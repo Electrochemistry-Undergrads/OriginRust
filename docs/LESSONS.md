@@ -82,3 +82,30 @@ A CH Instruments current-vs-time import has the current in A and in mA and the c
 columns. Plotting all of them on one axis is useless, so `Project::default_plot_columns` plots
 only the mA columns when there are any, otherwise the columns that share the first Y column's
 unit.
+
+## Run the whole test suite after every merge of parallel branches
+
+Two branches can each pass their own tests and still break together. In the fourth session the
+app branch changed how a new plot gets its color and the figure branch did not touch colors;
+only after both were merged did the stored reference image of the cyclic voltammetry template
+fail (two scans had the same color). Merge one branch at a time, run `cargo test --workspace`
+after each, and treat a changed golden image as a real signal, not as something to regenerate.
+
+## Parallel agents in git worktrees: what worked
+
+Each agent got its own worktree (`.claude/worktrees/...`, its own branch) and its own build
+folder (`CARGO_TARGET_DIR=target/wt-<name>`), built and tested only its crates, committed on its
+branch, and was followed by a fresh reviewer and a fix pass before the lead merged it. Nothing
+half-written reached `main`, and merges were clean because each agent owned named files. Shared
+types that two agents need (the fit report) were written by the lead before they started.
+
+## The workspace's test profile hides debug stack overflows
+
+`[profile.dev] opt-level = 1` makes stack frames smaller than in an unoptimised build, so a
+recursion test on a 1 MB thread passed even with the protection removed. Tests of stack depth
+use a smaller thread (256 KiB) and were checked to fail without the fix.
+
+## Clap reads a negative number as an unknown option
+
+`--x-min -1` is rejected; write `--x-min=-1`. Tests and examples of the command-line program
+use the `=` form for values that can be negative.

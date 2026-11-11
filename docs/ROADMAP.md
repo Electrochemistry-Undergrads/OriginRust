@@ -15,8 +15,8 @@ publication figures), P1 is common Origin use, P2 is later.
 - [x] Specs from the study of the installed Origin: UI command map, fit functions and FDF format,
       X-Function index, text import, workbook model, graphing
 - [x] `docs/spec/feature-inventory.md` with P0/P1/P2 tags
-- [ ] CI: one light job (format, lint, test) with caching (written; has never run because nothing
-      is pushed yet)
+- [x] CI: one light job (format, lint, test) with caching; first run passed on 2026-11-11
+      (Linux runner, about 7 minutes; the desktop app crate is left out)
 - [x] Origin can be driven by COM automation to produce reference numbers (`tools/origin-ref/`)
 
 ## Milestone 2: first vertical slice (P0 end to end)
@@ -33,7 +33,9 @@ publication figures), P1 is common Origin use, P2 is later.
 - [x] Desktop app: graph window; edit axes, ticks, fonts, line styles and legend
 - [x] Desktop app: export dialog (PNG with DPI, SVG, PDF); save and open projects; undo and redo
 - [x] Golden-image regression tests for the built-in templates
-- [ ] Independent review of the milestone by a fresh-context agent; findings fixed
+- [x] Independent review of the milestone by a fresh-context agent; findings fixed (11 confirmed
+      findings fixed on 2026-11-11, each fix reviewed again; merges `058b2a6`, `915ddab`,
+      `912ba75`, follow-up `b336226`)
 - [ ] A person clicks through the desktop app once (the four desktop-app items above were checked
       with screenshots of every window, not with mouse and keyboard)
 - [ ] Check the CH Instruments importer against real export files from the owner
@@ -91,3 +93,7 @@ publication figures), P1 is common Origin use, P2 is later.
   show the integrated area as a shaded region.
 - A baseline through anchor points picked on the graph (the numerics exist in sheaf-calc).
 - "Re-import" button that re-reads the source file of a workbook with the stored options.
+- Mixed text-and-number columns, as Origin's "Text & Numeric": today a cell such as `<LOD` or
+  `n.d.` in a numeric column is read as a missing value (with a warning), so its text is lost.
+- Choose whether a newly added plot takes the next palette color or re-spreads a gradient
+  (today automatic colors re-spread; colors chosen by hand stay).

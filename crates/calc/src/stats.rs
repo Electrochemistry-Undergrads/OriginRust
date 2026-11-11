@@ -57,7 +57,8 @@ pub fn stats(data: &[f64]) -> Stats {
     let missing = data.len() - v.len();
     let n = v.len();
     let nf = n as f64;
-    let sum: f64 = v.iter().sum();
+    // Adding +0.0 turns the -0.0 that an empty f64 sum gives into 0.
+    let sum: f64 = v.iter().sum::<f64>() + 0.0;
     let mean = if n > 0 { sum / nf } else { f64::NAN };
     let m2: f64 = v.iter().map(|a| (a - mean).powi(2)).sum();
     let variance = if n > 1 { m2 / (nf - 1.0) } else { f64::NAN };

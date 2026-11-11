@@ -119,7 +119,7 @@ pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGe
         .iter()
         .map(|layer| {
             let pds = data::collect(project, layer);
-            data::resolve_layer(layer, &g.page, &pds)
+            layout::layer_geometry(layer, &g.page, &pds, SystemFonts::shared())
         })
         .collect())
 }

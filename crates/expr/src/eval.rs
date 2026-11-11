@@ -248,7 +248,20 @@ fn build_col<'h>(host: &'h dyn Host, n: &Node) -> Result<Col<'h>, ExprError> {
     })
 }
 
+/// Runs `f`, first moving to a newly allocated stack segment if less than 64 KiB of the current
+/// stack is left. The tree of a long operator chain (`a+b+c+...`, up to about 1000 terms) is as
+/// deep as the chain is long, and building or evaluating it recurses once per level; without
+/// this a debug build overflows the 1 MB main thread at about 200 terms.
+#[inline]
+pub(crate) fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, f)
+}
+
 fn build<'h>(host: &'h dyn Host, n: &Node) -> Result<C<'h>, ExprError> {
+    grow_stack(|| build_inner(host, n))
+}
+
+fn build_inner<'h>(host: &'h dyn Host, n: &Node) -> Result<C<'h>, ExprError> {
     let b = |n: &Node| build(host, n).map(Box::new);
     let c = match &n.kind {
         Kind::Num(v) => C::Num(*v),
@@ -306,6 +319,16 @@ fn fold<'h>(host: &'h dyn Host, c: C<'h>) -> C<'h> {
 }
 
 fn ev(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
+    match c {
+        // Leaves need no stack check; this keeps the common case fast.
+        C::Num(v) => *v,
+        C::Row => (row + 1) as f64,
+        C::Col(col) => col.get(host, row),
+        _ => grow_stack(|| ev_inner(host, c, row)),
+    }
+}
+
+fn ev_inner(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
     match c {
         C::Num(v) => *v,
         C::Row => (row + 1) as f64,

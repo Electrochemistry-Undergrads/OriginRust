@@ -33,6 +33,14 @@ reaches `main` until the lead has reviewed and merged it.
 If a session ends before they finish: `git worktree list` and `git log main..<branch>` show
 what each did. Merge what is complete and reviewed; otherwise restart the stream from its branch.
 
+**Lead branch `lead-fit-ui`** (worktree `.claude/worktrees/lead-fit-ui`, pushed to GitHub): fitting
+in the app and the command-line program, built on snapshots of the two fitting branches.
+`Project::fit` (dispatch to the engines, parameter settings, derived quantities), `sheaf fit`
+(tables, `--list`, `--plot`, `--export`, `--save`; 3 integration tests) and the app's Fit window
+(Analysis menu; click test). All its tests pass. Merge it into `main` **after** both fitting
+branches are merged; expect small API changes from their final versions. The placement part of
+fitting (`Project::fit_with`, report sheets, curve on the graph) is already on `main` (`f729f6f`).
+
 ## Exact next step
 
 1. When the streams finish: review each branch, merge one at a time into `main`, run the full

@@ -3173,6 +3173,7 @@ version = "0.1.0"
 dependencies = [
  "nalgebra",
  "serde",
+ "serde_json",
  "sheaf-expr",
  "statrs",
  "thiserror 2.0.21",

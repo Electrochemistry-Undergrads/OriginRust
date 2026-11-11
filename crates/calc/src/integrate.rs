@@ -50,7 +50,15 @@ fn segment(h: f64, ya: f64, yb: f64, abs: bool) -> f64 {
         return h * (ya + yb) / 2.0;
     }
     let h = h.abs();
-    if ya * yb >= 0.0 { (h * (ya + yb) / 2.0).abs() } else { h * (ya * ya + yb * yb) / (2.0 * (ya.abs() + yb.abs())) }
+    // Compare signs directly: the product ya * yb underflows to zero below about 1e-154.
+    if ya == 0.0 || yb == 0.0 || (ya > 0.0) == (yb > 0.0) {
+        return (h * (ya + yb) / 2.0).abs();
+    }
+    // The segment crosses zero: the two triangles have area h (ya^2 + yb^2) / (2 (|ya| + |yb|)).
+    // Written with the fractions a and b so that squaring tiny values cannot underflow.
+    let s = ya.abs() + yb.abs();
+    let (a, b) = (ya.abs() / s, yb.abs() / s);
+    h * s * (a * a + b * b) / 2.0
 }
 
 /// Integrates y over x. Returns `None` when fewer than two valid points are in the range.

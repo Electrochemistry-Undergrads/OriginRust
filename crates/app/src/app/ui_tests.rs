@@ -150,6 +150,63 @@ fn double_click_edits_a_cell_and_enter_stores_the_value() {
 }
 
 #[test]
+fn enter_then_clicking_elsewhere_leaves_the_next_cell_alone() {
+    let mut h = start(vec![data_file("enter")]);
+    click(&mut h, "Book1 - sample");
+    let cell = grid_text(&h, "4.5");
+    cell.click();
+    cell.click();
+    settle(&mut h);
+    // Enter without typing: nothing changes, and the editor moves to the next row.
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    let editing = h.state().books.values().next().unwrap().editing.clone();
+    assert_eq!(editing.map(|e| (e.1, e.2)), Some((2, "6.5".to_string())), "the next cell is shown with its value");
+    // Click somewhere else to leave the editor.
+    click(&mut h, "Book1 - sample");
+    h.key_press(egui::Key::Tab);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Import data"), "no edit step was added");
+}
+
+#[test]
+fn editing_a_cell_starts_from_the_full_precision_value_and_unchanged_text_stores_nothing() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-precise-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sample.csv");
+    std::fs::write(
+        &path,
+        "t,v
+1,0.1234567891234
+2,5
+",
+    )
+    .unwrap();
+    let mut h = start(vec![path]);
+    click(&mut h, "Book1 - sample");
+    let shown = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().cell_text(0);
+    assert_ne!(shown, "0.1234567891234", "the grid shows a rounded value");
+    let cell = grid_text(&h, &shown);
+    cell.click();
+    cell.click();
+    settle(&mut h);
+    let editing = h.state().books.values().next().unwrap().editing.clone().unwrap();
+    assert_eq!(editing.2, "0.1234567891234", "the editor holds every digit");
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    let cell = grid_text(&h, &shown);
+    cell.click();
+    cell.click();
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(column(&h, "B")[0], 0.1234567891234);
+    assert_ne!(h.state().doc.undo_label(), Some("Edit cell"));
+}
+
+#[test]
 fn the_column_menu_changes_the_designation() {
     let mut h = start(vec![data_file("designation")]);
     click(&mut h, "Book1 - sample");

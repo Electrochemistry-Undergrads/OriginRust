@@ -10,9 +10,9 @@ use sheaf_core::analysis::{self, BaselineSpec, IntegrateSpec, InterpSpec, Tool};
 use sheaf_core::template::Template;
 
 /// Reads "FROM:TO" as two numbers.
-fn parse_pair<T: std::str::FromStr>(text: &str, what: &str) -> Result<(T, T)> {
+fn parse_pair<T: std::str::FromStr>(text: &str, what: &str, example: &str) -> Result<(T, T)> {
     let parsed = text.split_once(':').and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)));
-    parsed.ok_or_else(|| anyhow!("'{text}' is not a valid {what}; write it as FROM:TO, for example 120:480"))
+    parsed.ok_or_else(|| anyhow!("'{text}' is not a valid {what}; write it as FROM:TO, for example {example}"))
 }
 
 /// A number with six significant digits, without trailing zeros.
@@ -41,7 +41,21 @@ fn print_table(t: &analysis::ResultTable) {
             _ => h.clone(),
         })
         .collect();
-    let cells: Vec<Vec<String>> = t.rows.iter().map(|(_, v)| v.iter().map(|x| short_number(*x)).collect()).collect();
+    // Where the rows have different units (A and mA columns), each number carries its own unit.
+    let cells: Vec<Vec<String>> = t
+        .rows
+        .iter()
+        .enumerate()
+        .map(|(r, (_, v))| {
+            v.iter()
+                .enumerate()
+                .map(|(c, x)| match t.unit(r, c) {
+                    u if t.mixed_units(c) && !u.is_empty() => format!("{} {u}", short_number(*x)),
+                    _ => short_number(*x),
+                })
+                .collect()
+        })
+        .collect();
     let label_width = t.rows.iter().map(|(l, _)| l.chars().count()).max().unwrap_or(0).max(4);
     let widths: Vec<usize> = headers
         .iter()
@@ -157,9 +171,30 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             (target, Job::Tool(Tool::FindPeaks(analysis::PeakOptions { npts: points, direction, filter })))
         }
         AnalyzeTool::Stats { target } => (target, Job::Tool(Tool::Statistics)),
-        AnalyzeTool::Sort { target, by, descending } => (target, Job::Sort { by, descending }),
-        AnalyzeTool::Filter { target, condition, in_place } => (target, Job::Filter { condition, in_place }),
+        AnalyzeTool::Sort { target, by, descending } => {
+            whole_sheet_only(&target, "sort")?;
+            (target, Job::Sort { by, descending })
+        }
+        AnalyzeTool::Filter { target, condition, in_place } => {
+            whole_sheet_only(&target, "filter")?;
+            (target, Job::Filter { condition, in_place })
+        }
     })
+}
+
+/// Sorting and filtering work on all rows and columns of a sheet; refuse the options that choose
+/// rows or columns instead of silently ignoring them.
+fn whole_sheet_only(target: &TargetArgs, tool: &str) -> Result<()> {
+    let given: Vec<&str> =
+        [(!target.y.is_empty(), "--y"), (target.rows.is_some(), "--rows"), (target.x_range.is_some(), "--x-range")]
+            .into_iter()
+            .filter_map(|(set, name)| set.then_some(name))
+            .collect();
+    if given.is_empty() {
+        Ok(())
+    } else {
+        bail!("{tool} works on all rows and columns of the sheet; {} cannot be used with it", given.join(", "))
+    }
 }
 
 pub fn analyze(a: AnalyzeArgs) -> Result<()> {
@@ -187,11 +222,11 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             }
             let rows = match (&target.rows, &target.x_range) {
                 (Some(r), _) => {
-                    let (from, to) = parse_pair::<usize>(r, "row range")?;
+                    let (from, to) = parse_pair::<usize>(r, "row range", "120:480")?;
                     analysis::RowRange::Rows(from, to)
                 }
                 (None, Some(r)) => {
-                    let (from, to) = parse_pair::<f64>(r, "X range")?;
+                    let (from, to) = parse_pair::<f64>(r, "X range", "0.2:0.6")?;
                     analysis::RowRange::XBetween(from, to)
                 }
                 (None, None) => analysis::RowRange::All,
@@ -245,9 +280,9 @@ mod tests {
 
     #[test]
     fn ranges_are_read_as_from_colon_to() {
-        assert_eq!(parse_pair::<usize>("120:480", "row range").unwrap(), (120, 480));
-        assert_eq!(parse_pair::<f64>("-0.5: 0.1", "X range").unwrap(), (-0.5, 0.1));
-        assert!(parse_pair::<usize>("12-48", "row range").is_err());
-        assert!(parse_pair::<usize>("a:3", "row range").is_err());
+        assert_eq!(parse_pair::<usize>("120:480", "row range", "120:480").unwrap(), (120, 480));
+        assert_eq!(parse_pair::<f64>("-0.5: 0.1", "X range", "0.2:0.6").unwrap(), (-0.5, 0.1));
+        assert!(parse_pair::<usize>("12-48", "row range", "120:480").is_err());
+        assert!(parse_pair::<usize>("a:3", "row range", "120:480").is_err());
     }
 }

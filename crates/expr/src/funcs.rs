@@ -238,9 +238,13 @@ fn nint(x: f64) -> f64 {
 }
 
 fn round_digits(x: f64, n: f64) -> f64 {
-    if !x.is_finite() || !n.is_finite() {
+    if n.is_nan() {
+        return NA;
+    }
+    if !x.is_finite() {
         return x;
     }
+    // Infinite digit counts clamp like very large ones: +inf keeps x, -inf rounds to zero.
     let n = n.trunc().clamp(-300.0, 300.0);
     let scale = 10f64.powf(n);
     let r = (x * scale).round() / scale;
@@ -274,9 +278,10 @@ fn rmod(a: f64, b: f64) -> f64 {
 }
 
 /// `a` to the power `b`; zero to a negative power is a division by zero, so it is missing.
+/// A missing base or exponent gives missing, even where IEEE `pow` would give 1 (`x^0`, `1^x`).
 #[inline]
 pub(crate) fn pow(a: f64, b: f64) -> f64 {
-    if a == 0.0 && b < 0.0 { NA } else { a.powf(b) }
+    if a.is_nan() || b.is_nan() || (a == 0.0 && b < 0.0) { NA } else { a.powf(b) }
 }
 
 fn sqr(x: f64) -> f64 {
@@ -490,7 +495,13 @@ fn bessel_j1(x: f64) -> f64 {
 // ---------------------------------------------------------------------------------------------
 
 /// Sum of the non-missing values (Neumaier compensated summation) and their count.
+/// With an infinite value the plain sum is returned (infinite, or missing for `inf - inf`),
+/// because the compensation term would turn it into a missing value.
 fn sum_count(data: &[f64]) -> (f64, usize) {
+    if data.iter().any(|x| x.is_infinite()) {
+        let valid = data.iter().filter(|x| !x.is_nan());
+        return (valid.clone().sum::<f64>(), valid.count());
+    }
     let mut sum = 0.0;
     let mut comp = 0.0;
     let mut n = 0;
@@ -525,6 +536,10 @@ pub(crate) fn aggregate(kind: Agg, data: &[f64]) -> f64 {
                 return NA;
             }
             let mean = s / n as f64;
+            if !mean.is_finite() {
+                // An infinite value makes the spread undefined, not zero.
+                return NA;
+            }
             let dev: Vec<f64> = data.iter().filter(|x| !x.is_nan()).map(|x| (x - mean) * (x - mean)).collect();
             let var = sum_count(&dev).0 / (n - 1) as f64;
             if kind == Agg::Sd { var.sqrt() } else { var }

@@ -431,9 +431,10 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                     symbol: layer.default_symbol.clone(),
                     label: None,
                     visible: true,
+                    auto_color: true,
                 });
             }
-            layer.apply_palette();
+            layer.recolor_automatic();
         }
     });
     ui.separator();
@@ -491,6 +492,8 @@ fn plots_ui(ui: &mut egui::Ui, layer: &mut Layer, labels: &[String], selected: &
                 color_button(ui, &mut plot.line.color);
                 if plot.line.color != before {
                     plot.symbol.color = plot.line.color;
+                    // Chosen by hand: later palette changes from added plots leave it alone.
+                    plot.auto_color = false;
                 }
             });
             ui.end_row();

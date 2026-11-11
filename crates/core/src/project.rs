@@ -320,8 +320,9 @@ impl Project {
             symbol: l.default_symbol.clone(),
             label: None,
             visible: true,
+            auto_color: true,
         });
-        l.apply_palette();
+        l.recolor_automatic();
         Ok(())
     }
 
@@ -371,8 +372,14 @@ impl Project {
         for y in ys {
             self.add_plot(graph, 0, *y)?;
         }
-        if let (Some(name), Some(g)) = (long_name, self.graph_mut(graph)) {
-            g.long_name = name;
+        if let Some(g) = self.graph_mut(graph) {
+            // A new graph has no colors chosen by the user, so spread the palette over all plots.
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
         }
         Ok(graph)
     }
@@ -401,6 +408,60 @@ mod tests {
         assert_eq!(p.graph(g).unwrap().name, "Graph1");
         p.remove_window(book2);
         assert_eq!(p.unique_name("Book"), "Book2");
+    }
+
+    #[test]
+    fn adding_a_plot_keeps_the_colors_the_user_chose() {
+        let (mut p, book, _, y) = sample();
+        let y2 = p
+            .add_column(book, 0, crate::column::Designation::Y, crate::column::ColumnData::numeric(vec![1.0]))
+            .unwrap();
+        let g = p.add_graph(Template::Line);
+        p.add_plot(g, 0, y).unwrap();
+        let chosen = crate::Color::rgb(1, 2, 3);
+        {
+            // What the graph settings window does when the user picks a color.
+            let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+            plot.line.color = chosen;
+            plot.auto_color = false;
+        }
+        p.add_plot(g, 0, y2).unwrap();
+        let plots = &p.graph(g).unwrap().layers[0].plots;
+        assert_eq!(plots[0].line.color, chosen);
+        assert_ne!(plots[1].line.color, chosen);
+    }
+
+    /// With a gradient palette (the cyclic voltammetry template) every automatic color moves
+    /// along when a plot is added, so scans added one at a time get distinct colors; a color
+    /// chosen by hand stays. Adding only the newest plot's color gave two scans the same color.
+    #[test]
+    fn adding_plots_one_at_a_time_keeps_a_gradient_distinct() {
+        let (mut p, book, _, y) = sample();
+        let mut ys = vec![y];
+        for _ in 0..3 {
+            let c = crate::column::ColumnData::numeric(vec![1.0]);
+            ys.push(p.add_column(book, 0, crate::column::Designation::Y, c).unwrap());
+        }
+        let g = p.add_graph(Template::CyclicVoltammetry);
+        assert_eq!(p.graph(g).unwrap().layers[0].palette.mode, crate::graph::PaletteMode::Spread);
+        for &c in &ys[..3] {
+            p.add_plot(g, 0, c).unwrap();
+        }
+        let colors = |p: &Project| -> Vec<crate::Color> {
+            p.graph(g).unwrap().layers[0].plots.iter().map(|q| q.line.color).collect()
+        };
+        let three = colors(&p);
+        assert!(three[0] != three[1] && three[1] != three[2] && three[0] != three[2], "{three:?}");
+        let chosen = crate::Color::rgb(200, 0, 0);
+        {
+            let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[1];
+            plot.line.color = chosen;
+            plot.auto_color = false;
+        }
+        p.add_plot(g, 0, ys[3]).unwrap();
+        let four = colors(&p);
+        assert_eq!(four[1], chosen);
+        assert!(four[0] != four[2] && four[2] != four[3] && four[0] != four[3], "{four:?}");
     }
 
     #[test]

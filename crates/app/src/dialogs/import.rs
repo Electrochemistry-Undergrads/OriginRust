@@ -7,7 +7,11 @@ use sheaf_core::template::Template;
 use sheaf_io::ascii::{AsciiOptions, Delimiter};
 use sheaf_io::chi::ChiOptions;
 use sheaf_io::{ImportKind, Imported};
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+/// How much of the start of a file is looked at to detect the separator and header lines.
+const DETECT_BYTES: u64 = 256 * 1024;
 
 /// Rows of the preview table.
 const PREVIEW_ROWS: usize = 40;
@@ -25,6 +29,37 @@ pub struct ImportDialog {
     /// The graph template; `None` uses what the importer suggests for each file.
     template: Option<Template>,
     preview: Option<Result<Imported, String>>,
+    /// What detection found for the file and options it was computed for, so that it is not
+    /// repeated every frame.
+    detection: Option<DetectionCache>,
+    /// How many times detection has run (for tests).
+    detect_runs: usize,
+}
+
+struct DetectionCache {
+    file: PathBuf,
+    options: AsciiOptions,
+    detected: Option<sheaf_io::ascii::Detected>,
+}
+
+/// Runs detection on the first part of a file only, cut at a line end.
+fn detect_in_prefix(path: &Path, options: &AsciiOptions) -> Option<sheaf_io::ascii::Detected> {
+    let mut bytes = Vec::new();
+    std::fs::File::open(path).ok()?.take(DETECT_BYTES).read_to_end(&mut bytes).ok()?;
+    if bytes.len() as u64 == DETECT_BYTES {
+        if bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) {
+            bytes.truncate(bytes.len() & !1);
+        } else if let Some(end) = bytes.iter().rposition(|b| *b == b'\n') {
+            bytes.truncate(end + 1);
+        } else if let Err(e) = std::str::from_utf8(&bytes)
+            && e.error_len().is_none()
+        {
+            // One very long line: only drop a character that the cut left incomplete.
+            bytes.truncate(e.valid_up_to());
+        }
+    }
+    let text = sheaf_io::decode_text(&bytes, path).ok()?;
+    Some(sheaf_io::ascii::detect(&text, options))
 }
 
 /// What the dialog wants the application to do after a frame.
@@ -53,6 +88,8 @@ impl ImportDialog {
             plot: true,
             template: None,
             preview: None,
+            detection: None,
+            detect_runs: 0,
         }
     }
 
@@ -182,13 +219,24 @@ impl ImportDialog {
         }
     }
 
+    /// The detected settings of the current file, recomputed only when the file or the options
+    /// have changed since the last call.
+    fn detected(&mut self) -> Option<sheaf_io::ascii::Detected> {
+        let file = self.files.get(self.current)?;
+        let fresh = matches!(&self.detection, Some(c) if c.file == *file && c.options == self.ascii);
+        if !fresh {
+            self.detect_runs += 1;
+            self.detection = Some(DetectionCache {
+                file: file.clone(),
+                options: self.ascii.clone(),
+                detected: detect_in_prefix(file, &self.ascii),
+            });
+        }
+        self.detection.as_ref().and_then(|c| c.detected.clone())
+    }
+
     fn ascii_ui(&mut self, ui: &mut egui::Ui) {
-        let detected = match &self.preview {
-            Some(Ok(_)) => sheaf_io::read_text_file(&self.files[self.current])
-                .ok()
-                .map(|text| sheaf_io::ascii::detect(&text, &self.ascii)),
-            _ => None,
-        };
+        let detected = if matches!(self.preview, Some(Ok(_))) { self.detected() } else { None };
         let o = &mut self.ascii;
         egui::Grid::new("ascii_options").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
             ui.label("Separator");
@@ -374,4 +422,61 @@ fn optional_line(ui: &mut egui::Ui, value: &mut Option<usize>, detected: Option<
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detection_reads_a_bounded_prefix_once_per_file_and_options() {
+        let dir = std::env::temp_dir().join(format!("sheaf-import-detect-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("big.csv");
+        let mut text = String::from(
+            "x,y
+",
+        );
+        for i in 0..200_000 {
+            text.push_str(&format!(
+                "{i},{}
+",
+                i * 2
+            ));
+        }
+        std::fs::write(&path, &text).unwrap();
+        assert!(text.len() as u64 > 4 * DETECT_BYTES, "the file is much larger than the prefix");
+
+        let mut d = ImportDialog::new(vec![path.clone()]);
+        let found = d.detected().expect("detected");
+        assert_eq!(found.delimiter, Delimiter::Comma);
+        assert_eq!(found.columns, 2);
+        for _ in 0..50 {
+            d.detected();
+        }
+        assert_eq!(d.detect_runs, 1, "repeated frames reuse the cached result");
+        d.ascii.delimiter = Delimiter::Tab;
+        d.detected();
+        assert_eq!(d.detect_runs, 2, "changed options recompute");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detection_works_when_the_prefix_has_no_line_end() {
+        let dir = std::env::temp_dir().join(format!("sheaf-import-oneline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("oneline.csv");
+        // Seven-byte pieces, so the cut at the prefix size lands inside the first character.
+        let mut text = String::new();
+        while text.len() < 2 * DETECT_BYTES as usize {
+            text.push_str("\u{e9}1,2,3");
+        }
+        std::fs::write(&path, &text).unwrap();
+        let mut bytes = Vec::new();
+        std::fs::File::open(&path).unwrap().take(DETECT_BYTES).read_to_end(&mut bytes).unwrap();
+        assert!(std::str::from_utf8(&bytes).is_err(), "the cut splits a character");
+        let found = detect_in_prefix(&path, &AsciiOptions::default()).expect("detected");
+        assert_eq!(found.delimiter, Delimiter::Comma);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

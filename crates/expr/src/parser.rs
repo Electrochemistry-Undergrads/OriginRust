@@ -93,7 +93,9 @@ impl Parser {
 
     fn ternary(&mut self) -> Result<Node, ExprError> {
         self.enter()?;
-        let r = self.ternary_inner();
+        // Each nesting level passes through about ten parsing functions; in debug builds their
+        // frames are large, so grow the stack on demand instead of overflowing a 1 MB thread.
+        let r = crate::eval::grow_stack(|| self.ternary_inner());
         self.leave();
         r
     }

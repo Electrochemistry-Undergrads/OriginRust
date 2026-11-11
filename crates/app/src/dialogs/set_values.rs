@@ -82,9 +82,9 @@ impl SetValuesDialog {
                     ui.radio_value(&mut self.all_rows, true, "All");
                     ui.radio_value(&mut self.all_rows, false, "From");
                     ui.add_enabled_ui(!self.all_rows, |ui| {
-                        ui.add(DragValue::new(&mut self.from).range(1..=usize::MAX));
+                        ui.add(DragValue::new(&mut self.from).range(1..=sheaf_core::formula::MAX_FORMULA_ROWS));
                         ui.label("to");
-                        ui.add(DragValue::new(&mut self.to).range(1..=usize::MAX));
+                        ui.add(DragValue::new(&mut self.to).range(1..=sheaf_core::formula::MAX_FORMULA_ROWS));
                     });
                 });
                 if let Some(p) = &self.problem {

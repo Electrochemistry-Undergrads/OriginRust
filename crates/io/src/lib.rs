@@ -8,6 +8,7 @@ pub mod ascii;
 pub mod chi;
 mod error;
 pub mod export;
+pub mod opj;
 pub mod project_file;
 mod text;
 

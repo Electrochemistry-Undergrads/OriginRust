@@ -44,7 +44,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $inv = [Globalization.CultureInfo]::InvariantCulture
 $MissingBits = [BitConverter]::DoubleToInt64Bits(-1.23456789e-300)
-$Roles = @{ 0 = 'Y'; 1 = 'Disregard'; 2 = 'YError'; 3 = 'X'; 4 = 'Label'; 5 = 'Z'; 6 = 'XError'; 7 = 'Group'; 8 = 'Subject' }
+# LabTalk's wks.colN.type codes, written as the designation names our reader uses.
+$LabTalkTypes = @{ 1 = 'Y'; 2 = 'Disregard'; 3 = 'YError'; 4 = 'X'; 5 = 'Label'; 6 = 'Z'; 7 = 'XError'; 8 = 'Group'; 9 = 'Subject' }
 
 function Esc([string]$s) {
   if ($null -eq $s) { return '' }
@@ -110,13 +111,7 @@ try {
       $sname = LtS 'string sn$ = wks.name$;' 'sn$'
       $w.WriteLine("SHEET`t" + (Esc $sname))
       $nc = [int](LtN 'double nc = wks.ncols;' 'nc')
-      $data = $null
-      foreach ($addr in @("[$book]$sname", "[$book]$s")) {
-        try { $data = $origin.GetWorksheet($addr) } catch { $data = $null }
-        if ($null -ne $data) { break }
-      }
-      $rowsStored = 0
-      if ($null -ne $data) { $rowsStored = $data.GetLength(0) }
+      $rowsStored = [int](LtN 'double mr = wks.nrows;' 'mr')
       $w.WriteLine("# sheet $s columns=$nc stored rows=$rowsStored")
       for ($i = 0; $i -lt $nc; $i++) {
         $c1 = $i + 1
@@ -126,20 +121,21 @@ try {
           $lname = LtS "string a`$ = wks.col$c1.lname`$;" 'a$'
           $units = LtS "string a`$ = wks.col$c1.unit`$;" 'a$'
           $comm = LtS "string a`$ = wks.col$c1.comment`$;" 'a$'
-          $type = [int](LtN "double a = wks.col$c1.type;" 'a')
+          $type = [int](LtN "double ty = wks.col$c1.type;" 'ty')
           $role = $LabTalkTypes[$type]
           if ($null -eq $role) { $role = "Type$type" }
-          $used = $rowsStored
-          if ($null -ne $data -and $i -lt $data.GetLength(1)) {
-            while ($used -gt 0 -and (IsMissing $data[($used - 1), $i])) { $used-- }
-          } else { $used = 0 }
+          # Used rows: walk up from the bottom to the last cell that holds a number or text.
+          Lt ("double us = 0; double uv = 0; string ut`$ = `"`"; for (us = $rowsStored; us > 0; us--) { uv = cell(us, $c1); if (uv != NANUM) { break; } ut`$ = cell(us, $c1)`$; if (ut`$ != `"`" && ut`$ != `"--`") { break; } }")
+          $used = [int]$origin.LTVar('us')
           $w.WriteLine("COL`t$i`t" + (Esc $short) + "`t" + (Esc $lname) + "`t" + (Esc $units) + "`t" + (Esc $comm) + "`t$role`t$used")
           foreach ($r in (SampleRows $used)) {
-            $v = $data[$r, $i]
-            if (IsMissing $v) { $w.WriteLine("CELL`t$i`t$r`tM`t") }
-            elseif ($v -is [string]) { $w.WriteLine("CELL`t$i`t$r`tT`t" + (Esc $v)) }
-            elseif ($v -is [DateTime]) { $w.WriteLine("CELL`t$i`t$r`tN`t" + $v.ToOADate().ToString('R', $inv)) }
-            else { $w.WriteLine("CELL`t$i`t$r`tN`t" + ([double]$v).ToString('R', $inv)) }
+            $r1 = $r + 1
+            Lt "double cv = cell($r1, $c1); string cs`$ = cell($r1, $c1)`$;"
+            $v = [double]$origin.LTVar('cv')
+            $t = [string]$origin.LTStr('cs$')
+            if (-not (IsMissing $v)) { $w.WriteLine("CELL`t$i`t$r`tN`t" + $v.ToString('R', $inv)) }
+            elseif ($t.Length -gt 0 -and $t -ne '--') { $w.WriteLine("CELL`t$i`t$r`tT`t" + (Esc $t)) }
+            else { $w.WriteLine("CELL`t$i`t$r`tM`t") }
           }
         } catch {
           $w.WriteLine("ERR`tcolumn $i of sheet '$sname': " + ($_.Exception.Message -replace "[\r\n]+", ' '))

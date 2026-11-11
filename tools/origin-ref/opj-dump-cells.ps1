@@ -85,39 +85,65 @@ $w = New-Object IO.StreamWriter($Out, $false, (New-Object Text.UTF8Encoding($fal
 $w.NewLine = "`n"
 try {
   $origin = New-Object -ComObject Origin.Application
+  # The COM collections (WorksheetPages, Pages) stay empty after Load in a hidden instance, so the
+  # structure is read with LabTalk (results come back through LTStr and LTVar) and the cell data
+  # with GetWorksheet, which returns a whole sheet as a two-dimensional array.
+  function Lt([string]$script) { [void]$origin.Execute($script) }
+  function LtS([string]$script, [string]$var) { Lt $script; return [string]$origin.LTStr($var) }
+  function LtN([string]$script, [string]$var) { Lt $script; return [double]$origin.LTVar($var) }
   $ok = $origin.Load($opened, $true)
   $w.WriteLine("# project: loaded=$ok")
-  $pages = $origin.WorksheetPages
-  $w.WriteLine("# workbooks: " + $pages.Count)
-  for ($p = 0; $p -lt $pages.Count; $p++) {
-    $page = $pages.Item($p)
-    $w.WriteLine("BOOK`t" + (Esc $page.Name) + "`t" + (Esc $page.LongName))
-    $layers = $page.Layers
-    for ($s = 0; $s -lt $layers.Count; $s++) {
-      $sheet = $layers.Item($s)
-      $w.WriteLine("SHEET`t" + (Esc $sheet.Name))
-      $cols = $sheet.Columns
-      for ($i = 0; $i -lt $cols.Count; $i++) {
-        $c = $cols.Item($i)
+  $nb = [int](LtN 'double nb = 0; doc -e W { nb++; }' 'nb')
+  $w.WriteLine("# workbooks: $nb")
+  $names = @()
+  for ($k = 1; $k -le $nb; $k++) {
+    Lt "double kk = 0; string bn`$ = `"`"; doc -e W { kk++; if (kk == $k) { bn`$ = `"%H`"; } }"
+    $names += [string]$origin.LTStr('bn$')
+  }
+  foreach ($book in $names) {
+    Lt "win -a $book;"
+    $long = LtS 'string bl$ = page.longname$;' 'bl$'
+    $w.WriteLine("BOOK`t" + (Esc $book) + "`t" + (Esc $long))
+    $nl = [int](LtN 'double nl = page.nlayers;' 'nl')
+    for ($s = 1; $s -le $nl; $s++) {
+      Lt "win -a $book; page.active = $s;"
+      $sname = LtS 'string sn$ = wks.name$;' 'sn$'
+      $w.WriteLine("SHEET`t" + (Esc $sname))
+      $nc = [int](LtN 'double nc = wks.ncols;' 'nc')
+      $data = $null
+      foreach ($addr in @("[$book]$sname", "[$book]$s")) {
+        try { $data = $origin.GetWorksheet($addr) } catch { $data = $null }
+        if ($null -ne $data) { break }
+      }
+      $rowsStored = 0
+      if ($null -ne $data) { $rowsStored = $data.GetLength(0) }
+      $w.WriteLine("# sheet $s columns=$nc stored rows=$rowsStored")
+      for ($i = 0; $i -lt $nc; $i++) {
+        $c1 = $i + 1
         try {
-          $data = $c.GetData(5)
-          $n = if ($null -eq $data) { 0 } else { $data.Length }
-          $used = $n
-          while ($used -gt 0 -and (IsMissing $data[$used - 1]) ) { $used-- }
-          $role = $Roles[[int]$c.Type]
-          if ($null -eq $role) { $role = "Type" + [int]$c.Type }
-          $w.WriteLine("COL`t$i`t" + (Esc $c.Name) + "`t" + (Esc $c.LongName) + "`t" + (Esc $c.Units) + "`t" + (Esc $c.Comments) + "`t$role`t$used")
-          $w.WriteLine("# col $i stored rows=$n format=" + [int]$c.DataFormat)
+          Lt "win -a $book; page.active = $s;"
+          $short = LtS "string a`$ = wks.col$c1.name`$;" 'a$'
+          $lname = LtS "string a`$ = wks.col$c1.lname`$;" 'a$'
+          $units = LtS "string a`$ = wks.col$c1.unit`$;" 'a$'
+          $comm = LtS "string a`$ = wks.col$c1.comment`$;" 'a$'
+          $type = [int](LtN "double a = wks.col$c1.type;" 'a')
+          $role = $LabTalkTypes[$type]
+          if ($null -eq $role) { $role = "Type$type" }
+          $used = $rowsStored
+          if ($null -ne $data -and $i -lt $data.GetLength(1)) {
+            while ($used -gt 0 -and (IsMissing $data[($used - 1), $i])) { $used-- }
+          } else { $used = 0 }
+          $w.WriteLine("COL`t$i`t" + (Esc $short) + "`t" + (Esc $lname) + "`t" + (Esc $units) + "`t" + (Esc $comm) + "`t$role`t$used")
           foreach ($r in (SampleRows $used)) {
-            $v = $data[$r]
+            $v = $data[$r, $i]
             if (IsMissing $v) { $w.WriteLine("CELL`t$i`t$r`tM`t") }
             elseif ($v -is [string]) { $w.WriteLine("CELL`t$i`t$r`tT`t" + (Esc $v)) }
+            elseif ($v -is [DateTime]) { $w.WriteLine("CELL`t$i`t$r`tN`t" + $v.ToOADate().ToString('R', $inv)) }
             else { $w.WriteLine("CELL`t$i`t$r`tN`t" + ([double]$v).ToString('R', $inv)) }
           }
         } catch {
-          $w.WriteLine("ERR`tcolumn $i of sheet '" + $sheet.Name + "': " + ($_.Exception.Message -replace "[\r\n]+", ' '))
+          $w.WriteLine("ERR`tcolumn $i of sheet '$sname': " + ($_.Exception.Message -replace "[\r\n]+", ' '))
         }
-        [void][Runtime.InteropServices.Marshal]::ReleaseComObject($c)
       }
     }
   }

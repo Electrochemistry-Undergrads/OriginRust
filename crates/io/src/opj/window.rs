@@ -2,7 +2,7 @@
 //! column records of each layer (spec section 4). Only the parts that workbooks need
 //! are kept; annotations, axis blocks and everything else are stepped over.
 
-use super::frame::{FrameError, FrameResult, Frames};
+use super::frame::{Extent, FrameError, FrameResult, Frames};
 use super::strings::{field_text, visible_part};
 use std::io::{Read, Seek};
 
@@ -36,10 +36,25 @@ pub(crate) struct WinColumn {
     pub note: Vec<u8>,
 }
 
+/// One annotation of a layer (a graph's titles, texts and legend; for a workbook sheet its
+/// embedded storage). Blocks larger than [`KEEP_LIMIT`] are not kept and read as empty.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub(crate) struct WinAnnotation {
+    pub header: Vec<u8>,
+    pub block1: Vec<u8>,
+    pub block2: Vec<u8>,
+    pub block3: Vec<u8>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct WinLayer {
     pub name: String,
+    /// The layer header block (361 bytes in 9.x); graph layers keep their axis ranges here.
+    pub header: Vec<u8>,
+    pub annotations: Vec<WinAnnotation>,
     pub columns: Vec<WinColumn>,
+    /// The three groups of axis blocks (x, y, z); empty for workbook sheets.
+    pub axes: Vec<Vec<Vec<u8>>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,6 +63,8 @@ pub(crate) struct Window {
     /// First line of the window label (the long name).
     pub label: String,
     pub layers: Vec<WinLayer>,
+    /// The window header block (rectangle, state).
+    pub header: Vec<u8>,
 }
 
 /// Reads windows up to the empty block that ends the list. A damaged window ends the
@@ -85,8 +102,13 @@ fn scan_one<R: Read + Seek>(f: &mut Frames<R>) -> FrameResult<Option<Window>> {
         let name = field_text(&layer_header, LAYER_NAME_AT, LAYER_NAME_WIDTH);
         // Annotations, then column records, then one extra block, then three groups
         // of axis blocks, each group closed by an empty block.
-        while f.skip_block()?.len != 0 {
-            skip_annotation(f)?;
+        let mut annotations = Vec::new();
+        loop {
+            let header = f.block()?;
+            if header.is_empty() {
+                break;
+            }
+            read_annotation(f, header, &mut annotations)?;
         }
         let mut columns = Vec::new();
         loop {
@@ -98,12 +120,21 @@ fn scan_one<R: Read + Seek>(f: &mut Frames<R>) -> FrameResult<Option<Window>> {
             columns.push(parse_column(&record, note));
         }
         f.skip_block()?;
+        let mut axes = Vec::new();
         for _ in 0..3 {
-            while f.skip_block()?.len != 0 {}
+            let mut group = Vec::new();
+            loop {
+                let ext = f.skip_block()?;
+                if ext.len == 0 {
+                    break;
+                }
+                group.push(keep(f, ext)?);
+            }
+            axes.push(group);
         }
-        layers.push(WinLayer { name, columns });
+        layers.push(WinLayer { name, header: layer_header, annotations, columns, axes });
     }
-    Ok(Some(Window { name, label, layers }))
+    Ok(Some(Window { name, label, layers, header }))
 }
 
 /// The long name of a window: the first line of its label, without the storage tail.
@@ -116,21 +147,37 @@ fn window_label(header: &[u8]) -> String {
     visible.split(['\r', '\n']).next().unwrap_or("").to_string()
 }
 
-/// Steps over the rest of an annotation whose header block has been read: two blocks
-/// and, unless the annotation is a group, a third. A group announces the size of its
-/// first member's header in its second block; that header follows unframed and the
-/// member's own blocks come next, so a group is followed in a loop.
-fn skip_annotation<R: Read + Seek>(f: &mut Frames<R>) -> FrameResult<()> {
+/// Blocks up to this size are kept for graph reading; larger ones (embedded storage of
+/// workbook sheets) are stepped over and read as empty.
+const KEEP_LIMIT: u32 = 1 << 16;
+
+fn keep<R: Read + Seek>(f: &mut Frames<R>, ext: Extent) -> FrameResult<Vec<u8>> {
+    if ext.len == 0 || ext.len > KEEP_LIMIT { Ok(Vec::new()) } else { f.read_extent(ext) }
+}
+
+/// Reads the rest of an annotation whose header block has been read: two blocks and,
+/// unless the annotation is a group, a third. A group announces the size of its first
+/// member's header in its second block; that header follows unframed and the member's own
+/// blocks come next, so a group is followed in a loop. Every member is appended.
+fn read_annotation<R: Read + Seek>(
+    f: &mut Frames<R>,
+    mut header: Vec<u8>,
+    out: &mut Vec<WinAnnotation>,
+) -> FrameResult<()> {
     loop {
         let first = f.skip_block()?;
         let second = f.skip_block()?;
+        let (block1, block2) = (keep(f, first)?, keep(f, second)?);
         if GROUP_BLOCK1_SIZES.contains(&first.len) && second.len == 4 {
             let size = f.read_extent(second)?;
             let n = u32::from_le_bytes([size[0], size[1], size[2], size[3]]);
-            f.raw(n)?;
+            out.push(WinAnnotation { header, block1, block2, block3: Vec::new() });
+            header = f.raw(n)?;
             continue;
         }
-        f.skip_block()?;
+        let third = f.skip_block()?;
+        let block3 = keep(f, third)?;
+        out.push(WinAnnotation { header, block1, block2, block3 });
         return Ok(());
     }
 }

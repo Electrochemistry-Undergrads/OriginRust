@@ -648,3 +648,62 @@ fn golden_line_symbol_template() {
 fn golden_cv_template() {
     check_golden("cv", Template::CyclicVoltammetry);
 }
+
+// ----- labels stay on the page, reversed axes ------------------------------
+
+#[test]
+fn y_title_stays_inside_the_page_with_wide_tick_labels() {
+    let x: Vec<f64> = (0..10).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| -467338.0 + v * 1000.0).collect();
+    let (p, g) = project(Template::CyclicVoltammetry, x, vec![y]);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let title = d
+        .descendants()
+        .find(|n| n.has_tag_name("text") && n.text().is_some_and(|t| t.starts_with("Current 1")))
+        .expect("the Y title");
+    // The title is rotated about its anchor; its glyphs reach 0.72 * size left of the anchor x.
+    let transform = title.attribute("transform").expect("rotated");
+    let nums: Vec<f64> = transform
+        .trim_start_matches("rotate(")
+        .trim_end_matches(')')
+        .split(' ')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let size: f64 = title.attribute("font-size").unwrap().parse().unwrap();
+    let left = nums[1] - 0.72 * size;
+    assert!(left >= 2.99, "the title reaches x = {left}");
+}
+
+#[test]
+fn a_frame_that_fits_is_left_alone() {
+    let (x, y) = loop_data(20, 1.0);
+    let (p, g) = project(Template::Line, x, vec![y]);
+    let gr = p.graph(g).unwrap();
+    let nominal = gr.layers[0].frame;
+    let page = gr.page.clone();
+    let f = layout_geometry(&p, g).unwrap()[0].frame;
+    assert!((f.x - nominal.left * page.width_pt).abs() < 1e-9);
+    assert!((f.w - nominal.width * page.width_pt).abs() < 1e-9);
+    assert!((f.h - nominal.height * page.height_pt).abs() < 1e-9);
+}
+
+#[test]
+fn reversed_limits_draw_a_reversed_axis() {
+    let (x, y) = loop_data(20, 1.0);
+    let (mut p, g) = project(Template::Line, x, vec![y]);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.x_axis.min = Some(5.0);
+    layer.x_axis.max = Some(1.0);
+    let geom = &layout_geometry(&p, g).unwrap()[0];
+    assert!(geom.x.reversed);
+    assert_eq!((geom.x.min, geom.x.max), (1.0, 5.0));
+    assert_eq!(geom.x.major, vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+    // 5 is at the left end of the frame and 1 at the right end.
+    let (left, _) = geom.data_to_page(5.0, 0.0);
+    let (right, _) = geom.data_to_page(1.0, 0.0);
+    assert!((left - geom.frame.x).abs() < 1e-9);
+    assert!((right - (geom.frame.x + geom.frame.w)).abs() < 1e-9);
+    let (back, _) = geom.page_to_data(left, 0.0);
+    assert!((back - 5.0).abs() < 1e-9);
+}

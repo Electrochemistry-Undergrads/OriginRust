@@ -251,8 +251,60 @@ fn pick_graph(project: &Project, name: Option<&str>) -> Result<WindowId> {
     }
 }
 
+/// Fails with a clear message unless `value` (when given) is a finite number above zero.
+pub(crate) fn require_positive(option: &str, value: Option<f64>) -> Result<()> {
+    match value {
+        Some(v) if !(v.is_finite() && v > 0.0) => {
+            bail!("{option} must be a number greater than 0 (got {v})")
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Smallest and largest page side the program accepts, in inches (0.1 in is 7.2 pt).
+const PAGE_SIDE_RANGE_IN: (f64, f64) = (0.1, 100.0);
+
+/// Like [`require_positive`] for a page side, which must also lie within `PAGE_SIDE_RANGE_IN`,
+/// so that a tiny or huge value is refused here and not later by the renderer.
+fn require_page_size(option: &str, value: Option<f64>) -> Result<()> {
+    require_positive(option, value)?;
+    let (lo, hi) = PAGE_SIDE_RANGE_IN;
+    match value {
+        Some(v) if v < lo || v > hi => {
+            bail!("{option} must be between {lo} and {hi} inches (got {v})")
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Fails when the two limits of an axis are the same number, which has no width to draw.
+/// A lower limit above the upper one is allowed: it draws a reversed axis.
+fn check_limits(axis: &str, min: Option<f64>, max: Option<f64>) -> Result<()> {
+    for (name, v) in [("min", min), ("max", max)] {
+        if matches!(v, Some(v) if !v.is_finite()) {
+            bail!("--{axis}-{name} must be a finite number");
+        }
+    }
+    if let (Some(a), Some(b)) = (min, max)
+        && a == b
+    {
+        bail!("--{axis}-min and --{axis}-max are both {a}; the axis would have no length");
+    }
+    if let (Some(a), Some(b)) = (min, max)
+        && !(b - a).is_finite()
+    {
+        bail!("--{axis}-min and --{axis}-max are too far apart ({a} and {b}); use limits closer together");
+    }
+    Ok(())
+}
+
 /// Applies the style options of the command line to a graph.
 fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<()> {
+    require_page_size("--width", s.width)?;
+    require_page_size("--height", s.height)?;
+    require_positive("--line-width", s.line_width)?;
+    check_limits("x", s.x_min, s.x_max)?;
+    check_limits("y", s.y_min, s.y_max)?;
     let colors: Vec<Color> =
         s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
@@ -306,6 +358,7 @@ fn template_from(name: Option<&str>, fallback: Template) -> Result<Template> {
 }
 
 fn plot(a: PlotArgs) -> Result<()> {
+    require_positive("--dpi", Some(a.dpi))?;
     let first = &a.inputs[0];
     if a.inputs.len() > 1 && a.inputs.iter().any(|p| is_project(p)) {
         bail!("a project cannot be combined with other inputs; give one project, or one or more data files");
@@ -392,6 +445,7 @@ fn overlay_files(project: &mut Project, template: Template, a: &PlotArgs) -> Res
 }
 
 fn export(a: ExportArgs) -> Result<()> {
+    require_positive("--dpi", Some(a.dpi))?;
     let mut project = load_project(&a.project)?;
     let graph = pick_graph(&project, a.graph.as_deref())?;
     apply_style(&mut project, graph, &a.style)?;

@@ -22,6 +22,11 @@ pub enum FormulaError {
     NoRows,
     #[error("row {0} is beyond the limit of {MAX_FORMULA_ROWS} rows for a formula")]
     TooManyRows(usize),
+    #[error(
+        "column {0} holds text outside the chosen rows, and a column is either all text or all \
+         numbers; set values on all its rows to make it numeric, or use another column"
+    )]
+    TextOutsideRange(String),
     #[error("{0}")]
     Expr(#[from] ExprError),
 }
@@ -85,8 +90,9 @@ impl Project {
     ///
     /// `rows` is the 0-based row range to fill; `None` fills every row of
     /// the sheet (the length of its longest column). Rows of the column
-    /// outside the range keep their values. A text column becomes numeric.
-    /// On error nothing is changed.
+    /// outside the range keep their values. A text column becomes numeric,
+    /// which is only allowed when no text lies outside the range (otherwise
+    /// that text would be lost). On error nothing is changed.
     pub fn set_column_values(
         &mut self,
         column: ColumnId,
@@ -101,6 +107,12 @@ impl Project {
         }
         if range.end > MAX_FORMULA_ROWS {
             return Err(FormulaError::TooManyRows(range.end));
+        }
+        if let Some(text) = target.text() {
+            let outside = text.iter().enumerate().any(|(i, t)| !range.contains(&i) && !t.trim().is_empty());
+            if outside {
+                return Err(FormulaError::TextOutsideRange(target.short_name.clone()));
+            }
         }
         let computed = expr.eval_rows(&SheetHost { sheet }, range.end)?;
         let mut values: Vec<f64> = target.numeric().map(<[f64]>::to_vec).unwrap_or_default();
@@ -137,6 +149,21 @@ mod tests {
         let err = p.set_column_values(c, "i", Some(0..usize::MAX)).unwrap_err();
         assert!(matches!(err, FormulaError::TooManyRows(_)));
         assert!(p.numeric(c).unwrap().is_empty());
+    }
+
+    #[test]
+    fn text_outside_the_rows_is_never_thrown_away() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let names = vec!["S1".to_string(), "S2".to_string(), "S3".to_string(), String::new()];
+        let t = p.add_column(book, 0, Designation::Y, ColumnData::text(names.clone())).unwrap();
+        // Rows 2 and 3 only: S1 would be lost, so nothing changes.
+        let err = p.set_column_values(t, "i", Some(1..3)).unwrap_err();
+        assert!(matches!(err, FormulaError::TextOutsideRange(_)), "{err}");
+        assert_eq!(p.column(t).unwrap().text().unwrap(), &names[..]);
+        // All rows that hold text are inside the range (the last one is empty): allowed.
+        p.set_column_values(t, "i * 10", Some(0..3)).unwrap();
+        assert_eq!(&p.numeric(t).unwrap()[..3], &[10.0, 20.0, 30.0]);
     }
 
     #[test]

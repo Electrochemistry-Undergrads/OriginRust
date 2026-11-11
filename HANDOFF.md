@@ -1,77 +1,52 @@
 # Handoff
 
-Last updated: 2026-11-11, third session, while work is in progress.
+Last updated: 2026-11-11, fourth session, start of work.
 
 ## Where things stand
 
-- **Milestone 2 (first vertical slice) is built and works.** Open: findings of the independent
-  review (running, see "In progress"), and a person trying the app once.
-- **Milestone 3 (analysis) is nearly done.** The numerics are checked against Origin, and the tools
-  are in the app (Analysis menu) and in the command-line program (`sheaf analyze`). Sorting and
-  filtering of sheets work. Open: FFT filter smoothing (an agent is on it).
-- **Milestone 4 (fitting)** has started in the new crate `crates/fit` (an agent is on it; the crate
-  may be half-written).
-- **Milestone 5 (Origin project import)**: workbooks and column data are read and can be opened in
-  the app and the command-line program. An agent is checking the reader cell by cell against
-  Origin and then adding graphs.
-- The repository exists **only on this computer**: there is no GitHub remote yet. See "Needs from
-  me".
+- **The repository is on GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is
+  pushed; CI ran for the first time on this push.
+- **Milestone 2 (first vertical slice)** works. The independent review found 11 real problems
+  (listed below); they are being fixed. Then the milestone is tagged `m2-first-slice`.
+- **Milestone 3 (analysis)**: everything except the FFT filter (smoothing) and cubic B-spline
+  interpolation is built and checked against Origin.
+- **Milestone 4 (fitting)**: `crates/fit` has the shared report types (`report.rs`), t and F
+  probabilities (`dist.rs`, tested) and empty modules `linear`, `nlsf`, `library`, `fdf`.
+- **Milestone 5 (Origin projects)**: workbooks and column data are read. Tools to compare the
+  reader with Origin cell by cell exist (`b3f97be`) but have not been run to the end.
 
-## Finished and verified in this session
+All checks pass at `b3f97be`: `cargo fmt --check`, `cargo clippy --workspace --all-targets` (no
+warnings) and `cargo test --workspace` (about 270 tests).
 
-Commits `a16d708` and `0a006c3`.
+## In progress (background agents, each in its own git worktree under `.claude/worktrees/`)
 
-- `sheaf-calc`: integrate, differentiate, smooth (adjacent averaging, Savitzky-Golay, percentile),
-  normalize, interpolate (linear, cubic spline, Akima), baseline subtraction, peak finding,
-  statistics. 32 tests compare with numbers produced by the installed Origin 2016.
-- `sheaf-core`, module `analysis`: `Project::analyze`, `sort_sheet`, `filter_sheet` (10 tests).
-  Where results go is decided in `docs/adr/0005-analysis-results.md`.
-- `sheaf-cli`: `sheaf analyze integrate|differentiate|smooth|normalize|baseline|interpolate|peaks|
-  stats|sort|filter`. Run by hand on synthetic current-vs-time, cyclic voltammetry and CSV files;
-  the tables and exported sheets were read.
-- `sheaf-app`: Analysis menu, Worksheet > Sort Sheet by Column and Filter Rows. The Integrate,
-  Find Peaks and Filter windows were looked at in screenshots; two tests press OK in the Integrate
-  and Filter windows without a real window and check the result and the undo step.
-- The Origin driver scripts take a system-wide lock, so several agents can ask Origin for
-  reference numbers without starting two instances.
+Each agent commits on its own `worktree-...` branch; nothing reaches `main` until it is reviewed
+and merged. If a session ends before they finish, list the branches with `git branch` and the
+worktrees with `git worktree list`; merge what is complete, delete the rest.
 
-## Not verified
-
-- **Mouse and keyboard use of the desktop app by a person.** Tests that click through the app
-  without a window exist (`crates/app/src/app/ui_tests.rs`): 3 pass, 8 older drafts are marked
-  ignored until an agent has matched them to the real widgets (in progress).
-- The CI workflow has never run, because nothing is pushed.
-- The CH Instruments importer has only seen synthetic files, never a real export.
-- The Analysis windows other than Integrate and Filter were only drawn, not operated.
-
-## In progress (may be half-written if the session was cut off)
-
-Background agents share the working tree. Each owns the paths listed; nothing of theirs is
-committed until it is checked.
-
-- **FFT filter and B-spline interpolation**: `crates/calc`, `docs/spec/analysis-tools.md`.
-- **Fitting**: `crates/fit` (linear, polynomial, Levenberg-Marquardt, function library, `.FDF`
-  import), small additions to `crates/expr`, `docs/spec/fitting.md`,
-  `tools/origin-ref/fit-*.labtalk.txt`.
-- **Origin project reader**: `crates/io/src/opj`, `crates/io/examples`, `docs/spec/opj-format.md`,
-  `tools/origin-ref/opj-*`. First a cell-by-cell comparison with Origin for the owner's five
-  projects, then reading of basic graphs.
-- **Click tests of the app**: `crates/app` (the eight ignored tests).
-- **Review of milestone 2** by three reviewers in private git worktrees under `.claude/`
-  (read-only; they change nothing).
-
-If a session starts and these are unfinished: run the verification commands. A crate that does not
-compile is one of the above; finish it or set its uncommitted changes aside with
-`git stash push <path>`.
+1. Import fixes (`crates/io/src/ascii.rs`): a text cell such as `n.d.` in the first rows turned
+   data rows into header lines; `NA`, `--`, `n.d.` are not read as missing; quoted CSV fields
+   with line breaks split a record.
+2. App and document fixes: Enter in a cell opens the next cell empty and clicking away erases it;
+   opening a cell and leaving it rounds the stored number; the import dialog re-reads the whole
+   file every frame; an absurd row range in Set Column Values aborts the app; adding a plot
+   recolours all plots; a workbook without sheets panics.
+3. Figure and command-line fixes: the Y axis title is cut off when tick labels are wide; unclear
+   errors for a zero size or reversed axis limits.
+4. FFT filter smoothing and cubic B-spline interpolation (`crates/calc`).
+5. Linear and polynomial fits (`crates/fit/src/linear.rs`, `docs/spec/fitting-linear.md`).
+6. Nonlinear fitting, built-in functions and `.FDF` import (`nlsf.rs`, `library.rs`, `fdf.rs`,
+   `docs/spec/fitting.md`).
+7. Origin project reader: cell-by-cell comparison with Origin on the owner's five projects, then
+   reading basic graphs (`crates/io/src/opj`, `docs/spec/opj-format.md`).
 
 ## Exact next step
 
-1. Collect the agents' results, check each (tests, lint, a spot check against Origin), commit per
-   stream. Fix the confirmed findings of the milestone 2 review; tag `m2-first-slice`.
-2. Put fitting into the app and the command-line program (`sheaf fit`, a Fit window, the fitted
-   curve on the graph, a report sheet), following `docs/adr/0005-analysis-results.md`.
-3. Independent review of milestone 3; tag `m3-analysis`.
-4. Milestone 6 (more graph types) by the owner's priorities.
+1. Merge the agents' branches after their reviews; run the full checks; push.
+2. Tag `m2-first-slice` when stream 1 to 3 are merged.
+3. Put fitting into the app and the command-line program (`sheaf fit`, a Fit window, the fitted
+   curve on the graph, a report sheet) following `docs/adr/0005-analysis-results.md`.
+4. Independent review of milestone 3; tag `m3-analysis`.
 
 ## Commands that verify the current state
 
@@ -89,15 +64,11 @@ cargo run -p sheaf-app -- some_cv_export.txt --show analysis:integrate --screens
 
 ## Needs from me (the owner)
 
-1. **Create the GitHub repository.** Run this once in the repo folder:
-   `gh repo create OriginRust --private --source . --remote origin --push`
-   (or add a permission rule that lets the assistant run `gh repo create` and `git push`). Until
-   then every checkpoint is a local commit only.
-2. **Try the app** (`cargo run --release -p sheaf-app`), import one of your real CH Instruments
+1. **Try the app** (`cargo run --release -p sheaf-app`), import one of your real CH Instruments
    files, try Analysis > Integrate on a scan, and tell me what is wrong or missing. Real CV and
    i-t export files in the repo folder would also let me check the importer against real headers.
-3. Example figures you make most often, to match their style.
-4. How you choose the limits when you integrate a peak in Origin (by rows, by potential, or by
+2. Example figures you make most often, to match their style.
+3. How you choose the limits when you integrate a peak in Origin (by rows, by potential, or by
    dragging on the graph). The app offers rows and an X interval today; dragging on the graph is
    not built.
 
@@ -107,6 +78,9 @@ computer to develop and check the Origin project reader.
 ## Local-only resources
 
 - `re-workspace/scratch/` holds scratch scripts, raw dumps, synthetic test files and screenshots.
+  `scratch/calc/p1..p4, q1..q2` are Origin outputs of the FFT filter and B-spline interpolation
+  on our own inputs (from the previous session); `scratch/opj/ours/*.opj.txt` are our reader's
+  listings of the owner's projects.
 - The owner's `.opj` files are in the repo root (git-ignored).
 - No Ghidra project and no saved REA evidence bundle exist.
 - Origin can be driven through COM automation with `tools/origin-ref/run-labtalk.ps1`.

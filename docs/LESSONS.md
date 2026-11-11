@@ -3,14 +3,14 @@
 One entry per lesson, summary first. Update an entry instead of adding a duplicate; delete entries
 that turn out to be wrong.
 
-## Creating the GitHub repository is blocked for the assistant in auto mode
+## The GitHub repository exists; pushing works
 
-`gh repo create` was refused twice by Claude Code's automatic permission check ("public
-data-sharing upload"), even though the brief approves it. The owner has to run the command once
-himself (it is in `HANDOFF.md`) or add a permission rule. After that, plain `git push` may or may
-not be allowed; try it and record the result here. Tried again on 2026-11-11 in the second
-session with the owner present: refused again ("data exfiltration"). Do not keep retrying; commit
-locally and wait for the owner.
+The private repository is https://github.com/UlanS1/OriginRust. In the first two sessions
+`gh repo create` was refused by Claude Code's automatic permission check in auto mode ("data
+exfiltration"). In the fourth session (2026-11-11), with the owner's permission mode set to
+bypass, `gh repo create OriginRust --private --source . --remote origin --push` worked at once.
+If a later session in auto mode is refused a `git push`, commit locally and note it in
+`HANDOFF.md`; do not retry in a loop.
 
 ## Do not patch source files with `node -e` or `sed` scripts that contain backticks or `$`
 

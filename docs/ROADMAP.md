@@ -7,7 +7,7 @@ publication figures), P1 is common Origin use, P2 is later.
 ## Milestone 1: inventory and foundations
 
 - [x] Repository with ignore rules; local git history
-- [ ] Private GitHub repository `OriginRust` created and pushed (blocked: see HANDOFF "Needs from me")
+- [x] Private GitHub repository `OriginRust` created and pushed
 - [x] Cargo workspace with the six crates (ADR 0001)
 - [x] Document model in `sheaf-core`: project, workbooks, columns, graph model, templates, undo
 - [x] Design records: rendering pipeline, GUI stack, project file and undo (ADR 0002-0004)

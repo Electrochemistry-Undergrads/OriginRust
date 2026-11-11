@@ -146,10 +146,39 @@ pub struct Request {
 pub struct ResultTable {
     /// Header of each numeric column.
     pub headers: Vec<String>,
-    /// Unit of each numeric column (may be empty).
+    /// Unit of each numeric column when every row has the same unit there; empty when the rows
+    /// differ (see [`ResultTable::mixed_units`] and `row_units`).
     pub units: Vec<String>,
     /// A label (which input column) and one number per header.
     pub rows: Vec<(String, Vec<f64>)>,
+    /// The unit of every number, row by row. Input columns can have different units (the A and
+    /// mA columns of a CH Instruments import), so one unit per table column is not enough.
+    pub row_units: Vec<Vec<String>>,
+}
+
+impl ResultTable {
+    fn new(headers: &[&str]) -> Self {
+        ResultTable { headers: headers.iter().map(|h| h.to_string()).collect(), ..Default::default() }
+    }
+
+    /// Adds a row and updates the shared units.
+    fn push_row(&mut self, label: String, values: Vec<f64>, units: Vec<String>) {
+        self.rows.push((label, values));
+        self.row_units.push(units);
+        self.units = (0..self.headers.len())
+            .map(|i| if self.mixed_units(i) { String::new() } else { self.unit(0, i).to_string() })
+            .collect();
+    }
+
+    /// The unit of the number in row `row`, column `col`.
+    pub fn unit(&self, row: usize, col: usize) -> &str {
+        self.row_units.get(row).and_then(|u| u.get(col)).map_or("", String::as_str)
+    }
+
+    /// True if the rows of column `col` do not all have the same unit.
+    pub fn mixed_units(&self, col: usize) -> bool {
+        (1..self.rows.len()).any(|r| self.unit(r, col) != self.unit(0, col))
+    }
 }
 
 /// What a tool did.
@@ -389,13 +418,8 @@ impl Project {
 
         match &request.tool {
             Tool::Integrate(spec) => {
-                let mut t = ResultTable {
-                    headers: ["Area", "X start", "X end", "Peak X", "Peak height", "Width at half height"]
-                        .map(String::from)
-                        .to_vec(),
-                    units: Vec::new(),
-                    rows: Vec::new(),
-                };
+                let mut t =
+                    ResultTable::new(&["Area", "X start", "X end", "Peak X", "Peak height", "Width at half height"]);
                 for inp in &inputs {
                     let options = calc::IntegrateOptions {
                         area_type: spec.area_type,
@@ -405,17 +429,12 @@ impl Project {
                     let r = calc::integrate(inp.xs(), inp.ys(), &options)
                         .ok_or_else(|| AnalysisError::TooFewPoints(inp.short.clone()))?;
                     let area_unit = unit_product(&inp.units, &inp.x_units);
-                    if t.units.is_empty() {
-                        t.units = vec![
-                            area_unit.clone(),
-                            inp.x_units.clone(),
-                            inp.x_units.clone(),
-                            inp.x_units.clone(),
-                            inp.units.clone(),
-                            inp.x_units.clone(),
-                        ];
-                    }
-                    t.rows.push((inp.label.clone(), vec![r.area, r.x1, r.x2, r.peak_x, r.peak_height, r.width]));
+                    let xu = &inp.x_units;
+                    t.push_row(
+                        inp.label.clone(),
+                        vec![r.area, r.x1, r.x2, r.peak_x, r.peak_height, r.width],
+                        vec![area_unit.clone(), xu.clone(), xu.clone(), xu.clone(), inp.units.clone(), xu.clone()],
+                    );
                     if spec.cumulative {
                         let baseline = if spec.end_point_baseline { ", end-point baseline subtracted" } else { "" };
                         let kind = if spec.area_type == AreaType::Absolute { "Absolute integral" } else { "Integral" };
@@ -433,6 +452,23 @@ impl Project {
             Tool::Differentiate(options) => {
                 if !(1..=9).contains(&options.order) {
                     return Err(AnalysisError::BadOption("the derivative order must be between 1 and 9".into()));
+                }
+                if options.smooth {
+                    // Otherwise the local polynomial fit is impossible and the column comes out empty.
+                    let window = 2 * (options.npts / 2) + 1;
+                    if options.poly >= window {
+                        return Err(AnalysisError::BadOption(format!(
+                            "the polynomial order ({}) of the smoothing derivative must be smaller than its \
+                             window of {window} points",
+                            options.poly
+                        )));
+                    }
+                    if options.order > options.poly {
+                        return Err(AnalysisError::BadOption(format!(
+                            "a derivative of order {} needs a smoothing polynomial of at least that order (it is {})",
+                            options.order, options.poly
+                        )));
+                    }
                 }
                 for inp in &inputs {
                     let d = calc::differentiate(inp.xs(), inp.ys(), options);
@@ -470,6 +506,13 @@ impl Project {
                 }
             }
             Tool::Normalize(method) => {
+                if let NormalizeMethod::Divide(d) = method
+                    && (*d == 0.0 || !d.is_finite())
+                {
+                    return Err(AnalysisError::BadOption(format!(
+                        "cannot divide by {d}; give a finite value other than 0"
+                    )));
+                }
                 for inp in &inputs {
                     let v = calc::normalize(inp.ys(), *method);
                     let units =
@@ -564,14 +607,10 @@ impl Project {
                 }
             }
             Tool::FindPeaks(options) => {
-                let mut t = ResultTable {
-                    headers: vec!["Peaks found".to_string()],
-                    units: vec![String::new()],
-                    rows: Vec::new(),
-                };
+                let mut t = ResultTable::new(&["Peaks found"]);
                 for inp in &inputs {
                     let found = calc::find_peaks(inp.xs(), inp.ys(), options);
-                    t.rows.push((inp.label.clone(), vec![found.x.len() as f64]));
+                    t.push_row(inp.label.clone(), vec![found.x.len() as f64], vec![String::new()]);
                     on_sheet.push(SheetColumn {
                         designation: Designation::X,
                         long_name: format!("Peak position ({})", inp.x_name),
@@ -597,24 +636,13 @@ impl Project {
                 table = Some(t);
             }
             Tool::Statistics => {
-                let mut t = ResultTable {
-                    headers: ["N", "Missing", "Mean", "SD", "SEM", "Sum", "Minimum", "Q1", "Median", "Q3", "Maximum"]
-                        .map(String::from)
-                        .to_vec(),
-                    units: Vec::new(),
-                    rows: Vec::new(),
-                };
+                let mut t = ResultTable::new(&[
+                    "N", "Missing", "Mean", "SD", "SEM", "Sum", "Minimum", "Q1", "Median", "Q3", "Maximum",
+                ]);
                 for inp in &inputs {
                     let s = calc::stats(inp.ys());
-                    if t.units.is_empty() {
-                        t.units = t
-                            .headers
-                            .iter()
-                            .enumerate()
-                            .map(|(i, _)| if i < 2 { String::new() } else { inp.units.clone() })
-                            .collect();
-                    }
-                    t.rows.push((
+                    let units = (0..t.headers.len()).map(|i| if i < 2 { String::new() } else { inp.units.clone() });
+                    t.push_row(
                         inp.label.clone(),
                         vec![
                             s.n as f64,
@@ -629,7 +657,8 @@ impl Project {
                             s.q3,
                             s.max,
                         ],
-                    ));
+                        units.collect(),
+                    );
                 }
                 table = Some(t);
             }
@@ -652,6 +681,16 @@ impl Project {
                     comments: String::new(),
                     data: ColumnData::numeric(t.rows.iter().map(|(_, v)| v[i]).collect()),
                 });
+                // Rows with different units: the unit of each row goes into a text column beside it.
+                if t.mixed_units(i) {
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Label,
+                        long_name: format!("{header} unit"),
+                        units: String::new(),
+                        comments: String::new(),
+                        data: ColumnData::text((0..t.rows.len()).map(|r| t.unit(r, i).to_string()).collect()),
+                    });
+                }
             }
         }
 
@@ -659,6 +698,7 @@ impl Project {
         let count = inputs.len();
         drop(inputs);
         let mut new_columns = Vec::with_capacity(beside.len());
+        let mut added_names: Vec<String> = Vec::new();
         for nc in beside {
             let id = self.new_column_id();
             let ws = &mut self.workbook_mut(book_id).expect("workbook exists").sheets[sheet_index];
@@ -675,6 +715,7 @@ impl Project {
                 at += 1;
             }
             let name = ws.next_short_name();
+            added_names.push(format!("{name} \"{}\"", nc.long_name));
             let column = Column::new(id, name, Designation::Y, ColumnData::numeric(nc.data)).with_labels(
                 &nc.long_name,
                 &nc.units,
@@ -706,9 +747,18 @@ impl Project {
             new_sheet = Some(b.sheets.len() - 1);
         }
         let columns = if count == 1 { "1 column".to_string() } else { format!("{count} columns") };
-        let message = match new_sheet {
-            Some(_) => format!("{}: {columns}, results in sheet {sheet_name}", request.tool.name()),
-            None => format!("{}: {columns}, results in new columns", request.tool.name()),
+        // Name the added columns, so that the result can be found without opening the sheet.
+        const SHOWN: usize = 6;
+        let mut added = added_names.iter().take(SHOWN).cloned().collect::<Vec<_>>().join(", ");
+        if added_names.len() > SHOWN {
+            added.push_str(&format!(" and {} more", added_names.len() - SHOWN));
+        }
+        let message = match (new_sheet, added.is_empty()) {
+            (Some(_), true) => format!("{}: {columns}, results in sheet {sheet_name}", request.tool.name()),
+            (Some(_), false) => {
+                format!("{}: {columns}, results in sheet {sheet_name} and in new columns {added}", request.tool.name())
+            }
+            (None, _) => format!("{}: {columns}, results in new columns {added}", request.tool.name()),
         };
         Ok(Report { book: book_id, sheet: sheet_index, new_columns, new_sheet, table, message })
     }
@@ -788,6 +838,12 @@ impl Project {
             crate::formula::eval_on_sheet(&expr, ws, n).map_err(|e| AnalysisError::Condition(e.to_string()))?;
         let keep: Vec<usize> = (0..n).filter(|i| values[*i] != 0.0 && !values[*i].is_nan()).collect();
         let kept = keep.len();
+        if kept == 0 && n > 0 && !to_new_sheet {
+            // Filtering in place would empty the whole sheet; that is almost always a mistyped condition.
+            return Err(AnalysisError::Condition(format!(
+                "no row matches '{condition}', so filtering in place would delete all {n} rows; nothing was changed"
+            )));
+        }
         if to_new_sheet {
             let mut copy =
                 Worksheet::new(free_sheet_name(&self.workbook(book).expect("checked above").sheets, "Filter"));
@@ -863,6 +919,64 @@ mod tests {
 
     fn request(columns: &[ColumnId], tool: Tool) -> Request {
         Request { columns: columns.to_vec(), rows: RowRange::All, tool }
+    }
+
+    /// A CH Instruments import has the current in A and in mA side by side. Integrating both must
+    /// label each row with its own unit, not with the first column's (a factor of 1000).
+    #[test]
+    fn result_tables_keep_each_rows_unit() {
+        let (mut p, book, flat, ramp) = sample();
+        p.column_mut(ramp).unwrap().units = "mA".into();
+        let r = p.analyze(&request(&[flat, ramp], Tool::Integrate(IntegrateSpec::default()))).unwrap();
+        let t = r.table.as_ref().unwrap();
+        assert_eq!((t.unit(0, 0), t.unit(1, 0)), ("C", "mC"));
+        assert!(t.mixed_units(0));
+        assert_eq!(t.units[0], "", "no single unit for the Area column");
+        assert_eq!(t.units[1], "s", "both rows share the X unit");
+        // The result sheet carries the units of the rows in a text column beside the numbers.
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let names: Vec<&str> = rs.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(&names[..4], ["Data", "Area", "Area unit", "X start"]);
+        assert_eq!(rs.columns[2].text().unwrap(), ["C", "mC"]);
+        // Statistics too.
+        let s = p.analyze(&request(&[flat, ramp], Tool::Statistics)).unwrap();
+        let t = s.table.unwrap();
+        assert_eq!((t.unit(0, 2), t.unit(1, 2)), ("A", "mA"));
+        assert_eq!(t.units[0], "", "N has no unit");
+        assert!(!t.mixed_units(0));
+    }
+
+    #[test]
+    fn options_that_would_give_an_empty_or_infinite_column_are_refused() {
+        let (mut p, _, flat, _) = sample();
+        let smooth_diff = |poly, npts, order| Tool::Differentiate(DiffOptions { order, smooth: true, poly, npts });
+        for (tool, why) in [
+            (smooth_diff(2, 1, 1), "window of 1 point"),
+            (smooth_diff(5, 3, 1), "polynomial order not below the window"),
+            (smooth_diff(2, 20, 3), "derivative order above the polynomial order"),
+            (Tool::Normalize(NormalizeMethod::Divide(0.0)), "divide by zero"),
+            (Tool::Normalize(NormalizeMethod::Divide(f64::INFINITY)), "divide by infinity"),
+        ] {
+            let before = p.clone();
+            let err = p.analyze(&request(&[flat], tool)).unwrap_err();
+            assert!(matches!(err, AnalysisError::BadOption(_)), "{why}: {err}");
+            assert_eq!(p, before, "{why}: nothing may change");
+        }
+        // A usable smoothing derivative still works and names the column it added.
+        let r = p.analyze(&request(&[flat], smooth_diff(2, 5, 1))).unwrap();
+        assert!(r.message.contains("\"Derivative of Current\""), "{}", r.message);
+    }
+
+    #[test]
+    fn filtering_in_place_never_empties_the_sheet() {
+        let (mut p, book, _, _) = sample();
+        let before = p.clone();
+        let err = p.filter_sheet(book, 0, "col(A) > 100", false).unwrap_err();
+        assert!(err.to_string().contains("nothing was changed"), "{err}");
+        assert_eq!(p, before);
+        // Into a new sheet an empty result is fine: the source is untouched.
+        let (kept, _) = p.filter_sheet(book, 0, "col(A) > 100", true).unwrap();
+        assert_eq!(kept, 0);
     }
 
     #[test]

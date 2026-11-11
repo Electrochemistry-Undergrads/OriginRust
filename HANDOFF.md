@@ -40,6 +40,14 @@ worktrees with `git worktree list`; merge what is complete, delete the rest.
 7. Origin project reader: cell-by-cell comparison with Origin on the owner's five projects, then
    reading basic graphs (`crates/io/src/opj`, `docs/spec/opj-format.md`).
 
+A second workflow reviews milestone 3 (analysis) at `d27d87f` from five angles (numerics, the
+analysis entry point, the command-line program, the app's analysis windows, the expression
+language); a second reviewer re-checks every finding. It changes no files. Its confirmed findings
+are fixed after the merges above.
+
+Done in this session so far: the GitHub repository (`dd86f77`), ADR 0006 on fit results
+(`d27d87f`), tag `m1-foundations`, first CI run passed.
+
 ## Exact next step
 
 1. Merge the agents' branches after their reviews; run the full checks; push.

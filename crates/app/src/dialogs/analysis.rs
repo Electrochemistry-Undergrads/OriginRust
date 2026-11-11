@@ -1,0 +1,609 @@
+//! The windows of the Analysis menu (integrate, differentiate, smooth,
+//! normalize, subtract baseline, interpolate, find peaks, statistics) and the
+//! "Filter Rows" window of the Worksheet menu.
+//!
+//! One window type serves all analysis tools: it shows which columns the
+//! tool will work on, the tool's own options, and the row range. OK runs the
+//! tool as one undoable step.
+
+use eframe::egui::{self, DragValue, RichText};
+use sheaf_core::analysis::{
+    AreaType, BaselineSpec, Boundary, DiffOptions, IntegrateSpec, InterpMethod, InterpSpec, NormalizeMethod,
+    PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary,
+    Tool,
+};
+use sheaf_core::{ColumnId, Document, Project, WindowId};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnalysisKind {
+    Integrate,
+    Differentiate,
+    Smooth,
+    Normalize,
+    Baseline,
+    Interpolate,
+    Peaks,
+    Statistics,
+}
+
+impl AnalysisKind {
+    pub const ALL: [AnalysisKind; 8] = [
+        AnalysisKind::Integrate,
+        AnalysisKind::Differentiate,
+        AnalysisKind::Smooth,
+        AnalysisKind::Normalize,
+        AnalysisKind::Baseline,
+        AnalysisKind::Interpolate,
+        AnalysisKind::Peaks,
+        AnalysisKind::Statistics,
+    ];
+
+    /// The text of the menu entry.
+    pub fn menu_label(self) -> &'static str {
+        match self {
+            AnalysisKind::Integrate => "Integrate...",
+            AnalysisKind::Differentiate => "Differentiate...",
+            AnalysisKind::Smooth => "Smooth...",
+            AnalysisKind::Normalize => "Normalize...",
+            AnalysisKind::Baseline => "Subtract Baseline...",
+            AnalysisKind::Interpolate => "Interpolate...",
+            AnalysisKind::Peaks => "Find Peaks...",
+            AnalysisKind::Statistics => "Statistics on Columns...",
+        }
+    }
+
+    fn title(self) -> &'static str {
+        self.menu_label().trim_end_matches("...")
+    }
+
+    /// The name used on the command line with `--show analysis:NAME`.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "integrate" => AnalysisKind::Integrate,
+            "differentiate" => AnalysisKind::Differentiate,
+            "smooth" => AnalysisKind::Smooth,
+            "normalize" => AnalysisKind::Normalize,
+            "baseline" => AnalysisKind::Baseline,
+            "interpolate" => AnalysisKind::Interpolate,
+            "peaks" => AnalysisKind::Peaks,
+            "statistics" => AnalysisKind::Statistics,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RowMode {
+    All,
+    Rows,
+    XRange,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SmoothKind {
+    SavitzkyGolay,
+    Average,
+    Weighted,
+    Percentile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BaselineKind {
+    Minimum,
+    Constant,
+    EndPoints,
+    Line,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PeakKeep {
+    /// At least 20 % of the largest magnitude.
+    Default,
+    Height,
+    Count,
+    All,
+}
+
+const NORMALIZE_CHOICES: [(&str, NormalizeMethod); 12] = [
+    ("Divide by the maximum", NormalizeMethod::Max),
+    ("To the range 0 to 1", NormalizeMethod::ZeroToOne),
+    ("To the range 0 to 100", NormalizeMethod::ZeroToHundred),
+    ("Z scores (mean 0, standard deviation 1)", NormalizeMethod::ZScore),
+    ("Divide by the mean", NormalizeMethod::Mean),
+    ("Divide by the median", NormalizeMethod::Median),
+    ("Divide by the sum", NormalizeMethod::Sum),
+    ("Divide by the minimum", NormalizeMethod::Min),
+    ("Divide by the standard deviation", NormalizeMethod::Sd),
+    ("Divide by the norm", NormalizeMethod::Norm),
+    ("Divide by the mode", NormalizeMethod::Mode),
+    ("Divide by a value", NormalizeMethod::Divide(1.0)),
+];
+
+pub enum AnalysisOutcome {
+    Open,
+    Closed,
+    /// The tool ran; the window closes.
+    Done(Report),
+}
+
+pub struct AnalysisDialog {
+    kind: AnalysisKind,
+    columns: Vec<ColumnId>,
+    /// "B, C, D" for the first line of the window.
+    column_names: String,
+    rows_in_sheet: usize,
+    row_mode: RowMode,
+    from: usize,
+    to: usize,
+    x_from: f64,
+    x_to: f64,
+    integrate: IntegrateSpec,
+    diff: DiffOptions,
+    smooth_kind: SmoothKind,
+    smooth_points: usize,
+    smooth_poly: usize,
+    smooth_percent: f64,
+    boundary: Boundary,
+    normalize: usize,
+    divisor: f64,
+    baseline: BaselineKind,
+    level: f64,
+    line: [f64; 4],
+    interp: InterpSpec,
+    interp_own_range: bool,
+    peaks: PeakOptions,
+    peak_keep: PeakKeep,
+    peak_height: f64,
+    peak_count: usize,
+    problem: Option<String>,
+}
+
+impl AnalysisDialog {
+    /// A window for running `kind` on `columns`. `None` when a column no longer exists.
+    pub fn new(project: &Project, kind: AnalysisKind, columns: Vec<ColumnId>) -> Option<Self> {
+        let (_, sheet, _) = project.locate(*columns.first()?)?;
+        let names: Vec<&str> =
+            columns.iter().filter_map(|id| sheet.column(*id)).map(|c| c.short_name.as_str()).collect();
+        if names.len() != columns.len() {
+            return None;
+        }
+        let rows_in_sheet = sheet.row_count().max(1);
+        // Start the X limits at the X range of the first column's X data.
+        let x = sheet.column_index(columns[0]).and_then(|i| sheet.x_for(i)).and_then(|c| c.numeric());
+        let (x_lo, x_hi) = match x {
+            Some(v) => {
+                let finite = v.iter().copied().filter(|v| v.is_finite());
+                (finite.clone().fold(f64::INFINITY, f64::min), finite.fold(f64::NEG_INFINITY, f64::max))
+            }
+            None => (1.0, rows_in_sheet as f64),
+        };
+        let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
+        Some(AnalysisDialog {
+            kind,
+            column_names: names.join(", "),
+            columns,
+            rows_in_sheet,
+            row_mode: RowMode::All,
+            from: 1,
+            to: rows_in_sheet,
+            x_from: x_lo,
+            x_to: x_hi,
+            integrate: IntegrateSpec::default(),
+            diff: DiffOptions::default(),
+            smooth_kind: SmoothKind::SavitzkyGolay,
+            smooth_points: 5,
+            smooth_poly: 2,
+            smooth_percent: 50.0,
+            boundary: Boundary::None,
+            normalize: 0,
+            divisor: 1.0,
+            baseline: BaselineKind::Minimum,
+            level: 0.0,
+            line: [x_lo, 0.0, x_hi, 0.0],
+            interp: InterpSpec { range: Some((x_lo, x_hi)), ..InterpSpec::default() },
+            interp_own_range: false,
+            peaks: PeakOptions::default(),
+            peak_keep: PeakKeep::Default,
+            peak_height: 0.0,
+            peak_count: 1,
+            problem: None,
+        })
+    }
+
+    fn tool(&self) -> Tool {
+        match self.kind {
+            AnalysisKind::Integrate => Tool::Integrate(self.integrate),
+            AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
+            AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
+                method: match self.smooth_kind {
+                    SmoothKind::SavitzkyGolay => SmoothMethod::SavitzkyGolay { poly_order: self.smooth_poly },
+                    SmoothKind::Average => SmoothMethod::AdjacentAveraging { weighted: false },
+                    SmoothKind::Weighted => SmoothMethod::AdjacentAveraging { weighted: true },
+                    SmoothKind::Percentile => SmoothMethod::Percentile { percent: self.smooth_percent },
+                },
+                npts: self.smooth_points,
+                boundary: self.boundary,
+            }),
+            AnalysisKind::Normalize => Tool::Normalize(match NORMALIZE_CHOICES[self.normalize].1 {
+                NormalizeMethod::Divide(_) => NormalizeMethod::Divide(self.divisor),
+                other => other,
+            }),
+            AnalysisKind::Baseline => Tool::SubtractBaseline(match self.baseline {
+                BaselineKind::Minimum => BaselineSpec::Minimum,
+                BaselineKind::Constant => BaselineSpec::Constant(self.level),
+                BaselineKind::EndPoints => BaselineSpec::EndPoints,
+                BaselineKind::Line => BaselineSpec::Line((self.line[0], self.line[1]), (self.line[2], self.line[3])),
+            }),
+            AnalysisKind::Interpolate => Tool::Interpolate(InterpSpec {
+                range: if self.interp_own_range { self.interp.range } else { None },
+                ..self.interp
+            }),
+            AnalysisKind::Peaks => Tool::FindPeaks(PeakOptions {
+                filter: match self.peak_keep {
+                    PeakKeep::Default => PeakFilter::Height(0.0),
+                    PeakKeep::Height => PeakFilter::Height(self.peak_height),
+                    PeakKeep::Count => PeakFilter::Number(self.peak_count),
+                    PeakKeep::All => PeakFilter::None,
+                },
+                ..self.peaks
+            }),
+            AnalysisKind::Statistics => Tool::Statistics,
+        }
+    }
+
+    fn request(&self) -> Request {
+        let rows = match self.row_mode {
+            RowMode::All => RowRange::All,
+            RowMode::Rows => RowRange::Rows(self.from, self.to),
+            RowMode::XRange => RowRange::XBetween(self.x_from, self.x_to),
+        };
+        Request { columns: self.columns.clone(), rows, tool: self.tool() }
+    }
+
+    fn options(&mut self, ui: &mut egui::Ui) {
+        match self.kind {
+            AnalysisKind::Integrate => {
+                ui.horizontal(|ui| {
+                    ui.label("Area");
+                    ui.radio_value(&mut self.integrate.area_type, AreaType::Mathematical, "Signed");
+                    ui.radio_value(&mut self.integrate.area_type, AreaType::Absolute, "Absolute");
+                });
+                ui.checkbox(
+                    &mut self.integrate.end_point_baseline,
+                    "Subtract the line through the first and last point",
+                )
+                .on_hover_text("For the area of a peak above a sloping background: choose the rows around the peak.");
+                ui.checkbox(&mut self.integrate.cumulative, "Add a column with the running integral");
+                ui.weak("Area, peak position, height and width go to a new sheet.");
+            }
+            AnalysisKind::Differentiate => {
+                ui.horizontal(|ui| {
+                    ui.label("Derivative order");
+                    ui.add(DragValue::new(&mut self.diff.order).range(1..=9));
+                });
+                ui.checkbox(&mut self.diff.smooth, "Smooth with a local polynomial fit");
+                ui.add_enabled_ui(self.diff.smooth, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Polynomial order");
+                        ui.add(DragValue::new(&mut self.diff.poly).range(1..=9));
+                        ui.label("Points of window");
+                        ui.add(DragValue::new(&mut self.diff.npts).range(3..=1001));
+                    });
+                });
+            }
+            AnalysisKind::Smooth => {
+                ui.horizontal(|ui| {
+                    ui.label("Method");
+                    egui::ComboBox::from_id_salt("smooth_method")
+                        .selected_text(match self.smooth_kind {
+                            SmoothKind::SavitzkyGolay => "Savitzky-Golay",
+                            SmoothKind::Average => "Adjacent averaging",
+                            SmoothKind::Weighted => "Weighted adjacent averaging",
+                            SmoothKind::Percentile => "Percentile filter",
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::SavitzkyGolay, "Savitzky-Golay");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Average, "Adjacent averaging");
+                            ui.selectable_value(
+                                &mut self.smooth_kind,
+                                SmoothKind::Weighted,
+                                "Weighted adjacent averaging",
+                            );
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Percentile, "Percentile filter");
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Points of window");
+                    ui.add(DragValue::new(&mut self.smooth_points).range(1..=100_001));
+                    match self.smooth_kind {
+                        SmoothKind::SavitzkyGolay => {
+                            ui.label("Polynomial order");
+                            ui.add(DragValue::new(&mut self.smooth_poly).range(1..=9));
+                        }
+                        SmoothKind::Percentile => {
+                            ui.label("Percentile");
+                            ui.add(DragValue::new(&mut self.smooth_percent).range(0.0..=100.0));
+                        }
+                        _ => {}
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("At the ends");
+                    egui::ComboBox::from_id_salt("smooth_boundary")
+                        .selected_text(boundary_label(self.boundary))
+                        .show_ui(ui, |ui| {
+                            for b in [
+                                Boundary::None,
+                                Boundary::Reflect,
+                                Boundary::Repeat,
+                                Boundary::Periodic,
+                                Boundary::Extrapolate,
+                            ] {
+                                ui.selectable_value(&mut self.boundary, b, boundary_label(b));
+                            }
+                        });
+                });
+            }
+            AnalysisKind::Normalize => {
+                ui.horizontal(|ui| {
+                    ui.label("Method");
+                    egui::ComboBox::from_id_salt("normalize_method")
+                        .selected_text(NORMALIZE_CHOICES[self.normalize].0)
+                        .width(260.0)
+                        .show_ui(ui, |ui| {
+                            for (i, (label, _)) in NORMALIZE_CHOICES.iter().enumerate() {
+                                ui.selectable_value(&mut self.normalize, i, *label);
+                            }
+                        });
+                });
+                if matches!(NORMALIZE_CHOICES[self.normalize].1, NormalizeMethod::Divide(_)) {
+                    ui.horizontal(|ui| {
+                        ui.label("Value");
+                        ui.add(DragValue::new(&mut self.divisor).speed(0.1));
+                    });
+                }
+            }
+            AnalysisKind::Baseline => {
+                ui.radio_value(&mut self.baseline, BaselineKind::Minimum, "The smallest value");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut self.baseline, BaselineKind::Constant, "A constant");
+                    ui.add_enabled(self.baseline == BaselineKind::Constant, DragValue::new(&mut self.level).speed(0.1));
+                });
+                ui.radio_value(
+                    &mut self.baseline,
+                    BaselineKind::EndPoints,
+                    "The line through the first and last point",
+                );
+                ui.radio_value(&mut self.baseline, BaselineKind::Line, "The line through two points");
+                ui.add_enabled_ui(self.baseline == BaselineKind::Line, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("X1");
+                        ui.add(DragValue::new(&mut self.line[0]).speed(0.01));
+                        ui.label("Y1");
+                        ui.add(DragValue::new(&mut self.line[1]).speed(0.01));
+                        ui.label("X2");
+                        ui.add(DragValue::new(&mut self.line[2]).speed(0.01));
+                        ui.label("Y2");
+                        ui.add(DragValue::new(&mut self.line[3]).speed(0.01));
+                    });
+                });
+            }
+            AnalysisKind::Interpolate => {
+                ui.horizontal(|ui| {
+                    ui.label("Method");
+                    ui.radio_value(&mut self.interp.method, InterpMethod::Linear, "Linear");
+                    ui.radio_value(&mut self.interp.method, InterpMethod::CubicSpline, "Cubic spline");
+                    ui.radio_value(&mut self.interp.method, InterpMethod::Akima, "Akima spline");
+                });
+                if self.interp.method == InterpMethod::CubicSpline {
+                    ui.horizontal(|ui| {
+                        ui.label("Spline ends");
+                        ui.radio_value(&mut self.interp.boundary, SplineBoundary::NotAKnot, "Not-a-knot");
+                        ui.radio_value(&mut self.interp.boundary, SplineBoundary::Natural, "Natural");
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Number of points");
+                    ui.add(DragValue::new(&mut self.interp.npts).range(2..=10_000_000));
+                });
+                ui.checkbox(&mut self.interp_own_range, "Choose the X range of the result");
+                ui.add_enabled_ui(self.interp_own_range, |ui| {
+                    let (mut lo, mut hi) = self.interp.range.unwrap_or((0.0, 1.0));
+                    ui.horizontal(|ui| {
+                        ui.label("X from");
+                        ui.add(DragValue::new(&mut lo).speed(0.01));
+                        ui.label("to");
+                        ui.add(DragValue::new(&mut hi).speed(0.01));
+                    });
+                    self.interp.range = Some((lo, hi));
+                });
+                ui.weak("The interpolated curves go to a new sheet.");
+            }
+            AnalysisKind::Peaks => {
+                ui.horizontal(|ui| {
+                    ui.label("Direction");
+                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Both, "Both");
+                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Positive, "Positive");
+                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Negative, "Negative");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Neighbours compared on each side");
+                    ui.add(DragValue::new(&mut self.peaks.npts).range(1..=10_000));
+                });
+                ui.radio_value(&mut self.peak_keep, PeakKeep::Default, "Keep peaks of at least 20 % of the largest");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut self.peak_keep, PeakKeep::Height, "Keep peaks of at least this height");
+                    ui.add_enabled(
+                        self.peak_keep == PeakKeep::Height,
+                        DragValue::new(&mut self.peak_height).speed(0.01),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut self.peak_keep, PeakKeep::Count, "Keep only the highest");
+                    ui.add_enabled(
+                        self.peak_keep == PeakKeep::Count,
+                        DragValue::new(&mut self.peak_count).range(1..=10_000),
+                    );
+                });
+                ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+                ui.weak("Peak positions and heights go to a new sheet.");
+            }
+            AnalysisKind::Statistics => {
+                ui.weak("Count, mean, standard deviation, sum, minimum, quartiles and maximum go to a new sheet.");
+            }
+        }
+    }
+
+    /// Draws the window and runs the tool when OK is pressed.
+    pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> AnalysisOutcome {
+        if self.columns.iter().any(|c| doc.project().column(*c).is_none()) {
+            return AnalysisOutcome::Closed;
+        }
+        let mut open = true;
+        let mut run = false;
+        let mut cancel = false;
+        egui::Window::new(self.kind.title())
+            .id(egui::Id::new("analysis"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                let count = self.columns.len();
+                let what = if count == 1 { "Column".to_string() } else { format!("{count} columns:") };
+                ui.label(format!("{what} {}", self.column_names));
+                ui.separator();
+                self.options(ui);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("Rows");
+                    ui.radio_value(&mut self.row_mode, RowMode::All, "All");
+                    ui.radio_value(&mut self.row_mode, RowMode::Rows, "From row");
+                    ui.add_enabled_ui(self.row_mode == RowMode::Rows, |ui| {
+                        ui.add(DragValue::new(&mut self.from).range(1..=self.rows_in_sheet));
+                        ui.label("to");
+                        ui.add(DragValue::new(&mut self.to).range(1..=self.rows_in_sheet));
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("    ");
+                    ui.radio_value(&mut self.row_mode, RowMode::XRange, "X from")
+                        .on_hover_text("The first unbroken run of rows whose X value lies in the interval.");
+                    ui.add_enabled_ui(self.row_mode == RowMode::XRange, |ui| {
+                        ui.add(DragValue::new(&mut self.x_from).speed(0.01));
+                        ui.label("to");
+                        ui.add(DragValue::new(&mut self.x_to).speed(0.01));
+                    });
+                });
+                if let Some(p) = &self.problem {
+                    ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    run = ui.button("OK").clicked();
+                    cancel = ui.button("Cancel").clicked();
+                });
+            });
+
+        if run {
+            let request = self.request();
+            match doc.edit(request.tool.name(), |p| p.analyze(&request)) {
+                Ok(report) => return AnalysisOutcome::Done(report),
+                Err(e) => self.problem = Some(e.to_string()),
+            }
+        }
+        if open && !cancel { AnalysisOutcome::Open } else { AnalysisOutcome::Closed }
+    }
+}
+
+fn boundary_label(b: Boundary) -> &'static str {
+    match b {
+        Boundary::None => "Shrink the window",
+        Boundary::Reflect => "Mirror the data",
+        Boundary::Repeat => "Repeat the end value",
+        Boundary::Periodic => "Wrap around",
+        Boundary::Extrapolate => "Continue the end line",
+    }
+}
+
+pub enum FilterOutcome {
+    Open,
+    Closed,
+    /// Rows kept, and the index of the sheet that holds them.
+    Done(usize, usize),
+}
+
+/// The "Filter Rows" window: keep the rows of a sheet for which a condition holds.
+pub struct FilterDialog {
+    pub book: WindowId,
+    sheet: usize,
+    condition: String,
+    to_new_sheet: bool,
+    problem: Option<String>,
+    focus: bool,
+}
+
+impl FilterDialog {
+    pub fn new(project: &Project, book: WindowId) -> Option<Self> {
+        let b = project.workbook(book)?;
+        let sheet = b.active_sheet.min(b.sheets.len().checked_sub(1)?);
+        Some(FilterDialog { book, sheet, condition: String::new(), to_new_sheet: true, problem: None, focus: true })
+    }
+
+    pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> FilterOutcome {
+        let Some(sheet) = doc.project().workbook(self.book).and_then(|b| b.sheets.get(self.sheet)) else {
+            return FilterOutcome::Closed;
+        };
+        let columns: Vec<(String, String)> =
+            sheet.columns.iter().map(|c| (c.short_name.clone(), c.axis_title())).collect();
+        let mut open = true;
+        let mut run = false;
+        let mut cancel = false;
+        egui::Window::new("Filter rows")
+            .id(egui::Id::new("filter_rows"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label("Keep the rows for which this condition holds:");
+                let edit = ui.add(
+                    egui::TextEdit::singleline(&mut self.condition)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_width(420.0)
+                        .hint_text("for example  col(B) > 0.5 && col(A) < 10"),
+                );
+                if self.focus {
+                    edit.request_focus();
+                    self.focus = false;
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.weak("Insert:");
+                    for (short, label) in &columns {
+                        if ui.small_button(short).on_hover_text(label).clicked() {
+                            self.condition.push_str(&format!("col({short})"));
+                        }
+                    }
+                });
+                ui.weak("Comparisons: <  <=  >  >=  ==  !=    Combine with && (and), || (or), ! (not).");
+                ui.add_space(4.0);
+                ui.radio_value(&mut self.to_new_sheet, true, "Copy the kept rows to a new sheet");
+                ui.radio_value(&mut self.to_new_sheet, false, "Remove the other rows from this sheet");
+                if let Some(p) = &self.problem {
+                    ui.colored_label(egui::Color32::from_rgb(170, 30, 30), RichText::new(p));
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    run = ui.button("OK").clicked();
+                    cancel = ui.button("Cancel").clicked();
+                });
+            });
+        if run {
+            let (book, sheet, condition, new_sheet) =
+                (self.book, self.sheet, self.condition.clone(), self.to_new_sheet);
+            match doc.edit("Filter rows", move |p| p.filter_sheet(book, sheet, &condition, new_sheet)) {
+                Ok((kept, at)) => return FilterOutcome::Done(kept, at),
+                Err(e) => self.problem = Some(e.to_string()),
+            }
+        }
+        if open && !cancel { FilterOutcome::Open } else { FilterOutcome::Closed }
+    }
+}

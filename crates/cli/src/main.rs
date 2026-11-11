@@ -11,6 +11,7 @@
 //! sheaf export lab.sheaf --graph Graph1 -o fig.svg
 //! ```
 
+mod analyze;
 mod args;
 mod commands;
 

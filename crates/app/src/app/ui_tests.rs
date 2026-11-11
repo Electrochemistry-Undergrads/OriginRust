@@ -206,3 +206,53 @@ fn deleting_a_workbook_removes_its_plots_and_can_be_undone() {
     assert_eq!(project(&h).workbooks().count(), 1);
     assert_eq!(project(&h).graphs().next().unwrap().layers[0].plots.len(), 2);
 }
+
+#[test]
+fn an_analysis_tool_runs_from_its_window_and_shows_the_result_sheet() {
+    let mut h = start(vec![data_file("analysis")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Analyze { book, columns: Vec::new(), kind: AnalysisKind::Integrate }, &ctx);
+    settle(&mut h);
+    assert!(h.state().analysis.is_some(), "the Integrate window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert_eq!(b.sheets[1].name, "Integrate1");
+    assert_eq!(b.active_sheet, 1, "the result sheet is shown");
+    // Area under "up" (2.5, 4.5, 6.5, 8.5 over t = 1..4) and under "down" (30.5 .. 0.5).
+    assert_eq!(b.sheets[1].columns[1].numeric().unwrap(), [16.5, 46.5]);
+    assert_eq!(b.sheets[0].columns.len(), 5, "two running-integral columns were added");
+    assert_eq!(h.state().doc.undo_label(), Some("Integrate"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 3), "one undo removes everything the tool added");
+}
+
+#[test]
+fn sorting_and_filtering_a_sheet() {
+    let mut h = start(vec![data_file("sort")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let down = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SortSheet { column: down, descending: false }, &ctx);
+    settle(&mut h);
+    assert_eq!(column(&h, "C"), [0.5, 10.5, 20.5, 30.5]);
+    assert_eq!(column(&h, "A"), [4.0, 3.0, 2.0, 1.0], "rows stay together");
+    assert_eq!(h.state().doc.undo_label(), Some("Sort sheet"));
+
+    h.state_mut().apply(Action::FilterRows(book), &ctx);
+    settle(&mut h);
+    assert!(h.state().filter.is_some());
+    h.event(egui::Event::Text("col(A) >= 3".to_string()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().filter.is_none());
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets[1].name, "Filter1");
+    assert_eq!(b.sheets[1].columns[0].numeric().unwrap(), [4.0, 3.0]);
+    assert_eq!(b.active_sheet, 1);
+}

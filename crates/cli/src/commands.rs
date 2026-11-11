@@ -3,6 +3,7 @@
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
 use sheaf_core::graph::LineStyle;
+
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnId, Project, WindowId};
@@ -18,15 +19,16 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Plot(a) => plot(a),
         Command::Export(a) => export(a),
         Command::ExportData(a) => export_data(a),
+        Command::Analyze(a) => crate::analyze::analyze(a),
     }
 }
 
-fn is_project(path: &Path) -> bool {
+pub(crate) fn is_project(path: &Path) -> bool {
     sheaf_io::is_project_file(path)
 }
 
 /// Opens a `.sheaf` project or imports an Origin `.opj` project.
-fn load_project(path: &Path) -> Result<Project> {
+pub(crate) fn load_project(path: &Path) -> Result<Project> {
     let opened =
         sheaf_io::open_project(path).with_context(|| format!("could not open project '{}'", path.display()))?;
     for w in &opened.warnings {
@@ -66,7 +68,7 @@ fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
     Ok(o)
 }
 
-fn read_data_file(path: &Path, r: &ReadOptions) -> Result<Imported> {
+pub(crate) fn read_data_file(path: &Path, r: &ReadOptions) -> Result<Imported> {
     let kind = match r.format {
         Format::Auto => ImportKind::Auto,
         Format::Chi => ImportKind::Chi,
@@ -174,7 +176,7 @@ fn import(a: ImportArgs) -> Result<()> {
 }
 
 /// Saves as a `.sheaf` project. Refuses to write over an Origin project file.
-fn save_project(project: &Project, path: &Path) -> Result<()> {
+pub(crate) fn save_project(project: &Project, path: &Path) -> Result<()> {
     if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj")) {
         bail!("'{}' is an Origin project name; save as a .sheaf file instead", path.display());
     }
@@ -184,7 +186,12 @@ fn save_project(project: &Project, path: &Path) -> Result<()> {
 }
 
 /// Finds the Y columns named on the command line in one sheet.
-fn named_columns(project: &Project, book: WindowId, sheet: usize, names: &[String]) -> Result<Vec<ColumnId>> {
+pub(crate) fn named_columns(
+    project: &Project,
+    book: WindowId,
+    sheet: usize,
+    names: &[String],
+) -> Result<Vec<ColumnId>> {
     let ws = project
         .workbook(book)
         .and_then(|b| b.sheets.get(sheet))
@@ -200,7 +207,7 @@ fn named_columns(project: &Project, book: WindowId, sheet: usize, names: &[Strin
         .collect()
 }
 
-fn pick_book(project: &Project, name: Option<&str>) -> Result<WindowId> {
+pub(crate) fn pick_book(project: &Project, name: Option<&str>) -> Result<WindowId> {
     match name {
         Some(n) => match project.window_by_name(n) {
             Some(Window::Workbook(b)) => Ok(b.id),
@@ -211,7 +218,7 @@ fn pick_book(project: &Project, name: Option<&str>) -> Result<WindowId> {
     }
 }
 
-fn pick_sheet(project: &Project, book: WindowId, name: Option<&str>) -> Result<usize> {
+pub(crate) fn pick_sheet(project: &Project, book: WindowId, name: Option<&str>) -> Result<usize> {
     let b = project.workbook(book).ok_or_else(|| anyhow!("workbook not found"))?;
     match name {
         Some(n) => b
@@ -399,8 +406,12 @@ fn export_data(a: ExportDataArgs) -> Result<()> {
     let book = pick_book(&project, a.book.as_deref())?;
     let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
     let ws = &project.workbook(book).expect("picked above").sheets[sheet];
-    let tabs = a
-        .output
+    write_sheet(ws, &a.output)
+}
+
+/// Writes a sheet as delimited text: tabs for .tsv and .txt, commas otherwise.
+pub(crate) fn write_sheet(ws: &sheaf_core::Worksheet, path: &Path) -> Result<()> {
+    let tabs = path
         .extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| e.eq_ignore_ascii_case("tsv") || e.eq_ignore_ascii_case("txt"));
@@ -408,11 +419,10 @@ fn export_data(a: ExportDataArgs) -> Result<()> {
         delimiter: if tabs { '\t' } else { ',' },
         ..sheaf_io::export::AsciiExportOptions::default()
     };
-    let file =
-        std::fs::File::create(&a.output).with_context(|| format!("could not create '{}'", a.output.display()))?;
+    let file = std::fs::File::create(path).with_context(|| format!("could not create '{}'", path.display()))?;
     let mut out = std::io::BufWriter::new(file);
     sheaf_io::export::write_delimited(ws, &mut out, &opts)
-        .with_context(|| format!("could not write '{}'", a.output.display()))?;
-    println!("wrote {}", a.output.display());
+        .with_context(|| format!("could not write '{}'", path.display()))?;
+    println!("wrote {}", path.display());
     Ok(())
 }

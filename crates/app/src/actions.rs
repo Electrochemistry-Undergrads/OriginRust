@@ -5,6 +5,7 @@
 //! after the frame's drawing is done. This keeps borrowing simple and gives
 //! every change one place where it becomes an undo step.
 
+use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::graph_props::PropsTab;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
@@ -38,6 +39,20 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// Open the window of an analysis tool for these columns of a workbook; without columns,
+    /// for the columns a plot of the active sheet would show.
+    Analyze {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        kind: AnalysisKind,
+    },
+    /// Sort the rows of the sheet that holds this column by the column's values.
+    SortSheet {
+        column: ColumnId,
+        descending: bool,
+    },
+    /// Open the window that keeps only the rows matching a condition.
+    FilterRows(WindowId),
     PlotColumns {
         book: WindowId,
         columns: Vec<ColumnId>,

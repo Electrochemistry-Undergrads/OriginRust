@@ -70,6 +70,11 @@ impl Host for SheetHost<'_> {
     }
 }
 
+/// Evaluates an expression for the first `rows` rows of a sheet.
+pub(crate) fn eval_on_sheet(expr: &Expr, sheet: &Worksheet, rows: usize) -> Result<Vec<f64>, ExprError> {
+    expr.eval_rows(&SheetHost { sheet }, rows)
+}
+
 impl Project {
     /// Fills a column from a formula and remembers the formula on the column.
     ///

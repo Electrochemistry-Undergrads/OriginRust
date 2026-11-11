@@ -3,6 +3,7 @@
 //! project.
 
 use crate::actions::Action;
+use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
@@ -64,6 +65,8 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     column_props: Option<ColumnPropsDialog>,
     set_values: Option<SetValuesDialog>,
+    analysis: Option<AnalysisDialog>,
+    filter: Option<FilterDialog>,
     export: Option<ExportDialog>,
     rename: Option<RenameDialog>,
     about: bool,
@@ -100,6 +103,8 @@ impl SheafApp {
             graph_props: None,
             column_props: None,
             set_values: None,
+            analysis: None,
+            filter: None,
             export: None,
             rename: None,
             about: false,
@@ -435,6 +440,11 @@ impl SheafApp {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
+            Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
+            Action::FilterRows(book) => {
+                self.filter = FilterDialog::new(self.doc.project(), book);
+            }
             Action::GraphProperties { graph, tab } => {
                 let token = self.token();
                 self.graph_props = Some(GraphPropsDialog::new(graph, tab, token));
@@ -532,6 +542,54 @@ impl SheafApp {
             Ok(_) => self.status = format!("Plotted {} column(s)", ys.len()),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
+    }
+
+    /// Opens the window of an analysis tool. With no columns given, the tool gets the columns a
+    /// plot of the active sheet would show; columns that hold text are left out.
+    fn open_analysis(&mut self, book: WindowId, columns: Vec<ColumnId>, kind: AnalysisKind) {
+        let project = self.doc.project();
+        let columns: Vec<ColumnId> = if columns.is_empty() {
+            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+            project.default_plot_columns(book, sheet, Template::Line)
+        } else {
+            columns.into_iter().filter(|id| project.column(*id).is_some_and(|c| c.data.is_numeric())).collect()
+        };
+        if columns.is_empty() {
+            self.status = "Nothing to analyze: select one or more columns that hold numbers".to_string();
+            return;
+        }
+        self.analysis = AnalysisDialog::new(project, kind, columns);
+    }
+
+    fn sort_sheet(&mut self, column: ColumnId, descending: bool) {
+        let project = self.doc.project();
+        let Some((book, _, c)) = project.locate(column) else {
+            return;
+        };
+        let (book_id, name) = (book.id, c.short_name.clone());
+        let Some(sheet) = book.sheets.iter().position(|s| s.column(column).is_some()) else {
+            return;
+        };
+        match self.doc.edit("Sort sheet", |p| p.sort_sheet(book_id, sheet, column, descending)) {
+            Ok(()) => {
+                let order = if descending { "descending" } else { "ascending" };
+                self.status = format!("Sorted the sheet by column {name}, {order}");
+            }
+            Err(e) => self.message = Some(("Could not sort the sheet".to_string(), e.to_string())),
+        }
+    }
+
+    /// Shows a sheet of a workbook (a result sheet that a tool just added).
+    fn show_sheet(&mut self, book: WindowId, sheet: usize) {
+        self.doc.adjust_view(|p| {
+            if let Some(b) = p.workbook_mut(book) {
+                b.active_sheet = sheet.min(b.sheets.len().saturating_sub(1));
+            }
+        });
+        if let Some(state) = self.books.get_mut(&book) {
+            state.selected.clear();
+        }
+        self.focus(book);
     }
 
     fn export_data(&mut self, book: WindowId) {
@@ -669,7 +727,11 @@ impl SheafApp {
                 }
                 ui.separator();
                 match active_book {
-                    Some(book) => grid::column_menu(ui, book, &selected, actions),
+                    Some(book) => {
+                        grid::column_menu(ui, book, &selected, actions);
+                        ui.separator();
+                        grid::sheet_menu(ui, book, &selected, actions);
+                    }
                     None => {
                         ui.weak("Open a workbook to work with columns");
                     }
@@ -691,6 +753,24 @@ impl SheafApp {
                 }
                 None => {
                     ui.weak("Open a workbook to plot its columns");
+                }
+            });
+            ui.menu_button("Analysis", |ui| match active_book {
+                Some(book) => {
+                    let what = if selected.is_empty() {
+                        "the Y columns of the sheet".to_string()
+                    } else {
+                        format!("{} selected column(s)", selected.len())
+                    };
+                    ui.weak(format!("Works on {what}"));
+                    for kind in AnalysisKind::ALL {
+                        if item(ui, true, kind.menu_label(), "") {
+                            actions.push(Action::Analyze { book, columns: selected.clone(), kind });
+                        }
+                    }
+                }
+                None => {
+                    ui.weak("Open a workbook to analyze its columns");
                 }
             });
             ui.menu_button("Graph", |ui| {
@@ -824,6 +904,31 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.set_values = None;
+        }
+        if let Some(d) = &mut self.analysis {
+            match d.show(ctx, &mut self.doc) {
+                AnalysisOutcome::Open => {}
+                AnalysisOutcome::Closed => self.analysis = None,
+                AnalysisOutcome::Done(report) => {
+                    self.analysis = None;
+                    if let Some(sheet) = report.new_sheet {
+                        self.show_sheet(report.book, sheet);
+                    }
+                    self.status = report.message;
+                }
+            }
+        }
+        if let Some(d) = &mut self.filter {
+            match d.show(ctx, &mut self.doc) {
+                FilterOutcome::Open => {}
+                FilterOutcome::Closed => self.filter = None,
+                FilterOutcome::Done(kept, sheet) => {
+                    let book = d.book;
+                    self.filter = None;
+                    self.show_sheet(book, sheet);
+                    self.status = format!("Filter rows: {kept} row(s) kept");
+                }
+            }
         }
         if let Some(d) = &mut self.export {
             match d.show(ctx, &self.doc) {
@@ -967,6 +1072,20 @@ impl SheafApp {
                 "set-values" => {
                     if let Some(c) = first_column {
                         self.set_values = SetValuesDialog::new(self.doc.project(), c);
+                    }
+                }
+                "analysis" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let (Some(book), Some(kind)) = (book, AnalysisKind::from_name(arg)) {
+                        self.open_analysis(book, Vec::new(), kind);
+                        self.focus(book);
+                    }
+                }
+                "filter" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let Some(book) = book {
+                        self.filter = FilterDialog::new(self.doc.project(), book);
+                        self.focus(book);
                     }
                 }
                 "export" => {

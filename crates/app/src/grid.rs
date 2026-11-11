@@ -224,6 +224,25 @@ fn select_column(state: &mut BookUi, sheet: &sheaf_core::Worksheet, id: ColumnId
 }
 
 /// The right-click menu of a column header. Also used by the Column menu.
+/// Menu entries that change the sheet as a whole: sorting by the selected column, filtering rows.
+pub fn sheet_menu(ui: &mut egui::Ui, book: WindowId, selected: &[ColumnId], actions: &mut Vec<Action>) {
+    ui.menu_button("Sort Sheet by Column", |ui| {
+        for (label, descending) in [("Ascending", false), ("Descending", true)] {
+            if ui.add_enabled(selected.len() == 1, egui::Button::new(label)).clicked() {
+                actions.push(Action::SortSheet { column: selected[0], descending });
+                ui.close();
+            }
+        }
+        if selected.len() != 1 {
+            ui.weak("Select the one column to sort by");
+        }
+    });
+    if ui.button("Filter Rows...").clicked() {
+        actions.push(Action::FilterRows(book));
+        ui.close();
+    }
+}
+
 pub fn column_menu(ui: &mut egui::Ui, book: WindowId, selected: &[ColumnId], actions: &mut Vec<Action>) {
     let any = !selected.is_empty();
     ui.menu_button("Plot", |ui| {

@@ -22,6 +22,9 @@ pub enum Command {
     Export(ExportArgs),
     /// Write a worksheet of a project as delimited text.
     ExportData(ExportDataArgs),
+    /// Run an analysis tool on worksheet columns: integrate, differentiate, smooth, normalize,
+    /// baseline, interpolate, peaks, stats, sort, filter.
+    Analyze(AnalyzeArgs),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -201,4 +204,238 @@ pub struct ExportDataArgs {
     /// The text file to write. A .tsv or .txt extension gives tab-separated output, anything else commas.
     #[arg(short, long)]
     pub output: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct AnalyzeArgs {
+    #[command(subcommand)]
+    pub tool: AnalyzeTool,
+}
+
+/// Which data an analysis tool works on and where the results go.
+#[derive(Args, Debug, Clone)]
+pub struct TargetArgs {
+    /// A data file, a .sheaf project or an Origin .opj project.
+    pub input: PathBuf,
+    /// Y columns to work on, comma-separated short or long names (default: the columns a plot of
+    /// the sheet would show).
+    #[arg(short, long, value_delimiter = ',')]
+    pub y: Vec<String>,
+    /// For a project input: the workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// The sheet, by name (default: the workbook's active sheet).
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// Use only these worksheet rows, counted from 1, for example 120:480.
+    #[arg(long, value_name = "FROM:TO", conflicts_with = "x_range")]
+    pub rows: Option<String>,
+    /// Use only the first unbroken run of rows whose X value lies in this interval, for example
+    /// 0.2:0.6 (write negative limits as --x-range=-0.5:0.1).
+    #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
+    pub x_range: Option<String>,
+    /// Save the project with the results to this .sheaf file.
+    #[arg(long, value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
+    /// Write the sheet that holds the results as delimited text (.tsv or .txt gives tabs, anything
+    /// else commas).
+    #[arg(long, value_name = "FILE")]
+    pub export: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SmoothKind {
+    /// Savitzky-Golay: a local polynomial fit.
+    SavitzkyGolay,
+    /// Moving average.
+    Average,
+    /// Moving average with weights that fall off towards the window ends.
+    WeightedAverage,
+    /// A percentile of the window (50 is a median filter).
+    Percentile,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum BoundaryKind {
+    None,
+    Reflect,
+    Repeat,
+    Periodic,
+    Extrapolate,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum NormalizeKind {
+    /// Divide by the largest value.
+    Max,
+    /// Map to the interval 0 to 1.
+    Range,
+    /// Map to the interval 0 to 100.
+    Range100,
+    /// Subtract the mean and divide by the standard deviation.
+    ZScore,
+    Min,
+    Mean,
+    Median,
+    /// Divide by the standard deviation.
+    Sd,
+    /// Divide by the square root of the sum of squares.
+    Norm,
+    Mode,
+    Sum,
+    /// Divide by the number given with --value.
+    Divide,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum InterpKind {
+    Linear,
+    Spline,
+    Akima,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PeakKind {
+    Both,
+    Positive,
+    Negative,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AnalyzeTool {
+    /// Area under each curve, with peak position, height and width; adds the running integral.
+    Integrate {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Subtract the straight line through the first and last point of the row range first.
+        #[arg(long)]
+        baseline: bool,
+        /// Integrate the absolute value of the curve instead of the signed curve.
+        #[arg(long)]
+        absolute: bool,
+        /// Do not add a column with the running integral.
+        #[arg(long)]
+        no_cumulative: bool,
+    },
+    /// Derivative of each curve with respect to its X column.
+    Differentiate {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Derivative order, 1 to 9.
+        #[arg(long, default_value_t = 1)]
+        order: usize,
+        /// Smooth while differentiating, with a local polynomial fit of --poly over --points.
+        #[arg(long)]
+        smooth: bool,
+        #[arg(long, default_value_t = 2)]
+        poly: usize,
+        #[arg(long, default_value_t = 20)]
+        points: usize,
+    },
+    /// Smooth each curve.
+    Smooth {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = SmoothKind::SavitzkyGolay)]
+        method: SmoothKind,
+        /// Points of the window.
+        #[arg(long, default_value_t = 5)]
+        points: usize,
+        /// Savitzky-Golay: polynomial order.
+        #[arg(long, default_value_t = 2)]
+        poly: usize,
+        /// Percentile filter: the percentile, 0 to 100.
+        #[arg(long, default_value_t = 50.0)]
+        percent: f64,
+        /// How the window is filled where it sticks out of the data.
+        #[arg(long, value_enum, default_value_t = BoundaryKind::None)]
+        boundary: BoundaryKind,
+    },
+    /// Normalize each curve.
+    Normalize {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = NormalizeKind::Max)]
+        method: NormalizeKind,
+        /// The divisor for --method divide.
+        #[arg(long, allow_hyphen_values = true)]
+        value: Option<f64>,
+    },
+    /// Subtract a baseline from each curve (default: its smallest value).
+    Baseline {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Subtract this constant.
+        #[arg(long, allow_hyphen_values = true, group = "kind")]
+        constant: Option<f64>,
+        /// Subtract the straight line through the first and last point of the row range.
+        #[arg(long, group = "kind")]
+        end_points: bool,
+        /// Subtract the straight line through two points, written as X1,Y1,X2,Y2.
+        #[arg(long, value_delimiter = ',', allow_hyphen_values = true, value_name = "X1,Y1,X2,Y2", group = "kind")]
+        line: Vec<f64>,
+    },
+    /// Interpolate each curve onto equally spaced X values; the result goes to a new sheet.
+    Interpolate {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = InterpKind::Linear)]
+        method: InterpKind,
+        /// Number of points of the result.
+        #[arg(long, default_value_t = 100)]
+        points: usize,
+        /// First X of the result (default: the smallest X of the data).
+        #[arg(long, allow_hyphen_values = true)]
+        x_min: Option<f64>,
+        /// Last X of the result (default: the largest X of the data).
+        #[arg(long, allow_hyphen_values = true)]
+        x_max: Option<f64>,
+    },
+    /// Find the peaks of each curve; positions and heights go to a new sheet.
+    Peaks {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = PeakKind::Both)]
+        direction: PeakKind,
+        /// A peak must stand out against this many neighbours on each side.
+        #[arg(long, default_value_t = 2)]
+        points: usize,
+        /// Keep peaks at least this high (default: 20 % of the largest magnitude).
+        #[arg(long, group = "keep")]
+        min_height: Option<f64>,
+        /// Keep only this many of the highest peaks.
+        #[arg(long, group = "keep")]
+        count: Option<usize>,
+        /// Keep every local extremum.
+        #[arg(long, group = "keep")]
+        all: bool,
+    },
+    /// Descriptive statistics of each column.
+    Stats {
+        #[command(flatten)]
+        target: TargetArgs,
+    },
+    /// Sort the rows of the sheet by one column.
+    Sort {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The column to sort by (short or long name).
+        #[arg(long)]
+        by: String,
+        #[arg(long)]
+        descending: bool,
+    },
+    /// Keep the rows for which a condition holds, for example --where "col(B) > 0.5 && col(A) < 10".
+    Filter {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The condition, in the column-formula language.
+        #[arg(long = "where", value_name = "CONDITION")]
+        condition: String,
+        /// Remove the other rows from the sheet itself instead of copying the kept rows to a new sheet.
+        #[arg(long)]
+        in_place: bool,
+    },
 }

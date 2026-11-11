@@ -323,6 +323,44 @@ impl Project {
             None => "(missing column)".to_string(),
         }
     }
+
+    /// The Y columns a new graph of `template` should show for a sheet.
+    ///
+    /// Normally that is every Y column. For the cyclic voltammetry template,
+    /// when the sheet has current columns in mA next to the same data in A,
+    /// only the mA columns are plotted (publication figures use mA).
+    pub fn default_plot_columns(&self, book: WindowId, sheet: usize, template: Template) -> Vec<ColumnId> {
+        let Some(ws) = self.workbook(book).and_then(|b| b.sheets.get(sheet)) else {
+            return Vec::new();
+        };
+        let ys: Vec<&Column> =
+            ws.columns.iter().filter(|c| c.designation == Designation::Y && c.data.is_numeric()).collect();
+        if template == Template::CyclicVoltammetry {
+            let ma: Vec<ColumnId> = ys.iter().filter(|c| c.units.eq_ignore_ascii_case("mA")).map(|c| c.id).collect();
+            if !ma.is_empty() {
+                return ma;
+            }
+        }
+        ys.iter().map(|c| c.id).collect()
+    }
+
+    /// Creates a graph of `template` that plots the given Y columns in one
+    /// layer, and returns its id. The graph's long name is taken from the
+    /// workbook that holds the first column.
+    pub fn plot_columns(&mut self, template: Template, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        for y in ys {
+            self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(template);
+        for y in ys {
+            self.add_plot(graph, 0, *y)?;
+        }
+        if let (Some(name), Some(g)) = (long_name, self.graph_mut(graph)) {
+            g.long_name = name;
+        }
+        Ok(graph)
+    }
 }
 
 #[cfg(test)]

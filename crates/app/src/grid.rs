@@ -15,6 +15,8 @@ pub struct BookUi {
     pub selected: Vec<ColumnId>,
     /// The cell being edited: column, row, and the text typed so far.
     pub editing: Option<(ColumnId, usize, String)>,
+    /// The text the editor opened with; leaving the cell with this text unchanged stores nothing.
+    editing_original: String,
     /// True right after editing started, to move keyboard focus into the cell once.
     focus_editor: bool,
 }
@@ -148,7 +150,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
 
                             let is_editing = matches!(&state.editing, Some((c, er, _)) if *c == column.id && *er == r);
                             if is_editing {
-                                edit_cell(ui, state, actions);
+                                edit_cell(ui, state, sheet, actions);
                                 return;
                             }
                             let text = if r < column.len() { column.cell_text(r) } else { String::new() };
@@ -169,9 +171,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                 ui.label(RichText::new(&text).color(color));
                             });
                             if response.double_clicked() {
-                                let start = if text == "--" { String::new() } else { text };
-                                state.editing = Some((column.id, r, start));
-                                state.focus_editor = true;
+                                start_editing(state, column, r);
                             }
                         });
                     }
@@ -181,7 +181,27 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     });
 }
 
-fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, actions: &mut Vec<Action>) {
+/// The text a cell is edited with: for numbers the shortest text that reads back as exactly the
+/// same value (the grid shows a rounded version, which would lose digits), empty for a missing
+/// value or a row beyond the data.
+fn editor_text(column: &sheaf_core::Column, row: usize) -> String {
+    match &column.data {
+        sheaf_core::ColumnData::Numeric(v) => match v.get(row) {
+            Some(x) if !x.is_nan() => format!("{x:?}"),
+            _ => String::new(),
+        },
+        sheaf_core::ColumnData::Text(v) => v.get(row).cloned().unwrap_or_default(),
+    }
+}
+
+fn start_editing(state: &mut BookUi, column: &sheaf_core::Column, row: usize) {
+    let text = editor_text(column, row);
+    state.editing_original = text.clone();
+    state.editing = Some((column.id, row, text));
+    state.focus_editor = true;
+}
+
+fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &sheaf_core::Worksheet, actions: &mut Vec<Action>) {
     let Some((column, row, text)) = &mut state.editing else {
         return;
     };
@@ -194,13 +214,15 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, actions: &mut Vec<Action>) {
     if cancel {
         state.editing = None;
     } else if response.lost_focus() {
-        actions.push(Action::SetCell { column: *column, row: *row, text: text.clone() });
-        // Enter moves on to the cell below, like a spreadsheet.
-        if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-            state.editing = Some((*column, *row + 1, String::new()));
-            state.focus_editor = true;
-        } else {
-            state.editing = None;
+        let (column, row) = (*column, *row);
+        if *text != state.editing_original {
+            actions.push(Action::SetCell { column, row, text: text.clone() });
+        }
+        // Enter moves on to the cell below, like a spreadsheet, showing what it holds.
+        let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+        match sheet.column(column) {
+            Some(c) if enter => start_editing(state, c, row + 1),
+            _ => state.editing = None,
         }
     }
 }

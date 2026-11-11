@@ -154,6 +154,12 @@ pub fn load(path: &Path) -> Result<Project, IoError> {
 
     for w in &mut project.windows {
         let Window::Workbook(book) = w else { continue };
+        // A damaged or hand-edited file may list no sheets; the rest of the program assumes at
+        // least one, so an empty first sheet is added.
+        if book.sheets.is_empty() {
+            book.sheets.push(sheaf_core::Worksheet::new("Sheet1"));
+            book.active_sheet = 0;
+        }
         for col in book.sheets.iter_mut().flat_map(|s| &mut s.columns) {
             let id = col.id.0;
             let numeric = numeric_member(id);
@@ -406,6 +412,20 @@ mod tests {
             ],
         );
         assert!(matches!(load(&path).unwrap_err(), IoError::Corrupt { .. }));
+    }
+
+    #[test]
+    fn a_workbook_without_sheets_gets_an_empty_first_sheet() {
+        let dir = TempDir::new("nosheets");
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        p.workbook_mut(b).unwrap().sheets.clear();
+        let path = dir.file("nosheets.sheaf");
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        let wb = back.workbooks().next().unwrap();
+        assert_eq!(wb.sheets.len(), 1);
+        assert_eq!(wb.sheet().name, "Sheet1");
     }
 
     #[test]

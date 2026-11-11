@@ -85,6 +85,17 @@ pub struct Layer {
 }
 
 impl Layer {
+    /// Gives only the last plot its palette color (the next one in the list), leaving the colors
+    /// of the other plots as they are. Used when a plot is added.
+    pub fn color_newest_plot(&mut self) {
+        let n = self.plots.len();
+        if let Some(p) = self.plots.last_mut() {
+            let c = self.palette.color(n - 1, n);
+            p.line.color = c;
+            p.symbol.color = c;
+        }
+    }
+
     /// Recolors all plots from the palette, in plot order. Call this after
     /// adding or removing plots when the palette spreads colors over the
     /// number of plots.

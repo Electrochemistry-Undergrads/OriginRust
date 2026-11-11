@@ -85,16 +85,25 @@ pub struct Layer {
 }
 
 impl Layer {
-    /// Recolors all plots from the palette, in plot order. Call this after
-    /// adding or removing plots when the palette spreads colors over the
-    /// number of plots.
-    pub fn apply_palette(&mut self) {
+    /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
+    /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
+    /// spreads its colors over the number of plots, every automatic color moves along.
+    pub fn recolor_automatic(&mut self) {
         let n = self.plots.len();
-        for (i, p) in self.plots.iter_mut().enumerate() {
+        for (i, p) in self.plots.iter_mut().enumerate().filter(|(_, p)| p.auto_color) {
             let c = self.palette.color(i, n);
             p.line.color = c;
             p.symbol.color = c;
         }
+    }
+
+    /// Recolors all plots from the palette, in plot order, including colors chosen by hand
+    /// (the "Recolor plots" command); afterwards every color is automatic again.
+    pub fn apply_palette(&mut self) {
+        for p in &mut self.plots {
+            p.auto_color = true;
+        }
+        self.recolor_automatic();
     }
 }
 
@@ -353,6 +362,10 @@ pub struct Plot {
     pub label: Option<String>,
     #[serde(default = "yes")]
     pub visible: bool,
+    /// True while the plot's color comes from the layer's palette. Choosing a color by hand
+    /// clears it, so that adding plots later re-spreads only the automatic colors.
+    #[serde(default = "yes")]
+    pub auto_color: bool,
 }
 
 fn yes() -> bool {

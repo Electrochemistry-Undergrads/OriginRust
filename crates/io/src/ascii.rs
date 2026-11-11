@@ -165,19 +165,119 @@ fn parse_number(field: &str, decimal_comma: bool) -> Option<f64> {
     t.parse().ok()
 }
 
-/// Every non-empty field is a number, and there is at least one.
+/// True for the strings that instruments and spreadsheets write for "no value":
+/// `NA`, `N/A`, `#N/A`, `n.d.`, `nd`, `--`, `----`, error codes such as `#DIV/0!`,
+/// and "below detection limit" entries such as `<LOD` or `<0.05`. In a numeric
+/// column such a cell is a missing value; in a text column it is ordinary text.
+fn is_missing_marker(field: &str) -> bool {
+    let t = field.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t.chars().all(|c| matches!(c, '-' | '\u{2013}' | '\u{2014}')) {
+        return true;
+    }
+    if t.len() > 1 && t.starts_with('<') {
+        return true;
+    }
+    matches!(
+        t.to_ascii_lowercase().as_str(),
+        "na" | "n/a"
+            | "#n/a"
+            | "n.a."
+            | "n.a"
+            | "n.d."
+            | "n.d"
+            | "nd"
+            | "bdl"
+            | "#value!"
+            | "#div/0!"
+            | "#ref!"
+            | "#num!"
+    )
+}
+
+/// How one cell looks to the numeric-column logic.
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Cell {
+    Empty,
+    Number,
+    Marker,
+    Text,
+}
+
+fn classify(field: &str, decimal_comma: bool) -> Cell {
+    if field.trim().is_empty() {
+        Cell::Empty
+    } else if parse_number(field, decimal_comma).is_some() {
+        Cell::Number
+    } else if is_missing_marker(field) {
+        Cell::Marker
+    } else {
+        Cell::Text
+    }
+}
+
+/// No cell is plain text (missing-value markers are allowed) and there is at
+/// least one real number.
 fn is_numeric_row(fields: &[String], decimal_comma: bool) -> bool {
     let mut any = false;
     for f in fields {
-        if f.trim().is_empty() {
-            continue;
+        match classify(f, decimal_comma) {
+            Cell::Text => return false,
+            Cell::Number => any = true,
+            Cell::Empty | Cell::Marker => {}
         }
-        if parse_number(f, decimal_comma).is_none() {
-            return false;
-        }
-        any = true;
     }
     any
+}
+
+/// Splits the text into records. A record normally is a line, but a quoted
+/// field may contain line breaks, so the open-quote state is carried across
+/// lines. A quote opens a quoted field only at the start of a field. If a
+/// quote is still open at the end of the text (a stray quote character), the
+/// text is split into plain lines instead.
+fn split_records(text: &str) -> Vec<&str> {
+    let mut records = Vec::new();
+    let mut start = 0;
+    let mut in_quotes = false;
+    let mut field_start = true;
+    let mut chars = text.char_indices().peekable();
+    fn cut(s: &str) -> &str {
+        s.strip_suffix('\r').unwrap_or(s)
+    }
+    while let Some((i, c)) = chars.next() {
+        if in_quotes {
+            if c == '"' {
+                if chars.peek().is_some_and(|(_, n)| *n == '"') {
+                    chars.next();
+                } else {
+                    in_quotes = false;
+                }
+            }
+            continue;
+        }
+        match c {
+            '\n' => {
+                records.push(cut(&text[start..i]));
+                start = i + 1;
+                field_start = true;
+            }
+            '"' if field_start => {
+                in_quotes = true;
+                field_start = false;
+            }
+            ',' | ';' | '\t' | ' ' => field_start = true,
+            _ => field_start = false,
+        }
+    }
+    if in_quotes {
+        return text.lines().collect();
+    }
+    if start < text.len() {
+        records.push(cut(&text[start..]));
+    }
+    records
 }
 
 // ----- analysis ----------------------------------------------------------------
@@ -221,40 +321,89 @@ fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option
     let full_runs = (rows.len() + 1).saturating_sub(DATA_RUN);
     // 1. A full run of lines with one field count, all numeric.
     if let Some(i) = (0..full_runs).find(|&i| run_ok(i, DATA_RUN)) {
-        return Some(i);
+        return Some(extend_back(rows, i, decimal_comma));
     }
     // 2. Ragged numeric rows: every line is numeric but the field counts differ.
     if let Some(i) =
         (0..full_runs).find(|&i| rows[i..i + DATA_RUN].iter().all(|(_, f)| is_numeric_row(f, decimal_comma)))
     {
-        return Some(i);
+        return Some(extend_back(rows, i, decimal_comma));
     }
     // 3. Fewer than three lines left: all of them must fit.
     if let Some(i) = (full_runs..rows.len()).find(|&i| run_ok(i, rows.len() - i)) {
-        return Some(i);
+        return Some(extend_back(rows, i, decimal_comma));
     }
-    // Files with a text column: the numeric columns of the first data row stay numeric
-    // (or empty) in the next rows, and the other fields of that row are text.
+    // Files with a text column or with odd text cells inside numeric columns. A row
+    // starts the data when it holds at least one number or missing-value marker, its
+    // other fields are text, and the next rows have the same field count with at
+    // most half of the cells in its numeric columns being text.
     for i in 0..rows.len() {
         let first = &rows[i].1;
-        let numeric: Vec<bool> = first.iter().map(|f| parse_number(f, decimal_comma).is_some()).collect();
+        let numeric: Vec<bool> =
+            first.iter().map(|f| matches!(classify(f, decimal_comma), Cell::Number | Cell::Marker)).collect();
         let others_are_text = first.iter().zip(&numeric).all(|(f, n)| *n || !f.trim().is_empty());
         if !numeric.contains(&true) || !others_are_text {
             continue;
         }
         let need = DATA_RUN.min(rows.len() - i);
-        let consistent = rows[i..i + need].iter().all(|(_, f)| {
-            f.len() == first.len()
-                && f.iter()
-                    .zip(&numeric)
-                    .all(|(v, n)| !*n || v.trim().is_empty() || parse_number(v, decimal_comma).is_some())
-        });
-        if consistent {
+        let block = &rows[i..i + need];
+        if !block.iter().all(|(_, f)| f.len() == first.len()) {
+            continue;
+        }
+        let (mut odd, mut filled) = (0usize, 0usize);
+        for (_, f) in block {
+            for (v, n) in f.iter().zip(&numeric) {
+                if !*n {
+                    continue;
+                }
+                match classify(v, decimal_comma) {
+                    Cell::Empty => {}
+                    Cell::Text => {
+                        odd += 1;
+                        filled += 1;
+                    }
+                    Cell::Number | Cell::Marker => filled += 1,
+                }
+            }
+        }
+        if odd * 2 <= filled {
             return Some(i);
         }
     }
     // Last resort: the first row that is all numbers.
     rows.iter().position(|(_, f)| is_numeric_row(f, decimal_comma))
+}
+
+/// Moves the data start up over rows that belong to the data block although a
+/// cell in them is text (for example `3,trace` above numeric rows). Such a row
+/// has the field count of the block and at least as many numbers (or
+/// missing-value markers) as text cells; a name row has no numbers at all, so
+/// it stays a header line.
+fn extend_back(rows: &[(usize, Vec<String>)], start: usize, decimal_comma: bool) -> usize {
+    let width = rows[start].1.len();
+    let mut s = start;
+    while s > 0 {
+        let f = &rows[s - 1].1;
+        if f.len() != width {
+            break;
+        }
+        let (mut good, mut marks, mut odd) = (0, 0, 0);
+        for v in f {
+            match classify(v, decimal_comma) {
+                Cell::Number => good += 1,
+                Cell::Marker => marks += 1,
+                Cell::Text => odd += 1,
+                Cell::Empty => {}
+            }
+        }
+        // A row made only of markers (a units row such as `-,-`) is a header
+        // line, not data.
+        if (good == 0 && odd == 0) || good + marks < odd {
+            break;
+        }
+        s -= 1;
+    }
+    s
 }
 
 /// Detects the long-name, units and comments lines (1-based, 0 = none).
@@ -280,7 +429,7 @@ fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usiz
 }
 
 fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
-    let lines: Vec<&str> = text.lines().collect();
+    let lines: Vec<&str> = split_records(text);
     let delimiter = match opts.delimiter {
         Delimiter::Auto => auto_delimiter(&lines, opts.decimal_comma),
         d => d,
@@ -345,8 +494,8 @@ pub fn preview(text: &str, opts: &AsciiOptions, max_rows: usize) -> Vec<Vec<Stri
 
 /// Reads delimited text into a workbook with one sheet.
 ///
-/// Rows that consist only of empty fields are skipped. Quoted fields cannot
-/// span lines.
+/// Rows that consist only of empty fields are skipped. Quoted fields may span
+/// lines; line numbers in the options then count records, not physical lines.
 pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
     if opts.decimal_comma && matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(',')) {
         return Err(IoError::InvalidOption(
@@ -396,18 +545,27 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
     let mut sheet = Worksheet::new(sheet_name(file_stem));
     for j in 0..ncols {
         let cells: Vec<&str> = a.rows.iter().map(|r| r.get(j).map_or("", String::as_str)).collect();
-        let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count();
         let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, opts.decimal_comma)).collect();
         let parsed = numbers.iter().filter(|n| n.is_some()).count();
+        // Missing-value markers (`n.d.`, `<LOD`, `NA`, ...) are neither numbers nor evidence of text.
+        let markers = cells.iter().zip(&numbers).filter(|(c, n)| n.is_none() && is_missing_marker(c)).count();
+        let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count() - markers;
         let short = default_short_name(j);
-        let numeric = non_empty == 0 || parsed as f64 >= NUMERIC_SHARE * non_empty as f64;
+        // A column of markers only (names such as `NA` or `nd`) keeps its text.
+        let numeric = if non_empty == 0 { markers == 0 } else { parsed as f64 >= NUMERIC_SHARE * non_empty as f64 };
         let (designation, data) = if numeric {
-            if parsed < non_empty {
-                let bad = non_empty - parsed;
+            let bad = non_empty - parsed;
+            if bad > 0 {
                 let plural = if bad == 1 { "cell is not a number" } else { "cells are not numbers" };
                 warnings.push(format!(
                     "column {short}: {bad} {plural} and {} read as missing",
                     if bad == 1 { "was" } else { "were" }
+                ));
+            }
+            if markers > 0 {
+                let plural = if markers == 1 { "cell holds" } else { "cells hold" };
+                warnings.push(format!(
+                    "column {short}: {markers} {plural} a no-value marker (n.d., NA, <LOD, ...) and read as missing"
                 ));
             }
             let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Y };
@@ -615,6 +773,89 @@ mod tests {
     fn preview_and_trailing_delimiters() {
         let rows = preview("h1,h2,\n1,2,\n3,4,\n5,6,\n7,8,\n", &AsciiOptions::default(), 2);
         assert_eq!(rows, vec![vec!["1", "2"], vec!["3", "4"]]);
+    }
+
+    #[test]
+    fn text_cell_in_first_rows_does_not_turn_data_into_header() {
+        let imp = parse("x,y\n1,2\n3,n.d.\n5,6\n7,8\n9,10\n");
+        assert_eq!(imp.detected.header_lines, 1);
+        assert_eq!(col(&imp, 0).numeric().unwrap(), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        let y = col(&imp, 1).numeric().unwrap();
+        assert_eq!((y.len(), y[0], y[2]), (5, 2.0, 6.0));
+        assert!(y[1].is_nan());
+        assert_eq!(col(&imp, 0).long_name, "x");
+        // a text cell that is not a known marker, in the first and second data rows
+        let imp = parse("x,y\n1,trace\n3,4\n5,6\n7,8\n9,10\n");
+        assert_eq!(col(&imp, 0).numeric().unwrap().len(), 5);
+        assert!(col(&imp, 1).numeric().unwrap()[0].is_nan());
+        let imp = parse("x,y\n1,2\n3,trace\n5,trace\n7,8\n9,10\n");
+        assert_eq!(col(&imp, 0).numeric().unwrap().len(), 5);
+        assert_eq!(imp.detected.header_lines, 1);
+    }
+
+    #[test]
+    fn missing_markers_keep_a_column_numeric() {
+        let imp = parse("a,b\n1,NA\n2,N/A\n3,--\n4,n.d.\n5,#N/A\n6,nan\n7,----\n8,9\n");
+        let b = col(&imp, 1).numeric().expect("numeric column");
+        assert_eq!(b.iter().filter(|v| v.is_nan()).count(), 7);
+        assert_eq!(b[7], 9.0);
+        assert_eq!(col(&imp, 0).numeric().unwrap().len(), 8);
+        // a text column is not changed by markers
+        let imp = parse("id,v\nNA,1\nbob,2\nann,3\n");
+        assert_eq!(col(&imp, 0).text().unwrap(), ["NA", "bob", "ann"]);
+    }
+
+    #[test]
+    fn quoted_fields_may_contain_line_breaks() {
+        let text = "name,value\n\"line one\nline two\",1\n\"b\",2\n\"c, \"\"q\"\"\",3\n";
+        let imp = parse(text);
+        assert_eq!(col(&imp, 0).text().unwrap(), ["line one\nline two", "b", "c, \"q\""]);
+        assert_eq!(col(&imp, 1).numeric().unwrap(), &[1.0, 2.0, 3.0]);
+        // CRLF line ends, and a stray quote falls back to plain lines
+        let imp = parse("a,b\r\n\"x\r\ny\",1\r\n\"z\",2\r\nw,3\r\n");
+        assert_eq!(col(&imp, 1).numeric().unwrap(), &[1.0, 2.0, 3.0]);
+        assert_eq!(split_records("1,2\n5\" pipe,3\n7,8\n").len(), 3);
+        assert_eq!(split_records("a\n\"open\nb\n").len(), 3);
+    }
+
+    #[test]
+    fn icp_oes_like_file() {
+        let text = "Sample,Cu 324.754,Zn 213.857,Pb 220.353\nName,mg/L,mg/L,mg/L\n\
+                    S1,<LOD,0.52,n.d.\nS2,1.25,0.48,<LOD\nS3,n.d.,0.61,0.03\nS4,2.10,NA,0.04\nS5,0.95,0.55,----\n";
+        let imp = parse(text);
+        let d = &imp.detected;
+        assert_eq!((d.header_lines, d.long_name_line, d.units_line, d.columns), (2, 1, 2, 4));
+        assert_eq!(col(&imp, 0).designation, Designation::Label);
+        assert_eq!(col(&imp, 0).text().unwrap(), ["S1", "S2", "S3", "S4", "S5"]);
+        for j in 1..4 {
+            assert!(col(&imp, j).numeric().is_some(), "column {j} numeric");
+            assert_eq!(col(&imp, j).units, "mg/L");
+            assert_eq!(col(&imp, j).numeric().unwrap().len(), 5);
+        }
+        let cu = col(&imp, 1).numeric().unwrap();
+        assert!(cu[0].is_nan() && cu[2].is_nan());
+        assert_eq!((cu[1], cu[3], cu[4]), (1.25, 2.1, 0.95));
+        assert_eq!(col(&imp, 3).numeric().unwrap()[3], 0.04);
+        // the first data row has only markers in its numeric cells and is still data
+        let imp = parse("Sample,Cu,Zn\nName,mg/L,mg/L\nS1,<LOD,<LOD\nS2,1,2\nS3,3,4\n");
+        assert_eq!(col(&imp, 0).text().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn dash_units_row_stays_a_header_line() {
+        let imp = parse("Name,Value\n-,-\n1,2\n3,4\n5,6\n");
+        assert_eq!(col(&imp, 0).numeric().unwrap(), [1.0, 3.0, 5.0]);
+        assert_eq!(col(&imp, 0).units, "-");
+        let imp = parse("Sample,Cu\nName,mg/L\n-,-\n1,2\n3,4\n5,6\n");
+        assert_eq!(col(&imp, 1).numeric().unwrap(), [2.0, 4.0, 6.0]);
+        assert_eq!(col(&imp, 1).units, "mg/L"); // the dash row is a third header line (comments), not data
+    }
+
+    #[test]
+    fn marker_only_columns_keep_their_text() {
+        let imp = parse("id,v\nNA,1\nND,2\nnd,3\n");
+        assert_eq!(col(&imp, 0).text().unwrap(), ["NA", "ND", "nd"]);
+        assert!(col(&imp, 1).numeric().is_some());
     }
 
     #[test]

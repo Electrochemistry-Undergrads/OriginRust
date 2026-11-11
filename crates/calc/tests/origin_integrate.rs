@@ -598,3 +598,19 @@ fn suite6_peak_on_the_last_or_first_point() {
         close(&format!("{name} dx"), r.width, w[3], 1e-10);
     }
 }
+
+/// The absolute area must not depend on the scale of the data. Before the fix, values below about
+/// 1e-154 made the zero-crossing test (a product) underflow, and the crossing segments were
+/// integrated as plain trapezoids.
+#[test]
+fn absolute_area_is_independent_of_scale() {
+    let x = grid(101, 0.0, 0.01);
+    let y: Vec<f64> = x.iter().map(|t| (6.0 * t).sin()).collect();
+    let opts = IntegrateOptions { area_type: AreaType::Absolute, ..Default::default() };
+    let unit = integrate(&x, &y, &opts).unwrap().area;
+    for scale in [1e-170, 1e-9, 1e170] {
+        let scaled: Vec<f64> = y.iter().map(|v| v * scale).collect();
+        let area = integrate(&x, &scaled, &opts).unwrap().area / scale;
+        close(&format!("absolute area at scale {scale:e}"), area, unit, 1e-12);
+    }
+}

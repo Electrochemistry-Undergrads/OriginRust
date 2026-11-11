@@ -40,6 +40,27 @@ worktrees with `git worktree list`; merge what is complete, delete the rest.
 7. Origin project reader: cell-by-cell comparison with Origin on the owner's five projects, then
    reading basic graphs (`crates/io/src/opj`, `docs/spec/opj-format.md`).
 
+The independent review of milestone 3 (analysis) at `d27d87f` is finished: five reviewers, each
+finding re-checked by a second one; 16 of 40 findings confirmed, to be fixed after the merges
+above (they touch files the agents are editing):
+
+- Medium: Integrate, Statistics (and Peaks) result tables take every row's unit from the first
+  chosen column; choosing the A and mA columns of a CH Instruments import labels the mA row's
+  area A·V (factor 1000). Needs a unit per row (`ResultTable`, the result sheet, the CLI table).
+- Medium: `sheaf analyze sort|filter` accept `--rows`, `--x-range`, `--y` and ignore them.
+- Low: Set Column Values on part of a text column loses the text outside the range; the
+  smoothing derivative with an unusable window (points 1, or order above the polynomial order)
+  gives an empty column without an error; normalize divide by 0 writes infinity; per-row tools
+  do not name the columns they added and the `--x-range` error shows a row-range example.
+- Fixed in `adb1414`: the expression-language findings (missing values in `^` and `round`, `sd`
+  of infinite data, stack overflow on long formulas), the -0 sum, the absolute-area underflow,
+  the fixture comment and the empty assertion.
+- Also worth doing (rejected as "intended", but data loss): an in-place filter that keeps no row
+  empties the sheet without a warning.
+
+Done in this session so far: the GitHub repository (`dd86f77`), ADR 0006 on fit results
+(`d27d87f`), tag `m1-foundations`, first CI run passed.
+
 ## Exact next step
 
 1. Merge the agents' branches after their reviews; run the full checks; push.

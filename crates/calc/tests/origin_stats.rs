@@ -514,3 +514,13 @@ fn empty_and_all_missing() {
     assert_eq!((s.n, s.missing), (0, 2));
     assert!(s.mean.is_nan() && s.median.is_nan() && s.q1.is_nan());
 }
+
+/// An empty or all-missing column has a sum of 0, not -0 (an empty f64 sum is -0.0 in Rust).
+#[test]
+fn empty_sum_is_positive_zero() {
+    for data in [&[][..], &[f64::NAN, f64::NAN][..]] {
+        let s = stats(data);
+        assert_eq!(s.n, 0);
+        assert!(s.sum == 0.0 && s.sum.is_sign_positive(), "sum {:?}", s.sum);
+    }
+}

@@ -174,8 +174,9 @@ fn anchors_follow_the_interpolation_tools() {
         let m = BaselineMethod::Anchors { points: points.clone(), method, boundary: SplineBoundary::NotAKnot };
         let (corrected, base) = subtract_baseline(&at, &signal, &m);
         check(name, &base, want, 1e-10);
-        for i in 0..at.len() {
-            close(&format!("{name} corrected[{i}]"), corrected[i], signal[i] - base[i], 1e-14);
+        // The corrected signal against Origin's baseline values, not against our own baseline.
+        for &(i, origin_base) in want {
+            close(&format!("{name} corrected[{i}]"), corrected[i], signal[i] - origin_base, 1e-10);
         }
     }
 }

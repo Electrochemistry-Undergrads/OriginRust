@@ -8,7 +8,7 @@ use crate::scene::{Anchor, Cap, Item, Join, LayerScene, Scene, Stroke, line_to, 
 use crate::text::{self, ASCENT, DESCENT};
 use crate::ticks::ResolvedAxis;
 use crate::{LayerGeometry, PlotError, Rect};
-use sheaf_core::graph::{Axis, Layer, LegendPosition, LineStyle, TickDirection};
+use sheaf_core::graph::{Axis, Layer, LegendPosition, LineStyle, Page, TickDirection};
 use sheaf_core::{Project, WindowId};
 
 /// Builds the scene of a graph.
@@ -17,10 +17,45 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
     let mut layers = Vec::new();
     for layer in &g.layers {
         let pds = data::collect(project, layer);
-        let geom = data::resolve_layer(layer, &g.page, &pds);
+        let geom = layer_geometry(layer, &g.page, &pds, m);
         layers.push(layer_scene(project, layer, &geom, &pds, m));
     }
     Ok(Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers })
+}
+
+/// Smallest distance in points kept between any label or title and the page edge.
+const PAGE_MARGIN: f64 = 3.0;
+
+/// The geometry of a layer: the nominal frame from the model, moved inwards
+/// just enough that the Y title and the bottom X title stay inside the page
+/// (spec section 3, "Keeping labels on the page"). When everything already
+/// fits, the frame is the nominal one.
+pub(crate) fn layer_geometry(layer: &Layer, page: &Page, pds: &[PlotData], m: &dyn TextMeasurer) -> LayerGeometry {
+    let mut geom = data::resolve_layer(layer, page, pds);
+    let mut scratch = Vec::new();
+    let x_bottom = draw_x_labels(&mut scratch, layer, &geom, m);
+    let y_left = draw_y_labels(&mut scratch, layer, &geom, m);
+    let (xa, ya) = (&layer.x_axis, &layer.y_axis);
+    let left_edge = if ya.show_title {
+        let size = ya.title_font.size_pt;
+        y_left - 0.6 * size - (ASCENT + DESCENT) * size
+    } else {
+        y_left
+    };
+    let bottom_edge = if xa.show_title {
+        let size = xa.title_font.size_pt;
+        x_bottom + 0.6 * size + (ASCENT + DESCENT) * size
+    } else {
+        x_bottom
+    };
+    let f = &mut geom.frame;
+    // Never take more than half of the frame, whatever the labels need.
+    let shift_x = (PAGE_MARGIN - left_edge).clamp(0.0, 0.5 * f.w);
+    f.x += shift_x;
+    f.w -= shift_x;
+    let shift_y = (bottom_edge - (page.height_pt - PAGE_MARGIN)).clamp(0.0, 0.5 * f.h);
+    f.h -= shift_y;
+    geom
 }
 
 fn layer_scene(

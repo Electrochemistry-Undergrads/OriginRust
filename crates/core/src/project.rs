@@ -321,7 +321,7 @@ impl Project {
             label: None,
             visible: true,
         });
-        l.apply_palette();
+        l.color_newest_plot();
         Ok(())
     }
 
@@ -371,8 +371,14 @@ impl Project {
         for y in ys {
             self.add_plot(graph, 0, *y)?;
         }
-        if let (Some(name), Some(g)) = (long_name, self.graph_mut(graph)) {
-            g.long_name = name;
+        if let Some(g) = self.graph_mut(graph) {
+            // A new graph has no colors chosen by the user, so spread the palette over all plots.
+            if let Some(l) = g.layers.first_mut() {
+                l.apply_palette();
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
         }
         Ok(graph)
     }
@@ -401,6 +407,22 @@ mod tests {
         assert_eq!(p.graph(g).unwrap().name, "Graph1");
         p.remove_window(book2);
         assert_eq!(p.unique_name("Book"), "Book2");
+    }
+
+    #[test]
+    fn adding_a_plot_keeps_the_colors_the_user_chose() {
+        let (mut p, book, _, y) = sample();
+        let y2 = p
+            .add_column(book, 0, crate::column::Designation::Y, crate::column::ColumnData::numeric(vec![1.0]))
+            .unwrap();
+        let g = p.add_graph(Template::Line);
+        p.add_plot(g, 0, y).unwrap();
+        let chosen = crate::Color::rgb(1, 2, 3);
+        p.graph_mut(g).unwrap().layers[0].plots[0].line.color = chosen;
+        p.add_plot(g, 0, y2).unwrap();
+        let plots = &p.graph(g).unwrap().layers[0].plots;
+        assert_eq!(plots[0].line.color, chosen);
+        assert_ne!(plots[1].line.color, chosen);
     }
 
     #[test]

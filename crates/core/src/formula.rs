@@ -11,12 +11,17 @@ use crate::worksheet::Worksheet;
 use sheaf_expr::{ColumnRef, Expr, ExprError, Host};
 use std::ops::Range;
 
+/// The most rows a formula may fill; a larger end row is refused instead of allocating that much.
+pub const MAX_FORMULA_ROWS: usize = 100_000_000;
+
 #[derive(Debug, thiserror::Error)]
 pub enum FormulaError {
     #[error("there is no column with id {0:?}")]
     NoSuchColumn(ColumnId),
     #[error("the sheet has no rows yet; give a row range or enter data first")]
     NoRows,
+    #[error("row {0} is beyond the limit of {MAX_FORMULA_ROWS} rows for a formula")]
+    TooManyRows(usize),
     #[error("{0}")]
     Expr(#[from] ExprError),
 }
@@ -94,6 +99,9 @@ impl Project {
         if range.is_empty() {
             return Err(FormulaError::NoRows);
         }
+        if range.end > MAX_FORMULA_ROWS {
+            return Err(FormulaError::TooManyRows(range.end));
+        }
         let computed = expr.eval_rows(&SheetHost { sheet }, range.end)?;
         let mut values: Vec<f64> = target.numeric().map(<[f64]>::to_vec).unwrap_or_default();
         if values.len() < range.end {
@@ -121,6 +129,14 @@ mod tests {
         let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap();
         p.column_mut(b).unwrap().long_name = "Current".into();
         (p, a, b, c)
+    }
+
+    #[test]
+    fn an_absurd_end_row_is_refused_without_allocating() {
+        let (mut p, _, _, c) = sample();
+        let err = p.set_column_values(c, "i", Some(0..usize::MAX)).unwrap_err();
+        assert!(matches!(err, FormulaError::TooManyRows(_)));
+        assert!(p.numeric(c).unwrap().is_empty());
     }
 
     #[test]

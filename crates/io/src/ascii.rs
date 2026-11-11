@@ -387,15 +387,18 @@ fn extend_back(rows: &[(usize, Vec<String>)], start: usize, decimal_comma: bool)
         if f.len() != width {
             break;
         }
-        let (mut good, mut odd) = (0, 0);
+        let (mut good, mut marks, mut odd) = (0, 0, 0);
         for v in f {
             match classify(v, decimal_comma) {
-                Cell::Number | Cell::Marker => good += 1,
+                Cell::Number => good += 1,
+                Cell::Marker => marks += 1,
                 Cell::Text => odd += 1,
                 Cell::Empty => {}
             }
         }
-        if good == 0 || good < odd {
+        // A row made only of markers (a units row such as `-,-`) is a header
+        // line, not data.
+        if (good == 0 && odd == 0) || good + marks < odd {
             break;
         }
         s -= 1;
@@ -548,7 +551,8 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
         let markers = cells.iter().zip(&numbers).filter(|(c, n)| n.is_none() && is_missing_marker(c)).count();
         let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count() - markers;
         let short = default_short_name(j);
-        let numeric = non_empty == 0 || parsed as f64 >= NUMERIC_SHARE * non_empty as f64;
+        // A column of markers only (names such as `NA` or `nd`) keeps its text.
+        let numeric = if non_empty == 0 { markers == 0 } else { parsed as f64 >= NUMERIC_SHARE * non_empty as f64 };
         let (designation, data) = if numeric {
             let bad = non_empty - parsed;
             if bad > 0 {
@@ -835,6 +839,23 @@ mod tests {
         // the first data row has only markers in its numeric cells and is still data
         let imp = parse("Sample,Cu,Zn\nName,mg/L,mg/L\nS1,<LOD,<LOD\nS2,1,2\nS3,3,4\n");
         assert_eq!(col(&imp, 0).text().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn dash_units_row_stays_a_header_line() {
+        let imp = parse("Name,Value\n-,-\n1,2\n3,4\n5,6\n");
+        assert_eq!(col(&imp, 0).numeric().unwrap(), [1.0, 3.0, 5.0]);
+        assert_eq!(col(&imp, 0).units, "-");
+        let imp = parse("Sample,Cu\nName,mg/L\n-,-\n1,2\n3,4\n5,6\n");
+        assert_eq!(col(&imp, 1).numeric().unwrap(), [2.0, 4.0, 6.0]);
+        assert_eq!(col(&imp, 1).units, "mg/L"); // the dash row is a third header line (comments), not data
+    }
+
+    #[test]
+    fn marker_only_columns_keep_their_text() {
+        let imp = parse("id,v\nNA,1\nND,2\nnd,3\n");
+        assert_eq!(col(&imp, 0).text().unwrap(), ["NA", "ND", "nd"]);
+        assert!(col(&imp, 1).numeric().is_some());
     }
 
     #[test]

@@ -1,5 +1,27 @@
 use super::testutil::{FileBuilder, number_cell, text_cell};
 use super::*;
+
+#[test]
+fn into_project_keeps_window_names_and_drops_trailing_missing_cells() {
+    use sheaf_core::{Column, ColumnData, ColumnId, Designation, WindowId, Workbook};
+    let mut book = Workbook::new(WindowId(0), "Rates");
+    let cols = &mut book.sheets[0].columns;
+    cols.push(Column::new(
+        ColumnId(1),
+        "A",
+        Designation::X,
+        ColumnData::numeric(vec![1.0, f64::NAN, 3.0, f64::NAN, f64::NAN]),
+    ));
+    cols.push(Column::new(ColumnId(2), "B", Designation::Y, ColumnData::text(vec!["a".into(), String::new()])));
+    cols.push(Column::new(ColumnId(3), "C", Designation::Y, ColumnData::numeric(vec![f64::NAN; 32])));
+    let import =
+        OpjImport { workbooks: vec![book], version: "9.3".into(), signature: String::new(), warnings: Vec::new() };
+    let project = import.into_project();
+    let b = project.workbooks().next().unwrap();
+    assert_eq!(b.name, "Rates");
+    let lens: Vec<usize> = b.sheets[0].columns.iter().map(|c| c.len()).collect();
+    assert_eq!(lens, [3, 1, 0], "a missing value inside the data stays; the padding at the end goes");
+}
 use sheaf_core::column::ColumnData;
 use std::io::Cursor;
 

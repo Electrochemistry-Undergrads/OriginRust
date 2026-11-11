@@ -22,11 +22,17 @@ pub fn run(cli: Cli) -> Result<()> {
 }
 
 fn is_project(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(project_file::EXTENSION))
+    sheaf_io::is_project_file(path)
 }
 
+/// Opens a `.sheaf` project or imports an Origin `.opj` project.
 fn load_project(path: &Path) -> Result<Project> {
-    project_file::load(path).with_context(|| format!("could not open project '{}'", path.display()))
+    let opened =
+        sheaf_io::open_project(path).with_context(|| format!("could not open project '{}'", path.display()))?;
+    for w in &opened.warnings {
+        eprintln!("note: {w}");
+    }
+    Ok(opened.project)
 }
 
 fn chi_options(r: &ReadOptions) -> ChiOptions {
@@ -134,8 +140,23 @@ fn info(a: InfoArgs) -> Result<()> {
 }
 
 fn import(a: ImportArgs) -> Result<()> {
+    if a.files.iter().any(|f| f == &a.output) {
+        bail!("the output '{}' is also one of the inputs", a.output.display());
+    }
     let mut project = if a.append && a.output.exists() { load_project(&a.output)? } else { Project::new() };
     for file in &a.files {
+        if is_project(file) {
+            // An Origin project (or another Sheaf project): take over all its workbooks.
+            let mut count = 0;
+            for window in load_project(file)?.windows {
+                if let Window::Workbook(book) = window {
+                    project.adopt_named_workbook(book);
+                    count += 1;
+                }
+            }
+            println!("imported {count} workbook(s) from {}", file.display());
+            continue;
+        }
         let imported = read_data_file(file, &a.read)?;
         let template = imported.suggested_template;
         let book = project.adopt_workbook(imported.workbook);
@@ -148,8 +169,17 @@ fn import(a: ImportArgs) -> Result<()> {
         }
         println!("imported {} as {}", file.display(), project.workbook(book).map(|b| b.name.as_str()).unwrap_or("?"));
     }
-    project_file::save(&project, &a.output).with_context(|| format!("could not save '{}'", a.output.display()))?;
-    println!("saved {}", a.output.display());
+    save_project(&project, &a.output)?;
+    Ok(())
+}
+
+/// Saves as a `.sheaf` project. Refuses to write over an Origin project file.
+fn save_project(project: &Project, path: &Path) -> Result<()> {
+    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj")) {
+        bail!("'{}' is an Origin project name; save as a .sheaf file instead", path.display());
+    }
+    project_file::save(project, path).with_context(|| format!("could not save '{}'", path.display()))?;
+    println!("saved {}", path.display());
     Ok(())
 }
 
@@ -312,8 +342,7 @@ fn plot(a: PlotArgs) -> Result<()> {
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());
     if let Some(path) = &a.save {
-        project_file::save(&project, path).with_context(|| format!("could not save '{}'", path.display()))?;
-        println!("saved {}", path.display());
+        save_project(&project, path)?;
     }
     Ok(())
 }

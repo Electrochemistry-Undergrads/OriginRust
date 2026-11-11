@@ -65,7 +65,7 @@ pub struct ReadOptions {
 
 #[derive(Args, Debug)]
 pub struct InfoArgs {
-    /// A data file or a .sheaf project.
+    /// A data file, a .sheaf project or an Origin .opj project.
     pub path: PathBuf,
     #[command(flatten)]
     pub read: ReadOptions,
@@ -73,7 +73,7 @@ pub struct InfoArgs {
 
 #[derive(Args, Debug)]
 pub struct ImportArgs {
-    /// Data files to import. Each becomes one workbook.
+    /// Data files to import. Each becomes one workbook. An Origin .opj project adds all its workbooks.
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
     /// The project file to write.
@@ -138,7 +138,7 @@ pub struct StyleArgs {
 
 #[derive(Args, Debug)]
 pub struct PlotArgs {
-    /// A data file or a .sheaf project. Several data files are overlaid in one figure.
+    /// A data file, a .sheaf project or an Origin .opj project. Several data files are overlaid in one figure.
     #[arg(required = true)]
     pub inputs: Vec<PathBuf>,
     /// The figure to write: .png, .svg or .pdf.

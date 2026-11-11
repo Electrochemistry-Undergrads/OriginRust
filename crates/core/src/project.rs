@@ -206,6 +206,20 @@ impl Project {
         id
     }
 
+    /// Like [`Project::adopt_workbook`], but keeps the workbook's own short
+    /// name when no other window uses it (a project imported from another
+    /// program keeps its window names). A name that is taken or empty is
+    /// replaced by a free `Book<n>` name.
+    pub fn adopt_named_workbook(&mut self, book: Workbook) -> WindowId {
+        let wanted = book.name.clone();
+        let free = !wanted.is_empty() && !self.windows.iter().any(|w| w.name().eq_ignore_ascii_case(&wanted));
+        let id = self.adopt_workbook(book);
+        if free && let Some(b) = self.workbook_mut(id) {
+            b.name = wanted;
+        }
+        id
+    }
+
     /// Adds an empty graph in the style of `template` and returns its id.
     pub fn add_graph(&mut self, template: Template) -> WindowId {
         let id = WindowId(self.fresh_id());
@@ -418,6 +432,17 @@ mod tests {
         // Text columns are never plotted.
         let t = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into()])).unwrap();
         assert!(!p.default_plot_columns(book, 0, Template::Line).contains(&t));
+    }
+
+    #[test]
+    fn adopt_named_workbook_keeps_a_free_name() {
+        let (mut p, _, _, _) = sample();
+        let a = p.adopt_named_workbook(Workbook::new(WindowId(0), "Rates"));
+        let b = p.adopt_named_workbook(Workbook::new(WindowId(0), "rates"));
+        let c = p.adopt_named_workbook(Workbook::new(WindowId(0), ""));
+        assert_eq!(p.workbook(a).unwrap().name, "Rates");
+        assert_eq!(p.workbook(b).unwrap().name, "Book2", "a taken name (ignoring case) is replaced");
+        assert_eq!(p.workbook(c).unwrap().name, "Book3");
     }
 
     #[test]

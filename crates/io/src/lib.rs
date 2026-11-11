@@ -20,6 +20,37 @@ use sheaf_core::template::Template;
 use sheaf_core::worksheet::ImportSource;
 use std::path::Path;
 
+/// A project read by [`open_project`].
+#[derive(Clone, Debug)]
+pub struct OpenedProject {
+    pub project: sheaf_core::Project,
+    /// True when the file is in another program's format (an Origin `.opj`
+    /// project). Such a project cannot be saved back to that file; it has
+    /// to be saved as a `.sheaf` project under a new name.
+    pub foreign: bool,
+    /// Things that were skipped or need a look.
+    pub warnings: Vec<String>,
+}
+
+/// True for file names that [`open_project`] reads: `.sheaf` and `.opj`.
+pub fn is_project_file(path: &Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    ext.eq_ignore_ascii_case(project_file::EXTENSION) || ext.eq_ignore_ascii_case("opj")
+}
+
+/// Opens a Sheaf project (`.sheaf`) or imports an Origin project (`.opj`).
+pub fn open_project(path: &Path) -> Result<OpenedProject, IoError> {
+    let is_opj = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj"));
+    if is_opj {
+        let mut import = opj::read_opj(path)?;
+        let mut warnings = std::mem::take(&mut import.warnings);
+        warnings.insert(0, format!("Imported from an Origin {} project. Only workbooks are read.", import.version));
+        Ok(OpenedProject { project: import.into_project(), foreign: true, warnings })
+    } else {
+        Ok(OpenedProject { project: project_file::load(path)?, foreign: false, warnings: Vec::new() })
+    }
+}
+
 /// Which importer to use.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ImportKind {

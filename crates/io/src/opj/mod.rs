@@ -40,6 +40,41 @@ pub struct OpjImport {
     pub warnings: Vec<String>,
 }
 
+impl OpjImport {
+    /// Builds a project from the workbooks, keeping Origin's window names.
+    ///
+    /// Trailing missing cells of every column are dropped: Origin stores at
+    /// least 32 cells per column, so a column with 5 values would otherwise
+    /// show 27 empty rows that the user never entered.
+    pub fn into_project(self) -> sheaf_core::Project {
+        let mut project = sheaf_core::Project::new();
+        for mut book in self.workbooks {
+            for sheet in &mut book.sheets {
+                for column in &mut sheet.columns {
+                    trim_trailing_missing(column);
+                }
+            }
+            project.adopt_named_workbook(book);
+        }
+        project
+    }
+}
+
+fn trim_trailing_missing(column: &mut sheaf_core::Column) {
+    let keep = match &column.data {
+        sheaf_core::ColumnData::Numeric(v) => v.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1),
+        sheaf_core::ColumnData::Text(v) => v.iter().rposition(|t| !t.is_empty()).map_or(0, |i| i + 1),
+    };
+    if keep == column.len() {
+        return;
+    }
+    if let Some(v) = column.numeric_mut() {
+        v.truncate(keep);
+    } else if let Some(v) = column.text_mut() {
+        v.truncate(keep);
+    }
+}
+
 /// Reads an `.opj` file.
 pub fn read_opj(path: &Path) -> Result<OpjImport, IoError> {
     let file = File::open(path).map_err(|e| IoError::io(path, e))?;

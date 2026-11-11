@@ -38,8 +38,13 @@ pub struct Startup {
 enum Pending {
     New,
     Open,
+    /// Open the project in `pending_path` (dropped onto the window or given at start-up).
+    OpenFile,
     Quit,
 }
+
+/// More new windows than this at once are not all opened as tabs.
+const MAX_TABS_AT_ONCE: usize = 8;
 
 struct RenameDialog {
     window: WindowId,
@@ -67,6 +72,9 @@ pub struct SheafApp {
     status: String,
     next_token: u64,
     pending: Option<Pending>,
+    pending_path: Option<PathBuf>,
+    /// Folder of the last imported Origin project, used as the start folder of file choosers.
+    import_folder: Option<PathBuf>,
     quit_confirmed: bool,
     shown_title: String,
     startup: Startup,
@@ -99,6 +107,8 @@ impl SheafApp {
             status: "Ready".to_string(),
             next_token: 1,
             pending: None,
+            pending_path: None,
+            import_folder: None,
             quit_confirmed: false,
             shown_title: String::new(),
             startup,
@@ -119,11 +129,13 @@ impl SheafApp {
         if paths.is_empty() {
             return;
         }
-        let is_project = |p: &Path| {
-            p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(project_file::EXTENSION))
-        };
-        if let Some(project) = paths.iter().find(|p| is_project(p)) {
-            self.load_project(project.clone());
+        if let Some(project) = paths.iter().find(|p| sheaf_io::is_project_file(p)) {
+            if self.doc.dirty {
+                self.pending_path = Some(project.clone());
+                self.pending = Some(Pending::OpenFile);
+            } else {
+                self.load_project(project.clone());
+            }
             return;
         }
         if ask {
@@ -142,13 +154,31 @@ impl SheafApp {
         self.finish_import(items, errors, true, None);
     }
 
+    /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
     fn load_project(&mut self, path: PathBuf) {
-        match project_file::load(&path) {
-            Ok(project) => {
-                self.doc.replace(project);
-                self.status = format!("Opened {}", path.display());
-                self.path = Some(path);
+        match sheaf_io::open_project(&path) {
+            Ok(opened) => {
+                self.doc.replace(opened.project);
                 self.reset_views();
+                if opened.foreign {
+                    // Not saved back to the Origin file: the project has no file name yet.
+                    self.status = format!("Imported {}; save it as a Sheaf project to keep changes", path.display());
+                    self.import_folder = path.parent().map(Path::to_path_buf);
+                    self.path = None;
+                } else {
+                    self.status = format!("Opened {}", path.display());
+                    self.path = Some(path);
+                }
+                if !opened.warnings.is_empty() {
+                    self.message = Some((
+                        "Notes about this project".to_string(),
+                        opened.warnings.join(
+                            "
+
+",
+                        ),
+                    ));
+                }
             }
             Err(e) => self.message = Some(("Could not open the project".to_string(), e.to_string())),
         }
@@ -189,8 +219,15 @@ impl SheafApp {
                 let Some(mut p) = chooser.save_file() else {
                     return false;
                 };
-                if p.extension().is_none() {
-                    p.set_extension(project_file::EXTENSION);
+                // Always a Sheaf project: never write over a file of another program.
+                let is_sheaf = p
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case(project_file::EXTENSION));
+                if !is_sheaf {
+                    let mut name = p.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+                    name.push(format!(".{}", project_file::EXTENSION));
+                    p.set_file_name(name);
                 }
                 p
             }
@@ -213,6 +250,9 @@ impl SheafApp {
     fn folder(&self) -> Option<PathBuf> {
         if let Some(p) = &self.path {
             return p.parent().map(Path::to_path_buf);
+        }
+        if self.import_folder.is_some() {
+            return self.import_folder.clone();
         }
         self.doc
             .project()
@@ -267,10 +307,12 @@ impl SheafApp {
         self.known.retain(|k| set.contains(k));
         self.books.retain(|k, _| set.contains(k));
         self.graphs.retain(|k, _| set.contains(k));
-        for id in ids {
-            if self.known.insert(id) {
-                self.dock.push_to_focused_leaf(id);
-            }
+        // A project with very many windows (an imported Origin project can have dozens) opens
+        // only its first few as tabs; the others are opened from the project explorer.
+        let new: Vec<WindowId> = ids.into_iter().filter(|id| self.known.insert(*id)).collect();
+        let shown = if new.len() > MAX_TABS_AT_ONCE { 1 } else { new.len() };
+        for id in new.into_iter().take(shown) {
+            self.dock.push_to_focused_leaf(id);
         }
     }
 
@@ -444,11 +486,18 @@ impl SheafApp {
             Pending::Open => {
                 let mut chooser = rfd::FileDialog::new()
                     .set_title("Open project")
-                    .add_filter("Sheaf project", &[project_file::EXTENSION]);
+                    .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj"])
+                    .add_filter("Sheaf project", &[project_file::EXTENSION])
+                    .add_filter("Origin project", &["opj"]);
                 if let Some(dir) = self.folder() {
                     chooser = chooser.set_directory(dir);
                 }
                 if let Some(path) = chooser.pick_file() {
+                    self.load_project(path);
+                }
+            }
+            Pending::OpenFile => {
+                if let Some(path) = self.pending_path.take() {
                     self.load_project(path);
                 }
             }

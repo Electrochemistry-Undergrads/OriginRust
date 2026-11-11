@@ -3,6 +3,7 @@
 //! ```text
 //! sheaf-app                      start with an empty project
 //! sheaf-app lab.sheaf            open a project
+//! sheaf-app old.opj              import the workbooks of an Origin project
 //! sheaf-app run1.txt run2.txt    import data files with default settings and plot them
 //! ```
 //!

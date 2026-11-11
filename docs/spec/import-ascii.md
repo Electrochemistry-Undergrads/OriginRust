@@ -144,6 +144,17 @@ Missing values:
 - The words "NaN", "NA", "--" and similar strings as numeric values are **[?]**. Safe rule: treat as missing in numeric columns.
 - A text cell in a column typed numeric, with NonNum=1, converts the column to the mixed text-and-numeric format.
 
+### What Sheaf implements (crates/io/src/ascii.rs)
+
+None of the rules below were checked against a running Origin; they follow the documented NonNum=1 behaviour and the "safe rule" above. Sheaf columns are either all numbers or all text (`ColumnData`), so there is no mixed column. Where Origin keeps a text cell in a numeric column, Sheaf stores a missing value (NaN) and reports it in the import warnings.
+
+1. No-value markers. These count as missing, not as text: `NA`, `N/A`, `#N/A`, `n.a.`, `n.d.`, `nd`, `bdl`, `#VALUE!`, `#DIV/0!`, `#REF!`, `#NUM!` (any letter case), any string made only of dashes (`-`, `--`, `----`, en and em dashes), and any string that starts with `<` followed by something (`<LOD`, `<0.05`). `NaN` and `inf` are real numbers. Markers do not count when deciding whether a column is numeric, so a column with many `<LOD` cells stays numeric. A column that holds only markers is numeric with all values missing. In a text column (sample names) the markers stay as they are.
+2. Column type: a column is numeric when at least 80 percent of its cells that are neither empty nor markers are numbers. The remaining text cells become missing values, with a warning naming the column and the count. Otherwise the column is text and designated Label.
+3. Data start. Markers do not break a run of numeric rows. When the first run of three numeric rows is found, the start moves up over directly preceding rows that have the same field count and at least as many numbers or markers as text cells, so `3,trace` above numeric rows stays data. A name row (no numbers) or a units row stays a header line. In files with a text column the first data row is the first row that has a number or marker, has text in its other fields, and is followed by rows with the same field count in which at most half of the cells in its numeric columns are text.
+4. Quoted fields may contain line breaks. The text is cut into records, carrying the open-quote state across physical lines; a quote opens a field only at the start of a field (after a delimiter, a space or the start of a record). If a quote is still open at the end of the file, the file is cut into plain lines instead. Header line numbers in the options and in `Detected` count records, not physical lines. CRLF and LF both work, and a line break inside quotes is kept as a line feed in the cell.
+
+Not decided: whether Origin treats `-` or `<LOD` as numeric-column text (it probably keeps them as text cells that are not plotted); a black-box run of impasc on a small file would settle this.
+
 ## 8. Date and time detection (P0 for time-stamped logs, P1 otherwise)
 
 | Option | Meaning | Default | Source |

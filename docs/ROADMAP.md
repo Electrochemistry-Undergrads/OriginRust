@@ -29,6 +29,9 @@ publication figures), P1 is common Origin use, P2 is later.
       box, current axis symmetric about zero)
 - [x] Command-line program: `import`, `plot`, `export`, `info` (`sheaf-cli`)
 - [x] Desktop app: workbook grid with column designations, long names, units, comments
+      (measured 2026-11-11, release build: a 1,000,000-row, 27 MB CSV imports in 1.5 s; the app
+      opens it, draws 20 frames and saves a screenshot in 2.0 s in all; `sheaf plot` of it at
+      300 dpi takes 1.2 s)
 - [x] Desktop app: import dialog with options and preview
 - [x] Desktop app: graph window; edit axes, ticks, fonts, line styles and legend
 - [x] Desktop app: export dialog (PNG with DPI, SVG, PDF); save and open projects; undo and redo

@@ -12,7 +12,7 @@ use sheaf_expr::{ColumnRef, Expr, ExprError, Host};
 use std::ops::Range;
 
 /// The most rows a formula may fill; a larger end row is refused instead of allocating that much.
-pub const MAX_FORMULA_ROWS: usize = 100_000_000;
+pub const MAX_FORMULA_ROWS: usize = 10_000_000;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FormulaError {
@@ -137,6 +137,16 @@ mod tests {
         let err = p.set_column_values(c, "i", Some(0..usize::MAX)).unwrap_err();
         assert!(matches!(err, FormulaError::TooManyRows(_)));
         assert!(p.numeric(c).unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_row_limit_is_the_exact_boundary() {
+        let (mut p, _, _, c) = sample();
+        let err = p.set_column_values(c, "1", Some(0..MAX_FORMULA_ROWS + 1)).unwrap_err();
+        assert!(matches!(err, FormulaError::TooManyRows(n) if n == MAX_FORMULA_ROWS + 1));
+        // A range of a few rows is still fine.
+        p.set_column_values(c, "1", Some(0..3)).unwrap();
+        assert_eq!(p.numeric(c).unwrap()[..3], [1.0, 1.0, 1.0]);
     }
 
     #[test]

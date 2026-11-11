@@ -51,6 +51,11 @@ fn detect_in_prefix(path: &Path, options: &AsciiOptions) -> Option<sheaf_io::asc
             bytes.truncate(bytes.len() & !1);
         } else if let Some(end) = bytes.iter().rposition(|b| *b == b'\n') {
             bytes.truncate(end + 1);
+        } else if let Err(e) = std::str::from_utf8(&bytes)
+            && e.error_len().is_none()
+        {
+            // One very long line: only drop a character that the cut left incomplete.
+            bytes.truncate(e.valid_up_to());
         }
     }
     let text = sheaf_io::decode_text(&bytes, path).ok()?;
@@ -453,6 +458,25 @@ mod tests {
         d.ascii.delimiter = Delimiter::Tab;
         d.detected();
         assert_eq!(d.detect_runs, 2, "changed options recompute");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detection_works_when_the_prefix_has_no_line_end() {
+        let dir = std::env::temp_dir().join(format!("sheaf-import-oneline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("oneline.csv");
+        // Seven-byte pieces, so the cut at the prefix size lands inside the first character.
+        let mut text = String::new();
+        while text.len() < 2 * DETECT_BYTES as usize {
+            text.push_str("\u{e9}1,2,3");
+        }
+        std::fs::write(&path, &text).unwrap();
+        let mut bytes = Vec::new();
+        std::fs::File::open(&path).unwrap().take(DETECT_BYTES).read_to_end(&mut bytes).unwrap();
+        assert!(std::str::from_utf8(&bytes).is_err(), "the cut splits a character");
+        let found = detect_in_prefix(&path, &AsciiOptions::default()).expect("detected");
+        assert_eq!(found.delimiter, Delimiter::Comma);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

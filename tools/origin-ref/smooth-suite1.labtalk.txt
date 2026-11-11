@@ -1,0 +1,38 @@
+// Reference run for smooth.  A = x = 0..10 step 0.1 (101 pts), B = sin(x) + 0.3 cos(7x) + 0.05 x^2;
+// Z = B with a missing value in row 20.  Each call writes its own column; the same order is used
+// by the Rust test table.
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = sin(col(A)) + 0.3*cos(7*col(A)) + 0.05*col(A)^2;
+smooth iy:=col(B) method:=aav npts:=5 oy:=col(C);
+smooth iy:=col(B) method:=aav npts:=6 oy:=col(D);
+smooth iy:=col(B) method:=aav npts:=5 weight:=1 oy:=col(E);
+smooth iy:=col(B) method:=aav npts:=5 boundary:=reflect oy:=col(F);
+smooth iy:=col(B) method:=aav npts:=5 boundary:=repeat oy:=col(G);
+smooth iy:=col(B) method:=aav npts:=5 boundary:=periodic oy:=col(H);
+smooth iy:=col(B) method:=aav npts:=5 boundary:=extrap oy:=col(I);
+smooth iy:=col(B) method:=aav npts:=7 weight:=1 boundary:=reflect oy:=col(J);
+smooth iy:=col(B) method:=sg oy:=col(K);
+smooth iy:=col(B) method:=sg npts:=9 polyorder:=3 oy:=col(L);
+smooth iy:=col(B) method:=sg npts:=9 polyorder:=3 boundary:=reflect oy:=col(M);
+smooth iy:=col(B) method:=sg npts:=9 polyorder:=3 boundary:=repeat oy:=col(N);
+smooth iy:=col(B) method:=sg npts:=9 polyorder:=3 boundary:=periodic oy:=col(O);
+smooth iy:=col(B) method:=sg npts:=9 polyorder:=3 boundary:=extrap oy:=col(P);
+smooth iy:=col(B) method:=sg npts:=7 polyorder:=2 oy:=col(Q);
+smooth iy:=col(B) method:=sg npts:=6 polyorder:=2 oy:=col(R);
+smooth iy:=col(B) method:=pf npts:=5 percent:=50 oy:=col(S);
+smooth iy:=col(B) method:=pf npts:=7 percent:=70 oy:=col(T);
+smooth iy:=col(B) method:=pf npts:=5 percent:=50 boundary:=reflect oy:=col(U);
+smooth iy:=col(B) method:=pf npts:=6 percent:=25 oy:=col(V);
+smooth iy:=col(B) method:=fft npts:=10 oy:=col(W);
+double fft10cut=smooth.cutoff;
+smooth iy:=col(B) method:=fft npts:=25 oy:=col(X);
+double fft25cut=smooth.cutoff;
+smooth iy:=col(B) method:=fft npts:=5 oy:=col(Y);
+double fft5cut=smooth.cutoff;
+smooth iy:=col(B) method:=fft npts:=0 oy:=col(Z);
+double fft0cut=smooth.cutoff;
+col(Z) = col(B); col(Z)[20] = 0/0;
+smooth iy:=col(Z) method:=aav npts:=5 oy:=col(AA);
+smooth iy:=col(Z) method:=sg npts:=5 polyorder:=2 oy:=col(AB);
+smooth iy:=col(Z) method:=pf npts:=5 percent:=50 oy:=col(AC);

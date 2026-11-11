@@ -1,0 +1,36 @@
+// Reference run for normalize.  A = x = 0..10 step 0.1; B = sin(x) + 0.3 cos(7x) + 0.05 x^2 + 0.2;
+// C = round(2 sin(x)) (repeated values, for the mode); D = B with a missing value in row 20.
+// Output columns follow in the order of the list: first the 12 methods on B, then on C, then 4 on D.
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = sin(col(A)) + 0.3*cos(7*col(A)) + 0.05*col(A)^2 + 0.2;
+col(C) = round(2*sin(col(A)),0);
+col(D) = col(B); col(D)[20] = 0/0;
+normalize iy:=col(B) method:=specify val:=4 oy:=col(E);
+normalize iy:=col(B) method:=range oy:=col(F);
+normalize iy:=col(B) method:=snd oy:=col(G);
+normalize iy:=col(B) method:=max oy:=col(H);
+normalize iy:=col(B) method:=min oy:=col(I);
+normalize iy:=col(B) method:=mean oy:=col(J);
+normalize iy:=col(B) method:=median oy:=col(K);
+normalize iy:=col(B) method:=sd oy:=col(L);
+normalize iy:=col(B) method:=norm oy:=col(M);
+normalize iy:=col(B) method:=mode oy:=col(N);
+normalize iy:=col(B) method:=sum oy:=col(O);
+normalize iy:=col(B) method:=range100 oy:=col(P);
+normalize iy:=col(C) method:=specify val:=4 oy:=col(Q);
+normalize iy:=col(C) method:=range oy:=col(R);
+normalize iy:=col(C) method:=snd oy:=col(S);
+normalize iy:=col(C) method:=max oy:=col(T);
+normalize iy:=col(C) method:=min oy:=col(U);
+normalize iy:=col(C) method:=mean oy:=col(V);
+normalize iy:=col(C) method:=median oy:=col(W);
+normalize iy:=col(C) method:=sd oy:=col(X);
+normalize iy:=col(C) method:=norm oy:=col(Y);
+normalize iy:=col(C) method:=mode oy:=col(Z);
+normalize iy:=col(C) method:=sum oy:=col(AA);
+normalize iy:=col(C) method:=range100 oy:=col(AB);
+normalize iy:=col(D) method:=range oy:=col(AC);
+normalize iy:=col(D) method:=snd oy:=col(AD);
+normalize iy:=col(D) method:=max oy:=col(AE);
+normalize iy:=col(D) method:=mean oy:=col(AF);

@@ -22,3 +22,6 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+egui_kittest = { version = "0.33", features = ["eframe"] }

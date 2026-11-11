@@ -1,0 +1,12 @@
+// Fifth reference run for integ1: width at half height versus offset and trough depth.
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = exp(-(col(A)-2)^2) + (-0.02); integ1 iy:=(col(A),col(B)) oy:=col(C); double c1x0=integ1.x0; double c1y0=integ1.y0; double c1dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) + (-0.05); integ1 iy:=(col(A),col(B)) oy:=col(C); double c2x0=integ1.x0; double c2y0=integ1.y0; double c2dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) + (-0.1); integ1 iy:=(col(A),col(B)) oy:=col(C); double c3x0=integ1.x0; double c3y0=integ1.y0; double c3dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) + (-0.2); integ1 iy:=(col(A),col(B)) oy:=col(C); double c4x0=integ1.x0; double c4y0=integ1.y0; double c4dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) + (-0.4); integ1 iy:=(col(A),col(B)) oy:=col(C); double c5x0=integ1.x0; double c5y0=integ1.y0; double c5dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) - 0.6*exp(-(col(A)-7)^2); integ1 iy:=(col(A),col(B)) oy:=col(C); double c6x0=integ1.x0; double c6y0=integ1.y0; double c6dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) - 0.7*exp(-(col(A)-7)^2); integ1 iy:=(col(A),col(B)) oy:=col(C); double c7x0=integ1.x0; double c7y0=integ1.y0; double c7dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) - 0.8*exp(-(col(A)-7)^2); integ1 iy:=(col(A),col(B)) oy:=col(C); double c8x0=integ1.x0; double c8y0=integ1.y0; double c8dx=integ1.dx;
+col(B) = exp(-(col(A)-2)^2) - 0.9*exp(-(col(A)-7)^2); integ1 iy:=(col(A),col(B)) oy:=col(C); double c9x0=integ1.x0; double c9y0=integ1.y0; double c9dx=integ1.dx;

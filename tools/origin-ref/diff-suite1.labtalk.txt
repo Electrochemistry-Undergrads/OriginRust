@@ -1,0 +1,19 @@
+// Reference run for differentiate.  A = x = 0..10 step 0.1 (101 pts), B = sin(x) + 0.1 x^2.
+// G = x = t^2 for t = 0..3 step 0.05 (61 pts), H = sin(x) (uneven spacing).  Missing: col K has a
+// missing value in row 20.  Outputs C.. are the derivative columns, named in each call.
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = sin(col(A)) + 0.1*col(A)^2;
+differentiate iy:=(col(A),col(B)) oy:=col(C);
+differentiate iy:=(col(A),col(B)) order:=2 oy:=col(D);
+differentiate iy:=(col(A),col(B)) order:=3 oy:=col(E);
+col(G) = data(0, 3, 0.05)^2;
+col(H) = sin(col(G));
+differentiate iy:=(col(G),col(H)) oy:=col(I);
+differentiate iy:=(col(G),col(H)) order:=2 oy:=col(J);
+col(K) = col(B);
+col(K)[20] = 0/0;
+differentiate iy:=(col(A),col(K)) oy:=col(L);
+differentiate iy:=(col(A),col(B)) smooth:=1 poly:=2 npts:=7 oy:=col(M);
+differentiate iy:=(col(A),col(B)) smooth:=1 poly:=3 npts:=9 oy:=col(N);
+differentiate iy:=(col(A),col(B)) order:=2 smooth:=1 poly:=3 npts:=9 oy:=col(O);

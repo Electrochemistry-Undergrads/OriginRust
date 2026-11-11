@@ -1,0 +1,11 @@
+// Second reference run for colstats: quartile rule and small samples.  Column k has length 1,2,3,5,7,11,13;
+// values are (i*i*7 mod 13) + i/10, i = 1..length.
+newbook;
+col(A) = data(1, 1, 1); col(A) = mod(col(A)*col(A)*7, 13) + col(A)/10;
+col(B) = data(1, 2, 1); col(B) = mod(col(B)*col(B)*7, 13) + col(B)/10;
+col(C) = data(1, 3, 1); col(C) = mod(col(C)*col(C)*7, 13) + col(C)/10;
+col(D) = data(1, 5, 1); col(D) = mod(col(D)*col(D)*7, 13) + col(D)/10;
+col(E) = data(1, 7, 1); col(E) = mod(col(E)*col(E)*7, 13) + col(E)/10;
+col(F) = data(1, 11, 1); col(F) = mod(col(F)*col(F)*7, 13) + col(F)/10;
+col(G) = data(1, 13, 1); col(G) = mod(col(G)*col(G)*7, 13) + col(G)/10;
+colstats irng:=1:7 mean:=col(H) sd:=col(I) sem:=col(J) n:=col(K) min:=col(L) q1:=col(M) median:=col(N) q3:=col(O) max:=col(P) iqr:=col(Q) sum:=col(R) variance:=col(S) skewness:=col(T) kurtosis:=col(U) cv:=col(V) missing:=col(W) ;

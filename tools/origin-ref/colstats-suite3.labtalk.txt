@@ -1,0 +1,15 @@
+// Third reference run for colstats: quartile positions.  Column k has length 4,6,8,9,10,12,14,15,16,20,21
+// with values i^2 (i = 1..length), so that any interpolation shows up in the result.
+newbook;
+col(A) = data(1, 4, 1); col(A) = col(A)^2;
+col(B) = data(1, 6, 1); col(B) = col(B)^2;
+col(C) = data(1, 8, 1); col(C) = col(C)^2;
+col(D) = data(1, 9, 1); col(D) = col(D)^2;
+col(E) = data(1, 10, 1); col(E) = col(E)^2;
+col(F) = data(1, 12, 1); col(F) = col(F)^2;
+col(G) = data(1, 14, 1); col(G) = col(G)^2;
+col(H) = data(1, 15, 1); col(H) = col(H)^2;
+col(I) = data(1, 16, 1); col(I) = col(I)^2;
+col(J) = data(1, 20, 1); col(J) = col(J)^2;
+col(K) = data(1, 21, 1); col(K) = col(K)^2;
+colstats irng:=1:11 mean:=col(L) sd:=col(M) sem:=col(N) n:=col(O) min:=col(P) q1:=col(Q) median:=col(R) q3:=col(S) max:=col(T) iqr:=col(U) sum:=col(V) variance:=col(W) skewness:=col(X) kurtosis:=col(Y) cv:=col(Z) missing:=col(AA) ;

@@ -1,0 +1,19 @@
+// Fourth reference run for integ1: width at half height for curves with a second (negative)
+// lobe or an offset, to see when the crossings on the way out from the peak are used.
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = exp(-(col(A)-2)^2) - 0.3;
+integ1 iy:=(col(A),col(B)) oy:=col(C);
+double a1=integ1.area; double a1y0=integ1.y0; double a1x0=integ1.x0; double a1dx=integ1.dx;
+col(D) = exp(-(col(A)-2)^2) - 0.5*exp(-(col(A)-7)^2);
+integ1 iy:=(col(A),col(D)) oy:=col(E);
+double a2=integ1.area; double a2y0=integ1.y0; double a2x0=integ1.x0; double a2dx=integ1.dx;
+col(F) = exp(-(col(A)-8)^2) - 0.5*exp(-(col(A)-3)^2);
+integ1 iy:=(col(A),col(F)) oy:=col(G);
+double a3=integ1.area; double a3y0=integ1.y0; double a3x0=integ1.x0; double a3dx=integ1.dx;
+col(H) = exp(-(col(A)-2)^2) + 0.5*exp(-(col(A)-7)^2);
+integ1 iy:=(col(A),col(H)) oy:=col(I);
+double a4=integ1.area; double a4y0=integ1.y0; double a4x0=integ1.x0; double a4dx=integ1.dx;
+col(J) = exp(-(col(A)-5)^2) + 0.8*exp(-(col(A)-8)^2);
+integ1 iy:=(col(A),col(J)) oy:=col(K);
+double a5=integ1.area; double a5y0=integ1.y0; double a5x0=integ1.x0; double a5dx=integ1.dx;

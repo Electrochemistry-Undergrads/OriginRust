@@ -1,0 +1,34 @@
+// Second reference run for integ1: width at half height when the curve does not fall below half
+// height on one side, plateau peak (which row is the peak), a range that starts mid-peak, and
+// two-point / short inputs.  Inputs are closed form; x = 0..10 step 0.1 (101 points) in column A.
+newbook;
+col(A) = data(0, 10, 0.1);
+// B: peak at x=2 (y=1); left side falls (gaussian-like), right side stays above half height
+col(B) = (col(A)<2)*exp(-(col(A)-2)^2/1) + (col(A)>=2)*(1-0.05*(col(A)-2));
+// C: mirror image of B (peak at x=8, right side falls, left side stays high)
+col(C) = (col(A)>8)*exp(-(col(A)-8)^2/1) + (col(A)<=8)*(1-0.05*(8-col(A)));
+// D: plateau: min(1, 2-|x-5|), flat top from x=4 to x=6
+col(D) = (2-abs(col(A)-5) > 1) * 1 + (2-abs(col(A)-5) <= 1) * (2-abs(col(A)-5));
+// E: y = sin(x) + 0.5 x, rows 31..71 (range cut in mid-slope)
+col(E) = sin(col(A)) + 0.5*col(A);
+integ1 iy:=(col(A),col(B)) oy:=col(F);
+double a1=integ1.area; double a1y0=integ1.y0; double a1x0=integ1.x0; double a1dx=integ1.dx;
+integ1 iy:=(col(A),col(C)) oy:=col(G);
+double a2=integ1.area; double a2y0=integ1.y0; double a2x0=integ1.x0; double a2dx=integ1.dx;
+integ1 iy:=(col(A),col(D)) oy:=col(H);
+double a3=integ1.area; double a3y0=integ1.y0; double a3x0=integ1.x0; double a3dx=integ1.dx;
+integ1 iy:=(col(A),col(E))[31:71] oy:=col(I);
+double a4=integ1.area; double a4y0=integ1.y0; double a4x0=integ1.x0; double a4dx=integ1.dx; double a4i1=integ1.i1; double a4i2=integ1.i2;
+integ1 iy:=(col(A),col(E))[31:71] type:=abs baseline:=1 oy:=col(J);
+double a5=integ1.area; double a5y0=integ1.y0; double a5x0=integ1.x0; double a5dx=integ1.dx;
+// K: a sign-changing curve, absolute area with baseline
+col(K) = sin(col(A));
+integ1 iy:=(col(A),col(K)) type:=abs oy:=col(L);
+double a6=integ1.area; double a6y0=integ1.y0; double a6x0=integ1.x0; double a6dx=integ1.dx;
+// M: all-negative curve (trough): area, y0 (max Y), x0
+col(M) = -1 - exp(-(col(A)-5)^2);
+integ1 iy:=(col(A),col(M)) oy:=col(N);
+double a7=integ1.area; double a7y0=integ1.y0; double a7x0=integ1.x0; double a7dx=integ1.dx;
+// O: tiny curve of 2 points (rows 1..2)
+integ1 iy:=(col(A),col(E))[1:2] oy:=col(P);
+double a8=integ1.area; double a8y0=integ1.y0; double a8x0=integ1.x0; double a8dx=integ1.dx;

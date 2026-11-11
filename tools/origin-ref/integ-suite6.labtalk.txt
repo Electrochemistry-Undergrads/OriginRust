@@ -1,0 +1,18 @@
+// Sixth reference run for integ1: the peak (largest magnitude) is the first or the last point.
+// A = x = 2..10 step 0.1 (81 points).  B = x^2 (peak at the last point), C = (12-x)^2 (peak at the
+// first point), D = x^2 - 30 (largest magnitude at the last point, negative values at the start),
+// E = 5 + x (peak last, half height level below the first value).
+newbook;
+col(A) = data(2, 10, 0.1);
+col(B) = col(A)^2;
+col(C) = (12-col(A))^2;
+col(D) = col(A)^2 - 30;
+col(E) = 5 + col(A);
+integ1 iy:=(col(A),col(B)) oy:=col(F);
+double a1=integ1.area; double a1y0=integ1.y0; double a1x0=integ1.x0; double a1dx=integ1.dx;
+integ1 iy:=(col(A),col(C)) oy:=col(G);
+double a2=integ1.area; double a2y0=integ1.y0; double a2x0=integ1.x0; double a2dx=integ1.dx;
+integ1 iy:=(col(A),col(D)) oy:=col(H);
+double a3=integ1.area; double a3y0=integ1.y0; double a3x0=integ1.x0; double a3dx=integ1.dx;
+integ1 iy:=(col(A),col(E)) oy:=col(I);
+double a4=integ1.area; double a4y0=integ1.y0; double a4x0=integ1.x0; double a4dx=integ1.dx;

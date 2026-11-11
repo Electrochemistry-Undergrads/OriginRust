@@ -1,0 +1,11 @@
+// Third reference run for integ1: plateau peak (which row counts as the peak) and a curve whose
+// largest magnitude is positive in one lobe and negative in the other (peak = largest |y|).
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = (abs(col(A)-5)<=2)*(1 - (abs(col(A)-5)>1)*(abs(col(A)-5)-1));
+integ1 iy:=(col(A),col(B)) oy:=col(C);
+double a1=integ1.area; double a1y0=integ1.y0; double a1x0=integ1.x0; double a1dx=integ1.dx;
+// D: +1 lobe at x=2, -1 lobe at x=7 (exactly equal magnitude at the grid points)
+col(D) = exp(-(col(A)-2)^2) - exp(-(col(A)-7)^2);
+integ1 iy:=(col(A),col(D)) oy:=col(E);
+double a2=integ1.area; double a2y0=integ1.y0; double a2x0=integ1.x0; double a2dx=integ1.dx;

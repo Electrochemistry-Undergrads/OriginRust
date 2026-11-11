@@ -29,8 +29,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $work = (Resolve-Path $WorkDir).Path.TrimEnd('\') + '\'
 $text = (Get-Content -Raw -LiteralPath $Script).Replace('%WORK%', $work)
-$origin = New-Object -ComObject Origin.Application
+# Only one Origin instance may run at a time. A named lock makes a second copy of this
+# script wait (up to 30 minutes) until the first one has closed Origin.
+$lock = New-Object System.Threading.Mutex($false, 'Global\SheafOriginReference')
+try { $held = $lock.WaitOne([TimeSpan]::FromMinutes(30)) } catch [System.Threading.AbandonedMutexException] { $held = $true }
+if (-not $held) { throw 'Another Origin reference run held the lock for more than 30 minutes.' }
+$origin = $null
 try {
+  $origin = New-Object -ComObject Origin.Application
   $ok = $origin.Execute($text)
   "execute=$ok"
   foreach ($v in $Vars) {
@@ -42,6 +48,12 @@ try {
   }
 }
 finally {
-  try { [void]$origin.Exit() } catch { "warning: Origin did not exit cleanly: $_" }
-  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($origin)
+  if ($null -ne $origin) {
+    try { [void]$origin.Exit() } catch { "warning: Origin did not exit cleanly: $_" }
+    [void][Runtime.InteropServices.Marshal]::ReleaseComObject($origin)
+    # Give the Origin process a moment to end before the next run starts one.
+    Start-Sleep -Seconds 2
+  }
+  $lock.ReleaseMutex()
+  $lock.Dispose()
 }

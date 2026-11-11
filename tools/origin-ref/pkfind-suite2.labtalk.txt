@@ -1,0 +1,24 @@
+// Second reference run for pkfind: automatic height threshold and the sign rule.
+// A = x = 0..24 step 0.1; B = eleven triangular peaks (half width 0.5) at x = 2, 4, ..., 22 with heights
+// 1, .6, .3, .24, .22, .2, .19, .15, .12, .1, .05; C = B + 0.5; D = B - 2; E = B - 0.5 (mixed sign); F = -B.
+newbook;
+col(A) = data(0, 24, 0.1);
+col(B) = 1.0*(1-abs(col(A)-2)/0.5)*(abs(col(A)-2)<0.5) + 0.6*(1-abs(col(A)-4)/0.5)*(abs(col(A)-4)<0.5) + 0.3*(1-abs(col(A)-6)/0.5)*(abs(col(A)-6)<0.5) + 0.24*(1-abs(col(A)-8)/0.5)*(abs(col(A)-8)<0.5) + 0.22*(1-abs(col(A)-10)/0.5)*(abs(col(A)-10)<0.5) + 0.2*(1-abs(col(A)-12)/0.5)*(abs(col(A)-12)<0.5) + 0.19*(1-abs(col(A)-14)/0.5)*(abs(col(A)-14)<0.5) + 0.15*(1-abs(col(A)-16)/0.5)*(abs(col(A)-16)<0.5) + 0.12*(1-abs(col(A)-18)/0.5)*(abs(col(A)-18)<0.5) + 0.1*(1-abs(col(A)-20)/0.5)*(abs(col(A)-20)<0.5) + 0.05*(1-abs(col(A)-22)/0.5)*(abs(col(A)-22)<0.5);
+col(C) = col(B) + 0.5;
+col(D) = col(B) - 2;
+col(E) = col(B) - 0.5;
+col(F) = -col(B);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=p ocenter:=col(G) ocenter_x:=col(H) ocenter_y:=col(I);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b ocenter:=col(J) ocenter_x:=col(K) ocenter_y:=col(L);
+pkfind iy:=(col(A),col(C)) method:=max npts:=2 dir:=p ocenter:=col(M) ocenter_x:=col(N) ocenter_y:=col(O);
+pkfind iy:=(col(A),col(C)) method:=max npts:=2 dir:=b ocenter:=col(P) ocenter_x:=col(Q) ocenter_y:=col(R);
+pkfind iy:=(col(A),col(D)) method:=max npts:=2 dir:=p filter:=none ocenter:=col(S) ocenter_x:=col(T) ocenter_y:=col(U);
+pkfind iy:=(col(A),col(D)) method:=max npts:=2 dir:=p ocenter:=col(V) ocenter_x:=col(W) ocenter_y:=col(X);
+pkfind iy:=(col(A),col(D)) method:=max npts:=2 dir:=n filter:=none ocenter:=col(Y) ocenter_x:=col(Z) ocenter_y:=col(AA);
+pkfind iy:=(col(A),col(E)) method:=max npts:=2 dir:=p filter:=none ocenter:=col(AB) ocenter_x:=col(AC) ocenter_y:=col(AD);
+pkfind iy:=(col(A),col(E)) method:=max npts:=2 dir:=n filter:=none ocenter:=col(AE) ocenter_x:=col(AF) ocenter_y:=col(AG);
+pkfind iy:=(col(A),col(E)) method:=max npts:=2 dir:=b ocenter:=col(AH) ocenter_x:=col(AI) ocenter_y:=col(AJ);
+pkfind iy:=(col(A),col(F)) method:=max npts:=2 dir:=n ocenter:=col(AK) ocenter_x:=col(AL) ocenter_y:=col(AM);
+pkfind iy:=(col(A),col(F)) method:=max npts:=2 dir:=n filter:=none ocenter:=col(AN) ocenter_x:=col(AO) ocenter_y:=col(AP);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=p filter:=h value:=0.2 ocenter:=col(AQ) ocenter_x:=col(AR) ocenter_y:=col(AS);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=p filter:=h value:=0.19 ocenter:=col(AT) ocenter_x:=col(AU) ocenter_y:=col(AV);

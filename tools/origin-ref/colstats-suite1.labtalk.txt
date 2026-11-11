@@ -1,0 +1,10 @@
+// Reference run for colstats.  Four input columns (closed form, different lengths, one with a missing value):
+// A: 9 values sin(i)*3+1; B: 11 values (i^1.5 - 10 i/3), row 5 missing; C: 10 values 7 mod-ish: (i*37 mod 11); D: 4 values 2^i.
+newbook;
+col(A) = data(1, 9, 1); col(A) = sin(col(A))*3 + 1;
+col(B) = data(1, 11, 1); col(B) = col(B)^1.5 - 10*col(B)/3; col(B)[5] = 0/0;
+col(C) = data(1, 10, 1); col(C) = mod(col(C)*37, 11);
+col(D) = data(1, 4, 1); col(D) = 2^col(D);
+colstats irng:=1:4 n:=col(E) mean:=col(F) sd:=col(G) sem:=col(H) min:=col(I) q1:=col(J) median:=col(K) q3:=col(L) max:=col(M) iqr:=col(N) sum:=col(O) variance:=col(P) skewness:=col(Q) kurtosis:=col(R) cv:=col(S) missing:=col(T) ;
+stats ix:=col(A); double s_n=stats.n; double s_mean=stats.mean; double s_sd=stats.sd; double s_min=stats.min; double s_max=stats.max; double s_sum=stats.sum; double s_missing=stats.missing;
+stats ix:=col(B); double t_n=stats.n; double t_mean=stats.mean; double t_sd=stats.sd; double t_min=stats.min; double t_max=stats.max; double t_sum=stats.sum; double t_missing=stats.missing;

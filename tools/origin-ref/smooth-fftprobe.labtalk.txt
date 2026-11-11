@@ -1,0 +1,34 @@
+// Probe of the FFT-filter transfer function: pure sines with k whole periods over 100 points.
+// A = x = 0..9.9 step 0.1; column for sine k, filtered with npts 10 and with npts 20.
+newbook;
+col(A) = data(0, 9.9, 0.1);
+col(B) = sin(2*pi*1*col(A)/10);
+smooth iy:=col(B) method:=fft npts:=10 oy:=col(C);
+smooth iy:=col(B) method:=fft npts:=20 oy:=col(D);
+col(E) = sin(2*pi*2*col(A)/10);
+smooth iy:=col(E) method:=fft npts:=10 oy:=col(F);
+smooth iy:=col(E) method:=fft npts:=20 oy:=col(G);
+col(H) = sin(2*pi*3*col(A)/10);
+smooth iy:=col(H) method:=fft npts:=10 oy:=col(I);
+smooth iy:=col(H) method:=fft npts:=20 oy:=col(J);
+col(K) = sin(2*pi*4*col(A)/10);
+smooth iy:=col(K) method:=fft npts:=10 oy:=col(L);
+smooth iy:=col(K) method:=fft npts:=20 oy:=col(M);
+col(N) = sin(2*pi*5*col(A)/10);
+smooth iy:=col(N) method:=fft npts:=10 oy:=col(O);
+smooth iy:=col(N) method:=fft npts:=20 oy:=col(P);
+col(Q) = sin(2*pi*6*col(A)/10);
+smooth iy:=col(Q) method:=fft npts:=10 oy:=col(R);
+smooth iy:=col(Q) method:=fft npts:=20 oy:=col(S);
+col(T) = sin(2*pi*8*col(A)/10);
+smooth iy:=col(T) method:=fft npts:=10 oy:=col(U);
+smooth iy:=col(T) method:=fft npts:=20 oy:=col(V);
+col(W) = sin(2*pi*10*col(A)/10);
+smooth iy:=col(W) method:=fft npts:=10 oy:=col(X);
+smooth iy:=col(W) method:=fft npts:=20 oy:=col(Y);
+col(Z) = sin(2*pi*14*col(A)/10);
+smooth iy:=col(Z) method:=fft npts:=10 oy:=col(AA);
+smooth iy:=col(Z) method:=fft npts:=20 oy:=col(AB);
+col(AC) = sin(2*pi*20*col(A)/10);
+smooth iy:=col(AC) method:=fft npts:=10 oy:=col(AD);
+smooth iy:=col(AC) method:=fft npts:=20 oy:=col(AE);

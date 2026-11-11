@@ -1190,3 +1190,6 @@ impl eframe::App for SheafApp {
         self.screenshot_step(ctx);
     }
 }
+
+#[cfg(test)]
+mod ui_tests;

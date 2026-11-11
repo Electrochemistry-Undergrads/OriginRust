@@ -1,0 +1,18 @@
+// Reference run for pkfind (local-maximum method).  A = x = 0..20 step 0.1 (201 pts);
+// B = 1.0 exp(-(x-4)^2) + 0.7 exp(-(x-9)^2/2) - 0.6 exp(-(x-13)^2/0.5) + 0.8 exp(-(x-17)^2) + 0.12 sin(9x) + 0.2
+// (small ripple, a negative peak, a positive offset).  Each call writes three columns: peak index, x, y.
+newbook;
+col(A) = data(0, 20, 0.1);
+col(B) = exp(-(col(A)-4)^2) + 0.7*exp(-(col(A)-9)^2/2) - 0.6*exp(-(col(A)-13)^2/0.5) + 0.8*exp(-(col(A)-17)^2) + 0.12*sin(9*col(A)) + 0.2;
+pkfind iy:=(col(A),col(B)) method:=max filter:=none ocenter:=col(C) ocenter_x:=col(D) ocenter_y:=col(E);
+pkfind iy:=(col(A),col(B)) method:=max ocenter:=col(F) ocenter_x:=col(G) ocenter_y:=col(H);
+pkfind iy:=(col(A),col(B)) method:=max npts:=5 filter:=none ocenter:=col(I) ocenter_x:=col(J) ocenter_y:=col(K);
+pkfind iy:=(col(A),col(B)) method:=max npts:=3 filter:=none ocenter:=col(L) ocenter_x:=col(M) ocenter_y:=col(N);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=n filter:=none ocenter:=col(O) ocenter_x:=col(P) ocenter_y:=col(Q);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none ocenter:=col(R) ocenter_x:=col(S) ocenter_y:=col(T);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 filter:=h value:=0.5 ocenter:=col(U) ocenter_x:=col(V) ocenter_y:=col(W);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=h value:=0.5 ocenter:=col(X) ocenter_x:=col(Y) ocenter_y:=col(Z);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=n filter:=h value:=0.5 ocenter:=col(AA) ocenter_x:=col(AB) ocenter_y:=col(AC);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 filter:=none smooth:=5 ocenter:=col(AD) ocenter_x:=col(AE) ocenter_y:=col(AF);
+pkfind iy:=(col(A),col(B)) method:=max npts:=4 filter:=num value:=2 ocenter:=col(AG) ocenter_x:=col(AH) ocenter_y:=col(AI);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=p filter:=h value:=0.35 ocenter:=col(AJ) ocenter_x:=col(AK) ocenter_y:=col(AL);

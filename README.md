@@ -12,13 +12,43 @@ those. No OriginLab code or assets are in this repository.
 
 ## Status
 
-Early development. See `HANDOFF.md` for the exact current state and `docs/ROADMAP.md` for the plan.
+Early development. The first slice works: import CH Instruments and delimited text files, look at
+the data in workbooks, make overlay plots, edit the figure, export PNG, SVG and PDF, save and open
+projects. See `HANDOFF.md` for the exact current state and `docs/ROADMAP.md` for the plan.
+
+## Using it
+
+Desktop app:
+
+```
+cargo run --release -p sheaf-app                 # empty project
+cargo run --release -p sheaf-app -- run1.txt     # import a data file and plot it
+cargo run --release -p sheaf-app -- lab.sheaf    # open a project
+```
+
+Files can also be dropped onto the window. Double-click a column header for its properties,
+right-click it to plot or to set values from a formula, double-click a graph to change its axes,
+plots and legend.
+
+Command line (no window):
+
+```
+sheaf info run1.txt                              # what is in the file
+sheaf plot run1.txt -o cv.png --dpi 300          # a cyclic voltammetry file becomes a CV overlay
+sheaf plot run1.txt run2.txt -o overlay.pdf      # several files in one figure
+sheaf plot data.csv -o fig.svg --template line-symbol --y B,C
+sheaf import run1.txt run2.txt -o lab.sheaf --plot
+sheaf export lab.sheaf --graph Graph1 -o fig.png
+```
+
+`sheaf` is `cargo run --release -p sheaf-cli --`, or `target/release/sheaf.exe` after a build.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `crates/core` | Document model: project, workbooks, columns, graphs, figure templates, undo |
+| `crates/expr` | Expression language for column formulas and fit functions |
 | `crates/calc` | Numerics on plain number slices |
 | `crates/io` | Importers (CH Instruments text, delimited text), project file, exporters |
 | `crates/plot` | Figure rendering to SVG, PNG and PDF, independent of the GUI |

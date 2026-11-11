@@ -138,8 +138,9 @@ pub struct StyleArgs {
 
 #[derive(Args, Debug)]
 pub struct PlotArgs {
-    /// A data file or a .sheaf project.
-    pub input: PathBuf,
+    /// A data file or a .sheaf project. Several data files are overlaid in one figure.
+    #[arg(required = true)]
+    pub inputs: Vec<PathBuf>,
     /// The figure to write: .png, .svg or .pdf.
     #[arg(short, long)]
     pub output: PathBuf,

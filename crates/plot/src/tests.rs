@@ -541,6 +541,54 @@ fn decimation_keeps_first_and_last_points() {
     assert_eq!(path.matches('L').count(), 1, "{path}");
 }
 
+#[test]
+fn a_million_noisy_points_keep_their_envelope_with_few_segments() {
+    // Every point jumps far from the previous one, so thinning by distance alone keeps them all.
+    let n = 1_000_000;
+    let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
+    let y: Vec<f64> = (0..n).map(|i| ((i as u64 * 7919) % 1000) as f64 / 100.0).collect();
+    let (p, g) = project(Template::Line, x, vec![y]);
+    let svg = svg_of(&p, g);
+    let segments = svg.matches('L').count();
+    assert!(segments < 40_000, "{segments} segments");
+    // The lowest (0) and highest (9.99) values are still drawn: the path spans the data range.
+    let geom = &layout_geometry(&p, g).unwrap()[0];
+    let d = doc(&svg);
+    let path = paths_in(with_class(&d, "plots")[0])[0].attribute("d").unwrap().to_string();
+    let ys: Vec<f64> = path
+        .split(['M', 'L'])
+        .filter_map(|t| t.split_once(' ').and_then(|(_, y)| y.trim().parse::<f64>().ok()))
+        .collect();
+    let (top, bottom) = (geom.data_to_page(0.5, 9.99).1, geom.data_to_page(0.5, 0.0).1);
+    let (lo, hi) = ys.iter().fold((f64::MAX, f64::MIN), |(lo, hi), v| (lo.min(*v), hi.max(*v)));
+    assert!((lo - top).abs() < 0.02 && (hi - bottom).abs() < 0.02, "path y {lo}..{hi}, data {top}..{bottom}");
+}
+
+#[test]
+fn a_million_symbols_on_one_curve_are_thinned() {
+    let n = 1_000_000;
+    let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
+    let y: Vec<f64> = x.iter().map(|v| v * (1.0 - v)).collect();
+    let (p, g) = project(Template::Scatter, x, vec![y]);
+    let svg = svg_of(&p, g);
+    let symbols = svg.matches('Z').count();
+    assert!(symbols > 300 && symbols < 5_000, "{symbols} symbols");
+}
+
+#[test]
+fn thinning_leaves_sparse_and_reversing_curves_alone() {
+    // A loop that goes out and back over the same X range (like a voltammogram): all 400 points stay.
+    let n = 200;
+    let mut x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
+    x.extend((0..n).map(|i| 1.0 - i as f64 / n as f64));
+    let y: Vec<f64> = (0..2 * n).map(|i| if i < n { 1.0 } else { -1.0 }).collect();
+    let (p, g) = project(Template::Line, x, vec![y]);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let path = paths_in(with_class(&d, "plots")[0])[0].attribute("d").unwrap().to_string();
+    assert_eq!(path.matches('L').count(), 2 * n - 1);
+}
+
 // ----- golden images -------------------------------------------------------
 
 /// Compares the SVG of a built-in template with the stored one in

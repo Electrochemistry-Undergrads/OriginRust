@@ -7,6 +7,16 @@ use sheaf_core::graph::{Connect, LineStyle, SymbolShape, SymbolStyle};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
+/// Width (in pt) of the vertical strips used to thin out dense curves: of a
+/// run of consecutive points inside one strip only the first, lowest, highest
+/// and last are drawn. 0.1 pt is less than one pixel up to 720 dpi.
+const STRIP_PT: f64 = 0.1;
+/// Runs of up to this many points inside one strip are drawn point by point.
+const RUN_EXACT: usize = 4;
+/// Plots with more symbols than this leave out symbols that coincide.
+const SYMBOL_THIN_ABOVE: usize = 20_000;
+/// Two symbols in the same cell of this size (in pt) count as coinciding.
+const SYMBOL_CELL_PT: f64 = 0.5;
 /// Pieces with more points than this are never drawn as splines.
 const SPLINE_MAX_POINTS: usize = 2000;
 
@@ -31,6 +41,58 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     }
 }
 
+/// Consecutive points that fall into the same narrow vertical strip of the
+/// page. A long run is drawn as its first point, its lowest and highest
+/// points and its last point, which looks the same as drawing every point.
+struct Run {
+    strip: i64,
+    /// The first points of the run, kept so that short runs are drawn exactly.
+    head: [(f64, f64); RUN_EXACT],
+    count: usize,
+    /// Position in the run and page point of the smallest and largest page y, and of the last point.
+    low: (usize, (f64, f64)),
+    high: (usize, (f64, f64)),
+    last: (usize, (f64, f64)),
+}
+
+impl Run {
+    fn new(strip: i64, p: (f64, f64)) -> Self {
+        Run { strip, head: [p; RUN_EXACT], count: 1, low: (0, p), high: (0, p), last: (0, p) }
+    }
+
+    fn add(&mut self, p: (f64, f64)) {
+        let k = self.count;
+        if k < RUN_EXACT {
+            self.head[k] = p;
+        }
+        if p.1 < self.low.1.1 {
+            self.low = (k, p);
+        }
+        if p.1 > self.high.1.1 {
+            self.high = (k, p);
+        }
+        self.last = (k, p);
+        self.count += 1;
+    }
+
+    /// Hands the points that represent the run to `push`, in drawing order.
+    fn emit(&self, mut push: impl FnMut((f64, f64))) {
+        if self.count <= RUN_EXACT {
+            self.head[..self.count].iter().for_each(|p| push(*p));
+            return;
+        }
+        let mut keep = [(0, self.head[0]), self.low, self.high, self.last];
+        keep.sort_by_key(|(k, _)| *k);
+        let mut previous = usize::MAX;
+        for (k, p) in keep {
+            if k != previous {
+                push(p);
+            }
+            previous = k;
+        }
+    }
+}
+
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let stroke = line_stroke(&pd.plot.line);
     let connect = pd.plot.line.connect;
@@ -47,22 +109,44 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
         piece.clear();
     };
+    // Adds a point to the piece unless it is closer than DECIMATE_PT to the last kept one.
+    let keep = |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, p: (f64, f64)| match piece.last() {
+        None => piece.push(p),
+        Some(&(lx, ly)) => {
+            let (dx, dy) = (p.0 - lx, p.1 - ly);
+            if dx * dx + dy * dy < DECIMATE_PT * DECIMATE_PT {
+                *pending = Some(p);
+            } else {
+                *pending = None;
+                piece.push(p);
+            }
+        }
+    };
+    let mut run: Option<Run> = None;
     for i in pd.start..pd.end {
         match geom.checked_data_to_page(pd.x_at(i), pd.y[i]) {
-            Some(p) => match piece.last() {
-                None => piece.push(p),
-                Some(&(lx, ly)) => {
-                    let (dx, dy) = (p.0 - lx, p.1 - ly);
-                    if dx * dx + dy * dy < DECIMATE_PT * DECIMATE_PT {
-                        pending = Some(p);
-                    } else {
-                        pending = None;
-                        piece.push(p);
+            Some(p) => {
+                let strip = (p.0 / STRIP_PT).floor() as i64;
+                match &mut run {
+                    Some(r) if r.strip == strip => r.add(p),
+                    _ => {
+                        if let Some(r) = run.take() {
+                            r.emit(|q| keep(&mut piece, &mut pending, q));
+                        }
+                        run = Some(Run::new(strip, p));
                     }
                 }
-            },
-            None => flush(&mut piece, &mut pending, out),
+            }
+            None => {
+                if let Some(r) = run.take() {
+                    r.emit(|q| keep(&mut piece, &mut pending, q));
+                }
+                flush(&mut piece, &mut pending, out);
+            }
         }
+    }
+    if let Some(r) = run.take() {
+        r.emit(|q| keep(&mut piece, &mut pending, q));
     }
     flush(&mut piece, &mut pending, out);
 }
@@ -160,11 +244,19 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let sym = &pd.plot.symbol;
     let every = sym.every.max(1) as usize;
     let mut d = String::new();
+    // With very many points, symbols that would sit on top of an already drawn
+    // one (same small cell of the page) are left out; the picture is the same.
+    let thin = (pd.end - pd.start) / every > SYMBOL_THIN_ABOVE;
+    let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
     for i in (pd.start..pd.end).step_by(every) {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y[i]) else { continue };
-        if near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
-            symbol_path(&mut d, sym.shape, p.0, p.1, sym.size_pt);
+        if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
+            continue;
         }
+        if thin && !taken.insert(((p.0 / SYMBOL_CELL_PT).floor() as i64, (p.1 / SYMBOL_CELL_PT).floor() as i64)) {
+            continue;
+        }
+        symbol_path(&mut d, sym.shape, p.0, p.1, sym.size_pt);
     }
     if d.is_empty() {
         return;

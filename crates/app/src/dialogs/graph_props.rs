@@ -6,7 +6,7 @@
 
 use eframe::egui::{self, Color32, DragValue, RichText};
 use sheaf_core::graph::*;
-use sheaf_core::{Color, Document, WindowId};
+use sheaf_core::{Color, ColumnId, Document, Project, WindowId};
 use sheaf_plot::ticks::ResolvedAxis;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -24,11 +24,57 @@ pub struct GraphPropsDialog {
     /// Groups all edits of this dialog session into one undo step.
     token: u64,
     selected_plot: usize,
+    /// The sheet chosen in "Add data to this graph" (index into the list of sheets with Y columns).
+    add_from: usize,
+}
+
+/// A Y column that can be added to a graph, with the X and error columns its sheet gives it.
+struct Addable {
+    y: ColumnId,
+    x: Option<ColumnId>,
+    y_error: Option<ColumnId>,
+    label: String,
+}
+
+/// One worksheet and its numeric Y columns.
+struct Source {
+    title: String,
+    columns: Vec<Addable>,
+}
+
+fn sources(project: &Project) -> Vec<Source> {
+    let mut out = Vec::new();
+    for book in project.workbooks() {
+        for sheet in &book.sheets {
+            let columns: Vec<Addable> = sheet
+                .y_columns()
+                .into_iter()
+                .filter(|i| sheet.columns[*i].data.is_numeric())
+                .map(|i| {
+                    let c = &sheet.columns[i];
+                    let mut label = format!("{}: {}", c.short_name, c.axis_title());
+                    if let Some(first) = c.comments.lines().next().filter(|l| !l.is_empty()) {
+                        label.push_str(&format!(" [{first}]"));
+                    }
+                    Addable {
+                        y: c.id,
+                        x: sheet.x_for(i).map(|x| x.id),
+                        y_error: sheet.y_error_for(i).map(|e| e.id),
+                        label,
+                    }
+                })
+                .collect();
+            if !columns.is_empty() {
+                out.push(Source { title: format!("{} / {}", book.title(), sheet.name), columns });
+            }
+        }
+    }
+    out
 }
 
 impl GraphPropsDialog {
     pub fn new(graph: WindowId, tab: PropsTab, token: u64) -> Self {
-        GraphPropsDialog { graph, tab, token, selected_plot: 0 }
+        GraphPropsDialog { graph, tab, token, selected_plot: 0, add_from: 0 }
     }
 
     /// Draws the window. Returns `false` when it was closed.
@@ -43,6 +89,8 @@ impl GraphPropsDialog {
             .first()
             .map(|l| l.plots.iter().map(|p| doc.project().plot_label(p)).collect())
             .unwrap_or_default();
+
+        let sources = sources(doc.project());
 
         let mut open = true;
         egui::Window::new(format!("Graph settings: {}", graph.name))
@@ -72,7 +120,10 @@ impl GraphPropsDialog {
                     match self.tab {
                         PropsTab::XAxis => axis_ui(ui, &mut layer.x_axis, resolved.as_ref().map(|g| &g.x), "x"),
                         PropsTab::YAxis => axis_ui(ui, &mut layer.y_axis, resolved.as_ref().map(|g| &g.y), "y"),
-                        PropsTab::Plots => plots_ui(ui, layer, &labels, &mut self.selected_plot),
+                        PropsTab::Plots => {
+                            add_plot_ui(ui, layer, &sources, &mut self.add_from);
+                            plots_ui(ui, layer, &labels, &mut self.selected_plot);
+                        }
                         PropsTab::Legend => legend_ui(ui, &mut layer.legend),
                         PropsTab::Page => page_ui(ui, &mut graph),
                     }
@@ -340,9 +391,57 @@ fn axis_ui(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, 
     });
 }
 
+/// Lets the user overlay columns of any worksheet of the project on this graph.
+fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &mut usize) {
+    egui::CollapsingHeader::new("Add data to this graph").id_salt("add_plot").show(ui, |ui| {
+        if sources.is_empty() {
+            ui.weak("The project has no numeric Y columns.");
+            return;
+        }
+        *from = (*from).min(sources.len() - 1);
+        egui::ComboBox::from_id_salt("add_plot_source").selected_text(&sources[*from].title).width(320.0).show_ui(
+            ui,
+            |ui| {
+                for (i, s) in sources.iter().enumerate() {
+                    ui.selectable_value(from, i, &s.title);
+                }
+            },
+        );
+        let mut add: Vec<&Addable> = Vec::new();
+        ui.horizontal_wrapped(|ui| {
+            for a in &sources[*from].columns {
+                let already = layer.plots.iter().any(|p| p.y == a.y);
+                if ui.add_enabled(!already, egui::Button::new(&a.label).small()).clicked() {
+                    add.push(a);
+                }
+            }
+        });
+        if ui.button("Add all columns of this sheet").clicked() {
+            add = sources[*from].columns.iter().filter(|a| !layer.plots.iter().any(|p| p.y == a.y)).collect();
+        }
+        if !add.is_empty() {
+            for a in add {
+                layer.plots.push(Plot {
+                    x: a.x,
+                    y: a.y,
+                    y_error: a.y_error,
+                    rows: None,
+                    kind: layer.default_kind,
+                    line: layer.default_line.clone(),
+                    symbol: layer.default_symbol.clone(),
+                    label: None,
+                    visible: true,
+                });
+            }
+            layer.apply_palette();
+        }
+    });
+    ui.separator();
+}
+
 fn plots_ui(ui: &mut egui::Ui, layer: &mut Layer, labels: &[String], selected: &mut usize) {
     if layer.plots.is_empty() {
-        ui.label("This graph has no plots yet. Select Y columns in a workbook and choose Plot.");
+        ui.label("This graph has no plots yet. Add data above, or select Y columns in a workbook and choose Plot.");
         return;
     }
     *selected = (*selected).min(layer.plots.len() - 1);

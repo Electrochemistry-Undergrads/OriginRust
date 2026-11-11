@@ -5,6 +5,7 @@
 //! ```text
 //! sheaf info run1.txt
 //! sheaf plot run1.txt -o cv.png --dpi 300
+//! sheaf plot run1.txt run2.txt -o overlay.png      (several files in one figure)
 //! sheaf plot data.csv -o fig.pdf --template line --y B,C
 //! sheaf import run1.txt run2.txt -o lab.sheaf
 //! sheaf export lab.sheaf --graph Graph1 -o fig.svg

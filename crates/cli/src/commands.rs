@@ -269,18 +269,29 @@ fn template_from(name: Option<&str>, fallback: Template) -> Result<Template> {
 }
 
 fn plot(a: PlotArgs) -> Result<()> {
-    let (mut project, suggested) = if is_project(&a.input) {
-        (load_project(&a.input)?, Template::Line)
+    let first = &a.inputs[0];
+    if a.inputs.len() > 1 && a.inputs.iter().any(|p| is_project(p)) {
+        bail!("a project cannot be combined with other inputs; give one project, or one or more data files");
+    }
+    let (mut project, suggested) = if is_project(first) {
+        (load_project(first)?, Template::Line)
     } else {
-        let imported = read_data_file(&a.input, &a.read)?;
-        let template = imported.suggested_template;
         let mut p = Project::new();
-        p.adopt_workbook(imported.workbook);
+        let mut template = Template::Line;
+        for (i, input) in a.inputs.iter().enumerate() {
+            let imported = read_data_file(input, &a.read)?;
+            if i == 0 {
+                template = imported.suggested_template;
+            }
+            p.adopt_workbook(imported.workbook);
+        }
         (p, template)
     };
 
     let graph = if let Some(name) = &a.graph {
         pick_graph(&project, Some(name))?
+    } else if a.inputs.len() > 1 {
+        overlay_files(&mut project, template_from(a.template.as_deref(), suggested)?, &a)?
     } else {
         let template = template_from(a.template.as_deref(), suggested)?;
         let book = pick_book(&project, a.book.as_deref())?;
@@ -305,6 +316,43 @@ fn plot(a: PlotArgs) -> Result<()> {
         println!("saved {}", path.display());
     }
     Ok(())
+}
+
+/// One graph with the chosen (or default) Y columns of every imported file.
+/// Legend entries name the file, plus the column when a file gives several curves.
+fn overlay_files(project: &mut Project, template: Template, a: &PlotArgs) -> Result<WindowId> {
+    let books: Vec<WindowId> = project.workbooks().map(|b| b.id).collect();
+    let mut ys: Vec<ColumnId> = Vec::new();
+    let mut labels: Vec<String> = Vec::new();
+    for book in books {
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let columns = if a.y.is_empty() {
+            project.default_plot_columns(book, sheet, template)
+        } else {
+            named_columns(project, book, sheet, &a.y)?
+        };
+        let file = project.workbook(book).map(|b| b.long_name.clone()).unwrap_or_default();
+        for y in &columns {
+            let column = project
+                .column(*y)
+                .map(|c| c.comments.lines().next().filter(|l| !l.is_empty()).unwrap_or(c.display_name()).to_string());
+            labels.push(match (columns.len(), column) {
+                (1, _) | (_, None) => file.clone(),
+                (_, Some(c)) => format!("{file} {c}"),
+            });
+        }
+        ys.extend(columns);
+    }
+    if ys.is_empty() {
+        bail!("there are no numeric Y columns to plot");
+    }
+    let graph = project.plot_columns(template, &ys)?;
+    if let Some(layer) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()) {
+        for (plot, label) in layer.plots.iter_mut().zip(labels) {
+            plot.label = Some(label);
+        }
+    }
+    Ok(graph)
 }
 
 fn export(a: ExportArgs) -> Result<()> {

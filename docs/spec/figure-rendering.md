@@ -100,6 +100,31 @@ For each layer, in this drawing order (later items are on top):
    background fill are drawn when set.
 9. Free text labels.
 
+### Keeping labels on the page
+
+The frame in the model is a fixed fraction of the page, but tick labels and titles are placed
+relative to the frame, so wide Y tick labels (for example `-4.67×10^5`) or large fonts could push the
+Y title past the left page edge. Rule, applied to every layer before drawing: lay the labels out
+for the nominal frame and find the left edge of the Y title (or of the widest Y tick label when
+the title is hidden) and the bottom edge of the X title (or of the X tick labels when the title is
+hidden). Keep a margin of 3 pt from the page edge. If the left edge is smaller than the margin, move
+the frame's left side right by the difference (the right side stays); if the bottom edge is larger
+than page height minus the margin, move the frame's bottom side up by the difference (the top stays).
+A move never takes more than half of the frame's width or height. When everything already fits, the
+frame is exactly the nominal one, so figures that fit are unchanged. Because labels move with the
+frame, one move is exact. The same geometry is used by the screen view (`layout_geometry`).
+
+### Reversed axes
+
+When both limits of an axis are fixed and the lower limit (`min`) is greater than the upper
+(`max`), the axis is reversed, as in Origin where From greater than To makes values decrease along
+the axis. Ticks, labels and grid are those of the range `max..min`; the first axis end is
+at the larger value, and data, ticks and the inverse mapping all follow the reversed direction.
+`ResolvedAxis::reversed` is true; `min` and `max` of the resolved axis stay ordered. Reversal
+needs both limits: with only one fixed limit on the wrong side of the data, the old rule applies (the
+other limit becomes the fixed one plus 1). Equal limits are rejected by the command-line program.
+Previously reversed limits silently drew a one-unit-wide axis, which is why this is explicit.
+
 Text metrics: width from the font's advance widths; ascent 0.72 × size and descent 0.21 × size
 are used for vertical placement regardless of the font, so that layout does not depend on which
 font file is installed. The SVG `y` of a text element is its baseline.

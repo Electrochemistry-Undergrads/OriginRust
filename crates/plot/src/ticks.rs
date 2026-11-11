@@ -26,6 +26,10 @@ pub struct ResolvedAxis {
     /// One label per major tick, in the text markup of the `markup` module
     /// (superscripts are written `\+(..)`).
     pub labels: Vec<String>,
+    /// True when the user fixed the lower limit above the upper one: `min` and
+    /// `max` are still the smaller and larger value, but the axis runs from
+    /// `max` to `min` (values decrease along the axis).
+    pub reversed: bool,
 }
 
 impl ResolvedAxis {
@@ -33,6 +37,11 @@ impl ResolvedAxis {
     /// logarithmic according to the scale. Values that cannot be placed
     /// (non-positive on a log axis) give NaN.
     pub fn to_unit(&self, v: f64) -> f64 {
+        let u = self.to_unit_ascending(v);
+        if self.reversed { 1.0 - u } else { u }
+    }
+
+    fn to_unit_ascending(&self, v: f64) -> f64 {
         match self.scale {
             ScaleKind::Linear => (v - self.min) / (self.max - self.min),
             ScaleKind::Log10 => {
@@ -47,6 +56,7 @@ impl ResolvedAxis {
 
     /// Inverse of [`ResolvedAxis::to_unit`].
     pub fn from_unit(&self, u: f64) -> f64 {
+        let u = if self.reversed { 1.0 - u } else { u };
         match self.scale {
             ScaleKind::Linear => self.min + u * (self.max - self.min),
             ScaleKind::Log10 => {
@@ -115,6 +125,19 @@ fn clean(v: f64) -> f64 {
 /// `data_min_max` is the range of the finite data on this axis (positive
 /// values only for a log axis); `None` means there is no data.
 pub fn resolve_axis(axis: &Axis, data_min_max: Option<(f64, f64)>) -> ResolvedAxis {
+    // Both limits fixed with the lower one above the upper one: a reversed axis.
+    // Resolve it with the limits swapped and mark it.
+    if let (Some(a), Some(b)) = (axis.min, axis.max) {
+        let valid = |v: f64| v.is_finite() && (axis.scale == ScaleKind::Linear || v > 0.0);
+        if valid(a) && valid(b) && a > b {
+            let mut swapped = axis.clone();
+            swapped.min = Some(b);
+            swapped.max = Some(a);
+            let mut r = resolve_axis(&swapped, data_min_max);
+            r.reversed = true;
+            return r;
+        }
+    }
     match axis.scale {
         ScaleKind::Linear => resolve_linear(axis, data_min_max),
         ScaleKind::Log10 => resolve_log(axis, data_min_max),
@@ -197,7 +220,7 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
     let (major, step) = linear_major(min, max, step);
     let minor = linear_minor(min, max, step, axis.minor_ticks);
     let labels = linear_labels(axis, &major, step);
-    ResolvedAxis { min, max, step, scale: ScaleKind::Linear, major, minor, labels }
+    ResolvedAxis { min, max, step, scale: ScaleKind::Linear, major, minor, labels, reversed: false }
 }
 
 fn linear_major(min: f64, max: f64, mut step: f64) -> (Vec<f64>, f64) {
@@ -282,7 +305,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
             }
         }
     }
-    ResolvedAxis { min, max, step: pow10(k), scale: ScaleKind::Log10, major, minor, labels }
+    ResolvedAxis { min, max, step: pow10(k), scale: ScaleKind::Log10, major, minor, labels, reversed: false }
 }
 
 fn signed(e: i32) -> String {

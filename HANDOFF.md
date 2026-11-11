@@ -50,14 +50,11 @@ above (they touch files the agents are editing):
 - Medium: `sheaf analyze sort|filter` accept `--rows`, `--x-range`, `--y` and ignore them.
 - Low: Set Column Values on part of a text column loses the text outside the range; the
   smoothing derivative with an unusable window (points 1, or order above the polynomial order)
-  gives an empty column without an error; normalize divide by 0 writes infinity; `stats` sum of an
-  empty column is -0; absolute-area sign test multiplies (underflows below 1e-154); per-row tools
+  gives an empty column without an error; normalize divide by 0 writes infinity; per-row tools
   do not name the columns they added and the `--x-range` error shows a row-range example.
-- Low, expression language: `^`/`pow` loses missing values (`na()^0` gives 1); `sd` of data with
-  infinity gives 0; `round(x, missing)` ignores the missing digits; a chain of about 200 operators
-  or 56 nested calls overflows the 1 MB stack in debug builds.
-- Low, tests: the comment in `tools/origin-ref/interp-suite1.labtalk.txt` says 35 points (it is
-  33); one assertion in `crates/calc/tests/baseline.rs` (lines 176-179) checks nothing.
+- Fixed in `adb1414`: the expression-language findings (missing values in `^` and `round`, `sd`
+  of infinite data, stack overflow on long formulas), the -0 sum, the absolute-area underflow,
+  the fixture comment and the empty assertion.
 - Also worth doing (rejected as "intended", but data loss): an in-place filter that keeps no row
   empties the sheet without a warning.
 

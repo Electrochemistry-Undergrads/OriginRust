@@ -39,7 +39,15 @@ sheaf plot run1.txt run2.txt -o overlay.pdf      # several files in one figure
 sheaf plot data.csv -o fig.svg --template line-symbol --y B,C
 sheaf import run1.txt run2.txt -o lab.sheaf --plot
 sheaf export lab.sheaf --graph Graph1 -o fig.png
+sheaf analyze integrate it.txt                   # charge of a current-vs-time file
+sheaf analyze integrate cv.txt --rows 700:900 --baseline   # peak area above a sloping background
+sheaf analyze smooth data.csv --y B --points 11 --export smoothed.csv
+sheaf analyze stats lab.sheaf --book Book2
 ```
+
+`sheaf analyze --help` lists the tools: integrate, differentiate, smooth, normalize, baseline,
+interpolate, peaks, stats, sort, filter. In the app the same tools are in the Analysis menu; they
+work on the selected columns and each run is one undo step.
 
 `sheaf` is `cargo run --release -p sheaf-cli --`, or `target/release/sheaf.exe` after a build.
 
@@ -49,7 +57,8 @@ sheaf export lab.sheaf --graph Graph1 -o fig.png
 |---|---|
 | `crates/core` | Document model: project, workbooks, columns, graphs, figure templates, undo |
 | `crates/expr` | Expression language for column formulas and fit functions |
-| `crates/calc` | Numerics on plain number slices |
+| `crates/calc` | Analysis numerics on plain number slices, checked against Origin |
+| `crates/fit` | Curve fitting (in progress) |
 | `crates/io` | Importers (CH Instruments text, delimited text), project file, exporters |
 | `crates/plot` | Figure rendering to SVG, PNG and PDF, independent of the GUI |
 | `crates/cli` | `sheaf` command-line program (no window) |

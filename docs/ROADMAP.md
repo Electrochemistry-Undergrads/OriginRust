@@ -42,14 +42,17 @@ publication figures), P1 is common Origin use, P2 is later.
 
 - [x] Column formulas ("set column values" style expressions): `sheaf-expr`, `Project::set_column_values`,
       dialog in the app
-- [ ] Sort and filter worksheets
-- [ ] Normalize, interpolate, differentiate
-- [ ] Integrate: area under a curve with a baseline; charge from current vs. time
+- [x] Sort and filter worksheets (`Project::sort_sheet`, `filter_sheet`; app and `sheaf analyze`)
+- [x] Normalize, interpolate, differentiate (cubic B-spline interpolation is still open)
+- [x] Integrate: area under a curve with a baseline; charge from current vs. time
 - [ ] Smoothing: Savitzky-Golay, adjacent averaging, FFT filter
-- [ ] Baseline subtraction
-- [ ] Peak finding
-- [ ] Descriptive statistics
+- [x] Baseline subtraction (constant, minimum, line through end points or two given points)
+- [x] Peak finding (local maximum method)
+- [x] Descriptive statistics
 - [ ] Reference results from Origin for each tool, committed as fixtures with tolerances
+- [x] The tools in the desktop app (Analysis menu) and the command-line program (sheaf analyze),
+      results as new columns or result sheets (ADR 0005)
+- [ ] Independent review of the milestone by a fresh-context agent; findings fixed
 
 ## Milestone 4: fitting
 
@@ -61,7 +64,7 @@ publication figures), P1 is common Origin use, P2 is later.
 
 ## Milestone 5: Origin project import
 
-- [ ] Specification of the `.opj` container from public sources and inspection of sample files
+- [x] Specification of the `.opj` container from public sources and inspection of sample files
 - [ ] Read workbooks and column data from Origin 2016-era `.opj`
 - [ ] Read basic graphs
 - [ ] (Later, if needed) `.opju`
@@ -84,4 +87,7 @@ publication figures), P1 is common Origin use, P2 is later.
 - Automated tests of the desktop app that simulate clicks (for example with `egui_kittest`).
 - Tick labels from a text column (sample names on the X axis of an ICP-OES plot).
 - Open only some windows as tabs when a project with very many windows is opened.
+- Choose the integration range by dragging on the graph (like Origin's integration gadget), and
+  show the integrated area as a shaded region.
+- A baseline through anchor points picked on the graph (the numerics exist in sheaf-calc).
 - "Re-import" button that re-reads the source file of a workbook with the stored options.

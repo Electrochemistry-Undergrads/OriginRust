@@ -18,6 +18,24 @@ A one-line Node script passed through bash had its template literal eaten by the
 the word `undefined` into a source file. Use the Edit tool for source changes. Shell one-liners are
 fine only for simple literal `sed` substitutions.
 
+The same holds for shell here-documents (`cat >> file <<'EOF'`, `python - <<'EOF'`) whose body
+contains Rust or Python code with single quotes, such as a `'\t'` character or a `'''` string: three
+times in one session bash refused the whole command ("unexpected EOF while looking for matching
+quote"), so nothing ran. For a patch that touches many places, write a small Python script with the
+Write tool into the scratch folder and run that file.
+
+## `cargo test` does not refresh the program in `target/debug`
+
+After changing the command-line program, `cargo test -p sheaf-cli` passed while
+`target/debug/sheaf.exe` was still the old build without the new subcommand. Run
+`cargo build -p sheaf-cli` (or `cargo run -p sheaf-cli -- ...`) before trying it by hand.
+
+## Several agents can use Origin: the driver scripts take a lock
+
+`tools/origin-ref/run-labtalk.ps1` and `run-labtalk-data.ps1` hold the system-wide lock
+`Global\SheafOriginReference` while Origin runs, so a second run waits instead of starting a second
+Origin instance. New helper scripts that start Origin must take the same lock.
+
 ## Clippy rejects number literals close to pi or e
 
 `3.14159` and `2.71828` in tests fail `clippy::approx_constant`. Use other numbers in tests.

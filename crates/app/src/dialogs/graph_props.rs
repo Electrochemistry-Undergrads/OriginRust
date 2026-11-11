@@ -198,7 +198,10 @@ fn axis_ui(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, 
         ui.label("Text");
         ui.horizontal(|ui| {
             let mut auto = axis.title.is_none();
-            if ui.checkbox(&mut auto, "From column").on_hover_text("Long name and units of the plotted column").changed()
+            if ui
+                .checkbox(&mut auto, "From column")
+                .on_hover_text("Long name and units of the plotted column")
+                .changed()
             {
                 axis.title = if auto { None } else { Some(String::new()) };
             }
@@ -400,25 +403,27 @@ fn plots_ui(ui: &mut egui::Ui, layer: &mut Layer, labels: &[String], selected: &
                 });
                 ui.end_row();
                 ui.label("Connect");
-                egui::ComboBox::from_id_salt("plot_connect")
-                    .selected_text(connect_name(plot.line.connect))
-                    .show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("plot_connect").selected_text(connect_name(plot.line.connect)).show_ui(
+                    ui,
+                    |ui| {
                         for c in [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical] {
                             ui.selectable_value(&mut plot.line.connect, c, connect_name(c));
                         }
-                    });
+                    },
+                );
                 ui.end_row();
             }
             if plot.kind.has_symbols() {
                 ui.label("Symbol");
                 ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("plot_symbol")
-                        .selected_text(symbol_name(plot.symbol.shape))
-                        .show_ui(ui, |ui| {
+                    egui::ComboBox::from_id_salt("plot_symbol").selected_text(symbol_name(plot.symbol.shape)).show_ui(
+                        ui,
+                        |ui| {
                             for s in SymbolShape::ALL {
                                 ui.selectable_value(&mut plot.symbol.shape, s, symbol_name(s));
                             }
-                        });
+                        },
+                    );
                     ui.add(DragValue::new(&mut plot.symbol.size_pt).range(0.5..=40.0).speed(0.1).suffix(" pt"));
                     ui.checkbox(&mut plot.symbol.filled, "Filled");
                 });
@@ -430,7 +435,8 @@ fn plots_ui(ui: &mut egui::Ui, layer: &mut Layer, labels: &[String], selected: &
         });
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            if count > 1 && ui.button("Use this style for all plots").on_hover_text("Keeps each plot's color").clicked() {
+            if count > 1 && ui.button("Use this style for all plots").on_hover_text("Keeps each plot's color").clicked()
+            {
                 apply_to_all = Some(plot.clone());
             }
             if ui.add_enabled(*selected > 0, egui::Button::new("Move up")).clicked() {

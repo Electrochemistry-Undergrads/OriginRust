@@ -23,13 +23,30 @@ pub enum Action {
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
-    SetDesignation { columns: Vec<ColumnId>, designation: Designation },
-    SetCell { column: ColumnId, row: usize, text: String },
-    SelectSheet { book: WindowId, sheet: usize },
+    SetDesignation {
+        columns: Vec<ColumnId>,
+        designation: Designation,
+    },
+    SetCell {
+        column: ColumnId,
+        row: usize,
+        text: String,
+    },
+    SelectSheet {
+        book: WindowId,
+        sheet: usize,
+    },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
-    PlotColumns { book: WindowId, columns: Vec<ColumnId>, template: Template },
-    GraphProperties { graph: WindowId, tab: PropsTab },
+    PlotColumns {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        template: Template,
+    },
+    GraphProperties {
+        graph: WindowId,
+        tab: PropsTab,
+    },
     ExportGraph(WindowId),
     ExportData(WindowId),
     /// Bring a window's tab to the front, reopening it if it was closed.

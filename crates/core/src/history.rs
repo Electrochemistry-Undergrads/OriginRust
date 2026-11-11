@@ -105,6 +105,14 @@ impl Document {
         }
     }
 
+    /// Changes view state that lives in the project (for example which sheet
+    /// of a workbook is shown) without adding an undo step and without
+    /// marking the project as changed.
+    pub fn adjust_view(&mut self, change: impl FnOnce(&mut Project)) {
+        change(&mut self.project);
+        self.revision += 1;
+    }
+
     /// The label of the step that [`Document::undo`] would revert.
     pub fn undo_label(&self) -> Option<&str> {
         self.undo.last().map(|s| s.label.as_str())

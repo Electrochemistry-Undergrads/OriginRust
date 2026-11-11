@@ -60,13 +60,19 @@ pub(crate) enum Kind {
     Cond(Box<Node>, Box<Node>, Box<Node>),
     Call {
         func: Func,
-        name: &'static str,
         args: Vec<Node>,
-        pos: usize,
     },
+    /// `col(A)[row]`; `base` is always a `Col` node.
     Index {
         base: Box<Node>,
         idx: Box<Node>,
+    },
+    /// `col(A)[from:to]`; `base` is always a `Col` node. Only valid as a statistic's argument.
+    Range {
+        base: Box<Node>,
+        from: Box<Node>,
+        to: Box<Node>,
+        pos: usize,
     },
 }
 
@@ -77,16 +83,13 @@ impl Node {
             Kind::Num(_) | Kind::Var { .. } | Kind::Col { .. } => 0,
             Kind::Unary(_, a) => a.depth,
             Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => a.depth.max(b.depth),
-            Kind::Cond(a, b, c) => a.depth.max(b.depth).max(c.depth),
+            Kind::Cond(a, b, c) | Kind::Range { base: a, from: b, to: c, .. } => a.depth.max(b.depth).max(c.depth),
             Kind::Call { args, .. } => args.iter().map(|n| n.depth).max().unwrap_or(0),
         };
         if child_depth >= MAX_NODE_DEPTH {
             return Err(ExprError::at(pos, "expression is too long or too deeply nested"));
         }
-        Ok(Node {
-            kind,
-            depth: child_depth + 1,
-        })
+        Ok(Node { kind, depth: child_depth + 1 })
     }
 
     /// Visits this node and all descendants, parents first.
@@ -99,7 +102,7 @@ impl Node {
                 a.walk(f);
                 b.walk(f);
             }
-            Kind::Cond(a, b, c) => {
+            Kind::Cond(a, b, c) | Kind::Range { base: a, from: b, to: c, .. } => {
                 a.walk(f);
                 b.walk(f);
                 c.walk(f);
@@ -109,7 +112,7 @@ impl Node {
     }
 }
 
-/// A parsed expression. Create one with [`parse`](crate::parse).
+/// A parsed expression. Create one with [`Expr::parse`].
 ///
 /// An `Expr` is immutable, cheap to keep around and can be shared between threads.
 #[derive(Debug, Clone)]
@@ -119,12 +122,17 @@ pub struct Expr {
 }
 
 impl Expr {
-    pub(crate) fn parse(src: &str) -> Result<Expr, ExprError> {
+    /// Parses formula text. Function names, argument counts and `col()` syntax are checked
+    /// here; variables and column names are checked when the expression is evaluated against a
+    /// [`Host`](crate::Host).
+    ///
+    /// ```
+    /// let e = sheaf_expr::Expr::parse("sin(col(A)) + i/10").unwrap();
+    /// assert_eq!(e.variables(), ["i"]);
+    /// ```
+    pub fn parse(src: &str) -> Result<Expr, ExprError> {
         let root = parser::parse_root(src)?;
-        Ok(Expr {
-            source: src.to_string(),
-            root,
-        })
+        Ok(Expr { source: src.to_string(), root })
     }
 
     /// The text this expression was parsed from.

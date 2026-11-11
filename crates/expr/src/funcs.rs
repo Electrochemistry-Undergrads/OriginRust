@@ -26,13 +26,6 @@ pub(crate) enum Agg {
     Last,
 }
 
-/// Vector-to-vector functions that look at neighbouring rows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Cum {
-    Sum,
-    Diff,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Func {
     /// Elementwise function of one number.
@@ -45,9 +38,8 @@ pub(crate) enum Func {
     IfElse,
     /// `na()`.
     Na,
+    /// Statistic over a column or a row range of a column.
     Agg(Agg),
-    Cum(Cum),
-    Shift,
 }
 
 pub(crate) enum Resolved {
@@ -62,10 +54,7 @@ pub(crate) fn resolve(name: &str, argc: usize) -> Resolved {
         return match argc {
             1 => Resolved::Found(Func::U(nint), "round"),
             2 => Resolved::Found(Func::B(round_digits), "round"),
-            _ => Resolved::BadArity {
-                name: "round",
-                expected: "1 or 2 arguments".into(),
-            },
+            _ => Resolved::BadArity { name: "round", expected: "1 or 2 arguments".into() },
         };
     }
     for (n, f) in TABLE {
@@ -91,8 +80,8 @@ pub(crate) fn resolve(name: &str, argc: usize) -> Resolved {
 
 fn arity(f: Func) -> (usize, usize) {
     match f {
-        Func::U(_) | Func::Agg(_) | Func::Cum(_) => (1, 1),
-        Func::B(_) | Func::Shift => (2, 2),
+        Func::U(_) | Func::Agg(_) => (1, 1),
+        Func::B(_) => (2, 2),
         Func::MinMax { .. } => (1, usize::MAX),
         Func::IfElse => (3, 3),
         Func::Na => (0, 0),
@@ -156,9 +145,6 @@ static TABLE: &[(&str, Func)] = &[
     ("count", Func::Agg(Agg::Count)),
     ("first", Func::Agg(Agg::First)),
     ("last", Func::Agg(Agg::Last)),
-    ("cumsum", Func::Cum(Cum::Sum)),
-    ("diff", Func::Cum(Cum::Diff)),
-    ("shift", Func::Shift),
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -208,8 +194,9 @@ pub(crate) fn apply_bin(op: BinOp, a: f64, b: f64) -> f64 {
         BinOp::Le => f64::from(a <= b),
         BinOp::Gt => f64::from(a > b),
         BinOp::Ge => f64::from(a >= b),
-        BinOp::Eq => f64::from(a == b),
-        BinOp::Ne => f64::from(!a.is_nan() && !b.is_nan() && a != b),
+        // A missing value equals another missing value (so `col(A)==1/0` finds the gaps).
+        BinOp::Eq => f64::from(a == b || (a.is_nan() && b.is_nan())),
+        BinOp::Ne => f64::from(!(a == b || (a.is_nan() && b.is_nan()))),
         BinOp::And => f64::from(truthy(a) && truthy(b)),
         BinOp::Or => f64::from(truthy(a) || truthy(b)),
     }
@@ -283,11 +270,7 @@ fn rmod(a: f64, b: f64) -> f64 {
         return NA;
     }
     let r = a % b;
-    if r != 0.0 && ((r < 0.0) != (b < 0.0)) {
-        r + b
-    } else {
-        r
-    }
+    if r != 0.0 && ((r < 0.0) != (b < 0.0)) { r + b } else { r }
 }
 
 /// `a` to the power `b`; zero to a negative power is a division by zero, so it is missing.
@@ -301,11 +284,7 @@ fn sqr(x: f64) -> f64 {
 }
 
 fn heaviside(x: f64) -> f64 {
-    if x.is_nan() {
-        NA
-    } else {
-        f64::from(x >= 0.0)
-    }
+    if x.is_nan() { NA } else { f64::from(x >= 0.0) }
 }
 
 fn isna(x: f64) -> f64 {
@@ -546,11 +525,7 @@ pub(crate) fn aggregate(kind: Agg, data: &[f64]) -> f64 {
                 return NA;
             }
             let mean = s / n as f64;
-            let dev: Vec<f64> = data
-                .iter()
-                .filter(|x| !x.is_nan())
-                .map(|x| (x - mean) * (x - mean))
-                .collect();
+            let dev: Vec<f64> = data.iter().filter(|x| !x.is_nan()).map(|x| (x - mean) * (x - mean)).collect();
             let var = sum_count(&dev).0 / (n - 1) as f64;
             if kind == Agg::Sd { var.sqrt() } else { var }
         }
@@ -561,77 +536,13 @@ pub(crate) fn aggregate(kind: Agg, data: &[f64]) -> f64 {
             }
             v.sort_by(f64::total_cmp);
             let m = v.len() / 2;
-            if v.len() % 2 == 1 {
-                v[m]
-            } else {
-                0.5 * (v[m - 1] + v[m])
-            }
+            if v.len() % 2 == 1 { v[m] } else { 0.5 * (v[m - 1] + v[m]) }
         }
-        Agg::Min => data
-            .iter()
-            .copied()
-            .filter(|x| !x.is_nan())
-            .reduce(f64::min)
-            .unwrap_or(NA),
-        Agg::Max => data
-            .iter()
-            .copied()
-            .filter(|x| !x.is_nan())
-            .reduce(f64::max)
-            .unwrap_or(NA),
+        Agg::Min => data.iter().copied().filter(|x| !x.is_nan()).reduce(f64::min).unwrap_or(NA),
+        Agg::Max => data.iter().copied().filter(|x| !x.is_nan()).reduce(f64::max).unwrap_or(NA),
         Agg::First => data.iter().copied().find(|x| !x.is_nan()).unwrap_or(NA),
-        Agg::Last => data
-            .iter()
-            .rev()
-            .copied()
-            .find(|x| !x.is_nan())
-            .unwrap_or(NA),
+        Agg::Last => data.iter().rev().copied().find(|x| !x.is_nan()).unwrap_or(NA),
     }
-}
-
-/// Running sum (a missing row stays missing but does not stop the running total) or first
-/// differences (`v[k+1] - v[k]`, last row missing).
-pub(crate) fn cumulative(kind: Cum, data: &[f64]) -> Vec<f64> {
-    match kind {
-        Cum::Sum => {
-            let mut total = 0.0;
-            data.iter()
-                .map(|&x| {
-                    if x.is_nan() {
-                        NA
-                    } else {
-                        total += x;
-                        total
-                    }
-                })
-                .collect()
-        }
-        Cum::Diff => {
-            let mut out: Vec<f64> = data.windows(2).map(|w| w[1] - w[0]).collect();
-            if !data.is_empty() {
-                out.push(NA);
-            }
-            out
-        }
-    }
-}
-
-/// `out[k] = data[k - n]` (so a positive `n` moves values down); rows without a source are missing.
-pub(crate) fn shift(data: &[f64], n: f64) -> Vec<f64> {
-    if n.is_nan() || n.abs() > 1e15 {
-        return vec![NA; data.len()];
-    }
-    let n = n.trunc() as i64;
-    (0..data.len() as i64)
-        .map(|k| {
-            let src = k - n;
-            if src >= 0 && (src as usize) < data.len() {
-                data[src as usize]
-            } else {
-                NA
-            }
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -640,10 +551,7 @@ mod tests {
 
     fn close(a: f64, b: f64, tol: f64) {
         let scale = b.abs().max(1e-300);
-        assert!(
-            (a - b).abs() <= tol * scale.max(if b == 0.0 { 1.0 } else { 0.0 }),
-            "{a} vs {b}"
-        );
+        assert!((a - b).abs() <= tol * scale.max(if b == 0.0 { 1.0 } else { 0.0 }), "{a} vs {b}");
     }
 
     #[test]

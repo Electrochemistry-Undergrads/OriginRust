@@ -12,6 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 sheaf-core.workspace = true
+sheaf-io.workspace = true
+sheaf-plot.workspace = true
 eframe = { version = "0.33", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
 egui_extras = "0.33"
 egui_dock = "0.18"

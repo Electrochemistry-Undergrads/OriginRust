@@ -10,6 +10,7 @@
 pub mod color;
 pub mod column;
 pub mod format;
+pub mod formula;
 pub mod graph;
 pub mod history;
 pub mod ids;

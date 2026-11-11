@@ -116,19 +116,14 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
                 }
             }
             let text = &src[pos..end];
-            let value: f64 = text
-                .parse()
-                .map_err(|_| ExprError::at(pos, format!("malformed number '{text}'")))?;
+            let value: f64 = text.parse().map_err(|_| ExprError::at(pos, format!("malformed number '{text}'")))?;
             if !value.is_finite() {
                 return Err(ExprError::at(pos, format!("number '{text}' is too large")));
             }
             while chars.peek().is_some_and(|&(i, _)| i < end) {
                 chars.next();
             }
-            out.push(Token {
-                tok: Tok::Num(value),
-                pos,
-            });
+            out.push(Token { tok: Tok::Num(value), pos });
             continue;
         }
         if is_ident_start(c) {
@@ -141,10 +136,7 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
                     break;
                 }
             }
-            out.push(Token {
-                tok: Tok::Ident(src[pos..end].to_string()),
-                pos,
-            });
+            out.push(Token { tok: Tok::Ident(src[pos..end].to_string()), pos });
             continue;
         }
         if c == '"' {
@@ -159,15 +151,9 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
                 text.push(ch);
             }
             if !closed {
-                return Err(ExprError::at(
-                    pos,
-                    "text string is missing its closing '\"'",
-                ));
+                return Err(ExprError::at(pos, "text string is missing its closing '\"'"));
             }
-            out.push(Token {
-                tok: Tok::Str(text),
-                pos,
-            });
+            out.push(Token { tok: Tok::Str(text), pos });
             continue;
         }
         chars.next();
@@ -181,18 +167,12 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
             ('|', Some('|')) => Tok::OrOr,
             _ => single(c, pos)?,
         };
-        if matches!(
-            tok,
-            Tok::Le | Tok::Ge | Tok::EqEq | Tok::Ne | Tok::AndAnd | Tok::OrOr
-        ) {
+        if matches!(tok, Tok::Le | Tok::Ge | Tok::EqEq | Tok::Ne | Tok::AndAnd | Tok::OrOr) {
             chars.next();
         }
         out.push(Token { tok, pos });
     }
-    out.push(Token {
-        tok: Tok::End,
-        pos: src.len(),
-    });
+    out.push(Token { tok: Tok::End, pos: src.len() });
     Ok(out)
 }
 
@@ -215,22 +195,13 @@ fn single(c: char, pos: usize) -> Result<Tok, ExprError> {
         '>' => Tok::Gt,
         '!' => Tok::Not,
         '=' => {
-            return Err(ExprError::at(
-                pos,
-                "a single '=' is not an operator here; use '==' to compare",
-            ));
+            return Err(ExprError::at(pos, "a single '=' is not an operator here; use '==' to compare"));
         }
         '&' => {
-            return Err(ExprError::at(
-                pos,
-                "'&' must be doubled ('&&') to mean logical and",
-            ));
+            return Err(ExprError::at(pos, "'&' must be doubled ('&&') to mean logical and"));
         }
         '|' => {
-            return Err(ExprError::at(
-                pos,
-                "'|' must be doubled ('||') to mean logical or",
-            ));
+            return Err(ExprError::at(pos, "'|' must be doubled ('||') to mean logical or"));
         }
         _ => return Err(ExprError::at(pos, format!("unexpected character '{c}'"))),
     })

@@ -18,18 +18,12 @@ pub struct ExprError {
 impl ExprError {
     /// An error tied to a byte offset in the source.
     pub(crate) fn at(position: usize, message: impl AsRef<str>) -> Self {
-        Self {
-            text: format!("{} at position {position}", message.as_ref()),
-            position: Some(position),
-        }
+        Self { text: format!("{} at position {position}", message.as_ref()), position: Some(position) }
     }
 
     /// An error that has no useful source position.
     pub(crate) fn general(message: impl Into<String>) -> Self {
-        Self {
-            text: message.into(),
-            position: None,
-        }
+        Self { text: message.into(), position: None }
     }
 
     /// The zero-based byte offset in the formula text where the problem was found, if any.

@@ -1,0 +1,377 @@
+//! The import window: choose how files are read, see a preview of the
+//! result, then import all chosen files with the same settings.
+
+use eframe::egui::{self, Color32, DragValue, RichText};
+use egui_extras::{Column as TableColumn, TableBuilder};
+use sheaf_core::template::Template;
+use sheaf_io::ascii::{AsciiOptions, Delimiter};
+use sheaf_io::chi::ChiOptions;
+use sheaf_io::{ImportKind, Imported};
+use std::path::PathBuf;
+
+/// Rows of the preview table.
+const PREVIEW_ROWS: usize = 40;
+
+pub struct ImportDialog {
+    files: Vec<PathBuf>,
+    /// The file shown in the preview.
+    current: usize,
+    kind: ImportKind,
+    chi: ChiOptions,
+    ascii: AsciiOptions,
+    other_delimiter: String,
+    /// Make a graph of every imported file.
+    plot: bool,
+    /// The graph template; `None` uses what the importer suggests for each file.
+    template: Option<Template>,
+    preview: Option<Result<Imported, String>>,
+}
+
+/// What the dialog wants the application to do after a frame.
+pub enum ImportOutcome {
+    /// Keep showing the dialog.
+    Open,
+    Cancelled,
+    /// The user pressed Import. Files that could not be read are in `errors`.
+    Done {
+        items: Vec<Imported>,
+        errors: Vec<String>,
+        plot: bool,
+        template: Option<Template>,
+    },
+}
+
+impl ImportDialog {
+    pub fn new(files: Vec<PathBuf>) -> Self {
+        ImportDialog {
+            files,
+            current: 0,
+            kind: ImportKind::Auto,
+            chi: ChiOptions::default(),
+            ascii: AsciiOptions::default(),
+            other_delimiter: "|".to_string(),
+            plot: true,
+            template: None,
+            preview: None,
+        }
+    }
+
+    fn read(&self, index: usize) -> Result<Imported, String> {
+        sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii).map_err(|e| e.to_string())
+    }
+
+    pub fn show(&mut self, ctx: &egui::Context) -> ImportOutcome {
+        if self.files.is_empty() {
+            return ImportOutcome::Cancelled;
+        }
+        self.current = self.current.min(self.files.len() - 1);
+        if self.preview.is_none() {
+            self.preview = Some(self.read(self.current));
+        }
+        let before = (self.current, self.kind, self.chi.clone(), self.ascii.clone());
+
+        let mut open = true;
+        let mut outcome = ImportOutcome::Open;
+        egui::Window::new("Import data")
+            .id(egui::Id::new("import_dialog"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size([760.0, 600.0])
+            .show(ctx, |ui| {
+                self.files_ui(ui);
+                ui.separator();
+                ui.columns(2, |cols| {
+                    self.format_ui(&mut cols[0]);
+                    self.after_ui(&mut cols[1]);
+                });
+                ui.separator();
+                egui::TopBottomPanel::bottom("import_buttons").show_inside(ui, |ui| {
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        let label = if self.files.len() == 1 {
+                            "Import".to_string()
+                        } else {
+                            format!("Import {} files", self.files.len())
+                        };
+                        if ui.button(RichText::new(label).strong()).clicked() {
+                            outcome = self.run();
+                        }
+                        if ui.button("Cancel").clicked() {
+                            outcome = ImportOutcome::Cancelled;
+                        }
+                    });
+                });
+                egui::CentralPanel::default().show_inside(ui, |ui| self.preview_ui(ui));
+            });
+
+        if before != (self.current, self.kind, self.chi.clone(), self.ascii.clone()) {
+            self.preview = None;
+            ctx.request_repaint();
+        }
+        if !open {
+            outcome = ImportOutcome::Cancelled;
+        }
+        outcome
+    }
+
+    fn run(&self) -> ImportOutcome {
+        let mut items = Vec::new();
+        let mut errors = Vec::new();
+        for i in 0..self.files.len() {
+            match self.read(i) {
+                Ok(imported) => items.push(imported),
+                Err(e) => errors.push(e),
+            }
+        }
+        ImportOutcome::Done { items, errors, plot: self.plot, template: self.template }
+    }
+
+    fn files_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Files:");
+            let mut remove = None;
+            for (i, f) in self.files.iter().enumerate() {
+                let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let response = ui.selectable_label(i == self.current, name).on_hover_text(f.display().to_string());
+                if response.clicked() {
+                    self.current = i;
+                }
+                response.context_menu(|ui| {
+                    if ui.button("Remove from the list").clicked() {
+                        remove = Some(i);
+                        ui.close();
+                    }
+                });
+            }
+            if let Some(i) = remove {
+                self.files.remove(i);
+                self.preview = None;
+            }
+            if ui.small_button("Add files...").clicked()
+                && let Some(more) = rfd::FileDialog::new().set_title("Add data files").pick_files()
+            {
+                self.files.extend(more);
+            }
+        });
+    }
+
+    fn format_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("How to read the files").strong());
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.kind, ImportKind::Auto, "Detect");
+            ui.selectable_value(&mut self.kind, ImportKind::Chi, "CH Instruments");
+            ui.selectable_value(&mut self.kind, ImportKind::Ascii, "Delimited text");
+        });
+        let shown_format = match (&self.preview, self.kind) {
+            (_, ImportKind::Chi) => "chi",
+            (_, ImportKind::Ascii) => "ascii",
+            (Some(Ok(p)), ImportKind::Auto) => p.format,
+            _ => "",
+        };
+        ui.add_space(4.0);
+        match shown_format {
+            "chi" => {
+                ui.checkbox(&mut self.chi.split_scans, "Split cyclic voltammetry into scans");
+                ui.checkbox(&mut self.chi.add_milliamp, "Add the current in mA");
+                ui.checkbox(&mut self.chi.add_charge, "Add the charge to current-vs-time files");
+                ui.checkbox(&mut self.chi.invert_current, "Invert the sign of the current");
+            }
+            "ascii" => self.ascii_ui(ui),
+            _ => {}
+        }
+    }
+
+    fn ascii_ui(&mut self, ui: &mut egui::Ui) {
+        let detected = match &self.preview {
+            Some(Ok(_)) => sheaf_io::read_text_file(&self.files[self.current])
+                .ok()
+                .map(|text| sheaf_io::ascii::detect(&text, &self.ascii)),
+            _ => None,
+        };
+        let o = &mut self.ascii;
+        egui::Grid::new("ascii_options").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
+            ui.label("Separator");
+            ui.horizontal(|ui| {
+                let name = |d: Delimiter| match d {
+                    Delimiter::Auto => "Detect",
+                    Delimiter::Comma => "Comma",
+                    Delimiter::Tab => "Tab",
+                    Delimiter::Semicolon => "Semicolon",
+                    Delimiter::Whitespace => "Spaces",
+                    Delimiter::Other(_) => "Other",
+                };
+                egui::ComboBox::from_id_salt("ascii_delimiter").selected_text(name(o.delimiter)).show_ui(ui, |ui| {
+                    for d in
+                        [Delimiter::Auto, Delimiter::Comma, Delimiter::Tab, Delimiter::Semicolon, Delimiter::Whitespace]
+                    {
+                        ui.selectable_value(&mut o.delimiter, d, name(d));
+                    }
+                    let other = self.other_delimiter.chars().next().unwrap_or('|');
+                    let is_other = matches!(o.delimiter, Delimiter::Other(_));
+                    if ui.selectable_label(is_other, "Other").clicked() {
+                        o.delimiter = Delimiter::Other(other);
+                    }
+                });
+                if let Delimiter::Other(c) = &mut o.delimiter {
+                    if ui.add(egui::TextEdit::singleline(&mut self.other_delimiter).desired_width(24.0)).changed()
+                        && let Some(typed) = self.other_delimiter.chars().next()
+                    {
+                        *c = typed;
+                    }
+                } else if let (Delimiter::Auto, Some(d)) = (o.delimiter, &detected) {
+                    ui.weak(format!("found: {}", name(d.delimiter).to_lowercase()));
+                }
+            });
+            ui.end_row();
+
+            ui.label("Lines before the data");
+            optional_line(ui, &mut o.header_lines, detected.as_ref().map(|d| d.header_lines), "none");
+            ui.end_row();
+            ui.label("Line with the names");
+            optional_line(ui, &mut o.long_name_line, detected.as_ref().map(|d| d.long_name_line), "none");
+            ui.end_row();
+            ui.label("Line with the units");
+            optional_line(ui, &mut o.units_line, detected.as_ref().map(|d| d.units_line), "none");
+            ui.end_row();
+            ui.label("Line with comments");
+            optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
+            ui.end_row();
+
+            ui.label("Numbers");
+            ui.checkbox(&mut o.decimal_comma, "Comma as decimal separator");
+            ui.end_row();
+            ui.label("Columns");
+            ui.checkbox(&mut o.first_column_x, "The first column is X");
+            ui.end_row();
+            ui.label("Skip data rows");
+            ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
+            ui.end_row();
+        });
+    }
+
+    fn after_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("After the import").strong());
+        ui.checkbox(&mut self.plot, "Make a graph of each file");
+        ui.add_enabled_ui(self.plot, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Template");
+                let suggested = match &self.preview {
+                    Some(Ok(p)) => format!("Suggested ({})", p.suggested_template.label()),
+                    _ => "Suggested".to_string(),
+                };
+                let text = self.template.map(|t| t.label().to_string()).unwrap_or_else(|| suggested.clone());
+                egui::ComboBox::from_id_salt("import_template").selected_text(text).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.template, None, suggested);
+                    for t in Template::ALL {
+                        ui.selectable_value(&mut self.template, Some(t), t.label());
+                    }
+                });
+            });
+        });
+        if let Some(Ok(p)) = &self.preview
+            && !p.meta.is_empty()
+        {
+            ui.add_space(4.0);
+            egui::CollapsingHeader::new(format!("File header ({} entries)", p.meta.len())).id_salt("import_meta").show(
+                ui,
+                |ui| {
+                    egui::ScrollArea::vertical().id_salt("import_meta_scroll").max_height(110.0).show(ui, |ui| {
+                        for (k, v) in &p.meta {
+                            ui.horizontal(|ui| {
+                                ui.weak(k);
+                                ui.label(v);
+                            });
+                        }
+                    });
+                },
+            );
+        }
+    }
+
+    fn preview_ui(&mut self, ui: &mut egui::Ui) {
+        let imported = match &self.preview {
+            Some(Ok(p)) => p,
+            Some(Err(e)) => {
+                ui.colored_label(Color32::from_rgb(170, 30, 30), format!("This file cannot be read: {e}"));
+                return;
+            }
+            None => return,
+        };
+        for w in &imported.warnings {
+            ui.colored_label(Color32::from_rgb(170, 100, 0), format!("Note: {w}"));
+        }
+        let book = &imported.workbook;
+        let Some(sheet) = book.sheets.first() else {
+            ui.label("The file has no data.");
+            return;
+        };
+        let more_sheets = if book.sheets.len() > 1 { format!(", {} sheets", book.sheets.len()) } else { String::new() };
+        ui.weak(format!(
+            "Preview of sheet '{}': {} columns, {} rows{more_sheets}",
+            sheet.name,
+            sheet.columns.len(),
+            sheet.row_count()
+        ));
+        let rows = sheet.row_count().min(PREVIEW_ROWS);
+        egui::ScrollArea::horizontal().id_salt("import_preview_scroll").auto_shrink([false, false]).show(ui, |ui| {
+            let mut table = TableBuilder::new(ui).id_salt("import_preview").striped(true).min_scrolled_height(0.0);
+            for _ in &sheet.columns {
+                table = table.column(TableColumn::auto().at_least(70.0));
+            }
+            table
+                .header(64.0, |mut header| {
+                    for c in &sheet.columns {
+                        header.col(|ui| {
+                            ui.vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = 1.0;
+                                let tag = c.designation.tag();
+                                let head = if tag.is_empty() {
+                                    c.short_name.clone()
+                                } else {
+                                    format!("{}({tag})", c.short_name)
+                                };
+                                ui.label(RichText::new(head).strong());
+                                ui.label(&c.long_name);
+                                ui.label(&c.units);
+                                ui.weak(c.comments.lines().next().unwrap_or_default());
+                            });
+                        });
+                    }
+                })
+                .body(|body| {
+                    body.rows(18.0, rows, |mut row| {
+                        let r = row.index();
+                        for c in &sheet.columns {
+                            row.col(|ui| {
+                                ui.label(if r < c.len() { c.cell_text(r) } else { String::new() });
+                            });
+                        }
+                    });
+                });
+        });
+    }
+}
+
+/// A line number that is either detected or typed; 0 means "there is none".
+fn optional_line(ui: &mut egui::Ui, value: &mut Option<usize>, detected: Option<usize>, zero_text: &str) {
+    ui.horizontal(|ui| {
+        let mut auto = value.is_none();
+        if ui.checkbox(&mut auto, "Detect").changed() {
+            *value = if auto { None } else { Some(detected.unwrap_or(0)) };
+        }
+        match value {
+            Some(v) => {
+                ui.add(DragValue::new(v).range(0..=100_000));
+            }
+            None => {
+                let shown = match detected {
+                    Some(0) => zero_text.to_string(),
+                    Some(n) => n.to_string(),
+                    None => String::new(),
+                };
+                ui.weak(shown);
+            }
+        }
+    });
+}

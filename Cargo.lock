@@ -2922,6 +2922,8 @@ dependencies = [
  "image",
  "rfd",
  "sheaf-core",
+ "sheaf-io",
+ "sheaf-plot",
 ]
 
 [[package]]
@@ -2945,6 +2947,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sheaf-expr",
  "thiserror 2.0.21",
 ]
 

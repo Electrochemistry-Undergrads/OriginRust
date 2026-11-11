@@ -73,8 +73,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         // Raster pixels per page point.
         let pixel_scale = fit * ui.ctx().pixels_per_point();
         let scale_key = (pixel_scale * 50.0).round() as u32;
-        let stale =
-            state.texture.as_ref().is_none_or(|t| t.revision != doc.revision() || t.scale_key != scale_key);
+        let stale = state.texture.as_ref().is_none_or(|t| t.revision != doc.revision() || t.scale_key != scale_key);
         if stale {
             let scale = f64::from(scale_key) / 50.0;
             match sheaf_plot::render_raster(doc.project(), graph_id, scale)
@@ -85,8 +84,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                         [raster.width as usize, raster.height as usize],
                         &raster.rgba,
                     );
-                    let texture =
-                        ui.ctx().load_texture(format!("graph-{}", graph_id.0), image, TextureOptions::LINEAR);
+                    let texture = ui.ctx().load_texture(format!("graph-{}", graph_id.0), image, TextureOptions::LINEAR);
                     state.texture = Some(GraphTexture { revision: doc.revision(), scale_key, texture, geometry });
                     state.error = None;
                 }
@@ -114,7 +112,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         let Some(t) = &state.texture else {
             return;
         };
-        let to_page = |p: egui::Pos2| (f64::from((p.x - image_rect.left()) / fit), f64::from((p.y - image_rect.top()) / fit));
+        let to_page =
+            |p: egui::Pos2| (f64::from((p.x - image_rect.left()) / fit), f64::from((p.y - image_rect.top()) / fit));
         if let Some(pos) = response.hover_pos() {
             let (px, py) = to_page(pos);
             for g in &t.geometry {

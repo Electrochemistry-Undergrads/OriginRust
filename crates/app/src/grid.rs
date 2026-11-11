@@ -54,9 +54,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let rows = sheet.row_count() + SPARE_ROWS;
     let selection_fill = ui.visuals().selection.bg_fill.gamma_multiply(0.35);
     let header_fill = ui.visuals().faint_bg_color;
-    let grid_stroke = Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color);
+    let grid_stroke = Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color);
 
     egui::ScrollArea::horizontal().auto_shrink([false, false]).show(ui, |ui| {
+        // Cells touch each other so the grid lines join up.
+        ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
         let mut table = TableBuilder::new(ui)
             .striped(false)
             .resizable(true)
@@ -153,7 +155,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             };
                             ui.with_layout(layout, |ui| {
                                 ui.add_space(4.0);
-                                let color = if text == "--" { ui.visuals().weak_text_color() } else { ui.visuals().text_color() };
+                                let color = if text == "--" {
+                                    ui.visuals().weak_text_color()
+                                } else {
+                                    ui.visuals().text_color()
+                                };
                                 ui.label(RichText::new(&text).color(color));
                             });
                             if response.double_clicked() {

@@ -9,13 +9,13 @@
 //! multiplicative := unary ( ('*'|'/'|'%') unary )*
 //! unary    := ('-'|'+'|'!') unary | power
 //! power    := postfix ( '^' unary )?          -- right associative, exponent may be signed
-//! postfix  := primary ( '[' ternary ']' )*
+//! postfix  := primary ( '[' ternary ( ':' ternary )? ']' )?   -- only after a column reference
 //! primary  := number | name | name '(' args ')' | col-reference | '(' ternary ')'
 //! ```
 
 use crate::ast::{ColumnRef, Kind, Node, UnOp};
 use crate::error::ExprError;
-use crate::funcs::{BinOp, Resolved, resolve};
+use crate::funcs::{Agg, BinOp, Func, Resolved, resolve};
 use crate::lexer::{Tok, Token, lex};
 
 /// How deeply parentheses, signs and `?:` may nest before the parser gives up.
@@ -32,17 +32,13 @@ pub(crate) fn parse_root(src: &str) -> Result<Node, ExprError> {
     if toks.len() == 1 {
         return Err(ExprError::at(0, "the expression is empty"));
     }
-    let mut p = Parser {
-        toks,
-        at: 0,
-        nesting: 0,
-    };
+    let mut p = Parser { toks, at: 0, nesting: 0 };
     let node = p.ternary()?;
     let t = p.peek();
     if t.tok != Tok::End {
         let msg = match t.tok {
             Tok::RParen => "unmatched ')'".to_string(),
-            _ => format!("unexpected {}; expected an operator or the end of the expression", t.tok.describe()),
+            _ => format!("expected an operator or the end of the expression, found {}", t.tok.describe()),
         };
         return Err(ExprError::at(t.pos, msg));
     }
@@ -79,20 +75,14 @@ impl Parser {
         if self.eat(&tok) {
             Ok(())
         } else {
-            Err(ExprError::at(
-                self.peek().pos,
-                format!("expected {} {what}", tok.describe()),
-            ))
+            Err(ExprError::at(self.peek().pos, format!("expected {} {what}", tok.describe())))
         }
     }
 
     fn enter(&mut self) -> Result<(), ExprError> {
         self.nesting += 1;
         if self.nesting > MAX_NESTING {
-            return Err(ExprError::at(
-                self.peek().pos,
-                "expression is nested too deeply",
-            ));
+            return Err(ExprError::at(self.peek().pos, "expression is nested too deeply"));
         }
         Ok(())
     }
@@ -159,20 +149,13 @@ impl Parser {
     }
 
     fn additive(&mut self) -> Result<Node, ExprError> {
-        self.binary_level(
-            Parser::multiplicative,
-            &[(Tok::Plus, BinOp::Add), (Tok::Minus, BinOp::Sub)],
-        )
+        self.binary_level(Parser::multiplicative, &[(Tok::Plus, BinOp::Add), (Tok::Minus, BinOp::Sub)])
     }
 
     fn multiplicative(&mut self) -> Result<Node, ExprError> {
         self.binary_level(
             Parser::unary,
-            &[
-                (Tok::Star, BinOp::Mul),
-                (Tok::Slash, BinOp::Div),
-                (Tok::Percent, BinOp::Rem),
-            ],
+            &[(Tok::Star, BinOp::Mul), (Tok::Slash, BinOp::Div), (Tok::Percent, BinOp::Rem)],
         )
     }
 
@@ -206,20 +189,26 @@ impl Parser {
     }
 
     fn postfix(&mut self) -> Result<Node, ExprError> {
-        let mut node = self.primary()?;
-        while matches!(self.peek_tok(), Tok::LBracket) {
-            let pos = self.advance().pos;
-            let idx = self.ternary()?;
-            self.expect(Tok::RBracket, "after the row index")?;
-            node = Node::new(
-                Kind::Index {
-                    base: Box::new(node),
-                    idx: Box::new(idx),
-                },
-                pos,
-            )?;
+        let node = self.primary()?;
+        if !matches!(self.peek_tok(), Tok::LBracket) {
+            return Ok(node);
         }
-        Ok(node)
+        let pos = self.advance().pos;
+        if !matches!(node.kind, Kind::Col { .. }) {
+            return Err(ExprError::at(
+                pos,
+                "only a column reference such as col(A) can be followed by a [row] subscript",
+            ));
+        }
+        let first = self.ternary()?;
+        if self.eat(&Tok::Colon) {
+            let last = self.ternary()?;
+            self.expect(Tok::RBracket, "after the row range")?;
+            Node::new(Kind::Range { base: Box::new(node), from: Box::new(first), to: Box::new(last), pos }, pos)
+        } else {
+            self.expect(Tok::RBracket, "after the row index")?;
+            Node::new(Kind::Index { base: Box::new(node), idx: Box::new(first) }, pos)
+        }
     }
 
     fn primary(&mut self) -> Result<Node, ExprError> {
@@ -232,6 +221,8 @@ impl Parser {
                     self.call(name, t.pos)
                 } else if name.eq_ignore_ascii_case("pi") {
                     Node::new(Kind::Num(std::f64::consts::PI), t.pos)
+                } else if name.eq_ignore_ascii_case("e") {
+                    Node::new(Kind::Num(std::f64::consts::E), t.pos)
                 } else {
                     Node::new(Kind::Var { name, pos: t.pos }, t.pos)
                 }
@@ -241,18 +232,9 @@ impl Parser {
                 self.expect(Tok::RParen, &format!("to close the '(' at position {}", t.pos))?;
                 Ok(inner)
             }
-            Tok::Str(_) => Err(ExprError::at(
-                t.pos,
-                "text strings can only be used inside col(\"...\")",
-            )),
-            Tok::End => Err(ExprError::at(
-                t.pos,
-                "unexpected end of expression; expected a value",
-            )),
-            other => Err(ExprError::at(
-                t.pos,
-                format!("expected a value, found {}", other.describe()),
-            )),
+            Tok::Str(_) => Err(ExprError::at(t.pos, "text strings can only be used inside col(\"...\")")),
+            Tok::End => Err(ExprError::at(t.pos, "unexpected end of expression; expected a value")),
+            other => Err(ExprError::at(t.pos, format!("expected a value, found {}", other.describe()))),
         }
     }
 
@@ -273,15 +255,23 @@ impl Parser {
             }
         }
         match resolve(&name, args.len()) {
-            Resolved::Found(func, canonical) => Node::new(
-                Kind::Call {
-                    func,
-                    name: canonical,
-                    args,
-                    pos,
-                },
-                pos,
-            ),
+            Resolved::Found(mut func, canonical) => {
+                let is_col = |n: &Node| matches!(n.kind, Kind::Col { .. } | Kind::Range { .. });
+                // `min(col(A))` and `max(col(A))` are column statistics, not the identity.
+                if let Func::MinMax { max } = func
+                    && args.len() == 1
+                    && is_col(&args[0])
+                {
+                    func = Func::Agg(if max { Agg::Max } else { Agg::Min });
+                }
+                if matches!(func, Func::Agg(_)) && !args.first().is_some_and(is_col) {
+                    return Err(ExprError::at(
+                        pos,
+                        format!("function '{canonical}' needs a column such as col(A) or col(A)[1:10] as its argument"),
+                    ));
+                }
+                Node::new(Kind::Call { func, args }, pos)
+            }
             Resolved::Unknown => Err(ExprError::at(pos, format!("unknown function '{name}'"))),
             Resolved::BadArity { name, expected } => Err(ExprError::at(
                 pos,
@@ -304,19 +294,13 @@ impl Parser {
                 if v >= 1.0 && v.fract() == 0.0 && v < 1e9 {
                     ColumnRef::Index(v as usize)
                 } else {
-                    return Err(ExprError::at(
-                        t.pos,
-                        "a column number must be a whole number, 1 or more",
-                    ));
+                    return Err(ExprError::at(t.pos, "a column number must be a whole number, 1 or more"));
                 }
             }
             other => {
                 return Err(ExprError::at(
                     t.pos,
-                    format!(
-                        "expected a column name, \"long name\" or number inside col(), found {}",
-                        other.describe()
-                    ),
+                    format!("expected a column name, \"long name\" or number inside col(), found {}", other.describe()),
                 ));
             }
         };

@@ -1,0 +1,376 @@
+//! Evaluation: the [`Host`] trait, a ready-made host, and the compiled form of an expression.
+//!
+//! Evaluating against a host first *compiles* the parsed tree: variables are looked up once and
+//! become constants, column references are resolved to a slice when the host can hand one out,
+//! and constant sub-expressions are folded. The compiled tree is then run once per row without
+//! any heap allocation (except for statistics over a moving row range on a host that cannot
+//! lend column slices).
+
+use crate::ast::{ColumnRef, Expr, Kind, Node, UnOp};
+use crate::error::ExprError;
+use crate::funcs::{self, Agg, BinOp, F1, F2, Func, NA, apply_bin, max2, min2, truthy};
+
+/// Where an expression gets the values of variables and worksheet cells.
+///
+/// Only [`variable`](Host::variable) and [`cell`](Host::cell) are required. The other methods
+/// have defaults and let a host be stricter (reject unknown columns) or faster (lend whole
+/// columns as slices).
+pub trait Host {
+    /// The value of a named variable (a fit parameter, `x`, ...), or `None` if there is none.
+    /// Names are matched exactly as typed in the formula. The value is read once per
+    /// evaluation call, not once per row.
+    fn variable(&self, name: &str) -> Option<f64>;
+
+    /// The value of a cell, with `row` counted from 0. `None` means "no such cell" (past the
+    /// end of the column) and is treated as a missing value (NaN); a stored missing value
+    /// should be returned as `Some(f64::NAN)`.
+    fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64>;
+
+    /// Whether the column exists. If this returns `false`, evaluation fails with an
+    /// "unknown column" error that points at the reference. The default accepts every column.
+    fn has_column(&self, _col: &ColumnRef) -> bool {
+        true
+    }
+
+    /// The column's values as one slice, if the host stores them that way. This is the fast
+    /// path for column formulas; return `None` to have [`cell`](Host::cell) called per value.
+    fn column_data(&self, _col: &ColumnRef) -> Option<&[f64]> {
+        None
+    }
+
+    /// Number of rows in the column. The default uses [`column_data`](Host::column_data) or
+    /// counts rows until [`cell`](Host::cell) returns `None`.
+    fn column_len(&self, col: &ColumnRef) -> usize {
+        if let Some(d) = self.column_data(col) {
+            return d.len();
+        }
+        let mut n = 0;
+        while n < (1 << 31) && self.cell(col, n).is_some() {
+            n += 1;
+        }
+        n
+    }
+
+    /// The 0-based row that [`Expr::eval`] evaluates. The variable `i` is this row plus one.
+    fn row(&self) -> usize {
+        0
+    }
+}
+
+/// A host built from plain data: named variables and columns that are borrowed slices.
+///
+/// Meant for fit functions (variables only), tests and simple callers. Variable names match
+/// exactly; short column names match ignoring case, long names match exactly.
+///
+/// ```
+/// use sheaf_expr::{Expr, SimpleHost};
+/// let host = SimpleHost::new().var("A", 2.0).var("x", 3.0);
+/// let e = Expr::parse("A * x^2").unwrap();
+/// assert_eq!(e.eval(&host).unwrap(), 18.0);
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct SimpleHost<'a> {
+    vars: Vec<(String, f64)>,
+    cols: Vec<(ColumnRef, &'a [f64])>,
+    row: usize,
+}
+
+impl<'a> SimpleHost<'a> {
+    /// An empty host.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A host with the given variables.
+    pub fn from_vars<S: AsRef<str>>(vars: impl IntoIterator<Item = (S, f64)>) -> Self {
+        let mut h = Self::new();
+        for (n, v) in vars {
+            h.set_var(n.as_ref(), v);
+        }
+        h
+    }
+
+    /// Adds or replaces a variable.
+    #[must_use]
+    pub fn var(mut self, name: &str, value: f64) -> Self {
+        self.set_var(name, value);
+        self
+    }
+
+    /// Adds or replaces a variable in place (handy inside a fitting loop).
+    pub fn set_var(&mut self, name: &str, value: f64) {
+        if let Some(slot) = self.vars.iter_mut().find(|(n, _)| n == name) {
+            slot.1 = value;
+        } else {
+            self.vars.push((name.to_string(), value));
+        }
+    }
+
+    /// Adds a column under any kind of reference.
+    #[must_use]
+    pub fn column(mut self, col: ColumnRef, data: &'a [f64]) -> Self {
+        self.cols.push((col, data));
+        self
+    }
+
+    /// Adds a column that `col(name)` finds by its short name.
+    #[must_use]
+    pub fn short(self, name: &str, data: &'a [f64]) -> Self {
+        self.column(ColumnRef::Short(name.to_string()), data)
+    }
+
+    /// Adds a column that `col("name")` finds by its long name.
+    #[must_use]
+    pub fn long(self, name: &str, data: &'a [f64]) -> Self {
+        self.column(ColumnRef::Long(name.to_string()), data)
+    }
+
+    /// Sets the 0-based row used by [`Expr::eval`].
+    #[must_use]
+    pub fn at_row(mut self, row: usize) -> Self {
+        self.row = row;
+        self
+    }
+
+    fn find(&self, col: &ColumnRef) -> Option<&'a [f64]> {
+        self.cols.iter().find_map(|(k, d)| {
+            let same = match (k, col) {
+                (ColumnRef::Short(a), ColumnRef::Short(b)) => a.eq_ignore_ascii_case(b),
+                (a, b) => a == b,
+            };
+            same.then_some(*d)
+        })
+    }
+}
+
+impl Host for SimpleHost<'_> {
+    fn variable(&self, name: &str) -> Option<f64> {
+        self.vars.iter().find(|(n, _)| n == name).map(|(_, v)| *v)
+    }
+
+    fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
+        self.find(col)?.get(row).copied()
+    }
+
+    fn has_column(&self, col: &ColumnRef) -> bool {
+        self.find(col).is_some()
+    }
+
+    fn column_data(&self, col: &ColumnRef) -> Option<&[f64]> {
+        self.find(col)
+    }
+
+    fn row(&self) -> usize {
+        self.row
+    }
+}
+
+enum Col<'h> {
+    Slice(&'h [f64]),
+    Cell(ColumnRef),
+}
+
+impl Col<'_> {
+    #[inline]
+    fn get(&self, host: &dyn Host, row: usize) -> f64 {
+        match self {
+            Col::Slice(s) => s.get(row).copied().unwrap_or(NA),
+            Col::Cell(r) => host.cell(r, row).unwrap_or(NA),
+        }
+    }
+}
+
+enum C<'h> {
+    Num(f64),
+    Row,
+    Col(Col<'h>),
+    Index(Col<'h>, Box<C<'h>>),
+    Unary(UnOp, Box<C<'h>>),
+    Bin(BinOp, Box<C<'h>>, Box<C<'h>>),
+    Cond(Box<C<'h>>, Box<C<'h>>, Box<C<'h>>),
+    U(F1, Box<C<'h>>),
+    B(F2, Box<C<'h>>, Box<C<'h>>),
+    MinMax(bool, Vec<C<'h>>),
+    Agg { kind: Agg, col: Col<'h>, range: Option<(Box<C<'h>>, Box<C<'h>>)> },
+}
+
+/// An expression bound to a host: variables and columns are resolved, ready to run row by row.
+///
+/// Create one with [`Expr::compile`]. It borrows the host, so the host's variable values are
+/// fixed for as long as it lives.
+pub struct Compiled<'h> {
+    host: &'h dyn Host,
+    root: C<'h>,
+}
+
+impl Compiled<'_> {
+    /// Value for the 0-based `row` (the variable `i` is `row + 1`). Never fails: anything
+    /// undefined comes out as NaN.
+    pub fn eval_row(&self, row: usize) -> f64 {
+        ev(self.host, &self.root, row)
+    }
+}
+
+impl Expr {
+    /// Resolves variables and columns against `host` and returns a form that is fast to
+    /// evaluate repeatedly. Fails if a variable or column is unknown.
+    pub fn compile<'h>(&self, host: &'h dyn Host) -> Result<Compiled<'h>, ExprError> {
+        Ok(Compiled { host, root: build(host, &self.root)? })
+    }
+
+    /// Evaluates the expression once, at the host's [`row`](Host::row).
+    ///
+    /// Division by zero, `sqrt` of a negative number and similar give NaN, not an error. Errors
+    /// are only unknown variables or columns.
+    pub fn eval(&self, host: &dyn Host) -> Result<f64, ExprError> {
+        Ok(self.compile(host)?.eval_row(host.row()))
+    }
+
+    /// Evaluates the expression for rows `0..n` (the column-formula case) and returns the
+    /// values in row order. The expression is compiled once; the loop does no parsing and no
+    /// per-row allocation.
+    pub fn eval_rows(&self, host: &dyn Host, n: usize) -> Result<Vec<f64>, ExprError> {
+        let c = self.compile(host)?;
+        Ok((0..n).map(|r| c.eval_row(r)).collect())
+    }
+}
+
+fn build_col<'h>(host: &'h dyn Host, n: &Node) -> Result<Col<'h>, ExprError> {
+    let Kind::Col { r, pos } = &n.kind else {
+        return Err(ExprError::general("internal error: expected a column reference"));
+    };
+    if !host.has_column(r) {
+        return Err(ExprError::at(*pos, format!("unknown column {r}")));
+    }
+    Ok(match host.column_data(r) {
+        Some(d) => Col::Slice(d),
+        None => Col::Cell(r.clone()),
+    })
+}
+
+fn build<'h>(host: &'h dyn Host, n: &Node) -> Result<C<'h>, ExprError> {
+    let b = |n: &Node| build(host, n).map(Box::new);
+    let c = match &n.kind {
+        Kind::Num(v) => C::Num(*v),
+        Kind::Var { name, pos } => match host.variable(name) {
+            Some(v) => C::Num(v),
+            None if name == "i" => C::Row,
+            None => return Err(ExprError::at(*pos, format!("unknown variable '{name}'"))),
+        },
+        Kind::Col { .. } => C::Col(build_col(host, n)?),
+        Kind::Index { base, idx } => C::Index(build_col(host, base)?, b(idx)?),
+        Kind::Range { pos, .. } => {
+            return Err(ExprError::at(
+                *pos,
+                "a row range such as [1:10] can only be used inside a statistics function like mean()",
+            ));
+        }
+        Kind::Unary(op, a) => C::Unary(*op, b(a)?),
+        Kind::Binary(op, a, c) => C::Bin(*op, b(a)?, b(c)?),
+        Kind::Cond(a, x, y) => C::Cond(b(a)?, b(x)?, b(y)?),
+        Kind::Call { func, args, .. } => match *func {
+            Func::U(f) => C::U(f, b(&args[0])?),
+            Func::B(f) => C::B(f, b(&args[0])?, b(&args[1])?),
+            Func::MinMax { max } => {
+                let list = args.iter().map(|a| build(host, a)).collect::<Result<Vec<_>, _>>()?;
+                if list.len() == 1 {
+                    // A single scalar argument: min(x) is just x.
+                    list.into_iter().next().unwrap_or(C::Num(NA))
+                } else {
+                    C::MinMax(max, list)
+                }
+            }
+            Func::IfElse => C::Cond(b(&args[0])?, b(&args[1])?, b(&args[2])?),
+            Func::Na => C::Num(NA),
+            Func::Agg(kind) => match &args[0].kind {
+                Kind::Range { base, from, to, .. } => {
+                    C::Agg { kind, col: build_col(host, base)?, range: Some((b(from)?, b(to)?)) }
+                }
+                _ => C::Agg { kind, col: build_col(host, &args[0])?, range: None },
+            },
+        },
+    };
+    Ok(fold(host, c))
+}
+
+/// Replaces nodes whose inputs are all constants by their value.
+fn fold<'h>(host: &'h dyn Host, c: C<'h>) -> C<'h> {
+    let constant = match &c {
+        C::Unary(_, a) | C::U(_, a) => matches!(**a, C::Num(_)),
+        C::Bin(_, a, b) | C::B(_, a, b) => matches!((&**a, &**b), (C::Num(_), C::Num(_))),
+        C::Agg { range: None, .. } => true,
+        C::Agg { range: Some((a, b)), .. } => matches!((&**a, &**b), (C::Num(_), C::Num(_))),
+        _ => false,
+    };
+    if constant { C::Num(ev(host, &c, 0)) } else { c }
+}
+
+fn ev(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
+    match c {
+        C::Num(v) => *v,
+        C::Row => (row + 1) as f64,
+        C::Col(col) => col.get(host, row),
+        C::Index(col, idx) => {
+            let v = ev(host, idx, row);
+            if v.is_nan() {
+                return NA;
+            }
+            let r = v.round();
+            if !(1.0..=4.0e15).contains(&r) {
+                return NA;
+            }
+            col.get(host, r as usize - 1)
+        }
+        C::Unary(op, a) => {
+            let v = ev(host, a, row);
+            match op {
+                UnOp::Neg => -v,
+                UnOp::Plus => v,
+                UnOp::Not => f64::from(!truthy(v)),
+            }
+        }
+        C::Bin(op, a, b) => apply_bin(*op, ev(host, a, row), ev(host, b, row)),
+        C::Cond(t, a, b) => {
+            if truthy(ev(host, t, row)) {
+                ev(host, a, row)
+            } else {
+                ev(host, b, row)
+            }
+        }
+        C::U(f, a) => f(ev(host, a, row)),
+        C::B(f, a, b) => f(ev(host, a, row), ev(host, b, row)),
+        C::MinMax(max, args) => {
+            let mut it = args.iter().map(|a| ev(host, a, row));
+            let first = it.next().unwrap_or(NA);
+            if *max { it.fold(first, max2) } else { it.fold(first, min2) }
+        }
+        C::Agg { kind, col, range } => {
+            let len = match col {
+                Col::Slice(s) => s.len(),
+                Col::Cell(r) => host.column_len(r),
+            };
+            let (lo, hi) = match range {
+                None => (1, len),
+                Some((a, b)) => {
+                    let (a, b) = (ev(host, a, row), ev(host, b, row));
+                    if a.is_nan() || b.is_nan() {
+                        return NA;
+                    }
+                    let a = a.round().clamp(1.0, 4.0e15) as usize;
+                    let b = b.round().clamp(0.0, len as f64) as usize;
+                    (a, b)
+                }
+            };
+            if lo > hi {
+                return funcs::aggregate(*kind, &[]);
+            }
+            match col {
+                Col::Slice(s) => funcs::aggregate(*kind, &s[lo - 1..hi]),
+                Col::Cell(r) => {
+                    let v: Vec<f64> = (lo - 1..hi).map(|k| host.cell(r, k).unwrap_or(NA)).collect();
+                    funcs::aggregate(*kind, &v)
+                }
+            }
+        }
+    }
+}

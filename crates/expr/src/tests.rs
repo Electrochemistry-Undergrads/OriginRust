@@ -139,6 +139,45 @@ fn missing_values_propagate() {
     assert_eq!(ev("(1/0) && 1"), 0.0);
     assert_eq!(ev("!(1/0)"), 1.0);
     assert_eq!(ev("(1/0) ? 1 : 2"), 2.0);
+    // IEEE pow gives 1 for x^0 and 1^x even when x is missing; formulas must not fill gaps.
+    assert!(ev("na()^0").is_nan());
+    assert!(ev("1^na()").is_nan());
+    assert!(ev("pow(na(), 0)").is_nan());
+    assert!(ev("round(2.5, na())").is_nan());
+    assert_eq!(ev("round(2.345, 1/0 == 1/0)"), 2.3);
+}
+
+#[test]
+fn statistics_of_infinite_data_are_not_zero() {
+    let a = [1.0, f64::INFINITY, 3.0];
+    let host = SimpleHost::new().short("A", &a);
+    let e = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
+    assert!(e("sd(col(A))").is_nan(), "the spread of data with infinity is undefined");
+    assert!(e("var(col(A))").is_nan());
+    assert_eq!(e("sum(col(A))"), f64::INFINITY);
+    assert_eq!(e("count(col(A))"), 3.0);
+}
+
+/// The longest accepted formulas must parse and evaluate on a small stack. A review found that an
+/// unoptimised build overflowed the 1 MB Windows main thread at about 200 terms before the stack
+/// was grown on demand. This workspace's test profile optimises a little, so the test uses a
+/// 256 KiB thread instead: without the stack growth it overflows there (checked on 2026-11-11).
+#[test]
+fn longest_accepted_formulas_run_on_a_small_stack() {
+    let run = std::thread::Builder::new()
+        .stack_size(256 * 1024)
+        .spawn(|| {
+            let a = [2.0, 3.0];
+            let host = SimpleHost::new().short("A", &a);
+            let chain = format!("0{}", "+col(A)".repeat(900));
+            let v = Expr::parse(&chain).unwrap().eval_rows(&host, 2).unwrap();
+            assert_eq!(v, [1800.0, 2700.0]);
+            let nested = format!("{}col(A){}", "abs(".repeat(63), ")".repeat(63));
+            let v = Expr::parse(&nested).unwrap().eval_rows(&host, 2).unwrap();
+            assert_eq!(v, [2.0, 3.0]);
+        })
+        .unwrap();
+    run.join().expect("no stack overflow");
 }
 
 #[test]

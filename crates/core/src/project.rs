@@ -326,22 +326,23 @@ impl Project {
 
     /// The Y columns a new graph of `template` should show for a sheet.
     ///
-    /// Normally that is every Y column. For the cyclic voltammetry template,
-    /// when the sheet has current columns in mA next to the same data in A,
-    /// only the mA columns are plotted (publication figures use mA).
-    pub fn default_plot_columns(&self, book: WindowId, sheet: usize, template: Template) -> Vec<ColumnId> {
+    /// That is every numeric Y column when they all share one unit. When the
+    /// units differ, one Y axis cannot show them all, so only one group is
+    /// plotted: the columns in mA if there are any (an imported CH Instruments
+    /// file has the current in A and in mA plus, for current-vs-time files,
+    /// the charge; figures use mA), otherwise the columns that share the unit
+    /// of the first Y column.
+    pub fn default_plot_columns(&self, book: WindowId, sheet: usize, _template: Template) -> Vec<ColumnId> {
         let Some(ws) = self.workbook(book).and_then(|b| b.sheets.get(sheet)) else {
             return Vec::new();
         };
         let ys: Vec<&Column> =
             ws.columns.iter().filter(|c| c.designation == Designation::Y && c.data.is_numeric()).collect();
-        if template == Template::CyclicVoltammetry {
-            let ma: Vec<ColumnId> = ys.iter().filter(|c| c.units.eq_ignore_ascii_case("mA")).map(|c| c.id).collect();
-            if !ma.is_empty() {
-                return ma;
-            }
-        }
-        ys.iter().map(|c| c.id).collect()
+        let Some(first) = ys.first() else {
+            return Vec::new();
+        };
+        let unit = if ys.iter().any(|c| c.units == "mA") { "mA" } else { first.units.as_str() };
+        ys.iter().filter(|c| c.units == unit).map(|c| c.id).collect()
     }
 
     /// Creates a graph of `template` that plots the given Y columns in one
@@ -398,6 +399,25 @@ mod tests {
         assert_eq!(plot.y, y);
         assert_eq!(p.plot_label(plot), "B");
         assert_eq!(p.numeric(y).unwrap(), &[1.0, 4.0, 9.0]);
+    }
+
+    #[test]
+    fn default_plot_columns_keep_one_unit() {
+        let (mut p, book, _, y) = sample();
+        // Same (empty) unit everywhere: every Y column is plotted.
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 3])).unwrap();
+        assert_eq!(p.default_plot_columns(book, 0, Template::Line), vec![y, y2]);
+        // Mixed units without mA: the unit of the first Y column wins.
+        p.column_mut(y2).unwrap().units = "C".into();
+        assert_eq!(p.default_plot_columns(book, 0, Template::Line), vec![y]);
+        // Current in A and in mA plus charge: only the mA column.
+        p.column_mut(y).unwrap().units = "A".into();
+        let ma = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 3])).unwrap();
+        p.column_mut(ma).unwrap().units = "mA".into();
+        assert_eq!(p.default_plot_columns(book, 0, Template::Line), vec![ma]);
+        // Text columns are never plotted.
+        let t = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into()])).unwrap();
+        assert!(!p.default_plot_columns(book, 0, Template::Line).contains(&t));
     }
 
     #[test]

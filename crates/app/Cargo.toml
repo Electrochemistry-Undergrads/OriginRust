@@ -1,11 +1,22 @@
 [package]
 name = "sheaf-app"
+description = "Desktop application"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "sheaf-app"
+path = "src/main.rs"
+
 [dependencies]
+sheaf-core.workspace = true
+eframe = { version = "0.33", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
+egui_extras = "0.33"
+egui_dock = "0.18"
+rfd = "0.15"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [lints]
 workspace = true

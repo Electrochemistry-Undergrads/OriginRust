@@ -16,12 +16,18 @@ pub struct Document {
     /// True when the project differs from what was last saved or loaded.
     pub dirty: bool,
     limit: usize,
+    /// Counts every change of the project, including undo and redo. Views
+    /// compare it with the value they last drew to know when to redraw.
+    revision: u64,
 }
 
 #[derive(Debug)]
 struct Step {
     label: String,
     project: Project,
+    /// Steps with the same non-zero token are merged into one (see
+    /// [`Document::apply_merging`]).
+    merge_token: u64,
 }
 
 impl Default for Document {
@@ -32,26 +38,55 @@ impl Default for Document {
 
 impl Document {
     pub fn new(project: Project) -> Self {
-        Document { project, undo: Vec::new(), redo: Vec::new(), dirty: false, limit: 100 }
+        Document { project, undo: Vec::new(), redo: Vec::new(), dirty: false, limit: 100, revision: 0 }
     }
 
     pub fn project(&self) -> &Project {
         &self.project
     }
 
+    /// A number that changes whenever the project changes.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Changes the project as one undoable step named `label`.
     /// If `change` returns an error the project is left as it was.
     pub fn edit<T, E>(&mut self, label: &str, change: impl FnOnce(&mut Project) -> Result<T, E>) -> Result<T, E> {
+        self.edit_with_token(label, 0, change)
+    }
+
+    /// Like [`Document::apply`], but consecutive changes made with the same
+    /// non-zero `token` become a single undo step. A dialog that previews
+    /// every change live uses one token for as long as it is open, so one
+    /// Undo reverts everything the dialog did.
+    pub fn apply_merging<T>(&mut self, label: &str, token: u64, change: impl FnOnce(&mut Project) -> T) -> T {
+        let result: Result<T, std::convert::Infallible> = self.edit_with_token(label, token, |p| Ok(change(p)));
+        match result {
+            Ok(v) => v,
+        }
+    }
+
+    fn edit_with_token<T, E>(
+        &mut self,
+        label: &str,
+        token: u64,
+        change: impl FnOnce(&mut Project) -> Result<T, E>,
+    ) -> Result<T, E> {
         let before = self.project.clone();
         match change(&mut self.project) {
             Ok(value) => {
                 if self.project != before {
-                    self.undo.push(Step { label: label.to_string(), project: before });
-                    if self.undo.len() > self.limit {
-                        self.undo.remove(0);
+                    let merge = token != 0 && self.undo.last().is_some_and(|s| s.merge_token == token);
+                    if !merge {
+                        self.undo.push(Step { label: label.to_string(), project: before, merge_token: token });
+                        if self.undo.len() > self.limit {
+                            self.undo.remove(0);
+                        }
                     }
                     self.redo.clear();
                     self.dirty = true;
+                    self.revision += 1;
                 }
                 Ok(value)
             }
@@ -83,16 +118,18 @@ impl Document {
     pub fn undo(&mut self) -> Option<String> {
         let step = self.undo.pop()?;
         let current = std::mem::replace(&mut self.project, step.project);
-        self.redo.push(Step { label: step.label.clone(), project: current });
+        self.redo.push(Step { label: step.label.clone(), project: current, merge_token: 0 });
         self.dirty = true;
+        self.revision += 1;
         Some(step.label)
     }
 
     pub fn redo(&mut self) -> Option<String> {
         let step = self.redo.pop()?;
         let current = std::mem::replace(&mut self.project, step.project);
-        self.undo.push(Step { label: step.label.clone(), project: current });
+        self.undo.push(Step { label: step.label.clone(), project: current, merge_token: 0 });
         self.dirty = true;
+        self.revision += 1;
         Some(step.label)
     }
 
@@ -102,6 +139,7 @@ impl Document {
         self.undo.clear();
         self.redo.clear();
         self.dirty = false;
+        self.revision += 1;
     }
 }
 
@@ -143,6 +181,22 @@ mod tests {
         doc.apply("Nothing", |_| ());
         assert!(doc.undo_label().is_none());
         assert!(!doc.dirty);
+    }
+
+    #[test]
+    fn merged_edits_undo_as_one_step() {
+        let mut doc = Document::new(Project::new());
+        doc.apply("Base", |p| p.add_workbook(""));
+        let r0 = doc.revision();
+        doc.apply_merging("Dialog", 7, |p| p.add_workbook("a"));
+        doc.apply_merging("Dialog", 7, |p| p.add_workbook("b"));
+        doc.apply_merging("Other dialog", 8, |p| p.add_workbook("c"));
+        assert_eq!(doc.project().windows.len(), 4);
+        assert_eq!(doc.revision(), r0 + 3);
+        doc.undo();
+        assert_eq!(doc.project().windows.len(), 3);
+        doc.undo();
+        assert_eq!(doc.project().windows.len(), 1, "both token-7 edits are reverted together");
     }
 
     #[test]

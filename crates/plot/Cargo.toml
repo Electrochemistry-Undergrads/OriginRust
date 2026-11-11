@@ -1,0 +1,25 @@
+[package]
+name = "sheaf-plot"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Turns a Sheaf graph and its data into SVG, PNG and PDF."
+
+[dependencies]
+sheaf-core = { workspace = true }
+thiserror = { workspace = true }
+# resvg/usvg 0.45 and fontdb 0.23 are the versions svg2pdf 0.13 is built on;
+# using the same ones keeps a single copy of each in the build.
+resvg = { version = "0.45", default-features = false, features = ["text"] }
+usvg = { version = "0.45", default-features = false, features = ["text"] }
+svg2pdf = "0.13"
+fontdb = "0.23"
+ttf-parser = "0.25"
+png = "0.18"
+
+[dev-dependencies]
+roxmltree = "0.20"
+
+[lints]
+workspace = true

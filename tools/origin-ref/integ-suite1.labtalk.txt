@@ -1,0 +1,63 @@
+// Reference run for integ1 (integrate). Checks: default outputs, absolute area, end-point baseline,
+// an index range, uneven X, descending X, missing values in x or y, and how the FWHM output
+// (integ1.dx) and the max height are defined.  Inputs are closed form (see each block), so the
+// Rust tests can regenerate them.  Every call names its output column so the layout is fixed;
+// results are read from the columns of Book1 by run-labtalk-data.ps1.
+newbook;
+// ---- block 1: A = x = 0..10 step 0.1 (101 pts), B = exp(-(x-5)^2/2) + 0.2 sin(3x) + 0.05 x
+col(A) = data(0, 10, 0.1);
+col(B) = exp(-(col(A)-5)^2/2) + 0.2*sin(3*col(A)) + 0.05*col(A);
+integ1 iy:=col(B) oy:=col(C);                       // C = cumulative (default options)
+double a1=integ1.area; double a1x1=integ1.x1; double a1x2=integ1.x2; double a1i1=integ1.i1; double a1i2=integ1.i2;
+double a1y0=integ1.y0; double a1x0=integ1.x0; double a1dx=integ1.dx;
+integ1 iy:=col(B) type:=abs oy:=col(D);              // D = cumulative, absolute type
+double a2=integ1.area;
+integ1 iy:=col(B) baseline:=1 oy:=col(E);            // E = cumulative with end-point baseline
+double a3=integ1.area; double a3y0=integ1.y0; double a3x0=integ1.x0; double a3dx=integ1.dx;
+integ1 iy:=col(B)[11:61] oy:=col(F);                 // F = cumulative of rows 11..61
+double a4=integ1.area; double a4x1=integ1.x1; double a4x2=integ1.x2; double a4i1=integ1.i1; double a4i2=integ1.i2;
+double a4y0=integ1.y0; double a4x0=integ1.x0; double a4dx=integ1.dx;
+// ---- block 2: G = x = t^2, t = 0..3 step 0.05 (61 pts); H = sin(x) - 0.3
+col(G) = data(0, 3, 0.05)^2;
+col(H) = sin(col(G)) - 0.3;
+integ1 iy:=(col(G),col(H)) oy:=col(I);
+double b1=integ1.area; double b1y0=integ1.y0; double b1x0=integ1.x0; double b1dx=integ1.dx;
+integ1 iy:=(col(G),col(H)) type:=abs oy:=col(J);
+double b2=integ1.area;
+integ1 iy:=(col(G),col(H)) baseline:=1 oy:=col(K);
+double b3=integ1.area;
+// ---- block 3: L = 10 - x (descending), M = same y as block 1
+col(L) = 10 - col(A);
+col(M) = col(B);
+integ1 iy:=(col(L),col(M)) oy:=col(N);
+double c1=integ1.area; double c1x1=integ1.x1; double c1x2=integ1.x2; double c1i1=integ1.i1; double c1i2=integ1.i2;
+double c1y0=integ1.y0; double c1x0=integ1.x0; double c1dx=integ1.dx;
+integ1 iy:=(col(L),col(M)) type:=abs oy:=col(O);
+double c2=integ1.area;
+// ---- block 4: P = y with row 5 missing; R = x with row 8 missing
+col(P) = col(B);
+col(P)[5] = 0/0;                                     // 0/0 gives a missing value
+integ1 iy:=(col(A),col(P)) oy:=col(Q);
+double d1=integ1.area; double d1i1=integ1.i1; double d1i2=integ1.i2;
+col(R) = col(A);
+col(R)[8] = 0/0;
+integ1 iy:=(col(R),col(B)) oy:=col(S);
+double d2=integ1.area; double d2i1=integ1.i1; double d2i2=integ1.i2;
+// ---- block 5: FWHM definition.  T = gaussian centred at 5 (sigma 1); U = T + 3;
+// V = asymmetric peak (narrow left, wide right); W = -T
+col(T) = exp(-(col(A)-5)^2/2);
+col(U) = 3 + col(T);
+col(V) = (col(A)<5)*exp(-(col(A)-5)^2/0.5) + (col(A)>=5)*exp(-(col(A)-5)^2/8);
+col(W) = -col(T);
+integ1 iy:=(col(A),col(T)) oy:=col(X);
+double e1=integ1.area; double e1y0=integ1.y0; double e1x0=integ1.x0; double e1dx=integ1.dx;
+integ1 iy:=(col(A),col(U)) oy:=col(Y);
+double e2=integ1.area; double e2y0=integ1.y0; double e2x0=integ1.x0; double e2dx=integ1.dx;
+integ1 iy:=(col(A),col(V)) oy:=col(Z);
+double e3=integ1.area; double e3y0=integ1.y0; double e3x0=integ1.x0; double e3dx=integ1.dx;
+integ1 iy:=(col(A),col(W)) oy:=col(AA);
+double e4=integ1.area; double e4y0=integ1.y0; double e4x0=integ1.x0; double e4dx=integ1.dx;
+integ1 iy:=(col(A),col(U)) baseline:=1 oy:=col(AB);
+double e5=integ1.area; double e5y0=integ1.y0; double e5x0=integ1.x0; double e5dx=integ1.dx;
+integ1 iy:=(col(A),col(V)) baseline:=1 oy:=col(AC);
+double e6=integ1.area; double e6y0=integ1.y0; double e6x0=integ1.x0; double e6dx=integ1.dx;

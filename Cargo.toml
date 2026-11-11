@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/calc", "crates/io", "crates/plot", "crates/cli", "crates/app"]
+members = ["crates/core", "crates/expr", "crates/calc", "crates/io", "crates/plot", "crates/cli", "crates/app"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ publish = false
 [workspace.dependencies]
 sheaf-core = { path = "crates/core" }
 sheaf-calc = { path = "crates/calc" }
+sheaf-expr = { path = "crates/expr" }
 sheaf-io = { path = "crates/io" }
 sheaf-plot = { path = "crates/plot" }
 serde = { version = "1", features = ["derive", "rc"] }

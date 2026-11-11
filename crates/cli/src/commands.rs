@@ -1,0 +1,341 @@
+//! What each subcommand does.
+
+use crate::args::*;
+use anyhow::{Context, Result, anyhow, bail};
+use sheaf_core::graph::LineStyle;
+use sheaf_core::project::Window;
+use sheaf_core::template::Template;
+use sheaf_core::{Color, ColumnId, Project, WindowId};
+use sheaf_io::ascii::{AsciiOptions, Delimiter};
+use sheaf_io::chi::ChiOptions;
+use sheaf_io::{ImportKind, Imported, project_file};
+use std::path::Path;
+
+pub fn run(cli: Cli) -> Result<()> {
+    match cli.command {
+        Command::Info(a) => info(a),
+        Command::Import(a) => import(a),
+        Command::Plot(a) => plot(a),
+        Command::Export(a) => export(a),
+        Command::ExportData(a) => export_data(a),
+    }
+}
+
+fn is_project(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(project_file::EXTENSION))
+}
+
+fn load_project(path: &Path) -> Result<Project> {
+    project_file::load(path).with_context(|| format!("could not open project '{}'", path.display()))
+}
+
+fn chi_options(r: &ReadOptions) -> ChiOptions {
+    ChiOptions {
+        split_scans: !r.no_split_scans,
+        add_milliamp: !r.no_milliamp,
+        add_charge: !r.no_charge,
+        invert_current: r.invert_current,
+    }
+}
+
+fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
+    let mut o = AsciiOptions::default();
+    if let Some(d) = &r.delimiter {
+        o.delimiter = match d.to_ascii_lowercase().as_str() {
+            "comma" | "," => Delimiter::Comma,
+            "tab" | "\\t" => Delimiter::Tab,
+            "semicolon" | ";" => Delimiter::Semicolon,
+            "space" | "whitespace" | " " => Delimiter::Whitespace,
+            other => {
+                let mut chars = other.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) => Delimiter::Other(c),
+                    _ => bail!("--delimiter must be comma, tab, semicolon, space or a single character, not '{d}'"),
+                }
+            }
+        };
+    }
+    o.header_lines = r.header_lines;
+    o.decimal_comma = r.decimal_comma;
+    Ok(o)
+}
+
+fn read_data_file(path: &Path, r: &ReadOptions) -> Result<Imported> {
+    let kind = match r.format {
+        Format::Auto => ImportKind::Auto,
+        Format::Chi => ImportKind::Chi,
+        Format::Ascii => ImportKind::Ascii,
+    };
+    let imported = sheaf_io::import_file(path, kind, &chi_options(r), &ascii_options(r)?)
+        .with_context(|| format!("could not import '{}'", path.display()))?;
+    for w in &imported.warnings {
+        eprintln!("warning: {w}");
+    }
+    Ok(imported)
+}
+
+fn describe(project: &Project) {
+    for w in &project.windows {
+        match w {
+            Window::Workbook(b) => {
+                println!("workbook {}", b.title());
+                for s in &b.sheets {
+                    println!("  sheet {} ({} columns, {} rows)", s.name, s.columns.len(), s.row_count());
+                    for c in &s.columns {
+                        let kind = if c.data.is_numeric() { "" } else { " text" };
+                        let mut label = c.long_name.clone();
+                        if !c.units.is_empty() {
+                            label.push_str(&format!(" ({})", c.units));
+                        }
+                        if !c.comments.is_empty() {
+                            label.push_str(&format!(" [{}]", c.comments.replace('\n', " / ")));
+                        }
+                        println!(
+                            "    {:<4} {:<5} {:>8} rows{}  {}",
+                            c.short_name,
+                            c.designation.tag(),
+                            c.len(),
+                            kind,
+                            label
+                        );
+                    }
+                }
+            }
+            Window::Graph(g) => {
+                let plots: usize = g.layers.iter().map(|l| l.plots.len()).sum();
+                println!(
+                    "graph {} ({} layer(s), {} plot(s), {:.2} x {:.2} in)",
+                    g.title(),
+                    g.layers.len(),
+                    plots,
+                    g.page.width_pt / 72.0,
+                    g.page.height_pt / 72.0
+                );
+            }
+        }
+    }
+}
+
+fn info(a: InfoArgs) -> Result<()> {
+    if is_project(&a.path) {
+        describe(&load_project(&a.path)?);
+        return Ok(());
+    }
+    let imported = read_data_file(&a.path, &a.read)?;
+    println!("format: {}", imported.format);
+    println!("suggested template: {}", imported.suggested_template.name());
+    for (k, v) in &imported.meta {
+        println!("  {k} = {v}");
+    }
+    let mut project = Project::new();
+    project.adopt_workbook(imported.workbook);
+    describe(&project);
+    Ok(())
+}
+
+fn import(a: ImportArgs) -> Result<()> {
+    let mut project = if a.append && a.output.exists() { load_project(&a.output)? } else { Project::new() };
+    for file in &a.files {
+        let imported = read_data_file(file, &a.read)?;
+        let template = imported.suggested_template;
+        let book = project.adopt_workbook(imported.workbook);
+        if a.plot {
+            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+            let ys = project.default_plot_columns(book, sheet, template);
+            if !ys.is_empty() {
+                project.plot_columns(template, &ys)?;
+            }
+        }
+        println!("imported {} as {}", file.display(), project.workbook(book).map(|b| b.name.as_str()).unwrap_or("?"));
+    }
+    project_file::save(&project, &a.output).with_context(|| format!("could not save '{}'", a.output.display()))?;
+    println!("saved {}", a.output.display());
+    Ok(())
+}
+
+/// Finds the Y columns named on the command line in one sheet.
+fn named_columns(project: &Project, book: WindowId, sheet: usize, names: &[String]) -> Result<Vec<ColumnId>> {
+    let ws = project
+        .workbook(book)
+        .and_then(|b| b.sheets.get(sheet))
+        .ok_or_else(|| anyhow!("the workbook has no such sheet"))?;
+    names
+        .iter()
+        .map(|n| {
+            ws.column_by_name(n.trim()).map(|c| c.id).ok_or_else(|| {
+                let have: Vec<&str> = ws.columns.iter().map(|c| c.short_name.as_str()).collect();
+                anyhow!("column '{}' was not found in sheet '{}' (columns: {})", n, ws.name, have.join(", "))
+            })
+        })
+        .collect()
+}
+
+fn pick_book(project: &Project, name: Option<&str>) -> Result<WindowId> {
+    match name {
+        Some(n) => match project.window_by_name(n) {
+            Some(Window::Workbook(b)) => Ok(b.id),
+            Some(_) => bail!("'{n}' is not a workbook"),
+            None => bail!("there is no workbook named '{n}'"),
+        },
+        None => project.workbooks().next().map(|b| b.id).ok_or_else(|| anyhow!("the project has no workbook")),
+    }
+}
+
+fn pick_sheet(project: &Project, book: WindowId, name: Option<&str>) -> Result<usize> {
+    let b = project.workbook(book).ok_or_else(|| anyhow!("workbook not found"))?;
+    match name {
+        Some(n) => b
+            .sheets
+            .iter()
+            .position(|s| s.name.eq_ignore_ascii_case(n))
+            .ok_or_else(|| anyhow!("workbook '{}' has no sheet named '{}'", b.name, n)),
+        None => Ok(b.active_sheet.min(b.sheets.len().saturating_sub(1))),
+    }
+}
+
+fn pick_graph(project: &Project, name: Option<&str>) -> Result<WindowId> {
+    match name {
+        Some(n) => match project.window_by_name(n) {
+            Some(Window::Graph(g)) => Ok(g.id),
+            Some(_) => bail!("'{n}' is not a graph"),
+            None => bail!("there is no graph named '{n}'"),
+        },
+        None => {
+            let mut graphs = project.graphs();
+            match (graphs.next(), graphs.next()) {
+                (Some(g), None) => Ok(g.id),
+                (None, _) => bail!("the project has no graph"),
+                _ => {
+                    let names: Vec<&str> = project.graphs().map(|g| g.name.as_str()).collect();
+                    bail!("the project has several graphs; choose one with --graph ({})", names.join(", "))
+                }
+            }
+        }
+    }
+}
+
+/// Applies the style options of the command line to a graph.
+fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<()> {
+    let colors: Vec<Color> =
+        s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
+    let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
+    if let Some(w) = s.width {
+        g.page.width_pt = w * 72.0;
+    }
+    if let Some(h) = s.height {
+        g.page.height_pt = h * 72.0;
+    }
+    let Some(layer) = g.layers.first_mut() else {
+        return Ok(());
+    };
+    if let Some(t) = &s.x_title {
+        layer.x_axis.title = Some(t.clone());
+    }
+    if let Some(t) = &s.y_title {
+        layer.y_axis.title = Some(t.clone());
+    }
+    layer.x_axis.min = s.x_min.or(layer.x_axis.min);
+    layer.x_axis.max = s.x_max.or(layer.x_axis.max);
+    layer.y_axis.min = s.y_min.or(layer.y_axis.min);
+    layer.y_axis.max = s.y_max.or(layer.y_axis.max);
+    layer.x_axis.major_step = s.x_step.or(layer.x_axis.major_step);
+    layer.y_axis.major_step = s.y_step.or(layer.y_axis.major_step);
+    if s.no_legend {
+        layer.legend.visible = false;
+    }
+    for (i, plot) in layer.plots.iter_mut().enumerate() {
+        if let Some(w) = s.line_width {
+            plot.line = LineStyle { width_pt: w, ..plot.line.clone() };
+        }
+        if let Some(c) = colors.get(i) {
+            plot.line.color = *c;
+            plot.symbol.color = *c;
+        }
+        if let Some(l) = s.labels.get(i) {
+            plot.label = Some(l.clone());
+        }
+    }
+    Ok(())
+}
+
+fn template_from(name: Option<&str>, fallback: Template) -> Result<Template> {
+    match name {
+        None => Ok(fallback),
+        Some(n) => Template::from_name(n).ok_or_else(|| {
+            let names: Vec<&str> = Template::ALL.iter().map(Template::name).collect();
+            anyhow!("unknown template '{}'; choose one of: {}", n, names.join(", "))
+        }),
+    }
+}
+
+fn plot(a: PlotArgs) -> Result<()> {
+    let (mut project, suggested) = if is_project(&a.input) {
+        (load_project(&a.input)?, Template::Line)
+    } else {
+        let imported = read_data_file(&a.input, &a.read)?;
+        let template = imported.suggested_template;
+        let mut p = Project::new();
+        p.adopt_workbook(imported.workbook);
+        (p, template)
+    };
+
+    let graph = if let Some(name) = &a.graph {
+        pick_graph(&project, Some(name))?
+    } else {
+        let template = template_from(a.template.as_deref(), suggested)?;
+        let book = pick_book(&project, a.book.as_deref())?;
+        let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
+        let ys = if a.y.is_empty() {
+            project.default_plot_columns(book, sheet, template)
+        } else {
+            named_columns(&project, book, sheet, &a.y)?
+        };
+        if ys.is_empty() {
+            bail!("there are no numeric Y columns to plot");
+        }
+        project.plot_columns(template, &ys)?
+    };
+    apply_style(&mut project, graph, &a.style)?;
+
+    sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
+        .with_context(|| format!("could not write '{}'", a.output.display()))?;
+    println!("wrote {}", a.output.display());
+    if let Some(path) = &a.save {
+        project_file::save(&project, path).with_context(|| format!("could not save '{}'", path.display()))?;
+        println!("saved {}", path.display());
+    }
+    Ok(())
+}
+
+fn export(a: ExportArgs) -> Result<()> {
+    let mut project = load_project(&a.project)?;
+    let graph = pick_graph(&project, a.graph.as_deref())?;
+    apply_style(&mut project, graph, &a.style)?;
+    sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
+        .with_context(|| format!("could not write '{}'", a.output.display()))?;
+    println!("wrote {}", a.output.display());
+    Ok(())
+}
+
+fn export_data(a: ExportDataArgs) -> Result<()> {
+    let project = load_project(&a.project)?;
+    let book = pick_book(&project, a.book.as_deref())?;
+    let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
+    let ws = &project.workbook(book).expect("picked above").sheets[sheet];
+    let tabs = a
+        .output
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("tsv") || e.eq_ignore_ascii_case("txt"));
+    let opts = sheaf_io::export::AsciiExportOptions {
+        delimiter: if tabs { '\t' } else { ',' },
+        ..sheaf_io::export::AsciiExportOptions::default()
+    };
+    let file =
+        std::fs::File::create(&a.output).with_context(|| format!("could not create '{}'", a.output.display()))?;
+    let mut out = std::io::BufWriter::new(file);
+    sheaf_io::export::write_delimited(ws, &mut out, &opts)
+        .with_context(|| format!("could not write '{}'", a.output.display()))?;
+    println!("wrote {}", a.output.display());
+    Ok(())
+}

@@ -1,0 +1,13 @@
+// Checks the plumbing used by the other reference scripts:
+// integ1 default outputs on y = x^2 (x = 0..10 step 0.1), reading a column back as text.
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = col(A)^2;
+integ1 iy:=col(B) oy:=col(C);
+double area = integ1.area;
+double x1 = integ1.x1; double x2 = integ1.x2; double i1 = integ1.i1; double i2 = integ1.i2;
+double y0 = integ1.y0; double x0 = integ1.x0; double dx = integ1.dx;
+double c1 = col(C)[1]; double c2 = col(C)[2]; double c101 = col(C)[101];
+double nn = wks.nRows;
+string s1$ = "";
+loop(i, 1, 101) { s1$ = "%(s1$)$(col(C)[i], .15g),"; }

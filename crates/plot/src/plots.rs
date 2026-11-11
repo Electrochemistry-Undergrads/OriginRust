@@ -1,0 +1,255 @@
+//! Drawing the data of one plot: lines, error bars and symbols (spec section 4).
+
+use crate::LayerGeometry;
+use crate::data::PlotData;
+use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
+use sheaf_core::graph::{Connect, LineStyle, SymbolShape, SymbolStyle};
+
+/// Points closer than this (in pt) to the last kept point are dropped.
+const DECIMATE_PT: f64 = 0.05;
+/// Pieces with more points than this are never drawn as splines.
+const SPLINE_MAX_POINTS: usize = 2000;
+
+/// The stroke of a data line.
+pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
+    let dash: Vec<f64> = line.dash.pattern().iter().map(|m| m * line.width_pt).collect();
+    let cap = if dash.is_empty() { Cap::Round } else { Cap::Butt };
+    Stroke { color: line.color, width: line.width_pt, dash, cap, join: Join::Round }
+}
+
+/// Appends the items of one plot to `out`.
+pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let plot = pd.plot;
+    if plot.kind.has_line() && plot.line.width_pt > 0.0 {
+        draw_line(out, pd, geom);
+    }
+    if pd.err.is_some() {
+        draw_error_bars(out, pd, geom);
+    }
+    if plot.kind.has_symbols() {
+        draw_symbols(out, pd, geom);
+    }
+}
+
+fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let stroke = line_stroke(&pd.plot.line);
+    let connect = pd.plot.line.connect;
+    let mut piece: Vec<(f64, f64)> = Vec::new();
+    let mut pending: Option<(f64, f64)> = None;
+    let flush = |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, out: &mut Vec<Item>| {
+        if let Some(p) = pending.take() {
+            piece.push(p);
+        }
+        if piece.len() >= 2 {
+            let mut d = String::with_capacity(piece.len() * 12);
+            polyline_path(&mut d, piece, connect);
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+        }
+        piece.clear();
+    };
+    for i in pd.start..pd.end {
+        match geom.checked_data_to_page(pd.x_at(i), pd.y[i]) {
+            Some(p) => match piece.last() {
+                None => piece.push(p),
+                Some(&(lx, ly)) => {
+                    let (dx, dy) = (p.0 - lx, p.1 - ly);
+                    if dx * dx + dy * dy < DECIMATE_PT * DECIMATE_PT {
+                        pending = Some(p);
+                    } else {
+                        pending = None;
+                        piece.push(p);
+                    }
+                }
+            },
+            None => flush(&mut piece, &mut pending, out),
+        }
+    }
+    flush(&mut piece, &mut pending, out);
+}
+
+/// Writes one piece as path data.
+fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
+    let (x0, y0) = pts[0];
+    move_to(d, x0, y0);
+    match connect {
+        Connect::Straight => {
+            for &(x, y) in &pts[1..] {
+                line_to(d, x, y);
+            }
+        }
+        Connect::StepHorizontal => {
+            for w in pts.windows(2) {
+                line_to(d, w[1].0, w[0].1);
+                line_to(d, w[1].0, w[1].1);
+            }
+        }
+        Connect::StepVertical => {
+            for w in pts.windows(2) {
+                line_to(d, w[0].0, w[1].1);
+                line_to(d, w[1].0, w[1].1);
+            }
+        }
+        Connect::Spline if pts.len() > 2 && pts.len() <= SPLINE_MAX_POINTS => {
+            let n = pts.len();
+            for i in 0..n - 1 {
+                let p0 = pts[i.saturating_sub(1)];
+                let (p1, p2) = (pts[i], pts[i + 1]);
+                let p3 = pts[(i + 2).min(n - 1)];
+                d.push('C');
+                let coords = [
+                    p1.0 + (p2.0 - p0.0) / 6.0,
+                    p1.1 + (p2.1 - p0.1) / 6.0,
+                    p2.0 - (p3.0 - p1.0) / 6.0,
+                    p2.1 - (p3.1 - p1.1) / 6.0,
+                    p2.0,
+                    p2.1,
+                ];
+                for (k, c) in coords.iter().enumerate() {
+                    if k > 0 {
+                        d.push(if k % 2 == 0 { ' ' } else { ',' });
+                    }
+                    push_num(d, *c);
+                }
+            }
+        }
+        Connect::Spline => {
+            for &(x, y) in &pts[1..] {
+                line_to(d, x, y);
+            }
+        }
+    }
+}
+
+/// True when the point is within `margin` of the frame.
+fn near_frame(geom: &LayerGeometry, p: (f64, f64), margin: f64) -> bool {
+    let f = geom.frame;
+    p.0 >= f.x - margin && p.0 <= f.x + f.w + margin && p.1 >= f.y - margin && p.1 <= f.y + f.h + margin
+}
+
+fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let plot = pd.plot;
+    let color = if plot.kind.has_line() { plot.line.color } else { plot.symbol.color };
+    let half_cap = 0.6 * plot.symbol.size_pt;
+    let width = (plot.line.width_pt / 2.0).max(0.5);
+    let mut d = String::new();
+    for i in pd.start..pd.end {
+        let (x, y, e) = (pd.x_at(i), pd.y[i], pd.err_at(i));
+        if !e.is_finite() {
+            continue;
+        }
+        let (Some(top), Some(bottom)) = (geom.checked_data_to_page(x, y + e), geom.checked_data_to_page(x, y - e))
+        else {
+            continue;
+        };
+        if !(near_frame(geom, top, half_cap + width) || near_frame(geom, bottom, half_cap + width)) {
+            continue;
+        }
+        move_to(&mut d, top.0, top.1);
+        line_to(&mut d, bottom.0, bottom.1);
+        move_to(&mut d, top.0 - half_cap, top.1);
+        line_to(&mut d, top.0 + half_cap, top.1);
+        move_to(&mut d, bottom.0 - half_cap, bottom.1);
+        line_to(&mut d, bottom.0 + half_cap, bottom.1);
+    }
+    if !d.is_empty() {
+        out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, width)) });
+    }
+}
+
+fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let sym = &pd.plot.symbol;
+    let every = sym.every.max(1) as usize;
+    let mut d = String::new();
+    for i in (pd.start..pd.end).step_by(every) {
+        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y[i]) else { continue };
+        if near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
+            symbol_path(&mut d, sym.shape, p.0, p.1, sym.size_pt);
+        }
+    }
+    if d.is_empty() {
+        return;
+    }
+    out.push(symbol_item(d, sym));
+}
+
+/// The scene item for symbol path data written by [`symbol_path`].
+pub(crate) fn symbol_item(d: String, sym: &SymbolStyle) -> Item {
+    let stroke_only = matches!(sym.shape, SymbolShape::Plus | SymbolShape::Cross | SymbolShape::Star);
+    let stroke =
+        Stroke { color: sym.color, width: sym.edge_width_pt, dash: Vec::new(), cap: Cap::Butt, join: Join::Miter };
+    if sym.filled && !stroke_only {
+        Item::Path { d, fill: Some(sym.color), stroke: None }
+    } else {
+        Item::Path { d, fill: None, stroke: Some(stroke) }
+    }
+}
+
+/// Appends the outline of one symbol, centred on `(cx, cy)`, `size` wide.
+pub(crate) fn symbol_path(d: &mut String, shape: SymbolShape, cx: f64, cy: f64, size: f64) {
+    let r = size / 2.0;
+    let close = |d: &mut String| d.push('Z');
+    match shape {
+        SymbolShape::Square => {
+            move_to(d, cx - r, cy - r);
+            line_to(d, cx + r, cy - r);
+            line_to(d, cx + r, cy + r);
+            line_to(d, cx - r, cy + r);
+            close(d);
+        }
+        SymbolShape::Circle => {
+            move_to(d, cx - r, cy);
+            for (x, y) in [(cx + r, cy), (cx - r, cy)] {
+                d.push('A');
+                push_num(d, r);
+                d.push(' ');
+                push_num(d, r);
+                d.push_str(" 0 1 0 ");
+                push_num(d, x);
+                d.push(' ');
+                push_num(d, y);
+            }
+            close(d);
+        }
+        SymbolShape::TriangleUp | SymbolShape::TriangleDown => {
+            // Equilateral triangle, centred on its centroid.
+            let h = size * 0.866;
+            let s = if shape == SymbolShape::TriangleUp { 1.0 } else { -1.0 };
+            move_to(d, cx, cy - s * 2.0 * h / 3.0);
+            line_to(d, cx + r, cy + s * h / 3.0);
+            line_to(d, cx - r, cy + s * h / 3.0);
+            close(d);
+        }
+        SymbolShape::Diamond => {
+            move_to(d, cx, cy - r);
+            line_to(d, cx + r, cy);
+            line_to(d, cx, cy + r);
+            line_to(d, cx - r, cy);
+            close(d);
+        }
+        SymbolShape::Plus => plus(d, cx, cy, r),
+        SymbolShape::Cross => cross(d, cx, cy, r),
+        SymbolShape::Star => {
+            plus(d, cx, cy, r);
+            cross(d, cx, cy, r);
+        }
+    }
+}
+
+fn plus(d: &mut String, cx: f64, cy: f64, r: f64) {
+    move_to(d, cx - r, cy);
+    line_to(d, cx + r, cy);
+    move_to(d, cx, cy - r);
+    line_to(d, cx, cy + r);
+}
+
+fn cross(d: &mut String, cx: f64, cy: f64, r: f64) {
+    move_to(d, cx - r, cy - r);
+    line_to(d, cx + r, cy + r);
+    move_to(d, cx - r, cy + r);
+    line_to(d, cx + r, cy - r);
+}
+
+#[cfg(test)]
+pub(crate) fn polyline_path_for_test(d: &mut String, pts: &[(f64, f64)]) {
+    polyline_path(d, pts, Connect::Spline);
+}

@@ -1,0 +1,326 @@
+//! Recursive-descent parser.
+//!
+//! ```text
+//! ternary  := or ( '?' ternary ':' ternary )?
+//! or       := and ( '||' and )*
+//! and      := compare ( '&&' compare )*
+//! compare  := additive ( ('=='|'!='|'<'|'<='|'>'|'>=') additive )*
+//! additive := multiplicative ( ('+'|'-') multiplicative )*
+//! multiplicative := unary ( ('*'|'/'|'%') unary )*
+//! unary    := ('-'|'+'|'!') unary | power
+//! power    := postfix ( '^' unary )?          -- right associative, exponent may be signed
+//! postfix  := primary ( '[' ternary ']' )*
+//! primary  := number | name | name '(' args ')' | col-reference | '(' ternary ')'
+//! ```
+
+use crate::ast::{ColumnRef, Kind, Node, UnOp};
+use crate::error::ExprError;
+use crate::funcs::{BinOp, Resolved, resolve};
+use crate::lexer::{Tok, Token, lex};
+
+/// How deeply parentheses, signs and `?:` may nest before the parser gives up.
+const MAX_NESTING: u32 = 64;
+
+struct Parser {
+    toks: Vec<Token>,
+    at: usize,
+    nesting: u32,
+}
+
+pub(crate) fn parse_root(src: &str) -> Result<Node, ExprError> {
+    let toks = lex(src)?;
+    if toks.len() == 1 {
+        return Err(ExprError::at(0, "the expression is empty"));
+    }
+    let mut p = Parser {
+        toks,
+        at: 0,
+        nesting: 0,
+    };
+    let node = p.ternary()?;
+    let t = p.peek();
+    if t.tok != Tok::End {
+        let msg = match t.tok {
+            Tok::RParen => "unmatched ')'".to_string(),
+            _ => format!("unexpected {}; expected an operator or the end of the expression", t.tok.describe()),
+        };
+        return Err(ExprError::at(t.pos, msg));
+    }
+    Ok(node)
+}
+
+impl Parser {
+    fn peek(&self) -> &Token {
+        &self.toks[self.at.min(self.toks.len() - 1)]
+    }
+
+    fn peek_tok(&self) -> &Tok {
+        &self.peek().tok
+    }
+
+    fn advance(&mut self) -> Token {
+        let t = self.peek().clone();
+        if self.at < self.toks.len() - 1 {
+            self.at += 1;
+        }
+        t
+    }
+
+    fn eat(&mut self, tok: &Tok) -> bool {
+        if self.peek_tok() == tok {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn expect(&mut self, tok: Tok, what: &str) -> Result<(), ExprError> {
+        if self.eat(&tok) {
+            Ok(())
+        } else {
+            Err(ExprError::at(
+                self.peek().pos,
+                format!("expected {} {what}", tok.describe()),
+            ))
+        }
+    }
+
+    fn enter(&mut self) -> Result<(), ExprError> {
+        self.nesting += 1;
+        if self.nesting > MAX_NESTING {
+            return Err(ExprError::at(
+                self.peek().pos,
+                "expression is nested too deeply",
+            ));
+        }
+        Ok(())
+    }
+
+    fn leave(&mut self) {
+        self.nesting -= 1;
+    }
+
+    fn ternary(&mut self) -> Result<Node, ExprError> {
+        self.enter()?;
+        let r = self.ternary_inner();
+        self.leave();
+        r
+    }
+
+    fn ternary_inner(&mut self) -> Result<Node, ExprError> {
+        let cond = self.or()?;
+        let q = self.peek().pos;
+        if self.eat(&Tok::Question) {
+            let a = self.ternary()?;
+            self.expect(Tok::Colon, "in the '?' conditional expression")?;
+            let b = self.ternary()?;
+            return Node::new(Kind::Cond(Box::new(cond), Box::new(a), Box::new(b)), q);
+        }
+        Ok(cond)
+    }
+
+    fn binary_level(
+        &mut self,
+        next: fn(&mut Parser) -> Result<Node, ExprError>,
+        ops: &[(Tok, BinOp)],
+    ) -> Result<Node, ExprError> {
+        let mut lhs = next(self)?;
+        loop {
+            let Some(&(_, op)) = ops.iter().find(|(t, _)| t == self.peek_tok()) else {
+                return Ok(lhs);
+            };
+            let pos = self.advance().pos;
+            let rhs = next(self)?;
+            lhs = Node::new(Kind::Binary(op, Box::new(lhs), Box::new(rhs)), pos)?;
+        }
+    }
+
+    fn or(&mut self) -> Result<Node, ExprError> {
+        self.binary_level(Parser::and, &[(Tok::OrOr, BinOp::Or)])
+    }
+
+    fn and(&mut self) -> Result<Node, ExprError> {
+        self.binary_level(Parser::compare, &[(Tok::AndAnd, BinOp::And)])
+    }
+
+    fn compare(&mut self) -> Result<Node, ExprError> {
+        self.binary_level(
+            Parser::additive,
+            &[
+                (Tok::EqEq, BinOp::Eq),
+                (Tok::Ne, BinOp::Ne),
+                (Tok::Lt, BinOp::Lt),
+                (Tok::Le, BinOp::Le),
+                (Tok::Gt, BinOp::Gt),
+                (Tok::Ge, BinOp::Ge),
+            ],
+        )
+    }
+
+    fn additive(&mut self) -> Result<Node, ExprError> {
+        self.binary_level(
+            Parser::multiplicative,
+            &[(Tok::Plus, BinOp::Add), (Tok::Minus, BinOp::Sub)],
+        )
+    }
+
+    fn multiplicative(&mut self) -> Result<Node, ExprError> {
+        self.binary_level(
+            Parser::unary,
+            &[
+                (Tok::Star, BinOp::Mul),
+                (Tok::Slash, BinOp::Div),
+                (Tok::Percent, BinOp::Rem),
+            ],
+        )
+    }
+
+    fn unary(&mut self) -> Result<Node, ExprError> {
+        let op = match self.peek_tok() {
+            Tok::Minus => Some(UnOp::Neg),
+            Tok::Plus => Some(UnOp::Plus),
+            Tok::Not => Some(UnOp::Not),
+            _ => None,
+        };
+        let Some(op) = op else {
+            return self.power();
+        };
+        let pos = self.advance().pos;
+        self.enter()?;
+        let operand = self.unary();
+        self.leave();
+        Node::new(Kind::Unary(op, Box::new(operand?)), pos)
+    }
+
+    fn power(&mut self) -> Result<Node, ExprError> {
+        let base = self.postfix()?;
+        if matches!(self.peek_tok(), Tok::Caret) {
+            let pos = self.advance().pos;
+            self.enter()?;
+            let exp = self.unary();
+            self.leave();
+            return Node::new(Kind::Binary(BinOp::Pow, Box::new(base), Box::new(exp?)), pos);
+        }
+        Ok(base)
+    }
+
+    fn postfix(&mut self) -> Result<Node, ExprError> {
+        let mut node = self.primary()?;
+        while matches!(self.peek_tok(), Tok::LBracket) {
+            let pos = self.advance().pos;
+            let idx = self.ternary()?;
+            self.expect(Tok::RBracket, "after the row index")?;
+            node = Node::new(
+                Kind::Index {
+                    base: Box::new(node),
+                    idx: Box::new(idx),
+                },
+                pos,
+            )?;
+        }
+        Ok(node)
+    }
+
+    fn primary(&mut self) -> Result<Node, ExprError> {
+        let t = self.advance();
+        match t.tok {
+            Tok::Num(v) => Node::new(Kind::Num(v), t.pos),
+            Tok::Ident(name) => {
+                if matches!(self.peek_tok(), Tok::LParen) {
+                    self.advance();
+                    self.call(name, t.pos)
+                } else if name.eq_ignore_ascii_case("pi") {
+                    Node::new(Kind::Num(std::f64::consts::PI), t.pos)
+                } else {
+                    Node::new(Kind::Var { name, pos: t.pos }, t.pos)
+                }
+            }
+            Tok::LParen => {
+                let inner = self.ternary()?;
+                self.expect(Tok::RParen, &format!("to close the '(' at position {}", t.pos))?;
+                Ok(inner)
+            }
+            Tok::Str(_) => Err(ExprError::at(
+                t.pos,
+                "text strings can only be used inside col(\"...\")",
+            )),
+            Tok::End => Err(ExprError::at(
+                t.pos,
+                "unexpected end of expression; expected a value",
+            )),
+            other => Err(ExprError::at(
+                t.pos,
+                format!("expected a value, found {}", other.describe()),
+            )),
+        }
+    }
+
+    /// Parses after `name (`.
+    fn call(&mut self, name: String, pos: usize) -> Result<Node, ExprError> {
+        if name.eq_ignore_ascii_case("col") || name.eq_ignore_ascii_case("wcol") {
+            return self.column_ref(pos);
+        }
+        let mut args = Vec::new();
+        if !self.eat(&Tok::RParen) {
+            loop {
+                args.push(self.ternary()?);
+                if self.eat(&Tok::Comma) {
+                    continue;
+                }
+                self.expect(Tok::RParen, "after argument list")?;
+                break;
+            }
+        }
+        match resolve(&name, args.len()) {
+            Resolved::Found(func, canonical) => Node::new(
+                Kind::Call {
+                    func,
+                    name: canonical,
+                    args,
+                    pos,
+                },
+                pos,
+            ),
+            Resolved::Unknown => Err(ExprError::at(pos, format!("unknown function '{name}'"))),
+            Resolved::BadArity { name, expected } => Err(ExprError::at(
+                pos,
+                format!(
+                    "function '{name}' takes {expected}, but {} {} given",
+                    args.len(),
+                    if args.len() == 1 { "was" } else { "were" }
+                ),
+            )),
+        }
+    }
+
+    /// Parses after `col (`: a short name, a quoted long name or a 1-based number.
+    fn column_ref(&mut self, pos: usize) -> Result<Node, ExprError> {
+        let t = self.advance();
+        let r = match t.tok {
+            Tok::Ident(s) => ColumnRef::Short(s),
+            Tok::Str(s) => ColumnRef::Long(s),
+            Tok::Num(v) => {
+                if v >= 1.0 && v.fract() == 0.0 && v < 1e9 {
+                    ColumnRef::Index(v as usize)
+                } else {
+                    return Err(ExprError::at(
+                        t.pos,
+                        "a column number must be a whole number, 1 or more",
+                    ));
+                }
+            }
+            other => {
+                return Err(ExprError::at(
+                    t.pos,
+                    format!(
+                        "expected a column name, \"long name\" or number inside col(), found {}",
+                        other.describe()
+                    ),
+                ));
+            }
+        };
+        self.expect(Tok::RParen, "after the column name")?;
+        Node::new(Kind::Col { r, pos }, pos)
+    }
+}

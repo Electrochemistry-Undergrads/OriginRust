@@ -1,0 +1,6 @@
+// y = x^2 at x = 1, 2, 3, 4: the trapezoid area is 21.5.
+newbook;
+col(A) = {1, 2, 3, 4};
+col(B) = col(A)^2;
+integ1 iy:=col(B) type:=math;
+double area = integ1.area;

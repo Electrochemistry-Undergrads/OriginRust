@@ -540,3 +540,63 @@ fn decimation_keeps_first_and_last_points() {
     let path = paths_in(with_class(&d, "plots")[0])[0].attribute("d").unwrap().to_string();
     assert_eq!(path.matches('L').count(), 1, "{path}");
 }
+
+// ----- golden images -------------------------------------------------------
+
+/// Compares the SVG of a built-in template with the stored one in
+/// `tests/golden/`. Text is measured with [`FixedMetrics`] and the data uses
+/// only plain arithmetic, so the output does not depend on installed fonts or
+/// on the platform's math library. After an intended change of the rendering,
+/// run the tests once with the environment variable `SHEAF_UPDATE_GOLDEN=1`
+/// to rewrite the stored files, and look at them before committing.
+fn check_golden(name: &str, template: Template) {
+    let n = 41;
+    let x: Vec<f64> = (0..n).map(|i| -0.2 + 0.03 * i as f64).collect();
+    let curve = |amp: f64| -> Vec<f64> {
+        x.iter()
+            .map(|v| {
+                let t = (v + 0.2) / 1.2;
+                amp * (t * (1.0 - t) * (1.0 - 2.0 * t) * 20.0)
+            })
+            .collect()
+    };
+    let (p, g) = project(template, x.clone(), vec![curve(30.0), curve(21.5), curve(12.25)]);
+    let svg = svg_of(&p, g);
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("golden").join(format!("{name}.svg"));
+    if std::env::var_os("SHEAF_UPDATE_GOLDEN").is_some() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, &svg).unwrap();
+        return;
+    }
+    let stored = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}; run with SHEAF_UPDATE_GOLDEN=1 to create it", path.display()));
+    // Git may check the file out with Windows line ends.
+    let stored = stored.replace("\r\n", "\n");
+    assert!(
+        stored == svg,
+        "the rendering of the '{name}' template changed; if that is intended, run the tests with \
+         SHEAF_UPDATE_GOLDEN=1 and look at {}",
+        path.display()
+    );
+}
+
+#[test]
+fn golden_line_template() {
+    check_golden("line", Template::Line);
+}
+
+#[test]
+fn golden_scatter_template() {
+    check_golden("scatter", Template::Scatter);
+}
+
+#[test]
+fn golden_line_symbol_template() {
+    check_golden("line-symbol", Template::LineSymbol);
+}
+
+#[test]
+fn golden_cv_template() {
+    check_golden("cv", Template::CyclicVoltammetry);
+}

@@ -63,7 +63,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             .striped(false)
             .resizable(true)
             .cell_layout(Layout::left_to_right(Align::Center))
-            .column(TableColumn::exact(58.0))
+            .column(TableColumn::exact(80.0))
             .min_scrolled_height(0.0);
         for _ in &sheet.columns {
             table = table.column(TableColumn::initial(104.0).at_least(40.0).clip(true));
@@ -74,8 +74,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         table
             .header(HEADER_HEIGHT, |mut header| {
                 header.col(|ui| {
+                    ui.add_space(6.0);
                     ui.vertical(|ui| {
-                        ui.add_space(20.0);
+                        ui.spacing_mut().item_spacing.y = 1.0;
+                        ui.add_space(19.0);
                         ui.weak("Long Name");
                         ui.weak("Units");
                         ui.weak("Comments");
@@ -86,7 +88,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     header.col(|ui| {
                         let rect = ui.max_rect();
                         ui.painter().rect_filled(rect, 0.0, if selected { selection_fill } else { header_fill });
+                        ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, grid_stroke);
+                        ui.painter().vline(rect.right() - 0.5, rect.y_range(), grid_stroke);
                         let response = ui.interact(rect, ui.id().with(("col_header", column.id.0)), Sense::click());
+                        ui.add_space(4.0);
                         ui.vertical(|ui| {
                             ui.spacing_mut().item_spacing.y = 1.0;
                             let tag = column.designation.tag();
@@ -137,8 +142,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             if selected {
                                 ui.painter().rect_filled(rect, 0.0, selection_fill);
                             }
-                            ui.painter().line_segment([rect.left_bottom(), rect.right_bottom()], grid_stroke);
-                            ui.painter().line_segment([rect.right_top(), rect.right_bottom()], grid_stroke);
+                            let (right, bottom) = (rect.right() - 0.5, rect.bottom() - 0.5);
+                            ui.painter().hline(rect.x_range(), bottom, grid_stroke);
+                            ui.painter().vline(right, rect.y_range(), grid_stroke);
 
                             let is_editing = matches!(&state.editing, Some((c, er, _)) if *c == column.id && *er == r);
                             if is_editing {

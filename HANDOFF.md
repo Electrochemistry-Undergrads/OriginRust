@@ -1,73 +1,45 @@
 # Handoff
 
-Last updated: 2026-11-11, fourth session, start of work.
+Last updated: 2026-11-11, fifth session (resumed after a usage limit cut the fourth one off).
 
 ## Where things stand
 
-- **The repository is on GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is
-  pushed; CI ran for the first time on this push.
-- **Milestone 2 (first vertical slice)** works. The independent review found 11 real problems
-  (listed below); they are being fixed. Then the milestone is tagged `m2-first-slice`.
-- **Milestone 3 (analysis)**: everything except the FFT filter (smoothing) and cubic B-spline
-  interpolation is built and checked against Origin.
-- **Milestone 4 (fitting)**: `crates/fit` has the shared report types (`report.rs`), t and F
-  probabilities (`dist.rs`, tested) and empty modules `linear`, `nlsf`, `library`, `fdf`.
-- **Milestone 5 (Origin projects)**: workbooks and column data are read. Tools to compare the
-  reader with Origin cell by cell exist (`b3f97be`) but have not been run to the end.
+- **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed.
+- **Milestone 2 (first vertical slice)** is done and tagged `m2-first-slice`. Two items still
+  need the owner: a hands-on try of the app, and real CH Instruments files.
+- **Milestone 3 (analysis)**: all tools except the FFT filter (smoothing) and cubic B-spline
+  interpolation are built, checked against Origin, and in the app and `sheaf analyze`. All 16
+  confirmed findings of the independent review are fixed (`adb1414`, `2cefe20`, `2aa5b37`).
+- **Milestone 4 (fitting)**: on branches, not yet on `main` (see below).
+- **Milestone 5 (Origin projects)**: workbooks and column data are read; the cell-by-cell check
+  against Origin and graph reading are on a branch.
 
-All checks pass at `b3f97be`: `cargo fmt --check`, `cargo clippy --workspace --all-targets` (no
-warnings) and `cargo test --workspace` (about 270 tests).
+All checks pass on `main` at `2aa5b37`: `cargo fmt --check`, `cargo clippy --workspace
+--all-targets` (no warnings), `cargo test --workspace` (about 286 tests).
 
-## In progress (background agents, each in its own git worktree under `.claude/worktrees/`)
+## In progress: four agent streams, each in its own git worktree
 
-Each agent commits on its own `worktree-...` branch; nothing reaches `main` until it is reviewed
-and merged. If a session ends before they finish, list the branches with `git branch` and the
-worktrees with `git worktree list`; merge what is complete, delete the rest.
+The fourth session's agents were cut off. Their unfinished work was saved as `wip:` commits on
+their branches, `main` was merged into each branch, and the streams were restarted. Nothing
+reaches `main` until the lead has reviewed and merged it.
 
-1. Import fixes (`crates/io/src/ascii.rs`): a text cell such as `n.d.` in the first rows turned
-   data rows into header lines; `NA`, `--`, `n.d.` are not read as missing; quoted CSV fields
-   with line breaks split a record.
-2. App and document fixes: Enter in a cell opens the next cell empty and clicking away erases it;
-   opening a cell and leaving it rounds the stored number; the import dialog re-reads the whole
-   file every frame; an absurd row range in Set Column Values aborts the app; adding a plot
-   recolours all plots; a workbook without sheets panics.
-3. Figure and command-line fixes: the Y axis title is cut off when tick labels are wide; unclear
-   errors for a zero size or reversed axis limits.
-4. FFT filter smoothing and cubic B-spline interpolation (`crates/calc`).
-5. Linear and polynomial fits (`crates/fit/src/linear.rs`, `docs/spec/fitting-linear.md`).
-6. Nonlinear fitting, built-in functions and `.FDF` import (`nlsf.rs`, `library.rs`, `fdf.rs`,
-   `docs/spec/fitting.md`).
-7. Origin project reader: cell-by-cell comparison with Origin on the owner's five projects, then
-   reading basic graphs (`crates/io/src/opj`, `docs/spec/opj-format.md`).
+| Stream | Branch | Worktree | State when restarted |
+|---|---|---|---|
+| FFT filter smoothing, cubic B-spline interpolation | `stream-calc-fft-bspline` | `.claude/worktrees/calc-fft-bspline` | Started fresh from `main`. Earlier Origin runs on our inputs are in `re-workspace/scratch/calc/` (`p4`, `q2`, `r3`, `r4`). |
+| Linear and polynomial fits | `worktree-wf_7107af90-7f2-5` | `.claude/worktrees/wf_7107af90-7f2-5` | Draft `crates/fit/src/linear.rs` compiles; no tests, no Origin comparison. |
+| Nonlinear fitting, function library, `.FDF` import | `worktree-wf_7107af90-7f2-6` | `.claude/worktrees/wf_7107af90-7f2-6` | Engine, 206 built-in functions and `.FDF` import committed with 20 passing tests; not yet compared with Origin; spec draft. |
+| Origin project reader: cell check, then graphs | `worktree-wf_7107af90-7f2-7` | `.claude/worktrees/wf_7107af90-7f2-7` | Reader keeps the raw graph blocks; nothing interprets them; the cell check has not run. |
 
-The independent review of milestone 3 (analysis) at `d27d87f` is finished: five reviewers, each
-finding re-checked by a second one; 16 of 40 findings confirmed, to be fixed after the merges
-above (they touch files the agents are editing):
-
-- Medium: Integrate, Statistics (and Peaks) result tables take every row's unit from the first
-  chosen column; choosing the A and mA columns of a CH Instruments import labels the mA row's
-  area A·V (factor 1000). Needs a unit per row (`ResultTable`, the result sheet, the CLI table).
-- Medium: `sheaf analyze sort|filter` accept `--rows`, `--x-range`, `--y` and ignore them.
-- Low: Set Column Values on part of a text column loses the text outside the range; the
-  smoothing derivative with an unusable window (points 1, or order above the polynomial order)
-  gives an empty column without an error; normalize divide by 0 writes infinity; per-row tools
-  do not name the columns they added and the `--x-range` error shows a row-range example.
-- Fixed in `adb1414`: the expression-language findings (missing values in `^` and `round`, `sd`
-  of infinite data, stack overflow on long formulas), the -0 sum, the absolute-area underflow,
-  the fixture comment and the empty assertion.
-- Also worth doing (rejected as "intended", but data loss): an in-place filter that keeps no row
-  empties the sheet without a warning.
-
-Done in this session so far: the GitHub repository (`dd86f77`), ADR 0006 on fit results
-(`d27d87f`), tag `m1-foundations`, first CI run passed.
+If a session ends before they finish: `git worktree list` and `git log main..<branch>` show
+what each did. Merge what is complete and reviewed; otherwise restart the stream from its branch.
 
 ## Exact next step
 
-1. Merge the agents' branches after their reviews; run the full checks; push.
-2. Tag `m2-first-slice` when stream 1 to 3 are merged.
-3. Put fitting into the app and the command-line program (`sheaf fit`, a Fit window, the fitted
-   curve on the graph, a report sheet) following `docs/adr/0005-analysis-results.md`.
-4. Independent review of milestone 3; tag `m3-analysis`.
+1. When the streams finish: review each branch, merge one at a time into `main`, run the full
+   checks after each merge, push.
+2. Put fitting into the app and the command-line program (`sheaf fit`, a Fit window, the fitted
+   curve on the graph, report sheets) following `docs/adr/0006-fit-results.md`.
+3. Tag `m3-analysis` once the FFT filter and B-spline are merged.
 
 ## Commands that verify the current state
 
@@ -99,10 +71,8 @@ computer to develop and check the Origin project reader.
 ## Local-only resources
 
 - `re-workspace/scratch/` holds scratch scripts, raw dumps, synthetic test files and screenshots.
-  `scratch/calc/p1..p4, q1..q2` are Origin outputs of the FFT filter and B-spline interpolation
-  on our own inputs (from the previous session); `scratch/opj/ours/*.opj.txt` are our reader's
-  listings of the owner's projects.
 - The owner's `.opj` files are in the repo root (git-ignored).
 - No Ghidra project and no saved REA evidence bundle exist.
-- Origin can be driven through COM automation with `tools/origin-ref/run-labtalk.ps1`.
+- Origin can be driven through COM automation with `tools/origin-ref/run-labtalk.ps1` (it takes a
+  system-wide lock so only one Origin runs at a time).
 - Git identity is set for this repository only (`UlanS1`, GitHub no-reply address).

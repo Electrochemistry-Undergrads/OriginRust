@@ -40,10 +40,26 @@ worktrees with `git worktree list`; merge what is complete, delete the rest.
 7. Origin project reader: cell-by-cell comparison with Origin on the owner's five projects, then
    reading basic graphs (`crates/io/src/opj`, `docs/spec/opj-format.md`).
 
-A second workflow reviews milestone 3 (analysis) at `d27d87f` from five angles (numerics, the
-analysis entry point, the command-line program, the app's analysis windows, the expression
-language); a second reviewer re-checks every finding. It changes no files. Its confirmed findings
-are fixed after the merges above.
+The independent review of milestone 3 (analysis) at `d27d87f` is finished: five reviewers, each
+finding re-checked by a second one; 16 of 40 findings confirmed, to be fixed after the merges
+above (they touch files the agents are editing):
+
+- Medium: Integrate, Statistics (and Peaks) result tables take every row's unit from the first
+  chosen column; choosing the A and mA columns of a CH Instruments import labels the mA row's
+  area A·V (factor 1000). Needs a unit per row (`ResultTable`, the result sheet, the CLI table).
+- Medium: `sheaf analyze sort|filter` accept `--rows`, `--x-range`, `--y` and ignore them.
+- Low: Set Column Values on part of a text column loses the text outside the range; the
+  smoothing derivative with an unusable window (points 1, or order above the polynomial order)
+  gives an empty column without an error; normalize divide by 0 writes infinity; `stats` sum of an
+  empty column is -0; absolute-area sign test multiplies (underflows below 1e-154); per-row tools
+  do not name the columns they added and the `--x-range` error shows a row-range example.
+- Low, expression language: `^`/`pow` loses missing values (`na()^0` gives 1); `sd` of data with
+  infinity gives 0; `round(x, missing)` ignores the missing digits; a chain of about 200 operators
+  or 56 nested calls overflows the 1 MB stack in debug builds.
+- Low, tests: the comment in `tools/origin-ref/interp-suite1.labtalk.txt` says 35 points (it is
+  33); one assertion in `crates/calc/tests/baseline.rs` (lines 176-179) checks nothing.
+- Also worth doing (rejected as "intended", but data loss): an in-place filter that keeps no row
+  empties the sheet without a warning.
 
 Done in this session so far: the GitHub repository (`dd86f77`), ADR 0006 on fit results
 (`d27d87f`), tag `m1-foundations`, first CI run passed.

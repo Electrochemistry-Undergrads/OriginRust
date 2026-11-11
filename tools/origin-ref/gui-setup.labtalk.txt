@@ -1,0 +1,16 @@
+// A small project of our own data, to look at Origin's interface with: one workbook with
+// long names, units and comments, and one line graph made from it.
+newbook;
+wks.ncols = 3;
+col(A) = data(0, 10, 0.1);
+col(B) = sin(col(A));
+col(C) = cos(col(A)) * 0.5;
+col(A)[L]$ = "Time";
+col(A)[U]$ = "s";
+col(B)[L]$ = "Signal";
+col(B)[U]$ = "mA";
+col(B)[C]$ = "Scan 1";
+col(C)[L]$ = "Signal";
+col(C)[U]$ = "mA";
+col(C)[C]$ = "Scan 2";
+plotxy iy:=(1,2:3) plot:=200;

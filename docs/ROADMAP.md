@@ -15,8 +15,8 @@ publication figures), P1 is common Origin use, P2 is later.
 - [x] Specs from the study of the installed Origin: UI command map, fit functions and FDF format,
       X-Function index, text import, workbook model, graphing
 - [x] `docs/spec/feature-inventory.md` with P0/P1/P2 tags
-- [ ] CI: one light job (format, lint, test) with caching (written; has never run because nothing
-      is pushed yet)
+- [x] CI: one light job (format, lint, test) with caching; first run passed on 2026-11-11
+      (Linux runner, about 7 minutes; the desktop app crate is left out)
 - [x] Origin can be driven by COM automation to produce reference numbers (`tools/origin-ref/`)
 
 ## Milestone 2: first vertical slice (P0 end to end)

@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/calc", "crates/io", "crates/plot", "crates/cli", "crates/app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[workspace.dependencies]
+sheaf-core = { path = "crates/core" }
+sheaf-calc = { path = "crates/calc" }
+sheaf-io = { path = "crates/io" }
+sheaf-plot = { path = "crates/plot" }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"

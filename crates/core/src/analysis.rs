@@ -288,7 +288,7 @@ impl Input<'_> {
     }
 }
 
-fn column_label(c: &Column) -> String {
+pub(crate) fn column_label(c: &Column) -> String {
     let detail = match (c.long_name.is_empty(), c.comments.lines().next().unwrap_or_default()) {
         (true, "") => String::new(),
         (true, comment) => comment.to_string(),
@@ -325,7 +325,7 @@ fn unit_ratio(y: &str, x: &str, order: usize) -> String {
     }
 }
 
-fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> Result<(usize, usize), AnalysisError> {
+pub(crate) fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> Result<(usize, usize), AnalysisError> {
     match rows {
         RowRange::All => Ok((0, n - 1)),
         RowRange::Rows(from, to) => {
@@ -356,7 +356,7 @@ fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> Result<(usi
 }
 
 /// A sheet name that the workbook does not use yet: `prefix` followed by the smallest free number.
-fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
+pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
     (1..)
         .map(|n| format!("{prefix}{n}"))
         .find(|name| !sheets.iter().any(|s| s.name.eq_ignore_ascii_case(name)))

@@ -3155,6 +3155,7 @@ dependencies = [
  "serde_json",
  "sheaf-calc",
  "sheaf-expr",
+ "sheaf-fit",
  "thiserror 2.0.21",
 ]
 

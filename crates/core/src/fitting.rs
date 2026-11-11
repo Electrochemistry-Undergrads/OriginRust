@@ -588,9 +588,33 @@ impl Project {
     }
 }
 
-/// The names of the built-in fit functions with their category, for menus and `sheaf fit --list`.
-pub fn builtin_functions() -> Vec<sheaf_fit::library::FunctionInfo> {
+pub use sheaf_fit::library::FunctionInfo;
+
+/// The built-in fit functions with their category, parameters and formula, for menus and
+/// `sheaf fit --list`.
+pub fn builtin_functions() -> Vec<FunctionInfo> {
     sheaf_fit::library::list()
+}
+
+/// The parameter names of a model, in the order the report lists them. For an `.FDF` model the
+/// text is parsed; a file that cannot be used gives an error that says why.
+pub fn model_parameters(model: &FitModel) -> Result<Vec<String>, FitError> {
+    Ok(match model {
+        FitModel::Linear => vec!["Intercept".into(), "Slope".into()],
+        FitModel::Polynomial { order } => {
+            std::iter::once("Intercept".to_string()).chain((1..=*order).map(|k| format!("B{k}"))).collect()
+        }
+        FitModel::BuiltIn(name) => sheaf_fit::library::get(name)
+            .ok_or_else(|| FitError::BadFunction(format!("there is no built-in fit function named '{name}'")))?
+            .params
+            .into_iter()
+            .map(|p| p.name)
+            .collect(),
+        FitModel::Formula { params, .. } => params.clone(),
+        FitModel::Fdf(text) => {
+            sheaf_fit::fdf::parse_fdf(text)?.to_fit_function()?.params.into_iter().map(|p| p.name).collect()
+        }
+    })
 }
 
 /// Turns the request's weighting into the engines' form.

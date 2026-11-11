@@ -125,6 +125,13 @@ needs both limits: with only one fixed limit on the wrong side of the data, the 
 other limit becomes the fixed one plus 1). Equal limits are rejected by the command-line program.
 Previously reversed limits silently drew a one-unit-wide axis, which is why this is explicit.
 
+Reversal also works on a log axis and with the symmetric-about-zero range (both limits fixed): the
+axis is resolved as if the limits were in order and then flipped. Two finite limits whose span
+overflows (for example 1e308 and -1e308) cannot be drawn; the renderer ignores both limits and uses
+the automatic range, and the command-line program refuses them. The command-line program also
+accepts a page width or height only from 0.1 to 100 inches. A single fixed limit that leaves the
+data outside the axis is drawn as asked (as Origin does); no warning is given.
+
 Text metrics: width from the font's advance widths; ascent 0.72 × size and descent 0.21 × size
 are used for vertical placement regardless of the font, so that layout does not depend on which
 font file is installed. The SVG `y` of a text element is its baseline.

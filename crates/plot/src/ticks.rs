@@ -125,6 +125,17 @@ fn clean(v: f64) -> f64 {
 /// `data_min_max` is the range of the finite data on this axis (positive
 /// values only for a log axis); `None` means there is no data.
 pub fn resolve_axis(axis: &Axis, data_min_max: Option<(f64, f64)>) -> ResolvedAxis {
+    // Two finite limits so far apart that their span overflows cannot be drawn: ignore them.
+    if let (Some(a), Some(b)) = (axis.min, axis.max)
+        && a.is_finite()
+        && b.is_finite()
+        && !(b - a).is_finite()
+    {
+        let mut open = axis.clone();
+        open.min = None;
+        open.max = None;
+        return resolve_axis(&open, data_min_max);
+    }
     // Both limits fixed with the lower one above the upper one: a reversed axis.
     // Resolve it with the limits swapped and mark it.
     if let (Some(a), Some(b)) = (axis.min, axis.max) {
@@ -490,6 +501,48 @@ mod tests {
         a.major_step = Some(10.0);
         let r = resolve_axis(&a, Some((-30.0, 33.55)));
         assert_eq!((r.min, r.max), (-40.0, 40.0));
+    }
+
+    #[test]
+    fn limits_with_an_overflowing_span_are_ignored() {
+        let mut a = axis();
+        a.min = Some(1e308);
+        a.max = Some(-1e308);
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert!(!r.reversed);
+        assert_eq!((r.min, r.max), (0.0, 10.0));
+        assert!(!r.major.is_empty() && r.labels.len() == r.major.len());
+    }
+
+    #[test]
+    fn reversed_symmetric_and_log_axes() {
+        // Symmetric about zero with both limits fixed behaves like the forward axis, flipped.
+        let mut a = axis();
+        a.auto_range = AutoRange::SymmetricZero;
+        a.min = Some(0.6);
+        a.max = Some(-0.2);
+        let r = resolve_axis(&a, Some((-0.2, 0.6)));
+        let mut f = a.clone();
+        f.min = Some(-0.2);
+        f.max = Some(0.6);
+        let fwd = resolve_axis(&f, Some((-0.2, 0.6)));
+        assert!(r.reversed && !fwd.reversed);
+        assert_eq!((r.min, r.max, &r.major), (fwd.min, fwd.max, &fwd.major));
+        assert!(r.to_unit(r.max).abs() < 1e-12 && (r.to_unit(r.min) - 1.0).abs() < 1e-12);
+
+        // Log axis: 1000 to 1 runs from the right decade to the left one.
+        let mut l = axis();
+        l.scale = ScaleKind::Log10;
+        l.min = Some(1000.0);
+        l.max = Some(1.0);
+        let r = resolve_axis(&l, Some((1.0, 1000.0)));
+        assert!(r.reversed);
+        assert_eq!((r.min, r.max), (1.0, 1000.0));
+        assert_eq!(r.major, vec![1.0, 10.0, 100.0, 1000.0]);
+        assert!(r.to_unit(1000.0).abs() < 1e-12);
+        assert!((r.to_unit(1.0) - 1.0).abs() < 1e-12);
+        assert!((r.to_unit(10.0) - 2.0 / 3.0).abs() < 1e-12);
+        assert!((r.from_unit(r.to_unit(31.6)) - 31.6).abs() < 1e-9);
     }
 
     #[test]

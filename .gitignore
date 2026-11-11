@@ -1,0 +1,35 @@
+# Build output
+target/
+
+# Separate clone with its own git history (reverse-engineering tool)
+rea/
+
+# Copy of the owner's Origin settings: never commit
+OriginLab/
+
+# Local-only reverse-engineering material (Ghidra projects, evidence, scratch)
+re-workspace/
+
+# OriginLab file formats: never commit OriginLab assets or the owner's projects
+*.opj
+*.opju
+*.otp
+*.otw
+*.ogs
+*.oxf
+*.ogw
+*.ogg
+*.fdf
+*.oif
+
+# Secrets, logs, machine-specific files
+.env
+*.log
+.claude/settings.local.json
+register-rea-desktop.mjs
+
+# Editor and OS noise
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

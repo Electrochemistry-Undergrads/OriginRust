@@ -87,7 +87,7 @@ pub struct SheafApp {
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
         cc.egui_ctx.set_theme(egui::Theme::Light);
-        cc.egui_ctx.style_mut(|s| {
+        cc.egui_ctx.all_styles_mut(|s| {
             s.spacing.item_spacing = egui::vec2(8.0, 5.0);
             s.interaction.selectable_labels = false;
         });

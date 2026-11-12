@@ -312,10 +312,11 @@ fn grouped_shape(t: &str, sep: char) -> Option<(usize, Option<char>)> {
 
 /// Settles the number style of a file from the options and, for `Thousands::Auto`, from the cells:
 /// a separator is adopted only when some number shows it unambiguously (`1,234,567`, `1,234.5`,
-/// `1.234,5`, `1 234`, `1'234`); a lone `1,234` proves nothing. Evidence for two different
+/// `1.234,5`, `1 234`, `1'234`); a lone `1,234` proves nothing, except in a comma-delimited file,
+/// where a field holding it was quoted and so cannot be a decimal comma. Evidence for two different
 /// separators cancels out. Returns the decimal-comma flag, the separator, and whether it was found
 /// by detection.
-fn resolve_style(opts: &AsciiOptions, rows: &[(usize, Vec<String>)]) -> (bool, Thousands, bool) {
+fn resolve_style(opts: &AsciiOptions, rows: &[(usize, Vec<String>)], delimiter: Delimiter) -> (bool, Thousands, bool) {
     if opts.thousands != Thousands::Auto {
         let comma = opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space);
         return (comma, opts.thousands, false);
@@ -323,7 +324,7 @@ fn resolve_style(opts: &AsciiOptions, rows: &[(usize, Vec<String>)]) -> (bool, T
     let (mut comma, mut dot, mut space, mut apos, mut comma_decimal) = (false, false, false, false, false);
     for t in rows.iter().take(5000).flat_map(|(_, f)| f.iter()).map(|c| c.trim()).filter(|t| t.len() >= 5) {
         if let Some((g, dec)) = grouped_shape(t, ',')
-            && (g >= 2 || dec == Some('.'))
+            && (g >= 2 || dec == Some('.') || delimiter == Delimiter::Comma)
         {
             comma = true;
         }
@@ -642,7 +643,7 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
         .filter(|(_, l)| !l.trim().is_empty())
         .map(|(i, l)| (i, split_fields(l, delimiter)))
         .collect();
-    let (decimal_comma, thousands, thousands_found) = resolve_style(opts, &all);
+    let (decimal_comma, thousands, thousands_found) = resolve_style(opts, &all, delimiter);
     let ns = NumStyle::new(decimal_comma, thousands);
 
     let (header_lines, start) = match opts.header_lines {
@@ -1203,6 +1204,19 @@ mod tests {
     fn two_kinds_of_evidence_cancel_out() {
         let imp = parse("x\ty\n1\t1,234.5\n2\t1.234,5\n3\t7\n");
         assert_eq!(imp.detected.thousands, Thousands::Off);
+    }
+
+    #[test]
+    fn lone_quoted_grouped_values_in_a_comma_file_are_numbers() {
+        let imp = parse(
+            "a,b
+\"1,234\",\"2,345\"
+\"3,456\",\"1,000\"
+",
+        );
+        assert_eq!(imp.detected.thousands, Thousands::Comma);
+        assert_eq!(col(&imp, 0).numeric().unwrap(), &[1234.0, 3456.0]);
+        assert_eq!(col(&imp, 1).numeric().unwrap(), &[2345.0, 1000.0]);
     }
 
     #[test]

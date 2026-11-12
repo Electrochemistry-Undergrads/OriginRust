@@ -160,3 +160,49 @@ fn run(origin_start: bool) {
         )
     );
 }
+
+/// A user-defined function typed as a formula gives the same fit as the built-in function of the
+/// same equation: here Gauss, written out, against Origin's report for the built-in.
+#[test]
+fn user_defined_formula_matches_origin_builtin() {
+    use sheaf_fit::nlsf::FitFunction;
+    let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/origin_nlsf.json")).unwrap();
+    let cases: Vec<Value> = serde_json::from_str(&text).unwrap();
+    let c = cases.iter().find(|c| c["name"] == "gauss").unwrap();
+    let mut f = FitFunction::from_formula(
+        "User defined Gauss",
+        "y = y0 + (A/(w*sqrt(pi/2)))*exp(-2*((x-xc)/w)^2)",
+        &["y0", "xc", "w", "A"],
+    )
+    .unwrap();
+    for (k, v) in c["origin_initial"].as_object().unwrap() {
+        f = f.with_initial(k, num(v));
+    }
+    let r = fit(&f, &vec_of(&c["x"]), &vec_of(&c["y"]), &FitOptions::default()).unwrap();
+    assert_eq!(r.stats.iterations.unwrap() as u64, c["origin_iterations"].as_u64().unwrap());
+    for p in c["params_origin"].as_array().unwrap() {
+        let mine = r.param(p["name"].as_str().unwrap()).unwrap();
+        close("user Gauss value", mine.value, num(&p["value"]), PARAM_TOL);
+        close("user Gauss SE", mine.std_error, num(&p["se"]), STAT_TOL);
+    }
+    close("user Gauss RSS", r.stats.rss, num(&c["stats"]["rss"]), STAT_TOL);
+    let failures = FAILURES.with(|f| f.borrow().clone());
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn user_defined_formula_with_fixed_and_bounded_parameters() {
+    use sheaf_fit::nlsf::FitFunction;
+    let x: Vec<f64> = (1..=30).map(|i| i as f64 * 0.3).collect();
+    let y: Vec<f64> = x.iter().map(|x| 1.5 + 4.0 * (-x / 2.0).exp()).collect();
+    let f = FitFunction::from_formula("U", "y0 + A*exp(-x/t)", &["y0", "A", "t"])
+        .unwrap()
+        .with_fixed("y0", 1.5)
+        .with_bounds("t", Some(0.5), Some(10.0));
+    let r = fit(&f, &x, &y, &FitOptions::default()).unwrap();
+    assert!((r.param("A").unwrap().value - 4.0).abs() < 1e-6);
+    assert!((r.param("t").unwrap().value - 2.0).abs() < 1e-6);
+    assert!(r.param("y0").unwrap().fixed);
+    assert_eq!(r.stats.dof, 28);
+    assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+}

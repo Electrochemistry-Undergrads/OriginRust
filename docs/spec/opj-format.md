@@ -840,6 +840,13 @@ Origin's own files, the writer leaves out the stored layer information, plot gro
 of the project, and Origin still opens the files. A systematic removal of single blocks to find the
 smallest set that opens was not done for graphs; the whole set above is kept.
 
+**Frame and extreme ranges [obs].** A layer frame with no width, a negative corner or a size beyond the page
+loads in Origin 2016 but exports a blank picture, so the writer replaces it by a default frame (0.15, 0.12,
+0.78, 0.76 of the page) and warns. A log axis over data from 1e-300 to 1e300 came out in Origin with a limit
+range (about 1e269 to 1e281 drawn) that does not cover the data; the writer gives the limits it computes and
+does not warn. The cause (writer or Origin's own limit) was not traced, and such data is outside the
+range any real project holds.
+
 **Verification.** Round trip: `cargo test -p sheaf-io` writes graphs, reads them with this crate's
 reader and compares the models (all plot kinds, shapes, dashes, connections, log axes, automatic ranges,
 error bars, text X, two layers, warnings; damaged copies of written files never make the reader panic).
@@ -860,7 +867,7 @@ the station names from the text column, because the reader does not read a text 
 a legend icon for straight lines, symbols and columns but not for spline curves; the same graph with
 straight lines had icons [obs]; the cause was not found. (3) Origin writes tick labels as plain decimals
 (0.000025) where Sheaf uses 2.5x10^-5; when the frame leaves too little room, Origin cuts the Y title off at
-the page edge (seen in the current against time graph), and the model has no number format to avoid it.
+the page edge (seen in the current against time graph), and the model's tick number format (decimal, scientific) is not written, so the writer warns and Origin's decimal labels stay.
 (4) Origin's column bars are wider than Sheaf's. (5) Sheaf's picture of a read-back file has no grid lines,
 since the reader skips them; Origin shows them in its default style. (6) Origin's legend of a column plot has
 a filled box icon and a frame; the reader keeps neither.

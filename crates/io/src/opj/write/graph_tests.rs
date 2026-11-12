@@ -361,6 +361,20 @@ fn what_the_file_cannot_hold_is_named() {
 }
 
 #[test]
+fn a_frame_outside_the_page_is_replaced_and_named() {
+    let mut p = source();
+    graph_with(&mut p, Template::LineSymbol, &[(0, 1)], |g| {
+        g.name = "Edge".into();
+        g.layers[0].frame = Frame { left: -1.0, top: 5.0, width: 0.0, height: 100.0 };
+    });
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.join(" | ").contains("layer frame"), "{warnings:?}");
+    let f = imp.graphs[0].layers[0].frame;
+    assert!(f.width > 0.0 && f.height > 0.0 && f.left >= 0.0 && f.left + f.width <= 1.0 + 1e-6, "{f:?}");
+    assert!(!warnings.join(" | ").contains("position could not be read"), "{warnings:?}");
+}
+
+#[test]
 fn a_graph_without_plots_and_a_second_graph_read_back_in_order() {
     let mut p = source();
     p.add_graph(Template::Line);

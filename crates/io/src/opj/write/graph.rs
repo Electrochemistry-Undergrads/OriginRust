@@ -210,7 +210,7 @@ impl Writer {
         }
 
         // frame and axes
-        let frame = layer.frame;
+        let frame = sane_frame(layer.frame, notes);
         let left = unit_u16(frame.left * f64::from(page.0) / UNITS_PER_INCH * 72.0);
         let top = unit_u16(frame.top * f64::from(page.1) / UNITS_PER_INCH * 72.0);
         let right = unit_u16((frame.left + frame.width) * f64::from(page.0) / UNITS_PER_INCH * 72.0);
@@ -582,6 +582,24 @@ fn data_ranges(project: &Project, layer: &Layer, plots: &[&Plot]) -> (Option<(f6
         }
     }
     (x, y)
+}
+
+/// A frame that lies inside the page. Origin loads a frame with no width, a negative corner or a
+/// size beyond the page but draws a blank picture, so such a frame is replaced and named in a warning.
+fn sane_frame(f: sheaf_core::graph::Frame, notes: &mut Vec<String>) -> sheaf_core::graph::Frame {
+    use sheaf_core::graph::Frame;
+    let ok = [f.left, f.top, f.width, f.height].iter().all(|v| v.is_finite())
+        && f.left >= 0.0
+        && f.top >= 0.0
+        && f.width >= 0.01
+        && f.height >= 0.01
+        && f.left + f.width <= 1.0 + 1e-9
+        && f.top + f.height <= 1.0 + 1e-9;
+    if ok {
+        return f;
+    }
+    notes.push("a layer frame that does not lie inside the page was replaced by Origin's default frame".into());
+    Frame { left: 0.15, top: 0.12, width: 0.78, height: 0.76 }
 }
 
 /// The limits that go in the layer header: the fixed ones, and for an automatic limit one that

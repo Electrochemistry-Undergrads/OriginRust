@@ -27,7 +27,7 @@ By priority alone: 103 rows are P0, 86 are P1 and 42 are P2. The P1 and P2 rows 
 Reading the counts: the P0 rows are mostly present but often only partly (61 of 103 are partial). The 14 missing P0 rows are the real holes. The main ones are .opj saving, toolbars and the Origin look, copy and paste of cells, date and time columns, recalculation of column formulas, Double-Y graphs, offset and waterfall plots, per-peak integration with the Peak Analyzer, subtracting a reference curve, simple curve math, graph gadgets and analysis from a graph, and the shared analysis dialog frame.
 
 Cross-cutting findings:
-- `Column.formula` is stored but never re-run. The CHI import writes `col*1000` formulas that are one-time values. Origin recalculates, so this is a behaviour difference that affects many rows.
+- Column formulas now recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
 - Analysis and fit results are static sheets, not linked to their source data.
 - The core model holds several layers per graph, but the app edits only the first.
 - There is no .opj writer. `crates/io/src/opj` only reads.
@@ -112,7 +112,7 @@ Cross-cutting findings:
 | Multiple sheets per book | tabs menu | tabs switch only; analysis adds result sheets | ◐ | cannot add, rename, move, delete a sheet | P0 |
 | Set Column Values | Ctrl+Q | dialog with formula, rows from and to | ◐ | no Ctrl+Q, no function picker | P0 |
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
-| Recalculation (None, Auto, Manual) | Set Column Values | formula text stored, never re-run | ✗ | no recalculation, no lock icon | P0 |
+| Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
 | Simple math on curves | Analysis > Mathematics > Simple Math | only by formula | ✗ | same X only; no dialog | P0 |
 | Row filter | Column > Filter | Filter Rows, in place or new sheet | ◐ | removes or copies, not a live hidden filter | P1 |
 | Masking | Column > Mask | none | ✗ | model has no mask; .opj reader skips it | P1 |

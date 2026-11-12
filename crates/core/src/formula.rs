@@ -4,11 +4,12 @@
 //! The expression language is in the `sheaf-expr` crate and described in
 //! `docs/spec/expression-language.md`. This module connects it to worksheets.
 
-use crate::column::{Column, ColumnData};
+use crate::column::{Column, ColumnData, FormulaState, RecalcMode};
 use crate::ids::ColumnId;
 use crate::project::Project;
 use crate::worksheet::Worksheet;
 use sheaf_expr::{ColumnRef, Expr, ExprError, Host};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ops::Range;
 
 /// The most rows a formula may fill; a larger end row is refused instead of allocating that much.
@@ -27,6 +28,15 @@ pub enum FormulaError {
          numbers; set values on all its rows to make it numeric, or use another column"
     )]
     TextOutsideRange(String),
+    #[error(
+        "this formula would make the column depend on itself ({0}); a column that recalculates \
+         cannot read a column that reads it"
+    )]
+    Cycle(String),
+    #[error("column {0} has no formula that recalculates")]
+    NotRecalculating(String),
+    #[error("{0}")]
+    Broken(String),
     #[error("{0}")]
     Expr(#[from] ExprError),
 }
@@ -85,8 +95,241 @@ pub(crate) fn eval_on_sheet(expr: &Expr, sheet: &Worksheet, rows: usize) -> Resu
     expr.eval_rows(&SheetHost { sheet }, rows)
 }
 
+/// The columns of the sheet that a formula reads, or the first reference that matches no column.
+fn resolve_deps(expr: &Expr, sheet: &Worksheet) -> Result<Vec<ColumnId>, ColumnRef> {
+    let host = SheetHost { sheet };
+    let mut out = Vec::new();
+    for r in expr.columns() {
+        let id = host.find(&r).ok_or(r)?.id;
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    Ok(out)
+}
+
+/// The new data of `target` after its formula filled `range`. Rows outside the range keep their
+/// values. Checks the limits and the text rule of [`Project::set_column_values`].
+fn compute_fill(
+    sheet: &Worksheet,
+    target: &Column,
+    expr: &Expr,
+    range: Range<usize>,
+) -> Result<ColumnData, FormulaError> {
+    if range.is_empty() {
+        return Err(FormulaError::NoRows);
+    }
+    if range.end > MAX_FORMULA_ROWS {
+        return Err(FormulaError::TooManyRows(range.end));
+    }
+    if let Some(text) = target.text() {
+        let outside = text.iter().enumerate().any(|(i, t)| !range.contains(&i) && !t.trim().is_empty());
+        if outside {
+            return Err(FormulaError::TextOutsideRange(target.short_name.clone()));
+        }
+    }
+    let computed = expr.eval_rows(&SheetHost { sheet }, range.end)?;
+    if range.start == 0 && range.end >= target.len() {
+        return Ok(ColumnData::numeric(computed));
+    }
+    let mut values: Vec<f64> = target.numeric().map(<[f64]>::to_vec).unwrap_or_default();
+    if values.len() < range.end {
+        values.resize(range.end, f64::NAN);
+    }
+    values[range.clone()].copy_from_slice(&computed[range]);
+    Ok(ColumnData::numeric(values))
+}
+
+/// Looks for a chain of recalculating columns that leads from the columns `deps` back to
+/// `target`. Returns the chain, starting and ending with `target`.
+fn find_cycle(sheet: &Worksheet, target: ColumnId, deps: &[ColumnId]) -> Option<Vec<ColumnId>> {
+    let mut parent: HashMap<ColumnId, ColumnId> = HashMap::new();
+    let mut queue = VecDeque::new();
+    for d in deps {
+        if *d == target {
+            return Some(vec![target, target]);
+        }
+        if parent.insert(*d, target).is_none() {
+            queue.push_back(*d);
+        }
+    }
+    while let Some(id) = queue.pop_front() {
+        let Some(c) = sheet.column(id).filter(|c| c.is_locked()) else {
+            continue;
+        };
+        let Some(expr) = c.formula.as_deref().and_then(|f| Expr::parse(f).ok()) else {
+            continue;
+        };
+        let Ok(next) = resolve_deps(&expr, sheet) else {
+            continue;
+        };
+        for n in next {
+            if n == target {
+                let mut chain = vec![id];
+                let mut cur = id;
+                while let Some(&p) = parent.get(&cur) {
+                    if p == target {
+                        break;
+                    }
+                    chain.push(p);
+                    cur = p;
+                }
+                chain.reverse();
+                let mut path = vec![target];
+                path.extend(chain);
+                path.push(target);
+                return Some(path);
+            }
+            if parent.insert(n, id).is_none() {
+                queue.push_back(n);
+            }
+        }
+    }
+    None
+}
+
+/// A recalculating column that could not be brought up to date, and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecalcProblem {
+    pub column: ColumnId,
+    pub message: String,
+}
+
+struct FormulaNode {
+    idx: usize,
+    id: ColumnId,
+    deps: Result<Vec<ColumnId>, String>,
+    expr: Option<Expr>,
+}
+
+/// Brings the recalculating columns of one sheet up to date after the columns in `changed` were
+/// modified. `force` lists columns to recalculate even when they are Manual.
+///
+/// Columns run in dependency order: an Auto column runs when something it reads is in the dirty
+/// set (the changed columns plus every column recalculated so far), a Manual column is marked
+/// pending instead. A column that cannot run (a column it reads is missing, the formula does not
+/// parse, a circular chain) is marked broken and keeps its old values.
+pub(crate) fn recalc_sheet(
+    ws: &mut Worksheet,
+    changed: &HashSet<ColumnId>,
+    force: &HashSet<ColumnId>,
+) -> Vec<RecalcProblem> {
+    let mut problems = Vec::new();
+    let nodes: Vec<FormulaNode> = ws
+        .columns
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.is_locked())
+        .map(|(idx, c)| {
+            let source = c.formula.as_deref().unwrap_or_default();
+            match Expr::parse(source) {
+                Err(e) => {
+                    FormulaNode { idx, id: c.id, deps: Err(format!("the formula is not valid: {e}")), expr: None }
+                }
+                Ok(expr) => {
+                    let deps = resolve_deps(&expr, ws).map_err(|r| format!("it reads {r}, which is not in the sheet"));
+                    FormulaNode { idx, id: c.id, deps, expr: Some(expr) }
+                }
+            }
+        })
+        .collect();
+    if nodes.is_empty() {
+        return problems;
+    }
+
+    // Dependency order (Kahn). Nodes left over take part in a circular chain.
+    let position: HashMap<ColumnId, usize> = nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
+    let mut indegree = vec![0usize; nodes.len()];
+    let mut readers: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
+    for (j, n) in nodes.iter().enumerate() {
+        if let Ok(deps) = &n.deps {
+            for d in deps {
+                if let Some(&i) = position.get(d) {
+                    indegree[j] += 1;
+                    readers[i].push(j);
+                }
+            }
+        }
+    }
+    let mut order: Vec<usize> = (0..nodes.len()).filter(|&j| indegree[j] == 0).collect();
+    let mut head = 0;
+    while head < order.len() {
+        let i = order[head];
+        head += 1;
+        for &j in &readers[i] {
+            indegree[j] -= 1;
+            if indegree[j] == 0 {
+                order.push(j);
+            }
+        }
+    }
+    let cyclic: Vec<usize> = (0..nodes.len()).filter(|&j| indegree[j] > 0).collect();
+
+    let mut dirty = changed.clone();
+    for &j in &order {
+        let node = &nodes[j];
+        let (mode, state, formula_rows) = {
+            let c = &ws.columns[node.idx];
+            (c.recalc, c.formula_state, c.formula_rows.clone())
+        };
+        let deps = match &node.deps {
+            Ok(d) => d,
+            Err(why) => {
+                let short = ws.columns[node.idx].short_name.clone();
+                problems.push(RecalcProblem { column: node.id, message: format!("column {short}: {why}") });
+                ws.columns[node.idx].formula_state = FormulaState::Broken;
+                continue;
+            }
+        };
+        let forced = force.contains(&node.id);
+        let needs = forced || state == FormulaState::Broken || deps.iter().any(|d| dirty.contains(d));
+        if !needs {
+            continue;
+        }
+        if mode == RecalcMode::Manual && !forced {
+            ws.columns[node.idx].formula_state = FormulaState::Pending;
+            continue;
+        }
+        let range = formula_rows.unwrap_or_else(|| {
+            let rows = deps.iter().filter_map(|d| ws.column(*d)).map(Column::len).max().unwrap_or(0);
+            0..rows
+        });
+        if range.is_empty() {
+            ws.columns[node.idx].formula_state = FormulaState::Current;
+            continue;
+        }
+        let expr = node.expr.as_ref().expect("a node with resolved columns has a parsed formula");
+        match compute_fill(ws, &ws.columns[node.idx], expr, range) {
+            Ok(data) => {
+                let c = &mut ws.columns[node.idx];
+                if c.data != data {
+                    c.data = data;
+                }
+                c.formula_state = FormulaState::Current;
+                dirty.insert(node.id);
+            }
+            Err(e) => {
+                let c = &mut ws.columns[node.idx];
+                c.formula_state = FormulaState::Broken;
+                problems.push(RecalcProblem { column: node.id, message: format!("column {}: {e}", c.short_name) });
+            }
+        }
+    }
+    for j in cyclic {
+        let c = &mut ws.columns[nodes[j].idx];
+        c.formula_state = FormulaState::Broken;
+        problems.push(RecalcProblem {
+            column: c.id,
+            message: format!("column {} is part of a circular chain of formulas", c.short_name),
+        });
+    }
+    problems
+}
+
 impl Project {
-    /// Fills a column from a formula and remembers the formula on the column.
+    /// Fills a column from a formula and remembers the formula on the column. The formula runs
+    /// once ([`RecalcMode::None`]); see [`Project::set_column_values_with`] for a column that
+    /// follows its inputs.
     ///
     /// `rows` is the 0-based row range to fill; `None` fills every row of
     /// the sheet (the length of its longest column). Rows of the column
@@ -99,32 +342,146 @@ impl Project {
         formula: &str,
         rows: Option<Range<usize>>,
     ) -> Result<(), FormulaError> {
+        self.set_column_values_with(column, formula, rows, RecalcMode::None)
+    }
+
+    /// Like [`Project::set_column_values`], with the Recalculate choice of Set Column Values.
+    ///
+    /// With `Auto` or `Manual` the column keeps the formula and the row range, and is locked
+    /// against hand edits. A formula that reads its own column runs once, as mode `None` (what
+    /// Origin does); one that closes a loop through other recalculating columns (B reads C and
+    /// C reads B) is refused with the chain named. Columns that read this one are updated
+    /// (Auto) or marked pending (Manual) before the call returns.
+    pub fn set_column_values_with(
+        &mut self,
+        column: ColumnId,
+        formula: &str,
+        rows: Option<Range<usize>>,
+        mode: RecalcMode,
+    ) -> Result<(), FormulaError> {
         let expr = Expr::parse(formula)?;
         let (_, sheet, target) = self.locate(column).ok_or(FormulaError::NoSuchColumn(column))?;
-        let range = rows.unwrap_or(0..sheet.row_count());
-        if range.is_empty() {
-            return Err(FormulaError::NoRows);
-        }
-        if range.end > MAX_FORMULA_ROWS {
-            return Err(FormulaError::TooManyRows(range.end));
-        }
-        if let Some(text) = target.text() {
-            let outside = text.iter().enumerate().any(|(i, t)| !range.contains(&i) && !t.trim().is_empty());
-            if outside {
-                return Err(FormulaError::TextOutsideRange(target.short_name.clone()));
+        let range = rows.clone().unwrap_or(0..sheet.row_count());
+        let mut mode = mode;
+        if mode != RecalcMode::None
+            && let Ok(deps) = resolve_deps(&expr, sheet)
+        {
+            if deps.contains(&column) {
+                // Origin documents this case: a formula that reads its own column runs once.
+                mode = RecalcMode::None;
+            } else if let Some(path) = find_cycle(sheet, column, &deps) {
+                let names: Vec<&str> =
+                    path.iter().map(|id| sheet.column(*id).map_or("?", |c| c.short_name.as_str())).collect();
+                return Err(FormulaError::Cycle(names.join(" -> ")));
             }
         }
-        let computed = expr.eval_rows(&SheetHost { sheet }, range.end)?;
-        let mut values: Vec<f64> = target.numeric().map(<[f64]>::to_vec).unwrap_or_default();
-        if values.len() < range.end {
-            values.resize(range.end, f64::NAN);
-        }
-        values[range.clone()].copy_from_slice(&computed[range]);
+        let data = compute_fill(sheet, target, &expr, range)?;
 
         let c = self.column_mut(column).expect("located above");
-        c.data = ColumnData::numeric(values);
+        c.data = data;
         c.formula = Some(formula.trim().to_string());
+        c.recalc = mode;
+        c.formula_state = FormulaState::Current;
+        c.formula_rows = if mode == RecalcMode::None { None } else { rows };
+        self.refresh_formulas(&[column]);
         Ok(())
+    }
+
+    /// Updates the recalculating columns that read any of the `changed` columns (directly or
+    /// through other recalculating columns): Auto columns are recalculated, Manual ones are
+    /// marked pending. Call this after changing column data outside a [`crate::Document`] edit,
+    /// which does it by itself. Returns the columns that could not be updated.
+    pub fn refresh_formulas(&mut self, changed: &[ColumnId]) -> Vec<RecalcProblem> {
+        let changed: HashSet<ColumnId> = changed.iter().copied().collect();
+        let none = HashSet::new();
+        let mut problems = Vec::new();
+        for w in &mut self.windows {
+            if let crate::Window::Workbook(b) = w {
+                for s in &mut b.sheets {
+                    if s.columns.iter().any(|c| changed.contains(&c.id)) {
+                        problems.extend(recalc_sheet(s, &changed, &none));
+                    }
+                }
+            }
+        }
+        problems
+    }
+
+    /// Recalculates a Manual (or Auto) column now, then the columns that read it. Clears the
+    /// pending mark. Errors when the column has no recalculating formula or cannot run.
+    pub fn recalculate(&mut self, column: ColumnId) -> Result<(), FormulaError> {
+        let (_, sheet, c) = self.locate(column).ok_or(FormulaError::NoSuchColumn(column))?;
+        if !c.is_locked() {
+            return Err(FormulaError::NotRecalculating(c.short_name.clone()));
+        }
+        let _ = sheet;
+        let force = HashSet::from([column]);
+        let mut problems = Vec::new();
+        for w in &mut self.windows {
+            if let crate::Window::Workbook(b) = w {
+                for s in &mut b.sheets {
+                    if s.column(column).is_some() {
+                        problems = recalc_sheet(s, &HashSet::new(), &force);
+                    }
+                }
+            }
+        }
+        match problems.into_iter().find(|p| p.column == column) {
+            Some(p) => Err(FormulaError::Broken(p.message)),
+            None => Ok(()),
+        }
+    }
+
+    /// Recalculates every column of a sheet that is marked pending. Returns the problems.
+    pub fn recalculate_pending(&mut self, book: crate::WindowId, sheet: usize) -> Vec<RecalcProblem> {
+        let Some(ws) = self.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) else {
+            return Vec::new();
+        };
+        let force: HashSet<ColumnId> =
+            ws.columns.iter().filter(|c| c.formula_state == FormulaState::Pending).map(|c| c.id).collect();
+        if force.is_empty() {
+            return Vec::new();
+        }
+        recalc_sheet(ws, &HashSet::new(), &force)
+    }
+
+    /// Brings recalculating columns up to date after an edit that turned `before` into `self`:
+    /// columns whose data or names differ are the changes. Does nothing when no column in the
+    /// project recalculates. Used by [`crate::Document`], which calls it inside the undo step of
+    /// the edit.
+    pub fn recalculate_since(&mut self, before: &Project) -> Vec<RecalcProblem> {
+        let any = self.workbooks().any(|b| b.sheets.iter().any(|s| s.columns.iter().any(Column::is_locked)));
+        if !any {
+            return Vec::new();
+        }
+        let old: HashMap<ColumnId, &Column> = before
+            .workbooks()
+            .flat_map(|b| b.sheets.iter().flat_map(|s| s.columns.iter()))
+            .map(|c| (c.id, c))
+            .collect();
+        let mut problems = Vec::new();
+        let none = HashSet::new();
+        for w in &mut self.windows {
+            if let crate::Window::Workbook(b) = w {
+                for s in &mut b.sheets {
+                    if !s.columns.iter().any(Column::is_locked) {
+                        continue;
+                    }
+                    let changed: HashSet<ColumnId> = s
+                        .columns
+                        .iter()
+                        .filter(|c| {
+                            old.get(&c.id).is_none_or(|o| {
+                                o.data != c.data || o.short_name != c.short_name || o.long_name != c.long_name
+                            })
+                        })
+                        .map(|c| c.id)
+                        .collect();
+                    problems.extend(recalc_sheet(s, &changed, &none));
+                }
+            }
+        }
+        problems
     }
 }
 

@@ -415,6 +415,27 @@ impl SheafApp {
                     }
                 });
             }
+            Action::Recalculate(columns) => {
+                let columns: Vec<ColumnId> = columns
+                    .into_iter()
+                    .filter(|c| self.doc.project().column(*c).is_some_and(|c| c.is_locked()))
+                    .collect();
+                let result = self.doc.edit("Recalculate", |p| {
+                    for c in &columns {
+                        p.recalculate(*c)?;
+                    }
+                    Ok::<(), sheaf_core::formula::FormulaError>(())
+                });
+                self.status = match result {
+                    Ok(()) if columns.is_empty() => "No selected column recalculates".to_string(),
+                    Ok(()) => "Recalculated".to_string(),
+                    Err(e) => format!("Could not recalculate: {e}"),
+                };
+            }
+            Action::SetCell { column, .. } if self.doc.project().column(column).is_some_and(|c| c.is_locked()) => {
+                self.status =
+                    "That column is calculated from a formula; change the formula in Set Column Values".to_string();
+            }
             Action::SetCell { column, row, text } => {
                 let beyond_end = self.doc.project().column(column).is_none_or(|c| row >= c.len());
                 if !(beyond_end && text.trim().is_empty()) {

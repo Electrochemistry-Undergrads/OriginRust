@@ -876,6 +876,9 @@ impl Project {
                 c.id = self.new_column_id();
                 c.data = take_rows(&c.data, &keep, n);
                 c.formula = None;
+                c.recalc = crate::column::RecalcMode::None;
+                c.formula_state = crate::column::FormulaState::Current;
+                c.formula_rows = None;
                 copy.columns.push(c);
             }
             let b = self.workbook_mut(book).expect("checked above");

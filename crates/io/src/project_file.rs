@@ -291,6 +291,32 @@ mod tests {
     }
 
     #[test]
+    fn a_recalculating_column_keeps_its_mode_and_pending_mark_in_a_saved_project() {
+        use sheaf_core::{Document, FormulaState, RecalcMode};
+        let dir = TempDir::new("recalc");
+        let path = dir.file("demo.sheaf");
+        let mut doc = Document::new(sample());
+        let (a, b) = {
+            let cols = &doc.project().workbooks().next().unwrap().sheets[0].columns;
+            (cols[0].id, cols[1].id)
+        };
+        doc.edit("formula", |p| p.set_column_values_with(b, "col(A)*2", None, RecalcMode::Manual)).unwrap();
+        doc.apply("edit", |p| {
+            p.column_mut(a).unwrap().set_cell_text(0, "5");
+        });
+        assert_eq!(doc.project().column(b).unwrap().formula_state, FormulaState::Pending);
+        save(doc.project(), &path).unwrap();
+        let back = load(&path).unwrap();
+        let col = back.column(b).unwrap();
+        assert_eq!((col.recalc, col.formula_state), (RecalcMode::Manual, FormulaState::Pending));
+        same_data(doc.project(), &back);
+        // The loaded project still recalculates.
+        let mut doc = Document::new(back);
+        doc.edit("recalculate", |p| p.recalculate(b)).unwrap();
+        assert_eq!(doc.project().numeric(b).unwrap()[0], 10.0);
+    }
+
+    #[test]
     fn member_names_follow_the_spec() {
         let dir = TempDir::new("members");
         let path = dir.file("demo.sheaf");

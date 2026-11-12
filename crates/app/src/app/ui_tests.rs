@@ -2844,3 +2844,131 @@ fn the_data_reader_pins_a_point_and_steps_through_the_rows() {
     settle(&mut h);
     assert!(!graph_ui(&h).reader);
 }
+
+// ----- Statistics: two-way ANOVA, nonparametric tests, correlation ---------------------------------------
+
+/// Writes `text` as `<name>.csv` in a fresh folder.
+fn csv_file(tag: &str, name: &str, text: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(format!("{name}.csv"));
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+/// The result sheet that the last tool added to the first workbook: its name and the numbers of a column.
+fn result_column(h: &Harness<'static, SheafApp>, column: &str) -> (String, Vec<f64>) {
+    let b = project(h).workbooks().next().unwrap();
+    let ws = b.sheets.last().unwrap();
+    let c = ws.columns.iter().find(|c| c.long_name == column).unwrap_or_else(|| panic!("no column {column}"));
+    (ws.name.clone(), c.numeric().unwrap().to_vec())
+}
+
+/// Statistics > ANOVA > Two-Way ANOVA...: the factor columns can be text; the window starts with the first
+/// three columns as factor A, factor B and data; OK adds the result sheet and one undo removes it.
+#[test]
+fn the_statistics_menu_runs_a_two_way_anova_with_text_factors() {
+    let data = csv_file(
+        "anova2",
+        "design",
+        "dose,batch,response\nlow,1,1\nlow,1,2\nlow,2,4\nlow,2,5\nhigh,1,3\nhigh,1,5\nhigh,2,8\nhigh,2,9\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - design");
+    menu_path(&mut h, &["Statistics", "ANOVA", "Two-Way ANOVA..."]);
+    assert!(h.state().analysis.is_some(), "the two-way ANOVA window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let (sheet, df) = result_column(&h, "DF");
+    assert!(sheet.starts_with("ANOVA2Way"), "{sheet}");
+    // dose, batch, dose*batch, model, error, total of the balanced 2 x 2 design with two numbers per cell.
+    assert_eq!(df, vec![1.0, 1.0, 1.0, 3.0, 4.0, 7.0]);
+    let (_, ss) = result_column(&h, "Sum of Squares");
+    // Total 53.875; dose (means 3 and 6.25) 21.125 and batch (3 and 7.25... ) 28.125, each with one degree of freedom.
+    assert!((ss[5] - 53.875).abs() < 1e-9 && (ss[0] - 21.125).abs() < 1e-9 && (ss[1] - 28.125).abs() < 1e-9, "{ss:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Two-way ANOVA"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
+/// Statistics > Nonparametric Tests > Mann-Whitney Test... with the two Y columns of the sheet.
+#[test]
+fn the_nonparametric_menu_runs_a_mann_whitney_test() {
+    let mut h = start(vec![data_file("mannwhitney")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Nonparametric Tests", "Mann-Whitney Test..."]);
+    assert!(h.state().analysis.is_some(), "the Mann-Whitney window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, u) = result_column(&h, "U");
+    assert!(sheet.starts_with("MannWhitney"), "{sheet}");
+    // up = 2.5 .. 8.5 against down = 30.5 .. 0.5: ranks 3 4 5 7 against 8 6 2 1... U of the first sample.
+    assert_eq!(u.len(), 1);
+    assert!(u[0].is_finite() && (0.0..=16.0).contains(&u[0]), "{u:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Mann-Whitney test"));
+}
+
+/// Statistics > Nonparametric Tests > One-Sample Wilcoxon Signed Rank Test...: one row per chosen column.
+#[test]
+fn the_nonparametric_menu_runs_a_one_sample_signed_rank_test() {
+    let mut h = start(vec![data_file("signrank")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Nonparametric Tests", "One-Sample Wilcoxon Signed Rank Test..."]);
+    assert!(h.state().analysis.is_some(), "the signed rank window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, n) = result_column(&h, "N");
+    assert!(sheet.starts_with("SignedRank"), "{sheet}");
+    assert_eq!(n, vec![4.0, 4.0], "one row per chosen column");
+    assert_eq!(h.state().doc.undo_label(), Some("One-sample Wilcoxon signed rank test"));
+}
+
+/// Statistics > Nonparametric Tests > Paired Sample Wilcoxon Signed Rank Test...: the same window, starting with
+/// the paired test, which gives a single row for the two columns.
+#[test]
+fn the_nonparametric_menu_runs_a_paired_signed_rank_test() {
+    let mut h = start(vec![data_file("signrank-paired")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Nonparametric Tests", "Paired Sample Wilcoxon Signed Rank Test..."]);
+    assert!(h.state().analysis.is_some(), "the paired window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (_, n) = result_column(&h, "N");
+    assert_eq!(n, vec![4.0], "the paired test is one row");
+    assert_eq!(h.state().doc.undo_label(), Some("Paired Wilcoxon signed rank test"));
+}
+
+/// Statistics > Nonparametric Tests > Kruskal-Wallis ANOVA...
+#[test]
+fn the_nonparametric_menu_runs_a_kruskal_wallis_test() {
+    let mut h = start(vec![data_file("kruskal")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Nonparametric Tests", "Kruskal-Wallis ANOVA..."]);
+    click(&mut h, "OK");
+    let (sheet, value) = result_column(&h, "Value");
+    assert!(sheet.starts_with("KruskalWallis"), "{sheet}");
+    // chi-square, DF and p of the two groups.
+    assert_eq!(value.len(), 3);
+    assert_eq!(value[1], 1.0);
+    assert!(value[2] > 0.0 && value[2] <= 1.0, "{value:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Kruskal-Wallis test"));
+}
+
+/// Statistics > Descriptive Statistics > Correlation Coefficient...: up and down are perfectly anti-correlated.
+#[test]
+fn the_statistics_menu_computes_correlation_coefficients() {
+    let mut h = start(vec![data_file("corr")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Correlation Coefficient..."]);
+    assert!(h.state().analysis.is_some(), "the correlation window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, up) = result_column(&h, "up");
+    assert!(sheet.starts_with("Correlation"), "{sheet}");
+    // The Pearson matrix: column "up" holds r(up, up) = 1 and r(down, up) = -1 (the data are straight lines).
+    assert!((up[0] - 1.0).abs() < 1e-12 && (up[1] + 1.0).abs() < 1e-12, "{up:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Correlation coefficients"));
+}

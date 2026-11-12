@@ -8,7 +8,9 @@
 
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AnovaSpec, BinSize, FreqOptions, HistogramSpec, MeansComparison, NormalitySpec, TTestKind, TTestSpec, Tail,
+    AnovaSpec, BinSize, CorrelationSpec, FreqOptions, HistogramSpec, KruskalWallisSpec, MannWhitneySpec,
+    MeansComparison, NormalitySpec, SignedRankKind, SignedRankSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec,
+    TwoWayLayout,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
@@ -44,6 +46,15 @@ pub enum AnalysisKind {
     Anova,
     Histogram,
     Normality,
+    /// Statistics > ANOVA > Two-Way ANOVA.
+    Anova2,
+    /// Statistics > Nonparametric Tests and Descriptive Statistics > Correlation Coefficient.
+    MannWhitney,
+    SignedRank,
+    /// The same window, starting with the paired test.
+    SignedRankPaired,
+    KruskalWallis,
+    Correlation,
 }
 
 impl AnalysisKind {
@@ -81,6 +92,12 @@ impl AnalysisKind {
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
             AnalysisKind::Normality => "Normality Test...",
+            AnalysisKind::Anova2 => "Two-Way ANOVA...",
+            AnalysisKind::MannWhitney => "Mann-Whitney Test...",
+            AnalysisKind::SignedRank => "One-Sample Wilcoxon Signed Rank Test...",
+            AnalysisKind::SignedRankPaired => "Paired Sample Wilcoxon Signed Rank Test...",
+            AnalysisKind::KruskalWallis => "Kruskal-Wallis ANOVA...",
+            AnalysisKind::Correlation => "Correlation Coefficient...",
         }
     }
 
@@ -107,6 +124,12 @@ impl AnalysisKind {
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
             "normality" => AnalysisKind::Normality,
+            "anova2" => AnalysisKind::Anova2,
+            "mannwhitney" => AnalysisKind::MannWhitney,
+            "signrank" => AnalysisKind::SignedRank,
+            "signrank-paired" => AnalysisKind::SignedRankPaired,
+            "kruskal" => AnalysisKind::KruskalWallis,
+            "corr" => AnalysisKind::Correlation,
             _ => return None,
         })
     }
@@ -193,6 +216,25 @@ struct StatsOptions {
     bin_min: f64,
     bin_max: f64,
     graph: bool,
+    /// Two-way ANOVA: raw layout (one column per cell) instead of indexed.
+    two_way_raw: bool,
+    two_way_interaction: bool,
+    /// Indexes into the sheet's columns: factor A, factor B and the data.
+    two_way_columns: [usize; 3],
+    /// Raw layout: the levels of factor A and B of each chosen column.
+    two_way_levels: Vec<(String, String)>,
+    /// Mann-Whitney: exact p-value.
+    exact: bool,
+    /// Signed rank: paired instead of one-sample, and the hypothesized median.
+    paired: bool,
+    median: f64,
+    /// Signed rank: decide with the exact p-value where there is one.
+    decide_exact: bool,
+    /// Correlation: Pearson, Spearman, Kendall, and listwise deletion.
+    pearson: bool,
+    spearman: bool,
+    kendall: bool,
+    listwise: bool,
 }
 
 impl Default for StatsOptions {
@@ -212,6 +254,18 @@ impl Default for StatsOptions {
             bin_min: 0.0,
             bin_max: 10.0,
             graph: true,
+            two_way_raw: false,
+            two_way_interaction: true,
+            two_way_columns: [0, 1, 2],
+            two_way_levels: Vec::new(),
+            exact: false,
+            paired: false,
+            median: 0.0,
+            decide_exact: true,
+            pearson: true,
+            spearman: false,
+            kendall: false,
+            listwise: false,
         }
     }
 }
@@ -280,6 +334,9 @@ pub struct AnalysisDialog {
     reference: usize,
     common_only: bool,
     stats: StatsOptions,
+    /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
+    /// (the factor columns may hold text).
+    sheet_columns: Vec<(ColumnId, String)>,
     problem: Option<String>,
 }
 
@@ -328,6 +385,27 @@ impl AnalysisDialog {
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
         let reference_choices = reference_choices(project, &columns);
+        let sheet_columns: Vec<(ColumnId, String)> = sheet
+            .columns
+            .iter()
+            .map(|c| {
+                let detail = if c.long_name.is_empty() { String::new() } else { format!("  {}", c.long_name) };
+                (c.id, format!("{}{detail}", c.short_name))
+            })
+            .collect();
+        // The two-way ANOVA starts with the chosen columns as factor A, factor B and data, in this order.
+        let mut stats = StatsOptions { paired: kind == AnalysisKind::SignedRankPaired, ..StatsOptions::default() };
+        if kind == AnalysisKind::Anova2 {
+            let position = |id: &ColumnId| sheet_columns.iter().position(|(c, _)| c == id);
+            let chosen: Vec<usize> = columns.iter().filter_map(position).collect();
+            stats.two_way_columns = if chosen.len() >= 3 {
+                [chosen[0], chosen[1], chosen[2]]
+            } else {
+                let last = sheet_columns.len().saturating_sub(1);
+                [0, 1.min(last), 2.min(last)]
+            };
+            stats.two_way_levels = vec![(String::new(), String::new()); columns.len()];
+        }
         Some(AnalysisDialog {
             kind,
             column_names: names.join(", "),
@@ -370,7 +448,8 @@ impl AnalysisDialog {
             chain_integrate: true,
             chain_fit: None,
             chain_fit_linear: true,
-            stats: StatsOptions::default(),
+            stats,
+            sheet_columns,
             problem: None,
         })
     }
@@ -491,6 +570,48 @@ impl AnalysisDialog {
                 graph: self.stats.graph,
             }),
             AnalysisKind::Normality => Tool::Normality(NormalitySpec { alpha: self.stats.alpha }),
+            AnalysisKind::Anova2 => {
+                let layout = if self.stats.two_way_raw {
+                    if let Some(i) =
+                        self.stats.two_way_levels.iter().position(|(a, b)| a.trim().is_empty() || b.trim().is_empty())
+                    {
+                        let name = self.column_names.split(", ").nth(i).unwrap_or("");
+                        return Err(format!("give the level of factor A and of factor B for column {name}"));
+                    }
+                    TwoWayLayout::Raw { levels: self.stats.two_way_levels.clone() }
+                } else {
+                    TwoWayLayout::Indexed
+                };
+                Tool::TwoWayAnova(TwoWayAnovaSpec {
+                    layout,
+                    interaction: self.stats.two_way_interaction,
+                    comparison: COMPARISONS[self.stats.comparison].1,
+                    alpha: self.stats.alpha,
+                })
+            }
+            AnalysisKind::MannWhitney => Tool::MannWhitney(MannWhitneySpec {
+                tail: self.stats.tail,
+                exact: self.stats.exact,
+                alpha: self.stats.alpha,
+            }),
+            AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => Tool::SignedRank(SignedRankSpec {
+                kind: if self.stats.paired {
+                    SignedRankKind::Paired
+                } else {
+                    SignedRankKind::OneSample { median: self.stats.median }
+                },
+                tail: self.stats.tail,
+                exact: self.stats.decide_exact,
+                alpha: self.stats.alpha,
+            }),
+            AnalysisKind::KruskalWallis => Tool::KruskalWallis(KruskalWallisSpec { alpha: self.stats.alpha }),
+            AnalysisKind::Correlation => Tool::Correlation(CorrelationSpec {
+                pearson: self.stats.pearson,
+                spearman: self.stats.spearman,
+                kendall: self.stats.kendall,
+                listwise: self.stats.listwise,
+                alpha: self.stats.alpha,
+            }),
         })
     }
 
@@ -500,7 +621,18 @@ impl AnalysisDialog {
             RowMode::Rows => RowRange::Rows(self.from, self.to),
             RowMode::XRange => RowRange::XBetween(self.x_from, self.x_to),
         };
-        Ok(Request { columns: self.columns.clone(), rows, tool: self.tool()? })
+        let tool = self.tool()?;
+        let columns = if self.kind == AnalysisKind::Anova2 && !self.stats.two_way_raw {
+            let [a, b, y] = self.stats.two_way_columns;
+            let pick = |i: usize| self.sheet_columns.get(i).map(|(id, _)| *id);
+            match (pick(a), pick(b), pick(y)) {
+                (Some(a), Some(b), Some(y)) => vec![a, b, y],
+                _ => return Err("the sheet needs three columns: factor A, factor B and the data".to_string()),
+            }
+        } else {
+            self.columns.clone()
+        };
+        Ok(Request { columns, rows, tool })
     }
 
     /// The reference list and the options that belong to it.
@@ -880,6 +1012,140 @@ impl AnalysisDialog {
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
                 ui.weak("Group statistics, the ANOVA table and the comparisons go to a new sheet.");
+            }
+            AnalysisKind::Anova2 => {
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.label("Input data");
+                    ui.radio_value(&mut st.two_way_raw, false, "Indexed");
+                    ui.radio_value(&mut st.two_way_raw, true, "Raw");
+                });
+                if st.two_way_raw {
+                    ui.weak(
+                        "Every chosen column is one cell of the design: give its level of factor A and of factor B.",
+                    );
+                    let names: Vec<String> = self.column_names.split(", ").map(str::to_string).collect();
+                    egui::Grid::new("two_way_levels").num_columns(3).show(ui, |ui| {
+                        ui.label("Column");
+                        ui.label("Factor A level");
+                        ui.label("Factor B level");
+                        ui.end_row();
+                        for (name, (a, b)) in names.iter().zip(st.two_way_levels.iter_mut()) {
+                            ui.label(name);
+                            ui.add(egui::TextEdit::singleline(a).desired_width(90.0));
+                            ui.add(egui::TextEdit::singleline(b).desired_width(90.0));
+                            ui.end_row();
+                        }
+                    });
+                } else {
+                    for (i, label) in ["Factor A", "Factor B", "Data"].into_iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label(label);
+                            let current = self.sheet_columns.get(st.two_way_columns[i]).map_or("", |c| c.1.as_str());
+                            egui::ComboBox::from_id_salt(("two_way_column", i))
+                                .selected_text(current)
+                                .width(220.0)
+                                .show_ui(ui, |ui| {
+                                    for (j, (_, text)) in self.sheet_columns.iter().enumerate() {
+                                        ui.selectable_value(&mut st.two_way_columns[i], j, text);
+                                    }
+                                });
+                        });
+                    }
+                    ui.weak("The factor columns may hold text or numbers; one row of the sheet is one observation.");
+                }
+                ui.checkbox(&mut st.two_way_interaction, "Interaction of the two factors");
+                ui.horizontal(|ui| {
+                    ui.label("Means comparison");
+                    egui::ComboBox::from_id_salt("anova2_comparison")
+                        .selected_text(COMPARISONS[st.comparison].0)
+                        .show_ui(ui, |ui| {
+                            for (i, (label, _)) in COMPARISONS.iter().enumerate() {
+                                ui.selectable_value(&mut st.comparison, i, *label);
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak(
+                    "The tables (statistics, ANOVA, comparisons) go to a new sheet. Sums of squares are adjusted for the \
+                     other terms, as in Origin.",
+                );
+            }
+            AnalysisKind::MannWhitney => {
+                let st = &mut self.stats;
+                ui.label("Needs exactly two columns (two independent samples).");
+                ui.horizontal(|ui| {
+                    ui.label("Alternative (first column)");
+                    ui.radio_value(&mut st.tail, Tail::Two, "Differs");
+                    ui.radio_value(&mut st.tail, Tail::Upper, "Larger");
+                    ui.radio_value(&mut st.tail, Tail::Lower, "Smaller");
+                });
+                ui.checkbox(&mut st.exact, "Exact p-value (otherwise the normal approximation)");
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak("Ranks, U, Z and the p-values go to a new sheet.");
+            }
+            AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => {
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.label("Test");
+                    ui.radio_value(&mut st.paired, false, "One sample");
+                    ui.radio_value(&mut st.paired, true, "Paired (two columns)");
+                });
+                ui.add_enabled_ui(!st.paired, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Hypothesized median");
+                        ui.add(DragValue::new(&mut st.median).speed(0.01));
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Alternative");
+                    ui.radio_value(&mut st.tail, Tail::Two, "Two-tailed");
+                    ui.radio_value(&mut st.tail, Tail::Upper, "Upper tail");
+                    ui.radio_value(&mut st.tail, Tail::Lower, "Lower tail");
+                });
+                ui.checkbox(
+                    &mut st.decide_exact,
+                    "Decide with the exact p-value where there is one (up to 80 differences)",
+                );
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak("Both p-values go to a new sheet.");
+            }
+            AnalysisKind::KruskalWallis => {
+                let st = &mut self.stats;
+                ui.label("Every chosen column is a group.");
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak("Mean ranks, the chi-square statistic and its p-value go to a new sheet.");
+            }
+            AnalysisKind::Correlation => {
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.label("Coefficients");
+                    ui.checkbox(&mut st.pearson, "Pearson");
+                    ui.checkbox(&mut st.spearman, "Spearman");
+                    ui.checkbox(&mut st.kendall, "Kendall");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Missing values");
+                    ui.radio_value(&mut st.listwise, false, "Pairwise");
+                    ui.radio_value(&mut st.listwise, true, "Listwise");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak("The matrices of coefficients and p-values go to a new sheet.");
             }
             AnalysisKind::Histogram => {
                 let st = &mut self.stats;

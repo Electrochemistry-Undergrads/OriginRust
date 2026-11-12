@@ -44,7 +44,10 @@ pub fn open_project(path: &Path) -> Result<OpenedProject, IoError> {
     if is_opj {
         let mut import = opj::read_opj(path)?;
         let mut warnings = std::mem::take(&mut import.warnings);
-        warnings.insert(0, format!("Imported from an Origin {} project. Only workbooks are read.", import.version));
+        warnings.insert(
+            0,
+            format!("Imported from an Origin {} project. Workbooks and basic graphs are read.", import.version),
+        );
         Ok(OpenedProject { project: import.into_project(), foreign: true, warnings })
     } else {
         Ok(OpenedProject { project: project_file::load(path)?, foreign: false, warnings: Vec::new() })

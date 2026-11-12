@@ -1,9 +1,10 @@
 //! Drawing the data of one plot: lines, error bars and symbols (spec section 4).
 
 use crate::LayerGeometry;
+use crate::Rect;
 use crate::data::PlotData;
 use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
-use sheaf_core::graph::{Connect, LineStyle, SymbolShape, SymbolStyle};
+use sheaf_core::graph::{Connect, LineStyle, PlotKind, SymbolShape, SymbolStyle};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
@@ -32,6 +33,9 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     let plot = pd.plot;
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
+    }
+    if plot.kind == PlotKind::Column {
+        draw_columns(out, pd, geom);
     }
     if pd.err.is_some() {
         draw_error_bars(out, pd, geom);
@@ -210,11 +214,39 @@ fn near_frame(geom: &LayerGeometry, p: (f64, f64), margin: f64) -> bool {
     p.0 >= f.x - margin && p.0 <= f.x + f.w + margin && p.1 >= f.y - margin && p.1 <= f.y + f.h + margin
 }
 
+/// Bars from zero to each value, 70 percent of the smallest spacing between X values wide.
+fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let plot = pd.plot;
+    let mut xs: Vec<f64> = (pd.start..pd.end).map(|i| pd.x_at(i)).filter(|x| x.is_finite()).collect();
+    xs.sort_by(|a, b| a.total_cmp(b));
+    let spacing = xs.windows(2).map(|w| w[1] - w[0]).filter(|d| *d > 0.0).fold(f64::INFINITY, f64::min);
+    let half = if spacing.is_finite() { 0.35 * spacing } else { 0.35 };
+    let stroke = (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt));
+    for i in pd.start..pd.end {
+        let (x, y) = (pd.x_at(i), pd.y[i]);
+        let (Some(a), Some(b), Some(top)) = (
+            geom.checked_data_to_page(x - half, 0.0),
+            geom.checked_data_to_page(x + half, y),
+            geom.checked_data_to_page(x, y),
+        ) else {
+            continue;
+        };
+        let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
+        let (y0, y1) = (a.1.min(top.1), a.1.max(top.1));
+        out.push(Item::Rect {
+            rect: Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 },
+            fill: Some(plot.symbol.color),
+            stroke: stroke.clone(),
+        });
+    }
+}
+
 fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
-    let color = if plot.kind.has_line() { plot.line.color } else { plot.symbol.color };
+    let column = plot.kind == PlotKind::Column;
+    let color = if plot.kind.has_line() || column { plot.line.color } else { plot.symbol.color };
     let half_cap = 0.6 * plot.symbol.size_pt;
-    let width = (plot.line.width_pt / 2.0).max(0.5);
+    let width = if column { plot.line.width_pt.max(0.5) } else { (plot.line.width_pt / 2.0).max(0.5) };
     let mut d = String::new();
     for i in pd.start..pd.end {
         let (x, y, e) = (pd.x_at(i), pd.y[i], pd.err_at(i));

@@ -90,6 +90,8 @@ pub(crate) fn text_cell(s: &str, size: usize) -> Vec<u8> {
 /// A whole project file: signature line, version header, data sets, windows.
 #[derive(Default)]
 pub(crate) struct FileBuilder {
+    /// The Origin version written to the header; 9.3 when left at zero.
+    pub version: f64,
     pub datasets: Vec<Vec<u8>>,
     pub windows: Vec<u8>,
 }
@@ -105,9 +107,25 @@ impl FileBuilder {
     }
 
     pub fn window(&mut self, name: &str, label: &str, sheets: &[(&str, &[(u16, u8, &str, &[u8])])]) -> &mut Self {
+        self.window_with(name, label, sheets, false, 0)
+    }
+
+    /// A window whose layers have `axis_blocks` blocks in each of the three axis groups and, when
+    /// `graph_layer` is set, the graph-layer bit in the layer header (spec section 10.0). Origin 8.x
+    /// workbooks have axis blocks and no bit.
+    pub fn window_with(
+        &mut self,
+        name: &str,
+        label: &str,
+        sheets: &[(&str, &[(u16, u8, &str, &[u8])])],
+        graph_layer: bool,
+        axis_blocks: usize,
+    ) -> &mut Self {
         self.windows.extend(framed(&window_header(name, label)));
         for (sheet, cols) in sheets {
-            self.windows.extend(framed(&layer_header(sheet)));
+            let mut header = layer_header(sheet);
+            header[0x02] = if graph_layer { 0x1F } else { 0x5E };
+            self.windows.extend(framed(&header));
             self.windows.extend(annotation(false));
             self.windows.extend(framed(&[]));
             for (idx, des, short, note) in cols.iter() {
@@ -115,8 +133,12 @@ impl FileBuilder {
                 self.windows.extend(framed(note));
             }
             self.windows.extend(framed(&[]));
-            // the extra block and the three (empty) axis groups
-            for _ in 0..4 {
+            // the extra block, then the three axis groups, each closed by an empty block
+            self.windows.extend(framed(&[]));
+            for _ in 0..3 {
+                for _ in 0..axis_blocks {
+                    self.windows.extend(framed(&[0; 515]));
+                }
                 self.windows.extend(framed(&[]));
             }
         }
@@ -127,7 +149,8 @@ impl FileBuilder {
     pub fn build(&self) -> Vec<u8> {
         let mut v = b"CPYA 4.3168 226 W64 #\n".to_vec();
         let mut header = vec![0u8; 111];
-        header[0x1B..0x23].copy_from_slice(&9.3f64.to_le_bytes());
+        let version = if self.version == 0.0 { 9.3 } else { self.version };
+        header[0x1B..0x23].copy_from_slice(&version.to_le_bytes());
         v.extend(framed(&header));
         v.extend(framed(&[]));
         for d in &self.datasets {

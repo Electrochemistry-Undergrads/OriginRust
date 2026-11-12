@@ -39,12 +39,14 @@
 param(
   [Parameter(Mandatory = $true)][string]$Project,
   [Parameter(Mandatory = $true)][string]$Out,
-  [switch]$CopyFirst
+  [switch]$CopyFirst,
+  [int]$AllRowsLimit = 0
 )
 $ErrorActionPreference = 'Stop'
 $inv = [Globalization.CultureInfo]::InvariantCulture
 $MissingBits = [BitConverter]::DoubleToInt64Bits(-1.23456789e-300)
-$Roles = @{ 0 = 'Y'; 1 = 'Disregard'; 2 = 'YError'; 3 = 'X'; 4 = 'Label'; 5 = 'Z'; 6 = 'XError'; 7 = 'Group'; 8 = 'Subject' }
+# LabTalk's wks.colN.type codes, written as the designation names our reader uses.
+$LabTalkTypes = @{ 1 = 'Y'; 2 = 'Disregard'; 3 = 'YError'; 4 = 'X'; 5 = 'Label'; 6 = 'Z'; 7 = 'XError'; 8 = 'Group'; 9 = 'Subject' }
 
 function Esc([string]$s) {
   if ($null -eq $s) { return '' }
@@ -59,6 +61,7 @@ function IsMissing($v) {
 }
 
 function SampleRows([int]$used) {
+  if ($used -gt 0 -and $used -le $AllRowsLimit) { return 0..($used - 1) }
   $rows = New-Object 'System.Collections.Generic.SortedSet[int]'
   for ($r = 0; $r -lt [Math]::Min(3, $used); $r++) { [void]$rows.Add($r) }
   for ($r = [Math]::Max(0, $used - 3); $r -lt $used; $r++) { [void]$rows.Add($r) }
@@ -85,39 +88,80 @@ $w = New-Object IO.StreamWriter($Out, $false, (New-Object Text.UTF8Encoding($fal
 $w.NewLine = "`n"
 try {
   $origin = New-Object -ComObject Origin.Application
+  # The COM collections (WorksheetPages, Pages) stay empty after Load in a hidden instance, so the
+  # structure and the cells are read with LabTalk (results come back through LTStr and LTVar).
+  # GetWorksheet answered only for some sheets (it returned an error number for the others).
+  function Lt([string]$script) { [void]$origin.Execute($script) }
+  function LtS([string]$script, [string]$var) { Lt $script; return [string]$origin.LTStr($var) }
+  function LtN([string]$script, [string]$var) { Lt $script; return [double]$origin.LTVar($var) }
+  # Text of a cell as Origin shows it; $null when Origin refuses (row past the column's data).
+  function CellText([int]$r, [int]$c) {
+    $okc = $origin.Execute("string cs`$ = cell($r, $c)`$;")
+    if (-not $okc) { return $null }
+    return [string]$origin.LTStr('cs$')
+  }
   $ok = $origin.Load($opened, $true)
   $w.WriteLine("# project: loaded=$ok")
-  $pages = $origin.WorksheetPages
-  $w.WriteLine("# workbooks: " + $pages.Count)
-  for ($p = 0; $p -lt $pages.Count; $p++) {
-    $page = $pages.Item($p)
-    $w.WriteLine("BOOK`t" + (Esc $page.Name) + "`t" + (Esc $page.LongName))
-    $layers = $page.Layers
-    for ($s = 0; $s -lt $layers.Count; $s++) {
-      $sheet = $layers.Item($s)
-      $w.WriteLine("SHEET`t" + (Esc $sheet.Name))
-      $cols = $sheet.Columns
-      for ($i = 0; $i -lt $cols.Count; $i++) {
-        $c = $cols.Item($i)
+  $nb = [int](LtN 'double nb = 0; doc -e W { nb++; }' 'nb')
+  $w.WriteLine("# workbooks: $nb")
+  $names = @()
+  for ($k = 1; $k -le $nb; $k++) {
+    Lt "double kk = 0; string bn`$ = `"`"; doc -e W { kk++; if (kk == $k) { bn`$ = `"%H`"; } }"
+    $names += [string]$origin.LTStr('bn$')
+  }
+  foreach ($book in $names) {
+    Lt "win -a $book;"
+    $long = LtS 'string bl$ = page.longname$;' 'bl$'
+    $w.WriteLine("BOOK`t" + (Esc $book) + "`t" + (Esc $long))
+    $nl = [int](LtN 'double nl = page.nlayers;' 'nl')
+    for ($s = 1; $s -le $nl; $s++) {
+      Lt "win -a $book; page.active = $s;"
+      $sname = LtS 'string sn$ = wks.name$;' 'sn$'
+      $w.WriteLine("SHEET`t" + (Esc $sname))
+      $nc = [int](LtN 'double nc = wks.ncols;' 'nc')
+      $rowsStored = [int](LtN 'double mr = wks.nrows;' 'mr')
+      $w.WriteLine("# sheet $s columns=$nc stored rows=$rowsStored")
+      for ($i = 0; $i -lt $nc; $i++) {
+        $c1 = $i + 1
         try {
-          $data = $c.GetData(5)
-          $n = if ($null -eq $data) { 0 } else { $data.Length }
-          $used = $n
-          while ($used -gt 0 -and (IsMissing $data[$used - 1]) ) { $used-- }
-          $role = $Roles[[int]$c.Type]
-          if ($null -eq $role) { $role = "Type" + [int]$c.Type }
-          $w.WriteLine("COL`t$i`t" + (Esc $c.Name) + "`t" + (Esc $c.LongName) + "`t" + (Esc $c.Units) + "`t" + (Esc $c.Comments) + "`t$role`t$used")
-          $w.WriteLine("# col $i stored rows=$n format=" + [int]$c.DataFormat)
+          Lt "win -a $book; page.active = $s;"
+          $short = LtS "string a`$ = wks.col$c1.name`$;" 'a$'
+          $lname = LtS "string a`$ = wks.col$c1.lname`$;" 'a$'
+          $units = LtS "string a`$ = wks.col$c1.unit`$;" 'a$'
+          $comm = LtS "string a`$ = wks.col$c1.comment`$;" 'a$'
+          $type = [int](LtN "double ty = wks.col$c1.type;" 'ty')
+          $role = $LabTalkTypes[$type]
+          if ($null -eq $role) { $role = "Type$type" }
+          # Used rows: the last cell that holds a number or text. cell(r,c)$ makes the script fail
+          # for rows past the end of a column's data, so numbers are scanned first (they need no
+          # text), then the text length is found by bisection and scanned for text below it.
+          Lt ("double us = 0; for (us = $rowsStored; us > 0; us--) { if (cell(us, $c1) != NANUM) { break; } }")
+          $used = [int]$origin.LTVar('us')
+          if ($null -ne (CellText 1 $c1)) {
+            $lo = 1; $hi = $rowsStored
+            while ($lo -lt $hi) {
+              $mid = [int][Math]::Ceiling(($lo + $hi) / 2)
+              if ($null -ne (CellText $mid $c1)) { $lo = $mid } else { $hi = $mid - 1 }
+            }
+            for ($r = $lo; $r -gt $used; $r--) {
+              $t = CellText $r $c1
+              if ($t -ne '' -and $t -ne '--') { $used = $r; break }
+            }
+          }
+          $w.WriteLine("COL`t$i`t" + (Esc $short) + "`t" + (Esc $lname) + "`t" + (Esc $units) + "`t" + (Esc $comm) + "`t$role`t$used")
           foreach ($r in (SampleRows $used)) {
-            $v = $data[$r]
-            if (IsMissing $v) { $w.WriteLine("CELL`t$i`t$r`tM`t") }
-            elseif ($v -is [string]) { $w.WriteLine("CELL`t$i`t$r`tT`t" + (Esc $v)) }
-            else { $w.WriteLine("CELL`t$i`t$r`tN`t" + ([double]$v).ToString('R', $inv)) }
+            $r1 = $r + 1
+            Lt "double cv = cell($r1, $c1);"
+            $v = [double]$origin.LTVar('cv')
+            $t = ''
+            if (IsMissing $v) { $t = CellText $r1 $c1 }
+            if (-not (IsMissing $v)) { $w.WriteLine("CELL`t$i`t$r`tN`t" + $v.ToString('R', $inv)) }
+            elseif ($t.Length -gt 0 -and $t -ne '--') { $w.WriteLine("CELL`t$i`t$r`tT`t" + (Esc $t)) }
+            else { $w.WriteLine("CELL`t$i`t$r`tM`t") }
           }
         } catch {
-          $w.WriteLine("ERR`tcolumn $i of sheet '" + $sheet.Name + "': " + ($_.Exception.Message -replace "[\r\n]+", ' '))
+          $w.WriteLine("ERR`tcolumn $i of sheet '$sname': " + ($_.Exception.Message -replace "[\r\n]+", ' '))
         }
-        [void][Runtime.InteropServices.Marshal]::ReleaseComObject($c)
       }
     }
   }

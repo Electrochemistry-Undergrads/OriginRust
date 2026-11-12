@@ -267,7 +267,7 @@ pub struct PlotArgs {
 
 #[derive(Args, Debug)]
 pub struct ExportArgs {
-    /// A .sheaf project.
+    /// A .sheaf project or an Origin .opj project (its graphs are read).
     pub project: PathBuf,
     /// Name of the graph (default: the only graph of the project).
     #[arg(long)]

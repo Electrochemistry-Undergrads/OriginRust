@@ -1,8 +1,8 @@
 //! Reader for Origin project files (`.opj`, written by Origin 7.5 to 2016).
 //!
 //! It reads workbooks, their sheets and columns (names, long names, units, comments,
-//! designations) and the column values. Graphs, matrices, notes, fits and everything
-//! else are skipped and reported in [`OpjImport::warnings`]. The format is described in
+//! designations), the column values and basic graphs (axes, titles, plots; see `graph.rs`).
+//! Matrices, notes, fits and everything else are skipped and reported in [`OpjImport::warnings`]. The format is described in
 //! `docs/spec/opj-format.md`.
 //!
 //! The file is read through a buffered reader: the data blocks are stepped over on the
@@ -11,6 +11,7 @@
 
 mod dataset;
 mod frame;
+mod graph;
 mod strings;
 #[cfg(test)]
 mod testutil;
@@ -36,6 +37,9 @@ pub struct OpjImport {
     pub version: String,
     /// The first line of the file, for example `CPYA 4.3168 226 W64 #`.
     pub signature: String,
+    /// The graph windows, in file order. Their plots refer to the ids of the columns in
+    /// `workbooks`; [`OpjImport::into_project`] renumbers both together.
+    pub graphs: Vec<sheaf_core::graph::Graph>,
     /// Plain-English notes about what was skipped or could not be read.
     pub warnings: Vec<String>,
 }
@@ -48,13 +52,41 @@ impl OpjImport {
     /// show 27 empty rows that the user never entered.
     pub fn into_project(self) -> sheaf_core::Project {
         let mut project = sheaf_core::Project::new();
+        let mut renumbered: HashMap<ColumnId, ColumnId> = HashMap::new();
         for mut book in self.workbooks {
             for sheet in &mut book.sheets {
                 for column in &mut sheet.columns {
                     trim_trailing_missing(column);
                 }
             }
-            project.adopt_named_workbook(book);
+            let old: Vec<ColumnId> = book.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect();
+            let id = project.adopt_named_workbook(book);
+            if let Some(b) = project.workbook(id) {
+                let new = b.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id));
+                renumbered.extend(old.into_iter().zip(new));
+            }
+        }
+        for mut graph in self.graphs {
+            let new_id = |id: &mut ColumnId| match renumbered.get(id) {
+                Some(n) => {
+                    *id = *n;
+                    true
+                }
+                None => false,
+            };
+            for layer in &mut graph.layers {
+                layer.plots.retain_mut(|p| {
+                    let ok = new_id(&mut p.y);
+                    if p.x.as_mut().is_some_and(|x| !new_id(x)) {
+                        p.x = None;
+                    }
+                    if p.y_error.as_mut().is_some_and(|e| !new_id(e)) {
+                        p.y_error = None;
+                    }
+                    ok
+                });
+            }
+            project.adopt_graph(graph);
         }
         project
     }
@@ -116,8 +148,28 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
         warnings.push(format!("The window list is damaged ({why}); windows after that point are missing."));
     }
 
-    let mut b = Builder { f, sets, warnings, next_column: 1, skipped: BTreeMap::new(), counts: Counts::default() };
+    let mut b = Builder {
+        f,
+        sets,
+        warnings,
+        next_column: 1,
+        skipped: BTreeMap::new(),
+        counts: Counts::default(),
+        column_of_set: HashMap::new(),
+    };
     let mut workbooks = b.workbooks(&windows).map_err(from_frame)?;
+    let graphs: Vec<sheaf_core::graph::Graph> = windows
+        .iter()
+        .filter(|w| graph::is_graph(w))
+        .map(|w| graph::build(w, &b.column_of_set, &mut b.warnings))
+        .collect();
+    if !graphs.is_empty() && version_before_9(&version) {
+        b.warnings.push(format!(
+            "This project was saved by Origin {version}, before version 9. Graph details of such files (page \
+             size, frames, axes, plots) were not verified; only 9.x projects were checked, so a graph may be \
+             wrong."
+        ));
+    }
     if workbooks.is_empty() && !b.sets.is_empty() {
         b.warnings.push(
             "No workbook could be matched to its columns; the columns were grouped by their stored names, \
@@ -130,11 +182,11 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     for w in &mut workbooks {
         w.source = Some(source.clone());
     }
-    b.finish_warnings(windows.len(), workbooks.len());
+    b.finish_warnings(windows.len() - graphs.len(), workbooks.len());
     if workbooks.is_empty() {
         b.warnings.push("The project holds no workbook data (only graphs, matrices or empty workbooks).".to_string());
     }
-    Ok(OpjImport { workbooks, version, signature, warnings: b.warnings })
+    Ok(OpjImport { workbooks, graphs, version, signature, warnings: b.warnings })
 }
 
 /// The version number stored in the header block, as `9.3`.
@@ -146,6 +198,11 @@ fn origin_version(header: &[u8]) -> String {
     }
     let s = format!("{v:.2}");
     s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// True when `version` (as returned by [`origin_version`]) is a number below 9.0.
+fn version_before_9(version: &str) -> bool {
+    version.parse::<f64>().is_ok_and(|v| v < 9.0)
 }
 
 #[derive(Default)]
@@ -164,6 +221,8 @@ struct Builder<R> {
     /// Reason a column was skipped -> how many.
     skipped: BTreeMap<String, usize>,
     counts: Counts,
+    /// 0-based position of a data set -> the column imported from it (for the plots of graphs).
+    column_of_set: HashMap<usize, ColumnId>,
 }
 
 impl<R: Read + Seek> Builder<R> {
@@ -181,7 +240,9 @@ impl<R: Read + Seek> Builder<R> {
             Ok(d) => {
                 self.counts.mixed_to_text += usize::from(d.mixed_to_text);
                 self.counts.stray += usize::from(d.stray_bytes > 0);
-                Ok(Some(Column::new(self.new_id(), short_name, designation, d.data)))
+                let id = self.new_id();
+                self.column_of_set.insert(set, id);
+                Ok(Some(Column::new(id, short_name, designation, d.data)))
             }
             Err(reason) => {
                 *self.skipped.entry(reason).or_insert(0) += 1;
@@ -291,7 +352,7 @@ impl<R: Read + Seek> Builder<R> {
         let skipped_windows = windows.saturating_sub(books);
         if skipped_windows > 0 && books > 0 {
             self.warnings.push(format!(
-                "{skipped_windows} window(s) that are not workbooks (graphs, matrices, notes, layouts) were not imported."
+                "{skipped_windows} window(s) that are not workbooks or graphs (matrices, notes, layouts) were not imported."
             ));
         }
         for (reason, n) in std::mem::take(&mut self.skipped) {

@@ -331,6 +331,9 @@ pub enum PlotKind {
     Line,
     Scatter,
     LineSymbol,
+    /// Vertical bars from zero up to each value. The bar is filled with the
+    /// symbol color and outlined with the line style.
+    Column,
 }
 
 impl PlotKind {

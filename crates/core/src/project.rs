@@ -220,6 +220,20 @@ impl Project {
         id
     }
 
+    /// Adds a graph that an importer built. It gets a fresh window id; its name is kept when no
+    /// other window uses it and replaced by a free `Graph<n>` name otherwise.
+    pub fn adopt_graph(&mut self, mut graph: Graph) -> WindowId {
+        let id = WindowId(self.fresh_id());
+        graph.id = id;
+        let wanted = graph.name.clone();
+        let free = !wanted.is_empty() && !self.windows.iter().any(|w| w.name().eq_ignore_ascii_case(&wanted));
+        if !free {
+            graph.name = self.unique_name("Graph");
+        }
+        self.windows.push(Window::Graph(graph));
+        id
+    }
+
     /// Adds an empty graph in the style of `template` and returns its id.
     pub fn add_graph(&mut self, template: Template) -> WindowId {
         let id = WindowId(self.fresh_id());

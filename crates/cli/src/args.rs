@@ -535,6 +535,40 @@ pub enum PeakKind {
     Negative,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakMethodKind {
+    LocalMax,
+    Window,
+    FirstDerivative,
+    SecondDerivative,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakBaselineKind {
+    None,
+    EndPoints,
+    Minima,
+    Anchors,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakLimitKind {
+    Baseline,
+    HalfHeight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakFitKind {
+    Gauss,
+    Lorentz,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakFitBaselineKind {
+    Constant,
+    Linear,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum AnalyzeTool {
     /// Area under each curve, with peak position, height and width; adds the running integral.
@@ -676,6 +710,40 @@ pub enum AnalyzeTool {
         /// Keep every local extremum.
         #[arg(long, group = "keep")]
         all: bool,
+        /// How peaks are located. This and every option below switch to the peak chain
+        /// (baseline, search, per-peak limits), which also writes a baseline column.
+        #[arg(long, value_enum)]
+        method: Option<PeakMethodKind>,
+        /// Smooth the curve over this many points (Savitzky-Golay) before searching.
+        #[arg(long, default_value_t = 0)]
+        smooth: usize,
+        /// Drop peaks narrower than this full width at half height (X units).
+        #[arg(long, default_value_t = 0.0)]
+        min_width: f64,
+        /// Baseline to subtract before the search: none, end-points (straight line through the
+        /// first and last point), minima (the lowest point of each of --baseline-points stretches),
+        /// or anchors (--anchors).
+        #[arg(long, value_enum)]
+        baseline: Option<PeakBaselineKind>,
+        /// Number of stretches (anchor points) of the minima baseline.
+        #[arg(long, default_value_t = 5)]
+        baseline_points: usize,
+        /// Anchor points of the anchors baseline, written X1:Y1,X2:Y2,... (linear interpolation).
+        #[arg(long)]
+        anchors: Option<String>,
+        /// Where a peak starts and ends: baseline (where the corrected curve reaches the baseline
+        /// or the valley to the next peak) or half-height.
+        #[arg(long, value_enum)]
+        limits: Option<PeakLimitKind>,
+        /// Add area, area percent, FWHM and limits of every peak.
+        #[arg(long)]
+        integrate: bool,
+        /// Fit all peaks together (sum of peaks, started at the found peaks) and report each one.
+        #[arg(long, value_enum)]
+        fit: Option<PeakFitKind>,
+        /// Baseline of the multi-peak fit.
+        #[arg(long, value_enum, default_value_t = PeakFitBaselineKind::Linear)]
+        fit_baseline: PeakFitBaselineKind,
     },
     /// Descriptive statistics of each column.
     Stats {

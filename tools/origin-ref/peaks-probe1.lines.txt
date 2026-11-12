@@ -1,0 +1,5 @@
+newbook;
+col(A) = data(0, 20, 0.1);
+col(B) = 0.05 + 0.01*col(A) + exp(-(col(A)-4)^2/(2*0.4^2)) + 0.7*exp(-(col(A)-9)^2/(2*0.5^2)) + 0.005*sin(37*col(A)) + 0.003*cos(91*col(A));
+pkfind iy:=(col(A),col(B)) method:=max filter:=h value:=0.3 ocenter:=col(C) oleft:=col(D) oright:=col(E) ocenter_x:=col(F) oleft_x:=col(G) oright_x:=col(H);
+#[Book1]Sheet1

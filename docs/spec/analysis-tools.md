@@ -227,8 +227,8 @@ the ripple minima of a positive curve are not negative peaks. Height filter with
 with `|y| >= v`; with `v = 0` the threshold is 20 % of the largest `|y|` of the data (fits two data
 sets; whether the maximum is of `|y|` or of `y` was not separated). Number filter: the `value`
 largest `|y|`, reported in row order. If no peak exists Origin stops the script with an error; our
-function returns an empty result. The `smooth` option (smoothing before the search) is not
-implemented. The window search and derivative methods are not implemented.
+function returns an empty result. The other search methods and smoothing before the search are
+part of the peak chain (section 11); only the local maximum method is checked against `pkfind`.
 
 ## 8. Descriptive statistics (`stats`, `colstats`)
 
@@ -334,6 +334,84 @@ baselines per peak, and splitting a curve into peaks automatically (Origin's Pea
 Command line: `sheaf analyze integrate FILE --ranges 0.2:0.5,0.6:0.9 [--row-ranges 1:200,201:400]
 [--baseline]`; `--absolute` and `--no-cumulative` do not apply and are refused with a message.
 Window: Analysis > Integrate Ranges... (a list of X intervals with Add range and Remove).
+
+## 11. Peak chain (Sheaf's Peak Analyzer)
+
+Origin's Peak Analyzer is a wizard with the goals create baseline, subtract baseline, find peaks,
+integrate peaks and fit peaks. Sheaf runs the same goals in one tool, `Tool::PeakChain`
+(`crates/calc/src/peakchain.rs`, `crates/fit/src/multipeak.rs`, the glue in `crates/core/src/analysis.rs`).
+What was measured in Origin: the local-maximum search (section 7) and `integ1` (section 1), used here
+as the reference for the area, centre, height and half-height width of each peak. The wizard itself
+was not driven, so the rules for baselines, limits and the other search methods below are Sheaf's own
+choices, written to behave like the wizard's defaults; they are marked "own".
+
+Steps, in order:
+
+1. Baseline (own): none, a constant, the straight line through the first and last point, anchor
+   points joined by linear or spline interpolation (the `baseline` module), or an automatic mode that
+   takes the lowest point of each of n equal stretches of the (lightly smoothed) data as an anchor and
+   joins the anchors by straight lines. The baseline is subtracted; all later numbers use the
+   corrected curve.
+2. Search (own, except local maximum): methods local maximum (section 7, `npts` neighbours), window
+   search (the largest point of a window of `npts` points each side), first derivative (plus-to-minus
+   sign change of a Savitzky-Golay derivative) and second derivative (a negative minimum of the second
+   derivative, which also finds a shoulder that has no maximum of its own). Optional Savitzky-Golay
+   smoothing before the search; the reported row is the largest raw point next to the smoothed
+   maximum. Direction positive, negative or both. Filters: height (0 means 20 % of the largest
+   magnitude, as in `pkfind`), a number of highest peaks, and a minimum full width at half height.
+3. Limits (own): walking outwards from the peak point, a peak ends where the corrected curve reaches
+   zero (the baseline), found by linear interpolation between two points, but never beyond the valley
+   (the point nearest the baseline) between it and the neighbouring peak, so overlapping peaks share
+   the valley as their common limit and their areas add up to the area under both. With the half
+   height option the limits are the points where the curve falls to half the peak height.
+4. Result per peak: row of the peak point, centre (X of the peak point), height above the baseline,
+   area (trapezoids between the two limits, including the interpolated end pieces), area percent (share
+   of the sum of all areas), FWHM (interpolated half-height crossings inside the limits), left and right
+   limit (X). A negative peak has negative height and area.
+   Data rules (own, not compared with Origin): rows where X or Y is missing are skipped in every step
+   (the baseline and corrected curve are missing there, an area is the integral over the valid rows,
+   and the end-points line goes through the first and last valid rows), so the integration columns and
+   the fit columns agree. X must run one way, rising or falling; otherwise the tool refuses with "X is
+   not sorted" and changes nothing. The area of a positive peak is positive whichever way X runs
+   (Origin's `integ1` gives a negative area for falling X, section 1; the table here follows the
+   fit columns instead, so the two sets of columns have one sign).
+5. Multi-peak fit (own model, Origin's functions): a sum of Gauss or Lorentz peaks plus a constant or
+   sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak, in Origin's parameterisation
+   (Gauss `A/(w sqrt(pi/2)) exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz
+   `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`). Starting values come from the found peaks (centre, FWHM,
+   height above the baseline), with widths bounded to stay positive. The fit uses the nonlinear engine
+   of `crates/fit`. The report has centre, height, FWHM, area and area percent per peak, plus a line of
+   R squared, reduced chi-square and iterations. The fit uses the data, not the corrected curve, so
+   the baseline is fitted along with the peaks.
+
+Output (ADR 0005): a new sheet `PeakAnalysis1` with one row per peak and column, headers Row, Center,
+Height, then (with integration) Area, Area %, FWHM, Left limit, Right limit, then (with a fit) Fit
+center, Fit height, Fit FWHM, Fit area, Fit area %. A baseline column and, with a fit, a fitted-curve
+column are added beside each source column. No peaks found, or a baseline that cannot be made, is an
+error and changes nothing. One undo step named "Analyze peaks".
+
+Checked against Origin (`crates/calc/tests/origin_peakchain.rs`, script
+`tools/origin-ref/peaks-integ.lines.txt`): generated data (401 points, slope 0.01, one separate peak,
+two overlapping peaks, a small ripple). Sheaf found three peaks and its limits; Origin's `integ1` then
+integrated the corrected curve over exactly those rows. Agreement: peak position and height exactly,
+area within 2e-4 absolute (Sheaf also integrates the sliver up to the interpolated baseline crossing,
+below 1.1e-4 here), width at half height within 1e-9 where Origin's half-height crossing lies inside
+the rows. For the second peak the valley side never reaches half height inside its limits; Origin
+extends the width beyond the rows and Sheaf stops at the limit, so that width is not compared. Not
+checked against Origin: the choice of limits itself, the automatic baseline, the derivative methods,
+and the multi-peak fit (it is tested against closed-form data in `multipeak.rs` and in the core and
+CLI tests, not against Origin's Peak Analyzer fit).
+
+Not done: anchor points chosen on a graph, a second-derivative-zero baseline, the wizard's
+interactive preview, separate widths or shapes per peak, constraints, and fitting inside a row range
+other than the request's range.
+
+Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivative|second-derivative]
+[--smooth N] [--min-width W] [--baseline none|end-points|minima|anchors] [--baseline-points N]
+[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz]
+[--fit-baseline constant|linear]`, together with the existing `--points`, `--min-height`, `--count`,
+`--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
+Analyze Peaks... (command line `--show analysis:peak-chain`).
 
 ## Files
 

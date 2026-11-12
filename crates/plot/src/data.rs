@@ -75,14 +75,7 @@ pub(crate) struct LayerData<'a> {
     pub members: usize,
 }
 
-/// The half-open row range of a plot whose Y column has `len` rows, clamped to the column.
-pub(crate) fn row_range(plot: &Plot, len: usize) -> (usize, usize) {
-    let (start, end) = match plot.rows {
-        Some((s, e)) => (s.min(len), e.min(len)),
-        None => (0, len),
-    };
-    (start, end.max(start))
-}
+pub(crate) use sheaf_core::stack::row_range;
 
 /// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden
 /// or whose Y column is missing or not numeric is skipped (a hidden plot still keeps its place in

@@ -292,7 +292,7 @@ fn what_cannot_be_written_is_refused_or_reported() {
 }
 
 #[test]
-fn graphs_folders_formulas_and_line_breaks_are_reported() {
+fn folders_formulas_and_line_breaks_are_reported() {
     let mut project = sample_project();
     project.add_graph(sheaf_core::template::Template::Line);
     project.root.folders.push(sheaf_core::project::Folder { name: "Sub".into(), ..Default::default() });
@@ -302,12 +302,14 @@ fn graphs_folders_formulas_and_line_breaks_are_reported() {
     }
     let out = written(&project);
     let all = out.warnings.join(" | ");
-    for needle in ["1 graph(s) were not written", "Graph1", "folders", "column formula", "line breaks"] {
+    for needle in ["folders", "column formula", "line breaks"] {
         assert!(all.contains(needle), "{needle}: {all}");
     }
     let imp = read_back(&out.bytes);
     assert_eq!(imp.workbooks.len(), 2);
     assert_eq!(imp.workbooks[0].sheets[0].columns[0].long_name, "two lines");
+    // the empty graph is written, not skipped
+    assert_eq!(imp.graphs.len(), 1);
 }
 
 #[test]

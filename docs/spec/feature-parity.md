@@ -4,7 +4,7 @@ A snapshot. Update a row when its feature lands; re-run the audit after each mil
 
 Date: 2026-11-11.
 
-This document answers the owner's question: does Sheaf have all of Origin's features? The short answer is no. Sheaf does the owner's daily jobs well, but it has about a third of what Origin offers in some areas and almost nothing in others. It does not yet write .opj files, and its window layout and menus differ clearly from Origin's.
+This document answers the owner's question: does Sheaf have all of Origin's features? The short answer is no. Sheaf does the owner's daily jobs well, but it has about a third of what Origin offers in some areas and almost nothing in others. It writes .opj files from the command line only (the app does not yet), and its window layout and menus differ clearly from Origin's.
 
 ## How the audit was made
 
@@ -18,8 +18,8 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 37 | 94 | 99 | 230 |
-| P0 | 30 | 63 | 8 | 101 |
+| All rows | 37 | 95 | 98 | 230 |
+| P0 | 30 | 64 | 7 | 101 |
 | P1 and P2 together | 7 | 31 | 91 | 129 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 42 are P2. The P1 and P2 rows were not counted separately by status.
@@ -30,14 +30,14 @@ Cross-cutting findings:
 - Column formulas now recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
 - Analysis and fit results are static sheets, not linked to their source data.
 - The core model holds several layers per graph, but the app edits only the first.
-- There is no .opj writer. `crates/io/src/opj` only reads.
+- `crates/io/src/opj/write` writes workbooks and graphs as Origin 2016 projects (CLI `sheaf export -o x.opj`); the app does not use it yet, and matrices, notes, folders and fit results are not written.
 
 ## 1 Project, windows and menus
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Project save and open, own format | File > Save/Open, Ctrl+S/O | .sheaf zip; New/Open/Save/Save As; prompt on quit; CLI | ✓ | none | P0 |
-| Save project as .opj (owner's request) | File > Save Project As | none | ✗ | no writer anywhere; app and CLI write only .sheaf, PNG, SVG, PDF, CSV/TSV | P0 |
+| Save project as .opj (owner's request) | File > Save Project As | `io/src/opj/write`; CLI `export -o x.opj` | ◐ | workbooks and graphs are written and open in Origin 2016 (spec 13.9); the app has no menu entry yet; folders, matrices, notes, grid style, legend icons for spline curves not written | P0 |
 | Open .opj workbooks and basic graphs | File > Open | `io/src/opj`; app, drag and drop, CLI | ◐ | skips matrices, notes, layouts, folders, fit results, formulas, masks, column formats; .opju not read; saved as .sheaf copy; pre-9 graphs unverified | P0 |
 | Undo and redo | Edit > Undo, Ctrl+Z | full history, labelled, Ctrl+Z/Y | ✓ | superset of Origin's one level; Alt+Backspace unbound | P0 |
 | Project Explorer | View > Project Explorer, Alt+1 | flat window list, right-click Show/Rename/Export/Delete | ◐ | no folder tree or editing UI (model has folders), no filters, Duplicate, Properties, search; cannot be hidden | P0 |

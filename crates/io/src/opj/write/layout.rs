@@ -14,15 +14,15 @@ const VERSION: f64 = 9.300_226;
 
 /// A field of constant bytes: offset and value. Meanings that are known are in the comments; the
 /// others were seen with these values in every project written by Origin 2016.
-type Fields = &'static [(usize, &'static [u8])];
+pub(super) type Fields = &'static [(usize, &'static [u8])];
 
-fn fill(buf: &mut [u8], fields: Fields) {
+pub(super) fn fill(buf: &mut [u8], fields: Fields) {
     for (at, bytes) in fields {
         buf[*at..*at + bytes.len()].copy_from_slice(bytes);
     }
 }
 
-fn put(buf: &mut [u8], at: usize, bytes: &[u8]) {
+pub(super) fn put(buf: &mut [u8], at: usize, bytes: &[u8]) {
     buf[at..at + bytes.len()].copy_from_slice(bytes);
 }
 
@@ -39,7 +39,7 @@ pub(super) fn framed(body: &[u8]) -> Vec<u8> {
 }
 
 /// Where Origin keeps a name: NUL-terminated Windows-1252 in a field of `width` bytes.
-fn put_name(buf: &mut [u8], at: usize, width: usize, text: &str) {
+pub(super) fn put_name(buf: &mut [u8], at: usize, width: usize, text: &str) {
     let (bytes, _) = encode_cp1252(text);
     let n = bytes.len().min(width - 1);
     put(buf, at, &bytes[..n]);

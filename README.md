@@ -39,7 +39,7 @@ sheaf plot run1.txt run2.txt -o overlay.pdf      # several files in one figure
 sheaf plot data.csv -o fig.svg --template line-symbol --y B,C
 sheaf import run1.txt run2.txt -o lab.sheaf --plot
 sheaf export lab.sheaf --graph Graph1 -o fig.png
-sheaf export lab.sheaf -o lab.opj                  # the whole project as an Origin 2016 project (workbooks; graphs are skipped with a warning)
+sheaf export lab.sheaf -o lab.opj                  # the whole project as an Origin 2016 project (workbooks and graphs; what the file cannot hold is listed as warnings)
 sheaf export data.csv -o data.opj                # a data file as a one-workbook Origin project
 sheaf analyze integrate it.txt                   # charge of a current-vs-time file
 sheaf analyze integrate cv.txt --rows 700:900 --baseline   # peak area above a sloping background

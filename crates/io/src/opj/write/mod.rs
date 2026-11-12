@@ -2,14 +2,20 @@
 //!
 //! It writes the workbooks of a project: sheets, numeric and text columns with missing values,
 //! short and long names, units, comments and column roles, and the project tree with every window
-//! in one folder. Graphs and other windows are not written yet; they are skipped and named in
-//! [`OpjWrite::warnings`]. The layout is described in `docs/spec/opj-format.md`, section 13.
+//! in one folder, and the graphs (`graph.rs`: axes, plots, titles, text, legend). Whatever the file
+//! cannot hold is named in [`OpjWrite::warnings`]. The layout is described in
+//! `docs/spec/opj-format.md`, section 13.
 //!
 //! The file is built in memory in the order Origin writes it: signature, version header, one
 //! block triple per column (the data sets), then the windows with their layers and column
-//! records, then the sections after the window list. A graph writer would add its window blocks in
-//! [`Writer::window`] next to the workbook case.
+//! records, then the sections after the window list. Graph windows come from [`Writer::graph`].
 
+mod glayout;
+mod graph;
+#[cfg(test)]
+mod graph_tests;
+#[rustfmt::skip]
+mod graph_tables;
 mod layout;
 #[cfg(test)]
 mod tests;
@@ -20,9 +26,10 @@ use crate::error::IoError;
 use layout::{ColumnSpec, DatasetSpec, LayerSpec, TailSpec, WindowSpec, framed};
 use sheaf_core::Project;
 use sheaf_core::column::{Column, ColumnData, Designation};
+use sheaf_core::ids::ColumnId;
 use sheaf_core::project::Window;
 use sheaf_core::worksheet::{Workbook, Worksheet};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 /// The bytes of an Origin project and what was left out of it.
@@ -74,13 +81,36 @@ const MAX_CELL_TEXT: usize = 252;
 /// The column record points to its data set with 16 bits.
 const MAX_COLUMNS: usize = u16::MAX as usize;
 
+/// Where the data set of a column is in the file, for the curves of graphs.
+#[derive(Clone, Copy, Debug)]
+struct SetInfo {
+    /// 1-based position in the data-set list.
+    position: u16,
+    /// Position of the first value and after the last one (0 and 0 for an empty column).
+    first: u32,
+    last: u32,
+}
+
+/// The range of cells that hold a value, as `dataset()` stores it.
+fn used_range(column: &Column) -> (u32, u32) {
+    let used: Vec<usize> = match &column.data {
+        ColumnData::Numeric(v) => v.iter().enumerate().filter(|(_, x)| !x.is_nan()).map(|(i, _)| i).collect(),
+        ColumnData::Text(v) => v.iter().enumerate().filter(|(_, t)| !t.is_empty()).map(|(i, _)| i).collect(),
+    };
+    match (used.first(), used.last()) {
+        (Some(f), Some(l)) => (*f as u32, *l as u32 + 1),
+        _ => (0, 0),
+    }
+}
+
 #[derive(Default)]
 struct Notes {
     lossy_texts: usize,
     flattened_breaks: usize,
     formulas: usize,
     demoted_labels: usize,
-    skipped_graphs: Vec<String>,
+    /// Everything a graph holds that the file does not, one sentence each.
+    graph_notes: Vec<String>,
 }
 
 struct Writer {
@@ -92,6 +122,10 @@ struct Writer {
     /// Sheets written so far, over all workbooks.
     sheets: usize,
     written_windows: usize,
+    /// Graph windows written so far.
+    graphs: usize,
+    /// A counter that Origin gives to the objects of a graph (curves, text).
+    object_serial: u32,
     notes: Notes,
     folder_warning: bool,
 }
@@ -105,6 +139,8 @@ impl Writer {
             columns: 0,
             sheets: 0,
             written_windows: 0,
+            graphs: 0,
+            object_serial: 0x0325,
             notes: Notes::default(),
             folder_warning: false,
         }
@@ -114,23 +150,30 @@ impl Writer {
         self.check_text("project name", name)?;
         self.folder_warning = !project.root.folders.is_empty();
         let mut seen: HashSet<String> = HashSet::new();
+        // the data-set position of every column, as the workbooks will number them
+        let mut sets: HashMap<ColumnId, SetInfo> = HashMap::new();
+        let mut next = 0usize;
+        for book in project.workbooks() {
+            for column in book.sheets.iter().flat_map(|s| s.columns.iter()) {
+                next += 1;
+                let (first, last) = used_range(column);
+                sets.insert(column.id, SetInfo { position: next.min(usize::from(u16::MAX)) as u16, first, last });
+            }
+        }
         for window in &project.windows {
             if !seen.insert(window.name().to_lowercase()) {
                 return fail(format!("two windows are named '{}'; Origin needs distinct window names", window.name()));
             }
-            self.window(window)?;
+            self.window(project, window, &sets)?;
         }
         Ok(())
     }
 
-    /// Writes one window. Workbooks are written; a graph writer would go in the second arm.
-    fn window(&mut self, window: &Window) -> Result<(), IoError> {
+    /// Writes one window: a workbook or a graph.
+    fn window(&mut self, project: &Project, window: &Window, sets: &HashMap<ColumnId, SetInfo>) -> Result<(), IoError> {
         match window {
             Window::Workbook(book) => self.workbook(book),
-            Window::Graph(graph) => {
-                self.notes.skipped_graphs.push(graph.name.clone());
-                Ok(())
-            }
+            Window::Graph(graph) => self.graph(project, graph, sets),
         }
     }
 
@@ -387,13 +430,7 @@ impl Writer {
         bytes.extend(layout::tail(&TailSpec { project_name, windows: self.written_windows, time: self.time }));
         let n = &self.notes;
         let mut warnings = Vec::new();
-        if !n.skipped_graphs.is_empty() {
-            warnings.push(format!(
-                "{} graph(s) were not written because graphs cannot be saved as Origin projects yet: {}.",
-                n.skipped_graphs.len(),
-                n.skipped_graphs.join(", ")
-            ));
-        }
+        warnings.extend(n.graph_notes.iter().cloned());
         if self.folder_warning {
             warnings.push("The folders of the project were not written; every window is in the root folder.".into());
         }

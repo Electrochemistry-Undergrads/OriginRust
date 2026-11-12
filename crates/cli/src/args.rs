@@ -379,7 +379,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub graph: Option<String>,
     /// What to write: a figure (.png, .svg or .pdf) or, with .opj, the whole project as an Origin
-    /// 2016 project file (workbooks only for now; graphs are skipped with a warning).
+    /// 2016 project file (workbooks and graphs; what the file cannot hold is listed as warnings).
     #[arg(short, long)]
     pub output: PathBuf,
     /// Resolution of PNG output in dots per inch.

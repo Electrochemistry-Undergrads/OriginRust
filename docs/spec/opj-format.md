@@ -568,8 +568,8 @@ not sampled in the large project, hidden columns, column widths and number forma
 ## 13. Writing
 
 The writer is `crates/io/src/opj/write/` (`sheaf_io::opj::write`, `write_file`). It writes the
-workbooks of a project in the format of Origin 2016 (version 9.3). Graphs are not written yet; they
-are left out with a warning. Tags: **[orig]** checked by opening the written file in Origin 2016
+workbooks and graphs of a project in the format of Origin 2016 (version 9.3). Graphs are 13.9; what
+a graph holds that the file does not is named in a warning. Tags: **[orig]** checked by opening the written file in Origin 2016
 (sections 13.7 and 13.8), **[obs]** copied from what Origin writes, **[inf]** a guess that Origin
 accepted without showing a difference.
 
@@ -763,4 +763,114 @@ used row counts and every listed cell agree between Origin and our reader, and t
 equals the project that was written (the cargo tests). Not checked: how the window looks in Origin
 (column widths, window position; no picture was taken), saving the opened file again from Origin, other
 Origin versions (only 2016 was available; the file claims version 9.3 and Origin 7 to 9.1 were not
-tried), and everything that is not a workbook.
+tried), and everything that is neither a workbook nor a graph.
+
+### 13.9 Graph windows
+
+Code: `write/graph.rs` (model to blocks), `write/glayout.rs` (byte positions), `write/graph_tables.rs`
+(constant bytes), `write/graph_tests.rs`. Tags as above.
+
+**Order [orig]** (a graph is listed among the windows in project order, next to workbooks; its curves
+point to data sets by position, so every column of the project is numbered first and a graph may come
+before its workbook):
+
+```
+window header (195 + label)          page size at 0x3D / 0x3F, rectangle at 0x1B
+per layer:
+  layer header (361)                 frame, axis limits, steps, scale kinds, minor ticks
+  annotation blocks                  per object four blocks: header (131), style (102), text, empty
+                                     objects in the order: X title (XB), Y title (YL), free text (Text, Text1, ..), Legend
+  an empty block                     (end of the annotations)
+  curve records                      per curve a 515-byte record and an empty block; a Y error plot
+                                     directly after the curve it belongs to
+  two empty blocks                   (end of the curves, the extra block)
+  axis blocks                        group X: six 515-byte blocks and an empty block; group Y the same;
+                                     group Z: six fixed blocks and an empty block
+an empty block                       (end of the layer list)
+```
+
+**Layer header [orig].** Frame at `0x71` (left, top, right, bottom, 16 bits, 1/600 inch of the page),
+the rectangle around the frame that holds tick labels and titles at `0x79`. Per axis (X at `0x0F`, Y at
+`0x3A`): from, to and step as doubles, then the number of major ticks, a flag for "limits follow the
+data", the page units per axis unit (negative for Y) and at `0x37` / `0x62` the minor tick count and the
+scale kind (0 linear, 1 log10). The rectangle at `0x79` is written as an estimate and Origin draws the same
+picture [inf].
+
+**Axis blocks [orig].** The six blocks of a group are: minor grid, major grid, tick labels, axis line and
+ticks, title, opposite axis. Tick label size in points at `0x15` of block 2; "shown" is bit 6 of byte
+`0x26` in every block; the axis line width is at `0x15` of block 3 in 1/500 point and byte `0x25` of that
+block holds the major tick direction in bits 4 and 5 and the minor one in bits 6 and 7 (0 none, 1 in, 2 out,
+3 both). Colours are four bytes: the position in Origin's colour list, then the same position or the
+three bytes red, green, blue and 1 for a free colour. A text column as X sets the flag at `0x23` and
+`0x25` in blocks 2 and 4 of the X group; Origin then prints the texts of the column under the bars.
+
+**Curve records [orig].** Type words: 200 line, 201 scatter, 202 line and symbol, 203 column, 487 Y error
+(a 515-byte record whose `0x04` is the data set of the error column and `0x23` the Y data set of the curve).
+Data-set numbers at `0x04` (Y) and `0x23` (X, 0 for row numbers), first and after-last used row at `0x07`
+and `0x0B`. Line colour at `0x0F` and `0x16A`, dash at `0x12`, connection at `0x11` (1 straight, 5 spline,
+11 and 12 steps), width at `0x15` in 1/500 point, symbol shape at `0x17`, open flag at `0x18`, size at
+`0x19` in 1/500 point, symbol colour at `0x132`, column fill colour at `0xC2`. Byte `0x06` is 9 so
+that no curve is in a plot group (a group gives every curve the colour of the first one [obs]).
+Origin counts the objects of a project with a running number that is kept at `0x1E2`.
+
+**Annotations [orig].** The text is Windows-1252 with Origin's escapes (bold, italic, super and
+subscript, `\l(n)` for a legend icon, `%(n)` for the name of curve n, `%(?X,@LG)` / `%(?Y,@LG)` for an
+axis title made from long name and units). The shorter `%(?X)` gave the long name only in Origin 2016;
+`@LG` gives "Name (units)" as Sheaf does [orig]. The rectangle of an object is in page
+units, the text size in points at `0x04` of the style block, the angle in tenths of a degree. Origin seems
+to place axis titles itself: two files that differed only in the written position of a Y title gave
+identical pictures [obs]. A legend without a frame has its frame style and background colour set to "none".
+
+**Written, and not written.** Written: page size; layers with frame; X and Y axes with linear or log
+scale, limits (a round range is chosen when the model leaves them open), major step, minor tick count,
+tick directions, tick label size and visibility, line width, colour, opposite axis, grids on or off;
+titles; line, scatter, line and symbol and column plots with colour, width, dash, connection, symbol
+shape, size and open or filled; Y error bars; free text with size and rotation; the legend with its
+place, frame and text; categories from a text X column. Named in a warning, not written: page background
+colour, fonts other than Origin's default, text colours outside Origin's list (the nearest listed colour
+is used), grid colour, width and dash (Origin's default grid style appears), legend background colour, a
+plot's row range, symbols on every n-th point only, hidden plots, plots whose data are not columns of a
+workbook, axis ranges that follow the data in a way other than Origin's own (the limits for the current
+data are written), and graphs with no layer (not written at all).
+
+**Minimum records [obs, partial].** Every block above is written because Origin writes it. The constant
+bytes come from graphs that Origin 2016 saved (`opj-make-from-labtalk.ps1`; the tables in
+`graph_tables.rs` are the non-zero bytes of each block with the fields we set cleared). Compared with
+Origin's own files, the writer leaves out the stored layer information, plot groups and the storage text
+of the project, and Origin still opens the files. A systematic removal of single blocks to find the
+smallest set that opens was not done for graphs; the whole set above is kept.
+
+**Frame and extreme ranges [obs].** A layer frame with no width, a negative corner or a size beyond the page
+loads in Origin 2016 but exports a blank picture, so the writer replaces it by a default frame (0.15, 0.12,
+0.78, 0.76 of the page) and warns. A log axis over data from 1e-300 to 1e300 came out in Origin with a limit
+range (about 1e269 to 1e281 drawn) that does not cover the data; the writer gives the limits it computes and
+does not warn. The cause (writer or Origin's own limit) was not traced, and such data is outside the
+range any real project holds.
+
+**Verification.** Round trip: `cargo test -p sheaf-io` writes graphs, reads them with this crate's
+reader and compares the models (all plot kinds, shapes, dashes, connections, log axes, automatic ranges,
+error bars, text X, two layers, warnings; damaged copies of written files never make the reader panic).
+The reader does not read grid lines, legend text or fonts (section 10.7), so those were checked in
+Origin only. Origin 2016 (hidden instance, `opj-verify-graphs.ps1`) returned true from `Load` for each of
+the 8 files of `cargo run -p sheaf-io --example opj_write_graphs -- FOLDER`, listed all 18 graph windows,
+and exported each as a PNG. The report Origin printed for `g-basic` (limits, steps, scale kinds, frame)
+agrees with what was written; the reports of the other files were not compared line by line. The pictures
+were compared by eye with `sheaf export` of the same file (the pictures are in the scratch folder only).
+
+Matches: page and frame places, axis limits, steps, minor ticks and tick directions, log axes (Origin
+prints 1, 10, 100 where Sheaf prints powers of ten), line colours, widths, dashes, straight and step
+connections, all symbol shapes filled or open, column bars with error bars and free text labels, two layers
+on one page, the owner-style cyclic voltammogram overlay (three curves, box, titles), the current against
+time curve and the column chart with error bars and text labels (a to d).
+Differences seen: (1) Sheaf's picture of a read-back file numbers the categories 1 to 6 where Origin prints
+the station names from the text column, because the reader does not read a text X column. (2) Origin draws
+a legend icon for straight lines, symbols and columns but not for spline curves; the same graph with
+straight lines had icons [obs]; the cause was not found. (3) Origin writes tick labels as plain decimals
+(0.000025) where Sheaf uses 2.5x10^-5; when the frame leaves too little room, Origin cuts the Y title off at
+the page edge (seen in the current against time graph), and the model's tick number format (decimal, scientific) is not written, so the writer warns and Origin's decimal labels stay.
+(4) Origin's column bars are wider than Sheaf's. (5) Sheaf's picture of a read-back file has no grid lines,
+since the reader skips them; Origin shows them in its default style. (6) Origin's legend of a column plot has
+a filled box icon and a frame; the reader keeps neither.
+Not checked: Origin versions other than 2016; opening a written file in the visible Origin window and saving
+it again; other machines or fonts.
+

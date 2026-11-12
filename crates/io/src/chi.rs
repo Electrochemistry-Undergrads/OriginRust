@@ -1,9 +1,12 @@
 //! CH Instruments (CHI) potentiostat text exports.
 //!
 //! See `docs/spec/chi-text-format.md`. A file is a block of header lines
-//! (date, technique, `name = value` parameters), a column header such as
-//! `Potential/V, Current/A`, and numeric rows. Cyclic voltammetry files with
-//! several cycles are split into one pair of columns per scan.
+//! (date, technique, `name = value` parameters, optional results), a column
+//! header such as `Potential/V, Current/A`, and numeric rows. Cyclic
+//! voltammetry files with several cycles are split into one pair of columns
+//! per scan; chronopotentiometry (charge/discharge) files also get one group
+//! of columns per segment. Times that the file rounds to 4 significant digits
+//! are recomputed from the sampling interval in the header.
 
 use crate::error::IoError;
 use sheaf_core::column::default_short_name;
@@ -16,23 +19,39 @@ const HEADER_SEARCH_LINES: usize = 200;
 const CLIP_MIN_ROWS: usize = 20;
 /// Relative tolerance for "the same value" when looking for clipping.
 const CLIP_TOLERANCE: f64 = 1e-9;
+/// A chronopotentiometry segment ends where the potential has turned back by
+/// this fraction of the whole potential range (spec section 2.4).
+const SEGMENT_TURN_FRACTION: f64 = 0.05;
 
 /// What the CHI importer should do. The defaults follow the spec.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChiOptions {
     /// Split a multi-cycle CV file into scans (default on).
     pub split_scans: bool,
+    /// Add a sheet with one group of columns per charge or discharge segment
+    /// to a chronopotentiometry file (default on).
+    pub split_segments: bool,
     /// Add a current column in mA after every current column in A (default on).
     pub add_milliamp: bool,
     /// For time-based files with a current column, add the running charge (default on).
     pub add_charge: bool,
     /// Multiply the current by -1 (default off).
     pub invert_current: bool,
+    /// Replace times that the file rounds to 4 significant digits by exact
+    /// multiples of the sampling interval named in the header (default on).
+    pub exact_time: bool,
 }
 
 impl Default for ChiOptions {
     fn default() -> Self {
-        ChiOptions { split_scans: true, add_milliamp: true, add_charge: true, invert_current: false }
+        ChiOptions {
+            split_scans: true,
+            split_segments: true,
+            add_milliamp: true,
+            add_charge: true,
+            invert_current: false,
+            exact_time: true,
+        }
     }
 }
 
@@ -46,8 +65,12 @@ pub struct ChiImport {
     pub technique: String,
     /// Number of scans the file was split into, 0 when it was not split.
     pub scans: usize,
+    /// Number of chronopotentiometry segments in the `Segments` sheet, 0 when
+    /// there is no such sheet.
+    pub segments: usize,
     /// `Technique`, `Date`, `Instrument Model` (when present), then every
-    /// `name = value` line of the header in file order.
+    /// `name = value` line of the header in file order. Lines of the
+    /// `Results:` block carry their heading, for example `Segment 2: Ep`.
     pub meta: Vec<(String, String)>,
     /// Things the user should look at, for example a clipped current.
     pub warnings: Vec<String>,
@@ -65,6 +88,15 @@ struct Block {
     header: Vec<HeaderCol>,
     /// One vector of values per header column.
     data: Vec<Vec<f64>>,
+    /// For each row, the step of the last digit the file printed in the
+    /// first column (`2.023e+3` gives 1, `742.6` gives 0.1).
+    x_step: Vec<f64>,
+}
+
+impl Block {
+    fn new(header: Vec<HeaderCol>) -> Self {
+        Block { data: vec![Vec::new(); header.len()], header, x_step: Vec::new() }
+    }
 }
 
 impl Block {
@@ -94,12 +126,28 @@ fn parse_header_line(line: &str) -> Option<Vec<HeaderCol>> {
     matches!(first.as_str(), "potential" | "time" | "freq" | "frequency").then_some(cols)
 }
 
-fn parse_row(line: &str) -> Option<Vec<f64>> {
+/// The numbers of a data row and the printed step of its first field.
+fn parse_row(line: &str) -> Option<(Vec<f64>, f64)> {
     let mut values = Vec::new();
+    let mut step = f64::NAN;
     for f in line.split([',', '\t']).map(str::trim).filter(|f| !f.is_empty()) {
+        if values.is_empty() {
+            step = printed_step(f);
+        }
         values.push(f.parse::<f64>().ok()?);
     }
-    (values.len() >= 2).then_some(values)
+    (values.len() >= 2).then_some((values, step))
+}
+
+/// The value of one unit in the last printed digit of a number:
+/// `2.023e+3` gives 1, `742.6` gives 0.1, `1200` gives 1.
+fn printed_step(field: &str) -> f64 {
+    let (mantissa, exponent) = match field.find(['e', 'E']) {
+        Some(i) => (&field[..i], field[i + 1..].parse::<i32>().unwrap_or(0)),
+        None => (field, 0),
+    };
+    let decimals = mantissa.split_once('.').map_or(0, |(_, frac)| frac.len()) as i32;
+    10f64.powi(exponent - decimals)
 }
 
 fn find_header(lines: &[&str]) -> Option<usize> {
@@ -177,6 +225,7 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
 
     let mut warnings = Vec::new();
     let mut scans = 0;
+    let mut segments = 0;
     let mut sheets: Vec<Worksheet> = Vec::new();
     let mut next_id = 1u64;
     for mut block in blocks {
@@ -187,35 +236,121 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
                 }
             }
         }
-        let (mut sheet, n_scans) = build_sheet(&block, &technique, opts, &mut warnings);
-        scans += n_scans;
-        let base = sheet.name.clone();
-        let mut k = 2;
-        while sheets.iter().any(|s| s.name == sheet.name) {
-            sheet.name = format!("{base} {k}");
-            k += 1;
+        if opts.exact_time
+            && is_time(&block.header[0])
+            && let Some(note) = recompute_times(&mut block, &meta)
+        {
+            warnings.push(note);
         }
-        for col in &mut sheet.columns {
-            col.id = ColumnId(next_id);
-            next_id += 1;
+        let built = build_sheet(&block, &technique, &meta, opts, &mut warnings);
+        scans += built.scans;
+        segments += built.segments;
+        for mut sheet in built.sheets {
+            let base = sheet.name.clone();
+            let mut k = 2;
+            while sheets.iter().any(|s| s.name == sheet.name) {
+                sheet.name = format!("{base} {k}");
+                k += 1;
+            }
+            for col in &mut sheet.columns {
+                col.id = ColumnId(next_id);
+                next_id += 1;
+            }
+            sheets.push(sheet);
         }
-        sheets.push(sheet);
     }
 
     let mut workbook = Workbook::new(WindowId(0), "Book1");
     workbook.long_name = file_stem.to_string();
     workbook.sheets = sheets;
-    Ok(ChiImport { workbook, technique, scans, meta, warnings })
+    Ok(ChiImport { workbook, technique, scans, segments, meta, warnings })
+}
+
+fn is_time(h: &HeaderCol) -> bool {
+    h.long.eq_ignore_ascii_case("time") && h.unit == "s"
+}
+
+/// The sampling interval in seconds from a header line such as
+/// `Data Storage Interval (s) = 0.2` or `Sample Interval (s) = 0.1`, with
+/// the line's name.
+fn sampling_interval(meta: &[(String, String)]) -> Option<(&str, f64)> {
+    meta.iter().find_map(|(name, value)| {
+        let lower = name.to_ascii_lowercase();
+        let interval = lower.starts_with("sample interval") || lower.starts_with("data storage interval");
+        let seconds = lower.ends_with("(s)") || lower.ends_with("(sec)");
+        let dt = value.trim().parse::<f64>().ok()?;
+        (interval && seconds && dt.is_finite() && dt > 0.0).then_some((name.as_str(), dt))
+    })
+}
+
+/// CHI prints times with 4 significant digits, so above 1000 s they come in
+/// whole seconds and repeat. When every time of the block is the rounded
+/// value of a multiple of the header's sampling interval, the times are
+/// replaced by those multiples (spec section 2.5). Returns the note for the
+/// user, or `None` when nothing was changed.
+fn recompute_times(block: &mut Block, meta: &[(String, String)]) -> Option<String> {
+    let (name, dt) = sampling_interval(meta)?;
+    let t = &block.data[0];
+    let first = *t.first()?;
+    let m = (first / dt).round();
+    // Dividing by a whole number of samples per second (5 for 0.2 s) gives the
+    // correctly rounded value (0.6, not 0.6000000000000001).
+    let per_second = (1.0 / dt).round();
+    let divide = per_second >= 1.0 && ((1.0 / dt) - per_second).abs() <= 1e-9 * per_second;
+    let exact = |k: usize| {
+        let n = m + k as f64;
+        if divide { n / per_second } else { n * dt }
+    };
+    let mut changed = 0usize;
+    let mut largest_step = 0.0f64;
+    for (k, (&v, &step)) in t.iter().zip(&block.x_step).enumerate() {
+        let e = exact(k);
+        let off = (v - e).abs();
+        let allowed = 0.5 * step * (1.0 + 1e-9) + 1e-12 * e.abs();
+        // A NaN time or step is not within the allowance either.
+        if off.is_nan() || allowed.is_nan() || off > allowed {
+            return None;
+        }
+        if off > 1e-12 * e.abs().max(dt) {
+            changed += 1;
+            largest_step = largest_step.max(step);
+        }
+    }
+    if changed == 0 {
+        return None;
+    }
+    let rows = t.len();
+    block.data[0] = (0..rows).map(exact).collect();
+    Some(format!(
+        "{changed} of {rows} times in the file are rounded (to steps of up to {largest_step} s); \
+         all times were recomputed as multiples of {name} = {dt}"
+    ))
+}
+
+/// A heading line such as `Results:`, `Channel 1:` or `Segment 2:` (a name
+/// followed by a colon and nothing else). Returns the name.
+fn heading(line: &str) -> Option<&str> {
+    let name = line.strip_suffix(':')?.trim();
+    (!name.is_empty() && !name.contains(':')).then_some(name)
+}
+
+fn is_channel(name: &str) -> bool {
+    name.to_ascii_lowercase().starts_with("channel")
 }
 
 /// Reads date, technique, instrument model and `name = value` lines from the
-/// lines before the column header.
+/// lines before the column header. A `name = value` line inside the
+/// `Results:` block is named after its headings (`Segment 2: Ep`; the
+/// channel is added only when the block lists more than one).
 fn read_preamble(lines: &[&str]) -> (String, Vec<(String, String)>) {
     let mut technique = String::new();
     let mut date = String::new();
     let mut instrument = String::new();
     let mut params = Vec::new();
     let mut seen = 0;
+    let channels = lines.iter().filter_map(|l| heading(l.trim())).filter(|h| is_channel(h)).count();
+    let mut in_results = false;
+    let (mut channel, mut section) = (String::new(), String::new());
     for raw in lines {
         let line = raw.trim();
         if line.is_empty() {
@@ -224,7 +359,22 @@ fn read_preamble(lines: &[&str]) -> (String, Vec<(String, String)>) {
         if let Some((name, value)) = line.split_once(" = ") {
             let (name, value) = (name.trim(), value.trim());
             if !name.is_empty() {
-                params.push((name.to_string(), value.to_string()));
+                let name = if in_results {
+                    let mut label = String::new();
+                    if channels > 1 && !channel.is_empty() {
+                        label.push_str(&channel);
+                    }
+                    if !section.is_empty() {
+                        if !label.is_empty() {
+                            label.push_str(", ");
+                        }
+                        label.push_str(&section);
+                    }
+                    if label.is_empty() { name.to_string() } else { format!("{label}: {name}") }
+                } else {
+                    name.to_string()
+                };
+                params.push((name, value.to_string()));
             }
             seen += 1;
             continue;
@@ -239,6 +389,22 @@ fn read_preamble(lines: &[&str]) -> (String, Vec<(String, String)>) {
                 seen += 1;
                 continue;
             }
+        }
+        if seen >= 2
+            && let Some(name) = heading(line)
+        {
+            if name.eq_ignore_ascii_case("results") {
+                in_results = true;
+                channel.clear();
+                section.clear();
+            } else if in_results && is_channel(name) {
+                channel = name.to_string();
+                section.clear();
+            } else if in_results {
+                section = name.to_string();
+            }
+            seen += 1;
+            continue;
         }
         match seen {
             0 => date = line.to_string(),
@@ -272,17 +438,15 @@ fn read_blocks(lines: &[&str]) -> Vec<Block> {
         }
         if let Some(header) = parse_header_line(line) {
             match blocks.last_mut() {
-                Some(last) if last.rows() == 0 => {
-                    last.data = vec![Vec::new(); header.len()];
-                    last.header = header;
-                }
+                Some(last) if last.rows() == 0 => *last = Block::new(header),
                 Some(last) if last.header == header => {}
-                _ => blocks.push(Block { data: vec![Vec::new(); header.len()], header }),
+                _ => blocks.push(Block::new(header)),
             }
-        } else if let (Some(values), Some(block)) = (parse_row(line), blocks.last_mut()) {
+        } else if let (Some((values, step)), Some(block)) = (parse_row(line), blocks.last_mut()) {
             for (i, col) in block.data.iter_mut().enumerate() {
                 col.push(values.get(i).copied().unwrap_or(f64::NAN));
             }
+            block.x_step.push(step);
         }
     }
     blocks.retain(|b| b.rows() > 0);
@@ -326,7 +490,20 @@ fn finish_sheet(name: &str, drafts: Vec<Draft>) -> Worksheet {
     sheet
 }
 
-fn build_sheet(block: &Block, technique: &str, opts: &ChiOptions, warnings: &mut Vec<String>) -> (Worksheet, usize) {
+/// The sheets made from one data block.
+struct Built {
+    sheets: Vec<Worksheet>,
+    scans: usize,
+    segments: usize,
+}
+
+fn build_sheet(
+    block: &Block,
+    technique: &str,
+    meta: &[(String, String)],
+    opts: &ChiOptions,
+    warnings: &mut Vec<String>,
+) -> Built {
     let first = &block.header[0];
     let is_potential = first.long.eq_ignore_ascii_case("potential");
     let is_time = first.long.eq_ignore_ascii_case("time");
@@ -346,7 +523,8 @@ fn build_sheet(block: &Block, technique: &str, opts: &ChiOptions, warnings: &mut
                         .to_string(),
                 );
             }
-            return (scan_sheet(block, ci, &ranges, opts, warnings), ranges.len());
+            let sheet = scan_sheet(block, ci, &ranges, opts, warnings);
+            return Built { sheets: vec![sheet], scans: ranges.len(), segments: 0 };
         }
         warnings.push("the potential does not sweep back and forth, so the file was not split into scans".to_string());
     }
@@ -366,7 +544,137 @@ fn build_sheet(block: &Block, technique: &str, opts: &ChiOptions, warnings: &mut
         }
         warnings.extend(clipping_warnings(None, first, &block.data[0], &block.data[ci]));
     }
-    (finish_sheet("Data", drafts), 0)
+    let mut built = Built { sheets: vec![finish_sheet("Data", drafts)], scans: 0, segments: 0 };
+
+    let potential_idx = block.header.iter().position(|h| h.long.eq_ignore_ascii_case("potential") && h.unit == "V");
+    if opts.split_segments
+        && is_time
+        && technique.to_ascii_lowercase().contains("chronopotentiometry")
+        && let Some(pi) = potential_idx
+    {
+        let ranges = split_segments(&block.data[pi]);
+        if ranges.len() >= 2 {
+            built.segments = ranges.len();
+            built.sheets.push(segment_sheet(&block.data[0], &block.data[pi], &ranges, meta));
+        }
+    }
+    built
+}
+
+/// Splits a chronopotentiometry potential trace into charge and discharge
+/// segments (spec section 2.4).
+///
+/// A segment ends at the row where the potential reaches its extreme before
+/// turning back by more than [`SEGMENT_TURN_FRACTION`] of the whole range;
+/// that row is the last row of the segment. Small wiggles do not split.
+/// Ranges of 2 rows or fewer are dropped. Returns half-open row ranges.
+pub fn split_segments(potential: &[f64]) -> Vec<Range<usize>> {
+    let n = potential.len();
+    let finite = || potential.iter().copied().filter(|v| v.is_finite());
+    let (Some(lo), Some(hi)) = (finite().reduce(f64::min), finite().reduce(f64::max)) else {
+        return Vec::new();
+    };
+    let threshold = (hi - lo) * SEGMENT_TURN_FRACTION;
+    // Index of the largest (rising) or smallest (falling) finite value in `from..=to`, the later
+    // one on ties.
+    let extreme = |from: usize, to: usize, rising: bool| {
+        (from..=to).filter(|&i| potential[i].is_finite()).fold(None, |best: Option<usize>, i| match best {
+            Some(b) if (rising && potential[i] < potential[b]) || (!rising && potential[i] > potential[b]) => Some(b),
+            _ => Some(i),
+        })
+    };
+    let mut cuts = Vec::new();
+    if threshold > 0.0 {
+        // 0: direction not known yet; 1: rising; -1: falling.
+        let mut dir = 0i8;
+        let (mut lowest, mut highest) = (None::<usize>, None::<usize>);
+        let mut ext = 0usize;
+        for (k, &v) in potential.iter().enumerate() {
+            if !v.is_finite() {
+                continue;
+            }
+            match dir {
+                0 => {
+                    if lowest.is_none_or(|i| v <= potential[i]) {
+                        lowest = Some(k);
+                    }
+                    if highest.is_none_or(|i| v >= potential[i]) {
+                        highest = Some(k);
+                    }
+                    let (lo_i, hi_i) = (lowest.unwrap_or(k), highest.unwrap_or(k));
+                    if v - potential[lo_i] >= threshold {
+                        dir = 1;
+                        ext = extreme(lo_i, k, true).unwrap_or(k);
+                    } else if potential[hi_i] - v >= threshold {
+                        dir = -1;
+                        ext = extreme(hi_i, k, false).unwrap_or(k);
+                    }
+                }
+                1 if v >= potential[ext] => ext = k,
+                1 if potential[ext] - v >= threshold => {
+                    cuts.push(ext + 1);
+                    dir = -1;
+                    ext = extreme(ext + 1, k, false).unwrap_or(k);
+                }
+                -1 if v <= potential[ext] => ext = k,
+                -1 if v - potential[ext] >= threshold => {
+                    cuts.push(ext + 1);
+                    dir = 1;
+                    ext = extreme(ext + 1, k, true).unwrap_or(k);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    for cut in cuts.into_iter().chain(std::iter::once(n)) {
+        if cut - start > 2 {
+            ranges.push(start..cut);
+        }
+        start = cut;
+    }
+    ranges
+}
+
+/// The sheet with one group of columns per chronopotentiometry segment: time
+/// since the segment began, potential and, when the header gives both
+/// currents, the capacity passed so far in mAh.
+fn segment_sheet(time: &[f64], potential: &[f64], ranges: &[Range<usize>], meta: &[(String, String)]) -> Worksheet {
+    let param = |name: &str| {
+        meta.iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .and_then(|(_, v)| v.trim().parse::<f64>().ok())
+            .filter(|v| v.is_finite() && *v > 0.0)
+    };
+    let currents = param("Cathodic Current (A)").zip(param("Anodic Current (A)"));
+    let mut drafts = Vec::new();
+    for (k, range) in ranges.iter().enumerate() {
+        let e = &potential[range.clone()];
+        let falling = e.last() < e.first();
+        let comment = format!("Segment {} ({})", k + 1, if falling { "cathodic" } else { "anodic" });
+        // A segment's clock starts at the last row of the segment before it; the first segment's
+        // starts at 0 when its first sample is about one interval after 0.
+        let origin = if range.start > 0 {
+            time[range.start - 1]
+        } else if time.len() > 1 && time[0] >= 0.0 && time[0] <= 1.5 * (time[1] - time[0]) {
+            0.0
+        } else {
+            time[0]
+        };
+        let since: Vec<f64> = time[range.clone()].iter().map(|t| t - origin).collect();
+        if let Some((cathodic, anodic)) = currents {
+            let amps = if falling { cathodic } else { anodic };
+            let capacity = since.iter().map(|t| amps * t / 3.6).collect();
+            drafts.push(draft(Designation::X, "Time", "s", &comment, since));
+            drafts.push(draft(Designation::Y, "Potential", "V", &comment, e.to_vec()));
+            drafts.push(draft(Designation::Y, "Capacity", "mAh", &comment, capacity));
+        } else {
+            drafts.push(draft(Designation::X, "Time", "s", &comment, since));
+            drafts.push(draft(Designation::Y, "Potential", "V", &comment, e.to_vec()));
+        }
+    }
+    finish_sheet("Segments", drafts)
 }
 
 fn scan_sheet(
@@ -660,6 +968,202 @@ mod tests {
         }
         let msg = parse_chi("nonsense", "bad", &ChiOptions::default()).unwrap_err().to_string();
         assert!(msg.contains("bad"));
+    }
+
+    /// A number as CHI prints it: 4 significant digits, `e+3` style exponent.
+    fn chi_e(x: f64) -> String {
+        let s = format!("{x:.3e}");
+        match s.split_once('e') {
+            Some((m, e)) if !e.starts_with('-') => format!("{m}e+{e}"),
+            _ => s,
+        }
+    }
+
+    /// A chronopotentiometry file in the layout of a CHI627E export, sampled
+    /// every 0.2 s, with the given potentials.
+    fn cp_text(potential: &[f64], with_currents: bool) -> String {
+        let mut s = String::from(
+            "Oct. 2, 2026   10:00:00\nChronopotentiometry\nFile: run\nData Source:  Experiment\n\
+             Instrument Model:  CHI627E\nHeader: \nNote: \n\n",
+        );
+        if with_currents {
+            s.push_str("Cathodic Current (A) = 0.002\nAnodic Current (A) = 0.001\n");
+        }
+        s.push_str(
+            "Init P/N = N\nData Storage Interval (s) = 0.2\nHigh E Limit (V) = 1\nLow E Limit (V) = 0.4\n\
+             Segment = 4\n\nTime/sec, Potential/V\n\n",
+        );
+        for (k, e) in potential.iter().enumerate() {
+            s.push_str(&format!("{}, {}\n", chi_e((k + 1) as f64 * 0.2), chi_e(*e)));
+        }
+        s
+    }
+
+    #[test]
+    fn printed_step_reads_the_last_digit() {
+        assert_eq!(printed_step("2.023e+3"), 1.0);
+        assert_eq!(printed_step("742.6"), 0.1f64.powi(1));
+        assert_eq!(printed_step("1200"), 1.0);
+        assert!((printed_step("5.000e-1") - 1e-4).abs() < 1e-18);
+        assert_eq!(chi_e(2023.4), "2.023e+3");
+        assert_eq!(chi_e(0.2), "2.000e-1");
+    }
+
+    #[test]
+    fn results_block_lines_carry_their_segment() {
+        let e = path(&[1.2, 0.2, 1.2], &[50, 50]);
+        let text = cv_text("Cyclic Voltammetry", &e, |_, v| v * 1e-4, ",").replace(
+            "Sensitivity (A/V) = 1e-3\n",
+            "Sensitivity (A/V) = 1e-3\n\nResults:\n\nChannel 1:\nSegment 1:\nEp = 0.812V\nip = -6.5e-4A\n\n\
+             Segment 2:\nEp = 0.731V\nip = 8.1e-4A\n",
+        );
+        let imp = parse_chi(&text, "cv", &ChiOptions::default()).unwrap();
+        let tail: Vec<(&str, &str)> =
+            imp.meta.iter().rev().take(5).rev().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        assert_eq!(
+            tail,
+            [
+                ("Sensitivity (A/V)", "1e-3"),
+                ("Segment 1: Ep", "0.812V"),
+                ("Segment 1: ip", "-6.5e-4A"),
+                ("Segment 2: Ep", "0.731V"),
+                ("Segment 2: ip", "8.1e-4A")
+            ]
+        );
+        assert_eq!(imp.scans, 1);
+        assert_eq!(imp.technique, "Cyclic Voltammetry");
+        // With several channels, the channel is named too.
+        let two = text.replace("Segment 2:\n", "Channel 2:\nSegment 1:\n");
+        let imp = parse_chi(&two, "cv", &ChiOptions::default()).unwrap();
+        assert!(imp.meta.iter().any(|(k, _)| k == "Channel 2, Segment 1: Ep"), "{:?}", imp.meta);
+        assert!(imp.meta.iter().any(|(k, _)| k == "Channel 1, Segment 1: Ep"), "{:?}", imp.meta);
+    }
+
+    #[test]
+    fn rounded_times_are_recomputed_from_the_interval() {
+        // 6000 samples at 0.2 s: above 1000 s the file prints whole seconds.
+        let e: Vec<f64> = (0..6000).map(|k| 0.9 - k as f64 * 1e-5).collect();
+        let text = cp_text(&e, false);
+        assert!(text.contains("\n1.000e+3, ") && text.contains("\n1.200e+3, "));
+        let imp = parse_chi(&text, "cp", &ChiOptions::default()).unwrap();
+        let t = imp.workbook.sheets[0].columns[0].numeric().unwrap();
+        assert_eq!(t.len(), 6000);
+        assert!(t.iter().enumerate().all(|(k, &v)| v == (k + 1) as f64 / 5.0), "times are exact multiples of 0.2 s");
+        assert_eq!(imp.warnings.len(), 1, "{:?}", imp.warnings);
+        assert!(imp.warnings[0].contains("Data Storage Interval (s) = 0.2"), "{}", imp.warnings[0]);
+        assert!(imp.warnings[0].contains("steps of up to 1 s"), "{}", imp.warnings[0]);
+
+        let kept = parse_chi(&text, "cp", &ChiOptions { exact_time: false, ..ChiOptions::default() }).unwrap();
+        let t = kept.workbook.sheets[0].columns[0].numeric().unwrap();
+        assert_eq!((t[5000], t[5001]), (1000.0, 1000.0), "the file's rounded times are kept when asked");
+        assert!(kept.warnings.is_empty());
+    }
+
+    #[test]
+    fn times_that_do_not_fit_the_interval_are_kept() {
+        let e: Vec<f64> = (0..100).map(|k| 0.9 - k as f64 * 1e-3).collect();
+        let text = cp_text(&e, false).replace("\n2.000e+0, ", "\n2.500e+0, ");
+        let imp = parse_chi(&text, "cp", &ChiOptions::default()).unwrap();
+        let t = imp.workbook.sheets[0].columns[0].numeric().unwrap();
+        assert_eq!(t[9], 2.5, "a time off the sampling grid leaves the column as the file has it");
+        assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
+        // A file whose times are already exact is not touched and gets no note.
+        let exact = cp_text(&e, false);
+        assert!(parse_chi(&exact, "cp", &ChiOptions::default()).unwrap().warnings.is_empty());
+    }
+
+    #[test]
+    fn charge_of_an_it_file_uses_the_recomputed_times() {
+        // Constant 1 mA for 2000 s sampled every 0.1 s: Q = 2 C exactly. The file's rounded times
+        // would still integrate to 2 C overall, so check a running value inside the rounded part.
+        let mut text = String::from(
+            "Aug. 1, 2026\nAmperometric i-t Curve\nInit E (V) = 0.5\nSample Interval (s) = 0.1\n\nTime/sec, Current/A\n\n",
+        );
+        for k in 1..=20000 {
+            text.push_str(&format!("{}, 1.000e-3\n", chi_e(k as f64 * 0.1)));
+        }
+        let imp = parse_chi(&text, "it", &ChiOptions::default()).unwrap();
+        assert!(imp.warnings.iter().any(|w| w.contains("Sample Interval (s) = 0.1")), "{:?}", imp.warnings);
+        let s = &imp.workbook.sheets[0];
+        let q = s.columns.iter().find(|c| c.long_name == "Charge").unwrap().numeric().unwrap();
+        // Row 15004 is t = 1500.5 s; the charge since the first row (t = 0.1 s) is 1e-3 * 1500.4 C.
+        assert!((q[15004] - 1e-3 * 1500.4).abs() < 1e-12, "{}", q[15004]);
+    }
+
+    /// Fall from 0.85 V to the 0.4 V limit, jump, rise to 1.0 V, jump, fall to 0.4 V, jump, and a
+    /// partial rise (the run was stopped): four segments, with a small wiggle on every row.
+    fn gcd_trace() -> (Vec<f64>, Vec<usize>) {
+        let mut e = Vec::new();
+        let mut ends = Vec::new();
+        let legs: [(f64, f64, usize); 4] = [(0.85, 0.4, 3000), (0.55, 1.0, 1500), (0.9, 0.4, 2000), (0.5, 0.8, 1000)];
+        for (a, b, n) in legs {
+            for k in 0..n {
+                let wiggle = 0.0005 * ((e.len() % 7) as f64 - 3.0) / 3.0;
+                e.push(a + (b - a) * k as f64 / (n - 1) as f64 + wiggle);
+            }
+            ends.push(e.len());
+        }
+        (e, ends)
+    }
+
+    #[test]
+    fn segments_end_where_the_potential_turns() {
+        let (e, ends) = gcd_trace();
+        let r = split_segments(&e);
+        assert_eq!(r.len(), 4, "{r:?}");
+        // Each segment ends at its extreme row, within the wiggle of the last few rows.
+        for (range, &end) in r.iter().zip(&ends) {
+            assert!(range.end.abs_diff(end) <= 7, "{range:?} vs {end}");
+        }
+        assert_eq!(r[0].start, 0);
+        assert_eq!(r[3].end, e.len());
+        assert!(r.windows(2).all(|w| w[0].end == w[1].start), "no row is lost or repeated");
+        // A monotone trace with noise is one segment; a flat one too.
+        let ramp: Vec<f64> = (0..500).map(|k| k as f64 * 1e-3 + 1e-4 * (k % 3) as f64).collect();
+        assert_eq!(split_segments(&ramp), vec![0..500]);
+        assert_eq!(split_segments(&[0.5; 10]), vec![0..10]);
+        assert!(split_segments(&[]).is_empty());
+    }
+
+    #[test]
+    fn chronopotentiometry_gets_a_segment_sheet_with_capacity() {
+        let (e, _) = gcd_trace();
+        let imp = parse_chi(&cp_text(&e, true), "gcd", &ChiOptions::default()).unwrap();
+        assert_eq!(imp.segments, 4);
+        assert_eq!(imp.scans, 0);
+        let names: Vec<&str> = imp.workbook.sheets.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["Data", "Segments"]);
+        assert_eq!(imp.workbook.sheets[0].columns.len(), 2, "the whole run stays in the Data sheet");
+        let seg = &imp.workbook.sheets[1];
+        assert_eq!(seg.columns.len(), 12);
+        let c = &seg.columns;
+        assert_eq!(
+            (c[0].designation, c[0].long_name.as_str(), c[0].units.as_str(), c[0].comments.as_str()),
+            (Designation::X, "Time", "s", "Segment 1 (cathodic)")
+        );
+        assert_eq!((c[2].long_name.as_str(), c[2].units.as_str()), ("Capacity", "mAh"));
+        assert_eq!(c[3].comments, "Segment 2 (anodic)");
+        // Segment 1 starts at t = 0: its first row is 0.2 s and its capacity is 2 mA * t.
+        let t1 = c[0].numeric().unwrap();
+        let q1 = c[2].numeric().unwrap();
+        assert_eq!(t1[0], 0.2);
+        let last = t1.len() - 1;
+        assert!((q1[last] - 0.002 * t1[last] / 3.6).abs() < 1e-15);
+        // Segment 2 restarts its clock and uses the anodic current.
+        let t2 = c[3].numeric().unwrap();
+        let q2 = c[5].numeric().unwrap();
+        assert!((t2[0] - 0.2).abs() < 1e-9, "{}", t2[0]);
+        assert!((q2[9] - 0.001 * t2[9] / 3.6).abs() < 1e-15);
+        let rows: usize = (0..4).map(|k| c[3 * k].len()).sum();
+        assert_eq!(rows, e.len());
+
+        // Without the currents in the header there is no capacity column.
+        let imp = parse_chi(&cp_text(&e, false), "gcd", &ChiOptions::default()).unwrap();
+        assert_eq!(imp.workbook.sheets[1].columns.len(), 8);
+        // The option turns the sheet off.
+        let opts = ChiOptions { split_segments: false, ..ChiOptions::default() };
+        let imp = parse_chi(&cp_text(&e, true), "gcd", &opts).unwrap();
+        assert_eq!((imp.workbook.sheets.len(), imp.segments), (1, 0));
     }
 
     #[test]

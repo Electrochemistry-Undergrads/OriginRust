@@ -146,6 +146,14 @@ pub struct ReadOptions {
     /// CH Instruments: multiply the current by -1.
     #[arg(long)]
     pub invert_current: bool,
+    /// CH Instruments: do not add the sheet with one group of columns per charge or discharge
+    /// segment to a chronopotentiometry file.
+    #[arg(long)]
+    pub no_split_segments: bool,
+    /// CH Instruments: keep the times as the file prints them (4 significant digits) instead of
+    /// recomputing them from the sampling interval in the header.
+    #[arg(long)]
+    pub keep_file_times: bool,
     /// Delimited text: the separator. One of comma, tab, semicolon, space, or a single character.
     #[arg(long, value_name = "SEP")]
     pub delimiter: Option<String>,

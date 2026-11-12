@@ -41,9 +41,11 @@ pub(crate) fn load_project(path: &Path) -> Result<Project> {
 fn chi_options(r: &ReadOptions) -> ChiOptions {
     ChiOptions {
         split_scans: !r.no_split_scans,
+        split_segments: !r.no_split_segments,
         add_milliamp: !r.no_milliamp,
         add_charge: !r.no_charge,
         invert_current: r.invert_current,
+        exact_time: !r.keep_file_times,
     }
 }
 

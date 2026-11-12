@@ -211,3 +211,5 @@ The first group, `[Origin Basic Functions]`, lists 21 functions (Allometric1, Be
 * Whether `log` means natural or base-10 logarithm in Origin expression code (the evidence suggests natural).
 * Whether the hidden categories (Asymptotic etc.) are reachable in the dialog.
 * How `Peak Area` is used when both amplitude and area flags exist.
+
+A user-written fit function is refused when a parameter name is repeated, equals the x name, is `pi` or `e` in any case, or does not appear in the formula; each of these would leave a parameter that is never fitted but still counts in the degrees of freedom.

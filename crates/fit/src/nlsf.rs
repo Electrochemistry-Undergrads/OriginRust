@@ -121,6 +121,10 @@ impl FitFunction {
                 )));
             }
         }
+        let used = expr.variables();
+        if let Some(p) = params.iter().find(|p| !used.iter().any(|v| v == *p)) {
+            return Err(FitError::BadFunction(format!("the parameter '{p}' does not appear in the formula")));
+        }
         Ok(FitFunction {
             name: name.to_string(),
             equation: format!("y = {rhs}"),
@@ -614,6 +618,8 @@ mod tests {
             let e = FitFunction::from_formula("U", formula, &params).unwrap_err().to_string();
             assert!(e.contains("parameter"), "{formula} {params:?}: {e}");
         }
+        let e = FitFunction::from_formula("U", "a*x", &["a", "e1"]).unwrap_err().to_string();
+        assert!(e.contains("'e1' does not appear"), "{e}");
         // Names differ by case in the expression language, so these are two parameters.
         assert!(FitFunction::from_formula("U", "a*x + A", &["a", "A"]).is_ok());
     }

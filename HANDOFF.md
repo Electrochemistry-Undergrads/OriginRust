@@ -75,9 +75,9 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    statistics beyond t-tests, one-way ANOVA, frequency counts and normality (two-way ANOVA,
    nonparametric tests, correlation); analysis templates (batch import exists); an embedded
    scripting language; 3D graphs (last).
-5. **Smaller points**: automatic axis ranges can leave a wide empty band; plot groups and
-   log-axis tick labels do not look like Origin's; B-spline with smoothing factor 0 differs from
-   Origin.
+5. **Smaller points**: Origin pads automatic axis ranges more than Sheaf (measured, an open
+   choice below); plot groups do not look like Origin's; B-spline with smoothing factor 0 differs
+   from Origin. Log-axis tick labels now follow Origin (plain numbers from 0.001 to 1000000).
 
 ## Exact next step
 
@@ -102,8 +102,8 @@ The small points of the graph review are fixed too: `--offsets` gives its values
 
 - Fit reports show the standard error of a fixed parameter as blank (Origin's sheet stores 0).
 - Origin's bound handling can stop above the true constrained minimum; Sheaf copies it.
-- `.opj` graphs: plot groups (Origin's colour increments) are not modelled; legend frames and
-  Origin-style log tick labels are not drawn.
+- `.opj` graphs: plot groups (Origin's colour increments) are not modelled; legend frames are not
+  drawn.
 - Automatic axis ranges: measured in Origin 2016 (graphing.md section 4): Origin pads by 8 % of the span and rounds to half a major step, so it leaves a wider band than Sheaf (-0.2..1.0 gives -0.5..1.25 in Origin, -0.5..1.0 in Sheaf). Should Sheaf copy Origin's padding? Its step rule was not found.
 
 ## Commands that verify the current state

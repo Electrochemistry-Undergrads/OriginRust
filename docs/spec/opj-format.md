@@ -547,8 +547,7 @@ Known differences from Origin:
 - Layers that share one frame are linked only when the later one shows right-side tick labels
   (double Y). Other overlapping layers stay independent and draw over each other, as before. A
   right-axis layer that also shows its left axis has only the right side drawn (the import says so).
-- Origin draws a frame around the legend and prints logarithmic tick labels as plain numbers where
-  we print powers of ten.
+- Origin draws a frame around the legend.
 
 Checks made: four graphs with known settings (line, scatter on log axes, line and symbol with a
 moved frame, column) were saved by Origin and read back; ranges, steps, scale type, frame, titles,

@@ -307,10 +307,16 @@ fn log_axis_places_decades_evenly() {
     let (b, _) = geom.data_to_page(100.0, 1.0);
     let (c, _) = geom.data_to_page(1000.0, 1.0);
     assert!(((b - a) - (c - b)).abs() < 1e-9);
-    // Labels are powers of ten with a raised exponent: separate text elements.
+    // Labels are plain numbers, as Origin 2016 writes them on a log axis.
     let svg = svg_of(&p, g);
     let d = doc(&svg);
     let t = texts(&d);
+    for label in ["1", "10", "100", "1000"] {
+        assert!(t.contains(&label.to_string()), "{label} in {t:?}");
+    }
+    // With the scientific format they are powers of ten with a raised exponent.
+    p.graph_mut(g).unwrap().layers[0].x_axis.tick_format = sheaf_core::graph::TickFormat::Scientific(0);
+    let t = texts(&doc(&svg_of(&p, g)));
     assert!(t.iter().filter(|s| *s == "10").count() >= 4, "{t:?}");
     assert!(t.contains(&"3".to_string()));
 }

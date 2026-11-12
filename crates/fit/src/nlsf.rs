@@ -1,2 +1,696 @@
 //! Nonlinear least squares (Levenberg-Marquardt) with bounds and fixed parameters.
 //! See `docs/spec/fitting.md`.
+//!
+//! A [`FitFunction`] describes the model: parameter names, a formula in the `sheaf-expr`
+//! language or a Rust closure, an optional routine that guesses starting values from the data,
+//! and for each parameter an optional lower and upper bound and a "fixed" flag. [`fit`] minimises
+//! the (weighted) sum of squared residuals and returns the shared [`FitReport`].
+//!
+//! Numerical details that matter for matching Origin:
+//! - The covariance matrix of the parameters is `(J' W J)^-1`, multiplied by the reduced
+//!   chi-square when errors are scaled (Origin's default, also for weighted fits).
+//! - A parameter sitting on a bound stays a free parameter in the statistics (it counts in the
+//!   degrees of freedom and gets a standard error); a warning names it.
+//! - Points with a missing x, y or weight are dropped.
+
+use std::sync::Arc;
+
+use nalgebra::{DMatrix, DVector};
+use sheaf_expr::{Expr, Host};
+
+use crate::dist::{f_upper_p, t_critical, t_two_sided_p};
+use crate::report::{Anova, FitError, FitReport, FitStatus, Parameter, Statistics, Weighting};
+
+/// A model evaluated by Rust code: `(parameter values, x) -> y`.
+pub type ModelFn = Arc<dyn Fn(&[f64], f64) -> f64 + Send + Sync>;
+
+/// Guesses starting parameter values from the data: `(x, y) -> one value per parameter`. The
+/// data passed in have the missing points already removed. A NaN in the result means "no
+/// guess; use 1".
+pub type InitFn = Arc<dyn Fn(&[f64], &[f64]) -> Vec<f64> + Send + Sync>;
+
+/// How the model is computed.
+#[derive(Clone)]
+pub enum Model {
+    /// A formula in the expression language. The parameters and the independent variable are
+    /// variables of the formula.
+    Formula(Expr),
+    /// Rust code.
+    Closure(ModelFn),
+}
+
+/// One parameter of a [`FitFunction`] with its constraints.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamSpec {
+    pub name: String,
+    /// Starting value. NaN means "use the function's initial-guess routine, else 1".
+    pub initial: f64,
+    pub lower: Option<f64>,
+    pub upper: Option<f64>,
+    /// Held at `initial` and not fitted.
+    pub fixed: bool,
+}
+
+impl ParamSpec {
+    /// A free, unbounded parameter without a starting value.
+    pub fn new(name: &str) -> Self {
+        ParamSpec { name: name.to_string(), initial: f64::NAN, lower: None, upper: None, fixed: false }
+    }
+}
+
+/// A fit function: the model and everything known about its parameters.
+#[derive(Clone)]
+pub struct FitFunction {
+    /// Name shown in the report, for example `Gauss` or `User defined`.
+    pub name: String,
+    /// The model written as mathematics, for example `y = y0 + A*exp(-x/t)`.
+    pub equation: String,
+    /// Name of the independent variable in the formula (`x`).
+    pub x_name: String,
+    pub params: Vec<ParamSpec>,
+    pub model: Model,
+    pub init: Option<InitFn>,
+}
+
+impl std::fmt::Debug for FitFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FitFunction")
+            .field("name", &self.name)
+            .field("equation", &self.equation)
+            .field("params", &self.params)
+            .finish_non_exhaustive()
+    }
+}
+
+impl FitFunction {
+    /// A user-defined function from a formula such as `y0 + A*exp(-x/t)` (the right-hand side
+    /// only; a leading `y =` is accepted and removed) and its parameter names. The independent
+    /// variable is `x`.
+    pub fn from_formula(name: &str, formula: &str, params: &[&str]) -> Result<Self, FitError> {
+        let rhs = strip_lhs(formula);
+        let expr = Expr::parse(&rhs).map_err(|e| FitError::BadFunction(e.to_string()))?;
+        for v in expr.variables() {
+            if v != "x" && !params.iter().any(|p| *p == v) {
+                return Err(FitError::BadFunction(format!(
+                    "the formula uses '{v}', which is neither x nor a parameter"
+                )));
+            }
+        }
+        Ok(FitFunction {
+            name: name.to_string(),
+            equation: format!("y = {rhs}"),
+            x_name: "x".to_string(),
+            params: params.iter().map(|p| ParamSpec::new(p)).collect(),
+            model: Model::Formula(expr),
+            init: None,
+        })
+    }
+
+    /// A function computed by Rust code.
+    pub fn from_closure(name: &str, equation: &str, params: &[&str], f: ModelFn) -> Self {
+        FitFunction {
+            name: name.to_string(),
+            equation: equation.to_string(),
+            x_name: "x".to_string(),
+            params: params.iter().map(|p| ParamSpec::new(p)).collect(),
+            model: Model::Closure(f),
+            init: None,
+        }
+    }
+
+    /// Sets the starting value of a parameter (builder style). Unknown names are ignored.
+    pub fn with_initial(mut self, name: &str, value: f64) -> Self {
+        if let Some(p) = self.params.iter_mut().find(|p| p.name == name) {
+            p.initial = value;
+        }
+        self
+    }
+
+    /// Sets bounds of a parameter (builder style).
+    pub fn with_bounds(mut self, name: &str, lower: Option<f64>, upper: Option<f64>) -> Self {
+        if let Some(p) = self.params.iter_mut().find(|p| p.name == name) {
+            p.lower = lower;
+            p.upper = upper;
+        }
+        self
+    }
+
+    /// Holds a parameter at `value` (builder style).
+    pub fn with_fixed(mut self, name: &str, value: f64) -> Self {
+        if let Some(p) = self.params.iter_mut().find(|p| p.name == name) {
+            p.initial = value;
+            p.fixed = true;
+        }
+        self
+    }
+
+    /// The model value at `x` for the given parameter values (in `params` order). NaN if the
+    /// formula cannot be evaluated.
+    pub fn eval(&self, params: &[f64], x: f64) -> f64 {
+        match &self.model {
+            Model::Closure(f) => f(params, x),
+            Model::Formula(e) => {
+                let host = PointHost { names: &self.params, vals: params, x_name: &self.x_name, x };
+                e.eval(&host).unwrap_or(f64::NAN)
+            }
+        }
+    }
+}
+
+/// Removes a leading `name =` from a formula typed as an equation.
+fn strip_lhs(formula: &str) -> String {
+    let t = formula.trim();
+    if let Some(eq) = t.find('=') {
+        let (lhs, rest) = t.split_at(eq);
+        let rest_ok = !rest.starts_with("==");
+        let lhs_ok = !lhs.trim().is_empty()
+            && lhs.trim().chars().all(|c| c.is_alphanumeric() || c == '_' || c == '(' || c == ')');
+        if rest_ok && lhs_ok {
+            return rest[1..].trim().to_string();
+        }
+    }
+    t.to_string()
+}
+
+struct PointHost<'a> {
+    names: &'a [ParamSpec],
+    vals: &'a [f64],
+    x_name: &'a str,
+    x: f64,
+}
+
+impl Host for PointHost<'_> {
+    fn variable(&self, name: &str) -> Option<f64> {
+        if name == self.x_name {
+            return Some(self.x);
+        }
+        self.names.iter().position(|p| p.name == name).map(|i| self.vals[i])
+    }
+    fn cell(&self, _col: &sheaf_expr::ColumnRef, _row: usize) -> Option<f64> {
+        None
+    }
+}
+
+/// Settings of a fit. The defaults are Origin 2016's: tolerance 1e-9, at most 400 iterations,
+/// 95 % confidence limits, errors scaled by the reduced chi-square (also with instrumental weights).
+#[derive(Debug, Clone)]
+pub struct FitOptions {
+    pub weighting: Weighting,
+    pub max_iterations: usize,
+    /// Convergence tolerance on the relative decrease of the (weighted) sum of squares.
+    pub tolerance: f64,
+    pub confidence_level: f64,
+    /// Scale the covariance matrix by the reduced chi-square. `None`: on, as in Origin (also for
+    /// instrumental weighting).
+    pub scale_errors: Option<bool>,
+}
+
+impl Default for FitOptions {
+    fn default() -> Self {
+        FitOptions {
+            weighting: Weighting::None,
+            max_iterations: 400,
+            tolerance: 1e-9,
+            confidence_level: 0.95,
+            scale_errors: None,
+        }
+    }
+}
+
+/// Fits `func` to the points `(x, y)`.
+pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Result<FitReport, FitError> {
+    if x.len() != y.len() {
+        return Err(FitError::LengthMismatch { x: x.len(), y: y.len() });
+    }
+    let n_all = x.len();
+    let mut warnings = Vec::new();
+
+    for s in &func.params {
+        if s.fixed && !s.initial.is_finite() {
+            return Err(FitError::BadFunction(format!(
+                "parameter {} is fixed at a value that is not a finite number",
+                s.name
+            )));
+        }
+        if s.lower.is_some_and(f64::is_nan) || s.upper.is_some_and(f64::is_nan) {
+            return Err(FitError::BadFunction(format!("parameter {} has a bound that is not a number", s.name)));
+        }
+        if let (Some(lo), Some(hi)) = (s.lower, s.upper)
+            && lo > hi
+        {
+            return Err(FitError::BadFunction(format!(
+                "parameter {} has its lower bound ({lo}) above its upper bound ({hi})",
+                s.name
+            )));
+        }
+    }
+
+    // Weights, one per input point (sqrt applied later).
+    let raw_w: Vec<f64> = match &opts.weighting {
+        Weighting::None => vec![1.0; n_all],
+        Weighting::Instrumental(err) => {
+            check_len(err.len(), n_all)?;
+            err.iter().map(|e| if *e > 0.0 { 1.0 / (e * e) } else { f64::NAN }).collect()
+        }
+        Weighting::Statistical => y.iter().map(|v| if *v > 0.0 { 1.0 / v } else { f64::NAN }).collect(),
+        Weighting::Direct(w) => {
+            check_len(w.len(), n_all)?;
+            // A weight of zero means the point does not take part in the fit; it is left out
+            // like a missing value so that it does not count in the degrees of freedom.
+            w.iter().map(|w| if *w > 0.0 { *w } else { f64::NAN }).collect()
+        }
+    };
+    let used: Vec<usize> =
+        (0..n_all).filter(|&i| x[i].is_finite() && y[i].is_finite() && raw_w[i].is_finite()).collect();
+    if used.len() < n_all {
+        warnings
+            .push(format!("{} point(s) with a missing or invalid x, y or weight were left out", n_all - used.len()));
+    }
+    let xs: Vec<f64> = used.iter().map(|&i| x[i]).collect();
+    let ys: Vec<f64> = used.iter().map(|&i| y[i]).collect();
+    let ws: Vec<f64> = used.iter().map(|&i| raw_w[i]).collect();
+    let sw: Vec<f64> = ws.iter().map(|w| w.sqrt()).collect();
+    let n = xs.len();
+
+    let np = func.params.len();
+    let free: Vec<usize> = (0..np).filter(|&j| !func.params[j].fixed).collect();
+    let nfree = free.len();
+    if n < nfree || nfree == 0 && n == 0 {
+        return Err(FitError::TooFewPoints { have: n, need: nfree });
+    }
+
+    // Starting values: explicit, else from the guess routine, else 1.
+    let guess = func.init.as_ref().map(|f| f(&xs, &ys)).unwrap_or_default();
+    let mut p: Vec<f64> = (0..np)
+        .map(|j| {
+            let s = &func.params[j];
+            if s.initial.is_finite() {
+                s.initial
+            } else if guess.get(j).is_some_and(|g| g.is_finite()) {
+                guess[j]
+            } else {
+                1.0
+            }
+        })
+        .collect();
+    for (j, s) in func.params.iter().enumerate() {
+        if !s.fixed {
+            if let Some(lo) = s.lower {
+                p[j] = p[j].max(lo);
+            }
+            if let Some(hi) = s.upper {
+                p[j] = p[j].min(hi);
+            }
+        }
+    }
+
+    let cost_of = |p: &[f64]| -> f64 {
+        let mut c = 0.0;
+        for i in 0..n {
+            let r = sw[i] * (ys[i] - func.eval(p, xs[i]));
+            c += r * r;
+        }
+        c
+    };
+    let mut cost = cost_of(&p);
+    if !cost.is_finite() {
+        if xs.iter().all(|&xv| func.eval(&p, xv).is_finite()) {
+            return Err(FitError::Failed(
+                "the sum of squared residuals is too large to be computed (it overflows); scale the data".into(),
+            ));
+        }
+        return Err(FitError::Failed(
+            "the model is not defined (gives a missing value) at the starting parameters".into(),
+        ));
+    }
+
+    let mut status = FitStatus::MaxIterations;
+    let mut iterations = 0usize;
+    // Origin's damping: the diagonal of J'J is scaled by (1 + lambda). Lambda starts at 1e-3, is
+    // divided by 10 after every step that does not raise the sum of squares and multiplied by 10
+    // after a step that does. See docs/spec/fitting.md.
+    let mut lambda = INITIAL_DAMPING;
+    if nfree == 0 {
+        status = FitStatus::Converged;
+    } else {
+        'outer: for iter in 1..=opts.max_iterations.max(1) {
+            iterations = iter;
+            let (jac, res) = jacobian(func, &p, &free, &xs, &ys, &sw);
+            let g = jac.transpose() * &res;
+            let a = jac.transpose() * &jac;
+            let mut accepted = false;
+            while lambda < 1e14 {
+                let mut am = a.clone();
+                for k in 0..nfree {
+                    am[(k, k)] += lambda * a[(k, k)].max(1e-300);
+                }
+                let step = match am.lu().solve(&g) {
+                    Some(s) if s.iter().all(|v| v.is_finite()) => s,
+                    _ => {
+                        lambda *= 10.0;
+                        continue;
+                    }
+                };
+                // The whole step is computed as if no parameter were bounded; each component is
+                // then cut back to its bounds. A parameter held on its bound therefore still
+                // takes part in the step of the others.
+                let mut pn = p.clone();
+                for (k, &j) in free.iter().enumerate() {
+                    let mut v = p[j] + step[k];
+                    if let Some(lo) = func.params[j].lower {
+                        v = v.max(lo);
+                    }
+                    if let Some(hi) = func.params[j].upper {
+                        v = v.min(hi);
+                    }
+                    pn[j] = v;
+                }
+                let cn = cost_of(&pn);
+                if cn.is_finite() && cn <= cost {
+                    let prev = cost;
+                    lambda = (lambda / 10.0).max(1e-15);
+                    p = pn;
+                    cost = cn;
+                    accepted = true;
+                    if prev - cn <= opts.tolerance * (prev + cn) || cost == 0.0 {
+                        status = FitStatus::Converged;
+                        break 'outer;
+                    }
+                    break;
+                }
+                lambda *= 10.0;
+            }
+            if !accepted {
+                // No step can lower the sum of squares any more: at the minimum to machine precision.
+                status = FitStatus::Converged;
+                break;
+            }
+        }
+    }
+
+    // Statistics at the optimum.
+    let dof = n.saturating_sub(nfree);
+    let rss = cost;
+    let reduced = if dof > 0 { rss / dof as f64 } else { f64::NAN };
+
+    let (jac, _) = jacobian(func, &p, &free, &xs, &ys, &sw);
+    let jtj = jac.transpose() * &jac;
+    let scale = opts.scale_errors.unwrap_or(true);
+    let mut cov_free: Option<DMatrix<f64>> = None;
+    let mut inv_free: Option<DMatrix<f64>> = None;
+    if nfree > 0 {
+        match jtj.clone().try_inverse() {
+            Some(inv) if inv.iter().all(|v| v.is_finite()) => {
+                let factor = if scale { reduced } else { 1.0 };
+                cov_free = Some(&inv * factor);
+                inv_free = Some(inv);
+            }
+            _ => warnings.push("the covariance matrix is singular; standard errors are not available".into()),
+        }
+    }
+    let level = opts.confidence_level;
+    let tcrit = t_critical(level, dof);
+    let mut params = Vec::with_capacity(np);
+    let mut covariance = vec![0.0; np * np];
+    for (j, s) in func.params.iter().enumerate() {
+        let k = free.iter().position(|&f| f == j);
+        let (mut se, mut dep) = (f64::NAN, f64::NAN);
+        if let (Some(k), Some(cov)) = (k, cov_free.as_ref()) {
+            let var = cov[(k, k)];
+            se = if var >= 0.0 { var.sqrt() } else { f64::NAN };
+            // Dependency is 1 - 1/(C_ii (C^-1)_ii); the scale factor cancels.
+            if let Some(ci) = inv_free.as_ref() {
+                // (JtJ^-1)_ii * (JtJ)_ii is the same product as C_ii (C^-1)_ii.
+                let prod = ci[(k, k)] * jtj[(k, k)];
+                if prod.is_finite() && prod != 0.0 {
+                    dep = 1.0 - 1.0 / prod;
+                }
+            }
+            for (k2, &j2) in free.iter().enumerate() {
+                covariance[j * np + j2] = cov[(k, k2)];
+            }
+        }
+        let value = p[j];
+        let fixed = s.fixed;
+        let (t, prob, lcl, ucl) = if fixed || !se.is_finite() {
+            (f64::NAN, f64::NAN, f64::NAN, f64::NAN)
+        } else {
+            let t = value / se;
+            (t, t_two_sided_p(t, dof), value - tcrit * se, value + tcrit * se)
+        };
+        if !fixed {
+            if s.lower.is_some_and(|lo| value <= lo) {
+                warnings.push(format!("parameter {} reached its lower bound", s.name));
+            }
+            if s.upper.is_some_and(|hi| value >= hi) {
+                warnings.push(format!("parameter {} reached its upper bound", s.name));
+            }
+        }
+        params.push(Parameter {
+            name: s.name.clone(),
+            value,
+            std_error: if fixed { f64::NAN } else { se },
+            fixed,
+            t_value: t,
+            prob_t: prob,
+            lcl,
+            ucl,
+            dependency: if fixed { f64::NAN } else { dep },
+        });
+    }
+    if status == FitStatus::MaxIterations {
+        warnings.push("the fit stopped at the maximum number of iterations before converging".into());
+    }
+    if params.iter().any(|q| q.dependency.is_finite() && q.dependency > 0.9999) {
+        warnings.push("some parameters are strongly dependent on each other (dependency above 0.9999)".into());
+    }
+
+    // R-square and ANOVA, weighted by the fit weights.
+    let sum_w: f64 = ws.iter().sum();
+    let ybar_w = if sum_w > 0.0 { ws.iter().zip(&ys).map(|(w, v)| w * v).sum::<f64>() / sum_w } else { f64::NAN };
+    let tss: f64 = ws.iter().zip(&ys).map(|(w, v)| w * (v - ybar_w) * (v - ybar_w)).sum();
+    let utss: f64 = ws.iter().zip(&ys).map(|(w, v)| w * v * v).sum();
+    let r2 = if tss > 0.0 { 1.0 - rss / tss } else { f64::NAN };
+    let adj = if dof > 0 && n > 1 && tss > 0.0 { 1.0 - (rss / dof as f64) / (tss / (n - 1) as f64) } else { f64::NAN };
+    let anova = if dof > 0 && n > 1 {
+        let model_df = nfree;
+        let model_ss = utss - rss;
+        let model_ms = model_ss / model_df.max(1) as f64;
+        let err_ms = rss / dof as f64;
+        let f = model_ms / err_ms;
+        Some(Anova {
+            model_df,
+            model_ss,
+            model_ms,
+            error_df: dof,
+            error_ss: rss,
+            error_ms: err_ms,
+            total_df: n - 1,
+            total_ss: tss,
+            uncorrected_total_ss: utss,
+            f_value: f,
+            prob_f: f_upper_p(f, model_df.max(1), dof),
+        })
+    } else {
+        None
+    };
+
+    // Fitted values and residuals for every input row.
+    let mut fitted = vec![f64::NAN; n_all];
+    let mut residuals = vec![f64::NAN; n_all];
+    for (k, &i) in used.iter().enumerate() {
+        let f = func.eval(&p, xs[k]);
+        fitted[i] = f;
+        residuals[i] = ys[k] - f;
+    }
+
+    Ok(FitReport {
+        model: func.name.clone(),
+        equation: func.equation.clone(),
+        params,
+        stats: Statistics {
+            n_points: n,
+            dof,
+            rss,
+            reduced_chi_sqr: reduced,
+            r_squared: r2,
+            adj_r_squared: adj,
+            pearson_r: None,
+            iterations: Some(iterations),
+        },
+        anova,
+        covariance,
+        confidence_level: level,
+        fitted,
+        residuals,
+        status,
+        warnings,
+    })
+}
+
+/// Starting value of the damping factor of every Levenberg-Marquardt iteration.
+const INITIAL_DAMPING: f64 = 1e-3;
+
+fn check_len(have: usize, want: usize) -> Result<(), FitError> {
+    if have != want { Err(FitError::LengthMismatch { x: want, y: have }) } else { Ok(()) }
+}
+
+/// Weighted residual vector `sqrt(w) (y - f)` and the weighted Jacobian of the model with
+/// respect to the free parameters (central differences). The Jacobian is of `f`, so that
+/// `J' r` is the descent direction of the sum of squares.
+fn jacobian(
+    func: &FitFunction,
+    p: &[f64],
+    free: &[usize],
+    xs: &[f64],
+    ys: &[f64],
+    sw: &[f64],
+) -> (DMatrix<f64>, DVector<f64>) {
+    let n = xs.len();
+    let mut jac = DMatrix::<f64>::zeros(n, free.len());
+    let mut res = DVector::<f64>::zeros(n);
+    for i in 0..n {
+        res[i] = sw[i] * (ys[i] - func.eval(p, xs[i]));
+    }
+    let mut q = p.to_vec();
+    for (k, &j) in free.iter().enumerate() {
+        let h = 6e-6 * p[j].abs().max(1e-3);
+        // Central differences, also across a bound: Origin differentiates the model itself, so a
+        // parameter resting on its bound must not get a one-sided (less accurate) derivative.
+        for i in 0..n {
+            q[j] = p[j] + h;
+            let fu = func.eval(&q, xs[i]);
+            q[j] = p[j] - h;
+            let fd = func.eval(&q, xs[i]);
+            let d = if fu.is_finite() && fd.is_finite() {
+                (fu - fd) / (2.0 * h)
+            } else {
+                // The model is not defined on one side (for example a bound at the edge of its
+                // domain): use the other side.
+                let f0 = func.eval(p, xs[i]);
+                if fu.is_finite() { (fu - f0) / h } else { (f0 - fd) / h }
+            };
+            jac[(i, k)] = sw[i] * d;
+        }
+        q[j] = p[j];
+    }
+    (jac, res)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn data() -> (Vec<f64>, Vec<f64>) {
+        let x: Vec<f64> = (1..=30).map(|i| i as f64 * 0.3).collect();
+        let y: Vec<f64> = x
+            .iter()
+            .enumerate()
+            .map(|(i, &x)| 1.5 + 4.0 * (-x / 2.0).exp() + 0.01 * (37.0 * (i + 1) as f64).sin())
+            .collect();
+        (x, y)
+    }
+
+    #[test]
+    fn exponential_decay_is_recovered() {
+        let (x, y) = data();
+        let f = FitFunction::from_formula("User", "y0 + A*exp(-x/t)", &["y0", "A", "t"]).unwrap();
+        let r = fit(&f, &x, &y, &FitOptions::default()).unwrap();
+        assert_eq!(r.status, FitStatus::Converged);
+        assert!((r.param("y0").unwrap().value - 1.5).abs() < 0.02);
+        assert!((r.param("t").unwrap().value - 2.0).abs() < 0.05);
+        assert_eq!(r.stats.dof, 27);
+        assert!(r.param("t").unwrap().std_error > 0.0);
+        assert!(r.stats.r_squared > 0.99);
+    }
+
+    #[test]
+    fn fixed_parameter_stays_put() {
+        let (x, y) = data();
+        let f = FitFunction::from_formula("User", "y0 + A*exp(-x/t)", &["y0", "A", "t"]).unwrap().with_fixed("y0", 1.5);
+        let r = fit(&f, &x, &y, &FitOptions::default()).unwrap();
+        let p = r.param("y0").unwrap();
+        assert!(p.fixed && p.value == 1.5 && p.std_error.is_nan());
+        assert_eq!(r.stats.dof, 28);
+    }
+
+    #[test]
+    fn active_bound_is_reported() {
+        let (x, y) = data();
+        let f = FitFunction::from_formula("User", "y0 + A*exp(-x/t)", &["y0", "A", "t"]).unwrap().with_bounds(
+            "t",
+            None,
+            Some(1.5),
+        );
+        let r = fit(&f, &x, &y, &FitOptions::default()).unwrap();
+        assert!((r.param("t").unwrap().value - 1.5).abs() < 1e-9);
+        assert!(r.warnings.iter().any(|w| w.contains("upper bound")));
+    }
+
+    #[test]
+    fn too_few_points_is_an_error() {
+        let f = FitFunction::from_formula("User", "a + b*x", &["a", "b"]).unwrap();
+        let e = fit(&f, &[1.0], &[1.0], &FitOptions::default()).unwrap_err();
+        assert!(matches!(e, FitError::TooFewPoints { .. }));
+    }
+
+    #[test]
+    fn formula_with_unknown_name_is_rejected() {
+        assert!(FitFunction::from_formula("U", "a + q*x", &["a", "b"]).is_err());
+        assert!(FitFunction::from_formula("U", "y = a + b*x", &["a", "b"]).is_ok());
+    }
+
+    fn user() -> FitFunction {
+        FitFunction::from_formula("User", "y0 + A*exp(-x/t)", &["y0", "A", "t"]).unwrap()
+    }
+
+    #[test]
+    fn direct_weight_of_zero_leaves_the_point_out() {
+        let (x, y) = data();
+        let mut w = vec![1.0; x.len()];
+        w[5] = 0.0;
+        let opts = FitOptions { weighting: Weighting::Direct(w), ..FitOptions::default() };
+        let r = fit(&user(), &x, &y, &opts).unwrap();
+        assert_eq!(r.stats.n_points, 29);
+        assert_eq!(r.stats.dof, 26);
+    }
+
+    #[test]
+    fn direct_weights_all_zero_is_an_error() {
+        let (x, y) = data();
+        let opts = FitOptions { weighting: Weighting::Direct(vec![0.0; x.len()]), ..FitOptions::default() };
+        assert!(matches!(fit(&user(), &x, &y, &opts), Err(FitError::TooFewPoints { .. })));
+    }
+
+    #[test]
+    fn contradictory_or_non_finite_settings_are_errors() {
+        let (x, y) = data();
+        let o = FitOptions::default();
+        let f = user().with_bounds("t", Some(5.0), Some(1.0));
+        assert!(matches!(fit(&f, &x, &y, &o), Err(FitError::BadFunction(_))));
+        let f = user().with_fixed("y0", f64::NAN);
+        assert!(matches!(fit(&f, &x, &y, &o), Err(FitError::BadFunction(_))));
+        let f = user().with_bounds("t", Some(f64::NAN), None);
+        assert!(matches!(fit(&f, &x, &y, &o), Err(FitError::BadFunction(_))));
+    }
+
+    #[test]
+    fn overflowing_cost_is_reported_as_such() {
+        let (x, y) = data();
+        let big: Vec<f64> = y.iter().map(|v| v * 1e200).collect();
+        match fit(&user(), &x, &big, &FitOptions::default()) {
+            Err(FitError::Failed(m)) => assert!(m.contains("overflow"), "{m}"),
+            other => panic!("expected an overflow error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_points_are_dropped() {
+        let (mut x, y) = data();
+        x[3] = f64::NAN;
+        let f = FitFunction::from_formula("U", "y0 + A*exp(-x/t)", &["y0", "A", "t"]).unwrap();
+        let r = fit(&f, &x, &y, &FitOptions::default()).unwrap();
+        assert_eq!(r.stats.n_points, 29);
+        assert!(r.fitted[3].is_nan() && r.residuals[3].is_nan() && r.fitted[4].is_finite());
+    }
+}

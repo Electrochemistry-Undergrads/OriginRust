@@ -1,0 +1,248 @@
+[
+ {
+  "name": "gauss",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ]
+ },
+ {
+  "name": "lorentz",
+  "func": "Lorentz",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ]
+ },
+ {
+  "name": "expdec1",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ]
+ },
+ {
+  "name": "expdec2",
+  "func": "ExpDec2",
+  "params": [
+   "y0",
+   "A1",
+   "t1",
+   "A2",
+   "t2"
+  ]
+ },
+ {
+  "name": "boltzmann",
+  "func": "Boltzmann",
+  "params": [
+   "A1",
+   "A2",
+   "x0",
+   "dx"
+  ]
+ },
+ {
+  "name": "line",
+  "func": "Line",
+  "params": [
+   "A",
+   "B"
+  ]
+ },
+ {
+  "name": "gauss_fixed",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "fixed": {
+   "y0": 0.9
+  }
+ },
+ {
+  "name": "expdec1_bound",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "upper": {
+   "t1": 1.5
+  }
+ },
+ {
+  "name": "gauss_instr",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "weight": "ins"
+ },
+ {
+  "name": "expdec1_stat",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "weight": "stat"
+ },
+ {
+  "name": "gauss_lower_w",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "lower": {
+   "w": 1.6
+  }
+ },
+ {
+  "name": "expdec1_lower_y0",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "lower": {
+   "y0": 1.6
+  }
+ },
+ {
+  "name": "line_upper_A",
+  "func": "Line",
+  "params": [
+   "A",
+   "B"
+  ],
+  "upper": {
+   "A": 1.5
+  }
+ },
+ {
+  "name": "expdec1_upper_A1",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "upper": {
+   "A1": 3.5
+  }
+ },
+ {
+  "name": "gauss_upper_xc",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "upper": {
+   "xc": 4.9
+  }
+ },
+ {
+  "name": "expdec1_lower_t1",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "lower": {
+   "t1": 2.5
+  }
+ },
+ {
+  "name": "expdec2_two_bounds",
+  "func": "ExpDec2",
+  "params": [
+   "y0",
+   "A1",
+   "t1",
+   "A2",
+   "t2"
+  ],
+  "lower": {
+   "t1": 1.0
+  },
+  "upper": {
+   "t2": 3.5
+  }
+ },
+ {
+  "name": "gauss_fixed_and_lower",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "fixed": {
+   "xc": 5.0
+  },
+  "lower": {
+   "w": 1.6
+  }
+ },
+ {
+  "name": "expdec2_max3",
+  "func": "ExpDec2",
+  "params": [
+   "y0",
+   "A1",
+   "t1",
+   "A2",
+   "t2"
+  ],
+  "max_iter": 3
+ },
+ {
+  "name": "expdec1_lower_t1_inside",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "lower": {
+   "t1": 2.03
+  }
+ },
+ {
+  "name": "expdec1_upper_y0_inside",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "upper": {
+   "y0": 1.49
+  }
+ }
+]

@@ -1,0 +1,619 @@
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-2*((col(A)-5)/1.5)^2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Gauss nltree:=tt ;
+double i_y0 = tt.y0;
+?i_y0
+double i_xc = tt.xc;
+?i_xc
+double i_w = tt.w;
+?i_w
+double i_A = tt.A;
+?i_A
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_xc = tt.xc;
+?v_xc
+double v_w = tt.w;
+?v_w
+double v_A = tt.A;
+?v_A
+double nit = tt.niter;
+?nit
+#[Book1]Sheet1
+#[Book1]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 0.5 + (2*3/3.0)*1.2/(4*(col(A)-5)^2+1.2^2)/1 + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Lorentz nltree:=tt ;
+double i_y0 = tt.y0;
+?i_y0
+double i_xc = tt.xc;
+?i_xc
+double i_w = tt.w;
+?i_w
+double i_A = tt.A;
+?i_A
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_xc = tt.xc;
+?v_xc
+double v_w = tt.w;
+?v_w
+double v_A = tt.A;
+?v_A
+double nit = tt.niter;
+?nit
+#[Book2]Sheet1
+#[Book2]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt ;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+#[Book3]Sheet1
+#[Book3]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.2, 8, 0.2);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 40, 1);
+col(B) = 0.5 + 3*exp(-col(A)/0.8) + 2*exp(-col(A)/4) + 0.01*sin(37*col(D)) + 0.008*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec2 nltree:=tt ;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+double i_A2 = tt.A2;
+?i_A2
+double i_t2 = tt.t2;
+?i_t2
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double v_A2 = tt.A2;
+?v_A2
+double v_t2 = tt.t2;
+?v_t2
+double nit = tt.niter;
+?nit
+#[Book4]Sheet1
+#[Book4]FitNL1
+$page.name$
+newbook;
+col(A) = data(-5, 5, 0.25);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 41, 1);
+col(B) = 3 + (0.2-3)/(1+exp((col(A)-0.5)/1.1)) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Boltzmann nltree:=tt ;
+double i_A1 = tt.A1;
+?i_A1
+double i_A2 = tt.A2;
+?i_A2
+double i_x0 = tt.x0;
+?i_x0
+double i_dx = tt.dx;
+?i_dx
+nlfit;
+nlend output:=1;
+double v_A1 = tt.A1;
+?v_A1
+double v_A2 = tt.A2;
+?v_A2
+double v_x0 = tt.x0;
+?v_x0
+double v_dx = tt.dx;
+?v_dx
+double nit = tt.niter;
+?nit
+#[Book5]Sheet1
+#[Book5]FitNL1
+$page.name$
+newbook;
+col(A) = data(1, 25, 1);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 25, 1);
+col(B) = 2 + 0.7*col(A) + 0.3*sin(37*col(D)) + 0.2*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Line nltree:=tt ;
+double i_A = tt.A;
+?i_A
+double i_B = tt.B;
+?i_B
+nlfit;
+nlend output:=1;
+double v_A = tt.A;
+?v_A
+double v_B = tt.B;
+?v_B
+double nit = tt.niter;
+?nit
+#[Book6]Sheet1
+#[Book6]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-2*((col(A)-5)/1.5)^2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Gauss nltree:=tt ;
+tt.y0 = 0.9; tt.f_y0 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_xc = tt.xc;
+?i_xc
+double i_w = tt.w;
+?i_w
+double i_A = tt.A;
+?i_A
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_xc = tt.xc;
+?v_xc
+double v_w = tt.w;
+?v_w
+double v_A = tt.A;
+?v_A
+double nit = tt.niter;
+?nit
+#[Book7]Sheet1
+#[Book7]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt ;
+tt.ub_t1 = 1.5; tt.ubon_t1 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+#[Book8]Sheet1
+#[Book8]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-2*((col(A)-5)/1.5)^2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+col(C) = 0.02 + 0.01*(1+sin(5*col(D)));
+nlbegin iy:=(1,2,3) func:=Gauss nltree:=tt weight:=ins;
+double i_y0 = tt.y0;
+?i_y0
+double i_xc = tt.xc;
+?i_xc
+double i_w = tt.w;
+?i_w
+double i_A = tt.A;
+?i_A
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_xc = tt.xc;
+?v_xc
+double v_w = tt.w;
+?v_w
+double v_A = tt.A;
+?v_A
+double nit = tt.niter;
+?nit
+#[Book9]Sheet1
+#[Book9]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt weight:=stat;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+#[Book10]Sheet1
+#[Book10]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-2*((col(A)-5)/1.5)^2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Gauss nltree:=tt ;
+tt.lb_w = 1.6; tt.lbon_w = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_xc = tt.xc;
+?i_xc
+double i_w = tt.w;
+?i_w
+double i_A = tt.A;
+?i_A
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_xc = tt.xc;
+?v_xc
+double v_w = tt.w;
+?v_w
+double v_A = tt.A;
+?v_A
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book11]Sheet1
+#[Book11]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt ;
+tt.lb_y0 = 1.6; tt.lbon_y0 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book12]Sheet1
+#[Book12]FitNL1
+$page.name$
+newbook;
+col(A) = data(1, 25, 1);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 25, 1);
+col(B) = 2 + 0.7*col(A) + 0.3*sin(37*col(D)) + 0.2*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Line nltree:=tt ;
+tt.ub_A = 1.5; tt.ubon_A = 1;
+double i_A = tt.A;
+?i_A
+double i_B = tt.B;
+?i_B
+nlfit;
+nlend output:=1;
+double v_A = tt.A;
+?v_A
+double v_B = tt.B;
+?v_B
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book13]Sheet1
+#[Book13]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt ;
+tt.ub_A1 = 3.5; tt.ubon_A1 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book14]Sheet1
+#[Book14]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-2*((col(A)-5)/1.5)^2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Gauss nltree:=tt ;
+tt.ub_xc = 4.9; tt.ubon_xc = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_xc = tt.xc;
+?i_xc
+double i_w = tt.w;
+?i_w
+double i_A = tt.A;
+?i_A
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_xc = tt.xc;
+?v_xc
+double v_w = tt.w;
+?v_w
+double v_A = tt.A;
+?v_A
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book15]Sheet1
+#[Book15]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt ;
+tt.lb_t1 = 2.5; tt.lbon_t1 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book16]Sheet1
+#[Book16]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.2, 8, 0.2);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 40, 1);
+col(B) = 0.5 + 3*exp(-col(A)/0.8) + 2*exp(-col(A)/4) + 0.01*sin(37*col(D)) + 0.008*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec2 nltree:=tt ;
+tt.lb_t1 = 1.0; tt.lbon_t1 = 1; tt.ub_t2 = 3.5; tt.ubon_t2 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+double i_A2 = tt.A2;
+?i_A2
+double i_t2 = tt.t2;
+?i_t2
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double v_A2 = tt.A2;
+?v_A2
+double v_t2 = tt.t2;
+?v_t2
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book17]Sheet1
+#[Book17]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-2*((col(A)-5)/1.5)^2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Gauss nltree:=tt ;
+tt.xc = 5; tt.f_xc = 1; tt.lb_w = 1.6; tt.lbon_w = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_xc = tt.xc;
+?i_xc
+double i_w = tt.w;
+?i_w
+double i_A = tt.A;
+?i_A
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_xc = tt.xc;
+?v_xc
+double v_w = tt.w;
+?v_w
+double v_A = tt.A;
+?v_A
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book18]Sheet1
+#[Book18]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.2, 8, 0.2);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 40, 1);
+col(B) = 0.5 + 3*exp(-col(A)/0.8) + 2*exp(-col(A)/4) + 0.01*sin(37*col(D)) + 0.008*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec2 nltree:=tt ;
+tt.maxIter = 3;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+double i_A2 = tt.A2;
+?i_A2
+double i_t2 = tt.t2;
+?i_t2
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double v_A2 = tt.A2;
+?v_A2
+double v_t2 = tt.t2;
+?v_t2
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book19]Sheet1
+#[Book19]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt ;
+tt.lb_t1 = 2.03; tt.lbon_t1 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book20]Sheet1
+#[Book20]FitNL1
+$page.name$
+newbook;
+col(A) = data(0.3, 9, 0.3);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 30, 1);
+col(B) = 1.5 + 4*exp(-col(A)/2) + 0.02*sin(37*col(D)) + 0.015*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt ;
+tt.ub_y0 = 1.49; tt.ubon_y0 = 1;
+double i_y0 = tt.y0;
+?i_y0
+double i_A1 = tt.A1;
+?i_A1
+double i_t1 = tt.t1;
+?i_t1
+nlfit;
+nlend output:=1;
+double v_y0 = tt.y0;
+?v_y0
+double v_A1 = tt.A1;
+?v_A1
+double v_t1 = tt.t1;
+?v_t1
+double nit = tt.niter;
+?nit
+$tt.fitstatus$
+#[Book21]Sheet1
+#[Book21]FitNL1
+$page.name$

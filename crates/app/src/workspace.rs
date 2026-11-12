@@ -38,6 +38,8 @@ struct State {
     /// Top-left corner relative to the workspace corner (in the normal state).
     pos: Vec2,
     size: Vec2,
+    /// The size a new window of this kind has; Cascade gives it back.
+    base_size: Vec2,
     mode: Mode,
     /// Closed windows are hidden, not deleted.
     visible: bool,
@@ -61,6 +63,8 @@ pub struct Workspace {
     z: Vec<WindowId>,
     active: Option<WindowId>,
     cascaded: usize,
+    /// Size of the area the windows were drawn in last time; the arranging commands use it.
+    area: Vec2,
 }
 
 impl Workspace {
@@ -70,7 +74,15 @@ impl Workspace {
         let size = if graph { Vec2::new(520.0, 360.0) } else { Vec2::new(480.0, 330.0) };
         self.wins.insert(
             id,
-            State { pos: Vec2::ZERO, size, mode: Mode::Normal, visible: false, placed: false, generation: 0 },
+            State {
+                pos: Vec2::ZERO,
+                size,
+                base_size: size,
+                mode: Mode::Normal,
+                visible: false,
+                placed: false,
+                generation: 0,
+            },
         );
         self.z.push(id);
         if visible {
@@ -162,6 +174,66 @@ impl Workspace {
         self.activate(id);
     }
 
+    /// The windows an arranging command moves: shown and not minimised, bottom to top.
+    fn arrangeable(&self) -> Vec<WindowId> {
+        self.z
+            .iter()
+            .copied()
+            .filter(|id| self.wins.get(id).is_some_and(|s| s.visible && s.mode != Mode::Minimised))
+            .collect()
+    }
+
+    /// The size of the workspace; before the first frame a plain guess.
+    fn area(&self) -> Vec2 {
+        if self.area.x > 1.0 && self.area.y > 1.0 { self.area } else { Vec2::new(800.0, 500.0) }
+    }
+
+    /// Gives a window a place and size and makes it a normal window again. The generation
+    /// changes so that egui takes the new size.
+    fn place(&mut self, id: WindowId, pos: Vec2, size: Vec2) {
+        if let Some(s) = self.wins.get_mut(&id) {
+            s.pos = pos;
+            s.size = size;
+            s.mode = Mode::Normal;
+            s.placed = true;
+            s.generation += 1;
+        }
+    }
+
+    /// Window > Cascade: all open windows at their starting size, each 26 points right of and
+    /// below the one behind it, the active window in front.
+    pub fn cascade(&mut self) {
+        for (k, id) in self.arrangeable().into_iter().enumerate() {
+            let step = Vec2::splat(CASCADE_START + CASCADE_STEP * (k % CASCADE_WRAP) as f32);
+            let size = self.wins[&id].base_size;
+            self.place(id, step, size);
+        }
+        self.cascaded = self.arrangeable().len();
+    }
+
+    /// Window > Tile Horizontally: the open windows one above the other, each as wide as the
+    /// workspace (the meaning of the word in Windows' MDI).
+    pub fn tile_horizontally(&mut self) {
+        let ids = self.arrangeable();
+        let n = ids.len().max(1) as f32;
+        let area = self.area();
+        let h = area.y / n;
+        for (k, id) in ids.into_iter().enumerate() {
+            self.place(id, Vec2::new(0.0, h * k as f32), Vec2::new(area.x, h));
+        }
+    }
+
+    /// Window > Tile Vertically: the open windows side by side, each as high as the workspace.
+    pub fn tile_vertically(&mut self) {
+        let ids = self.arrangeable();
+        let n = ids.len().max(1) as f32;
+        let area = self.area();
+        let w = area.x / n;
+        for (k, id) in ids.into_iter().enumerate() {
+            self.place(id, Vec2::new(w * k as f32, 0.0), Vec2::new(w, area.y));
+        }
+    }
+
     /// The topmost window that is shown and not minimised.
     fn top_visible(&self) -> Option<WindowId> {
         self.z
@@ -187,6 +259,7 @@ impl Workspace {
     ) {
         let ctx = ui.ctx().clone();
         let area = ui.max_rect();
+        self.area = area.size();
         let mut events: Vec<(WindowId, Event)> = Vec::new();
         for id in self.z.clone() {
             let Some(mut s) = self.wins.get(&id).copied() else { continue };
@@ -515,5 +588,50 @@ mod tests {
         assert_eq!(w.active(), None);
         w.activate(WindowId(1));
         assert_eq!(w.mode(WindowId(1)), Some(Mode::Normal));
+    }
+
+    #[test]
+    fn cascade_restores_the_start_size_and_steps_each_window() {
+        let mut w = Workspace::default();
+        for k in 1..=3 {
+            w.add(WindowId(k), k == 2, true);
+        }
+        w.toggle_maximise(WindowId(1));
+        w.minimise(WindowId(3));
+        w.cascade();
+        // The minimised window is left alone, the maximised one is a normal window again.
+        assert_eq!(w.mode(WindowId(1)), Some(Mode::Normal));
+        assert_eq!(w.mode(WindowId(3)), Some(Mode::Minimised));
+        // Each window sits one step right of and below the one behind it.
+        let order = w.arrangeable();
+        assert_eq!(order.len(), 2);
+        let (a, b) = (&w.wins[&order[0]], &w.wins[&order[1]]);
+        assert_eq!(b.pos - a.pos, Vec2::splat(CASCADE_STEP));
+        assert_eq!(a.size, a.base_size);
+        assert_eq!(b.size, b.base_size);
+        assert_eq!(w.active(), Some(WindowId(1)), "the active window stays in front");
+        assert_eq!(order[1], WindowId(1));
+    }
+
+    #[test]
+    fn tiling_divides_the_workspace_between_the_open_windows() {
+        let mut w = Workspace { area: Vec2::new(900.0, 600.0), ..Workspace::default() };
+        for k in 1..=3 {
+            w.add(WindowId(k), false, true);
+        }
+        w.tile_horizontally();
+        for k in 1..=3u64 {
+            let s = &w.wins[&WindowId(k)];
+            assert_eq!(s.size, Vec2::new(900.0, 200.0));
+            assert_eq!(s.pos, Vec2::new(0.0, 200.0 * (k - 1) as f32));
+        }
+        w.tile_vertically();
+        for k in 1..=3u64 {
+            let s = &w.wins[&WindowId(k)];
+            assert_eq!(s.size, Vec2::new(300.0, 600.0));
+            assert_eq!(s.pos, Vec2::new(300.0 * (k - 1) as f32, 0.0));
+        }
+        // The windows are not stacked on each other afterwards: the order of the stack stays.
+        assert_eq!(w.shown(), vec![WindowId(1), WindowId(2), WindowId(3)]);
     }
 }

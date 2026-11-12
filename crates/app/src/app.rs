@@ -12,9 +12,10 @@ use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi};
+use crate::menus::{self, MenuContext, WindowKind};
 use crate::theme;
 use crate::workspace::{self, WindowInfo, Workspace};
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText, Sense};
+use eframe::egui::{self, RichText, Sense};
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
@@ -84,6 +85,8 @@ pub struct SheafApp {
     /// Folder of the last imported Origin project, used as the start folder of file choosers.
     import_folder: Option<PathBuf>,
     quit_confirmed: bool,
+    /// A top-level menu that is held open (`--show menu:NAME`).
+    open_menu: Option<String>,
     shown_title: String,
     startup: Startup,
     frame: u64,
@@ -118,6 +121,7 @@ impl SheafApp {
             pending_path: None,
             import_folder: None,
             quit_confirmed: false,
+            open_menu: None,
             shown_title: String::new(),
             startup,
             frame: 0,
@@ -552,6 +556,9 @@ impl SheafApp {
                     self.rename = Some(RenameDialog { window: id, long_name });
                 }
             }
+            Action::Cascade => self.workspace.cascade(),
+            Action::TileHorizontally => self.workspace.tile_horizontally(),
+            Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
             Action::Quit => {
                 if self.doc.dirty {
@@ -706,195 +713,52 @@ impl SheafApp {
 
     // ----- drawing -------------------------------------------------------
 
+    /// What the menus need to know about the program right now.
+    fn menu_context(&self) -> MenuContext<'_> {
+        let project = self.doc.project();
+        let book = self.active.filter(|id| project.workbook(*id).is_some());
+        let graph = self.active.filter(|id| project.graph(*id).is_some());
+        let kind = match (book, graph) {
+            (Some(_), _) => WindowKind::Workbook,
+            (_, Some(_)) => WindowKind::Graph,
+            _ => WindowKind::None,
+        };
+        let selected: &[ColumnId] = book.and_then(|b| self.books.get(&b)).map(|s| s.selected.as_slice()).unwrap_or(&[]);
+        MenuContext {
+            kind,
+            book,
+            graph,
+            active: self.active,
+            selected,
+            undo: self.doc.undo_label(),
+            redo: self.doc.redo_label(),
+            windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
+            open: self.open_menu.as_deref(),
+        }
+    }
+
+    /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands
+    /// Sheaf has), and nothing else.
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
-        let cmd = |key| KeyboardShortcut::new(Modifiers::COMMAND, key);
-        let cmd_shift = |key| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, key);
         let typing = ctx.wants_keyboard_input();
+        let menu_ctx = self.menu_context();
         ctx.input_mut(|i| {
-            if i.consume_shortcut(&cmd_shift(Key::S)) {
-                actions.push(Action::SaveProjectAs);
-            }
-            if i.consume_shortcut(&cmd(Key::S)) {
-                actions.push(Action::SaveProject);
-            }
-            if i.consume_shortcut(&cmd(Key::O)) {
-                actions.push(Action::OpenProject);
-            }
-            if i.consume_shortcut(&cmd(Key::N)) {
-                actions.push(Action::NewProject);
-            }
-            if i.consume_shortcut(&cmd(Key::I)) {
-                actions.push(Action::Import(None));
-            }
-            if !typing {
-                if i.consume_shortcut(&cmd_shift(Key::Z)) || i.consume_shortcut(&cmd(Key::Y)) {
-                    actions.push(Action::Redo);
+            for (keys, cmd) in menus::shortcuts() {
+                if typing && !menus::works_while_typing(&cmd) {
+                    continue;
                 }
-                if i.consume_shortcut(&cmd(Key::Z)) {
-                    actions.push(Action::Undo);
+                if i.consume_shortcut(&keys)
+                    && let Ok(action) = menus::resolve(&cmd, &menu_ctx)
+                {
+                    actions.push(action);
                 }
             }
         });
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        let project = self.doc.project();
-        let active_book = self.active.filter(|id| project.workbook(*id).is_some());
-        let active_graph = self.active.filter(|id| project.graph(*id).is_some());
-        let selected: Vec<ColumnId> =
-            active_book.and_then(|b| self.books.get(&b)).map(|s| s.selected.clone()).unwrap_or_default();
-        let item = |ui: &mut egui::Ui, enabled: bool, text: &str, shortcut: &str| {
-            let mut button = egui::Button::new(text);
-            if !shortcut.is_empty() {
-                button = button.shortcut_text(shortcut);
-            }
-            let clicked = ui.add_enabled(enabled, button).clicked();
-            if clicked {
-                ui.close();
-            }
-            clicked
-        };
-
-        egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                if item(ui, true, "New Project", "Ctrl+N") {
-                    actions.push(Action::NewProject);
-                }
-                if item(ui, true, "Open Project...", "Ctrl+O") {
-                    actions.push(Action::OpenProject);
-                }
-                if item(ui, true, "Save Project", "Ctrl+S") {
-                    actions.push(Action::SaveProject);
-                }
-                if item(ui, true, "Save Project As...", "Ctrl+Shift+S") {
-                    actions.push(Action::SaveProjectAs);
-                }
-                ui.separator();
-                if item(ui, true, "Import Data...", "Ctrl+I") {
-                    actions.push(Action::Import(None));
-                }
-                ui.separator();
-                if item(ui, active_graph.is_some(), "Export Graph...", "")
-                    && let Some(g) = active_graph
-                {
-                    actions.push(Action::ExportGraph(g));
-                }
-                if item(ui, active_book.is_some(), "Export Worksheet...", "")
-                    && let Some(b) = active_book
-                {
-                    actions.push(Action::ExportData(b));
-                }
-                ui.separator();
-                if item(ui, true, "Quit", "") {
-                    actions.push(Action::Quit);
-                }
-            });
-            ui.menu_button("Edit", |ui| {
-                let undo = self.doc.undo_label().map(|l| format!("Undo {l}")).unwrap_or_else(|| "Undo".to_string());
-                let redo = self.doc.redo_label().map(|l| format!("Redo {l}")).unwrap_or_else(|| "Redo".to_string());
-                if item(ui, self.doc.undo_label().is_some(), &undo, "Ctrl+Z") {
-                    actions.push(Action::Undo);
-                }
-                if item(ui, self.doc.redo_label().is_some(), &redo, "Ctrl+Y") {
-                    actions.push(Action::Redo);
-                }
-            });
-            ui.menu_button("Worksheet", |ui| {
-                if item(ui, true, "New Workbook", "") {
-                    actions.push(Action::NewWorkbook);
-                }
-                ui.separator();
-                match active_book {
-                    Some(book) => {
-                        grid::column_menu(ui, book, &selected, actions);
-                        ui.separator();
-                        grid::sheet_menu(ui, book, &selected, actions);
-                    }
-                    None => {
-                        ui.weak("Open a workbook to work with columns");
-                    }
-                }
-            });
-            ui.menu_button("Plot", |ui| match active_book {
-                Some(book) => {
-                    let what = if selected.is_empty() {
-                        "all Y columns of the sheet".to_string()
-                    } else {
-                        format!("{} selected column(s)", selected.len())
-                    };
-                    ui.weak(format!("Plots {what}"));
-                    for t in Template::ALL {
-                        if item(ui, true, t.label(), "") {
-                            actions.push(Action::PlotColumns { book, columns: selected.clone(), template: t });
-                        }
-                    }
-                }
-                None => {
-                    ui.weak("Open a workbook to plot its columns");
-                }
-            });
-            ui.menu_button("Analysis", |ui| match active_book {
-                Some(book) => {
-                    let what = if selected.is_empty() {
-                        "the Y columns of the sheet".to_string()
-                    } else {
-                        format!("{} selected column(s)", selected.len())
-                    };
-                    ui.weak(format!("Works on {what}"));
-                    for kind in AnalysisKind::ALL {
-                        if item(ui, true, kind.menu_label(), "") {
-                            actions.push(Action::Analyze { book, columns: selected.clone(), kind });
-                        }
-                    }
-                    ui.separator();
-                    for (kind, label) in FitKind::MENU {
-                        if item(ui, true, label, "") {
-                            actions.push(Action::Fit { book, column: selected.first().copied(), kind });
-                        }
-                    }
-                }
-                None => {
-                    ui.weak("Open a workbook to analyze its columns");
-                }
-            });
-            ui.menu_button("Graph", |ui| {
-                let on = active_graph.is_some();
-                for (text, tab) in [
-                    ("X Axis...", PropsTab::XAxis),
-                    ("Y Axis...", PropsTab::YAxis),
-                    ("Plots...", PropsTab::Plots),
-                    ("Legend...", PropsTab::Legend),
-                    ("Page...", PropsTab::Page),
-                ] {
-                    if item(ui, on, text, "")
-                        && let Some(graph) = active_graph
-                    {
-                        actions.push(Action::GraphProperties { graph, tab });
-                    }
-                }
-                ui.separator();
-                if item(ui, on, "Export...", "")
-                    && let Some(g) = active_graph
-                {
-                    actions.push(Action::ExportGraph(g));
-                }
-            });
-            ui.menu_button("Window", |ui| {
-                if project.windows.is_empty() {
-                    ui.weak("The project has no windows");
-                }
-                for w in &project.windows {
-                    if item(ui, true, &w.title(), "") {
-                        actions.push(Action::Focus(w.id()));
-                    }
-                }
-            });
-            ui.menu_button("Help", |ui| {
-                if item(ui, true, &format!("About {APP_NAME}"), "") {
-                    actions.push(Action::About);
-                }
-            });
-        });
+        let menu_ctx = self.menu_context();
+        menus::show_bar(ui, &menu_ctx, actions);
     }
 
     fn explorer(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -1145,6 +1009,7 @@ impl SheafApp {
             let first_column = project.workbooks().next().and_then(|b| b.sheet().columns.first()).map(|c| c.id);
             let named = project.window_by_name(arg).map(Window::id);
             match name {
+                "menu" => self.open_menu = Some(arg.to_string()),
                 "focus" => {
                     if let Some(id) = named {
                         self.focus(id);
@@ -1291,8 +1156,8 @@ impl eframe::App for SheafApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.pending = Some(Pending::Quit);
         }
-        self.shortcuts(ctx, &mut actions);
         self.active = self.workspace.active();
+        self.shortcuts(ctx, &mut actions);
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {

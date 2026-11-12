@@ -17,7 +17,9 @@
 param(
   [Parameter(Mandatory = $true)][string]$Out,
   [Parameter(Mandatory = $true)][string]$PngDir,
-  [Parameter(Mandatory = $true)][string]$Report
+  [Parameter(Mandatory = $true)][string]$Report,
+  # Only the graphs with these names are built (all of them when empty).
+  [string[]]$Only = @()
 )
 $ErrorActionPreference = 'Stop'
 if (Test-Path -LiteralPath $Out) { throw "Refusing to overwrite $Out" }
@@ -64,6 +66,7 @@ try {
        plotfmt = @('set %C -c 5;') }
   )
   foreach ($g in $graphs) {
+    if ($Only.Count -gt 0 -and $Only -notcontains $g.name) { continue }
     Lt ("plotxy iy:=[GSrc]1!" + $g.cols + " plot:=" + $g.plot + " ogl:=[<new>];")
     Lt ("win -r %H " + $g.name + ";")
     Lt ("win -a " + $g.name + ";")

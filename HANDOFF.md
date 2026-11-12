@@ -57,20 +57,27 @@ through (they are held for approval and expire), so the split is written here:
   Origin 2016), the CH Instruments `.bin` reader, curve math, multi-range integration, date and
   time columns, recalculating formulas, fit bands and controls, CSV/ICP-OES import extras with
   batch import, the peak analysis chain.
-- **Running**: workflow `origin-look-1` (run `wf_24c63ee8-83e`): `.opj` as the default save format
-  with a `<name>.opj.sheaf` companion when content would be lost, then ADR 0007 steps 1 to 4
-  (theme, child windows, Window menu, menus per window type), all in one worktree branch, each
-  step reviewed with screenshots; in parallel, the missing Origin pictures (step 13). The second session works on `chi-text-real` and
+- **Merged on 2026-11-12 (afternoon)**: `.opj` is the default save format with a `.opj.sheaf`
+  companion (ADR 0008); the app shell has Origin's theme, child windows, Window menu and menu bars
+  per window type (ADR 0007 steps 1 to 4); `docs/spec/gui-look.md` completed from a second set of
+  pictures (`re-workspace/scratch/gui-study2/`, local only).
+- **Running**: workflow `p0-gaps-3` (run `wf_5a289106-226`): graphs written into `.opj`, and basic
+  statistics (t-tests, ANOVA, histograms, normality). Its statistics menu entry was written
+  against the old menu code: when merging, place it in `crates/app/src/menus.rs`. Workflow
+  `origin-look-2`: ADR 0007 steps 5 to 7 (workbook look with cell selection and copy/paste,
+  toolbars, Project Explorer and panels). The second session works on `chi-text-real` and
   `graph-p0` (double Y is committed there).
+- **Known app bug** (seen by an agent, not traced): after a click into the graph body a popup layer
+  of about 450 x 470 px can stay on screen and swallow the next click on a window title below it.
 
-All checks pass on `main` at `928a233` (571 tests). Parity counts are recomputed with `python tools/parity-count.py`.
+All checks pass on `main` at `2a1b35c` (621 tests). Parity counts are recomputed with `python tools/parity-count.py`.
 
 ## Exact next step
 
-1. Merge the `origin-look-1` branch (after looking at its screenshots) after its reviews; full checks after each merge. Merge `chi-text-real` and
+1. Merge the `p0-gaps-3` and `origin-look-2` branches after their reviews; full checks after each merge. Merge `chi-text-real` and
    `graph-p0` (second session) when its note says they are ready.
-2. Continue ADR 0007: steps 5 to 10 (workbook look, toolbars, panels, graph window look and mouse
-   actions, dialogs in Origin's layout, window geometry in the project file).
+2. Continue ADR 0007: steps 8 to 10 (graph window look and mouse actions, dialogs in Origin's
+   layout, window geometry in the project file), and fix the popup bug above.
 3. Write graphs into `.opj` so the `.opj.sheaf` companion is no longer needed.
 4. Then the gaps from the parity audit in its order (column and bar charts with text labels,
    offset and stacked plots, multi-panel, double Y, log scales are P0 for the owner).

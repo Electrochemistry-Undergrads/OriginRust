@@ -111,16 +111,20 @@ the default project format.
       14 missing; judged from code, nothing was run)
 - [x] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
       design record `docs/adr/0007-origin-style-workspace.md` (accepted; 13-step plan)
-- [ ] Origin-style workspace: child windows inside the main window instead of tabs, Project
-      Explorer, menus that follow the active window type with Origin's names and order, toolbars
-      and the Tools bar (our own icons), right-click menus and double-click actions as in Origin
+- [ ] Origin-style workspace (ADR 0007): done: theme, child windows in a grey workspace instead of
+      tabs, Window menu (Cascade, Tile), menu bars per window type with Origin's names, order,
+      Alt letters and shortcuts (Ctrl+K import, Ctrl+Q set values, Ctrl+Y fit; redo moved to
+      Ctrl+Shift+Z because Origin has none), commands Sheaf lacks shown greyed. To do: workbook
+      look, toolbars, Project Explorer and panels, graph-window mouse actions, dialogs in Origin's
+      layout, window positions saved in the project
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin 2016 and comparing every cell (`sheaf export ... -o
       x.opj`; seven test projects up to 100000 rows opened in Origin with no difference)
 - [ ] Write `.opj`: graphs
-- [ ] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
-      everything a project holds (graphs at first), saving also writes a `.sheaf` copy next to the
-      `.opj` and says what only the copy holds; the copy is dropped once nothing would be lost
+- [x] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
+      everything a project holds (graphs at first), saving also writes a `<name>.opj.sheaf`
+      companion and says what only it holds; opening the `.opj` uses the companion when it is at
+      least as new; saving over an Origin-made `.opj` keeps a `.opj.bak` first (ADR 0008)
 - [ ] Close the gaps from the parity audit in its order of work. Done so far (each built by an
       agent, reviewed by another, fixed, merged on 2026-11-12):
   - [x] Subtract Reference Data and Simple Math (+ - * / power with a constant or a reference

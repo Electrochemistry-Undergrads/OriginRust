@@ -224,13 +224,12 @@ impl PanelLayout {
         let count = g.layers.len();
         let rows_joined = self.v_gap == 0.0 && self.link_x;
         let cols_joined = self.h_gap == 0.0 && self.link_y;
-        for k in 0..count {
+        for (k, layer) in g.layers.iter_mut().enumerate() {
             let (r, c) = self.cell(k);
             let below = r.checked_add(1).and_then(|r| self.panel_at(r, c, count)).is_some();
             let above = r.checked_sub(1).and_then(|r| self.panel_at(r, c, count)).is_some();
             let left = c.checked_sub(1).and_then(|c| self.panel_at(r, c, count)).is_some();
             let right = c.checked_add(1).and_then(|c| self.panel_at(r, c, count)).is_some();
-            let layer = &mut g.layers[k];
             if rows_joined && below {
                 let x = &mut layer.x_axis;
                 x.show_tick_labels = false;

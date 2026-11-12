@@ -10,6 +10,7 @@
 use crate::theme;
 use eframe::egui::{self, Color32, Id, Pos2, Rect, Sense, Stroke, Vec2};
 use sheaf_core::WindowId;
+use sheaf_core::project::{WindowPlace, WindowState};
 use std::collections::HashMap;
 
 /// Step of the cascade, in points.
@@ -232,6 +233,66 @@ impl Workspace {
         for (k, id) in ids.into_iter().enumerate() {
             self.place(id, Vec2::new(w * k as f32, 0.0), Vec2::new(w, area.y));
         }
+    }
+
+    /// Where every window that has a place is, bottom of the stack first, for saving in the
+    /// project. Windows that were never shown have no place yet and are left out.
+    pub fn places(&self) -> Vec<WindowPlace> {
+        self.z
+            .iter()
+            .filter_map(|id| {
+                let s = self.wins.get(id)?;
+                if !s.placed {
+                    return None;
+                }
+                let state = match (s.visible, s.mode) {
+                    (false, _) => WindowState::Hidden,
+                    (true, Mode::Normal) => WindowState::Normal,
+                    (true, Mode::Minimised) => WindowState::Minimised,
+                    (true, Mode::Maximised) => WindowState::Maximised,
+                };
+                Some(WindowPlace {
+                    window: *id,
+                    x: f64::from(s.pos.x),
+                    y: f64::from(s.pos.y),
+                    width: f64::from(s.size.x),
+                    height: f64::from(s.size.y),
+                    state,
+                })
+            })
+            .collect()
+    }
+
+    /// Puts the listed windows back where `places` says (a project being opened), in its stacking
+    /// order; the topmost shown window becomes the active one. Windows the workspace does not
+    /// track, and sizes that are not finite, are skipped.
+    pub fn restore(&mut self, places: &[WindowPlace]) {
+        let mut restored = Vec::new();
+        for p in places {
+            let Some(s) = self.wins.get_mut(&p.window) else { continue };
+            let (pos, size) = (Vec2::new(p.x as f32, p.y as f32), Vec2::new(p.width as f32, p.height as f32));
+            if !(pos.x.is_finite() && pos.y.is_finite() && size.x.is_finite() && size.y.is_finite()) {
+                continue;
+            }
+            s.pos = pos.max(Vec2::ZERO);
+            s.size = size.max(MIN_SIZE);
+            s.placed = true;
+            s.visible = p.state != WindowState::Hidden;
+            s.mode = match p.state {
+                WindowState::Minimised => Mode::Minimised,
+                WindowState::Maximised => Mode::Maximised,
+                WindowState::Normal | WindowState::Hidden => Mode::Normal,
+            };
+            s.generation += 1;
+            restored.push(p.window);
+        }
+        if restored.is_empty() {
+            return;
+        }
+        // The listed windows go to the top in their saved order; others stay below them.
+        self.z.retain(|id| !restored.contains(id));
+        self.z.extend(restored);
+        self.active = self.top_visible();
     }
 
     /// The topmost window that is shown and not minimised.
@@ -611,6 +672,30 @@ mod tests {
         assert_eq!(b.size, b.base_size);
         assert_eq!(w.active(), Some(WindowId(1)), "the active window stays in front");
         assert_eq!(order[1], WindowId(1));
+    }
+
+    #[test]
+    fn places_are_saved_and_restored_with_state_and_order() {
+        let mut w = Workspace::default();
+        for (id, graph) in [(WindowId(1), false), (WindowId(2), true), (WindowId(3), true)] {
+            w.add(id, graph, true);
+        }
+        w.minimise(WindowId(2));
+        w.hide(WindowId(3));
+        w.activate(WindowId(1));
+        let places = w.places();
+        assert_eq!(places.iter().map(|p| p.window).collect::<Vec<_>>(), vec![WindowId(2), WindowId(3), WindowId(1)]);
+        assert_eq!(places[0].state, WindowState::Minimised);
+        assert_eq!(places[1].state, WindowState::Hidden);
+
+        let mut fresh = Workspace::default();
+        for (id, graph) in [(WindowId(1), false), (WindowId(2), true), (WindowId(3), true)] {
+            fresh.add(id, graph, true);
+        }
+        fresh.restore(&places);
+        assert_eq!(fresh.places(), places, "the same places, states and order");
+        assert_eq!(fresh.active(), Some(WindowId(1)));
+        assert!(!fresh.is_shown(WindowId(3)));
     }
 
     #[test]

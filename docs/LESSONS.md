@@ -135,3 +135,12 @@ builds at once, and look at the result of every cleanup.
 The owner sometimes starts a second Claude session on the same repository. The sessions agree by
 message which crates and files each one owns. Only the lead merges to `main` and edits HANDOFF.md,
 ROADMAP.md and LESSONS.md. The other session works on named branches and reports them to the lead.
+
+## One build folder shared by several worktrees can run tests with a dead source path
+
+Cargo's fingerprints use paths relative to the workspace, so a test binary built in worktree A is
+reused unchanged in worktree B when the sources are equal. `env!("CARGO_MANIFEST_DIR")` is baked
+into that binary and still points at A. After A was removed, the fit fixtures failed to load
+("file not found") on `main` although the files were there. When a worktree that shared the build
+folder is removed, run `cargo clean -p <crate>` for the workspace crates (cheap: dependencies stay)
+before trusting a test failure about a missing fixture.

@@ -25,3 +25,8 @@ Reasons: every edit is undoable with no per-command undo code, which removes a w
 
 Consequence: code that changes the project goes through `Document::edit` (or `apply`) with a label
 for the Edit menu. The history is capped at 100 steps.
+
+Addendum (2026-11-12, ADR 0007 step 10): the project also holds view state that is saved but is
+not an edit: which sheet is shown, and the places of the windows in the workspace
+(`Project::window_places`, `docs/spec/project-file-format.md`). It changes through
+`Document::adjust_view`, which neither adds an undo step nor marks the project as changed.

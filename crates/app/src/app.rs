@@ -306,6 +306,11 @@ impl SheafApp {
                 }
             }
         }
+        // Where the windows are goes into the project file too (view state: no undo step).
+        let places = self.workspace.places();
+        if self.doc.project().window_places != places {
+            self.doc.adjust_view(|p| p.window_places = places);
+        }
         match sheaf_io::save::save_project(self.doc.project(), &path) {
             Ok(outcome) => {
                 // The project is safe on disk either way: in the .opj, or in the companion when
@@ -410,8 +415,16 @@ impl SheafApp {
         // only its first few; the others are opened from the project explorer.
         let new: Vec<(WindowId, bool)> = ids.into_iter().filter(|(id, _)| self.known.insert(*id)).collect();
         let shown = if new.len() > MAX_TABS_AT_ONCE { 1 } else { new.len() };
+        let added: HashSet<WindowId> = new.iter().map(|(id, _)| *id).collect();
         for (k, (id, graph)) in new.into_iter().enumerate() {
             self.workspace.add(id, graph, k < shown);
+        }
+        // A project that was saved with its window places opens with them; windows it does not
+        // list, and windows that were already open, keep their places.
+        let places: Vec<_> =
+            self.doc.project().window_places.iter().filter(|p| added.contains(&p.window)).copied().collect();
+        if !places.is_empty() {
+            self.workspace.restore(&places);
         }
     }
 

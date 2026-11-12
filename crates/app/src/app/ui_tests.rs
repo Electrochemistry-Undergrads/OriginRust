@@ -2534,3 +2534,24 @@ fn after_a_click_into_a_graph_the_next_click_reaches_the_window_title_under_it()
     click(&mut h, "Title Book1 - sample");
     assert_eq!(h.state().active, Some(book), "the click on the title was not swallowed");
 }
+
+#[test]
+fn a_saved_project_reopens_with_its_windows_where_they_were() {
+    let dir = save_dir("places");
+    let file = dir.join("arranged.sheaf");
+    let mut h = start(vec![data_file("places")]);
+    let (book, graph_id) = window_ids(&h);
+    click(&mut h, "Minimise Book1 - sample");
+    click(&mut h, "Maximise Graph1 - sample");
+    let before = h.state().workspace.places();
+    assert_eq!(before.len(), 2);
+    h.state_mut().save_to(file.clone());
+    assert!(!h.state().doc.dirty, "recording the places does not count as a change");
+
+    let h2 = start(vec![file]);
+    let after = h2.state().workspace.places();
+    assert_eq!(after, before, "same places, states and stacking order");
+    assert_eq!(h2.state().workspace.mode(book), Some(crate::workspace::Mode::Minimised));
+    assert_eq!(h2.state().workspace.mode(graph_id), Some(crate::workspace::Mode::Maximised));
+    assert_eq!(h2.state().active, Some(graph_id));
+}

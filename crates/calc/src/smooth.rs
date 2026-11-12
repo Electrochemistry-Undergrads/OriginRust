@@ -152,8 +152,9 @@ fn smooth_valid(y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
 /// ascending X. Rules (all observed, see `docs/spec/analysis-tools.md`):
 ///
 /// 1. A straight baseline is subtracted: the line from the mean of the first `w` points (at the
-///    first X) to the mean of the last `w` points (at the last X), `w = max(10, n / 100)` for
-///    `n > 10` and `1` otherwise.
+///    first X) to the mean of the last `w` points (at the last X), `w = n / 100` limited to
+///    10..=100 for `n > 10` and `1` otherwise (the upper limit 100 was found at n = 20000 and 50000;
+///    n / 100 was found up to n = 5000).
 /// 2. The remainder is transformed with a plain length-`n` FFT (no padding). With `R` the X range
 ///    the bin spacing is `df = 1 / R`, and the cutoff is `fc = 1 / (dx * 2 * npts)`, `dx = R / (n-1)`.
 /// 3. Cosine part `k` is kept when `(k + 1) df <= fc`, sine part `k` when `k df <= fc` (the sine
@@ -173,7 +174,7 @@ fn fft_filter(x: &[f64], y: &[f64], npts: usize) -> Vec<f64> {
     let dx = range / (n - 1) as f64;
     let df = 1.0 / range;
     let fc = 1.0 / dx / (2.0 * npts.max(1) as f64);
-    let w = if n > 10 { (n / 100).max(10) } else { 1 };
+    let w = if n > 10 { (n / 100).clamp(10, 100) } else { 1 };
     let a = y[..w].iter().sum::<f64>() / w as f64;
     let b = y[n - w..].iter().sum::<f64>() / w as f64;
     let base: Vec<f64> = x.iter().map(|&xi| a + (b - a) * (xi - x[0]) / range).collect();

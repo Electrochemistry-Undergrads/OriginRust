@@ -17,6 +17,8 @@
 //! - Tools that give a few numbers per input column (integration results,
 //!   statistics) add a new sheet to the workbook with one row per input
 //!   column, and return the same table in the [`Report`].
+//! - The statistics tools (t-tests, one-way ANOVA, normality tests, histogram) put their tables on
+//!   a new sheet of their own; see the `statistics` submodule and `docs/spec/statistics.md`.
 //! - Tools whose result has its own length (interpolated curve, list of
 //!   peaks) add a new sheet with an X and a Y column per input column.
 
@@ -31,6 +33,7 @@ pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions,
     SmoothMethod, SmoothOptions, SplineBoundary,
 };
+pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
@@ -157,6 +160,67 @@ pub struct CurveMathSpec {
     pub common_only: bool,
 }
 
+/// Which t-test [`TTestSpec`] runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TTestKind {
+    /// Each chosen column is tested on its own against a hypothesized mean.
+    OneSample { mean: f64 },
+    /// Exactly two chosen columns; the difference of their means (first minus second) against
+    /// `difference`. Without `equal_variance` the Welch test is used.
+    TwoSample { equal_variance: bool, difference: f64 },
+    /// Exactly two chosen columns; the rows where both have a number are paired.
+    Paired { difference: f64 },
+}
+
+/// What [`Tool::TTest`] does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TTestSpec {
+    pub kind: TTestKind,
+    pub tail: Tail,
+    /// Significance level, 0 to 1 (Origin's default is 0.05).
+    pub alpha: f64,
+}
+
+impl Default for TTestSpec {
+    fn default() -> Self {
+        TTestSpec { kind: TTestKind::OneSample { mean: 0.0 }, tail: Tail::Two, alpha: 0.05 }
+    }
+}
+
+/// What [`Tool::Anova`] does: one-way ANOVA with each chosen column as a group.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AnovaSpec {
+    pub alpha: f64,
+    /// Means comparison of all pairs of groups; `None` leaves it out.
+    pub comparison: Option<MeansComparison>,
+}
+
+impl Default for AnovaSpec {
+    fn default() -> Self {
+        AnovaSpec { alpha: 0.05, comparison: Some(MeansComparison::Tukey) }
+    }
+}
+
+/// What [`Tool::Histogram`] does: frequency counts of each chosen column.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct HistogramSpec {
+    pub freq: FreqOptions,
+    /// Also make a graph with a column plot of the counts.
+    pub graph: bool,
+}
+
+/// What [`Tool::Normality`] does: all the normality tests on each chosen column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NormalitySpec {
+    pub alpha: f64,
+}
+
+impl Default for NormalitySpec {
+    fn default() -> Self {
+        NormalitySpec { alpha: 0.05 }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tool {
     Integrate(IntegrateSpec),
@@ -170,6 +234,10 @@ pub enum Tool {
     FindPeaks(PeakOptions),
     PeakChain(PeakChainSpec),
     Statistics,
+    TTest(TTestSpec),
+    Anova(AnovaSpec),
+    Histogram(HistogramSpec),
+    Normality(NormalitySpec),
 }
 
 impl Tool {
@@ -190,6 +258,14 @@ impl Tool {
             Tool::FindPeaks(_) => "Find peaks",
             Tool::PeakChain(_) => "Analyze peaks",
             Tool::Statistics => "Statistics",
+            Tool::TTest(spec) => match spec.kind {
+                TTestKind::OneSample { .. } => "One-sample t-test",
+                TTestKind::TwoSample { .. } => "Two-sample t-test",
+                TTestKind::Paired { .. } => "Paired t-test",
+            },
+            Tool::Anova(_) => "One-way ANOVA",
+            Tool::Histogram(_) => "Histogram",
+            Tool::Normality(_) => "Normality test",
         }
     }
 
@@ -201,6 +277,10 @@ impl Tool {
             Tool::FindPeaks(_) => "Peaks",
             Tool::PeakChain(_) => "PeakAnalysis",
             Tool::Statistics => "Statistics",
+            Tool::TTest(_) => "TTest",
+            Tool::Anova(_) => "ANOVA",
+            Tool::Histogram(_) => "Histogram",
+            Tool::Normality(_) => "Normality",
             _ => "Result",
         }
     }
@@ -273,6 +353,8 @@ pub struct Report {
     pub new_columns: Vec<ColumnId>,
     /// Index of the sheet that was added for the results, if any.
     pub new_sheet: Option<usize>,
+    /// The graph that was added (a histogram's column plot), if any.
+    pub new_graph: Option<WindowId>,
     /// The numbers per input column (integration, statistics, peak counts).
     pub table: Option<ResultTable>,
     /// One sentence for a status line, for example "Integrate: 3 columns, results in sheet Integrate1".
@@ -577,7 +659,34 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod statistics;
+
 impl Project {
+    /// A new graph with a column plot of each (bin centre, count) pair of columns.
+    fn histogram_graph(&mut self, ids: &[ColumnId], plots: &[(usize, usize)]) -> WindowId {
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(crate::template::Template::Scatter);
+        for &(x, y) in plots {
+            self.add_plot_xy(graph, 0, Some(ids[x]), ids[y], None).expect("the graph and the new columns exist");
+        }
+        let count_title = plots.first().and_then(|&(_, y)| self.column(ids[y])).map(|c| c.display_name().to_string());
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                for p in &mut l.plots {
+                    p.kind = crate::graph::PlotKind::Column;
+                }
+                l.apply_palette();
+                l.y_axis.title = count_title;
+                // The bars start at zero.
+                l.y_axis.min = Some(0.0);
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        graph
+    }
+
     /// Runs an analysis tool on worksheet columns. See the module text for
     /// where the results go. On error nothing is changed.
     pub fn analyze(&mut self, request: &Request) -> Result<Report, AnalysisError> {
@@ -630,8 +739,17 @@ impl Project {
         let mut on_sheet: Vec<SheetColumn> = Vec::new();
         let mut table: Option<ResultTable> = None;
         let mut notes: Vec<String> = Vec::new();
+        // Plots of a new graph: indices into `on_sheet` of the X and the Y column.
+        let mut graph_plots: Vec<(usize, usize)> = Vec::new();
 
         match &request.tool {
+            Tool::TTest(_) | Tool::Anova(_) | Tool::Histogram(_) | Tool::Normality(_) => {
+                let out = statistics::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                graph_plots = out.plots;
+            }
             Tool::PeakChain(spec) => {
                 table = Some(run_peak_chain(spec, &inputs, &mut beside, &mut notes)?);
             }
@@ -1126,7 +1244,9 @@ impl Project {
             new_columns.push(id);
         }
         let mut new_sheet = None;
+        let mut new_graph = None;
         let mut sheet_name = String::new();
+        let mut sheet_column_ids: Vec<ColumnId> = Vec::new();
         if !on_sheet.is_empty() {
             let mut ws = Worksheet::new(free_sheet_name(
                 &self.workbook(book_id).expect("workbook exists").sheets,
@@ -1141,11 +1261,15 @@ impl Project {
                     &sc.comments,
                 ));
                 new_columns.push(id);
+                sheet_column_ids.push(id);
             }
             sheet_name = ws.name.clone();
             let b = self.workbook_mut(book_id).expect("workbook exists");
             b.sheets.push(ws);
             new_sheet = Some(b.sheets.len() - 1);
+        }
+        if !graph_plots.is_empty() {
+            new_graph = Some(self.histogram_graph(&sheet_column_ids, &graph_plots));
         }
         let columns = if count == 1 { "1 column".to_string() } else { format!("{count} columns") };
         // Name the added columns, so that the result can be found without opening the sheet.
@@ -1161,7 +1285,11 @@ impl Project {
             }
             (None, _) => format!("{}: {columns}, results in new columns {added}", request.tool.name()),
         };
-        Ok(Report { book: book_id, sheet: sheet_index, new_columns, new_sheet, table, message, notes })
+        let message = match new_graph.and_then(|g| self.graph(g)) {
+            Some(g) => format!("{message}; graph {}", g.name),
+            None => message,
+        };
+        Ok(Report { book: book_id, sheet: sheet_index, new_columns, new_sheet, new_graph, table, message, notes })
     }
 
     /// Sorts all rows of a sheet by the values of one column. Rows keep

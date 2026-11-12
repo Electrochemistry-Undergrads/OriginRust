@@ -821,6 +821,18 @@ impl SheafApp {
                     ui.weak("Open a workbook to analyze its columns");
                 }
             });
+            ui.menu_button("Statistics", |ui| match active_book {
+                Some(book) => {
+                    for kind in AnalysisKind::STATISTICS {
+                        if item(ui, true, kind.menu_label(), "") {
+                            actions.push(Action::Analyze { book, columns: selected.clone(), kind });
+                        }
+                    }
+                }
+                None => {
+                    ui.weak("Open a workbook to analyze its columns");
+                }
+            });
             ui.menu_button("Graph", |ui| {
                 let on = active_graph.is_some();
                 for (text, tab) in [
@@ -971,6 +983,9 @@ impl SheafApp {
                     self.analysis = None;
                     if let Some(sheet) = report.new_sheet {
                         self.show_sheet(report.book, sheet);
+                    }
+                    if let Some(graph) = report.new_graph {
+                        self.focus(graph);
                     }
                     self.status = report.message;
                 }

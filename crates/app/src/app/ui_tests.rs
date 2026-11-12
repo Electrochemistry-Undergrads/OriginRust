@@ -674,3 +674,43 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     let b = project(&h).workbooks().next().unwrap();
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
 }
+
+/// Statistics > t-Test... opens the window with the two Y columns of the sheet; OK adds a result
+/// sheet, and one undo removes it.
+#[test]
+fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
+    let mut h = start(vec![data_file("ttest")]);
+    click(&mut h, "Book1 - sample");
+    menu(&mut h, "Statistics", "t-Test...");
+    assert!(h.state().analysis.is_some(), "the t-test window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert!(b.sheets[1].name.starts_with("TTest"), "{}", b.sheets[1].name);
+    let ws = &b.sheets[1];
+    let t_col = ws.columns.iter().find(|c| c.long_name == "t").expect("a t column").numeric().unwrap().to_vec();
+    assert_eq!(t_col.len(), 1);
+    // up = 2.5 .. 8.5 (mean 5.5), down = 30.5 .. 0.5 (mean 15.5), both with SD 2.582 and 12.91.
+    assert!(t_col[0] < -1.0 && t_col[0].is_finite(), "{t_col:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Two-sample t-test"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
+/// Statistics > Histogram... adds the counts sheet and a graph with a column plot.
+#[test]
+fn the_statistics_menu_makes_a_histogram_graph() {
+    let mut h = start(vec![data_file("histogram")]);
+    click(&mut h, "Book1 - sample");
+    let graphs_before = project(&h).graphs().count();
+    menu(&mut h, "Statistics", "Histogram...");
+    click(&mut h, "OK");
+    let p = project(&h);
+    assert_eq!(p.graphs().count(), graphs_before + 1);
+    let g = p.graphs().last().unwrap();
+    assert_eq!(g.layers[0].plots[0].kind, sheaf_core::graph::PlotKind::Column);
+    assert!(p.workbooks().next().unwrap().sheets[1].name.starts_with("Histogram"));
+}

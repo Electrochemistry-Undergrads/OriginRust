@@ -398,3 +398,69 @@ fn peaks_chain_integrates_and_fits_every_peak() {
     let (ok, _, stderr) = sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline", "anchors"]);
     assert!(!ok && stderr.contains("--anchors"), "{stderr}");
 }
+
+/// Two groups of five measurements (untreated and treated), one X-less sheet.
+fn groups_file(dir: &Path) -> PathBuf {
+    let path = dir.join("groups.csv");
+    std::fs::write(
+        &path,
+        "untreated,treated,third\n10.1,12.0,9.0\n9.8,12.4,9.5\n10.4,11.7,9.2\n10.0,12.2,8.8\n9.7,12.1,9.1\n",
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
+    let dir = scratch("stats");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "ttest", file, "--y", "untreated,treated", "--unequal", "--tail", "lower"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("untreated vs treated") && out.contains("Welch") && out.contains("rejected"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "ttest", file, "--y", "untreated", "--test", "one-sample", "--mean", "10"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("one-sample t-test"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "ttest", file, "--y", "untreated", "--test", "paired"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+
+    let project = dir.join("stats.sheaf");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "anova",
+        file,
+        "--y",
+        "untreated,treated,third",
+        "--comparison",
+        "tukey",
+        "--save",
+        project.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Model") && out.contains("Tukey means comparison") && out.contains("ANOVA1"), "{out}");
+
+    let (ok, out, err) = sheaf(&["analyze", "normality", file, "--y", "untreated,treated"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Shapiro-Wilk W"), "{out}");
+
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "histogram",
+        file,
+        "--y",
+        "untreated",
+        "--bin-size",
+        "0.5",
+        "--min",
+        "9.5",
+        "--max",
+        "10.5",
+        "--save",
+        project.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Histogram1") && out.contains("graph Graph1"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Graph1"), "{info}");
+}

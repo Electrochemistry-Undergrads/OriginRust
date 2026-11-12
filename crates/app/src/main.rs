@@ -20,6 +20,8 @@ mod app;
 mod dialogs;
 mod graph_view;
 mod grid;
+mod theme;
+mod workspace;
 
 use std::path::PathBuf;
 

@@ -98,8 +98,10 @@ fn a_data_file_given_at_start_is_imported_and_plotted() {
     // Both windows are listed in the project explorer ...
     assert_eq!(h.query_all_by_label("Book1 - sample").count(), 1);
     assert_eq!(h.query_all_by_label("Graph1 - sample").count(), 1);
-    // ... and have a tab (the tab titles are drawn by the docking library and are not exposed).
-    assert_eq!(h.state().dock.iter_all_tabs().count(), 2);
+    // ... and are open as child windows of the workspace, each with its own title bar.
+    assert_eq!(h.state().workspace.shown().len(), 2);
+    assert!(h.query_by_label("Title Book1 - sample").is_some());
+    assert!(h.query_by_label("Title Graph1 - sample").is_some());
 }
 
 #[test]
@@ -707,4 +709,136 @@ fn saving_over_an_imported_origin_file_keeps_a_copy_of_the_original() {
     assert!(h2.state_mut().save_to(opj.clone()));
     assert_eq!(std::fs::read(dir.join("lab.opj.bak")).unwrap(), original);
     assert!(h2.state().status.contains("lab.opj.bak"));
+}
+
+/// A mouse click at a point of the screen.
+fn click_at(h: &mut Harness<'static, SheafApp>, at: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    settle(h);
+}
+
+fn window_ids(h: &Harness<'static, SheafApp>) -> (WindowId, WindowId) {
+    let p = project(h);
+    (p.workbooks().next().unwrap().id, p.graphs().next().unwrap().id)
+}
+
+#[test]
+fn clicking_a_window_makes_it_the_active_one_and_brings_it_to_the_front() {
+    let mut h = start(vec![data_file("activate")]);
+    let (book, graph) = window_ids(&h);
+    assert_eq!(h.state().active, Some(graph), "the newest window is active");
+    click(&mut h, "Title Book1 - sample");
+    assert_eq!(h.state().active, Some(book));
+    assert_eq!(h.state().workspace.shown().last(), Some(&book), "and on top of the stack");
+    // A click into the body of the other window, in the part the first one does not cover.
+    let title = h.get_by_label("Title Graph1 - sample").rect().center();
+    click_at(&mut h, title + egui::vec2(0.0, 315.0));
+    assert_eq!(h.state().active, Some(graph));
+    assert_eq!(h.state().workspace.shown().last(), Some(&graph));
+    // The menus follow the active window: the Graph menu is only usable with a graph active.
+    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Graph");
+    assert!(h.query_all_by_label("Export...").count() >= 1);
+}
+
+#[test]
+fn maximise_fills_the_workspace_and_restore_gives_the_old_size_back() {
+    let mut h = start(vec![data_file("maximise")]);
+    let width = |h: &Harness<'static, SheafApp>| h.get_by_label("Title Graph1 - sample").rect().width();
+    let (_, graph) = window_ids(&h);
+    let normal = width(&h);
+    assert!(normal < 700.0);
+    click(&mut h, "Maximise Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Maximised));
+    assert!(width(&h) > 1000.0, "fills the area right of the project list: {}", width(&h));
+    click(&mut h, "Restore Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Normal));
+    assert!((width(&h) - normal).abs() < 2.0, "back to {normal}, is {}", width(&h));
+}
+
+#[test]
+fn minimise_makes_a_bar_and_clicking_the_bar_restores() {
+    let mut h = start(vec![data_file("minimise")]);
+    let (book, graph) = window_ids(&h);
+    click(&mut h, "Minimise Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Minimised));
+    assert!(h.query_by_label("Title Graph1 - sample").is_none());
+    assert_eq!(h.state().active, Some(book), "the next window becomes active");
+    click(&mut h, "Restore Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Normal));
+    assert_eq!(h.state().active, Some(graph));
+}
+
+#[test]
+fn closing_a_window_hides_it_and_keeps_its_data_until_it_is_shown_again() {
+    let mut h = start(vec![data_file("close")]);
+    let (book, graph) = window_ids(&h);
+    click(&mut h, "Close Graph1 - sample");
+    assert!(h.query_by_label("Title Graph1 - sample").is_none(), "no longer in the workspace");
+    assert_eq!(project(&h).graphs().count(), 1, "but still in the project");
+    assert_eq!(project(&h).graphs().next().unwrap().layers[0].plots.len(), 2);
+    assert_eq!(h.state().active, Some(book));
+    // The project explorer still lists it, and clicking it shows it again.
+    click(&mut h, "Graph1 - sample");
+    assert_eq!(h.state().active, Some(graph));
+    assert!(h.query_by_label("Title Graph1 - sample").is_some());
+    // A closed window is not reopened by the next change of the project.
+    click(&mut h, "Close Graph1 - sample");
+    menu(&mut h, "Worksheet", "New Workbook");
+    assert!(h.query_by_label("Title Graph1 - sample").is_none());
+}
+
+#[test]
+fn a_million_row_workbook_scrolls_quickly_inside_a_window() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-big-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("big.csv");
+    let mut text = String::from(
+        "x,y
+",
+    );
+    for i in 0..1_000_000 {
+        text.push_str(&format!(
+            "{i},{}
+",
+            i % 977
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().row_count(), 1_000_000);
+    // Scroll with the mouse wheel over the cells of the workbook, frame after frame.
+    click(&mut h, "Title Book1 - big");
+    let at = h.get_by_label("Title Book1 - big").rect().center() + egui::vec2(0.0, 120.0);
+    h.event(egui::Event::PointerMoved(at));
+    let frames = 30;
+    let started = std::time::Instant::now();
+    for _ in 0..frames {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, -40.0),
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    // The view really moved: row numbers far below the first screen are drawn.
+    let deepest = h
+        .query_all(By::new().role(egui::accesskit::Role::Label))
+        .filter_map(|n| n.value().and_then(|v| v.parse::<usize>().ok()))
+        .max()
+        .unwrap_or(0);
+    assert!(deepest > 1000, "the grid did not scroll (deepest row shown: {deepest})");
+    let per_frame = started.elapsed().as_secs_f64() * 1000.0 / frames as f64;
+    println!("1,000,000 rows in a window: {per_frame:.1} ms per frame while scrolling");
+    assert!(per_frame < 150.0, "scrolling is too slow: {per_frame:.1} ms per frame");
 }

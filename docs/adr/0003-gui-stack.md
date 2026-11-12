@@ -1,6 +1,7 @@
 # ADR 0003: Desktop GUI with eframe/egui and egui_dock
 
-Status: accepted (2026-11-11)
+Status: accepted (2026-11-11). The use of `egui_dock` is replaced by the floating child windows of ADR 0007
+(done: `egui_dock` is no longer a dependency of the app crate); eframe/egui and `rfd` stand.
 
 ## Decision
 

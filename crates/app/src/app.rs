@@ -1,5 +1,5 @@
-//! The application window: menus, project explorer, docked workbook and
-//! graph tabs, dialogs, and the one place where user actions change the
+//! The application window: menus, project explorer, the workspace with its
+//! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
 use crate::actions::Action;
@@ -12,8 +12,9 @@ use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi};
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText, Sense, Stroke};
-use egui_dock::{DockArea, DockState, TabViewer};
+use crate::theme;
+use crate::workspace::{self, WindowInfo, Workspace};
+use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText, Sense};
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
@@ -45,7 +46,7 @@ enum Pending {
     Quit,
 }
 
-/// More new windows than this at once are not all opened as tabs.
+/// More new windows than this at once are not all opened.
 const MAX_TABS_AT_ONCE: usize = 8;
 
 struct RenameDialog {
@@ -58,8 +59,8 @@ pub struct SheafApp {
     path: Option<PathBuf>,
     /// The Origin file the project was imported from; saving over it first keeps a `.bak` copy.
     foreign_source: Option<PathBuf>,
-    dock: DockState<WindowId>,
-    /// Windows that already got a tab once. A tab the user closed is not reopened by itself.
+    workspace: Workspace,
+    /// Windows that were already shown once. A window the user closed is not reopened by itself.
     known: HashSet<WindowId>,
     active: Option<WindowId>,
     books: HashMap<WindowId, BookUi>,
@@ -90,16 +91,12 @@ pub struct SheafApp {
 
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
-        cc.egui_ctx.set_theme(egui::Theme::Light);
-        cc.egui_ctx.all_styles_mut(|s| {
-            s.spacing.item_spacing = egui::vec2(8.0, 5.0);
-            s.interaction.selectable_labels = false;
-        });
+        theme::apply(&cc.egui_ctx);
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
             foreign_source: None,
-            dock: DockState::new(Vec::new()),
+            workspace: Workspace::default(),
             known: HashSet::new(),
             active: None,
             books: HashMap::new(),
@@ -127,7 +124,7 @@ impl SheafApp {
         };
         let paths = std::mem::take(&mut app.startup.paths);
         app.open_paths(paths, false);
-        app.sync_tabs();
+        app.sync_windows();
         app.run_startup_show();
         app
     }
@@ -204,7 +201,7 @@ impl SheafApp {
     }
 
     fn reset_views(&mut self) {
-        self.dock = DockState::new(Vec::new());
+        self.workspace = Workspace::default();
         self.known.clear();
         self.books.clear();
         self.graphs.clear();
@@ -353,31 +350,33 @@ impl SheafApp {
         }
     }
 
-    // ----- tabs ----------------------------------------------------------
+    // ----- windows -------------------------------------------------------
 
-    /// Gives every new window of the project a tab and drops tabs of windows that are gone.
-    fn sync_tabs(&mut self) {
-        let ids: Vec<WindowId> = self.doc.project().windows.iter().map(Window::id).collect();
-        let set: HashSet<WindowId> = ids.iter().copied().collect();
-        self.dock.retain_tabs(|t| set.contains(t));
+    /// Gives every new window of the project a place in the workspace and drops those that are gone.
+    fn sync_windows(&mut self) {
+        let ids: Vec<(WindowId, bool)> =
+            self.doc.project().windows.iter().map(|w| (w.id(), matches!(w, Window::Graph(_)))).collect();
+        let set: HashSet<WindowId> = ids.iter().map(|(id, _)| *id).collect();
+        self.workspace.retain(|id| set.contains(&id));
         self.known.retain(|k| set.contains(k));
         self.books.retain(|k, _| set.contains(k));
         self.graphs.retain(|k, _| set.contains(k));
         // A project with very many windows (an imported Origin project can have dozens) opens
-        // only its first few as tabs; the others are opened from the project explorer.
-        let new: Vec<WindowId> = ids.into_iter().filter(|id| self.known.insert(*id)).collect();
+        // only its first few; the others are opened from the project explorer.
+        let new: Vec<(WindowId, bool)> = ids.into_iter().filter(|(id, _)| self.known.insert(*id)).collect();
         let shown = if new.len() > MAX_TABS_AT_ONCE { 1 } else { new.len() };
-        for id in new.into_iter().take(shown) {
-            self.dock.push_to_focused_leaf(id);
+        for (k, (id, graph)) in new.into_iter().enumerate() {
+            self.workspace.add(id, graph, k < shown);
         }
     }
 
     fn focus(&mut self, id: WindowId) {
-        if let Some((surface, node, tab)) = self.dock.find_tab(&id) {
-            self.dock.set_active_tab((surface, node, tab));
-            self.dock.set_focused_node_and_surface((surface, node));
-        } else if self.doc.project().window(id).is_some() {
-            self.dock.push_to_focused_leaf(id);
+        if self.doc.project().window(id).is_some() {
+            if !self.workspace.contains(id) {
+                let graph = self.doc.project().graph(id).is_some();
+                self.workspace.add(id, graph, false);
+            }
+            self.workspace.activate(id);
         }
     }
 
@@ -1274,71 +1273,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
 /// A small drawn icon: a table for workbooks, a curve on axes for graphs.
 fn window_icon(ui: &mut egui::Ui, graph: bool) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), Sense::hover());
-    let r = rect.shrink(1.0);
-    let painter = ui.painter();
-    let line = Stroke::new(1.0_f32, ui.visuals().text_color().gamma_multiply(0.75));
-    if graph {
-        painter.line_segment([r.left_top(), r.left_bottom()], line);
-        painter.line_segment([r.left_bottom(), r.right_bottom()], line);
-        let accent = Stroke::new(1.5_f32, egui::Color32::from_rgb(40, 110, 200));
-        let pts: Vec<egui::Pos2> = [(0.1, 0.8), (0.35, 0.45), (0.6, 0.6), (0.95, 0.1)]
-            .iter()
-            .map(|(x, y)| egui::pos2(r.left() + x * r.width(), r.top() + y * r.height()))
-            .collect();
-        painter.add(egui::Shape::line(pts, accent));
-    } else {
-        painter.rect_stroke(r, 1.0, line, egui::StrokeKind::Inside);
-        let third_w = r.width() / 3.0;
-        let third_h = r.height() / 3.0;
-        for k in 1..3 {
-            let x = r.left() + third_w * k as f32;
-            let y = r.top() + third_h * k as f32;
-            painter.line_segment([egui::pos2(x, r.top()), egui::pos2(x, r.bottom())], line);
-            painter.line_segment([egui::pos2(r.left(), y), egui::pos2(r.right(), y)], line);
-        }
-    }
-}
-
-struct Tabs<'a> {
-    doc: &'a Document,
-    books: &'a mut HashMap<WindowId, BookUi>,
-    graphs: &'a mut HashMap<WindowId, GraphUi>,
-    actions: &'a mut Vec<Action>,
-}
-
-impl TabViewer for Tabs<'_> {
-    type Tab = WindowId;
-
-    fn title(&mut self, tab: &mut WindowId) -> egui::WidgetText {
-        match self.doc.project().window(*tab) {
-            Some(w) => w.title().into(),
-            None => "(closed)".into(),
-        }
-    }
-
-    fn id(&mut self, tab: &mut WindowId) -> egui::Id {
-        egui::Id::new(("window_tab", tab.0))
-    }
-
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut WindowId) {
-        match self.doc.project().window(*tab) {
-            Some(Window::Workbook(_)) => {
-                let state = self.books.entry(*tab).or_default();
-                grid::show(ui, self.doc, *tab, state, self.actions);
-            }
-            Some(Window::Graph(_)) => {
-                let state = self.graphs.entry(*tab).or_default();
-                graph_view::show(ui, self.doc, *tab, state, self.actions);
-            }
-            None => {
-                ui.label("This window no longer exists.");
-            }
-        }
-    }
-
-    fn scroll_bars(&self, _tab: &WindowId) -> [bool; 2] {
-        [false, false]
-    }
+    workspace::paint_window_icon(ui.painter(), rect, graph);
 }
 
 impl eframe::App for SheafApp {
@@ -1357,7 +1292,7 @@ impl eframe::App for SheafApp {
             self.pending = Some(Pending::Quit);
         }
         self.shortcuts(ctx, &mut actions);
-        self.active = self.dock.find_active_focused().map(|(_, tab)| *tab);
+        self.active = self.workspace.active();
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
@@ -1375,32 +1310,37 @@ impl eframe::App for SheafApp {
             .default_width(200.0)
             .width_range(120.0..=420.0)
             .show(ctx, |ui| self.explorer(ui, &mut actions));
-        egui::CentralPanel::default().frame(egui::Frame::central_panel(&ctx.style()).inner_margin(0.0)).show(
-            ctx,
-            |ui| {
-                if self.doc.project().windows.is_empty() {
-                    self.welcome(ui, &mut actions);
-                } else {
-                    let mut tabs = Tabs {
-                        doc: &self.doc,
-                        books: &mut self.books,
-                        graphs: &mut self.graphs,
-                        actions: &mut actions,
-                    };
-                    DockArea::new(&mut self.dock)
-                        .style(egui_dock::Style::from_egui(ui.style().as_ref()))
-                        .show_leaf_collapse_buttons(false)
-                        .show_leaf_close_all_buttons(false)
-                        .show_inside(ui, &mut tabs);
-                }
-            },
-        );
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::WORKSPACE_GREY)).show(ctx, |ui| {
+            if self.doc.project().windows.is_empty() {
+                self.welcome(ui, &mut actions);
+            } else {
+                let doc = &self.doc;
+                let books = &mut self.books;
+                let graphs = &mut self.graphs;
+                let actions = &mut actions;
+                let info = |id: WindowId| {
+                    doc.project()
+                        .window(id)
+                        .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
+                };
+                let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
+                    Some(Window::Workbook(_)) => {
+                        grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                    }
+                    Some(Window::Graph(_)) => {
+                        graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
+                    }
+                    None => {}
+                };
+                self.workspace.show(ui, doc.dirty, &info, &mut content);
+            }
+        });
 
         self.dialogs(ctx);
         for action in actions {
             self.apply(action, ctx);
         }
-        self.sync_tabs();
+        self.sync_windows();
 
         let name = self
             .path

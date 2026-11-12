@@ -295,6 +295,27 @@ impl Column {
         }
     }
 
+    /// The text of a cell as the worksheet shows it. A column in the General format shows up to
+    /// 5 decimal digits (Origin's default, Tools > Options > Numeric Format), so 0.841470985 is
+    /// shown as 0.84147; very small and very large numbers use scientific notation. Other
+    /// formats show what `cell_text` gives. The cell keeps every digit.
+    pub fn shown_text(&self, row: usize) -> String {
+        match (&self.data, self.format) {
+            (ColumnData::Numeric(v), crate::format::NumberFormat::General) => match v.get(row) {
+                Some(x) if x.is_finite() && *x != 0.0 => {
+                    if x.abs() >= 1e-4 && x.abs() < 1e15 {
+                        let text = format!("{x:.5}");
+                        text.trim_end_matches('0').trim_end_matches('.').to_string()
+                    } else {
+                        crate::format::format_general(*x, 5)
+                    }
+                }
+                _ => self.cell_text(row),
+            },
+            _ => self.cell_text(row),
+        }
+    }
+
     /// Sets one cell from typed text. Numeric columns grow with missing
     /// values as needed; text that is not a number becomes a missing value.
     /// Returns `false` when the text could not be read as a number.
@@ -371,6 +392,18 @@ mod tests {
         assert_eq!(c.axis_title(), "Potential (V)");
         let d = Column::new(ColumnId(2), "B", Designation::Y, ColumnData::default());
         assert_eq!(d.axis_title(), "B");
+    }
+
+    #[test]
+    fn the_worksheet_shows_five_decimals_for_the_general_format_and_the_cell_keeps_all_digits() {
+        let values = vec![0.841470984807897, -0.7568, 10.0, 1234567.891, 0.00001234, 0.0, f64::NAN, 2.5e20];
+        let c = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(values));
+        let shown: Vec<String> = (0..8).map(|r| c.shown_text(r)).collect();
+        assert_eq!(shown, ["0.84147", "-0.7568", "10", "1234567.891", "1.234E-5", "0", "--", "2.5E20"]);
+        assert_eq!(c.cell_text(0), "0.841470985");
+        let mut d = c.clone();
+        d.format = crate::format::NumberFormat::Decimal(2);
+        assert_eq!(d.shown_text(0), "0.84");
     }
 
     #[test]

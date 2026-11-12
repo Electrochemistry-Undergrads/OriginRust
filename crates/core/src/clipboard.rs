@@ -40,14 +40,20 @@ pub struct PasteReport {
     pub not_numbers: usize,
 }
 
+/// The shortest text that reads back as exactly this number, without a useless ".0".
+fn full_text(x: f64) -> String {
+    let text = format!("{x:?}");
+    text.strip_suffix(".0").map(str::to_string).unwrap_or(text)
+}
+
 /// The text of one cell as Copy writes it.
 fn copy_cell(column: &Column, row: usize, full_precision: bool) -> String {
     let clean = |s: &str| s.replace(['\t', '\r', '\n'], " ");
     match &column.data {
         ColumnData::Numeric(v) => match v.get(row) {
             Some(x) if x.is_nan() => String::new(),
-            Some(x) if full_precision && !column.format.is_date_time() && x.is_finite() => format!("{x:?}"),
-            Some(_) => column.cell_text(row),
+            Some(x) if full_precision && !column.format.is_date_time() && x.is_finite() => full_text(*x),
+            Some(_) => column.shown_text(row),
             None => String::new(),
         },
         ColumnData::Text(v) => v.get(row).map(|s| clean(s)).unwrap_or_default(),
@@ -349,7 +355,7 @@ mod tests {
         let shown = ws.copy_text(&[0, 1], 0..3, CopyOptions::default());
         assert_eq!(shown, "0.30\ta b\n\tx y\n2.00\t\n");
         let full = ws.copy_text(&[0], 0..3, CopyOptions { full_precision: true, ..Default::default() });
-        assert_eq!(full, "0.30000000000000004\n\n2.0\n");
+        assert_eq!(full, "0.30000000000000004\n\n2\n", "a whole number has no useless .0");
     }
 
     #[test]

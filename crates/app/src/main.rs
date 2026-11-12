@@ -20,6 +20,7 @@
 mod actions;
 mod app;
 mod dialogs;
+mod gadget;
 mod graph_view;
 mod grid;
 mod menus;

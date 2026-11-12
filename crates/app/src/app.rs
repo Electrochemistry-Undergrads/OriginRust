@@ -429,6 +429,72 @@ impl SheafApp {
         }
     }
 
+    /// Gadgets > Integrate: the gadget goes on the selected plot of the active layer, or its first
+    /// visible plot with numbers, over the middle half of the X axis.
+    fn start_integrate(&mut self, graph: WindowId) {
+        let project = self.doc.project();
+        let Some(g) = project.graph(graph) else { return };
+        let state = self.graphs.entry(graph).or_default();
+        let layer = state.active_layer.min(g.layers.len().saturating_sub(1));
+        let numeric = |i: &usize| {
+            g.layers
+                .get(layer)
+                .and_then(|l| l.plots.get(*i))
+                .is_some_and(|p| p.visible && project.column(p.y).is_some_and(|c| c.numeric().is_some()))
+        };
+        let selected = match state.selected {
+            Some((l, sheaf_plot::scene::ObjectKind::Plot(p))) if l == layer => Some(p).filter(numeric),
+            _ => None,
+        };
+        let count = g.layers.get(layer).map_or(0, |l| l.plots.len());
+        let Some(plot) = selected.or_else(|| (0..count).find(numeric)) else {
+            self.warn("Nothing to integrate: the active layer has no plot of numbers".to_string());
+            return;
+        };
+        let Some(geom) = sheaf_plot::layout_geometry(project, graph).ok().and_then(|v| v.into_iter().nth(layer)) else {
+            return;
+        };
+        let (x0, x1) = (geom.x.from_unit(0.25), geom.x.from_unit(0.75));
+        state.gadget = Some(crate::gadget::Integrator { layer, plot, x0, x1, end_point_baseline: false });
+        self.focus(graph);
+    }
+
+    /// A command of a graph's Integrate gadget. New Output runs the analysis tool Integrate on the
+    /// same rows, so the result lands in a sheet as from Analysis > Integrate.
+    fn gadget(&mut self, graph: WindowId, op: crate::gadget::GadgetOp) {
+        use crate::gadget::GadgetOp;
+        let Some(state) = self.graphs.get_mut(&graph) else { return };
+        let Some(g) = &mut state.gadget else { return };
+        match op {
+            GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
+            GadgetOp::Close => state.gadget = None,
+            GadgetOp::NewOutput => {
+                let g = *g;
+                let column = self
+                    .doc
+                    .project()
+                    .graph(graph)
+                    .and_then(|gr| gr.layers.get(g.layer))
+                    .and_then(|l| l.plots.get(g.plot))
+                    .map(|p| p.y);
+                let Some(column) = column else { return };
+                let request = sheaf_core::analysis::Request {
+                    columns: vec![column],
+                    rows: sheaf_core::analysis::RowRange::XBetween(g.x0, g.x1),
+                    tool: sheaf_core::analysis::Tool::Integrate(sheaf_core::analysis::IntegrateSpec {
+                        area_type: Default::default(),
+                        end_point_baseline: g.end_point_baseline,
+                        cumulative: false,
+                    }),
+                };
+                match self.doc.edit("Integrate", |p| p.analyze(&request)) {
+                    Ok(_) => self.say("The integration result was added to the workbook of the plot's data"),
+                    Err(e) => self.warn(format!("Could not integrate: {e}")),
+                }
+            }
+        }
+    }
+
     /// Applies a change made from a graph window (right-click menus, Delete, Ctrl+R) as one undo
     /// step.
     fn edit_graph(&mut self, graph: WindowId, op: GraphOp) {
@@ -656,6 +722,8 @@ impl SheafApp {
             Action::ActivateLayer { graph, layer } => {
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
+            Action::StartIntegrate { graph } => self.start_integrate(graph),
+            Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
                 self.export = Some(ExportDialog::new(graph, self.folder()));
             }
@@ -1477,6 +1545,11 @@ impl SheafApp {
                 "focus" => {
                     if let Some(id) = named {
                         self.focus(id);
+                    }
+                }
+                "integrate" => {
+                    if let Some(id) = first_graph {
+                        self.start_integrate(id);
                     }
                 }
                 "graph-settings" => {

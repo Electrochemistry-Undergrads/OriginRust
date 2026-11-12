@@ -173,6 +173,15 @@ pub enum Action {
         graph: WindowId,
         op: GraphOp,
     },
+    /// Gadgets > Integrate on a graph.
+    StartIntegrate {
+        graph: WindowId,
+    },
+    /// A command of a graph's open gadget.
+    Gadget {
+        graph: WindowId,
+        op: crate::gadget::GadgetOp,
+    },
     /// Makes a layer of a graph the active one (a click on its layer icon or inside its frame).
     ActivateLayer {
         graph: WindowId,

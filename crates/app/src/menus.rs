@@ -20,6 +20,7 @@ use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
+use crate::gadget::GadgetOp;
 use crate::panels::PanelId;
 use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
@@ -105,6 +106,10 @@ pub enum Cmd {
     },
     /// Go to the workbook a plot's data is in.
     GoTo(WindowId),
+    /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
+    IntegrateGadget,
+    /// A command of the open gadget's right-click menu.
+    Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
     /// View > Project Explorer and the other panels.
@@ -946,12 +951,9 @@ fn data_menu() -> Vec<Entry> {
 }
 
 fn gadgets_menu() -> Vec<Entry> {
-    greys(&[
-        "Statistics...",
-        "Quick Fit...",
-        "Quick Sigmoidal Fit...",
-        "Quick Peaks...",
-        "Integrate...",
+    let mut v = greys(&["Statistics...", "Quick Fit...", "Quick Sigmoidal Fit...", "Quick Peaks..."]);
+    v.push(item("Integrate...", Cmd::IntegrateGadget));
+    v.extend(greys(&[
         "Differentiate...",
         "Interpolate...",
         "Intersect...",
@@ -962,7 +964,19 @@ fn gadgets_menu() -> Vec<Entry> {
         "-",
         "Vertical Cursor...",
         "Go To...",
-    ])
+    ]));
+    v
+}
+
+/// The right-click menu of the Integrate gadget.
+pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
+    let baseline = if end_point_baseline { "Baseline: Zero" } else { "Baseline: Line Through End Points" };
+    vec![
+        item(baseline, Cmd::Gadget(GadgetOp::ToggleBaseline)),
+        item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
+        sep(),
+        keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),
+    ]
 }
 
 fn tools_menu() -> Vec<Entry> {
@@ -1628,6 +1642,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SelectPlot { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot }
         }
         Cmd::GoTo(id) => Action::Focus(*id),
+        Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,

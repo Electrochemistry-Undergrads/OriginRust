@@ -14,8 +14,13 @@ fn into_project_keeps_window_names_and_drops_trailing_missing_cells() {
     ));
     cols.push(Column::new(ColumnId(2), "B", Designation::Y, ColumnData::text(vec!["a".into(), String::new()])));
     cols.push(Column::new(ColumnId(3), "C", Designation::Y, ColumnData::numeric(vec![f64::NAN; 32])));
-    let import =
-        OpjImport { workbooks: vec![book], version: "9.3".into(), signature: String::new(), warnings: Vec::new() };
+    let import = OpjImport {
+        workbooks: vec![book],
+        graphs: Vec::new(),
+        version: "9.3".into(),
+        signature: String::new(),
+        warnings: Vec::new(),
+    };
     let project = import.into_project();
     let b = project.workbooks().next().unwrap();
     assert_eq!(b.name, "Rates");
@@ -290,4 +295,25 @@ fn collect(dir: &Path, recurse: bool, out: &mut Vec<std::path::PathBuf>) {
             out.push(p);
         }
     }
+}
+
+/// The owner's figure project (git-ignored, only on his machine): its one graph is a column plot
+/// with error bars whose data come from the workbook next to it.
+#[test]
+fn local_figure_project_gives_a_column_graph() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Final Project Figures.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let project = read_opj(&path).unwrap().into_project();
+    let graphs: Vec<_> = project.graphs().collect();
+    assert_eq!(graphs.len(), 1);
+    let layer = &graphs[0].layers[0];
+    assert_eq!(layer.plots.len(), 1, "the error column is attached to the bars");
+    let plot = &layer.plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Column);
+    assert!(plot.y_error.is_some() && project.numeric(plot.y).is_some());
+    assert_eq!((layer.y_axis.min, layer.y_axis.max), (Some(0.0), Some(3.25)));
+    assert!(layer.labels.len() >= 6);
 }

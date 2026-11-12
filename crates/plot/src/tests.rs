@@ -707,3 +707,16 @@ fn reversed_limits_draw_a_reversed_axis() {
     let (back, _) = geom.page_to_data(left, 0.0);
     assert!((back - 5.0).abs() < 1e-9);
 }
+
+#[test]
+fn column_plots_draw_one_filled_bar_per_value() {
+    let x: Vec<f64> = (1..=4).map(f64::from).collect();
+    let (mut p, g) = project(Template::Scatter, x.clone(), vec![vec![1.0, 2.0, 3.0, 2.0]]);
+    {
+        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+        plot.kind = sheaf_core::graph::PlotKind::Column;
+        plot.symbol.color = sheaf_core::color::Color::rgb(0, 107, 172);
+    }
+    let svg = svg_of(&p, g);
+    assert_eq!(svg.matches("fill=\"#006BAC\"").count(), 4, "{svg}");
+}

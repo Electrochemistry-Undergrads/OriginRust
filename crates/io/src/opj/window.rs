@@ -34,6 +34,8 @@ pub(crate) struct WinColumn {
     pub value_type: u8,
     /// The column note: long name, units and comments.
     pub note: Vec<u8>,
+    /// The whole record; for the curves of a graph this holds the plot settings.
+    pub record: Vec<u8>,
 }
 
 /// One annotation of a layer (a graph's titles, texts and legend; for a workbook sheet its
@@ -195,6 +197,7 @@ fn parse_column(record: &[u8], note: Vec<u8>) -> WinColumn {
         short_name: if long_enough { field_text(record, COL_NAME_AT, COL_NAME_WIDTH) } else { String::new() },
         value_type: get(COL_TYPE_AT),
         note,
+        record: record.to_vec(),
     }
 }
 

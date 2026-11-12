@@ -447,6 +447,38 @@ pub struct TargetArgs {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum TTestKindArg {
+    /// Each column against --mean.
+    OneSample,
+    /// Two columns against each other.
+    TwoSample,
+    /// Two columns, rows paired.
+    Paired,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum TailArg {
+    /// Differs from (either direction).
+    Two,
+    /// Larger than.
+    Upper,
+    /// Smaller than.
+    Lower,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ComparisonArg {
+    Tukey,
+    Bonferroni,
+    Sidak,
+    /// Fisher's least significant difference.
+    Lsd,
+    Scheffe,
+    /// No means comparison.
+    None,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum SmoothKind {
     /// Savitzky-Golay: a local polynomial fit.
     SavitzkyGolay,
@@ -761,6 +793,76 @@ pub enum AnalyzeTool {
     Stats {
         #[command(flatten)]
         target: TargetArgs,
+    },
+    /// t-test: each column against a hypothesized mean (one-sample), two columns against each other
+    /// (two-sample, equal variances unless --unequal) or two columns as pairs. The result goes to a
+    /// new sheet; the columns are chosen with --y.
+    Ttest {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TTestKindArg::TwoSample)]
+        test: TTestKindArg,
+        /// One-sample test: the hypothesized mean.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        mean: f64,
+        /// Two-sample and paired test: the hypothesized difference of the means (first minus second).
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        difference: f64,
+        /// Two-sample test: do not assume equal variances (Welch's test).
+        #[arg(long)]
+        unequal: bool,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// One-way ANOVA: every chosen column is a group. The result (group statistics, ANOVA table,
+    /// means comparison of all pairs) goes to a new sheet.
+    Anova {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = ComparisonArg::Tukey)]
+        comparison: ComparisonArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Frequency counts (the numbers of a histogram) of each column, and a graph with a column plot
+    /// of the counts. Without --bin-size and --bins the bin size and range are chosen automatically.
+    Histogram {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Width of a bin.
+        #[arg(long, conflicts_with = "bins")]
+        bin_size: Option<f64>,
+        /// Number of bins over the range (needs --min and --max, or takes the data range).
+        #[arg(long)]
+        bins: Option<usize>,
+        /// Start of the first bin.
+        #[arg(long, allow_hyphen_values = true)]
+        min: Option<f64>,
+        /// End of the last bin.
+        #[arg(long, allow_hyphen_values = true)]
+        max: Option<f64>,
+        /// Add a row for the values below the first bin.
+        #[arg(long)]
+        below: bool,
+        /// Add a row for the values above the last bin.
+        #[arg(long)]
+        above: bool,
+        /// Do not make a graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Normality tests (Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson)
+    /// of each column; the result goes to a new sheet.
+    Normality {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
     },
     /// Sort the rows of the sheet by one column.
     Sort {

@@ -8,6 +8,9 @@
 
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
+    AnovaSpec, BinSize, FreqOptions, HistogramSpec, MeansComparison, NormalitySpec, TTestKind, TTestSpec, Tail,
+};
+use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
     IntegrateSpec, InterpMethod, InterpSpec, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions, Report, Request,
     RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
@@ -36,6 +39,11 @@ pub enum AnalysisKind {
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
     PeakChain,
     Statistics,
+    /// The Statistics menu: t-tests, one-way ANOVA, histogram and normality tests.
+    TTest,
+    Anova,
+    Histogram,
+    Normality,
 }
 
 impl AnalysisKind {
@@ -69,6 +77,10 @@ impl AnalysisKind {
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
             AnalysisKind::Statistics => "Statistics on Columns...",
+            AnalysisKind::TTest => "t-Test...",
+            AnalysisKind::Anova => "One-Way ANOVA...",
+            AnalysisKind::Histogram => "Histogram...",
+            AnalysisKind::Normality => "Normality Test...",
         }
     }
 
@@ -91,6 +103,10 @@ impl AnalysisKind {
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
             "statistics" => AnalysisKind::Statistics,
+            "ttest" => AnalysisKind::TTest,
+            "anova" => AnalysisKind::Anova,
+            "histogram" => AnalysisKind::Histogram,
+            "normality" => AnalysisKind::Normality,
             _ => return None,
         })
     }
@@ -158,11 +174,62 @@ const NORMALIZE_CHOICES: [(&str, NormalizeMethod); 12] = [
     ("Divide by a value", NormalizeMethod::Divide(1.0)),
 ];
 
+/// The options of the Statistics menu windows.
+struct StatsOptions {
+    /// 0 one-sample, 1 two-sample, 2 paired.
+    ttest: usize,
+    mean: f64,
+    difference: f64,
+    equal_variance: bool,
+    tail: Tail,
+    alpha: f64,
+    /// Index into `COMPARISONS`.
+    comparison: usize,
+    /// 0 automatic, 1 bin size, 2 number of bins.
+    bins: usize,
+    bin_size: f64,
+    bin_count: usize,
+    own_range: bool,
+    bin_min: f64,
+    bin_max: f64,
+    graph: bool,
+}
+
+impl Default for StatsOptions {
+    fn default() -> Self {
+        StatsOptions {
+            ttest: 1,
+            mean: 0.0,
+            difference: 0.0,
+            equal_variance: true,
+            tail: Tail::Two,
+            alpha: 0.05,
+            comparison: 0,
+            bins: 0,
+            bin_size: 1.0,
+            bin_count: 10,
+            own_range: false,
+            bin_min: 0.0,
+            bin_max: 10.0,
+            graph: true,
+        }
+    }
+}
+
+const COMPARISONS: [(&str, Option<MeansComparison>); 6] = [
+    ("Tukey", Some(MeansComparison::Tukey)),
+    ("Bonferroni", Some(MeansComparison::Bonferroni)),
+    ("Sidak", Some(MeansComparison::Sidak)),
+    ("Fisher LSD", Some(MeansComparison::FisherLsd)),
+    ("Scheffe", Some(MeansComparison::Scheffe)),
+    ("None", None),
+];
+
 pub enum AnalysisOutcome {
     Open,
     Closed,
     /// The tool ran; the window closes.
-    Done(Report),
+    Done(Box<Report>),
 }
 
 pub struct AnalysisDialog {
@@ -212,6 +279,7 @@ pub struct AnalysisDialog {
     reference_choices: Vec<(ColumnId, String)>,
     reference: usize,
     common_only: bool,
+    stats: StatsOptions,
     problem: Option<String>,
 }
 
@@ -302,6 +370,7 @@ impl AnalysisDialog {
             chain_integrate: true,
             chain_fit: None,
             chain_fit_linear: true,
+            stats: StatsOptions::default(),
             problem: None,
         })
     }
@@ -392,6 +461,36 @@ impl AnalysisDialog {
                 }),
             }),
             AnalysisKind::Statistics => Tool::Statistics,
+            AnalysisKind::TTest => Tool::TTest(TTestSpec {
+                kind: match self.stats.ttest {
+                    0 => TTestKind::OneSample { mean: self.stats.mean },
+                    1 => TTestKind::TwoSample {
+                        equal_variance: self.stats.equal_variance,
+                        difference: self.stats.difference,
+                    },
+                    _ => TTestKind::Paired { difference: self.stats.difference },
+                },
+                tail: self.stats.tail,
+                alpha: self.stats.alpha,
+            }),
+            AnalysisKind::Anova => {
+                Tool::Anova(AnovaSpec { alpha: self.stats.alpha, comparison: COMPARISONS[self.stats.comparison].1 })
+            }
+            AnalysisKind::Histogram => Tool::Histogram(HistogramSpec {
+                freq: FreqOptions {
+                    min: self.stats.own_range.then_some(self.stats.bin_min),
+                    max: self.stats.own_range.then_some(self.stats.bin_max),
+                    size: match self.stats.bins {
+                        1 => BinSize::Width(self.stats.bin_size),
+                        2 => BinSize::Count(self.stats.bin_count),
+                        _ => BinSize::Auto,
+                    },
+                    below: false,
+                    above: false,
+                },
+                graph: self.stats.graph,
+            }),
+            AnalysisKind::Normality => Tool::Normality(NormalitySpec { alpha: self.stats.alpha }),
         })
     }
 
@@ -727,6 +826,91 @@ impl AnalysisDialog {
             AnalysisKind::Statistics => {
                 ui.weak("Count, mean, standard deviation, sum, minimum, quartiles and maximum go to a new sheet.");
             }
+            AnalysisKind::TTest => {
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.label("Test");
+                    ui.radio_value(&mut st.ttest, 0, "One sample");
+                    ui.radio_value(&mut st.ttest, 1, "Two sample");
+                    ui.radio_value(&mut st.ttest, 2, "Paired");
+                });
+                if st.ttest == 0 {
+                    ui.horizontal(|ui| {
+                        ui.label("Hypothesized mean");
+                        ui.add(DragValue::new(&mut st.mean).speed(0.01));
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("Hypothesized difference (first minus second)");
+                        ui.add(DragValue::new(&mut st.difference).speed(0.01));
+                    });
+                    ui.label("Needs exactly two columns.");
+                }
+                ui.add_enabled(
+                    st.ttest == 1,
+                    egui::Checkbox::new(&mut st.equal_variance, "Assume equal variances (otherwise Welch)"),
+                );
+                ui.horizontal(|ui| {
+                    ui.label("Alternative");
+                    ui.radio_value(&mut st.tail, Tail::Two, "Two-tailed");
+                    ui.radio_value(&mut st.tail, Tail::Upper, "Upper tail");
+                    ui.radio_value(&mut st.tail, Tail::Lower, "Lower tail");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak("The statistic, p-value and confidence interval go to a new sheet.");
+            }
+            AnalysisKind::Anova => {
+                let st = &mut self.stats;
+                ui.label("Every chosen column is a group.");
+                ui.horizontal(|ui| {
+                    ui.label("Means comparison");
+                    egui::ComboBox::from_id_salt("anova_comparison")
+                        .selected_text(COMPARISONS[st.comparison].0)
+                        .show_ui(ui, |ui| {
+                            for (i, (label, _)) in COMPARISONS.iter().enumerate() {
+                                ui.selectable_value(&mut st.comparison, i, *label);
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak("Group statistics, the ANOVA table and the comparisons go to a new sheet.");
+            }
+            AnalysisKind::Histogram => {
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.label("Bins");
+                    ui.radio_value(&mut st.bins, 0, "Automatic");
+                    ui.radio_value(&mut st.bins, 1, "Bin size");
+                    ui.add_enabled(st.bins == 1, DragValue::new(&mut st.bin_size).speed(0.01).range(1e-12..=1e12));
+                    ui.radio_value(&mut st.bins, 2, "Number of bins");
+                    ui.add_enabled(st.bins == 2, DragValue::new(&mut st.bin_count).range(1..=10_000));
+                });
+                ui.checkbox(&mut st.own_range, "Set the range of the bins");
+                ui.add_enabled_ui(st.own_range, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("From");
+                        ui.add(DragValue::new(&mut st.bin_min).speed(0.01));
+                        ui.label("to");
+                        ui.add(DragValue::new(&mut st.bin_max).speed(0.01));
+                    });
+                });
+                ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
+                ui.weak("Bin centres, counts, cumulative counts and percentages go to a new sheet.");
+            }
+            AnalysisKind::Normality => {
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+                ui.weak("Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson.");
+            }
         }
     }
 
@@ -783,7 +967,7 @@ impl AnalysisDialog {
         if run {
             match self.request() {
                 Ok(request) => match doc.edit(request.tool.name(), |p| p.analyze(&request)) {
-                    Ok(report) => return AnalysisOutcome::Done(report),
+                    Ok(report) => return AnalysisOutcome::Done(Box::new(report)),
                     Err(e) => self.problem = Some(e.to_string()),
                 },
                 Err(e) => self.problem = Some(e),

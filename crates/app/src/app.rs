@@ -883,6 +883,9 @@ impl SheafApp {
                     if let Some(sheet) = report.new_sheet {
                         self.show_sheet(report.book, sheet);
                     }
+                    if let Some(graph) = report.new_graph {
+                        self.focus(graph);
+                    }
                     self.status = report.message;
                 }
             }

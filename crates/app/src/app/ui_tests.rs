@@ -748,12 +748,23 @@ fn ctrl_s(h: &mut Harness<'static, SheafApp>) {
     settle(h);
 }
 
+/// Gives the second column of the first sheet a column formula, which the .opj writer cannot
+/// store (only the values are written), so saving needs the companion.
+fn add_formula(h: &mut Harness<'static, SheafApp>) {
+    h.state_mut().doc.apply("Set formula", |p| {
+        if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+            b.sheets[0].columns[1].formula = Some("col(A)*2".into());
+        }
+    });
+    settle(h);
+}
+
 #[test]
-fn ctrl_s_saves_an_opj_with_a_companion_for_the_graph_and_reopening_brings_the_graph_back() {
-    let dir = save_dir("graph");
+fn ctrl_s_saves_an_opj_with_a_companion_for_what_it_cannot_hold_and_reopening_uses_it() {
+    let dir = save_dir("formula");
     let opj = dir.join("lab.opj");
-    let mut h = start(vec![data_file("save-graph")]);
-    assert_eq!(project(&h).graphs().count(), 1, "the import made a graph");
+    let mut h = start(vec![data_file("save-formula")]);
+    add_formula(&mut h);
     h.state_mut().path = Some(opj.clone());
     ctrl_s(&mut h);
     let companion = dir.join("lab.opj.sheaf");
@@ -763,27 +774,48 @@ fn ctrl_s_saves_an_opj_with_a_companion_for_the_graph_and_reopening_brings_the_g
     assert!(!h.state().doc.dirty);
     assert!(h.state().status.contains("lab.opj.sheaf"), "{}", h.state().status);
     let (title, text) = h.state().message.clone().expect("a message says what only the companion holds");
-    assert!(title.contains("companion") && text.contains("graph"), "{title}: {text}");
+    assert!(title.contains("companion") && text.contains("formula"), "{title}: {text}");
     assert_eq!(h.state().path.as_deref(), Some(opj.as_path()));
 
     let h2 = start(vec![opj.clone()]);
+    let book = project(&h2).workbooks().next().unwrap();
+    assert_eq!(book.sheets[0].columns[1].formula.as_deref(), Some("col(A)*2"), "the formula is back");
     assert_eq!(project(&h2).graphs().count(), 1, "the graph is back");
-    assert_eq!(project(&h2).workbooks().count(), 1);
     assert_eq!(h2.state().path.as_deref(), Some(opj.as_path()), "it saves to the .opj again");
     assert!(h2.state().status.contains("companion"), "{}", h2.state().status);
 }
 
 #[test]
-fn a_workbook_only_save_writes_no_companion_and_deletes_an_old_one() {
+fn a_graph_is_saved_inside_the_opj_without_a_companion() {
+    let dir = save_dir("graph");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-graph")]);
+    assert_eq!(project(&h).graphs().count(), 1, "the import made a graph");
+    h.state_mut().path = Some(opj.clone());
+    ctrl_s(&mut h);
+    assert!(opj.exists());
+    assert!(!dir.join("lab.opj.sheaf").exists(), "graphs need no companion any more");
+    let h2 = start(vec![opj.clone()]);
+    assert_eq!(project(&h2).graphs().count(), 1, "the graph is read back from the .opj");
+    assert_eq!(project(&h2).workbooks().count(), 1);
+}
+
+#[test]
+fn a_save_that_loses_nothing_writes_no_companion_and_deletes_an_old_one() {
     let dir = save_dir("clean");
     let opj = dir.join("lab.opj");
     let mut h = start(vec![data_file("save-clean")]);
+    add_formula(&mut h);
     h.state_mut().path = Some(opj.clone());
     ctrl_s(&mut h);
     assert!(dir.join("lab.opj.sheaf").exists());
-    // Drop the graph: now the .opj holds everything.
+    // Drop the formula: now the .opj holds everything.
     h.state_mut().message = None;
-    h.state_mut().doc.apply("Delete graph", |p| p.windows.retain(|w| matches!(w, Window::Workbook(_))));
+    h.state_mut().doc.apply("Clear formula", |p| {
+        if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+            b.sheets[0].columns[1].formula = None;
+        }
+    });
     settle(&mut h);
     ctrl_s(&mut h);
     assert!(opj.exists());
@@ -1244,4 +1276,44 @@ fn alt_and_the_underlined_letter_opens_a_top_level_menu() {
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::K);
     settle(&mut h);
     assert!(h.query_by_label_contains("Sort Worksheet").is_some());
+}
+
+/// Statistics > Hypothesis Testing > Two-Sample t-Test... opens the window with the two Y columns of the sheet; OK adds a result
+/// sheet, and one undo removes it.
+#[test]
+fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
+    let mut h = start(vec![data_file("ttest")]);
+    click(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Hypothesis Testing", "Two-Sample t-Test..."]);
+    assert!(h.state().analysis.is_some(), "the t-test window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert!(b.sheets[1].name.starts_with("TTest"), "{}", b.sheets[1].name);
+    let ws = &b.sheets[1];
+    let t_col = ws.columns.iter().find(|c| c.long_name == "t").expect("a t column").numeric().unwrap().to_vec();
+    assert_eq!(t_col.len(), 1);
+    // up = 2.5 .. 8.5 (mean 5.5), down = 30.5 .. 0.5 (mean 15.5), both with SD 2.582 and 12.91.
+    assert!(t_col[0] < -1.0 && t_col[0].is_finite(), "{t_col:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Two-sample t-test"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
+/// Statistics > Histogram... adds the counts sheet and a graph with a column plot.
+#[test]
+fn the_statistics_menu_makes_a_histogram_graph() {
+    let mut h = start(vec![data_file("histogram")]);
+    click(&mut h, "Book1 - sample");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Frequency Counts..."]);
+    click(&mut h, "OK");
+    let p = project(&h);
+    assert_eq!(p.graphs().count(), graphs_before + 1);
+    let g = p.graphs().last().unwrap();
+    assert_eq!(g.layers[0].plots[0].kind, sheaf_core::graph::PlotKind::Column);
+    assert!(p.workbooks().next().unwrap().sheets[1].name.starts_with("Histogram"));
 }

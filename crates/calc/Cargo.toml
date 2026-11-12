@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 rustfft = "6"
+statrs = { version = "0.19", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true

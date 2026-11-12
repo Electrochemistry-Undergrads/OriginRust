@@ -1,0 +1,41 @@
+newbook;
+col(A) = data(1, 8, 1); col(A) = 10 + 2*sin(3*col(A)) + col(A)/4;
+col(B) = data(1, 10, 1); col(B) = 11.5 + 2.5*cos(2*col(B)) + col(B)/5;
+wks.addcol(); col(C) = data(1, 20, 1); col(C) = exp(1.1*sin(2.3*col(C)))*3;
+wks.addcol(); col(D) = data(1, 40, 1); col(D) = 5 + 3*sin(1.7*col(D)) + 2*cos(0.37*col(D)^1.2);
+wks.addcol(); col(E) = data(1, 5, 1); col(E) = col(E)^2;
+stats ix:=[Book1]Sheet1!col(D);
+double dmin = stats.min; double dmax = stats.max; double dn = stats.n;
+?dmin
+?dmax
+?dn
+stats ix:=[Book1]Sheet1!col(C);
+double cmin = stats.min; double cmax = stats.max;
+?cmin
+?cmax
+stats ix:=[Book1]Sheet1!col(A);
+double amin = stats.min; double amax = stats.max;
+?amin
+?amax
+freqcounts irng:=[Book1]Sheet1!col(D);
+#[Book1]FreqCounts1
+freqcounts irng:=[Book1]Sheet1!col(C);
+#[Book1]FreqCounts2
+freqcounts irng:=[Book1]Sheet1!col(A);
+#[Book1]FreqCounts3
+freqcounts irng:=[Book1]Sheet1!col(E);
+#[Book1]FreqCounts4
+freqcounts irng:=[Book1]Sheet1!col(D) inc:=1 min:=-2 max:=11;
+#[Book1]FreqCounts5
+freqcounts irng:=[Book1]Sheet1!col(D) bin:=end inc:=2 min:=-2 max:=12 freq:=1 cumulfreq:=1 show:=percent;
+#[Book1]FreqCounts6
+freqcounts irng:=[Book1]Sheet1!col(D) inc:=2 min:=0 max:=8 outleft:=1 outright:=1;
+#[Book1]FreqCounts7
+freqcounts irng:=[Book1]Sheet1!col(D) inc:=2 min:=0 max:=8;
+#[Book1]FreqCounts8
+freqcounts irng:=[Book1]Sheet1!col(D) inc:=2 min:=1 max:=9 cmin:=1 cmax:=1;
+#[Book1]FreqCounts9
+freqcounts irng:=[Book1]Sheet1!col(D) inc:=2.5 min:=0;
+#[Book1]FreqCounts10
+freqcounts irng:=[Book1]Sheet1!col(D) bin:=custom bins:=[0 3 4 8 12];
+#[Book1]FreqCounts11

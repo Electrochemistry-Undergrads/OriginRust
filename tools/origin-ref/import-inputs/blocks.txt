@@ -1,0 +1,12 @@
+junk header line
+Time	A
+s	mV
+1	10
+2	20
+3	30
+
+Time	A
+s	mV
+7	70
+8	80
+9	90

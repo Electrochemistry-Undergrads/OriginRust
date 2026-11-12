@@ -74,13 +74,13 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Delimited text engine, CSV | File > Import > ASCII, Ctrl+K | `io/src/ascii.rs`; dialog; CLI | ✓ | single-character delimiters only | P0 |
 | Data-start detection | auto header lines | `detect()` with preview | ✓ | rule differs slightly from Origin's, not compared by black-box run | P0 |
-| Header, long name, units, comments lines | File Header group | detected and overridable | ◐ | no parameter rows, no name+unit splitter, no leading-character rule, no count from bottom | P0 |
+| Header, long name, units, comments lines | File Header group | detected and overridable; header lines can become named parameter rows (`--param-lines`) | ◐ | no name+unit splitter, no leading-character rule, no count from bottom, comment lines are not joined, label detection looks at three lines at most | P0 |
 | Non-numeric text, missing markers | NonNum, LeadingZeros | marker list, 80 percent rule, warning | ◐ | no choice of treatment, no mixed text and number column | P0 |
 | Date and time detection | DateFormat, TimeFormat | `ascii.rs`: ISO, M/d/yyyy, d/M/yyyy, dd.MM.yyyy, d-Mon-yyyy, clocks with AM or PM; order rule and warning; option to keep text | ◐ | no custom pattern list, no per-column choice, no two-digit years | P0 |
-| Import mode and naming | replace, new columns, rows, books, sheets | each file becomes a new book named from the file | ◐ | no replace, append, new-sheet modes; no name trimming | P0 |
-| Number separators | NumSep | decimal comma only | ◐ | no thousands separators | P0 |
+| Import mode and naming | replace, new columns, rows, books, sheets | `io/src/batch.rs`: new book, new sheet, replace, new columns, new rows; import window; file name in sheet name or comment row | ✓ | no name trimming (FNameToShtFrom/To), no separate first-file mode | P0 |
+| Number separators | NumSep | comma, dot, space, apostrophe grouping and decimal comma; found when unambiguous; option in window and CLI | ✓ | stricter than Origin: groups must have three digits | P0 |
 | CH Instruments files | owner's workflow | `io/src/chi.rs`: CV, i-t, LSV, scan splitting, mA, charge, sign, clip warning, run parameters | ✓ | no real CHI file checked yet per the spec | P0 |
-| Batch import of many files | multiple files | dialog, drops, CLI | ✓ | always one book per file | P0 |
+| Batch import of many files | multiple files | dialog, drops, CLI `sheaf import <folder or pattern> --mode books/sheets/columns/rows`; CHI files go through the CHI importers | ✓ | | P0 |
 | Partial import | row, column ranges, read/skip patterns | skip rows, max rows | ◐ | no column range or patterns; max rows has no dialog control | P1 |
 | Fixed width, multi-character delimiter | ASCII options | none | ✗ | | P1 |
 | Encoding | none in Origin 2016 | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |

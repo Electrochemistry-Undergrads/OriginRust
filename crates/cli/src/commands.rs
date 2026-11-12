@@ -7,7 +7,8 @@ use sheaf_core::graph::LineStyle;
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnId, Project, WindowId};
-use sheaf_io::ascii::{AsciiOptions, Delimiter};
+use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands};
+use sheaf_io::batch::{BatchLayout, BatchOptions};
 use sheaf_io::chi::ChiOptions;
 use sheaf_io::{ImportKind, Imported, project_file};
 use std::path::Path;
@@ -38,7 +39,7 @@ pub(crate) fn load_project(path: &Path) -> Result<Project> {
     Ok(opened.project)
 }
 
-fn chi_options(r: &ReadOptions) -> ChiOptions {
+pub(crate) fn chi_options(r: &ReadOptions) -> ChiOptions {
     ChiOptions {
         split_scans: !r.no_split_scans,
         add_milliamp: !r.no_milliamp,
@@ -47,7 +48,7 @@ fn chi_options(r: &ReadOptions) -> ChiOptions {
     }
 }
 
-fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
+pub(crate) fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
     let mut o = AsciiOptions::default();
     if let Some(d) = &r.delimiter {
         o.delimiter = match d.to_ascii_lowercase().as_str() {
@@ -66,6 +67,21 @@ fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
     }
     o.header_lines = r.header_lines;
     o.decimal_comma = r.decimal_comma;
+    o.thousands = match r.thousands {
+        ThousandsArg::Auto => Thousands::Auto,
+        ThousandsArg::None => Thousands::Off,
+        ThousandsArg::Comma => Thousands::Comma,
+        ThousandsArg::Dot => Thousands::Dot,
+        ThousandsArg::Space => Thousands::Space,
+        ThousandsArg::Apostrophe => Thousands::Apostrophe,
+    };
+    o.long_name_line = r.long_name_line;
+    o.units_line = r.units_line;
+    o.comments_line = r.comments_line;
+    o.param_lines = r.param_lines.clone();
+    if r.blocks_as_sheets {
+        o.blocks = sheaf_io::ascii::Blocks::Sheets;
+    }
     if r.dates_as_text {
         o.dates = sheaf_io::ascii::DateImport::AsText;
     }
@@ -172,32 +188,72 @@ fn import(a: ImportArgs) -> Result<()> {
         bail!("the output '{}' is also one of the inputs", a.output.display());
     }
     let mut project = if a.append && a.output.exists() { load_project(&a.output)? } else { Project::new() };
-    for file in &a.files {
-        if is_project(file) {
-            // An Origin project (or another Sheaf project): take over all its workbooks.
+    // Projects are taken over as they are; everything else is a data file, folder or pattern.
+    let mut data_files = Vec::new();
+    for arg in &a.files {
+        if is_project(arg) {
             let mut count = 0;
-            for window in load_project(file)?.windows {
+            for window in load_project(arg)?.windows {
                 if let Window::Workbook(book) = window {
                     project.adopt_named_workbook(book);
                     count += 1;
                 }
             }
-            println!("imported {count} workbook(s) from {}", file.display());
+            println!("imported {count} workbook(s) from {}", arg.display());
             continue;
         }
-        let imported = read_data_file(file, &a.read)?;
-        let template = imported.suggested_template;
-        let book = project.adopt_workbook(imported.workbook);
-        if a.plot {
-            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
-            let ys = project.default_plot_columns(book, sheet, template);
+        let found = sheaf_io::batch::expand_inputs(arg).map_err(|e| anyhow!(e))?;
+        if found.len() > 1 {
+            println!("{} matches {} files", arg.display(), found.len());
+        }
+        data_files.extend(found);
+    }
+    let layout = match a.mode {
+        ImportLayout::Books => BatchLayout::Books,
+        ImportLayout::Sheets => BatchLayout::Sheets,
+        ImportLayout::Columns => BatchLayout::Columns,
+        ImportLayout::Rows => BatchLayout::Rows,
+    };
+    let kind = match a.read.format {
+        Format::Auto => ImportKind::Auto,
+        Format::Chi => ImportKind::Chi,
+        Format::Ascii => ImportKind::Ascii,
+    };
+    let opts = BatchOptions {
+        layout,
+        kind,
+        chi: chi_options(&a.read),
+        ascii: ascii_options(&a.read)?,
+        book_name: a.book_name.clone().unwrap_or_default(),
+        file_name_in_comments: a.file_name_comments,
+    };
+    let result = sheaf_io::batch::import_batch(&mut project, &data_files, &opts);
+    let mut plotted = std::collections::HashSet::new();
+    for item in &result.items {
+        for w in &item.warnings {
+            eprintln!("warning: {}: {w}", item.path.display());
+        }
+        let name = project.workbook(item.book).map(|b| b.name.clone()).unwrap_or_default();
+        println!("imported {} into {name}", item.path.display());
+        // One graph per book, or per sheet when each file has its own sheet.
+        let key = if layout == BatchLayout::Sheets { (item.book, item.sheet) } else { (item.book, 0) };
+        if a.plot && plotted.insert(key) {
+            let ys = project.default_plot_columns(item.book, item.sheet, item.suggested_template);
             if !ys.is_empty() {
-                project.plot_columns(template, &ys)?;
+                project.plot_columns(item.suggested_template, &ys)?;
             }
         }
-        println!("imported {} as {}", file.display(), project.workbook(book).map(|b| b.name.as_str()).unwrap_or("?"));
+    }
+    for e in &result.errors {
+        eprintln!("error: {e}");
+    }
+    if result.items.is_empty() && !data_files.is_empty() {
+        bail!("none of the {} file(s) could be imported", data_files.len());
     }
     save_project(&project, &a.output)?;
+    if !result.errors.is_empty() {
+        bail!("{} file(s) could not be imported (the others were saved)", result.errors.len());
+    }
     Ok(())
 }
 

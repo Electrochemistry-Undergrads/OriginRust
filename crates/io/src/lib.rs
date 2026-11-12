@@ -5,6 +5,7 @@
 //! identifiers; hand them to `Project::adopt_workbook` to give them real ones.
 
 pub mod ascii;
+pub mod batch;
 pub mod chi;
 pub mod chi_bin;
 mod error;

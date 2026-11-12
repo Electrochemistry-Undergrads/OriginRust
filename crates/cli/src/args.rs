@@ -185,6 +185,25 @@ pub struct ReadOptions {
     /// Delimited text: read 11/12/2026 as 11 December (default: 12 November) when the file does not decide.
     #[arg(long)]
     pub day_first: bool,
+    /// Delimited text: the digit-grouping character of numbers.
+    #[arg(long, value_enum, default_value_t = ThousandsArg::Auto)]
+    pub thousands: ThousandsArg,
+    /// Delimited text: line (1-based) holding the column long names (0: none; default: detect).
+    #[arg(long, value_name = "N")]
+    pub long_name_line: Option<usize>,
+    /// Delimited text: line holding the units (0: none).
+    #[arg(long, value_name = "N")]
+    pub units_line: Option<usize>,
+    /// Delimited text: line holding the comments (0: none).
+    #[arg(long, value_name = "N")]
+    pub comments_line: Option<usize>,
+    /// Delimited text: header lines that become named parameter rows (for example the wavelengths
+    /// of an ICP-OES export), as a comma-separated list. The first cell of the line is the name.
+    #[arg(long, value_name = "N,N", value_delimiter = ',')]
+    pub param_lines: Vec<usize>,
+    /// Delimited text: a file with several blocks of data separated by blank lines gets one sheet per block.
+    #[arg(long)]
+    pub blocks_as_sheets: bool,
 }
 
 #[derive(Args, Debug)]
@@ -197,11 +216,14 @@ pub struct InfoArgs {
 
 #[derive(Args, Debug)]
 pub struct ImportArgs {
-    /// Data files to import. Each becomes one workbook. An Origin .opj project adds all its workbooks.
+    /// Data files, folders or patterns to import. A folder gives its data files (.txt, .csv, .tsv,
+    /// .dat, .asc, .prn, .tab, .bin); a name with * or ? in it (for example "exports/icp_*.csv")
+    /// gives the matching files, in natural order (icp_2 before icp_10). An Origin .opj project adds
+    /// all its workbooks.
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
     /// The project file to write.
-    #[arg(short, long)]
+    #[arg(short, long, visible_alias = "into")]
     pub output: PathBuf,
     /// Add the workbooks to the existing project at --output instead of starting a new one.
     #[arg(long)]
@@ -209,8 +231,50 @@ pub struct ImportArgs {
     /// Also add one graph per imported workbook, in the template the importer suggests.
     #[arg(long)]
     pub plot: bool,
+    /// Where the files go: one book each (books), one book with a sheet per file (sheets), one sheet
+    /// with the columns of all files side by side (columns), or one sheet with the rows of all files
+    /// one under the other (rows).
+    #[arg(long, value_enum, default_value_t = ImportLayout::Books)]
+    pub mode: ImportLayout,
+    /// Long name of the shared book when --mode is not books (default: the name of the folder).
+    #[arg(long, value_name = "TEXT")]
+    pub book_name: Option<String>,
+    /// Write the file name into the comment row and the SourceFile parameter row of every column
+    /// (always done with --mode columns).
+    #[arg(long)]
+    pub file_name_comments: bool,
     #[command(flatten)]
     pub read: ReadOptions,
+}
+
+/// The layout of a multi-file import (`sheaf import --mode`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ImportLayout {
+    /// One workbook per file.
+    Books,
+    /// One workbook, one sheet per file, named after the file.
+    Sheets,
+    /// One sheet; the columns of the files side by side.
+    Columns,
+    /// One sheet; the rows of the files one under the other.
+    Rows,
+}
+
+/// The digit-grouping character of numbers (`sheaf import --thousands`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ThousandsArg {
+    /// Use one when a number in the file shows it unambiguously.
+    Auto,
+    /// None: 1,234 is not a number.
+    None,
+    /// 1,234.5
+    Comma,
+    /// 1.234,5 (the decimal separator is then a comma)
+    Dot,
+    /// 1 234,5 (the decimal separator is then a comma)
+    Space,
+    /// 1'234.5
+    Apostrophe,
 }
 
 /// Changes applied to a graph before it is rendered.

@@ -23,3 +23,16 @@ lock). A line starting with `?` prints a LabTalk number, `$` a string, and `#[Bo
 worksheet (the fit report sheet). `nlfit-suite.lines.txt` is the script that produced
 `crates/fit/tests/data/origin_nlsf.json`; `nlfit-make-fixture.py nlfit-suite.out nlfit-suite-meta.json out.json`
 turns the output into that file. Origin 2016 shows no dialog when `nlend output:=1` is called this way.
+
+## Text import reference runs
+
+The `import-*.lines.txt` scripts run `impasc` on the small files in `import-inputs/` (all written by
+us) and print what landed in the worksheet: number separators (`import-numsep`), the import modes
+(`import-modes`), header lines (`import-header`) and user parameter rows (`import-userparam`). Run
+them with the input folder as the work folder, for example:
+
+```
+.\run-labtalk-lines.ps1 -Script import-modes.lines.txt -WorkDir import-inputs
+```
+
+What they showed is written down in `docs/spec/import-ascii.md`, section 15.

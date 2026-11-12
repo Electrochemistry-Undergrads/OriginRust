@@ -119,7 +119,6 @@ pub struct FitDialog {
     order: usize,
     functions: Vec<FunctionInfo>,
     function: String,
-    search: String,
     formula: String,
     formula_params: String,
     fdf_path: Option<PathBuf>,
@@ -143,6 +142,10 @@ pub struct FitDialog {
     x_from: f64,
     x_to: f64,
     problem: Option<String>,
+    /// The page of the left list that is shown.
+    page: FitPage,
+    /// How the last trial fit (the Fit button) went.
+    message: Option<String>,
 }
 
 impl FitDialog {
@@ -181,7 +184,6 @@ impl FitDialog {
             order: 2,
             functions,
             function,
-            search: String::new(),
             formula: "y0 + A*exp(-x/t)".to_string(),
             formula_params: "y0, A, t".to_string(),
             fdf_path: None,
@@ -202,6 +204,8 @@ impl FitDialog {
             x_from: 0.0,
             x_to: 1.0,
             problem: None,
+            page: FitPage::FunctionSelection,
+            message: None,
         };
         d.column_changed(project);
         d.refresh_params();
@@ -308,92 +312,144 @@ impl FitDialog {
         Some(r)
     }
 
-    fn model_ui(&mut self, ui: &mut egui::Ui) -> bool {
+    /// The categories of the Category drop-down: the two closed-form fits, Origin's function
+    /// categories, then the two ways to bring in a function of one's own.
+    fn categories(&self) -> Vec<String> {
+        let mut out = vec![CAT_LINEAR.to_string(), CAT_POLY.to_string()];
+        for f in &self.functions {
+            if !out.contains(&f.category) {
+                out.push(f.category.clone());
+            }
+        }
+        out.push(CAT_FORMULA.to_string());
+        out.push(CAT_FDF.to_string());
+        out
+    }
+
+    /// The category the current model belongs to.
+    fn category(&self) -> String {
+        match self.kind {
+            FitKind::Linear => CAT_LINEAR.to_string(),
+            FitKind::Polynomial => CAT_POLY.to_string(),
+            FitKind::Formula => CAT_FORMULA.to_string(),
+            FitKind::Fdf => CAT_FDF.to_string(),
+            FitKind::BuiltIn => {
+                self.functions.iter().find(|f| f.name == self.function).map(|f| f.category.clone()).unwrap_or_default()
+            }
+        }
+    }
+
+    /// Chooses a category; a built-in category starts on its first function.
+    fn set_category(&mut self, category: &str) {
+        match category {
+            CAT_LINEAR => self.kind = FitKind::Linear,
+            CAT_POLY => self.kind = FitKind::Polynomial,
+            CAT_FORMULA => self.kind = FitKind::Formula,
+            CAT_FDF => self.kind = FitKind::Fdf,
+            _ => {
+                if let Some(f) = self.functions.iter().find(|f| f.category == category) {
+                    self.kind = FitKind::BuiltIn;
+                    self.function = f.name.clone();
+                }
+            }
+        }
+    }
+
+    /// The name of the function in the Function drop-down and in the title.
+    fn function_label(&self) -> String {
+        match self.kind {
+            FitKind::BuiltIn => self.function.clone(),
+            FitKind::Fdf => self
+                .fdf_path
+                .as_ref()
+                .and_then(|p| p.file_stem())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "(no file)".to_string()),
+            k => k.label().to_string(),
+        }
+    }
+
+    /// The formula as text: what the Description and the Code page show.
+    fn formula_text(&self) -> String {
+        match self.kind {
+            FitKind::Linear => "y = Intercept + Slope*x".to_string(),
+            FitKind::Polynomial => "y = Intercept + B1*x + B2*x^2 + ...".to_string(),
+            FitKind::BuiltIn => match self.functions.iter().find(|f| f.name == self.function) {
+                Some(f) => {
+                    f.formula.as_deref().map_or_else(|| "(computed in code)".to_string(), |s| format!("y = {s}"))
+                }
+                None => String::new(),
+            },
+            FitKind::Formula => format!("y = {}", self.formula),
+            FitKind::Fdf => self.fdf_text.as_deref().map(|_| "(from the .FDF file)".to_string()).unwrap_or_default(),
+        }
+    }
+
+    /// The top row: Category and Function drop-downs, and the formula. True when the model
+    /// changed.
+    fn top_ui(&mut self, ui: &mut egui::Ui) -> bool {
         let mut changed = false;
         ui.horizontal(|ui| {
-            ui.label("Model");
-            egui::ComboBox::from_id_salt("fit_kind").selected_text(self.kind.label()).show_ui(ui, |ui| {
-                for k in [FitKind::Linear, FitKind::Polynomial, FitKind::BuiltIn, FitKind::Formula, FitKind::Fdf] {
-                    changed |= ui.selectable_value(&mut self.kind, k, k.label()).changed();
-                }
-            });
-        });
-        match self.kind {
-            FitKind::Linear => {
-                ui.weak("y = Intercept + Slope·x");
-            }
-            FitKind::Polynomial => {
-                ui.horizontal(|ui| {
-                    ui.label("Order");
-                    changed |= ui.add(DragValue::new(&mut self.order).range(1..=9)).changed();
-                    ui.weak("y = Intercept + B1·x + B2·x² + ...");
-                });
-            }
-            FitKind::BuiltIn => {
-                ui.horizontal(|ui| {
-                    ui.label("Function");
-                    let selected = self.function.clone();
+            ui.label("Category");
+            let current = self.category();
+            egui::ComboBox::from_id_salt("fit_category").selected_text(&current).width(190.0).height(420.0).show_ui(
+                ui,
+                |ui| {
+                    for c in self.categories() {
+                        if ui.selectable_label(c == current, &c).clicked() && c != current {
+                            self.set_category(&c);
+                            changed = true;
+                        }
+                    }
+                },
+            );
+            ui.add_space(12.0);
+            ui.label("Function");
+            let label = self.function_label();
+            match self.kind {
+                FitKind::BuiltIn => {
+                    let category = self.category();
                     egui::ComboBox::from_id_salt("fit_function")
-                        .selected_text(&selected)
-                        .width(200.0)
+                        .selected_text(&label)
+                        .width(190.0)
                         .height(420.0)
                         .show_ui(ui, |ui| {
-                            ui.add(
-                                egui::TextEdit::singleline(&mut self.search).hint_text("search").desired_width(180.0),
-                            );
-                            let needle = self.search.to_ascii_lowercase();
-                            let mut category = "";
-                            for f in &self.functions {
-                                let hit = needle.is_empty()
-                                    || f.name.to_ascii_lowercase().contains(&needle)
-                                    || f.category.to_ascii_lowercase().contains(&needle);
-                                if !hit {
-                                    continue;
-                                }
-                                if f.category != category {
-                                    category = &f.category;
-                                    ui.label(RichText::new(category).weak().small());
-                                }
-                                if ui.selectable_label(f.name == selected, &f.name).clicked() {
+                            for f in self.functions.iter().filter(|f| f.category == category) {
+                                if ui.selectable_label(f.name == self.function, &f.name).clicked() {
                                     self.function = f.name.clone();
                                     changed = true;
                                 }
                             }
                         });
-                });
-                if let Some(f) = self.functions.iter().find(|f| f.name == self.function) {
-                    let text =
-                        f.formula.as_deref().map_or_else(|| "(computed in code)".to_string(), |s| format!("y = {s}"));
-                    ui.add(egui::Label::new(RichText::new(text).monospace().small()).wrap());
+                }
+                _ => {
+                    // The only function of its category: shown, not chosen.
+                    ui.add_enabled_ui(false, |ui| {
+                        egui::ComboBox::from_id_salt("fit_function_fixed")
+                            .selected_text(&label)
+                            .width(190.0)
+                            .show_ui(ui, |_| {});
+                    });
                 }
             }
-            FitKind::Formula => {
+        });
+        ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace().small()).wrap());
+        changed
+    }
+
+    /// Function Selection: what belongs to the chosen function (order, file) and its description.
+    fn function_selection_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+        match self.kind {
+            FitKind::Polynomial => {
                 ui.horizontal(|ui| {
-                    ui.label("y =");
-                    changed |= ui
-                        .add(
-                            egui::TextEdit::singleline(&mut self.formula)
-                                .font(egui::TextStyle::Monospace)
-                                .desired_width(330.0),
-                        )
-                        .changed();
+                    ui.label("Order");
+                    changed |= ui.add(DragValue::new(&mut self.order).range(1..=9)).changed();
                 });
-                ui.horizontal(|ui| {
-                    ui.label("Parameters");
-                    changed |= ui
-                        .add(
-                            egui::TextEdit::singleline(&mut self.formula_params)
-                                .desired_width(250.0)
-                                .hint_text("y0, A, t"),
-                        )
-                        .changed();
-                });
-                ui.weak(
-                    "The variable is x. Functions: exp, ln, log (base 10), sqrt, sin, cos, erf, ... and ^ for powers.",
-                );
             }
             FitKind::Fdf => {
                 ui.horizontal(|ui| {
+                    ui.label("File Name(.FDF)");
                     if ui.button("Choose file...").clicked()
                         && let Some(path) =
                             rfd::FileDialog::new().add_filter("Origin fit function", &["fdf", "FDF"]).pick_file()
@@ -418,11 +474,139 @@ impl FitDialog {
                     };
                 });
             }
+            FitKind::Formula => {
+                ui.weak("Write the formula on the Code page.");
+            }
+            _ => {}
+        }
+        ui.add_enabled_ui(false, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Iteration Algorithm");
+                egui::ComboBox::from_id_salt("fit_algorithm").selected_text("Levenberg Marquardt").show_ui(ui, |_| {});
+            });
+        });
+        ui.horizontal_top(|ui| {
+            ui.label("Description");
+            ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace().small()).wrap());
+        });
+        changed
+    }
+
+    /// Code: the formula. A formula of one's own is typed here; for the others it is read-only.
+    fn code_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+        if self.kind == FitKind::Formula {
+            ui.horizontal(|ui| {
+                ui.label("y =");
+                changed |= ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.formula)
+                            .font(egui::TextStyle::Monospace)
+                            .desired_width(380.0),
+                    )
+                    .changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label("Parameters");
+                changed |= ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.formula_params).desired_width(250.0).hint_text("y0, A, t"),
+                    )
+                    .changed();
+            });
+            ui.weak("The variable is x. Functions: exp, ln, log (base 10), sqrt, sin, cos, erf, ... and ^ for powers.");
+        } else {
+            ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace()).wrap());
+            ui.weak("Choose the category \"User Defined\" to type a formula of your own.");
         }
         changed
     }
 
-    fn params_ui(&mut self, ui: &mut egui::Ui) {
+    fn data_selection_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut column_changed = false;
+        ui.horizontal(|ui| {
+            ui.label("Weights");
+            ui.radio_value(&mut self.weighting, FitWeighting::None, "None");
+            ui.add_enabled_ui(self.has_error_column, |ui| {
+                ui.radio_value(&mut self.weighting, FitWeighting::Instrumental, "Error bars (1/err²)")
+                    .on_disabled_hover_text("The column has no Y-error column next to it.");
+            });
+            ui.radio_value(&mut self.weighting, FitWeighting::Statistical, STATISTICAL_LABEL);
+        });
+        ui.add_space(4.0);
+        ui.strong("Input Data");
+        ui.horizontal(|ui| {
+            ui.label("Column");
+            let label = self.choices.iter().find(|(c, _)| *c == self.y).map(|(_, l)| l.clone()).unwrap_or_default();
+            egui::ComboBox::from_id_salt("fit_column").selected_text(label).width(300.0).show_ui(ui, |ui| {
+                for (id, l) in &self.choices {
+                    column_changed |= ui.selectable_value(&mut self.y, *id, l).changed();
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.label("Rows");
+            ui.radio_value(&mut self.row_mode, RowMode::All, "All");
+            ui.radio_value(&mut self.row_mode, RowMode::Rows, "From row");
+            ui.add_enabled_ui(self.row_mode == RowMode::Rows, |ui| {
+                ui.add(DragValue::new(&mut self.from).range(1..=self.rows_in_sheet));
+                ui.label("to");
+                ui.add(DragValue::new(&mut self.to).range(1..=self.rows_in_sheet));
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.label("    ");
+            ui.radio_value(&mut self.row_mode, RowMode::XRange, "X from")
+                .on_hover_text("The first unbroken run of rows whose X value lies in the interval.");
+            ui.add_enabled_ui(self.row_mode == RowMode::XRange, |ui| {
+                ui.add(DragValue::new(&mut self.x_from).speed(0.01));
+                ui.label("to");
+                ui.add(DragValue::new(&mut self.x_to).speed(0.01));
+            });
+        });
+        column_changed
+    }
+
+    fn fitted_curves_ui(&mut self, ui: &mut egui::Ui) {
+        ui.strong("Fitted Curves Plot");
+        ui.horizontal(|ui| {
+            ui.label("Bands");
+            ui.radio_value(&mut self.bands, BandChoice::None, "No bands");
+            ui.radio_value(&mut self.bands, BandChoice::Confidence, "Confidence bands");
+            ui.radio_value(&mut self.bands, BandChoice::Prediction, "Prediction bands");
+            ui.radio_value(&mut self.bands, BandChoice::Both, "Confidence and prediction");
+        });
+        ui.add_enabled_ui(self.bands != BandChoice::None, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Band confidence level");
+                ui.add(DragValue::new(&mut self.band_level).range(50.0..=99.99).speed(0.1).suffix(" %"));
+            });
+        });
+        ui.weak("Fitted values and residuals go next to the column; the curve is added to a graph that shows it.");
+    }
+
+    fn advanced_ui(&mut self, ui: &mut egui::Ui) {
+        ui.strong("Fit Control");
+        ui.horizontal(|ui| {
+            ui.label("Maximum iterations");
+            ui.add(DragValue::new(&mut self.max_iterations).range(1..=100_000).speed(1.0));
+        });
+        ui.horizontal(|ui| {
+            ui.label("Tolerance 1e-");
+            ui.add(DragValue::new(&mut self.tolerance_digits).range(3..=15))
+                .on_hover_text("Nonlinear fits only; a straight line or polynomial is solved directly.");
+        });
+        ui.add_space(4.0);
+        ui.strong("Quantities");
+        ui.horizontal(|ui| {
+            ui.label("Confidence level");
+            ui.add(DragValue::new(&mut self.confidence).range(50.0..=99.99).speed(0.1).suffix(" %"));
+        });
+        ui.weak("Parameters and statistics go to new sheets.");
+    }
+
+    /// The Parameters page: starting or fixed values.
+    fn parameters_ui(&mut self, ui: &mut egui::Ui) {
         if let Some(p) = &self.model_problem {
             ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
             return;
@@ -432,12 +616,10 @@ impl FitDialog {
         }
         // A linear fit can fix the intercept and the slope; a polynomial only the intercept.
         let closed_form = matches!(self.kind, FitKind::Linear | FitKind::Polynomial);
-        egui::Grid::new("fit_params").num_columns(5).spacing([10.0, 4.0]).striped(true).show(ui, |ui| {
-            ui.strong("Parameter");
-            ui.strong(if closed_form { "" } else { "Start value" });
+        egui::Grid::new("fit_params").num_columns(3).spacing([14.0, 4.0]).striped(true).show(ui, |ui| {
+            ui.strong("Meaning");
+            ui.strong(if closed_form { "" } else { "Value" });
             ui.strong("Fixed");
-            ui.strong(if closed_form { "" } else { "Lower bound" });
-            ui.strong(if closed_form { "" } else { "Upper bound" });
             ui.end_row();
             for p in self.params.iter_mut() {
                 let can_fix =
@@ -464,128 +646,135 @@ impl FitDialog {
                         }
                     });
                 });
-                if closed_form {
-                    ui.label("");
-                    ui.label("");
-                } else {
-                    for (on, value) in [(&mut p.has_lower, &mut p.lower), (&mut p.has_upper, &mut p.upper)] {
-                        ui.horizontal(|ui| {
-                            ui.checkbox(on, "");
-                            if *on {
-                                ui.add(DragValue::new(value).speed(0.01).max_decimals(10));
-                            } else {
-                                ui.weak("none");
-                            }
-                        });
-                    }
+                ui.end_row();
+            }
+        });
+    }
+
+    /// The Bounds page: lower and upper limits of nonlinear fits.
+    fn bounds_ui(&mut self, ui: &mut egui::Ui) {
+        if let Some(p) = &self.model_problem {
+            ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
+            return;
+        }
+        if matches!(self.kind, FitKind::Linear | FitKind::Polynomial) {
+            ui.add_enabled_ui(false, |ui| ui.label("A straight line or polynomial is solved directly: no bounds."));
+            return;
+        }
+        egui::Grid::new("fit_bounds").num_columns(3).spacing([14.0, 4.0]).striped(true).show(ui, |ui| {
+            ui.strong("Param");
+            ui.strong("Lower Bounds");
+            ui.strong("Upper Bounds");
+            ui.end_row();
+            for p in self.params.iter_mut() {
+                ui.label(&p.name);
+                for (on, value) in [(&mut p.has_lower, &mut p.lower), (&mut p.has_upper, &mut p.upper)] {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(on, "");
+                        if *on {
+                            ui.add(DragValue::new(value).speed(0.01).max_decimals(10));
+                        } else {
+                            ui.weak("none");
+                        }
+                    });
                 }
                 ui.end_row();
             }
         });
     }
 
-    /// Draws the window and runs the fit when OK is pressed.
+    /// Draws the window. Fit tries the fit on a copy of the project and says how it went; Done
+    /// runs the fit for good and closes the window.
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> FitDialogOutcome {
         if doc.project().column(self.y).is_none() || doc.project().workbook(self.book).is_none() {
             return FitDialogOutcome::Closed;
         }
         let mut open = true;
         let mut run = false;
+        let mut trial = false;
         let mut cancel = false;
         let mut column_changed = false;
-        egui::Window::new("Fit")
+        let title = format!("NLFit ({})", self.function_label());
+        egui::Window::new(title)
             .id(egui::Id::new("fit"))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .default_width(520.0)
+            .default_width(760.0)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Column");
-                    let label =
-                        self.choices.iter().find(|(c, _)| *c == self.y).map(|(_, l)| l.clone()).unwrap_or_default();
-                    egui::ComboBox::from_id_salt("fit_column").selected_text(label).width(300.0).show_ui(ui, |ui| {
-                        for (id, l) in &self.choices {
-                            column_changed |= ui.selectable_value(&mut self.y, *id, l).changed();
-                        }
-                    });
-                });
+                let mut model_changed = self.top_ui(ui);
                 ui.separator();
-                if self.model_ui(ui) {
+                ui.allocate_ui_with_layout(
+                    egui::vec2(740.0, 270.0),
+                    egui::Layout::left_to_right(egui::Align::Min),
+                    |ui| {
+                        ui.vertical(|ui| {
+                            ui.set_width(150.0);
+                            ui.label(RichText::new("Settings").strong());
+                            for page in FitPage::ALL {
+                                if page == FitPage::Code {
+                                    ui.add_space(4.0);
+                                }
+                                let indent = if page.in_settings() { 14.0 } else { 0.0 };
+                                ui.horizontal(|ui| {
+                                    ui.add_space(indent);
+                                    if ui.selectable_label(self.page == page, page.label()).clicked() {
+                                        self.page = page;
+                                    }
+                                });
+                            }
+                        });
+                        ui.separator();
+                        ui.vertical(|ui| {
+                            ui.set_width(560.0);
+                            egui::ScrollArea::vertical()
+                                .id_salt("fit_page")
+                                .max_height(266.0)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| match self.page {
+                                    FitPage::FunctionSelection => model_changed |= self.function_selection_ui(ui),
+                                    FitPage::DataSelection => column_changed |= self.data_selection_ui(ui),
+                                    FitPage::FittedCurves => self.fitted_curves_ui(ui),
+                                    FitPage::Advanced => self.advanced_ui(ui),
+                                    FitPage::Code => model_changed |= self.code_ui(ui),
+                                    FitPage::Parameters => self.parameters_ui(ui),
+                                    FitPage::Bounds => self.bounds_ui(ui),
+                                });
+                        });
+                    },
+                );
+                if model_changed {
                     self.refresh_params();
+                    self.message = None;
+                }
+                ui.separator();
+                if let Some(p) = self.model_problem.as_ref().or(self.problem.as_ref()) {
+                    ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
+                } else if let Some(m) = &self.message {
+                    ui.colored_label(egui::Color32::from_rgb(20, 70, 170), m);
+                } else {
+                    ui.weak("Fit tries the fit and shows the result here; Done keeps it.");
                 }
                 ui.add_space(4.0);
-                self.params_ui(ui);
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("Weighting");
-                    ui.radio_value(&mut self.weighting, FitWeighting::None, "None");
-                    ui.add_enabled_ui(self.has_error_column, |ui| {
-                        ui.radio_value(&mut self.weighting, FitWeighting::Instrumental, "Error bars (1/err²)")
-                            .on_disabled_hover_text("The column has no Y-error column next to it.");
-                    });
-                    ui.radio_value(&mut self.weighting, FitWeighting::Statistical, STATISTICAL_LABEL);
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Confidence level");
-                    ui.add(DragValue::new(&mut self.confidence).range(50.0..=99.99).speed(0.1).suffix(" %"));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Bands");
-                    ui.radio_value(&mut self.bands, BandChoice::None, "No bands");
-                    ui.radio_value(&mut self.bands, BandChoice::Confidence, "Confidence bands");
-                    ui.radio_value(&mut self.bands, BandChoice::Prediction, "Prediction bands");
-                    ui.radio_value(&mut self.bands, BandChoice::Both, "Confidence and prediction");
-                });
-                ui.horizontal(|ui| {
-                    ui.add_enabled_ui(self.bands != BandChoice::None, |ui| {
-                        ui.label("Band confidence level");
-                        ui.add(DragValue::new(&mut self.band_level).range(50.0..=99.99).speed(0.1).suffix(" %"));
-                    });
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Maximum iterations");
-                    ui.add(DragValue::new(&mut self.max_iterations).range(1..=100_000).speed(1.0));
-                    ui.label("Tolerance 1e-");
-                    ui.add(DragValue::new(&mut self.tolerance_digits).range(3..=15))
-                        .on_hover_text("Nonlinear fits only; a straight line or polynomial is solved directly.");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Rows");
-                    ui.radio_value(&mut self.row_mode, RowMode::All, "All");
-                    ui.radio_value(&mut self.row_mode, RowMode::Rows, "From row");
-                    ui.add_enabled_ui(self.row_mode == RowMode::Rows, |ui| {
-                        ui.add(DragValue::new(&mut self.from).range(1..=self.rows_in_sheet));
-                        ui.label("to");
-                        ui.add(DragValue::new(&mut self.to).range(1..=self.rows_in_sheet));
-                    });
-                });
-                ui.horizontal(|ui| {
-                    ui.label("    ");
-                    ui.radio_value(&mut self.row_mode, RowMode::XRange, "X from")
-                        .on_hover_text("The first unbroken run of rows whose X value lies in the interval.");
-                    ui.add_enabled_ui(self.row_mode == RowMode::XRange, |ui| {
-                        ui.add(DragValue::new(&mut self.x_from).speed(0.01));
-                        ui.label("to");
-                        ui.add(DragValue::new(&mut self.x_to).speed(0.01));
-                    });
-                });
-                ui.weak(
-                    "Parameters and statistics go to new sheets; fitted values and residuals go next to the column.",
-                );
-                if let Some(p) = &self.problem {
-                    ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
-                }
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    run = ui.add_enabled(self.model_problem.is_none(), egui::Button::new("OK")).clicked();
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     cancel = ui.button("Cancel").clicked();
+                    run = ui.add_enabled(self.model_problem.is_none(), egui::Button::new("Done")).clicked();
+                    trial = ui.add_enabled(self.model_problem.is_none(), egui::Button::new("Fit")).clicked();
                 });
             });
         if column_changed {
             self.column_changed(doc.project());
         }
 
+        if trial && let Some(request) = self.request() {
+            self.problem = None;
+            self.message = None;
+            let mut copy = doc.project().clone();
+            match copy.fit(&request) {
+                Ok(outcome) => self.message = Some(outcome.message),
+                Err(e) => self.problem = Some(e.to_string()),
+            }
+        }
         if run && let Some(request) = self.request() {
             let y = self.y;
             let result = doc.edit("Fit", |p| -> Result<(FitOutcome, Option<WindowId>), FitRequestError> {
@@ -603,6 +792,51 @@ impl FitDialog {
             }
         }
         if open && !cancel { FitDialogOutcome::Open } else { FitDialogOutcome::Closed }
+    }
+}
+
+const CAT_LINEAR: &str = "Linear Fit";
+const CAT_POLY: &str = "Polynomial Fit";
+const CAT_FORMULA: &str = "User Defined";
+const CAT_FDF: &str = "Origin .FDF File";
+
+/// The pages of the left list: the four under Settings, then Code, Parameters and Bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FitPage {
+    FunctionSelection,
+    DataSelection,
+    FittedCurves,
+    Advanced,
+    Code,
+    Parameters,
+    Bounds,
+}
+
+impl FitPage {
+    const ALL: [FitPage; 7] = [
+        FitPage::FunctionSelection,
+        FitPage::DataSelection,
+        FitPage::FittedCurves,
+        FitPage::Advanced,
+        FitPage::Code,
+        FitPage::Parameters,
+        FitPage::Bounds,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            FitPage::FunctionSelection => "Function Selection",
+            FitPage::DataSelection => "Data Selection",
+            FitPage::FittedCurves => "Fitted Curves",
+            FitPage::Advanced => "Advanced",
+            FitPage::Code => "Code",
+            FitPage::Parameters => "Parameters",
+            FitPage::Bounds => "Bounds",
+        }
+    }
+
+    fn in_settings(self) -> bool {
+        matches!(self, FitPage::FunctionSelection | FitPage::DataSelection | FitPage::FittedCurves | FitPage::Advanced)
     }
 }
 

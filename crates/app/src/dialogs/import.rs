@@ -39,6 +39,44 @@ pub struct ImportDialog {
     detection: Option<DetectionCache>,
     /// How many times detection has run (for tests).
     detect_runs: usize,
+    /// The node of the tree at the left that is shown.
+    page: ImportPage,
+}
+
+/// The nodes of the tree at the left: "Import Options" and its groups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImportPage {
+    Options,
+    ImportMode,
+    HeaderLines,
+    ColumnDesignation,
+    PartialImport,
+    Miscellaneous,
+    FileInfo,
+}
+
+impl ImportPage {
+    const ALL: [ImportPage; 7] = [
+        ImportPage::Options,
+        ImportPage::ImportMode,
+        ImportPage::HeaderLines,
+        ImportPage::ColumnDesignation,
+        ImportPage::PartialImport,
+        ImportPage::Miscellaneous,
+        ImportPage::FileInfo,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            ImportPage::Options => "Import Options",
+            ImportPage::ImportMode => "Import Mode",
+            ImportPage::HeaderLines => "Header Lines",
+            ImportPage::ColumnDesignation => "Column Designation",
+            ImportPage::PartialImport => "Partial Import",
+            ImportPage::Miscellaneous => "Miscellaneous",
+            ImportPage::FileInfo => "File Info and Parameters",
+        }
+    }
 }
 
 struct DetectionCache {
@@ -98,6 +136,7 @@ impl ImportDialog {
             preview: None,
             detection: None,
             detect_runs: 0,
+            page: ImportPage::Options,
         }
     }
 
@@ -121,37 +160,53 @@ impl ImportDialog {
 
         let mut open = true;
         let mut outcome = ImportOutcome::Open;
-        egui::Window::new("Import data")
+        egui::Window::new("Import ASCII: impASC")
             .id(egui::Id::new("import_dialog"))
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
-            .default_size([760.0, 600.0])
+            .default_size([760.0, 640.0])
             .show(ctx, |ui| {
-                self.files_ui(ui);
-                ui.separator();
-                ui.columns(2, |cols| {
-                    self.format_ui(&mut cols[0]);
-                    self.after_ui(&mut cols[1]);
-                });
-                ui.separator();
+                // Windows order at the bottom right: OK, Cancel.
                 egui::TopBottomPanel::bottom("import_buttons").show_inside(ui, |ui| {
                     ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        let label = if self.files.len() == 1 {
-                            "Import".to_string()
-                        } else {
-                            format!("Import {} files", self.files.len())
-                        };
-                        if ui.button(RichText::new(label).strong()).clicked() {
-                            outcome = self.run();
-                        }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Cancel").clicked() {
                             outcome = ImportOutcome::Cancelled;
                         }
+                        if ui.button("OK").clicked() {
+                            outcome = self.run();
+                        }
+                        if self.files.len() > 1 {
+                            ui.weak(format!("{} files are imported with these options", self.files.len()));
+                        }
                     });
                 });
-                egui::CentralPanel::default().show_inside(ui, |ui| self.preview_ui(ui));
+                egui::CentralPanel::default().show_inside(ui, |ui| {
+                    self.files_ui(ui);
+                    ui.separator();
+                    // The tree of option groups at the left, the controls of the chosen group at
+                    // the right.
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width(), 235.0),
+                        egui::Layout::left_to_right(egui::Align::Min),
+                        |ui| {
+                            ui.vertical(|ui| {
+                                ui.set_width(170.0);
+                                self.tree_ui(ui);
+                            });
+                            ui.separator();
+                            ui.vertical(|ui| {
+                                egui::ScrollArea::vertical()
+                                    .id_salt("import_page")
+                                    .auto_shrink([false, false])
+                                    .show(ui, |ui| self.page_ui(ui));
+                            });
+                        },
+                    );
+                    ui.separator();
+                    self.preview_ui(ui);
+                });
             });
 
         if before != (self.current, self.kind, self.chi.clone(), self.ascii.clone()) {
@@ -205,41 +260,6 @@ impl ImportDialog {
         });
     }
 
-    fn format_ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("How to read the files").strong());
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.kind, ImportKind::Auto, "Detect");
-            ui.selectable_value(&mut self.kind, ImportKind::Chi, "CH Instruments");
-            ui.selectable_value(&mut self.kind, ImportKind::Ascii, "Delimited text");
-        });
-        let shown_format = match (&self.preview, self.kind) {
-            (_, ImportKind::Chi) => "chi",
-            (_, ImportKind::Ascii) => "ascii",
-            (Some(Ok(p)), ImportKind::Auto) => p.format,
-            _ => "",
-        };
-        ui.add_space(4.0);
-        match shown_format {
-            "chi" => {
-                ui.checkbox(&mut self.chi.split_scans, "Split cyclic voltammetry into scans");
-                ui.checkbox(
-                    &mut self.chi.split_segments,
-                    "Add a sheet with each charge and discharge segment (chronopotentiometry)",
-                );
-                ui.checkbox(&mut self.chi.add_milliamp, "Add the current in mA");
-                ui.checkbox(&mut self.chi.add_charge, "Add the charge to current-vs-time files");
-                ui.checkbox(&mut self.chi.invert_current, "Invert the sign of the current");
-                ui.checkbox(&mut self.chi.exact_time, "Recompute rounded times from the sampling interval")
-                    .on_hover_text(
-                        "The file prints times with 4 significant digits (whole seconds above 1000 s). \
-                         When every time fits the sampling interval in the file header, the exact times are used.",
-                    );
-            }
-            "ascii" => self.ascii_ui(ui),
-            _ => {}
-        }
-    }
-
     /// The detected settings of the current file, recomputed only when the file or the options
     /// have changed since the last call.
     fn detected(&mut self) -> Option<sheaf_io::ascii::Detected> {
@@ -256,109 +276,67 @@ impl ImportDialog {
         self.detection.as_ref().and_then(|c| c.detected.clone())
     }
 
-    fn ascii_ui(&mut self, ui: &mut egui::Ui) {
-        let detected = if matches!(self.preview, Some(Ok(_))) { self.detected() } else { None };
-        let o = &mut self.ascii;
-        egui::Grid::new("ascii_options").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
-            ui.label("Separator");
-            ui.horizontal(|ui| {
-                let name = |d: Delimiter| match d {
-                    Delimiter::Auto => "Detect",
-                    Delimiter::Comma => "Comma",
-                    Delimiter::Tab => "Tab",
-                    Delimiter::Semicolon => "Semicolon",
-                    Delimiter::Whitespace => "Spaces",
-                    Delimiter::Other(_) => "Other",
-                };
-                egui::ComboBox::from_id_salt("ascii_delimiter").selected_text(name(o.delimiter)).show_ui(ui, |ui| {
-                    for d in
-                        [Delimiter::Auto, Delimiter::Comma, Delimiter::Tab, Delimiter::Semicolon, Delimiter::Whitespace]
-                    {
-                        ui.selectable_value(&mut o.delimiter, d, name(d));
-                    }
-                    let other = self.other_delimiter.chars().next().unwrap_or('|');
-                    let is_other = matches!(o.delimiter, Delimiter::Other(_));
-                    if ui.selectable_label(is_other, "Other").clicked() {
-                        o.delimiter = Delimiter::Other(other);
-                    }
-                });
-                if let Delimiter::Other(c) = &mut o.delimiter {
-                    if ui.add(egui::TextEdit::singleline(&mut self.other_delimiter).desired_width(24.0)).changed()
-                        && let Some(typed) = self.other_delimiter.chars().next()
-                    {
-                        *c = typed;
-                    }
-                } else if let (Delimiter::Auto, Some(d)) = (o.delimiter, &detected) {
-                    ui.weak(format!("found: {}", name(d.delimiter).to_lowercase()));
-                }
-            });
-            ui.end_row();
-
-            ui.label("Lines before the data");
-            optional_line(ui, &mut o.header_lines, detected.as_ref().map(|d| d.header_lines), "none");
-            ui.end_row();
-            ui.label("Line with the names");
-            optional_line(ui, &mut o.long_name_line, detected.as_ref().map(|d| d.long_name_line), "none");
-            ui.end_row();
-            ui.label("Line with the units");
-            optional_line(ui, &mut o.units_line, detected.as_ref().map(|d| d.units_line), "none");
-            ui.end_row();
-            ui.label("Line with comments");
-            optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
-            ui.end_row();
-
-            ui.label("Numbers");
-            ui.checkbox(&mut o.decimal_comma, "Comma as decimal separator");
-            ui.end_row();
-            ui.label("Thousands separator");
-            ui.horizontal(|ui| {
-                let name = |t: Thousands| match t {
-                    Thousands::Auto => "Detect",
-                    Thousands::Off => "None",
-                    Thousands::Comma => "Comma (1,234.5)",
-                    Thousands::Dot => "Dot (1.234,5)",
-                    Thousands::Space => "Space (1 234,5)",
-                    Thousands::Apostrophe => "Apostrophe (1'234.5)",
-                };
-                egui::ComboBox::from_id_salt("ascii_thousands").selected_text(name(o.thousands)).show_ui(ui, |ui| {
-                    for t in [
-                        Thousands::Auto,
-                        Thousands::Off,
-                        Thousands::Comma,
-                        Thousands::Dot,
-                        Thousands::Space,
-                        Thousands::Apostrophe,
-                    ] {
-                        ui.selectable_value(&mut o.thousands, t, name(t));
-                    }
-                });
-                if let (Thousands::Auto, Some(d)) = (o.thousands, &detected)
-                    && d.thousands != Thousands::Off
-                {
-                    ui.weak(format!("found: {}", name(d.thousands).to_lowercase()));
-                }
-            });
-            ui.end_row();
-            ui.label("Columns");
-            ui.checkbox(&mut o.first_column_x, "The first column is X");
-            ui.end_row();
-            ui.label("Dates and times");
-            let mut as_text = o.dates == sheaf_io::ascii::DateImport::AsText;
-            if ui.checkbox(&mut as_text, "Keep as text").changed() {
-                o.dates =
-                    if as_text { sheaf_io::ascii::DateImport::AsText } else { sheaf_io::ascii::DateImport::Detect };
-            }
-            ui.end_row();
-            ui.label("Skip data rows");
-            ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
-            ui.end_row();
-        });
+    /// What the format drop-down and the detection say about the files: "chi", "ascii" or "".
+    fn shown_format(&self) -> &'static str {
+        match (&self.preview, self.kind) {
+            (_, ImportKind::Chi) => "chi",
+            (_, ImportKind::Ascii) => "ascii",
+            (Some(Ok(p)), ImportKind::Auto) => p.format,
+            _ => "",
+        }
     }
 
-    fn after_ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("After the import").strong());
+    /// The tree at the left: "Import Options" with its groups below it.
+    fn tree_ui(&mut self, ui: &mut egui::Ui) {
+        for page in ImportPage::ALL {
+            let indent = if page == ImportPage::Options { 0.0 } else { 16.0 };
+            ui.horizontal(|ui| {
+                ui.add_space(indent);
+                let text = if page == ImportPage::Options {
+                    RichText::new(page.label()).strong()
+                } else {
+                    RichText::new(page.label())
+                };
+                if ui.selectable_label(self.page == page, text).clicked() {
+                    self.page = page;
+                }
+            });
+        }
+    }
+
+    fn page_ui(&mut self, ui: &mut egui::Ui) {
+        match self.page {
+            ImportPage::Options => self.options_page(ui),
+            ImportPage::ImportMode => self.import_mode_page(ui),
+            ImportPage::FileInfo => self.file_info_page(ui),
+            ImportPage::Miscellaneous => {
+                self.ascii_page(ui);
+                self.chi_group(ui);
+            }
+            _ => self.ascii_page(ui),
+        }
+    }
+
+    /// Import Options: how to read the files, and the separator between the columns.
+    fn options_page(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label("Put the data in");
+            ui.label("Read the files as");
+            ui.selectable_value(&mut self.kind, ImportKind::Auto, "Detect");
+            ui.selectable_value(&mut self.kind, ImportKind::Chi, "CH Instruments");
+            ui.selectable_value(&mut self.kind, ImportKind::Ascii, "Delimited text");
+        });
+        ui.add_space(4.0);
+        if self.shown_format() == "ascii" {
+            self.ascii_page(ui);
+        } else {
+            ui.add_enabled_ui(false, |ui| ui.label("The separator applies to delimited text files."));
+        }
+    }
+
+    /// Import Mode: where the data goes, and the graph made after the import.
+    fn import_mode_page(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Import Mode");
             egui::ComboBox::from_id_salt("import_mode").selected_text(self.mode.label()).show_ui(ui, |ui| {
                 for m in ImportMode::ALL {
                     let usable = m == ImportMode::NewBook || self.target.is_some();
@@ -377,6 +355,7 @@ impl ImportDialog {
             }
             _ => {}
         }
+        ui.add_space(6.0);
         ui.checkbox(&mut self.plot, "Make a graph of each file");
         ui.add_enabled_ui(self.plot, |ui| {
             ui.horizontal(|ui| {
@@ -394,24 +373,172 @@ impl ImportDialog {
                 });
             });
         });
-        if let Some(Ok(p)) = &self.preview
-            && !p.meta.is_empty()
-        {
-            ui.add_space(4.0);
-            egui::CollapsingHeader::new(format!("File header ({} entries)", p.meta.len())).id_salt("import_meta").show(
-                ui,
-                |ui| {
-                    egui::ScrollArea::vertical().id_salt("import_meta_scroll").max_height(110.0).show(ui, |ui| {
-                        for (k, v) in &p.meta {
-                            ui.horizontal(|ui| {
-                                ui.weak(k);
-                                ui.label(v);
-                            });
-                        }
+    }
+
+    /// File Info and Parameters: the header entries the importer found in the current file.
+    fn file_info_page(&mut self, ui: &mut egui::Ui) {
+        match &self.preview {
+            Some(Ok(p)) if !p.meta.is_empty() => {
+                ui.weak(format!("{} entries in the header of the file shown in the preview", p.meta.len()));
+                for (k, v) in &p.meta {
+                    ui.horizontal(|ui| {
+                        ui.weak(k);
+                        ui.label(v);
                     });
-                },
-            );
+                }
+            }
+            _ => {
+                ui.weak("The file has no header entries.");
+            }
         }
+    }
+
+    /// The CH Instruments options (Miscellaneous), when the files are read as CH Instruments.
+    fn chi_group(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(6.0);
+        ui.strong("CH Instruments");
+        if self.shown_format() != "chi" {
+            ui.add_enabled_ui(false, |ui| ui.label("These options apply to CH Instruments files."));
+            return;
+        }
+        ui.checkbox(&mut self.chi.split_scans, "Split cyclic voltammetry into scans");
+        ui.checkbox(
+            &mut self.chi.split_segments,
+            "Add a sheet with each charge and discharge segment (chronopotentiometry)",
+        );
+        ui.checkbox(&mut self.chi.add_milliamp, "Add the current in mA");
+        ui.checkbox(&mut self.chi.add_charge, "Add the charge to current-vs-time files");
+        ui.checkbox(&mut self.chi.invert_current, "Invert the sign of the current");
+        ui.checkbox(&mut self.chi.exact_time, "Recompute rounded times from the sampling interval").on_hover_text(
+            "The file prints times with 4 significant digits (whole seconds above 1000 s). \
+             When every time fits the sampling interval in the file header, the exact times are used.",
+        );
+    }
+
+    /// The groups of delimited-text options: the separator (Import Options), Header Lines,
+    /// Column Designation, Partial Import and the number and date options (Miscellaneous).
+    fn ascii_page(&mut self, ui: &mut egui::Ui) {
+        let page = self.page;
+        if self.shown_format() != "ascii" {
+            if page != ImportPage::Miscellaneous {
+                ui.add_enabled_ui(false, |ui| ui.label("These options apply to delimited text files."));
+            }
+            return;
+        }
+        let detected = if matches!(self.preview, Some(Ok(_))) { self.detected() } else { None };
+        let o = &mut self.ascii;
+        egui::Grid::new(("ascii_options", page as u8)).num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
+            if matches!(page, ImportPage::Options) {
+                ui.label("Delimiter");
+                ui.horizontal(|ui| {
+                    let name = |d: Delimiter| match d {
+                        Delimiter::Auto => "Detect",
+                        Delimiter::Comma => "Comma",
+                        Delimiter::Tab => "Tab",
+                        Delimiter::Semicolon => "Semicolon",
+                        Delimiter::Whitespace => "Spaces",
+                        Delimiter::Other(_) => "Other",
+                    };
+                    egui::ComboBox::from_id_salt("ascii_delimiter").selected_text(name(o.delimiter)).show_ui(
+                        ui,
+                        |ui| {
+                            for d in [
+                                Delimiter::Auto,
+                                Delimiter::Comma,
+                                Delimiter::Tab,
+                                Delimiter::Semicolon,
+                                Delimiter::Whitespace,
+                            ] {
+                                ui.selectable_value(&mut o.delimiter, d, name(d));
+                            }
+                            let other = self.other_delimiter.chars().next().unwrap_or('|');
+                            let is_other = matches!(o.delimiter, Delimiter::Other(_));
+                            if ui.selectable_label(is_other, "Other").clicked() {
+                                o.delimiter = Delimiter::Other(other);
+                            }
+                        },
+                    );
+                    if let Delimiter::Other(c) = &mut o.delimiter {
+                        if ui.add(egui::TextEdit::singleline(&mut self.other_delimiter).desired_width(24.0)).changed()
+                            && let Some(typed) = self.other_delimiter.chars().next()
+                        {
+                            *c = typed;
+                        }
+                    } else if let (Delimiter::Auto, Some(d)) = (o.delimiter, &detected) {
+                        ui.weak(format!("found: {}", name(d.delimiter).to_lowercase()));
+                    }
+                });
+                ui.end_row();
+            }
+            if page == ImportPage::HeaderLines {
+                ui.label("Lines before the data");
+                optional_line(ui, &mut o.header_lines, detected.as_ref().map(|d| d.header_lines), "none");
+                ui.end_row();
+                ui.label("Line with the names");
+                optional_line(ui, &mut o.long_name_line, detected.as_ref().map(|d| d.long_name_line), "none");
+                ui.end_row();
+                ui.label("Line with the units");
+                optional_line(ui, &mut o.units_line, detected.as_ref().map(|d| d.units_line), "none");
+                ui.end_row();
+                ui.label("Line with comments");
+                optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
+                ui.end_row();
+            }
+            if page == ImportPage::ColumnDesignation {
+                ui.label("Columns");
+                ui.checkbox(&mut o.first_column_x, "The first column is X");
+                ui.end_row();
+            }
+            if page == ImportPage::PartialImport {
+                ui.label("Skip data rows");
+                ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
+                ui.end_row();
+            }
+            if page == ImportPage::Miscellaneous {
+                ui.label("Numbers");
+                ui.checkbox(&mut o.decimal_comma, "Comma as decimal separator");
+                ui.end_row();
+                ui.label("Thousands separator");
+                ui.horizontal(|ui| {
+                    let name = |t: Thousands| match t {
+                        Thousands::Auto => "Detect",
+                        Thousands::Off => "None",
+                        Thousands::Comma => "Comma (1,234.5)",
+                        Thousands::Dot => "Dot (1.234,5)",
+                        Thousands::Space => "Space (1 234,5)",
+                        Thousands::Apostrophe => "Apostrophe (1'234.5)",
+                    };
+                    egui::ComboBox::from_id_salt("ascii_thousands").selected_text(name(o.thousands)).show_ui(
+                        ui,
+                        |ui| {
+                            for t in [
+                                Thousands::Auto,
+                                Thousands::Off,
+                                Thousands::Comma,
+                                Thousands::Dot,
+                                Thousands::Space,
+                                Thousands::Apostrophe,
+                            ] {
+                                ui.selectable_value(&mut o.thousands, t, name(t));
+                            }
+                        },
+                    );
+                    if let (Thousands::Auto, Some(d)) = (o.thousands, &detected)
+                        && d.thousands != Thousands::Off
+                    {
+                        ui.weak(format!("found: {}", name(d.thousands).to_lowercase()));
+                    }
+                });
+                ui.end_row();
+                ui.label("Dates and times");
+                let mut as_text = o.dates == sheaf_io::ascii::DateImport::AsText;
+                if ui.checkbox(&mut as_text, "Keep as text").changed() {
+                    o.dates =
+                        if as_text { sheaf_io::ascii::DateImport::AsText } else { sheaf_io::ascii::DateImport::Detect };
+                }
+                ui.end_row();
+            }
+        });
     }
 
     fn preview_ui(&mut self, ui: &mut egui::Ui) {

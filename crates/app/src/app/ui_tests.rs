@@ -532,8 +532,9 @@ fn a_dropped_data_file_goes_through_the_import_window() {
     assert_eq!(project(&h).windows.len(), 0, "nothing is imported before the user confirms");
     // The preview shows the detected columns.
     assert!(h.query_by_label("B(Y)").is_some());
+    click(&mut h, "Import Mode");
     click(&mut h, "Make a graph of each file");
-    click(&mut h, "Import");
+    click(&mut h, "OK");
     assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1);
     assert_eq!(project(&h).graphs().count(), 0, "the graph option was switched off");
@@ -616,8 +617,8 @@ fn a_linear_fit_runs_from_its_window_adds_the_curve_to_the_graph_and_undoes_in_o
     h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Linear }, &ctx);
     settle(&mut h);
     assert!(h.state().fit.is_some(), "the Fit window is open");
-    click(&mut h, "OK");
-    assert!(h.state().fit.is_none(), "OK closes the window");
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_none(), "Done closes the window");
     let b = project(&h).workbooks().next().unwrap();
     let names: Vec<&str> = b.sheets.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["sample", "FitLinear1", "FitLinear1Stats", "FitCurve1"]);
@@ -641,18 +642,64 @@ fn the_fit_window_offers_bands_and_iteration_controls() {
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Linear }, &ctx);
     settle(&mut h);
-    // The controls are there and have Origin's defaults.
+    // The controls are on their pages of the left list and have Origin's defaults.
+    click(&mut h, "Advanced");
     h.get_by_label("Maximum iterations");
+    h.get_by_label("Confidence level");
+    click(&mut h, "Fitted Curves");
     h.get_by_label("Band confidence level");
     click(&mut h, "Confidence and prediction");
-    click(&mut h, "OK");
-    assert!(h.state().fit.is_none(), "OK closes the window");
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_none(), "Done closes the window");
     let b = project(&h).workbooks().next().unwrap();
     let curve = b.sheets.iter().find(|s| s.name == "FitCurve1").expect("the curve sheet");
     let names: Vec<&str> = curve.columns.iter().map(|c| c.long_name.as_str()).collect();
     assert!(names.iter().any(|n| n.starts_with("LCL")), "{names:?}");
     assert!(names.iter().any(|n| n.starts_with("UPL")), "{names:?}");
     assert_eq!(curve.columns.len(), 2 + 4, "the curve and four band columns");
+}
+
+#[test]
+fn the_fit_window_pages_reach_the_function_the_parameters_and_the_bounds() {
+    let mut h = start(vec![data_file("fitpages")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+    settle(&mut h);
+    // The title names the function; the left list has Origin's pages.
+    h.get_by_label("NLFit (Gauss)");
+    for page in ["Function Selection", "Data Selection", "Fitted Curves", "Advanced", "Code", "Parameters", "Bounds"] {
+        h.get_by_label(page);
+    }
+    // The Category drop-down offers the closed-form fits too.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Peak Functions")).click();
+    settle(&mut h);
+    click(&mut h, "Polynomial Fit");
+    h.get_by_label("NLFit (Polynomial)");
+    click(&mut h, "Function Selection");
+    h.get_by_label("Order");
+    // The Parameters page lists the parameters of the polynomial; Bounds is greyed for it.
+    click(&mut h, "Parameters");
+    h.get_by_label("Intercept");
+    click(&mut h, "Bounds");
+    assert!(h.query_by_label_contains("no bounds").is_some());
+    // A nonlinear function brings its parameters to the Bounds page.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Polynomial Fit")).click();
+    settle(&mut h);
+    click(&mut h, "Peak Functions");
+    h.get_by_label("Lower Bounds");
+    // Data Selection holds the weights; Code shows the formula.
+    click(&mut h, "Data Selection");
+    h.get_by_label("Weights");
+    click(&mut h, "Code");
+    assert!(h.query_all_by_label_contains("y = ").count() >= 1);
+    // Fit tries the fit and reports; nothing is written until Done.
+    let before = project(&h).workbooks().next().unwrap().sheets.len();
+    click(&mut h, "Fit");
+    assert!(h.state().fit.is_some(), "Fit leaves the window open");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), before, "the trial wrote nothing");
+    click(&mut h, "Cancel");
+    assert!(h.state().fit.is_none());
 }
 
 #[test]
@@ -781,7 +828,7 @@ fn the_import_window_imports_dates_as_numbers_or_keeps_them_as_text() {
     let mut h = start(Vec::new());
     h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates")), ..Default::default() });
     settle(&mut h);
-    click(&mut h, "Import");
+    click(&mut h, "OK");
     let book = project(&h).workbooks().next().unwrap();
     let col = book.sheet().column_by_name("A").unwrap();
     assert!(matches!(col.format, NumberFormat::DateTime(..)));
@@ -790,8 +837,9 @@ fn the_import_window_imports_dates_as_numbers_or_keeps_them_as_text() {
     let mut h = start(Vec::new());
     h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates-text")), ..Default::default() });
     settle(&mut h);
+    click(&mut h, "Miscellaneous");
     click(&mut h, "Keep as text");
-    click(&mut h, "Import");
+    click(&mut h, "OK");
     let book = project(&h).workbooks().next().unwrap();
     let col = book.sheet().column_by_name("A").unwrap();
     assert!(col.numeric().is_none());
@@ -805,7 +853,7 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
     let mut h = start(Vec::new());
     h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates-props")), ..Default::default() });
     settle(&mut h);
-    click(&mut h, "Import");
+    click(&mut h, "OK");
     show_window(&mut h, "Book1 - icp");
     // The long menu of a column head needs a tall window to show all its items.
     h.set_size(egui::vec2(1280.0, 1400.0));
@@ -834,13 +882,17 @@ fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_sep
     h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(more), ..Default::default() });
     settle(&mut h);
     assert!(h.state().import.is_some());
-    // The window found the separator by itself and says so.
+    // The delimiter (Import Options) and the thousands separator (Miscellaneous) are found by
+    // the window itself, which says so.
+    assert!(h.query_by_label_contains("found: tab").is_some());
+    click(&mut h, "Miscellaneous");
     assert!(h.query_by_label_contains("found: comma").is_some());
-    // Put the data into the active sheet as new columns.
+    // Put the data into the active sheet as new columns (the Import Mode node of the tree).
+    click(&mut h, "Import Mode");
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New book")).click();
     settle(&mut h);
     click(&mut h, "New columns");
-    click(&mut h, "Import");
+    click(&mut h, "OK");
     assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1, "no new book was made");
     let book = project(&h).workbooks().next().unwrap();
@@ -848,6 +900,44 @@ fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_sep
     assert_eq!(column(&h, "D"), [1000.5, 2000.5, 3000.5, 4000.5]);
     assert_eq!(column(&h, "E"), [1.0, 2.0, 3.0, 4.0]);
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5], "the first file's columns are untouched");
+}
+
+#[test]
+fn the_import_tree_nodes_reach_the_options_and_ok_applies_them() {
+    let mut h = start(Vec::new());
+    h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(data_file("tree")), ..Default::default() });
+    settle(&mut h);
+    // The tree has Origin's groups; the first node holds the delimiter.
+    for node in [
+        "Import Options",
+        "Import Mode",
+        "Header Lines",
+        "Column Designation",
+        "Partial Import",
+        "Miscellaneous",
+        "File Info and Parameters",
+    ] {
+        h.get_by_label(node);
+    }
+    h.get_by_label("Delimiter");
+    click(&mut h, "Header Lines");
+    h.get_by_label("Lines before the data");
+    h.get_by_label("Line with the units");
+    click(&mut h, "Partial Import");
+    h.get_by_label("Skip data rows");
+    click(&mut h, "Miscellaneous");
+    h.get_by_label("Thousands separator");
+    click(&mut h, "File Info and Parameters");
+    click(&mut h, "Column Designation");
+    click(&mut h, "The first column is X");
+    // Windows order: OK, then Cancel.
+    let ok = h.get_by_label("OK").rect().center().x;
+    let cancel = h.get_by_label("Cancel").rect().center().x;
+    assert!(ok < cancel, "OK is left of Cancel");
+    click(&mut h, "OK");
+    assert!(h.state().import.is_none());
+    let book = project(&h).workbooks().next().unwrap();
+    assert_ne!(book.sheet().columns[0].designation, Designation::X, "the option reached the importer");
 }
 
 /// Analysis > Peaks and Baseline > Peak Analyzer... runs the chain on a curve with two peaks on a slope: the window

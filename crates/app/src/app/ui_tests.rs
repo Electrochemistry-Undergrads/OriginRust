@@ -2555,3 +2555,24 @@ fn a_saved_project_reopens_with_its_windows_where_they_were() {
     assert_eq!(h2.state().workspace.mode(graph_id), Some(crate::workspace::Mode::Maximised));
     assert_eq!(h2.state().active, Some(graph_id));
 }
+
+#[test]
+fn deleting_a_column_drops_the_stack_settings_and_tick_labels_that_name_it() {
+    let mut p = Project::new();
+    let book = p.add_workbook("w");
+    let names = p.add_column(book, 0, Designation::X, ColumnData::text(vec!["a".into(), "b".into()])).unwrap();
+    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 4.0])).unwrap();
+    let g = p.plot_columns(Template::Line, &[y1, y2]).unwrap();
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.x_axis.tick_label_source = TickLabelSource::Column { column: names };
+        l.plot_offset_mut(y1).y = 2.0;
+        l.plot_offset_mut(y2).follows = Some(y1);
+    }
+    delete_columns(&mut p, &[names, y1]);
+    let l = &p.graph(g).unwrap().layers[0];
+    assert_eq!(l.x_axis.tick_label_source, TickLabelSource::Auto);
+    assert!(l.plot_offset(y1).is_none());
+    assert_eq!(l.plot_offset(y2).and_then(|o| o.follows), None);
+}

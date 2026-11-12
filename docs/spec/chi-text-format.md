@@ -164,28 +164,49 @@ contains "Chronopotentiometry", and option `split_segments` is on (default). The
 2.1 is kept (the whole run against time is the usual figure), and a second sheet `Segments` is
 added when the run has two segments or more.
 
-The instrument switches the current when the potential reaches a limit (`Current Switching
-Polarity = Potential`) or after a set time, and the potential then turns back, often with a jump.
-Splitting, on the potential values `E[0..n)`:
+The instrument switches the current either when the potential reaches a limit or after a set time.
+The header line whose name starts with `Current Switching` (the owner's CHI627E prints `Current
+Switching Polarity = Potential`) says which. The importer uses the header to decide where the
+switches are; the potential alone is not enough, because a time-switched run can drift back a
+little before its switch, and a spike that relaxes can look like a turn.
+
+**Runs switched on time.** When the `Current Switching ...` value is `Time` and the header gives
+`Init P/N` (`N`: the first current is cathodic, `P`: anodic), `Cathodic Time (s)` and `Anodic Time
+(s)`, the switching times are `T1`, `T1 + T2`, `2 T1 + T2`, ... where the first and second
+durations follow `Init P/N` and alternate. A row belongs to the segment whose switching time it has
+not passed (a row exactly at a switching time ends the segment). Each segment's clock starts at
+its switching time, exactly. A gap in the data longer than a segment leaves that segment out.
+
+**All other runs** are split where the potential turns back, on the potential values `E[0..n)`:
 
 1. Let `h` be 5% of `max(E) - min(E)`. If `h` is 0, there is one segment.
-2. Walk the rows. Until the direction is known, keep the lowest and highest value so far; the
-   direction becomes "rising" when a value is `h` or more above the lowest, and "falling" when it is
-   `h` or more below the highest. The running extreme is then the highest (rising) or lowest
-   (falling) row since the lowest or highest row.
+2. Walk the rows (missing values are skipped). Until the direction is known, keep the lowest and
+   highest value so far; the direction becomes "rising" when a value is `h` or more above the
+   lowest, and "falling" when it is `h` or more below the highest. The running extreme is then the
+   highest (rising) or lowest (falling) row since the lowest or highest row.
 3. While rising, a value at or above the running extreme moves the extreme to that row. A value `h`
-   or more below the extreme ends the segment at the extreme row (it is the segment's last row);
-   the direction becomes falling and the running extreme is the lowest row after the old extreme.
-   Falling works the same way with the signs swapped. On equal values the later row is the extreme.
-4. Segments are the half-open row ranges between the cuts; ranges of 2 rows or fewer are dropped.
+   or more below the extreme is a **turn**. When the header has `High E Limit (V)` and `Low E Limit
+   (V)`, a turn counts only if the extreme is within 2% of the limit span of the High limit, or if
+   the stretch has lasted the segment's maximum time (`Anodic Time (s)` for a rising stretch, less
+   1.5 sampling steps; time counted from the last row of the stretch before). A turn that does not
+   count is ignored and the walk goes on. A counted turn ends the segment at the extreme row (it is
+   the segment's last row); the direction becomes falling and the running extreme is the lowest row
+   after the old extreme. Falling works the same way with the signs swapped (Low limit, `Cathodic
+   Time (s)`). On equal values the later row is the extreme. Without limits in the header every
+   turn counts.
+4. A rising stretch is an **anodic** segment and a falling one **cathodic**. A run whose direction
+   never became clear is one segment, named by `Init P/N` when the header has it, otherwise by
+   whether its last value is above its first.
+5. A stretch of 2 rows or fewer is joined to the next one (the last one to the one before it), so
+   no row is lost.
 
 Noise of a few millivolts never turns the direction, because `h` is tens of millivolts for a
-normal run. Check value from the owner's file (0.4 V to 0.995 V limits, 10118 rows, 4 segments):
-the segments end at the rows of the potential minimum and maximum (rows 3713, 5847, 8097, 10118,
-1-based).
+normal run. Check value from the owner's file (`Current Switching Polarity = Potential`, 0.4 V to
+0.995 V limits, 10118 rows, 4 segments): segments of 3713, 2134, 2250 and 2021 rows. The first
+three end at the rows of the potential minimum, maximum and minimum (rows 3713, 5847 and 8097,
+1-based; row 5847 ties with row 5846 and the later one wins); the last ends at the file's last row.
 
-A segment whose last potential is below its first is **cathodic**, otherwise **anodic**. For
-segment `k` the sheet gets, in this order:
+For segment `k` the sheet gets, in this order:
 
 | Column | Designation | Long name | Unit | Comments |
 |---|---|---|---|---|
@@ -193,11 +214,13 @@ segment `k` the sheet gets, in this order:
 | potential | Y | `Potential` | `V` | same |
 | capacity (only when the header has `Cathodic Current (A)` and `Anodic Current (A)`) | Y | `Capacity` | `mAh` | same |
 
-A segment's clock starts at the time of the last row of the segment before it. The first segment's
-clock starts at 0 when its first time is between 0 and 1.5 sampling steps; otherwise at its first
-time. Capacity is the magnitude of the segment's current (cathodic current for a cathodic segment,
-anodic for an anodic one) times the segment time, divided by 3.6 to give mAh. It is positive in
-both directions, as charge and discharge curves are usually drawn.
+For runs split by turns, a segment's clock starts at the time of the last row of the segment before
+it. The first segment's clock starts at 0 when its first time is between 0 and 1.5 sampling steps;
+otherwise at its first time. (Runs switched on time use the switching times, as said above.)
+Capacity is the magnitude of the segment's current (cathodic current for a cathodic segment, anodic
+for an anodic one) times the segment time, divided by 3.6 to give mAh. It is positive in both
+directions, as charge and discharge curves are usually drawn. The capacity columns are there
+whenever both current lines hold a number; a current of 0 gives a capacity of 0.
 
 ### 2.5 Rounded times
 

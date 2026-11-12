@@ -22,6 +22,9 @@ const CLIP_TOLERANCE: f64 = 1e-9;
 /// A chronopotentiometry segment ends where the potential has turned back by
 /// this fraction of the whole potential range (spec section 2.4).
 const SEGMENT_TURN_FRACTION: f64 = 0.05;
+/// A turn counts as the instrument's switch at a potential limit when the
+/// extreme is within this fraction of the limit span of the limit.
+const SEGMENT_LIMIT_FRACTION: f64 = 0.02;
 
 /// What the CHI importer should do. The defaults follow the spec.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,23 +134,32 @@ fn parse_row(line: &str) -> Option<(Vec<f64>, f64)> {
     let mut values = Vec::new();
     let mut step = f64::NAN;
     for f in line.split([',', '\t']).map(str::trim).filter(|f| !f.is_empty()) {
+        let value = f.parse::<f64>().ok()?;
         if values.is_empty() {
             step = printed_step(f);
         }
-        values.push(f.parse::<f64>().ok()?);
+        values.push(value);
     }
     (values.len() >= 2).then_some((values, step))
 }
 
 /// The value of one unit in the last printed digit of a number:
-/// `2.023e+3` gives 1, `742.6` gives 0.1, `1200` gives 1.
+/// `2.023e+3` gives 1, `742.6` gives 0.1, `1200` gives 1. Only called on
+/// text that parsed as a number; absurd exponents give 0 or infinity, never
+/// an overflow.
 fn printed_step(field: &str) -> f64 {
     let (mantissa, exponent) = match field.find(['e', 'E']) {
-        Some(i) => (&field[..i], field[i + 1..].parse::<i32>().unwrap_or(0)),
+        Some(i) => {
+            let digits = &field[i + 1..];
+            // An exponent too long for i64 is still a valid f64 (0 or infinity): saturate it.
+            let saturated = if digits.starts_with('-') { i64::MIN } else { i64::MAX };
+            (&field[..i], digits.parse::<i64>().unwrap_or(saturated))
+        }
         None => (field, 0),
     };
-    let decimals = mantissa.split_once('.').map_or(0, |(_, frac)| frac.len()) as i32;
-    10f64.powi(exponent - decimals)
+    let decimals = mantissa.split_once('.').map_or(0, |(_, frac)| frac.len()) as i64;
+    let power = exponent.saturating_sub(decimals).clamp(-400, 400) as i32;
+    10f64.powi(power)
 }
 
 fn find_header(lines: &[&str]) -> Option<usize> {
@@ -552,28 +564,153 @@ fn build_sheet(
         && technique.to_ascii_lowercase().contains("chronopotentiometry")
         && let Some(pi) = potential_idx
     {
-        let ranges = split_segments(&block.data[pi]);
-        if ranges.len() >= 2 {
-            built.segments = ranges.len();
-            built.sheets.push(segment_sheet(&block.data[0], &block.data[pi], &ranges, meta));
+        let segments = chrono_segments(&block.data[0], &block.data[pi], meta);
+        if segments.len() >= 2 {
+            built.segments = segments.len();
+            built.sheets.push(segment_sheet(&block.data[0], &block.data[pi], &segments, meta));
         }
     }
     built
 }
 
-/// Splits a chronopotentiometry potential trace into charge and discharge
-/// segments (spec section 2.4).
+/// One charge or discharge segment of a chronopotentiometry run.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Segment {
+    /// Half-open row range.
+    pub rows: Range<usize>,
+    /// True when the current was cathodic (the potential falls).
+    pub cathodic: bool,
+    /// The time at which the segment's current started, when the header
+    /// gives the switching times; otherwise `None`.
+    pub start_time: Option<f64>,
+}
+
+/// A number from a `name = value` header line, matched case-insensitively.
+fn header_number(meta: &[(String, String)], name: &str) -> Option<f64> {
+    meta.iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .and_then(|(_, v)| v.trim().parse::<f64>().ok())
+        .filter(|v| v.is_finite())
+}
+
+/// Splits a chronopotentiometry run into charge and discharge segments
+/// (spec section 2.4). A run whose header says the current switches on time
+/// is cut at the switching times; any other run is cut where the potential
+/// turns back at a potential limit (or after the segment's maximum time).
+pub fn chrono_segments(time: &[f64], potential: &[f64], meta: &[(String, String)]) -> Vec<Segment> {
+    let by_time = meta
+        .iter()
+        .any(|(k, v)| k.to_ascii_lowercase().starts_with("current switching") && v.trim().eq_ignore_ascii_case("time"));
+    let cathodic_first = meta.iter().find(|(k, _)| k.eq_ignore_ascii_case("Init P/N")).and_then(|(_, v)| {
+        match v.trim().to_ascii_uppercase().as_str() {
+            "N" => Some(true),
+            "P" => Some(false),
+            _ => None,
+        }
+    });
+    let cathodic_time = header_number(meta, "Cathodic Time (s)").filter(|t| *t > 0.0);
+    let anodic_time = header_number(meta, "Anodic Time (s)").filter(|t| *t > 0.0);
+    if by_time && let (Some(first), Some(tc), Some(ta)) = (cathodic_first, cathodic_time, anodic_time) {
+        return segments_by_time(time, first, tc, ta);
+    }
+
+    let high = header_number(meta, "High E Limit (V)");
+    let low = header_number(meta, "Low E Limit (V)");
+    let tolerance = match (high, low) {
+        (Some(h), Some(l)) if h > l => Some(SEGMENT_LIMIT_FRACTION * (h - l)),
+        _ => None,
+    };
+    let step = if time.len() > 1 { (time[1] - time[0]).abs() } else { 0.0 };
+    // A turn at row `ext` after a rising (or falling) stretch that began at row `start` is a real
+    // switch when the extreme is at the potential limit, or when the stretch lasted the segment's
+    // maximum time. Without limits in the header every turn counts.
+    let accept = |ext: usize, rising: bool, start: usize| {
+        let Some(tol) = tolerance else { return true };
+        let limit = if rising { high } else { low };
+        let at_limit = limit.is_some_and(|l| (potential[ext] - l).abs() <= tol);
+        let max_time = if rising { anodic_time } else { cathodic_time };
+        let origin = if start == 0 { 0.0 } else { time[start - 1] };
+        let timed_out = max_time.is_some_and(|m| time[ext] - origin >= m - 1.5 * step);
+        at_limit || timed_out
+    };
+    let turns = split_at_turns(potential, accept);
+    let mut segments: Vec<Segment> = Vec::new();
+    for (rows, rising) in turns {
+        segments.push(Segment { rows, cathodic: !rising, start_time: None });
+    }
+    // A run whose direction never became clear is one segment; Init P/N names its current.
+    if segments.len() == 1
+        && let Some(first) = cathodic_first
+    {
+        segments[0].cathodic = first;
+    }
+    segments
+}
+
+/// Cuts a time-switched run at `tc`, `tc + ta`, `2 tc + ta`, ... (or starting
+/// with `ta` when the first current is anodic). A row belongs to the segment
+/// whose switching time it has not passed.
+fn segments_by_time(time: &[f64], cathodic_first: bool, tc: f64, ta: f64) -> Vec<Segment> {
+    let mut segments = Vec::new();
+    let mut start_row = 0;
+    let mut start_time = 0.0;
+    let mut cathodic = cathodic_first;
+    let n = time.len();
+    while start_row < n {
+        let end_time = start_time + if cathodic { tc } else { ta };
+        let tolerance = 1e-9 * end_time.abs().max(1.0);
+        // A missing time (NaN) is not past the switch, so it stays in the current segment.
+        let mut end_row = start_row;
+        while end_row < n && (time[end_row].is_nan() || time[end_row] <= end_time + tolerance) {
+            end_row += 1;
+        }
+        if end_row > start_row {
+            segments.push(Segment { rows: start_row..end_row, cathodic, start_time: Some(start_time) });
+        } else {
+            let t = time[start_row];
+            if !t.is_finite() {
+                // An infinite time cannot be placed; it joins the segment before it.
+                match segments.last_mut() {
+                    Some(last) => last.rows.end = start_row + 1,
+                    None => segments.push(Segment { rows: start_row..start_row + 1, cathodic, start_time: Some(0.0) }),
+                }
+                start_row += 1;
+                continue;
+            }
+            // The next row lies beyond this segment (a gap in the data). The next segment is of the
+            // other kind and starts at `end_time`; whole cycles later it starts again, so skip them
+            // at once instead of one empty segment at a time.
+            let cycles = ((t - end_time) / (tc + ta)).floor();
+            if cycles >= 1.0 {
+                start_time = end_time + cycles * (tc + ta);
+                cathodic = !cathodic;
+                continue;
+            }
+        }
+        start_row = end_row;
+        start_time = end_time;
+        cathodic = !cathodic;
+    }
+    segments
+}
+
+/// Splits a potential trace at its turning points.
 ///
-/// A segment ends at the row where the potential reaches its extreme before
-/// turning back by more than [`SEGMENT_TURN_FRACTION`] of the whole range;
-/// that row is the last row of the segment. Small wiggles do not split.
-/// Ranges of 2 rows or fewer are dropped. Returns half-open row ranges.
-pub fn split_segments(potential: &[f64]) -> Vec<Range<usize>> {
+/// The direction (rising or falling) is known once the potential has moved
+/// by [`SEGMENT_TURN_FRACTION`] of its whole range. A stretch ends at its
+/// extreme row (the later one on ties) once the potential has come back by
+/// that much and `accept(extreme, rising, stretch_start)` agrees; a turn that
+/// is not accepted is ignored. Returns each stretch's row range and whether
+/// it was rising. A stretch of 2 rows or fewer is joined to the next one.
+fn split_at_turns(potential: &[f64], accept: impl Fn(usize, bool, usize) -> bool) -> Vec<(Range<usize>, bool)> {
     let n = potential.len();
     let finite = || potential.iter().copied().filter(|v| v.is_finite());
     let (Some(lo), Some(hi)) = (finite().reduce(f64::min), finite().reduce(f64::max)) else {
         return Vec::new();
     };
+    let first = potential.iter().position(|v| v.is_finite()).unwrap_or(0);
+    let last = potential.iter().rposition(|v| v.is_finite()).unwrap_or(0);
+    let overall_rising = potential[last] >= potential[first];
     let threshold = (hi - lo) * SEGMENT_TURN_FRACTION;
     // Index of the largest (rising) or smallest (falling) finite value in `from..=to`, the later
     // one on ties.
@@ -583,18 +720,20 @@ pub fn split_segments(potential: &[f64]) -> Vec<Range<usize>> {
             _ => Some(i),
         })
     };
-    let mut cuts = Vec::new();
+    // (row range, rising) of each stretch; the cut rows are where the next stretch starts.
+    let mut stretches: Vec<(Range<usize>, bool)> = Vec::new();
+    let mut start = 0usize;
+    // `None` until the direction is known; then true for rising.
+    let mut rising: Option<bool> = None;
     if threshold > 0.0 {
-        // 0: direction not known yet; 1: rising; -1: falling.
-        let mut dir = 0i8;
         let (mut lowest, mut highest) = (None::<usize>, None::<usize>);
         let mut ext = 0usize;
         for (k, &v) in potential.iter().enumerate() {
             if !v.is_finite() {
                 continue;
             }
-            match dir {
-                0 => {
+            match rising {
+                None => {
                     if lowest.is_none_or(|i| v <= potential[i]) {
                         lowest = Some(k);
                     }
@@ -603,75 +742,77 @@ pub fn split_segments(potential: &[f64]) -> Vec<Range<usize>> {
                     }
                     let (lo_i, hi_i) = (lowest.unwrap_or(k), highest.unwrap_or(k));
                     if v - potential[lo_i] >= threshold {
-                        dir = 1;
+                        rising = Some(true);
                         ext = extreme(lo_i, k, true).unwrap_or(k);
                     } else if potential[hi_i] - v >= threshold {
-                        dir = -1;
+                        rising = Some(false);
                         ext = extreme(hi_i, k, false).unwrap_or(k);
                     }
                 }
-                1 if v >= potential[ext] => ext = k,
-                1 if potential[ext] - v >= threshold => {
-                    cuts.push(ext + 1);
-                    dir = -1;
-                    ext = extreme(ext + 1, k, false).unwrap_or(k);
+                Some(up) => {
+                    let beyond = if up { v >= potential[ext] } else { v <= potential[ext] };
+                    let back = if up { potential[ext] - v } else { v - potential[ext] };
+                    if beyond {
+                        ext = k;
+                    } else if back >= threshold && accept(ext, up, start) {
+                        stretches.push((start..ext + 1, up));
+                        start = ext + 1;
+                        rising = Some(!up);
+                        ext = extreme(start, k, !up).unwrap_or(k);
+                    }
                 }
-                -1 if v <= potential[ext] => ext = k,
-                -1 if v - potential[ext] >= threshold => {
-                    cuts.push(ext + 1);
-                    dir = 1;
-                    ext = extreme(ext + 1, k, true).unwrap_or(k);
-                }
-                _ => {}
             }
         }
     }
-    let mut ranges = Vec::new();
-    let mut start = 0;
-    for cut in cuts.into_iter().chain(std::iter::once(n)) {
-        if cut - start > 2 {
-            ranges.push(start..cut);
+    stretches.push((start..n, rising.unwrap_or(overall_rising)));
+    // Join stretches of 2 rows or fewer to the next one (the last to the one before it), so that
+    // no row is lost.
+    let mut joined: Vec<(Range<usize>, bool)> = Vec::new();
+    let mut carry: Option<usize> = None;
+    for (rows, up) in stretches {
+        let rows = carry.take().unwrap_or(rows.start)..rows.end;
+        if rows.len() <= 2 {
+            carry = Some(rows.start);
+        } else {
+            joined.push((rows, up));
         }
-        start = cut;
     }
-    ranges
+    if let Some(from) = carry {
+        match joined.last_mut() {
+            Some(last) => last.0.end = n.max(last.0.end),
+            None if n > 0 => joined.push((from..n, overall_rising)),
+            None => {}
+        }
+    }
+    joined
 }
 
 /// The sheet with one group of columns per chronopotentiometry segment: time
-/// since the segment began, potential and, when the header gives both
-/// currents, the capacity passed so far in mAh.
-fn segment_sheet(time: &[f64], potential: &[f64], ranges: &[Range<usize>], meta: &[(String, String)]) -> Worksheet {
-    let param = |name: &str| {
-        meta.iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case(name))
-            .and_then(|(_, v)| v.trim().parse::<f64>().ok())
-            .filter(|v| v.is_finite() && *v > 0.0)
-    };
-    let currents = param("Cathodic Current (A)").zip(param("Anodic Current (A)"));
+/// since the segment's current started, potential and, when the header gives
+/// both currents, the capacity passed so far in mAh.
+fn segment_sheet(time: &[f64], potential: &[f64], segments: &[Segment], meta: &[(String, String)]) -> Worksheet {
+    let currents = header_number(meta, "Cathodic Current (A)").zip(header_number(meta, "Anodic Current (A)"));
     let mut drafts = Vec::new();
-    for (k, range) in ranges.iter().enumerate() {
-        let e = &potential[range.clone()];
-        let falling = e.last() < e.first();
-        let comment = format!("Segment {} ({})", k + 1, if falling { "cathodic" } else { "anodic" });
-        // A segment's clock starts at the last row of the segment before it; the first segment's
-        // starts at 0 when its first sample is about one interval after 0.
-        let origin = if range.start > 0 {
-            time[range.start - 1]
-        } else if time.len() > 1 && time[0] >= 0.0 && time[0] <= 1.5 * (time[1] - time[0]) {
-            0.0
-        } else {
-            time[0]
+    for (k, seg) in segments.iter().enumerate() {
+        let range = seg.rows.clone();
+        let comment = format!("Segment {} ({})", k + 1, if seg.cathodic { "cathodic" } else { "anodic" });
+        // Without switching times, a segment's clock starts at the last row of the segment before
+        // it; the first segment's starts at 0 when its first sample is about one interval after 0.
+        let origin = match seg.start_time {
+            Some(t) => t,
+            None if range.start > 0 => time[range.start - 1],
+            None if time.len() > 1 && time[0] >= 0.0 && time[0] <= 1.5 * (time[1] - time[0]) => 0.0,
+            None => time[0],
         };
         let since: Vec<f64> = time[range.clone()].iter().map(|t| t - origin).collect();
-        if let Some((cathodic, anodic)) = currents {
-            let amps = if falling { cathodic } else { anodic };
-            let capacity = since.iter().map(|t| amps * t / 3.6).collect();
-            drafts.push(draft(Designation::X, "Time", "s", &comment, since));
-            drafts.push(draft(Designation::Y, "Potential", "V", &comment, e.to_vec()));
+        let capacity = currents.map(|(cathodic, anodic)| {
+            let amps = if seg.cathodic { cathodic } else { anodic }.abs();
+            since.iter().map(|t| amps * t / 3.6).collect::<Vec<f64>>()
+        });
+        drafts.push(draft(Designation::X, "Time", "s", &comment, since));
+        drafts.push(draft(Designation::Y, "Potential", "V", &comment, potential[range].to_vec()));
+        if let Some(capacity) = capacity {
             drafts.push(draft(Designation::Y, "Capacity", "mAh", &comment, capacity));
-        } else {
-            drafts.push(draft(Designation::X, "Time", "s", &comment, since));
-            drafts.push(draft(Designation::Y, "Potential", "V", &comment, e.to_vec()));
         }
     }
     finish_sheet("Segments", drafts)
@@ -1007,6 +1148,13 @@ mod tests {
         assert!((printed_step("5.000e-1") - 1e-4).abs() < 1e-18);
         assert_eq!(chi_e(2023.4), "2.023e+3");
         assert_eq!(chi_e(0.2), "2.000e-1");
+        // Absurd exponents neither overflow nor panic.
+        assert_eq!(printed_step("1.5e-2147483648"), 0.0);
+        assert!(printed_step("1e99999999999999999999").is_infinite());
+        let text = "Oct. 2, 2026\nAmperometric i-t Curve\n\nTime/sec, Current/A\n\n1.5e-2147483648, 1.0e-3\n\
+                    2.0e-1, 1.0e-3\nnot a number at all\n4.0e-1, 1.0e-3\n";
+        let imp = parse_chi(text, "odd", &ChiOptions::default()).unwrap();
+        assert_eq!(imp.workbook.sheets[0].row_count(), 3);
     }
 
     #[test]
@@ -1106,23 +1254,133 @@ mod tests {
         (e, ends)
     }
 
+    /// Header lines as `(name, value)` pairs.
+    fn meta(lines: &[(&str, &str)]) -> Vec<(String, String)> {
+        lines.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    fn times(n: usize) -> Vec<f64> {
+        (1..=n).map(|k| k as f64 / 5.0).collect()
+    }
+
+    const LIMITS: [(&str, &str); 3] = [("Init P/N", "N"), ("High E Limit (V)", "1"), ("Low E Limit (V)", "0.4")];
+
     #[test]
-    fn segments_end_where_the_potential_turns() {
+    fn segments_end_where_the_potential_turns_at_a_limit() {
         let (e, ends) = gcd_trace();
-        let r = split_segments(&e);
-        assert_eq!(r.len(), 4, "{r:?}");
+        let s = chrono_segments(&times(e.len()), &e, &meta(&LIMITS));
+        assert_eq!(s.len(), 4, "{s:?}");
         // Each segment ends at its extreme row, within the wiggle of the last few rows.
-        for (range, &end) in r.iter().zip(&ends) {
-            assert!(range.end.abs_diff(end) <= 7, "{range:?} vs {end}");
+        for (seg, &end) in s.iter().zip(&ends) {
+            assert!(seg.rows.end.abs_diff(end) <= 7, "{seg:?} vs {end}");
         }
-        assert_eq!(r[0].start, 0);
-        assert_eq!(r[3].end, e.len());
-        assert!(r.windows(2).all(|w| w[0].end == w[1].start), "no row is lost or repeated");
-        // A monotone trace with noise is one segment; a flat one too.
+        assert_eq!(s.iter().map(|s| s.cathodic).collect::<Vec<_>>(), [true, false, true, false]);
+        assert_eq!(s[0].rows.start, 0);
+        assert_eq!(s[3].rows.end, e.len());
+        assert!(s.windows(2).all(|w| w[0].rows.end == w[1].rows.start), "no row is lost or repeated");
+        // A monotone trace with noise is one segment; a flat one too, named by Init P/N.
         let ramp: Vec<f64> = (0..500).map(|k| k as f64 * 1e-3 + 1e-4 * (k % 3) as f64).collect();
-        assert_eq!(split_segments(&ramp), vec![0..500]);
-        assert_eq!(split_segments(&[0.5; 10]), vec![0..10]);
-        assert!(split_segments(&[]).is_empty());
+        let one = chrono_segments(&times(500), &ramp, &meta(&LIMITS));
+        assert_eq!(one.iter().map(|s| (s.rows.clone(), s.cathodic)).collect::<Vec<_>>(), [(0..500, true)]);
+        assert_eq!(chrono_segments(&times(10), &[0.5; 10], &[]).len(), 1);
+        assert!(chrono_segments(&[], &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn a_spike_that_relaxes_away_from_the_limits_is_not_a_segment() {
+        // Falling towards 0.4 V with a 60 mV dip-and-recovery at 0.7 V (more than 5% of the range),
+        // then the real switch at the limit and a rise to 1.0 V.
+        let mut e: Vec<f64> = (0..1000).map(|k| 0.85 - 0.15 * k as f64 / 999.0).collect();
+        e.extend((0..20).map(|k| 0.70 - 0.06 * (1.0 - (k as f64 - 10.0).abs() / 10.0)));
+        e.extend((0..1000).map(|k| 0.70 - 0.30 * k as f64 / 999.0));
+        e.extend((0..1000).map(|k| 0.55 + 0.45 * k as f64 / 999.0));
+        let s = chrono_segments(&times(e.len()), &e, &meta(&LIMITS));
+        assert_eq!(
+            s.iter().map(|s| (s.rows.clone(), s.cathodic)).collect::<Vec<_>>(),
+            [(0..2020, true), (2020..3020, false)]
+        );
+        // Without limits in the header every turn counts, so the dip makes extra segments.
+        assert!(chrono_segments(&times(e.len()), &e, &meta(&[("Init P/N", "N")])).len() > 2);
+    }
+
+    #[test]
+    fn a_time_switched_run_is_cut_at_the_switching_times() {
+        // 500 s per segment at 0.2 s: each half rises (or falls) for 100 s, then drifts back 2 mV.
+        let mut e = Vec::new();
+        for half in 0..4 {
+            let (a, b) = if half % 2 == 0 { (0.75, 0.95) } else { (0.95, 0.75) };
+            for k in 0..2500 {
+                let ramp = (k as f64 / 499.0).min(1.0);
+                let drift = if k >= 500 { 0.002 * (k - 500) as f64 / 1999.0 } else { 0.0 };
+                e.push(a + (b - a) * ramp - drift * (b - a).signum());
+            }
+        }
+        let header = meta(&[
+            ("Init P/N", "P"),
+            ("Current Switching Polarity", "Time"),
+            ("Cathodic Time (s)", "500"),
+            ("Anodic Time (s)", "500"),
+            ("High E Limit (V)", "1"),
+            ("Low E Limit (V)", "0.7"),
+        ]);
+        let s = chrono_segments(&times(e.len()), &e, &header);
+        let got: Vec<_> = s.iter().map(|s| (s.rows.clone(), s.cathodic, s.start_time)).collect();
+        assert_eq!(
+            got,
+            [
+                (0..2500, false, Some(0.0)),
+                (2500..5000, true, Some(500.0)),
+                (5000..7500, false, Some(1000.0)),
+                (7500..10000, true, Some(1500.0))
+            ]
+        );
+        // The capacity of every segment ends at 1 mA * 500 s.
+        let mut text = cp_text(&e, false);
+        text = text.replace(
+            "Init P/N = N\n",
+            "Cathodic Current (A) = 0.001\nAnodic Current (A) = 0.001\nInit P/N = P\nCurrent Switching Polarity = Time\n\
+             Cathodic Time (s) = 500\nAnodic Time (s) = 500\n",
+        );
+        let imp = parse_chi(&text, "t", &ChiOptions::default()).unwrap();
+        let c = &imp.workbook.sheets[1].columns;
+        for k in 0..4 {
+            let q = c[3 * k + 2].numeric().unwrap();
+            assert!((q[q.len() - 1] - 0.001 * 500.0 / 3.6).abs() < 1e-12, "segment {k}: {}", q[q.len() - 1]);
+        }
+    }
+
+    #[test]
+    fn capacity_uses_the_magnitude_and_allows_zero() {
+        let (e, _) = gcd_trace();
+        let text = cp_text(&e, true)
+            .replace("Anodic Current (A) = 0.001", "Anodic Current (A) = 0")
+            .replace("Cathodic Current (A) = 0.002", "Cathodic Current (A) = -0.002");
+        let imp = parse_chi(&text, "gcd", &ChiOptions::default()).unwrap();
+        let c = &imp.workbook.sheets[1].columns;
+        assert_eq!(c.len(), 12, "a Capacity column for every segment");
+        let t1 = c[0].numeric().unwrap();
+        let q1 = c[2].numeric().unwrap();
+        assert!((q1[10] - 0.002 * t1[10] / 3.6).abs() < 1e-15, "magnitude of a negative current");
+        assert!(c[5].numeric().unwrap().iter().all(|&q| q == 0.0), "zero anodic current gives zero capacity");
+    }
+
+    #[test]
+    fn labels_come_from_the_direction_not_the_end_rows() {
+        let (mut e, _) = gcd_trace();
+        e.push(f64::NAN);
+        e[0] = f64::NAN;
+        let s = chrono_segments(&times(e.len()), &e, &meta(&LIMITS));
+        assert_eq!(s.iter().map(|s| s.cathodic).collect::<Vec<_>>(), [true, false, true, false]);
+    }
+
+    #[test]
+    fn a_short_first_stretch_joins_the_next_segment() {
+        // One stray row at 0.40 V, then a fall from 0.85 V: the 1-row stretch is not dropped.
+        let (mut e, _) = gcd_trace();
+        e.insert(0, 0.40);
+        let s = chrono_segments(&times(e.len()), &e, &meta(&LIMITS));
+        assert_eq!(s[0].rows.start, 0, "{s:?}");
+        assert_eq!(s.iter().map(|s| s.rows.len()).sum::<usize>(), e.len());
     }
 
     #[test]

@@ -394,12 +394,132 @@ fn graph_settings_change_the_axis_live_and_undo_as_one_step() {
     assert_eq!(scale(&h), ScaleKind::Linear);
     click(&mut h, "Log10");
     assert_eq!(scale(&h), ScaleKind::Log10, "the change applies while the window is open");
-    click(&mut h, "Legend");
-    click(&mut h, "Draw a frame");
+    click(&mut h, "Line and Ticks");
+    click(&mut h, "Ticks");
+    assert!(project(&h).graphs().next().unwrap().layers[0].y_axis.opposite_ticks);
     assert_eq!(h.state().doc.undo_label(), Some("Change graph settings"));
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert_eq!(scale(&h), ScaleKind::Linear, "one undo reverts everything the window did");
+    assert!(!project(&h).graphs().next().unwrap().layers[0].y_axis.opposite_ticks);
     assert_eq!(h.state().doc.undo_label(), Some("Import data"));
+}
+
+fn open_props(h: &mut Harness<'static, SheafApp>, layer: usize, tab: PropsTab, plot: Option<usize>) {
+    let (_, graph) = window_ids(h);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::GraphProperties { graph, layer, tab, plot }, &ctx);
+    settle(h);
+}
+
+#[test]
+fn the_axis_dialog_switches_between_the_horizontal_and_the_vertical_axis() {
+    let mut h = start(vec![data_file("axis-switch")]);
+    open_props(&mut h, 0, PropsTab::XAxis, None);
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::XAxis);
+    for tab in ["Scale", "Tick Labels", "Title", "Grids", "Line and Ticks", "Special Ticks", "Breaks"] {
+        assert!(h.query_by_label(tab).is_some(), "the tab {tab}");
+    }
+    click(&mut h, "Vertical");
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::YAxis);
+    click(&mut h, "Log10");
+    assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Log10);
+    assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Linear, "only the chosen axis changes");
+    click(&mut h, "Horizontal");
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::XAxis);
+    click(&mut h, "Log10");
+    assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Log10);
+    click(&mut h, "OK");
+    assert!(h.state().graph_props.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Change graph settings"));
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Linear, "both axes were one undo step");
+    assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Linear);
+}
+
+#[test]
+fn a_change_on_the_scale_tab_fixes_the_limit() {
+    let mut h = start(vec![data_file("axis-scale")]);
+    open_props(&mut h, 0, PropsTab::YAxis, None);
+    assert!(graph(&h).layers[0].y_axis.min.is_none());
+    // The first "Auto" box is the one of From.
+    h.query_all_by_label("Auto").next().expect("From has an Auto box").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].y_axis.min, Some(0.0));
+    assert!(graph(&h).layers[0].y_axis.max.is_none());
+    click(&mut h, "Tick Labels");
+    click(&mut h, "Hide Last Label");
+}
+
+#[test]
+fn cancel_takes_the_graph_back_and_leaves_no_undo_entry() {
+    let mut h = start(vec![data_file("axis-cancel")]);
+    let before = graph(&h).clone();
+    open_props(&mut h, 0, PropsTab::YAxis, None);
+    click(&mut h, "Log10");
+    assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Log10);
+    click(&mut h, "Cancel");
+    assert!(h.state().graph_props.is_none());
+    assert_eq!(*graph(&h), before);
+    assert_eq!(h.state().doc.undo_label(), Some("Import data"), "no undo entry is left");
+}
+
+#[test]
+fn apply_moves_the_starting_point_of_cancel() {
+    let mut h = start(vec![data_file("axis-apply")]);
+    open_props(&mut h, 0, PropsTab::YAxis, None);
+    click(&mut h, "Log10");
+    click(&mut h, "Apply");
+    assert!(h.state().graph_props.is_some(), "Apply keeps the window open");
+    click(&mut h, "Linear");
+    assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Linear);
+    click(&mut h, "Cancel");
+    assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Log10, "Cancel goes back to the Apply");
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Linear);
+}
+
+#[test]
+fn the_plot_details_tree_chooses_a_plot_of_the_second_layer() {
+    let mut h = start(vec![data_file("details-tree")]);
+    let (_, g) = window_ids(&h);
+    h.state_mut().doc.apply("Double Y", |p| {
+        p.add_right_y_layer(g, 0).unwrap();
+        let graph = p.graph_mut(g).unwrap();
+        let moved = graph.layers[0].plots.remove(1);
+        graph.layers[1].plots.push(moved);
+    });
+    let name = project(&h).plot_label(&graph(&h).layers[1].plots[0]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    assert_eq!(h.state().graph_props.as_ref().unwrap().layer, 0);
+    for entry in ["Layer 1", "Layer 2"] {
+        assert!(h.query_by_label(entry).is_some(), "{entry} is in the tree");
+    }
+    h.get(By::new().role(egui::accesskit::Role::Button).label(name.as_str())).click();
+    settle(&mut h);
+    let d = h.state().graph_props.as_ref().unwrap();
+    assert_eq!((d.layer, d.selected_plot()), (1, 0), "the plot of layer 2 is chosen");
+    assert_eq!(d.tab(), PropsTab::Plots);
+    // Its Group tab removes it from layer 2 only; Cancel brings it back.
+    click(&mut h, "Group");
+    click(&mut h, "Remove plot");
+    assert!(graph(&h).layers[1].plots.is_empty());
+    assert_eq!(graph(&h).layers[0].plots.len(), 1);
+    click(&mut h, "Cancel");
+    assert_eq!(graph(&h).layers[1].plots.len(), 1, "Cancel restored the plot");
+}
+
+#[test]
+fn plot_details_opened_for_the_page_and_the_legend_show_those_tabs() {
+    let mut h = start(vec![data_file("details-page")]);
+    open_props(&mut h, 0, PropsTab::Page, None);
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Page);
+    click(&mut h, "Text");
+    click(&mut h, "+10 %");
+    open_props(&mut h, 0, PropsTab::Legend, None);
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Legend);
+    let frame = graph(&h).layers[0].legend.frame;
+    click(&mut h, "Draw a frame");
+    assert_ne!(graph(&h).layers[0].legend.frame, frame);
 }
 
 #[test]
@@ -2451,7 +2571,7 @@ fn double_clicks_on_the_graph_open_the_settings_of_what_was_clicked() {
         let at = on(&h, 0, kind);
         double_click_at(&mut h, at);
         let d = h.state().graph_props.as_ref().unwrap_or_else(|| panic!("{kind:?} opened nothing"));
-        assert_eq!((d.tab, d.layer), (tab, 0), "{kind:?}");
+        assert_eq!((d.tab(), d.layer), (tab, 0), "{kind:?}");
         if let Some(p) = plot {
             assert_eq!(d.selected_plot(), p, "the clicked plot is the chosen one");
         }
@@ -2518,7 +2638,7 @@ fn the_layer_icon_has_origins_menu_and_a_double_click_opens_the_plot_list() {
     close_menus(&mut h);
     double_click_at(&mut h, at);
     let d = h.state().graph_props.as_ref().expect("Plot Setup");
-    assert_eq!(d.tab, PropsTab::Plots);
+    assert_eq!(d.tab(), PropsTab::Plots);
 }
 
 #[test]

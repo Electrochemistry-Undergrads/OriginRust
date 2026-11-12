@@ -1,47 +1,86 @@
-//! The graph settings window: axes, plots, legend and page.
+//! The graph dialogs in Origin's layout (ADR 0007 step 9): the **axis dialog** ("X Axis - Layer 1")
+//! with a list at the left (Horizontal, Vertical) and the tabs Scale, Tick Labels, Title, Grids,
+//! Line and Ticks, Special Ticks, Breaks; and **Plot Details** with a tree at the left (graph,
+//! layers, plots) and the tabs of what is chosen. Both end in the buttons OK, Cancel, Apply.
 //!
-//! Every change is applied to the project at once, so the figure behind the
-//! window always shows the current settings. All changes made while the
-//! window is open form one undo step.
+//! Every change is applied to the project at once, so the figure behind the window always shows the
+//! current settings, and all changes made while the window is open form one undo step. Because the
+//! changes are live, the buttons mean:
+//!
+//! * **Apply** keeps what has been done so far as the new starting point of Cancel, and the next
+//!   changes form a new undo step. It is grey while nothing differs from the starting point.
+//! * **OK** closes the window and keeps the changes.
+//! * **Cancel** (and the close button of the window) takes the graph back to its state at the
+//!   opening of the window, or at the last Apply: it undoes the window's step, so no undo entry
+//!   is left behind.
 
-use eframe::egui::{self, Color32, DragValue, RichText};
+use eframe::egui::{self, Align, Color32, DragValue, Layout, RichText};
 use sheaf_core::graph::*;
 use sheaf_core::{Color, ColumnId, Document, Project, WindowId};
-use sheaf_plot::ticks::ResolvedAxis;
 
+use super::graph_axis::{self, AxisTab};
+use super::graph_details::{self, DetailTab, Node};
+
+/// The undo label of the dialog's edits.
+const LABEL: &str = "Change graph settings";
+
+/// Where the older entry points (menus, toolbar, Object Manager, the graph window) want to go.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PropsTab {
+    /// The axis dialog on the horizontal axis.
     XAxis,
+    /// The axis dialog on the vertical axis.
     YAxis,
+    /// Plot Details on a plot (when one is given) or on the layer (Layer Contents).
     Plots,
+    /// Plot Details on the legend settings of the layer.
     Legend,
+    /// Plot Details on the page of the graph.
     Page,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum View {
+    Axis { vertical: bool, tab: AxisTab },
+    Details { node: Node, tab: DetailTab },
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Button {
+    Ok,
+    Cancel,
+    Apply,
 }
 
 pub struct GraphPropsDialog {
     pub graph: WindowId,
     /// The layer whose axes, plots and legend the dialog edits.
     pub layer: usize,
-    pub tab: PropsTab,
-    /// Groups all edits of this dialog session into one undo step.
+    view: View,
+    /// Groups all edits since the opening (or the last Apply) into one undo step.
     token: u64,
+    /// The graph as Cancel gives it back: at the opening, or at the last Apply.
+    baseline: Option<Graph>,
+    /// True when an edit was made with the current token.
+    touched: bool,
+    /// The plot of the dialog's layer that was chosen last.
     selected_plot: usize,
     /// The sheet chosen in "Add data to this graph" (index into the list of sheets with Y columns).
     add_from: usize,
 }
 
 /// A Y column that can be added to a graph, with the X and error columns its sheet gives it.
-struct Addable {
-    y: ColumnId,
-    x: Option<ColumnId>,
-    y_error: Option<ColumnId>,
-    label: String,
+pub struct Addable {
+    pub y: ColumnId,
+    pub x: Option<ColumnId>,
+    pub y_error: Option<ColumnId>,
+    pub label: String,
 }
 
 /// One worksheet and its numeric Y columns.
-struct Source {
-    title: String,
-    columns: Vec<Addable>,
+pub struct Source {
+    pub title: String,
+    pub columns: Vec<Addable>,
 }
 
 fn sources(project: &Project) -> Vec<Source> {
@@ -74,20 +113,87 @@ fn sources(project: &Project) -> Vec<Source> {
     out
 }
 
+/// Every column of the project with a name for lists.
+fn all_columns(project: &Project) -> Vec<(ColumnId, String)> {
+    let mut out = Vec::new();
+    for book in project.workbooks() {
+        for sheet in &book.sheets {
+            for c in &sheet.columns {
+                out.push((c.id, format!("{} / {}: {}", book.title(), sheet.name, c.short_name)));
+            }
+        }
+    }
+    out
+}
+
 impl GraphPropsDialog {
     pub fn new(graph: WindowId, layer: usize, tab: PropsTab, token: u64) -> Self {
-        GraphPropsDialog { graph, layer, tab, token, selected_plot: 0, add_from: 0 }
+        let view = match tab {
+            PropsTab::XAxis => View::Axis { vertical: false, tab: AxisTab::Scale },
+            PropsTab::YAxis => View::Axis { vertical: true, tab: AxisTab::Scale },
+            PropsTab::Plots => View::Details { node: Node::Layer(layer), tab: DetailTab::LayerContents },
+            PropsTab::Legend => View::Details { node: Node::Layer(layer), tab: DetailTab::Legend },
+            PropsTab::Page => View::Details { node: Node::Graph, tab: DetailTab::Page },
+        };
+        GraphPropsDialog { graph, layer, view, token, baseline: None, touched: false, selected_plot: 0, add_from: 0 }
     }
 
-    /// The plot of the dialog's layer that the Plots tab has selected.
+    /// Which of the entry points this dialog is at now.
+    #[cfg(test)]
+    pub fn tab(&self) -> PropsTab {
+        match self.view {
+            View::Axis { vertical: false, .. } => PropsTab::XAxis,
+            View::Axis { vertical: true, .. } => PropsTab::YAxis,
+            View::Details { node: Node::Graph, .. } => PropsTab::Page,
+            View::Details { node: Node::Layer(_), tab: DetailTab::Legend } => PropsTab::Legend,
+            View::Details { .. } => PropsTab::Plots,
+        }
+    }
+
+    /// The plot of the dialog's layer that Plot Details has chosen last.
     pub fn selected_plot(&self) -> usize {
         self.selected_plot
     }
 
-    /// Selects a plot of the dialog's layer (the Object Manager and the graph window do this
-    /// when a plot is clicked).
+    /// Chooses a plot of the dialog's layer (the Object Manager and the graph window do this
+    /// when a plot is clicked) and, in Plot Details, shows its node.
     pub fn select_plot(&mut self, plot: usize) {
         self.selected_plot = plot;
+        if let View::Details { node, tab } = &mut self.view {
+            *node = Node::Plot(self.layer, plot);
+            // The tab is made valid for the plot while drawing.
+            if matches!(*tab, DetailTab::LayerContents | DetailTab::Page) {
+                *tab = DetailTab::Line;
+            }
+        }
+    }
+
+    fn fresh_token(&mut self) {
+        // The application's own tokens count up from 1; this keeps clear of them.
+        self.token = self.token.wrapping_add(1 << 40);
+        self.touched = false;
+    }
+
+    /// Takes the graph back to the baseline: one undo step when the window's step is the last one,
+    /// otherwise by writing the saved copy.
+    fn cancel(&mut self, doc: &mut Document) {
+        let Some(base) = self.baseline.take() else {
+            return;
+        };
+        if !self.touched {
+            return;
+        }
+        if doc.undo_label() == Some(LABEL) {
+            doc.undo();
+        }
+        if doc.project().graph(self.graph).is_some_and(|g| *g != base) {
+            let id = self.graph;
+            doc.apply("Restore graph settings", move |p| {
+                if let Some(g) = p.graph_mut(id) {
+                    *g = base;
+                }
+            });
+        }
     }
 
     /// Draws the window. Returns `false` when it was closed.
@@ -95,82 +201,173 @@ impl GraphPropsDialog {
         let Some(original) = doc.project().graph(self.graph) else {
             return false;
         };
+        if original.layers.is_empty() {
+            return false;
+        }
+        if self.baseline.is_none() {
+            self.baseline = Some(original.clone());
+        }
         let mut graph = original.clone();
-        let li = self.layer.min(graph.layers.len().saturating_sub(1));
-        let resolved = sheaf_plot::layout_geometry(doc.project(), self.graph).ok().and_then(|g| g.into_iter().nth(li));
-        let labels: Vec<String> = graph
-            .layers
-            .get(li)
-            .map(|l| l.plots.iter().map(|p| doc.project().plot_label(p)).collect())
-            .unwrap_or_default();
-
+        let li = self.layer.min(graph.layers.len() - 1);
+        self.layer = li;
+        let geometry = sheaf_plot::layout_geometry(doc.project(), self.graph).ok();
+        let labels: Vec<Vec<String>> =
+            graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_label(p)).collect()).collect();
         let sources = sources(doc.project());
+        let columns = all_columns(doc.project());
 
-        let mut open = true;
-        let title = match graph.layers.len() {
-            0 | 1 => format!("Graph settings: {}", graph.name),
-            _ => format!("Graph settings: {} - Layer {}", graph.name, li + 1),
+        let (title, window_id, size) = match self.view {
+            View::Axis { vertical, .. } => (
+                format!("{} Axis - Layer {}", if vertical { "Y" } else { "X" }, li + 1),
+                "graph_axis_dialog",
+                [600.0_f32, 540.0],
+            ),
+            View::Details { node, .. } => (
+                format!(
+                    "Plot Details - {}",
+                    match node {
+                        Node::Graph => "Page Properties",
+                        Node::Layer(_) => "Layer Properties",
+                        Node::Plot(..) => "Plot Properties",
+                    }
+                ),
+                "graph_plot_details",
+                [900.0_f32, 560.0],
+            ),
         };
+
+        // Centred in the free area between the docked panels, and no wider than it.
+        let avail = ctx.available_rect();
+        let size = [size[0].min(avail.width() - 16.0).max(480.0), size[1].min(avail.height() - 16.0).max(360.0)];
+        let pos = (avail.center() - egui::vec2(size[0], size[1]) / 2.0).max(avail.min);
+        let mut open = true;
+        let mut button: Option<Button> = None;
+        let this = &mut *self;
         egui::Window::new(title)
-            .id(egui::Id::new("graph_props"))
+            .id(egui::Id::new(window_id))
             .open(&mut open)
-            .default_width(440.0)
+            .default_pos(pos)
+            .default_size(size)
             .resizable(true)
             .collapsible(false)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    for (tab, name) in [
-                        (PropsTab::XAxis, "X axis"),
-                        (PropsTab::YAxis, "Y axis"),
-                        (PropsTab::Plots, "Plots"),
-                        (PropsTab::Legend, "Legend"),
-                        (PropsTab::Page, "Page"),
-                    ] {
-                        ui.selectable_value(&mut self.tab, tab, name);
+                let body_h = (ui.available_height() - 46.0).max(240.0);
+                ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| match &mut this.view {
+                    View::Axis { vertical, tab } => {
+                        let resolved =
+                            geometry.as_ref().and_then(|g| g.get(li)).map(|g| if *vertical { &g.y } else { &g.x });
+                        graph_axis::dialog_body(ui, vertical, tab, &mut graph.layers[li], resolved, &columns);
+                    }
+                    View::Details { node, tab } => {
+                        graph_details::dialog_body(
+                            ui,
+                            node,
+                            tab,
+                            &mut graph,
+                            &labels,
+                            &sources,
+                            &columns,
+                            &mut this.add_from,
+                        );
                     }
                 });
                 ui.separator();
-                egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
-                    let Some(layer) = graph.layers.get_mut(li) else {
-                        ui.label("This graph has no layer.");
-                        return;
-                    };
-                    match self.tab {
-                        PropsTab::XAxis => axis_ui(ui, &mut layer.x_axis, resolved.as_ref().map(|g| &g.x), "x"),
-                        PropsTab::YAxis => axis_ui(ui, &mut layer.y_axis, resolved.as_ref().map(|g| &g.y), "y"),
-                        PropsTab::Plots => {
-                            add_plot_ui(ui, layer, &sources, &mut self.add_from);
-                            plots_ui(ui, layer, &labels, &mut self.selected_plot);
-                        }
-                        PropsTab::Legend => legend_ui(ui, &mut layer.legend),
-                        PropsTab::Page => page_ui(ui, &mut graph),
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let dirty = this.baseline.as_ref().is_some_and(|b| *b != graph);
+                    // Right to left: Apply is drawn first so that the order reads OK, Cancel, Apply.
+                    if ui.add_enabled(dirty, egui::Button::new("Apply")).clicked() {
+                        button = Some(Button::Apply);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        button = Some(Button::Cancel);
+                    }
+                    if ui.button("OK").clicked() {
+                        button = Some(Button::Ok);
                     }
                 });
             });
 
-        if graph != *original {
+        // Which plot and layer the dialog is on, for the Object Manager and the next opening.
+        if let View::Details { node, .. } = self.view {
+            match node {
+                Node::Plot(l, p) => {
+                    self.layer = l;
+                    self.selected_plot = p;
+                }
+                Node::Layer(l) => self.layer = l,
+                Node::Graph => {}
+            }
+        }
+
+        let changed = graph != *doc.project().graph(self.graph).expect("checked above");
+        if changed {
             let id = self.graph;
-            doc.apply_merging("Change graph settings", self.token, move |p| {
+            let edited = graph.clone();
+            doc.apply_merging(LABEL, self.token, move |p| {
                 if let Some(g) = p.graph_mut(id) {
-                    *g = graph;
+                    *g = edited;
                 }
             });
+            self.touched = true;
         }
-        open
+
+        match button {
+            Some(Button::Ok) => return false,
+            Some(Button::Cancel) => {
+                self.cancel(doc);
+                return false;
+            }
+            Some(Button::Apply) => {
+                // What is shown now becomes the starting point of Cancel; later edits are a new step.
+                self.baseline = doc.project().graph(self.graph).cloned();
+                self.fresh_token();
+            }
+            None => {}
+        }
+        if !open {
+            self.cancel(doc);
+            return false;
+        }
+        true
     }
 }
 
-fn grid<R>(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+// ----- shared widgets of the two dialogs ----------------------------------------------------
+
+pub(super) fn grid<R>(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     egui::Grid::new(id).num_columns(2).spacing([14.0, 6.0]).show(ui, add).inner
 }
 
-fn section(ui: &mut egui::Ui, title: &str) {
+pub(super) fn section(ui: &mut egui::Ui, title: &str) {
     ui.add_space(8.0);
     ui.label(RichText::new(title).strong());
 }
 
+/// A group box: a thin frame with its title above, as Origin draws them.
+pub(super) fn group_box<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.add_space(4.0);
+    ui.label(RichText::new(title).strong());
+    ui.group(|ui| {
+        ui.set_width(ui.available_width());
+        add(ui)
+    })
+    .inner
+}
+
+/// A row of tabs. Each is (value, name, enabled); a disabled one is shown grey.
+pub(super) fn tab_row<T: Copy + PartialEq>(ui: &mut egui::Ui, current: &mut T, tabs: &[(T, &str, bool)]) {
+    ui.horizontal_wrapped(|ui| {
+        for (value, name, enabled) in tabs {
+            let button = egui::Button::selectable(*current == *value, *name);
+            if ui.add_enabled(*enabled, button).clicked() {
+                *current = *value;
+            }
+        }
+    });
+}
+
 /// A number field that can be switched between "automatic" and a fixed value.
-fn optional_number(ui: &mut egui::Ui, value: &mut Option<f64>, auto_value: Option<f64>, speed: f64) {
+pub(super) fn optional_number(ui: &mut egui::Ui, value: &mut Option<f64>, auto_value: Option<f64>, speed: f64) {
     ui.horizontal(|ui| {
         let mut auto = value.is_none();
         if ui.checkbox(&mut auto, "Auto").changed() {
@@ -196,7 +393,7 @@ pub fn color_button(ui: &mut egui::Ui, color: &mut Color) {
     }
 }
 
-fn font_ui(ui: &mut egui::Ui, font: &mut Font) {
+pub(super) fn font_ui(ui: &mut egui::Ui, font: &mut Font) {
     ui.horizontal(|ui| {
         ui.add(DragValue::new(&mut font.size_pt).range(4.0..=96.0).speed(0.25).suffix(" pt"));
         ui.checkbox(&mut font.bold, "Bold");
@@ -205,7 +402,7 @@ fn font_ui(ui: &mut egui::Ui, font: &mut Font) {
     });
 }
 
-fn tick_direction_ui(ui: &mut egui::Ui, id: &str, dir: &mut TickDirection) {
+pub(super) fn tick_direction_ui(ui: &mut egui::Ui, id: &str, dir: &mut TickDirection) {
     egui::ComboBox::from_id_salt(id)
         .selected_text(match dir {
             TickDirection::In => "In",
@@ -221,26 +418,7 @@ fn tick_direction_ui(ui: &mut egui::Ui, id: &str, dir: &mut TickDirection) {
         });
 }
 
-fn grid_line_ui(ui: &mut egui::Ui, label: &str, line: &mut Option<LineStyle>) {
-    ui.horizontal(|ui| {
-        let mut on = line.is_some();
-        if ui.checkbox(&mut on, label).changed() {
-            *line = on.then(|| LineStyle {
-                color: Color::rgb(200, 200, 200),
-                width_pt: 0.5,
-                dash: Dash::Solid,
-                connect: Connect::Straight,
-            });
-        }
-        if let Some(l) = line {
-            color_button(ui, &mut l.color);
-            ui.add(DragValue::new(&mut l.width_pt).range(0.1..=5.0).speed(0.05).suffix(" pt"));
-            dash_ui(ui, &format!("{label}_dash"), &mut l.dash);
-        }
-    });
-}
-
-fn dash_name(d: Dash) -> &'static str {
+pub(super) fn dash_name(d: Dash) -> &'static str {
     match d {
         Dash::Solid => "Solid",
         Dash::Dash => "Dash",
@@ -253,7 +431,7 @@ fn dash_name(d: Dash) -> &'static str {
     }
 }
 
-fn dash_ui(ui: &mut egui::Ui, id: &str, dash: &mut Dash) {
+pub(super) fn dash_ui(ui: &mut egui::Ui, id: &str, dash: &mut Dash) {
     egui::ComboBox::from_id_salt(id).selected_text(dash_name(*dash)).show_ui(ui, |ui| {
         for d in Dash::ALL {
             ui.selectable_value(dash, d, dash_name(d));
@@ -261,359 +439,7 @@ fn dash_ui(ui: &mut egui::Ui, id: &str, dash: &mut Dash) {
     });
 }
 
-fn axis_ui(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, id: &str) {
-    section(ui, "Title");
-    grid(ui, &format!("{id}_title"), |ui| {
-        ui.label("Text");
-        ui.horizontal(|ui| {
-            let mut auto = axis.title.is_none();
-            if ui
-                .checkbox(&mut auto, "From column")
-                .on_hover_text("Long name and units of the plotted column")
-                .changed()
-            {
-                axis.title = if auto { None } else { Some(String::new()) };
-            }
-            if let Some(t) = &mut axis.title {
-                ui.add(egui::TextEdit::singleline(t).desired_width(190.0));
-            }
-        });
-        ui.end_row();
-        ui.label("Show");
-        ui.checkbox(&mut axis.show_title, "");
-        ui.end_row();
-        ui.label("Font");
-        font_ui(ui, &mut axis.title_font);
-        ui.end_row();
-    });
-    ui.weak("Markup: \\+(superscript)  \\-(subscript)  \\g(greek)  \\b(bold)  \\i(italic)");
-
-    section(ui, "Scale");
-    grid(ui, &format!("{id}_scale"), |ui| {
-        ui.label("Type");
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut axis.scale, ScaleKind::Linear, "Linear");
-            ui.selectable_value(&mut axis.scale, ScaleKind::Log10, "Log10");
-        });
-        ui.end_row();
-        let span = resolved.map(|r| (r.max - r.min).abs()).unwrap_or(1.0);
-        let speed = (span / 200.0).max(1e-12);
-        ui.label("From");
-        optional_number(ui, &mut axis.min, resolved.map(|r| r.min), speed);
-        ui.end_row();
-        ui.label("To");
-        optional_number(ui, &mut axis.max, resolved.map(|r| r.max), speed);
-        ui.end_row();
-        ui.label("Automatic range");
-        egui::ComboBox::from_id_salt(format!("{id}_auto"))
-            .selected_text(match axis.auto_range {
-                AutoRange::Nice => "Round out to ticks",
-                AutoRange::Tight => "Exact data range",
-                AutoRange::SymmetricZero => "Symmetric about zero",
-            })
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut axis.auto_range, AutoRange::Nice, "Round out to ticks");
-                ui.selectable_value(&mut axis.auto_range, AutoRange::Tight, "Exact data range");
-                ui.selectable_value(&mut axis.auto_range, AutoRange::SymmetricZero, "Symmetric about zero");
-            });
-        ui.end_row();
-        ui.label("Major tick step");
-        optional_number(ui, &mut axis.major_step, resolved.map(|r| r.step), speed);
-        ui.end_row();
-        ui.label("Minor ticks between");
-        ui.add(DragValue::new(&mut axis.minor_ticks).range(0..=9));
-        ui.end_row();
-    });
-
-    section(ui, "Ticks and labels");
-    grid(ui, &format!("{id}_ticks"), |ui| {
-        ui.label("Major ticks");
-        ui.horizontal(|ui| {
-            tick_direction_ui(ui, &format!("{id}_major_dir"), &mut axis.major_tick);
-            ui.add(DragValue::new(&mut axis.major_tick_len_pt).range(0.0..=30.0).speed(0.1).suffix(" pt"));
-        });
-        ui.end_row();
-        ui.label("Minor ticks");
-        ui.horizontal(|ui| {
-            tick_direction_ui(ui, &format!("{id}_minor_dir"), &mut axis.minor_tick);
-            ui.add(DragValue::new(&mut axis.minor_tick_len_pt).range(0.0..=30.0).speed(0.1).suffix(" pt"));
-        });
-        ui.end_row();
-        ui.label("Tick labels");
-        ui.checkbox(&mut axis.show_tick_labels, "Show");
-        ui.end_row();
-        ui.label("Label font");
-        font_ui(ui, &mut axis.tick_font);
-        ui.end_row();
-        ui.label("Number format");
-        ui.horizontal(|ui| {
-            let mut kind = match axis.tick_format {
-                TickFormat::Auto => 0,
-                TickFormat::Decimal(_) => 1,
-                TickFormat::Scientific(_) => 2,
-                // Set automatically for a date column; the menu shows it as Automatic.
-                TickFormat::DateTime(_) => 0,
-            };
-            let digits = match axis.tick_format {
-                TickFormat::Decimal(d) | TickFormat::Scientific(d) => d,
-                TickFormat::Auto | TickFormat::DateTime(_) => 2,
-            };
-            let before = kind;
-            egui::ComboBox::from_id_salt(format!("{id}_fmt"))
-                .selected_text(["Automatic", "Decimal", "Scientific"][kind])
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut kind, 0, "Automatic");
-                    ui.selectable_value(&mut kind, 1, "Decimal");
-                    ui.selectable_value(&mut kind, 2, "Scientific");
-                });
-            let mut d = digits;
-            if kind != 0 {
-                ui.add(DragValue::new(&mut d).range(0..=10).suffix(" digits"));
-            }
-            if kind != before || d != digits {
-                axis.tick_format = match kind {
-                    1 => TickFormat::Decimal(d),
-                    2 => TickFormat::Scientific(d),
-                    _ => TickFormat::Auto,
-                };
-            }
-        });
-        ui.end_row();
-        ui.label("Divide labels by");
-        ui.add(DragValue::new(&mut axis.tick_label_divisor).speed(0.1).max_decimals(9))
-            .on_hover_text("Tick labels show the value divided by this factor, e.g. 0.001 to show A as mA");
-        if axis.tick_label_divisor == 0.0 {
-            axis.tick_label_divisor = 1.0;
-        }
-        ui.end_row();
-    });
-
-    section(ui, "Lines");
-    grid(ui, &format!("{id}_lines"), |ui| {
-        ui.label("Axis line");
-        ui.horizontal(|ui| {
-            ui.add(DragValue::new(&mut axis.line_width_pt).range(0.0..=10.0).speed(0.05).suffix(" pt"));
-            color_button(ui, &mut axis.color);
-        });
-        ui.end_row();
-        ui.label("Opposite side");
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut axis.show_opposite, "Line").on_hover_text("With both axes: a closed box around the plot");
-            ui.checkbox(&mut axis.opposite_ticks, "Ticks");
-        });
-        ui.end_row();
-        ui.label("Grid");
-        ui.vertical(|ui| {
-            grid_line_ui(ui, "Major", &mut axis.major_grid);
-            grid_line_ui(ui, "Minor", &mut axis.minor_grid);
-        });
-        ui.end_row();
-    });
-}
-
-/// Lets the user overlay columns of any worksheet of the project on this graph.
-fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &mut usize) {
-    egui::CollapsingHeader::new("Add data to this graph").id_salt("add_plot").show(ui, |ui| {
-        if sources.is_empty() {
-            ui.weak("The project has no numeric Y columns.");
-            return;
-        }
-        *from = (*from).min(sources.len() - 1);
-        egui::ComboBox::from_id_salt("add_plot_source").selected_text(&sources[*from].title).width(320.0).show_ui(
-            ui,
-            |ui| {
-                for (i, s) in sources.iter().enumerate() {
-                    ui.selectable_value(from, i, &s.title);
-                }
-            },
-        );
-        let mut add: Vec<&Addable> = Vec::new();
-        ui.horizontal_wrapped(|ui| {
-            for a in &sources[*from].columns {
-                let already = layer.plots.iter().any(|p| p.y == a.y);
-                if ui.add_enabled(!already, egui::Button::new(&a.label).small()).clicked() {
-                    add.push(a);
-                }
-            }
-        });
-        if ui.button("Add all columns of this sheet").clicked() {
-            add = sources[*from].columns.iter().filter(|a| !layer.plots.iter().any(|p| p.y == a.y)).collect();
-        }
-        if !add.is_empty() {
-            for a in add {
-                layer.plots.push(Plot {
-                    x: a.x,
-                    y: a.y,
-                    y_error: a.y_error,
-                    rows: None,
-                    kind: layer.default_kind,
-                    line: layer.default_line.clone(),
-                    symbol: layer.default_symbol.clone(),
-                    label: None,
-                    visible: true,
-                    auto_color: true,
-                });
-            }
-            layer.recolor_automatic();
-        }
-    });
-    ui.separator();
-}
-
-fn plots_ui(ui: &mut egui::Ui, layer: &mut Layer, labels: &[String], selected: &mut usize) {
-    if layer.plots.is_empty() {
-        ui.label("This graph has no plots yet. Add data above, or select Y columns in a workbook and choose Plot.");
-        return;
-    }
-    *selected = (*selected).min(layer.plots.len() - 1);
-
-    ui.horizontal_wrapped(|ui| {
-        for (i, plot) in layer.plots.iter().enumerate() {
-            let name = labels.get(i).cloned().unwrap_or_else(|| format!("Plot {}", i + 1));
-            ui.horizontal(|ui| {
-                crate::grid::color_swatch(ui, plot.line.color);
-                ui.selectable_value(selected, i, name);
-            });
-        }
-    });
-    ui.separator();
-
-    let count = layer.plots.len();
-    let mut apply_to_all = None;
-    let mut remove = false;
-    let mut move_by: i32 = 0;
-    {
-        let plot = &mut layer.plots[*selected];
-        grid(ui, "plot_props", |ui| {
-            ui.label("Type");
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut plot.kind, PlotKind::Line, "Line");
-                ui.selectable_value(&mut plot.kind, PlotKind::Scatter, "Scatter");
-                ui.selectable_value(&mut plot.kind, PlotKind::LineSymbol, "Line + symbol");
-            });
-            ui.end_row();
-            ui.label("Visible");
-            ui.checkbox(&mut plot.visible, "");
-            ui.end_row();
-            ui.label("Legend text");
-            ui.horizontal(|ui| {
-                let mut auto = plot.label.is_none();
-                if ui.checkbox(&mut auto, "From column").changed() {
-                    plot.label = if auto { None } else { Some(labels.get(*selected).cloned().unwrap_or_default()) };
-                }
-                if let Some(l) = &mut plot.label {
-                    ui.add(egui::TextEdit::singleline(l).desired_width(170.0));
-                }
-            });
-            ui.end_row();
-            ui.label("Color");
-            ui.horizontal(|ui| {
-                let before = plot.line.color;
-                color_button(ui, &mut plot.line.color);
-                if plot.line.color != before {
-                    plot.symbol.color = plot.line.color;
-                    // Chosen by hand: later palette changes from added plots leave it alone.
-                    plot.auto_color = false;
-                }
-            });
-            ui.end_row();
-            if plot.kind.has_line() {
-                ui.label("Line");
-                ui.horizontal(|ui| {
-                    ui.add(DragValue::new(&mut plot.line.width_pt).range(0.1..=20.0).speed(0.05).suffix(" pt"));
-                    dash_ui(ui, "plot_dash", &mut plot.line.dash);
-                });
-                ui.end_row();
-                ui.label("Connect");
-                egui::ComboBox::from_id_salt("plot_connect").selected_text(connect_name(plot.line.connect)).show_ui(
-                    ui,
-                    |ui| {
-                        for c in [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical] {
-                            ui.selectable_value(&mut plot.line.connect, c, connect_name(c));
-                        }
-                    },
-                );
-                ui.end_row();
-            }
-            if plot.kind.has_symbols() {
-                ui.label("Symbol");
-                ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("plot_symbol").selected_text(symbol_name(plot.symbol.shape)).show_ui(
-                        ui,
-                        |ui| {
-                            for s in SymbolShape::ALL {
-                                ui.selectable_value(&mut plot.symbol.shape, s, symbol_name(s));
-                            }
-                        },
-                    );
-                    ui.add(DragValue::new(&mut plot.symbol.size_pt).range(0.5..=40.0).speed(0.1).suffix(" pt"));
-                    ui.checkbox(&mut plot.symbol.filled, "Filled");
-                });
-                ui.end_row();
-                ui.label("Show every");
-                ui.add(DragValue::new(&mut plot.symbol.every).range(1..=100000).suffix(" th point"));
-                ui.end_row();
-            }
-        });
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            if count > 1 && ui.button("Use this style for all plots").on_hover_text("Keeps each plot's color").clicked()
-            {
-                apply_to_all = Some(plot.clone());
-            }
-            if ui.add_enabled(*selected > 0, egui::Button::new("Move up")).clicked() {
-                move_by = -1;
-            }
-            if ui.add_enabled(*selected + 1 < count, egui::Button::new("Move down")).clicked() {
-                move_by = 1;
-            }
-            if ui.button("Remove plot").clicked() {
-                remove = true;
-            }
-        });
-    }
-    if let Some(src) = apply_to_all {
-        for p in &mut layer.plots {
-            let color = p.line.color;
-            p.kind = src.kind;
-            p.line = LineStyle { color, ..src.line.clone() };
-            p.symbol = SymbolStyle { color, ..src.symbol.clone() };
-        }
-    }
-    if move_by != 0 {
-        let j = (*selected as i32 + move_by) as usize;
-        layer.plots.swap(*selected, j);
-        *selected = j;
-    }
-    if remove {
-        layer.plots.remove(*selected);
-        *selected = selected.saturating_sub(1);
-    }
-
-    section(ui, "Colors of this graph");
-    ui.horizontal(|ui| {
-        for c in &mut layer.palette.colors {
-            color_button(ui, c);
-        }
-        if ui.small_button("+").clicked() {
-            layer.palette.colors.push(Color::BLACK);
-        }
-        if layer.palette.colors.len() > 1 && ui.small_button("-").clicked() {
-            layer.palette.colors.pop();
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.selectable_value(&mut layer.palette.mode, PaletteMode::Cycle, "One color per plot")
-            .on_hover_text("Plot 1 takes color 1, plot 2 color 2, and so on");
-        ui.selectable_value(&mut layer.palette.mode, PaletteMode::Spread, "Gradient")
-            .on_hover_text("Colors run from the first to the last color over all plots");
-        if ui.button("Recolor plots").clicked() {
-            layer.apply_palette();
-        }
-    });
-}
-
-fn connect_name(c: Connect) -> &'static str {
+pub(super) fn connect_name(c: Connect) -> &'static str {
     match c {
         Connect::Straight => "Straight",
         Connect::Spline => "Smooth (spline)",
@@ -622,7 +448,7 @@ fn connect_name(c: Connect) -> &'static str {
     }
 }
 
-fn symbol_name(s: SymbolShape) -> &'static str {
+pub(super) fn symbol_name(s: SymbolShape) -> &'static str {
     match s {
         SymbolShape::Square => "Square",
         SymbolShape::Circle => "Circle",
@@ -633,135 +459,4 @@ fn symbol_name(s: SymbolShape) -> &'static str {
         SymbolShape::Cross => "Cross",
         SymbolShape::Star => "Star",
     }
-}
-
-fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend) {
-    grid(ui, "legend_props", |ui| {
-        ui.label("Show legend");
-        ui.checkbox(&mut legend.visible, "");
-        ui.end_row();
-        ui.label("Position");
-        ui.horizontal(|ui| {
-            let name = |p: &LegendPosition| match p {
-                LegendPosition::TopRight => "Top right",
-                LegendPosition::TopLeft => "Top left",
-                LegendPosition::BottomRight => "Bottom right",
-                LegendPosition::BottomLeft => "Bottom left",
-                LegendPosition::Manual { .. } => "Custom",
-            };
-            egui::ComboBox::from_id_salt("legend_pos").selected_text(name(&legend.position)).show_ui(ui, |ui| {
-                for p in [
-                    LegendPosition::TopRight,
-                    LegendPosition::TopLeft,
-                    LegendPosition::BottomRight,
-                    LegendPosition::BottomLeft,
-                ] {
-                    ui.selectable_value(&mut legend.position, p, name(&p));
-                }
-                let is_manual = matches!(legend.position, LegendPosition::Manual { .. });
-                if ui.selectable_label(is_manual, "Custom").clicked() && !is_manual {
-                    legend.position = LegendPosition::Manual { x: 0.8, y: 0.5 };
-                }
-            });
-        });
-        ui.end_row();
-        if let LegendPosition::Manual { x, y } = &mut legend.position {
-            ui.label("Centre (fraction of plot area)");
-            ui.horizontal(|ui| {
-                ui.add(DragValue::new(x).range(0.0..=1.0).speed(0.005).prefix("x "));
-                ui.add(DragValue::new(y).range(0.0..=1.0).speed(0.005).prefix("y "));
-            });
-            ui.end_row();
-        }
-        ui.label("Font");
-        font_ui(ui, &mut legend.font);
-        ui.end_row();
-        ui.label("Box");
-        ui.checkbox(&mut legend.frame, "Draw a frame");
-        ui.end_row();
-        ui.label("Background");
-        ui.horizontal(|ui| {
-            let mut on = legend.background.is_some();
-            if ui.checkbox(&mut on, "Fill").changed() {
-                legend.background = on.then_some(Color::WHITE);
-            }
-            if let Some(c) = &mut legend.background {
-                color_button(ui, c);
-            }
-        });
-        ui.end_row();
-    });
-}
-
-fn page_ui(ui: &mut egui::Ui, graph: &mut Graph) {
-    section(ui, "Page");
-    grid(ui, "page_props", |ui| {
-        let mut w = graph.page.width_pt / 72.0;
-        let mut h = graph.page.height_pt / 72.0;
-        ui.label("Width");
-        ui.add(DragValue::new(&mut w).range(1.0..=40.0).speed(0.02).suffix(" in"));
-        ui.end_row();
-        ui.label("Height");
-        ui.add(DragValue::new(&mut h).range(1.0..=40.0).speed(0.02).suffix(" in"));
-        ui.end_row();
-        graph.page.width_pt = w * 72.0;
-        graph.page.height_pt = h * 72.0;
-        ui.label("Background");
-        color_button(ui, &mut graph.page.background);
-        ui.end_row();
-        ui.label("Title");
-        ui.add(egui::TextEdit::singleline(&mut graph.long_name).desired_width(220.0));
-        ui.end_row();
-    });
-
-    let Some(layer) = graph.layers.first_mut() else {
-        return;
-    };
-    section(ui, "Plot area (percent of the page)");
-    grid(ui, "frame_props", |ui| {
-        let pct = |ui: &mut egui::Ui, label: &str, v: &mut f64| {
-            let mut p = *v * 100.0;
-            ui.label(label);
-            ui.add(DragValue::new(&mut p).range(0.0..=100.0).speed(0.2).suffix(" %"));
-            ui.end_row();
-            *v = p / 100.0;
-        };
-        pct(ui, "Left", &mut layer.frame.left);
-        pct(ui, "Top", &mut layer.frame.top);
-        pct(ui, "Width", &mut layer.frame.width);
-        pct(ui, "Height", &mut layer.frame.height);
-    });
-
-    section(ui, "All text");
-    ui.horizontal(|ui| {
-        ui.label("Font family");
-        let mut family = layer.x_axis.title_font.family.clone();
-        if ui.add(egui::TextEdit::singleline(&mut family).desired_width(160.0)).changed() {
-            for f in [
-                &mut layer.x_axis.title_font,
-                &mut layer.x_axis.tick_font,
-                &mut layer.y_axis.title_font,
-                &mut layer.y_axis.tick_font,
-                &mut layer.legend.font,
-            ] {
-                f.family = family.clone();
-            }
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.label("Scale all sizes");
-        for (label, factor) in [("-10 %", 0.9), ("+10 %", 1.1)] {
-            if ui.button(label).clicked() {
-                for f in [
-                    &mut layer.x_axis.title_font,
-                    &mut layer.x_axis.tick_font,
-                    &mut layer.y_axis.title_font,
-                    &mut layer.y_axis.tick_font,
-                    &mut layer.legend.font,
-                ] {
-                    f.size_pt = (f.size_pt * factor * 4.0).round() / 4.0;
-                }
-            }
-        }
-    });
 }

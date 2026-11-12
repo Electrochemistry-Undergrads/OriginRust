@@ -404,3 +404,25 @@ fn the_fixture_is_what_the_writer_makes_and_reads_back() {
     );
     assert_same_books(&sample_project(), &read_back(&on_disk));
 }
+
+#[test]
+fn label_columns_without_a_y_column_are_written_as_unused() {
+    // Origin 2016 opens such a label column as unused (checked in Origin), so the writer says so
+    let only_labels = sheet("S", vec![column("A", Designation::Label, texts(&["a", "b"]))]);
+    let x_label = sheet(
+        "T",
+        vec![column("A", Designation::X, nums(&[1.0, 2.0])), column("B", Designation::Label, texts(&["a", "b"]))],
+    );
+    let out = written(&project_of(vec![book("B", "", vec![only_labels, x_label])]));
+    assert!(out.warnings.iter().any(|w| w.contains("2 label column(s)")), "{:?}", out.warnings);
+    let imp = read_back(&out.bytes);
+    let sheets = &imp.workbooks[0].sheets;
+    assert_eq!(sheets[0].columns[0].designation, Designation::Disregard);
+    assert_eq!(sheets[1].columns[1].designation, Designation::Disregard);
+    // with a Y column in the sheet the label stays a label, without a warning
+    let with_y =
+        sheet("S", vec![column("A", Designation::Label, texts(&["a"])), column("B", Designation::Y, nums(&[1.0]))]);
+    let out = written(&project_of(vec![book("B", "", vec![with_y])]));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert_eq!(read_back(&out.bytes).workbooks[0].sheets[0].columns[0].designation, Designation::Label);
+}

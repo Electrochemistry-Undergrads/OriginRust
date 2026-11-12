@@ -79,6 +79,7 @@ struct Notes {
     lossy_texts: usize,
     flattened_breaks: usize,
     formulas: usize,
+    demoted_labels: usize,
     skipped_graphs: Vec<String>,
 }
 
@@ -172,6 +173,20 @@ impl Writer {
         let suffix = if index == 0 { String::new() } else { format!("@{}", index + 1) };
         let mut names: HashSet<String> = HashSet::new();
         let mut records = Vec::new();
+        // Origin 2016 opens a label column as unused when the sheet has no Y column, so write it so
+        let has_y = sheet.columns.iter().any(|c| c.designation == Designation::Y);
+        let roles: Vec<Designation> = sheet
+            .columns
+            .iter()
+            .map(|c| {
+                if c.designation == Designation::Label && !has_y {
+                    self.notes.demoted_labels += 1;
+                    Designation::Disregard
+                } else {
+                    c.designation
+                }
+            })
+            .collect();
         for (i, column) in sheet.columns.iter().enumerate() {
             let dataset_name = format!("{}_{}{}", book.name, column.short_name, suffix);
             self.check_name("column name", &column.short_name, MAX_DATASET_NAME)?;
@@ -195,16 +210,16 @@ impl Writer {
                 self.notes.formulas += 1;
             }
             let (block, used) =
-                self.dataset(&dataset_name, column, rows, parent_of(&sheet.columns, i, first_dataset))?;
+                self.dataset(&dataset_name, column, roles[i], rows, parent_of(&roles, i, first_dataset))?;
             self.datasets.extend(block);
             let spec = ColumnSpec {
                 dataset: (self.columns + 1) as u16,
-                designation: designation_code(column.designation),
+                designation: designation_code(roles[i]),
                 short_name: &column.short_name,
-                type_code: type_code(column.designation),
+                type_code: type_code(roles[i]),
                 first: used.0,
                 last: used.1,
-                parent: parent_of(&sheet.columns, i, first_dataset),
+                parent: parent_of(&roles, i, first_dataset),
                 index: i,
             };
             records.extend(framed(&layout::column_record(&spec)));
@@ -227,6 +242,7 @@ impl Writer {
         &mut self,
         name: &str,
         column: &Column,
+        role: Designation,
         rows: usize,
         parent: u16,
     ) -> Result<(Vec<u8>, (u32, u32)), IoError> {
@@ -285,12 +301,12 @@ impl Writer {
         let (first, last) = used.map_or((0, 0), |(f, l)| (f as u32, l as u32));
         let spec = DatasetSpec {
             name,
-            type_code: type_code(column.designation),
+            type_code: type_code(role),
             cell_size,
             rows: rows as u32,
             first,
             last,
-            parent: if column.designation == Designation::Disregard { 0 } else { parent.min(255) as u8 },
+            parent: if role == Designation::Disregard { 0 } else { parent.min(255) as u8 },
         };
         let mut block = framed(&layout::dataset_header(&spec));
         block.extend(framed(&data));
@@ -393,6 +409,12 @@ impl Writer {
                 n.flattened_breaks
             ));
         }
+        if n.demoted_labels > 0 {
+            warnings.push(format!(
+                "{} label column(s) are in sheets without a Y column; Origin opens those as unused, so they were written as unused.",
+                n.demoted_labels
+            ));
+        }
         if n.formulas > 0 {
             warnings.push(format!("{} column(s) have a column formula; only their values were written.", n.formulas));
         }
@@ -428,11 +450,11 @@ fn type_code(d: Designation) -> u16 {
 /// The 1-based data-set position of the column that column `i` belongs to: a Y column to the nearest X
 /// column on its left, an error, Z or label column to the nearest Y column on its left, an unused column
 /// to the nearest X; 0 when there is none. `first` is the number of data sets before the sheet.
-fn parent_of(columns: &[Column], i: usize, first: usize) -> u16 {
-    let wanted: &[Designation] = match columns[i].designation {
+fn parent_of(roles: &[Designation], i: usize, first: usize) -> u16 {
+    let wanted: &[Designation] = match roles[i] {
         Designation::X => return 0,
         Designation::Y | Designation::Disregard => &[Designation::X],
         Designation::YError | Designation::XError | Designation::Z | Designation::Label => &[Designation::Y],
     };
-    columns[..i].iter().rposition(|c| wanted.contains(&c.designation)).map_or(0, |p| (first + p + 1) as u16)
+    roles[..i].iter().rposition(|c| wanted.contains(c)).map_or(0, |p| (first + p + 1) as u16)
 }

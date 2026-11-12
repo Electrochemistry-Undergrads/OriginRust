@@ -629,8 +629,14 @@ has).
 | Z | 5 | 0x6120 |
 | Y error | 2 | 0x6130 |
 | X error | 6 | 0x6130 |
-| label | 4 | 0x6120 |
+| label | 4 | 0x6120 (only when the sheet has a Y column; see below) |
 | unused | 1 | 0x4121 |
+
+A label column in a sheet with no Y column at all (text-only sheet, X plus label, labels only) is
+reported by Origin 2016 as unused (LabTalk type 2), whatever "belongs to" says [orig, checked with six
+small files: it holds only when no Y column exists anywhere in the sheet; a text Y column counts, and the
+Y column may lie left or right of the label]. The writer therefore writes such a column as unused and
+lists a warning, so the file says what Origin will show.
 
 The high byte of the type word is 0x5 for X, 0x6 for Y and 0x4 for an unused column in files from
 Origin, and the low byte is 0x30 for error columns and 0x20 for Z and label columns [obs]. The

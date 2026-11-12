@@ -9,6 +9,7 @@
 //! Row numbers in options and results are 1-based, as in a worksheet.
 
 pub mod baseline;
+pub mod dierckx;
 pub mod differentiate;
 pub mod integrate;
 pub mod interp;

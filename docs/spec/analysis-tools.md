@@ -15,8 +15,9 @@ regenerates the same data.
 Status by tool: integrate, differentiate, normalize, interpolate (linear, cubic spline, Akima),
 baseline, peak finding (local maximum) and statistics are done and checked. Smooth: adjacent
 averaging, Savitzky-Golay, percentile filter and the FFT filter are done and checked. Cubic
-B-spline interpolation is implemented only as the interpolating spline (Origin's automatic
-smoothing factor and the smoothing spline for a factor above 0 are not implemented, see section 5).
+B-spline interpolation: the smoothing spline for a smoothing factor above 0 is done and matches
+Origin; the default factor 0 is implemented as the interpolating spline and does NOT match Origin
+inside the data (Origin's automatic factor was not found, see section 5).
 
 ## 1. Integrate (`integ1`)
 
@@ -116,8 +117,10 @@ acts like the next odd number (observed for 6 with averaging and Savitzky-Golay)
      order. Missing values are removed and put back, as for the other methods.
   2. (observed) A straight baseline is subtracted before and added back after the transform. It is
      the line from the mean of the first `w` points, placed at the first X, to the mean of the last
-     `w` points, placed at the last X, with `w = 1` for `n <= 10` and `w = max(10, floor(n / 100))`
-     for larger `n` (the script-only option `baseline` has the values `two_ends_1` (default, this
+     `w` points, placed at the last X, with `w = 1` for `n <= 10` and `w = floor(n / 100)` limited to
+     10..100 for larger `n` (the cap of 100 was missed at first: Origin outputs at n = 20000 and
+     50000 match only with `w` = 100, the other values of `w` between 1 and 5000 that were tried do
+     not; n / 100 itself was confirmed up to n = 5000) (the script-only option `baseline` has the values `two_ends_1` (default, this
      rule), `two_ends` and `none`; only the default was measured).
   3. (observed) The rest goes through a plain FFT of length `n`: no padding to a power of two (the
      script option `pad` is 0 by default), no windowing in the time domain. Write `R` for the X range,
@@ -170,9 +173,14 @@ x = 0..10, impulses, polynomials, random numbers; scripts `interp-bspline.labtal
 
 * (observed) The curve inside the data range is a Dierckx smoothing spline (FITPACK `curfit`, the
   routine behind NAG e02be that Origin's documentation names): with the `sf` value `s` as the allowed
-  sum of squared residuals it reproduces Origin's output to 1e-9 for `sf` = 0.05, 0.3, 0.5 and 2 (an
-  earlier note that `sf` has no effect was wrong). The knots are chosen by Dierckx's rule, not
-  uniformly.
+  sum of squared residuals it reproduces Origin's output to 1e-14 for `sf` = 0.05, 0.3, 0.5, 1, 2
+  and 1e-6 on 11 and 24 points (even and uneven spacing) and for 5 on 200 noisy points (54 knots).
+  The knots are chosen by Dierckx's rule (start with no interior knot, add knots where the
+  residual is largest until the residual sum falls below `s`, then tune the smoothness penalty until
+  the residual sum is within 0.1 % of `s`), not uniformly. `crates/calc/src/dierckx.rs` is our port;
+  it also agrees with SciPy's `splrep` on 300 random cases (checked once, not kept as a test). A very
+  small `sf` ends with one knot per data point (the interpolating spline); a large one with a single
+  cubic polynomial.
 * (observed) `sf = 0` (the default) is not an interpolating spline: Origin then uses an automatic
   factor that depends on the data in a way we did not find. Measured values of this factor for
   unit impulses on x = 0..10: 1/12, 0.1245, 19/120, 0.1799, 0.1843, 1/6, 1/12, 0.0422, 1/120, 9/680,
@@ -185,11 +193,16 @@ x = 0..10, impulses, polynomials, random numbers; scripts `interp-bspline.labtal
 * (observed) Outside the data range with the default option Origin continues with the straight
   line through the two nearest data points (not the end slope of the curve), whatever `sf` is.
   `miss` and `repeat` work as for the other methods.
-* Our implementation (`InterpMethod::BSpline`): the interpolating (not-a-knot) cubic spline inside
-  the data with Origin's straight continuation outside; at least four points; a smoothing factor
-  above 0 is refused by the analysis entry point (the Dierckx smoothing spline is not ported). It
-  agrees with Origin for polynomial data and outside the data, and is wrong inside the data wherever
-  Origin's automatic smoothing changes the curve.
+* (observed) Repeated X values: Origin replaces them by one point with the mean Y (checked for
+  `sf` = 0.2 on x = 0 1 2 2 3 4 4; the output equals the fit of the merged points to 1e-9). We do the
+  same for the B-spline method. For the default factor the curve at a repeated X then differs from
+  the mean, which is the same automatic smoothing that is not understood. Fewer than four different
+  X values give no result.
+* Our implementation (`InterpMethod::BSpline`): `smoothing` above 0 is the Dierckx smoothing spline
+  inside the data; 0 is the interpolating (not-a-knot) cubic spline, which agrees with Origin's
+  default only for data that lie on a cubic polynomial; both continue outside the data with Origin's
+  straight line. At least four different X values. A negative or missing factor is refused. The
+  dialog and the command line say that factor 0 is not Origin's automatic smoothing.
 
 Unsorted X: we sort and drop pairs with a missing value (not compared with Origin).
 

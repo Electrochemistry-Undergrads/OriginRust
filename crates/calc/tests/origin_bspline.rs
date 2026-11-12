@@ -3,14 +3,16 @@
 //! Reference script: `tools/origin-ref/interp-bspline.labtalk.txt` (run with
 //! `run-labtalk-data.ps1`); data x = 0..10 step 1, evaluated at -1..11 step 0.25.
 //!
-//! What can be checked: Origin's B-spline is a smoothing spline whose default (`sf = 0`) smoothing
-//! factor is chosen automatically, in a way we did not find. Our `InterpMethod::BSpline` is the
+//! What can be checked: Origin's B-spline is a Dierckx smoothing spline. With a smoothing factor
+//! `sf > 0` we reproduce it (tests `smoothing_factor_*`, Origin numbers from the impulse at x = 5
+//! with `sf` = 0.5 and 2, tolerance 1e-9). For the default `sf = 0` Origin chooses an automatic
+//! factor that we did not find; our `InterpMethod::BSpline` with `smoothing = 0` is the
 //! interpolating cubic spline. The two agree where Origin's smoothing has nothing to remove: data
 //! that already lie on a cubic polynomial (a line and a parabola below), and outside the data,
 //! where Origin continues with the straight line through the two nearest data points whatever the
-//! smoothing. Inside the data for other inputs Origin's curve differs from ours (by up to 0.27 for
-//! a unit impulse); that is documented in `docs/spec/analysis-tools.md`, not tested here.
-//! Tolerance: 1e-10 relative.
+//! smoothing. Inside the data for other inputs Origin's default curve differs from ours (by up to
+//! 0.27 for a unit impulse); that is documented in `docs/spec/analysis-tools.md`, not tested here.
+//! Tolerance: 1e-10 relative unless stated.
 
 use sheaf_calc::{InterpMethod, InterpOptions, interp1};
 
@@ -24,6 +26,7 @@ fn data(name: &str) -> Vec<f64> {
     let x = (0..11).map(f64::from);
     match name {
         "impulse at x = 0" => x.map(|v| f64::from(v == 0.0)).collect(),
+        "impulse at x = 5" => x.map(|v| f64::from((v - 5.0).abs() < 0.5)).collect(),
         "impulse at x = 1" => x.map(|v| f64::from(v == 1.0)).collect(),
         "y = x^2" => x.map(|v| v * v).collect(),
         _ => x.map(|v| 3.0 + 2.0 * v).collect(),
@@ -291,9 +294,308 @@ fn the_data_points_are_reproduced_and_unsupported_inputs_give_nan() {
     for (g, w) in interp1(&x, &y, &x, &bspline()).iter().zip(&y) {
         assert!((g - w).abs() < 1e-12);
     }
-    // a smoothing factor above zero is not implemented
-    let smooth = InterpOptions { smoothing: 0.3, ..bspline() };
-    assert!(interp1(&x, &y, &[2.5], &smooth)[0].is_nan());
+    // a negative or missing smoothing factor is refused
+    for bad in [-0.3, f64::NAN] {
+        let smooth = InterpOptions { smoothing: bad, ..bspline() };
+        assert!(interp1(&x, &y, &[2.5], &smooth)[0].is_nan());
+    }
     // Origin needs four points
     assert!(interp1(&x[..3], &y[..3], &[1.5], &bspline())[0].is_nan());
+}
+
+fn smoothing(sf: f64) -> InterpOptions {
+    InterpOptions { smoothing: sf, ..bspline() }
+}
+
+/// Origin output (`interp1 method:=bspline sf:=0.5 option:=extrap`) for the unit impulse at x = 5
+/// on x = 0..10, at x = -1, -0.75, ..., 11.
+const IMPULSE_SF_HALF: [f64; 49] = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.02060690997686037,
+    0.007273767987436556,
+    -0.007314098211373671,
+    -0.021907134954898804,
+    -0.03525578857846734,
+    -0.04611050541740777,
+    -0.05322173180704861,
+    -0.05533991408271832,
+    -0.051215498579745444,
+    -0.03959893163345843,
+    -0.019240659579185804,
+    0.011108871247743976,
+    0.05269921451200234,
+    0.10580420850381013,
+    0.1667948300155853,
+    0.23106634046529498,
+    0.2940140012709065,
+    0.35103307385038696,
+    0.39751881962170366,
+    0.4288665000028239,
+    0.44047137641171463,
+    0.42924926439238814,
+    0.39819819599303563,
+    0.3518367573878931,
+    0.2946835347511968,
+    0.23125711425718284,
+    0.1660760820800872,
+    0.10365902439414607,
+    0.04852452737359553,
+    0.00440157488186208,
+    -0.02813925846086613,
+    -0.04931700034521059,
+    -0.05935067846179274,
+    -0.05888993710016421,
+    -0.05030688694559712,
+    -0.03640425528229384,
+    -0.01998476939445665,
+    -0.0038511565662878834,
+    0.00919385591801016,
+    0.016347540774235166,
+    0.014807170718184815,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+];
+
+/// The same with `sf:=2` (a single cubic polynomial: no interior knot is needed).
+const IMPULSE_SF_TWO: [f64; 49] = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -0.08391608391608382,
+    -0.055506993006992945,
+    -0.028554778554778497,
+    -0.0030594405594405265,
+    0.02097902097902101,
+    0.04356060606060608,
+    0.0646853146853147,
+    0.08435314685314685,
+    0.10256410256410256,
+    0.1193181818181818,
+    0.13461538461538458,
+    0.14845571095571092,
+    0.16083916083916078,
+    0.17176573426573424,
+    0.1812354312354312,
+    0.18924825174825172,
+    0.19580419580419575,
+    0.20090326340326334,
+    0.2045454545454545,
+    0.20673076923076922,
+    0.20745920745920748,
+    0.20673076923076916,
+    0.2045454545454545,
+    0.2009032634032634,
+    0.19580419580419578,
+    0.18924825174825172,
+    0.18123543123543123,
+    0.1717657342657343,
+    0.16083916083916086,
+    0.14845571095571097,
+    0.13461538461538464,
+    0.11931818181818184,
+    0.10256410256410257,
+    0.08435314685314688,
+    0.06468531468531469,
+    0.04356060606060606,
+    0.020979020979020973,
+    -0.00305944055944056,
+    -0.02855477855477857,
+    -0.05550699300699304,
+    -0.08391608391608395,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+];
+
+#[test]
+fn smoothing_factor_reproduces_origin_on_an_impulse() {
+    let x: Vec<f64> = (0..11).map(f64::from).collect();
+    let y = data("impulse at x = 5");
+    let at: Vec<f64> = (0..49).map(|i| -1.0 + 0.25 * f64::from(i)).collect();
+    for (sf, want) in [(0.5, &IMPULSE_SF_HALF), (2.0, &IMPULSE_SF_TWO)] {
+        let got = interp1(&x, &y, &at, &smoothing(sf));
+        for (i, (g, w)) in got.iter().zip(want).enumerate() {
+            assert!((g - w).abs() <= 1e-9, "sf {sf} at row {i}: got {g:?}, Origin gave {w:?}");
+        }
+    }
+}
+
+/// 24 points with uneven spacing (a smooth curve plus a fixed wiggle).
+const UNEVEN_X: [f64; 24] = [
+    0.0,
+    1.3854232741668773,
+    2.2062005487285856,
+    2.72489353632641,
+    3.646618137711939,
+    5.086047995235126,
+    6.399417338149842,
+    7.127639344939741,
+    7.668869412365739,
+    8.695206566432388,
+    10.168066814730656,
+    11.394708785709845,
+    12.043101460919777,
+    12.628350394906253,
+    13.758066871037487,
+    15.242215947887841,
+    16.371518093630897,
+    16.95654536183037,
+    17.60523377675174,
+    18.832255633570707,
+    20.30502338019184,
+    21.33093116023815,
+    21.87202401524632,
+    22.600601987734475,
+];
+const UNEVEN_Y: [f64; 24] = [
+    0.25,
+    1.0633641241849838,
+    1.103315514266713,
+    0.9984690568327542,
+    0.7797392689198133,
+    0.14401464307687917,
+    -0.14123846921323047,
+    -0.05543231568473239,
+    0.00457646768228237,
+    0.4950751794757069,
+    1.5113642537686376,
+    2.0476397015561054,
+    2.218344734265932,
+    2.0963853105535835,
+    1.2865854548900568,
+    0.4093340811492452,
+    0.4560152599590368,
+    0.9244701805033897,
+    1.6612837997087853,
+    2.7243819206627764,
+    3.168708435936643,
+    2.7445007792677663,
+    2.353277631802524,
+    1.9846166095154465,
+];
+const UNEVEN_AT: [f64; 13] = [
+    0.0,
+    1.8833834989778728,
+    3.7667669979557457,
+    5.650150496933619,
+    7.533533995911491,
+    9.416917494889365,
+    11.300300993867237,
+    13.18368449284511,
+    15.067067991822983,
+    16.950451490800855,
+    18.83383498977873,
+    20.7172184887566,
+    22.600601987734475,
+];
+
+/// Origin outputs (`interp1 method:=bspline sf:=... option:=extrap`, script
+/// `tools/origin-ref/interp-bspline-smooth.labtalk.txt`) at `UNEVEN_AT` for the data above. The
+/// factors 0.05, 0.3 and 1 end with 15, 14 and 13 knots; 1e-6 is small enough that the spline
+/// interpolates (28 knots, one per data point plus four). Tolerance 1e-9.
+const UNEVEN_SF_005: [f64; 13] = [
+    0.2560985386794413,
+    1.109261858825655,
+    0.7003777659805317,
+    0.00832168170469504,
+    -0.025368047825969766,
+    0.9682435204596084,
+    2.1293291136922288,
+    1.6783210441244447,
+    0.44790726139165365,
+    0.954974311929561,
+    2.668842296179394,
+    3.0676227012492054,
+    1.937463368191648,
+];
+const UNEVEN_SF_03: [f64; 13] = [
+    0.252203911563674,
+    1.1156648893586363,
+    0.6929019236756515,
+    -0.006969365759603058,
+    -0.016395008746311047,
+    0.9978065248773076,
+    2.130944507404977,
+    1.619140488922257,
+    0.4463292617853052,
+    1.0648511668214677,
+    2.4698237079724286,
+    3.0771278981638615,
+    1.8124059693313699,
+];
+const UNEVEN_SF_1: [f64; 13] = [
+    0.2616561054504348,
+    1.1321977787433648,
+    0.6227840148703118,
+    -0.08403924384995486,
+    0.11353367634964148,
+    1.11951574028907,
+    1.9211069931827234,
+    1.5907547097024086,
+    0.7893333227393207,
+    1.0669739954471322,
+    2.2804293028584555,
+    3.094410472054868,
+    1.7550725864972943,
+];
+const UNEVEN_SF_TINY: [f64; 13] = [
+    0.24999533761419424,
+    1.124029068822673,
+    0.7378780175569115,
+    -0.05048466798513152,
+    -0.01776830500783086,
+    1.0091089181788009,
+    2.0131828849988302,
+    1.7466977020994354,
+    0.47301127326970516,
+    0.9183144250231479,
+    2.725438044758799,
+    3.0681556675475408,
+    1.9846057757897129,
+];
+
+#[test]
+fn smoothing_factor_reproduces_origin_on_uneven_data() {
+    for (sf, want) in [(0.05, &UNEVEN_SF_005), (0.3, &UNEVEN_SF_03), (1.0, &UNEVEN_SF_1), (1e-6, &UNEVEN_SF_TINY)] {
+        let got = interp1(&UNEVEN_X, &UNEVEN_Y, &UNEVEN_AT, &smoothing(sf));
+        for (i, (g, w)) in got.iter().zip(want).enumerate() {
+            assert!((g - w).abs() <= 1e-9, "sf {sf} at {i}: got {g:?}, Origin gave {w:?}");
+        }
+    }
+}
+
+#[test]
+fn smoothing_spline_residual_sum_is_close_to_the_factor() {
+    let (spline, fp) = sheaf_calc::dierckx::smoothing_spline(&UNEVEN_X, &UNEVEN_Y, 0.3).unwrap();
+    assert!((fp - 0.3).abs() <= 0.001 * 0.3, "{fp}");
+    let direct: f64 = UNEVEN_X.iter().zip(&UNEVEN_Y).map(|(&x, &y)| (spline.eval(x) - y).powi(2)).sum();
+    assert!((direct - fp).abs() < 1e-9, "{direct} vs {fp}");
+}
+
+#[test]
+fn repeated_x_values_are_averaged_like_origin_does() {
+    // Origin, sf = 0.2, x = 0 1 2 2 3 4 4, y = 0 2 3 5 8 5 7 at -1, 0.5, 2, 3.5, 4, 5. The values
+    // agree with a fit of the points whose repeated X are replaced by their mean Y (2 -> 4, 4 -> 6).
+    const ORIGIN_DUPLICATES_SF_02: [f64; 6] =
+        [-2.0, 0.9254206429787896, 4.320747589427569, 8.050420642978791, 6.053457931571261, 4.0];
+    let x = [0.0, 1.0, 2.0, 2.0, 3.0, 4.0, 4.0];
+    let y = [0.0, 2.0, 3.0, 5.0, 8.0, 5.0, 7.0];
+    let at = [-1.0, 0.5, 2.0, 3.5, 4.0, 5.0];
+    let got = interp1(&x, &y, &at, &smoothing(0.2));
+    for (g, w) in got.iter().zip(&ORIGIN_DUPLICATES_SF_02) {
+        assert!((g - w).abs() <= 1e-9, "{got:?} vs {ORIGIN_DUPLICATES_SF_02:?}");
+    }
+    // the interpolating form gives finite numbers too (Origin's own factor 0 was not matched)
+    let got = interp1(&x, &y, &at, &bspline());
+    assert!(got.iter().all(|v| v.is_finite()), "{got:?}");
+    // fewer than four different X values cannot be fitted
+    let r = interp1(&[1.0, 1.0, 2.0, 3.0, 3.0], &[1.0, 2.0, 3.0, 4.0, 5.0], &[1.5], &bspline());
+    assert!(r[0].is_nan());
 }

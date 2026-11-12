@@ -338,8 +338,12 @@ fn a_pre_9_workbook_with_axis_blocks_is_not_read_as_a_graph() {
     assert_eq!(imp.version, "8.1");
     assert_eq!(imp.workbooks.len(), 1);
     assert!(imp.graphs.is_empty(), "the workbook must not be read a second time as a graph");
-    assert!(!imp.warnings.iter().any(|w| w.contains("Graph")), "{:?}", imp.warnings);
-    assert!(!imp.warnings.iter().any(|w| w.contains("before version 9")), "no graph, so nothing to caution about");
+    assert!(!imp.warnings.iter().any(|w| w.contains("Graph1")), "{:?}", imp.warnings);
+    assert!(
+        imp.warnings.iter().any(|w| w.contains("before version 9") && w.contains("missing")),
+        "graphs the reader misses must not go unmentioned: {:?}",
+        imp.warnings
+    );
 }
 
 #[test]

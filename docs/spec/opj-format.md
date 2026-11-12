@@ -343,8 +343,9 @@ Graph windows are told apart as described in 10.0. `crates/io/src/opj/graph.rs` 
 9.x (the owner's projects and graphs built in Origin 2016). Projects saved by Origin 7.0 to 8.6 have
 the same block structure, and the rule in 10.0 was checked against them, but the offsets of the page
 size, frame, axes and curve records were *not* checked on any pre-9 file. For a file older than 9.0
-the reader still imports the graphs that 10.0 identifies, and adds a warning that their details are
-not verified. Offsets below were found by building graphs in Origin 2016 with known settings
+the reader still imports the graphs that 10.0 identifies, and always adds a warning that graphs of
+such a file are not verified and may be missing or wrong (also when no graph was read, since a
+missed graph would otherwise go unmentioned). Offsets below were found by building graphs in Origin 2016 with known settings
 (`tools/origin-ref/opj-make-test-graphs.ps1`, and one-property-at-a-time variations whose records
 were compared byte by byte), by comparing with the graph in the owner's figure project, and with the
 public description of the format [pub]. All numbers are little-endian.

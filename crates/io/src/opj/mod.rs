@@ -163,11 +163,11 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
         .filter(|w| graph::is_graph(w))
         .map(|w| graph::build(w, &b.column_of_set, &mut b.warnings))
         .collect();
-    if !graphs.is_empty() && version_before_9(&version) {
+    if version_before_9(&version) {
+        // Said for every such file: graphs the reader misses would otherwise go unmentioned.
         b.warnings.push(format!(
-            "This project was saved by Origin {version}, before version 9. Graph details of such files (page \
-             size, frames, axes, plots) were not verified; only 9.x projects were checked, so a graph may be \
-             wrong."
+            "This project was saved by Origin {version}, before version 9. Graphs of such files were not \
+             verified (only 9.x projects were checked), so a graph may be missing or drawn wrong."
         ));
     }
     if workbooks.is_empty() && !b.sets.is_empty() {

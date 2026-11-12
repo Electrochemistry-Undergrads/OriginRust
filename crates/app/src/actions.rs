@@ -9,6 +9,7 @@ use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
 use crate::panels::PanelId;
+use sheaf_core::graph::PlotKind;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
 use std::path::PathBuf;
@@ -59,6 +60,33 @@ pub enum SheetOp {
     Duplicate,
     /// Open the window that asks for a new name.
     RenameDialog,
+}
+
+/// An edit of one object of a graph, from the graph window (Origin's right-click menus).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GraphOp {
+    /// Change Plot to: line, scatter, line + symbol, column.
+    SetPlotKind { layer: usize, plot: usize, kind: PlotKind },
+    /// Hide Data Plot.
+    HidePlot { layer: usize, plot: usize },
+    /// Hide Axis (`y` false for the X axis).
+    HideAxis { layer: usize, y: bool },
+    /// Hide Grids, or show the major grid lines again.
+    ToggleGrids { layer: usize, y: bool },
+    /// Rescale To Show All: automatic limits on both axes of the layer.
+    Rescale { layer: usize },
+    /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
+    AxisZoom { layer: usize, y: bool, zoom_in: bool },
+    /// Delete on the legend: it is hidden.
+    HideLegend { layer: usize },
+    /// Delete on an axis title: it is hidden.
+    HideTitle { layer: usize, y: bool },
+    /// Delete on a free text label.
+    DeleteLabel { layer: usize, label: usize },
+    /// Hide Layer (every plot of the layer is hidden).
+    HideLayer { layer: usize },
+    /// Hide Other Layers.
+    HideOtherLayers { layer: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -133,9 +161,22 @@ pub enum Action {
         columns: Vec<ColumnId>,
         template: Template,
     },
+    /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {
         graph: WindowId,
+        layer: usize,
         tab: PropsTab,
+        plot: Option<usize>,
+    },
+    /// A change of a graph made from its window (right-click menus, the Delete key, Ctrl+R).
+    GraphEdit {
+        graph: WindowId,
+        op: GraphOp,
+    },
+    /// Makes a layer of a graph the active one (a click on its layer icon or inside its frame).
+    ActivateLayer {
+        graph: WindowId,
+        layer: usize,
     },
     ExportGraph(WindowId),
     ExportData(WindowId),

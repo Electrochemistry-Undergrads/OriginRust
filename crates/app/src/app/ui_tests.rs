@@ -6,7 +6,8 @@
 use super::*;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{By, NodeT, Queryable};
-use sheaf_core::graph::ScaleKind;
+use sheaf_core::graph::{PlotKind, ScaleKind};
+use sheaf_plot::scene::ObjectKind;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -2406,4 +2407,130 @@ fn the_statistics_menu_makes_a_histogram_graph() {
     let g = p.graphs().last().unwrap();
     assert_eq!(g.layers[0].plots[0].kind, sheaf_core::graph::PlotKind::Column);
     assert!(p.workbooks().next().unwrap().sheets[1].name.starts_with("Histogram"));
+}
+
+// ----- graph window: picking objects with the mouse (gui-look.md section 4) -----------------------
+
+fn graph_ui<'a>(h: &'a Harness<'static, SheafApp>) -> &'a crate::graph_view::GraphUi {
+    h.state().graphs.values().next().expect("a graph window was drawn")
+}
+
+fn on(h: &Harness<'static, SheafApp>, layer: usize, kind: ObjectKind) -> egui::Pos2 {
+    graph_ui(h).point_on(layer, kind).unwrap_or_else(|| panic!("{kind:?} is not drawn"))
+}
+
+fn right_click_at(h: &mut Harness<'static, SheafApp>, at: egui::Pos2) {
+    pause(h);
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    settle(h);
+}
+
+fn graph<'a>(h: &'a Harness<'static, SheafApp>) -> &'a sheaf_core::Graph {
+    project(h).graphs().next().unwrap()
+}
+
+#[test]
+fn double_clicks_on_the_graph_open_the_settings_of_what_was_clicked() {
+    let mut h = start(vec![data_file("gdbl")]);
+    for (kind, tab, plot) in [
+        (ObjectKind::YAxis, PropsTab::YAxis, None),
+        (ObjectKind::XAxis, PropsTab::XAxis, None),
+        (ObjectKind::Legend, PropsTab::Legend, None),
+        (ObjectKind::Plot(1), PropsTab::Plots, Some(1)),
+    ] {
+        h.state_mut().graph_props = None;
+        let at = on(&h, 0, kind);
+        double_click_at(&mut h, at);
+        let d = h.state().graph_props.as_ref().unwrap_or_else(|| panic!("{kind:?} opened nothing"));
+        assert_eq!((d.tab, d.layer), (tab, 0), "{kind:?}");
+        if let Some(p) = plot {
+            assert_eq!(d.selected_plot(), p, "the clicked plot is the chosen one");
+        }
+    }
+}
+
+#[test]
+fn a_click_selects_a_plot_and_its_menu_changes_the_plot_type_in_one_undo_step() {
+    let mut h = start(vec![data_file("gplot")]);
+    let at = on(&h, 0, ObjectKind::Plot(0));
+    click_at(&mut h, at);
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Plot(0))));
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Hide Data Plot").is_some(), "the plot's menu");
+    assert!(h.query_by_label("Go to Book1").is_some());
+    menu_path(&mut h, &["Change Plot to", "Scatter"]);
+    assert_eq!(graph(&h).layers[0].plots[0].kind, PlotKind::Scatter);
+    assert_ne!(graph(&h).layers[0].plots[1].kind, PlotKind::Scatter, "only the clicked plot changes");
+    assert_eq!(h.state().doc.undo_label(), Some("Change plot type"));
+    menu(&mut h, "Edit", "Undo Change plot type");
+    assert_ne!(graph(&h).layers[0].plots[0].kind, PlotKind::Scatter);
+}
+
+#[test]
+fn the_axis_menu_hides_grids_zooms_and_rescales() {
+    let mut h = start(vec![data_file("gaxis")]);
+    let at = on(&h, 0, ObjectKind::YAxis);
+    right_click_at(&mut h, at);
+    click(&mut h, "Axis Zoom In");
+    let y = &graph(&h).layers[0].y_axis;
+    let (lo, hi) = (y.min.expect("zoom fixes the limits"), y.max.unwrap());
+    assert!(hi - lo > 0.0);
+    // The other axis is untouched.
+    assert!(graph(&h).layers[0].x_axis.min.is_none());
+    right_click_at(&mut h, at);
+    click(&mut h, "Show Grids");
+    assert!(graph(&h).layers[0].y_axis.major_grid.is_some());
+    // Ctrl+R (Graph > Rescale to Show All) gives automatic limits back.
+    menu(&mut h, "Graph", "Rescale to Show All");
+    assert!(graph(&h).layers[0].y_axis.min.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Rescale to show all"));
+}
+
+#[test]
+fn delete_removes_the_selected_legend() {
+    let mut h = start(vec![data_file("glegend")]);
+    let at = on(&h, 0, ObjectKind::Legend);
+    click_at(&mut h, at);
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Legend)));
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert!(!graph(&h).layers[0].legend.visible);
+    assert_eq!(h.state().doc.undo_label(), Some("Delete legend"));
+}
+
+#[test]
+fn the_layer_icon_has_origins_menu_and_a_double_click_opens_the_plot_list() {
+    let mut h = start(vec![data_file("gicon")]);
+    let at = graph_ui(&h).page_point(0.0, 0.0).unwrap() + egui::vec2(9.0, 9.0);
+    right_click_at(&mut h, at);
+    for entry in ["Hide Layer", "Layer Contents...", "Plot Setup...", "Axis..."] {
+        assert!(h.query_by_label_contains(entry).is_some(), "{entry}");
+    }
+    close_menus(&mut h);
+    double_click_at(&mut h, at);
+    let d = h.state().graph_props.as_ref().expect("Plot Setup");
+    assert_eq!(d.tab, PropsTab::Plots);
+}
+
+#[test]
+fn after_a_click_into_a_graph_the_next_click_reaches_the_window_title_under_it() {
+    // The bug seen before: a layer stayed over the workspace after a click into the graph.
+    let mut h = start(vec![data_file("gpopup")]);
+    let (book, graph_id) = window_ids(&h);
+    let inside = on(&h, 0, ObjectKind::Plot(0));
+    click_at(&mut h, inside);
+    right_click_at(&mut h, inside);
+    close_menus(&mut h);
+    assert_eq!(h.state().active, Some(graph_id));
+    click(&mut h, "Title Book1 - sample");
+    assert_eq!(h.state().active, Some(book), "the click on the title was not swallowed");
 }

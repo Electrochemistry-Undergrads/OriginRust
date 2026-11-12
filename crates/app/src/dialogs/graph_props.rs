@@ -20,6 +20,8 @@ pub enum PropsTab {
 
 pub struct GraphPropsDialog {
     pub graph: WindowId,
+    /// The layer whose axes, plots and legend the dialog edits.
+    pub layer: usize,
     pub tab: PropsTab,
     /// Groups all edits of this dialog session into one undo step.
     token: u64,
@@ -73,16 +75,17 @@ fn sources(project: &Project) -> Vec<Source> {
 }
 
 impl GraphPropsDialog {
-    pub fn new(graph: WindowId, tab: PropsTab, token: u64) -> Self {
-        GraphPropsDialog { graph, tab, token, selected_plot: 0, add_from: 0 }
+    pub fn new(graph: WindowId, layer: usize, tab: PropsTab, token: u64) -> Self {
+        GraphPropsDialog { graph, layer, tab, token, selected_plot: 0, add_from: 0 }
     }
 
-    /// The plot of the first layer that the Plots tab has selected.
+    /// The plot of the dialog's layer that the Plots tab has selected.
     pub fn selected_plot(&self) -> usize {
         self.selected_plot
     }
 
-    /// Selects a plot of the first layer (the Object Manager does this when a plot is clicked).
+    /// Selects a plot of the dialog's layer (the Object Manager and the graph window do this
+    /// when a plot is clicked).
     pub fn select_plot(&mut self, plot: usize) {
         self.selected_plot = plot;
     }
@@ -93,17 +96,22 @@ impl GraphPropsDialog {
             return false;
         };
         let mut graph = original.clone();
-        let resolved = sheaf_plot::layout_geometry(doc.project(), self.graph).ok().and_then(|g| g.into_iter().next());
+        let li = self.layer.min(graph.layers.len().saturating_sub(1));
+        let resolved = sheaf_plot::layout_geometry(doc.project(), self.graph).ok().and_then(|g| g.into_iter().nth(li));
         let labels: Vec<String> = graph
             .layers
-            .first()
+            .get(li)
             .map(|l| l.plots.iter().map(|p| doc.project().plot_label(p)).collect())
             .unwrap_or_default();
 
         let sources = sources(doc.project());
 
         let mut open = true;
-        egui::Window::new(format!("Graph settings: {}", graph.name))
+        let title = match graph.layers.len() {
+            0 | 1 => format!("Graph settings: {}", graph.name),
+            _ => format!("Graph settings: {} - Layer {}", graph.name, li + 1),
+        };
+        egui::Window::new(title)
             .id(egui::Id::new("graph_props"))
             .open(&mut open)
             .default_width(440.0)
@@ -123,7 +131,7 @@ impl GraphPropsDialog {
                 });
                 ui.separator();
                 egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
-                    let Some(layer) = graph.layers.first_mut() else {
+                    let Some(layer) = graph.layers.get_mut(li) else {
                         ui.label("This graph has no layer.");
                         return;
                     };

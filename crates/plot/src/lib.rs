@@ -12,6 +12,7 @@
 
 mod data;
 mod fonts;
+pub mod hit;
 mod layout;
 pub mod markup;
 mod plots;
@@ -149,6 +150,18 @@ pub fn render_svg(project: &Project, graph: WindowId) -> Result<String, PlotErro
 pub fn render_svg_with(project: &Project, graph: WindowId, measurer: &dyn TextMeasurer) -> Result<String, PlotError> {
     let scene = layout::build_scene(project, graph, measurer)?;
     Ok(svg::write_svg(&scene))
+}
+
+/// The scene of a graph, with the pickable objects that [`hit::hit_test`] looks at, measured
+/// with the installed fonts. Draw it with [`render_scene_raster`].
+pub fn graph_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, PlotError> {
+    layout::build_scene(project, graph, SystemFonts::shared())
+}
+
+/// Renders a scene from [`graph_scene`] to pixels at `pixels_per_point` (1 = 72 dpi). The
+/// picture is the same as [`render_raster`] of the graph the scene was made from.
+pub fn render_scene_raster(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
+    raster::rasterise(&svg::write_svg(scene), pixels_per_point, SystemFonts::shared())
 }
 
 /// Renders a graph to pixels at `pixels_per_point` (1 = 72 dpi), for showing on screen.

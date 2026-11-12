@@ -2130,3 +2130,41 @@ fn golden_grid_of_four_panels() {
     let (p, g) = panel_graph(Template::Line, &PanelLayout::grid(2, 2, &frame), curves);
     compare_golden("grid-2x2", &svg_of(&p, g));
 }
+
+#[test]
+fn a_point_of_the_page_is_traced_back_to_the_axis_plot_legend_or_layer_under_it() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    let x: Vec<f64> = (0..10).map(f64::from).collect();
+    let low: Vec<f64> = x.iter().map(|v| v * 0.5).collect();
+    let high: Vec<f64> = x.iter().map(|v| 20.0 - v).collect();
+    let (p, g) = project(Template::Line, x, vec![low, high]);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    // The frame as laid out with the same text metrics as the scene.
+    let mut geom = layout_geometry(&p, g).unwrap().remove(0);
+    geom.frame = scene.layers[0].clip;
+    let f = geom.frame;
+    let on = |x: f64, y: f64| hit_test(&scene, geom.data_to_page(x, y), 2.0);
+    let object = |kind| Hit::Object { layer: 0, kind };
+    // On each curve, away from where they cross.
+    assert_eq!(on(2.0, 1.0), object(ObjectKind::Plot(0)));
+    assert_eq!(on(2.0, 18.0), object(ObjectKind::Plot(1)));
+    // In the frame but far from both curves.
+    let (mx, my) = geom.data_to_page(8.0, 7.0);
+    assert_eq!(hit_test(&scene, (mx, my), 2.0), Hit::Layer(0));
+    // On the bottom and left axis lines, and on a tick label below the frame.
+    assert_eq!(hit_test(&scene, (f.x + f.w * 0.3, f.y + f.h + 0.5), 2.0), object(ObjectKind::XAxis));
+    assert_eq!(hit_test(&scene, (f.x - 0.5, f.y + f.h * 0.6), 2.0), object(ObjectKind::YAxis));
+    let boxes = scene.layers[0].objects.iter().filter(|o| o.kind == ObjectKind::XAxis).flat_map(|o| &o.boxes);
+    let tick_label = boxes.into_iter().find(|b| b.y > f.y + f.h + 1.0).unwrap();
+    let c = (tick_label.x + tick_label.w / 2.0, tick_label.y + tick_label.h / 2.0);
+    assert_eq!(hit_test(&scene, c, 1.0), object(ObjectKind::XAxis));
+    // The legend and the titles.
+    for kind in [ObjectKind::Legend, ObjectKind::XTitle, ObjectKind::YTitle] {
+        let o = scene.layers[0].objects.iter().find(|o| o.kind == kind).unwrap();
+        let c = (o.bounds.x + o.bounds.w / 2.0, o.bounds.y + o.bounds.h / 2.0);
+        assert_eq!(hit_test(&scene, c, 1.0), object(kind), "{kind:?}");
+    }
+    // The top edge of a line graph has no axis line: inside the frame it is the layer, above it the page.
+    assert_eq!(hit_test(&scene, (f.x + f.w * 0.5, f.y - 8.0), 1.0), Hit::Page);
+}

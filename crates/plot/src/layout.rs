@@ -11,8 +11,11 @@
 
 use crate::data::{self, Dim, LayerData, PlotData};
 use crate::fonts::TextMeasurer;
+use crate::hit;
 use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
-use crate::scene::{Anchor, Cap, Item, Join, LayerScene, Scene, Stroke, line_to, move_to};
+use crate::scene::{
+    Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
+};
 use crate::stack;
 use crate::text::{self, ASCENT, DESCENT};
 use crate::ticks::{ResolvedAxis, resolve_axis};
@@ -41,7 +44,9 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
             && let Some(last) = layers.last_mut()
         {
             let entries: Vec<&PlotData> = g.same_frame(i).into_iter().flat_map(|j| pds[j].plots.iter()).collect();
+            let start = last.overlay.len();
             draw_legend(&mut last.overlay, project, &layer.legend, geoms[i].frame, &entries, &edge_ticks(g, i), m);
+            hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
     }
     Ok(Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers })
@@ -366,7 +371,9 @@ fn layer_scene(
     m: &dyn TextMeasurer,
 ) -> LayerScene {
     let layer = &g.layers[index];
-    let mut scene = LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new() };
+    let mut scene =
+        LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
+    let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
     let waterfall = stack::waterfall(g, index);
     // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
     // through the curves behind the front frame.
@@ -382,7 +389,10 @@ fn layer_scene(
     match waterfall {
         None => {
             for pd in pds {
+                let start = scene.plots.len();
                 draw_plot(&mut scene.plots, pd, geom);
+                let kind = ObjectKind::Plot(plot_index(pd));
+                hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
         }
         Some((sx, sy)) => {
@@ -392,19 +402,42 @@ fn layer_scene(
                 let mut moved = geom.clone();
                 moved.frame.x += k * sx * geom.frame.w;
                 moved.frame.y -= k * sy * geom.frame.h;
+                let start = scene.plots.len();
                 draw_plot(&mut scene.plots, pd, &moved);
+                let kind = ObjectKind::Plot(plot_index(pd));
+                hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
         }
     }
+    let objects = &mut scene.objects;
     let out = &mut scene.overlay;
     let f = geom.frame;
     let first_color = plot_color(pds);
     let (xp, yp) = (AxisPaint::new(xa, first_color), AxisPaint::new(ya, first_color));
+    let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
+        hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
+    };
+    // The edge each axis line is drawn on, as a box of no height or width.
+    let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
+    let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
     draw_axis_lines(out, xa, ya, f, xp.line, yp.line);
+    let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
+    if xa.side != AxisSide::Hidden {
+        rec(objects, out, start, ObjectKind::XAxis, &[x_line]);
+    }
+    let start = out.len();
     draw_ticks(out, ya, &geom.y, f, false, yp.line);
+    if ya.side != AxisSide::Hidden {
+        rec(objects, out, start, ObjectKind::YAxis, &[y_line]);
+    }
+    let start = out.len();
     let x_edge = (xa.side != AxisSide::Hidden).then(|| draw_x_labels(out, xa, &geom.x, f, &xp.labels, m));
+    rec(objects, out, start, ObjectKind::XAxis, &[]);
+    let start = out.len();
     let y_edge = (ya.side != AxisSide::Hidden).then(|| draw_y_labels(out, ya, &geom.y, f, &yp.labels, m));
+    rec(objects, out, start, ObjectKind::YAxis, &[]);
+    let start = out.len();
     if let Some(edge) = x_edge {
         match x_title {
             TitlePlace::Own => draw_x_title(out, project, xa, f, pds, edge, &xp.title, m),
@@ -414,6 +447,8 @@ fn layer_scene(
             }
         }
     }
+    rec(objects, out, start, ObjectKind::XTitle, &[]);
+    let start = out.len();
     if let Some(edge) = y_edge {
         match y_title {
             TitlePlace::Own => draw_y_title(out, project, ya, f, pds, edge, &yp.title, m),
@@ -423,11 +458,15 @@ fn layer_scene(
             }
         }
     }
+    rec(objects, out, start, ObjectKind::YTitle, &[]);
     if layer.legend.scope == LegendScope::Layer {
         let entries: Vec<&PlotData> = pds.iter().collect();
+        let start = out.len();
         draw_legend(out, project, &layer.legend, f, &entries, &edge_ticks(g, index), m);
+        rec(objects, out, start, ObjectKind::Legend, &[]);
     }
-    for label in &layer.labels {
+    for (k, label) in layer.labels.iter().enumerate() {
+        let start = out.len();
         let size = label.font.size_pt;
         let anchor = (f.x + label.x * f.w, f.y + label.y * f.h);
         // The anchor is the vertical middle of the text's first character.
@@ -435,6 +474,7 @@ fn layer_scene(
         let dy = (ASCENT - DESCENT) / 2.0 * size;
         let pos = (anchor.0 + dy * sin, anchor.1 + dy * cos);
         text::place(out, m, &label.text, &label.font, size, pos, Anchor::Start, label.rotation_deg);
+        rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
     scene
 }

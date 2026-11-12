@@ -42,7 +42,7 @@ pub fn show(ui: &mut egui::Ui, st: &mut ObjectsState, data: &PanelData, actions:
                 st.selected = None;
             }
             if r.double_clicked() {
-                actions.push(Action::GraphProperties { graph: graph_id, tab: PropsTab::Page });
+                actions.push(Action::GraphProperties { graph: graph_id, layer: 0, tab: PropsTab::Page, plot: None });
             }
         });
         for (li, layer) in graph.layers.iter().enumerate() {
@@ -75,9 +75,10 @@ fn layer_row(
         let r = ui.selectable_label(selected, name.as_str());
         if r.clicked() {
             st.selected = Some((layer, None));
+            actions.push(Action::ActivateLayer { graph, layer });
         }
         if r.double_clicked() {
-            actions.push(Action::GraphProperties { graph, tab: PropsTab::Plots });
+            actions.push(Action::GraphProperties { graph, layer, tab: PropsTab::Plots, plot: None });
         }
     });
 }
@@ -108,9 +109,7 @@ fn plot_row(
             actions.push(Action::SelectPlot { graph, layer, plot: index });
         }
         if r.double_clicked() {
-            // The dialog is made first (it starts at the first plot), then told which one.
-            actions.push(Action::GraphProperties { graph, tab: PropsTab::Plots });
-            actions.push(Action::SelectPlot { graph, layer, plot: index });
+            actions.push(Action::GraphProperties { graph, layer, tab: PropsTab::Plots, plot: Some(index) });
         }
     });
 }

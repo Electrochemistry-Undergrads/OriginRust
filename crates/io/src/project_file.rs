@@ -314,6 +314,94 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_keeps_a_double_y_graph() {
+        let dir = TempDir::new("double-y");
+        let path = dir.file("dy.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap().id;
+        let charge = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.5, 1.5, 3.0])).unwrap();
+        let current = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+        let g = p.plot_columns(Template::DoubleY, &[current, charge]).unwrap();
+        p.graph_mut(g).unwrap().layers[1].y_axis.title_color_follows_plot = true;
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let graph = back.graph(g).unwrap();
+        assert_eq!(graph.right_y_member(0), Some(1), "the link and the axis side survive");
+        assert!(graph.layers[1].y_axis.title_color_follows_plot);
+    }
+
+    #[test]
+    fn round_trip_keeps_a_stack_of_panels() {
+        use sheaf_core::panels::PanelLayout;
+        let dir = TempDir::new("panels");
+        let path = dir.file("stack.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap().id;
+        let second = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 6.0, 7.0, 8.0])).unwrap();
+        let first = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+        let g =
+            p.plot_panels(Template::CyclicVoltammetry, &[vec![first], vec![second]], &PanelLayout::stack(2)).unwrap();
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let graph = back.graph(g).unwrap();
+        assert_eq!(back.graph(g), p.graph(g));
+        assert_eq!(graph.link_parent(1), Some(0), "the link survives");
+        assert_eq!(graph.panels(), vec![0, 1]);
+        assert!(graph.layers[0].y_axis.hide_end_label && !graph.layers[1].x_axis.show_tick_labels);
+    }
+
+    #[test]
+    fn round_trip_keeps_stack_settings() {
+        let dir = TempDir::new("stack");
+        let path = dir.file("stack.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap().id;
+        let second = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 6.0, 7.0, 8.0])).unwrap();
+        let first = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+        let g = p.plot_columns(Template::StackedLines, &[first, second]).unwrap();
+        {
+            let layer = &mut p.graph_mut(g).unwrap().layers[0];
+            layer.plot_offset_mut(second).y = 250.0;
+            layer.plot_offset_mut(first).follows = Some(second);
+        }
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let layer = &back.graph(g).unwrap().layers[0];
+        assert_eq!(layer.stack, sheaf_core::graph::Stack::Auto { gap_percent: 10.0 });
+        assert_eq!(layer.plot_offset(second).map(|o| o.y), Some(250.0));
+        assert_eq!(layer.follows(first), Some(second));
+        assert_eq!(back.graph(g), p.graph(g));
+    }
+
+    #[test]
+    fn round_trip_keeps_tick_label_sources_and_bar_spacing() {
+        use sheaf_core::graph::{BarSpacing, TickLabelSource};
+        let dir = TempDir::new("column");
+        let path = dir.file("column.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap();
+        let (y, names) = (book.sheets[0].columns[1].id, book.sheets[0].columns[2].id);
+        let g = p.plot_columns(Template::Column, &[y]).unwrap();
+        {
+            let layer = &mut p.graph_mut(g).unwrap().layers[0];
+            layer.x_axis.tick_label_source = TickLabelSource::Column { column: names };
+            layer.x_axis.tick_label_angle_deg = -30.0;
+            layer.bars = BarSpacing { gap_pct: 40.0, overlap_pct: -10.0 };
+        }
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let layer = &back.graph(g).unwrap().layers[0];
+        assert_eq!(layer.x_axis.tick_label_source, TickLabelSource::Column { column: names });
+        assert_eq!(layer.x_axis.tick_label_angle_deg, -30.0);
+        assert_eq!(layer.bars, BarSpacing { gap_pct: 40.0, overlap_pct: -10.0 });
+        assert!(back.graph(g).unwrap().referenced_columns().contains(&names));
+    }
+
+    #[test]
     fn a_recalculating_column_keeps_its_mode_and_pending_mark_in_a_saved_project() {
         use sheaf_core::{Document, FormulaState, RecalcMode};
         let dir = TempDir::new("recalc");

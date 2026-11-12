@@ -913,7 +913,10 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
             (designation, ColumnData::numeric(numbers.into_iter().map(|n| n.unwrap_or(f64::NAN)).collect()))
         } else {
             let text = cells.iter().map(|c| c.to_string()).collect();
-            (Designation::Label, ColumnData::text(text))
+            // Origin designates the columns of a text file by position, so a first column of sample
+            // names is the X column: the Y columns are drawn against the names (graphing spec 14.6).
+            let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Label };
+            (designation, ColumnData::text(text))
         };
         let mut col = Column::new(ColumnId(j as u64 + 1), short, designation, data);
         col.long_name = long_names[j].clone();
@@ -1259,7 +1262,7 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert_eq!(sheet.columns.len(), 5);
         let names = &sheet.columns[0];
         assert_eq!(names.text().unwrap(), ["Blank", "Std 1", "Std 2", "Sample A"]);
-        assert_eq!(names.designation, Designation::Label);
+        assert_eq!(names.designation, Designation::X, "sample names in the first column are X");
         assert!(names.params.is_empty(), "the first cell of a parameter row is its name");
         let fe = &sheet.columns[1];
         assert_eq!((fe.long_name.as_str(), fe.units.as_str()), ("Fe 238.204", "mg/L"));
@@ -1385,7 +1388,23 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
             assert!(matches!(e, IoError::NoData { .. }) && e.to_string().contains("empty"));
         }
         let imp = parse("just\nwords\nhere\n");
-        assert_eq!(col(&imp, 0).designation, Designation::Label, "no numbers: a text column");
+        assert!(col(&imp, 0).text().is_some(), "no numbers: a text column");
+    }
+
+    #[test]
+    fn a_first_column_of_names_is_x_and_later_text_columns_are_labels() {
+        let imp = parse("Sample,Li,K,Mn,Note\nS1,1.2,0.5,0.2,a\nS2,2.5,0.9,0.3,b\n");
+        let a = col(&imp, 0);
+        assert_eq!(a.designation, Designation::X);
+        assert_eq!(a.text().unwrap(), ["S1", "S2"]);
+        assert_eq!(a.long_name, "Sample");
+        for j in 1..4 {
+            assert_eq!(col(&imp, j).designation, Designation::Y);
+        }
+        assert_eq!(col(&imp, 4).designation, Designation::Label, "a second text column stays a label column");
+        let all_y = AsciiOptions { first_column_x: false, ..AsciiOptions::default() };
+        let imp = parse_ascii("Sample,Li\nS1,1.2\nS2,2.5\n", "t", &all_y).unwrap();
+        assert_eq!(imp.workbook.sheets[0].columns[0].designation, Designation::Label);
     }
 
     #[test]
@@ -1457,7 +1476,7 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         let imp = parse(text);
         let d = &imp.detected;
         assert_eq!((d.header_lines, d.long_name_line, d.units_line, d.columns), (2, 1, 2, 4));
-        assert_eq!(col(&imp, 0).designation, Designation::Label);
+        assert_eq!(col(&imp, 0).designation, Designation::X);
         assert_eq!(col(&imp, 0).text().unwrap(), ["S1", "S2", "S3", "S4", "S5"]);
         for j in 1..4 {
             assert!(col(&imp, j).numeric().is_some(), "column {j} numeric");

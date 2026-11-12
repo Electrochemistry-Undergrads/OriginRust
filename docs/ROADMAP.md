@@ -115,9 +115,12 @@ the default project format.
 - [ ] Origin-style workspace (ADR 0007): done: theme, child windows in a grey workspace instead of
       tabs, Window menu (Cascade, Tile), menu bars per window type with Origin's names, order,
       Alt letters and shortcuts (Ctrl+K import, Ctrl+Q set values, Ctrl+Y fit; redo moved to
-      Ctrl+Shift+Z because Origin has none), commands Sheaf lacks shown greyed. To do: workbook
-      look, toolbars, Project Explorer and panels, graph-window mouse actions, dialogs in Origin's
-      layout, window positions saved in the project
+      Ctrl+Shift+Z because Origin has none), commands Sheaf lacks shown greyed; workbook look with
+      label rows, selection, clipboard and right-click menus; toolbars; Project Explorer, Object
+      Manager, logs and status bar; graph window (2026-11-12, `0e23919`): page on grey ground,
+      layer icons and an active layer, click to select, double-click opens the settings of that
+      axis, plot or legend, Origin's right-click menus per object, Delete, Ctrl+R. To do: dialogs
+      in Origin's layout (axis dialog, Plot Details), window positions saved in the project
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin 2016 and comparing every cell (`sheaf export ... -o
       x.opj`; seven test projects up to 100000 rows opened in Origin with no difference)
@@ -151,8 +154,12 @@ the default project format.
 
 ## Milestone 6: breadth
 
-- [ ] More 2D graph types: column and bar, area, error bars, double-Y, multi-panel, log and
-      reciprocal scales
+- [ ] More 2D graph types. Done (second session's `graph-p0`, reviewed and merged 2026-11-12):
+      double-Y as linked layers (ADR 0009), stacked lines by Y offsets and waterfall (ADR 0010),
+      column charts with sample names as tick labels, multi-panel graphs and stacks that share
+      X; log10 axes and error bars existed before. To do: area plots, reciprocal and other
+      scales, writing these features into `.opj` (today saving names them and keeps the
+      companion), the app controls for per-plot left/right axis and offsets
 - [ ] Matrices, contour plots and heatmaps
 - [ ] Statistics: t-tests, ANOVA
 - [ ] Batch processing and analysis templates

@@ -1,24 +1,53 @@
 //! Graph to scene (spec section 3): frames, axes, ticks, labels, titles,
 //! legend and free text, in drawing order.
+//!
+//! Layers that are linked to another layer (the right Y axis of a double-Y
+//! graph, graphing spec section 12, or the panels of a stack that share X,
+//! section 15) are laid out together with it as one group: their frames are
+//! placed inside or beside its frame and, when linked, they share its axis.
+//!
+//! A layer drawn as a waterfall (graphing spec section 13.6) lays its axes out
+//! on a smaller front frame and draws each later curve moved right and up.
 
-use crate::data::{self, PlotData};
+use crate::data::{self, Dim, LayerData, PlotData};
 use crate::fonts::TextMeasurer;
+use crate::hit;
 use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
-use crate::scene::{Anchor, Cap, Item, Join, LayerScene, Scene, Stroke, line_to, move_to};
+use crate::scene::{
+    Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
+};
+use crate::stack;
 use crate::text::{self, ASCENT, DESCENT};
-use crate::ticks::ResolvedAxis;
+use crate::ticks::{ResolvedAxis, resolve_axis};
 use crate::{LayerGeometry, PlotError, Rect};
-use sheaf_core::graph::{Axis, Layer, LegendPosition, LineStyle, Page, TickDirection};
+use sheaf_core::Color;
+use sheaf_core::graph::{
+    Axis, AxisSide, Font, Graph, Layer, Legend, LegendPosition, LegendScope, LineStyle, Page, PlotKind, ScaleLink,
+    TickDirection,
+};
 use sheaf_core::{Project, WindowId};
 
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let mut layers = Vec::new();
-    for layer in &g.layers {
-        let pds = data::collect(project, layer);
-        let geom = layer_geometry(layer, &g.page, &pds, m);
-        layers.push(layer_scene(project, layer, &geom, &pds, m));
+    let pds: Vec<LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let geoms = graph_geometry(project, g, &pds, m);
+    let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);
+    let y_titles = title_places(project, g, &geoms, &pds, Dim::Y, m);
+    let mut layers: Vec<LayerScene> = (0..g.layers.len())
+        .map(|i| layer_scene(project, g, i, &geoms[i], &pds[i].plots, (x_titles[i], y_titles[i]), m))
+        .collect();
+    // A legend that lists the plots of every layer drawn in its frame (a layer and its right Y
+    // layer) is drawn after all layers, so that no layer's curves cover it.
+    for (i, layer) in g.layers.iter().enumerate() {
+        if layer.legend.scope == LegendScope::Graph
+            && let Some(last) = layers.last_mut()
+        {
+            let entries: Vec<&PlotData> = g.same_frame(i).into_iter().flat_map(|j| pds[j].plots.iter()).collect();
+            let start = last.overlay.len();
+            draw_legend(&mut last.overlay, project, &layer.legend, geoms[i].frame, &entries, &edge_ticks(g, i), m);
+            hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
+        }
     }
     Ok(Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers })
 }
@@ -26,59 +55,418 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
 /// Smallest distance in points kept between any label or title and the page edge.
 const PAGE_MARGIN: f64 = 3.0;
 
-/// The geometry of a layer: the nominal frame from the model, moved inwards
-/// just enough that the Y title and the bottom X title stay inside the page
-/// (spec section 3, "Keeping labels on the page"). When everything already
-/// fits, the frame is the nominal one.
-pub(crate) fn layer_geometry(layer: &Layer, page: &Page, pds: &[PlotData], m: &dyn TextMeasurer) -> LayerGeometry {
-    let mut geom = data::resolve_layer(layer, page, pds);
+/// The geometry of every layer of a graph, in layer order.
+///
+/// Each group (a layer that is not linked, followed by the layers linked to it) is resolved
+/// together: an axis linked straight to the group's first layer is that layer's axis, whose
+/// automatic range covers the data of every layer that shares it. The rectangle that holds the
+/// nominal frames of every member (the first layer's frame, or a whole stack of panels) is moved
+/// inwards just enough that the tick labels and titles of every member stay inside the page (spec
+/// section 3, "Keeping labels on the page"), and the frames are moved and scaled with it, so the
+/// panels of a stack stay aligned. When everything already fits, the frames are the nominal ones.
+///
+/// A layer drawn as a waterfall gets the front frame of spec 13.6 as its frame and the whole
+/// fitted frame as its clip rectangle.
+pub(crate) fn graph_geometry(
+    project: &Project,
+    g: &Graph,
+    pds: &[LayerData],
+    m: &dyn TextMeasurer,
+) -> Vec<LayerGeometry> {
+    let mut out: Vec<Option<LayerGeometry>> = vec![None; g.layers.len()];
+    for root in 0..g.layers.len() {
+        if g.root_of(root) == root {
+            for (i, geom) in group_geometry(project, g, &g.group(root), pds, m) {
+                out[i] = Some(geom);
+            }
+        }
+    }
+    out.into_iter().map(|geom| geom.expect("every layer belongs to the group of its root")).collect()
+}
+
+/// Resolves one axis from the plots it shows (`sources`, the first of which is the axis' first plot).
+///
+/// - An X axis whose first plot has text in its X column (sample names) is a category axis (see
+///   [`data::is_category`]): one tick per row, half a step of room at each end.
+/// - An X axis over column plots gets half a bar spacing of room at each end, without rounding, so
+///   that the end bars are not cut; a linear Y axis over column plots reaches down to their base.
+/// - An X axis over a date or time column gets date tick labels (see [`data::date_axis`]).
+/// - An axis with a label column shows that column's cells at whole-number ticks.
+fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
+    let first = sources.first().copied();
+    let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
+    let mut resolved = if dim == Dim::X && data::is_category(project, axis, first) {
+        crate::ticks::resolve_category(axis, range)
+    } else {
+        let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
+        let linear = axis.scale == sheaf_core::graph::ScaleKind::Linear;
+        let bars: Vec<&data::PlotData> = sources.iter().copied().filter(|pd| pd.bar.is_some()).collect();
+        if linear && let (Some((lo, hi)), Some(pd)) = (range, bars.first()) {
+            match dim {
+                Dim::X => {
+                    let half = pd.bar.map_or(0.5, |b| b.spacing / 2.0);
+                    range = Some((lo - half, hi + half));
+                    let base = drawn.as_ref().unwrap_or(axis);
+                    drawn = Some(Axis { auto_range: sheaf_core::graph::AutoRange::Tight, ..base.clone() });
+                }
+                Dim::Y => {
+                    // Bars rise from their base: 0, or the plot's offset in a stacked layer.
+                    let (lo, hi) = bars.iter().fold((lo, hi), |(lo, hi), pd| (lo.min(pd.oy), hi.max(pd.oy)));
+                    range = Some((lo, hi));
+                }
+            }
+        }
+        resolve_axis(drawn.as_ref().unwrap_or(axis), range)
+    };
+    if let Some(column) = data::label_column(project, axis, dim, first) {
+        crate::ticks::label_from_cells(&mut resolved, &data::cell_texts(column));
+    }
+    resolved
+}
+
+fn group_geometry(
+    project: &Project,
+    g: &Graph,
+    members: &[usize],
+    pds: &[LayerData],
+    m: &dyn TextMeasurer,
+) -> Vec<(usize, LayerGeometry)> {
+    let root = members[0];
+    let rl = &g.layers[root];
+    // Does layer `i` use the root's scale on this axis?
+    let shares = |i: usize, dim: Dim| {
+        i == root || g.valid_link(i).is_some_and(|l| (if dim == Dim::X { l.x } else { l.y }) == ScaleLink::Straight)
+    };
+    let shared = |dim: Dim, axis: &Axis| {
+        let sources: Vec<&data::PlotData> =
+            members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter()).collect();
+        resolve_dim(project, axis, dim, &sources)
+    };
+    let own = |i: usize, dim: Dim, axis: &Axis| {
+        let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
+        resolve_dim(project, axis, dim, &sources)
+    };
+    let (root_x, root_y) = (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis));
+    let axes: Vec<(ResolvedAxis, ResolvedAxis)> = members
+        .iter()
+        .map(|&i| {
+            let l = &g.layers[i];
+            let x = if shares(i, Dim::X) { root_x.clone() } else { own(i, Dim::X, &l.x_axis) };
+            let y = if shares(i, Dim::Y) { root_y.clone() } else { own(i, Dim::Y, &l.y_axis) };
+            (x, y)
+        })
+        .collect();
+
+    let frame_of = |root_frame: Rect, i: usize| {
+        if i == root { root_frame } else { data::linked_frame(&g.layers[i].frame, root_frame) }
+    };
+    let nominal = data::page_frame(&rl.frame, &g.page);
+    let mut edges = LabelEdges::NONE;
+    // The rectangle that holds the frames of every member: the root's frame, or the whole stack
+    // when the members are panels of their own.
+    let mut bounds = nominal;
+    for (&i, (x, y)) in members.iter().zip(&axes) {
+        let f = frame_of(nominal, i);
+        bounds = cover(bounds, f);
+        label_edges(&mut edges, &g.layers[i], f, x, y, m);
+    }
+    let fitted = fit_on_page(bounds, &edges, &g.page);
+    let f = if bounds == nominal { fitted } else { scale_into(nominal, bounds, fitted) };
+    members
+        .iter()
+        .zip(axes)
+        .map(|(&i, (x, y))| {
+            let clip = frame_of(f, i);
+            let frame = match stack::waterfall(g, i) {
+                Some((sx, sy)) => stack::front_frame(clip, pds[i].members, sx, sy),
+                None => clip,
+            };
+            (i, LayerGeometry { frame, clip, x, y })
+        })
+        .collect()
+}
+
+/// The outermost extent of the tick labels and titles of a group, in page points.
+#[derive(Copy, Clone, Debug)]
+struct LabelEdges {
+    left: f64,
+    right: f64,
+    top: f64,
+    bottom: f64,
+}
+
+impl LabelEdges {
+    const NONE: LabelEdges =
+        LabelEdges { left: f64::INFINITY, right: f64::NEG_INFINITY, top: f64::INFINITY, bottom: f64::NEG_INFINITY };
+}
+
+/// Widens `e` by the tick labels and titles of one layer laid out at frame `f`.
+fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: &ResolvedAxis, m: &dyn TextMeasurer) {
     let mut scratch = Vec::new();
-    let x_bottom = draw_x_labels(&mut scratch, layer, &geom, m);
-    let y_left = draw_y_labels(&mut scratch, layer, &geom, m);
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
-    let left_edge = if ya.show_title {
-        let size = ya.title_font.size_pt;
-        y_left - 0.6 * size - (ASCENT + DESCENT) * size
-    } else {
-        y_left
+    let x_size = xa.title_font.size_pt;
+    match xa.side {
+        AxisSide::Normal => {
+            let below = draw_x_labels(&mut scratch, xa, x, f, &xa.tick_font, m);
+            let edge = if xa.show_title { below + 0.6 * x_size + (ASCENT + DESCENT) * x_size } else { below };
+            e.bottom = e.bottom.max(edge);
+        }
+        AxisSide::Opposite => {
+            let above = draw_x_labels(&mut scratch, xa, x, f, &xa.tick_font, m);
+            let edge = if xa.show_title { above - 0.6 * x_size - (ASCENT + DESCENT) * x_size } else { above };
+            e.top = e.top.min(edge);
+        }
+        AxisSide::Hidden => {}
+    }
+    let y_size = ya.title_font.size_pt;
+    match ya.side {
+        AxisSide::Normal => {
+            let left = draw_y_labels(&mut scratch, ya, y, f, &ya.tick_font, m);
+            let edge = if ya.show_title { left - 0.6 * y_size - (ASCENT + DESCENT) * y_size } else { left };
+            e.left = e.left.min(edge);
+        }
+        AxisSide::Opposite => {
+            let right = draw_y_labels(&mut scratch, ya, y, f, &ya.tick_font, m);
+            let edge = if ya.show_title { right + 0.6 * y_size + (ASCENT + DESCENT) * y_size } else { right };
+            e.right = e.right.max(edge);
+        }
+        AxisSide::Hidden => {}
+    }
+}
+
+/// The smallest rectangle that holds `b` and `f`; `b` itself when `f` lies inside it (so that a
+/// group whose members all share the root's frame keeps that frame exactly).
+fn cover(b: Rect, f: Rect) -> Rect {
+    let finite = [f.x, f.y, f.w, f.h].iter().all(|v| v.is_finite());
+    if !finite || (f.x >= b.x && f.y >= b.y && f.x + f.w <= b.x + b.w && f.y + f.h <= b.y + b.h) {
+        return b;
+    }
+    let (x0, y0) = (b.x.min(f.x), b.y.min(f.y));
+    let (x1, y1) = ((b.x + b.w).max(f.x + f.w), (b.y + b.h).max(f.y + f.h));
+    Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+/// `r`, a rectangle inside `from`, moved and scaled the way `from` became `to`.
+fn scale_into(r: Rect, from: Rect, to: Rect) -> Rect {
+    let sx = if from.w > 0.0 { to.w / from.w } else { 1.0 };
+    let sy = if from.h > 0.0 { to.h / from.h } else { 1.0 };
+    Rect { x: to.x + (r.x - from.x) * sx, y: to.y + (r.y - from.y) * sy, w: r.w * sx, h: r.h * sy }
+}
+
+/// Moves the sides of `nominal` inwards until the label edges are `PAGE_MARGIN` inside the page.
+/// Each move shifts one side only (the opposite side stays) and never takes more than half of
+/// the frame, whatever the labels need.
+fn fit_on_page(nominal: Rect, e: &LabelEdges, page: &Page) -> Rect {
+    let shift = |need: f64, size: f64| need.clamp(0.0, (0.5 * size).max(0.0));
+    let mut f = nominal;
+    let left = shift(PAGE_MARGIN - e.left, f.w);
+    f.x += left;
+    f.w -= left;
+    let right = shift(e.right - (page.width_pt - PAGE_MARGIN), f.w);
+    f.w -= right;
+    let bottom = shift(e.bottom - (page.height_pt - PAGE_MARGIN), f.h);
+    f.h -= bottom;
+    let top = shift(PAGE_MARGIN - e.top, f.h);
+    f.y += top;
+    f.h -= top;
+    f
+}
+
+/// Where a layer draws the title of one of its axes.
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum TitlePlace {
+    /// Centred on its own frame.
+    Own,
+    /// Not drawn: another panel of a run of touching panels with the same title draws it.
+    Shared,
+    /// Drawn once for a run of touching panels with the same title: centred between `from` and `to`
+    /// (page points along the axis), beyond `edge`, the outermost tick label edge of the run.
+    Span { from: f64, to: f64, edge: f64 },
+}
+
+/// How each layer draws its X (or Y) title. Panels of one linked group that touch along the axis
+/// (a column of panels without a gap for Y titles, a row for X titles) and have the same title text
+/// show it once, centred on the run, so that a stack of thin panels can carry one title such as
+/// "Intensity (a.u.)" (graphing spec 15.5). Every other layer draws its own title.
+fn title_places(
+    project: &Project,
+    g: &Graph,
+    geoms: &[LayerGeometry],
+    pds: &[LayerData],
+    dim: Dim,
+    m: &dyn TextMeasurer,
+) -> Vec<TitlePlace> {
+    let mut out = vec![TitlePlace::Own; g.layers.len()];
+    let panels = g.panels();
+    let axis = |i: usize| if dim == Dim::X { &g.layers[i].x_axis } else { &g.layers[i].y_axis };
+    let title = |i: usize| {
+        let a = axis(i);
+        a.title.clone().unwrap_or_else(|| first_title(project, a, &pds[i].plots, dim == Dim::Y))
     };
-    let bottom_edge = if xa.show_title {
-        let size = xa.title_font.size_pt;
-        x_bottom + 0.6 * size + (ASCENT + DESCENT) * size
-    } else {
-        x_bottom
+    // Along the axis: start and length of a frame; across it: start and length.
+    let along = |f: Rect| if dim == Dim::X { (f.x, f.w) } else { (f.y, f.h) };
+    let across = |f: Rect| if dim == Dim::X { (f.y, f.h) } else { (f.x, f.w) };
+    let close = |a: f64, b: f64| (a - b).abs() <= 1e-6 * a.abs().max(b.abs()).max(1.0);
+    let touch = |a: usize, b: usize| {
+        let (fa, fb) = (geoms[a].frame, geoms[b].frame);
+        let ((sa, la), (sb, _)) = (along(fa), along(fb));
+        let ((ca, wa), (cb, wb)) = (across(fa), across(fb));
+        close(ca, cb) && close(wa, wb) && close(sa + la, sb)
     };
-    let f = &mut geom.frame;
-    // Never take more than half of the frame, whatever the labels need.
-    let shift_x = (PAGE_MARGIN - left_edge).clamp(0.0, 0.5 * f.w);
-    f.x += shift_x;
-    f.w -= shift_x;
-    let shift_y = (bottom_edge - (page.height_pt - PAGE_MARGIN)).clamp(0.0, 0.5 * f.h);
-    f.h -= shift_y;
-    geom
+    for root in (0..g.layers.len()).filter(|&i| g.root_of(i) == i) {
+        let mut line: Vec<usize> = g
+            .group(root)
+            .into_iter()
+            .filter(|i| panels.contains(i) && axis(*i).side == AxisSide::Normal && axis(*i).show_title)
+            .collect();
+        if line.len() < 2 {
+            continue;
+        }
+        line.sort_by(|&a, &b| along(geoms[a].frame).0.total_cmp(&along(geoms[b].frame).0));
+        let mut start = 0;
+        while start < line.len() {
+            let text = title(line[start]);
+            let mut end = start + 1;
+            while end < line.len() && touch(line[end - 1], line[end]) && title(line[end]) == text {
+                end += 1;
+            }
+            let run = &line[start..end];
+            if run.len() > 1 {
+                let mut scratch = Vec::new();
+                let edges = run.iter().map(|&i| {
+                    let (a, geom) = (axis(i), &geoms[i]);
+                    match dim {
+                        Dim::X => draw_x_labels(&mut scratch, a, &geom.x, geom.frame, &a.tick_font, m),
+                        Dim::Y => draw_y_labels(&mut scratch, a, &geom.y, geom.frame, &a.tick_font, m),
+                    }
+                });
+                let edge = match dim {
+                    Dim::X => edges.fold(f64::NEG_INFINITY, f64::max),
+                    Dim::Y => edges.fold(f64::INFINITY, f64::min),
+                };
+                let from = along(geoms[run[0]].frame).0;
+                let (last_start, last_len) = along(geoms[run[run.len() - 1]].frame);
+                let leader = *run.iter().min().expect("a run is not empty");
+                for &i in run {
+                    out[i] = if i == leader {
+                        TitlePlace::Span { from, to: last_start + last_len, edge }
+                    } else {
+                        TitlePlace::Shared
+                    };
+                }
+            }
+            start = end;
+        }
+    }
+    out
 }
 
 fn layer_scene(
     project: &Project,
-    layer: &Layer,
+    g: &Graph,
+    index: usize,
     geom: &LayerGeometry,
     pds: &[PlotData],
+    (x_title, y_title): (TitlePlace, TitlePlace),
     m: &dyn TextMeasurer,
 ) -> LayerScene {
-    let mut scene = LayerScene { clip: geom.frame, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new() };
-    draw_grid(&mut scene.grid, layer, geom);
-    for pd in pds {
-        draw_plot(&mut scene.plots, pd, geom);
+    let layer = &g.layers[index];
+    let mut scene =
+        LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
+    let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
+    let waterfall = stack::waterfall(g, index);
+    // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
+    // through the curves behind the front frame.
+    let (x_axis, y_axis);
+    let (xa, ya) = if waterfall.is_some() {
+        x_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.x_axis.clone() };
+        y_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.y_axis.clone() };
+        (&x_axis, &y_axis)
+    } else {
+        draw_grid(&mut scene.grid, layer, geom);
+        (&layer.x_axis, &layer.y_axis)
+    };
+    match waterfall {
+        None => {
+            for pd in pds {
+                let start = scene.plots.len();
+                draw_plot(&mut scene.plots, pd, geom);
+                let kind = ObjectKind::Plot(plot_index(pd));
+                hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
+            }
+        }
+        Some((sx, sy)) => {
+            // Back to front, so that the first curve is on top; member k moves by k shifts.
+            for pd in pds.iter().rev() {
+                let k = pd.member.unwrap_or(0) as f64;
+                let mut moved = geom.clone();
+                moved.frame.x += k * sx * geom.frame.w;
+                moved.frame.y -= k * sy * geom.frame.h;
+                let start = scene.plots.len();
+                draw_plot(&mut scene.plots, pd, &moved);
+                let kind = ObjectKind::Plot(plot_index(pd));
+                hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
+            }
+        }
     }
+    let objects = &mut scene.objects;
     let out = &mut scene.overlay;
-    draw_axis_lines(out, layer, geom.frame);
-    draw_ticks(out, layer, geom);
-    let x_labels_bottom = draw_x_labels(out, layer, geom, m);
-    let y_labels_left = draw_y_labels(out, layer, geom, m);
-    draw_titles(out, project, layer, geom, pds, m, x_labels_bottom, y_labels_left);
-    draw_legend(out, project, layer, geom, pds, m);
-    for label in &layer.labels {
-        let f = geom.frame;
+    let f = geom.frame;
+    let first_color = plot_color(pds);
+    let (xp, yp) = (AxisPaint::new(xa, first_color), AxisPaint::new(ya, first_color));
+    let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
+        hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
+    };
+    // The edge each axis line is drawn on, as a box of no height or width.
+    let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
+    let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
+    draw_axis_lines(out, xa, ya, f, xp.line, yp.line);
+    let start = out.len();
+    draw_ticks(out, xa, &geom.x, f, true, xp.line);
+    if xa.side != AxisSide::Hidden {
+        rec(objects, out, start, ObjectKind::XAxis, &[x_line]);
+    }
+    let start = out.len();
+    draw_ticks(out, ya, &geom.y, f, false, yp.line);
+    if ya.side != AxisSide::Hidden {
+        rec(objects, out, start, ObjectKind::YAxis, &[y_line]);
+    }
+    let start = out.len();
+    let x_edge = (xa.side != AxisSide::Hidden).then(|| draw_x_labels(out, xa, &geom.x, f, &xp.labels, m));
+    rec(objects, out, start, ObjectKind::XAxis, &[]);
+    let start = out.len();
+    let y_edge = (ya.side != AxisSide::Hidden).then(|| draw_y_labels(out, ya, &geom.y, f, &yp.labels, m));
+    rec(objects, out, start, ObjectKind::YAxis, &[]);
+    let start = out.len();
+    if let Some(edge) = x_edge {
+        match x_title {
+            TitlePlace::Own => draw_x_title(out, project, xa, f, pds, edge, &xp.title, m),
+            TitlePlace::Shared => {}
+            TitlePlace::Span { from, to, edge } => {
+                draw_x_title(out, project, xa, Rect { x: from, w: to - from, ..f }, pds, edge, &xp.title, m)
+            }
+        }
+    }
+    rec(objects, out, start, ObjectKind::XTitle, &[]);
+    let start = out.len();
+    if let Some(edge) = y_edge {
+        match y_title {
+            TitlePlace::Own => draw_y_title(out, project, ya, f, pds, edge, &yp.title, m),
+            TitlePlace::Shared => {}
+            TitlePlace::Span { from, to, edge } => {
+                draw_y_title(out, project, ya, Rect { y: from, h: to - from, ..f }, pds, edge, &yp.title, m)
+            }
+        }
+    }
+    rec(objects, out, start, ObjectKind::YTitle, &[]);
+    if layer.legend.scope == LegendScope::Layer {
+        let entries: Vec<&PlotData> = pds.iter().collect();
+        let start = out.len();
+        draw_legend(out, project, &layer.legend, f, &entries, &edge_ticks(g, index), m);
+        rec(objects, out, start, ObjectKind::Legend, &[]);
+    }
+    for (k, label) in layer.labels.iter().enumerate() {
+        let start = out.len();
         let size = label.font.size_pt;
         let anchor = (f.x + label.x * f.w, f.y + label.y * f.h);
         // The anchor is the vertical middle of the text's first character.
@@ -86,8 +474,43 @@ fn layer_scene(
         let dy = (ASCENT - DESCENT) / 2.0 * size;
         let pos = (anchor.0 + dy * sin, anchor.1 + dy * cos);
         text::place(out, m, &label.text, &label.font, size, pos, Anchor::Start, label.rotation_deg);
+        rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
     scene
+}
+
+// ----- axis colors ---------------------------------------------------------------------------
+
+/// The color of the first drawable plot of a layer: its line color, or the symbol (fill) color
+/// for scatter and column plots, which have no line of their own to show.
+fn plot_color(pds: &[PlotData]) -> Option<Color> {
+    pds.first().map(|pd| match pd.plot.kind {
+        PlotKind::Scatter | PlotKind::Column => pd.plot.symbol.color,
+        PlotKind::Line | PlotKind::LineSymbol => pd.plot.line.color,
+    })
+}
+
+/// The colors an axis is drawn in: its own, or that of the layer's first plot when the axis
+/// follows the plot (and the layer has one).
+struct AxisPaint {
+    /// Axis line and ticks.
+    line: Color,
+    /// The tick label font, in its final color.
+    labels: Font,
+    /// The title font, in its final color.
+    title: Font,
+}
+
+impl AxisPaint {
+    fn new(axis: &Axis, plot: Option<Color>) -> AxisPaint {
+        let follow = plot.filter(|_| axis.color_follows_plot);
+        let title_follow = plot.filter(|_| axis.title_color_follows_plot);
+        AxisPaint {
+            line: follow.unwrap_or(axis.color),
+            labels: Font { color: follow.unwrap_or(axis.tick_font.color), ..axis.tick_font.clone() },
+            title: Font { color: title_follow.unwrap_or(axis.title_font.color), ..axis.title_font.clone() },
+        }
+    }
 }
 
 // ----- grid, axis lines, ticks ---------------------------------------------------------------
@@ -129,40 +552,44 @@ fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
     lines(&layer.y_axis.major_grid, &geom.y.major, &geom.y, false);
 }
 
-fn draw_axis_lines(out: &mut Vec<Item>, layer: &Layer, f: Rect) {
-    let (xa, ya) = (&layer.x_axis, &layer.y_axis);
+/// Draws the axis lines of a layer: each shown axis on its own edge and, with `show_opposite`,
+/// on the edge across. `xc` and `yc` are the axes' line colors.
+fn draw_axis_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, f: Rect, xc: Color, yc: Color) {
     let (l, r, t, b) = (f.x, f.x + f.w, f.y, f.y + f.h);
-    let same = xa.line_width_pt == ya.line_width_pt && xa.color == ya.color;
-    let square = |a: &Axis| Stroke {
-        color: a.color,
-        width: a.line_width_pt,
-        dash: Vec::new(),
-        cap: Cap::Square,
-        join: Join::Miter,
-    };
-    let line = |out: &mut Vec<Item>, x0, y0, x1, y1, a: &Axis| {
-        let mut d = String::new();
-        move_to(&mut d, x0, y0);
-        line_to(&mut d, x1, y1);
-        out.push(Item::Path { d, fill: None, stroke: Some(square(a)) });
-    };
-    if xa.show_opposite && ya.show_opposite && same {
+    let shown = |a: &Axis| a.side != AxisSide::Hidden;
+    let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
+    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same {
+        // All four edges in one stroke, so that the corners join cleanly.
         let mut d = String::new();
         move_to(&mut d, l, t);
         line_to(&mut d, r, t);
         line_to(&mut d, r, b);
         line_to(&mut d, l, b);
         d.push('Z');
-        out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(xa.color, xa.line_width_pt)) });
+        out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(xc, xa.line_width_pt)) });
         return;
     }
-    line(out, l, b, r, b, xa);
-    line(out, l, t, l, b, ya);
-    if xa.show_opposite {
-        line(out, l, t, r, t, xa);
+    let line = |out: &mut Vec<Item>, (x0, y0): (f64, f64), (x1, y1): (f64, f64), a: &Axis, color: Color| {
+        let mut d = String::new();
+        move_to(&mut d, x0, y0);
+        line_to(&mut d, x1, y1);
+        let stroke = Stroke { color, width: a.line_width_pt, dash: Vec::new(), cap: Cap::Square, join: Join::Miter };
+        out.push(Item::Path { d, fill: None, stroke: Some(stroke) });
+    };
+    // The edge each axis is drawn on, and the edge across from it.
+    let (x_main, x_other) = if xa.side == AxisSide::Opposite { (t, b) } else { (b, t) };
+    let (y_main, y_other) = if ya.side == AxisSide::Opposite { (r, l) } else { (l, r) };
+    if shown(xa) {
+        line(out, (l, x_main), (r, x_main), xa, xc);
     }
-    if ya.show_opposite {
-        line(out, r, t, r, b, ya);
+    if shown(ya) {
+        line(out, (y_main, t), (y_main, b), ya, yc);
+    }
+    if shown(xa) && xa.show_opposite {
+        line(out, (l, x_other), (r, x_other), xa, xc);
+    }
+    if shown(ya) && ya.show_opposite {
+        line(out, (y_other, t), (y_other, b), ya, yc);
     }
 }
 
@@ -190,11 +617,18 @@ fn outward_extent(axis: &Axis) -> f64 {
     e
 }
 
-fn draw_ticks(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
-    let f = geom.frame;
-    let stroke = |a: &Axis| Stroke::solid(a.color, a.line_width_pt);
-    // Horizontal axis: ticks run vertically. `inward` is +1 when "into the frame" is +y.
-    let mut side = |axis: &Axis, resolved: &ResolvedAxis, horizontal: bool, line_pos: f64, inward: f64| {
+/// Draws the ticks of one axis on its own edge and, with `opposite_ticks`, on the edge across
+/// (mirrored, so an `In` tick still points into the frame). `horizontal` is true for X.
+fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect, horizontal: bool, color: Color) {
+    // (position of the edge, +1 when "into the frame" is the positive page direction).
+    let (main, other) = match (horizontal, axis.side) {
+        (_, AxisSide::Hidden) => return,
+        (true, AxisSide::Normal) => ((f.y + f.h, -1.0), (f.y, 1.0)),
+        (true, AxisSide::Opposite) => ((f.y, 1.0), (f.y + f.h, -1.0)),
+        (false, AxisSide::Normal) => ((f.x, 1.0), (f.x + f.w, -1.0)),
+        (false, AxisSide::Opposite) => ((f.x + f.w, -1.0), (f.x, 1.0)),
+    };
+    let side = |out: &mut Vec<Item>, (line_pos, inward): (f64, f64)| {
         let mut d = String::new();
         let sets = [
             (&resolved.major, axis.major_tick, axis.major_tick_len_pt),
@@ -219,17 +653,12 @@ fn draw_ticks(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
             }
         }
         if !d.is_empty() {
-            out.push(Item::Path { d, fill: None, stroke: Some(stroke(axis)) });
+            out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, axis.line_width_pt)) });
         }
     };
-    let (xa, ya) = (&layer.x_axis, &layer.y_axis);
-    side(xa, &geom.x, true, f.y + f.h, -1.0);
-    if xa.opposite_ticks {
-        side(xa, &geom.x, true, f.y, 1.0);
-    }
-    side(ya, &geom.y, false, f.x, 1.0);
-    if ya.opposite_ticks {
-        side(ya, &geom.y, false, f.x + f.w, -1.0);
+    side(out, main);
+    if axis.opposite_ticks {
+        side(out, other);
     }
 }
 
@@ -239,129 +668,260 @@ fn label_gap(axis: &Axis) -> f64 {
     0.35 * axis.tick_font.size_pt
 }
 
-/// Draws the X tick labels; returns the y of the bottom of the label block
-/// (or of the tick ends when there are no labels).
-fn draw_x_labels(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry, m: &dyn TextMeasurer) -> f64 {
-    let (axis, f) = (&layer.x_axis, geom.frame);
-    let tick_end = f.y + f.h + outward_extent(axis);
-    if !axis.show_tick_labels {
-        return tick_end;
-    }
-    let size = axis.tick_font.size_pt;
-    let top = tick_end + label_gap(axis);
-    let baseline = top + ASCENT * size;
-    for (v, label) in geom.x.major.iter().zip(&geom.x.labels) {
-        let u = geom.x.to_unit(*v);
-        if u.is_finite() {
-            text::place(out, m, label, &axis.tick_font, size, (f.x + u * f.w, baseline), Anchor::Middle, 0.0);
-        }
-    }
-    top + (ASCENT + DESCENT) * size
+/// Whether the tick at unit position `u` is at the far end of an axis that leaves out its end
+/// label (`hide_end_label`): the top of a Y axis or the right end of an X axis, whatever the
+/// direction of the values.
+fn at_hidden_end(axis: &Axis, u: f64) -> bool {
+    axis.hide_end_label && u >= 1.0 - 1e-9
 }
 
-/// Draws the Y tick labels; returns the x of the left edge of the widest
-/// label (or of the tick ends when there are no labels).
-fn draw_y_labels(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry, m: &dyn TextMeasurer) -> f64 {
-    let (axis, f) = (&layer.y_axis, geom.frame);
-    let tick_end = f.x - outward_extent(axis);
+/// The rotation of an X axis' tick labels in degrees, counter-clockwise, in (-180, 180]; 0 when
+/// the stored angle is not a number.
+fn label_angle(axis: &Axis) -> f64 {
+    let a = axis.tick_label_angle_deg;
+    if !a.is_finite() {
+        return 0.0;
+    }
+    let a = a.rem_euclid(360.0);
+    if a > 180.0 { a - 360.0 } else { a }
+}
+
+/// Draws the X tick labels in `font` below the frame, or above it for an axis on the top edge.
+/// Returns the outer edge of the label block: its bottom (top), or the tick ends when the
+/// labels are hidden.
+///
+/// Rotated labels (graphing spec 14.5) hang from the corner of their text box that is nearest to
+/// the axis, which sits right under (over) the tick; the block reaches as far as the deepest label.
+fn draw_x_labels(
+    out: &mut Vec<Item>,
+    axis: &Axis,
+    resolved: &ResolvedAxis,
+    f: Rect,
+    font: &Font,
+    m: &dyn TextMeasurer,
+) -> f64 {
+    let size = axis.tick_font.size_pt;
+    let top_side = axis.side == AxisSide::Opposite;
+    let tick_end = if top_side { f.y - outward_extent(axis) } else { f.y + f.h + outward_extent(axis) };
+    if !axis.show_tick_labels {
+        return tick_end;
+    }
+    // The side of the label block that faces the axis.
+    let near = if top_side { tick_end - label_gap(axis) } else { tick_end + label_gap(axis) };
+    let labels = resolved.major.iter().zip(&resolved.labels).filter_map(|(v, label)| {
+        let u = resolved.to_unit(*v);
+        (u.is_finite() && !at_hidden_end(axis, u)).then_some((f.x + u * f.w, label))
+    });
+    let angle = label_angle(axis);
+    if angle == 0.0 {
+        let baseline = if top_side { near - DESCENT * size } else { near + ASCENT * size };
+        for (x, label) in labels {
+            text::place(out, m, label, font, size, (x, baseline), Anchor::Middle, 0.0);
+        }
+        let depth = (ASCENT + DESCENT) * size;
+        return if top_side { near - depth } else { near + depth };
+    }
+    let (sin, cos) = angle.to_radians().sin_cos();
+    let mut depth: f64 = 0.0;
+    for (x, label) in labels {
+        if label.is_empty() {
+            continue;
+        }
+        let w = text::width(m, label, &axis.tick_font, size);
+        // The text box in label coordinates (along the text, down from the baseline start),
+        // turned to page offsets from the baseline start.
+        let corners = [(0.0, -ASCENT * size), (w, -ASCENT * size), (w, DESCENT * size), (0.0, DESCENT * size)]
+            .map(|(a, b)| (a * cos + b * sin, -a * sin + b * cos));
+        let ymin = corners.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
+        let ymax = corners.iter().map(|c| c.1).fold(f64::NEG_INFINITY, f64::max);
+        // The corner (or edge) nearest to the axis goes right under (over) the tick.
+        let target = if top_side { ymax } else { ymin };
+        let tol = 1e-9 * target.abs().max(1.0);
+        let touching: Vec<f64> = corners.iter().filter(|c| (c.1 - target).abs() <= tol).map(|c| c.0).collect();
+        let xt = touching.iter().sum::<f64>() / touching.len() as f64;
+        text::place(out, m, label, font, size, (x - xt, near - target), Anchor::Start, angle);
+        depth = depth.max(ymax - ymin);
+    }
+    if top_side { near - depth } else { near + depth }
+}
+
+/// Draws the Y tick labels in `font`: right-aligned left of the frame, or left-aligned right of
+/// it for an axis on the right edge. Returns the outer edge of the widest label (or of the tick
+/// ends when the labels are hidden).
+fn draw_y_labels(
+    out: &mut Vec<Item>,
+    axis: &Axis,
+    resolved: &ResolvedAxis,
+    f: Rect,
+    font: &Font,
+    m: &dyn TextMeasurer,
+) -> f64 {
+    let right_side = axis.side == AxisSide::Opposite;
+    let tick_end = if right_side { f.x + f.w + outward_extent(axis) } else { f.x - outward_extent(axis) };
     if !axis.show_tick_labels {
         return tick_end;
     }
     let size = axis.tick_font.size_pt;
-    let right = tick_end - label_gap(axis);
-    let mut left = right;
-    for (v, label) in geom.y.major.iter().zip(&geom.y.labels) {
-        let u = geom.y.to_unit(*v);
-        if !u.is_finite() {
+    let (start, anchor) = if right_side {
+        (tick_end + label_gap(axis), Anchor::Start)
+    } else {
+        (tick_end - label_gap(axis), Anchor::End)
+    };
+    let mut edge = start;
+    for (v, label) in resolved.major.iter().zip(&resolved.labels) {
+        let u = resolved.to_unit(*v);
+        if !u.is_finite() || at_hidden_end(axis, u) {
             continue;
         }
         let y = f.y + (1.0 - u) * f.h;
-        left = left.min(right - text::width(m, label, &axis.tick_font, size));
-        text::place(
-            out,
-            m,
-            label,
-            &axis.tick_font,
-            size,
-            (right, y + (ASCENT - DESCENT) / 2.0 * size),
-            Anchor::End,
-            0.0,
-        );
+        let w = text::width(m, label, &axis.tick_font, size);
+        edge = if right_side { edge.max(start + w) } else { edge.min(start - w) };
+        text::place(out, m, label, font, size, (start, y + (ASCENT - DESCENT) / 2.0 * size), anchor, 0.0);
     }
-    left
+    edge
 }
 
-fn first_title(project: &Project, pds: &[PlotData], y_axis: bool) -> String {
+/// The title of an axis without a title of its own, from the layer's first plot: its Y column for
+/// a Y axis; for an X axis its X column (numbers or text), else the column that labels the ticks,
+/// else `Row`.
+fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
     if y_axis {
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
     }
-    match pd.plot.x.filter(|_| pd.x.is_some()).and_then(|id| project.column(id)) {
+    let x = pd.plot.x.and_then(|id| project.column(id));
+    match x.or_else(|| data::label_column(project, axis, Dim::X, Some(pd))) {
         Some(c) => c.axis_title(),
         None => "Row".to_string(),
     }
 }
 
-fn draw_titles(
+/// X title, centred on the frame, `0.6 * size` beyond the labels' outer edge `labels_edge`.
+#[allow(clippy::too_many_arguments)]
+fn draw_x_title(
     out: &mut Vec<Item>,
     project: &Project,
-    layer: &Layer,
-    geom: &LayerGeometry,
+    axis: &Axis,
+    f: Rect,
     pds: &[PlotData],
+    labels_edge: f64,
+    font: &Font,
     m: &dyn TextMeasurer,
-    x_labels_bottom: f64,
-    y_labels_left: f64,
 ) {
-    let f = geom.frame;
-    let (xa, ya) = (&layer.x_axis, &layer.y_axis);
-    if xa.show_title {
-        let title = xa.title.clone().unwrap_or_else(|| first_title(project, pds, false));
-        let size = xa.title_font.size_pt;
-        let baseline = x_labels_bottom + 0.6 * size + ASCENT * size;
-        text::place(out, m, &title, &xa.title_font, size, (f.x + f.w / 2.0, baseline), Anchor::Middle, 0.0);
+    if !axis.show_title {
+        return;
     }
-    if ya.show_title {
-        let title = ya.title.clone().unwrap_or_else(|| first_title(project, pds, true));
-        let size = ya.title_font.size_pt;
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
+    let size = axis.title_font.size_pt;
+    let baseline = if axis.side == AxisSide::Opposite {
+        // The text's bottom edge (baseline plus descent) faces the labels below it.
+        labels_edge - 0.6 * size - DESCENT * size
+    } else {
+        labels_edge + 0.6 * size + ASCENT * size
+    };
+    text::place(out, m, &title, font, size, (f.x + f.w / 2.0, baseline), Anchor::Middle, 0.0);
+}
+
+/// Y title, rotated 90 degrees counter-clockwise (read from bottom to top) on either side, centred
+/// on the frame height, `0.6 * size` beyond the labels' outer edge `labels_edge`.
+#[allow(clippy::too_many_arguments)]
+fn draw_y_title(
+    out: &mut Vec<Item>,
+    project: &Project,
+    axis: &Axis,
+    f: Rect,
+    pds: &[PlotData],
+    labels_edge: f64,
+    font: &Font,
+    m: &dyn TextMeasurer,
+) {
+    if !axis.show_title {
+        return;
+    }
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
+    let size = axis.title_font.size_pt;
+    let x = if axis.side == AxisSide::Opposite {
+        // The tops of the letters (the ascent side) face the labels on the left.
+        labels_edge + 0.6 * size + ASCENT * size
+    } else {
         // The text's bottom edge (baseline plus descent) faces the axis.
-        let x = y_labels_left - 0.6 * size - DESCENT * size;
-        text::place(out, m, &title, &ya.title_font, size, (x, f.y + f.h / 2.0), Anchor::Middle, 90.0);
-    }
+        labels_edge - 0.6 * size - DESCENT * size
+    };
+    text::place(out, m, &title, font, size, (x, f.y + f.h / 2.0), Anchor::Middle, 90.0);
 }
 
 // ----- legend --------------------------------------------------------------------------------
 
+/// How far the major ticks reach into the frame on each edge, over every axis drawn in the frame
+/// (a layer and its right Y layer, not the other panels of a stack); a legend in a corner keeps
+/// clear of them. `None` where no axis draws ticks on that edge.
+#[derive(Copy, Clone, Debug, Default)]
+struct EdgeTicks {
+    left: Option<f64>,
+    right: Option<f64>,
+    top: Option<f64>,
+    bottom: Option<f64>,
+}
+
+fn edge_ticks(g: &Graph, index: usize) -> EdgeTicks {
+    fn add(slot: &mut Option<f64>, v: f64) {
+        *slot = Some(slot.map_or(v, |old| old.max(v)));
+    }
+    // `across` is `None` when the axis draws no ticks on the edge across (a waterfall never does).
+    fn axis(a: &Axis, main: &mut Option<f64>, across: Option<&mut Option<f64>>) {
+        let inward =
+            if matches!(a.major_tick, TickDirection::In | TickDirection::Both) { a.major_tick_len_pt } else { 0.0 };
+        add(main, inward);
+        if let Some(across) = across.filter(|_| a.opposite_ticks) {
+            add(across, inward);
+        }
+    }
+    let mut e = EdgeTicks::default();
+    for i in g.same_frame(index) {
+        let (xa, ya) = (&g.layers[i].x_axis, &g.layers[i].y_axis);
+        let opposite = stack::waterfall(g, i).is_none();
+        match xa.side {
+            AxisSide::Normal => axis(xa, &mut e.bottom, opposite.then_some(&mut e.top)),
+            AxisSide::Opposite => axis(xa, &mut e.top, opposite.then_some(&mut e.bottom)),
+            AxisSide::Hidden => {}
+        }
+        match ya.side {
+            AxisSide::Normal => axis(ya, &mut e.left, opposite.then_some(&mut e.right)),
+            AxisSide::Opposite => axis(ya, &mut e.right, opposite.then_some(&mut e.left)),
+            AxisSide::Hidden => {}
+        }
+    }
+    e
+}
+
+/// Draws legend `lg` with one row per entry inside frame `f`.
 fn draw_legend(
     out: &mut Vec<Item>,
     project: &Project,
-    layer: &Layer,
-    geom: &LayerGeometry,
-    pds: &[PlotData],
+    lg: &Legend,
+    f: Rect,
+    entries: &[&PlotData],
+    ticks: &EdgeTicks,
     m: &dyn TextMeasurer,
 ) {
-    let lg = &layer.legend;
-    if !lg.visible || pds.is_empty() {
+    if !lg.visible || entries.is_empty() {
         return;
     }
     let fs = lg.font.size_pt;
-    let f = geom.frame;
-    let labels: Vec<String> = pds.iter().map(|pd| project.plot_label(pd.plot)).collect();
+    let labels: Vec<String> = entries.iter().map(|pd| project.plot_label(pd.plot)).collect();
     let sample = 2.2 * fs;
     let gap = 0.5 * fs;
     let pad = 0.4 * fs;
     let row_h = 1.3 * fs;
     let text_w = labels.iter().map(|l| text::width(m, l, &lg.font, fs)).fold(0.0, f64::max);
     let w = 2.0 * pad + sample + gap + text_w;
-    let h = 2.0 * pad + row_h * pds.len() as f64;
+    let h = 2.0 * pad + row_h * entries.len() as f64;
 
     // Margin from the nearest frame edges; ticks pointing in push the legend further.
-    let tick_in =
-        |dir: TickDirection, len: f64| if matches!(dir, TickDirection::In | TickDirection::Both) { len } else { 0.0 };
-    let (xa, ya) = (&layer.x_axis, &layer.y_axis);
-    let m_left = 0.8 * fs + tick_in(ya.major_tick, ya.major_tick_len_pt);
-    let m_bottom = 0.8 * fs + tick_in(xa.major_tick, xa.major_tick_len_pt);
-    let m_right = 0.8 * fs + if ya.opposite_ticks { tick_in(ya.major_tick, ya.major_tick_len_pt) } else { 0.0 };
-    let m_top = 0.8 * fs + if xa.opposite_ticks { tick_in(xa.major_tick, xa.major_tick_len_pt) } else { 0.0 };
+    let m_left = 0.8 * fs + ticks.left.unwrap_or(0.0);
+    let m_bottom = 0.8 * fs + ticks.bottom.unwrap_or(0.0);
+    let m_right = 0.8 * fs + ticks.right.unwrap_or(0.0);
+    let m_top = 0.8 * fs + ticks.top.unwrap_or(0.0);
     let (x0, y0) = match lg.position {
         LegendPosition::TopLeft => (f.x + m_left, f.y + m_top),
         LegendPosition::TopRight => (f.x + f.w - m_right - w, f.y + m_top),
@@ -373,7 +933,7 @@ fn draw_legend(
         let stroke = lg.frame.then(|| Stroke::solid(lg.font.color, 0.75));
         out.push(Item::Rect { rect: Rect { x: x0, y: y0, w, h }, fill: lg.background, stroke });
     }
-    for (i, (pd, label)) in pds.iter().zip(&labels).enumerate() {
+    for (i, (pd, label)) in entries.iter().zip(&labels).enumerate() {
         let cy = y0 + pad + row_h * (i as f64 + 0.5);
         let sx0 = x0 + pad;
         let sx1 = sx0 + sample;
@@ -388,6 +948,15 @@ fn draw_legend(
             let mut d = String::new();
             symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
             out.push(symbol_item(d, &plot.symbol));
+        }
+        if plot.kind == PlotKind::Column {
+            // A small bar: as long as a line sample, one font size high, filled and outlined
+            // like the bars.
+            out.push(Item::Rect {
+                rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                fill: Some(plot.symbol.color),
+                stroke: (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
+            });
         }
         let baseline = cy + (ASCENT - DESCENT) / 2.0 * fs;
         text::place(out, m, label, &lg.font, fs, (sx1 + gap, baseline), Anchor::Start, 0.0);

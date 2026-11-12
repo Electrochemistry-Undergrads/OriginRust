@@ -12,11 +12,13 @@
 
 mod data;
 mod fonts;
+pub mod hit;
 mod layout;
 pub mod markup;
 mod plots;
 mod raster;
 pub mod scene;
+mod stack;
 mod svg;
 mod text;
 pub mod ticks;
@@ -35,6 +37,9 @@ pub enum PlotError {
     /// The project has no graph with this id.
     #[error("there is no graph with id {0:?} in the project")]
     NoSuchGraph(WindowId),
+    /// The graph has no layer with this index.
+    #[error("the graph has no layer {0}")]
+    NoSuchLayer(usize),
     /// The scene could not be written as SVG.
     #[error("could not build the SVG: {0}")]
     Svg(String),
@@ -71,8 +76,11 @@ pub struct Rect {
 /// The GUI uses this for read-outs, zooming and hit testing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerGeometry {
-    /// The rectangle data is drawn in, in page points.
+    /// The rectangle the axes are drawn on and data is mapped into, in page points.
     pub frame: Rect,
+    /// The rectangle data is clipped to. It is `frame`, except in a waterfall, where `frame` is
+    /// the smaller front frame and later curves are drawn moved into the rest of this rectangle.
+    pub clip: Rect,
     /// The resolved X axis.
     pub x: ticks::ResolvedAxis,
     /// The resolved Y axis.
@@ -112,16 +120,24 @@ pub struct Raster {
     pub rgba: Vec<u8>,
 }
 
-/// Frame rectangles and resolved axes of every layer of a graph.
+/// Frame rectangles and resolved axes of every layer of a graph, in layer order. A layer linked
+/// to another one has its frame placed relative to its parent's (the same frame for the right Y
+/// axis of a double-Y graph, its own place for a panel of a stack) and, when its X scale is
+/// linked, its parent's X axis.
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    Ok(g.layers
-        .iter()
-        .map(|layer| {
-            let pds = data::collect(project, layer);
-            layout::layer_geometry(layer, &g.page, &pds, SystemFonts::shared())
-        })
-        .collect())
+    let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
+}
+
+/// The offsets `(x, y)`, in axis units, at which each plot of a layer is drawn, one pair per plot
+/// in plot order (graphing spec section 13). They are `(0, 0)` unless the layer stacks its curves;
+/// in automatic mode they are computed from the current data. The desktop app copies them into
+/// the layer when the user switches to individual offsets, so that the picture does not jump.
+pub fn stack_offsets(project: &Project, graph: WindowId, layer: usize) -> Result<Vec<(f64, f64)>, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let layer = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
+    Ok(stack::places(project, layer).0.into_iter().map(|p| (p.ox, p.oy)).collect())
 }
 
 /// Renders a graph as SVG text, measuring text with the installed fonts.
@@ -134,6 +150,18 @@ pub fn render_svg(project: &Project, graph: WindowId) -> Result<String, PlotErro
 pub fn render_svg_with(project: &Project, graph: WindowId, measurer: &dyn TextMeasurer) -> Result<String, PlotError> {
     let scene = layout::build_scene(project, graph, measurer)?;
     Ok(svg::write_svg(&scene))
+}
+
+/// The scene of a graph, with the pickable objects that [`hit::hit_test`] looks at, measured
+/// with the installed fonts. Draw it with [`render_scene_raster`].
+pub fn graph_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, PlotError> {
+    layout::build_scene(project, graph, SystemFonts::shared())
+}
+
+/// Renders a scene from [`graph_scene`] to pixels at `pixels_per_point` (1 = 72 dpi). The
+/// picture is the same as [`render_raster`] of the graph the scene was made from.
+pub fn render_scene_raster(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
+    raster::rasterise(&svg::write_svg(scene), pixels_per_point, SystemFonts::shared())
 }
 
 /// Renders a graph to pixels at `pixels_per_point` (1 = 72 dpi), for showing on screen.

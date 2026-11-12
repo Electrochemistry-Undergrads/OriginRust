@@ -1,106 +1,62 @@
 # Handoff
 
-Last updated: 2026-11-11, about 23:30, by the Claude Code session `originrust-3a` (the lead). Only
-one session should work on the repository at a time.
+Last updated: 2026-11-12, about 14:00, by the lead Claude Code session. Only one session should
+merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lead).
 
-## The owner's new requests (2026-11-11, evening)
+## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
 
-1. The desktop app should **look and work like Origin** (OriginPro 2016), so the owner's skills
-   carry over: same window arrangement, menu names and order, dialogs, right-click menus,
-   double-click actions and shortcuts. Icons, artwork and help text stay our own (clean-room rule).
-2. Sheaf should have **all of Origin's features**, and this must be checked, not assumed.
-3. **`.opj` is to be the default project format** (Save, Save As, `--save`, export). Agreed
-   safeguard: while the writer cannot store everything (formulas, folders, some graph details), saving also writes a
-   `.sheaf` copy next to the `.opj` and says what only the copy holds.
-
-These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11-11").
-
-## Two sessions at work: who owns what (read this first)
-
-The owner runs two Claude sessions on this repository. Cross-session messages are not getting
-through (they are held for approval and expire), so the split is written here:
-
-- **Lead: session `originrust-3a`** (Claude Code, cf09e3ad). Only the lead merges to `main`,
-  pushes, and edits HANDOFF.md, docs/ROADMAP.md and docs/LESSONS.md. The lead owns `crates/app`
-  (being rebuilt in Origin's style, ADR 0007), the `.opj` writer (`crates/io/src/opj/`, new
-  files), the CH Instruments binary reader, curve math, date and time columns and recalculating
-  formulas (workflows `chi-binary-reader`, `parity-gui-opj`, `p0-gaps-core`).
-- **Second session: "Sonnet subagents from ORIGIN_RUST_PROMPT"** (05b367c2). It owns branch
-  `chi-text-real` (CH Instruments text importer checked against the owner's real text files) and
-  `graph-p0`: milestone 6 graph work in `crates/core/src/graph.rs`, `crates/plot` and `crates/cli`
-  (column and bar plots with text tick labels, offset and stacked plots, multi-panel, double Y,
-  log and reciprocal scales, error bars) plus reading plot offsets from `.opj` in
-  `crates/io/src/opj/graph.rs`. Please stay out of `crates/app` (expose options in the model,
-  renderer and CLI; the lead wires them into the app), never merge to `main`, and leave notes for
-  the lead in `re-workspace/scratch/peer-notes.md` (local file) naming each branch that is ready.
-- Each session builds in its own folders under `target/` with `CARGO_PROFILE_DEV_DEBUG=0` (the
-  disk filled up once; see LESSONS.md).
-- ADR numbers: `main` has ADR 0008 (`.opj` default with companion). The `graph-p0` branch's ADRs
-  0008 (linked layers) and 0009 (stack offsets) become 0009 and 0010 when the lead merges them;
-  the next free number after that is 0011.
-- Merged from the second session so far: `chi-text-real` (squashed as `89e617a`).
+1. The desktop app should **look and work like Origin** (OriginPro 2016): same window arrangement,
+   menu names and order, dialogs, right-click menus, double-click actions and shortcuts. Icons,
+   artwork and help text stay our own (clean-room rule). Plan: ADR 0007.
+2. Sheaf should have **all of Origin's features**, checked, not assumed (`docs/spec/feature-parity.md`).
+3. **`.opj` is the default project format.** While the writer cannot store everything, saving also
+   writes a `<name>.opj.sheaf` companion and says what only the copy holds (ADR 0008).
 
 ## Where things stand
 
-- **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed; CI runs on push.
-- **Milestones 1 to 3 are done** and tagged. Milestone 2 still needs the owner for two checks.
-- **Milestone 4 (fitting) is done** and tagged `m4-fitting`: its 11 review findings were fixed,
-  reviewed again and merged (`fe407b1`, `0ac9546`, `83a09de`).
-- **CH Instruments binary files** are read (`2ca7d26`): CV, i-t and chronopotentiometry `.bin`
-  files give the same workbooks as text exports. The owner's six `.bin` files (git-ignored) import
-  and plot correctly by eye. Open points are in `docs/spec/chi-binary-format.md` section 5 (CP
-  sample interval, which CP current is cathodic). CH Instruments programs on the Desktop must not
-  be started without the owner's go-ahead (a potentiostat may be connected; their `.ini`/`.cfg`
-  files are the owner's settings).
-- **Milestone 5**: workbooks and basic graphs are read from `.opj` and merged (`d3c3a3f`). Origin's
-  text escapes `\f:`, `\p`, `\x`, `\v` are now understood in labels. Known gaps: 34 of 41 graphs of
-  the owner's "Integration of Delithiation SF data" project are missed; XRD curves that Origin
-  draws offset are drawn on top of each other (plot offsets are not read).
-- **Done on 2026-11-12**: the parity audit (`docs/spec/feature-parity.md`), the interface study
-  (`docs/spec/gui-look.md`, ADR 0007 accepted), the `.opj` writer for workbooks (verified in
-  Origin 2016), the CH Instruments `.bin` reader, curve math, multi-range integration, date and
-  time columns, recalculating formulas, fit bands and controls, CSV/ICP-OES import extras with
-  batch import, the peak analysis chain.
-- **Merged on 2026-11-12 (morning)**: `.opj` is the default save format with a `.opj.sheaf`
-  companion (ADR 0008); the app shell has Origin's theme, child windows, Window menu and menu bars
-  per window type (ADR 0007 steps 1 to 4); `docs/spec/gui-look.md` completed from a second set of
-  pictures (`re-workspace/scratch/gui-study2/`, local only).
-- **Merged on 2026-11-12 (midday)**: graphs written into `.opj` (Origin opened 18 written graphs;
-  the companion is now needed only for formulas, folders and graph details the writer lacks),
-  basic statistics (Statistics menu: t-tests, one-way ANOVA, frequency counts, normality), and the
-  second session's CH Instruments text work (`89e617a`, squashed so no numbers from the owner's
-  files enter the history). Note: the second session pushed its branch `chi-text-real` to GitHub
-  with a few numbers from the owner's charge-discharge file in a spec paragraph; delete that
-  remote branch when the second session no longer needs it (ask the owner).
-- **Running**: workflow `origin-look-2` (run `wf_4cb25432-db5`): ADR 0007 steps 5 to 7 (workbook
-  look with selection and copy/paste, toolbars, Project Explorer and panels). The second session
-  works on `graph-p0` (double Y, stacked and waterfall plots committed there).
-- **Known app bug** (seen by an agent, not traced): after a click into the graph body a popup layer
-  of about 450 x 470 px can stay on screen and swallow the next click on a window title below it.
-
-All checks pass on `main` at `4b02ea3` (687 tests). Parity counts are recomputed with `python tools/parity-count.py`.
+- **GitHub** (private): https://github.com/UlanS1/OriginRust. CI runs on push.
+- Milestones 1 to 5 are done and tagged (milestone 2 still needs the owner for two checks; milestone
+  5 misses some graphs of one owner project). Owner requests: parity audit, interface study, `.opj`
+  writer for workbooks and graphs, `.opj` as default with companion: done.
+- **Merged on 2026-11-12 (afternoon)**:
+  - The second session's graph work (branch `graph-p0`, its four commits up to `6c668ed`): double-Y
+    as linked layers, stacked lines and waterfall, column charts with sample names, multi-panel
+    graphs. An independent review found that saving to `.opj` silently dropped all of it; fixed in
+    `11f6fdb` (the writer now names each such feature, so the companion keeps it). Its ADRs are now
+    0009 and 0010.
+  - ADR 0007 step 8, the graph window (`0e23919`): page on grey ground, layer icons and an active
+    layer, click selects, double-click opens the settings of that axis, plot or legend, Origin's
+    right-click menus per object, Delete, Ctrl+R, Layer Contents (F12), Plot Setup. Picking uses new
+    `sheaf_plot::hit` (the scene records which items belong to which object).
+  - The "popup that swallows the next click" bug was not reproduced; a UI test now guards it.
+- **Running when this was written**: a subagent on branch `worktree-agent-a175d68f1d5696c0d` (worktree
+  `.claude/worktrees/agent-a175d68f1d5696c0d`) writes column formulas and nested folders into `.opj` and reads them back,
+  checked in Origin through COM. If this session ended before merging it, look for that branch
+  (`git log main..worktree-agent-a175d68f1d5696c0d`), read its commit messages, run the checks and merge.
 
 ## Exact next step
 
-1. Merge the `origin-look-2` branch after its reviews; full checks after each merge. Merge `chi-text-real` and
-   `graph-p0` (second session) when its note says they are ready.
-2. Continue ADR 0007: steps 8 to 10 (graph window look and mouse actions, dialogs in Origin's
-   layout, window geometry in the project file), and fix the popup bug above.
-3. Write column formulas (and folders) into `.opj`, so the `.opj.sheaf` companion is rarely
-   needed; tick number formats in written graphs.
-4. Then the gaps from the parity audit in its order (column and bar charts with text labels,
-   offset and stacked plots, multi-panel, double Y, log scales are P0 for the owner).
+1. Merge the `.opj` formulas-and-folders branch when it is done (full checks after the merge).
+2. ADR 0007 step 9: dialogs in Origin's layout — the axis dialog (Horizontal/Vertical list; tabs
+   Scale, Tick Labels, Title, Grids, Line and Ticks) and Plot Details (layer/plot tree at the left,
+   tabs at the right), from `docs/spec/gui-look.md` section 5. Then step 10: window positions saved
+   in the project.
+3. Write the new graph features into `.opj` (linked layers, offsets, bar spacing, tick label
+   sources) so the companion is rarely needed; tick number formats in written graphs.
+4. App controls the graph work exposes only in the CLI: per-plot left/right axis, offsets editor.
+5. Then the parity-audit gaps in their order.
+
+Small open points from the review (not yet fixed): `--offsets` pairs values with plots, not stack
+members, so a fitted curve takes a value; deleting a column leaves a `TickLabelSource::Column` or
+plot offset pointing at it (harmless, never cleaned).
 
 ## Open questions noted by the agents (no answer needed to continue)
 
 - Fit reports show the standard error of a fixed parameter as blank (Origin's sheet stores 0).
-- Origin's bound handling can stop above the true constrained minimum; Sheaf copies it. An option
-  for the true constrained minimum could be added.
-- Should the B-spline label say more clearly that factor 0 is not Origin's result?
+- Origin's bound handling can stop above the true constrained minimum; Sheaf copies it.
 - `.opj` graphs: plot groups (Origin's colour increments) are not modelled; legend frames and
   Origin-style log tick labels are not drawn.
-- The automatic axis range can leave a wide empty band (data from -0.2 to 1.0 gave an axis from
-  -0.5 to 1.0); compare with Origin's rescale rule.
+- The automatic axis range can leave a wide empty band (data from -0.2 to 1.0 gave -0.5 to 1.0).
 
 ## Commands that verify the current state
 
@@ -108,35 +64,31 @@ All checks pass on `main` at `4b02ea3` (687 tests). Parity counts are recomputed
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo run -p sheaf-cli -- fit data.csv -m Gauss --plot fit.png
-cargo run -p sheaf-cli -- analyze smooth cv.txt --method fft --points 10
-cargo run -p sheaf-app -- data.csv --show fit:nonlinear --screenshot window.png
+cargo run -p sheaf-app -- data.csv --screenshot window.png
+cargo run -p sheaf-cli -- plot a.txt b.txt -t cv --panels stack -o cv.png
 ```
 
-`re-workspace/scratch/gen_chi.js` (local only) writes synthetic CV, current-vs-time and CSV files:
-`node re-workspace/scratch/gen_chi.js re-workspace/scratch/cli`.
+Build with `CARGO_TARGET_DIR=target/lead` and `CARGO_PROFILE_DEV_DEBUG=0` (the disk filled once; it
+is at about 88 %). `re-workspace/scratch/gen_chi.js` (local only) writes synthetic test files.
 
 ## Needs from me (the owner)
 
-0. For the `.bin` reader: export the charge-discharge file `GCD(0.5C).bin` (most useful), the CV
-   and one i-t file as text from the CH Instruments program and put each `.txt` next to its `.bin`
-   (same name). A test then compares them automatically. Or allow me to run a copy of the CH
-   Instruments program myself (only when no experiment is running).
-
-1. **Try the app** (`cargo run --release -p sheaf-app`), import one of your real CH Instruments
-   files, try Analysis > Integrate and Analysis > Fit, and tell me what is wrong or missing. Real
-   CV and i-t export files in the repo folder would also let me check the importer.
+0. For the `.bin` reader: export `GCD(0.5C).bin`, the CV and one i-t file as text from the CH
+   Instruments program and put each `.txt` next to its `.bin` (same name). Or allow me to run a copy
+   of the CH Instruments program myself (only when no experiment is running).
+1. **Try the app** (`cargo run --release -p sheaf-app`): import a real CH Instruments file, plot,
+   right-click and double-click the graph, try Analysis > Integrate and Fit; tell me what is wrong.
 2. Example figures you make most often, to match their style.
-3. How you choose the limits when you integrate a peak in Origin (by rows, by potential, or by
-   dragging on the graph).
-
-Received: five `.opj` projects in the repo root (git-ignored; used only on this computer).
+3. How you choose integration limits in Origin (by rows, by potential, or by dragging on the graph).
+4. Do you plot charge/discharge curves against time or capacity, and per gram (needs the mass)?
+5. May I delete the remote branch `chi-text-real` on GitHub? It holds a few numbers from your
+   charge-discharge file in a spec paragraph (the merged copy on `main` does not).
 
 ## Local-only resources
 
-- `re-workspace/scratch/` holds scratch scripts, raw Origin dumps, synthetic files and screenshots.
-- The owner's `.opj` files are in the repo root (git-ignored).
+- `re-workspace/scratch/` holds scratch scripts, raw Origin dumps, synthetic files and screenshots;
+  `re-workspace/scratch/peer-notes.md` is the note file between the two sessions.
+- The owner's `.opj` and `.bin` files are in the repo root (git-ignored).
 - No Ghidra project and no saved REA evidence bundle exist.
-- Origin is driven through COM by the scripts in `tools/origin-ref/` (they take a system-wide lock
-  so only one Origin runs at a time).
-- Git identity is set for this repository only (`UlanS1`, GitHub no-reply address).
+- Origin is driven through COM by `tools/origin-ref/` (system-wide lock: one Origin at a time).
+- A hidden Origin instance started by an agent of the second session may still be running.

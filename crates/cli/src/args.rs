@@ -17,7 +17,7 @@ pub enum Command {
     /// Import data files into a project file.
     Import(ImportArgs),
     /// Make a figure from a data file or a project and write it as PNG, SVG or PDF.
-    Plot(PlotArgs),
+    Plot(Box<PlotArgs>),
     /// Write a graph of a project as PNG, SVG or PDF.
     Export(ExportArgs),
     /// Write a worksheet of a project as delimited text.
@@ -257,6 +257,14 @@ pub struct ImportArgs {
     pub read: ReadOptions,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AxisColors {
+    /// Each Y axis (line, ticks and tick labels) in the color of its first curve.
+    Plot,
+    /// Every axis in its own color (black in the built-in templates).
+    Fixed,
+}
+
 /// The layout of a multi-file import (`sheaf import --mode`).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ImportLayout {
@@ -314,6 +322,22 @@ pub struct StyleArgs {
     /// Distance between major Y ticks.
     #[arg(long)]
     pub y_step: Option<f64>,
+    /// Title of the right Y axis (the graph needs one: see --y2 and the double-y template).
+    #[arg(long, value_name = "TEXT")]
+    pub y2_title: Option<String>,
+    /// Lower limit of the right Y axis.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_min: Option<f64>,
+    /// Upper limit of the right Y axis.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_max: Option<f64>,
+    /// Distance between major ticks of the right Y axis.
+    #[arg(long)]
+    pub y2_step: Option<f64>,
+    /// Draw each Y axis in the color of its first curve (plot) or in its own color (fixed).
+    /// Without this option the template decides: double-y follows the curves.
+    #[arg(long, value_enum, value_name = "MODE")]
+    pub axis_colors: Option<AxisColors>,
     /// Page width in inches.
     #[arg(long, value_name = "INCHES")]
     pub width: Option<f64>,
@@ -323,15 +347,60 @@ pub struct StyleArgs {
     /// Line width of the data curves in points.
     #[arg(long, value_name = "PT")]
     pub line_width: Option<f64>,
-    /// Curve colors in plot order, comma-separated, as #RRGGBB or basic names.
+    /// Curve colors in legend order (left axis first, then right axis), comma-separated, as
+    /// #RRGGBB or basic names.
     #[arg(long, value_delimiter = ',', value_name = "COLORS")]
     pub colors: Vec<String>,
-    /// Legend labels in plot order, comma-separated.
+    /// Legend labels in legend order (left axis first, then right axis), comma-separated.
     #[arg(long, value_delimiter = ',', value_name = "LABELS")]
     pub labels: Vec<String>,
     /// Hide the legend.
     #[arg(long)]
     pub no_legend: bool,
+    /// Move the curves apart: none; auto (each curve above the one before it with a gap of 10 %
+    /// of the tallest curve); auto:GAP (gap in percent); step:STEP (curve k moved up by k * STEP
+    /// axis units; write a negative step as --stack=step:-500).
+    #[arg(long, value_name = "MODE", conflicts_with_all = ["offsets", "waterfall"])]
+    pub stack: Option<String>,
+    /// Move each curve up by its own amount in axis units, in plot order, for example
+    /// --offsets=0,1000,2000 (curves after the list keep their offsets).
+    #[arg(
+        long,
+        value_delimiter = ',',
+        value_name = "Y1,Y2,...",
+        allow_hyphen_values = true,
+        conflicts_with = "waterfall"
+    )]
+    pub offsets: Vec<f64>,
+    /// Draw a waterfall: curve k moved right by k * DX and up by k * DY percent of the front frame
+    /// (each from -100 to 100), for example --waterfall 5,10.
+    #[arg(long, value_delimiter = ',', value_name = "DX,DY", allow_hyphen_values = true)]
+    pub waterfall: Vec<f64>,
+    /// Hide the Y tick labels (stacked curves: the values on the axis are true only for the first
+    /// curve).
+    #[arg(long)]
+    pub no_y_tick_labels: bool,
+    /// Draw no Y ticks.
+    #[arg(long)]
+    pub no_y_ticks: bool,
+    /// Tick labels of the X axis: auto (the cells of the first curve's X column when it holds text,
+    /// such as sample names, otherwise numbers), numbers, or the short or long name of a column whose
+    /// cells label the ticks (looked up in the sheet of the first curve).
+    #[arg(long, value_name = "auto|numbers|COLUMN")]
+    pub x_labels: Option<String>,
+    /// Turn the X tick labels by this many degrees counter-clockwise, from -90 to 90 (write a
+    /// negative angle as --x-label-angle=-45).
+    #[arg(long, value_name = "DEG", allow_hyphen_values = true)]
+    pub x_label_angle: Option<f64>,
+    /// Column charts: the gap between neighbouring groups of bars, in percent of the distance
+    /// between X positions, from 0 to 100 (default 20).
+    #[arg(long, value_name = "PCT")]
+    pub bar_gap: Option<f64>,
+    /// Column charts: how much neighbouring bars of a group cover each other, in percent of a bar's
+    /// width, from -100 to 100 (default 0; a negative value leaves a gap, written as
+    /// --bar-overlap=-20).
+    #[arg(long, value_name = "PCT", allow_hyphen_values = true)]
+    pub bar_overlap: Option<f64>,
 }
 
 #[derive(Args, Debug)]
@@ -345,12 +414,20 @@ pub struct PlotArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Figure template: line, scatter, line-symbol or cv (default: what the importer suggests).
+    /// Figure template: line, scatter, line-symbol, column, cv, double-y, stacked or waterfall
+    /// (default: what the importer suggests). column draws one group of bars per row, the Y columns
+    /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
+    /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
+    /// curve above the one before it.
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
     #[arg(short, long, value_delimiter = ',')]
     pub y: Vec<String>,
+    /// Y columns to plot on a second Y axis on the right, comma-separated short or long names.
+    /// The left axis gets the -y columns (default: the other Y columns).
+    #[arg(long, value_delimiter = ',', value_name = "COLUMNS", conflicts_with = "graph")]
+    pub y2: Vec<String>,
     /// For a project input: the workbook to plot from (default: the first one).
     #[arg(long)]
     pub book: Option<String>,
@@ -364,10 +441,63 @@ pub struct PlotArgs {
     /// with a companion .opj.sheaf if needed) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
+    /// Make a graph of several panels: stack (one column of panels that share the X axis, the
+    /// first at the bottom, as Origin's Stack command), or ROWSxCOLUMNS such as 2x1 (Origin's
+    /// Vertical 2 Panel), 1x2 (Horizontal 2 Panel) or 2x2 (4 Panel). Each Y column gets its own
+    /// panel; with several files, each file does. Style options act on every panel; touching
+    /// panels with the same Y title (for example from --y-title) show it once.
+    #[arg(long, value_name = "stack|RxC", conflicts_with_all = ["graph", "y2"])]
+    pub panels: Option<String>,
+    /// The Y columns of one panel, comma-separated short or long names. Give it once per panel, in
+    /// panel order, for example --panel-y B,C --panel-y D. With several files, each panel gets
+    /// these columns of every file.
+    #[arg(long = "panel-y", value_name = "COLUMNS", requires = "panels", conflicts_with_all = ["y", "per_panel"])]
+    pub panel_y: Vec<String>,
+    /// How many curves go into each panel, in order, for example --per-panel 2,1,1.
+    #[arg(long, value_delimiter = ',', value_name = "N,N,...", requires = "panels")]
+    pub per_panel: Vec<usize>,
+    /// The gap between panels in percent of the page, from 0 to 50: one number for both
+    /// directions, or H,V (default: 0 for a stack; for a grid, the room the template leaves around
+    /// its frame).
+    #[arg(long, value_delimiter = ',', value_name = "PCT|H,V", allow_hyphen_values = true, requires = "panels")]
+    pub panel_gap: Vec<f64>,
+    /// The margins around the panels in percent of the page, from 0 to 90: L,R,T,B (default: 15,
+    /// 10, 10, 10 for a stack; for a grid, the template's margins).
+    #[arg(long, value_delimiter = ',', value_name = "L,R,T,B", allow_hyphen_values = true, requires = "panels")]
+    pub panel_margins: Vec<f64>,
+    /// Where the first panel goes (default: at the bottom for a stack and a single column, at the
+    /// top left otherwise).
+    #[arg(long, value_enum, requires = "panels")]
+    pub panel_order: Option<PanelOrderArg>,
+    /// The axes the panels share (default: x for a stack, none for a grid).
+    #[arg(long, value_enum, requires = "panels")]
+    pub panel_link: Option<PanelLinkArg>,
     #[command(flatten)]
     pub style: StyleArgs,
     #[command(flatten)]
     pub read: ReadOptions,
+}
+
+/// Where the first panel goes (`sheaf plot --panel-order`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PanelOrderArg {
+    /// Row by row from the bottom left: the first panel is at the bottom.
+    BottomUp,
+    /// Row by row from the top left.
+    TopDown,
+}
+
+/// The axes the panels share (`sheaf plot --panel-link`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PanelLinkArg {
+    /// One X axis for every panel.
+    X,
+    /// One Y axis for every panel.
+    Y,
+    /// Both.
+    Xy,
+    /// Every panel has its own axes.
+    None,
 }
 
 #[derive(Args, Debug)]

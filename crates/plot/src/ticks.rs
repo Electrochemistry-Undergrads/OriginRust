@@ -161,6 +161,42 @@ pub fn resolve_axis(axis: &Axis, data_min_max: Option<(f64, f64)>) -> ResolvedAx
     }
 }
 
+/// The most ticks a category axis gets with one tick per row; beyond that its step follows the
+/// usual rule (graphing spec 14.3).
+pub const CATEGORY_TICKS_MAX: f64 = 200.0;
+
+/// Resolves a category axis (graphing spec 14.3): rows stand at 1, 2, 3, ..., the automatic limits
+/// are half a step beyond the first and last drawn row and are not rounded, and the major step is 1
+/// while the axis spans at most [`CATEGORY_TICKS_MAX`]. `rows` is the smallest and largest position
+/// of a drawn row (`None` without rows, read as row 1).
+pub(crate) fn resolve_category(axis: &Axis, rows: Option<(f64, f64)>) -> ResolvedAxis {
+    let (lo, hi) = rows.unwrap_or((1.0, 1.0));
+    let (auto_min, auto_max) = (lo - 0.5, hi + 0.5);
+    let fixed = |v: Option<f64>| v.filter(|v| v.is_finite());
+    let span = (fixed(axis.max).unwrap_or(auto_max) - fixed(axis.min).unwrap_or(auto_min)).abs();
+    let step = axis
+        .major_step
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .unwrap_or_else(|| if span <= CATEGORY_TICKS_MAX { 1.0 } else { nice_step(span / 5.0) });
+    let drawn = Axis { auto_range: AutoRange::Tight, major_step: Some(step), ..axis.clone() };
+    resolve_axis(&drawn, Some((auto_min, auto_max)))
+}
+
+/// Replaces the tick labels with the cells of a label column (graphing spec 14.3): the major tick
+/// at a whole number k shows row k (counted from 1); every other tick gets an empty label, which
+/// draws nothing.
+pub(crate) fn label_from_cells(resolved: &mut ResolvedAxis, cells: &[String]) {
+    resolved.labels = resolved
+        .major
+        .iter()
+        .map(|&v| {
+            let k = v.round();
+            let whole = (v - k).abs() <= 1e-9 * v.abs().max(1.0);
+            if whole && k >= 1.0 && k <= cells.len() as f64 { cells[k as usize - 1].clone() } else { String::new() }
+        })
+        .collect();
+}
+
 fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
     let (mut lo, mut hi) = match data {
         Some((a, b)) if a.is_finite() && b.is_finite() => (a.min(b), a.max(b)),
@@ -465,6 +501,12 @@ mod tests {
             opposite_ticks: false,
             major_grid: None,
             minor_grid: None,
+            side: Default::default(),
+            color_follows_plot: false,
+            title_color_follows_plot: false,
+            tick_label_source: Default::default(),
+            tick_label_angle_deg: 0.0,
+            hide_end_label: false,
         }
     }
 

@@ -89,6 +89,51 @@ pub struct LayerScene {
     pub plots: Vec<Item>,
     /// Axes, ticks, labels, titles, legend and free labels.
     pub overlay: Vec<Item>,
+    /// What the items stand for, so that a click can be traced back to an object of the model
+    /// (see [`crate::hit`]). Not written to any file.
+    pub objects: Vec<SceneObject>,
+}
+
+/// An object of the model that a click can pick.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ObjectKind {
+    /// The X axis: its line, ticks and tick labels.
+    XAxis,
+    /// The Y axis: its line, ticks and tick labels.
+    YAxis,
+    /// The title of the X axis.
+    XTitle,
+    /// The title of the Y axis.
+    YTitle,
+    /// The legend.
+    Legend,
+    /// A free text label: its index in `Layer::labels`.
+    Label(usize),
+    /// A plot: its index in `Layer::plots`.
+    Plot(usize),
+}
+
+/// Which list of a [`LayerScene`] an object's items are in.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ItemList {
+    Plots,
+    Overlay,
+}
+
+/// One pickable object: the model layer it belongs to, the items drawn for it and their bounds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SceneObject {
+    pub kind: ObjectKind,
+    /// The index of the model layer the object belongs to. A legend that lists several layers is
+    /// drawn with the last layer's items but belongs to its own layer.
+    pub layer: usize,
+    pub list: ItemList,
+    /// The items of `list` drawn for the object.
+    pub items: std::ops::Range<usize>,
+    /// The bounding box of those items in page points (text measured, strokes not widened).
+    pub bounds: Rect,
+    /// Boxes that count as the object besides its lines: one per text item, and the axis line.
+    pub boxes: Vec<Rect>,
 }
 
 /// A whole figure.

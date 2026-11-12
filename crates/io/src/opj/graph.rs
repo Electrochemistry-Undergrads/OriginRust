@@ -51,6 +51,8 @@ const CURVE_DASH_AT: usize = 0x12;
 const CURVE_WIDTH_AT: usize = 0x15;
 const CURVE_SHAPE_AT: usize = 0x17;
 const CURVE_SIZE_AT: usize = 0x19;
+/// In a column plot the size field holds the bar width in percent of the X spacing, times 50.
+const CURVE_BAR_WIDTH_PER_PERCENT: f64 = 50.0;
 /// 0 for a solid symbol, 1 and above for an open one.
 const CURVE_SYMBOL_FILL_AT: usize = 0x18;
 const CURVE_X_AT: usize = 0x23;
@@ -585,6 +587,13 @@ fn read_curve(
         // Bars are outlined in black unless the line colour was chosen.
         plot.line.color = if auto { Color::BLACK } else { line_color };
         plot.line.width_pt = width.min(2.0);
+        // A column plot keeps the width of its bars in the size field: (100 - gap) * 50, so 4000 is
+        // Origin's default gap of 20 percent (graphing spec 14.7). The layer's first column plot
+        // sets the gap of the layer's bars.
+        let bar_width = f64::from(u16_at(r, CURVE_SIZE_AT)) / CURVE_BAR_WIDTH_PER_PERCENT;
+        if !layer.plots.iter().any(|p| p.kind == PlotKind::Column) && (0.0..=100.0).contains(&bar_width) {
+            layer.bars.gap_pct = 100.0 - bar_width;
+        }
     }
     if x_set != 0 && column(x_set).is_none() {
         notes.push("a plot's X data is not a worksheet column; it was plotted against the row number".into());
@@ -754,6 +763,32 @@ mod tests {
         assert_eq!(p[1].kind, PlotKind::Line);
         assert_eq!(p[1].line.color, palette_color(1), "automatic colour follows the plot position");
         assert_eq!(p[1].y_error, Some(ColumnId(103)));
+    }
+
+    #[test]
+    fn the_first_column_plot_gives_the_gap_between_bars() {
+        let mut w = window();
+        // Bar widths as Origin 2016 saved them for gaps of 40 and 55 percent.
+        let mut bars = curve(2, 1, 203, [0, 0, 0, 0]);
+        put_u16(&mut bars.record, CURVE_SIZE_AT, 3000);
+        let mut second = curve(3, 1, 203, [0, 0, 0, 0]);
+        put_u16(&mut second.record, CURVE_SIZE_AT, 2250);
+        w.layers[0].columns = vec![bars, second];
+        let mut warnings = Vec::new();
+        let g = build(&w, &ids(), &mut warnings);
+        let l = &g.layers[0];
+        assert_eq!(l.plots.len(), 2);
+        assert_eq!(l.bars.gap_pct, 40.0);
+        assert_eq!(l.bars.overlap_pct, 0.0);
+        // A layer without column plots keeps the default gap.
+        let g = build(&window(), &ids(), &mut warnings);
+        assert_eq!(g.layers[0].bars, sheaf_core::graph::BarSpacing::default());
+        // A width outside 0..100 percent is not a gap.
+        let mut w = window();
+        let mut odd = curve(2, 1, 203, [0, 0, 0, 0]);
+        put_u16(&mut odd.record, CURVE_SIZE_AT, 6000);
+        w.layers[0].columns = vec![odd];
+        assert_eq!(build(&w, &ids(), &mut warnings).layers[0].bars.gap_pct, 20.0);
     }
 
     #[test]

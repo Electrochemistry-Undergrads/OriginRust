@@ -23,7 +23,15 @@ SVG structure.
 
 Input: the axis settings and the finite data values of all visible plots of the layer for that
 axis (for a plot without an X column, the X values are the row numbers 1, 2, 3, ...). Rows where
-X or Y is missing are ignored. With no finite data the range is 0..1.
+X or Y is missing are ignored. With no finite data the range is 0..1. In a layer that stacks its
+curves the values are taken as drawn, with each plot's offsets added (graphing.md section 13.5).
+
+Three cases change the input (graphing.md sections 14.3 and 14.4):
+- An X axis whose first plot has text in its X column (sample names), or no X column and labels
+  from a chosen column, is a category axis: limits half a row beyond the first and last drawn row,
+  never rounded, and a major step of 1 while the axis spans at most 200.
+- An X axis over column plots gets half a bar spacing of room at each end and is not rounded.
+- A linear Y axis over column plots includes their base (0, or the plot's offset).
 
 Step 1, data range `[lo, hi]`. If `lo == hi`, widen: `lo -= 0.5*|lo|`, `hi += 0.5*|hi|`, or
 `-1..1` when the value is 0. For a log10 axis only positive values count; with none, use 1..10.
@@ -64,10 +72,18 @@ Step 5, tick label text. The shown number is `value / tick_label_divisor`.
 - `Decimal(d)`: fixed d decimals. `Scientific(d)`: `m×10^e` with d mantissa decimals.
 - Negative numbers use the real minus sign U+2212. Negative zero prints as `0`.
 - Log axes label powers of ten as `10` with a superscript exponent.
+- An axis with a label column (sample names) shows the cell of row k at a major tick at the whole
+  number k, and nothing at other ticks (graphing.md section 14.3).
 
 ## 3. Layout
 
-For each layer, in this drawing order (later items are on top):
+For each layer, in this drawing order (later items are on top). A layer linked to another layer
+(the right Y axis of a double-Y graph) is laid out together with it: it shares its frame and,
+when linked, its X axis, and the rules for axes on the top and right edges, hidden axes, axis
+colours that follow the first curve and a legend for the whole graph are in graphing.md section 12.
+A layer drawn as a waterfall lays its axes, labels and legend out on a smaller front frame, clips
+data to the whole frame, draws each later curve moved right and up, and draws no grid and no
+opposite lines or ticks (graphing.md section 13.6).
 
 1. Page background rectangle (once per graph).
 2. Grid lines, if set: minor first, then major; spanning the frame at each tick position.
@@ -83,17 +99,22 @@ For each layer, in this drawing order (later items are on top):
 6. Tick labels. X labels are centred under their tick; the top of the text is `gap` below the
    bottom end of the ticks, where `gap = 0.35 * tick font size` and the tick end is the axis line for
    `In`/`None` ticks or the outer tick end for `Out`/`Both`. Y labels are right-aligned, vertically
-   centred on the tick, the same `gap` left of the left end of the ticks.
+   centred on the tick, the same `gap` left of the left end of the ticks. X labels turned by
+   `tick_label_angle_deg` hang from the highest corner of their text box, which sits directly
+   under the tick; the label block is as deep as the deepest turned label (graphing.md
+   section 14.5).
 7. Axis titles. X title: centred under the frame, its top `0.6 * title font size` below the bottom
    of the tick labels. Y title: rotated 90° counter-clockwise, centred along the frame's height,
    its bottom edge (the side facing the axis) `0.6 * title font size` left of the widest Y tick
    label. A title that is `None` in the model is built from the first visible plot: the X (or Y)
-   column's long name (short name if empty), followed by ` (unit)` when the unit is not empty.
-   When the plot has no X column the X title is `Row`.
+   column's long name (short name if empty), followed by ` (unit)` when the unit is not empty; an
+   X column of text counts too. When the plot has no X column the X title is that of the column
+   that labels the ticks, if any, else `Row`.
 8. Legend, when visible and the layer has at least one visible plot. One row per visible plot: a
    sample (a horizontal line of length 2.2 × font size in the plot's line style, with one symbol
-   centred on it for kinds that have symbols; symbol only for scatter), a gap of 0.5 × font size,
-   then the label text (see `Project::plot_label`). Row height 1.3 × font size. Padding inside the
+   centred on it for kinds that have symbols; symbol only for scatter; for a column plot a bar as
+   long as the line sample and one font size high, filled and outlined like the bars), a gap of
+   0.5 × font size, then the label text (see `Project::plot_label`). Row height 1.3 × font size. Padding inside the
    legend box 0.4 × font size. Corner positions put the box inside the frame with a margin of
    0.8 × font size from the two nearest frame edges (plus the major tick length when ticks point
    in). `Manual {x, y}` centres the box at that fraction of the frame. A frame rectangle and a
@@ -113,6 +134,13 @@ than page height minus the margin, move the frame's bottom side up by the differ
 A move never takes more than half of the frame's width or height. When everything already fits, the
 frame is exactly the nominal one, so figures that fit are unchanged. Because labels move with the
 frame, one move is exact. The same geometry is used by the screen view (`layout_geometry`).
+Axes drawn on the right or top edge move the right or top side in the same way, and a layer with
+linked layers takes the outermost labels of all of them into account (graphing.md section 12.3).
+When linked layers lie outside the first layer's frame (the panels of a stack), the moves apply to
+the rectangle that holds all their frames, and every frame is moved and scaled with it, so the
+panels stay aligned (graphing.md section 15.5). An axis with `hide_end_label` leaves out the tick
+label at its far end (top of a Y axis, right end of an X axis), and touching panels with the same
+axis title draw it once, centred on them.
 
 ### Reversed axes
 
@@ -140,7 +168,9 @@ font file is installed. The SVG `y` of a text element is its baseline.
 
 - Convert each (x, y) row to page coordinates with the resolved axes (linear or log10). Rows with a
   missing or non-finite coordinate (or a non-positive value on a log axis) break the line: the
-  curve is drawn as separate pieces on each side of the gap.
+  curve is drawn as separate pieces on each side of the gap. In a layer that stacks its curves,
+  the row is drawn at (x + ox, y + oy) with the plot's offsets, and column bars start at oy
+  instead of 0 (graphing.md section 13.5).
 - `Straight`: one polyline per piece. `StepHorizontal` / `StepVertical`: add the intermediate
   corner. `Spline`: a Catmull-Rom spline through the points (uniform parameterisation, tension 0.5),
   written as cubic Bézier segments: for points P0..P3 the segment P1→P2 has control points
@@ -155,7 +185,12 @@ font file is installed. The SVG `y` of a text element is its baseline.
 - Symbols are centred on the data point, `size_pt` wide: square, circle, triangle up/down, diamond
   (all filled or outlined with `edge_width_pt`), plus, cross and star (stroked).
 - Error bars: a vertical line from `y - err` to `y + err` with caps of width `1.2 × symbol size`,
-  in the plot's color, line width `max(0.5, line width / 2)`.
+  in the plot's color, line width `max(0.5, line width / 2)`. A column plot's error bars stand in
+  the middle of its own bar.
+- Column plots: one rectangle per row from the base (0 on a linear Y axis, the lower limit on a log
+  axis) to the value. The bars at one X position take `1 - gap` of the X spacing s together, and
+  the visible column plots of a layer stand side by side in plot order (graphing.md section 14.4,
+  with check values). s is 1 for row numbers and the mean X spacing otherwise.
 
 ## 5. Text markup
 

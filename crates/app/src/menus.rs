@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, GraphOp, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -25,6 +25,7 @@ use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
+use sheaf_core::graph::PlotKind;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
 use std::sync::OnceLock;
@@ -85,7 +86,25 @@ pub enum Cmd {
     FilterRows,
     Analyze(AnalysisKind),
     Fit(FitKind),
+    /// The graph settings of the active layer on a tab.
     GraphProps(PropsTab),
+    /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
+    GraphPropsAt {
+        layer: usize,
+        tab: PropsTab,
+        plot: Option<usize>,
+    },
+    /// A change made from a graph's right-click menus.
+    GraphEdit(GraphOp),
+    /// Rescale to Show All on the active layer (Ctrl+R).
+    Rescale,
+    /// Makes a plot the active one (the plot list of the layer icon's menu).
+    SelectPlot {
+        layer: usize,
+        plot: usize,
+    },
+    /// Go to the workbook a plot's data is in.
+    GoTo(WindowId),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
     /// View > Project Explorer and the other panels.
@@ -152,6 +171,8 @@ pub struct MenuContext<'a> {
     pub open: Option<&'a str>,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
+    /// The active layer of the active graph (0 when there is none).
+    pub layer: usize,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -510,35 +531,42 @@ fn plot_menu() -> Vec<Entry> {
                 &["Line Series", "2 Point Segment", "3 Point Segment"],
             ),
         ),
-        // Sheaf's plot kinds include columns, but no template makes a column graph yet.
-        grey_sub(
+        sub(
             "Column/Bar/&Pie",
-            &[
-                "Column",
-                "Column + Label",
-                "Grouped Columns (indexed data)",
-                "Bar",
-                "Stacked Column",
-                "Stacked Bar",
-                "100% Stacked Column",
-                "100% Stacked Bar",
-                "Floating Column",
-                "Floating Bar",
-                "3D Color Pie",
-                "2D B&&W Pie",
-            ],
+            with(
+                vec![item("&Column", Cmd::Plot(Template::Column))],
+                &[
+                    "Column + Label",
+                    "Grouped Columns (indexed data)",
+                    "Bar",
+                    "Stacked Column",
+                    "Stacked Bar",
+                    "100% Stacked Column",
+                    "100% Stacked Bar",
+                    "Floating Column",
+                    "Floating Bar",
+                    "3D Color Pie",
+                    "2D B&&W Pie",
+                ],
+            ),
         ),
         sep(),
-        grey_sub("&Multi-Y", &["Double-Y", "3Ys Y-YY", "3Ys Y-Y-Y", "4Ys Y-YYY", "4Ys YY-YY", "Multiple Y Axes..."]),
-        grey_sub(
+        sub(
+            "&Multi-Y",
+            with(
+                vec![item("&Double-Y", Cmd::Plot(Template::DoubleY))],
+                &["3Ys Y-YY", "3Ys Y-Y-Y", "4Ys Y-YYY", "4Ys YY-YY", "Multiple Y Axes..."],
+            ),
+        ),
+        sub(
             "Y-offset/&Waterfall",
-            &[
-                "Stacked Lines by Y Offsets",
-                "Waterfall",
-                "Waterfall Y:Color Mapping",
-                "Waterfall Z:Color Mapping",
-                "3D Waterfall",
-            ],
+            with(
+                vec![
+                    item("&Stacked Lines by Y Offsets", Cmd::Plot(Template::StackedLines)),
+                    item("&Waterfall", Cmd::Plot(Template::Waterfall)),
+                ],
+                &["Waterfall Y:Color Mapping", "Waterfall Z:Color Mapping", "3D Waterfall"],
+            ),
         ),
         grey_sub(
             "Multi-Pa&nel",
@@ -866,8 +894,9 @@ fn image_menu() -> Vec<Entry> {
 
 fn graph_menu() -> Vec<Entry> {
     vec![
-        grey_keyed("Layer Contents...", plain_key(Key::F12)),
-        grey("Plot Setup..."),
+        // Sheaf's Plots tab does what Layer Contents and Plot Setup do: add and remove plots.
+        keyed("Layer Contents...", plain_key(Key::F12), Cmd::GraphProps(PropsTab::Plots)),
+        item("Plot Setup...", Cmd::GraphProps(PropsTab::Plots)),
         grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
         sep(),
         grey("Layer Management..."),
@@ -877,7 +906,7 @@ fn graph_menu() -> Vec<Entry> {
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
         grey("Merge Graph Windows..."),
         sep(),
-        grey_keyed("Rescale to Show All", ctrl(Key::R)),
+        keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
             "&Legend",
             vec![
@@ -1187,6 +1216,171 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
     ]
 }
 
+// ----- graph window menus (gui-look.md section 4) ----------------------------------------------
+
+/// The menu of a plot: what was picked, so the commands act on it. `book` is the workbook the
+/// plot's data is in, with its title.
+pub fn graph_plot_menu(layer: usize, plot: usize, kind: PlotKind, book: Option<(WindowId, String)>) -> Vec<Entry> {
+    let change = |label: &str, to: PlotKind| {
+        if to == kind {
+            grey(label)
+        } else {
+            item(label, Cmd::GraphEdit(GraphOp::SetPlotKind { layer, plot, kind: to }))
+        }
+    };
+    let mut v = vec![
+        sub(
+            "Change Plot to",
+            vec![
+                change("Line", PlotKind::Line),
+                change("Scatter", PlotKind::Scatter),
+                change("Line + Symbol", PlotKind::LineSymbol),
+                change("Column", PlotKind::Column),
+            ],
+        ),
+        grey("Change X"),
+        grey("Change Y"),
+        sep(),
+        item("Hide Data Plot", Cmd::GraphEdit(GraphOp::HidePlot { layer, plot })),
+    ];
+    match book {
+        Some((id, name)) => v.push(item(&format!("Go to {name}"), Cmd::GoTo(id))),
+        None => v.push(grey("Go to Book")),
+    }
+    v.extend([
+        sep(),
+        grey("Ungroup"),
+        sep(),
+        item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: Some(plot) }),
+    ]);
+    v
+}
+
+/// The menu of an axis. `grids` tells whether the axis shows grid lines now.
+pub fn graph_axis_menu(layer: usize, y: bool, grids: bool) -> Vec<Entry> {
+    let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
+    let at = Cmd::GraphPropsAt { layer, tab, plot: None };
+    vec![
+        item("Hide Axis", Cmd::GraphEdit(GraphOp::HideAxis { layer, y })),
+        item(if grids { "Hide Grids" } else { "Show Grids" }, Cmd::GraphEdit(GraphOp::ToggleGrids { layer, y })),
+        sep(),
+        keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
+        item("Axis Zoom In", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: true })),
+        item("Axis Zoom Out", Cmd::GraphEdit(GraphOp::AxisZoom { layer, y, zoom_in: false })),
+        grey("Center"),
+        sep(),
+        grey_sub("Copy Format", &["All", "All Style Formats", "Axis"]),
+        grey("Save Format as Theme..."),
+        sep(),
+        item("Scale...", at.clone()),
+        item("Tick Labels...", at.clone()),
+        item("Properties...", at),
+    ]
+}
+
+/// The menu of an axis title.
+pub fn graph_title_menu(layer: usize, y: bool) -> Vec<Entry> {
+    let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
+    vec![
+        grey_keyed("Cut", ctrl(Key::X)),
+        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideTitle { layer, y })),
+        sep(),
+        grey("Bring to the front"),
+        grey("Push to the back"),
+        sep(),
+        item("Properties...", Cmd::GraphPropsAt { layer, tab, plot: None }),
+    ]
+}
+
+/// The menu of a free text label.
+pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
+    vec![
+        grey_keyed("Cut", ctrl(Key::X)),
+        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteLabel { layer, label })),
+        sep(),
+        grey("Bring to the front"),
+        grey("Push to the back"),
+        sep(),
+        grey("Properties..."),
+    ]
+}
+
+/// The menu of the legend.
+pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
+    vec![
+        item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
+        grey_sub("Legend", &["Reconstruct Legend", "Update Legend", "Add Legend Title"]),
+        grey("Add Color Scale"),
+        grey("Add Bubble Scale"),
+        sep(),
+        grey_keyed("Cut", ctrl(Key::X)),
+        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideLegend { layer })),
+        sep(),
+        grey("Bring to the front"),
+        grey("Push to the back"),
+        sep(),
+        grey("Programming Control..."),
+        item("Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Legend, plot: None }),
+        sep(),
+        grey_sub("Copy Format", &["All", "All Style Formats", "Text"]),
+        grey("Save Format as Theme..."),
+    ]
+}
+
+/// The menu of the page outside the plots and axes, or of the inside of a layer.
+pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
+    vec![
+        grey("Add Text..."),
+        grey("Layer Management..."),
+        grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
+        grey("Add Shortcut to Favorites"),
+        grey_keyed("Copy Page", ctrl(Key::J)),
+        item("Export Graphs...", Cmd::ExportGraph),
+        grey("View Full Screen"),
+        sep(),
+        keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
+        item("Page Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Page, plot: None }),
+        grey_sub("Copy Format", &["All", "All Style Formats"]),
+        grey_sub("Duplicate (Batch Plotting)", &["Duplicate"]),
+    ]
+}
+
+/// The menu of a layer icon (the numbered button at the top left of the page). `plots` names the
+/// layer's plots in order; `active` is the active plot, which gets a tick.
+pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Option<usize>) -> Vec<Entry> {
+    let others = if layers > 1 {
+        item("Hide Other Layers", Cmd::GraphEdit(GraphOp::HideOtherLayers { layer }))
+    } else {
+        grey("Hide Other Layers")
+    };
+    let contents = Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None };
+    let mut v = vec![
+        item("Hide Layer", Cmd::GraphEdit(GraphOp::HideLayer { layer })),
+        others,
+        grey("Show Active Layer Only"),
+        grey("Set Active Layer By Layer Icon Only"),
+        grey("Delete Layer"),
+        sep(),
+        keyed("Layer Contents...", plain_key(Key::F12), contents.clone()),
+        item("Plot Setup...", contents),
+        sep(),
+        item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
+        grey("Layer Properties..."),
+        grey("Layer Management..."),
+    ];
+    if !plots.is_empty() {
+        v.push(sep());
+    }
+    for (i, name) in plots.iter().enumerate() {
+        let tick = if active == Some(i) { "\u{2713} " } else { "    " };
+        v.push(item(&format!("{tick}{} {name}", i + 1), Cmd::SelectPlot { layer, plot: i }));
+    }
+    v
+}
+
 /// The menu of the corner above the row numbers: switches for the parts of the grid.
 pub fn corner_menu() -> Vec<Entry> {
     vec![
@@ -1420,7 +1614,20 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             None if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             None => return Err(NEED_BOOK),
         },
-        Cmd::GraphProps(tab) => Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, tab: *tab },
+        Cmd::GraphProps(tab) => {
+            Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, tab: *tab, plot: None }
+        }
+        Cmd::GraphPropsAt { layer, tab, plot } => {
+            Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, tab: *tab, plot: *plot }
+        }
+        Cmd::GraphEdit(op) => Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
+        Cmd::Rescale => {
+            Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
+        }
+        Cmd::SelectPlot { layer, plot } => {
+            Action::SelectPlot { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot }
+        }
+        Cmd::GoTo(id) => Action::Focus(*id),
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
@@ -1745,6 +1952,7 @@ mod tests {
             windows: Vec::new(),
             open: None,
             panels: [true; 4],
+            layer: 0,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

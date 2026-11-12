@@ -1,11 +1,28 @@
 //! Reading the numbers of the plots of a layer.
 
-use crate::ticks::{ResolvedAxis, resolve_axis};
-use crate::{LayerGeometry, Rect};
-use sheaf_core::Project;
+use crate::{Rect, stack};
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
-use sheaf_core::graph::{Layer, Page, Plot, ScaleKind, TickFormat};
+use sheaf_core::graph::{Axis, BarSpacing, Frame, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat, TickLabelSource};
+use sheaf_core::{Column, Project};
+
+/// Where the bars of one column plot stand at each X position (graphing spec 14.4), in X axis units.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct BarSlot {
+    /// Left edge of the bar, relative to the row's X.
+    pub left: f64,
+    /// Width of the bar.
+    pub width: f64,
+    /// The X spacing s of the layer's bars.
+    pub spacing: f64,
+}
+
+impl BarSlot {
+    /// The middle of the bar, relative to the row's X; error bars are drawn there.
+    pub fn centre(&self) -> f64 {
+        self.left + self.width / 2.0
+    }
+}
 
 /// A visible plot whose Y column holds numbers, with its data resolved.
 pub(crate) struct PlotData<'a> {
@@ -19,15 +36,30 @@ pub(crate) struct PlotData<'a> {
     /// Half-open row range that is drawn.
     pub start: usize,
     pub end: usize,
+    /// Offsets of a stacked layer, in axis units, added to every point (graphing spec 13).
+    pub ox: f64,
+    pub oy: f64,
+    /// The plot's place in the stack, for the waterfall shift.
+    pub member: Option<usize>,
+    /// Where the bars of a column plot stand; `None` for other kinds.
+    pub bar: Option<BarSlot>,
 }
 
 impl PlotData<'_> {
-    /// X value of row `i` (NaN when the X column is shorter than the Y column).
+    /// X value of row `i` as drawn, with the stack offset (NaN when the X column is shorter than
+    /// the Y column).
     pub fn x_at(&self, i: usize) -> f64 {
-        match self.x {
+        let x = match self.x {
             None => (i + 1) as f64,
             Some(x) => x.get(i).copied().unwrap_or(f64::NAN),
-        }
+        };
+        // Adding 0 would turn -0 into +0; leave unstacked values exactly as they are.
+        if self.ox == 0.0 { x } else { x + self.ox }
+    }
+
+    /// Y value of row `i` as drawn, with the stack offset.
+    pub fn y_at(&self, i: usize) -> f64 {
+        if self.oy == 0.0 { self.y[i] } else { self.y[i] + self.oy }
     }
 
     pub fn err_at(&self, i: usize) -> f64 {
@@ -35,76 +67,195 @@ impl PlotData<'_> {
     }
 }
 
-/// The drawable plots of a layer, in plot order. A plot whose Y column is
-/// missing or not numeric is skipped.
-pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> Vec<PlotData<'a>> {
-    let mut out = Vec::new();
-    for plot in layer.plots.iter().filter(|p| p.visible) {
+/// The plots of a layer as they are drawn.
+pub(crate) struct LayerData<'a> {
+    /// The visible plots whose Y column holds numbers, in plot order.
+    pub plots: Vec<PlotData<'a>>,
+    /// The number of members of the layer's stack, hidden plots included.
+    pub members: usize,
+}
+
+/// The half-open row range of a plot whose Y column has `len` rows, clamped to the column.
+pub(crate) fn row_range(plot: &Plot, len: usize) -> (usize, usize) {
+    let (start, end) = match plot.rows {
+        Some((s, e)) => (s.min(len), e.min(len)),
+        None => (0, len),
+    };
+    (start, end.max(start))
+}
+
+/// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden
+/// or whose Y column is missing or not numeric is skipped (a hidden plot still keeps its place in
+/// the stack).
+pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'a> {
+    let (places, members) = stack::places(project, layer);
+    let mut plots = Vec::new();
+    for (plot, place) in layer.plots.iter().zip(places).filter(|(p, _)| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
         let x_format = plot.x.and_then(|id| project.column(id)).map(|c| c.format);
         let err = plot.y_error.and_then(|id| project.numeric(id));
-        let (start, end) = match plot.rows {
-            Some((s, e)) => (s.min(y.len()), e.min(y.len())),
-            None => (0, y.len()),
-        };
-        out.push(PlotData { plot, x, x_format, y, err, start, end: end.max(start) });
+        let (start, end) = row_range(plot, y.len());
+        plots.push(PlotData {
+            plot,
+            x,
+            x_format,
+            y,
+            err,
+            start,
+            end,
+            ox: place.ox,
+            oy: place.oy,
+            member: place.member,
+            bar: None,
+        });
     }
-    out
+    place_bars(&mut plots, &layer.bars);
+    LayerData { plots, members }
 }
 
-/// Finite data range per axis over all rows where both X and Y are finite.
-/// On a log axis only positive values count.
-fn data_range(pds: &[PlotData], x_scale: ScaleKind, y_scale: ScaleKind) -> (Option<(f64, f64)>, Option<(f64, f64)>) {
-    let mut xr: Option<(f64, f64)> = None;
-    let mut yr: Option<(f64, f64)> = None;
-    let widen = |r: &mut Option<(f64, f64)>, v: f64| {
-        *r = Some(match *r {
-            None => (v, v),
-            Some((lo, hi)) => (lo.min(v), hi.max(v)),
-        });
-    };
+/// A percentage of the model clamped to `lo..=hi`; a value that is not finite takes `default`.
+fn percent(v: f64, lo: f64, hi: f64, default: f64) -> f64 {
+    if v.is_finite() { v.clamp(lo, hi) } else { default }
+}
+
+/// Gives every column plot of a layer its place in the group of bars (graphing spec 14.4): the bars
+/// at one X position together take `(1 - gap) * s` and stand side by side in plot order, each
+/// `w` wide and `w * (1 - overlap)` from the one before it.
+fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
+    let columns: Vec<usize> = (0..plots.len()).filter(|&i| plots[i].plot.kind == PlotKind::Column).collect();
+    let Some(&first) = columns.first() else { return };
+    let s = bar_spacing(&plots[first]);
+    let gap = percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0;
+    let overlap = percent(bars.overlap_pct, -100.0, 100.0, 0.0) / 100.0;
+    let n = columns.len() as f64;
+    let group = (1.0 - gap) * s;
+    let width = group / (1.0 + (n - 1.0) * (1.0 - overlap));
+    let step = width * (1.0 - overlap);
+    for (j, &i) in columns.iter().enumerate() {
+        plots[i].bar = Some(BarSlot { left: -group / 2.0 + j as f64 * step, width, spacing: s });
+    }
+}
+
+/// The X spacing s of a column plot: 1 without an X column of numbers (the bars stand at row numbers),
+/// otherwise the mean distance between X values, `(largest X - smallest X) / (n - 1)`, where the X
+/// values are those of the drawn rows and n counts the rows of the row range that have a Y value (an
+/// empty row between two groups of bars does not count, a row with only its X missing does); 1 when
+/// that is not a number above 0.
+fn bar_spacing(pd: &PlotData) -> f64 {
+    if pd.x.is_none() {
+        return 1.0;
+    }
+    let rows = (pd.start..pd.end).filter(|&i| pd.y_at(i).is_finite()).count();
+    let xs = (pd.start..pd.end).filter(|&i| pd.y_at(i).is_finite()).map(|i| pd.x_at(i)).filter(|x| x.is_finite());
+    let (lo, hi) = xs.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)));
+    let s = (hi - lo) / (rows as f64 - 1.0);
+    if rows >= 2 && s.is_finite() && s > 0.0 { s } else { 1.0 }
+}
+
+/// The X column of a plot when it holds text (sample names).
+fn text_x_column<'a>(project: &'a Project, pd: &PlotData) -> Option<&'a Column> {
+    pd.plot.x.and_then(|id| project.column(id)).filter(|c| !c.data.is_numeric())
+}
+
+/// The column whose cells label the major ticks of an axis (graphing spec 14.3), if any. `first`
+/// is the first plot the axis shows.
+pub(crate) fn label_column<'a>(
+    project: &'a Project,
+    axis: &Axis,
+    dim: Dim,
+    first: Option<&PlotData>,
+) -> Option<&'a Column> {
+    match axis.tick_label_source {
+        TickLabelSource::Numbers => None,
+        TickLabelSource::Column { column } => project.column(column),
+        TickLabelSource::Auto if dim == Dim::X => text_x_column(project, first?),
+        TickLabelSource::Auto => None,
+    }
+}
+
+/// Whether a linear X axis is a category axis (graphing spec 14.3): its first plot has no X column
+/// of numbers, and that plot's X column holds text or the labels come from a chosen column. Its
+/// rows then stand at the row numbers 1, 2, 3, ... and the axis gets half a step of room at each end.
+pub(crate) fn is_category(project: &Project, axis: &Axis, first: Option<&PlotData>) -> bool {
+    let Some(pd) = first else { return false };
+    if axis.scale != ScaleKind::Linear || pd.x.is_some() {
+        return false;
+    }
+    text_x_column(project, pd).is_some()
+        || matches!(axis.tick_label_source, TickLabelSource::Column { column } if project.column(column).is_some())
+}
+
+/// The cells of a label column as they show in the worksheet.
+pub(crate) fn cell_texts(column: &Column) -> Vec<String> {
+    (0..column.len()).map(|row| column.cell_text(row)).collect()
+}
+
+/// Which coordinate of the plots an axis shows.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Dim {
+    X,
+    Y,
+}
+
+/// Finite data range of one coordinate, as drawn (with the stack offsets), over all rows where
+/// both X and Y are finite. On a log axis only positive values count.
+pub(crate) fn axis_range<'p, 'a: 'p>(
+    pds: impl IntoIterator<Item = &'p PlotData<'a>>,
+    dim: Dim,
+    scale: ScaleKind,
+) -> Option<(f64, f64)> {
+    let mut r: Option<(f64, f64)> = None;
     for pd in pds {
         for i in pd.start..pd.end {
-            let (x, y) = (pd.x_at(i), pd.y[i]);
+            let (x, y) = (pd.x_at(i), pd.y_at(i));
             if !(x.is_finite() && y.is_finite()) {
                 continue;
             }
-            if x_scale == ScaleKind::Linear || x > 0.0 {
-                widen(&mut xr, x);
-            }
-            if y_scale == ScaleKind::Linear || y > 0.0 {
-                widen(&mut yr, y);
+            let v = if dim == Dim::X { x } else { y };
+            if scale == ScaleKind::Linear || v > 0.0 {
+                r = Some(match r {
+                    None => (v, v),
+                    Some((lo, hi)) => (lo.min(v), hi.max(v)),
+                });
             }
         }
     }
-    (xr, yr)
+    r
 }
 
-/// Frame rectangle in points and the two resolved axes of a layer.
-pub(crate) fn resolve_layer(layer: &Layer, page: &Page, pds: &[PlotData]) -> LayerGeometry {
-    let f = layer.frame;
-    let frame = Rect {
+/// A frame given as fractions of the page, in points.
+pub(crate) fn page_frame(f: &Frame, page: &Page) -> Rect {
+    Rect {
         x: f.left * page.width_pt,
         y: f.top * page.height_pt,
         w: f.width * page.width_pt,
         h: f.height * page.height_pt,
-    };
-    let (xr, yr) = data_range(pds, layer.x_axis.scale, layer.y_axis.scale);
-    // An X column in a date, time or date-time format gives date tick labels, unless the axis has a format of its own.
-    let date_pattern = pds.iter().find_map(|pd| match pd.x_format {
+    }
+}
+
+/// A frame given as fractions of the parent layer's frame `parent` (a linked layer), in points.
+pub(crate) fn linked_frame(f: &Frame, parent: Rect) -> Rect {
+    Rect {
+        x: parent.x + f.left * parent.w,
+        y: parent.y + f.top * parent.h,
+        w: f.width * parent.w,
+        h: f.height * parent.h,
+    }
+}
+
+/// The X axis as it is drawn when it differs from the stored one: an X column in a date, time or
+/// date-time format gives date tick labels, unless the axis has a tick format of its own.
+pub(crate) fn date_axis<'p, 'a: 'p>(axis: &Axis, pds: impl IntoIterator<Item = &'p PlotData<'a>>) -> Option<Axis> {
+    if axis.tick_format != TickFormat::Auto {
+        return None;
+    }
+    let pattern = pds.into_iter().find_map(|pd| match pd.x_format {
         Some(NumberFormat::Date(d) | NumberFormat::DateTime(d, _)) => Some(d),
         Some(NumberFormat::Time(_)) => Some(DatePattern::default()),
         _ => None,
-    });
-    let x: ResolvedAxis = match date_pattern {
-        Some(d) if layer.x_axis.tick_format == TickFormat::Auto => {
-            let mut axis = layer.x_axis.clone();
-            axis.tick_format = TickFormat::DateTime(d);
-            resolve_axis(&axis, xr)
-        }
-        _ => resolve_axis(&layer.x_axis, xr),
-    };
-    let y: ResolvedAxis = resolve_axis(&layer.y_axis, yr);
-    LayerGeometry { frame, x, y }
+    })?;
+    let mut drawn = axis.clone();
+    drawn.tick_format = TickFormat::DateTime(pattern);
+    Some(drawn)
 }

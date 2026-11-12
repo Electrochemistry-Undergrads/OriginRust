@@ -4,7 +4,7 @@ use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
 use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
-use sheaf_core::graph::{Connect, LineStyle, PlotKind, SymbolShape, SymbolStyle};
+use sheaf_core::graph::{Connect, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
@@ -128,7 +128,7 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let mut run: Option<Run> = None;
     for i in pd.start..pd.end {
-        match geom.checked_data_to_page(pd.x_at(i), pd.y[i]) {
+        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => {
                 let strip = (p.0 / STRIP_PT).floor() as i64;
                 match &mut run {
@@ -214,25 +214,27 @@ fn near_frame(geom: &LayerGeometry, p: (f64, f64), margin: f64) -> bool {
     p.0 >= f.x - margin && p.0 <= f.x + f.w + margin && p.1 >= f.y - margin && p.1 <= f.y + f.h + margin
 }
 
-/// Bars from zero to each value, 70 percent of the smallest spacing between X values wide.
+/// One bar per row from the base to the value, in the plot's slot of the layer's group of bars
+/// (graphing spec 14.4). The base is 0 on a linear Y axis (the plot's offset in a stacked layer)
+/// and the lower axis limit on a log axis. A bar with a corner that cannot be placed is skipped.
 fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
-    let mut xs: Vec<f64> = (pd.start..pd.end).map(|i| pd.x_at(i)).filter(|x| x.is_finite()).collect();
-    xs.sort_by(|a, b| a.total_cmp(b));
-    let spacing = xs.windows(2).map(|w| w[1] - w[0]).filter(|d| *d > 0.0).fold(f64::INFINITY, f64::min);
-    let half = if spacing.is_finite() { 0.35 * spacing } else { 0.35 };
+    let slot = pd.bar.unwrap_or(crate::data::BarSlot { left: -0.4, width: 0.8, spacing: 1.0 });
+    let base = match geom.y.scale {
+        ScaleKind::Linear => pd.oy,
+        ScaleKind::Log10 => geom.y.min,
+    };
     let stroke = (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt));
     for i in pd.start..pd.end {
-        let (x, y) = (pd.x_at(i), pd.y[i]);
-        let (Some(a), Some(b), Some(top)) = (
-            geom.checked_data_to_page(x - half, 0.0),
-            geom.checked_data_to_page(x + half, y),
-            geom.checked_data_to_page(x, y),
-        ) else {
+        let (x, y) = (pd.x_at(i), pd.y_at(i));
+        let left = x + slot.left;
+        let (Some(a), Some(b)) =
+            (geom.checked_data_to_page(left, base), geom.checked_data_to_page(left + slot.width, y))
+        else {
             continue;
         };
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
-        let (y0, y1) = (a.1.min(top.1), a.1.max(top.1));
+        let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
         out.push(Item::Rect {
             rect: Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 },
             fill: Some(plot.symbol.color),
@@ -247,9 +249,12 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let color = if plot.kind.has_line() || column { plot.line.color } else { plot.symbol.color };
     let half_cap = 0.6 * plot.symbol.size_pt;
     let width = if column { plot.line.width_pt.max(0.5) } else { (plot.line.width_pt / 2.0).max(0.5) };
+    // A column plot's error bars stand in the middle of its own bars.
+    let shift = pd.bar.map_or(0.0, |b| b.centre());
     let mut d = String::new();
     for i in pd.start..pd.end {
-        let (x, y, e) = (pd.x_at(i), pd.y[i], pd.err_at(i));
+        let x = if shift == 0.0 { pd.x_at(i) } else { pd.x_at(i) + shift };
+        let (y, e) = (pd.y_at(i), pd.err_at(i));
         if !e.is_finite() {
             continue;
         }
@@ -281,7 +286,7 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let thin = (pd.end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
     for i in (pd.start..pd.end).step_by(every) {
-        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y[i]) else { continue };
+        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
             continue;
         }

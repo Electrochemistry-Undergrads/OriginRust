@@ -2,7 +2,7 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, LabelRow, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, GraphOp, LabelRow, SheetOp};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
@@ -415,6 +415,32 @@ impl SheafApp {
         }
     }
 
+    /// Applies a change made from a graph window (right-click menus, Delete, Ctrl+R) as one undo
+    /// step.
+    fn edit_graph(&mut self, graph: WindowId, op: GraphOp) {
+        if let GraphOp::HidePlot { layer, plot } = op {
+            self.doc.apply("Hide data plot", |p| objects::set_plot_visible(p, graph, layer, plot, false));
+            return;
+        }
+        let label = match op {
+            GraphOp::SetPlotKind { .. } => "Change plot type",
+            GraphOp::HideAxis { .. } => "Hide axis",
+            GraphOp::ToggleGrids { .. } => "Show or hide grids",
+            GraphOp::Rescale { .. } => "Rescale to show all",
+            GraphOp::AxisZoom { zoom_in: true, .. } => "Axis zoom in",
+            GraphOp::AxisZoom { .. } => "Axis zoom out",
+            GraphOp::HideLegend { .. } => "Delete legend",
+            GraphOp::HideTitle { .. } => "Delete axis title",
+            GraphOp::DeleteLabel { .. } => "Delete text",
+            GraphOp::HideLayer { .. } => "Hide layer",
+            GraphOp::HideOtherLayers { .. } => "Hide other layers",
+            GraphOp::HidePlot { .. } => unreachable!("handled above"),
+        };
+        // The present axis ranges, for the zoom (an automatic axis has no stored limits).
+        let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
+        self.doc.apply(label, |p| graph_view::apply_op(p, graph, op, resolved.as_deref()));
+    }
+
     fn focus(&mut self, id: WindowId) {
         if self.doc.project().window(id).is_some() {
             if !self.workspace.contains(id) {
@@ -602,10 +628,19 @@ impl SheafApp {
             Action::FilterRows(book) => {
                 self.filter = FilterDialog::new(self.doc.project(), book);
             }
-            Action::GraphProperties { graph, tab } => {
+            Action::GraphProperties { graph, layer, tab, plot } => {
                 let token = self.token();
-                self.graph_props = Some(GraphPropsDialog::new(graph, tab, token));
+                let mut dialog = GraphPropsDialog::new(graph, layer, tab, token);
+                if let Some(plot) = plot {
+                    dialog.select_plot(plot);
+                }
+                self.graph_props = Some(dialog);
                 self.focus(graph);
+                self.graphs.entry(graph).or_default().active_layer = layer;
+            }
+            Action::GraphEdit { graph, op } => self.edit_graph(graph, op),
+            Action::ActivateLayer { graph, layer } => {
+                self.graphs.entry(graph).or_default().active_layer = layer;
             }
             Action::ExportGraph(graph) => {
                 self.export = Some(ExportDialog::new(graph, self.folder()));
@@ -653,8 +688,9 @@ impl SheafApp {
             }
             Action::SelectPlot { graph, layer, plot } => {
                 self.panels.objects.selected = Some((layer, Some(plot)));
-                if layer == 0
-                    && let Some(d) = &mut self.graph_props
+                self.graphs.entry(graph).or_default().active_layer = layer;
+                if let Some(d) = &mut self.graph_props
+                    && d.layer == layer
                     && d.graph == graph
                 {
                     d.select_plot(plot);
@@ -1024,6 +1060,7 @@ impl SheafApp {
             windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
             open: self.open_menu.as_deref(),
             panels: self.panels.shown_flags(),
+            layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
         }
     }
 
@@ -1031,6 +1068,18 @@ impl SheafApp {
     /// Sheaf has), and nothing else.
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let typing = ctx.wants_keyboard_input();
+        // Delete on a graph removes its selected object (a legend, a title, a text label).
+        if !typing
+            && let Some(graph) = self.active.filter(|id| self.doc.project().graph(*id).is_some())
+            && let Some(state) = self.graphs.get_mut(&graph)
+            && state.selected.is_some()
+            && ctx.input(|i| i.key_pressed(egui::Key::Delete))
+        {
+            if let Some(op) = state.delete_selected() {
+                actions.push(Action::GraphEdit { graph, op });
+            }
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
+        }
         let menu_ctx = self.menu_context();
         // Ctrl+C, Ctrl+X and Ctrl+V reach the program as events of their own, not as keys. They
         // belong to the cells unless a text field has the keyboard.
@@ -1425,7 +1474,7 @@ impl SheafApp {
                             "page" => PropsTab::Page,
                             _ => PropsTab::XAxis,
                         };
-                        self.graph_props = Some(GraphPropsDialog::new(id, tab, 1_000_000));
+                        self.graph_props = Some(GraphPropsDialog::new(id, 0, tab, 1_000_000));
                         self.focus(id);
                     }
                 }

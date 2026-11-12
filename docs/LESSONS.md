@@ -22,7 +22,9 @@ The same holds for shell here-documents (`cat >> file <<'EOF'`, `python - <<'EOF
 contains Rust or Python code with single quotes, such as a `'\t'` character or a `'''` string: three
 times in one session bash refused the whole command ("unexpected EOF while looking for matching
 quote"), so nothing ran. For a patch that touches many places, write a small Python script with the
-Write tool into the scratch folder and run that file.
+Write tool into the scratch folder and run that file. It happened again with bodies that held an
+apostrophe in a comment (`layer's`) or a Rust lifetime (`&'static`), even inside `<<'EOF'`; the
+Write and Edit tools always work.
 
 ## `cargo test` does not refresh the program in `target/debug`
 
@@ -104,6 +106,13 @@ types that two agents need (the fit report) were written by the lead before they
 `[profile.dev] opt-level = 1` makes stack frames smaller than in an unoptimised build, so a
 recursion test on a 1 MB thread passed even with the protection removed. Tests of stack depth
 use a smaller thread (256 KiB) and were checked to fail without the fix.
+
+## An empty `SHEAF_UPDATE_GOLDEN` still rewrites the golden images
+
+The golden-image tests of `sheaf-plot` check only whether the variable exists, so
+`SHEAF_UPDATE_GOLDEN= cargo test` (meant to clear it) rewrote every stored SVG instead of comparing
+them. Run the tests without the variable, and after an accidental run check `git status
+crates/plot/tests/golden` before committing.
 
 ## Clap reads a negative number as an unknown option
 

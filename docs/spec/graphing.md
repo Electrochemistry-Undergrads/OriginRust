@@ -431,3 +431,250 @@ Method: draw an overlay of four XY columns with the default template; read Plot 
 - U16 axis title when long name and units are empty.
 - U17 default rescale mode after adding plots.
 - U18 default PNG export result of the GUI Export dialog (DPI, margin mode).
+
+---
+
+## 12. Double-Y graphs, right Y axes and linked layers (P0, GP-DY-01)
+
+Tags as elsewhere in this document, plus **[COM]** for behaviour observed in Origin 2016 through COM/LabTalk on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). The design decision is recorded in ADR 0008.
+
+### 12.1 What Origin 2016 does
+
+- **Two layers.** A double-Y graph is one page with two layers. Origin 2023 later added two Y scales inside one layer; Origin 2016 has only the two-layer form, template `DOUBLEY.OTP` (the current help calls it "2Ys Y-Y") [W:tutorials/double-y, origin-help/2ys-y-y-graph; F:DOUBLEY.OTP, no DblY.otp].
+- **The link.** Layer 2 is linked to layer 1 [COM]:
+  - its frame is given in "% of linked layer" as 0, 0, 100, 100, so it covers layer 1's frame exactly;
+  - its X scale is linked "straight 1:1": the same limits as layer 1, and changing layer 1's X range moves layer 2's;
+  - its Y scale is its own.
+- **Moving and resizing.** A linked layer always moves and resizes with its parent; a straight or custom link makes its scale follow the parent's, and the link acts only when the parent changes [W:origin-help/link-layers, pd-dialog-linkaxesscale-tab].
+- **Frame.** Layer 1's frame is about 17.9 / 11.6 / 68.2 / 71.9 percent of the page (left, top, width, height), practically the frame of the plain Line template, whose right margin already leaves room for a right axis [COM].
+- **Axes per layer.** Layer 1 shows the bottom X and left Y axes with labels. Layer 2 shows the right Y axis with labels, and the top X line and ticks without labels, which closes the box. All ticks point outwards [COM].
+- **Right Y title.** It belongs to layer 2 and is built from layer 2's first plot (long name and units). It is rotated 90 degrees counter-clockwise like the left title (it reads bottom to top), sits right of the right tick labels, centred on the frame height, and is black [COM].
+- **Columns.** The Double-Y plot command puts the 1st, 3rd, 5th ... selected Y column in layer 1 and the 2nd, 4th ... in layer 2 [COM with one X column]. With two X columns the help says the split follows the X columns [W; not run]. Plotting with `plotxy` into the DoubleY template put every column into layer 1 [COM].
+- **Legend.** One legend, in layer 1, lists the plots of both layers, one line per layer and plot; layer 2 has none. It is placed above the top-right corner of the frame, partly outside it [COM].
+- **Colours** [COM]:
+  - layer 1's curve is black and layer 2's curve is pure blue (the third entry of the default colour list, not the second);
+  - curves placed in the same layer by the command did not change colour;
+  - every axis colour in this template is "automatic": the axis line, its ticks and tick labels take the colour of the layer's plot, so the right Y axis (and the top X line, which belongs to layer 2) is blue like its curve; the Line template uses black axes;
+  - titles stay black;
+  - the help describes the automatic axis colour as a darker shade of the plot's fill, else of its border, else its line colour [W:axesref-lineticks].
+- **Autoscale.** Each layer fits its Y axis to its own plots. X is shared through the link, and the layer that was rescaled last decides the shared X range; a rescale of layer 1 ignores layer 2's data and can cut off layer 2's curve [COM].
+- **Adding a right Y axis to an existing graph.** "New Layer (Axes) > Right-Y (Linked X Scale and Dimension)" (`layadd type:=righty`) adds a linked layer that shows only a right Y axis [W:addlayers-insertlayer, x-function/ref/layadd; COM]:
+  - black axis, no top line (the box stays open);
+  - its own legend;
+  - its own colour sequence, starting again at black.
+
+### 12.2 Model
+
+A double-Y graph in Sheaf is a graph with two layers, the second linked to the first. Every new field below has a serde default and is not written while it has its default value, so files written before this feature load unchanged, draw exactly as before, and graphs that do not use the feature are saved exactly as before.
+
+```rust
+pub struct Layer {
+    // ... existing fields ...
+    /// Set when this layer is drawn over another layer of the graph and follows it. While the
+    /// link is valid, `frame` is read as fractions of the parent's frame instead of the page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<LayerLink>,
+}
+
+pub struct LayerLink {
+    /// Index of the parent in `Graph::layers`.
+    pub parent: usize,
+    #[serde(default)]
+    pub x: ScaleLink,
+    #[serde(default)]
+    pub y: ScaleLink,
+}
+
+pub enum ScaleLink {
+    /// The layer's own scale (default).
+    None,
+    /// Exactly the parent's scale: limits, scale type, ticks and direction.
+    Straight,
+}
+
+pub struct Axis {
+    // ... existing fields ...
+    pub side: AxisSide,                 // default Normal
+    /// Axis line, ticks and tick labels in the colour of the layer's first visible plot.
+    pub color_follows_plot: bool,       // default false
+    /// The axis title in that colour too.
+    pub title_color_follows_plot: bool, // default false
+}
+
+pub enum AxisSide {
+    /// Bottom for X, left for Y (default).
+    Normal,
+    /// Top for X, right for Y.
+    Opposite,
+    /// Not drawn at all; the scale still places the data.
+    Hidden,
+}
+
+pub struct Legend {
+    // ... existing fields ...
+    pub scope: LegendScope,             // default Layer
+}
+
+pub enum LegendScope {
+    /// This layer's plots (default).
+    Layer,
+    /// Every layer's plots.
+    Graph,
+}
+```
+
+The enums are written in snake_case like the existing ones (`"straight"`, `"opposite"`, `"graph"`). A later `Custom` variant of `ScaleLink` can carry link formulas.
+
+**Valid links.** A link is valid when `parent` is smaller than the layer's own index and the parent layer has no link itself (`Graph::link_parent`). An invalid link (to itself, to a later or missing layer, or to a linked layer) is ignored: the layer is drawn as an independent layer with its `frame` read as page fractions.
+
+**Groups.** A layer without a valid link is a *root*. A root plus every layer validly linked to it, in layer order, is a *group* (`Graph::group`). The member of a group whose Y axis side is `Opposite` carries the group's right Y axis (`Graph::right_y_member`).
+
+**Right-Y layer.** `template::right_y_layer(parent, parent_index)` builds the layer that gives a parent a right Y axis:
+
+- start from a copy of the parent without its plots and free labels;
+- `link = { parent: parent_index, x: Straight, y: None }` and `frame = {0, 0, 1, 1}`;
+- `x_axis.side = Hidden`, without grids;
+- `y_axis` is the parent's Y axis (fonts, ticks, scale type, automatic range mode, colour rule) with:
+  - `side = Opposite`;
+  - `min`, `max`, `major_step` and `title` set to `None`, and `tick_label_divisor = 1`;
+  - `show_opposite = false` and `opposite_ticks = false`;
+  - no grids;
+- `legend.visible = false`, scope `Layer`;
+- palette:
+  - for a `Cycle` palette, the parent's colour list starting at its third colour (wrapping); a list of one or two colours starts at its last colour;
+  - for a `Spread` palette, the parent's list in reverse order.
+
+**Changes to the parent.** When a right-Y layer is added (`Project::add_right_y_layer`), the parent changes as follows:
+
+- `y_axis.show_opposite = false` and `y_axis.opposite_ticks = false`, because the right edge now belongs to the new axis;
+- `legend.scope = Graph`.
+
+**Template `DoubleY`** (name `double-y`, label "Double Y"). The Line template with these changes:
+
+- page 6.4 x 4.8 inch, as the Line template;
+- layer 0:
+  - frame left 0.16, top 0.07, width 0.68, height 0.75, which leaves room for the right labels and title;
+  - `x_axis.show_opposite = true` and `x_axis.opposite_ticks = true` (the top line of the box);
+  - `y_axis.color_follows_plot = true`;
+  - legend scope `Graph`, position TopRight;
+- layer 1 = `right_y_layer(layer 0, 0)`; its Y axis inherits `color_follows_plot = true`;
+- titles do not follow the plot, X axes stay black, ticks point out.
+
+`Template::new_graph` returns two layers for this template.
+
+### 12.3 Resolving axes and frames
+
+Groups are resolved one after the other in the order of their roots. Within a group:
+
+1. **Data ranges.** For the root's X axis, take the finite X values of the root's visible plots and of every member whose `link.x` is `Straight`, with the row rules of figure-rendering.md section 2: rows with a missing X or Y are skipped, and on a log10 axis only positive values count, judged by the root's scale. The root's Y axis works the same way with `link.y`. Every other axis uses only its own layer's plots.
+2. **Linked axes.** The root's axis is resolved as before. A member's axis with a `Straight` link *is* the root's resolved axis: the same limits, step, ticks, labels, scale type and reversal. The member's own `min`, `max`, `major_step`, `minor_ticks`, `scale` and `auto_range` on that axis are not used while it is linked.
+3. **Nominal frames.** The root's nominal frame comes from `frame` as page fractions, as before. A member's frame is `x = R.x + f.left*R.w`, `y = R.y + f.top*R.h`, `w = f.width*R.w`, `h = f.height*R.h`, where R is the root's frame. For `{0,0,1,1}` it is the root's frame.
+4. **Page fit** (extends "Keeping labels on the page" in figure-rendering.md). Lay out every member's labels at the nominal frames and take the outermost edges over the whole group:
+   - the left edge of every `Normal` Y axis's title (or of its widest tick label when the title is hidden);
+   - the right edge of every `Opposite` Y axis's title (or of its labels);
+   - the bottom edge of every `Normal` X axis's title (or of its labels);
+   - the top edge of every `Opposite` X axis's title (or of its labels).
+
+   `Hidden` axes add nothing. The margin stays 3 pt from the page edge. Each shift moves one side of the root's frame and the opposite side stays where it is, in this order:
+   - `left_shift = clamp(3 - left_edge, 0, 0.5*w)`, then `w1 = w - left_shift`;
+   - `right_shift = clamp(right_edge - (page_w - 3), 0, 0.5*w1)`, taken from the width;
+   - `bottom_shift = clamp(bottom_edge - (page_h - 3), 0, 0.5*h)`, then `h1 = h - bottom_shift`;
+   - `top_shift = clamp(3 - top_edge, 0, 0.5*h1)`, moving the top side down.
+
+   Then the members' frames are derived again from the adjusted root frame. A group whose labels already fit keeps its nominal frames, so existing one-layer figures are unchanged.
+5. **Geometry.** `layout_geometry` still returns one `LayerGeometry` per layer, in layer order. A member's entry carries its derived frame, the root's X axis when X is linked, and its own Y axis.
+
+Check values (fixed text metrics, every character 0.55 x size wide; DoubleY template, X = 0..10, left Y = x², right Y = (x - 5)/100): both frames are x 73.728, y 24.192, w 313.344, h 259.2; left Y 0..100 step 20; right Y -0.06..0.06 step 0.02; the right tick labels start at x = 396.272 (frame right edge 387.072 + 5 pt outward tick + 0.35 x 12 pt gap); the right title is anchored in its middle at (447.752, 153.792). With layer 0's width set to 0.78 the right title would end at 496.772, so the right side moves left by 38.972 and w becomes 320.452.
+
+### 12.4 Drawing
+
+Layers are drawn in layer order, each as before (grid, plots clipped to its frame, axes, ticks, labels, titles, legend, free text), with the rules below.
+
+- **Axis colour.** If `color_follows_plot` is set and the axis's layer has a visible plot that can be drawn, the colour is that of the layer's first such plot: its line colour for Line and LineSymbol plots, its symbol (fill) colour for Scatter and Column plots. Otherwise the axis line and ticks use `axis.color` and the tick labels `tick_font.color`, as before. The title uses the plot's colour only when `title_color_follows_plot` is set; otherwise `title_font.color`.
+- **Side `Normal`.** As before.
+- **Side `Opposite`, Y axis:**
+  - main line on the right frame edge;
+  - ticks on that edge, `In` pointing left into the frame and `Out` pointing right;
+  - tick labels left-aligned, vertically centred on their tick as on the left side, starting `0.35 * tick font size` right of the outer end of the ticks (of the axis line for `In`/`None` ticks);
+  - title rotated 90 degrees counter-clockwise like the left title (it reads bottom to top), centred on the frame height, with its baseline at `labels_right + 0.6*size + 0.72*size`, where `labels_right` is the right edge of the widest right tick label (or the outer tick end when labels are hidden). The tops of its letters then face the labels at a distance of `0.6*size`, mirroring the left title;
+  - `show_opposite` and `opposite_ticks` refer to the left edge.
+- **Side `Opposite`, X axis:**
+  - main line on the top edge;
+  - labels centred above their ticks, the bottom of the text (baseline plus descent) `0.35 * size` above the outer tick end;
+  - title centred above the labels, its bottom edge `0.6*size` above them;
+  - `show_opposite` and `opposite_ticks` refer to the bottom edge.
+- **Side `Hidden`.** No line, ticks, labels or title for that axis, and no opposite line. Grid lines follow the grid settings as usual.
+- **Closed box.** One closed rectangle is drawn only when neither axis is `Hidden`, both have `show_opposite`, and their widths and line colours are equal. Otherwise each edge is drawn as its own line with square caps, in this order: X main edge, Y main edge, X opposite edge, Y opposite edge.
+- **Title text.** A title that is `None` is built from the first visible plot of the axis's own layer, so the right title comes from the right layer's first plot. A layer without plots draws no title text.
+
+So in the DoubleY template layer 0 draws the bottom, left and top lines and layer 1 draws only the right line, with its ticks, labels and title.
+
+### 12.5 Legend and colours
+
+- **Graph scope.** A legend with scope `Graph` lists every visible drawable plot of every layer: layer 0's plots in plot order, then layer 1's, and so on. Rows look as before. The box is placed in its own layer's frame. It is drawn after all layers of the graph (at the end of the last layer's drawing), so that no layer's curves cover it.
+- **Margins.** A legend in a corner keeps `0.8 * font size` plus the inward length of the major ticks from each frame edge. The tick length counts for every axis of the legend's group that draws ticks pointing `In` or `Both` on that edge (its main edge, or the edge across with `opposite_ticks`). For a single layer this is the rule of figure-rendering.md; on a CV-style graph with a right axis the legend also keeps clear of the right axis's inward ticks.
+- **No entries.** A legend with no entries is not drawn.
+- **Automatic colours** are handed out per layer from that layer's palette (`Layer::recolor_automatic`). A plot that moves between layers takes the new layer's automatic colour unless its colour was chosen by hand. In the DoubleY template the first left curve is black and the first right curve is the third Sheaf palette colour, blue (30, 80, 220), as in Origin. Unlike Origin, a second curve on the same axis gets the next colour.
+
+### 12.6 Commands
+
+**Project API.**
+- `Project::add_right_y_layer(graph, parent) -> Result<usize, ProjectError>`: when `parent`'s group already has a right-Y member, returns it and changes nothing; otherwise appends `right_y_layer(root)` (the root of `parent`'s group), changes the root as in 12.2 and returns the new index.
+- `Project::move_plot_to_layer(graph, from, index, to)`: moves the plot to the end of layer `to` and hands out automatic colours again in both layers.
+- `Project::plot_columns_double_y(template, left, right)`: makes the graph from `template`, adds the right layer (the DoubleY template already has it), plots `left` in layer 0 and `right` in the right layer, applies each layer's palette, and takes the long name from the first column's workbook.
+- `Project::plot_columns(DoubleY, ys)` alternates the columns as Origin does (1st, 3rd, ... left; 2nd, 4th, ... right). `Project::default_plot_columns` returns every numeric Y column for the DoubleY template, because a double-Y graph exists to show different units. The desktop app's Plot menu lists the template through `Template::ALL`, so "Double Y" works there through these two functions.
+
+**Command line** (`sheaf plot`):
+- `--y2 COLS`: comma-separated short or long names, looked up like `-y` (per file when several files are overlaid). These columns go on a right Y axis added to the chosen template's graph. The left axis gets the `-y` columns, or the default columns without those named in `--y2`. Not allowed together with `--graph`.
+- A column named in both `-y` and `--y2` is an error ("a column cannot be on both axes").
+- `-t double-y` without `--y2`: the Y columns are those of `-y`, or every numeric Y column of the sheet; they alternate in column order. Fewer than one column per axis is an error ("a double-Y graph needs at least two Y columns, one for each axis").
+- Several files with `--y2` or `-t double-y`: each file's columns are split as for one file; the right axis lists its curves after all left curves.
+
+**Style options** (`sheaf plot` and `sheaf export`):
+- `--y2-title TEXT`, `--y2-min`, `--y2-max`, `--y2-step` (negative values are written with `=`, for example `--y2-min=-1`) set the right Y axis of layer 0's group. On a graph without one they are an error ("the graph has no right Y axis ...").
+- `--x-*` and `--y-*` set layer 0. Linked layers follow its X.
+- `--axis-colors plot|fixed` sets `color_follows_plot` on the Y axes of layer 0's group. When it is absent the template decides.
+- `--colors`, `--labels` and `--line-width` apply to the plots of layer 0's group in legend order (layer 0's plots first). `--no-legend` hides every legend of that group. Further layers of a graph read from an Origin project (multi-panel graphs) are left alone, as before.
+
+Examples: `sheaf plot cycles.csv -y Capacity --y2 Efficiency -o fig.png`; `sheaf plot it.txt -t cv -y "i/mA" --y2 "Q/C" --y2-title "Charge (C)" -o fig.svg`; `sheaf plot data.csv -t double-y -o fig.pdf`.
+
+**Desktop app** (later, with ADR 0007): the Plot menu's multi-axis group with "Double-Y" (today it appears as a template in the Plot menu); a Graph toolbar button that adds a Right-Y layer; a "Left axis / Right axis" choice per plot that calls `move_plot_to_layer`, creating the right layer the first time; layer icons 1 and 2 that choose the layer the dialogs edit. Today the graph settings dialog edits layer 0 only.
+
+### 12.7 Origin project files (for the .opj reader and writer)
+
+Observed on one Origin 2016 project [COM; one sample each]:
+- **Frame.** Both layer records store the same absolute frame (layer header `0x71`, page units).
+- **Linked-layer header bytes.** The linked layer differs from its parent at header `0x0AB` (= 1, probably the parent's number, unconfirmed), `0x12D` (= 1), `0x02E` (1 becomes 9) and bit `0x80` of `0x0FC`. Turning the X link off changed none of them.
+- **X link.** A straight X link shows as annotations named `X1` and `X2` in the linked layer; with the X link off, `X1` was gone.
+- **Axis visibility.** In each axis group, bit `0x40` of byte `0x26` of blocks 2, 3, 4 and 5 means: block 2 primary-side tick labels shown; block 3 primary line and ticks shown; block 4 opposite-side tick labels shown; block 5 opposite line shown. For Y, primary is left and opposite is right. This corrects opj-format.md section 10.3, which calls block 4 "title (not used)".
+- **Automatic axis colour.** Stored as `F7 FF` at block 3 offset `0x0F` and as `F7 FF FF FF` at `0x92` and `0x16A`; black is 0 there.
+- **Right title and legend.** The right title is the text object `YR` of the linked layer. The DoubleY template names its legend object `legend` in lower case.
+
+Reader rule, not yet implemented (the reader today reads every layer as independent, drops `YR`, and matches only the exact name `Legend`):
+- a layer k > 0 with the same rectangle as an earlier root layer, whose Y group shows the right line and labels and hides the left ones, becomes a member with `link = {parent, x: Straight, y: None}`, `frame = {0,0,1,1}` and `y_axis.side = Opposite`, with its title from `YR`;
+- an X group with nothing shown becomes `x_axis.side = Hidden`;
+- an X group showing only the top line becomes `Hidden` too, while the root gets `x_axis.show_opposite = true`;
+- automatic axis colours set `color_follows_plot`;
+- the legend object is matched without regard to case.
+
+### 12.8 Deliberate differences from Origin 2016
+
+- The shared X range covers the data of all linked layers, so no curve is cut off by a rescale of the other layer.
+- Colours increment within each layer.
+- The X axes and the top line of the box stay in the X axis colour (black); only Y axes follow their plot.
+- Adding a right axis gives one legend for the graph, not a second legend in the new layer.
+- The legend sits inside the frame (TopRight), not above it.
+- Every plot is listed (Origin's four-column run showed one fewer).
+- The right layer of a CV-style graph copies the CV style: ticks in, symmetric range about zero, black axes, closed box.
+
+Tick positions of the left and right axes are not aligned with each other (Origin does not align them either).
+
+### 12.9 Unknowns
+
+- The meaning of the linked layer's header bytes listed in 12.7, and where Origin stores the straight X link.
+- Whether Origin's blue for layer 2 is stored in the template or follows from a colour-list rule.
+- Whether Origin 2016 offers "title colour follows plot" for axis titles (it appears in current help).
+- How Origin splits a selection with two X columns (documented, not run).
+- Origin's distance between the right tick labels and the right title, and the right title's size (not measured; Sheaf mirrors its left-side rule).
+- Why Origin's DoubleY template uses finer automatic tick steps than the Line template for the same data (X -1..11 step 2 against -2.5..12.5 step 5); related to U4.
+- Whether the owner wants coloured Y axes on double-Y figures (the DoubleY template colours them; `--axis-colors fixed` turns it off) and a symmetric right axis on CV-style figures.

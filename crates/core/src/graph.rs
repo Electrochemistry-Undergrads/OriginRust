@@ -38,6 +38,41 @@ impl Graph {
         }
         out
     }
+
+    /// The parent of layer `index` when the layer has a valid link: the parent comes earlier in
+    /// the list and is not linked itself. A layer with an invalid link (to itself, to a later or
+    /// missing layer, or to a linked layer) is drawn as an independent layer.
+    pub fn link_parent(&self, index: usize) -> Option<usize> {
+        let link = self.layers.get(index)?.link?;
+        (link.parent < index && self.layers[link.parent].link.is_none()).then_some(link.parent)
+    }
+
+    /// The link of layer `index` when it is valid (see [`Graph::link_parent`]).
+    pub fn valid_link(&self, index: usize) -> Option<LayerLink> {
+        self.link_parent(index).and(self.layers[index].link)
+    }
+
+    /// The layer that layer `index` follows: its parent when validly linked, else itself.
+    pub fn root_of(&self, index: usize) -> usize {
+        self.link_parent(index).unwrap_or(index)
+    }
+
+    /// The layers drawn as one group with layer `index`: its root followed by every layer
+    /// validly linked to that root, in layer order. Empty when there is no such layer.
+    pub fn group(&self, index: usize) -> Vec<usize> {
+        if index >= self.layers.len() {
+            return Vec::new();
+        }
+        let root = self.root_of(index);
+        (0..self.layers.len()).filter(|&i| i == root || self.link_parent(i) == Some(root)).collect()
+    }
+
+    /// The linked layer that gives layer `index`'s group its right Y axis, if there is one.
+    pub fn right_y_member(&self, index: usize) -> Option<usize> {
+        self.group(index)
+            .into_iter()
+            .find(|&i| self.link_parent(i).is_some() && self.layers[i].y_axis.side == AxisSide::Opposite)
+    }
 }
 
 /// The sheet of "paper" a graph is drawn on.
@@ -82,6 +117,74 @@ pub struct Layer {
     pub default_line: LineStyle,
     pub default_symbol: SymbolStyle,
     pub default_kind: PlotKind,
+    /// Set when this layer is drawn over another layer of the graph and follows it (a double-Y
+    /// graph is a layer with a right Y axis linked to the layer with the left one). While the
+    /// link is valid, `frame` is read as fractions of the parent's frame instead of the page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<LayerLink>,
+}
+
+/// How a layer follows its parent layer.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayerLink {
+    /// Index of the parent in [`Graph::layers`]; it must be smaller than the layer's own index.
+    pub parent: usize,
+    #[serde(default)]
+    pub x: ScaleLink,
+    #[serde(default)]
+    pub y: ScaleLink,
+}
+
+/// How one axis scale of a linked layer relates to the parent's.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ScaleLink {
+    /// The layer's own scale.
+    #[default]
+    None,
+    /// Exactly the parent's scale: limits, scale type, ticks and direction. The automatic range
+    /// covers the data of the parent and of every layer linked this way.
+    Straight,
+}
+
+/// Which edge of the frame an axis is drawn on.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AxisSide {
+    /// Bottom for X, left for Y.
+    #[default]
+    Normal,
+    /// Top for X, right for Y: line, ticks, tick labels and title move there.
+    Opposite,
+    /// Nothing of the axis is drawn; its scale still places the data.
+    Hidden,
+}
+
+impl AxisSide {
+    fn is_normal(&self) -> bool {
+        *self == AxisSide::Normal
+    }
+}
+
+/// Which plots a legend lists.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LegendScope {
+    /// The plots of its own layer.
+    #[default]
+    Layer,
+    /// The plots of every layer of the graph, layer by layer.
+    Graph,
+}
+
+impl LegendScope {
+    fn is_layer(&self) -> bool {
+        *self == LegendScope::Layer
+    }
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 impl Layer {
@@ -205,6 +308,17 @@ pub struct Axis {
     pub opposite_ticks: bool,
     pub major_grid: Option<LineStyle>,
     pub minor_grid: Option<LineStyle>,
+    /// The edge the axis is drawn on. With [`AxisSide::Opposite`], `show_opposite` and
+    /// `opposite_ticks` refer to the bottom (X) or left (Y) edge.
+    #[serde(default, skip_serializing_if = "AxisSide::is_normal")]
+    pub side: AxisSide,
+    /// Draw the axis line, its ticks and its tick labels in the color of the layer's first
+    /// visible plot instead of `color` and the tick font's color.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub color_follows_plot: bool,
+    /// Draw the title in that color too.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub title_color_follows_plot: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -398,6 +512,8 @@ pub struct Legend {
     /// Draw a box around the legend.
     pub frame: bool,
     pub background: Option<Color>,
+    #[serde(default, skip_serializing_if = "LegendScope::is_layer")]
+    pub scope: LegendScope,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -481,5 +597,107 @@ mod tests {
         assert_eq!(p.color(1, 5), Color::rgb(50, 50, 50));
         assert_eq!(p.color(4, 5), Color::rgb(200, 200, 200));
         assert_eq!(p.color(0, 1), Color::rgb(0, 0, 0));
+    }
+
+    /// A layer as files written before linked layers existed store it: no `link`, `side`,
+    /// `color_follows_plot`, `title_color_follows_plot` or `scope` keys.
+    const OLD_LAYER: &str = r##"{
+        "frame": {"left": 0.16, "top": 0.07, "width": 0.78, "height": 0.75},
+        "x_axis": {"scale": "linear", "min": null, "max": 2.0, "auto_range": "nice", "major_step": null,
+            "minor_ticks": 1, "title": null, "show_title": true,
+            "title_font": {"family": "Arial", "size_pt": 14.0, "color": "#000000"},
+            "show_tick_labels": true,
+            "tick_font": {"family": "Arial", "size_pt": 12.0, "color": "#000000"},
+            "tick_format": {"kind": "auto"}, "tick_label_divisor": 1.0, "major_tick": "out",
+            "minor_tick": "out", "major_tick_len_pt": 5.0, "minor_tick_len_pt": 2.5, "line_width_pt": 1.0,
+            "color": "#000000", "show_opposite": false, "opposite_ticks": false,
+            "major_grid": null, "minor_grid": null},
+        "y_axis": {"scale": "linear", "min": null, "max": null, "auto_range": "symmetric_zero",
+            "major_step": null, "minor_ticks": 0, "title": "j", "show_title": true,
+            "title_font": {"family": "Arial", "size_pt": 14.0, "color": "#000000"},
+            "show_tick_labels": true,
+            "tick_font": {"family": "Arial", "size_pt": 12.0, "color": "#000000"},
+            "tick_label_divisor": 1.0, "major_tick": "in", "minor_tick": "none", "major_tick_len_pt": 5.0,
+            "minor_tick_len_pt": 2.5, "line_width_pt": 1.0, "color": "#000000", "show_opposite": true,
+            "opposite_ticks": false, "major_grid": null, "minor_grid": null},
+        "plots": [],
+        "legend": {"visible": true, "position": {"kind": "top_right"},
+            "font": {"family": "Arial", "size_pt": 11.0, "color": "#000000"},
+            "frame": false, "background": null},
+        "palette": {"colors": ["#000000"], "mode": "cycle"},
+        "default_line": {"color": "#000000", "width_pt": 1.5},
+        "default_symbol": {"shape": "circle", "size_pt": 5.0, "color": "#000000", "filled": true,
+            "edge_width_pt": 0.75},
+        "default_kind": "line"
+    }"##;
+
+    #[test]
+    fn a_layer_saved_before_linked_layers_loads_with_the_old_meaning() {
+        let layer: Layer = serde_json::from_str(OLD_LAYER).expect("an old layer loads");
+        assert_eq!(layer.link, None);
+        for axis in [&layer.x_axis, &layer.y_axis] {
+            assert_eq!(axis.side, AxisSide::Normal);
+            assert!(!axis.color_follows_plot && !axis.title_color_follows_plot);
+        }
+        assert_eq!(layer.legend.scope, LegendScope::Layer);
+        assert_eq!(layer.x_axis.max, Some(2.0));
+        // Saving it again writes none of the new keys, so the file looks as before.
+        let json = serde_json::to_string(&layer).unwrap();
+        for key in ["\"link\"", "\"side\"", "color_follows_plot", "\"scope\""] {
+            assert!(!json.contains(key), "{key} in {json}");
+        }
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, layer);
+    }
+
+    #[test]
+    fn new_fields_are_written_when_set_and_read_back() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        layer.link = Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None });
+        layer.y_axis.side = AxisSide::Opposite;
+        layer.x_axis.side = AxisSide::Hidden;
+        layer.y_axis.color_follows_plot = true;
+        layer.y_axis.title_color_follows_plot = true;
+        layer.legend.scope = LegendScope::Graph;
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains(r#""link":{"parent":0,"x":"straight","y":"none"}"#), "{json}");
+        assert!(json.contains(r#""side":"opposite""#) && json.contains(r#""side":"hidden""#), "{json}");
+        assert!(json.contains(r#""scope":"graph""#), "{json}");
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, layer);
+    }
+
+    fn graph_of(links: &[Option<usize>]) -> Graph {
+        let base: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        let layers = links
+            .iter()
+            .map(|p| Layer {
+                link: p.map(|parent| LayerLink { parent, x: ScaleLink::Straight, y: ScaleLink::None }),
+                ..base.clone()
+            })
+            .collect();
+        Graph { id: WindowId(1), name: "G".into(), long_name: String::new(), page: Page::inches(6.4, 4.8), layers }
+    }
+
+    #[test]
+    fn only_links_to_an_earlier_unlinked_layer_are_valid() {
+        let g = graph_of(&[None, Some(0), Some(1), Some(3), Some(9), Some(0)]);
+        assert_eq!(g.link_parent(0), None);
+        assert_eq!(g.link_parent(1), Some(0));
+        assert_eq!(g.link_parent(2), None, "a chain 2 -> 1 -> 0 is not followed");
+        assert_eq!(g.link_parent(3), None, "a link to itself");
+        assert_eq!(g.link_parent(4), None, "a link to a missing layer");
+        assert_eq!(g.link_parent(5), Some(0));
+        assert_eq!(g.group(0), vec![0, 1, 5]);
+        assert_eq!(g.group(5), vec![0, 1, 5]);
+        assert_eq!(g.group(2), vec![2]);
+        assert_eq!(g.group(17), Vec::<usize>::new());
+        assert_eq!(g.root_of(4), 4);
+        assert_eq!(g.right_y_member(0), None, "no member has its Y axis on the right");
+        let mut g = g;
+        g.layers[5].y_axis.side = AxisSide::Opposite;
+        g.layers[2].y_axis.side = AxisSide::Opposite;
+        assert_eq!(g.right_y_member(1), Some(5));
+        assert_eq!(g.right_y_member(2), None, "a layer that is not linked is not a right-Y member");
     }
 }

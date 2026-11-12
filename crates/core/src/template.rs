@@ -22,11 +22,15 @@ pub enum Template {
     /// ticks pointing inwards, a closed black box around the plot, and a
     /// current axis that is symmetric about zero.
     CyclicVoltammetry,
+    /// Two Y axes over one X axis: the line template with a second, linked layer whose Y axis is
+    /// on the right (Origin's "Double-Y"). Selected columns alternate between the left and the
+    /// right axis, and each Y axis is drawn in the color of its first curve.
+    DoubleY,
 }
 
 impl Template {
-    pub const ALL: [Template; 4] =
-        [Template::Line, Template::Scatter, Template::LineSymbol, Template::CyclicVoltammetry];
+    pub const ALL: [Template; 5] =
+        [Template::Line, Template::Scatter, Template::LineSymbol, Template::CyclicVoltammetry, Template::DoubleY];
 
     /// The name used on the command line and in menus.
     pub fn name(&self) -> &'static str {
@@ -35,6 +39,7 @@ impl Template {
             Template::Scatter => "scatter",
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
+            Template::DoubleY => "double-y",
         }
     }
 
@@ -44,6 +49,7 @@ impl Template {
             Template::Scatter => "Scatter",
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
+            Template::DoubleY => "Double Y",
         }
     }
 
@@ -51,13 +57,15 @@ impl Template {
         Template::ALL.into_iter().find(|t| t.name().eq_ignore_ascii_case(name))
     }
 
-    /// Builds an empty graph (one layer, no plots) in this template's style.
+    /// Builds an empty graph (no plots) in this template's style: one layer, or two for
+    /// [`Template::DoubleY`].
     pub fn new_graph(&self, id: WindowId, name: &str) -> Graph {
         match self {
             Template::Line => general(id, name, PlotKind::Line),
             Template::Scatter => general(id, name, PlotKind::Scatter),
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
+            Template::DoubleY => double_y(id, name),
         }
     }
 }
@@ -91,6 +99,9 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         opposite_ticks: false,
         major_grid: None,
         minor_grid: None,
+        side: AxisSide::Normal,
+        color_follows_plot: false,
+        title_color_follows_plot: false,
     }
 }
 
@@ -126,6 +137,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 font: Font::new(DEFAULT_FONT, 11.0),
                 frame: false,
                 background: None,
+                scope: LegendScope::Layer,
             },
             labels: Vec::new(),
             palette,
@@ -139,6 +151,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 every: 1,
             },
             default_kind: kind,
+            link: None,
         }],
     }
 }
@@ -170,8 +183,70 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
         font: Font::new(DEFAULT_FONT, 10.0),
         frame: false,
         background: None,
+        scope: LegendScope::Layer,
     };
     g
+}
+
+fn double_y(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Line);
+    let layer = &mut g.layers[0];
+    // Narrower than the line template, so that the right tick labels and title fit as well as the
+    // left ones.
+    layer.frame = Frame { left: 0.16, top: 0.07, width: 0.68, height: 0.75 };
+    // The top line closes the box; the right edge belongs to the right Y axis.
+    layer.x_axis.show_opposite = true;
+    layer.x_axis.opposite_ticks = true;
+    layer.y_axis.color_follows_plot = true;
+    layer.legend.scope = LegendScope::Graph;
+    layer.legend.position = LegendPosition::TopRight;
+    let right = right_y_layer(layer, 0);
+    g.layers.push(right);
+    g
+}
+
+/// Builds the layer that gives layer `parent_index` (whose content is `parent`) a right Y axis:
+/// a layer linked to it with the same X scale, its own Y scale, and the parent's style.
+///
+/// The new layer is a copy of the parent without plots and free labels. Its frame covers the
+/// parent's frame, its X axis is not drawn, and its Y axis is drawn on the right with automatic
+/// limits and step and a title built from its own first plot. Its legend is hidden: the parent's
+/// legend lists the plots of both layers (see [`crate::project::Project::add_right_y_layer`]).
+/// Its palette starts at the parent's third color (for a gradient: runs the other way), so the
+/// first right curve differs from the first left one.
+pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
+    let mut l = parent.clone();
+    l.plots.clear();
+    l.labels.clear();
+    l.link = Some(LayerLink { parent: parent_index, x: ScaleLink::Straight, y: ScaleLink::None });
+    l.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
+    l.x_axis.side = AxisSide::Hidden;
+    l.x_axis.major_grid = None;
+    l.x_axis.minor_grid = None;
+    let y = &mut l.y_axis;
+    y.side = AxisSide::Opposite;
+    y.min = None;
+    y.max = None;
+    y.major_step = None;
+    y.title = None;
+    y.tick_label_divisor = 1.0;
+    y.show_opposite = false;
+    y.opposite_ticks = false;
+    y.major_grid = None;
+    y.minor_grid = None;
+    l.legend.visible = false;
+    l.legend.scope = LegendScope::Layer;
+    let colors = &mut l.palette.colors;
+    match l.palette.mode {
+        PaletteMode::Cycle => {
+            if !colors.is_empty() {
+                let start = if colors.len() >= 3 { 2 } else { colors.len() - 1 };
+                colors.rotate_left(start);
+            }
+        }
+        PaletteMode::Spread => colors.reverse(),
+    }
+    l
 }
 
 #[cfg(test)]
@@ -198,6 +273,62 @@ mod tests {
             assert_eq!(Template::from_name(t.name()), Some(t));
         }
         assert_eq!(Template::from_name("CV"), Some(Template::CyclicVoltammetry));
+        assert_eq!(Template::from_name("double-y"), Some(Template::DoubleY));
         assert_eq!(Template::from_name("nope"), None);
+    }
+
+    #[test]
+    fn double_y_template_has_a_right_layer_linked_to_the_first() {
+        let g = Template::DoubleY.new_graph(WindowId(1), "Graph1");
+        assert_eq!(g.layers.len(), 2);
+        let (left, right) = (&g.layers[0], &g.layers[1]);
+        assert_eq!(right.link, Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None }));
+        assert_eq!(g.link_parent(1), Some(0));
+        assert_eq!(right.frame, Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 });
+        assert_eq!(right.x_axis.side, AxisSide::Hidden);
+        assert_eq!(right.y_axis.side, AxisSide::Opposite);
+        assert!(!right.legend.visible);
+        assert_eq!(left.legend.scope, LegendScope::Graph);
+        assert!(!left.y_axis.show_opposite && left.x_axis.show_opposite && left.x_axis.opposite_ticks);
+        for y in [&left.y_axis, &right.y_axis] {
+            assert!(y.color_follows_plot && !y.title_color_follows_plot);
+        }
+        assert!(!left.x_axis.color_follows_plot);
+        // The first right curve is blue, the first left curve black, as in Origin.
+        assert_eq!(left.palette.colors[0], Color::rgb(0, 0, 0));
+        assert_eq!(right.palette.colors[0], Color::rgb(30, 80, 220));
+        assert_eq!(left.x_axis.major_tick, TickDirection::Out);
+    }
+
+    #[test]
+    fn right_y_layer_copies_the_parent_style_but_not_its_limits() {
+        let mut g = Template::CyclicVoltammetry.new_graph(WindowId(1), "Graph1");
+        let parent = &mut g.layers[0];
+        parent.y_axis.min = Some(-3.0);
+        parent.y_axis.title = Some("j".into());
+        parent.labels.push(TextLabel {
+            text: "note".into(),
+            x: 0.1,
+            y: 0.1,
+            font: Font::new(DEFAULT_FONT, 9.0),
+            rotation_deg: 0.0,
+        });
+        let r = right_y_layer(&g.layers[0], 0);
+        assert_eq!(r.y_axis.major_tick, TickDirection::In);
+        assert_eq!(r.y_axis.auto_range, AutoRange::SymmetricZero);
+        assert_eq!(r.default_line, g.layers[0].default_line);
+        assert_eq!((r.y_axis.min, r.y_axis.title.clone()), (None, None));
+        assert!(r.labels.is_empty() && r.plots.is_empty());
+        assert!(!r.y_axis.show_opposite && !r.y_axis.opposite_ticks);
+        // A gradient runs the other way on the right.
+        let mut reversed = g.layers[0].palette.colors.clone();
+        reversed.reverse();
+        assert_eq!(r.palette.colors, reversed);
+        // Short color lists start at their last color.
+        let mut two = g.layers[0].clone();
+        two.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle };
+        assert_eq!(right_y_layer(&two, 0).palette.colors, vec![Color::RED, Color::BLACK]);
+        two.palette.colors.clear();
+        assert!(right_y_layer(&two, 0).palette.colors.is_empty());
     }
 }

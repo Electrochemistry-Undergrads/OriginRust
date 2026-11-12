@@ -105,6 +105,13 @@ types that two agents need (the fit report) were written by the lead before they
 recursion test on a 1 MB thread passed even with the protection removed. Tests of stack depth
 use a smaller thread (256 KiB) and were checked to fail without the fix.
 
+## An empty `SHEAF_UPDATE_GOLDEN` still rewrites the golden images
+
+The golden-image tests of `sheaf-plot` check only whether the variable exists, so
+`SHEAF_UPDATE_GOLDEN= cargo test` (meant to clear it) rewrote every stored SVG instead of comparing
+them. Run the tests without the variable, and after an accidental run check `git status
+crates/plot/tests/golden` before committing.
+
 ## Clap reads a negative number as an unknown option
 
 `--x-min -1` is rejected; write `--x-min=-1`. Tests and examples of the command-line program

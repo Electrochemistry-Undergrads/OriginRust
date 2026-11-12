@@ -183,6 +183,14 @@ pub struct ImportArgs {
     pub read: ReadOptions,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AxisColors {
+    /// Each Y axis (line, ticks and tick labels) in the color of its first curve.
+    Plot,
+    /// Every axis in its own color (black in the built-in templates).
+    Fixed,
+}
+
 /// Changes applied to a graph before it is rendered.
 #[derive(Args, Debug, Clone, Default)]
 pub struct StyleArgs {
@@ -210,6 +218,22 @@ pub struct StyleArgs {
     /// Distance between major Y ticks.
     #[arg(long)]
     pub y_step: Option<f64>,
+    /// Title of the right Y axis (the graph needs one: see --y2 and the double-y template).
+    #[arg(long, value_name = "TEXT")]
+    pub y2_title: Option<String>,
+    /// Lower limit of the right Y axis.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_min: Option<f64>,
+    /// Upper limit of the right Y axis.
+    #[arg(long, allow_hyphen_values = true)]
+    pub y2_max: Option<f64>,
+    /// Distance between major ticks of the right Y axis.
+    #[arg(long)]
+    pub y2_step: Option<f64>,
+    /// Draw each Y axis in the color of its first curve (plot) or in its own color (fixed).
+    /// Without this option the template decides: double-y follows the curves.
+    #[arg(long, value_enum, value_name = "MODE")]
+    pub axis_colors: Option<AxisColors>,
     /// Page width in inches.
     #[arg(long, value_name = "INCHES")]
     pub width: Option<f64>,
@@ -219,10 +243,11 @@ pub struct StyleArgs {
     /// Line width of the data curves in points.
     #[arg(long, value_name = "PT")]
     pub line_width: Option<f64>,
-    /// Curve colors in plot order, comma-separated, as #RRGGBB or basic names.
+    /// Curve colors in legend order (left axis first, then right axis), comma-separated, as
+    /// #RRGGBB or basic names.
     #[arg(long, value_delimiter = ',', value_name = "COLORS")]
     pub colors: Vec<String>,
-    /// Legend labels in plot order, comma-separated.
+    /// Legend labels in legend order (left axis first, then right axis), comma-separated.
     #[arg(long, value_delimiter = ',', value_name = "LABELS")]
     pub labels: Vec<String>,
     /// Hide the legend.
@@ -241,12 +266,18 @@ pub struct PlotArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Figure template: line, scatter, line-symbol or cv (default: what the importer suggests).
+    /// Figure template: line, scatter, line-symbol, cv or double-y (default: what the importer
+    /// suggests). double-y puts the 1st, 3rd, ... Y column on the left axis and the 2nd, 4th, ...
+    /// on a right axis.
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
     #[arg(short, long, value_delimiter = ',')]
     pub y: Vec<String>,
+    /// Y columns to plot on a second Y axis on the right, comma-separated short or long names.
+    /// The left axis gets the -y columns (default: the other Y columns).
+    #[arg(long, value_delimiter = ',', value_name = "COLUMNS", conflicts_with = "graph")]
+    pub y2: Vec<String>,
     /// For a project input: the workbook to plot from (default: the first one).
     #[arg(long)]
     pub book: Option<String>,

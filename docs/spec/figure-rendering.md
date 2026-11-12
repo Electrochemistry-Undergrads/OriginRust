@@ -67,7 +67,10 @@ Step 5, tick label text. The shown number is `value / tick_label_divisor`.
 
 ## 3. Layout
 
-For each layer, in this drawing order (later items are on top):
+For each layer, in this drawing order (later items are on top). A layer linked to another layer
+(the right Y axis of a double-Y graph) is laid out together with it: it shares its frame and,
+when linked, its X axis, and the rules for axes on the top and right edges, hidden axes, axis
+colours that follow the first curve and a legend for the whole graph are in graphing.md section 12.
 
 1. Page background rectangle (once per graph).
 2. Grid lines, if set: minor first, then major; spanning the frame at each tick position.
@@ -113,6 +116,8 @@ than page height minus the margin, move the frame's bottom side up by the differ
 A move never takes more than half of the frame's width or height. When everything already fits, the
 frame is exactly the nominal one, so figures that fit are unchanged. Because labels move with the
 frame, one move is exact. The same geometry is used by the screen view (`layout_geometry`).
+Axes drawn on the right or top edge move the right or top side in the same way, and a layer with
+linked layers takes the outermost labels of all of them into account (graphing.md section 12.3).
 
 ### Reversed axes
 

@@ -112,16 +112,13 @@ pub struct Raster {
     pub rgba: Vec<u8>,
 }
 
-/// Frame rectangles and resolved axes of every layer of a graph.
+/// Frame rectangles and resolved axes of every layer of a graph, in layer order. A layer linked
+/// to another one (the right Y axis of a double-Y graph) has its parent's frame and, when its X
+/// scale is linked, its parent's X axis.
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    Ok(g.layers
-        .iter()
-        .map(|layer| {
-            let pds = data::collect(project, layer);
-            layout::layer_geometry(layer, &g.page, &pds, SystemFonts::shared())
-        })
-        .collect())
+    let pds: Vec<Vec<data::PlotData>> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    Ok(layout::graph_geometry(g, &pds, SystemFonts::shared()))
 }
 
 /// Renders a graph as SVG text, measuring text with the installed fonts.

@@ -414,6 +414,9 @@ mod tests {
             opposite_ticks: false,
             major_grid: None,
             minor_grid: None,
+            side: Default::default(),
+            color_follows_plot: false,
+            title_color_follows_plot: false,
         }
     }
 

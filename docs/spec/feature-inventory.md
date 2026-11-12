@@ -141,7 +141,7 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | GP-LSYM-01 | Line plus symbol | Combined | P0 | GR 5 | |
 | GP-OVER-01 | Overlay of many curves on shared axes | Several Y columns or several books in one layer, with plot grouping | P0 | GR 1.5; XF plotxy | |
 | GP-ERR-01 | Error bars (Y, X, XY) | Error bars from error columns | P0 | GR 5.5 | |
-| GP-DY-01 | Double-Y and multiple Y axes | Two or more Y axes in one layer | P0 | GR 8; UI A2 | |
+| GP-DY-01 | Double-Y and multiple Y axes | Two or more Y axes over one X axis (Origin 2016: further layers linked to the first) | P0 | GR 8, GR 12; UI A2 | double Y and right Y axis done (model, renderer, `sheaf plot --y2`, `-t double-y`); 3 and 4 Y axes, app controls and the .opj reader's link not yet |
 | GP-OFF-01 | Stacked lines by Y offsets and waterfall | Shifted curves | P0 | GR 8; UI A2 | |
 | GP-COL-01 | Column and bar charts | Grouped, stacked, floating, 100 percent | P1 | GR 8; UI A2 | |
 | GP-SPL-01 | Spline and step connection | Smooth and stair-step lines | P1 | GR 5.2 | |

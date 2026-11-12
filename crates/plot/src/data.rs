@@ -1,9 +1,8 @@
 //! Reading the numbers of the plots of a layer.
 
-use crate::ticks::{ResolvedAxis, resolve_axis};
-use crate::{LayerGeometry, Rect};
+use crate::Rect;
 use sheaf_core::Project;
-use sheaf_core::graph::{Layer, Page, Plot, ScaleKind};
+use sheaf_core::graph::{Frame, Layer, Page, Plot, ScaleKind};
 
 /// A visible plot whose Y column holds numbers, with its data resolved.
 pub(crate) struct PlotData<'a> {
@@ -48,45 +47,55 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> Vec<PlotDat
     out
 }
 
-/// Finite data range per axis over all rows where both X and Y are finite.
-/// On a log axis only positive values count.
-fn data_range(pds: &[PlotData], x_scale: ScaleKind, y_scale: ScaleKind) -> (Option<(f64, f64)>, Option<(f64, f64)>) {
-    let mut xr: Option<(f64, f64)> = None;
-    let mut yr: Option<(f64, f64)> = None;
-    let widen = |r: &mut Option<(f64, f64)>, v: f64| {
-        *r = Some(match *r {
-            None => (v, v),
-            Some((lo, hi)) => (lo.min(v), hi.max(v)),
-        });
-    };
+/// Which coordinate of the plots an axis shows.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Dim {
+    X,
+    Y,
+}
+
+/// Finite data range of one coordinate over all rows where both X and Y are
+/// finite. On a log axis only positive values count.
+pub(crate) fn axis_range<'p, 'a: 'p>(
+    pds: impl IntoIterator<Item = &'p PlotData<'a>>,
+    dim: Dim,
+    scale: ScaleKind,
+) -> Option<(f64, f64)> {
+    let mut r: Option<(f64, f64)> = None;
     for pd in pds {
         for i in pd.start..pd.end {
             let (x, y) = (pd.x_at(i), pd.y[i]);
             if !(x.is_finite() && y.is_finite()) {
                 continue;
             }
-            if x_scale == ScaleKind::Linear || x > 0.0 {
-                widen(&mut xr, x);
-            }
-            if y_scale == ScaleKind::Linear || y > 0.0 {
-                widen(&mut yr, y);
+            let v = if dim == Dim::X { x } else { y };
+            if scale == ScaleKind::Linear || v > 0.0 {
+                r = Some(match r {
+                    None => (v, v),
+                    Some((lo, hi)) => (lo.min(v), hi.max(v)),
+                });
             }
         }
     }
-    (xr, yr)
+    r
 }
 
-/// Frame rectangle in points and the two resolved axes of a layer.
-pub(crate) fn resolve_layer(layer: &Layer, page: &Page, pds: &[PlotData]) -> LayerGeometry {
-    let f = layer.frame;
-    let frame = Rect {
+/// A frame given as fractions of the page, in points.
+pub(crate) fn page_frame(f: &Frame, page: &Page) -> Rect {
+    Rect {
         x: f.left * page.width_pt,
         y: f.top * page.height_pt,
         w: f.width * page.width_pt,
         h: f.height * page.height_pt,
-    };
-    let (xr, yr) = data_range(pds, layer.x_axis.scale, layer.y_axis.scale);
-    let x: ResolvedAxis = resolve_axis(&layer.x_axis, xr);
-    let y: ResolvedAxis = resolve_axis(&layer.y_axis, yr);
-    LayerGeometry { frame, x, y }
+    }
+}
+
+/// A frame given as fractions of the parent layer's frame `parent` (a linked layer), in points.
+pub(crate) fn linked_frame(f: &Frame, parent: Rect) -> Rect {
+    Rect {
+        x: parent.x + f.left * parent.w,
+        y: parent.y + f.top * parent.h,
+        w: f.width * parent.w,
+        h: f.height * parent.h,
+    }
 }

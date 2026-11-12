@@ -291,6 +291,24 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_keeps_a_double_y_graph() {
+        let dir = TempDir::new("double-y");
+        let path = dir.file("dy.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap().id;
+        let charge = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.5, 1.5, 3.0])).unwrap();
+        let current = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+        let g = p.plot_columns(Template::DoubleY, &[current, charge]).unwrap();
+        p.graph_mut(g).unwrap().layers[1].y_axis.title_color_follows_plot = true;
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let graph = back.graph(g).unwrap();
+        assert_eq!(graph.right_y_member(0), Some(1), "the link and the axis side survive");
+        assert!(graph.layers[1].y_axis.title_color_follows_plot);
+    }
+
+    #[test]
     fn member_names_follow_the_spec() {
         let dir = TempDir::new("members");
         let path = dir.file("demo.sheaf");

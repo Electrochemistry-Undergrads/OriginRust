@@ -591,6 +591,22 @@ fn thinning_leaves_sparse_and_reversing_curves_alone() {
 
 // ----- golden images -------------------------------------------------------
 
+/// The X values and the curve shape used by the golden images.
+fn golden_data() -> (Vec<f64>, impl Fn(f64) -> Vec<f64>) {
+    let n = 41;
+    let x: Vec<f64> = (0..n).map(|i| -0.2 + 0.03 * i as f64).collect();
+    let xs = x.clone();
+    let curve = move |amp: f64| -> Vec<f64> {
+        xs.iter()
+            .map(|v| {
+                let t = (v + 0.2) / 1.2;
+                amp * (t * (1.0 - t) * (1.0 - 2.0 * t) * 20.0)
+            })
+            .collect()
+    };
+    (x, curve)
+}
+
 /// Compares the SVG of a built-in template with the stored one in
 /// `tests/golden/`. Text is measured with [`FixedMetrics`] and the data uses
 /// only plain arithmetic, so the output does not depend on installed fonts or
@@ -598,23 +614,17 @@ fn thinning_leaves_sparse_and_reversing_curves_alone() {
 /// run the tests once with the environment variable `SHEAF_UPDATE_GOLDEN=1`
 /// to rewrite the stored files, and look at them before committing.
 fn check_golden(name: &str, template: Template) {
-    let n = 41;
-    let x: Vec<f64> = (0..n).map(|i| -0.2 + 0.03 * i as f64).collect();
-    let curve = |amp: f64| -> Vec<f64> {
-        x.iter()
-            .map(|v| {
-                let t = (v + 0.2) / 1.2;
-                amp * (t * (1.0 - t) * (1.0 - 2.0 * t) * 20.0)
-            })
-            .collect()
-    };
-    let (p, g) = project(template, x.clone(), vec![curve(30.0), curve(21.5), curve(12.25)]);
-    let svg = svg_of(&p, g);
+    let (x, curve) = golden_data();
+    let (p, g) = project(template, x, vec![curve(30.0), curve(21.5), curve(12.25)]);
+    compare_golden(name, &svg_of(&p, g));
+}
+
+fn compare_golden(name: &str, svg: &str) {
     let path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("golden").join(format!("{name}.svg"));
     if std::env::var_os("SHEAF_UPDATE_GOLDEN").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, &svg).unwrap();
+        std::fs::write(&path, svg).unwrap();
         return;
     }
     let stored = std::fs::read_to_string(&path)
@@ -719,4 +729,359 @@ fn column_plots_draw_one_filled_bar_per_value() {
     }
     let svg = svg_of(&p, g);
     assert_eq!(svg.matches("fill=\"#006BAC\"").count(), 4, "{svg}");
+}
+
+// ----- double-Y graphs: linked layers, axis sides, graph legend ------------
+
+/// One curve for a double-Y test: its column's long name, unit, X values and Y values.
+struct Curve {
+    name: &'static str,
+    unit: &'static str,
+    x: Vec<f64>,
+    y: Vec<f64>,
+}
+
+fn curve(name: &'static str, unit: &'static str, x: &[f64], f: impl Fn(f64) -> f64) -> Curve {
+    Curve { name, unit, x: x.to_vec(), y: x.iter().map(|v| f(*v)).collect() }
+}
+
+/// A graph of `template` with the `left` curves in layer 0 and the `right` curves in the layer
+/// that carries the right Y axis (made with `add_right_y_layer` unless the template has one).
+/// Every curve has its own X column, called "Time" in s. The legend text of a curve is its name.
+fn double_y(template: Template, left: Vec<Curve>, right: Vec<Curve>) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let g = p.add_graph(template);
+    let r = p.add_right_y_layer(g, 0).unwrap();
+    for (layer, curves) in [(0, left), (r, right)] {
+        for c in curves {
+            let x = p.add_column(book, 0, Designation::X, ColumnData::numeric(c.x)).unwrap();
+            {
+                let col = p.column_mut(x).unwrap();
+                col.long_name = "Time".into();
+                col.units = "s".into();
+            }
+            let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(c.y)).unwrap();
+            let col = p.column_mut(y).unwrap();
+            col.long_name = c.name.into();
+            col.units = c.unit.into();
+            p.add_plot_xy(g, layer, Some(x), y, None).unwrap();
+        }
+    }
+    (p, g)
+}
+
+/// The spec's example: X = 0..10, left Y = x², right Y = (x - 5)/100.
+fn squares_and_line() -> (Project, WindowId) {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    double_y(
+        Template::DoubleY,
+        vec![curve("Squares", "mm", &x, |v| v * v)],
+        vec![curve("Line", "mA", &x, |v| (v - 5.0) / 100.0)],
+    )
+}
+
+/// Geometry with the fixed text metrics of the SVG tests (`layout_geometry` measures with the
+/// installed fonts).
+fn fixed_geometry(p: &Project, g: WindowId) -> Vec<LayerGeometry> {
+    let graph = p.graph(g).unwrap();
+    let pds: Vec<Vec<data::PlotData>> = graph.layers.iter().map(|l| data::collect(p, l)).collect();
+    layout::graph_geometry(graph, &pds, &FixedMetrics)
+}
+
+fn near(a: f64, b: f64) -> bool {
+    (a - b).abs() < 1e-6
+}
+
+fn texts_of(items: &[scene::Item]) -> Vec<&scene::TextItem> {
+    items
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Text(t) => Some(t),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Straight lines (one move, one line) drawn with this stroke width: axis lines, not ticks.
+fn single_lines(items: &[scene::Item], width: f64) -> Vec<(String, Color)> {
+    items
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Path { d, stroke: Some(s), .. }
+                if s.width == width && d.matches('M').count() == 1 && d.matches('L').count() == 1 =>
+            {
+                Some((d.clone(), s.color))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn double_y_layout_puts_the_right_axis_labels_and_title_beside_the_frame() {
+    let (p, g) = squares_and_line();
+    let geoms = fixed_geometry(&p, g);
+    assert_eq!(geoms.len(), 2);
+    for geom in &geoms {
+        let f = geom.frame;
+        assert!(near(f.x, 73.728) && near(f.y, 24.192) && near(f.w, 313.344) && near(f.h, 259.2), "{f:?}");
+        assert_eq!((geom.x.min, geom.x.max, geom.x.step), (0.0, 10.0, 2.0));
+    }
+    assert_eq!((geoms[0].y.min, geoms[0].y.max, geoms[0].y.step), (0.0, 100.0, 20.0));
+    let right = &geoms[1].y;
+    assert!(near(right.min, -0.06) && near(right.max, 0.06) && near(right.step, 0.02), "{right:?}");
+    assert_eq!(right.major.len(), 7);
+
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let texts = texts_of(&scene.layers[1].overlay);
+    let tick_labels: Vec<_> = texts.iter().filter(|t| t.rotate_ccw == 0.0 && t.x > 387.0).collect();
+    assert_eq!(tick_labels.len(), 7);
+    assert!(tick_labels.iter().all(|t| t.anchor == scene::Anchor::Start && near(t.x, 396.272)), "{tick_labels:?}");
+    let titles: Vec<_> = texts.iter().filter(|t| t.rotate_ccw == 90.0).collect();
+    assert_eq!(titles.len(), 1);
+    let t = titles[0];
+    assert_eq!(t.text, "Line (mA)");
+    assert_eq!(t.anchor, scene::Anchor::Middle);
+    assert!(near(t.x, 447.752) && near(t.y, 153.792), "{t:?}");
+    // Layer 1 draws no X axis: no X tick labels and no X title.
+    assert!(!texts.iter().any(|t| t.text == "Time (s)" || (t.anchor == scene::Anchor::Middle && t.rotate_ccw == 0.0)));
+}
+
+#[test]
+fn right_labels_move_the_right_side_of_the_frame_to_stay_on_the_page() {
+    let (mut p, g) = squares_and_line();
+    p.graph_mut(g).unwrap().layers[0].frame.width = 0.78;
+    for geom in fixed_geometry(&p, g) {
+        let f = geom.frame;
+        // 359.424 nominal width; the right title would reach 496.772, 38.972 past 457.8.
+        assert!(near(f.x, 73.728) && near(f.w, 359.424 - 38.972), "{f:?}");
+        assert!(near(f.y, 24.192) && near(f.h, 259.2), "{f:?}");
+    }
+    // The right title now ends 3 pt inside the page.
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let title = texts_of(&scene.layers[1].overlay).into_iter().find(|t| t.rotate_ccw == 90.0).unwrap();
+    assert!(near(title.x + 0.21 * title.size, 460.8 - 3.0), "{title:?}");
+}
+
+#[test]
+fn a_linked_x_axis_covers_the_data_of_both_layers_and_follows_the_parent() {
+    let a: Vec<f64> = (0..=10).map(f64::from).collect();
+    let b: Vec<f64> = (5..=25).map(f64::from).collect();
+    let (mut p, g) =
+        double_y(Template::DoubleY, vec![curve("Left", "V", &a, |v| v)], vec![curve("Right", "A", &b, |v| 1000.0 + v)]);
+    let geoms = fixed_geometry(&p, g);
+    for geom in &geoms {
+        assert_eq!((geom.x.min, geom.x.max, geom.x.step), (0.0, 25.0, 5.0));
+    }
+    assert_eq!((geoms[0].y.min, geoms[0].y.max), (0.0, 10.0), "the left Y axis sees only its own data");
+    assert_eq!((geoms[1].y.min, geoms[1].y.max), (1005.0, 1025.0), "the right Y axis sees only its own data");
+    // The linked layer's own X settings are not used while it is linked.
+    p.graph_mut(g).unwrap().layers[1].x_axis.min = Some(100.0);
+    assert_eq!(fixed_geometry(&p, g)[1].x, geoms[1].x);
+    // Limits set on the parent apply to both.
+    {
+        let x = &mut p.graph_mut(g).unwrap().layers[0].x_axis;
+        x.min = Some(2.0);
+        x.max = Some(6.0);
+    }
+    for geom in fixed_geometry(&p, g) {
+        assert_eq!((geom.x.min, geom.x.max), (2.0, 6.0));
+    }
+}
+
+#[test]
+fn y_axes_take_the_color_of_their_first_curve_in_the_double_y_template() {
+    let (mut p, g) = squares_and_line();
+    let blue = Color::rgb(30, 80, 220);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    // Right axis: line and ticks (width 1) and tick labels in the right curve's blue; title black.
+    let right_strokes: Vec<Color> = scene.layers[1]
+        .overlay
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Path { stroke: Some(s), .. } if s.width == 1.0 => Some(s.color),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(right_strokes.len(), 2, "the right line and its ticks");
+    assert!(right_strokes.iter().all(|c| *c == blue), "{right_strokes:?}");
+    let texts = texts_of(&scene.layers[1].overlay);
+    assert!(texts.iter().filter(|t| t.x > 387.0 && t.rotate_ccw == 0.0).all(|t| t.color == blue));
+    assert!(texts.iter().filter(|t| t.rotate_ccw == 90.0).all(|t| t.color == Color::BLACK));
+    // Left axis: its curve is black, so everything there is black.
+    let left = &scene.layers[0].overlay;
+    assert!(texts_of(left).iter().all(|t| t.color == Color::BLACK));
+    let svg = svg_of(&p, g);
+    assert!(svg.contains("stroke=\"#1E50DC\""));
+
+    // A left curve colored by hand: the left axis follows it, the X axis stays black.
+    {
+        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+        plot.line.color = Color::RED;
+        plot.auto_color = false;
+    }
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let lines = single_lines(&scene.layers[0].overlay, 1.0);
+    let left_line = lines.iter().find(|(d, _)| d == "M73.728 24.192L73.728 283.392").expect("left line");
+    assert_eq!(left_line.1, Color::RED);
+    let bottom = lines.iter().find(|(d, _)| d == "M73.728 283.392L387.072 283.392").expect("bottom line");
+    assert_eq!(bottom.1, Color::BLACK);
+    let left_labels: Vec<_> =
+        texts_of(&scene.layers[0].overlay).into_iter().filter(|t| t.anchor == scene::Anchor::End).collect();
+    assert!(!left_labels.is_empty() && left_labels.iter().all(|t| t.color == Color::RED));
+
+    // Fixed colors: every axis black.
+    for layer in &mut p.graph_mut(g).unwrap().layers {
+        layer.y_axis.color_follows_plot = false;
+    }
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    for layer in &scene.layers {
+        for (_, color) in single_lines(&layer.overlay, 1.0) {
+            assert_eq!(color, Color::BLACK);
+        }
+    }
+    // With the title following too, the right title is blue.
+    p.graph_mut(g).unwrap().layers[1].y_axis.title_color_follows_plot = true;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let title = texts_of(&scene.layers[1].overlay).into_iter().find(|t| t.rotate_ccw == 90.0).unwrap();
+    assert_eq!(title.color, blue);
+}
+
+#[test]
+fn each_layer_draws_only_the_edges_of_its_own_axes() {
+    let (p, g) = squares_and_line();
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let (l, r, t, b) = (73.728, 387.072, 24.192, 283.392);
+    let edges = |items: &[scene::Item]| -> Vec<&'static str> {
+        let mut out: Vec<&'static str> = single_lines(items, 1.0)
+            .into_iter()
+            .map(|(d, _)| {
+                let n: Vec<f64> = d[1..].split(['L', ' ']).map(|s| s.parse().unwrap()).collect();
+                match () {
+                    _ if near(n[1], b) && near(n[3], b) => "bottom",
+                    _ if near(n[1], t) && near(n[3], t) => "top",
+                    _ if near(n[0], l) && near(n[2], l) => "left",
+                    _ if near(n[0], r) && near(n[2], r) => "right",
+                    _ => "other",
+                }
+            })
+            .collect();
+        out.sort_unstable();
+        out
+    };
+    assert_eq!(edges(&scene.layers[0].overlay), vec!["bottom", "left", "top"]);
+    assert_eq!(edges(&scene.layers[1].overlay), vec!["right"]);
+    // Layer 1 has no left ticks of its own (the Origin file read today draws them on the left).
+    let layer1_ticks_left = scene.layers[1].overlay.iter().any(|it| {
+        matches!(it, scene::Item::Path { d, stroke: Some(s), .. }
+            if s.width == 1.0 && d.matches('M').count() > 1 && d.starts_with(&format!("M{l}")))
+    });
+    assert!(!layer1_ticks_left);
+}
+
+#[test]
+fn one_legend_lists_the_curves_of_both_axes_on_top_of_everything() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let (p, g) = double_y(
+        Template::DoubleY,
+        vec![curve("B", "V", &x, |v| v), curve("D", "V", &x, |v| 10.0 - v)],
+        vec![curve("C", "mA", &x, |v| v * 0.01)],
+    );
+    let svg = svg_of(&p, g);
+    let pos = |text: &str| -> Vec<usize> { svg.match_indices(&format!(">{text}</text>")).map(|(i, _)| i).collect() };
+    let (b, d, c) = (pos("B"), pos("D"), pos("C"));
+    assert_eq!((b.len(), d.len(), c.len()), (1, 1, 1), "each curve is listed once");
+    assert!(b[0] < d[0] && d[0] < c[0], "left curves first, then the right one");
+    let layer1_plots = svg.find("clip-path=\"url(#clip1)\"").unwrap();
+    assert!(b[0] > layer1_plots, "the legend comes after the right layer's curves");
+    // Rows of one box: equal spacing, one column.
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let rows: Vec<_> =
+        texts_of(&scene.layers[1].overlay).into_iter().filter(|t| ["B", "D", "C"].contains(&t.text.as_str())).collect();
+    assert!(near(rows[1].y - rows[0].y, rows[2].y - rows[1].y) && near(rows[0].x, rows[2].x));
+}
+
+#[test]
+fn an_empty_right_axis_is_drawn_from_0_to_1_without_a_title() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let (p, g) = double_y(Template::DoubleY, vec![curve("Left", "V", &x, |v| v)], vec![]);
+    let geoms = fixed_geometry(&p, g);
+    assert_eq!((geoms[1].y.min, geoms[1].y.max), (0.0, 1.0));
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert!(!texts_of(&scene.layers[1].overlay).iter().any(|t| t.rotate_ccw == 90.0));
+    let svg = svg_of(&p, g);
+    assert_eq!(svg.matches(">Left</text>").count(), 1);
+}
+
+#[test]
+fn invalid_links_draw_independent_layers() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    for parent in [1, 5] {
+        let (mut p, g) =
+            double_y(Template::DoubleY, vec![curve("Left", "V", &x, |v| v)], vec![curve("Right", "A", &x, |v| -v)]);
+        p.graph_mut(g).unwrap().layers[1].link.as_mut().unwrap().parent = parent;
+        let geoms = fixed_geometry(&p, g);
+        assert_eq!(geoms.len(), 2);
+        // The frame {0, 0, 1, 1} is read as the whole page; only its right side moves in.
+        let f = geoms[1].frame;
+        assert!(f.x == 0.0 && f.y == 0.0 && near(f.h, 345.6) && f.w < 460.8, "{f:?}");
+        assert_eq!((geoms[1].x.min, geoms[1].x.max), (0.0, 10.0), "its own X range");
+        svg_of(&p, g);
+        layout_geometry(&p, g).unwrap();
+    }
+    // A chain: layer 2 links to layer 1, which links to layer 0. Layer 2 is drawn on its own.
+    let (mut p, g) = squares_and_line();
+    let third = sheaf_core::template::right_y_layer(&p.graph(g).unwrap().layers[1], 1);
+    p.graph_mut(g).unwrap().layers.push(third);
+    let geoms = fixed_geometry(&p, g);
+    assert_eq!(geoms.len(), 3);
+    assert_eq!(geoms[1].frame, geoms[0].frame);
+    assert_eq!(geoms[2].frame.x, 0.0);
+    svg_of(&p, g);
+}
+
+#[test]
+fn golden_double_y_template() {
+    // Two curves on the left, a charge-like curve with a different scale on the right.
+    let (x, shape) = golden_data();
+    let mk = |name: &'static str, unit: &'static str, y: Vec<f64>| Curve { name, unit, x: x.clone(), y };
+    let mut q = 0.0;
+    let charge: Vec<f64> = shape(30.0)
+        .iter()
+        .map(|i| {
+            q += i * 0.03;
+            q
+        })
+        .collect();
+    let (p, g) = double_y(
+        Template::DoubleY,
+        vec![mk("Current 1", "mA", shape(30.0)), mk("Current 2", "mA", shape(12.25))],
+        vec![mk("Charge", "mC", charge)],
+    );
+    compare_golden("double-y", &svg_of(&p, g));
+}
+
+#[test]
+fn a_right_axis_on_the_cv_template_keeps_the_closed_black_box() {
+    let (x, y) = loop_data(100, 3.0);
+    let (p, g) = double_y(
+        Template::CyclicVoltammetry,
+        vec![Curve { name: "Current", unit: "mA", x: x.clone(), y: y.clone() }],
+        vec![Curve { name: "Charge", unit: "mC", x, y: y.iter().map(|v| v * 0.4 + 1.0).collect() }],
+    );
+    let graph = p.graph(g).unwrap();
+    assert_eq!(graph.layers[1].y_axis.major_tick, TickDirection::In);
+    let geoms = fixed_geometry(&p, g);
+    // Both Y axes are symmetric about zero, each for its own data.
+    for geom in &geoms {
+        assert!(geom.y.max > 0.0 && geom.y.min == -geom.y.max, "{:?}", geom.y);
+    }
+    assert!(geoms[1].y.max > geoms[0].y.max / 3.0 && geoms[1].y.max < geoms[0].y.max, "its own range");
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let mut colors: Vec<Color> = Vec::new();
+    for layer in &scene.layers {
+        colors.extend(single_lines(&layer.overlay, 1.0).into_iter().map(|(_, c)| c));
+    }
+    assert_eq!(colors, vec![Color::BLACK; 4], "four black edges");
 }

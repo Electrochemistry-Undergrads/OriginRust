@@ -2,7 +2,7 @@
 
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
-use sheaf_core::graph::LineStyle;
+use sheaf_core::graph::{Graph, LineStyle};
 
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
@@ -300,21 +300,51 @@ fn check_limits(axis: &str, min: Option<f64>, max: Option<f64>) -> Result<()> {
 }
 
 /// Applies the style options of the command line to a graph.
+///
+/// The options act on the first layer and the layers linked to it (its right Y axis): `--x-*`
+/// and `--y-*` set the first layer, whose X axis linked layers follow; `--y2-*` set the right Y
+/// axis; colors, labels and line widths count the plots in legend order, first layer first.
+/// Further layers of a graph read from an Origin project are left alone.
 fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<()> {
     require_page_size("--width", s.width)?;
     require_page_size("--height", s.height)?;
     require_positive("--line-width", s.line_width)?;
     check_limits("x", s.x_min, s.x_max)?;
     check_limits("y", s.y_min, s.y_max)?;
+    check_limits("y2", s.y2_min, s.y2_max)?;
     let colors: Vec<Color> =
         s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
+    let right = g.right_y_member(0);
+    let wants_y2 = s.y2_title.is_some() || s.y2_min.is_some() || s.y2_max.is_some() || s.y2_step.is_some();
+    if wants_y2 && right.is_none() {
+        bail!(
+            "the graph has no right Y axis for --y2-title, --y2-min, --y2-max or --y2-step; \
+             make one with --y2 COLUMNS or -t double-y"
+        );
+    }
     if let Some(w) = s.width {
         g.page.width_pt = w * 72.0;
     }
     if let Some(h) = s.height {
         g.page.height_pt = h * 72.0;
     }
+    let group = g.group(0);
+    if let Some(r) = right {
+        let y2 = &mut g.layers[r].y_axis;
+        if let Some(t) = &s.y2_title {
+            y2.title = Some(t.clone());
+        }
+        y2.min = s.y2_min.or(y2.min);
+        y2.max = s.y2_max.or(y2.max);
+        y2.major_step = s.y2_step.or(y2.major_step);
+    }
+    if let Some(mode) = s.axis_colors {
+        for &i in &group {
+            g.layers[i].y_axis.color_follows_plot = mode == AxisColors::Plot;
+        }
+    }
+    style_plots(g, &group, s, &colors);
     let Some(layer) = g.layers.first_mut() else {
         return Ok(());
     };
@@ -330,22 +360,32 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
     layer.y_axis.max = s.y_max.or(layer.y_axis.max);
     layer.x_axis.major_step = s.x_step.or(layer.x_axis.major_step);
     layer.y_axis.major_step = s.y_step.or(layer.y_axis.major_step);
-    if s.no_legend {
-        layer.legend.visible = false;
-    }
-    for (i, plot) in layer.plots.iter_mut().enumerate() {
-        if let Some(w) = s.line_width {
-            plot.line = LineStyle { width_pt: w, ..plot.line.clone() };
-        }
-        if let Some(c) = colors.get(i) {
-            plot.line.color = *c;
-            plot.symbol.color = *c;
-        }
-        if let Some(l) = s.labels.get(i) {
-            plot.label = Some(l.clone());
-        }
-    }
     Ok(())
+}
+
+/// Line widths, colors, labels and `--no-legend` for the plots of the layers in `group`, counted
+/// in legend order (layer by layer, plots in order).
+fn style_plots(g: &mut Graph, group: &[usize], s: &StyleArgs, colors: &[Color]) {
+    let mut i = 0;
+    for &li in group {
+        let layer = &mut g.layers[li];
+        if s.no_legend {
+            layer.legend.visible = false;
+        }
+        for plot in &mut layer.plots {
+            if let Some(w) = s.line_width {
+                plot.line = LineStyle { width_pt: w, ..plot.line.clone() };
+            }
+            if let Some(c) = colors.get(i) {
+                plot.line.color = *c;
+                plot.symbol.color = *c;
+            }
+            if let Some(l) = s.labels.get(i) {
+                plot.label = Some(l.clone());
+            }
+            i += 1;
+        }
+    }
 }
 
 fn template_from(name: Option<&str>, fallback: Template) -> Result<Template> {
@@ -387,15 +427,17 @@ fn plot(a: PlotArgs) -> Result<()> {
         let template = template_from(a.template.as_deref(), suggested)?;
         let book = pick_book(&project, a.book.as_deref())?;
         let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
-        let ys = if a.y.is_empty() {
-            project.default_plot_columns(book, sheet, template)
-        } else {
-            named_columns(&project, book, sheet, &a.y)?
-        };
+        let (left, right) = axis_columns(&project, book, sheet, template, &a)?;
+        let ys: Vec<ColumnId> = left.iter().chain(&right).copied().collect();
         if ys.is_empty() {
             bail!("there are no numeric Y columns to plot");
         }
-        project.plot_columns(template, &ys)?
+        if a.y2.is_empty() && template != Template::DoubleY {
+            project.plot_columns(template, &ys)?
+        } else {
+            require_two_axes(&left, &right)?;
+            project.plot_columns_double_y(template, &left, &right)?
+        }
     };
     apply_style(&mut project, graph, &a.style)?;
 
@@ -408,39 +450,117 @@ fn plot(a: PlotArgs) -> Result<()> {
     Ok(())
 }
 
-/// One graph with the chosen (or default) Y columns of every imported file.
-/// Legend entries name the file, plus the column when a file gives several curves.
-fn overlay_files(project: &mut Project, template: Template, a: &PlotArgs) -> Result<WindowId> {
-    let books: Vec<WindowId> = project.workbooks().map(|b| b.id).collect();
-    let mut ys: Vec<ColumnId> = Vec::new();
-    let mut labels: Vec<String> = Vec::new();
-    for book in books {
-        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
-        let columns = if a.y.is_empty() {
-            project.default_plot_columns(book, sheet, template)
-        } else {
-            named_columns(project, book, sheet, &a.y)?
-        };
-        let file = project.workbook(book).map(|b| b.long_name.clone()).unwrap_or_default();
-        for y in &columns {
+/// The Y columns of one sheet for the left and the right axis.
+///
+/// With `--y2`, the right axis gets those columns and the left axis the `-y` columns (or the
+/// default columns without the `--y2` ones). With the double-y template and no `--y2`, the
+/// columns (`-y`, or every numeric Y column) alternate: 1st, 3rd, ... left; 2nd, 4th, ... right.
+/// Otherwise every column is on the left axis.
+fn axis_columns(
+    project: &Project,
+    book: WindowId,
+    sheet: usize,
+    template: Template,
+    a: &PlotArgs,
+) -> Result<(Vec<ColumnId>, Vec<ColumnId>)> {
+    let named = |names: &[String]| named_columns(project, book, sheet, names);
+    if a.y2.is_empty() {
+        let ys = if a.y.is_empty() { project.default_plot_columns(book, sheet, template) } else { named(&a.y)? };
+        if template == Template::DoubleY {
+            return Ok(alternate(&ys));
+        }
+        return Ok((ys, Vec::new()));
+    }
+    let right = named(&a.y2)?;
+    let left = if a.y.is_empty() {
+        let mut ys = project.default_plot_columns(book, sheet, template);
+        ys.retain(|c| !right.contains(c));
+        ys
+    } else {
+        named(&a.y)?
+    };
+    if left.iter().any(|c| right.contains(c)) {
+        bail!("a column cannot be on both axes; a column named with --y2 must not be named with -y");
+    }
+    Ok((left, right))
+}
+
+/// Splits columns as Origin's Double-Y command does: 1st, 3rd, ... left; 2nd, 4th, ... right.
+fn alternate(ys: &[ColumnId]) -> (Vec<ColumnId>, Vec<ColumnId>) {
+    (ys.iter().step_by(2).copied().collect(), ys.iter().skip(1).step_by(2).copied().collect())
+}
+
+/// A double-Y graph needs a curve for each axis.
+fn require_two_axes(left: &[ColumnId], right: &[ColumnId]) -> Result<()> {
+    if left.is_empty() || right.is_empty() {
+        bail!(
+            "a double-Y graph needs at least two Y columns, one for each axis (left: {}, right: {})",
+            left.len(),
+            right.len()
+        );
+    }
+    Ok(())
+}
+
+/// The legend text of each column of one file in an overlay: the file name, plus the column when
+/// the file gives several curves.
+fn overlay_labels(project: &Project, book: WindowId, columns: &[ColumnId]) -> Vec<String> {
+    let file = project.workbook(book).map(|b| b.long_name.clone()).unwrap_or_default();
+    columns
+        .iter()
+        .map(|y| {
             let column = project
                 .column(*y)
                 .map(|c| c.comments.lines().next().filter(|l| !l.is_empty()).unwrap_or(c.display_name()).to_string());
-            labels.push(match (columns.len(), column) {
+            match (columns.len(), column) {
                 (1, _) | (_, None) => file.clone(),
                 (_, Some(c)) => format!("{file} {c}"),
-            });
-        }
-        ys.extend(columns);
+            }
+        })
+        .collect()
+}
+
+/// One graph with the chosen (or default) Y columns of every imported file.
+/// Legend entries name the file, plus the column when a file gives several curves.
+/// With `--y2` (or the double-y template) each file's columns are split between the axes as for a
+/// single file, and the right axis lists its curves after the left axis' curves.
+fn overlay_files(project: &mut Project, template: Template, a: &PlotArgs) -> Result<WindowId> {
+    let books: Vec<WindowId> = project.workbooks().map(|b| b.id).collect();
+    let (mut left, mut right) = (Vec::new(), Vec::new());
+    let (mut left_labels, mut right_labels) = (Vec::new(), Vec::new());
+    for book in books {
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let (l, r) = axis_columns(project, book, sheet, template, a)?;
+        // Labels are made over the file's columns together, so that a file with one curve per
+        // axis still names the column.
+        let all: Vec<ColumnId> = l.iter().chain(&r).copied().collect();
+        let labels = overlay_labels(project, book, &all);
+        left_labels.extend_from_slice(&labels[..l.len()]);
+        right_labels.extend_from_slice(&labels[l.len()..]);
+        left.extend(l);
+        right.extend(r);
     }
-    if ys.is_empty() {
+    if left.is_empty() && right.is_empty() {
         bail!("there are no numeric Y columns to plot");
     }
-    let graph = project.plot_columns(template, &ys)?;
-    if let Some(layer) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()) {
-        for (plot, label) in layer.plots.iter_mut().zip(labels) {
-            plot.label = Some(label);
-        }
+    let two_axes = !a.y2.is_empty() || template == Template::DoubleY;
+    let graph = if two_axes {
+        require_two_axes(&left, &right)?;
+        project.plot_columns_double_y(template, &left, &right)?
+    } else {
+        project.plot_columns(template, &left)?
+    };
+    if let Some(g) = project.graph_mut(graph) {
+        let right_layer = g.right_y_member(0);
+        let mut set = |layer: Option<usize>, labels: Vec<String>| {
+            if let Some(layer) = layer.and_then(|i| g.layers.get_mut(i)) {
+                for (plot, label) in layer.plots.iter_mut().zip(labels) {
+                    plot.label = Some(label);
+                }
+            }
+        };
+        set(Some(0), left_labels);
+        set(right_layer.filter(|_| two_axes), right_labels);
     }
     Ok(graph)
 }

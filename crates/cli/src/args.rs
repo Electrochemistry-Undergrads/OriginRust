@@ -375,6 +375,24 @@ pub struct StyleArgs {
     /// Draw no Y ticks.
     #[arg(long)]
     pub no_y_ticks: bool,
+    /// Tick labels of the X axis: auto (the cells of the first curve's X column when it holds text,
+    /// such as sample names, otherwise numbers), numbers, or the short or long name of a column whose
+    /// cells label the ticks (looked up in the sheet of the first curve).
+    #[arg(long, value_name = "auto|numbers|COLUMN")]
+    pub x_labels: Option<String>,
+    /// Turn the X tick labels by this many degrees counter-clockwise, from -90 to 90 (write a
+    /// negative angle as --x-label-angle=-45).
+    #[arg(long, value_name = "DEG", allow_hyphen_values = true)]
+    pub x_label_angle: Option<f64>,
+    /// Column charts: the gap between neighbouring groups of bars, in percent of the distance
+    /// between X positions, from 0 to 100 (default 20).
+    #[arg(long, value_name = "PCT")]
+    pub bar_gap: Option<f64>,
+    /// Column charts: how much neighbouring bars of a group cover each other, in percent of a bar's
+    /// width, from -100 to 100 (default 0; a negative value leaves a gap, written as
+    /// --bar-overlap=-20).
+    #[arg(long, value_name = "PCT", allow_hyphen_values = true)]
+    pub bar_overlap: Option<f64>,
 }
 
 #[derive(Args, Debug)]
@@ -388,9 +406,11 @@ pub struct PlotArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Figure template: line, scatter, line-symbol, cv, double-y, stacked or waterfall (default:
-    /// what the importer suggests). double-y puts the 1st, 3rd, ... Y column on the left axis and
-    /// the 2nd, 4th, ... on a right axis; stacked moves each curve above the one before it.
+    /// Figure template: line, scatter, line-symbol, column, cv, double-y, stacked or waterfall
+    /// (default: what the importer suggests). column draws one group of bars per row, the Y columns
+    /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
+    /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
+    /// curve above the one before it.
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).

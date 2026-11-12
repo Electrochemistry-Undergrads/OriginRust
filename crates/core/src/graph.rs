@@ -35,6 +35,11 @@ impl Graph {
                 out.push(p.y);
                 out.extend(p.y_error);
             }
+            for axis in [&layer.x_axis, &layer.y_axis] {
+                if let TickLabelSource::Column { column } = axis.tick_label_source {
+                    out.push(column);
+                }
+            }
         }
         out
     }
@@ -130,6 +135,65 @@ pub struct Layer {
     /// of [`Stack::Individual`] mode and which curve a fitted curve moves with.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plot_offsets: Vec<PlotOffset>,
+    /// Width and spacing of the bars of the layer's column plots. All visible column plots of a
+    /// layer stand side by side as one group (graphing spec section 14.4).
+    #[serde(default, skip_serializing_if = "BarSpacing::is_default")]
+    pub bars: BarSpacing,
+}
+
+/// How the bars of the column plots of a layer share the room at one X position (Origin's "Gap
+/// Between Bars" and "Overlap"). The rules are in the graphing spec, section 14.4.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BarSpacing {
+    /// The gap between neighbouring groups of bars, in percent of the X spacing (0 to 100). The
+    /// bars at one X position together take `100 - gap_pct` percent of the spacing.
+    #[serde(default = "default_gap_pct")]
+    pub gap_pct: f64,
+    /// How much neighbouring bars of the group cover each other, in percent of a bar's width
+    /// (-100 to 100). Negative values leave a gap between them; 100 puts them on top of each other.
+    #[serde(default)]
+    pub overlap_pct: f64,
+}
+
+/// Origin's default gap between bars, in percent.
+pub const DEFAULT_BAR_GAP_PCT: f64 = 20.0;
+
+fn default_gap_pct() -> f64 {
+    DEFAULT_BAR_GAP_PCT
+}
+
+impl Default for BarSpacing {
+    fn default() -> Self {
+        BarSpacing { gap_pct: DEFAULT_BAR_GAP_PCT, overlap_pct: 0.0 }
+    }
+}
+
+impl BarSpacing {
+    pub fn is_default(&self) -> bool {
+        *self == BarSpacing::default()
+    }
+}
+
+/// Where the tick labels of an axis come from (Origin's tick label types "Numeric" and "Text from
+/// dataset"). The rules are in the graphing spec, section 14.3.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum TickLabelSource {
+    /// The X axis shows the cells of the first plot's X column when that column holds text (sample
+    /// names), and numbers otherwise. A Y axis always shows numbers.
+    #[default]
+    Auto,
+    /// Always numbers.
+    Numbers,
+    /// The major tick at value k shows the cell of row k (counted from 1) of this column; other
+    /// ticks get no label.
+    Column { column: ColumnId },
+}
+
+impl TickLabelSource {
+    pub fn is_auto(&self) -> bool {
+        *self == TickLabelSource::Auto
+    }
 }
 
 /// How the plots of a layer are moved against each other (Origin's "Offset Grouped Data in
@@ -256,11 +320,16 @@ impl Layer {
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.
+    ///
+    /// A column plot gets the color as its fill only; its outline keeps its own color (black in
+    /// the column template, as in Origin).
     pub fn recolor_automatic(&mut self) {
         let n = self.plots.len();
         for (i, p) in self.plots.iter_mut().enumerate().filter(|(_, p)| p.auto_color) {
             let c = self.palette.color(i, n);
-            p.line.color = c;
+            if p.kind != PlotKind::Column {
+                p.line.color = c;
+            }
             p.symbol.color = c;
         }
     }
@@ -409,6 +478,12 @@ pub struct Axis {
     /// Draw the title in that color too.
     #[serde(default, skip_serializing_if = "is_false")]
     pub title_color_follows_plot: bool,
+    /// Where the tick labels come from: numbers, or the cells of a text column such as sample names.
+    #[serde(default, skip_serializing_if = "TickLabelSource::is_auto")]
+    pub tick_label_source: TickLabelSource,
+    /// Counter-clockwise rotation of the tick labels in degrees. Used for X axes; a Y axis ignores it.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tick_label_angle_deg: f64,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -806,6 +881,80 @@ mod tests {
         layer.plot_offset_mut(ColumnId(4)).follows = Some(ColumnId(4));
         assert_eq!(layer.follows(ColumnId(4)), None);
         assert_eq!(layer.follows(ColumnId(9)), None);
+    }
+
+    #[test]
+    fn a_layer_saved_before_text_tick_labels_and_bars_loads_with_the_defaults() {
+        let layer: Layer = serde_json::from_str(OLD_LAYER).expect("an old layer loads");
+        for axis in [&layer.x_axis, &layer.y_axis] {
+            assert_eq!(axis.tick_label_source, TickLabelSource::Auto);
+            assert_eq!(axis.tick_label_angle_deg, 0.0);
+        }
+        assert_eq!(layer.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
+        // Saved again, none of the new keys is written, and it reads back equal.
+        let json = serde_json::to_string(&layer).unwrap();
+        for key in ["tick_label_source", "tick_label_angle_deg", "\"bars\""] {
+            assert!(!json.contains(key), "{key} in {json}");
+        }
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), layer);
+    }
+
+    #[test]
+    fn tick_label_sources_and_bar_spacing_are_written_when_set_and_read_back() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        layer.x_axis.tick_label_source = TickLabelSource::Column { column: ColumnId(5) };
+        layer.x_axis.tick_label_angle_deg = 45.0;
+        layer.y_axis.tick_label_source = TickLabelSource::Numbers;
+        layer.bars.gap_pct = 50.0;
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains(r#""tick_label_source":{"kind":"column","column":5}"#), "{json}");
+        assert!(json.contains(r#""tick_label_source":{"kind":"numbers"}"#), "{json}");
+        assert!(json.contains(r#""tick_label_angle_deg":45.0"#), "{json}");
+        assert!(json.contains(r#""bars":{"gap_pct":50.0,"overlap_pct":0.0}"#), "{json}");
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), layer);
+        // A bar entry with only one of its numbers takes the default for the other.
+        let bars: BarSpacing = serde_json::from_str(r#"{"overlap_pct":-50.0}"#).unwrap();
+        assert_eq!(bars, BarSpacing { gap_pct: 20.0, overlap_pct: -50.0 });
+        assert_eq!(serde_json::from_str::<TickLabelSource>(r#"{"kind":"auto"}"#).unwrap(), TickLabelSource::Auto);
+    }
+
+    #[test]
+    fn an_automatic_color_fills_a_column_plot_and_leaves_its_outline() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle };
+        let plot = |kind: PlotKind| Plot {
+            x: None,
+            y: ColumnId(1),
+            y_error: None,
+            rows: None,
+            kind,
+            line: LineStyle::solid(Color::BLACK, 0.5),
+            symbol: layer.default_symbol.clone(),
+            label: None,
+            visible: true,
+            auto_color: true,
+        };
+        layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
+        layer.recolor_automatic();
+        assert_eq!(layer.plots[1].symbol.color, Color::RED);
+        assert_eq!(layer.plots[1].line.color, Color::BLACK, "the outline keeps its color");
+        // Other kinds take the color for line and symbol, as before.
+        assert_eq!((layer.plots[2].line.color, layer.plots[2].symbol.color), (Color::BLACK, Color::BLACK));
+        layer.plots.swap(0, 2);
+        layer.recolor_automatic();
+        assert_eq!((layer.plots[2].line.color, layer.plots[2].symbol.color), (Color::BLACK, Color::BLACK));
+        assert_eq!((layer.plots[1].line.color, layer.plots[1].symbol.color), (Color::BLACK, Color::RED));
+        layer.plots[0].kind = PlotKind::Line;
+        layer.plots[0].line.color = Color::BLUE;
+        layer.recolor_automatic();
+        assert_eq!(layer.plots[0].line.color, Color::BLACK);
+    }
+
+    #[test]
+    fn a_label_column_is_a_referenced_column() {
+        let mut g = graph_of(&[None]);
+        g.layers[0].x_axis.tick_label_source = TickLabelSource::Column { column: ColumnId(42) };
+        assert_eq!(g.referenced_columns(), vec![ColumnId(42)]);
     }
 
     fn graph_of(links: &[Option<usize>]) -> Graph {

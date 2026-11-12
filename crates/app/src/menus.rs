@@ -497,23 +497,24 @@ fn plot_menu() -> Vec<Entry> {
                 &["Line Series", "2 Point Segment", "3 Point Segment"],
             ),
         ),
-        // Sheaf's plot kinds include columns, but no template makes a column graph yet.
-        grey_sub(
+        sub(
             "Column/Bar/&Pie",
-            &[
-                "Column",
-                "Column + Label",
-                "Grouped Columns (indexed data)",
-                "Bar",
-                "Stacked Column",
-                "Stacked Bar",
-                "100% Stacked Column",
-                "100% Stacked Bar",
-                "Floating Column",
-                "Floating Bar",
-                "3D Color Pie",
-                "2D B&&W Pie",
-            ],
+            with(
+                vec![item("&Column", Cmd::Plot(Template::Column))],
+                &[
+                    "Column + Label",
+                    "Grouped Columns (indexed data)",
+                    "Bar",
+                    "Stacked Column",
+                    "Stacked Bar",
+                    "100% Stacked Column",
+                    "100% Stacked Bar",
+                    "Floating Column",
+                    "Floating Bar",
+                    "3D Color Pie",
+                    "2D B&&W Pie",
+                ],
+            ),
         ),
         sep(),
         sub(

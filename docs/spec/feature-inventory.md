@@ -143,7 +143,7 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | GP-ERR-01 | Error bars (Y, X, XY) | Error bars from error columns | P0 | GR 5.5 | |
 | GP-DY-01 | Double-Y and multiple Y axes | Two or more Y axes over one X axis (Origin 2016: further layers linked to the first) | P0 | GR 8, GR 12; UI A2 | double Y and right Y axis done (model, renderer, `sheaf plot --y2`, `-t double-y`); 3 and 4 Y axes, app controls and the .opj reader's link not yet |
 | GP-OFF-01 | Stacked lines by Y offsets and waterfall | Shifted curves | P0 | GR 8, GR 13; UI A2 | stacked lines done (model, renderer, Auto as in Origin 2016, Constant, Individual, `-t stacked`, `--stack`, `--offsets`); a simple 2D waterfall (`-t waterfall`, `--waterfall`); app controls, Cumulative mode and reading offsets from .opj not yet |
-| GP-COL-01 | Column and bar charts | Grouped, stacked, floating, 100 percent | P1 | GR 8; UI A2 | |
+| GP-COL-01 | Column and bar charts | Grouped, stacked, floating, 100 percent | P1 | GR 8, GR 14; UI A2 | column charts done (bars side by side per layer, gap and overlap, bars from zero, `-t column`, `--bar-gap`, `--bar-overlap`, the gap read from .opj); horizontal bars, stacked, floating and 100 percent, plot groups and app controls not yet |
 | GP-SPL-01 | Spline and step connection | Smooth and stair-step lines | P1 | GR 5.2 | |
 | GP-PAN-01 | Multi-panel and stack graphs | Several layers per page | P1 | GR 8; XF plotstack, layarrange | |
 | GP-AREA-01 | Area and fill-area plots | Filled regions | P1 | UI A2 | |
@@ -166,7 +166,7 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | GS-UNIT-01 | Units and sizing | Page and layer size units, scale elements | P0 | GR 2 | |
 | GS-AXIS-01 | Axis scale and range | Linear/log scales, from/to, rescale modes | P0 | GR 3.1, 4 | |
 | GS-AXIS-02 | Axis line and ticks | Major and minor ticks, direction, length, width | P0 | GR 3.2 | |
-| GS-AXIS-03 | Tick labels | Number format, font, rotation, display | P0 | GR 3.3 | |
+| GS-AXIS-03 | Tick labels | Number format, font, rotation, display | P0 | GR 3.3, GR 14 | text from a column (sample names under the X axis, automatic for a text X column, `--x-labels`) and rotated X labels (`--x-label-angle`) done; automatic rotation, tick-indexed labels and app controls not yet |
 | GS-AXIS-04 | Axis titles | Default text from long name and units | P0 | GR 3.4 | |
 | GS-AXIS-05 | Grids | Major and minor gridlines | P1 | GR 3.5 | |
 | GS-AXIS-06 | Axis breaks | Break the axis range | P1 | GR 3.6 | |

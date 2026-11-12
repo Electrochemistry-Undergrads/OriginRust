@@ -447,12 +447,13 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 | offset | size | meaning |
 |---|---|---|
 | `0x04` | u16 | position (1-based) of the Y data set in the data-set list |
+| `0x06` | u8 | probably plot group membership: bit `0x20` on the first plot of a group, bit `0x10` on the others (graphing.md 14.7; inferred from one test file and the owner's two grouped layers) |
 | `0x0F` | u8 | line colour as a position in the colour list (10.6); 0 when automatic |
 | `0x11` | u8 | line connection: 0 none, 1 and above a line (values 1 to 8 all drew straight lines through 8 points; the other kinds were not told apart) |
 | `0x12` | u8 | line style: 0 solid, 1 dash, 2 dot, 3 dash dot, 4 dash dot dot, 5 short dash, 6 short dot, 7 short dash dot (the `set -d` values, modulo 8) |
 | `0x15` | u16 | line width in 1/500 point (`set -w 1000` is 2 points) |
 | `0x17` | u8 | symbol shape: 0 none, 1 square (the default); the others are guessed: 2 circle, 3 up triangle, 4 down triangle, 5 diamond |
-| `0x19` | u16 | symbol size in 1/500 point (`set -z 12` is 6000) |
+| `0x19` | u16 | symbol size in 1/500 point (`set -z 12` is 6000). In a column plot (203) it is the bar width in percent of the X spacing times 50, that is (100 - gap) × 50: 4000 for Origin's default gap of 20, 3000 for 40, 2250 for 55 (`set -vg`); a copy is at `0x11A` (graphing.md 14.7) |
 | `0x23` | u16 | position of the X data set (0 for none). For an error plot it holds the position of the Y data set of the plot the errors belong to |
 | `0x4C` | u16 | plot type: 200 line, 201 scatter, 202 line and symbol, 203 column; 487 (`0x1E7`) is a Y error plot |
 | `0xC2` | 4 bytes | fill colour of a column: red, green, blue, then 1 when the colour was chosen freely (the owner's bars are 0, 107, 172, 1) |
@@ -483,8 +484,9 @@ Read: page size; for each layer the frame, both axis ranges, steps, scale (linea
 ticks, tick direction, tick label size and visibility, axis line width, the box; the titles of the
 bottom and left axes with their font size; free text (one label per line, centred on the object's
 rectangle with an estimated text width); a legend (present or not, and its position); plots with
-their columns, type, colours, line width and style, symbol shape and size; error columns, which are
-attached to the plot they belong to. A Y error plot (487) is attached; other error kinds are not.
+their columns, type, colours, line width and style, symbol shape and size; the gap between the bars
+of a layer's column plots (from its first column plot); error columns, which are attached to the
+plot they belong to. A Y error plot (487) is attached; other error kinds are not.
 
 Not read (the figure still draws, with the defaults of the template): top and right axis titles;
 the Z axis; other scale types (drawn linear, with a warning); tick label font, bold and colour;

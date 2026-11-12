@@ -32,13 +32,18 @@ pub enum Template {
     StackedLines,
     /// A simple two-dimensional waterfall: each later curve is drawn moved right and up.
     Waterfall,
+    /// Column chart (Origin's "Column"): one bar per row from zero, several Y columns side by side,
+    /// filled from the palette with a thin black outline, in a closed box with ticks pointing in.
+    /// With a text X column (sample names) the names are written under the bars.
+    Column,
 }
 
 impl Template {
-    pub const ALL: [Template; 7] = [
+    pub const ALL: [Template; 8] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
+        Template::Column,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -55,6 +60,7 @@ impl Template {
             Template::DoubleY => "double-y",
             Template::StackedLines => "stacked",
             Template::Waterfall => "waterfall",
+            Template::Column => "column",
         }
     }
 
@@ -67,6 +73,7 @@ impl Template {
             Template::DoubleY => "Double Y",
             Template::StackedLines => "Stacked lines (Y offsets)",
             Template::Waterfall => "Waterfall",
+            Template::Column => "Column",
         }
     }
 
@@ -85,6 +92,7 @@ impl Template {
             Template::DoubleY => double_y(id, name),
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
+            Template::Column => column(id, name),
         }
     }
 }
@@ -121,6 +129,8 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         side: AxisSide::Normal,
         color_follows_plot: false,
         title_color_follows_plot: false,
+        tick_label_source: TickLabelSource::Auto,
+        tick_label_angle_deg: 0.0,
     }
 }
 
@@ -173,6 +183,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             link: None,
             stack: Stack::None,
             plot_offsets: Vec::new(),
+            bars: BarSpacing::default(),
         }],
     }
 }
@@ -257,6 +268,31 @@ fn waterfall(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// The column template: the line template's page, fonts, legend and colors, with bars outlined in
+/// black 0.5 pt (Origin's default outline) and the owner's house style for the axes: Y ticks
+/// pointing in and a closed box. The X axis has no ticks, as in the owner's column figures: a tick
+/// pointing in would cross the middle bar of each group.
+fn column(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Column);
+    let layer = &mut g.layers[0];
+    layer.default_line = LineStyle::solid(Color::BLACK, 0.5);
+    layer.default_symbol.color = Color::BLACK;
+    layer.default_symbol.filled = true;
+    for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+        axis.show_opposite = true;
+        axis.opposite_ticks = false;
+    }
+    let x = &mut layer.x_axis;
+    x.major_tick = TickDirection::None;
+    x.minor_tick = TickDirection::None;
+    x.minor_ticks = 0;
+    let y = &mut layer.y_axis;
+    y.major_tick = TickDirection::In;
+    y.minor_tick = TickDirection::In;
+    y.minor_ticks = 1;
+    g
+}
+
 /// Builds the layer that gives layer `parent_index` (whose content is `parent`) a right Y axis:
 /// a layer linked to it with the same X scale, its own Y scale, and the parent's style.
 ///
@@ -329,7 +365,43 @@ mod tests {
         assert_eq!(Template::from_name("double-y"), Some(Template::DoubleY));
         assert_eq!(Template::from_name("stacked"), Some(Template::StackedLines));
         assert_eq!(Template::from_name("Waterfall"), Some(Template::Waterfall));
+        assert_eq!(Template::from_name("column"), Some(Template::Column));
         assert_eq!(Template::from_name("nope"), None);
+        assert_eq!(Template::ALL.len(), 8);
+    }
+
+    #[test]
+    fn column_template_draws_outlined_bars_in_a_closed_box_with_y_ticks_in() {
+        let g = Template::Column.new_graph(WindowId(1), "Graph1");
+        assert_eq!(g.layers.len(), 1);
+        let l = &g.layers[0];
+        assert_eq!(l.default_kind, PlotKind::Column);
+        assert_eq!(l.default_line, LineStyle::solid(Color::BLACK, 0.5), "a thin black outline");
+        assert!(l.default_symbol.filled);
+        assert_eq!(l.default_symbol.color, Color::BLACK);
+        for axis in [&l.x_axis, &l.y_axis] {
+            assert!(axis.show_opposite && !axis.opposite_ticks, "closed box");
+            assert!(axis.major_grid.is_none() && axis.minor_grid.is_none(), "no grid");
+            assert_eq!(axis.tick_label_source, TickLabelSource::Auto);
+            assert!(axis.show_tick_labels);
+        }
+        assert_eq!((l.y_axis.major_tick, l.y_axis.minor_tick), (TickDirection::In, TickDirection::In));
+        assert_eq!((l.x_axis.major_tick, l.x_axis.minor_tick), (TickDirection::None, TickDirection::None));
+        assert_eq!((l.x_axis.minor_ticks, l.y_axis.minor_ticks), (0, 1));
+        assert_eq!(l.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
+        // Page, fonts, legend and colors are those of the line template.
+        let line = Template::Line.new_graph(WindowId(1), "Graph1");
+        assert_eq!(g.page, line.page);
+        assert_eq!(l.legend, line.layers[0].legend);
+        assert_eq!(l.palette, line.layers[0].palette);
+        assert_eq!(l.x_axis.tick_font, line.layers[0].x_axis.tick_font);
+        // No template writes the new keys, so their files look as before.
+        for t in Template::ALL {
+            let json = serde_json::to_string(&t.new_graph(WindowId(1), "G")).unwrap();
+            for key in ["tick_label_source", "tick_label_angle_deg", "\"bars\""] {
+                assert!(!json.contains(key), "{t:?}: {key}");
+            }
+        }
     }
 
     #[test]

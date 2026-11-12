@@ -1,10 +1,28 @@
 //! Reading the numbers of the plots of a layer.
 
 use crate::{Rect, stack};
-use sheaf_core::Project;
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
-use sheaf_core::graph::{Axis, Frame, Layer, Page, Plot, ScaleKind, TickFormat};
+use sheaf_core::graph::{Axis, BarSpacing, Frame, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat, TickLabelSource};
+use sheaf_core::{Column, Project};
+
+/// Where the bars of one column plot stand at each X position (graphing spec 14.4), in X axis units.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct BarSlot {
+    /// Left edge of the bar, relative to the row's X.
+    pub left: f64,
+    /// Width of the bar.
+    pub width: f64,
+    /// The X spacing s of the layer's bars.
+    pub spacing: f64,
+}
+
+impl BarSlot {
+    /// The middle of the bar, relative to the row's X; error bars are drawn there.
+    pub fn centre(&self) -> f64 {
+        self.left + self.width / 2.0
+    }
+}
 
 /// A visible plot whose Y column holds numbers, with its data resolved.
 pub(crate) struct PlotData<'a> {
@@ -23,6 +41,8 @@ pub(crate) struct PlotData<'a> {
     pub oy: f64,
     /// The plot's place in the stack, for the waterfall shift.
     pub member: Option<usize>,
+    /// Where the bars of a column plot stand; `None` for other kinds.
+    pub bar: Option<BarSlot>,
 }
 
 impl PlotData<'_> {
@@ -87,9 +107,88 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             ox: place.ox,
             oy: place.oy,
             member: place.member,
+            bar: None,
         });
     }
+    place_bars(&mut plots, &layer.bars);
     LayerData { plots, members }
+}
+
+/// A percentage of the model clamped to `lo..=hi`; a value that is not finite takes `default`.
+fn percent(v: f64, lo: f64, hi: f64, default: f64) -> f64 {
+    if v.is_finite() { v.clamp(lo, hi) } else { default }
+}
+
+/// Gives every column plot of a layer its place in the group of bars (graphing spec 14.4): the bars
+/// at one X position together take `(1 - gap) * s` and stand side by side in plot order, each
+/// `w` wide and `w * (1 - overlap)` from the one before it.
+fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
+    let columns: Vec<usize> = (0..plots.len()).filter(|&i| plots[i].plot.kind == PlotKind::Column).collect();
+    let Some(&first) = columns.first() else { return };
+    let s = bar_spacing(&plots[first]);
+    let gap = percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0;
+    let overlap = percent(bars.overlap_pct, -100.0, 100.0, 0.0) / 100.0;
+    let n = columns.len() as f64;
+    let group = (1.0 - gap) * s;
+    let width = group / (1.0 + (n - 1.0) * (1.0 - overlap));
+    let step = width * (1.0 - overlap);
+    for (j, &i) in columns.iter().enumerate() {
+        plots[i].bar = Some(BarSlot { left: -group / 2.0 + j as f64 * step, width, spacing: s });
+    }
+}
+
+/// The X spacing s of a column plot: 1 without an X column of numbers (the bars stand at row numbers),
+/// otherwise the mean distance between X values, `(largest X - smallest X) / (n - 1)`, where the X
+/// values are those of the drawn rows and n counts the rows of the row range that have a Y value (an
+/// empty row between two groups of bars does not count, a row with only its X missing does); 1 when
+/// that is not a number above 0.
+fn bar_spacing(pd: &PlotData) -> f64 {
+    if pd.x.is_none() {
+        return 1.0;
+    }
+    let rows = (pd.start..pd.end).filter(|&i| pd.y_at(i).is_finite()).count();
+    let xs = (pd.start..pd.end).filter(|&i| pd.y_at(i).is_finite()).map(|i| pd.x_at(i)).filter(|x| x.is_finite());
+    let (lo, hi) = xs.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)));
+    let s = (hi - lo) / (rows as f64 - 1.0);
+    if rows >= 2 && s.is_finite() && s > 0.0 { s } else { 1.0 }
+}
+
+/// The X column of a plot when it holds text (sample names).
+fn text_x_column<'a>(project: &'a Project, pd: &PlotData) -> Option<&'a Column> {
+    pd.plot.x.and_then(|id| project.column(id)).filter(|c| !c.data.is_numeric())
+}
+
+/// The column whose cells label the major ticks of an axis (graphing spec 14.3), if any. `first`
+/// is the first plot the axis shows.
+pub(crate) fn label_column<'a>(
+    project: &'a Project,
+    axis: &Axis,
+    dim: Dim,
+    first: Option<&PlotData>,
+) -> Option<&'a Column> {
+    match axis.tick_label_source {
+        TickLabelSource::Numbers => None,
+        TickLabelSource::Column { column } => project.column(column),
+        TickLabelSource::Auto if dim == Dim::X => text_x_column(project, first?),
+        TickLabelSource::Auto => None,
+    }
+}
+
+/// Whether a linear X axis is a category axis (graphing spec 14.3): its first plot has no X column
+/// of numbers, and that plot's X column holds text or the labels come from a chosen column. Its
+/// rows then stand at the row numbers 1, 2, 3, ... and the axis gets half a step of room at each end.
+pub(crate) fn is_category(project: &Project, axis: &Axis, first: Option<&PlotData>) -> bool {
+    let Some(pd) = first else { return false };
+    if axis.scale != ScaleKind::Linear || pd.x.is_some() {
+        return false;
+    }
+    text_x_column(project, pd).is_some()
+        || matches!(axis.tick_label_source, TickLabelSource::Column { column } if project.column(column).is_some())
+}
+
+/// The cells of a label column as they show in the worksheet.
+pub(crate) fn cell_texts(column: &Column) -> Vec<String> {
+    (0..column.len()).map(|row| column.cell_text(row)).collect()
 }
 
 /// Which coordinate of the plots an axis shows.

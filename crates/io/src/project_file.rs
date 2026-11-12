@@ -356,6 +356,31 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_keeps_tick_label_sources_and_bar_spacing() {
+        use sheaf_core::graph::{BarSpacing, TickLabelSource};
+        let dir = TempDir::new("column");
+        let path = dir.file("column.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap();
+        let (y, names) = (book.sheets[0].columns[1].id, book.sheets[0].columns[2].id);
+        let g = p.plot_columns(Template::Column, &[y]).unwrap();
+        {
+            let layer = &mut p.graph_mut(g).unwrap().layers[0];
+            layer.x_axis.tick_label_source = TickLabelSource::Column { column: names };
+            layer.x_axis.tick_label_angle_deg = -30.0;
+            layer.bars = BarSpacing { gap_pct: 40.0, overlap_pct: -10.0 };
+        }
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let layer = &back.graph(g).unwrap().layers[0];
+        assert_eq!(layer.x_axis.tick_label_source, TickLabelSource::Column { column: names });
+        assert_eq!(layer.x_axis.tick_label_angle_deg, -30.0);
+        assert_eq!(layer.bars, BarSpacing { gap_pct: 40.0, overlap_pct: -10.0 });
+        assert!(back.graph(g).unwrap().referenced_columns().contains(&names));
+    }
+
+    #[test]
     fn a_recalculating_column_keeps_its_mode_and_pending_mark_in_a_saved_project() {
         use sheaf_core::{Document, FormulaState, RecalcMode};
         let dir = TempDir::new("recalc");

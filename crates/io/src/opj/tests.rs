@@ -316,6 +316,8 @@ fn local_figure_project_gives_a_column_graph() {
     assert!(plot.y_error.is_some() && project.numeric(plot.y).is_some());
     assert_eq!((layer.y_axis.min, layer.y_axis.max), (Some(0.0), Some(3.25)));
     assert!(layer.labels.len() >= 6);
+    // Origin 2016 reports a gap of 40 percent between the bars of this graph.
+    assert_eq!(layer.bars.gap_pct, 40.0);
 }
 
 /// A project with one workbook `Book1` (two columns) and optionally one graph `Graph1` whose

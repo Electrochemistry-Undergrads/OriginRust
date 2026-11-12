@@ -928,3 +928,203 @@ With the second plot of the first row hidden, the visible curves span 0..10, 130
 - Origin's exact waterfall geometry.
 - Owner preferences: whether the stacked template should hide the legend (he deletes it and types the curve names next to the curves); whether he wants an option that writes each curve's name at its right end (a possible follow-up); whether hidden curves should keep their place (Origin's behaviour, adopted here).
 - The current online help describes Individual offsets in the template and a pairwise Auto gap; neither matches Origin 2016, and later versions may differ.
+
+---
+
+## 14. Text tick labels and column charts (P0, GP-COL-01)
+
+Use: sample names under the X axis (ICP-OES results per sample) with one or several elements drawn as bars side by side. Status: researched on 2026-11-12 with Origin 2016 runs through COM on our own synthetic data, plus exports and byte comparisons of copies of the owner's projects (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. Bar and label positions were measured on exported PNGs. Where the current online help **[W]** and Origin 2016 disagree, Origin 2016 decides.
+
+### 14.1 What Origin 2016 does
+
+**Plotting against a text X column**
+- A Y column whose X column holds text is drawn against the row number: row 1 at x = 1, row 2 at x = 2, and so on [W:quick-help/xcol-text-plotting]. This holds for line, scatter and column plots [COM].
+- Origin sets the bottom axis to the tick label type "text from dataset" by itself, with the X column as the dataset (`layer.x.label.type` = 2) [COM]. Under that type the major tick at value v shows the cell of row v [W:axesref-ticklabels].
+- These ticks get no label [COM]: ticks at values that are not whole numbers, and whole-number ticks without a row (0, n + 1, ...).
+- An empty cell is printed as `--` [COM]. A column that holds mostly text prints its few numbers as written [COM].
+- Automatic range [COM, 4 to 120 rows]: from 0.5 to n + 0.5, not rounded to ticks; major step 1 and one minor tick between majors, so the minor ticks mark the borders between rows and both ends.
+- With 450 rows Origin fell back to its numeric step: majors every 100, labels from rows 100, 200, ... [COM]. Its options name 400 as the most major ticks on a text axis [W:options-dialog-axis-tab].
+- Labels are never thinned and not rotated by default; long or many labels overlap [COM].
+- A set rotation (degrees, counter-clockwise, `layer.x.label.rotate`) hangs each label from its highest point, directly below the tick [COM]: with a positive angle the end of the text is at the tick, with a negative angle its start, and at 90 degrees the text is centred on the tick. Origin moved neither the axis title nor the layer, so long turned labels ran over the title.
+- A column designated Label is not used for tick labels [COM].
+- "Tick-indexed dataset" (row i labels the i-th major tick) and "tick-indexed string" (labels from a typed list) also exist [W:axesref-ticklabels]. P2.
+
+**Column plots**
+- Bars rise from Y = 0, and the automatic Y range includes 0; negative values hang below 0 [COM].
+- X spacing s: 1 for row numbers. For numeric X it is the mean spacing, (largest X - smallest X) / (n - 1) [COM]. With uneven X, bars can overlap their neighbours. Which rows n counts [COM, two cases]: a row with an empty X but a Y value counts (X = 1, 2, -, 4, 5 gave bars 0.8 wide at gap 20); an empty row (no X and no Y) between two groups of bars does not (the owner's Mn dissolution graph: X = 1, 1.05, 1.1, -, 1.3, 1.35, 1.4 and gap 60 gave bars 0.63 of the neighbour distance, that is 0.4 × 0.4 / 5).
+- Gap between bars, g percent (default 20, range 0 to 100) [W:pd-dialog-spacing-tab]. The bars at one X position together take (1 - g/100) × s, centred on X [COM: 0.80 s at g = 20 and 0.50 s at g = 50, for one plot and for three]. The help calls it a percentage of the bar width; the measurements show a share of the spacing.
+- Plots made together form a group: side by side in plot order, touching, each (1 - g/100) × s / n wide [COM]. A column plot added to the layer on its own later is drawn at the same place, full width, on top [COM].
+- Overlap, o percent (default 0, range -100 to 100, negative values leave a gap; grouped plots only) [W:pd-dialog-spacing-tab]. Not reachable from LabTalk in 2016 (`set -vo` changed nothing) [COM], so its geometry was not measured.
+- Automatic X range of column plots on numeric X: first X - s/2 to last X + s/2, not rounded [COM].
+- Defaults [COM]: black fill and a 0.5 pt black outline; a group steps the fill colour (black, red, ...); error bars centred on each plot's own bar.
+- Exports of copies of the owner's projects match these rules: a single column plot with gap 40 (bars 0.6 of the spacing), a group of two with gap 60 drawn side by side, and a plot whose X values come in groups (so that the mean spacing is larger than the distance between neighbours) drawn as touching bars [COM].
+
+### 14.2 Model
+
+| Where | Field | Default | Meaning |
+|---|---|---|---|
+| Axis | `tick_label_source` | `Auto` | `Auto`: on the X axis the cells of the first plot's X column when that column holds text, otherwise numbers; a Y axis shows numbers. `Numbers`: always numbers. `Column { column }`: the cells of that column. |
+| Axis | `tick_label_angle_deg` | 0 | Counter-clockwise rotation of the X tick labels in degrees. A Y axis ignores it. |
+| Layer | `bars.gap_pct` | 20 | Gap between the groups of bars, in percent of the spacing s; clamped to 0..100. |
+| Layer | `bars.overlap_pct` | 0 | Overlap of neighbouring bars of the group, in percent of a bar's width; clamped to -100..100; negative values leave a gap. |
+
+```rust
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum TickLabelSource { Auto, Numbers, Column { column: ColumnId } }
+pub struct BarSpacing { pub gap_pct: f64, pub overlap_pct: f64 }
+```
+
+- Every new field has a serde default and is not written while it has its default value (`{"kind":"auto"}` and `{"gap_pct":20.0,"overlap_pct":0.0}` are left out), so files written before this feature load unchanged, and graphs that do not use it are saved exactly as before. `FORMAT_VERSION` stays 1.
+- A label column counts as a column the graph reads (`Graph::referenced_columns`).
+- **Groups.** Sheaf has no plot groups, so the bar settings live on the layer and all visible column plots of a layer form one group. An overlap of 100 draws them on top of one another, as Origin does with column plots that are not grouped.
+- **Automatic colour.** For a column plot the automatic colour (`Layer::recolor_automatic`) and `--colors` set the fill (`symbol.color`) only; the outline keeps its line colour.
+
+**Template `column`** (`Template::Column`, label "Column"; in `Template::ALL` after `line-symbol`, and in the desktop app's Plot menu as Column/Bar/Pie > Column, where Origin has it):
+- page, fonts, legend (top right) and colours (black, red, blue, ...) of the `line` template;
+- plot kind Column, outline black 0.5 pt, fill from the palette;
+- a closed black box; Y ticks pointing in with one minor tick, as in the owner's house style;
+- no X ticks: a tick pointing in would cross the middle bar of each group, and the owner's column figures show none;
+- no grid.
+
+### 14.3 Category axis and labels from a column
+
+"First plot" means the first visible plot, whose Y column holds numbers, among the plots that use the axis (for a linked layer, section 12.3, the plots of every layer that shares it).
+
+**Category axis.** A linear X axis is a category axis when its first plot has no X column of numbers and either
+- (a) that plot's X column holds text, or
+- (b) `tick_label_source` is `Column` with a column that exists.
+
+The rows of a plot without an X column of numbers stand at the row numbers 1, 2, 3, ... as before.
+
+**Label column.**
+- `Numbers`: none.
+- `Column { c }`: column c, when it exists. Any column type works; its cells are shown as in the worksheet.
+- `Auto`, X axis: the first plot's X column when it holds text.
+- `Auto`, Y axis: none.
+
+**Range of a category axis.** Let lo and hi be the smallest and largest position of a drawn row (finite X and Y, inside the row range) over the axis' plots; without rows lo = hi = 1.
+- The automatic limits are lo - 0.5 and hi + 0.5. They are never rounded, whatever `auto_range` says.
+- A fixed `min` or `max` replaces its own side; two fixed limits follow the usual rules, reversal included.
+- Major step: `major_step` when set; otherwise 1 when max - min <= 200; otherwise `nice_step((max - min) / 5)` (450 rows give 100).
+- Major ticks lie at whole multiples of the step. Minor ticks follow `minor_ticks` as on any linear axis; 1 gives ticks at 0.5, 1.5, ..., n + 0.5.
+
+**Labels.** On any axis with a label column, category or not, for each major tick v let k = round(v):
+- if |v - k| <= 1e-9 × max(1, |v|) and 1 <= k <= the column length, the label is the cell of row k;
+- otherwise the label is empty, and an empty label draws nothing;
+- `tick_format` and `tick_label_divisor` do not apply; labels use the text markup of all other labels.
+
+A category axis whose source is `Numbers` shows ordinary numbers (the row numbers) over the same range.
+
+**Axis title.** When `title` is None, the X title is:
+1. the title of the first plot's X column (long name, else short name, plus units), whether that column holds numbers or text;
+2. otherwise, when the labels come from a column, that column's title;
+3. otherwise `Row`.
+
+Rule 1 also changes graphs read from `.opj` files whose X title is Origin's `%(?X)` over a text X column: they show the column's name, as Origin does, instead of `Row`.
+
+### 14.4 Column plots
+
+**Spacing s of a layer**, taken from its first visible column plot:
+- s = 1 when that plot has no X column of numbers (the bars stand at row numbers);
+- otherwise s = (xb - xa) / (n - 1), where xa and xb are the smallest and largest X of the drawn rows (finite X and Y) and n counts the rows of the row range that have a finite Y;
+- s = 1 when n < 2 or the result is not a number above 0.
+
+**X range.** On a linear X axis that is not a category axis and shows a column plot, the data range [lo, hi] becomes [lo - s/2, hi + s/2] and is used without rounding, as for `Tight` (s from the first column plot among the axis' plots). The step is `nice_step((max - min) / 5)` unless `major_step` is set, and fixed limits replace their side, so graphs read from `.opj` files (which have fixed limits) keep their range. A category axis already has this room.
+
+**Y range.** On a linear Y axis the data range includes the base of every visible column plot: 0, or the plot's offset in a stacked layer (section 13.5).
+
+**Placement.** With n the number of visible column plots of the layer, j the 0-based index of this plot among them in plot order, and g = gap_pct/100 and o = overlap_pct/100 after clamping:
+- W = (1 - g) × s
+- w = W / (1 + (n - 1) × (1 - o))
+- d = w × (1 - o)
+
+Each row with a finite position x and value y draws one rectangle:
+- horizontally from left = x - W/2 + j × d to left + w, in data units;
+- vertically from the base to y; the base is 0 (the plot's offset in a stacked layer) on a linear Y axis and the lower axis limit on a log axis;
+- a bar with a corner that cannot be placed is skipped;
+- filled with `symbol.color` and outlined with `line.color` at `line.width_pt` when that is above 0;
+- plots in plot order, rows in row order.
+
+Check values, in units of s:
+
+| Case | Bars at one X position, from left to right |
+|---|---|
+| n = 1, gap 20 | x - 0.4 .. x + 0.4 |
+| n = 3, gap 20 | x - 0.4 .. x - 0.1333, x - 0.1333 .. x + 0.1333, x + 0.1333 .. x + 0.4 |
+| n = 3, gap 50 | each bar 1/6 wide, the group from x - 0.25 to x + 0.25 |
+| n = 3, overlap 100 | all three from x - 0.4 to x + 0.4 |
+| n = 2, overlap -50 | w = 0.32: x - 0.4 .. x - 0.08 and x + 0.08 .. x + 0.4 |
+| n = 2, gap 150 (clamped to 100) | bars without width at x |
+
+**Error bars** of a column plot are drawn at the middle of the plot's own bar, left + w/2.
+
+**Legend sample.** A rectangle centred on the row, as long as a line sample (2.2 × the legend font size) and one font size high, filled and outlined like the bars.
+
+### 14.5 Rotated X tick labels
+
+- Let a be `tick_label_angle_deg` taken to (-180, 180] (a value that is not a number counts as 0). When a = 0, labels are placed exactly as in figure-rendering.md section 3.
+- Otherwise work in label coordinates: u runs along the text, w points down, and the origin is the start of the baseline. The label's box has the corners (0, -0.72 S), (Wt, -0.72 S), (Wt, 0.21 S) and (0, 0.21 S), where Wt is the text width and S the tick font size.
+- Turn each corner to page offsets: (u cos a + w sin a, -u sin a + w cos a).
+- Let ymin and ymax be the smallest and largest page y of the corners, and xt the mean x of the corners whose y equals ymin (within 1e-9 relative).
+- Place the baseline start at (tick x - xt, top - ymin), where top is the tick end plus the label gap, as for unturned labels, with text anchor start and rotation a.
+- The highest point of the label then lies directly under the tick: a positive angle puts the end of the text there, a negative angle its start, and at 90 degrees the text is centred.
+- The label block reaches down to top + the largest (ymax - ymin) of the labels that are not empty. The X title and the keep-on-page rule use that bottom, so unlike Origin the title never overlaps turned labels.
+- An X axis on the top edge mirrors this: the lowest point of the label sits directly over the tick.
+- Check values (fixed metrics, "S1" at 12 pt, Wt = 13.2): at 90 degrees the start is at (tick + 3.06, top + 13.2) and the block 13.2 deep; at 45 degrees (tick - 3.224, top + 15.443), block 17.225; at -45 degrees (tick - 6.109, top + 6.109).
+
+### 14.6 Import
+
+Delimited text: when "first column is X" is on (the default), the first column is designated X whether it holds numbers or text, as Origin's text import designates columns by position. Other text columns stay Label. Only new imports change; saved projects keep their designations. Analyses that need numbers already skip an X column of text and use row numbers.
+
+### 14.7 Origin project files
+
+In the 515-byte curve record (opj-format.md section 10.5) [COM, byte comparisons of one graph saved with gaps 20, 40 and 55, and the owner's files]:
+- u16 at `0x19`, the symbol size field of other plot types, holds the bar width of a column plot in percent of the spacing, times 50: 4000 is a gap of 20, 3000 of 40, 2250 of 55, 2000 of 60. A copy at `0x11A` holds the same number. The owner's projects use 2000, 2250, 3000, 3600 and 4000.
+- The reader sets the layer's `bars.gap_pct` = 100 - width / 50 from the layer's first column plot, when the width lies within 0..100 percent.
+- Byte `0x06` of the record probably marks plot groups [INF]: bit `0x20` on the first plot of a group and bit `0x10` on the others (a lone column plot had neither), in a test file and in the owner's two grouped layers. Not read yet: every layer of the owner's projects with more than one column plot is a group, which is what Sheaf draws.
+- Where Origin stores the tick label type, its dataset and the overlap is not known.
+
+### 14.8 Command line
+
+`sheaf plot` and `sheaf export` take:
+
+| Option | Values | Default |
+|---|---|---|
+| `--x-labels` | `auto`, `numbers`, or a column's short or long name | the template's (`auto`) |
+| `--x-label-angle` | degrees, -90 to 90, counter-clockwise; negative values as `--x-label-angle=-45` | 0 |
+| `--bar-gap` | percent, 0 to 100 | 20 |
+| `--bar-overlap` | percent, -100 to 100; negative values as `--bar-overlap=-20` | 0 |
+
+- A column name is looked up in the sheet that holds the Y column of the graph's first plot; the words `auto` and `numbers` come first.
+- `--x-labels` and `--x-label-angle` set the first layer's X axis (linked layers follow it); `--bar-gap` and `--bar-overlap` set every layer of the first layer's group.
+- Errors name the option and the value: "--x-label-angle must be between -90 and 90 (got 100)", "--bar-gap must be between 0 and 100 (got 120)", "--x-labels: no column named 'Nope' in sheet 'icp' (columns: A, B, C, D) ...".
+- `-t column` chooses the template.
+
+Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t column -y Li,K,Mn --x-label-angle 45 --bar-gap 30 -o icp.pdf`; `sheaf export project.sheaf --graph Graph2 --x-labels Sample -o g.svg` (names in a label column).
+
+### 14.9 Desktop app (later, with ADR 0007)
+
+- The Plot menu lists Column/Bar/Pie > Column today, through `Template::ALL`.
+- Graph settings, X axis tab: "Tick labels: Automatic / Numbers / From column" with a column list, and "Rotation".
+- Plots tab: kind Column; for a layer with column plots, "Gap between bars %" and "Overlap %".
+
+### 14.10 Deliberate differences from Origin 2016
+
+- An empty cell gives no label (Origin prints `--`). Missing numbers in a numeric label column show as the worksheet shows them.
+- One tick per row up to a span of 200; Origin keeps one per row further, up to its limit of about 400.
+- One spacing for bar widths and the X range. With an X cell missing in a row that has a Y value, Origin used the valid points for the range (1, 2, -, 4, 5 gave 0.333..5.667) and Sheaf gives 0.5..5.5.
+- No automatic rotation and no tick-indexed label types.
+- The X axis line stays at the frame bottom when bars go below zero; Origin's column template draws it at Y = 0.
+- Plot groups are not modelled: all column plots of a layer form one group.
+- The `column` template closes the box, draws Y ticks pointing in and no X ticks (the owner's style); Origin's template has ticks out and open axes.
+- The title moves below turned labels instead of being overlapped by them.
+
+### 14.11 Unknowns
+
+- The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.
+- Whether Origin 2016's tick label dialog offers the automatic 45/90-degree rotation of the current help; the hidden COM exports did not rotate.
+- The exact row count where a 2016 text axis stops putting one tick per row (between 121 and 450).
+- Whether Origin reads escape sequences (`\+()`, `\g()`, ...) in text-from-dataset cells; Sheaf uses its markup for them like for every other label.
+- The error bar cap width on columns, and whether error bar ends widen the automatic Y range.
+- Where an `.opj` stores the tick label type and dataset and the overlap; the meaning of record byte `0x06` (14.7) needs a second check.
+- Owner preferences for the `column` template: ticks, box, minor ticks, legend frame, colours.

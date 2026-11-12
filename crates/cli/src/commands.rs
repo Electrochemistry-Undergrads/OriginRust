@@ -2,7 +2,7 @@
 
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
-use sheaf_core::graph::{Graph, LineStyle, Stack, TickDirection};
+use sheaf_core::graph::{Graph, LineStyle, PlotKind, Stack, TickDirection, TickLabelSource};
 
 use sheaf_core::project::Window;
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
@@ -427,8 +427,9 @@ fn check_limits(axis: &str, min: Option<f64>, max: Option<f64>) -> Result<()> {
 /// Applies the style options of the command line to a graph.
 ///
 /// The options act on the first layer and the layers linked to it (its right Y axis): `--x-*`
-/// and `--y-*` set the first layer, whose X axis linked layers follow; `--y2-*` set the right Y
-/// axis; colors, labels and line widths count the plots in legend order, first layer first.
+/// and `--y-*` (with `--x-labels` and `--x-label-angle`) set the first layer, whose X axis linked
+/// layers follow; `--y2-*` set the right Y axis; `--bar-gap` and `--bar-overlap` set every layer of
+/// the group; colors, labels and line widths count the plots in legend order, first layer first.
 /// Further layers of a graph read from an Origin project are left alone.
 fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<()> {
     require_page_size("--width", s.width)?;
@@ -440,6 +441,10 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
     let colors: Vec<Color> =
         s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
     let stack = stack_option(s)?;
+    require_range("--x-label-angle", s.x_label_angle, -90.0, 90.0)?;
+    require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
+    require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
+    let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
     check_stack_fits(g, s)?;
     let right = g.right_y_member(0);
@@ -470,6 +475,11 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
         for &i in &group {
             g.layers[i].y_axis.color_follows_plot = mode == AxisColors::Plot;
         }
+    }
+    for &i in &group {
+        let bars = &mut g.layers[i].bars;
+        bars.gap_pct = s.bar_gap.unwrap_or(bars.gap_pct);
+        bars.overlap_pct = s.bar_overlap.unwrap_or(bars.overlap_pct);
     }
     style_plots(g, &group, s, &colors);
     let Some(layer) = g.layers.first_mut() else {
@@ -504,7 +514,52 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
         layer.y_axis.major_tick = TickDirection::None;
         layer.y_axis.minor_tick = TickDirection::None;
     }
+    if let Some(source) = x_labels {
+        layer.x_axis.tick_label_source = source;
+    }
+    layer.x_axis.tick_label_angle_deg = s.x_label_angle.unwrap_or(layer.x_axis.tick_label_angle_deg);
     Ok(())
+}
+
+/// Fails with a clear message unless `value` (when given) is a number from `lo` to `hi`.
+fn require_range(option: &str, value: Option<f64>, lo: f64, hi: f64) -> Result<()> {
+    match value {
+        Some(v) if !(v.is_finite() && (lo..=hi).contains(&v)) => {
+            bail!("{option} must be between {lo} and {hi} (got {v})")
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Reads the value of `--x-labels`: `auto`, `numbers`, or the short or long name of a column in the
+/// sheet that holds the Y column of the graph's first curve.
+fn x_label_source(project: &Project, graph: WindowId, text: &str) -> Result<TickLabelSource> {
+    let name = text.trim();
+    if name.eq_ignore_ascii_case("auto") {
+        return Ok(TickLabelSource::Auto);
+    }
+    if name.eq_ignore_ascii_case("numbers") {
+        return Ok(TickLabelSource::Numbers);
+    }
+    let first = project
+        .graph(graph)
+        .and_then(|g| g.layers.first())
+        .and_then(|l| l.plots.first())
+        .ok_or_else(|| anyhow!("--x-labels {name}: the graph has no curve whose sheet holds the column"))?;
+    let (_, sheet, _) = project
+        .locate(first.y)
+        .ok_or_else(|| anyhow!("--x-labels {name}: the first curve's column is missing from the project"))?;
+    match sheet.column_by_name(name) {
+        Some(c) => Ok(TickLabelSource::Column { column: c.id }),
+        None => {
+            let have: Vec<&str> = sheet.columns.iter().map(|c| c.short_name.as_str()).collect();
+            bail!(
+                "--x-labels: no column named '{name}' in sheet '{}' (columns: {}); use auto, numbers or a column name",
+                sheet.name,
+                have.join(", ")
+            )
+        }
+    }
 }
 
 /// The stack mode asked for with `--stack` or `--waterfall`, checked (`--offsets` is applied
@@ -580,7 +635,10 @@ fn style_plots(g: &mut Graph, group: &[usize], s: &StyleArgs, colors: &[Color]) 
                 plot.line = LineStyle { width_pt: w, ..plot.line.clone() };
             }
             if let Some(c) = colors.get(i) {
-                plot.line.color = *c;
+                // A column plot's color is its fill; its outline keeps its own color.
+                if plot.kind != PlotKind::Column {
+                    plot.line.color = *c;
+                }
                 plot.symbol.color = *c;
             }
             if let Some(l) = s.labels.get(i) {

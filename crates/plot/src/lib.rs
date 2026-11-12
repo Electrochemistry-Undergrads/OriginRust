@@ -125,7 +125,7 @@ pub struct Raster {
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
-    Ok(layout::graph_geometry(g, &pds, SystemFonts::shared()))
+    Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
 }
 
 /// The offsets `(x, y)`, in axis units, at which each plot of a layer is drawn, one pair per plot

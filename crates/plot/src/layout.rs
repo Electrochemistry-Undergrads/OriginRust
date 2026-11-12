@@ -27,7 +27,7 @@ use sheaf_core::{Project, WindowId};
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let pds: Vec<LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
-    let geoms = graph_geometry(g, &pds, m);
+    let geoms = graph_geometry(project, g, &pds, m);
     let mut layers: Vec<LayerScene> =
         (0..g.layers.len()).map(|i| layer_scene(project, g, i, &geoms[i], &pds[i].plots, m)).collect();
     // A legend that lists the plots of every layer is drawn after all layers, so that no
@@ -57,11 +57,16 @@ const PAGE_MARGIN: f64 = 3.0;
 ///
 /// A layer drawn as a waterfall gets the front frame of spec 13.6 as its frame and the whole
 /// fitted frame as its clip rectangle.
-pub(crate) fn graph_geometry(g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer) -> Vec<LayerGeometry> {
+pub(crate) fn graph_geometry(
+    project: &Project,
+    g: &Graph,
+    pds: &[LayerData],
+    m: &dyn TextMeasurer,
+) -> Vec<LayerGeometry> {
     let mut out: Vec<Option<LayerGeometry>> = vec![None; g.layers.len()];
     for root in 0..g.layers.len() {
         if g.root_of(root) == root {
-            for (i, geom) in group_geometry(g, &g.group(root), pds, m) {
+            for (i, geom) in group_geometry(project, g, &g.group(root), pds, m) {
                 out[i] = Some(geom);
             }
         }
@@ -69,19 +74,48 @@ pub(crate) fn graph_geometry(g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer)
     out.into_iter().map(|geom| geom.expect("every layer belongs to the group of its root")).collect()
 }
 
-/// Resolves one axis from the plots it shows. An X axis over a date or time column gets date tick
-/// labels (see [`data::date_axis`]).
-fn resolve_dim(axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
-    let range = data::axis_range(sources.iter().copied(), dim, axis.scale);
-    if dim == Dim::X
-        && let Some(drawn) = data::date_axis(axis, sources.iter().copied())
-    {
-        return resolve_axis(&drawn, range);
+/// Resolves one axis from the plots it shows (`sources`, the first of which is the axis' first plot).
+///
+/// - An X axis whose first plot has text in its X column (sample names) is a category axis (see
+///   [`data::is_category`]): one tick per row, half a step of room at each end.
+/// - An X axis over column plots gets half a bar spacing of room at each end, without rounding, so
+///   that the end bars are not cut; a linear Y axis over column plots reaches down to their base.
+/// - An X axis over a date or time column gets date tick labels (see [`data::date_axis`]).
+/// - An axis with a label column shows that column's cells at whole-number ticks.
+fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
+    let first = sources.first().copied();
+    let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
+    let mut resolved = if dim == Dim::X && data::is_category(project, axis, first) {
+        crate::ticks::resolve_category(axis, range)
+    } else {
+        let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
+        let linear = axis.scale == sheaf_core::graph::ScaleKind::Linear;
+        let bars: Vec<&data::PlotData> = sources.iter().copied().filter(|pd| pd.bar.is_some()).collect();
+        if linear && let (Some((lo, hi)), Some(pd)) = (range, bars.first()) {
+            match dim {
+                Dim::X => {
+                    let half = pd.bar.map_or(0.5, |b| b.spacing / 2.0);
+                    range = Some((lo - half, hi + half));
+                    let base = drawn.as_ref().unwrap_or(axis);
+                    drawn = Some(Axis { auto_range: sheaf_core::graph::AutoRange::Tight, ..base.clone() });
+                }
+                Dim::Y => {
+                    // Bars rise from their base: 0, or the plot's offset in a stacked layer.
+                    let (lo, hi) = bars.iter().fold((lo, hi), |(lo, hi), pd| (lo.min(pd.oy), hi.max(pd.oy)));
+                    range = Some((lo, hi));
+                }
+            }
+        }
+        resolve_axis(drawn.as_ref().unwrap_or(axis), range)
+    };
+    if let Some(column) = data::label_column(project, axis, dim, first) {
+        crate::ticks::label_from_cells(&mut resolved, &data::cell_texts(column));
     }
-    resolve_axis(axis, range)
+    resolved
 }
 
 fn group_geometry(
+    project: &Project,
     g: &Graph,
     members: &[usize],
     pds: &[LayerData],
@@ -96,11 +130,11 @@ fn group_geometry(
     let shared = |dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> =
             members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter()).collect();
-        resolve_dim(axis, dim, &sources)
+        resolve_dim(project, axis, dim, &sources)
     };
     let own = |i: usize, dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
-        resolve_dim(axis, dim, &sources)
+        resolve_dim(project, axis, dim, &sources)
     };
     let (root_x, root_y) = (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis));
     let axes: Vec<(ResolvedAxis, ResolvedAxis)> = members
@@ -462,9 +496,23 @@ fn label_gap(axis: &Axis) -> f64 {
     0.35 * axis.tick_font.size_pt
 }
 
+/// The rotation of an X axis' tick labels in degrees, counter-clockwise, in (-180, 180]; 0 when
+/// the stored angle is not a number.
+fn label_angle(axis: &Axis) -> f64 {
+    let a = axis.tick_label_angle_deg;
+    if !a.is_finite() {
+        return 0.0;
+    }
+    let a = a.rem_euclid(360.0);
+    if a > 180.0 { a - 360.0 } else { a }
+}
+
 /// Draws the X tick labels in `font` below the frame, or above it for an axis on the top edge.
 /// Returns the outer edge of the label block: its bottom (top), or the tick ends when the
 /// labels are hidden.
+///
+/// Rotated labels (graphing spec 14.5) hang from the corner of their text box that is nearest to
+/// the axis, which sits right under (over) the tick; the block reaches as far as the deepest label.
 fn draw_x_labels(
     out: &mut Vec<Item>,
     axis: &Axis,
@@ -474,30 +522,48 @@ fn draw_x_labels(
     m: &dyn TextMeasurer,
 ) -> f64 {
     let size = axis.tick_font.size_pt;
-    let place_all = |out: &mut Vec<Item>, baseline: f64| {
-        for (v, label) in resolved.major.iter().zip(&resolved.labels) {
-            let u = resolved.to_unit(*v);
-            if u.is_finite() {
-                text::place(out, m, label, font, size, (f.x + u * f.w, baseline), Anchor::Middle, 0.0);
-            }
-        }
-    };
-    if axis.side == AxisSide::Opposite {
-        let tick_end = f.y - outward_extent(axis);
-        if !axis.show_tick_labels {
-            return tick_end;
-        }
-        let bottom = tick_end - label_gap(axis);
-        place_all(out, bottom - DESCENT * size);
-        return bottom - (ASCENT + DESCENT) * size;
-    }
-    let tick_end = f.y + f.h + outward_extent(axis);
+    let top_side = axis.side == AxisSide::Opposite;
+    let tick_end = if top_side { f.y - outward_extent(axis) } else { f.y + f.h + outward_extent(axis) };
     if !axis.show_tick_labels {
         return tick_end;
     }
-    let top = tick_end + label_gap(axis);
-    place_all(out, top + ASCENT * size);
-    top + (ASCENT + DESCENT) * size
+    // The side of the label block that faces the axis.
+    let near = if top_side { tick_end - label_gap(axis) } else { tick_end + label_gap(axis) };
+    let labels = resolved.major.iter().zip(&resolved.labels).filter_map(|(v, label)| {
+        let u = resolved.to_unit(*v);
+        u.is_finite().then_some((f.x + u * f.w, label))
+    });
+    let angle = label_angle(axis);
+    if angle == 0.0 {
+        let baseline = if top_side { near - DESCENT * size } else { near + ASCENT * size };
+        for (x, label) in labels {
+            text::place(out, m, label, font, size, (x, baseline), Anchor::Middle, 0.0);
+        }
+        let depth = (ASCENT + DESCENT) * size;
+        return if top_side { near - depth } else { near + depth };
+    }
+    let (sin, cos) = angle.to_radians().sin_cos();
+    let mut depth: f64 = 0.0;
+    for (x, label) in labels {
+        if label.is_empty() {
+            continue;
+        }
+        let w = text::width(m, label, &axis.tick_font, size);
+        // The text box in label coordinates (along the text, down from the baseline start),
+        // turned to page offsets from the baseline start.
+        let corners = [(0.0, -ASCENT * size), (w, -ASCENT * size), (w, DESCENT * size), (0.0, DESCENT * size)]
+            .map(|(a, b)| (a * cos + b * sin, -a * sin + b * cos));
+        let ymin = corners.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
+        let ymax = corners.iter().map(|c| c.1).fold(f64::NEG_INFINITY, f64::max);
+        // The corner (or edge) nearest to the axis goes right under (over) the tick.
+        let target = if top_side { ymax } else { ymin };
+        let tol = 1e-9 * target.abs().max(1.0);
+        let touching: Vec<f64> = corners.iter().filter(|c| (c.1 - target).abs() <= tol).map(|c| c.0).collect();
+        let xt = touching.iter().sum::<f64>() / touching.len() as f64;
+        text::place(out, m, label, font, size, (x - xt, near - target), Anchor::Start, angle);
+        depth = depth.max(ymax - ymin);
+    }
+    if top_side { near - depth } else { near + depth }
 }
 
 /// Draws the Y tick labels in `font`: right-aligned left of the frame, or left-aligned right of
@@ -536,12 +602,16 @@ fn draw_y_labels(
     edge
 }
 
-fn first_title(project: &Project, pds: &[PlotData], y_axis: bool) -> String {
+/// The title of an axis without a title of its own, from the layer's first plot: its Y column for
+/// a Y axis; for an X axis its X column (numbers or text), else the column that labels the ticks,
+/// else `Row`.
+fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
     if y_axis {
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
     }
-    match pd.plot.x.filter(|_| pd.x.is_some()).and_then(|id| project.column(id)) {
+    let x = pd.plot.x.and_then(|id| project.column(id));
+    match x.or_else(|| data::label_column(project, axis, Dim::X, Some(pd))) {
         Some(c) => c.axis_title(),
         None => "Row".to_string(),
     }
@@ -562,7 +632,7 @@ fn draw_x_title(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, pds, false));
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
     let size = axis.title_font.size_pt;
     let baseline = if axis.side == AxisSide::Opposite {
         // The text's bottom edge (baseline plus descent) faces the labels below it.
@@ -589,7 +659,7 @@ fn draw_y_title(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, pds, true));
+    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
     let size = axis.title_font.size_pt;
     let x = if axis.side == AxisSide::Opposite {
         // The tops of the letters (the ascent side) face the labels on the left.
@@ -698,6 +768,15 @@ fn draw_legend(
             let mut d = String::new();
             symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
             out.push(symbol_item(d, &plot.symbol));
+        }
+        if plot.kind == PlotKind::Column {
+            // A small bar: as long as a line sample, one font size high, filled and outlined
+            // like the bars.
+            out.push(Item::Rect {
+                rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                fill: Some(plot.symbol.color),
+                stroke: (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
+            });
         }
         let baseline = cy + (ASCENT - DESCENT) / 2.0 * fs;
         text::place(out, m, label, &lg.font, fs, (sx1 + gap, baseline), Anchor::Start, 0.0);

@@ -385,3 +385,75 @@ fn local_pre_9_sample_has_one_graph() {
     assert_eq!(imp.graphs[0].name, "Graph1");
     assert!(!imp.warnings.iter().any(|w| w.contains("plot type 0")), "{:?}", imp.warnings);
 }
+
+#[test]
+fn into_project_renumbers_the_stack_offsets_with_the_columns() {
+    use sheaf_core::graph::{PlotOffset, Stack};
+    use sheaf_core::{Column, ColumnData, ColumnId, Designation, WindowId, Workbook};
+    let mut book = Workbook::new(WindowId(0), "XRD");
+    let cols = &mut book.sheets[0].columns;
+    cols.push(Column::new(ColumnId(1), "A", Designation::X, ColumnData::numeric(vec![1.0, 2.0])));
+    cols.push(Column::new(ColumnId(2), "B", Designation::Y, ColumnData::numeric(vec![3.0, 4.0])));
+    cols.push(Column::new(ColumnId(3), "C", Designation::Y, ColumnData::numeric(vec![5.0, 6.0])));
+    let mut graph = sheaf_core::template::Template::Line.new_graph(WindowId(0), "Stacked");
+    let layer = &mut graph.layers[0];
+    for y in [2, 3] {
+        layer.plots.push(sheaf_core::graph::Plot {
+            x: Some(ColumnId(1)),
+            y: ColumnId(y),
+            y_error: None,
+            rows: None,
+            kind: sheaf_core::graph::PlotKind::Line,
+            line: layer.default_line.clone(),
+            symbol: layer.default_symbol.clone(),
+            label: None,
+            visible: true,
+            auto_color: true,
+        });
+    }
+    layer.stack = Stack::Individual;
+    layer.plot_offsets = vec![
+        PlotOffset { column: ColumnId(2), x: 0.0, y: 0.0, follows: None },
+        PlotOffset { column: ColumnId(3), x: 0.0, y: 250.0, follows: None },
+        // An entry whose column is not in the file is dropped.
+        PlotOffset { column: ColumnId(99), x: 0.0, y: 7.0, follows: None },
+    ];
+    let import = OpjImport {
+        workbooks: vec![book],
+        graphs: vec![graph],
+        folders: Vec::new(),
+        version: "9.3".into(),
+        signature: String::new(),
+        warnings: Vec::new(),
+    };
+    let project = import.into_project();
+    let layer = &project.graphs().next().unwrap().layers[0];
+    let ys: Vec<ColumnId> = layer.plots.iter().map(|p| p.y).collect();
+    assert_eq!(layer.plot_offsets.len(), 2);
+    assert_eq!(layer.plot_offset(ys[1]).map(|o| o.y), Some(250.0), "the offset follows its curve's new id");
+    assert_eq!(layer.plot_offset(ys[0]).map(|o| o.y), Some(0.0));
+    assert_eq!(layer.stack, Stack::Individual);
+}
+
+/// The owner's XRD project (git-ignored, only on his machine): its stacked graphs keep Origin's
+/// offsets, so the patterns are drawn apart and in the order of the labels.
+#[test]
+fn local_xrd_project_keeps_the_offsets_of_its_stacked_graphs() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../XRD of all dopants for Pittcon.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let project = read_opj(&path).unwrap().into_project();
+    let graph = project.graphs().find(|g| g.name == "AllDopantsXRD").expect("the graph is read");
+    let layer = &graph.layers[0];
+    assert_eq!(layer.stack, sheaf_core::graph::Stack::Individual);
+    let offsets: Vec<f64> = layer.plots.iter().map(|p| layer.plot_offset(p.y).map_or(f64::NAN, |o| o.y)).collect();
+    assert_eq!(offsets.len(), 6);
+    assert_eq!(offsets[0], 0.0);
+    assert!(offsets.windows(2).all(|w| w[1] > w[0]), "each curve above the one before: {offsets:?}");
+    // A graph whose curves are not moved has no stack.
+    let plain = project.graphs().find(|g| g.name == "LMOafter100cycle").expect("the graph is read");
+    assert_eq!(plain.layers[0].stack, sheaf_core::graph::Stack::None);
+    assert!(plain.layers[0].plot_offsets.is_empty());
+}

@@ -650,12 +650,13 @@ Observed on one Origin 2016 project [COM; one sample each]:
 - **Automatic axis colour.** Stored as `F7 FF` at block 3 offset `0x0F` and as `F7 FF FF FF` at `0x92` and `0x16A`; black is 0 there.
 - **Right title and legend.** The right title is the text object `YR` of the linked layer. The DoubleY template names its legend object `legend` in lower case.
 
-Reader rule, not yet implemented (the reader today reads every layer as independent, drops `YR`, and matches only the exact name `Legend`):
-- a layer k > 0 with the same rectangle as an earlier root layer, whose Y group shows the right line and labels and hides the left ones, becomes a member with `link = {parent, x: Straight, y: None}`, `frame = {0,0,1,1}` and `y_axis.side = Opposite`, with its title from `YR`;
-- an X group with nothing shown becomes `x_axis.side = Hidden`;
-- an X group showing only the top line becomes `Hidden` too, while the root gets `x_axis.show_opposite = true`;
-- automatic axis colours set `color_follows_plot`;
+Reader rule (implemented in `crates/io/src/opj/graph.rs`, `link_right_y_layers`):
+- the Y axis of a layer is drawn on the right (`y_axis.side = Opposite`, title from `YR`) when its Y group shows the opposite side (block 4 labels or block 5 line) and nothing on the left, or, for any layer after the first, when it shows tick labels on the right (block 4). In the second case a left side the layer also shows is not drawn, and the import notes it;
+- such a layer k > 0 with exactly the same rectangle (header `0x71`, eight bytes) as an earlier unlinked layer whose Y axis is on the left becomes a member with `link = {parent, x: Straight, y: None}`, `frame = {0,0,1,1}`; its X axis gets `side = Hidden` (the X scale is the parent's), and if its X group shows the top line, the parent gets `x_axis.show_opposite = true` to close the box. The parent's right Y line is turned off, and its legend lists the plots of both layers (`scope = Graph`); a legend object in the member is dropped;
+- automatic axis colours (block 3 `0x0F` = `F7 FF`) set `color_follows_plot` on any axis;
 - the legend object is matched without regard to case.
+
+Checked on the research project `dy3.opj` (Origin 2016; graphs G1 to G4 made by script, local only): G1 (the DoubleY command), G2 (X link turned off: still linked by this rule, since the X range stored in both layers is the same), G3 (layer 2 shows its Y axis on both sides) and G4 (layer 2's axis colour set to black) draw like Origin's own PNG of each, except: Origin draws the legend in a frame; Origin draws the top line in the plot's blue (12.8 keeps it black on purpose); and for G4 Origin's PNG still shows a blue right axis although the file stores black, which this reader follows. Whether Origin keeps the colour elsewhere or the PNG was made before the change took effect is unknown.
 
 ### 12.8 Deliberate differences from Origin 2016
 
@@ -893,7 +894,7 @@ In the 515-byte curve record (opj-format.md section 10.5) [COM, byte comparisons
 
 The 361-byte layer header also differs at f64 `0x13D` (0.1 stacked, 0.08 plain) and `0x135` (Origin's "no value" stacked, 0 plain); their meaning is unknown.
 
-Import rule (not yet implemented; the reader ignores these fields today, which is why the owner's XRD curves are drawn on top of each other): if any curve of a layer has a non-zero offset, set `stack = Individual` and add an entry with that curve's offsets for its Y column. This redraws the graph exactly as Origin saved it. Mapping `0x13A`/`0x148` to Auto can follow once the mode codes are confirmed. A future writer needs the same bytes.
+Import rule (implemented): if any curve of a layer has a non-zero, finite offset (Origin's "no value" double counts as 0), set `stack = Individual` and add an entry with each curve's offsets for its Y column (the first curve of a column wins). This redraws the graph exactly as Origin saved it. Mapping `0x13A`/`0x148` to Auto can follow once the mode codes are confirmed. A future writer needs the same bytes. Checked on the owner's XRD project: its six-pattern graph stores six increasing offsets (the first 0) and now draws each pattern in the band of its label, as in the owner's figure.
 
 ### 13.11 Check values (Origin 2016, Auto, gap 10 %, X = 0, 1, ..., 20)
 
@@ -1306,7 +1307,7 @@ sheaf plot xrd.csv --panels 2x2 -o grid.svg
 
 ### 15.8 Origin project files
 
-The `.opj` reader reads every layer of an Origin graph as an independent layer with the limits stored in the file, so the owner's stacks and panel graphs already draw at Origin's ranges without links. Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading links, and writing panel graphs, needs that first.
+The `.opj` reader reads the layers of a panel graph as independent layers with the limits stored in the file, so the owner's panel graphs already draw at Origin's ranges without links (only the second layer of a double-Y graph is linked, by the rule of section 12.7). Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading panel links, and writing panel graphs, needs that first.
 
 ### 15.9 Deliberate differences from Origin 2016
 

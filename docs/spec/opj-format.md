@@ -422,8 +422,9 @@ owner's graph). The frame equals `layer.left`, `layer.top`, `layer.width` and `l
 ### 10.3 Axis blocks
 
 Group 0 is X, group 1 is Y, group 2 is Z. In each group the blocks are, by position:
-0 minor grid, 1 major grid, 2 tick labels, 3 axis line and ticks, 4 title (not used), 5 the
-opposite axis.
+0 minor grid, 1 major grid, 2 tick labels, 3 axis line and ticks, 4 tick labels on the opposite
+side, 5 the opposite axis line. (An earlier version of this section called block 4 the title; the
+double-Y study of graphing.md 12.7 showed what it is.)
 
 - Block 2, byte `0x15`: tick label font size in points. Byte `0x26`: bit `0x40` set means the
   labels are shown (cleared by `layer.x.showLabels = 0`).
@@ -431,6 +432,11 @@ opposite axis.
   5 give the major tick direction, bits 6 and 7 the minor one: 0 none, 1 in, 2 out, 3 both (a default
   Origin graph has `0xA0`, both out; the owner's Y axis has `0x50`, both in, which matches his figure).
   The meaning of 1 and 3 was inferred from these two cases, not from a rendering of each.
+- Block 3, byte `0x26`: bit `0x40` set means the axis line and ticks are drawn on the primary side
+  (bottom for X, left for Y). u16 at `0x0F`: the axis colour; `F7 FF` means "automatic" (the colour
+  of the layer's plot), 0 black.
+- Block 4, byte `0x26`: bit `0x40` set means tick labels are drawn on the opposite side (top for X,
+  right for Y).
 - Block 5, byte `0x26`: bit `0x40` set means the opposite axis line is drawn (the closed box). Set by
   `layer.x.showAxes = 3`.
 
@@ -463,6 +469,8 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 | `0x4C` | u16 | plot type: 200 line, 201 scatter, 202 line and symbol, 203 column; 487 (`0x1E7`) is a Y error plot |
 | `0xC2` | 4 bytes | fill colour of a column: red, green, blue, then 1 when the colour was chosen freely (the owner's bars are 0, 107, 172, 1) |
 | `0x132` | 4 bytes | colour: a list position then three zero bytes, or red, green, blue, 1; `F7 FF FF FF` means "automatic" |
+| `0x1B2` | f64 | X offset of the curve in a stacked layer, in axis units; 0 in every file seen [inf] (graphing.md 13.10) |
+| `0x1CA` | f64 | Y offset of the curve in a stacked layer, in axis units: the offset Origin drew it with (graphing.md 13.10) |
 
 "Automatic" colours follow the list by plot position: the first plot black, the second red, and so
 on. The reader gives each automatic plot the list colour of its position in the layer. Note that
@@ -493,7 +501,14 @@ their columns, type, colours, line width and style, symbol shape and size; the g
 of a layer's column plots (from its first column plot); error columns, which are attached to the
 plot they belong to. A Y error plot (487) is attached; other error kinds are not.
 
-Not read (the figure still draws, with the defaults of the template): top and right axis titles;
+Also read: the offsets of stacked curves, and the second layer of a double-Y graph as a linked layer
+(graphing.md 12.7 and 13.10, "Reader rule"). A layer whose curves are moved gets `stack =
+Individual` with each curve's stored offsets, so it draws exactly as Origin saved it, whatever mode
+Origin used (the mode bytes are not needed for that). The offsets are kept by the Y column of the
+curve, and `OpjImport::into_project` renumbers them together with the plots.
+
+Not read (the figure still draws, with the defaults of the template): the top axis title, and the
+right one except on a right-axis layer;
 the Z axis; other scale types (drawn linear, with a warning); tick label font, bold and colour;
 number formats; legend text (the legend shows the column names); the colour and style of grids and of
 the frame; text colour; line and arrow objects; plot groups.
@@ -507,8 +522,9 @@ Known differences from Origin:
   fill colour and outlined with the line colour. Origin's handling of bar border and fill colour was not
   decoded: a column plot whose `set -c` colour was changed is black in Origin and cyan outlined here.
 - Horizontal bars, stacked bars, area, 3D, contour, polar, pie and box plots are not read.
-- Layers that share one frame (double Y) are read layer by layer; whether the renderer draws a second
-  Y axis for the second layer was not checked.
+- Layers that share one frame are linked only when the later one shows right-side tick labels
+  (double Y). Other overlapping layers stay independent and draw over each other, as before. A
+  right-axis layer that also shows its left axis has only the right side drawn (the import says so).
 - Origin draws a frame around the legend and prints logarithmic tick labels as plain numbers where
   we print powers of ten.
 

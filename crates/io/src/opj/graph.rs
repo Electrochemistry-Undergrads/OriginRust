@@ -39,7 +39,13 @@ const RECT_AT: usize = 0x71;
 // Axis blocks (groups x, y, z of six blocks each).
 const AXIS_LABELS: usize = 2;
 const AXIS_LINE: usize = 3;
+const AXIS_OPPOSITE_LABELS: usize = 4;
 const AXIS_OPPOSITE: usize = 5;
+/// Colour of the axis line in block 3: `F7 FF` means "automatic" (follows the plot).
+const AXIS_COLOR_AT: usize = 0x0F;
+const AXIS_AUTO_COLOR: u16 = 0xFFF7;
+/// Bit of byte [`AXIS_FLAGS_AT`] in blocks 2 to 5 that shows the part (graphing spec 12.7).
+const AXIS_SHOWN_BIT: u8 = 0x40;
 const AXIS_FONT_AT: usize = 0x15;
 const AXIS_FLAGS_AT: usize = 0x26;
 const AXIS_LINE_WIDTH_AT: usize = 0x15;
@@ -65,6 +71,11 @@ const CURVE_LINE_COLOR_AT: usize = 0x132;
 const CURVE_PLOT_LINE_COLOR_AT: usize = 0x16A;
 const CURVE_FILL_USED_AT: usize = 0x1E;
 const CURVE_FILL_USED_BIT: u8 = 0x10;
+/// Offsets of a curve in a stacked layer, in axis units (graphing spec 13.10).
+const CURVE_X_OFFSET_AT: usize = 0x1B2;
+const CURVE_Y_OFFSET_AT: usize = 0x1CA;
+/// Origin's "no value" double.
+const NO_VALUE: f64 = -1.23456789e-300;
 // Annotation: header holds the rectangle and the name, block 1 the text style, block 2 the text.
 const ANN_RECT_AT: usize = 0x03;
 const ANN_NAME_AT: usize = 0x46;
@@ -148,9 +159,10 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
         notes.push("the page size could not be read; a default size was used".into());
     }
     let template = graph.layers.remove(0);
-    for layer in &w.layers {
-        graph.layers.push(build_layer(layer, &template, &graph.page, column_of_set, &mut notes));
+    for (k, layer) in w.layers.iter().enumerate() {
+        graph.layers.push(build_layer(layer, k == 0, &template, &graph.page, column_of_set, &mut notes));
     }
+    link_right_y_layers(&mut graph, w);
     if graph.layers.is_empty() {
         graph.layers.push(template);
         notes.push("it has no layers".into());
@@ -165,6 +177,7 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
 
 fn build_layer(
     layer: &WinLayer,
+    first: bool,
     template: &Layer,
     page: &Page,
     column_of_set: &HashMap<usize, ColumnId>,
@@ -224,6 +237,19 @@ fn build_layer(
         }
         if let Some(blocks) = layer.axes.get(group) {
             apply_axis_blocks(axis, blocks);
+            // A Y axis shown on the right only, or a later layer's Y axis with tick labels on the
+            // right (the second layer of a double-Y graph): drawn on the right edge. The model
+            // draws one side of an axis, so a left side such a layer also shows is left out.
+            let right_labels = !first && shown(blocks, AXIS_OPPOSITE_LABELS);
+            if group == 1 && (right_side_only(blocks) || right_labels) {
+                if shown(blocks, AXIS_LABELS) {
+                    notes.push("a layer shows its Y axis on both sides; only the right side is drawn".into());
+                }
+                axis.side = AxisSide::Opposite;
+                axis.show_tick_labels = shown(blocks, AXIS_OPPOSITE_LABELS);
+                axis.show_opposite = false;
+                axis.opposite_ticks = false;
+            }
         }
         axis.show_title = false;
     }
@@ -243,10 +269,13 @@ fn build_layer(
                 if text.trim().is_empty() {
                     continue;
                 }
-                // Only the bottom and left titles are drawn by this model.
+                // The bottom and left titles, and the right title of a layer whose Y axis is drawn
+                // on the right (the second layer of a double-Y graph).
                 let axis = match name.as_str() {
                     "XB" => &mut out.x_axis,
-                    "YL" => &mut out.y_axis,
+                    "YL" if out.y_axis.side != AxisSide::Opposite => &mut out.y_axis,
+                    "YR" if out.y_axis.side == AxisSide::Opposite => &mut out.y_axis,
+                    "YL" => continue,
                     _ => {
                         notes.push("a title on the top or right axis was not imported".into());
                         continue;
@@ -257,7 +286,7 @@ fn build_layer(
                 axis.show_title = true;
                 axis.title_font.size_pt = size_pt;
             }
-            "Legend" => {
+            n if n.eq_ignore_ascii_case("legend") => {
                 out.legend.visible = true;
                 out.legend.font.size_pt = size_pt;
                 let (cx, cy) = annotation_center(a, page_units);
@@ -284,7 +313,66 @@ fn build_layer(
     for (i, rec) in layer.columns.iter().enumerate() {
         read_curve(&mut out, &mut y_sets, i, rec, column_of_set, notes);
     }
+    // Curves moved apart by offsets (stacked lines): Origin stores each curve's offset as it drew
+    // it, so the layer is drawn with those offsets as they are (graphing spec 13.10).
+    if out.plot_offsets.iter().any(|o| o.x != 0.0 || o.y != 0.0) {
+        out.stack = Stack::Individual;
+    } else {
+        out.plot_offsets.clear();
+    }
     out
+}
+
+/// True when bit [`AXIS_SHOWN_BIT`] is set in block `k` of an axis group.
+fn shown(blocks: &[Vec<u8>], k: usize) -> bool {
+    blocks.get(k).is_some_and(|b| u8_at(b, AXIS_FLAGS_AT) & AXIS_SHOWN_BIT != 0)
+}
+
+/// An axis group that shows the opposite side (line or tick labels) and nothing on the primary
+/// side: for Y, a right axis only (graphing spec 12.7).
+fn right_side_only(blocks: &[Vec<u8>]) -> bool {
+    blocks.len() >= 6
+        && !shown(blocks, AXIS_LABELS)
+        && !shown(blocks, AXIS_LINE)
+        && (shown(blocks, AXIS_OPPOSITE_LABELS) || shown(blocks, AXIS_OPPOSITE))
+}
+
+/// Turns the second layer of a double-Y graph (and any layer like it) into a layer linked to the
+/// layer it lies on (graphing spec 12.7): a layer after the first whose rectangle is the same as an
+/// earlier unlinked layer's and whose Y axis is drawn on the right only. It shares the parent's X
+/// scale and has its own Y scale; its X axis is not drawn (a top line it shows closes the parent's
+/// box instead), and the parent's legend lists the plots of both layers.
+fn link_right_y_layers(graph: &mut Graph, w: &Window) {
+    let rect = |k: usize| w.layers.get(k).and_then(|l| l.header.get(RECT_AT..RECT_AT + 8)).map(<[u8]>::to_vec);
+    for k in 1..graph.layers.len().min(w.layers.len()) {
+        if graph.layers[k].y_axis.side != AxisSide::Opposite || rect(k).is_none() {
+            continue;
+        }
+        let Some(parent) = (0..k).find(|&p| {
+            graph.layers[p].link.is_none() && graph.layers[p].y_axis.side != AxisSide::Opposite && rect(p) == rect(k)
+        }) else {
+            continue;
+        };
+        let x_blocks = w.layers[k].axes.first().map(Vec::as_slice).unwrap_or(&[]);
+        let top_line = shown(x_blocks, AXIS_OPPOSITE);
+        let layer = &mut graph.layers[k];
+        layer.link = Some(LayerLink { parent, x: ScaleLink::Straight, y: ScaleLink::None });
+        layer.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
+        layer.x_axis.side = AxisSide::Hidden;
+        layer.x_axis.show_title = false;
+        let legend_here = layer.legend.visible;
+        layer.legend.visible = false;
+        let p = &mut graph.layers[parent];
+        if top_line {
+            p.x_axis.show_opposite = true;
+        }
+        p.y_axis.show_opposite = false;
+        p.y_axis.opposite_ticks = false;
+        if p.legend.visible || legend_here {
+            p.legend.visible = true;
+            p.legend.scope = LegendScope::Graph;
+        }
+    }
 }
 
 fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>]) {
@@ -297,6 +385,7 @@ fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>]) {
         axis.show_tick_labels = u8_at(b, AXIS_FLAGS_AT) & 0x40 != 0;
     }
     if let Some(b) = blocks.get(AXIS_LINE) {
+        axis.color_follows_plot = u16_at(b, AXIS_COLOR_AT) == AXIS_AUTO_COLOR;
         let width = f64::from(u16_at(b, AXIS_LINE_WIDTH_AT)) / CURVE_UNITS_PER_POINT;
         if width > 0.0 && width < 20.0 {
             axis.line_width_pt = width;
@@ -598,6 +687,18 @@ fn read_curve(
     if x_set != 0 && column(x_set).is_none() {
         notes.push("a plot's X data is not a worksheet column; it was plotted against the row number".into());
     }
+    let offset = |at: usize| {
+        let v = f64_at(r, at);
+        if v.is_finite() && v != NO_VALUE && v.abs() < 1e300 { v } else { 0.0 }
+    };
+    let (dx, dy) = (offset(CURVE_X_OFFSET_AT), offset(CURVE_Y_OFFSET_AT));
+    if layer.plot_offset(y).is_none() {
+        // Every curve gets an entry (an offset of 0 included); entries are dropped again when no
+        // curve of the layer is moved.
+        let o = layer.plot_offset_mut(y);
+        o.x = dx;
+        o.y = dy;
+    }
     layer.plots.push(plot);
 }
 
@@ -825,5 +926,98 @@ mod tests {
         assert_eq!(palette_color(1), Color::RED);
         assert_eq!(palette_color(3), Color::BLUE);
         assert_eq!(palette_color(22), Color::BLACK);
+    }
+
+    /// Axis blocks with the visibility bits of graphing spec 12.7: primary-side tick labels,
+    /// primary line, opposite-side tick labels, opposite line.
+    fn axis_sides(labels: bool, line: bool, opposite_labels: bool, opposite_line: bool) -> Vec<Vec<u8>> {
+        let mut blocks = axis_blocks(20, labels, 0x50, opposite_line);
+        blocks[AXIS_LINE][AXIS_FLAGS_AT] = if line { 0x40 } else { 0 };
+        blocks[AXIS_OPPOSITE_LABELS][AXIS_FLAGS_AT] = if opposite_labels { 0x40 } else { 0 };
+        blocks
+    }
+
+    fn with_offset(mut c: WinColumn, y: f64) -> WinColumn {
+        put_f64(&mut c.record, CURVE_Y_OFFSET_AT, y);
+        c
+    }
+
+    #[test]
+    fn curve_offsets_give_an_individual_stack() {
+        let mut w = window();
+        w.layers[0].columns =
+            vec![with_offset(curve(2, 1, 200, [0, 0, 0, 0]), 0.0), with_offset(curve(3, 1, 200, [1, 0, 0, 0]), 378.3)];
+        let g = build(&w, &ids(), &mut Vec::new());
+        let l = &g.layers[0];
+        assert_eq!(l.stack, Stack::Individual);
+        assert_eq!(l.plot_offset(ColumnId(101)).map(|o| o.y), Some(0.0));
+        assert_eq!(l.plot_offset(ColumnId(102)).map(|o| (o.x, o.y)), Some((0.0, 378.3)));
+        // Origin's "no value" and numbers that are not finite count as no offset.
+        for odd in [NO_VALUE, f64::NAN, f64::INFINITY, 0.0] {
+            let mut w = window();
+            w.layers[0].columns =
+                vec![curve(2, 1, 200, [0, 0, 0, 0]), with_offset(curve(3, 1, 200, [1, 0, 0, 0]), odd)];
+            let l = &build(&w, &ids(), &mut Vec::new()).layers[0];
+            assert_eq!(l.stack, Stack::None, "{odd}");
+            assert!(l.plot_offsets.is_empty(), "{odd}");
+        }
+    }
+
+    /// The window of [`window`] with a second layer on the same frame that shows only a right Y
+    /// axis (automatic colour) and the top line, as Origin's double-Y graph does.
+    fn double_y_window() -> Window {
+        let mut w = window();
+        let mut second = w.layers[0].clone();
+        second.annotations = vec![text_annotation("YR", "Sine (mA)", 22, [5500, 500, 5600, 2000])];
+        second.columns = vec![curve(5, 1, 200, [0xF7, 0xFF, 0xFF, 0xFF])];
+        let mut y = axis_sides(false, false, true, true);
+        put_u16(&mut y[AXIS_LINE], AXIS_COLOR_AT, AXIS_AUTO_COLOR);
+        second.axes = vec![axis_sides(false, false, false, true), y, Vec::new()];
+        w.layers[0].annotations[2] = text_annotation("legend", "\\l(1.1) %(1.1)", 18, [3000, 400, 4000, 700]);
+        w.layers[0].axes[0] = axis_sides(true, true, false, false);
+        w.layers.push(second);
+        w
+    }
+
+    #[test]
+    fn a_second_layer_with_a_right_axis_on_the_same_frame_becomes_a_linked_layer() {
+        let mut warnings = Vec::new();
+        let g = build(&double_y_window(), &ids(), &mut warnings);
+        assert_eq!(g.layers.len(), 2);
+        let (root, right) = (&g.layers[0], &g.layers[1]);
+        assert_eq!(right.link, Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None }));
+        assert_eq!(right.frame, Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 });
+        assert_eq!((right.y_axis.side, right.x_axis.side), (AxisSide::Opposite, AxisSide::Hidden));
+        assert!(right.y_axis.show_tick_labels && right.y_axis.color_follows_plot);
+        assert_eq!(right.y_axis.title.as_deref(), Some("Sine (mA)"));
+        assert!(right.y_axis.show_title && !right.legend.visible);
+        assert!(root.legend.visible && root.legend.scope == LegendScope::Graph, "the lower-case legend is found");
+        assert!(root.x_axis.show_opposite, "the right layer's top line closes the box");
+        assert!(!root.y_axis.show_opposite && !root.y_axis.color_follows_plot);
+        assert_eq!(right.plots.len(), 1);
+        assert!(!warnings.iter().any(|m| m.contains("top or right")), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_right_axis_layer_elsewhere_or_a_plain_second_layer_stays_unlinked() {
+        // Another frame: an inset with its axis on the right is drawn there, but not linked.
+        let mut w = double_y_window();
+        put_u16(&mut w.layers[1].header, RECT_AT, 3000);
+        let g = build(&w, &ids(), &mut Vec::new());
+        assert!(g.layers[1].link.is_none());
+        assert_eq!(g.layers[1].y_axis.side, AxisSide::Opposite);
+        // The same frame with the axis on the left and a box: two plain overlapping layers.
+        let mut w = double_y_window();
+        w.layers[1].axes[1] = axis_sides(true, true, false, true);
+        let g = build(&w, &ids(), &mut Vec::new());
+        assert!(g.layers[1].link.is_none());
+        assert_eq!(g.layers[1].y_axis.side, AxisSide::Normal);
+        // Tick labels on both sides: linked and drawn on the right; the import says what is left out.
+        let mut w = double_y_window();
+        w.layers[1].axes[1] = axis_sides(true, true, true, true);
+        let mut warnings = Vec::new();
+        let g = build(&w, &ids(), &mut warnings);
+        assert!(g.layers[1].link.is_some());
+        assert!(warnings.iter().any(|m| m.contains("both sides")), "{warnings:?}");
     }
 }

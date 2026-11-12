@@ -105,6 +105,16 @@ impl OpjImport {
                     }
                     ok
                 });
+                // The stack offsets are found by Y column, so they are renumbered too.
+                layer.plot_offsets.retain_mut(|o| {
+                    if o.follows.as_mut().is_some_and(|f| !new_id(f)) {
+                        o.follows = None;
+                    }
+                    new_id(&mut o.column)
+                });
+                if layer.plot_offsets.is_empty() && layer.stack == sheaf_core::graph::Stack::Individual {
+                    layer.stack = sheaf_core::graph::Stack::None;
+                }
             }
             let file_name = graph.name.clone();
             let id = project.adopt_graph(graph);

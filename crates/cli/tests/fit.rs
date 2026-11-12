@@ -10,12 +10,20 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-/// x = 0..20; "line" is exactly 1.5 + 0.5x; "decay" is 3 + 7 exp(-x/4); "err" is a Y-error column.
+/// "noisy" in row i: a line with a fixed wiggle; "err" in row i: its error bar.
+fn noisy(i: u32) -> f64 {
+    1.5 + 0.5 * f64::from(i) + 0.3 * (7.0 * f64::from(i)).sin()
+}
+fn err(i: u32) -> f64 {
+    0.1 + 0.2 * f64::from(i % 3)
+}
+
+/// x = 0..20; "line" is exactly 1.5 + 0.5x; "decay" is 3 + 7 exp(-x/4); "noisy" and its errors "err".
 fn data_file(dir: &Path) -> PathBuf {
-    let mut text = String::from("x,line,decay\nV,mA,mA\n");
+    let mut text = String::from("x,line,decay,noisy,err\nV,mA,mA,mA,mA\n");
     for i in 0..=20 {
         let x = f64::from(i);
-        text.push_str(&format!("{x},{},{}\n", 1.5 + 0.5 * x, 3.0 + 7.0 * (-x / 4.0).exp()));
+        text.push_str(&format!("{x},{},{},{},{}\n", 1.5 + 0.5 * x, 3.0 + 7.0 * (-x / 4.0).exp(), noisy(i), err(i)));
     }
     let path = dir.join("data.csv");
     std::fs::write(&path, text).unwrap();
@@ -104,6 +112,40 @@ fn nonlinear_fits_take_starting_values_bounds_and_fixed_parameters() {
     assert!(row(&stdout, "y0").contains(&"fixed"));
     let t: f64 = row(&stdout, "t")[1].parse().unwrap();
     assert!((t - 4.0).abs() < 1e-5, "{stdout}");
+}
+
+#[test]
+fn instrumental_weighting_uses_the_error_column_named_with_yerr() {
+    let dir = scratch("weights");
+    let data = data_file(&dir);
+    let (ok, stdout, stderr) =
+        sheaf(&["fit", data.to_str().unwrap(), "--y", "noisy", "--weight", "instrumental", "--yerr", "err"]);
+    assert!(ok, "stderr: {stderr}");
+    // Weighted least squares by hand, with w = 1/err^2.
+    let (mut sw, mut sx, mut sy, mut sxx, mut sxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    for i in 0..=20 {
+        let (x, y, w) = (f64::from(i), noisy(i), 1.0 / (err(i) * err(i)));
+        sw += w;
+        sx += w * x;
+        sy += w * y;
+        sxx += w * x * x;
+        sxy += w * x * y;
+    }
+    let slope = (sw * sxy - sx * sy) / (sw * sxx - sx * sx);
+    let intercept = (sy - slope * sx) / sw;
+    let printed = |name: &str| row(&stdout, name)[1].parse::<f64>().unwrap();
+    assert!((printed("Slope") - slope).abs() < 1e-5 * slope.abs(), "{stdout}\nwant slope {slope}");
+    assert!((printed("Intercept") - intercept).abs() < 1e-5 * intercept.abs().max(1.0), "{stdout}");
+    // The unweighted fit gives a different slope, so the weights did something.
+    let (_, plain, _) = sheaf(&["fit", data.to_str().unwrap(), "--y", "noisy"]);
+    assert_ne!(row(&plain, "Slope")[1], row(&stdout, "Slope")[1]);
+
+    // --yerr without instrumental weighting, and a count mismatch, are refused.
+    let (ok, _, stderr) = sheaf(&["fit", data.to_str().unwrap(), "--y", "noisy", "--yerr", "err"]);
+    assert!(!ok && stderr.contains("--weight instrumental"), "{stderr}");
+    let (ok, _, stderr) =
+        sheaf(&["fit", data.to_str().unwrap(), "--y", "noisy", "--weight", "instrumental", "--yerr", "err,line,decay"]);
+    assert!(!ok && stderr.contains("one per --y column"), "{stderr}");
 }
 
 #[test]

@@ -71,9 +71,14 @@ pub struct FitArgs {
     /// Bounds, for example --bounds w=0:,A=0:100 (leave a side empty for no bound).
     #[arg(long, value_delimiter = ',', value_name = "NAME=LOW:HIGH", allow_hyphen_values = true)]
     pub bounds: Vec<String>,
-    /// How points are weighted.
+    /// How points are weighted. Instrumental weighting uses the Y-error column given with
+    /// --yerr, or the one that belongs to the Y column in a project.
     #[arg(long, value_enum, default_value_t = WeightKind::None)]
     pub weight: WeightKind,
+    /// The Y-error column(s) for --weight instrumental, by short or long name: one for all fitted
+    /// columns, or one per --y column in the same order.
+    #[arg(long, value_delimiter = ',', value_name = "COLUMNS")]
+    pub yerr: Vec<String>,
     /// Confidence level of the parameter limits.
     #[arg(long, default_value_t = 0.95)]
     pub confidence: f64,
@@ -105,6 +110,8 @@ pub struct FitArgs {
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     /// Write the parameter sheet as delimited text (.tsv or .txt gives tabs, anything else commas).
+    /// With several columns, only the first one's. The statistics and curve sheets are kept with
+    /// --save and can be written with export-data.
     #[arg(long, value_name = "FILE")]
     pub export: Option<PathBuf>,
     #[command(flatten)]

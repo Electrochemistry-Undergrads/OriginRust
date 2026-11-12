@@ -263,7 +263,22 @@ impl FitDialog {
 
     fn request(&self) -> Option<FitRequest> {
         let mut r = FitRequest::new(self.y, self.model()?);
-        r.params = self.params.iter().filter_map(ParamRow::setting).collect();
+        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::Polynomial);
+        r.params = self
+            .params
+            .iter()
+            // A straight line or polynomial has only fixed values; start values and bounds typed
+            // for another model with the same parameter names do not apply.
+            .filter(|p| !closed_form || p.fixed)
+            .map(|p| {
+                if closed_form {
+                    ParamRow { set_initial: false, has_lower: false, has_upper: false, ..p.clone() }
+                } else {
+                    p.clone()
+                }
+            })
+            .filter_map(|p| p.setting())
+            .collect();
         r.weighting = self.weighting;
         r.confidence_level = self.confidence / 100.0;
         r.rows = match self.row_mode {
@@ -364,12 +379,15 @@ impl FitDialog {
                         && let Some(path) =
                             rfd::FileDialog::new().add_filter("Origin fit function", &["fdf", "FDF"]).pick_file()
                     {
-                        match std::fs::read(&path) {
-                            Ok(bytes) => {
-                                self.fdf_text = Some(String::from_utf8_lossy(&bytes).into_owned());
+                        // Origin writes these files in the Windows code page or as UTF-16; the
+                        // shared reader handles both, as in `sheaf fit --fdf`.
+                        match sheaf_io::read_text_file(&path) {
+                            Ok(text) => {
+                                self.fdf_text = Some(text);
                                 self.fdf_path = Some(path);
+                                self.problem = None;
                             }
-                            Err(e) => self.problem = Some(format!("could not read {}: {e}", path.display())),
+                            Err(e) => self.problem = Some(e.to_string()),
                         }
                         changed = true;
                     }
@@ -611,5 +629,23 @@ mod tests {
         assert_eq!(r.params[0].lower, Some(0.1));
         assert!(r.params[0].initial.is_none());
         assert_eq!(r.confidence_level, 0.95);
+
+        // Switching to a straight line keeps only fixed values.
+        let (p, book, y) = project();
+        let mut d = FitDialog::new(&p, book, Some(y), FitKind::Formula).unwrap();
+        d.formula = "Intercept + Slope*x".into();
+        d.formula_params = "Intercept, Slope".into();
+        d.refresh_params();
+        d.params[0].set_initial = true;
+        d.params[0].initial = 7.0;
+        d.params[1].has_lower = true;
+        d.kind = FitKind::Linear;
+        d.refresh_params();
+        assert!(d.request().unwrap().params.is_empty());
+        d.params[1].fixed = true;
+        d.params[1].initial = 2.0;
+        let r = d.request().unwrap();
+        assert_eq!(r.params.len(), 1);
+        assert_eq!((r.params[0].initial, r.params[0].fixed, r.params[0].lower), (Some(2.0), true, None));
     }
 }

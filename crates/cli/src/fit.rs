@@ -244,13 +244,25 @@ pub fn fit(a: FitArgs) -> Result<()> {
     };
     let book = pick_book(&project, a.book.as_deref())?;
     let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
-    let columns = if a.y.is_empty() {
-        project.default_plot_columns(book, sheet, Template::Line)
+    let errors = named_columns(&project, book, sheet, &a.yerr)?;
+    if !errors.is_empty() && weighting != FitWeighting::Instrumental {
+        bail!("--yerr names the error columns of instrumental weighting; add --weight instrumental");
+    }
+    let columns: Vec<_> = if a.y.is_empty() {
+        // Error columns given with --yerr are not fitted themselves.
+        project.default_plot_columns(book, sheet, Template::Line).into_iter().filter(|c| !errors.contains(c)).collect()
     } else {
         named_columns(&project, book, sheet, &a.y)?
     };
     if columns.is_empty() {
         bail!("there are no numeric Y columns to fit; name them with --y");
+    }
+    if errors.len() > 1 && errors.len() != columns.len() {
+        bail!(
+            "--yerr names {} columns for {} fitted columns; give one error column for all, or one per --y column",
+            errors.len(),
+            columns.len()
+        );
     }
 
     let mut first: Option<(FitOutcome, sheaf_core::ColumnId)> = None;
@@ -262,6 +274,7 @@ pub fn fit(a: FitArgs) -> Result<()> {
         request.rows = rows;
         request.params = params.clone();
         request.weighting = weighting;
+        request.y_error = errors.get(i).or(errors.first()).copied();
         request.confidence_level = a.confidence;
         let outcome = project.fit(&request)?;
         print_outcome(&outcome);

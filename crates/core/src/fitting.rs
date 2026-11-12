@@ -412,8 +412,15 @@ impl Project {
         }
 
         let sheets = &self.workbook(book_id).expect("workbook exists").sheets;
-        let mut param_ws = Worksheet::new(free_sheet_name(sheets, request.model.sheet_prefix()));
-        let mut stats_ws = Worksheet::new(format!("{}Stats", param_ws.name));
+        // The parameter sheet and its "Stats" companion share a number; take the first number
+        // for which neither name is in use (a sheet may have been renamed or deleted since).
+        let taken = |name: &str| sheets.iter().any(|s| s.name.eq_ignore_ascii_case(name));
+        let param_name = (1..)
+            .map(|n| format!("{}{n}", request.model.sheet_prefix()))
+            .find(|name| !taken(name) && !taken(&format!("{name}Stats")))
+            .expect("the name sequence is unbounded");
+        let mut param_ws = Worksheet::new(param_name.clone());
+        let mut stats_ws = Worksheet::new(format!("{param_name}Stats"));
         let mut curve_ws = Worksheet::new(free_sheet_name(sheets, "FitCurve"));
 
         let p = &report.params;
@@ -664,6 +671,11 @@ fn closed_form_fixed(settings: &[ParamSetting], allowed: &[&str]) -> Result<Vec<
         }
         if s.fixed {
             fixed.push((s.name.clone(), fixed_value(s)?));
+        } else if s.initial.is_some() {
+            return Err(FitError::BadFunction(format!(
+                "a linear or polynomial fit needs no start values (parameter {}); to hold it at a value, fix it",
+                s.name
+            )));
         }
     }
     Ok(fixed)
@@ -748,6 +760,24 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                         "the lower bound of {} ({lo}) is above its upper bound ({hi})",
                         p.name
                     )));
+                }
+                // A value the user gave must lie within the bounds (the function's own bounds
+                // included); otherwise the fit would start, or stay, outside them.
+                if s.initial.is_some() || s.fixed {
+                    let v = p.initial;
+                    let what = if p.fixed { "fixed value" } else { "start value" };
+                    if let Some(lo) = p.lower.filter(|lo| v < *lo) {
+                        return Err(FitError::BadFunction(format!(
+                            "the {what} of {} ({v}) is below its lower bound ({lo})",
+                            p.name
+                        )));
+                    }
+                    if let Some(hi) = p.upper.filter(|hi| v > *hi) {
+                        return Err(FitError::BadFunction(format!(
+                            "the {what} of {} ({v}) is above its upper bound ({hi})",
+                            p.name
+                        )));
+                    }
                 }
             }
             let opts = nlsf::FitOptions { weighting: w, confidence_level: d.confidence_level, ..Default::default() };
@@ -931,6 +961,22 @@ mod tests {
         let b = p.workbook(out2.book).unwrap();
         assert_eq!(b.sheets[out2.param_sheet].name, "FitLinear2");
         assert_eq!(b.sheets[out2.curve_sheet].name, "FitCurve2");
+    }
+
+    #[test]
+    fn report_sheet_names_never_collide_with_kept_stats_sheets() {
+        let (mut p, book, _, y, _) = sample();
+        let first = p.fit_with(&FitRequest::new(y, FitModel::Linear), line_engine).unwrap();
+        // Rename the parameter sheet but keep its statistics sheet, then fit again.
+        p.workbook_mut(book).unwrap().sheets[first.param_sheet].name = "My parameters".into();
+        let second = p.fit_with(&FitRequest::new(y, FitModel::Linear), line_engine).unwrap();
+        let b = p.workbook(book).unwrap();
+        assert_eq!(b.sheets[second.param_sheet].name, "FitLinear2");
+        assert_eq!(b.sheets[second.stats_sheet].name, "FitLinear2Stats");
+        let mut names: Vec<String> = b.sheets.iter().map(|s| s.name.to_ascii_lowercase()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), b.sheets.len(), "all sheet names differ");
     }
 
     #[test]
@@ -1124,6 +1170,34 @@ mod tests {
                 ParamSetting { name: "w".into(), lower: Some(2.0), upper: Some(1.0), ..Default::default() },
                 FitModel::BuiltIn("Gauss".into()),
                 "crossed bounds",
+            ),
+        ] {
+            let mut req = FitRequest::new(y, model);
+            req.params = vec![settings];
+            let err = p.fit(&req).unwrap_err();
+            assert!(matches!(err, FitRequestError::Fit(FitError::BadFunction(_))), "{why}: {err}");
+        }
+        // Values outside the bounds, and start values of a closed-form fit.
+        for (settings, model, why) in [
+            (
+                ParamSetting { name: "w".into(), initial: Some(3.0), fixed: true, lower: Some(5.0), upper: Some(6.0) },
+                FitModel::BuiltIn("Gauss".into()),
+                "fixed value below the lower bound",
+            ),
+            (
+                ParamSetting { name: "w".into(), initial: Some(9.0), upper: Some(6.0), ..Default::default() },
+                FitModel::BuiltIn("Gauss".into()),
+                "start value above the upper bound",
+            ),
+            (
+                ParamSetting { name: "w".into(), initial: Some(-1.0), ..Default::default() },
+                FitModel::BuiltIn("Gauss".into()),
+                "start value below the function's own lower bound of 0",
+            ),
+            (
+                ParamSetting { name: "Intercept".into(), initial: Some(100.0), ..Default::default() },
+                FitModel::Linear,
+                "a start value for a closed-form fit",
             ),
         ] {
             let mut req = FitRequest::new(y, model);

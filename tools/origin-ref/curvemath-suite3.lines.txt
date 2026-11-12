@@ -1,0 +1,13 @@
+newbook;
+col(A) = {0, 1, 9, 10, 5, 4};
+col(B) = col(A)*0 + 100;
+col(C) = {8.5, 1.5, 5.5, 3.5};
+col(D) = col(C)^2;
+subtract_ref iy1:=(col(A),col(B)) iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(E),col(F));
+col(G) = {1.5, 3.5, 5.5, 8.5};
+col(H) = col(G)^2;
+subtract_ref iy1:=(col(A),col(B)) iy2:=(col(G),col(H)) common:=0 rescale:=0 oy:=(col(I),col(J));
+col(K) = {1.5, 3.5, 5.5, 5.5, 8.5};
+col(L) = {2.25, 12.25, 30.25, 99, 72.25};
+subtract_ref iy1:=(col(A),col(B)) iy2:=(col(K),col(L)) common:=0 rescale:=0 oy:=(col(M),col(N));
+#[Book1]Sheet1

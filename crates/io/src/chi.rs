@@ -11,7 +11,9 @@ use sheaf_core::{Column, ColumnData, ColumnId, Designation, WindowId, Workbook, 
 use std::ops::Range;
 
 /// Number of leading lines searched for the column header line.
-const HEADER_SEARCH_LINES: usize = 200;
+/// A CV with many segments lists its peaks segment by segment before the column header (a real
+/// export has the header at line 6906), so the window is large.
+const HEADER_SEARCH_LINES: usize = 100_000;
 /// A current that stays at one value for this many rows is reported as clipped.
 const CLIP_MIN_ROWS: usize = 20;
 /// Relative tolerance for "the same value" when looking for clipping.
@@ -55,16 +57,22 @@ pub struct ChiImport {
 
 /// One column of a column-header line: `Potential/V` is ("Potential", "V").
 #[derive(Clone, Debug, PartialEq)]
-struct HeaderCol {
-    long: String,
-    unit: String,
+pub(crate) struct HeaderCol {
+    pub(crate) long: String,
+    pub(crate) unit: String,
+}
+
+impl HeaderCol {
+    pub(crate) fn new(long: &str, unit: &str) -> Self {
+        HeaderCol { long: long.to_string(), unit: unit.to_string() }
+    }
 }
 
 #[derive(Debug)]
-struct Block {
-    header: Vec<HeaderCol>,
+pub(crate) struct Block {
+    pub(crate) header: Vec<HeaderCol>,
     /// One vector of values per header column.
-    data: Vec<Vec<f64>>,
+    pub(crate) data: Vec<Vec<f64>>,
 }
 
 impl Block {
@@ -106,7 +114,7 @@ fn find_header(lines: &[&str]) -> Option<usize> {
     lines.iter().take(HEADER_SEARCH_LINES).position(|l| parse_header_line(l).is_some())
 }
 
-/// True when the text has a CHI column-header line within its first 200 lines.
+/// True when the text has a CHI column-header line within its first 100000 lines.
 pub fn looks_like_chi(text: &str) -> bool {
     let lines: Vec<&str> = text.lines().collect();
     find_header(&lines).is_some()
@@ -174,7 +182,24 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
             detail: "the column header is followed by no numeric rows".to_string(),
         });
     }
+    Ok(assemble(blocks, technique, meta, file_stem, opts, None))
+}
 
+/// Turns data blocks into a workbook: scan splitting, mA and charge columns,
+/// clipping warnings. Shared by the text and the binary importer, so that a
+/// file gives the same workbook whichever way it was saved.
+///
+/// `clip_digits` is `Some(4)` for binary files: the text export keeps 4 significant digits of a
+/// current, so two stored values that agree to 4 digits count as the same value when looking for a
+/// pinned current. `None` compares exactly (text files already are rounded).
+pub(crate) fn assemble(
+    blocks: Vec<Block>,
+    technique: String,
+    meta: Vec<(String, String)>,
+    file_stem: &str,
+    opts: &ChiOptions,
+    clip_digits: Option<usize>,
+) -> ChiImport {
     let mut warnings = Vec::new();
     let mut scans = 0;
     let mut sheets: Vec<Worksheet> = Vec::new();
@@ -187,7 +212,7 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
                 }
             }
         }
-        let (mut sheet, n_scans) = build_sheet(&block, &technique, opts, &mut warnings);
+        let (mut sheet, n_scans) = build_sheet(&block, &technique, opts, clip_digits, &mut warnings);
         scans += n_scans;
         let base = sheet.name.clone();
         let mut k = 2;
@@ -205,7 +230,7 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
     let mut workbook = Workbook::new(WindowId(0), "Book1");
     workbook.long_name = file_stem.to_string();
     workbook.sheets = sheets;
-    Ok(ChiImport { workbook, technique, scans, meta, warnings })
+    ChiImport { workbook, technique, scans, meta, warnings }
 }
 
 /// Reads date, technique, instrument model and `name = value` lines from the
@@ -289,8 +314,13 @@ fn read_blocks(lines: &[&str]) -> Vec<Block> {
     blocks
 }
 
+/// A current column in A: `Current/A`, or `i1/A`, `i2/A`, ... in files with several channels.
 fn is_current_a(h: &HeaderCol) -> bool {
-    h.long.eq_ignore_ascii_case("current") && h.unit == "A"
+    if h.unit != "A" {
+        return false;
+    }
+    let long = h.long.to_ascii_lowercase();
+    long == "current" || long.strip_prefix('i').is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// A column that is being assembled; `milliamp` marks a column whose formula
@@ -326,7 +356,13 @@ fn finish_sheet(name: &str, drafts: Vec<Draft>) -> Worksheet {
     sheet
 }
 
-fn build_sheet(block: &Block, technique: &str, opts: &ChiOptions, warnings: &mut Vec<String>) -> (Worksheet, usize) {
+fn build_sheet(
+    block: &Block,
+    technique: &str,
+    opts: &ChiOptions,
+    clip_digits: Option<usize>,
+    warnings: &mut Vec<String>,
+) -> (Worksheet, usize) {
     let first = &block.header[0];
     let is_potential = first.long.eq_ignore_ascii_case("potential");
     let is_time = first.long.eq_ignore_ascii_case("time");
@@ -346,25 +382,30 @@ fn build_sheet(block: &Block, technique: &str, opts: &ChiOptions, warnings: &mut
                         .to_string(),
                 );
             }
-            return (scan_sheet(block, ci, &ranges, opts, warnings), ranges.len());
+            return (scan_sheet(block, ci, &ranges, opts, clip_digits, warnings), ranges.len());
         }
         warnings.push("the potential does not sweep back and forth, so the file was not split into scans".to_string());
     }
 
     let mut drafts = Vec::new();
+    let several = block.header.iter().filter(|h| is_current_a(h)).count() > 1;
     for (j, (h, values)) in block.header.iter().zip(&block.data).enumerate() {
         let designation = if j == 0 { Designation::X } else { Designation::Y };
         drafts.push(draft(designation, &h.long, &h.unit, "", values.clone()));
         if is_current_a(h) && opts.add_milliamp {
-            drafts.push(milliamp_draft(values, ""));
+            drafts.push(milliamp_draft(values, if several { &h.long } else { "" }));
         }
     }
-    if let Some(ci) = current_idx {
+    // With several current channels the charge columns and the warnings name the channel.
+    let currents: Vec<usize> = (0..block.header.len()).filter(|&j| is_current_a(&block.header[j])).collect();
+    for &ci in &currents {
+        let channel = if currents.len() > 1 { block.header[ci].long.as_str() } else { "" };
         if is_time && opts.add_charge {
             let charge = running_charge(&block.data[0], &block.data[ci]);
-            drafts.push(draft(Designation::Y, "Charge", "C", "", charge));
+            drafts.push(draft(Designation::Y, "Charge", "C", channel, charge));
         }
-        warnings.extend(clipping_warnings(None, first, &block.data[0], &block.data[ci]));
+        let who = (!channel.is_empty()).then_some(channel);
+        warnings.extend(clipping_warnings(who, first, &block.data[0], &block.data[ci], clip_digits));
     }
     (finish_sheet("Data", drafts), 0)
 }
@@ -374,6 +415,7 @@ fn scan_sheet(
     ci: usize,
     ranges: &[Range<usize>],
     opts: &ChiOptions,
+    clip_digits: Option<usize>,
     warnings: &mut Vec<String>,
 ) -> Worksheet {
     let mut drafts = Vec::new();
@@ -386,7 +428,7 @@ fn scan_sheet(
         if opts.add_milliamp {
             drafts.push(milliamp_draft(current, &comment));
         }
-        warnings.extend(clipping_warnings(Some(&comment), &block.header[0], potential, current));
+        warnings.extend(clipping_warnings(Some(&comment), &block.header[0], potential, current, clip_digits));
     }
     finish_sheet("Scans", drafts)
 }
@@ -404,9 +446,31 @@ fn running_charge(time: &[f64], current: &[f64]) -> Vec<f64> {
     q
 }
 
+/// `v` rounded to `digits` significant digits (what a text export would show).
+fn round_significant(v: f64, digits: usize) -> f64 {
+    if v == 0.0 || !v.is_finite() {
+        return v;
+    }
+    format!("{:.*e}", digits.saturating_sub(1), v).parse().unwrap_or(v)
+}
+
 /// Looks for a current that is stuck at its largest positive or negative
 /// value for [`CLIP_MIN_ROWS`] or more consecutive rows.
-fn clipping_warnings(scan: Option<&str>, x: &HeaderCol, xs: &[f64], current: &[f64]) -> Vec<String> {
+fn clipping_warnings(
+    scan: Option<&str>,
+    x: &HeaderCol,
+    xs: &[f64],
+    current: &[f64],
+    clip_digits: Option<usize>,
+) -> Vec<String> {
+    let rounded: Vec<f64>;
+    let current = match clip_digits {
+        Some(d) => {
+            rounded = current.iter().map(|&v| round_significant(v, d)).collect();
+            &rounded[..]
+        }
+        None => current,
+    };
     let mut out = Vec::new();
     for positive in [true, false] {
         let extreme = current

@@ -8,33 +8,49 @@
 
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AreaType, BaselineSpec, Boundary, DiffOptions, IntegrateSpec, InterpMethod, InterpSpec, NormalizeMethod,
-    PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary,
-    Tool,
+    AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
+    IntegrateSpec, InterpMethod, InterpSpec, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions, Report, Request,
+    RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
+use sheaf_core::analysis::{
+    ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec, PeakFitSpec, PeakShape,
+};
+use sheaf_core::column::Designation;
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnalysisKind {
     Integrate,
+    /// Integrate several X ranges into one table.
+    IntegrateRanges,
     Differentiate,
     Smooth,
     Normalize,
     Baseline,
+    /// Subtract a reference curve.
+    SubtractRef,
+    /// Simple Math: add, subtract, multiply, divide or power with a constant or a reference.
+    CurveMath,
     Interpolate,
     Peaks,
+    /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
+    PeakChain,
     Statistics,
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 8] = [
+    pub const ALL: [AnalysisKind; 12] = [
         AnalysisKind::Integrate,
+        AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
         AnalysisKind::Smooth,
         AnalysisKind::Normalize,
         AnalysisKind::Baseline,
+        AnalysisKind::SubtractRef,
+        AnalysisKind::CurveMath,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
+        AnalysisKind::PeakChain,
         AnalysisKind::Statistics,
     ];
 
@@ -42,12 +58,16 @@ impl AnalysisKind {
     pub fn menu_label(self) -> &'static str {
         match self {
             AnalysisKind::Integrate => "Integrate...",
+            AnalysisKind::IntegrateRanges => "Integrate Ranges...",
             AnalysisKind::Differentiate => "Differentiate...",
             AnalysisKind::Smooth => "Smooth...",
             AnalysisKind::Normalize => "Normalize...",
             AnalysisKind::Baseline => "Subtract Baseline...",
+            AnalysisKind::SubtractRef => "Subtract Reference Data...",
+            AnalysisKind::CurveMath => "Simple Math...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
+            AnalysisKind::PeakChain => "Peak Analyzer...",
             AnalysisKind::Statistics => "Statistics on Columns...",
         }
     }
@@ -60,12 +80,16 @@ impl AnalysisKind {
     pub fn from_name(name: &str) -> Option<Self> {
         Some(match name {
             "integrate" => AnalysisKind::Integrate,
+            "integrate-ranges" => AnalysisKind::IntegrateRanges,
             "differentiate" => AnalysisKind::Differentiate,
             "smooth" => AnalysisKind::Smooth,
             "normalize" => AnalysisKind::Normalize,
             "baseline" => AnalysisKind::Baseline,
+            "subtract-ref" => AnalysisKind::SubtractRef,
+            "math" => AnalysisKind::CurveMath,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
+            "peak-chain" => AnalysisKind::PeakChain,
             "statistics" => AnalysisKind::Statistics,
             _ => return None,
         })
@@ -95,6 +119,20 @@ enum BaselineKind {
     EndPoints,
     Line,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChainBaselineKind {
+    None,
+    EndPoints,
+    Minima,
+}
+
+const FIND_METHODS: [(&str, FindMethod); 4] = [
+    ("Local maximum", FindMethod::LocalMax),
+    ("Window search", FindMethod::Window),
+    ("First derivative", FindMethod::FirstDerivative),
+    ("Second derivative", FindMethod::SecondDerivative),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PeakKeep {
@@ -156,7 +194,49 @@ pub struct AnalysisDialog {
     peak_keep: PeakKeep,
     peak_height: f64,
     peak_count: usize,
+    chain_baseline: ChainBaselineKind,
+    chain_minima: usize,
+    find_method: usize,
+    chain_half_height: bool,
+    chain_integrate: bool,
+    chain_fit: Option<PeakShape>,
+    chain_fit_linear: bool,
+    /// X intervals of "Integrate Ranges".
+    ranges: Vec<(f64, f64)>,
+    curve_op: CurveOp,
+    /// Simple Math: use a reference curve (otherwise the constant).
+    use_reference: bool,
+    constant: f64,
+    /// Columns that can serve as reference: every other numeric Y column of the project, with a
+    /// description ("Book2 / Sheet1: B  up").
+    reference_choices: Vec<(ColumnId, String)>,
+    reference: usize,
+    common_only: bool,
     problem: Option<String>,
+}
+
+const CURVE_OPS: [(&str, CurveOp); 5] = [
+    ("Add", CurveOp::Add),
+    ("Subtract", CurveOp::Subtract),
+    ("Multiply", CurveOp::Multiply),
+    ("Divide", CurveOp::Divide),
+    ("Power", CurveOp::Power),
+];
+
+/// Every numeric Y column outside `exclude`, for the reference list.
+fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, String)> {
+    let mut out = Vec::new();
+    for book in project.workbooks() {
+        for sheet in &book.sheets {
+            for c in &sheet.columns {
+                if c.designation == Designation::Y && c.data.is_numeric() && !exclude.contains(&c.id) {
+                    let detail = if c.long_name.is_empty() { String::new() } else { format!("  {}", c.long_name) };
+                    out.push((c.id, format!("{} / {}: {}{detail}", book.name, sheet.name, c.short_name)));
+                }
+            }
+        }
+    }
+    out
 }
 
 impl AnalysisDialog {
@@ -179,9 +259,17 @@ impl AnalysisDialog {
             None => (1.0, rows_in_sheet as f64),
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
+        let reference_choices = reference_choices(project, &columns);
         Some(AnalysisDialog {
             kind,
             column_names: names.join(", "),
+            ranges: vec![(x_lo, x_hi)],
+            curve_op: CurveOp::Add,
+            use_reference: kind == AnalysisKind::SubtractRef || !reference_choices.is_empty(),
+            constant: 1.0,
+            reference_choices,
+            reference: 0,
+            common_only: false,
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -207,13 +295,40 @@ impl AnalysisDialog {
             peak_keep: PeakKeep::Default,
             peak_height: 0.0,
             peak_count: 1,
+            chain_baseline: ChainBaselineKind::Minima,
+            chain_minima: 5,
+            find_method: 0,
+            chain_half_height: false,
+            chain_integrate: true,
+            chain_fit: None,
+            chain_fit_linear: true,
             problem: None,
         })
     }
 
-    fn tool(&self) -> Tool {
-        match self.kind {
+    fn tool(&self) -> Result<Tool, String> {
+        Ok(match self.kind {
             AnalysisKind::Integrate => Tool::Integrate(self.integrate),
+            AnalysisKind::IntegrateRanges => Tool::IntegrateRanges(IntegrateRangesSpec {
+                ranges: self.ranges.iter().map(|&(a, b)| RowRange::XBetween(a, b)).collect(),
+                end_point_baseline: self.integrate.end_point_baseline,
+            }),
+            AnalysisKind::SubtractRef | AnalysisKind::CurveMath => {
+                let reference = || {
+                    self.reference_choices.get(self.reference).map(|(id, _)| CurveOperand::Reference(*id)).ok_or_else(
+                        || "there is no other column with numbers to use as the reference curve".to_string(),
+                    )
+                };
+                let (op, operand) = if self.kind == AnalysisKind::SubtractRef {
+                    (CurveOp::Subtract, reference()?)
+                } else if self.use_reference {
+                    (self.curve_op, reference()?)
+                } else {
+                    (self.curve_op, CurveOperand::Constant(self.constant))
+                };
+                let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
+                Tool::CurveMath(CurveMathSpec { op, operand, common_only })
+            }
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
                 method: match self.smooth_kind {
@@ -249,21 +364,119 @@ impl AnalysisDialog {
                 },
                 ..self.peaks
             }),
+            AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
+                chain: ChainOptions {
+                    baseline: match self.chain_baseline {
+                        ChainBaselineKind::None => ChainBaseline::None,
+                        ChainBaselineKind::EndPoints => ChainBaseline::EndPoints,
+                        ChainBaselineKind::Minima => ChainBaseline::AutoMinima(self.chain_minima),
+                    },
+                    find: FindOptions {
+                        method: FIND_METHODS[self.find_method].1,
+                        npts: self.peaks.npts,
+                        direction: self.peaks.direction,
+                        filter: match self.peak_keep {
+                            PeakKeep::Default => PeakFilter::Height(0.0),
+                            PeakKeep::Height => PeakFilter::Height(self.peak_height),
+                            PeakKeep::Count => PeakFilter::Number(self.peak_count),
+                            PeakKeep::All => PeakFilter::None,
+                        },
+                        ..FindOptions::default()
+                    },
+                    limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
+                },
+                integrate: self.chain_integrate,
+                fit: self.chain_fit.map(|shape| PeakFitSpec {
+                    shape,
+                    baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
+                }),
+            }),
             AnalysisKind::Statistics => Tool::Statistics,
-        }
+        })
     }
 
-    fn request(&self) -> Request {
+    fn request(&self) -> Result<Request, String> {
         let rows = match self.row_mode {
             RowMode::All => RowRange::All,
             RowMode::Rows => RowRange::Rows(self.from, self.to),
             RowMode::XRange => RowRange::XBetween(self.x_from, self.x_to),
         };
-        Request { columns: self.columns.clone(), rows, tool: self.tool() }
+        Ok(Request { columns: self.columns.clone(), rows, tool: self.tool()? })
+    }
+
+    /// The reference list and the options that belong to it.
+    fn reference_options(&mut self, ui: &mut egui::Ui) {
+        let text = match self.reference_choices.get(self.reference) {
+            Some((_, label)) => label.as_str(),
+            None => "(no other column with numbers)",
+        };
+        ui.horizontal(|ui| {
+            ui.label("Reference");
+            let mut chosen = self.reference;
+            egui::ComboBox::from_id_salt("reference_column").selected_text(text).width(300.0).show_ui(ui, |ui| {
+                for (i, (_, label)) in self.reference_choices.iter().enumerate() {
+                    ui.selectable_value(&mut chosen, i, label);
+                }
+            });
+            self.reference = chosen;
+        });
+        ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
+            "Only where data and reference both have X values; the result goes to a new sheet. Otherwise the \
+             reference is continued as a straight line outside its range.",
+        );
     }
 
     fn options(&mut self, ui: &mut egui::Ui) {
         match self.kind {
+            AnalysisKind::IntegrateRanges => {
+                let mut remove = None;
+                for (i, (from, to)) in self.ranges.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Range {}: X from", i + 1));
+                        ui.add(DragValue::new(from).speed(0.01));
+                        ui.label("to");
+                        ui.add(DragValue::new(to).speed(0.01));
+                        if ui.small_button("Remove").clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = remove.filter(|_| self.ranges.len() > 1) {
+                    self.ranges.remove(i);
+                }
+                if ui.button("Add range").clicked() {
+                    let last = self.ranges.last().copied().unwrap_or((0.0, 1.0));
+                    self.ranges.push(last);
+                }
+                ui.checkbox(
+                    &mut self.integrate.end_point_baseline,
+                    "Subtract the line through the first and last point of each range",
+                );
+                ui.weak("One row per range and column (area, absolute area, peak, width) goes to a new sheet.");
+            }
+            AnalysisKind::SubtractRef => {
+                self.reference_options(ui);
+                ui.weak("The reference is interpolated onto the X values of the data.");
+            }
+            AnalysisKind::CurveMath => {
+                ui.horizontal(|ui| {
+                    ui.label("Operator");
+                    egui::ComboBox::from_id_salt("curve_op")
+                        .selected_text(CURVE_OPS.iter().find(|o| o.1 == self.curve_op).map_or("", |o| o.0))
+                        .show_ui(ui, |ui| {
+                            for (label, op) in CURVE_OPS {
+                                ui.selectable_value(&mut self.curve_op, op, label);
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Operand");
+                    ui.radio_value(&mut self.use_reference, false, "Constant");
+                    ui.add_enabled(!self.use_reference, DragValue::new(&mut self.constant).speed(0.1));
+                });
+                ui.radio_value(&mut self.use_reference, true, "Reference data");
+                ui.add_enabled_ui(self.use_reference, |ui| self.reference_options(ui));
+            }
             AnalysisKind::Integrate => {
                 ui.horizontal(|ui| {
                     ui.label("Area");
@@ -442,7 +655,31 @@ impl AnalysisDialog {
                 });
                 ui.weak("The interpolated curves go to a new sheet.");
             }
-            AnalysisKind::Peaks => {
+            AnalysisKind::Peaks | AnalysisKind::PeakChain => {
+                let chain = self.kind == AnalysisKind::PeakChain;
+                if chain {
+                    ui.horizontal(|ui| {
+                        ui.label("Baseline");
+                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::None, "None");
+                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::EndPoints, "End points");
+                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::Minima, "Lowest points of");
+                        ui.add_enabled(
+                            self.chain_baseline == ChainBaselineKind::Minima,
+                            DragValue::new(&mut self.chain_minima).range(2..=1000),
+                        );
+                        ui.label("stretches");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Search method");
+                        egui::ComboBox::from_id_salt("peak_find_method")
+                            .selected_text(FIND_METHODS[self.find_method].0)
+                            .show_ui(ui, |ui| {
+                                for (i, (name, _)) in FIND_METHODS.iter().enumerate() {
+                                    ui.selectable_value(&mut self.find_method, i, *name);
+                                }
+                            });
+                    });
+                }
                 ui.horizontal(|ui| {
                     ui.label("Direction");
                     ui.radio_value(&mut self.peaks.direction, PeakDirection::Both, "Both");
@@ -469,7 +706,23 @@ impl AnalysisDialog {
                     );
                 });
                 ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
-                ui.weak("Peak positions and heights go to a new sheet.");
+                if chain {
+                    ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak");
+                    ui.checkbox(&mut self.chain_integrate, "Integrate every peak (area, area %, FWHM, limits)");
+                    ui.horizontal(|ui| {
+                        ui.label("Fit all peaks together");
+                        ui.radio_value(&mut self.chain_fit, None, "No fit");
+                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Gauss), "Gauss");
+                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Lorentz), "Lorentz");
+                    });
+                    ui.add_enabled(
+                        self.chain_fit.is_some(),
+                        egui::Checkbox::new(&mut self.chain_fit_linear, "Sloped baseline in the fit"),
+                    );
+                    ui.weak("Peaks, areas and fit results go to a new sheet; the baseline goes beside the data.");
+                } else {
+                    ui.weak("Peak positions and heights go to a new sheet.");
+                }
             }
             AnalysisKind::Statistics => {
                 ui.weak("Count, mean, standard deviation, sum, minimum, quartiles and maximum go to a new sheet.");
@@ -528,10 +781,12 @@ impl AnalysisDialog {
             });
 
         if run {
-            let request = self.request();
-            match doc.edit(request.tool.name(), |p| p.analyze(&request)) {
-                Ok(report) => return AnalysisOutcome::Done(report),
-                Err(e) => self.problem = Some(e.to_string()),
+            match self.request() {
+                Ok(request) => match doc.edit(request.tool.name(), |p| p.analyze(&request)) {
+                    Ok(report) => return AnalysisOutcome::Done(report),
+                    Err(e) => self.problem = Some(e.to_string()),
+                },
+                Err(e) => self.problem = Some(e),
             }
         }
         if open && !cancel { AnalysisOutcome::Open } else { AnalysisOutcome::Closed }

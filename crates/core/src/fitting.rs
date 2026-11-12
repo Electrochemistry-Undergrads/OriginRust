@@ -23,11 +23,11 @@
 use crate::analysis::{AnalysisError, RowRange, column_label, free_sheet_name, resolve_rows};
 use crate::color::Color;
 use crate::column::{Column, ColumnData, Designation};
-use crate::graph::{LineStyle, Plot, PlotKind};
+use crate::graph::{Dash, LineStyle, Plot, PlotKind};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
-use sheaf_fit::{FitError, FitReport, FitStatus};
+use sheaf_fit::{Bands, FitError, FitReport, FitStatus};
 
 /// Which kind of model is fitted. It decides the name of the report sheet
 /// and which engine of `sheaf-fit` runs.
@@ -81,6 +81,28 @@ pub enum FitWeighting {
     Statistical,
 }
 
+/// Which bands around the fitted curve are computed (Origin's "Confidence Bands" and
+/// "Prediction Bands" check boxes of the fit output).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BandChoice {
+    #[default]
+    None,
+    /// The band that holds the true curve with the chosen probability.
+    Confidence,
+    /// The wider band that holds a new observation with the chosen probability.
+    Prediction,
+    Both,
+}
+
+impl BandChoice {
+    pub fn confidence(self) -> bool {
+        matches!(self, BandChoice::Confidence | BandChoice::Both)
+    }
+    pub fn prediction(self) -> bool {
+        matches!(self, BandChoice::Prediction | BandChoice::Both)
+    }
+}
+
 /// One fit: a Y column, its rows and the model.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FitRequest {
@@ -99,6 +121,18 @@ pub struct FitRequest {
     pub curve_points: usize,
     /// Add the fitted curve to the graphs that show the source column.
     pub add_to_graphs: bool,
+    /// Bands around the fitted curve, written as extra columns of the curve sheet.
+    pub bands: BandChoice,
+    /// Confidence level of the bands (Origin's "Confidence Level for Curves", 0.95), kept apart
+    /// from `confidence_level`, the level of the parameter limits.
+    pub band_level: f64,
+    /// Also draw the bands as dashed lines in the graphs that receive the fitted curve.
+    pub plot_bands: bool,
+    /// Most iterations of a nonlinear fit (Origin's default 400). Ignored by linear and
+    /// polynomial fits, which are solved in closed form.
+    pub max_iterations: usize,
+    /// Convergence tolerance of a nonlinear fit (Origin's default 1e-9).
+    pub tolerance: f64,
 }
 
 impl FitRequest {
@@ -115,6 +149,11 @@ impl FitRequest {
             confidence_level: 0.95,
             curve_points: 1000,
             add_to_graphs: true,
+            bands: BandChoice::None,
+            band_level: 0.95,
+            plot_bands: true,
+            max_iterations: 400,
+            tolerance: 1e-9,
         }
     }
 }
@@ -130,15 +169,34 @@ pub struct FitData {
     pub y_error: Option<Vec<f64>>,
     pub weighting: FitWeighting,
     pub confidence_level: f64,
+    /// Iteration limit and tolerance of a nonlinear fit (see [`FitRequest`]).
+    pub max_iterations: usize,
+    pub tolerance: f64,
 }
+
+/// Computes the bands of a fitted model at the given x values and confidence level.
+pub type BandFn = Box<dyn Fn(&[f64], f64) -> Result<Bands, FitError>>;
 
 /// What a fit engine returns: the report and the fitted model as a function of x, for the curve.
 pub struct FittedModel {
     pub report: FitReport,
     pub curve: Box<dyn Fn(f64) -> f64>,
+    /// Bands of the fitted model; `None` for an engine that cannot compute them (a request for
+    /// bands is then an error).
+    pub bands: Option<BandFn>,
     /// Quantities computed from the fitted parameters, such as `FWHM` of a peak or the
     /// half-life of a decay, as (name, value).
     pub derived: Vec<(String, f64)>,
+}
+
+/// One band column of the curve sheet.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BandColumn {
+    pub id: ColumnId,
+    /// Plain words for legends, for example "lower confidence limit".
+    pub what: &'static str,
+    /// Prediction limits are drawn dotted, confidence limits dashed.
+    pub prediction: bool,
 }
 
 /// What [`Project::fit_with`] did.
@@ -156,6 +214,12 @@ pub struct FitOutcome {
     pub residual_column: ColumnId,
     pub curve_x: ColumnId,
     pub curve_y: ColumnId,
+    /// Bands written to the curve sheet, in the order lower and upper confidence limit, lower and
+    /// upper prediction limit (only the requested pairs), with the level they belong to.
+    pub band_columns: Vec<BandColumn>,
+    pub bands: Option<Bands>,
+    /// Whether the band columns are drawn when the graph is made by [`Project::plot_fit`].
+    pub plot_bands: bool,
     /// Graphs to which the fitted curve was added.
     pub graphs: Vec<WindowId>,
     /// Derived quantities (see [`FittedModel::derived`]); also on the statistics sheet.
@@ -193,6 +257,24 @@ const CURVE_COLORS: [Color; 5] = [
 fn color_distance(a: Color, b: Color) -> i32 {
     let d = |p: u8, q: u8| (i32::from(p) - i32::from(q)).abs();
     d(a.r, b.r) + d(a.g, b.g) + d(a.b, b.b)
+}
+
+/// A band limit as a thin dashed (confidence) or dotted (prediction) line in the curve's colour.
+fn band_plot(layer: &crate::graph::Layer, x: ColumnId, band: &BandColumn, color: Color, model: &str) -> Plot {
+    let mut line = LineStyle::solid(color, (layer.default_line.width_pt * 0.75).max(1.0));
+    line.dash = if band.prediction { Dash::Dot } else { Dash::Dash };
+    Plot {
+        x: Some(x),
+        y: band.id,
+        y_error: None,
+        rows: None,
+        kind: PlotKind::Line,
+        line,
+        symbol: crate::graph::SymbolStyle { color, ..layer.default_symbol.clone() },
+        label: Some(format!("{model} {}", band.what)),
+        visible: true,
+        auto_color: false,
+    }
 }
 
 /// Equally spaced values from `lo` to `hi`, both included.
@@ -292,6 +374,18 @@ impl Project {
         if !(request.confidence_level > 0.0 && request.confidence_level < 1.0) {
             return Err(FitRequestError::BadConfidence(request.confidence_level));
         }
+        if !(request.band_level > 0.0 && request.band_level < 1.0) {
+            return Err(FitRequestError::BadConfidence(request.band_level));
+        }
+        if request.max_iterations == 0 {
+            return Err(FitRequestError::BadOption("the maximum number of iterations must be at least 1".into()));
+        }
+        if !(request.tolerance > 0.0 && request.tolerance.is_finite()) {
+            return Err(FitRequestError::BadOption(format!(
+                "the tolerance must be a positive number, not {}",
+                request.tolerance
+            )));
+        }
         if request.curve_points < 2 || request.curve_points > 1_000_000 {
             return Err(FitRequestError::BadOption(format!(
                 "the fitted curve needs between 2 and 1000000 points, not {}",
@@ -335,6 +429,8 @@ impl Project {
             y_error,
             weighting: request.weighting,
             confidence_level: request.confidence_level,
+            max_iterations: request.max_iterations,
+            tolerance: request.tolerance,
         };
         let source_label = column_label(column);
         let source_name = column.display_name().to_string();
@@ -350,7 +446,7 @@ impl Project {
 
         // ----- fit (still no changes) ----------------------------------------------------
         let fitted = engine(&data)?;
-        let report = fitted.report;
+        let mut report = fitted.report;
         if report.fitted.len() != data.y.len() || report.residuals.len() != data.y.len() {
             return Err(FitRequestError::BadOption(format!(
                 "the fit engine returned {} fitted values for {} points",
@@ -372,6 +468,28 @@ impl Project {
         }
         let curve_x = linspace(lo, hi, request.curve_points);
         let curve_y: Vec<f64> = curve_x.iter().map(|x| (fitted.curve)(*x)).collect();
+        let bands = if request.bands == BandChoice::None {
+            None
+        } else {
+            let band_fn = fitted.bands.as_ref().ok_or_else(|| {
+                FitRequestError::BadOption("this fit engine cannot compute confidence or prediction bands".into())
+            })?;
+            let computed = band_fn(&curve_x, request.band_level)?;
+            // With no degrees of freedom (or a singular covariance) every limit is undefined:
+            // write and draw nothing, and say so, instead of adding empty columns and plots.
+            let any_finite = [&computed.conf_lower, &computed.conf_upper, &computed.pred_lower, &computed.pred_upper]
+                .iter()
+                .any(|v| v.iter().any(|x| x.is_finite()));
+            if any_finite {
+                Some(computed)
+            } else {
+                report.warnings.push(
+                    "confidence and prediction bands are undefined (no degrees of freedom or a singular covariance), so none were written"
+                        .into(),
+                );
+                None
+            }
+        };
 
         // ----- change the project ----------------------------------------------------------
         let align = |values: &[f64]| {
@@ -480,6 +598,34 @@ impl Project {
         if let Some(c) = curve_ws.column_mut(curve_y_id) {
             c.comments = report.model.clone();
         }
+        // Bands: lower and upper confidence limit, then lower and upper prediction limit, as
+        // Origin orders them. The level is part of the comment so that it survives renaming.
+        let mut band_columns: Vec<BandColumn> = Vec::new();
+        if let Some(b) = &bands {
+            let level = format!("{}%", (b.level * 100.0 * 1e6).round() / 1e6);
+            let mut add = |ws: &mut Worksheet, prefix: &str, what: &'static str, prediction: bool, values: &[f64]| {
+                let id = sheet_column(
+                    self,
+                    ws,
+                    Designation::Y,
+                    &format!("{prefix} of {source_name} ({level})"),
+                    &y_units,
+                    ColumnData::numeric(values.to_vec()),
+                );
+                if let Some(c) = ws.column_mut(id) {
+                    c.comments = format!("{what}, {level} confidence level");
+                }
+                band_columns.push(BandColumn { id, what, prediction });
+            };
+            if request.bands.confidence() {
+                add(&mut curve_ws, "LCL", "lower confidence limit", false, &b.conf_lower);
+                add(&mut curve_ws, "UCL", "upper confidence limit", false, &b.conf_upper);
+            }
+            if request.bands.prediction() {
+                add(&mut curve_ws, "LPL", "lower prediction limit", true, &b.pred_lower);
+                add(&mut curve_ws, "UPL", "upper prediction limit", true, &b.pred_upper);
+            }
+        }
 
         let param_name = param_ws.name.clone();
         let b = self.workbook_mut(book_id).expect("workbook exists");
@@ -519,6 +665,16 @@ impl Project {
                     });
                     // In a stacked layer the fitted curve moves with its data.
                     layer.plot_offset_mut(curve_y_id).follows = Some(id);
+                    if request.plot_bands {
+                        let line_color = layer.plots.last().map_or(CURVE_COLORS[0], |pl| pl.line.color);
+                        for band in &band_columns {
+                            let plot = band_plot(layer, curve_x_id, band, line_color, &report.model);
+                            let band_y = plot.y;
+                            layer.plots.push(plot);
+                            // The confidence bands move with the data too.
+                            layer.plot_offset_mut(band_y).follows = Some(id);
+                        }
+                    }
                     touched = true;
                 }
                 if touched {
@@ -550,6 +706,9 @@ impl Project {
             residual_column: residual_id,
             curve_x: curve_x_id,
             curve_y: curve_y_id,
+            band_columns,
+            bands,
+            plot_bands: request.plot_bands,
             graphs,
             derived: fitted.derived,
             message,
@@ -590,6 +749,14 @@ impl Project {
             auto_color: false,
         });
         layer.plot_offset_mut(outcome.curve_y).follows = Some(source);
+        if outcome.plot_bands {
+            for band in &outcome.band_columns {
+                let plot = band_plot(layer, outcome.curve_x, band, color, &outcome.report.model);
+                let band_y = plot.y;
+                layer.plots.push(plot);
+                layer.plot_offset_mut(band_y).follows = Some(source);
+            }
+        }
         Ok(graph)
     }
 }
@@ -699,7 +866,14 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 ..Default::default()
             };
             let (report, curve) = linear::fit_linear_with_curve(&d.x, &d.y, &opts)?;
-            Ok(FittedModel { report, curve: Box::new(move |x| curve.eval(x)), derived: Vec::new() })
+            let curve = std::rc::Rc::new(curve);
+            let for_bands = curve.clone();
+            Ok(FittedModel {
+                report,
+                curve: Box::new(move |x| curve.eval(x)),
+                bands: Some(Box::new(move |xs, level| for_bands.bands(xs, level))),
+                derived: Vec::new(),
+            })
         }
         FitModel::Polynomial { order } => {
             let fixed = closed_form_fixed(settings, &["Intercept"])?;
@@ -710,7 +884,14 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 ..Default::default()
             };
             let (report, curve) = linear::fit_polynomial_with_curve(&d.x, &d.y, *order, &opts)?;
-            Ok(FittedModel { report, curve: Box::new(move |x| curve.eval(x)), derived: Vec::new() })
+            let curve = std::rc::Rc::new(curve);
+            let for_bands = curve.clone();
+            Ok(FittedModel {
+                report,
+                curve: Box::new(move |x| curve.eval(x)),
+                bands: Some(Box::new(move |xs, level| for_bands.bands(xs, level))),
+                derived: Vec::new(),
+            })
         }
         FitModel::BuiltIn(_) | FitModel::Formula { .. } | FitModel::Fdf(_) => {
             let (mut func, library_name) = match model {
@@ -776,12 +957,28 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                     }
                 }
             }
-            let opts = nlsf::FitOptions { weighting: w, confidence_level: d.confidence_level, ..Default::default() };
+            let opts = nlsf::FitOptions {
+                weighting: w,
+                confidence_level: d.confidence_level,
+                max_iterations: d.max_iterations,
+                tolerance: d.tolerance,
+                ..Default::default()
+            };
             let report = nlsf::fit(&func, &d.x, &d.y, &opts)?;
             let values: Vec<f64> = report.params.iter().map(|p| p.value).collect();
             let derived =
                 library_name.map(|n| sheaf_fit::library::derived_values(&n, &report.params)).unwrap_or_default();
-            Ok(FittedModel { report, curve: Box::new(move |x| func.eval(&values, x)), derived })
+            let func = std::rc::Rc::new(func);
+            let for_curve = func.clone();
+            let for_bands_report = report.clone();
+            Ok(FittedModel {
+                report,
+                curve: Box::new(move |x| for_curve.eval(&values, x)),
+                bands: Some(Box::new(move |xs, level| {
+                    sheaf_fit::bands::nl_bands(&func, &for_bands_report, xs, level, true)
+                })),
+                derived,
+            })
         }
     }
 }
@@ -858,7 +1055,12 @@ mod tests {
             status: FitStatus::Exact,
             warnings: vec!["a test warning".into()],
         };
-        Ok(FittedModel { report, curve: Box::new(f), derived: vec![("Twice the slope".into(), 2.0 * slope)] })
+        Ok(FittedModel {
+            report,
+            curve: Box::new(f),
+            bands: None,
+            derived: vec![("Twice the slope".into(), 2.0 * slope)],
+        })
     }
 
     /// Book1 with X = 0..9 (V), Y = 2 + 3x with one missing value (mA), and Y errors.
@@ -882,7 +1084,15 @@ mod tests {
     fn the_drawn_polynomial_matches_the_fitted_values_for_badly_scaled_x() {
         let x: Vec<f64> = (0..20).map(|i| 1e5 + f64::from(i)).collect();
         let y: Vec<f64> = (0..20).map(|i| 2e-3 * (1.0 + 0.3 * (0.7 * f64::from(i)).sin())).collect();
-        let d = FitData { x: x.clone(), y, y_error: None, weighting: FitWeighting::None, confidence_level: 0.95 };
+        let d = FitData {
+            x: x.clone(),
+            y,
+            y_error: None,
+            weighting: FitWeighting::None,
+            confidence_level: 0.95,
+            max_iterations: 400,
+            tolerance: 1e-9,
+        };
         let m = run_engine(&FitModel::Polynomial { order: 5 }, &[], &d).unwrap();
         let worst = x.iter().zip(&m.report.fitted).map(|(x, f)| ((m.curve)(*x) - f).abs()).fold(0.0, f64::max);
         assert!(worst < 1e-12, "the curve differs from the fitted values by {worst}");
@@ -1264,6 +1474,98 @@ mod tests {
         let names = ss.columns[0].text().unwrap();
         let at = names.iter().position(|n| n == "Twice the slope").unwrap();
         assert!((ss.columns[1].numeric().unwrap()[at] - 6.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn bands_become_curve_sheet_columns_and_dashed_plots() {
+        let (mut p, y) = sheet_with(|x| 1.5 - 0.25 * x + 0.05 * (3.0 * x).sin());
+        let g = p.plot_columns(Template::Line, &[y]).unwrap();
+        let mut req = FitRequest::new(y, FitModel::Linear);
+        req.curve_points = 50;
+        let none = p.fit(&req).unwrap();
+        assert!(none.band_columns.is_empty() && none.bands.is_none());
+        assert_eq!(p.graph(g).unwrap().layers[0].plots.len(), 2);
+
+        req.bands = BandChoice::Both;
+        req.band_level = 0.9;
+        let out = p.fit(&req).unwrap();
+        let names: Vec<&str> = out.band_columns.iter().map(|b| b.what).collect();
+        assert_eq!(
+            names,
+            ["lower confidence limit", "upper confidence limit", "lower prediction limit", "upper prediction limit"]
+        );
+        let b = out.bands.as_ref().unwrap();
+        assert_eq!(b.level, 0.9);
+        let curve = p.numeric(out.curve_y).unwrap().to_vec();
+        let lcl = p.numeric(out.band_columns[0].id).unwrap().to_vec();
+        let upl = p.numeric(out.band_columns[3].id).unwrap().to_vec();
+        assert_eq!(lcl.len(), 50);
+        for i in 0..50 {
+            assert!(lcl[i] < curve[i] && upl[i] > curve[i]);
+            assert!(b.pred_upper[i] > b.conf_upper[i]);
+        }
+        assert!(p.column(out.band_columns[0].id).unwrap().long_name.starts_with("LCL"));
+        // The curve plus four band plots were added to the graph (the first fit added one curve).
+        let plots = &p.graph(g).unwrap().layers[0].plots;
+        assert_eq!(plots.len(), 2 + 1 + 4);
+        assert_eq!(plots[3].line.dash, Dash::Dash);
+        assert_eq!(plots[5].line.dash, Dash::Dot);
+
+        // Only confidence bands, not drawn.
+        req.bands = BandChoice::Confidence;
+        req.plot_bands = false;
+        let out = p.fit(&req).unwrap();
+        assert_eq!(out.band_columns.len(), 2);
+        assert_eq!(p.graph(g).unwrap().layers[0].plots.len(), 7 + 1);
+        // A bad band level is refused and changes nothing.
+        let before = p.clone();
+        req.band_level = 1.5;
+        assert!(p.fit(&req).is_err());
+        assert_eq!(p, before);
+    }
+
+    #[test]
+    fn bands_without_degrees_of_freedom_are_skipped_with_a_warning() {
+        let mut p = Project::new();
+        let book = p.add_workbook("data");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 3.0])).unwrap();
+        let g = p.plot_columns(Template::Line, &[y]).unwrap();
+        let mut req = FitRequest::new(y, FitModel::Linear);
+        req.bands = BandChoice::Both;
+        let out = p.fit(&req).unwrap();
+        assert!(out.band_columns.is_empty() && out.bands.is_none());
+        assert!(out.report.warnings.iter().any(|w| w.contains("bands are undefined")));
+        assert_eq!(p.graph(g).unwrap().layers[0].plots.len(), 2);
+    }
+
+    #[test]
+    fn nonlinear_fits_give_bands_and_obey_the_iteration_controls() {
+        let (mut p, y) = sheet_with(|x| 2.0 + 3.0 * (-x / 6.0).exp() + 0.01 * (5.0 * x).sin());
+        let mut req = FitRequest::new(y, FitModel::BuiltIn("ExpDec1".into()));
+        req.curve_points = 20;
+        req.bands = BandChoice::Prediction;
+        let out = p.fit(&req).unwrap();
+        assert_eq!(out.band_columns.len(), 2);
+        assert!(out.band_columns.iter().all(|b| b.prediction));
+        let (lo, hi) = (out.bands.as_ref().unwrap().pred_lower.clone(), out.bands.as_ref().unwrap().pred_upper.clone());
+        assert!(lo.iter().zip(&hi).all(|(a, b)| a < b));
+        // One iteration is not enough to converge, and the limit is reported.
+        let mut one = req.clone();
+        one.max_iterations = 1;
+        one.bands = BandChoice::None;
+        let r = p.fit(&one);
+        let iterations = match &r {
+            Ok(o) => o.report.stats.iterations.unwrap_or(0),
+            Err(_) => 1,
+        };
+        assert!(iterations <= 1, "{iterations}");
+        let mut bad = req.clone();
+        bad.max_iterations = 0;
+        assert!(p.fit(&bad).is_err());
+        bad.max_iterations = 400;
+        bad.tolerance = 0.0;
+        assert!(p.fit(&bad).is_err());
     }
 
     #[test]

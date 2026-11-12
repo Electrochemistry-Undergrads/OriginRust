@@ -2,7 +2,7 @@
 //! other columns of its sheet.
 
 use eframe::egui::{self, DragValue, RichText};
-use sheaf_core::{ColumnId, Document, Project};
+use sheaf_core::{ColumnId, Document, Project, RecalcMode};
 
 pub struct SetValuesDialog {
     column: ColumnId,
@@ -11,6 +11,8 @@ pub struct SetValuesDialog {
     all_rows: bool,
     from: usize,
     to: usize,
+    /// Whether and when the formula runs again, as in Origin's Recalculate choice.
+    mode: RecalcMode,
     problem: Option<String>,
     focus: bool,
 }
@@ -21,9 +23,11 @@ impl SetValuesDialog {
         Some(SetValuesDialog {
             column,
             formula: c.formula.clone().unwrap_or_default(),
-            all_rows: true,
-            from: 1,
-            to: sheet.row_count().max(1),
+            all_rows: c.formula_rows.is_none(),
+            from: c.formula_rows.as_ref().map_or(1, |r| r.start + 1),
+            to: c.formula_rows.as_ref().map_or(sheet.row_count().max(1), |r| r.end),
+            // Origin opens the dialog on Manual for a column that has no recalculating formula.
+            mode: if c.is_locked() { c.recalc } else { RecalcMode::Manual },
             problem: None,
             focus: true,
         })
@@ -87,6 +91,17 @@ impl SetValuesDialog {
                         ui.add(DragValue::new(&mut self.to).range(1..=sheaf_core::formula::MAX_FORMULA_ROWS));
                     });
                 });
+                ui.horizontal(|ui| {
+                    ui.label("Recalculate");
+                    for m in RecalcMode::ALL {
+                        let hint = match m {
+                            RecalcMode::None => "Run the formula once; the values are plain data afterwards",
+                            RecalcMode::Auto => "Recalculate whenever a column the formula reads changes",
+                            RecalcMode::Manual => "Mark the column when an input changes; recalculate by hand",
+                        };
+                        ui.radio_value(&mut self.mode, m, m.label()).on_hover_text(hint);
+                    }
+                });
                 if let Some(p) = &self.problem {
                     ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
                 }
@@ -107,8 +122,8 @@ impl SetValuesDialog {
 
         if apply {
             let rows = (!self.all_rows).then(|| (self.from - 1)..self.to.max(self.from));
-            let (id, formula) = (self.column, self.formula.clone());
-            match doc.edit("Set column values", move |p| p.set_column_values(id, &formula, rows)) {
+            let (id, formula, mode) = (self.column, self.formula.clone(), self.mode);
+            match doc.edit("Set column values", move |p| p.set_column_values_with(id, &formula, rows, mode)) {
                 Ok(()) => self.problem = None,
                 Err(e) => {
                     self.problem = Some(e.to_string());

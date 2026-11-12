@@ -40,6 +40,18 @@ pub enum WeightKind {
     Statistical,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum BandKind {
+    /// No bands.
+    None,
+    /// The band that holds the true curve with the chosen probability.
+    Confidence,
+    /// The wider band that holds a new observation with the chosen probability.
+    Prediction,
+    /// Both bands.
+    Both,
+}
+
 #[derive(Args, Debug)]
 pub struct FitArgs {
     /// A data file, a .sheaf project or an Origin .opj project. Not needed with --list.
@@ -82,6 +94,18 @@ pub struct FitArgs {
     /// Confidence level of the parameter limits.
     #[arg(long, default_value_t = 0.95)]
     pub confidence: f64,
+    /// Bands around the fitted curve, written to the FitCurve sheet and drawn in the figure.
+    #[arg(long, value_enum, default_value_t = BandKind::None)]
+    pub bands: BandKind,
+    /// Confidence level of the bands in percent (95 means 95 %).
+    #[arg(long, default_value_t = 95.0, value_name = "PERCENT")]
+    pub level: f64,
+    /// Most iterations of a nonlinear fit.
+    #[arg(long, default_value_t = 400, value_name = "N")]
+    pub max_iterations: usize,
+    /// Convergence tolerance of a nonlinear fit.
+    #[arg(long, default_value_t = 1e-9)]
+    pub tolerance: f64,
     /// Y columns to fit, comma-separated short or long names; each is fitted on its own
     /// (default: the columns a plot of the sheet would show).
     #[arg(short, long, value_delimiter = ',')]
@@ -106,7 +130,8 @@ pub struct FitArgs {
     /// Resolution of a PNG figure in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Save the project with the results to this .sheaf file.
+    /// Save the project with the results to this file: .opj (also when no extension is given, with a
+    /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     /// Write the parameter sheet as delimited text (.tsv or .txt gives tabs, anything else commas).
@@ -155,6 +180,31 @@ pub struct ReadOptions {
     /// Delimited text: numbers use a comma as the decimal separator.
     #[arg(long)]
     pub decimal_comma: bool,
+    /// Delimited text: keep date and time columns as text instead of reading them as date numbers.
+    #[arg(long)]
+    pub dates_as_text: bool,
+    /// Delimited text: read 11/12/2026 as 11 December (default: 12 November) when the file does not decide.
+    #[arg(long)]
+    pub day_first: bool,
+    /// Delimited text: the digit-grouping character of numbers.
+    #[arg(long, value_enum, default_value_t = ThousandsArg::Auto)]
+    pub thousands: ThousandsArg,
+    /// Delimited text: line (1-based) holding the column long names (0: none; default: detect).
+    #[arg(long, value_name = "N")]
+    pub long_name_line: Option<usize>,
+    /// Delimited text: line holding the units (0: none).
+    #[arg(long, value_name = "N")]
+    pub units_line: Option<usize>,
+    /// Delimited text: line holding the comments (0: none).
+    #[arg(long, value_name = "N")]
+    pub comments_line: Option<usize>,
+    /// Delimited text: header lines that become named parameter rows (for example the wavelengths
+    /// of an ICP-OES export), as a comma-separated list. The first cell of the line is the name.
+    #[arg(long, value_name = "N,N", value_delimiter = ',')]
+    pub param_lines: Vec<usize>,
+    /// Delimited text: a file with several blocks of data separated by blank lines gets one sheet per block.
+    #[arg(long)]
+    pub blocks_as_sheets: bool,
 }
 
 #[derive(Args, Debug)]
@@ -167,11 +217,15 @@ pub struct InfoArgs {
 
 #[derive(Args, Debug)]
 pub struct ImportArgs {
-    /// Data files to import. Each becomes one workbook. An Origin .opj project adds all its workbooks.
+    /// Data files, folders or patterns to import. A folder gives its data files (.txt, .csv, .tsv,
+    /// .dat, .asc, .prn, .tab, .bin); a name with * or ? in it (for example "exports/icp_*.csv")
+    /// gives the matching files, in natural order (icp_2 before icp_10). An Origin .opj project adds
+    /// all its workbooks.
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
-    /// The project file to write.
-    #[arg(short, long)]
+    /// The project file to write: .opj (the default, also when no extension is given) or .sheaf.
+    /// An .opj that cannot hold everything gets a companion .opj.sheaf.
+    #[arg(short, long, visible_alias = "into")]
     pub output: PathBuf,
     /// Add the workbooks to the existing project at --output instead of starting a new one.
     #[arg(long)]
@@ -179,6 +233,18 @@ pub struct ImportArgs {
     /// Also add one graph per imported workbook, in the template the importer suggests.
     #[arg(long)]
     pub plot: bool,
+    /// Where the files go: one book each (books), one book with a sheet per file (sheets), one sheet
+    /// with the columns of all files side by side (columns), or one sheet with the rows of all files
+    /// one under the other (rows).
+    #[arg(long, value_enum, default_value_t = ImportLayout::Books)]
+    pub mode: ImportLayout,
+    /// Long name of the shared book when --mode is not books (default: the name of the folder).
+    #[arg(long, value_name = "TEXT")]
+    pub book_name: Option<String>,
+    /// Write the file name into the comment row and the SourceFile parameter row of every column
+    /// (always done with --mode columns).
+    #[arg(long)]
+    pub file_name_comments: bool,
     #[command(flatten)]
     pub read: ReadOptions,
 }
@@ -189,6 +255,36 @@ pub enum AxisColors {
     Plot,
     /// Every axis in its own color (black in the built-in templates).
     Fixed,
+}
+
+/// The layout of a multi-file import (`sheaf import --mode`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ImportLayout {
+    /// One workbook per file.
+    Books,
+    /// One workbook, one sheet per file, named after the file.
+    Sheets,
+    /// One sheet; the columns of the files side by side.
+    Columns,
+    /// One sheet; the rows of the files one under the other.
+    Rows,
+}
+
+/// The digit-grouping character of numbers (`sheaf import --thousands`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ThousandsArg {
+    /// Use one when a number in the file shows it unambiguously.
+    Auto,
+    /// None: 1,234 is not a number.
+    None,
+    /// 1,234.5
+    Comma,
+    /// 1.234,5 (the decimal separator is then a comma)
+    Dot,
+    /// 1 234,5 (the decimal separator is then a comma)
+    Space,
+    /// 1'234.5
+    Apostrophe,
 }
 
 /// Changes applied to a graph before it is rendered.
@@ -313,7 +409,8 @@ pub struct PlotArgs {
     /// For a project input: render this existing graph instead of making a new one.
     #[arg(long)]
     pub graph: Option<String>,
-    /// Also save the resulting project (data plus the new graph) to this .sheaf file.
+    /// Also save the resulting project (data plus the new graph) to this file: .opj (the default,
+    /// with a companion .opj.sheaf if needed) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     #[command(flatten)]
@@ -324,12 +421,14 @@ pub struct PlotArgs {
 
 #[derive(Args, Debug)]
 pub struct ExportArgs {
-    /// A .sheaf project or an Origin .opj project (its graphs are read).
+    /// A .sheaf project or an Origin .opj project (its graphs are read). For an output ending in
+    /// .opj a data file (CH Instruments text, CSV or other delimited text) is also accepted.
     pub project: PathBuf,
-    /// Name of the graph (default: the only graph of the project).
+    /// Name of the graph (default: the only graph of the project). Not used for .opj output.
     #[arg(long)]
     pub graph: Option<String>,
-    /// The figure to write: .png, .svg or .pdf.
+    /// What to write: a figure (.png, .svg or .pdf) or, with .opj, the whole project as an Origin
+    /// 2016 project file (workbooks only for now; graphs are skipped with a warning).
     #[arg(short, long)]
     pub output: PathBuf,
     /// Resolution of PNG output in dots per inch.
@@ -337,6 +436,8 @@ pub struct ExportArgs {
     pub dpi: f64,
     #[command(flatten)]
     pub style: StyleArgs,
+    #[command(flatten)]
+    pub read: ReadOptions,
 }
 
 #[derive(Args, Debug)]
@@ -382,7 +483,8 @@ pub struct TargetArgs {
     /// 0.2:0.6 (write negative limits as --x-range=-0.5:0.1).
     #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
     pub x_range: Option<String>,
-    /// Save the project with the results to this .sheaf file.
+    /// Save the project with the results to this file: .opj (also when no extension is given, with a
+    /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     /// Write the sheet that holds the results as delimited text (.tsv or .txt gives tabs, anything
@@ -441,6 +543,42 @@ pub enum NormalizeKind {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum MathKind {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    /// The curve raised to the operand.
+    Power,
+}
+
+/// The second operand of curve math: a number, or a reference column.
+#[derive(Args, Debug, Clone)]
+pub struct OperandArgs {
+    /// A constant operand.
+    #[arg(long, allow_hyphen_values = true, conflicts_with = "reference")]
+    pub value: Option<f64>,
+    /// The Y column of the reference curve (short or long name); its X column is the nearest
+    /// X column to its left. By default it is searched in the same sheet.
+    #[arg(long = "ref", value_name = "COLUMN")]
+    pub reference: Option<String>,
+    /// Take the reference from this data file (or project) instead.
+    #[arg(long, value_name = "FILE", requires = "reference")]
+    pub ref_file: Option<PathBuf>,
+    /// The workbook that holds the reference (a project input, or the --ref-file project).
+    #[arg(long, requires = "reference")]
+    pub ref_book: Option<String>,
+    /// The sheet that holds the reference.
+    #[arg(long, requires = "reference")]
+    pub ref_sheet: Option<String>,
+    /// Only the X range that data and reference both cover, at the merged X values of both; the
+    /// result goes to a new sheet. Without it every data row gets a value, the reference being
+    /// continued as a straight line outside its range.
+    #[arg(long, requires = "reference")]
+    pub common: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum InterpKind {
     Linear,
     Spline,
@@ -458,6 +596,40 @@ pub enum PeakKind {
     Negative,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakMethodKind {
+    LocalMax,
+    Window,
+    FirstDerivative,
+    SecondDerivative,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakBaselineKind {
+    None,
+    EndPoints,
+    Minima,
+    Anchors,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakLimitKind {
+    Baseline,
+    HalfHeight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakFitKind {
+    Gauss,
+    Lorentz,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum PeakFitBaselineKind {
+    Constant,
+    Linear,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum AnalyzeTool {
     /// Area under each curve, with peak position, height and width; adds the running integral.
@@ -473,6 +645,35 @@ pub enum AnalyzeTool {
         /// Do not add a column with the running integral.
         #[arg(long)]
         no_cumulative: bool,
+        /// Integrate several X intervals at once, for example 0.2:0.5,0.6:0.9 (write negative
+        /// limits as --ranges=-0.5:0.1,0.2:0.4). One result row per interval and column, with
+        /// the signed and the absolute area, peak position and height and the half-height width.
+        /// Each interval is the first unbroken run of rows inside it; for the return sweep of a
+        /// cyclic voltammogram use --row-ranges. The baseline option applies to each interval.
+        #[arg(long, value_delimiter = ',', value_name = "FROM:TO,...", allow_hyphen_values = true)]
+        ranges: Vec<String>,
+        /// Like --ranges, but worksheet rows counted from 1, for example 1:200,201:400 (the
+        /// charge of each cycle).
+        #[arg(long, value_delimiter = ',', value_name = "FROM:TO,...")]
+        row_ranges: Vec<String>,
+    },
+    /// Subtract a reference curve (a blank scan, a background) from each curve. The reference
+    /// is interpolated linearly onto the X values of the data.
+    SubtractRef {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[command(flatten)]
+        operand: OperandArgs,
+    },
+    /// Combine each curve with a constant or a reference curve: add, subtract, multiply,
+    /// divide or raise to a power (Origin's Simple Math).
+    Math {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = MathKind::Subtract)]
+        op: MathKind,
+        #[command(flatten)]
+        operand: OperandArgs,
     },
     /// Derivative of each curve with respect to its X column.
     Differentiate {
@@ -570,6 +771,40 @@ pub enum AnalyzeTool {
         /// Keep every local extremum.
         #[arg(long, group = "keep")]
         all: bool,
+        /// How peaks are located. This and every option below switch to the peak chain
+        /// (baseline, search, per-peak limits), which also writes a baseline column.
+        #[arg(long, value_enum)]
+        method: Option<PeakMethodKind>,
+        /// Smooth the curve over this many points (Savitzky-Golay) before searching.
+        #[arg(long, default_value_t = 0)]
+        smooth: usize,
+        /// Drop peaks narrower than this full width at half height (X units).
+        #[arg(long, default_value_t = 0.0)]
+        min_width: f64,
+        /// Baseline to subtract before the search: none, end-points (straight line through the
+        /// first and last point), minima (the lowest point of each of --baseline-points stretches),
+        /// or anchors (--anchors).
+        #[arg(long, value_enum)]
+        baseline: Option<PeakBaselineKind>,
+        /// Number of stretches (anchor points) of the minima baseline.
+        #[arg(long, default_value_t = 5)]
+        baseline_points: usize,
+        /// Anchor points of the anchors baseline, written X1:Y1,X2:Y2,... (linear interpolation).
+        #[arg(long)]
+        anchors: Option<String>,
+        /// Where a peak starts and ends: baseline (where the corrected curve reaches the baseline
+        /// or the valley to the next peak) or half-height.
+        #[arg(long, value_enum)]
+        limits: Option<PeakLimitKind>,
+        /// Add area, area percent, FWHM and limits of every peak.
+        #[arg(long)]
+        integrate: bool,
+        /// Fit all peaks together (sum of peaks, started at the found peaks) and report each one.
+        #[arg(long, value_enum)]
+        fit: Option<PeakFitKind>,
+        /// Baseline of the multi-peak fit.
+        #[arg(long, value_enum, default_value_t = PeakFitBaselineKind::Linear)]
+        fit_baseline: PeakFitBaselineKind,
     },
     /// Descriptive statistics of each column.
     Stats {

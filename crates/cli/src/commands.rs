@@ -7,10 +7,11 @@ use sheaf_core::graph::{Graph, LineStyle, Stack, TickDirection};
 use sheaf_core::project::Window;
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
 use sheaf_core::{Color, ColumnId, Project, WindowId};
-use sheaf_io::ascii::{AsciiOptions, Delimiter};
+use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands};
+use sheaf_io::batch::{BatchLayout, BatchOptions};
 use sheaf_io::chi::ChiOptions;
-use sheaf_io::{ImportKind, Imported, project_file};
-use std::path::Path;
+use sheaf_io::{ImportKind, Imported};
+use std::path::{Path, PathBuf};
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
@@ -29,16 +30,22 @@ pub(crate) fn is_project(path: &Path) -> bool {
 }
 
 /// Opens a `.sheaf` project or imports an Origin `.opj` project.
+/// Origin files this run read as a project (Sheaf reads only part of them).
+static FOREIGN_INPUTS: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
 pub(crate) fn load_project(path: &Path) -> Result<Project> {
     let opened =
         sheaf_io::open_project(path).with_context(|| format!("could not open project '{}'", path.display()))?;
     for w in &opened.warnings {
         eprintln!("note: {w}");
     }
+    if opened.foreign {
+        FOREIGN_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).push(path.to_path_buf());
+    }
     Ok(opened.project)
 }
 
-fn chi_options(r: &ReadOptions) -> ChiOptions {
+pub(crate) fn chi_options(r: &ReadOptions) -> ChiOptions {
     ChiOptions {
         split_scans: !r.no_split_scans,
         add_milliamp: !r.no_milliamp,
@@ -47,7 +54,7 @@ fn chi_options(r: &ReadOptions) -> ChiOptions {
     }
 }
 
-fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
+pub(crate) fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
     let mut o = AsciiOptions::default();
     if let Some(d) = &r.delimiter {
         o.delimiter = match d.to_ascii_lowercase().as_str() {
@@ -66,6 +73,27 @@ fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
     }
     o.header_lines = r.header_lines;
     o.decimal_comma = r.decimal_comma;
+    o.thousands = match r.thousands {
+        ThousandsArg::Auto => Thousands::Auto,
+        ThousandsArg::None => Thousands::Off,
+        ThousandsArg::Comma => Thousands::Comma,
+        ThousandsArg::Dot => Thousands::Dot,
+        ThousandsArg::Space => Thousands::Space,
+        ThousandsArg::Apostrophe => Thousands::Apostrophe,
+    };
+    o.long_name_line = r.long_name_line;
+    o.units_line = r.units_line;
+    o.comments_line = r.comments_line;
+    o.param_lines = r.param_lines.clone();
+    if r.blocks_as_sheets {
+        o.blocks = sheaf_io::ascii::Blocks::Sheets;
+    }
+    if r.dates_as_text {
+        o.dates = sheaf_io::ascii::DateImport::AsText;
+    }
+    if r.day_first {
+        o.date_order = sheaf_core::datetime::DateOrder::Dmy;
+    }
     Ok(o)
 }
 
@@ -91,8 +119,27 @@ fn describe(project: &Project) {
                 for s in &b.sheets {
                     println!("  sheet {} ({} columns, {} rows)", s.name, s.columns.len(), s.row_count());
                     for c in &s.columns {
-                        let kind = if c.data.is_numeric() { "" } else { " text" };
+                        let kind = if !c.data.is_numeric() {
+                            " text"
+                        } else if c.format.is_date_time() {
+                            " date"
+                        } else {
+                            ""
+                        };
                         let mut label = c.long_name.clone();
+                        // A date column shows its first and last value as they appear in the worksheet.
+                        if c.format.is_date_time()
+                            && let Some(v) = c.numeric()
+                            && let (Some(first), Some(last)) =
+                                (v.iter().find(|x| x.is_finite()), v.iter().rev().find(|x| x.is_finite()))
+                        {
+                            let sep = if label.is_empty() { "" } else { " " };
+                            label.push_str(&format!(
+                                "{sep}<{} to {}>",
+                                c.format.format(*first),
+                                c.format.format(*last)
+                            ));
+                        }
                         if !c.units.is_empty() {
                             label.push_str(&format!(" ({})", c.units));
                         }
@@ -142,47 +189,125 @@ fn info(a: InfoArgs) -> Result<()> {
     Ok(())
 }
 
-fn import(a: ImportArgs) -> Result<()> {
+fn import(mut a: ImportArgs) -> Result<()> {
+    a.output = sheaf_io::save::default_extension(&a.output);
     if a.files.iter().any(|f| f == &a.output) {
         bail!("the output '{}' is also one of the inputs", a.output.display());
     }
     let mut project = if a.append && a.output.exists() { load_project(&a.output)? } else { Project::new() };
-    for file in &a.files {
-        if is_project(file) {
-            // An Origin project (or another Sheaf project): take over all its workbooks.
+    // Projects are taken over as they are; everything else is a data file, folder or pattern.
+    let mut data_files = Vec::new();
+    for arg in &a.files {
+        if is_project(arg) {
             let mut count = 0;
-            for window in load_project(file)?.windows {
+            for window in load_project(arg)?.windows {
                 if let Window::Workbook(book) = window {
                     project.adopt_named_workbook(book);
                     count += 1;
                 }
             }
-            println!("imported {count} workbook(s) from {}", file.display());
+            println!("imported {count} workbook(s) from {}", arg.display());
             continue;
         }
-        let imported = read_data_file(file, &a.read)?;
-        let template = imported.suggested_template;
-        let book = project.adopt_workbook(imported.workbook);
-        if a.plot {
-            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
-            let ys = project.default_plot_columns(book, sheet, template);
+        let found = sheaf_io::batch::expand_inputs(arg).map_err(|e| anyhow!(e))?;
+        if found.len() > 1 {
+            println!("{} matches {} files", arg.display(), found.len());
+        }
+        data_files.extend(found);
+    }
+    let layout = match a.mode {
+        ImportLayout::Books => BatchLayout::Books,
+        ImportLayout::Sheets => BatchLayout::Sheets,
+        ImportLayout::Columns => BatchLayout::Columns,
+        ImportLayout::Rows => BatchLayout::Rows,
+    };
+    let kind = match a.read.format {
+        Format::Auto => ImportKind::Auto,
+        Format::Chi => ImportKind::Chi,
+        Format::Ascii => ImportKind::Ascii,
+    };
+    let opts = BatchOptions {
+        layout,
+        kind,
+        chi: chi_options(&a.read),
+        ascii: ascii_options(&a.read)?,
+        book_name: a.book_name.clone().unwrap_or_default(),
+        file_name_in_comments: a.file_name_comments,
+    };
+    let result = sheaf_io::batch::import_batch(&mut project, &data_files, &opts);
+    let mut plotted = std::collections::HashSet::new();
+    for item in &result.items {
+        for w in &item.warnings {
+            eprintln!("warning: {}: {w}", item.path.display());
+        }
+        let name = project.workbook(item.book).map(|b| b.name.clone()).unwrap_or_default();
+        println!("imported {} into {name}", item.path.display());
+        // One graph per book, or per sheet when each file has its own sheet.
+        let key = if layout == BatchLayout::Sheets { (item.book, item.sheet) } else { (item.book, 0) };
+        if a.plot && plotted.insert(key) {
+            let ys = project.default_plot_columns(item.book, item.sheet, item.suggested_template);
             if !ys.is_empty() {
-                project.plot_columns(template, &ys)?;
+                project.plot_columns(item.suggested_template, &ys)?;
             }
         }
-        println!("imported {} as {}", file.display(), project.workbook(book).map(|b| b.name.as_str()).unwrap_or("?"));
+    }
+    for e in &result.errors {
+        eprintln!("error: {e}");
+    }
+    if result.items.is_empty() && !data_files.is_empty() {
+        bail!("none of the {} file(s) could be imported", data_files.len());
     }
     save_project(&project, &a.output)?;
+    if !result.errors.is_empty() {
+        bail!("{} file(s) could not be imported (the others were saved)", result.errors.len());
+    }
     Ok(())
 }
 
-/// Saves as a `.sheaf` project. Refuses to write over an Origin project file.
+/// Saves the project: `.opj` by default (a path without extension gets `.opj`), with a companion
+/// `<name>.opj.sheaf` when the Origin file cannot hold everything; an explicit `.sheaf` path writes
+/// a Sheaf project. When the Origin writer refuses the project only the companion is written, and
+/// that is reported as an error because the file asked for does not exist.
 pub(crate) fn save_project(project: &Project, path: &Path) -> Result<()> {
-    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj")) {
-        bail!("'{}' is an Origin project name; save as a .sheaf file instead", path.display());
+    // Saving over the Origin file this run read would replace it with a partial rewrite: keep a copy.
+    let target = sheaf_io::save::default_extension(path);
+    let over_input = {
+        let inputs = FOREIGN_INPUTS.lock().unwrap_or_else(|e| e.into_inner());
+        inputs.iter().any(|i| match (std::fs::canonicalize(i), std::fs::canonicalize(&target)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => *i == target,
+        })
+    };
+    if over_input
+        && let Some(b) = sheaf_io::save::backup_original(&target)
+            .with_context(|| format!("could not keep a copy of '{}'", target.display()))?
+    {
+        println!("kept the original Origin file as {}", b.display());
     }
-    project_file::save(project, path).with_context(|| format!("could not save '{}'", path.display()))?;
-    println!("saved {}", path.display());
+    let outcome =
+        sheaf_io::save::save_project(project, path).with_context(|| format!("could not save '{}'", path.display()))?;
+    report_save(&outcome)
+}
+
+fn report_save(outcome: &sheaf_io::save::SaveOutcome) -> Result<()> {
+    if let Some(reason) = &outcome.refusal {
+        let companion = outcome.companion.as_ref().map(|c| c.display().to_string()).unwrap_or_default();
+        println!("saved {companion} (the whole project)");
+        bail!(
+            "'{}' was not written because Origin cannot store the project: {reason}. Rename as it says and save again; the project is safe in '{companion}'",
+            outcome.path.display()
+        );
+    }
+    println!("saved {}", outcome.path.display());
+    if let Some(c) = &outcome.companion {
+        println!("saved {} (the whole project; the .opj cannot hold everything)", c.display());
+        for w in &outcome.warnings {
+            eprintln!("warning: only {} holds: {w}", c.display());
+        }
+    }
+    if let Some(c) = &outcome.companion_removed {
+        println!("removed {} (nothing is lost in the .opj any more)", c.display());
+    }
     Ok(())
 }
 
@@ -646,8 +771,41 @@ fn overlay_files(project: &mut Project, template: Template, a: &PlotArgs) -> Res
     Ok(graph)
 }
 
+fn is_opj(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj"))
+}
+
+/// Writes the whole project (or the data file as a one-workbook project) as an Origin project.
+fn export_opj(a: &ExportArgs) -> Result<()> {
+    if a.graph.is_some() {
+        bail!("--graph is for figures; an .opj output holds the whole project");
+    }
+    if let (Ok(input), Ok(output)) = (std::fs::canonicalize(&a.project), std::fs::canonicalize(&a.output))
+        && input == output
+    {
+        bail!("the output '{}' is also the input", a.output.display());
+    }
+    let project = if is_project(&a.project) {
+        load_project(&a.project)?
+    } else {
+        let mut p = Project::new();
+        p.adopt_workbook(read_data_file(&a.project, &a.read)?.workbook);
+        p
+    };
+    save_project(&project, &a.output)
+}
+
 fn export(a: ExportArgs) -> Result<()> {
+    if is_opj(&a.output) {
+        return export_opj(&a);
+    }
     require_positive("--dpi", Some(a.dpi))?;
+    if !is_project(&a.project) {
+        bail!(
+            "'{}' is not a project; figures are exported from a .sheaf or .opj project (use `sheaf plot` for a data file)",
+            a.project.display()
+        );
+    }
     let mut project = load_project(&a.project)?;
     let graph = pick_graph(&project, a.graph.as_deref())?;
     apply_style(&mut project, graph, &a.style)?;

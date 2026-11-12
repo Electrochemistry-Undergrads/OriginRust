@@ -65,7 +65,7 @@ Origin's files compute starting values with helper routines that are not in the 
 
 Gaussian has parameters (y0, xc, A, w) with `A` the area and `w` the FWHM: its guess is `A = area`, `w = FWHM`. Every guess was checked against its function's parameter order and conventions (FWHM or sigma, area or height).
 
-A test fits every such function (every name with a guess, 29 cases; a test also fails if a function with a guess has no case) from its guess on noisy generated data and requires the true parameters back within a few percent. The whole table runs at y scales 1, 1e-3 and 1e-6: offsets, amplitudes and areas and the noise are multiplied by the scale. Power (`y = x^A`) has no prefactor, so there its x range is scaled by `scale^(1/A)`, which scales y by `scale`. Poly is fitted with its six highest coefficients held at zero and ExpGrow1 with `x0` held at 0 (it trades off against `A1`). The phases of ExpDec2, ExpDec3 and ExpAssoc are compared ordered by time constant, because the fit may swap them.
+A test fits every such function (every name with a guess, 57 cases; a test also fails if a function with a guess has no case) from its guess on noisy generated data and requires the true parameters back within a few percent. The whole table runs at y scales 1, 1e-3 and 1e-6: offsets, amplitudes and areas and the noise are multiplied by the scale. Power (`y = x^A`) has no prefactor, so there its x range is scaled by `scale^(1/A)`, which scales y by `scale`. Poly is fitted with its six highest coefficients held at zero and ExpGrow1 with `x0` held at 0 (it trades off against `A1`). The phases of ExpDec2, ExpDec3 and ExpAssoc are compared ordered by time constant, because the fit may swap them.
 
 ### FDF import
 

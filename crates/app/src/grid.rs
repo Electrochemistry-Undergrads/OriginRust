@@ -6,7 +6,7 @@ use crate::actions::Action;
 use eframe::egui::{self, Align, Color32, Layout, RichText, Sense, Stroke};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::template::Template;
-use sheaf_core::{ColumnId, Designation, Document, WindowId};
+use sheaf_core::{ColumnId, Designation, Document, FormulaState, RecalcMode, WindowId};
 
 /// What the user is doing in one workbook window.
 #[derive(Default)]
@@ -102,7 +102,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             } else {
                                 format!("{}({})", column.short_name, tag)
                             };
-                            ui.label(RichText::new(head).strong());
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(head).strong());
+                                lock_mark(ui, column);
+                            });
                             ui.label(&column.long_name);
                             ui.label(&column.units);
                             ui.label(column.comments.lines().next().unwrap_or_default());
@@ -170,7 +173,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                 };
                                 ui.label(RichText::new(&text).color(color));
                             });
-                            if response.double_clicked() {
+                            // The values of a recalculating column come from its formula.
+                            if response.double_clicked() && !column.is_locked() {
                                 start_editing(state, column, r);
                             }
                         });
@@ -179,6 +183,32 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                 });
             });
     });
+}
+
+/// The small mark in the head of a column whose formula keeps running: green when the values
+/// are current, yellow when an input changed and the user has to recalculate, red when the
+/// formula cannot run (Origin shows a lock icon in these three colors).
+fn lock_mark(ui: &mut egui::Ui, column: &sheaf_core::Column) {
+    if !column.is_locked() {
+        return;
+    }
+    let (word, color, hint) = match (column.formula_state, column.recalc) {
+        (FormulaState::Broken, _) => (
+            "broken",
+            Color32::from_rgb(200, 40, 40),
+            "The formula cannot run: a column it reads is missing or renamed, or it is circular",
+        ),
+        (FormulaState::Pending, _) => (
+            "pending",
+            Color32::from_rgb(190, 140, 0),
+            "An input changed. Use Recalculate in the column menu to update this column",
+        ),
+        (_, RecalcMode::Auto) => ("auto", Color32::from_rgb(40, 150, 60), "Recalculates when its inputs change"),
+        _ => ("manual", Color32::from_rgb(40, 150, 60), "Up to date; recalculate by hand after an input changes"),
+    };
+    let formula = column.formula.as_deref().unwrap_or_default();
+    ui.label(RichText::new(word).small().color(color))
+        .on_hover_text(format!("col({}) = {formula}\n{hint}", column.short_name));
 }
 
 /// The text a cell is edited with: for numbers the shortest text that reads back as exactly the
@@ -245,26 +275,8 @@ fn select_column(state: &mut BookUi, sheet: &sheaf_core::Worksheet, id: ColumnId
     }
 }
 
-/// The right-click menu of a column header. Also used by the Column menu.
-/// Menu entries that change the sheet as a whole: sorting by the selected column, filtering rows.
-pub fn sheet_menu(ui: &mut egui::Ui, book: WindowId, selected: &[ColumnId], actions: &mut Vec<Action>) {
-    ui.menu_button("Sort Sheet by Column", |ui| {
-        for (label, descending) in [("Ascending", false), ("Descending", true)] {
-            if ui.add_enabled(selected.len() == 1, egui::Button::new(label)).clicked() {
-                actions.push(Action::SortSheet { column: selected[0], descending });
-                ui.close();
-            }
-        }
-        if selected.len() != 1 {
-            ui.weak("Select the one column to sort by");
-        }
-    });
-    if ui.button("Filter Rows...").clicked() {
-        actions.push(Action::FilterRows(book));
-        ui.close();
-    }
-}
-
+/// The right-click menu of a column header. The menu bar's Column menu has the same commands
+/// (see `menus.rs`).
 pub fn column_menu(ui: &mut egui::Ui, book: WindowId, selected: &[ColumnId], actions: &mut Vec<Action>) {
     let any = !selected.is_empty();
     ui.menu_button("Plot", |ui| {
@@ -299,6 +311,10 @@ pub fn column_menu(ui: &mut egui::Ui, book: WindowId, selected: &[ColumnId], act
     }
     if ui.add_enabled(selected.len() == 1, egui::Button::new("Set Column Values...")).clicked() {
         actions.push(Action::SetColumnValues(selected[0]));
+        ui.close();
+    }
+    if ui.add_enabled(any, egui::Button::new("Recalculate")).clicked() {
+        actions.push(Action::Recalculate(selected.to_vec()));
         ui.close();
     }
     ui.separator();

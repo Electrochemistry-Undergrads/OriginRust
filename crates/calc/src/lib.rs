@@ -9,21 +9,28 @@
 //! Row numbers in options and results are 1-based, as in a worksheet.
 
 pub mod baseline;
+pub mod curvemath;
 pub mod dierckx;
 pub mod differentiate;
 pub mod integrate;
 pub mod interp;
 pub mod normalize;
+pub mod peakchain;
 pub mod peaks;
 pub mod smooth;
 pub mod stats;
 mod util;
 
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
+pub use curvemath::{CurveMathResult, CurveOp, curve_math_const, curve_math_ref};
 pub use differentiate::{DiffOptions, differentiate};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
 pub use normalize::{NormalizeMethod, normalize};
+pub use peakchain::{
+    ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo, analyze_peaks,
+    auto_minima_anchors, find_peak_indices, integrate_peaks,
+};
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use smooth::{Boundary, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{Stats, quantile_origin, stats};

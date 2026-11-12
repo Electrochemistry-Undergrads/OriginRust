@@ -1443,3 +1443,23 @@ fn golden_stacked_template() {
 fn golden_waterfall_template() {
     check_golden("waterfall", Template::Waterfall);
 }
+
+#[test]
+fn a_date_column_as_x_gives_date_tick_labels() {
+    use sheaf_core::datetime::{DatePattern, TimePattern, date_value, time_value};
+    use sheaf_core::format::NumberFormat;
+    let t0 = date_value(2026, 11, 11).unwrap() + time_value(13, 0, 0.0).unwrap();
+    // Two hours, one point every 10 minutes.
+    let x: Vec<f64> = (0..13).map(|i| t0 + f64::from(i) * 10.0 / 1440.0).collect();
+    let y: Vec<f64> = (0..13).map(f64::from).collect();
+    let (mut p, g) = project(Template::Line, x, vec![y]);
+    let xid = p.graph(g).unwrap().layers[0].plots[0].x.unwrap();
+    // Plain numbers: ordinary labels.
+    let plain = svg_of(&p, g);
+    assert!(!texts(&doc(&plain)).iter().any(|t| t.contains(':')));
+    p.column_mut(xid).unwrap().format = NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hms);
+    let svg = svg_of(&p, g);
+    let all = texts(&doc(&svg));
+    assert!(all.iter().any(|t| t == "13:00"), "{all:?}");
+    assert!(all.iter().any(|t| t == "14:00"), "{all:?}");
+}

@@ -69,6 +69,18 @@ pub(crate) fn graph_geometry(g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer)
     out.into_iter().map(|geom| geom.expect("every layer belongs to the group of its root")).collect()
 }
 
+/// Resolves one axis from the plots it shows. An X axis over a date or time column gets date tick
+/// labels (see [`data::date_axis`]).
+fn resolve_dim(axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
+    let range = data::axis_range(sources.iter().copied(), dim, axis.scale);
+    if dim == Dim::X
+        && let Some(drawn) = data::date_axis(axis, sources.iter().copied())
+    {
+        return resolve_axis(&drawn, range);
+    }
+    resolve_axis(axis, range)
+}
+
 fn group_geometry(
     g: &Graph,
     members: &[usize],
@@ -82,11 +94,14 @@ fn group_geometry(
         i == root || g.valid_link(i).is_some_and(|l| (if dim == Dim::X { l.x } else { l.y }) == ScaleLink::Straight)
     };
     let shared = |dim: Dim, axis: &Axis| {
-        let sources = members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter());
-        resolve_axis(axis, data::axis_range(sources, dim, axis.scale))
+        let sources: Vec<&data::PlotData> =
+            members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter()).collect();
+        resolve_dim(axis, dim, &sources)
     };
-    let own =
-        |i: usize, dim: Dim, axis: &Axis| resolve_axis(axis, data::axis_range(pds[i].plots.iter(), dim, axis.scale));
+    let own = |i: usize, dim: Dim, axis: &Axis| {
+        let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
+        resolve_dim(axis, dim, &sources)
+    };
     let (root_x, root_y) = (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis));
     let axes: Vec<(ResolvedAxis, ResolvedAxis)> = members
         .iter()

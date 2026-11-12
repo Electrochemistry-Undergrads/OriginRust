@@ -10,6 +10,7 @@
 pub mod analysis;
 pub mod color;
 pub mod column;
+pub mod datetime;
 pub mod fitting;
 pub mod format;
 pub mod formula;
@@ -21,7 +22,7 @@ pub mod template;
 pub mod worksheet;
 
 pub use color::Color;
-pub use column::{Column, ColumnData, Designation};
+pub use column::{Column, ColumnData, Designation, FormulaState, RecalcMode};
 pub use graph::{Axis, Graph, Layer, Plot};
 pub use history::Document;
 pub use ids::{ColumnId, WindowId};

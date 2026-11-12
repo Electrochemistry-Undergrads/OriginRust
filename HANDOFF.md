@@ -15,35 +15,71 @@ one session should work on the repository at a time.
 
 These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11-11").
 
+## Two sessions at work: who owns what (read this first)
+
+The owner runs two Claude sessions on this repository. Cross-session messages are not getting
+through (they are held for approval and expire), so the split is written here:
+
+- **Lead: session `originrust-3a`** (Claude Code, cf09e3ad). Only the lead merges to `main`,
+  pushes, and edits HANDOFF.md, docs/ROADMAP.md and docs/LESSONS.md. The lead owns `crates/app`
+  (being rebuilt in Origin's style, ADR 0007), the `.opj` writer (`crates/io/src/opj/`, new
+  files), the CH Instruments binary reader, curve math, date and time columns and recalculating
+  formulas (workflows `chi-binary-reader`, `parity-gui-opj`, `p0-gaps-core`).
+- **Second session: "Sonnet subagents from ORIGIN_RUST_PROMPT"** (05b367c2). It owns branch
+  `chi-text-real` (CH Instruments text importer checked against the owner's real text files) and
+  `graph-p0`: milestone 6 graph work in `crates/core/src/graph.rs`, `crates/plot` and `crates/cli`
+  (column and bar plots with text tick labels, offset and stacked plots, multi-panel, double Y,
+  log and reciprocal scales, error bars) plus reading plot offsets from `.opj` in
+  `crates/io/src/opj/graph.rs`. Please stay out of `crates/app` (expose options in the model,
+  renderer and CLI; the lead wires them into the app), never merge to `main`, and leave notes for
+  the lead in `re-workspace/scratch/peer-notes.md` (local file) naming each branch that is ready.
+- Each session builds in its own folders under `target/` with `CARGO_PROFILE_DEV_DEBUG=0` (the
+  disk filled up once; see LESSONS.md).
+
 ## Where things stand
 
 - **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed; CI runs on push.
 - **Milestones 1 to 3 are done** and tagged. Milestone 2 still needs the owner for two checks.
 - **Milestone 4 (fitting) is done** and tagged `m4-fitting`: its 11 review findings were fixed,
   reviewed again and merged (`fe407b1`, `0ac9546`, `83a09de`).
-- **CH Instruments binary files**: the owner put six `.bin` files in the repo root (i-t, CV,
-  chronopotentiometry; git-ignored, never commit them). Workflow `chi-binary-reader` (run
-  `wf_5085cfd4-c57`) builds a reader in a worktree, then a review. CH Instruments programs on the
-  Desktop must not be started without the owner's go-ahead (a potentiostat may be connected; their
-  `.ini`/`.cfg` files are the owner's settings).
+- **CH Instruments binary files** are read (`2ca7d26`): CV, i-t and chronopotentiometry `.bin`
+  files give the same workbooks as text exports. The owner's six `.bin` files (git-ignored) import
+  and plot correctly by eye. Open points are in `docs/spec/chi-binary-format.md` section 5 (CP
+  sample interval, which CP current is cathodic). CH Instruments programs on the Desktop must not
+  be started without the owner's go-ahead (a potentiostat may be connected; their `.ini`/`.cfg`
+  files are the owner's settings).
 - **Milestone 5**: workbooks and basic graphs are read from `.opj` and merged (`d3c3a3f`). Origin's
   text escapes `\f:`, `\p`, `\x`, `\v` are now understood in labels. Known gaps: 34 of 41 graphs of
   the owner's "Integration of Delithiation SF data" project are missed; XRD curves that Origin
   draws offset are drawn on top of each other (plot offsets are not read).
-- **Running** (workflow `parity-gui-opj`, run `wf_c5d04af1-669`): a feature parity audit (its
-  text is returned, to be written to `docs/spec/feature-parity.md`), a study of Origin's interface
-  (branch with `docs/spec/gui-look.md` and ADR 0007), and a first `.opj` writer for workbooks
-  verified in Origin (branch, then review).
+- **Done on 2026-11-12**: the parity audit (`docs/spec/feature-parity.md`), the interface study
+  (`docs/spec/gui-look.md`, ADR 0007 accepted), the `.opj` writer for workbooks (verified in
+  Origin 2016), the CH Instruments `.bin` reader, curve math, multi-range integration, date and
+  time columns, recalculating formulas, fit bands and controls, CSV/ICP-OES import extras with
+  batch import, the peak analysis chain.
+- **Merged on 2026-11-12 (afternoon)**: `.opj` is the default save format with a `.opj.sheaf`
+  companion (ADR 0008); the app shell has Origin's theme, child windows, Window menu and menu bars
+  per window type (ADR 0007 steps 1 to 4); `docs/spec/gui-look.md` completed from a second set of
+  pictures (`re-workspace/scratch/gui-study2/`, local only).
+- **Running**: workflow `p0-gaps-3` (run `wf_5a289106-226`): graphs written into `.opj`, and basic
+  statistics (t-tests, ANOVA, histograms, normality). Its statistics menu entry was written
+  against the old menu code: when merging, place it in `crates/app/src/menus.rs`. Workflow
+  `origin-look-2`: ADR 0007 steps 5 to 7 (workbook look with cell selection and copy/paste,
+  toolbars, Project Explorer and panels). The second session works on `chi-text-real` and
+  `graph-p0` (double Y is committed there).
+- **Known app bug** (seen by an agent, not traced): after a click into the graph body a popup layer
+  of about 450 x 470 px can stay on screen and swallow the next click on a window title below it.
 
-All checks pass on `main` at `c64f3f3` (405 tests).
+All checks pass on `main` at `2a1b35c` (621 tests). Parity counts are recomputed with `python tools/parity-count.py`.
 
 ## Exact next step
 
-1. Merge the CH Instruments binary reader after its review; full checks.
-2. Write `docs/spec/feature-parity.md` from the audit; merge the GUI study and the `.opj` writer.
-3. Make `.opj` the default format (with the `.sheaf` copy safeguard), then graph writing.
-4. Rebuild the app shell in Origin's style following ADR 0007, step by step with click tests.
-5. Then the gaps from the parity audit in its order (column and bar charts with text labels,
+1. Merge the `p0-gaps-3` and `origin-look-2` branches after their reviews; full checks after each merge. Merge `chi-text-real` and
+   `graph-p0` (second session) when its note says they are ready.
+2. Continue ADR 0007: steps 8 to 10 (graph window look and mouse actions, dialogs in Origin's
+   layout, window geometry in the project file), and fix the popup bug above.
+3. Write graphs into `.opj` so the `.opj.sheaf` companion is no longer needed.
+4. Then the gaps from the parity audit in its order (column and bar charts with text labels,
    offset and stacked plots, multi-panel, double Y, log scales are P0 for the owner).
 
 ## Open questions noted by the agents (no answer needed to continue)
@@ -73,10 +109,10 @@ cargo run -p sheaf-app -- data.csv --show fit:nonlinear --screenshot window.png
 
 ## Needs from me (the owner)
 
-0. For the `.bin` reader: export one of the `.bin` files (ideally `CV_after_1stDelith.bin` and one
-   i-t file) as text from the CH Instruments program and put the `.txt` next to it, so the reader
-   can be checked number by number. Or allow me to run a copy of the CH Instruments program myself
-   (only when no experiment is running).
+0. For the `.bin` reader: export the charge-discharge file `GCD(0.5C).bin` (most useful), the CV
+   and one i-t file as text from the CH Instruments program and put each `.txt` next to its `.bin`
+   (same name). A test then compares them automatically. Or allow me to run a copy of the CH
+   Instruments program myself (only when no experiment is running).
 
 1. **Try the app** (`cargo run --release -p sheaf-app`), import one of your real CH Instruments
    files, try Analysis > Integrate and Analysis > Fit, and tell me what is wrong or missing. Real

@@ -337,6 +337,9 @@ pub enum TickFormat {
     Auto,
     Decimal(u8),
     Scientific(u8),
+    /// The axis values are date numbers (see `datetime`): ticks fall on round times and labels
+    /// are dates (with the given pattern) or times of day, depending on the tick step.
+    DateTime(crate::datetime::DatePattern),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

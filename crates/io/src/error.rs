@@ -25,9 +25,14 @@ pub enum IoError {
     /// The file was expected to be a CH Instruments export but is not.
     #[error(
         "'{source_name}' is not a CH Instruments text file: no column header such as \
-         'Potential/V, Current/A' was found in the first 200 lines"
+         'Potential/V, Current/A' was found in the first 100000 lines"
     )]
     NotChi { source_name: String },
+
+    /// A CH Instruments binary file (`.bin`) that cannot be read: damaged, cut short, or of a
+    /// technique whose layout is not known.
+    #[error("'{source_name}' is a CH Instruments binary file that cannot be read: {detail}")]
+    ChiBinary { source_name: String, detail: String },
 
     /// An import option has a value that cannot work.
     #[error("invalid import option: {0}")]
@@ -73,6 +78,14 @@ pub enum IoError {
     /// The file is not an Origin project (.opj) that can be read.
     #[error("'{}' is not a readable Origin project (.opj): {reason}", path.display())]
     OpjFormat { path: PathBuf, reason: String },
+
+    /// The project holds something that an Origin project cannot store, or a name Origin would refuse.
+    #[error("cannot write an Origin project (.opj): {reason}")]
+    OpjWrite { reason: String },
+
+    /// A file named like the companion exists and Sheaf did not write it, so it is not replaced.
+    #[error("'{}' already exists and is not a companion file written by Sheaf, so it was not replaced; move or rename it and save again", path.display())]
+    CompanionExists { path: PathBuf },
 
     /// Two columns of a project share one identifier, so their data would collide.
     #[error("'{}' cannot be saved: column id {id} is used by more than one column", path.display())]

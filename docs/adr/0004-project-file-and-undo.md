@@ -4,6 +4,9 @@ Status: accepted (2026-11-11)
 
 ## Decision 1: project file
 
+(Since ADR 0008 the default file written by Save is an Origin `.opj`, with a `.opj.sheaf` companion
+when the `.opj` cannot hold everything. The `.sheaf` format described here is the lossless one.)
+
 A project is saved as a ZIP archive (`.sheaf`) with a JSON description of all windows and one raw
 little-endian `f64` file per numeric column. The full layout is in
 `docs/spec/project-file-format.md`.

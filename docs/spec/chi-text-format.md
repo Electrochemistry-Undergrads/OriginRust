@@ -7,6 +7,9 @@ rows into worksheet columns, and how a cyclic voltammetry (CV) run with several 
 separate scans. The scan-splitting rule and the clipping check were taken from the owner's own
 Python workflow (his `cv_overlay.py`), so results match the spreadsheets he already has.
 
+The binary `.bin` files of the same program are read by `chi_bin.rs` and described in
+`chi-binary-format.md`; they give the same workbooks as the text files.
+
 Sources: the owner's script (observed), public knowledge of the CHI export layout (observed in
 many published data sets), and inference where marked. **No real CHI file has been checked yet in
 this project**; see "Unknowns".
@@ -68,7 +71,8 @@ Other common column names: `Current/A`, `Charge/C`, `Potential/V` (as a Y column
 `Z'/ohm`, `Z"/ohm`, `Z/ohm`, `Phase/deg`.
 
 A file is treated as a CHI export when a column header line as defined above is found within the
-first 200 lines.
+first 100000 lines. (The first version said 200; a real export of a CV with 3177 segments lists the
+peaks of every segment before the column header, which then sits at line 6906.)
 
 ## 2. What the importer produces
 

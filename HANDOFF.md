@@ -1,63 +1,65 @@
 # Handoff
 
-Last updated: 2026-11-11, fifth session (resumed after a usage limit cut the fourth one off).
+Last updated: 2026-11-11, about 21:10, by the Claude Code session `originrust-3a` (the fourth
+session, resumed after its usage limit). A fifth session in Claude Desktop ("Sonnet subagents from
+ORIGIN_RUST_PROMPT") did the work from 17:30 to 18:40 and then stopped; the owner asked this
+session to continue. Only one session should work on the repository at a time.
 
 ## Where things stand
 
-- **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed.
-- **Milestone 2 (first vertical slice)** is done and tagged `m2-first-slice`. Two items still
-  need the owner: a hands-on try of the app, and real CH Instruments files.
-- **Milestone 3 (analysis)**: all tools except the FFT filter (smoothing) and cubic B-spline
-  interpolation are built, checked against Origin, and in the app and `sheaf analyze`. All 16
-  confirmed findings of the independent review are fixed (`adb1414`, `2cefe20`, `2aa5b37`).
-- **Milestone 4 (fitting)**: on branches, not yet on `main` (see below).
-- **Milestone 5 (Origin projects)**: workbooks and column data are read; the cell-by-cell check
-  against Origin and graph reading are on a branch.
+- **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed; CI runs on push.
+- **Milestones 1 to 3 are done** and tagged `m1-foundations`, `m2-first-slice`, `m3-analysis`.
+  Milestone 2 still needs the owner for two checks (a hands-on try of the app, real CH Instruments
+  files).
+- **Milestone 4 (fitting) is on `main`**: linear and polynomial fits, the nonlinear engine, 206
+  built-in functions, user formulas, `.FDF` import, `Project::fit`, `sheaf fit` and the app's Fit
+  window. Each part was reviewed on its branch. Still owed: the milestone review of the merged
+  whole, then the tag `m4-fitting`.
+- **Milestone 5 (Origin projects)**: the reader for workbooks is on `main`. On the branch
+  `worktree-wf_7107af90-7f2-7` (worktree `.claude/worktrees/wf_7107af90-7f2-7`): the cell-by-cell
+  comparison with Origin (the owner's five projects match exactly) and reading of basic graphs. Its
+  review found that workbooks of pre-9 projects are also read as bogus graphs; an agent is fixing
+  that now (workflow "opj-review-fixes"), then the branch is merged.
 
-All checks pass on `main` at `2aa5b37`: `cargo fmt --check`, `cargo clippy --workspace
---all-targets` (no warnings), `cargo test --workspace` (about 286 tests).
+All checks pass on `main` at `cf81d6b`: `cargo fmt --check`, `cargo clippy --workspace
+--all-targets -- -D warnings`, `cargo test --workspace`.
 
-## In progress: four agent streams, each in its own git worktree
-
-The fourth session's agents were cut off. Their unfinished work was saved as `wip:` commits on
-their branches, `main` was merged into each branch, and the streams were restarted. Nothing
-reaches `main` until the lead has reviewed and merged it.
-
-| Stream | Branch | Worktree | State when restarted |
-|---|---|---|---|
-| FFT filter smoothing, cubic B-spline interpolation | `stream-calc-fft-bspline` | `.claude/worktrees/calc-fft-bspline` | Started fresh from `main`. Earlier Origin runs on our inputs are in `re-workspace/scratch/calc/` (`p4`, `q2`, `r3`, `r4`). |
-| Linear and polynomial fits | `worktree-wf_7107af90-7f2-5` | `.claude/worktrees/wf_7107af90-7f2-5` | Draft `crates/fit/src/linear.rs` compiles; no tests, no Origin comparison. |
-| Nonlinear fitting, function library, `.FDF` import | `worktree-wf_7107af90-7f2-6` | `.claude/worktrees/wf_7107af90-7f2-6` | Engine, 206 built-in functions and `.FDF` import committed with 20 passing tests; not yet compared with Origin; spec draft. |
-| Origin project reader: cell check, then graphs | `worktree-wf_7107af90-7f2-7` | `.claude/worktrees/wf_7107af90-7f2-7` | Reader keeps the raw graph blocks; nothing interprets them; the cell check has not run. |
-
-If a session ends before they finish: `git worktree list` and `git log main..<branch>` show
-what each did. Merge what is complete and reviewed; otherwise restart the stream from its branch.
-
-**Lead branch `lead-fit-ui`** (worktree `.claude/worktrees/lead-fit-ui`, pushed to GitHub): fitting
-in the app and the command-line program, built on snapshots of the two fitting branches.
-`Project::fit` (dispatch to the engines, parameter settings, derived quantities), `sheaf fit`
-(tables, `--list`, `--plot`, `--export`, `--save`; 3 integration tests) and the app's Fit window
-(Analysis menu; click test). All its tests pass. Merge it into `main` **after** both fitting
-branches are merged; expect small API changes from their final versions. The placement part of
-fitting (`Project::fit_with`, report sheets, curve on the graph) is already on `main` (`f729f6f`).
+Checked by hand in this session: `sheaf fit peak.csv -m Gauss --plot` on a synthetic peak gives the
+built-in parameters back and a correct figure; screenshots of the Fit, Smooth and Interpolate
+windows look right; a new click test picks the FFT filter in the Smooth window and checks its result.
 
 ## Exact next step
 
-1. When the streams finish: review each branch, merge one at a time into `main`, run the full
-   checks after each merge, push.
-2. Put fitting into the app and the command-line program (`sheaf fit`, a Fit window, the fitted
-   curve on the graph, report sheets) following `docs/adr/0006-fit-results.md`.
-3. Tag `m3-analysis` once the FFT filter and B-spline are merged.
+1. When the OPJ fix and its review finish: merge `worktree-wf_7107af90-7f2-7` into `main`, run the
+   full checks, push, tick milestone 5's first two items.
+2. Independent review of milestone 4 (fitting) on `main`; fix the confirmed findings; tag
+   `m4-fitting`.
+3. Then milestone 6 by the owner's priorities: column and bar charts with text labels (ICP-OES),
+   stacked and offset plots and multi-panel layouts (XRD), error bars, double Y, log scales.
+4. Clean up: remove merged worktrees and branches (`git worktree remove`, `git branch -d`); the
+   three `wf_7107af90-7f2-*` worktrees are marked locked by a stopped workflow, so
+   `git worktree unlock` them first.
+
+## Open questions noted by the agents (no answer needed to continue)
+
+- Fit reports show the standard error of a fixed parameter as blank (Origin's sheet stores 0).
+- Origin's bound handling can stop above the true constrained minimum; Sheaf copies it. An option
+  for the true constrained minimum could be added.
+- Should the B-spline label say more clearly that factor 0 is not Origin's result?
+- `.opj` graphs: plot groups (Origin's colour increments) are not modelled; legend frames and
+  Origin-style log tick labels are not drawn.
+- The automatic axis range can leave a wide empty band (data from -0.2 to 1.0 gave an axis from
+  -0.5 to 1.0); compare with Origin's rescale rule.
 
 ## Commands that verify the current state
 
 ```
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo run -p sheaf-cli -- analyze integrate some_it_export.txt
-cargo run -p sheaf-cli -- plot some_cv_export.txt -o cv.png --dpi 300
-cargo run -p sheaf-app -- some_cv_export.txt --show analysis:integrate --screenshot window.png
+cargo run -p sheaf-cli -- fit data.csv -m Gauss --plot fit.png
+cargo run -p sheaf-cli -- analyze smooth cv.txt --method fft --points 10
+cargo run -p sheaf-app -- data.csv --show fit:nonlinear --screenshot window.png
 ```
 
 `re-workspace/scratch/gen_chi.js` (local only) writes synthetic CV, current-vs-time and CSV files:
@@ -66,21 +68,19 @@ cargo run -p sheaf-app -- some_cv_export.txt --show analysis:integrate --screens
 ## Needs from me (the owner)
 
 1. **Try the app** (`cargo run --release -p sheaf-app`), import one of your real CH Instruments
-   files, try Analysis > Integrate on a scan, and tell me what is wrong or missing. Real CV and
-   i-t export files in the repo folder would also let me check the importer against real headers.
+   files, try Analysis > Integrate and Analysis > Fit, and tell me what is wrong or missing. Real
+   CV and i-t export files in the repo folder would also let me check the importer.
 2. Example figures you make most often, to match their style.
 3. How you choose the limits when you integrate a peak in Origin (by rows, by potential, or by
-   dragging on the graph). The app offers rows and an X interval today; dragging on the graph is
-   not built.
+   dragging on the graph).
 
-Received: five `.opj` projects in the repo root. They are ignored by git and are used only on this
-computer to develop and check the Origin project reader.
+Received: five `.opj` projects in the repo root (git-ignored; used only on this computer).
 
 ## Local-only resources
 
-- `re-workspace/scratch/` holds scratch scripts, raw dumps, synthetic test files and screenshots.
+- `re-workspace/scratch/` holds scratch scripts, raw Origin dumps, synthetic files and screenshots.
 - The owner's `.opj` files are in the repo root (git-ignored).
 - No Ghidra project and no saved REA evidence bundle exist.
-- Origin can be driven through COM automation with `tools/origin-ref/run-labtalk.ps1` (it takes a
-  system-wide lock so only one Origin runs at a time).
+- Origin is driven through COM by the scripts in `tools/origin-ref/` (they take a system-wide lock
+  so only one Origin runs at a time).
 - Git identity is set for this repository only (`UlanS1`, GitHub no-reply address).

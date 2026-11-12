@@ -537,6 +537,11 @@ impl Project {
                             end_point_baseline: spec.end_point_baseline,
                             rows: None,
                         };
+                        // Worksheet rows (1-based) of the first and last point that is actually used:
+                        // points with a missing X or Y are skipped by the integration.
+                        let usable = |i: &usize| xs[*i].is_finite() && ys[*i].is_finite();
+                        let first_used = (0..xs.len()).find(usable).map_or(f + 1, |i| f + i + 1);
+                        let last_used = (0..xs.len()).rev().find(usable).map_or(f + 1, |i| f + i + 1);
                         let math = calc::integrate(xs, ys, &options(AreaType::Mathematical))
                             .ok_or_else(|| AnalysisError::TooFewPoints(inp.short.clone()))?;
                         let abs = calc::integrate(xs, ys, &options(AreaType::Absolute))
@@ -546,8 +551,8 @@ impl Project {
                         t.push_row(
                             format!("{}, range {}", inp.label, k + 1),
                             vec![
-                                (f + math.i1) as f64,
-                                (f + math.i2) as f64,
+                                first_used as f64,
+                                last_used as f64,
                                 math.x1,
                                 math.x2,
                                 math.area,
@@ -1560,6 +1565,29 @@ mod tests {
         assert_eq!(rs.name, "Integrate1");
         assert_eq!(rs.columns[0].text().unwrap().len(), 4);
         assert!(r.new_columns.len() > 4 && p.workbook(book).unwrap().sheets[0].columns.len() == 3);
+    }
+
+    /// First row and Last row are worksheet rows, also when a missing value sits inside the range
+    /// or at its start.
+    #[test]
+    fn range_rows_are_worksheet_rows_with_missing_values() {
+        let (mut p, _, _, ramp) = sample();
+        let col = p.column_mut(ramp).unwrap();
+        let mut y: Vec<f64> = (0..=10).map(f64::from).collect();
+        y[3] = f64::NAN; // row 4
+        y[4] = f64::NAN; // row 5
+        col.data = ColumnData::numeric(y);
+        let rows = |tool: Tool, p: &mut Project| {
+            let t = p.analyze(&request(&[ramp], tool)).unwrap().table.unwrap();
+            (t.rows[0].1[0], t.rows[0].1[1])
+        };
+        let by_rows = |a, b| {
+            Tool::IntegrateRanges(IntegrateRangesSpec { ranges: vec![RowRange::Rows(a, b)], end_point_baseline: false })
+        };
+        assert_eq!(rows(by_rows(1, 5), &mut p), (1.0, 3.0), "the range ends in missing values");
+        assert_eq!(rows(by_rows(4, 8), &mut p), (6.0, 8.0), "the range starts in missing values");
+        assert_eq!(rows(by_rows(1, 8), &mut p), (1.0, 8.0), "a gap in the middle changes nothing");
+        assert_eq!(rows(ranges(&[(0.0, 7.0)], false), &mut p), (1.0, 8.0));
     }
 
     #[test]

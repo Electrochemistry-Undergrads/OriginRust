@@ -92,6 +92,17 @@ pub enum GraphOp {
     HideOtherLayers { layer: usize },
 }
 
+/// The tool of a graph window (the Tools toolbar).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GraphTool {
+    #[default]
+    Pointer,
+    /// The Data Reader.
+    Reader,
+    /// The Text tool: the next click on the page places a text label.
+    Text,
+}
+
 #[derive(Debug, Clone)]
 pub enum Action {
     NewProject,
@@ -176,10 +187,31 @@ pub enum Action {
         graph: WindowId,
         op: GraphOp,
     },
-    /// Switches a graph's tool: the Data Reader (`reader`) or the pointer.
+    /// Switches a graph's tool.
     GraphTool {
         graph: WindowId,
-        reader: bool,
+        tool: GraphTool,
+    },
+    /// Add Text: opens the text window for a new label in a layer (the active one when `layer`
+    /// is `None`) at a point given as fractions of the layer frame (the middle when `None`).
+    AddText {
+        graph: WindowId,
+        layer: Option<usize>,
+        at: Option<(f64, f64)>,
+    },
+    /// Opens the text window for an existing label (double click, Properties).
+    EditText {
+        graph: WindowId,
+        layer: usize,
+        label: usize,
+    },
+    /// Moves a label to a new anchor (fractions of the layer frame): one undo step.
+    MoveLabel {
+        graph: WindowId,
+        layer: usize,
+        label: usize,
+        x: f64,
+        y: f64,
     },
     /// Copy Page: the graph as a picture on the clipboard.
     CopyPage(WindowId),

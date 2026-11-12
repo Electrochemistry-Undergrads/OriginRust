@@ -1335,3 +1335,37 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
 - Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns, horizontal stacks, and the defaults of the Layer Management dialog's Arrange tab.
+
+## 16. Free text labels (P0, GP-TXT-01)
+
+### 16.1 What Origin 2016 does
+
+- A free text object has its text (with the escapes of section 7), a font, a size, a colour, a rotation and a place. Its attachment is *page*, *layer frame* or *layer and scales* (section 1.6).
+- It is made with the Text tool of the Tools toolbar (click on the page, type in a box on the graph) and with the page's right-click command "Add Text...". A double click on it opens its text and format settings; it is moved by dragging, removed with Delete [W:attachment-scaling-object]. [INF] The tool ends after one label.
+- Pictures of the owner's figures show labels of two kinds: curve names such as "Zn-LMO" and "After Delithiation", and peak indices such as "311".
+
+### 16.2 Sheaf's model and anchor rule (Sheaf choice)
+
+- A label belongs to one layer (`Layer::labels`) and is attached to the *layer frame*: its anchor is `(x, y)`, fractions of the layer's frame, `(0, 0)` the top left corner, `(1, 1)` the bottom right. Values outside 0 to 1 are allowed and put the label outside the frame. The anchor follows the frame when the layer moves or the page is resized and ignores the axis range.
+- The anchor is the start of the text, at the vertical middle of its first character, so a label with rotation 0 grows to the right of the point, and a rotated one grows along its angle (counter-clockwise degrees).
+- A new label's font is the layer's legend font, upright and black; the text window changes size, bold, italic and rotation. Bold and italic of single words are written with `\b(..)` and `\i(..)`.
+- Sheaf has no "page" or "layer and scales" attachment; labels read from `.opj` files are stored in the same frame fractions by the reader.
+
+### 16.3 Commands
+
+**Desktop app.**
+- Graph > Add Text... and the page's right-click "Add Text...": open the Text window for a new label in the active layer, placed in the middle of its frame (`0.5, 0.5`).
+- The Text tool of the Tools toolbar: a click on the page places the label at that point in the layer under the click (a click outside every frame uses the active layer) and opens the Text window. The tool ends after one label, or with Esc.
+- The Text window has the text (several lines; escapes allowed), Size, Bold, Italic and Rotation, and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
+- Double click on a label, or its right-click "Properties...", opens the window for it. A click selects it; dragging it moves it (the selection handles follow the pointer; the label moves when the button is let go). Delete removes it.
+- Each of Add text, Edit text, Move text and Delete text is one undo step.
+- `sheaf-app --show text:N` opens the Text window of the N-th label of the first graph (for pictures).
+
+**Command line** (`sheaf plot` and `sheaf export`, style option):
+- `--label "TEXT@X,Y"`, repeatable: adds a label to layer 0 at the fractions `X`, `Y` of its frame. The text is everything before the last `@`, so it may hold `@`; escapes are kept as written (`--label "\b(Zn-LMO)@0.85,0.1"`).
+- A value without `@`, with an empty text, or whose position is not two finite numbers is an error that quotes the value and shows the form `TEXT@X,Y`; no file is written.
+- The labels are added after the other style options, in the order given, and are saved with `--save`.
+
+### 16.4 Not done
+
+- Colour, font family, attachment choice, resizing and a background or frame for a label; copy and paste of labels; "Bring to the front" and "Push to the back"; editing text in place on the graph.

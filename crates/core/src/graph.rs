@@ -739,6 +739,21 @@ pub struct TextLabel {
     pub rotation_deg: f64,
 }
 
+impl TextLabel {
+    /// A label with no rotation.
+    pub fn new(text: impl Into<String>, x: f64, y: f64, font: Font) -> Self {
+        TextLabel { text: text.into(), x, y, font, rotation_deg: 0.0 }
+    }
+}
+
+impl Layer {
+    /// The font a new free text label of this layer starts with: the layer's legend font (the
+    /// text size the figure already uses), black and upright.
+    pub fn new_label_font(&self) -> Font {
+        Font { bold: false, italic: false, color: Color::BLACK, ..self.legend.font.clone() }
+    }
+}
+
 /// The colors a layer hands out to its plots.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Palette {

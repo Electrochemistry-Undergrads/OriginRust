@@ -14,7 +14,7 @@
 //! Each layer has a numbered icon: a click activates the layer, a double click opens its plot
 //! list, a right click the layer menu.
 
-use crate::actions::{Action, GraphOp};
+use crate::actions::{Action, GraphOp, GraphTool};
 use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
 use crate::menus::{self, MenuContext, WindowKind};
@@ -61,9 +61,34 @@ pub struct GraphUi {
     pub reader: bool,
     /// The data point the Data Reader pinned with a click.
     pub reader_point: Option<reader::Point>,
+    /// The Text tool is on: the next click on the page places a label.
+    pub text_tool: bool,
+    /// A label being dragged.
+    label_drag: Option<LabelDrag>,
+}
+
+/// A label being moved with the mouse: its anchor when the drag began (fractions of the layer
+/// frame) and how far the pointer has moved since (page points).
+#[derive(Clone, Copy)]
+struct LabelDrag {
+    layer: usize,
+    label: usize,
+    from: (f64, f64),
+    delta: (f64, f64),
 }
 
 impl GraphUi {
+    /// The tool in use.
+    pub fn tool(&self) -> GraphTool {
+        if self.reader {
+            GraphTool::Reader
+        } else if self.text_tool {
+            GraphTool::Text
+        } else {
+            GraphTool::Pointer
+        }
+    }
+
     /// What the Delete key does to the selected object: a legend, an axis title or a text label
     /// goes; other objects have no Delete in Origin's menus either.
     pub fn delete_selected(&mut self) -> Option<GraphOp> {
@@ -126,7 +151,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         state.active_layer = 0;
     }
 
-    let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     ui.painter().rect_filled(rect, 0.0, GROUND);
     let margin = 12.0;
     let page_w = graph.page.width_pt as f32;
@@ -189,7 +214,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // The selection, drawn over the picture.
     if let Some((layer, kind)) = state.selected {
-        draw_selection(&painter, &t.scene, layer, kind, &to_screen);
+        let moved = state.label_drag.filter(|d| kind == ObjectKind::Label(d.label) && layer == d.layer);
+        let shift = moved.map_or((0.0, 0.0), |d| d.delta);
+        draw_selection(&painter, &t.scene, layer, kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
     }
 
     // Data read-out under the pointer, in the layer under it.
@@ -240,12 +267,67 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // The Text tool: a click places a label there, in the layer under the click.
+    if state.text_tool {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.text_tool = false;
+        }
+    }
+
+    // Dragging a label moves it; the change is made when the button is let go.
+    if response.drag_started()
+        && !state.reader
+        && !state.text_tool
+        && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        && let Hit::Object { layer, kind: ObjectKind::Label(label) } = pick(pos)
+        && let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label))
+    {
+        state.selected = Some((layer, ObjectKind::Label(label)));
+        state.label_drag = Some(LabelDrag { layer, label, from: (l.x, l.y), delta: (0.0, 0.0) });
+        actions.push(Action::ActivateLayer { graph: graph_id, layer });
+    }
+    if let Some(mut d) = state.label_drag {
+        let page = response.drag_delta() / fit;
+        d.delta = (d.delta.0 + f64::from(page.x), d.delta.1 + f64::from(page.y));
+        state.label_drag = Some(d);
+        if response.drag_stopped() {
+            state.label_drag = None;
+            if let Some(f) = t.geometry.get(d.layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
+                && (d.delta.0 != 0.0 || d.delta.1 != 0.0)
+            {
+                actions.push(Action::MoveLabel {
+                    graph: graph_id,
+                    layer: d.layer,
+                    label: d.label,
+                    x: d.from.0 + d.delta.0 / f.w,
+                    y: d.from.1 + d.delta.1 / f.h,
+                });
+            }
+        }
+    }
+
     // Clicks on the page.
     let layer_of = |hit: Hit| match hit {
         Hit::Object { layer, .. } | Hit::Layer(layer) => Some(layer),
         Hit::Page => None,
     };
     if response.clicked()
+        && state.text_tool
+        && let Some(pos) = response.interact_pointer_pos()
+    {
+        let (px, py) = to_page(pos);
+        let layer = layer_of(pick(pos)).unwrap_or(state.active_layer);
+        if let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0) {
+            state.text_tool = false;
+            actions.push(Action::ActivateLayer { graph: graph_id, layer });
+            actions.push(Action::AddText {
+                graph: graph_id,
+                layer: Some(layer),
+                at: Some(((px - f.x) / f.w, (py - f.y) / f.h)),
+            });
+        }
+    } else if response.clicked()
         && !state.reader
         && let Some(pos) = response.interact_pointer_pos()
     {
@@ -270,7 +352,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 ObjectKind::YAxis | ObjectKind::YTitle => Some(open(layer, PropsTab::YAxis, None)),
                 ObjectKind::Legend => Some(open(layer, PropsTab::Legend, None)),
                 ObjectKind::Plot(p) => Some(open(layer, PropsTab::Plots, Some(p))),
-                ObjectKind::Label(_) => None,
+                ObjectKind::Label(label) => Some(Action::EditText { graph: graph_id, layer, label }),
             },
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
@@ -299,7 +381,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             .ok()
             .and_then(|o| o.get(gadget.plot).copied())
             .unwrap_or((0.0, 0.0));
-        let c = graph_context(graph_id, state.active_layer, state.reader);
+        let c = graph_context(graph_id, state.active_layer, state.tool());
         state.gadget_rect = gadget.show(ui, doc.project(), graph_id, geom, fit, &to_screen, offset, &c, actions);
         state.gadget = Some(gadget);
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -339,7 +421,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
 
     // The right-click menus.
-    let c = graph_context(graph_id, state.active_layer, state.reader);
+    let c = graph_context(graph_id, state.active_layer, state.tool());
     let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected);
     let target = state.menu_on;
     let mut shown = response.context_menu(|ui| {
@@ -361,7 +443,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 }
 
 /// The menu context of a graph window's own menus.
-fn graph_context(graph_id: WindowId, layer: usize, reader: bool) -> MenuContext<'static> {
+fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuContext<'static> {
     MenuContext {
         kind: WindowKind::Graph,
         book: None,
@@ -375,7 +457,7 @@ fn graph_context(graph_id: WindowId, layer: usize, reader: bool) -> MenuContext<
         open: None,
         panels: [true; 4],
         layer,
-        reader,
+        tool,
     }
 }
 

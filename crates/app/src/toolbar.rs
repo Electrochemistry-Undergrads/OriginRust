@@ -15,7 +15,7 @@
 //! colours. They are recognisable by meaning (a grid for a workbook, a polyline for Line, dots
 //! for Scatter) and are not copies of Origin's pictures.
 
-use crate::actions::Action;
+use crate::actions::{Action, GraphTool};
 use crate::dialogs::analysis::AnalysisKind;
 use crate::menus::{self, Cmd, MenuContext, NOT_YET};
 use crate::panels::PanelId;
@@ -232,7 +232,7 @@ fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
 /// True for the commands of tools (no menu entry; pressed while on).
 #[cfg(test)]
 fn is_tool(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::Pointer | Cmd::DataReader)
+    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool)
 }
 
 /// A button for a feature Sheaf lacks.
@@ -354,7 +354,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(Rescale, "Rescale", Cmd::Rescale, "Rescale to Show All"),
             tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),
-            g(Text, "Text"),
+            tool(Text, "Text", Cmd::TextTool),
             g(Arrow, "Arrow"),
             g(Icon::Line, "Line"),
             g(Rectangle, "Rectangle"),
@@ -472,8 +472,9 @@ fn text_box(ui: &mut Ui, text: &str, width: f32, name: &str) {
 fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions: &mut Vec<Action>) {
     let resolved = button.cmd.as_ref().map(|cmd| menus::resolve(cmd, c));
     let on = match button.cmd {
-        Some(Cmd::Pointer) => !c.reader,
-        Some(Cmd::DataReader) => c.reader,
+        Some(Cmd::Pointer) => c.tool == GraphTool::Pointer,
+        Some(Cmd::DataReader) => c.tool == GraphTool::Reader,
+        Some(Cmd::TextTool) => c.tool == GraphTool::Text,
         _ => button.on,
     };
     let enabled = on || matches!(resolved, Some(Ok(_)));

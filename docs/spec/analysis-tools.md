@@ -368,6 +368,13 @@ Steps, in order:
    area (trapezoids between the two limits, including the interpolated end pieces), area percent (share
    of the sum of all areas), FWHM (interpolated half-height crossings inside the limits), left and right
    limit (X). A negative peak has negative height and area.
+   Data rules (own, not compared with Origin): rows where X or Y is missing are skipped in every step
+   (the baseline and corrected curve are missing there, an area is the integral over the valid rows,
+   and the end-points line goes through the first and last valid rows), so the integration columns and
+   the fit columns agree. X must run one way, rising or falling; otherwise the tool refuses with "X is
+   not sorted" and changes nothing. The area of a positive peak is positive whichever way X runs
+   (Origin's `integ1` gives a negative area for falling X, section 1; the table here follows the
+   fit columns instead, so the two sets of columns have one sign).
 5. Multi-peak fit (own model, Origin's functions): a sum of Gauss or Lorentz peaks plus a constant or
    sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak, in Origin's parameterisation
    (Gauss `A/(w sqrt(pi/2)) exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz

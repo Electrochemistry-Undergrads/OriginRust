@@ -239,9 +239,17 @@ impl ResultTable {
     fn push_row(&mut self, label: String, values: Vec<f64>, units: Vec<String>) {
         self.rows.push((label, values));
         self.row_units.push(units);
-        self.units = (0..self.headers.len())
-            .map(|i| if self.mixed_units(i) { String::new() } else { self.unit(0, i).to_string() })
-            .collect();
+        // Kept up to date row by row (a rescan of all rows here made big tables quadratic).
+        let last = self.rows.len() - 1;
+        if last == 0 {
+            self.units = (0..self.headers.len()).map(|i| self.unit(0, i).to_string()).collect();
+        } else {
+            for i in 0..self.headers.len() {
+                if self.unit(last, i) != self.unit(0, i) {
+                    self.units[i].clear();
+                }
+            }
+        }
     }
 
     /// The unit of the number in row `row`, column `col`.
@@ -457,11 +465,15 @@ fn run_peak_chain(
     let mut t = ResultTable::new(&headers);
     for inp in inputs {
         let (xs, ys) = (inp.xs(), inp.ys());
-        let result = calc::analyze_peaks(xs, ys, &spec.chain).ok_or_else(|| {
-            AnalysisError::BadOption(format!(
+        let result = calc::analyze_peaks(xs, ys, &spec.chain).map_err(|e| match e {
+            calc::ChainError::NoBaseline => AnalysisError::BadOption(format!(
                 "column {}: the baseline could not be made (anchor points need at least two different X values, and the data at least two points)",
                 inp.short
-            ))
+            )),
+            calc::ChainError::UnsortedX => AnalysisError::BadOption(format!(
+                "column {}: X is not sorted; sort the rows along X before analysing peaks",
+                inp.short
+            )),
         })?;
         if result.peaks.is_empty() {
             return Err(AnalysisError::BadOption(format!(
@@ -486,19 +498,27 @@ fn run_peak_chain(
                 (_, ChainBaseline::None) => {
                     (ys.iter().copied().filter(|v| v.is_finite()).fold(f64::INFINITY, f64::min), 0.0)
                 }
-                (FitBaseline::Constant, _) => (result.baseline.iter().sum::<f64>() / n as f64, 0.0),
+                (FitBaseline::Constant, _) => {
+                    let v: Vec<f64> = result.baseline.iter().copied().filter(|b| b.is_finite()).collect();
+                    (v.iter().sum::<f64>() / v.len().max(1) as f64, 0.0)
+                }
                 (FitBaseline::Linear, _) => {
-                    let (b0, b1) = (result.baseline[0], result.baseline[n - 1]);
-                    let m = if xs[n - 1] == xs[0] { 0.0 } else { (b1 - b0) / (xs[n - 1] - xs[0]) };
-                    (b0 - m * xs[0], m)
+                    let ok: Vec<usize> =
+                        (0..n).filter(|&i| result.baseline[i].is_finite() && xs[i].is_finite()).collect();
+                    let (f, l) = (ok[0], ok[ok.len() - 1]);
+                    let (b0, b1) = (result.baseline[f], result.baseline[l]);
+                    let m = if xs[l] == xs[f] { 0.0 } else { (b1 - b0) / (xs[l] - xs[f]) };
+                    (b0 - m * xs[f], m)
                 }
             };
+            let finite_x = xs.iter().copied().filter(|v| v.is_finite());
+            let span = finite_x.clone().fold(f64::NEG_INFINITY, f64::max) - finite_x.fold(f64::INFINITY, f64::min);
             let starts: Vec<sheaf_fit::multipeak::PeakStart> = result
                 .peaks
                 .iter()
                 .map(|p| sheaf_fit::multipeak::PeakStart {
                     center: p.center,
-                    fwhm: if p.fwhm > 0.0 { p.fwhm } else { (xs[n - 1] - xs[0]).abs() / 20.0 },
+                    fwhm: if p.fwhm > 0.0 { p.fwhm } else { span / 20.0 },
                     height: ys[p.index] - (y0 + m * p.center),
                 })
                 .collect();
@@ -1873,5 +1893,48 @@ mod tests {
         });
         assert!(p.analyze(&request(&[y], bad)).is_err());
         assert_eq!(p, before);
+    }
+
+    #[test]
+    fn peak_chain_survives_a_missing_end_point_and_refuses_unsorted_x() {
+        let (mut p, book, y) = two_peaks();
+        let xcol = p.workbook(book).unwrap().sheets[0].columns[0].id;
+        let y0 = p.column_mut(y).unwrap().numeric_mut().unwrap();
+        y0[0] = f64::NAN;
+        y0[120] = f64::NAN; // inside the first peak
+        let end = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions {
+                baseline: ChainBaseline::EndPoints,
+                find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
+                ..ChainOptions::default()
+            },
+            integrate: true,
+            fit: Some(PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear }),
+        });
+        let t = p.analyze(&request(&[y], end.clone())).unwrap().table.unwrap();
+        assert_eq!(t.rows.len(), 2);
+        for r in &t.rows {
+            assert!(r.1.iter().all(|v| v.is_finite()), "{:?}", r.1);
+        }
+        assert!((t.rows[0].1[4] + t.rows[1].1[4] - 100.0).abs() < 1e-9);
+        // Unsorted X: refused, nothing changes.
+        let mut q = p.clone();
+        q.column_mut(xcol).unwrap().numeric_mut().unwrap().swap(10, 300);
+        let snapshot = q.clone();
+        assert!(matches!(q.analyze(&request(&[y], end)), Err(AnalysisError::BadOption(m)) if m.contains("not sorted")));
+        assert_eq!(q, snapshot);
+    }
+
+    #[test]
+    fn a_big_result_table_is_built_in_linear_time() {
+        let mut t = ResultTable::new(&["a"]);
+        for i in 0..50_000 {
+            t.push_row(format!("r{i}"), vec![i as f64], vec![if i == 40_000 { "s".into() } else { "A".into() }]);
+        }
+        assert_eq!(t.units, vec![String::new()], "mixed units give an empty shared unit");
+        let mut u = ResultTable::new(&["a"]);
+        u.push_row("r".into(), vec![1.0], vec!["A".into()]);
+        u.push_row("r".into(), vec![2.0], vec!["A".into()]);
+        assert_eq!(u.units, vec!["A".to_string()]);
     }
 }

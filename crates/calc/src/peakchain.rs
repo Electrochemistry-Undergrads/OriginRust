@@ -15,7 +15,8 @@
 //!    the baseline (or the half height), but never beyond the valley that separates it from a
 //!    neighbouring peak. Neighbouring peaks that overlap therefore share the valley point.
 //!
-//! Rows are 0-based indices here. The data must be ordered along X (rising or falling).
+//! Rows are 0-based indices here. The data must be ordered along X (rising or falling); rows
+//! with a missing X or Y are skipped.
 
 use crate::baseline::{BaselineMethod, subtract_baseline};
 use crate::differentiate::{DiffOptions, differentiate};
@@ -346,6 +347,9 @@ pub fn integrate_peaks(x: &[f64], c: &[f64], peaks: &[usize], mode: LimitMode) -
             py = c[i];
         }
         area += (rx - px) * (py + ry) / 2.0;
+        if x[n - 1] < x[0] {
+            area = -area;
+        }
         // Width at half height inside the limits.
         let half = c[p] / 2.0;
         let mut wl = lx;
@@ -386,22 +390,52 @@ pub fn integrate_peaks(x: &[f64], c: &[f64], peaks: &[usize], mode: LimitMode) -
     out
 }
 
-/// Runs the chain on `y(x)`. Returns `None` when the baseline cannot be made (fewer than two
-/// anchors, or fewer than two points).
-pub fn analyze_peaks(x: &[f64], y: &[f64], opts: &ChainOptions) -> Option<ChainResult> {
-    let n = x.len().min(y.len());
-    if n < 2 {
-        return None;
+/// Why [`analyze_peaks`] could not run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChainError {
+    /// Fewer than two usable points, or fewer than two anchors with different X.
+    NoBaseline,
+    /// X is neither rising nor falling (the rows are not sorted along X).
+    UnsortedX,
+}
+
+/// Runs the chain on `y(x)`. Rows where X or Y is missing are left out of the calculation
+/// (the baseline and corrected curve are NaN there, and an area is the integral over the valid
+/// rows, as the multi-peak fit also skips them); the indices in the result are row indices of
+/// the input. The areas are positive for a positive peak whichever way X runs.
+pub fn analyze_peaks(x: &[f64], y: &[f64], opts: &ChainOptions) -> Result<ChainResult, ChainError> {
+    let len = x.len().min(y.len());
+    let rows: Vec<usize> = (0..len).filter(|&i| x[i].is_finite() && y[i].is_finite()).collect();
+    if rows.len() < 2 {
+        return Err(ChainError::NoBaseline);
     }
-    let method = baseline_method(&x[..n], &y[..n], &opts.baseline)?;
-    let (corrected, baseline) = subtract_baseline(&x[..n], &y[..n], &method);
-    let mut idx = find_peak_indices(&x[..n], &corrected, &opts.find);
-    let mut peaks = integrate_peaks(&x[..n], &corrected, &idx, opts.limits);
+    let xv: Vec<f64> = rows.iter().map(|&i| x[i]).collect();
+    let yv: Vec<f64> = rows.iter().map(|&i| y[i]).collect();
+    let rising = xv.windows(2).all(|w| w[1] >= w[0]);
+    let falling = xv.windows(2).all(|w| w[1] <= w[0]);
+    if !rising && !falling {
+        return Err(ChainError::UnsortedX);
+    }
+    let method = baseline_method(&xv, &yv, &opts.baseline).ok_or(ChainError::NoBaseline)?;
+    let (corrected, baseline) = subtract_baseline(&xv, &yv, &method);
+    let mut idx = find_peak_indices(&xv, &corrected, &opts.find);
+    let mut peaks = integrate_peaks(&xv, &corrected, &idx, opts.limits);
     if opts.find.min_fwhm > 0.0 && peaks.iter().any(|p| p.fwhm < opts.find.min_fwhm) {
         idx = peaks.iter().filter(|p| p.fwhm >= opts.find.min_fwhm).map(|p| p.index).collect();
-        peaks = integrate_peaks(&x[..n], &corrected, &idx, opts.limits);
+        peaks = integrate_peaks(&xv, &corrected, &idx, opts.limits);
     }
-    Some(ChainResult { baseline, corrected, peaks })
+    for p in peaks.iter_mut() {
+        p.index = rows[p.index];
+        p.left_index = rows[p.left_index];
+        p.right_index = rows[p.right_index];
+    }
+    let mut full_b = vec![f64::NAN; len];
+    let mut full_c = vec![f64::NAN; len];
+    for (k, &i) in rows.iter().enumerate() {
+        full_b[i] = baseline[k];
+        full_c[i] = corrected[k];
+    }
+    Ok(ChainResult { baseline: full_b, corrected: full_c, peaks })
 }
 
 #[cfg(test)]
@@ -517,11 +551,59 @@ mod tests {
         let r = analyze_peaks(&x, &y, &o).unwrap();
         let p = &r.peaks[0];
         assert!((p.right_x - p.left_x - 0.5 * 2.354_820).abs() < 2e-3);
-        assert!(analyze_peaks(&x[..1], &y[..1], &o).is_none());
+        assert_eq!(analyze_peaks(&x[..1], &y[..1], &o), Err(ChainError::NoBaseline));
         let bad = ChainOptions {
             baseline: ChainBaseline::Anchors(vec![(1.0, 0.0)], InterpMethod::Linear),
             ..Default::default()
         };
-        assert!(analyze_peaks(&x, &y, &bad).is_none());
+        assert_eq!(analyze_peaks(&x, &y, &bad), Err(ChainError::NoBaseline));
+    }
+
+    fn two_peaks() -> (Vec<f64>, Vec<f64>) {
+        let x = grid();
+        let y = x.iter().map(|&x| 0.1 + gauss(x, 5.0, 0.4, 1.0) + gauss(x, 14.0, 0.6, 0.5)).collect();
+        (x, y)
+    }
+
+    #[test]
+    fn missing_end_point_and_inner_point_are_skipped() {
+        let (x, mut y) = two_peaks();
+        let clean =
+            analyze_peaks(&x, &y, &ChainOptions { baseline: ChainBaseline::EndPoints, ..Default::default() }).unwrap();
+        y[0] = f64::NAN;
+        y[90] = f64::NAN; // inside the first peak
+        let o = ChainOptions { baseline: ChainBaseline::EndPoints, ..Default::default() };
+        let r = analyze_peaks(&x, &y, &o).unwrap();
+        assert_eq!(r.peaks.len(), 2);
+        assert!(r.baseline[0].is_nan() && r.baseline[1].is_finite());
+        for (a, b) in r.peaks.iter().zip(&clean.peaks) {
+            assert!(a.area.is_finite() && a.area_percent.is_finite());
+            assert!((a.area - b.area).abs() < 2e-3 * b.area.abs(), "{} {}", a.area, b.area);
+            assert_eq!(a.index, b.index);
+        }
+    }
+
+    #[test]
+    fn reversed_x_gives_the_same_positive_areas() {
+        // No offset: on a flat plateau the valley point between the peaks is a tie.
+        let (x, y0) = two_peaks();
+        let y: Vec<f64> = y0.iter().map(|v| v - 0.1).collect();
+        let fwd = analyze_peaks(&x, &y, &ChainOptions::default()).unwrap();
+        let xr: Vec<f64> = x.iter().rev().copied().collect();
+        let yr: Vec<f64> = y.iter().rev().copied().collect();
+        let rev = analyze_peaks(&xr, &yr, &ChainOptions::default()).unwrap();
+        assert_eq!(rev.peaks.len(), 2);
+        let mut a: Vec<f64> = rev.peaks.iter().map(|p| p.area).collect();
+        a.reverse();
+        for (r, f) in a.iter().zip(&fwd.peaks) {
+            assert!(*r > 0.0 && (r - f.area).abs() < 1e-9 * f.area, "{r} {}", f.area);
+        }
+    }
+
+    #[test]
+    fn unsorted_x_is_refused() {
+        let (mut x, y) = two_peaks();
+        x.swap(10, 300);
+        assert_eq!(analyze_peaks(&x, &y, &ChainOptions::default()), Err(ChainError::UnsortedX));
     }
 }

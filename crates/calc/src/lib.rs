@@ -28,7 +28,7 @@ pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integra
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
 pub use normalize::{NormalizeMethod, normalize};
 pub use peakchain::{
-    ChainBaseline, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo, analyze_peaks,
+    ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo, analyze_peaks,
     auto_minima_anchors, find_peak_indices, integrate_peaks,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};

@@ -225,6 +225,26 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
     let n_all = x.len();
     let mut warnings = Vec::new();
 
+    for s in &func.params {
+        if s.fixed && !s.initial.is_finite() {
+            return Err(FitError::BadFunction(format!(
+                "parameter {} is fixed at a value that is not a finite number",
+                s.name
+            )));
+        }
+        if s.lower.is_some_and(f64::is_nan) || s.upper.is_some_and(f64::is_nan) {
+            return Err(FitError::BadFunction(format!("parameter {} has a bound that is not a number", s.name)));
+        }
+        if let (Some(lo), Some(hi)) = (s.lower, s.upper)
+            && lo > hi
+        {
+            return Err(FitError::BadFunction(format!(
+                "parameter {} has its lower bound ({lo}) above its upper bound ({hi})",
+                s.name
+            )));
+        }
+    }
+
     // Weights, one per input point (sqrt applied later).
     let raw_w: Vec<f64> = match &opts.weighting {
         Weighting::None => vec![1.0; n_all],
@@ -235,7 +255,9 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
         Weighting::Statistical => y.iter().map(|v| if *v > 0.0 { 1.0 / v } else { f64::NAN }).collect(),
         Weighting::Direct(w) => {
             check_len(w.len(), n_all)?;
-            w.iter().map(|w| if *w >= 0.0 { *w } else { f64::NAN }).collect()
+            // A weight of zero means the point does not take part in the fit; it is left out
+            // like a missing value so that it does not count in the degrees of freedom.
+            w.iter().map(|w| if *w > 0.0 { *w } else { f64::NAN }).collect()
         }
     };
     let used: Vec<usize> =
@@ -292,6 +314,11 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
     };
     let mut cost = cost_of(&p);
     if !cost.is_finite() {
+        if xs.iter().all(|&xv| func.eval(&p, xv).is_finite()) {
+            return Err(FitError::Failed(
+                "the sum of squared residuals is too large to be computed (it overflows); scale the data".into(),
+            ));
+        }
         return Err(FitError::Failed(
             "the model is not defined (gives a missing value) at the starting parameters".into(),
         ));
@@ -611,6 +638,50 @@ mod tests {
     fn formula_with_unknown_name_is_rejected() {
         assert!(FitFunction::from_formula("U", "a + q*x", &["a", "b"]).is_err());
         assert!(FitFunction::from_formula("U", "y = a + b*x", &["a", "b"]).is_ok());
+    }
+
+    fn user() -> FitFunction {
+        FitFunction::from_formula("User", "y0 + A*exp(-x/t)", &["y0", "A", "t"]).unwrap()
+    }
+
+    #[test]
+    fn direct_weight_of_zero_leaves_the_point_out() {
+        let (x, y) = data();
+        let mut w = vec![1.0; x.len()];
+        w[5] = 0.0;
+        let opts = FitOptions { weighting: Weighting::Direct(w), ..FitOptions::default() };
+        let r = fit(&user(), &x, &y, &opts).unwrap();
+        assert_eq!(r.stats.n_points, 29);
+        assert_eq!(r.stats.dof, 26);
+    }
+
+    #[test]
+    fn direct_weights_all_zero_is_an_error() {
+        let (x, y) = data();
+        let opts = FitOptions { weighting: Weighting::Direct(vec![0.0; x.len()]), ..FitOptions::default() };
+        assert!(matches!(fit(&user(), &x, &y, &opts), Err(FitError::TooFewPoints { .. })));
+    }
+
+    #[test]
+    fn contradictory_or_non_finite_settings_are_errors() {
+        let (x, y) = data();
+        let o = FitOptions::default();
+        let f = user().with_bounds("t", Some(5.0), Some(1.0));
+        assert!(matches!(fit(&f, &x, &y, &o), Err(FitError::BadFunction(_))));
+        let f = user().with_fixed("y0", f64::NAN);
+        assert!(matches!(fit(&f, &x, &y, &o), Err(FitError::BadFunction(_))));
+        let f = user().with_bounds("t", Some(f64::NAN), None);
+        assert!(matches!(fit(&f, &x, &y, &o), Err(FitError::BadFunction(_))));
+    }
+
+    #[test]
+    fn overflowing_cost_is_reported_as_such() {
+        let (x, y) = data();
+        let big: Vec<f64> = y.iter().map(|v| v * 1e200).collect();
+        match fit(&user(), &x, &big, &FitOptions::default()) {
+            Err(FitError::Failed(m)) => assert!(m.contains("overflow"), "{m}"),
+            other => panic!("expected an overflow error, got {other:?}"),
+        }
     }
 
     #[test]

@@ -77,6 +77,16 @@ impl GraphPropsDialog {
         GraphPropsDialog { graph, tab, token, selected_plot: 0, add_from: 0 }
     }
 
+    /// The plot of the first layer that the Plots tab has selected.
+    pub fn selected_plot(&self) -> usize {
+        self.selected_plot
+    }
+
+    /// Selects a plot of the first layer (the Object Manager does this when a plot is clicked).
+    pub fn select_plot(&mut self, plot: usize) {
+        self.selected_plot = plot;
+    }
+
     /// Draws the window. Returns `false` when it was closed.
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> bool {
         let Some(original) = doc.project().graph(self.graph) else {

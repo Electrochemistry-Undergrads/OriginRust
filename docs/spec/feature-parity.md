@@ -18,9 +18,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 37 | 95 | 98 | 230 |
+| All rows | 37 | 96 | 97 | 230 |
 | P0 | 30 | 64 | 7 | 101 |
-| P1 and P2 together | 7 | 31 | 91 | 129 |
+| P1 and P2 together | 7 | 32 | 90 | 129 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 42 are P2. The P1 and P2 rows were not counted separately by status.
 
@@ -40,7 +40,7 @@ Cross-cutting findings:
 | Save project as .opj (owner's request) | File > Save Project As | none | ✗ | no writer anywhere; app and CLI write only .sheaf, PNG, SVG, PDF, CSV/TSV | P0 |
 | Open .opj workbooks and basic graphs | File > Open | `io/src/opj`; app, drag and drop, CLI | ◐ | skips matrices, notes, layouts, folders, fit results, formulas, masks, column formats; .opju not read; saved as .sheaf copy; pre-9 graphs unverified | P0 |
 | Undo and redo | Edit > Undo, Ctrl+Z | full history, labelled, Ctrl+Z/Y | ✓ | superset of Origin's one level; Alt+Backspace unbound | P0 |
-| Project Explorer | View > Project Explorer, Alt+1 | flat window list, right-click Show/Rename/Export/Delete | ◐ | no folder tree or editing UI (model has folders), no filters, Duplicate, Properties, search; cannot be hidden | P0 |
+| Project Explorer | View > Project Explorer, Alt+1 | auto-hide panel on the left edge (slides out on hover, pin to dock, X and Alt+1 hide it): folder tree over a window list (Name, Long Name, Short Name, Type, sortable), active window in bold, double click shows, right-click Show/Hide/Rename/Delete/Export/Properties, drag a window onto a folder, New Folder | ◐ | no Duplicate, search or filters; folders cannot be renamed or deleted; Properties only edits the long name; no multi-select, F2 or Del keys | P0 |
 | Menu bar per window type | menus differ for book, graph, layout, matrix | one bar: File, Edit, Worksheet, Plot, Analysis, Graph, Window, Help | ◐ | no View, Column, Statistics, Gadgets, Tools, Format menus; Edit holds only undo and redo; bar does not change with the active window | P0 |
 | Analysis and Statistics menu structure | Mathematics, Signal Processing, Fitting, Peaks and Baseline submenus; Statistics menu | one flat Analysis menu: 8 tools and 3 fit entries | ◐ | no submenus, no Statistics or Gadgets menu, not extensible | P0 |
 | Toolbars | about 30, View > Toolbars | Standard, Edit, Format, Graph, 2D Graphs, Tools and Object Edit bars with drawn icons; View > Toolbars shows and hides each | ◐ | buttons for features Sheaf lacks are greyed (most of 2D Graphs, Graph, Format, Tools, Object Edit); no Style, Mask, Layout, 3D bars; bars are not draggable or customisable | P0 |
@@ -56,7 +56,7 @@ Cross-cutting findings:
 | Window properties and rename | Alt+Enter | long name only | ◐ | short name automatic; no comments field or Properties dialog | P1 |
 | Window menu | cascade, tile, duplicate, split, refresh | lists windows and focuses one | ◐ | no cascade, tile, Duplicate, Split, Refresh | P1 |
 | Preferences | Tools > Options, Ctrl+U | none | ✗ | no settings stored | P1 |
-| Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | one-line status bar | ✗ | results go to sheets; no log | P1 |
+| Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | Object Manager (right edge: layers and plots of the active graph with tick boxes that show or hide plots), Messages Log and Results Log (left edge, with Clear), status bar with hints, Average, Sum and Count of the selected cells, AU : ON, active sheet, Radian | ◐ | no Command Window, Code Builder, Quick Help, Smart Hint Log or Data Display; Results Log holds only the analysis and fit summaries; Object Manager has no plot groups and no layer-level settings | P1 |
 | Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | page fitted to window | ◐ | no user zoom or view commands | P1 |
 | Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | none | ✗ | | P1 |
 | Set As Begin, End, Reset | Edit menu | none | ✗ | analysis dialogs take row ranges individually | P1 |

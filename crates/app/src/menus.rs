@@ -20,6 +20,7 @@ use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
+use crate::panels::PanelId;
 use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
@@ -87,6 +88,8 @@ pub enum Cmd {
     GraphProps(PropsTab),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
+    /// View > Project Explorer and the other panels.
+    Panel(PanelId),
     Cascade,
     TileHorizontally,
     TileVertically,
@@ -147,6 +150,8 @@ pub struct MenuContext<'a> {
     pub windows: Vec<(WindowId, String)>,
     /// A top-level menu to hold open (`--show menu:Plot`, for pictures of the menus).
     pub open: Option<&'a str>,
+    /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
+    pub panels: [bool; 4],
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -426,14 +431,14 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
     v.push(grey_keyed("Command Window", alt(Key::Num3)));
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
-    v.push(grey_keyed("Project Explorer", alt(Key::Num1)));
+    v.push(keyed("Project Explorer", alt(Key::Num1), Cmd::Panel(PanelId::Explorer)));
     if kind == WindowKind::Graph {
-        v.push(grey_keyed("Object Manager", alt(Key::Num8)));
+        v.push(keyed("Object Manager", alt(Key::Num8), Cmd::Panel(PanelId::Objects)));
     }
     v.push(grey_sub("View Windows", &["None", "Windows in Active Folder", "Active Folder and Subfolders"]));
     v.push(sep());
-    v.push(grey_keyed("Results Log", alt(Key::Num2)));
-    v.push(grey_keyed("Messages Log", alt(Key::Num6)));
+    v.push(keyed("Results Log", alt(Key::Num2), Cmd::Panel(PanelId::Results)));
+    v.push(keyed("Messages Log", alt(Key::Num6), Cmd::Panel(PanelId::Messages)));
     v.push(grey_keyed("Smart Hint Log", alt(Key::Num7)));
     match kind {
         WindowKind::Workbook => v.extend(greys(&["-", "Actively Update Plots", "Page Break Preview Lines"])),
@@ -1405,6 +1410,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         Cmd::GraphProps(tab) => Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, tab: *tab },
         Cmd::Toolbars => Action::Toolbars,
+        Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,
         Cmd::TileVertically => Action::TileVertically,
@@ -1531,6 +1537,14 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                     button = button.shortcut_text(ui.ctx().format_shortcut(keys));
                 }
                 let response = ui.add_enabled(enabled, button);
+                if let Some(Cmd::Panel(p)) = &it.cmd
+                    && c.panels[p.index()]
+                {
+                    tick(ui, &response);
+                }
+                if response.contains_pointer() {
+                    crate::panels::set_hint(ui.ctx(), &plain(&it.label));
+                }
                 match resolved {
                     Some(Ok(action)) => {
                         if response.clicked() {
@@ -1718,6 +1732,7 @@ mod tests {
             redo: None,
             windows: Vec::new(),
             open: None,
+            panels: [true; 4],
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

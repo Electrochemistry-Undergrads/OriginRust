@@ -18,6 +18,7 @@
 use crate::actions::Action;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::menus::{self, Cmd, MenuContext, NOT_YET};
+use crate::panels::PanelId;
 use crate::theme;
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Shape, Stroke, Ui, vec2};
 use sheaf_core::Designation;
@@ -256,9 +257,9 @@ fn build(bar: Bar) -> Vec<Item> {
             g(Print, "Print"),
             g(Duplicate, "Duplicate"),
             gap(),
-            g(PanelLeft, "Project Explorer"),
-            g(PanelRight, "Object Manager"),
-            g(LogLines, "Results Log"),
+            b(PanelLeft, "Project Explorer", Cmd::Panel(PanelId::Explorer), "Project Explorer"),
+            b(PanelRight, "Object Manager", Cmd::Panel(PanelId::Objects), "Object Manager"),
+            b(LogLines, "Results Log", Cmd::Panel(PanelId::Results), "Results Log"),
             gap(),
             b(AddColumns, "Add New Columns", Cmd::AddColumns, "Add New Columns"),
             gap(),
@@ -494,6 +495,9 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
         button.tip.to_string()
     };
     let clicked = enabled && response.clicked();
+    if response.hovered() {
+        crate::panels::set_hint(ui.ctx(), &name);
+    }
     response.on_hover_ui(|ui| {
         ui.label(name);
         if let Some(why) = reason {

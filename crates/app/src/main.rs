@@ -10,7 +10,8 @@
 //! Two more options exist so the interface can be checked without a person
 //! at the screen: `--screenshot FILE.png` saves a picture of the window after
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
-//! `graph-settings:plots`, `column`, `export`, `import:FILE`, `focus:Book1`, `menu:Plot` to
+//! `graph-settings:plots`, `panel:explorer` (also `-docked`, `-hidden`; `objects`, `messages`,
+//! `results`), `hide-plot:2`, `column`, `export`, `import:FILE`, `focus:Book1`, `menu:Plot` to
 //! hold a top-level menu open, `select-column:B` and `column-menu:B` for the first workbook).
 
 // In release builds on Windows, do not open a console window next to the app.
@@ -22,6 +23,7 @@ mod dialogs;
 mod graph_view;
 mod grid;
 mod menus;
+mod panels;
 mod theme;
 mod toolbar;
 mod workspace;

@@ -37,6 +37,35 @@ pub struct Target {
     pub top_left: (usize, usize),
 }
 
+/// The numbers in the selected cells: what the status bar summarises.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Stats {
+    pub sum: f64,
+    pub count: usize,
+}
+
+impl Stats {
+    pub fn average(&self) -> f64 {
+        self.sum / self.count as f64
+    }
+}
+
+/// Sum and count of the numbers in the cells a selection covers; `None` when there is no number
+/// (text and empty cells are not counted, as in Origin).
+pub fn selection_stats(sheet: &Worksheet, t: &Target) -> Option<Stats> {
+    let (mut sum, mut count) = (0.0, 0);
+    for column in t.columns.iter().filter_map(|i| sheet.columns.get(*i)) {
+        let Some(values) = column.numeric() else { continue };
+        let end = t.rows.end.min(values.len());
+        let start = t.rows.start.min(end);
+        for v in values[start..end].iter().filter(|v| v.is_finite()) {
+            sum += v;
+            count += 1;
+        }
+    }
+    (count > 0).then_some(Stats { sum, count })
+}
+
 /// What the user is doing in one workbook window.
 #[derive(Default)]
 pub struct BookUi {
@@ -172,6 +201,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         redo: None,
         windows: Vec::new(),
         open: None,
+        panels: [true; 4],
     }
 }
 
@@ -991,6 +1021,31 @@ mod tests {
         ui.select_all(&s);
         let t = ui.target(&s).unwrap();
         assert_eq!((t.columns.len(), t.rows, t.top_left), (5, 0..4, (0, 0)));
+    }
+
+    #[test]
+    fn the_statistics_count_the_numbers_of_the_selection_and_skip_text_and_gaps() {
+        let s = sheet();
+        let mut ui = BookUi::default();
+        assert_eq!(ui.target(&s).and_then(|t| selection_stats(&s, &t)), None);
+        // Column B alone: 4, 5, 6, 7.
+        ui.sel = Sel::Columns;
+        ui.selected = vec![s.columns[1].id];
+        let st = selection_stats(&s, &ui.target(&s).unwrap()).unwrap();
+        assert_eq!((st.sum, st.count, st.average()), (22.0, 4, 5.5));
+        // A block that reaches below the shorter columns counts only what exists: C has one value.
+        ui.select_cells(&s, (1, 2), (2, 3));
+        let st = selection_stats(&s, &ui.target(&s).unwrap()).unwrap();
+        assert_eq!((st.sum, st.count), (6.0 + 7.0, 2));
+        // Everything: 6 + 22 + 8 + 18 + 3.
+        ui.select_all(&s);
+        let st = selection_stats(&s, &ui.target(&s).unwrap()).unwrap();
+        assert_eq!((st.sum, st.count), (6.0 + 22.0 + 8.0 + 18.0 + 3.0, 3 + 4 + 1 + 2 + 2));
+        // A text column holds no numbers.
+        let mut text = s.clone();
+        text.columns[1].data = ColumnData::text(vec!["a".into(), "b".into()]);
+        ui.select_cells(&text, (1, 0), (1, 1));
+        assert_eq!(selection_stats(&text, &ui.target(&text).unwrap()), None);
     }
 
     #[test]

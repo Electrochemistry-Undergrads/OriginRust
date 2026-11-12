@@ -132,6 +132,16 @@ let rep = fit_polynomial(&x, &y, 3, &PolyOptions::default())?;      // Intercept
 - Both fixed parameters of a line is an error (nothing to fit).
 - The report's `status` is `Exact`, `iterations` is `None`, `pearson_r` is set for orders 1 only.
 
+## Our own rules for odd inputs (Origin not run on these)
+
+- A confidence level that is not strictly between 0 and 1 is refused with an error.
+- When y does not vary (the total sum of squares is zero or only rounding noise), R-square,
+  adjusted R-square and Pearson's r are NaN and a warning is added. Origin's behaviour was not
+  checked.
+- The confidence limits are value plus or minus the Student t critical value times the standard
+  error, and the ANOVA F equals the squared t of a straight line's slope: these are checked against
+  our own formulas only, not against an Origin dialog report.
+
 ## What was not checked against Origin
 
 - The Linear Fit and Polynomial Fit dialogs' own report sheets (only `fitlr`, `fitpoly` and

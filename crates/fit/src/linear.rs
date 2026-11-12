@@ -121,8 +121,18 @@ fn collect_points(x: &[f64], y: &[f64], weighting: &Weighting) -> Result<Points,
     Ok(p)
 }
 
+/// The confidence level must lie strictly between 0 and 1; otherwise the limits would be NaN.
+fn check_level(level: f64) -> Result<(), FitError> {
+    if level > 0.0 && level < 1.0 {
+        Ok(())
+    } else {
+        Err(FitError::Failed(format!("the confidence level must be strictly between 0 and 1, not {level}")))
+    }
+}
+
 /// Fit a straight line `y = Intercept + Slope * x`.
 pub fn fit_linear(x: &[f64], y: &[f64], opts: &LinearOptions) -> Result<FitReport, FitError> {
+    check_level(opts.confidence_level)?;
     let pts = collect_points(x, y, &opts.weighting)?;
     let fixed = [opts.fix_intercept, opts.fix_slope];
     let solved = solve(&pts, 1, &fixed, opts.scale_errors_by_reduced_chi_sqr)?;
@@ -143,6 +153,7 @@ pub fn fit_polynomial(x: &[f64], y: &[f64], order: usize, opts: &PolyOptions) ->
     if order == 0 {
         return Err(FitError::BadFunction("a polynomial needs order 1 or more".to_string()));
     }
+    check_level(opts.confidence_level)?;
     let pts = collect_points(x, y, &opts.weighting)?;
     let mut fixed = vec![None; order + 1];
     fixed[0] = opts.fix_intercept;
@@ -208,6 +219,8 @@ struct Solved {
     tss: f64,
     /// Degrees of freedom of the total sum of squares.
     total_df: usize,
+    /// Weighted sum of y squared: the scale against which `tss` is judged to be zero.
+    tss_scale: f64,
 }
 
 /// Weighted least squares of a polynomial of `order`; `fixed[k]` holds coefficient k at a value.
@@ -323,6 +336,7 @@ fn solve(pts: &Points, order: usize, fixed: &[Option<f64>], scale_by_chi: bool) 
         rss,
         tss,
         total_df,
+        tss_scale: pts.y.iter().zip(&pts.w).map(|(y, w)| w * y * y).sum(),
     })
 }
 
@@ -399,8 +413,14 @@ fn build_report(
 
     let rss = solved.rss;
     let reduced = if dof > 0 { rss / dof as f64 } else { f64::NAN };
-    let r2 = 1.0 - rss / solved.tss;
-    let adj = 1.0 - reduced / (solved.tss / solved.total_df as f64);
+    // A total sum of squares that is zero (or only rounding noise relative to the data) means y
+    // does not vary: R-square is undefined. Origin's behaviour here was not checked.
+    let degenerate = solved.tss.is_nan() || solved.tss <= solved.tss_scale * 1e-24;
+    let (r2, adj) = if degenerate {
+        (f64::NAN, f64::NAN)
+    } else {
+        (1.0 - rss / solved.tss, 1.0 - reduced / (solved.tss / solved.total_df as f64))
+    };
     let model_df = solved.total_df - dof;
     let model_ss = solved.tss - rss;
     let (model_ms, f, prob_f) = if model_df > 0 && dof > 0 {
@@ -441,6 +461,10 @@ fn build_report(
         None
     };
     let mut warnings = Vec::new();
+    if degenerate {
+        warnings
+            .push("the y values do not vary, so R-square, adjusted R-square and Pearson's r are undefined".to_string());
+    }
     if dof == 0 {
         warnings.push("as many free parameters as points: the errors and probabilities are undefined".to_string());
     }

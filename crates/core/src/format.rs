@@ -39,6 +39,7 @@ impl NumberFormat {
             NumberFormat::Decimal(d) => format!("{:.*}", usize::from(d), v),
             NumberFormat::Scientific(d) => format_scientific(v, usize::from(d)),
             NumberFormat::Significant(d) => format_general(v, usize::from(d.max(1))),
+            NumberFormat::Date(_) | NumberFormat::DateTime(..) if !datetime::in_range(v) => format_general(v, 9),
             NumberFormat::Date(d) => datetime::format_date(v, d),
             NumberFormat::Time(t) => datetime::format_time(datetime::time_only_fraction(v), t),
             NumberFormat::DateTime(d, t) => datetime::format_date_time(v, d, t),
@@ -92,6 +93,19 @@ fn trim_zeros(s: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn huge_values_in_a_date_format_show_as_plain_numbers() {
+        for v in [1e300, -1e300, 1e19, 1e15, -1e15] {
+            let a = NumberFormat::Date(DatePattern::Iso).format(v);
+            let b = NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hms).format(v);
+            let c = NumberFormat::Time(TimePattern::Hms).format(v);
+            assert_eq!(a, format_general(v, 9));
+            assert_eq!(b, a);
+            assert!(!c.is_empty());
+        }
+        assert_eq!(datetime::parts(1e300).month, datetime::parts(3.7e7).month);
+    }
 
     #[test]
     fn general_format_drops_noise_and_trailing_zeros() {

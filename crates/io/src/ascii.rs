@@ -992,6 +992,19 @@ mod tests {
     }
 
     #[test]
+    fn ratios_such_as_1_2_stay_text() {
+        let imp = parse(
+            "ratio,v
+1:1,1
+1:2,2
+2:3,3
+",
+        );
+        assert!(col(&imp, 0).text().is_some());
+        assert_eq!(col(&imp, 0).text().unwrap()[1], "1:2");
+    }
+
+    #[test]
     fn dates_can_be_kept_as_text() {
         let opts = AsciiOptions { dates: DateImport::AsText, ..AsciiOptions::default() };
         let imp = parse_ascii(ICP, "f", &opts).unwrap();

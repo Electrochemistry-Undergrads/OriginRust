@@ -162,8 +162,18 @@ pub fn time_value(hour: u32, minute: u32, seconds: f64) -> Option<f64> {
     Some((f64::from(hour) * 3600.0 + f64::from(minute) * 60.0 + seconds) / 86_400.0)
 }
 
+/// Date numbers outside this range (years about -100000 to 100000) are shown as plain numbers.
+const MIN_VALUE: f64 = -3.0e7;
+const MAX_VALUE: f64 = 3.7e7;
+
+/// True when `v` is a date number the calendar code can show.
+pub fn in_range(v: f64) -> bool {
+    v.is_finite() && (MIN_VALUE..=MAX_VALUE).contains(&v)
+}
+
 /// Splits a date number into calendar fields, rounding to the millisecond.
 pub fn parts(v: f64) -> Parts {
+    let v = if v.is_finite() { v.clamp(MIN_VALUE, MAX_VALUE) } else { 0.0 };
     let days_f = v - UNIX_EPOCH_VALUE;
     let mut day = days_f.floor();
     let mut ms = ((days_f - day) * MS_PER_DAY as f64).round() as i64;
@@ -283,12 +293,16 @@ fn parse_clock(s: &str) -> Option<(f64, TimePattern)> {
     let int =
         |f: &str| -> Option<u32> { (f.len() <= 2 && f.bytes().all(|b| b.is_ascii_digit())).then(|| f.parse().ok())? };
     let mut hour = int(fields[0])?;
+    // Clock minutes are always written with two digits; this keeps ratios such as 1:2 out.
+    if fields[1].len() != 2 {
+        return None;
+    }
     let minute = int(fields[1])?;
     let (seconds, pat) = match fields.get(2) {
         None => (0.0, TimePattern::Hm),
         Some(f) => {
             let (whole, frac) = f.split_once('.').map_or((*f, None), |(a, b)| (a, Some(b)));
-            if whole.len() > 2 || !whole.bytes().all(|b| b.is_ascii_digit()) || whole.is_empty() {
+            if whole.len() != 2 || !whole.bytes().all(|b| b.is_ascii_digit()) || whole.is_empty() {
                 return None;
             }
             if let Some(fr) = frac
@@ -437,6 +451,15 @@ mod tests {
         assert_eq!(date_value(2026, 13, 1), None);
         assert_eq!(date_value(2026, 4, 31), None);
         assert_eq!(time_value(24, 0, 0.0), None);
+    }
+
+    #[test]
+    fn ratios_are_not_clock_times() {
+        for t in ["1:1", "1:2", "2:3", "1:30:5"] {
+            assert!(parse_clock(t).is_none(), "{t}");
+        }
+        assert!(parse_clock("9:05").is_some());
+        assert!(parse_clock("1:45:10 PM").is_some());
     }
 
     #[test]

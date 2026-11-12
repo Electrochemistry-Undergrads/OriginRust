@@ -308,3 +308,5 @@ Observed structure from the owner's domain knowledge (not from Origin): a CH Ins
 8. Behavior on ragged lines (fewer or more cells than the structure) and blank lines.
 9. Discrepancy: CSV filter file has book renaming off and header lines 0, the documentation says otherwise.
 10. Full list of numeric-separator options beyond the four confirmed.
+
+Sheaf's own guard on clock times: minutes (and seconds, when present) must have two digits, so ratios or codes such as 1:2 or 2:3 stay text instead of becoming times of day. Date-format cells holding numbers outside about year -100000 to 100000 are shown as plain numbers rather than as a date.

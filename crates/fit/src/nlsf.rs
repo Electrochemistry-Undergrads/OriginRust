@@ -58,6 +58,30 @@ impl ParamSpec {
     }
 }
 
+/// Checks parameter names of a user-written function: none may repeat (names are case
+/// sensitive, as in the expression language), none may equal the independent variable, and none
+/// may be a constant of the expression language (`pi` and `e`, in any case), because the
+/// formula would read the constant and the parameter would never be used.
+pub fn check_param_names<'a>(x_name: &str, names: impl IntoIterator<Item = &'a str>) -> Result<(), String> {
+    let mut seen: Vec<&str> = Vec::new();
+    for n in names {
+        if n == x_name {
+            return Err(format!("the parameter '{n}' has the same name as the independent variable"));
+        }
+        if n.eq_ignore_ascii_case("pi") || n.eq_ignore_ascii_case("e") {
+            return Err(format!(
+                "'{n}' cannot be a parameter name: the formula language reads it as the constant {}",
+                if n.eq_ignore_ascii_case("pi") { "pi" } else { "e" }
+            ));
+        }
+        if seen.contains(&n) {
+            return Err(format!("the parameter name '{n}' is used twice"));
+        }
+        seen.push(n);
+    }
+    Ok(())
+}
+
 /// A fit function: the model and everything known about its parameters.
 #[derive(Clone)]
 pub struct FitFunction {
@@ -89,12 +113,17 @@ impl FitFunction {
     pub fn from_formula(name: &str, formula: &str, params: &[&str]) -> Result<Self, FitError> {
         let rhs = strip_lhs(formula);
         let expr = Expr::parse(&rhs).map_err(|e| FitError::BadFunction(e.to_string()))?;
+        check_param_names("x", params.iter().copied()).map_err(FitError::BadFunction)?;
         for v in expr.variables() {
             if v != "x" && !params.iter().any(|p| *p == v) {
                 return Err(FitError::BadFunction(format!(
                     "the formula uses '{v}', which is neither x nor a parameter"
                 )));
             }
+        }
+        let used = expr.variables();
+        if let Some(p) = params.iter().find(|p| !used.iter().any(|v| v == *p)) {
+            return Err(FitError::BadFunction(format!("the parameter '{p}' does not appear in the formula")));
         }
         Ok(FitFunction {
             name: name.to_string(),
@@ -591,6 +620,20 @@ fn jacobian(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unusable_parameter_names_are_refused() {
+        for (formula, params) in
+            [("E*x+3", vec!["E"]), ("pi*a*x", vec!["a", "Pi"]), ("a*x", vec!["a", "a"]), ("a*x", vec!["x", "a"])]
+        {
+            let e = FitFunction::from_formula("U", formula, &params).unwrap_err().to_string();
+            assert!(e.contains("parameter"), "{formula} {params:?}: {e}");
+        }
+        let e = FitFunction::from_formula("U", "a*x", &["a", "e1"]).unwrap_err().to_string();
+        assert!(e.contains("'e1' does not appear"), "{e}");
+        // Names differ by case in the expression language, so these are two parameters.
+        assert!(FitFunction::from_formula("U", "a*x + A", &["a", "A"]).is_ok());
+    }
 
     fn data() -> (Vec<f64>, Vec<f64>) {
         let x: Vec<f64> = (1..=30).map(|i| i as f64 * 0.3).collect();

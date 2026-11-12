@@ -617,7 +617,11 @@ pub fn model_parameters(model: &FitModel) -> Result<Vec<String>, FitError> {
             .into_iter()
             .map(|p| p.name)
             .collect(),
-        FitModel::Formula { params, .. } => params.clone(),
+        FitModel::Formula { params, .. } => {
+            sheaf_fit::nlsf::check_param_names("x", params.iter().map(String::as_str))
+                .map_err(FitError::BadFunction)?;
+            params.clone()
+        }
         FitModel::Fdf(text) => {
             sheaf_fit::fdf::parse_fdf(text)?.to_fit_function()?.params.into_iter().map(|p| p.name).collect()
         }

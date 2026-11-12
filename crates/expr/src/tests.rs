@@ -345,6 +345,9 @@ fn error_messages_and_positions() {
         assert_eq!(e.position(), Some(*pos), "{src}: {e}");
         assert!(e.to_string().contains(text), "{src}: {e}");
         assert!(e.to_string().ends_with(&format!("at position {pos}")), "{src}: {e}");
+        // The place is named once only.
+        assert_eq!(e.to_string().matches("position").count(), 1, "{src}: {e}");
+        assert!(!e.message().contains("position"), "{src}: {e}");
     }
 }
 

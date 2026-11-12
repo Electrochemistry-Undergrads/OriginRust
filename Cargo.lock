@@ -3150,6 +3150,7 @@ dependencies = [
  "egui_kittest",
  "image",
  "rfd",
+ "sheaf-calc",
  "sheaf-core",
  "sheaf-io",
  "sheaf-plot",

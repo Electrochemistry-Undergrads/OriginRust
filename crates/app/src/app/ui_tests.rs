@@ -315,6 +315,36 @@ fn an_analysis_tool_runs_from_its_window_and_shows_the_result_sheet() {
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 3), "one undo removes everything the tool added");
 }
 
+/// The FFT filter is chosen in the Smooth window's method list; OK adds a smoothed column that
+/// equals what sheaf-calc computes for the same options (the window's own default of 5 points).
+#[test]
+fn the_fft_filter_is_chosen_in_the_smooth_window_and_runs() {
+    let mut h = start(vec![data_file("fft")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Analyze { book, columns: Vec::new(), kind: AnalysisKind::Smooth }, &ctx);
+    settle(&mut h);
+    // A combo box shows its current choice as its value, not as a label.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Savitzky-Golay")).click();
+    settle(&mut h);
+    click(&mut h, "FFT filter");
+    // The FFT note appears only once the FFT filter is chosen (the query panics if it is missing).
+    grid_text(&h, "The FFT filter keeps frequencies below 1 / (2 dx points); larger values smooth more.");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let smoothed = b.sheet().columns.iter().find(|c| c.comments.contains("FFT filter")).expect("an FFT column");
+    let t = column(&h, "A");
+    let up = column(&h, "B");
+    let options =
+        sheaf_calc::SmoothOptions { method: sheaf_calc::SmoothMethod::FftFilter, npts: 5, ..Default::default() };
+    let want = sheaf_calc::smooth_xy(&t, &up, &options);
+    let got = smoothed.numeric().unwrap();
+    assert_eq!(got.len(), want.len());
+    for (g, w) in got.iter().zip(&want) {
+        assert!((g - w).abs() < 1e-12, "{got:?} vs {want:?}");
+    }
+}
+
 #[test]
 fn a_linear_fit_runs_from_its_window_adds_the_curve_to_the_graph_and_undoes_in_one_step() {
     let mut h = start(vec![data_file("fit")]);

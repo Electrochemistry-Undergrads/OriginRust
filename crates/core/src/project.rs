@@ -57,8 +57,40 @@ pub struct Project {
     pub windows: Vec<Window>,
     #[serde(default)]
     pub root: Folder,
+    /// Where the windows were in the workspace when the project was saved, bottom of the stack
+    /// first. Empty when unknown (a new project, or one read from an Origin file); windows that are
+    /// not listed are placed by the cascade. The desktop app fills it just before saving and reads
+    /// it on opening; it is view state, not data, so editing it is never an undo step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub window_places: Vec<WindowPlace>,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
+}
+
+/// The place of one window in the desktop app's workspace (ADR 0007 point 1).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WindowPlace {
+    pub window: WindowId,
+    /// Top-left corner relative to the workspace's top-left corner, and size, in screen points,
+    /// of the window in its normal (not maximised) state.
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(default)]
+    pub state: WindowState,
+}
+
+/// How a window was shown.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowState {
+    #[default]
+    Normal,
+    Minimised,
+    Maximised,
+    /// Closed: listed in the project explorer only.
+    Hidden,
 }
 
 impl Default for Project {
@@ -91,7 +123,12 @@ pub enum ProjectError {
 
 impl Project {
     pub fn new() -> Self {
-        Project { windows: Vec::new(), root: Folder { name: "Project".into(), ..Folder::default() }, next_id: 1 }
+        Project {
+            windows: Vec::new(),
+            root: Folder { name: "Project".into(), ..Folder::default() },
+            window_places: Vec::new(),
+            next_id: 1,
+        }
     }
 
     fn fresh_id(&mut self) -> u64 {
@@ -147,6 +184,7 @@ impl Project {
             f.folders.iter_mut().for_each(|c| forget(c, id));
         }
         forget(&mut self.root, id);
+        self.window_places.retain(|p| p.window != id);
         Some(self.windows.remove(i))
     }
 

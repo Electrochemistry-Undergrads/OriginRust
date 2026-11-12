@@ -29,6 +29,19 @@ so the format version stays 1. The key tells Sheaf that it wrote the file itself
 is opened in place of the `.opj`, and only such a file is deleted when a later save to the `.opj`
 loses nothing. A project the user saved as `<name>.sheaf` never has the key and is never deleted.
 
+## Window places (optional key of `project.json`)
+
+`project.json` may carry `window_places`: a list, bottom of the stacking order first, of
+`{"window": <window id>, "x", "y", "width", "height", "state"}`. `x` and `y` are the window's
+top-left corner relative to the top-left corner of the desktop app's workspace, and `width` and
+`height` its size in its normal (not maximised) state, all in screen points. `state` is `normal`,
+`minimised`, `maximised` or `hidden` (closed, listed in the project explorer only); a missing
+`state` means `normal`. The topmost shown window is the active one. The key is absent when no window
+was ever shown; windows that are not listed are placed by the cascade. It is view state: the app
+writes it when saving, never as an undo step, and an older reader ignores it, so the format version
+stays 1. The `.opj` writer does not store it yet, so a project reopened from an `.opj` without a
+companion gets the cascade.
+
 ## Reading rules
 
 1. Read `manifest.json`. If `format` is not `sheaf-project`, the file is not a project. If `version`

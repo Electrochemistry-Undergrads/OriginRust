@@ -231,7 +231,7 @@ impl Parser {
             }
             Tok::LParen => {
                 let inner = self.ternary()?;
-                self.expect(Tok::RParen, &format!("to close the '(' at position {}", t.pos))?;
+                self.expect(Tok::RParen, &format!("to close the '(' opened at offset {}", t.pos))?;
                 Ok(inner)
             }
             Tok::Str(_) => Err(ExprError::at(t.pos, "text strings can only be used inside col(\"...\")")),

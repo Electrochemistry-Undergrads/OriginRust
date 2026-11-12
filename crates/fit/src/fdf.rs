@@ -228,6 +228,14 @@ impl FdfFunction {
                 self.formula_note.clone().unwrap_or_else(|| "no formula".into())
             )));
         };
+        if self.dependent.len() > 1 {
+            return Err(FitError::BadFunction(format!(
+                "{}: {} dependent variables ({}); several dependent variables (a global fit) are not supported",
+                self.name,
+                self.dependent.len(),
+                self.dependent.join(", ")
+            )));
+        }
         if self.independent.len() != 1 {
             return Err(FitError::BadFunction(format!(
                 "{}: {} independent variables; only one is supported",
@@ -236,7 +244,11 @@ impl FdfFunction {
             )));
         }
         let x = &self.independent[0];
-        let expr = Expr::parse(formula).map_err(|e| FitError::BadFunction(format!("{}: {e}", self.name)))?;
+        crate::nlsf::check_param_names(x, self.params.iter().map(|p| p.name.as_str()))
+            .map_err(|why| FitError::BadFunction(format!("{}: {why}", self.name)))?;
+        // The position would point into the translated text, not into the file, so leave it out.
+        let expr =
+            Expr::parse(formula).map_err(|e| FitError::BadFunction(format!("{}: {}", self.name, e.message())))?;
         for v in expr.variables() {
             if &v != x && v != "i" && !self.params.iter().any(|p| p.name == v) {
                 return Err(FitError::BadFunction(format!(
@@ -363,7 +375,7 @@ fn translate_expression(s: &str) -> Result<String, String> {
         }
     }
     let out = out.trim().to_string();
-    Expr::parse(&out).map_err(|e| e.to_string())?;
+    Expr::parse(&out).map_err(|e| e.message().to_string())?;
     Ok(out)
 }
 
@@ -555,7 +567,7 @@ fn translate_body(body: &str, dep: &str) -> Result<String, String> {
     }
     let out = r.ok_or_else(|| format!("the formula never assigns {dep}"))?;
     // Strip the outermost redundant parentheses added around a plain substituted value.
-    Expr::parse(&out).map_err(|e| e.to_string())?;
+    Expr::parse(&out).map_err(|e| e.message().to_string())?;
     Ok(out)
 }
 
@@ -619,6 +631,37 @@ Lower Bounds=--(X,Off),--(X,Off),0.0(X,ON)\r\nUpper Bounds=--,--,--\r\nInitial V
         let g = parse_fdf(&EXPDEC.replace("exp(-x/t1)", "nlf_voigt(x)")).unwrap();
         assert!(g.to_fit_function().is_err());
         assert!(parse_fdf("[General Information]\nFunction Name=\n").is_err());
+    }
+
+    fn small_fdf(names: &str, formula: &str, dependent: &str) -> String {
+        format!(
+            "[General Information]\nFunction Name=T\n[Fitting Parameters]\nNames={names}\n[Formula]\n{formula}\n[Independent Variables]\nx=\n[Dependent Variables]\n{dependent}\n"
+        )
+    }
+
+    #[test]
+    fn several_dependent_variables_are_refused() {
+        let t = small_fdf("a, b", "y1 = a*x;\ny2 = b*x;", "y1=\ny2=");
+        let e = parse_fdf(&t).unwrap().to_fit_function().unwrap_err().to_string();
+        assert!(e.contains("several dependent variables"), "{e}");
+    }
+
+    #[test]
+    fn bad_parameter_names_are_refused() {
+        for names in ["a, x", "a, a", "a, E", "a, pi"] {
+            let t = small_fdf(names, "y = a*x;", "y=");
+            assert!(parse_fdf(&t).unwrap().to_fit_function().is_err(), "{names}");
+        }
+        assert!(parse_fdf(&small_fdf("a, b", "y = a*x + b;", "y=")).unwrap().to_fit_function().is_ok());
+    }
+
+    #[test]
+    fn formula_errors_name_no_position_in_translated_text() {
+        let e = parse_fdf(&small_fdf("a, b", "y = a*(x+b;", "y=")).unwrap().to_fit_function().unwrap_err();
+        assert!(!e.to_string().contains("position"), "{e}");
+        let e = parse_fdf(&small_fdf("a", "y = gamcdf(x, a);", "y=")).unwrap().to_fit_function().unwrap_err();
+        assert!(!e.to_string().contains("position"), "{e}");
+        assert!(e.to_string().contains("gamcdf"), "{e}");
     }
 
     #[test]

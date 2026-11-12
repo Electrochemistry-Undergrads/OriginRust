@@ -231,3 +231,107 @@ fn mistakes_give_a_message_and_a_failure_code() {
         assert!(stderr.contains(expect), "{args:?}: expected '{expect}' in: {stderr}");
     }
 }
+
+#[test]
+fn integrate_ranges_prints_one_row_per_interval_and_column() {
+    let dir = scratch("ranges");
+    let data = data_file(&dir);
+    let export = dir.join("ranges.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "integrate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--ranges",
+        "0:4,4:10",
+        "--row-ranges",
+        "1:3",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(lines[0].contains("Absolute area") && lines[0].contains("Peak X"), "{}", lines[0]);
+    assert!(lines[1].contains("range 1") && lines[2].contains("range 2") && lines[3].contains("range 3"), "{stdout}");
+    // y = t: the areas under 0..4, 4..10 and rows 1..3 (t = 0..2) are 8, 42 and 2. In the
+    // exported sheet the label comes first, then First row, Last row, X start, X end, Area (counted here from the right, after a units row).
+    let exported = std::fs::read_to_string(&export).unwrap();
+    let areas: Vec<&str> = exported.lines().skip(2).map(|l| l.rsplit(',').nth(4).unwrap()).collect();
+    assert_eq!(areas, ["8", "42", "2"], "{exported}");
+}
+
+#[test]
+fn subtract_ref_and_math_use_a_reference_from_another_file() {
+    let dir = scratch("math");
+    let data = data_file(&dir);
+    // reference: x = 2, 4, 6 and y = x / 2
+    let blank = dir.join("blank.csv");
+    std::fs::write(&blank, "t,ref\ns,A\n2,1\n4,2\n6,3\n").unwrap();
+    let export = dir.join("sub.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "subtract-ref",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--ref",
+        "ref",
+        "--ref-file",
+        blank.to_str().unwrap(),
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Subtract reference"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&export).unwrap().lines().skip(2).map(str::to_string).collect();
+    // t, flat, ramp, then the new column behind its source: ramp minus the reference (x / 2)
+    assert_eq!(rows[0], "0,2,0,0");
+    assert_eq!(rows[10], "10,2,10,5");
+    // Common range only: a new sheet with t = 2..6.
+    let out = dir.join("common.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "math",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--op",
+        "divide",
+        "--ref",
+        "ref",
+        "--ref-file",
+        blank.to_str().unwrap(),
+        "--common",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let body: Vec<&str> = text.lines().skip(2).collect();
+    assert_eq!(body.len(), 5, "{text}");
+    assert!(body.iter().all(|l| l.ends_with(",2")), "{text}");
+    // A constant, with a negative value.
+    let (ok, stdout, stderr) = sheaf(&["analyze", "math", data.to_str().unwrap(), "--y", "ramp", "--value", "-3"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Curve math"), "{stdout}");
+}
+
+#[test]
+fn curve_math_and_range_mistakes_are_explained() {
+    let dir = scratch("math-errors");
+    let data = data_file(&dir);
+    let d = data.to_str().unwrap();
+    for (args, expect) in [
+        (vec!["analyze", "math", d], "--value NUMBER or --ref COLUMN"),
+        (vec!["analyze", "subtract-ref", d, "--value", "1"], "--ref COLUMN"),
+        (vec!["analyze", "math", d, "--op", "divide", "--value", "0"], "divide by 0"),
+        (vec!["analyze", "math", d, "--ref", "nope"], "'nope' was not found"),
+        (vec!["analyze", "integrate", d, "--ranges", "1-4"], "not a valid X range"),
+        (vec!["analyze", "integrate", d, "--ranges", "1:4", "--absolute"], "do not apply"),
+    ] {
+        let (ok, _, stderr) = sheaf(&args);
+        assert!(!ok, "{args:?} should fail");
+        assert!(stderr.contains(expect), "{args:?}: expected '{expect}' in: {stderr}");
+    }
+}

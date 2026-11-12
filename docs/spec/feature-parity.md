@@ -18,8 +18,8 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 34 | 91 | 106 | 231 |
-| P0 | 28 | 61 | 14 | 103 |
+| All rows | 36 | 92 | 103 | 231 |
+| P0 | 30 | 62 | 11 | 103 |
 | P1 and P2 together | 6 | 30 | 92 | 128 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 42 are P2. The P1 and P2 rows were not counted separately by status.
@@ -113,7 +113,7 @@ Cross-cutting findings:
 | Set Column Values | Ctrl+Q | dialog with formula, rows from and to | ◐ | no Ctrl+Q, no function picker | P0 |
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
 | Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
-| Simple math on curves | Analysis > Mathematics > Simple Math | only by formula | ✗ | same X only; no dialog | P0 |
+| Simple math on curves | Analysis > Mathematics > Simple Math | Simple Math window, `analyze math`, `Tool::CurveMath` | ✓ | add, subtract, multiply, divide, power with a constant or a reference; checked against Origin (spec section 9); no graph rescale | P0 |
 | Row filter | Column > Filter | Filter Rows, in place or new sheet | ◐ | removes or copies, not a live hidden filter | P1 |
 | Masking | Column > Mask | none | ✗ | model has no mask; .opj reader skips it | P1 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |
@@ -154,7 +154,7 @@ Cross-cutting findings:
 | Integrate range, baseline, charge | integ1 with limits and baseline | typed rows or X range, end-point baseline, unit-aware area | ◐ | baseline is end-point line only; range typed, not picked on graph | P0 |
 | Differentiate | order 1 to 9, smoothing | `calc/differentiate.rs` | ✓ | higher orders with smoothing not checked against Origin | P0 |
 | Subtract straight line | subtract_line | Subtract Baseline: Line, End points | ◐ | typed coordinates, no on-graph pick | P0 |
-| Subtract reference curve | subtract_ref | none | ✗ | | P0 |
+| Subtract reference curve | subtract_ref | Subtract Reference Data window, `analyze subtract-ref` | ✓ | linear interpolation, common range option, checked against Origin (spec section 9) | P0 |
 | Normalize | 12 methods | `calc/normalize.rs`, checked | ◐ | no reference column or cell methods; no row normalize | P0 |
 | Interpolate and resample | interp1xy | linear, spline, Akima, B-spline | ◐ | extrapolation option not exposed; B-spline default does not match; new sheet only | P0 |
 | Interpolate onto given X, trace | interp1, interp1trace | library function only | ✗ | no app or CLI route | P1 |
@@ -187,7 +187,7 @@ Cross-cutting findings:
 | Peak finding | Peak Analyzer, local maximum | `calc/peaks.rs`, checked; Find Peaks | ◐ | no window search, derivative methods, smoothing, width filter | P0 |
 | Baseline modes | constant, points, dataset, end points, ALS | Minimum, Constant, End points, Line | ◐ | no anchors (library function not reachable), dataset baseline, ALS, auto detect, preview | P0 |
 | Baseline subtraction | pa_basesubtr | new Y column beside source | ✓ | limited by modes | P0 |
-| Per-peak integration | area, centre, height, FWHM per peak | Integrate and Find Peaks separately | ✗ | no table per peak, no peak split | P0 |
+| Per-peak integration | area, centre, height, FWHM per peak | Integrate Ranges window, `analyze integrate --ranges` | ◐ | one table row per typed range with area, absolute area, peak, FWHM (spec section 10); no automatic peak split, no picking on a graph | P0 |
 | CV charge with sloped baseline | integ1 with baseline | end-point baseline over typed range | ◐ | no foot picking, no anodic and cathodic split, no scan-rate division | P0 |
 | Peak Analyzer wizard | goal, baseline, peaks, results | separate dialogs | ✗ | | P0 |
 | Multiple peak fit | Peaks and Baseline | one peak function at a time | ◐ | no multi-peak model, no starting values from found peaks, no area report | P0 |

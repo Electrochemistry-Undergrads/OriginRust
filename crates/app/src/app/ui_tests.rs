@@ -475,3 +475,62 @@ fn the_graph_menu_opens_the_export_window_and_close_closes_it() {
     click(&mut h, "Close");
     assert!(h.state().export.is_none());
 }
+
+#[test]
+fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
+    let mut h = start(vec![data_file("ranges")]);
+    click(&mut h, "Book1 - sample");
+    menu(&mut h, "Analysis", "Integrate Ranges");
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "Add range");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    let results = b.sheets.last().unwrap();
+    assert_eq!(results.name, "Integrate1");
+    // two Y columns times two ranges; each range is the whole X range 1..4
+    assert_eq!(results.columns[0].text().unwrap().len(), 4);
+    let area = results.columns.iter().find(|c| c.long_name == "Area").unwrap().numeric().unwrap();
+    assert_eq!(area, [16.5, 16.5, 46.5, 46.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Integrate ranges"));
+}
+
+#[test]
+fn subtract_reference_data_runs_from_the_analysis_menu_in_one_undo_step() {
+    let mut h = start(vec![data_file("subref-a"), data_file("subref-b")]);
+    assert_eq!(project(&h).workbooks().count(), 2);
+    click(&mut h, "Book1 - sample");
+    menu(&mut h, "Analysis", "Subtract Reference Data");
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    // The reference is the "up" column of the other workbook (the first column not used as input).
+    let added: Vec<&sheaf_core::Column> = project(&h)
+        .workbooks()
+        .flat_map(|b| b.sheet().columns.iter())
+        .filter(|c| c.comments.contains("minus reference"))
+        .collect();
+    assert_eq!(added.len(), 2, "one column for each of the two Y columns");
+    assert_eq!(added[0].numeric().unwrap(), [0.0; 4], "up minus up");
+    assert_eq!(added[1].numeric().unwrap(), [28.0, 16.0, 4.0, -8.0], "down minus up");
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract reference"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert!(project(&h).workbooks().all(|b| b.sheet().columns.len() == 3), "one undo removes both columns");
+}
+
+#[test]
+fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
+    let mut h = start(vec![data_file("math")]);
+    click(&mut h, "Book1 - sample");
+    menu(&mut h, "Analysis", "Simple Math");
+    assert!(h.state().analysis.is_some(), "the window is open");
+    // With no other column to use as reference the operand is the constant, 1 for a start.
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let plus: Vec<&sheaf_core::Column> = b.sheet().columns.iter().filter(|c| c.comments.contains("plus 1")).collect();
+    assert_eq!(plus.len(), 2);
+    assert_eq!(plus[0].numeric().unwrap(), [3.5, 5.5, 7.5, 9.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Curve math"));
+}

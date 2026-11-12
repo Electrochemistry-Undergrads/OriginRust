@@ -80,20 +80,69 @@ fn print_table(t: &analysis::ResultTable) {
 /// works on Y columns.
 enum Job {
     Tool(Tool),
-    Sort { by: String, descending: bool },
-    Filter { condition: String, in_place: bool },
+    /// Curve math; the reference column is looked up once the project is loaded.
+    Math {
+        op: MathKind,
+        operand: OperandArgs,
+    },
+    Sort {
+        by: String,
+        descending: bool,
+    },
+    Filter {
+        condition: String,
+        in_place: bool,
+    },
 }
 
 fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
     Ok(match tool {
-        AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative } => (
-            target,
-            Job::Tool(Tool::Integrate(IntegrateSpec {
-                area_type: if absolute { analysis::AreaType::Absolute } else { analysis::AreaType::Mathematical },
-                end_point_baseline: baseline,
-                cumulative: !no_cumulative,
-            })),
-        ),
+        AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative, ranges, row_ranges } => {
+            if ranges.is_empty() && row_ranges.is_empty() {
+                (
+                    target,
+                    Job::Tool(Tool::Integrate(IntegrateSpec {
+                        area_type: if absolute {
+                            analysis::AreaType::Absolute
+                        } else {
+                            analysis::AreaType::Mathematical
+                        },
+                        end_point_baseline: baseline,
+                        cumulative: !no_cumulative,
+                    })),
+                )
+            } else {
+                if absolute || no_cumulative {
+                    bail!(
+                        "--absolute and --no-cumulative do not apply to --ranges: the result table always \
+                         has both the signed and the absolute area and no running integral"
+                    );
+                }
+                let mut list = Vec::new();
+                for text in &ranges {
+                    let (a, b) = parse_pair::<f64>(text, "X range", "0.2:0.6")?;
+                    list.push(analysis::RowRange::XBetween(a, b));
+                }
+                for text in &row_ranges {
+                    let (a, b) = parse_pair::<usize>(text, "row range", "120:480")?;
+                    list.push(analysis::RowRange::Rows(a, b));
+                }
+                (
+                    target,
+                    Job::Tool(Tool::IntegrateRanges(analysis::IntegrateRangesSpec {
+                        ranges: list,
+                        end_point_baseline: baseline,
+                    })),
+                )
+            }
+        }
+        AnalyzeTool::SubtractRef { target, operand } => {
+            if operand.reference.is_none() {
+                bail!("subtract-ref needs the reference curve: --ref COLUMN (use 'math --value' for a constant)");
+            }
+            (target, Job::Math { op: MathKind::Subtract, operand })
+        }
+        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand }),
         AnalyzeTool::Differentiate { target, order, smooth, poly, points } => {
             (target, Job::Tool(Tool::Differentiate(analysis::DiffOptions { order, smooth, poly, npts: points })))
         }
@@ -208,6 +257,62 @@ fn whole_sheet_only(target: &TargetArgs, tool: &str) -> Result<()> {
     }
 }
 
+/// Finds the reference column (loading its file if one was named) and builds the tool.
+fn math_tool(
+    project: &mut Project,
+    book: sheaf_core::WindowId,
+    sheet: usize,
+    op: MathKind,
+    operand: &OperandArgs,
+    read: &ReadOptions,
+) -> Result<Tool> {
+    let op = match op {
+        MathKind::Add => analysis::CurveOp::Add,
+        MathKind::Subtract => analysis::CurveOp::Subtract,
+        MathKind::Multiply => analysis::CurveOp::Multiply,
+        MathKind::Divide => analysis::CurveOp::Divide,
+        MathKind::Power => analysis::CurveOp::Power,
+    };
+    let operand_value = match (&operand.reference, operand.value) {
+        (None, Some(v)) => analysis::CurveOperand::Constant(v),
+        (None, None) => bail!("give the second operand: --value NUMBER or --ref COLUMN"),
+        (Some(name), _) => {
+            let (rb, rs) = match &operand.ref_file {
+                Some(file) => {
+                    let loaded = if is_project(file) {
+                        load_project(file)?
+                    } else {
+                        let mut p = Project::new();
+                        p.adopt_workbook(read_data_file(file, read)?.workbook);
+                        p
+                    };
+                    let from = pick_book(&loaded, operand.ref_book.as_deref())?;
+                    let book = loaded.workbook(from).expect("picked above").clone();
+                    let id = project.adopt_workbook(book);
+                    (id, pick_sheet(project, id, operand.ref_sheet.as_deref())?)
+                }
+                None => {
+                    let rb = match &operand.ref_book {
+                        Some(n) => pick_book(project, Some(n))?,
+                        None => book,
+                    };
+                    let rs = match (&operand.ref_sheet, rb == book) {
+                        (Some(n), _) => pick_sheet(project, rb, Some(n))?,
+                        (None, true) => sheet,
+                        (None, false) => pick_sheet(project, rb, None)?,
+                    };
+                    (rb, rs)
+                }
+            };
+            analysis::CurveOperand::Reference(named_columns(project, rb, rs, std::slice::from_ref(name))?[0])
+        }
+    };
+    if operand.common && matches!(operand_value, analysis::CurveOperand::Constant(_)) {
+        bail!("--common only applies to a reference curve");
+    }
+    Ok(Tool::CurveMath(analysis::CurveMathSpec { op, operand: operand_value, common_only: operand.common }))
+}
+
 pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     let (target, job) = job_from(a.tool)?;
     let mut project = if is_project(&target.input) {
@@ -219,6 +324,10 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     };
     let book = pick_book(&project, target.book.as_deref())?;
     let sheet = pick_sheet(&project, book, target.sheet.as_deref())?;
+    let job = match job {
+        Job::Math { op, operand } => Job::Tool(math_tool(&mut project, book, sheet, op, &operand, &target.read)?),
+        other => other,
+    };
 
     // The sheet that holds the results, for --export.
     let result_sheet = match job {
@@ -249,6 +358,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)
         }
+        Job::Math { .. } => unreachable!("curve math was turned into a tool above"),
         Job::Sort { by, descending } => {
             let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;

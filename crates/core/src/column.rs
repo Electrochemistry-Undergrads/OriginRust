@@ -130,6 +130,10 @@ pub struct Column {
     /// Extra label rows (name -> value), for example instrument settings.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, String>,
+    /// True for the "Fitted ..." and "Residual of ..." columns that a fit writes next to its
+    /// source column (ADR 0006). They are left out of the default column choice for fitting.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fit_result: bool,
     /// The values. Not part of the JSON description: the project file stores
     /// column data separately (see the `sheaf-io` crate).
     #[serde(skip)]
@@ -148,8 +152,15 @@ impl Column {
             format: NumberFormat::default(),
             formula: None,
             params: BTreeMap::new(),
+            fit_result: false,
             data,
         }
+    }
+
+    /// Marks the column as a result column written by a fit.
+    pub fn as_fit_result(mut self) -> Self {
+        self.fit_result = true;
+        self
     }
 
     pub fn with_labels(mut self, long_name: &str, units: &str, comments: &str) -> Self {

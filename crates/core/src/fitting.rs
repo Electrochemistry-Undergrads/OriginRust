@@ -394,20 +394,16 @@ impl Project {
             let fitted_name = ws.next_short_name();
             ws.columns.insert(
                 at,
-                Column::new(fitted_id, fitted_name, Designation::Y, ColumnData::numeric(fitted_values)).with_labels(
-                    &format!("Fitted {source_name}"),
-                    &y_units,
-                    &report.model,
-                ),
+                Column::new(fitted_id, fitted_name, Designation::Y, ColumnData::numeric(fitted_values))
+                    .with_labels(&format!("Fitted {source_name}"), &y_units, &report.model)
+                    .as_fit_result(),
             );
             let residual_name = ws.next_short_name();
             ws.columns.insert(
                 at + 1,
-                Column::new(residual_id, residual_name, Designation::Y, ColumnData::numeric(residuals)).with_labels(
-                    &format!("Residual of {source_name}"),
-                    &y_units,
-                    &report.model,
-                ),
+                Column::new(residual_id, residual_name, Designation::Y, ColumnData::numeric(residuals))
+                    .with_labels(&format!("Residual of {source_name}"), &y_units, &report.model)
+                    .as_fit_result(),
             );
         }
 
@@ -685,11 +681,6 @@ fn closed_form_fixed(settings: &[ParamSetting], allowed: &[&str]) -> Result<Vec<
     Ok(fixed)
 }
 
-/// The value of a polynomial with coefficients in increasing order (`Intercept`, `B1`, ...).
-fn polynomial(coefficients: &[f64], x: f64) -> f64 {
-    coefficients.iter().rev().fold(0.0, |acc, c| acc * x + c)
-}
-
 fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Result<FittedModel, FitError> {
     use sheaf_fit::{linear, nlsf};
     let w = weighting(d)?;
@@ -704,9 +695,8 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 confidence_level: d.confidence_level,
                 ..Default::default()
             };
-            let report = linear::fit_linear(&d.x, &d.y, &opts)?;
-            let c: Vec<f64> = report.params.iter().map(|p| p.value).collect();
-            Ok(FittedModel { report, curve: Box::new(move |x| polynomial(&c, x)), derived: Vec::new() })
+            let (report, curve) = linear::fit_linear_with_curve(&d.x, &d.y, &opts)?;
+            Ok(FittedModel { report, curve: Box::new(move |x| curve.eval(x)), derived: Vec::new() })
         }
         FitModel::Polynomial { order } => {
             let fixed = closed_form_fixed(settings, &["Intercept"])?;
@@ -716,9 +706,8 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 confidence_level: d.confidence_level,
                 ..Default::default()
             };
-            let report = linear::fit_polynomial(&d.x, &d.y, *order, &opts)?;
-            let c: Vec<f64> = report.params.iter().map(|p| p.value).collect();
-            Ok(FittedModel { report, curve: Box::new(move |x| polynomial(&c, x)), derived: Vec::new() })
+            let (report, curve) = linear::fit_polynomial_with_curve(&d.x, &d.y, *order, &opts)?;
+            Ok(FittedModel { report, curve: Box::new(move |x| curve.eval(x)), derived: Vec::new() })
         }
         FitModel::BuiltIn(_) | FitModel::Formula { .. } | FitModel::Fdf(_) => {
             let (mut func, library_name) = match model {
@@ -884,6 +873,37 @@ mod tests {
         c.long_name = "Current".into();
         c.units = "mA".into();
         (p, book, x, y, e)
+    }
+
+    #[test]
+    fn the_drawn_polynomial_matches_the_fitted_values_for_badly_scaled_x() {
+        let x: Vec<f64> = (0..20).map(|i| 1e5 + f64::from(i)).collect();
+        let y: Vec<f64> = (0..20).map(|i| 2e-3 * (1.0 + 0.3 * (0.7 * f64::from(i)).sin())).collect();
+        let d = FitData { x: x.clone(), y, y_error: None, weighting: FitWeighting::None, confidence_level: 0.95 };
+        let m = run_engine(&FitModel::Polynomial { order: 5 }, &[], &d).unwrap();
+        let worst = x.iter().zip(&m.report.fitted).map(|(x, f)| ((m.curve)(*x) - f).abs()).fold(0.0, f64::max);
+        assert!(worst < 1e-12, "the curve differs from the fitted values by {worst}");
+        let lin = run_engine(&FitModel::Linear, &[], &d).unwrap();
+        let worst = x.iter().zip(&lin.report.fitted).map(|(x, f)| ((lin.curve)(*x) - f).abs()).fold(0.0, f64::max);
+        assert!(worst < 1e-12, "linear: {worst}");
+    }
+
+    #[test]
+    fn fit_result_columns_are_marked_and_left_out_of_the_default_fit_columns() {
+        let (mut p, book, _, y, _) = sample();
+        let out = p.fit_with(&FitRequest::new(y, FitModel::Linear), line_engine).unwrap();
+        assert!(p.column(out.fitted_column).unwrap().fit_result);
+        assert!(p.column(out.residual_column).unwrap().fit_result);
+        assert!(!p.column(y).unwrap().fit_result);
+        assert_eq!(p.default_fit_columns(book, 0), vec![y]);
+        assert!(p.default_plot_columns(book, 0, Template::Line).contains(&out.fitted_column));
+        // The mark survives saving to JSON, and a description without it still loads.
+        let c = p.column(out.fitted_column).unwrap();
+        let json = serde_json::to_string(c).unwrap();
+        assert!(serde_json::from_str::<Column>(&json).unwrap().fit_result);
+        let old = serde_json::to_string(p.column(y).unwrap()).unwrap();
+        assert!(!old.contains("fit_result"));
+        assert!(!serde_json::from_str::<Column>(&old).unwrap().fit_result);
     }
 
     #[test]

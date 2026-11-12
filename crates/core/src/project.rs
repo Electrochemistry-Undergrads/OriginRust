@@ -374,6 +374,24 @@ impl Project {
         ys.iter().filter(|c| c.units == unit).map(|c| c.id).collect()
     }
 
+    /// The columns a fit takes when none are named: those of `default_plot_columns`, without the
+    /// "Fitted ..." and "Residual of ..." columns that earlier fits wrote (ADR 0006).
+    pub fn default_fit_columns(&self, book: WindowId, sheet: usize) -> Vec<ColumnId> {
+        let Some(ws) = self.workbook(book).and_then(|b| b.sheets.get(sheet)) else {
+            return Vec::new();
+        };
+        let ys: Vec<&Column> = ws
+            .columns
+            .iter()
+            .filter(|c| c.designation == Designation::Y && c.data.is_numeric() && !c.fit_result)
+            .collect();
+        let Some(first) = ys.first() else {
+            return Vec::new();
+        };
+        let unit = if ys.iter().any(|c| c.units == "mA") { "mA" } else { first.units.as_str() };
+        ys.iter().filter(|c| c.units == unit).map(|c| c.id).collect()
+    }
+
     /// Creates a graph of `template` that plots the given Y columns in one
     /// layer, and returns its id. The graph's long name is taken from the
     /// workbook that holds the first column.

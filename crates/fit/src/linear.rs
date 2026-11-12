@@ -132,11 +132,17 @@ fn check_level(level: f64) -> Result<(), FitError> {
 
 /// Fit a straight line `y = Intercept + Slope * x`.
 pub fn fit_linear(x: &[f64], y: &[f64], opts: &LinearOptions) -> Result<FitReport, FitError> {
+    fit_linear_with_curve(x, y, opts).map(|(report, _)| report)
+}
+
+/// Like [`fit_linear`], and also returns the fitted line as a curve evaluated in the solved basis.
+pub fn fit_linear_with_curve(x: &[f64], y: &[f64], opts: &LinearOptions) -> Result<(FitReport, FittedCurve), FitError> {
     check_level(opts.confidence_level)?;
     let pts = collect_points(x, y, &opts.weighting)?;
     let fixed = [opts.fix_intercept, opts.fix_slope];
     let solved = solve(&pts, 1, &fixed, opts.scale_errors_by_reduced_chi_sqr)?;
-    Ok(build_report(
+    let curve = FittedCurve(solved.basis.clone());
+    let report = build_report(
         "Linear".to_string(),
         "y = Intercept + Slope*x".to_string(),
         vec!["Intercept".to_string(), "Slope".to_string()],
@@ -145,11 +151,23 @@ pub fn fit_linear(x: &[f64], y: &[f64], opts: &LinearOptions) -> Result<FitRepor
         solved,
         opts.confidence_level,
         true,
-    ))
+    );
+    Ok((report, curve))
 }
 
 /// Fit a polynomial `y = Intercept + B1*x + B2*x^2 + ...` of the given order (at least 1).
 pub fn fit_polynomial(x: &[f64], y: &[f64], order: usize, opts: &PolyOptions) -> Result<FitReport, FitError> {
+    fit_polynomial_with_curve(x, y, order, opts).map(|(report, _)| report)
+}
+
+/// Like [`fit_polynomial`], and also returns the fitted polynomial as a curve evaluated in the
+/// solved (centred or scaled) basis, which is accurate where the power-of-x coefficients are not.
+pub fn fit_polynomial_with_curve(
+    x: &[f64],
+    y: &[f64],
+    order: usize,
+    opts: &PolyOptions,
+) -> Result<(FitReport, FittedCurve), FitError> {
     if order == 0 {
         return Err(FitError::BadFunction("a polynomial needs order 1 or more".to_string()));
     }
@@ -158,13 +176,14 @@ pub fn fit_polynomial(x: &[f64], y: &[f64], order: usize, opts: &PolyOptions) ->
     let mut fixed = vec![None; order + 1];
     fixed[0] = opts.fix_intercept;
     let solved = solve(&pts, order, &fixed, opts.scale_errors_by_reduced_chi_sqr)?;
+    let curve = FittedCurve(solved.basis.clone());
     let mut names = vec!["Intercept".to_string()];
     let mut eq = String::from("y = Intercept");
     for k in 1..=order {
         names.push(format!("B{k}"));
         eq.push_str(&format!(" + B{k}*x^{k}"));
     }
-    Ok(build_report(
+    let report = build_report(
         format!("Polynomial (order {order})"),
         eq,
         names,
@@ -173,10 +192,24 @@ pub fn fit_polynomial(x: &[f64], y: &[f64], order: usize, opts: &PolyOptions) ->
         solved,
         opts.confidence_level,
         order == 1,
-    ))
+    );
+    Ok((report, curve))
+}
+
+/// The fitted polynomial as a function of x, evaluated in the basis the fit was solved in
+/// (centred and scaled x), not from the coefficients in powers of x, which lose digits when x is
+/// far from zero relative to its spread.
+#[derive(Debug, Clone)]
+pub struct FittedCurve(Basis);
+
+impl FittedCurve {
+    pub fn eval(&self, x: f64) -> f64 {
+        self.0.eval(x)
+    }
 }
 
 /// How the solved coefficients are turned back into curve values.
+#[derive(Debug, Clone)]
 enum Basis {
     /// `y = sum c_j u^j` with `u = (x - centre) / spread`; every coefficient was free.
     Centred { centre: f64, spread: f64, c: Vec<f64> },

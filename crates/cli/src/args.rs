@@ -57,7 +57,7 @@ pub struct FitArgs {
     #[arg(long, requires = "params")]
     pub formula: Option<String>,
     /// Parameter names of --formula, comma-separated.
-    #[arg(long, value_delimiter = ',')]
+    #[arg(long, value_delimiter = ',', requires = "formula")]
     pub params: Vec<String>,
     /// Fit the function defined in this Origin .FDF file.
     #[arg(long, value_name = "FILE")]

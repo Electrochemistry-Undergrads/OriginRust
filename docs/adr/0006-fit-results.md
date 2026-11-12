@@ -33,7 +33,13 @@ fitted curve and the residuals, and adds the fitted curve to the graph of the da
    used in column formulas, and they are saved with the project like any sheet.
 3. **Fitted values and residuals** (one value per input row) are new Y columns directly after the
    source column, following ADR 0005 rule 3: "Fitted Current" and "Residual of Current", with the
-   source unit, and missing values for rows outside the range or left out of the fit.
+   source unit, and missing values for rows outside the range or left out of the fit. Both
+   columns carry the flag `fit_result` (a column property saved with the project; projects saved
+   before it existed load with it unset). A fit that is not told which columns to use (`sheaf fit`
+   without `--y`, and the default column of the app's Fit window) takes the Y columns that a plot
+   would show, except those flagged `fit_result`, so refitting a project does not fit the earlier
+   results. They can still be fitted by naming them. Name matching was rejected because users
+   rename columns.
 4. **Fitted curve.** A sheet `FitCurve1` (counting up) holds an X column of equally spaced points
    over the fitted X range and the model evaluated there (default 1000 points, so that a curve
    fitted to a few points is still smooth on the graph).

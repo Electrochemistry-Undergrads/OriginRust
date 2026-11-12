@@ -172,3 +172,46 @@ fn the_function_list_and_clear_errors() {
     let (ok, _, stderr) = sheaf(&["fit"]);
     assert!(!ok && stderr.contains("INPUT"), "{stderr}");
 }
+
+#[test]
+fn a_second_fit_without_y_leaves_the_result_columns_of_the_first_alone() {
+    let dir = scratch("refit");
+    let data = dir.join("one.csv");
+    let mut text = String::from(
+        "x,y
+",
+    );
+    for i in 0..=20 {
+        let x = f64::from(i);
+        text.push_str(&format!(
+            "{x},{}
+",
+            3.0 + 7.0 * (-x / 4.0).exp()
+        ));
+    }
+    std::fs::write(&data, text).unwrap();
+    let project = dir.join("it.sheaf");
+    let (ok, _, stderr) = sheaf(&["fit", data.to_str().unwrap(), "-m", "ExpDec1", "--save", project.to_str().unwrap()]);
+    assert!(ok, "stderr: {stderr}");
+    let (ok, stdout, stderr) = sheaf(&["fit", project.to_str().unwrap(), "-m", "linear"]);
+    assert!(ok, "stderr: {stderr}");
+    assert_eq!(
+        stdout.matches("Number of points").count(),
+        1,
+        "one report set for one column:
+{stdout}"
+    );
+    assert!(!stdout.contains("Fitted y"), "{stdout}");
+}
+
+#[test]
+fn params_without_formula_is_refused() {
+    let dir = scratch("params");
+    let data = data_file(&dir);
+    let (ok, _, stderr) = sheaf(&["fit", data.to_str().unwrap(), "-y", "line", "-m", "linear", "--params", "a,b"]);
+    assert!(!ok);
+    assert!(stderr.contains("--formula"), "{stderr}");
+    let (ok, _, stderr) = sheaf(&["fit", data.to_str().unwrap(), "-y", "line", "--params", "a,b"]);
+    assert!(!ok);
+    assert!(stderr.contains("--formula"), "{stderr}");
+}

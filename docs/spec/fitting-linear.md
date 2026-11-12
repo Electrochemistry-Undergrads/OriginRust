@@ -106,6 +106,11 @@ Let `n` be the number of usable points, `p` the number of free parameters, `w_i`
   to rounding for x near 1e5. The coefficients are converted to powers of x for the report. The
   converted coefficients and their errors suffer cancellation when `mean / spread` is large;
   fitted values and the residual sum of squares are evaluated in the `u` basis and do not.
+- The fitted curve that the app and `sheaf fit` draw (the `FitCurve` sheet and the graph line) is
+  evaluated in that solved basis too, through `fit_linear_with_curve` and
+  `fit_polynomial_with_curve`, which return a `FittedCurve` next to the report. Evaluating the
+  converted coefficients with Horner's rule instead was off by 16 times the y scale for x = 1e5..1e5+19
+  and order 5. The reported coefficients are unchanged.
 - With a fixed coefficient the free powers of `x / max|x|` are used.
 - Badly scaled x (100000 to 100010): for the straight line our numbers equal Origin's to 1e-7 or
   better. For a second-order fit on the same data **Origin itself is inaccurate**: an exact
@@ -123,6 +128,7 @@ Let `n` be the number of usable points, `p` the number of free parameters, `w_i`
 ```rust
 let rep = fit_linear(&x, &y, &LinearOptions::default())?;           // Intercept, Slope
 let rep = fit_polynomial(&x, &y, 3, &PolyOptions::default())?;      // Intercept, B1, B2, B3
+let (rep, curve) = fit_polynomial_with_curve(&x, &y, 3, &PolyOptions::default())?; // curve.eval(x)
 ```
 
 - `LinearOptions { fix_intercept, fix_slope, weighting, confidence_level (0.95),

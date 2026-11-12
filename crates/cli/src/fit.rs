@@ -9,7 +9,6 @@ use anyhow::{Context, Result, anyhow, bail};
 use sheaf_core::Project;
 use sheaf_core::analysis::RowRange;
 use sheaf_core::fitting::{FitModel, FitOutcome, FitRequest, FitWeighting, ParamSetting, builtin_functions};
-use sheaf_core::template::Template;
 
 /// Reads `--model`: `linear`, `poly:N` or a built-in function name.
 fn model_from(text: &str) -> Result<FitModel> {
@@ -242,6 +241,11 @@ pub fn fit(a: FitArgs) -> Result<()> {
         p.adopt_workbook(read_data_file(input, &a.read)?.workbook);
         p
     };
+    // clap's `requires` is skipped when --model is given explicitly (it conflicts with --formula),
+    // so the rule that --params belongs to --formula is also checked here.
+    if a.formula.is_none() && !a.params.is_empty() {
+        bail!("--params names the parameters of --formula; add --formula, or drop --params");
+    }
     let book = pick_book(&project, a.book.as_deref())?;
     let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
     let errors = named_columns(&project, book, sheet, &a.yerr)?;
@@ -250,7 +254,7 @@ pub fn fit(a: FitArgs) -> Result<()> {
     }
     let columns: Vec<_> = if a.y.is_empty() {
         // Error columns given with --yerr are not fitted themselves.
-        project.default_plot_columns(book, sheet, Template::Line).into_iter().filter(|c| !errors.contains(c)).collect()
+        project.default_fit_columns(book, sheet).into_iter().filter(|c| !errors.contains(c)).collect()
     } else {
         named_columns(&project, book, sheet, &a.y)?
     };

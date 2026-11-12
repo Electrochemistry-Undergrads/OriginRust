@@ -157,7 +157,12 @@ impl FitDialog {
         let y = match y {
             Some(id) if choices.iter().any(|(c, _)| *c == id) => id,
             Some(_) => return None,
-            None => choices.first()?.0,
+            None => sheet
+                .columns
+                .iter()
+                .find(|c| c.designation == Designation::Y && c.data.is_numeric() && !c.fit_result)
+                .map(|c| c.id)
+                .or_else(|| choices.first().map(|c| c.0))?,
         };
         let rows_in_sheet = sheet.row_count().max(1);
         let functions = builtin_functions();

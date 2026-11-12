@@ -63,8 +63,16 @@ fn grid_text<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> egui_kitte
 /// Clicks the one widget whose label contains the text (menu entries carry
 /// their keyboard shortcut in the label, for example "Undo Import data Ctrl+Z").
 fn click_containing(h: &mut Harness<'static, SheafApp>, label: &str) {
-    h.get_by_label_contains(label).click();
+    not_toolbar(h, label).into_iter().next().unwrap_or_else(|| panic!("nothing is labelled {label:?}")).click();
     settle(h);
+}
+
+/// The widgets whose label contains the text, leaving out toolbar buttons, whose labels
+/// ("Standard toolbar: Copy") carry the names of the menu entries they stand for.
+fn not_toolbar<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> Vec<egui_kittest::Node<'a>> {
+    h.query_all_by_label_contains(text)
+        .filter(|n| !n.accesskit_node().label().unwrap_or_default().contains(" toolbar: "))
+        .collect()
 }
 
 /// The menu entry with this text: the one whose label is exactly the text, otherwise the one
@@ -83,7 +91,7 @@ fn menu_entry<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> egui_kitt
     };
     let pick =
         |nodes: Vec<egui_kittest::Node<'a>>| nodes.into_iter().max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x));
-    let all: Vec<egui_kittest::Node<'a>> = h.query_all_by_label_contains(text).collect();
+    let all: Vec<egui_kittest::Node<'a>> = not_toolbar(h, text);
     let exact: Vec<egui_kittest::Node<'a>> = all
         .iter()
         .filter(|n| name(n) == text || n.accesskit_node().label().as_deref() == Some(text))
@@ -1243,11 +1251,11 @@ fn alt_and_the_underlined_letter_opens_a_top_level_menu() {
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::C);
     settle(&mut h);
     assert!(h.query_by_label("Save Project Ctrl+S").is_none());
-    assert!(h.query_by_label_contains("Set Column Values").is_some(), "Alt+C opens Column");
+    assert!(!not_toolbar(&h, "Set Column Values").is_empty(), "Alt+C opens Column");
     // Alt+K is the letter of Worksheet.
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::K);
     settle(&mut h);
-    assert!(h.query_by_label_contains("Sort Worksheet").is_some());
+    assert!(!not_toolbar(&h, "Sort Worksheet").is_empty());
 }
 
 // ----- the workbook window as in Origin: selection, clipboard, label cells, right-click menus -----
@@ -1864,4 +1872,85 @@ fn the_grid_shows_five_decimals_and_blank_for_missing_values() {
     grid_text(&h, "0.84147");
     grid_text(&h, "-0.7568");
     assert!(h.query_all(By::new().role(egui::accesskit::Role::Label).value("--")).next().is_none());
+}
+
+// ----- toolbars --------------------------------------------------------------------------------
+
+macro_rules! bar_button {
+    ($h:expr, $bar:expr, $tip:expr) => {
+        $h.get_by_label(&format!("{} toolbar: {}", $bar, $tip))
+    };
+}
+
+fn bar_button_shown(h: &Harness<'static, SheafApp>, bar: &str, tip: &str) -> bool {
+    h.query_by_label(&format!("{bar} toolbar: {tip}")).is_some()
+}
+
+#[test]
+fn clicking_line_in_the_2d_graphs_bar_with_a_column_selected_makes_a_line_graph() {
+    let mut h = start(vec![data_file("tb-line")]);
+    click(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
+    let before = project(&h).graphs().count();
+    bar_button!(h, "2D Graphs", "Line").click();
+    settle(&mut h);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let plots = &graphs[before].layers[0].plots;
+    assert_eq!(plots.len(), 1);
+    assert_eq!(plots[0].y, c);
+}
+
+#[test]
+fn a_bar_is_hidden_and_shown_again_from_view_toolbars() {
+    let mut h = start(Vec::new());
+    assert!(bar_button_shown(&h, "Tools", "Pointer"));
+    menu(&mut h, "View", "Toolbars...");
+    settle(&mut h);
+    h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Tools").click();
+    settle(&mut h);
+    assert!(!bar_button_shown(&h, "Tools", "Pointer"), "the Tools bar is hidden");
+    assert!(bar_button_shown(&h, "Standard", "Open"), "the other bars stay");
+    h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Tools").click();
+    settle(&mut h);
+    assert!(bar_button_shown(&h, "Tools", "Pointer"), "and shown again");
+}
+
+#[test]
+fn ctrl_t_opens_the_toolbars_window() {
+    let mut h = start(Vec::new());
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::T);
+    settle(&mut h);
+    assert!(h.state().toolbars.dialog);
+}
+
+#[test]
+fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
+    let mut h = start(vec![data_file("tb-grey")]);
+    click(&mut h, "Book1 - sample");
+    let windows = project(&h).windows.len();
+    // Column is a 2D type Sheaf lacks: greyed, a click changes nothing.
+    assert!(bar_button!(h, "2D Graphs", "Column").accesskit_node().is_disabled());
+    bar_button!(h, "2D Graphs", "Column").click();
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), windows);
+    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Column")));
+    // Line needs a selected column.
+    click_text(&mut h, "C(Y1)");
+    assert!(!bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());
+    // Set as X is enabled only with columns selected; Pointer is on.
+    assert!(!bar_button!(h, "Standard", "Set as X").accesskit_node().is_disabled());
+    assert!(!bar_button!(h, "Tools", "Pointer").accesskit_node().is_disabled());
+    assert!(bar_button!(h, "Tools", "Zoom In").accesskit_node().is_disabled());
+}
+
+#[test]
+fn toolbar_buttons_follow_the_window_type() {
+    let mut h = start(vec![data_file("tb-kind")]);
+    click(&mut h, "Title Graph1 - sample");
+    // In a graph window the plot buttons have no worksheet to plot from.
+    assert!(bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());
+    assert!(bar_button!(h, "Standard", "Add New Columns").accesskit_node().is_disabled());
+    assert!(!bar_button!(h, "Standard", "Open").accesskit_node().is_disabled());
 }

@@ -14,6 +14,7 @@ use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::theme;
+use crate::toolbar::{self, Bar, Toolbars};
 use crate::workspace::{self, WindowInfo, Workspace};
 use eframe::egui::{self, RichText, Sense};
 use sheaf_core::clipboard::CopyOptions;
@@ -88,6 +89,8 @@ pub struct SheafApp {
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
     about: bool,
+    /// Which toolbars are shown.
+    toolbars: Toolbars,
     /// A message the user has to dismiss (title, text).
     message: Option<(String, String)>,
     status: String,
@@ -128,6 +131,7 @@ impl SheafApp {
             sheet_name: None,
             copied: String::new(),
             about: false,
+            toolbars: Toolbars::default(),
             message: None,
             status: "Ready".to_string(),
             next_token: 1,
@@ -606,6 +610,7 @@ impl SheafApp {
             Action::TileHorizontally => self.workspace.tile_horizontally(),
             Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
+            Action::Toolbars => self.toolbars.dialog = true,
             Action::Quit => {
                 if self.doc.dirty {
                     self.pending = Some(Pending::Quit);
@@ -1202,6 +1207,7 @@ impl SheafApp {
                 self.sheet_name = None;
             }
         }
+        self.toolbars.show_dialog(ctx);
         if self.about {
             egui::Window::new(format!("About {APP_NAME}"))
                 .open(&mut self.about)
@@ -1442,21 +1448,66 @@ impl eframe::App for SheafApp {
         self.shortcuts(ctx, &mut actions);
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
-        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(&self.status);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.doc.dirty {
-                        ui.weak("unsaved changes");
-                    }
+        {
+            let c = self.menu_context();
+            let tb = &self.toolbars;
+            let bar_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(3, 1));
+            if tb.shown(Bar::Standard) {
+                egui::TopBottomPanel::top("toolbar_standard")
+                    .frame(bar_frame())
+                    .show(ctx, |ui| toolbar::show_row(ui, &[Bar::Standard], tb, &c, &mut actions));
+            }
+            let second = [Bar::Edit, Bar::Format, Bar::Graph];
+            if tb.any(&second) {
+                egui::TopBottomPanel::top("toolbar_second")
+                    .frame(bar_frame())
+                    .show(ctx, |ui| toolbar::show_row(ui, &second, tb, &c, &mut actions));
+            }
+            egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(&self.status);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if self.doc.dirty {
+                            ui.weak("unsaved changes");
+                        }
+                    });
                 });
             });
-        });
+            if tb.shown(Bar::Graphs2D) {
+                egui::TopBottomPanel::bottom("toolbar_2d_graphs")
+                    .frame(bar_frame())
+                    .show(ctx, |ui| toolbar::show_row(ui, &[Bar::Graphs2D], tb, &c, &mut actions));
+            }
+        }
         egui::SidePanel::left("explorer")
             .resizable(true)
             .default_width(200.0)
             .width_range(120.0..=420.0)
             .show(ctx, |ui| self.explorer(ui, &mut actions));
+        {
+            let c = self.menu_context();
+            let tb = &self.toolbars;
+            let side_frame = || egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::symmetric(1, 3));
+            if tb.shown(Bar::Tools) {
+                egui::SidePanel::left("toolbar_tools").frame(side_frame()).resizable(false).exact_width(24.0).show(
+                    ctx,
+                    |ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                        toolbar::show_bar(ui, Bar::Tools, &c, &mut actions);
+                    },
+                );
+            }
+            if tb.shown(Bar::ObjectEdit) {
+                egui::SidePanel::right("toolbar_object_edit")
+                    .frame(side_frame())
+                    .resizable(false)
+                    .exact_width(24.0)
+                    .show(ctx, |ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                        toolbar::show_bar(ui, Bar::ObjectEdit, &c, &mut actions);
+                    });
+            }
+        }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::WORKSPACE_GREY)).show(ctx, |ui| {
             if self.doc.project().windows.is_empty() {
                 self.welcome(ui, &mut actions);

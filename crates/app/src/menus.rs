@@ -85,6 +85,8 @@ pub enum Cmd {
     Analyze(AnalysisKind),
     Fit(FitKind),
     GraphProps(PropsTab),
+    /// View > Toolbars: the window that shows and hides the bars.
+    Toolbars,
     Cascade,
     TileHorizontally,
     TileVertically,
@@ -420,7 +422,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
 }
 
 fn view_menu(kind: WindowKind) -> Vec<Entry> {
-    let mut v = vec![grey("Menu"), grey_keyed("&Toolbars...", ctrl(Key::T)), grey("Status Bar"), sep()];
+    let mut v = vec![grey("Menu"), keyed("&Toolbars...", ctrl(Key::T), Cmd::Toolbars), grey("Status Bar"), sep()];
     v.push(grey_keyed("Command Window", alt(Key::Num3)));
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
@@ -1402,6 +1404,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             None => return Err(NEED_BOOK),
         },
         Cmd::GraphProps(tab) => Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, tab: *tab },
+        Cmd::Toolbars => Action::Toolbars,
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,
         Cmd::TileVertically => Action::TileVertically,

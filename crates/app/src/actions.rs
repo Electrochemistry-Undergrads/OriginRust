@@ -148,5 +148,7 @@ pub enum Action {
     TileHorizontally,
     TileVertically,
     About,
+    /// Open the window of View > Toolbars.
+    Toolbars,
     Quit,
 }

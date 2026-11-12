@@ -18,8 +18,8 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 37 | 94 | 99 | 230 |
-| P0 | 30 | 63 | 8 | 101 |
+| All rows | 37 | 95 | 98 | 230 |
+| P0 | 30 | 64 | 7 | 101 |
 | P1 and P2 together | 7 | 31 | 91 | 129 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 42 are P2. The P1 and P2 rows were not counted separately by status.
@@ -43,7 +43,7 @@ Cross-cutting findings:
 | Project Explorer | View > Project Explorer, Alt+1 | flat window list, right-click Show/Rename/Export/Delete | ◐ | no folder tree or editing UI (model has folders), no filters, Duplicate, Properties, search; cannot be hidden | P0 |
 | Menu bar per window type | menus differ for book, graph, layout, matrix | one bar: File, Edit, Worksheet, Plot, Analysis, Graph, Window, Help | ◐ | no View, Column, Statistics, Gadgets, Tools, Format menus; Edit holds only undo and redo; bar does not change with the active window | P0 |
 | Analysis and Statistics menu structure | Mathematics, Signal Processing, Fitting, Peaks and Baseline submenus; Statistics menu | one flat Analysis menu: 8 tools and 3 fit entries | ◐ | no submenus, no Statistics or Gadgets menu, not extensible | P0 |
-| Toolbars | about 30, View > Toolbars | none (a small button row inside a graph) | ✗ | all families missing: standard, edit, graph, 2D plots, column, worksheet data, style, format, mask, tools | P0 |
+| Toolbars | about 30, View > Toolbars | Standard, Edit, Format, Graph, 2D Graphs, Tools and Object Edit bars with drawn icons; View > Toolbars shows and hides each | ◐ | buttons for features Sheaf lacks are greyed (most of 2D Graphs, Graph, Format, Tools, Object Edit); no Style, Mask, Layout, 3D bars; bars are not draggable or customisable | P0 |
 | Origin look: MDI windows, classic chrome | main window | egui default style, tabs, left panel | ✗ | layout and chrome differ | P0 |
 | Keyboard shortcuts | Ctrl+K import, Ctrl+Q set values, Ctrl+D, Ctrl+R, F-keys, Alt+n | Ctrl+N/O/S/Shift+S/I/Z/Y | ◐ | import is Ctrl+I (Origin: Ctrl+K, where Ctrl+I is zoom); most Origin keys unbound | P0 |
 | New window kinds | File > New: Worksheet, Matrix, Graph, Image, Excel, Layout, Notes, Function Plot, from Template | Worksheet > New Workbook only | ◐ | no empty graph, matrix, image, layout, notes, function plot, new-from-template | P1 |

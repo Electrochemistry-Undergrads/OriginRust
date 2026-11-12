@@ -23,6 +23,7 @@ mod graph_view;
 mod grid;
 mod menus;
 mod theme;
+mod toolbar;
 mod workspace;
 
 use std::path::PathBuf;

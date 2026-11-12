@@ -290,18 +290,33 @@ pub(crate) fn recalc_sheet(
             ws.columns[node.idx].formula_state = FormulaState::Pending;
             continue;
         }
+        let derived = formula_rows.is_none();
         let range = formula_rows.unwrap_or_else(|| {
             let rows = deps.iter().filter_map(|d| ws.column(*d)).map(Column::len).max().unwrap_or(0);
             0..rows
         });
         if range.is_empty() {
-            ws.columns[node.idx].formula_state = FormulaState::Current;
+            let c = &mut ws.columns[node.idx];
+            // A formula over the whole column follows its sources, so when they are all empty
+            // (for example after a shorter re-import) the results go too.
+            if derived && !deps.is_empty() && !c.is_empty() {
+                c.data = ColumnData::numeric(Vec::new());
+                dirty.insert(node.id);
+            }
+            c.formula_state = FormulaState::Current;
             continue;
         }
         let expr = node.expr.as_ref().expect("a node with resolved columns has a parsed formula");
+        let range_end = range.end;
         match compute_fill(ws, &ws.columns[node.idx], expr, range) {
-            Ok(data) => {
+            Ok(mut data) => {
                 let c = &mut ws.columns[node.idx];
+                if derived && data.len() > range_end {
+                    // The sources got shorter: rows past their end no longer have results.
+                    if let ColumnData::Numeric(v) = &data {
+                        data = ColumnData::numeric(v[..range_end].to_vec());
+                    }
+                }
                 if c.data != data {
                     c.data = data;
                 }

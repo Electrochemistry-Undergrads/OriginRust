@@ -187,6 +187,24 @@ fn rows_added_to_the_source_grow_the_auto_column() {
 }
 
 #[test]
+fn a_shorter_or_emptied_source_drops_the_stale_results() {
+    let (mut d, _, c) = book();
+    set(&mut d, c[1], "col(A)*2", RecalcMode::Auto).unwrap();
+    assert_eq!(values(&d, c[1]), [2.0, 4.0, 6.0, 8.0]);
+    d.apply("Replace source", |p| {
+        p.column_mut(c[0]).unwrap().data = ColumnData::numeric(vec![5.0, 6.0]);
+    });
+    assert_eq!(values(&d, c[1]), [10.0, 12.0]);
+    d.apply("Empty source", |p| {
+        p.column_mut(c[0]).unwrap().data = ColumnData::numeric(Vec::new());
+    });
+    assert!(values(&d, c[1]).is_empty());
+    assert_eq!(state(&d, c[1]), FormulaState::Current);
+    d.undo();
+    assert_eq!(values(&d, c[1]), [10.0, 12.0]);
+}
+
+#[test]
 fn the_mode_and_pending_mark_survive_json_and_old_projects_load() {
     let (mut d, _, c) = book();
     set(&mut d, c[1], "col(A)*2", RecalcMode::Manual).unwrap();

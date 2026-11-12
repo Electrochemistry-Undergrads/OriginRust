@@ -247,9 +247,98 @@ the two neighbours) and rounded to the nearest whole position otherwise (`.25` g
 Median: the usual one. The `stats` X-function returns mean, sd, n, min, max, sum, missing for the same
 numbers (checked for two columns).
 
+## 9. Curve math: subtract a reference curve and simple math (`subtract_ref`, `mathtool`)
+
+Origin has two menu items for this: Analysis > Mathematics > Subtract Reference Data (`subtract_ref`)
+and Analysis > Mathematics > Simple Math (`mathtool`). `subtract_ref` is `mathtool` fixed to the
+operator Subtract and the operand Reference Data. Inputs of `mathtool` (from its X-Function file):
+the data curve `iy1` (X and Y), `operator` (add, sub, div, mul, pow; default add), `operand`
+(Constant or Reference Data), the reference curve `iy2`, the constant `const`, `common` ("use common
+range only", off by default) and `rescale` (rescales the source graph; a graph action, not
+implemented). The output `oy` is an X and a Y column.
+
+Observed (Origin 2016, scripts `curvemath-suite1..3.lines.txt`; the Rust test is
+`crates/calc/tests/origin_curvemath.rs`, relative tolerance 1e-10):
+
+- Operations are `y op operand` with the data on the left: `y + r`, `y - r`, `y * r`, `y / r`,
+  `y ^ r`. With a constant the operand is the same number for every row.
+- The reference is interpolated onto the X values of the data with straight lines between its
+  points (the default, and the only choice offered). Outside the reference's X range the first or
+  last segment of the reference is continued as a straight line (so a data point left of the
+  reference gets the straight-line extension, not the end value, and no missing value). Checked
+  with data reaching 1.5 below and 1.5 above the reference.
+- Without "common range only" the output has one row per data row, at the data's X values and in
+  the data's order; the data need not be sorted.
+- With "common range only" the result covers X from the larger of the two minima to the smaller of
+  the two maxima (both ends included). Its X values are the sorted union of the data's and the
+  reference's X values inside that range, and both curves are interpolated linearly onto them (so
+  the data are also interpolated, not only the reference). Checked with unsorted data and a
+  reference on a different grid.
+- Division by zero (by the constant 0, or by a reference value that is exactly 0 at that X) gives a
+  missing value. For the constant 0 Origin refuses to run the X-Function at all.
+- A reference sorted by X is handled as expected, including two reference points with the same X
+  (the segment left of them uses the first, the segment right of them the second). An unsorted
+  reference was probed too, and Origin's result there is odd: inside the range it equals the
+  sorted result, but outside the range it continued the ends differently (constant below the
+  lowest X, a different slope above the highest). We do not reproduce this; we sort the reference
+  and continue its end segments, which is what Origin does for a sorted reference. Not compared:
+  missing values inside the data or the reference, a reference with fewer than two points.
+
+Sheaf: `sheaf_calc::curve_math_ref`, `curve_math_const` and `CurveOp` (add, subtract, multiply,
+divide, power; non-finite results become missing values). The project operation is
+`Tool::CurveMath(CurveMathSpec)` of `Project::analyze` (ADR 0005), one undo step named "Subtract
+reference" or "Curve math". The reference is any numeric column of the project (another sheet or
+workbook too); its X is the nearest X column to its left, or row numbers. Where results go, which
+follows ADR 0005 and differs a little from Origin's X and Y output pair: without common range, a
+new Y column directly behind each source column (rows outside a chosen row range are missing),
+named "<name> minus <reference name>" and so on, with unit of the source for add and subtract and
+for scaling by a constant, and no unit otherwise. With common range only, a new sheet `Math1` with
+an X column and a Y column per input. The reference needs at least two valid points; an empty
+common range and division by the constant 0 are refused and change nothing. Origin's power
+operator is included; the owner asked only for the four basic ones.
+
+Command line: `sheaf analyze subtract-ref FILE --y B --ref COLUMN [--ref-file F] [--ref-book B]
+[--ref-sheet S] [--common]` and `sheaf analyze math --op add|subtract|multiply|divide|power
+(--value N | --ref COLUMN ...)`. The reference column is searched in the same sheet unless a file,
+book or sheet is named; a file named with `--ref-file` is added to the project as a workbook (and
+so appears in `--save`). Window: Analysis > Subtract Reference Data... and Simple Math..., with a
+list of all other numeric Y columns of the project as references.
+
+## 10. Integrating several ranges at once (`integ1` per range)
+
+Origin's Integrate reports for one curve and one range: `area`, `x0`/`y0` (position and signed
+height of the largest-magnitude point after the baseline), `dx` (width at half height, measured as
+in section 1), the first and last point of the range (`x1`, `x2`, `i1`, `i2`). It does not report
+a separate absolute area; that comes from running it with `type:=abs`. Sheaf's range table is
+those same numbers per range, with the absolute area added, so it reuses the checked numerics of
+section 1 for every row (there is no new Origin fixture: each row is one `integ1` run on the range's
+rows).
+
+Sheaf: `Tool::IntegrateRanges(IntegrateRangesSpec)`. Input: a list of ranges, each an X interval
+(the first unbroken run of rows inside it, as for the row choice of ADR 0005) or a row range, and
+the end-point-baseline switch, which is applied to each range separately (the line through that
+range's own first and last point). The request's own row range is applied first: X intervals are
+searched inside it and row ranges are cut to it, so the two sweeps of a cyclic voltammogram are
+separated with a row range, since an X interval always finds the first pass. Result: a table with
+one row per input column and range, labelled "<column label>, range N", and the numbers First row,
+Last row (worksheet rows), X start, X end (X of the first and last point used), Area, Absolute
+area, Peak X, Peak height, Width at half height; also written as the new sheet `Integrate1`. The
+area unit is the product of the Y and X units (current times time is charge). No running-integral
+columns are added. A range with fewer than two points, or no row inside it, is an error and
+nothing changes. One undo step, named "Integrate ranges".
+
+Typical uses: the anodic and cathodic peak of a cyclic voltammogram (one row range per sweep) and
+the charge of each cycle. Not done: choosing the ranges by dragging on a graph, anchor-point
+baselines per peak, and splitting a curve into peaks automatically (Origin's Peak Analyzer).
+
+Command line: `sheaf analyze integrate FILE --ranges 0.2:0.5,0.6:0.9 [--row-ranges 1:200,201:400]
+[--baseline]`; `--absolute` and `--no-cumulative` do not apply and are refused with a message.
+Window: Analysis > Integrate Ranges... (a list of X intervals with Add range and Remove).
+
 ## Files
 
-Reference scripts (all in `tools/origin-ref/`): `integ-suite1..6`, `diff-suite1`, `smooth-suite1`,
+Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with
+`run-labtalk-lines.ps1`, they print the result sheet), `integ-suite1..6`, `diff-suite1`, `smooth-suite1`,
 `smooth-fftprobe`, `smooth-fft-grid`, `smooth-fft-edge`, `smooth-fft-big`, `interp-bspline`, `normalize-suite1`, `interp-suite1`, `pkfind-suite1`, `pkfind-suite2`,
 `colstats-suite1..3`. Run with `run-labtalk-data.ps1`. Raw dumps (git-ignored):
 `re-workspace/scratch/sheaf-calc/*.json`.

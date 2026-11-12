@@ -8,7 +8,7 @@
 //!
 //! Numerical details that matter for matching Origin:
 //! - The covariance matrix of the parameters is `(J' W J)^-1`, multiplied by the reduced
-//!   chi-square when errors are scaled (the default for unweighted fits).
+//!   chi-square when errors are scaled (Origin's default, also for weighted fits).
 //! - A parameter sitting on a bound stays a free parameter in the statistics (it counts in the
 //!   degrees of freedom and gets a standard error); a warning names it.
 //! - Points with a missing x, y or weight are dropped.
@@ -192,8 +192,7 @@ impl Host for PointHost<'_> {
 }
 
 /// Settings of a fit. The defaults are Origin 2016's: tolerance 1e-9, at most 400 iterations,
-/// 95 % confidence limits, errors scaled by the reduced chi-square unless the fit is weighted by
-/// measured errors.
+/// 95 % confidence limits, errors scaled by the reduced chi-square (also with instrumental weights).
 #[derive(Debug, Clone)]
 pub struct FitOptions {
     pub weighting: Weighting,
@@ -201,8 +200,8 @@ pub struct FitOptions {
     /// Convergence tolerance on the relative decrease of the (weighted) sum of squares.
     pub tolerance: f64,
     pub confidence_level: f64,
-    /// Scale the covariance matrix by the reduced chi-square. `None`: on, except for
-    /// instrumental weighting.
+    /// Scale the covariance matrix by the reduced chi-square. `None`: on, as in Origin (also for
+    /// instrumental weighting).
     pub scale_errors: Option<bool>,
 }
 
@@ -300,7 +299,10 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
 
     let mut status = FitStatus::MaxIterations;
     let mut iterations = 0usize;
-    let mut lambda = 1e-3;
+    // Origin's damping: the diagonal of J'J is scaled by (1 + lambda). Lambda starts at 1e-3, is
+    // divided by 10 after every step that does not raise the sum of squares and multiplied by 10
+    // after a step that does. See docs/spec/fitting.md.
+    let mut lambda = INITIAL_DAMPING;
     if nfree == 0 {
         status = FitStatus::Converged;
     } else {
@@ -309,43 +311,25 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
             let (jac, res) = jacobian(func, &p, &free, &xs, &ys, &sw);
             let g = jac.transpose() * &res;
             let a = jac.transpose() * &jac;
-            // Parameters pressed against a bound by the gradient stay out of this step.
-            let movable: Vec<usize> = (0..nfree)
-                .filter(|&k| {
-                    let s = &func.params[free[k]];
-                    let pv = p[free[k]];
-                    !(s.lower.is_some_and(|lo| pv <= lo && g[k] < 0.0)
-                        || s.upper.is_some_and(|hi| pv >= hi && g[k] > 0.0))
-                })
-                .collect();
-            if movable.is_empty() {
-                status = FitStatus::Converged;
-                break;
-            }
-            let m = movable.len();
             let mut accepted = false;
             while lambda < 1e14 {
-                let mut am = DMatrix::<f64>::zeros(m, m);
-                let mut gm = DVector::<f64>::zeros(m);
-                for (r, &kr) in movable.iter().enumerate() {
-                    gm[r] = g[kr];
-                    for (c, &kc) in movable.iter().enumerate() {
-                        am[(r, c)] = a[(kr, kc)];
-                    }
-                    let d = a[(kr, kr)].max(1e-300);
-                    am[(r, r)] += lambda * d;
+                let mut am = a.clone();
+                for k in 0..nfree {
+                    am[(k, k)] += lambda * a[(k, k)].max(1e-300);
                 }
-                let step = match am.clone().lu().solve(&gm) {
+                let step = match am.lu().solve(&g) {
                     Some(s) if s.iter().all(|v| v.is_finite()) => s,
                     _ => {
                         lambda *= 10.0;
                         continue;
                     }
                 };
+                // The whole step is computed as if no parameter were bounded; each component is
+                // then cut back to its bounds. A parameter held on its bound therefore still
+                // takes part in the step of the others.
                 let mut pn = p.clone();
-                for (r, &kr) in movable.iter().enumerate() {
-                    let j = free[kr];
-                    let mut v = p[j] + step[r];
+                for (k, &j) in free.iter().enumerate() {
+                    let mut v = p[j] + step[k];
                     if let Some(lo) = func.params[j].lower {
                         v = v.max(lo);
                     }
@@ -356,20 +340,12 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
                 }
                 let cn = cost_of(&pn);
                 if cn.is_finite() && cn <= cost {
-                    let decrease = cost - cn;
-                    let rel_step = movable
-                        .iter()
-                        .map(|&k| {
-                            let j = free[k];
-                            (pn[j] - p[j]).abs() / (p[j].abs() + pn[j].abs() + 1e-300)
-                        })
-                        .fold(0.0, f64::max);
-                    p = pn;
                     let prev = cost;
-                    cost = cn;
                     lambda = (lambda / 10.0).max(1e-15);
+                    p = pn;
+                    cost = cn;
                     accepted = true;
-                    if decrease <= opts.tolerance * prev.max(1e-300) && rel_step < 1e-7 || cost == 0.0 {
+                    if prev - cn <= opts.tolerance * (prev + cn) || cost == 0.0 {
                         status = FitStatus::Converged;
                         break 'outer;
                     }
@@ -392,7 +368,7 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
 
     let (jac, _) = jacobian(func, &p, &free, &xs, &ys, &sw);
     let jtj = jac.transpose() * &jac;
-    let scale = opts.scale_errors.unwrap_or(!matches!(opts.weighting, Weighting::Instrumental(_)));
+    let scale = opts.scale_errors.unwrap_or(true);
     let mut cov_free: Option<DMatrix<f64>> = None;
     let mut inv_free: Option<DMatrix<f64>> = None;
     if nfree > 0 {
@@ -525,6 +501,9 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
     })
 }
 
+/// Starting value of the damping factor of every Levenberg-Marquardt iteration.
+const INITIAL_DAMPING: f64 = 1e-3;
+
 fn check_len(have: usize, want: usize) -> Result<(), FitError> {
     if have != want { Err(FitError::LengthMismatch { x: want, y: have }) } else { Ok(()) }
 }
@@ -548,27 +527,23 @@ fn jacobian(
     }
     let mut q = p.to_vec();
     for (k, &j) in free.iter().enumerate() {
-        let s = &func.params[j];
         let h = 6e-6 * p[j].abs().max(1e-3);
-        // Stay inside the bounds if the point is close to one.
-        let mut up = p[j] + h;
-        let mut dn = p[j] - h;
-        if let Some(hi) = s.upper {
-            up = up.min(hi);
-        }
-        if let Some(lo) = s.lower {
-            dn = dn.max(lo);
-        }
-        let span = up - dn;
-        if span <= 0.0 {
-            continue;
-        }
+        // Central differences, also across a bound: Origin differentiates the model itself, so a
+        // parameter resting on its bound must not get a one-sided (less accurate) derivative.
         for i in 0..n {
-            q[j] = up;
+            q[j] = p[j] + h;
             let fu = func.eval(&q, xs[i]);
-            q[j] = dn;
+            q[j] = p[j] - h;
             let fd = func.eval(&q, xs[i]);
-            jac[(i, k)] = sw[i] * (fu - fd) / span;
+            let d = if fu.is_finite() && fd.is_finite() {
+                (fu - fd) / (2.0 * h)
+            } else {
+                // The model is not defined on one side (for example a bound at the edge of its
+                // domain): use the other side.
+                let f0 = func.eval(p, xs[i]);
+                if fu.is_finite() { (fu - f0) / h } else { (f0 - fd) / h }
+            };
+            jac[(i, k)] = sw[i] * d;
         }
         q[j] = p[j];
     }

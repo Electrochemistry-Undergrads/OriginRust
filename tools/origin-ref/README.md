@@ -15,3 +15,11 @@ Example (PowerShell):
 ```
 .\run-labtalk.ps1 -Script integ-parabola.labtalk.txt -Vars area
 ```
+
+## Nonlinear fit reference runs
+
+`run-labtalk-lines.ps1` runs a script one line at a time in one Origin session (it takes the same
+lock). A line starting with `?` prints a LabTalk number, `$` a string, and `#[Book1]FitNL1` dumps a
+worksheet (the fit report sheet). `nlfit-suite.lines.txt` is the script that produced
+`crates/fit/tests/data/origin_nlsf.json`; `nlfit-make-fixture.py nlfit-suite.out nlfit-suite-meta.json out.json`
+turns the output into that file. Origin 2016 shows no dialog when `nlend output:=1` is called this way.

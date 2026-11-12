@@ -78,7 +78,9 @@ publication figures), P1 is common Origin use, P2 is later.
 - [x] User-defined functions; import of `.FDF` fit definitions
 - [x] Fit report (parameters, standard errors, R², reduced chi-square, residuals); fitted curve on the
       graph; `sheaf fit` and the app's Fit window (ADR 0006)
-- [ ] Independent review of the milestone by a fresh-context agent; findings fixed
+- [x] Independent review of the milestone by a fresh-context agent; findings fixed (11 confirmed
+      findings, among them wrong starting values of `Gaussian` and base-e EC20/EC80; fixed and
+      reviewed again in three branches, merged `fe407b1`, `0ac9546`, `83a09de`)
 
 ## Milestone 5: Origin project import
 

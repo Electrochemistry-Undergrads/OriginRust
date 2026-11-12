@@ -12,6 +12,54 @@ use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
 use std::path::PathBuf;
 
+/// How Copy writes the cells (the Copy submenu of the Edit menu).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopyKind {
+    /// What the cells show.
+    Plain,
+    /// Every digit of the numbers.
+    FullPrecision,
+    /// The label rows above the values, which are written as shown.
+    WithLabels,
+}
+
+/// What to do with the selected cells of a worksheet.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CellOp {
+    Copy(CopyKind),
+    Cut,
+    /// Paste what is on the clipboard: asks the system for the text, which comes back as `PasteText`.
+    Paste,
+    PasteText(String),
+    /// Empty the cells (the Delete key).
+    Clear,
+}
+
+/// One of the label rows above the data of a column.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LabelRow {
+    LongName,
+    Units,
+    Comments,
+    /// The F(x)= row: editing it opens Set Column Values.
+    Formula,
+    /// A user parameter row, by name.
+    Param(String),
+}
+
+/// What to do with a sheet tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SheetOp {
+    /// A new empty sheet after the last one.
+    Add,
+    /// A new empty sheet before the active one.
+    Insert,
+    Delete,
+    Duplicate,
+    /// Open the window that asks for a new name.
+    RenameDialog,
+}
+
 #[derive(Debug, Clone)]
 pub enum Action {
     NewProject,
@@ -37,6 +85,22 @@ pub enum Action {
     SelectSheet {
         book: WindowId,
         sheet: usize,
+    },
+    /// Copy, cut, paste or clear the selected cells of a workbook.
+    Cells {
+        book: WindowId,
+        op: CellOp,
+    },
+    /// Change one label row of a column (a double click on the label cell).
+    SetLabel {
+        column: ColumnId,
+        row: LabelRow,
+        text: String,
+    },
+    /// Add, insert, delete, duplicate or rename the active sheet of a workbook.
+    Sheet {
+        book: WindowId,
+        op: SheetOp,
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),

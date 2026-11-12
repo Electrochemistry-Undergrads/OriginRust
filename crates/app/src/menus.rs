@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::Action;
+use crate::actions::{Action, CellOp, CopyKind, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -33,6 +33,7 @@ pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
 const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
+const NEED_CELLS: &str = "Select cells, columns or rows first";
 const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
@@ -64,6 +65,14 @@ pub enum Cmd {
     Undo,
     Redo,
     DeleteColumns,
+    /// Copy the selected cells (Edit > Copy and the Copy item of the cell menus).
+    Copy(CopyKind),
+    Cut,
+    Paste,
+    /// Empty the selected cells (the Delete key).
+    Clear,
+    /// A command of a sheet tab's menu, on the active sheet.
+    Sheet(SheetOp),
     Plot(Template),
     SetAs(Designation),
     SetColumnValues,
@@ -127,6 +136,9 @@ pub struct MenuContext<'a> {
     pub graph: Option<WindowId>,
     pub active: Option<WindowId>,
     pub selected: &'a [ColumnId],
+    /// True when the active workbook has selected cells, columns or rows (Copy, Cut, Paste and
+    /// Clear act on them).
+    pub cells: bool,
     pub undo: Option<&'a str>,
     pub redo: Option<&'a str>,
     /// All windows of the project, in order, with their titles.
@@ -339,32 +351,25 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         // Origin has no Redo; Sheaf keeps its own, with its own key.
         keyed("&Redo", ctrl_shift(Key::Z), Cmd::Redo),
         sep(),
-        grey("Cu&t"),
     ];
     if kind == WindowKind::Workbook {
-        v.push(grey_sub(
+        v.push(keyed("Cu&t", ctrl(Key::X), Cmd::Cut));
+        v.push(sub(
             "&Copy",
-            &[
-                "Copy",
-                "Copy full precision",
-                "Copy including label rows",
-                "Copy formula",
-                "Copy label rows",
-                "Copy formula and label rows",
-                "Copy All",
+            vec![
+                keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain)),
+                keyed("Copy full precision", ctrl_alt(Key::C), Cmd::Copy(CopyKind::FullPrecision)),
+                item("Copy including label rows", Cmd::Copy(CopyKind::WithLabels)),
+                grey("Copy formula"),
+                grey("Copy label rows"),
+                grey("Copy formula and label rows"),
+                grey("Copy All"),
             ],
         ));
-        v.extend(greys(&[
-            "Paste",
-            "Paste Transpose",
-            "Paste Link",
-            "Paste Link Transpose",
-            "Paste Special",
-            "-",
-            "Select...",
-            "Clear",
-            "Insert",
-        ]));
+        v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
+        v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
+        v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
+        v.push(grey("Insert"));
         v.push(item("&Delete", Cmd::DeleteColumns));
         v.extend(greys(&[
             "Remove Links",
@@ -381,6 +386,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
             "Button Edit Mode",
         ]));
     } else {
+        v.push(grey("Cu&t"));
         v.extend(greys(&[
             "Copy",
             "Copy Page",
@@ -1027,6 +1033,173 @@ fn help_menu() -> Vec<Entry> {
     ]
 }
 
+// ----- the right-click menus of the worksheet ------------------------------------------------
+//
+// The lists of Origin's context menus (`docs/spec/gui-look.md`, section 3), drawn with the same
+// code as the menu bar so that greyed items, tooltips and shortcut texts look the same. Origin
+// shows a short form with a chevron; Sheaf shows the long form (a deliberate difference, as for
+// the menu bar).
+
+fn copy_entries() -> Vec<Entry> {
+    vec![
+        keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain)),
+        keyed("Copy (full precision)", ctrl_alt(Key::C), Cmd::Copy(CopyKind::FullPrecision)),
+        item("Copy including label rows", Cmd::Copy(CopyKind::WithLabels)),
+    ]
+}
+
+/// The menu of a column header (the column is selected first).
+pub fn column_header_menu() -> Vec<Entry> {
+    let order = ["Ascending", "Descending", "Custom..."];
+    let set_as: Vec<Entry> = [
+        ("X", Designation::X),
+        ("Y", Designation::Y),
+        ("Z", Designation::Z),
+        ("Label", Designation::Label),
+        ("Disregard", Designation::Disregard),
+        ("Y Error", Designation::YError),
+        ("X Error", Designation::XError),
+    ]
+    .iter()
+    .map(|(l, d)| item(l, Cmd::SetAs(*d)))
+    .collect();
+    let plots: Vec<Entry> = Template::ALL.iter().map(|t| item(t.label(), Cmd::Plot(*t))).collect();
+    let mut v = vec![sub("Plot", plots), sep(), keyed("Cut", ctrl(Key::X), Cmd::Cut), sub("Copy", copy_entries())];
+    v.push(grey("Copy Columns to..."));
+    v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
+    v.push(sep());
+    v.push(grey("Insert"));
+    v.push(item("Delete", Cmd::DeleteColumns));
+    v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
+    v.push(grey("Remove Links"));
+    v.push(sep());
+    v.push(sub("Set As", set_as));
+    v.push(grey("Set As Categorical"));
+    v.push(sep());
+    v.push(keyed("Set Column Values...", ctrl(Key::Q), Cmd::SetColumnValues));
+    v.push(grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)));
+    v.push(item("Recalculate", Cmd::Recalculate));
+    v.push(item("Add New Columns...", Cmd::AddColumns));
+    v.push(sep());
+    v.push(grey_sub(
+        "Fill Column with",
+        &[
+            "Row Numbers",
+            "Uniform Random Numbers",
+            "Normal Random Numbers",
+            "A set of Numbers...",
+            "A set of Date/Time values...",
+            "Arbitrary set of Text&&Numeric values...",
+        ],
+    ));
+    v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
+    v.push(grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]));
+    v.push(grey_sub("Mask", &["Apply", "Remove", "Swap", "Change Color", "Disable Masking"]));
+    v.push(grey("Mask Cells by Condition..."));
+    v.push(sep());
+    v.push(grey_sub("Sort Column", &order));
+    v.push(sub(
+        "Sort Worksheet",
+        vec![item("Ascending", Cmd::SortAscending), item("Descending", Cmd::SortDescending), grey("Custom...")],
+    ));
+    v.extend(greys(&["Sort Columns by Label...", "Reverse Order", "-"]));
+    v.push(item("Normalize...", Cmd::Analyze(AnalysisKind::Normalize)));
+    v.push(grey("Frequency Count..."));
+    v.push(item("Statistics on Columns...", Cmd::Analyze(AnalysisKind::Statistics)));
+    v.push(sep());
+    v.push(grey_sub("Hide/Unhide Columns", &["Hide Selected", "Unhide All"]));
+    v.push(grey_sub("Move Columns", &["To First", "Left", "Right", "To Last"]));
+    v.extend(greys(&["Swap Columns...", "Column Width...", "-", "Slide Show of Dependent Graphs"]));
+    v.extend(greys(&["Add or Update Sparklines...", "-", "Format Cells..."]));
+    v.push(item("Properties...", Cmd::ColumnProperties));
+    v
+}
+
+/// The menu of a cell.
+pub fn cell_menu() -> Vec<Entry> {
+    let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
+    v.extend(copy_entries());
+    v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
+    v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "-", "Insert", "Delete"]));
+    v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
+    v.extend(greys(&["Remove Links", "-", "Set as Begin", "Set as End", "-"]));
+    v.push(grey_sub("Insert Arrow", &["Arrow", "Double Arrow"]));
+    v.extend(greys(&[
+        "Insert Graph...",
+        "Insert Images from Files...",
+        "Insert Notes",
+        "Insert Sparklines...",
+        "Insert Variables...",
+        "-",
+        "Format Cells...",
+    ]));
+    v.push(grey_sub("Mask", &["Apply", "Remove", "Swap"]));
+    v.push(grey_sub("Set Data Style", &["Default"]));
+    v
+}
+
+/// The menu of a row number: Origin's short form, the same items as the cell menu starts with.
+pub fn row_menu() -> Vec<Entry> {
+    let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut), keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain))];
+    v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
+    v.extend(greys(&["Insert", "Delete"]));
+    v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
+    v.extend(greys(&["Insert Graph...", "Format Cells..."]));
+    v
+}
+
+/// The menu of a sheet tab (it acts on the sheet whose tab was clicked, which becomes the
+/// active one first).
+pub fn sheet_tab_menu() -> Vec<Entry> {
+    vec![
+        item("Insert", Cmd::Sheet(SheetOp::Insert)),
+        item("Delete", Cmd::Sheet(SheetOp::Delete)),
+        item("Add", Cmd::Sheet(SheetOp::Add)),
+        grey("Add Graph as Sheet..."),
+        grey("Add Notes as Sheet"),
+        sep(),
+        grey("Duplicate Without Data"),
+        item("Duplicate", Cmd::Sheet(SheetOp::Duplicate)),
+        sep(),
+        grey_sub("Sheet Name to Show", &["Short Name", "Long Name", "Both"]),
+        item("Name and Comments...", Cmd::Sheet(SheetOp::RenameDialog)),
+        sep(),
+        grey("Navigate..."),
+    ]
+}
+
+/// The menu of the corner above the row numbers: switches for the parts of the grid.
+pub fn corner_menu() -> Vec<Entry> {
+    vec![
+        grey_sub(
+            "Row Labels for Column Label Rows",
+            &["Long Name", "Units", "Comments", "F(x)=", "Sparklines", "Parameters"],
+        ),
+        sep(),
+        grey("Column Header"),
+        grey("Row Header"),
+        grey("Column Grid"),
+        grey("Row Grid"),
+        grey("Page Break Preview Lines"),
+    ]
+}
+
+/// Draws a list of entries into a context menu.
+pub fn show_context(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: &mut Vec<Action>) {
+    // Origin shows a short form with a chevron; the long list scrolls when the screen is low.
+    let height = (ui.ctx().content_rect().height() - 40.0).max(200.0);
+    egui::ScrollArea::vertical().max_height(height).min_scrolled_height(height).auto_shrink([true, true]).show(
+        ui,
+        |ui| {
+            ui.set_min_width(200.0);
+            // Close-set rows: the long lists of Origin's menus are about 17 px per item there too.
+            ui.spacing_mut().interact_size.y = 16.0;
+            ui.spacing_mut().item_spacing.y = 1.0;
+            show_entries(ui, entries, c, actions);
+        },
+    );
+}
+
 // ----- checks and helpers on the table --------------------------------------------------------
 
 /// Calls `f` for every item of the entries, submenus included.
@@ -1179,6 +1352,22 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::DeleteColumns(some()?)
         }
+        Cmd::Copy(kind) => {
+            let book = book?;
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            Action::Cells { book, op: CellOp::Copy(*kind) }
+        }
+        Cmd::Cut | Cmd::Paste | Cmd::Clear => {
+            let book = book?;
+            c.cells.then_some(()).ok_or(NEED_CELLS)?;
+            let op = match cmd {
+                Cmd::Cut => CellOp::Cut,
+                Cmd::Paste => CellOp::Paste,
+                _ => CellOp::Clear,
+            };
+            Action::Cells { book, op }
+        }
+        Cmd::Sheet(op) => Action::Sheet { book: book?, op: op.clone() },
         Cmd::Plot(template) => Action::PlotColumns { book: book?, columns: c.selected.to_vec(), template: *template },
         Cmd::SetAs(designation) => {
             book?;
@@ -1521,6 +1710,7 @@ mod tests {
             graph: Some(WindowId(2)),
             active: Some(WindowId(2)),
             selected: &[],
+            cells: false,
             undo: None,
             redo: None,
             windows: Vec::new(),

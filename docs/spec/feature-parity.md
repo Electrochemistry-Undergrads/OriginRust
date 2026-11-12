@@ -99,7 +99,7 @@ Cross-cutting findings:
 | Names and limits | 13-char book, 18-char column | validation of characters only | ◐ | length limits and uniqueness not enforced in the UI | P0 |
 | New worksheet default shape | A(X), B(Y), 30 rows | `Project::add_workbook` | ◐ | not compared with Origin's | P0 |
 | Label rows: long name, units, comments | worksheet header | grid rows and properties dialog | ✓ | | P0 |
-| Parameter, user parameter, F(x) rows, show or hide label rows | label rows | stored in model, not shown | ◐ | not shown or editable; no sampling-interval row | P0 |
+| Parameter, user parameter, F(x) rows, show or hide label rows | label rows | F(x)= row with a lock mark and one row per user parameter, shown and edited in place | ◐ | rows cannot be hidden (corner menu items greyed); no way to add a new parameter row; no sampling-interval row | P0 |
 | Plot designations | Column > Set As | X, Y, Z, yEr, xEr, Label, Disregard | ✓ | no Group or Subject; Y-finds-X is nearest-left only | P0 |
 | Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday, mixed; fewer display patterns than Origin; Column Properties dialog sets the display pattern only | P0 |
 | Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
@@ -108,7 +108,7 @@ Cross-cutting findings:
 | Sorting | nested, range, columns | one key for the whole sheet | ◐ | no nested keys, no range or column sort | P0 |
 | Add, delete, move columns | Ctrl+D | add one, delete | ◐ | no insert at position, count dialog, move, swap, hide, no row insert or delete | P0 |
 | Sampling interval, Show X Column | Column menu | none | ◐ | no Set Sampling Interval, no Show X Column | P0 |
-| Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click edit with undo, column select | ◐ | no cell or range selection, no clipboard code at all | P0 |
+| Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click edit with undo; select column, row, block or all; Ctrl+C, X, V and Delete as one undo step each | ◐ | no fill, Paste Transpose, Paste Special, insert or delete of cells (columns and rows only move by Delete of whole columns); no Select... dialog; no keyboard cursor | P0 |
 | Multiple sheets per book | tabs menu | tabs switch only; analysis adds result sheets | ◐ | cannot add, rename, move, delete a sheet | P0 |
 | Set Column Values | Ctrl+Q | dialog with formula, rows from and to | ◐ | no Ctrl+Q, no function picker | P0 |
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
@@ -329,7 +329,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | each tool writes a new result sheet | ✗ | | P0 |
 | Column Properties dialog | Format dialog | name, long name, units, comments, plot as, number format incl. date, time, date and time | ◐ | no text type, width, Prev and Next | P0 |
-| Context menus | header, cell, row, corner, graph objects | column header menu; graph menu | ◐ | no Fill, Mask, Normalize, Statistics entries; no cell, row, corner menus | P0 |
+| Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
 | Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |
 
 ## Order of work

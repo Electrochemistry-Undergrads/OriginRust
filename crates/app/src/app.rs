@@ -2,7 +2,7 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::Action;
+use crate::actions::{Action, CellOp, CopyKind, LabelRow, SheetOp};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
@@ -11,11 +11,12 @@ use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::graph_view::{self, GraphUi};
-use crate::grid::{self, BookUi};
+use crate::grid::{self, BookUi, Sel};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::theme;
 use crate::workspace::{self, WindowInfo, Workspace};
 use eframe::egui::{self, RichText, Sense};
+use sheaf_core::clipboard::CopyOptions;
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
@@ -56,6 +57,13 @@ struct RenameDialog {
     long_name: String,
 }
 
+/// The window that asks for a new name of a sheet.
+struct SheetNameDialog {
+    book: WindowId,
+    sheet: usize,
+    name: String,
+}
+
 pub struct SheafApp {
     doc: Document,
     path: Option<PathBuf>,
@@ -76,6 +84,9 @@ pub struct SheafApp {
     filter: Option<FilterDialog>,
     export: Option<ExportDialog>,
     rename: Option<RenameDialog>,
+    sheet_name: Option<SheetNameDialog>,
+    /// The text of the last Copy or Cut (the system clipboard has it too).
+    copied: String,
     about: bool,
     /// A message the user has to dismiss (title, text).
     message: Option<(String, String)>,
@@ -114,6 +125,8 @@ impl SheafApp {
             filter: None,
             export: None,
             rename: None,
+            sheet_name: None,
+            copied: String::new(),
             about: false,
             message: None,
             status: "Ready".to_string(),
@@ -215,6 +228,7 @@ impl SheafApp {
         self.set_values = None;
         self.export = None;
         self.rename = None;
+        self.sheet_name = None;
         self.import = None;
     }
 
@@ -513,12 +527,33 @@ impl SheafApp {
                 }
             }
             Action::SelectSheet { book, sheet } => {
+                let changed = self.doc.project().workbook(book).is_some_and(|b| b.active_sheet != sheet);
+                if changed && let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
+                }
                 self.doc.adjust_view(|p| {
                     if let Some(b) = p.workbook_mut(book) {
                         b.active_sheet = sheet;
                     }
                 });
             }
+            Action::Cells { book, op } => self.cell_op(book, op, ctx),
+            Action::SetLabel { column, row, text } => {
+                self.doc.apply("Edit label", |p| {
+                    if let Some(c) = p.column_mut(column) {
+                        match row {
+                            LabelRow::LongName => c.long_name = text,
+                            LabelRow::Units => c.units = text,
+                            LabelRow::Comments => c.comments = text,
+                            LabelRow::Formula => {}
+                            LabelRow::Param(name) => {
+                                c.params.insert(name, text);
+                            }
+                        }
+                    }
+                });
+            }
+            Action::Sheet { book, op } => self.sheet_op(book, op),
             Action::ColumnProperties(column) => {
                 self.column_props = ColumnPropsDialog::new(self.doc.project(), column);
             }
@@ -614,6 +649,166 @@ impl SheafApp {
         }
     }
 
+    /// Copy, cut, paste and clear on the selected cells of a workbook. Cut, paste and clear
+    /// are one undo step each.
+    fn cell_op(&mut self, book: WindowId, op: CellOp, ctx: &egui::Context) {
+        let Some(b) = self.doc.project().workbook(book) else {
+            return;
+        };
+        let sheet_index = b.active_sheet.min(b.sheets.len().saturating_sub(1));
+        let Some(sheet) = b.sheets.get(sheet_index) else {
+            return;
+        };
+        let target = self.books.get(&book).and_then(|s| s.target(sheet));
+        let Some(t) = target else {
+            if op == CellOp::Paste || matches!(op, CellOp::PasteText(_)) {
+                self.status = "Click a cell first: the pasted text starts there".to_string();
+            }
+            return;
+        };
+        match op {
+            CellOp::Copy(_) | CellOp::Cut => {
+                let kind = if let CellOp::Copy(k) = op { k } else { CopyKind::Plain };
+                let options = CopyOptions {
+                    full_precision: kind == CopyKind::FullPrecision,
+                    label_rows: kind == CopyKind::WithLabels,
+                };
+                let text = sheet.copy_text(&t.columns, t.rows.clone(), options);
+                ctx.copy_text(text.clone());
+                self.copied = text;
+                let what = format!("{} row(s) of {} column(s)", t.rows.len(), t.columns.len());
+                if matches!(op, CellOp::Cut) {
+                    self.clear_cells(book, sheet_index, &t, "Cut cells");
+                    self.status = format!("Cut {what}");
+                } else {
+                    self.status = format!("Copied {what}");
+                }
+            }
+            CellOp::Clear => self.clear_cells(book, sheet_index, &t, "Clear cells"),
+            CellOp::Paste => {
+                // The system answers with the text in a later frame (an `Event::Paste`).
+                ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+            }
+            CellOp::PasteText(text) => {
+                let (col, row) = t.top_left;
+                match self.doc.edit("Paste", |p| p.paste_text(book, sheet_index, col, row, &text)) {
+                    Ok(report) => {
+                        let mut status = format!("Pasted {} row(s) of {} column(s)", report.rows, report.columns);
+                        if report.columns_added > 0 {
+                            status.push_str(&format!(", {} new column(s)", report.columns_added));
+                        }
+                        if report.locked_columns > 0 {
+                            status.push_str(&format!(
+                                "; {} column(s) calculated from a formula were left alone",
+                                report.locked_columns
+                            ));
+                        }
+                        if report.not_numbers > 0 {
+                            status.push_str(&format!(
+                                "; {} value(s) are not numbers and were left empty",
+                                report.not_numbers
+                            ));
+                        }
+                        self.status = status;
+                        // The pasted block becomes the selection.
+                        let project = self.doc.project();
+                        if let Some(sheet) = project.workbook(book).and_then(|b| b.sheets.get(sheet_index))
+                            && report.rows > 0
+                            && let Some(state) = self.books.get_mut(&book)
+                        {
+                            let last = col + report.columns.max(1) - 1;
+                            state.select_cells(sheet, (col, row), (last, row + report.rows - 1));
+                        }
+                    }
+                    Err(e) => self.message = Some(("Could not paste".to_string(), e.to_string())),
+                }
+            }
+        }
+    }
+
+    fn clear_cells(&mut self, book: WindowId, sheet: usize, t: &grid::Target, label: &str) {
+        let mut locked = 0;
+        self.doc.apply(label, |p| {
+            if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {
+                locked = ws.clear_cells(&t.columns, t.rows.clone());
+            }
+        });
+        if locked > 0 {
+            self.status = format!("{locked} column(s) calculated from a formula were left alone");
+        }
+    }
+
+    /// Add, insert, delete, duplicate and rename sheets of a workbook (the sheet tab's menu).
+    fn sheet_op(&mut self, book: WindowId, op: SheetOp) {
+        use sheaf_core::Worksheet;
+        let Some(b) = self.doc.project().workbook(book) else {
+            return;
+        };
+        let active = b.active_sheet.min(b.sheets.len().saturating_sub(1));
+        let free_name = |sheets: &[Worksheet], base: &str| -> String {
+            let mut n = sheets.len() + 1;
+            loop {
+                let name = format!("{base}{n}");
+                if !sheets.iter().any(|s| s.name == name) {
+                    return name;
+                }
+                n += 1;
+            }
+        };
+        match op {
+            SheetOp::Add | SheetOp::Insert => {
+                let at = if op == SheetOp::Add { b.sheets.len() } else { active };
+                let name = free_name(&b.sheets, "Sheet");
+                self.doc.apply(if op == SheetOp::Add { "Add sheet" } else { "Insert sheet" }, |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.sheets.insert(at, Worksheet::new(name));
+                        b.active_sheet = at;
+                    }
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
+                }
+            }
+            SheetOp::Delete => {
+                if b.sheets.len() < 2 {
+                    self.status = "A workbook keeps at least one sheet".to_string();
+                    return;
+                }
+                let ids: Vec<ColumnId> = b.sheets[active].columns.iter().map(|c| c.id).collect();
+                self.doc.apply("Delete sheet", |p| {
+                    delete_columns(p, &ids);
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.sheets.remove(active);
+                        b.active_sheet = active.min(b.sheets.len() - 1);
+                    }
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
+                }
+            }
+            SheetOp::Duplicate => {
+                let mut copy = b.sheets[active].clone();
+                copy.name = free_name(&b.sheets, &format!("{}_", copy.name));
+                self.doc.apply("Duplicate sheet", |p| {
+                    for c in &mut copy.columns {
+                        c.id = p.new_column_id();
+                    }
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.sheets.insert(active + 1, copy);
+                        b.active_sheet = active + 1;
+                    }
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
+                }
+            }
+            SheetOp::RenameDialog => {
+                let name = b.sheets[active].name.clone();
+                self.sheet_name = Some(SheetNameDialog { book, sheet: active, name });
+            }
+        }
+    }
+
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
         let project = self.doc.project();
         let ys: Vec<ColumnId> = if columns.is_empty() {
@@ -683,7 +878,7 @@ impl SheafApp {
             }
         });
         if let Some(state) = self.books.get_mut(&book) {
-            state.selected.clear();
+            state.clear_selection();
         }
         self.focus(book);
     }
@@ -741,6 +936,7 @@ impl SheafApp {
             graph,
             active: self.active,
             selected,
+            cells: book.and_then(|b| self.books.get(&b)).is_some_and(|s| s.sel != Sel::None),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
             windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
@@ -753,6 +949,22 @@ impl SheafApp {
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let typing = ctx.wants_keyboard_input();
         let menu_ctx = self.menu_context();
+        // Ctrl+C, Ctrl+X and Ctrl+V reach the program as events of their own, not as keys. They
+        // belong to the cells unless a text field has the keyboard.
+        if !typing && let Some(book) = menu_ctx.book {
+            let events = ctx.input(|i| i.events.clone());
+            for event in events {
+                let op = match event {
+                    egui::Event::Copy => CellOp::Copy(CopyKind::Plain),
+                    egui::Event::Cut => CellOp::Cut,
+                    egui::Event::Paste(text) => CellOp::PasteText(text),
+                    _ => continue,
+                };
+                if menu_ctx.cells {
+                    actions.push(Action::Cells { book, op });
+                }
+            }
+        }
         ctx.input_mut(|i| {
             for (keys, cmd) in menus::shortcuts() {
                 if typing && !menus::works_while_typing(&cmd) {
@@ -954,6 +1166,43 @@ impl SheafApp {
                 self.rename = None;
             }
         }
+        if let Some(d) = &mut self.sheet_name {
+            let mut open = true;
+            let mut done = false;
+            egui::Window::new("Sheet name").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Name");
+                    ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(200.0));
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("OK").clicked() {
+                        let (book, sheet, name) = (d.book, d.sheet, d.name.clone());
+                        let name = name.trim().to_string();
+                        let taken = self
+                            .doc
+                            .project()
+                            .workbook(book)
+                            .is_none_or(|b| b.sheets.iter().enumerate().any(|(i, s)| i != sheet && s.name == name));
+                        if name.is_empty() || taken {
+                            self.status = "A sheet needs a name that no other sheet of the workbook has".to_string();
+                        } else {
+                            self.doc.apply("Rename sheet", |p| {
+                                if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) {
+                                    s.name = name;
+                                }
+                            });
+                        }
+                        done = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        done = true;
+                    }
+                });
+            });
+            if done || !open {
+                self.sheet_name = None;
+            }
+        }
         if self.about {
             egui::Window::new(format!("About {APP_NAME}"))
                 .open(&mut self.about)
@@ -1031,6 +1280,19 @@ impl SheafApp {
             let named = project.window_by_name(arg).map(Window::id);
             match name {
                 "menu" => self.open_menu = Some(arg.to_string()),
+                "select-column" | "column-menu" => {
+                    let book = project.workbooks().next();
+                    let found = book.and_then(|b| b.sheet().column_by_name(arg).map(|c| (b.id, c.id)));
+                    if let Some((book, column)) = found {
+                        let state = self.books.entry(book).or_default();
+                        state.selected = vec![column];
+                        state.sel = Sel::Columns;
+                        if name == "column-menu" {
+                            state.open_header_menu = Some(arg.to_string());
+                        }
+                        self.focus(book);
+                    }
+                }
                 "focus" => {
                     if let Some(id) = named {
                         self.focus(id);

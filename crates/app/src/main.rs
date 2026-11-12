@@ -11,7 +11,7 @@
 //! at the screen: `--screenshot FILE.png` saves a picture of the window after
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
 //! `graph-settings:plots`, `column`, `export`, `import:FILE`, `focus:Book1`, `menu:Plot` to
-//! hold a top-level menu open).
+//! hold a top-level menu open, `select-column:B` and `column-menu:B` for the first workbook).
 
 // In release builds on Windows, do not open a console window next to the app.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]

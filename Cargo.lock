@@ -3173,6 +3173,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sheaf-core",
+ "sheaf-expr",
  "thiserror 2.0.21",
  "zip",
 ]

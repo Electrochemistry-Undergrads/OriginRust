@@ -252,6 +252,9 @@ pub(super) struct ColumnSpec<'a> {
     pub parent: u16,
     /// Position of the column in its sheet; the first two get the default width.
     pub index: usize,
+    /// The number that ties the column to the recalculation records (0 for a column that takes
+    /// no part in one; spec section 13.10).
+    pub object_id: u16,
 }
 
 const COLUMN_FIELDS: Fields =
@@ -279,6 +282,7 @@ pub(super) fn column_record(c: &ColumnSpec) -> Vec<u8> {
     }
     put(&mut h, 0x1d2, &1.0f64.to_le_bytes());
     put(&mut h, 0x1da, &1.0f64.to_le_bytes());
+    put(&mut h, 0x1e2, &c.object_id.to_le_bytes());
     h
 }
 
@@ -295,94 +299,4 @@ pub(super) fn column_note(long: &str, units: &str, comments: &str) -> Vec<u8> {
     let (mut bytes, _) = encode_cp1252(&text);
     bytes.push(0);
     bytes
-}
-
-// ----- the part after the windows ---------------------------------------------------------------
-
-/// What the tail of the file says.
-pub(super) struct TailSpec<'a> {
-    /// The project name, shown as the root folder.
-    pub project_name: &'a str,
-    /// How many windows the folder lists.
-    pub windows: usize,
-    pub time: f64,
-}
-
-/// The sections after the window list (spec section 13.6): the parameter list (empty), the note
-/// windows (only the results log), the project folder tree and the project attribute records.
-pub(super) fn tail(t: &TailSpec) -> Vec<u8> {
-    let mut v = vec![0x00, b'\n'];
-    // notes: the results log that every project has
-    v.extend(framed(&[]));
-    v.extend(framed(&[0u8; 80]));
-    v.extend(framed(b"ResultsLog\0"));
-    v.extend(framed(&[0]));
-    v.extend(framed(&[]));
-
-    // the folder tree: one root folder that holds every window, closed by the marker block
-    let mut tree = Vec::new();
-    tree.extend(framed(&[0xde, 0x36, 0x10, 0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
-    let mut times = vec![0u8; 32];
-    times[2] = 1;
-    times[16..24].copy_from_slice(&t.time.to_le_bytes());
-    times[24..32].copy_from_slice(&t.time.to_le_bytes());
-    tree.extend(framed(&times));
-    tree.extend(framed(&[]));
-    let (name, _) = encode_cp1252(t.project_name);
-    let mut name_block = name;
-    name_block.push(0);
-    tree.extend(framed(&name_block));
-    tree.extend_from_slice(&[2, 0, 0, 0, b'\n']);
-    let mut a = vec![0u8; 36];
-    a[..5].copy_from_slice(&[0x47, 0x11, 0x11, 0x11, 0x01]);
-    tree.extend(framed(&a));
-    let mut b = vec![0u8; 28];
-    b[..5].copy_from_slice(&[0x4d, 0x11, 0x11, 0x11, 0x01]);
-    tree.extend(framed(&b));
-    tree.extend(framed(&(t.windows as u32).to_le_bytes()));
-    // one entry per window, in file order: an empty block, the position, an empty block
-    for i in 0..t.windows {
-        tree.extend(framed(&[]));
-        let mut entry = [0u8; 8];
-        entry[4..].copy_from_slice(&(i as u32).to_le_bytes());
-        tree.extend(framed(&entry));
-        tree.extend(framed(&[]));
-    }
-    // no sub-folders
-    tree.extend(framed(&0u32.to_le_bytes()));
-    tree.extend(framed(&[]));
-    tree.extend(framed(&[0x00, 0x10, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00]));
-    // the size block in front of the tree counts everything after it except 4 bytes
-    let size = (tree.len() - 4) as u32;
-    v.extend(framed(&size.to_le_bytes()));
-    v.extend(tree);
-
-    // project attribute records: type 0x1000, an index, a size and a body
-    let records: [(u32, &[u8]); 8] = [
-        (0, &[]),
-        (1, &[]),
-        (2, &[0x25, 0x11, 0x11, 0x11, 0, 0, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-        (3, &[0x28, 0x11, 0x11, 0x11, 0, 0, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-        (4, &[]),
-        (5, &[0x3e, 0x11, 0x11, 0x11, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-        (6, &[0, 0, 0, 0]),
-        (
-            7,
-            &[
-                0x5d, 0x11, 0x11, 0x11, 0x01, 0, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0,
-            ],
-        ),
-    ];
-    for (index, body) in records {
-        let mut head = vec![0u8; 28];
-        head[..4].copy_from_slice(&0x1000u32.to_le_bytes());
-        head[4..8].copy_from_slice(&index.to_le_bytes());
-        head[8..12].copy_from_slice(&(body.len() as u32).to_le_bytes());
-        v.extend_from_slice(&head);
-        v.push(b'\n');
-        v.extend_from_slice(body);
-        v.push(b'\n');
-    }
-    v
 }

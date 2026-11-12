@@ -10,27 +10,32 @@
 //! block triple per column (the data sets), then the windows with their layers and column
 //! records, then the sections after the window list. Graph windows come from [`Writer::graph`].
 
+#[cfg(test)]
+mod feature_tests;
 mod glayout;
 mod graph;
 #[cfg(test)]
 mod graph_tests;
 #[rustfmt::skip]
 mod graph_tables;
+mod formulas;
 mod layout;
+mod tail;
 #[cfg(test)]
 mod tests;
 
 use super::dataset::MISSING;
 use super::strings::encode_cp1252;
 use crate::error::IoError;
-use layout::{ColumnSpec, DatasetSpec, LayerSpec, TailSpec, WindowSpec, framed};
+use layout::{ColumnSpec, DatasetSpec, LayerSpec, WindowSpec, framed};
 use sheaf_core::Project;
-use sheaf_core::column::{Column, ColumnData, Designation};
-use sheaf_core::ids::ColumnId;
-use sheaf_core::project::Window;
+use sheaf_core::column::{Column, ColumnData, Designation, FormulaState, RecalcMode};
+use sheaf_core::ids::{ColumnId, WindowId};
+use sheaf_core::project::{Folder, Window};
 use sheaf_core::worksheet::{Workbook, Worksheet};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use tail::{Dependency, FolderOut, TailSpec};
 
 /// The bytes of an Origin project and what was left out of it.
 #[derive(Clone, Debug)]
@@ -58,7 +63,7 @@ pub fn write_file(project: &Project, path: &Path) -> Result<Vec<String>, IoError
 pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite, IoError> {
     let mut w = Writer::new(time);
     w.project(project, name)?;
-    Ok(w.finish(name))
+    Ok(w.finish())
 }
 
 /// The current time as a Julian day number, the unit of the time stamps in the file.
@@ -80,6 +85,15 @@ const MAX_SHEET_NAME: usize = layout::SHEET_NAME_WIDTH - 1;
 const MAX_CELL_TEXT: usize = 252;
 /// The column record points to its data set with 16 bits.
 const MAX_COLUMNS: usize = u16::MAX as usize;
+/// The first number given to a column or a formula that takes part in a recalculation (the first
+/// that Origin gave in the files examined). The column record keeps its number in 16 bits.
+const OBJECT_NUMBER_START: u32 = 0x4000;
+/// The longest formula text that is stored, in bytes (the reader keeps blocks up to 64 KiB).
+const MAX_FORMULA_TEXT: usize = 60_000;
+/// Deepest nesting of folders that is written.
+const MAX_FOLDER_DEPTH: usize = 32;
+/// Longest folder name in bytes.
+const MAX_FOLDER_NAME: usize = 100;
 
 /// Where the data set of a column is in the file, for the curves of graphs.
 #[derive(Clone, Copy, Debug)]
@@ -107,10 +121,23 @@ fn used_range(column: &Column) -> (u32, u32) {
 struct Notes {
     lossy_texts: usize,
     flattened_breaks: usize,
-    formulas: usize,
+    /// Formulas whose text could not be stored.
+    formulas_dropped: usize,
+    /// Formulas that should recalculate but are stored with recalculate mode None.
+    formula_modes_dropped: usize,
+    /// Formulas whose state (out of date, broken) is not stored.
+    formula_states_dropped: usize,
     demoted_labels: usize,
     /// Everything a graph holds that the file does not, one sentence each.
     graph_notes: Vec<String>,
+}
+
+/// What of the formulas of one sheet goes into the file.
+struct SheetFormulas {
+    /// The stored text of the formula of each column, if it can be stored.
+    texts: Vec<Option<Vec<u8>>>,
+    /// The number of each column in the recalculation records; 0 for a column outside them.
+    object_ids: Vec<u16>,
 }
 
 struct Writer {
@@ -127,7 +154,12 @@ struct Writer {
     /// A counter that Origin gives to the objects of a graph (curves, text).
     object_serial: u32,
     notes: Notes,
-    folder_warning: bool,
+    /// The formulas that recalculate, in the order of their columns.
+    dependencies: Vec<Dependency>,
+    /// The next number to give to a column or a formula that takes part in a recalculation.
+    next_object: u32,
+    /// The folder tree, with the windows of every folder as positions in the window list.
+    tree: FolderOut,
 }
 
 impl Writer {
@@ -142,13 +174,15 @@ impl Writer {
             graphs: 0,
             object_serial: 0x0325,
             notes: Notes::default(),
-            folder_warning: false,
+            dependencies: Vec::new(),
+            next_object: OBJECT_NUMBER_START,
+            tree: FolderOut::default(),
         }
     }
 
     fn project(&mut self, project: &Project, name: &str) -> Result<(), IoError> {
         self.check_text("project name", name)?;
-        self.folder_warning = !project.root.folders.is_empty();
+        self.tree = self.folder_tree(project, name)?;
         let mut seen: HashSet<String> = HashSet::new();
         // the data-set position of every column, as the workbooks will number them
         let mut sets: HashMap<ColumnId, SetInfo> = HashMap::new();
@@ -207,7 +241,14 @@ impl Writer {
             LayerSpec { name: &sheet.name, columns: sheet.columns.len(), index_in_book: index, ordinal: self.sheets };
         self.sheets += 1;
         self.windows.extend(framed(&layout::layer_header(&layer)));
-        // no annotations
+        // The only annotations of a written sheet hold the formulas of columns, the last column
+        // first as Origin lists them; then the empty block that ends the list.
+        let formulas = self.formula_plans(sheet);
+        for (i, text) in formulas.texts.iter().enumerate().rev() {
+            if let Some(text) = text {
+                self.windows.extend(tail::formula_annotation(&sheet.columns[i].short_name, text));
+            }
+        }
         self.windows.extend(framed(&[]));
         // Origin stores every column of a sheet with the same number of cells, 32 for a new sheet
         let longest = sheet.columns.iter().map(Column::len).max().unwrap_or(0);
@@ -249,9 +290,6 @@ impl Writer {
             if self.columns >= MAX_COLUMNS {
                 return fail(format!("a project file holds at most {MAX_COLUMNS} columns"));
             }
-            if column.formula.is_some() {
-                self.notes.formulas += 1;
-            }
             let (block, used) =
                 self.dataset(&dataset_name, column, roles[i], rows, parent_of(&roles, i, first_dataset))?;
             self.datasets.extend(block);
@@ -264,6 +302,7 @@ impl Writer {
                 last: used.1,
                 parent: parent_of(&roles, i, first_dataset),
                 index: i,
+                object_id: formulas.object_ids[i],
             };
             records.extend(framed(&layout::column_record(&spec)));
             let long = self.label_text(&column.long_name, "long name")?;
@@ -357,6 +396,140 @@ impl Writer {
         Ok((block, (first, last)))
     }
 
+    /// Decides what of the formulas of one sheet goes into the file: the text of every formula that
+    /// can be stored, and for the formulas that recalculate the numbers that tie them to the
+    /// columns they read (spec section 13.10). Records the recalculation for the tail.
+    fn formula_plans(&mut self, sheet: &Worksheet) -> SheetFormulas {
+        let n = sheet.columns.len();
+        let mut out = SheetFormulas { texts: vec![None; n], object_ids: vec![0; n] };
+        for (i, column) in sheet.columns.iter().enumerate() {
+            let Some(formula) = column.formula.as_deref().filter(|f| !f.trim().is_empty()) else { continue };
+            let text = formulas::stored_text(formula, column.formula_rows.as_ref());
+            let (bytes, lossy) = encode_cp1252(&text);
+            if bytes.contains(&0)
+                || bytes.len() > MAX_FORMULA_TEXT
+                || text.contains("@${")
+                || formula.contains(formulas::TAIL_MARK)
+            {
+                self.notes.formulas_dropped += 1;
+                continue;
+            }
+            self.notes.lossy_texts += usize::from(lossy);
+            out.texts[i] = Some(bytes);
+            if column.recalc == RecalcMode::None {
+                continue;
+            }
+            self.notes.formula_states_dropped += usize::from(column.formula_state != FormulaState::Current);
+            // A formula recalculates only through the columns it reads: one that reads none, reads
+            // itself, reads a column that is not there or cannot be parsed is stored as plain.
+            let inputs = formulas::inputs_of(sheet, formula).filter(|v| !v.is_empty() && !v.contains(&i));
+            let Some(inputs) = inputs else {
+                self.notes.formula_modes_dropped += 1;
+                continue;
+            };
+            let fresh = inputs.iter().chain(std::iter::once(&i)).filter(|&&j| out.object_ids[j] == 0).count();
+            if self.next_object as usize + fresh >= usize::from(u16::MAX) {
+                self.notes.formula_modes_dropped += 1;
+                continue;
+            }
+            let id = self.next_object;
+            self.next_object += 1;
+            for &j in inputs.iter().chain(std::iter::once(&i)) {
+                if out.object_ids[j] == 0 {
+                    out.object_ids[j] = self.next_object as u16;
+                    self.next_object += 1;
+                }
+            }
+            self.dependencies.push(Dependency {
+                inputs: inputs.iter().map(|&j| u32::from(out.object_ids[j])).collect(),
+                output: u32::from(out.object_ids[i]),
+                auto: column.recalc == RecalcMode::Auto,
+                id,
+            });
+        }
+        out
+    }
+
+    /// The folder tree of the file: the folders of the project with the position of each window in
+    /// the window list. Windows that no folder lists are in the root folder, as are those the root
+    /// lists; a window listed by several folders stays in the first one.
+    fn folder_tree(&self, project: &Project, root_name: &str) -> Result<FolderOut, IoError> {
+        let position: HashMap<WindowId, u32> =
+            project.windows.iter().enumerate().map(|(i, w)| (w.id(), i as u32)).collect();
+        let mut claimed: HashSet<WindowId> = HashSet::new();
+        let mut folders = Vec::new();
+        let mut names: HashSet<String> = HashSet::new();
+        for child in &project.root.folders {
+            folders.push(self.folder_out(child, 1, &position, &mut claimed, &mut names, "")?);
+        }
+        let windows =
+            project.windows.iter().enumerate().filter(|(_, w)| !claimed.contains(&w.id())).map(|(i, _)| i as u32);
+        Ok(FolderOut { name: root_name.to_string(), windows: windows.collect(), folders })
+    }
+
+    fn folder_out(
+        &self,
+        folder: &Folder,
+        depth: usize,
+        position: &HashMap<WindowId, u32>,
+        claimed: &mut HashSet<WindowId>,
+        siblings: &mut HashSet<String>,
+        parent: &str,
+    ) -> Result<FolderOut, IoError> {
+        let path = format!("{parent}/{}", folder.name);
+        self.check_folder_name(&folder.name, &path)?;
+        if !siblings.insert(folder.name.to_lowercase()) {
+            return fail(format!(
+                "two folders in '{}' are named '{}'; Origin needs distinct folder names",
+                if parent.is_empty() { "/" } else { parent },
+                folder.name
+            ));
+        }
+        if depth > MAX_FOLDER_DEPTH {
+            return fail(format!("the folder '{path}' is nested more than {MAX_FOLDER_DEPTH} levels deep"));
+        }
+        let mut windows: Vec<u32> = folder
+            .windows
+            .iter()
+            .filter(|id| claimed.insert(**id))
+            .filter_map(|id| position.get(id).copied())
+            .collect();
+        windows.sort_unstable();
+        let mut names: HashSet<String> = HashSet::new();
+        let mut folders = Vec::new();
+        for child in &folder.folders {
+            folders.push(self.folder_out(child, depth + 1, position, claimed, &mut names, &path)?);
+        }
+        Ok(FolderOut { name: folder.name.clone(), windows, folders })
+    }
+
+    /// A folder name that Origin can store: not empty, no control characters, nothing outside
+    /// Windows-1252, no slash or backslash (which separate the folders of a path).
+    fn check_folder_name(&self, name: &str, path: &str) -> Result<(), IoError> {
+        if name.trim().is_empty() {
+            return fail(format!("a folder inside '{}' has no name", path.rsplit_once('/').map_or("", |(p, _)| p)));
+        }
+        if encode_cp1252(name).1 {
+            return fail(format!(
+                "the folder '{path}' has characters that Origin cannot store in a name (Windows-1252 only)"
+            ));
+        }
+        if name.chars().any(|c| c.is_control()) {
+            return fail(format!("the folder '{path}' has a control character in its name"));
+        }
+        if name.contains(['/', '\\']) {
+            return fail(format!(
+                "the folder name '{name}' contains a slash or backslash, which Origin uses between folders"
+            ));
+        }
+        if name.len() > MAX_FOLDER_NAME {
+            return fail(format!(
+                "the folder name '{name}' is longer than the {MAX_FOLDER_NAME} bytes that Origin stores"
+            ));
+        }
+        Ok(())
+    }
+
     /// A name that Origin can store: not empty, no control characters, nothing outside Windows-1252, no
     /// `@` (which separates the sheet number in a data-set name), at most `max` bytes.
     fn check_name(&self, what: &str, name: &str, max: usize) -> Result<(), IoError> {
@@ -419,7 +592,7 @@ impl Writer {
         self.notes.lossy_texts += usize::from(encode_cp1252(text).1);
     }
 
-    fn finish(self, project_name: &str) -> OpjWrite {
+    fn finish(self) -> OpjWrite {
         let mut bytes = layout::SIGNATURE.to_vec();
         bytes.extend(framed(&layout::header()));
         bytes.extend(framed(&[]));
@@ -427,13 +600,10 @@ impl Writer {
         bytes.extend(framed(&[]));
         bytes.extend(self.windows);
         bytes.extend(framed(&[]));
-        bytes.extend(layout::tail(&TailSpec { project_name, windows: self.written_windows, time: self.time }));
+        bytes.extend(tail::tail(&TailSpec { root: &self.tree, dependencies: &self.dependencies, time: self.time }));
         let n = &self.notes;
         let mut warnings = Vec::new();
         warnings.extend(n.graph_notes.iter().cloned());
-        if self.folder_warning {
-            warnings.push("The folders of the project were not written; every window is in the root folder.".into());
-        }
         if n.lossy_texts > 0 {
             warnings.push(format!(
                 "{} text(s) had characters outside Windows-1252, which an Origin 2016 project cannot store; they were written as '?'.",
@@ -452,8 +622,23 @@ impl Writer {
                 n.demoted_labels
             ));
         }
-        if n.formulas > 0 {
-            warnings.push(format!("{} column(s) have a column formula; only their values were written.", n.formulas));
+        if n.formulas_dropped > 0 {
+            warnings.push(format!(
+                "{} column formula(s) could not be stored in the file (text too long, with a NUL or an Origin storage mark); only their values were written.",
+                n.formulas_dropped
+            ));
+        }
+        if n.formula_modes_dropped > 0 {
+            warnings.push(format!(
+                "{} column formula(s) that recalculate read no column of their sheet, read themselves or could not be understood; the formula text was written with recalculate mode None.",
+                n.formula_modes_dropped
+            ));
+        }
+        if n.formula_states_dropped > 0 {
+            warnings.push(format!(
+                "{} recalculating column(s) were out of date or broken; the file does not store that state, so they read as up to date.",
+                n.formula_states_dropped
+            ));
         }
         OpjWrite { bytes, warnings }
     }

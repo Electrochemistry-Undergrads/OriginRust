@@ -1,7 +1,7 @@
 //! Saving a project in its default format, `.opj`, without losing data.
 //!
-//! The `.opj` writer cannot store everything a project holds (graphs, folders, column formulas
-//! and so on). When it leaves something out, a companion file `<name>.opj.sheaf` is written next
+//! The `.opj` writer cannot store everything a project holds (graph details, characters outside
+//! Windows-1252 and so on; folders and column formulas are stored). When it leaves something out, a companion file `<name>.opj.sheaf` is written next
 //! to the `.opj` with the whole project, and the caller is told what only the companion holds.
 //! The companion is marked in its manifest, so a later save that loses nothing deletes it, while a
 //! `.sheaf` file the user made is never touched. When the writer refuses the project (a name Origin

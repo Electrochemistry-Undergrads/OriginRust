@@ -292,22 +292,23 @@ fn what_cannot_be_written_is_refused_or_reported() {
 }
 
 #[test]
-fn folders_formulas_and_line_breaks_are_reported() {
+fn line_breaks_are_reported_and_graphs_are_written() {
     let mut project = sample_project();
     project.add_graph(sheaf_core::template::Template::Line);
-    project.root.folders.push(sheaf_core::project::Folder { name: "Sub".into(), ..Default::default() });
     if let Some(Window::Workbook(b)) = project.windows.first_mut() {
         b.sheets[0].columns[0].formula = Some("col(B)*2".into());
-        b.sheets[0].columns[0].long_name = "two\nlines".into();
+        b.sheets[0].columns[0].long_name = "two
+lines"
+            .into();
     }
     let out = written(&project);
     let all = out.warnings.join(" | ");
-    for needle in ["folders", "column formula", "line breaks"] {
-        assert!(all.contains(needle), "{needle}: {all}");
-    }
+    assert!(all.contains("line breaks"), "{all}");
+    assert!(!all.contains("formula") && !all.contains("folder"), "formulas and folders are stored: {all}");
     let imp = read_back(&out.bytes);
     assert_eq!(imp.workbooks.len(), 2);
     assert_eq!(imp.workbooks[0].sheets[0].columns[0].long_name, "two lines");
+    assert_eq!(imp.workbooks[0].sheets[0].columns[0].formula.as_deref(), Some("col(B)*2"));
     // the empty graph is written, not skipped
     assert_eq!(imp.graphs.len(), 1);
 }
@@ -341,7 +342,8 @@ fn the_file_ends_with_the_project_tree_and_the_attribute_records() {
 #[test]
 fn the_size_in_front_of_the_tree_matches_what_follows() {
     for n in [0usize, 1, 2, 5] {
-        let tail = layout::tail(&TailSpec { project_name: "p", windows: n, time: TIME });
+        let root = tail::FolderOut { name: "p".into(), windows: (0..n as u32).collect(), folders: Vec::new() };
+        let tail = tail::tail(&tail::TailSpec { root: &root, dependencies: &[], time: TIME });
         // skip "\0\n", the empty block, the note (three blocks) and the empty block that closes the notes
         let mut i = 2 + 5;
         for _ in 0..3 {

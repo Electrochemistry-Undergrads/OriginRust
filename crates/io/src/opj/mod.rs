@@ -16,6 +16,7 @@ mod graph;
 mod strings;
 #[cfg(test)]
 mod testutil;
+mod tree;
 mod window;
 mod write;
 
@@ -24,7 +25,7 @@ pub use write::{OpjWrite, julian_day_now, write, write_file, write_named};
 use crate::error::IoError;
 use dataset::DataSetInfo;
 use frame::{FrameError, Frames};
-use sheaf_core::column::{Column, Designation};
+use sheaf_core::column::{Column, Designation, RecalcMode};
 use sheaf_core::ids::{ColumnId, WindowId};
 use sheaf_core::worksheet::{ImportSource, Workbook, Worksheet};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -44,8 +45,20 @@ pub struct OpjImport {
     /// The graph windows, in file order. Their plots refer to the ids of the columns in
     /// `workbooks`; [`OpjImport::into_project`] renumbers both together.
     pub graphs: Vec<sheaf_core::graph::Graph>,
+    /// The folders directly under the root folder of the project, with the windows each lists by
+    /// name. Windows that no folder lists are in the root.
+    pub folders: Vec<OpjFolder>,
     /// Plain-English notes about what was skipped or could not be read.
     pub warnings: Vec<String>,
+}
+
+/// A folder of the project explorer as the file lists it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OpjFolder {
+    pub name: String,
+    /// Names of the windows in this folder (workbooks and graphs that were imported).
+    pub windows: Vec<String>,
+    pub folders: Vec<OpjFolder>,
 }
 
 impl OpjImport {
@@ -57,6 +70,7 @@ impl OpjImport {
     pub fn into_project(self) -> sheaf_core::Project {
         let mut project = sheaf_core::Project::new();
         let mut renumbered: HashMap<ColumnId, ColumnId> = HashMap::new();
+        let mut by_name: HashMap<String, WindowId> = HashMap::new();
         for mut book in self.workbooks {
             for sheet in &mut book.sheets {
                 for column in &mut sheet.columns {
@@ -64,7 +78,9 @@ impl OpjImport {
                 }
             }
             let old: Vec<ColumnId> = book.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect();
+            let file_name = book.name.clone();
             let id = project.adopt_named_workbook(book);
+            by_name.insert(file_name, id);
             if let Some(b) = project.workbook(id) {
                 let new = b.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id));
                 renumbered.extend(old.into_iter().zip(new));
@@ -90,9 +106,23 @@ impl OpjImport {
                     ok
                 });
             }
-            project.adopt_graph(graph);
+            let file_name = graph.name.clone();
+            let id = project.adopt_graph(graph);
+            by_name.insert(file_name, id);
         }
+        project.root.folders = self.folders.iter().map(|f| f.to_core(&by_name)).collect();
         project
+    }
+}
+
+impl OpjFolder {
+    /// The folder of the project model; windows the import does not have are left out.
+    fn to_core(&self, by_name: &HashMap<String, WindowId>) -> sheaf_core::project::Folder {
+        sheaf_core::project::Folder {
+            name: self.name.clone(),
+            folders: self.folders.iter().map(|f| f.to_core(by_name)).collect(),
+            windows: self.windows.iter().filter_map(|n| by_name.get(n).copied()).collect(),
+        }
     }
 }
 
@@ -152,9 +182,17 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
         warnings.push(format!("The window list is damaged ({why}); windows after that point are missing."));
     }
 
+    let tail = if warnings.is_empty() { tree::scan(&mut f, windows.len()) } else { tree::Tail::default() };
+    if let Some(problem) = &tail.problem {
+        warnings.push(format!("The folder tree could not be read ({problem}); every window is in the root folder."));
+    }
+    let folders = tail.root.as_ref().map_or_else(Vec::new, |root| folder_list(&root.folders, &windows));
+
     let mut b = Builder {
         f,
         sets,
+        recalcs: tail.recalcs,
+        formula_scripts: 0,
         warnings,
         next_column: 1,
         skipped: BTreeMap::new(),
@@ -190,7 +228,7 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     if workbooks.is_empty() {
         b.warnings.push("The project holds no workbook data (only graphs, matrices or empty workbooks).".to_string());
     }
-    Ok(OpjImport { workbooks, graphs, version, signature, warnings: b.warnings })
+    Ok(OpjImport { workbooks, graphs, version, signature, folders, warnings: b.warnings })
 }
 
 /// The version number stored in the header block, as `9.3`.
@@ -220,6 +258,10 @@ struct Counts {
 struct Builder<R> {
     f: Frames<R>,
     sets: Vec<DataSetInfo>,
+    /// The formulas of the file that recalculate (from the attribute records).
+    recalcs: Vec<tree::Recalc>,
+    /// Formulas that carry a script in front of them, kept in the formula text.
+    formula_scripts: usize,
     warnings: Vec<String>,
     next_column: u64,
     /// Reason a column was skipped -> how many.
@@ -296,6 +338,7 @@ impl<R: Read + Seek> Builder<R> {
                     col.long_name = long;
                     col.units = units;
                     col.comments = comments;
+                    self.apply_formula(&mut col, layer, rec, &short);
                     if is_time_type(rec.value_type) {
                         self.counts.time_columns += 1;
                     }
@@ -309,6 +352,29 @@ impl<R: Read + Seek> Builder<R> {
             out.push(wb);
         }
         Ok(out)
+    }
+
+    /// Gives `col` the formula that its sheet stores for it, with the recalculate mode and the rows
+    /// the file says.
+    fn apply_formula(&mut self, col: &mut Column, layer: &window::WinLayer, rec: &window::WinColumn, short: &str) {
+        let Some(stored) = formula_text(layer, &[short, &rec.short_name]) else { return };
+        let (formula, rows, script) = split_formula(&stored);
+        if formula.trim().is_empty() {
+            return;
+        }
+        self.formula_scripts += usize::from(script);
+        let id = u16::from_le_bytes([
+            rec.record.get(COL_OBJECT_AT).copied().unwrap_or(0),
+            rec.record.get(COL_OBJECT_AT + 1).copied().unwrap_or(0),
+        ]);
+        let mode = match self.recalcs.iter().find(|r| id != 0 && r.output == u32::from(id)).map(|r| r.mode) {
+            Some(2) => RecalcMode::Auto,
+            Some(1) => RecalcMode::Manual,
+            _ => RecalcMode::None,
+        };
+        col.formula = Some(formula.trim().to_string());
+        col.recalc = mode;
+        col.formula_rows = rows.filter(|_| mode != RecalcMode::None);
     }
 
     /// Workbooks rebuilt from data-set names alone, for files whose window list is unusable.
@@ -380,7 +446,67 @@ impl<R: Read + Seek> Builder<R> {
             self.warnings
                 .push(format!("{} column record(s) could not be matched to stored data and were skipped.", c.unlinked));
         }
+        if self.formula_scripts > 0 {
+            self.warnings.push(format!(
+                "{} column formula(s) have a script in front of the formula; the script was kept in the formula text.",
+                self.formula_scripts
+            ));
+        }
     }
+}
+
+/// Offset in a column record of the number that ties the column to the recalculation records.
+const COL_OBJECT_AT: usize = 0x1E2;
+/// Offset and width of the name in the header of a sheet annotation.
+const ANNOTATION_NAME_AT: usize = 0x46;
+const ANNOTATION_NAME_WIDTH: usize = 28;
+/// The kind byte of the annotation that holds a column formula.
+const FORMULA_ANNOTATION: u8 = 0x06;
+/// What separates a formula from the part after it in the stored text.
+const FORMULA_TAIL_MARK: &str = ";\r\n#";
+
+/// The stored text of the formula of the column called one of `names`, if the sheet has one.
+fn formula_text(layer: &window::WinLayer, names: &[&str]) -> Option<String> {
+    layer
+        .annotations
+        .iter()
+        .find(|a| {
+            a.header.get(2) == Some(&FORMULA_ANNOTATION)
+                && a.block2.is_empty()
+                && a.block3.is_empty()
+                && !a.block1.is_empty()
+                && names.contains(&strings::field_text(&a.header, ANNOTATION_NAME_AT, ANNOTATION_NAME_WIDTH).as_str())
+        })
+        .map(|a| strings::decode_cp1252(strings::c_bytes(&a.block1)))
+}
+
+/// Splits the stored text into the formula and the rows it fills (`$[first:last]`, 1-based and
+/// inclusive, after the tail mark). A text with another tail (a script in front of the formula)
+/// is returned whole and flagged.
+fn split_formula(text: &str) -> (&str, Option<std::ops::Range<usize>>, bool) {
+    let Some((formula, tail)) = text.split_once(FORMULA_TAIL_MARK) else { return (text, None, false) };
+    let range = tail
+        .strip_prefix("$[")
+        .and_then(|t| t.strip_suffix(']'))
+        .and_then(|t| t.split_once(':'))
+        .and_then(|(a, b)| Some((a.trim().parse::<usize>().ok()?, b.trim().parse::<usize>().ok()?)))
+        .filter(|(a, b)| *a >= 1 && b >= a);
+    match range {
+        Some((a, b)) => (formula, Some(a - 1..b), false),
+        None => (text, None, true),
+    }
+}
+
+/// The folders of the tree with window positions turned into window names.
+fn folder_list(folders: &[tree::TreeFolder], windows: &[window::Window]) -> Vec<OpjFolder> {
+    folders
+        .iter()
+        .map(|f| OpjFolder {
+            name: f.name.clone(),
+            windows: f.windows.iter().filter_map(|&i| windows.get(i)).map(|w| w.name.clone()).collect(),
+            folders: folder_list(&f.folders, windows),
+        })
+        .collect()
 }
 
 /// The column role from the stored code (0 Y, 3 X, 5 Z, 2 and 6 errors, 4 labels).

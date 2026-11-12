@@ -36,3 +36,10 @@ them with the input folder as the work folder, for example:
 ```
 
 What they showed is written down in `docs/spec/import-ascii.md`, section 15.
+
+## Project file features (folders and column formulas)
+
+`opj-verify-features.ps1` loads an `.opj` in a hidden Origin (through COM, same lock, with a watchdog) and prints the
+folder tree with the windows of each folder and, per column, the recalculate mode and formula text that Origin reports.
+`cargo run -p sheaf-io --example opj_write_features -- FOLDER` writes the files it was used on; the results are in
+`docs/spec/opj-format.md`, sections 13.10 and 13.11.

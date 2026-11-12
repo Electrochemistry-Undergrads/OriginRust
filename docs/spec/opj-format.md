@@ -257,8 +257,9 @@ matches Origin's header rows (Long Name, Units, Comments) [inf].
 Origin's text escapes (for example `\g(a)` for a Greek letter and `\+(0)` for a superscript) are not
 decoded and stay in the strings.
 
-Other label rows (parameters, user-defined rows) and the "set column values" formula are also in
-this note storage and in the annotations; they are not decoded [unknown].
+Other label rows (parameters, user-defined rows) are also in this note storage and in the
+annotations; they are not decoded [unknown]. The "set column values" formula is not in the note: it is
+a sheet annotation (section 13.10).
 
 ### 4.5 Sheets and sheet names [obs]
 
@@ -272,8 +273,8 @@ within a sheet is the order of its column records, not the data-set order [obs].
 ### 5.1 Annotation [obs]
 
 An annotation is a header block (123 or 131 bytes), then block 1, block 2 and block 3. The reader
-steps over them. In a workbook sheet the annotations hold the sheet's embedded storage and the
-"set column values" formulas; in a graph they hold text labels, lines, legends and colour scales [pub].
+steps over them (the reader keeps the small ones). In a workbook sheet the annotations hold the sheet's
+embedded storage and the "set column values" formulas (one annotation per formula, section 13.10); in a graph they hold text labels, lines, legends and colour scales [pub].
 In graphs a name at header offset `0x46` (`Legend`, `XB`, `PL`, `ZCOLORS`) says which one it is [pub];
 not used here. A layer has zero or more annotations (0 to 34 seen), closed by an empty block.
 
@@ -296,11 +297,15 @@ files).
   loop, whose entries are project-wide parameters.
 - **Notes.** Each note window has a header block (80 bytes), a name block (NUL-terminated, `ResultsLog`
   is the results log window that every project has), and a text block. Then an empty block.
-- **Project tree.** A few blocks with the project name and folders (names as NUL-terminated strings) and, per entry,
-  16-byte and 32-byte records that appear to hold timestamps as doubles [inf].
+- **Project tree.** The project name and the folders (names as NUL-terminated strings), each with the positions of its
+  windows, and per folder a 32-byte record with two timestamps as doubles; layout in section 13.5 and, for
+  nesting, section 13.11 [obs][orig].
+- **Attribute records.** Eight records at the very end of the file; record 2 lists the column formulas that
+  recalculate (section 13.10).
 - **Further blobs.** High-entropy data at the end of the file (embedded storage, compressed). Not understood.
 
-The reader stops after the window list.
+The reader reads the folder tree and record 2 after the window list (`opj/tree.rs`); a file whose tail does not
+look like section 13.5 simply has no folders and no recalculation table.
 
 ## 7. Text encoding [inf]
 
@@ -526,8 +531,8 @@ colour, heights, error bars, axis range and tick marks inside.
 - Excel workbooks embedded in a project (layer header differs [pub]); not seen in the files used.
 - The two bytes before the sheet name (`Pd` / `PdM`).
 - Complex data sets (16 bytes per cell) and function data sets.
-- Hidden columns, column widths, number formats and the "set column values" formula, the user parameter rows
-  of a worksheet.
+- Hidden columns, column widths, number formats, the user parameter rows of a worksheet, and the
+  "before formula script" and the out-of-date mark of a formula column (section 13.10).
 - Which code page non-ASCII text uses.
 - The notes, project tree and the trailing blobs beyond what section 6 says.
 - Whether the one extra block after the column records can be non-empty (it was empty in all 55 files).
@@ -564,14 +569,14 @@ LabTalk designation codes: 1 Y, 2 disregard, 3 Y error, 4 X, 5 label, 6 Z, 7 X e
 
 "No difference" means window names, long names, short names, units, comments, designations, used
 row counts and every listed cell agree, numbers to the last bit. Not compared: the cells that were
-not sampled in the large project, hidden columns, column widths and number formats, matrices
-(`doc -e M` was not run), and the "set column values" formulas.
+not sampled in the large project, hidden columns, column widths and number formats, and matrices
+(`doc -e M` was not run). Formulas and folders were checked in section 13.10 and 13.11.
 
 ## 13. Writing
 
 The writer is `crates/io/src/opj/write/` (`sheaf_io::opj::write`, `write_file`). It writes the
-workbooks and graphs of a project in the format of Origin 2016 (version 9.3). Graphs are 13.9; what
-a graph holds that the file does not is named in a warning. Tags: **[orig]** checked by opening the written file in Origin 2016
+workbooks and graphs of a project in the format of Origin 2016 (version 9.3). Graphs are 13.9; column formulas
+are 13.10 and the folder tree with sub-folders 13.11; what a graph holds that the file does not is named in a warning. Tags: **[orig]** checked by opening the written file in Origin 2016
 (sections 13.7 and 13.8), **[obs]** copied from what Origin writes, **[inf]** a guess that Origin
 accepted without showing a difference.
 
@@ -703,10 +708,9 @@ block of 8 bytes     00 10 00 00 08 00 00 00        (closes the tree)
 The results log note before the tree is: the empty block, a block of 80 zero bytes, the block
 `ResultsLog` + NUL, a block of one NUL, an empty block. Origin 2016 writes the log window in every project; the writer
 writes it empty.
-Folders with sub-folders (several `Folder` blocks nested inside the root) are written by Origin with
-the same pieces repeated; this writer does not write them. In a project with folders, windows are
-listed with the index of their position in the file; the 53 windows of one folder of a private
-project were numbered 0 to 52 [obs].
+Folders with sub-folders are written by Origin with the same pieces repeated inside the root, and this
+writer writes them too (section 13.11). In a project with folders, windows are listed with the index of
+their position in the file; the 53 windows of one folder of a private project were numbered 0 to 52 [obs].
 
 ### 13.6 The attribute records [orig]
 
@@ -876,3 +880,150 @@ a filled box icon and a frame; the reader keeps neither.
 Not checked: Origin versions other than 2016; opening a written file in the visible Origin window and saving
 it again; other machines or fonts.
 
+### 13.10 Column formulas [orig]
+
+A column that was filled with "Set Column Values" keeps its formula. The pieces below were found by making small
+projects in Origin 2016 with known formulas (`csetvalue col(B) formula:="col(A)*2" recalculate:=1`, the same with
+0 and 2, formulas of 8 to 100 characters, one with two input columns, one that fills rows 2 to 4, one with a
+"before formula" script, several in one sheet, in a second sheet and in a second workbook) and comparing their
+bytes with the same project without the formula (`tools/origin-ref/opj-make-from-labtalk.ps1`,
+`opj-dump-blocks.py`). Code: `write/tail.rs` (bytes), `write/formulas.rs` (which columns a formula reads),
+`opj/tree.rs` and `Builder::apply_formula` in `opj/mod.rs` (reader).
+
+**The text: one annotation per formula [orig].** The formula is an annotation of the sheet (section 5.1), placed
+after the sheet's other annotations, if any, and before the empty block that ends the list. When a sheet has
+several formulas their annotations follow each other with the last column first (the order of creation reversed
+in the files made one formula at a time). The annotation has the usual four blocks:
+
+```
+header, 131 bytes   0x02 = 06 (the kind)
+                    0x13 two doubles, constant: 85 EB 51 B8 1E 85 BB BF  92 24 49 92 24 49 C2 BF
+                    0x23 u32  size of block 1
+                    0x28 constant: 10 01 3E 00 3E 00 C2 FF C2 FF
+                    0x46 the short name of the column, NUL terminated (28 bytes)
+                    0x71 = 08
+block 1             the text, NUL terminated, zero padded to at least 20 bytes (size = max(20, length + 1))
+block 2, block 3    empty
+```
+
+The text is the formula as typed (`col(A)*2`), Windows-1252. For a formula that fills only some rows the text
+continues with `;` CR LF `#$[first:last]`, the rows 1-based and inclusive (`col(A)*2;\r\n#$[2:4]`; Origin's own
+`wks.col.formula$` returns the part before the semicolon). A "before formula" script is stored in the same place
+as `;` CR LF `#` and the script (`col(A)*2;\r\n#col(C)=7`). The reader splits the rows off and keeps a script as part of
+the formula text (with a warning). Row ranges are kept by Sheaf only for columns that recalculate (a formula that ran
+once has no range in the project model), so the reader drops the range of a column with mode None.
+
+**The recalculate mode: not in the annotation [orig].** Annotations of a formula with mode None, Auto and Manual
+are byte for byte the same. The mode lives in two other places:
+
+- the column record has a number at `0x1E2` (16 bits; zero for a column that takes no part). The columns a
+  recalculating formula reads and the column it fills have one; all other columns have 0;
+- attribute record 2 (section 13.6) lists the recalculating formulas. In a file without any it is the 20 bytes
+  `25 11 11 11 00 00 01 00`, zero count, zeros. With formulas: the same 8 bytes, the number of entries (u32), a zero
+  u32, then the entries one after another, then a zero u32. An entry is 284 bytes for a formula that reads one
+  column and 4 more for each further column. Its parts, in order: tags `24 11 11 11 22 11 11 11 00 00 01 00`;
+  the size of the entry minus 68 (u32); `23 11 11 11 06 00 01 00`; the **input list**: its size in bytes
+  (4 per number), the column numbers, a zero u32; the **output list** in the same form with the number of the
+  column that the formula fills; the **mode** (u32: 2 for Auto, 1 for Manual), a number for the formula itself
+  (u32, any number nobody else uses) and a zero u32; then `05 00 00 00`, the size of what follows up to a
+  fixed point (`0x60` when the creator name has six letters, as the name of the Windows user in the files examined), `2D 11 11 11 01 00 01 00`,
+  the time as a Julian day number (double), the creator name (u32 length with terminator, name), and 189 bytes
+  of constants that were identical in every entry (they include a 10-byte cell holding the "missing value"
+  number -1.23456789e-300 and the words `UT` and `Unknown`; their meaning is not known). The writer uses
+  its own name, "Sheaf", for the creator (one byte shorter, so the two size fields are one less). The
+  inputs are listed in order of first use in the formula.
+
+A formula with mode Auto or Manual and no input column (`5`, `i`) reads back from Origin as mode None, and the
+writer stores such formulas that way (with a warning). So does a formula that reads its own column (Origin's
+documented behaviour; Sheaf's model makes it mode None too).
+
+**Two things that are needed for Origin to use the table [orig].**
+
+1. *The numbers must stay out of the range Origin hands out while it loads.* With numbers starting at 0x0323
+   (what Origin itself writes in a new session) a file with 12 workbooks of one Auto formula each lost the first 4
+   recalculations, 6 workbooks the first 2, 3 workbooks the first one, and a file with 2 workbooks of
+   formulas lost 3 of 6: `col(A)` was changed from LabTalk, `run -p au` run, and the formula column did not change,
+   although Origin reported the right mode and formula text. The count lost grew with the number of
+   windows, so the numbers seem to collide with the numbers Origin gives to the objects it creates while loading.
+   The writer starts at 0x4000 and gives each formula, each input column and each output column a new number
+   (a column that is both is numbered once); with that every recalculation worked, up to the largest case tried (12
+   workbooks, and 6 formulas in 2 sheets and 2 workbooks).
+2. *Attribute record 0 must not be empty.* With record 0 empty (the 0-byte body the writer used until now)
+   Origin loaded the formulas and their modes, and still did not recalculate; with any
+   non-empty body it did (`x` worked; so does the shortest valid storage text `<OriginStorage></OriginStorage>`, which
+   the writer writes when a project has recalculating formulas, and only then). Origin keeps the
+   command history there (section 13.6).
+
+The 189 constant bytes of an entry are written exactly as Origin writes them; whether any of them could be left
+out or changed was not tested.
+
+**Not stored.** The "before formula" script of the dialog (it is stored by Origin, and the reader keeps it inside the
+formula text, but Sheaf has nowhere to put it); the state of the lock (green, yellow, red: a Manual formula whose
+inputs changed is out of date in Sheaf; in the file nothing of that was found, so the writer warns and the column reads
+back as up to date); a mode other than None for a formula with no input columns, with an unparsable text or one
+that reads a missing column (stored as None, with a warning); formulas longer than 60000 bytes, with a NUL or
+containing `@${` or `;` CR LF `#` (not stored, with a warning).
+
+**Verified.** With `tools/origin-ref/opj-verify-features.ps1` (loads the file in a hidden Origin 2016 and prints, per
+column, `wks.colN.svrm` and `wks.colN.formula$`, and the folder tree): `cargo run -p sheaf-io --example
+opj_write_features -- FOLDER` writes `formulas.opj` (Auto, Manual, None, a formula with two inputs, one with rows 2 to
+4, one reading a formula column, a second sheet, a second workbook). Origin reported for each column the same
+mode (1 Auto, 2 Manual, 0 None) and the same formula text. Function: after loading, `col(A)` was changed and
+`run -p au` was run; the Auto and the Manual formula columns changed (the row range kept to rows 2 to 4, the
+None column did not). Origin then saved the loaded file again and the reader of this crate read the same formulas, modes and rows back
+from Origin's file. `opj-verify-written.ps1` found no difference in the cells of these files. The cargo tests
+(`write/feature_tests.rs`) write and read back every mode, the rows, several sheets and workbooks, the layout
+of the table and truncations of the file.
+
+### 13.11 Folders [orig]
+
+The tree of section 13.5 repeats its folder piece for every folder, inside the piece of the folder that holds it. One
+folder, in the order of the file:
+
+```
+block of 32 bytes    zeros, but byte 2 is 1 for the folder that was open when the project was saved;
+                     at 16 and 24 two doubles: Julian day of creation and of last change
+empty block
+block                the folder name, NUL terminated
+line                 the number 2
+block of 36 bytes    47 11 11 11 01, then zeros
+block of 28 bytes    4D 11 11 11 01, then zeros
+block of 4 bytes     the number of windows in this folder
+per window:          empty block, block of 8 bytes (u32 0, u32 position in the window list), empty block
+block of 4 bytes     the number of sub-folders
+the sub-folders, one after the other, each in this same form
+```
+
+The root folder has in front of it the 16-byte marker block (`DE 36 10 03`) and, after its last sub-folder, the empty
+block and the 8-byte closing block of section 13.5. The size block in front of the whole tree counts everything
+after itself except 4 bytes. Found in files made by Origin 2016 with `pe_mkdir folder:=F1 cd:=1` (a new window goes
+to the active folder): a three-level chain F1 / F1a / F1b, a sibling F2 with two windows, an empty F3, and another
+project with windows created in the root after others were made in sub-folders.
+Byte 2 of the 32-byte block is 1 for the folder that was active when the project was saved and 0 for the others (the
+writer writes 1 for the root). In the private projects the active folder was a sub-folder and its second fixed block
+is longer (95 to 99 bytes: `4D 11 11 11 01`, then a storage text that names the last used folder, and zeros); the
+reader accepts any length of 5 bytes or more, and the writer writes 28.
+
+Window positions index the window list **in the order the windows are written in the file**. That order is not the
+order of the folders and not always the order of creation: in the project with a chain of folders, the first window
+(in the root) was written last, after the windows of the sub-folders, and the root listed that last position. It looks like
+the order in which the windows were last active [inf]; the position is all a reader needs. The writer writes the windows in the order of the project and lists the windows of each folder by
+ascending position (Origin does the same). A window that no folder lists, and one the root lists, are in the root; a window
+listed by several folders stays in the first one in depth-first order.
+
+Names: the folder name is a plain NUL-terminated string. `pe_mkdir` accepted 100 characters, spaces, a colon,
+a question mark and a backslash; it made a sub-folder of `a/b`, and turned `LOWER` into `LOWER2` next to `Lower` (names are unique
+ignoring case within a folder). The writer therefore refuses (like other names Origin cannot store) a name that is
+empty, longer than 100 bytes, outside Windows-1252, with a control character, a slash or a backslash, and two
+siblings whose names differ only in case, and nesting deeper than 32 levels. A name may repeat in different places.
+
+**Verified.** `opj_write_features` writes `folders.opj` (Book1 in the root, Book2 in F1, Book3 in F1/F1a, Book4 in
+F1/F1a/F1b, Book5 and Book6 in F2, an empty F3; the project that was also made in Origin, and the tail of
+the two files, taken block by block, is the same except for names, sizes and times) and `deep.opj` (twelve levels,
+a name of 45 characters, a folder with a name of 100 characters). `opj-verify-features.ps1` loads each in Origin
+2016 through COM and walks `RootFolder`, `Folders` and `PageBases`: the folders, their nesting, and the window in
+each folder were all as written (the deepest folder had the path of 12 names). Origin saved `folders.opj` again and the
+reader of this crate read the same tree back from Origin's file. The four private projects with folders (one
+folder with 2, 11, 27 and 53 windows) read as a root with one folder whose windows have the right names. The cargo tests
+(`write/feature_tests.rs`) write and read back nested folders, empty folders, graphs in folders, refused names, the depth
+limit, the size block and truncations of the file.

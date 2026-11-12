@@ -48,24 +48,35 @@ publication figures), P1 is common Origin use, P2 is later.
 - [x] Column formulas ("set column values" style expressions): `sheaf-expr`, `Project::set_column_values`,
       dialog in the app
 - [x] Sort and filter worksheets (`Project::sort_sheet`, `filter_sheet`; app and `sheaf analyze`)
-- [x] Normalize, interpolate, differentiate (cubic B-spline interpolation is still open)
+- [x] Normalize, interpolate, differentiate. Cubic B-spline: with a smoothing factor above 0 it
+      matches Origin (about 1e-14); with Origin's default factor 0 it does not, because Origin's
+      automatic factor was not found (documented in the spec, the dialog and the help)
 - [x] Integrate: area under a curve with a baseline; charge from current vs. time
-- [ ] Smoothing: Savitzky-Golay, adjacent averaging, FFT filter
+- [x] Smoothing: Savitzky-Golay, adjacent averaging, percentile, FFT filter (the FFT filter matches
+      47 Origin outputs to about 1e-15)
 - [x] Baseline subtraction (constant, minimum, line through end points or two given points)
 - [x] Peak finding (local maximum method)
 - [x] Descriptive statistics
-- [ ] Reference results from Origin for each tool, committed as fixtures with tolerances
+- [x] Reference results from Origin for each tool, committed as fixtures with tolerances
+      (`crates/calc/tests/origin_*.rs`, scripts in `tools/origin-ref/`)
 - [x] The tools in the desktop app (Analysis menu) and the command-line program (sheaf analyze),
       results as new columns or result sheets (ADR 0005)
-- [ ] Independent review of the milestone by a fresh-context agent; findings fixed
+- [x] Independent review of the milestone by a fresh-context agent; findings fixed (16 confirmed
+      findings, fixed in `adb1414`, `2cefe20`, `2aa5b37`; the FFT and B-spline work had its own
+      review)
 
 ## Milestone 4: fitting
 
-- [ ] Linear and polynomial fits with full statistics
-- [ ] Nonlinear least squares (Levenberg-Marquardt) with bounds and fixed parameters
-- [ ] Built-in function library covering Origin's common categories
-- [ ] User-defined functions; import of `.FDF` fit definitions
-- [ ] Fit report (parameters, standard errors, R², reduced chi-square, residuals); fitted curve on the graph
+- [x] Linear and polynomial fits with full statistics (match Origin's fitlr, fitpoly and nlfit to
+      1e-9; Origin's Linear Fit dialog report could not be scripted, see `docs/spec/fitting-linear.md`)
+- [x] Nonlinear least squares (Levenberg-Marquardt) with bounds and fixed parameters (21 fits match
+      Origin's NLFit to 5e-10 with the same iteration counts)
+- [x] Built-in function library covering Origin's common categories (206 functions; only Gauss,
+      Lorentz, ExpDec1, ExpDec2, Boltzmann and Line were compared with Origin)
+- [x] User-defined functions; import of `.FDF` fit definitions
+- [x] Fit report (parameters, standard errors, R², reduced chi-square, residuals); fitted curve on the
+      graph; `sheaf fit` and the app's Fit window (ADR 0006)
+- [ ] Independent review of the milestone by a fresh-context agent; findings fixed
 
 ## Milestone 5: Origin project import
 

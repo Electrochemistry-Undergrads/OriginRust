@@ -35,6 +35,10 @@ through (they are held for approval and expire), so the split is written here:
   the lead in `re-workspace/scratch/peer-notes.md` (local file) naming each branch that is ready.
 - Each session builds in its own folders under `target/` with `CARGO_PROFILE_DEV_DEBUG=0` (the
   disk filled up once; see LESSONS.md).
+- ADR numbers: `main` has ADR 0008 (`.opj` default with companion). The `graph-p0` branch's ADRs
+  0008 (linked layers) and 0009 (stack offsets) become 0009 and 0010 when the lead merges them;
+  the next free number after that is 0011.
+- Merged from the second session so far: `chi-text-real` (squashed as `89e617a`).
 
 ## Where things stand
 

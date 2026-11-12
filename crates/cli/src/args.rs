@@ -36,7 +36,7 @@ pub enum WeightKind {
     None,
     /// 1 / error² from the Y-error column.
     Instrumental,
-    /// 1 / y.
+    /// 1 / abs(y); a y of exactly 0 is refused.
     Statistical,
 }
 

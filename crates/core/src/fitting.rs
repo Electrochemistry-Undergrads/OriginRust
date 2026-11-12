@@ -446,7 +446,7 @@ impl Project {
 
         // ----- fit (still no changes) ----------------------------------------------------
         let fitted = engine(&data)?;
-        let report = fitted.report;
+        let mut report = fitted.report;
         if report.fitted.len() != data.y.len() || report.residuals.len() != data.y.len() {
             return Err(FitRequestError::BadOption(format!(
                 "the fit engine returned {} fitted values for {} points",
@@ -474,7 +474,21 @@ impl Project {
             let band_fn = fitted.bands.as_ref().ok_or_else(|| {
                 FitRequestError::BadOption("this fit engine cannot compute confidence or prediction bands".into())
             })?;
-            Some(band_fn(&curve_x, request.band_level)?)
+            let computed = band_fn(&curve_x, request.band_level)?;
+            // With no degrees of freedom (or a singular covariance) every limit is undefined:
+            // write and draw nothing, and say so, instead of adding empty columns and plots.
+            let any_finite = [&computed.conf_lower, &computed.conf_upper, &computed.pred_lower, &computed.pred_upper]
+                .iter()
+                .any(|v| v.iter().any(|x| x.is_finite()));
+            if any_finite {
+                Some(computed)
+            } else {
+                report.warnings.push(
+                    "confidence and prediction bands are undefined (no degrees of freedom or a singular covariance), so none were written"
+                        .into(),
+                );
+                None
+            }
         };
 
         // ----- change the project ----------------------------------------------------------
@@ -1498,6 +1512,21 @@ mod tests {
         req.band_level = 1.5;
         assert!(p.fit(&req).is_err());
         assert_eq!(p, before);
+    }
+
+    #[test]
+    fn bands_without_degrees_of_freedom_are_skipped_with_a_warning() {
+        let mut p = Project::new();
+        let book = p.add_workbook("data");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 3.0])).unwrap();
+        let g = p.plot_columns(Template::Line, &[y]).unwrap();
+        let mut req = FitRequest::new(y, FitModel::Linear);
+        req.bands = BandChoice::Both;
+        let out = p.fit(&req).unwrap();
+        assert!(out.band_columns.is_empty() && out.bands.is_none());
+        assert!(out.report.warnings.iter().any(|w| w.contains("bands are undefined")));
+        assert_eq!(p.graph(g).unwrap().layers[0].plots.len(), 2);
     }
 
     #[test]

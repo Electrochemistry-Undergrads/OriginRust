@@ -86,11 +86,19 @@ pub struct InterpSpec {
     pub npts: usize,
     /// X range of the result; `None` is the X range of the data.
     pub range: Option<(f64, f64)>,
+    /// Smoothing factor of the B-spline method; only 0 (interpolating) is implemented.
+    pub smoothing: f64,
 }
 
 impl Default for InterpSpec {
     fn default() -> Self {
-        InterpSpec { method: InterpMethod::Linear, boundary: SplineBoundary::NotAKnot, npts: 100, range: None }
+        InterpSpec {
+            method: InterpMethod::Linear,
+            boundary: SplineBoundary::NotAKnot,
+            npts: 100,
+            range: None,
+            smoothing: 0.0,
+        }
     }
 }
 
@@ -491,11 +499,12 @@ impl Project {
                     SmoothMethod::AdjacentAveraging { weighted: true } => "weighted adjacent averaging".to_string(),
                     SmoothMethod::SavitzkyGolay { poly_order } => format!("Savitzky-Golay, order {poly_order}"),
                     SmoothMethod::Percentile { percent } => format!("percentile filter, {percent} %"),
+                    SmoothMethod::FftFilter => "FFT filter".to_string(),
                     #[allow(unreachable_patterns)]
                     _ => "smoothing".to_string(),
                 };
                 for inp in &inputs {
-                    let s = calc::smooth(inp.ys(), options);
+                    let s = calc::smooth_xy(inp.xs(), inp.ys(), options);
                     beside.push(NewColumn {
                         after: inp.id,
                         long_name: format!("Smoothed {}", inp.name),
@@ -575,15 +584,29 @@ impl Project {
                 if spec.npts < 2 {
                     return Err(AnalysisError::BadOption("interpolation needs at least two result points".into()));
                 }
+                if spec.method == InterpMethod::BSpline && spec.smoothing != 0.0 {
+                    return Err(AnalysisError::BadOption(
+                        "the B-spline smoothing factor must be 0: smoothing splines are not implemented yet".into(),
+                    ));
+                }
                 let options = calc::InterpOptions {
                     method: spec.method,
                     boundary: spec.boundary,
                     extrapolation: calc::Extrapolation::Extrapolate,
+                    smoothing: spec.smoothing,
                 };
+                let needed = if spec.method == InterpMethod::BSpline { 4 } else { 2 };
                 for inp in &inputs {
                     let valid = inp.xs().iter().zip(inp.ys()).filter(|(a, b)| a.is_finite() && b.is_finite()).count();
-                    if valid < 2 {
-                        return Err(AnalysisError::TooFewPoints(inp.short.clone()));
+                    if valid < needed {
+                        return Err(if needed == 2 {
+                            AnalysisError::TooFewPoints(inp.short.clone())
+                        } else {
+                            AnalysisError::BadOption(format!(
+                                "column {} has fewer than four rows with both an X and a Y value; the B-spline needs four",
+                                inp.short
+                            ))
+                        });
                     }
                     let (lo, hi) = match spec.range {
                         Some((a, b)) => (Some(a.min(b)), Some(a.max(b))),
@@ -1075,6 +1098,23 @@ mod tests {
         let source = ws.column_index(ramp).unwrap();
         assert_eq!(ws.columns.len(), source + 6);
         assert!(d.new_sheet.is_none());
+    }
+
+    #[test]
+    fn the_fft_filter_and_the_b_spline_are_accepted_and_bad_factors_are_refused() {
+        let (mut p, book, _, ramp) = sample();
+        let fft = SmoothOptions { method: SmoothMethod::FftFilter, npts: 3, ..SmoothOptions::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Smooth(fft))).unwrap();
+        let col = p.column(r.new_columns[0]).unwrap();
+        assert!(col.comments.contains("FFT filter"), "{}", col.comments);
+        assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.is_finite()));
+        let spec = InterpSpec { method: InterpMethod::BSpline, npts: 21, ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns.len(), 2);
+        let smoothing = InterpSpec { smoothing: 0.5, ..spec };
+        let err = p.analyze(&request(&[ramp], Tool::Interpolate(smoothing))).unwrap_err();
+        assert!(err.to_string().contains("smoothing factor"), "{err}");
     }
 
     #[test]

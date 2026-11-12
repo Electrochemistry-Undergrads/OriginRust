@@ -45,6 +45,37 @@ pub enum DateImport {
     AsText,
 }
 
+/// Which character groups the digits of a number (`1,234.5`, `1.234,5`, `1 234,5`, `1'234.5`).
+/// These are Origin's four number-separator choices plus "none" and "detect".
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum Thousands {
+    /// Use a separator when the file shows one unambiguously (a number such as `1,234,567`,
+    /// `1,234.5`, `1.234,5` or `1 234`), none otherwise.
+    #[default]
+    Auto,
+    /// No grouping character; `1,234` is not a number.
+    Off,
+    /// `1,234.5`: comma groups, dot is the decimal point.
+    Comma,
+    /// `1.234,5`: dot groups, comma is the decimal point.
+    Dot,
+    /// `1 234,5`: a space (also a no-break space) groups, comma is the decimal point.
+    Space,
+    /// `1'234.5`: apostrophe groups, dot is the decimal point.
+    Apostrophe,
+}
+
+/// What to do with a file that holds several blocks of data separated by blank lines
+/// (each block may repeat its header lines).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum Blocks {
+    /// One block: blank lines are skipped and everything is read as one table.
+    #[default]
+    One,
+    /// Each block becomes its own sheet of the workbook.
+    Sheets,
+}
+
 /// Import settings. `None` means "detect"; for the line numbers, `Some(0)` means "there is none".
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AsciiOptions {
@@ -59,6 +90,18 @@ pub struct AsciiOptions {
     pub comments_line: Option<usize>,
     /// Numbers use `,` as decimal separator; `,` then cannot be the delimiter.
     pub decimal_comma: bool,
+    /// The digit-grouping character. It is removed from numbers (`1,234.5` is 1234.5); dot and
+    /// space also make the comma the decimal point.
+    pub thousands: Thousands,
+    /// Header lines (1-based) whose cells become named parameter rows of the columns, see
+    /// [`AsciiOptions::param_name_from_first_cell`].
+    pub param_lines: Vec<usize>,
+    /// A parameter row takes its name from the first cell of its line (`Wavelength` in the first
+    /// column, values in the others). When false the rows are named `Param1`, `Param2`, ... and
+    /// the first column gets a value as well.
+    pub param_name_from_first_cell: bool,
+    /// What to do with a file that holds several blocks of data separated by blank lines.
+    pub blocks: Blocks,
     /// The first column is X and the others Y (otherwise all are Y).
     pub first_column_x: bool,
     /// Data rows to skip at the start.
@@ -81,6 +124,10 @@ impl Default for AsciiOptions {
             units_line: None,
             comments_line: None,
             decimal_comma: false,
+            thousands: Thousands::Auto,
+            param_lines: Vec::new(),
+            param_name_from_first_cell: true,
+            blocks: Blocks::One,
             first_column_x: true,
             skip_rows: 0,
             max_rows: None,
@@ -102,6 +149,10 @@ pub struct Detected {
     pub comments_line: usize,
     /// Number of columns the sheet will have.
     pub columns: usize,
+    /// Numbers are read with a decimal comma (chosen, or implied by the thousands separator).
+    pub decimal_comma: bool,
+    /// The digit-grouping character in use; never `Auto`.
+    pub thousands: Thousands,
 }
 
 /// The result of [`parse_ascii`].
@@ -173,15 +224,135 @@ fn finish_field(cur: &str, quoted: bool) -> String {
 
 /// Reads a number as the importer understands it: `1e-5`, `+3.2`, `.5`,
 /// `-.5e3`, `NaN`, `inf`, and with `decimal_comma` also `1,5`.
-fn parse_number(field: &str, decimal_comma: bool) -> Option<f64> {
+fn parse_number(field: &str, ns: NumStyle) -> Option<f64> {
     let t = field.trim();
     if t.is_empty() {
         return None;
     }
-    if decimal_comma && t.contains(',') {
+    if let Some(sep) = ns.thousands
+        && let Some((_, dec)) = grouped_shape(t, sep)
+        && dec.is_none_or(|d| d == ns.decimal)
+    {
+        let cleaned: String =
+            t.chars().filter(|c| !is_group_char(*c, sep)).map(|c| if c == ns.decimal { '.' } else { c }).collect();
+        return cleaned.parse().ok();
+    }
+    if ns.decimal == ',' && t.contains(',') {
         return t.replace(',', ".").parse().ok();
     }
     t.parse().ok()
+}
+
+/// How numbers are written in one file.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct NumStyle {
+    decimal: char,
+    thousands: Option<char>,
+}
+
+impl NumStyle {
+    fn new(decimal_comma: bool, thousands: Thousands) -> NumStyle {
+        let thousands_char = match thousands {
+            Thousands::Auto | Thousands::Off => None,
+            Thousands::Comma => Some(','),
+            Thousands::Dot => Some('.'),
+            Thousands::Space => Some(' '),
+            Thousands::Apostrophe => Some('\''),
+        };
+        let comma = decimal_comma || thousands == Thousands::Dot;
+        NumStyle { decimal: if comma { ',' } else { '.' }, thousands: thousands_char }
+    }
+}
+
+fn is_group_char(c: char, sep: char) -> bool {
+    match sep {
+        ' ' => matches!(c, ' ' | '\u{a0}' | '\u{202f}'),
+        '\'' => c == '\'' || c == '\u{2019}',
+        _ => c == sep,
+    }
+}
+
+/// Looks at `t` as `[sign] 1-3 digits, (separator + 3 digits)+, [decimal part and exponent]`.
+/// Returns the number of 3-digit groups and the decimal character used after them, if any.
+fn grouped_shape(t: &str, sep: char) -> Option<(usize, Option<char>)> {
+    let t = t.strip_prefix(['+', '-']).unwrap_or(t);
+    let mut chars = t.chars().peekable();
+    let mut lead = 0;
+    while chars.peek().is_some_and(char::is_ascii_digit) {
+        chars.next();
+        lead += 1;
+    }
+    if !(1..=3).contains(&lead) {
+        return None;
+    }
+    let mut groups = 0;
+    while chars.peek().is_some_and(|c| is_group_char(*c, sep)) {
+        chars.next();
+        for _ in 0..3 {
+            if !chars.next().is_some_and(|c| c.is_ascii_digit()) {
+                return None;
+            }
+        }
+        groups += 1;
+    }
+    if groups == 0 {
+        return None;
+    }
+    let rest: String = chars.collect();
+    if rest.is_empty() {
+        return Some((groups, None));
+    }
+    let dec = rest.chars().next()?;
+    if !matches!(dec, '.' | ',') || is_group_char(dec, sep) {
+        return None;
+    }
+    let digits = rest[1..].split(['e', 'E']).next().unwrap_or("");
+    (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())).then_some((groups, Some(dec)))
+}
+
+/// Settles the number style of a file from the options and, for `Thousands::Auto`, from the cells:
+/// a separator is adopted only when some number shows it unambiguously (`1,234,567`, `1,234.5`,
+/// `1.234,5`, `1 234`, `1'234`); a lone `1,234` proves nothing. Evidence for two different
+/// separators cancels out. Returns the decimal-comma flag, the separator, and whether it was found
+/// by detection.
+fn resolve_style(opts: &AsciiOptions, rows: &[(usize, Vec<String>)]) -> (bool, Thousands, bool) {
+    if opts.thousands != Thousands::Auto {
+        let comma = opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space);
+        return (comma, opts.thousands, false);
+    }
+    let (mut comma, mut dot, mut space, mut apos, mut comma_decimal) = (false, false, false, false, false);
+    for t in rows.iter().take(5000).flat_map(|(_, f)| f.iter()).map(|c| c.trim()).filter(|t| t.len() >= 5) {
+        if let Some((g, dec)) = grouped_shape(t, ',')
+            && (g >= 2 || dec == Some('.'))
+        {
+            comma = true;
+        }
+        if let Some((g, dec)) = grouped_shape(t, '.')
+            && (g >= 2 || dec == Some(','))
+        {
+            dot = true;
+        }
+        if let Some((_, dec)) = grouped_shape(t, ' ') {
+            space = true;
+            comma_decimal |= dec == Some(',');
+        }
+        apos |= grouped_shape(t, '\'').is_some();
+    }
+    // With a decimal comma chosen, a comma or an apostrophe cannot group digits.
+    let found: Vec<Thousands> = [
+        (comma && !opts.decimal_comma, Thousands::Comma),
+        (dot, Thousands::Dot),
+        (space, Thousands::Space),
+        (apos && !opts.decimal_comma, Thousands::Apostrophe),
+    ]
+    .into_iter()
+    .filter_map(|(on, t)| on.then_some(t))
+    .collect();
+    match found.as_slice() {
+        [Thousands::Space] => (opts.decimal_comma || comma_decimal, Thousands::Space, true),
+        [one] => (opts.decimal_comma || *one == Thousands::Dot, *one, true),
+        _ => (opts.decimal_comma, Thousands::Off, false),
+    }
 }
 
 /// True for the strings that instruments and spreadsheets write for "no value":
@@ -227,10 +398,10 @@ enum Cell {
     Text,
 }
 
-fn classify(field: &str, decimal_comma: bool) -> Cell {
+fn classify(field: &str, ns: NumStyle) -> Cell {
     if field.trim().is_empty() {
         Cell::Empty
-    } else if parse_number(field, decimal_comma).is_some() {
+    } else if parse_number(field, ns).is_some() {
         Cell::Number
     } else if looks_like_date(field) {
         Cell::Date
@@ -248,10 +419,10 @@ fn looks_like_date(field: &str) -> bool {
 
 /// No cell is plain text (missing-value markers are allowed) and there is at
 /// least one real number.
-fn is_numeric_row(fields: &[String], decimal_comma: bool) -> bool {
+fn is_numeric_row(fields: &[String], ns: NumStyle) -> bool {
     let mut any = false;
     for f in fields {
-        match classify(f, decimal_comma) {
+        match classify(f, ns) {
             Cell::Text => return false,
             Cell::Number | Cell::Date => any = true,
             Cell::Empty | Cell::Marker => {}
@@ -315,14 +486,17 @@ struct Analysis<'a> {
     detected: Detected,
     /// The data rows after `skip_rows` / `max_rows`, as raw fields.
     rows: Vec<Vec<String>>,
+    /// The digit-grouping character was found by looking at the numbers, not chosen.
+    thousands_found: bool,
+    ns: NumStyle,
 }
 
-fn auto_delimiter(lines: &[&str], decimal_comma: bool) -> Delimiter {
+fn auto_delimiter(lines: &[&str], skip_comma: bool) -> Delimiter {
     let sample: Vec<&str> =
         lines.iter().copied().filter(|l| !l.trim().is_empty()).take(DELIMITER_SAMPLE_LINES).collect();
     let mut best: Option<(usize, Delimiter)> = None;
     for cand in [Delimiter::Tab, Delimiter::Comma, Delimiter::Semicolon, Delimiter::Whitespace] {
-        if decimal_comma && cand == Delimiter::Comma {
+        if skip_comma && cand == Delimiter::Comma {
             continue;
         }
         let mut counts: HashMap<usize, usize> = HashMap::new();
@@ -341,25 +515,23 @@ fn auto_delimiter(lines: &[&str], decimal_comma: bool) -> Delimiter {
 }
 
 /// Index (into `rows`) of the first row of the data block.
-fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option<usize> {
+fn find_data_start(rows: &[(usize, Vec<String>)], ns: NumStyle) -> Option<usize> {
     let run_ok = |i: usize, need: usize| {
         let n = rows[i].1.len();
-        rows[i..i + need].iter().all(|(_, f)| f.len() == n && is_numeric_row(f, decimal_comma))
+        rows[i..i + need].iter().all(|(_, f)| f.len() == n && is_numeric_row(f, ns))
     };
     let full_runs = (rows.len() + 1).saturating_sub(DATA_RUN);
     // 1. A full run of lines with one field count, all numeric.
     if let Some(i) = (0..full_runs).find(|&i| run_ok(i, DATA_RUN)) {
-        return Some(extend_back(rows, i, decimal_comma));
+        return Some(extend_back(rows, i, ns));
     }
     // 2. Ragged numeric rows: every line is numeric but the field counts differ.
-    if let Some(i) =
-        (0..full_runs).find(|&i| rows[i..i + DATA_RUN].iter().all(|(_, f)| is_numeric_row(f, decimal_comma)))
-    {
-        return Some(extend_back(rows, i, decimal_comma));
+    if let Some(i) = (0..full_runs).find(|&i| rows[i..i + DATA_RUN].iter().all(|(_, f)| is_numeric_row(f, ns))) {
+        return Some(extend_back(rows, i, ns));
     }
     // 3. Fewer than three lines left: all of them must fit.
     if let Some(i) = (full_runs..rows.len()).find(|&i| run_ok(i, rows.len() - i)) {
-        return Some(extend_back(rows, i, decimal_comma));
+        return Some(extend_back(rows, i, ns));
     }
     // Files with a text column or with odd text cells inside numeric columns. A row
     // starts the data when it holds at least one number or missing-value marker, its
@@ -367,10 +539,8 @@ fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option
     // most half of the cells in its numeric columns being text.
     for i in 0..rows.len() {
         let first = &rows[i].1;
-        let numeric: Vec<bool> = first
-            .iter()
-            .map(|f| matches!(classify(f, decimal_comma), Cell::Number | Cell::Date | Cell::Marker))
-            .collect();
+        let numeric: Vec<bool> =
+            first.iter().map(|f| matches!(classify(f, ns), Cell::Number | Cell::Date | Cell::Marker)).collect();
         let others_are_text = first.iter().zip(&numeric).all(|(f, n)| *n || !f.trim().is_empty());
         if !numeric.contains(&true) || !others_are_text {
             continue;
@@ -386,7 +556,7 @@ fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option
                 if !*n {
                     continue;
                 }
-                match classify(v, decimal_comma) {
+                match classify(v, ns) {
                     Cell::Empty => {}
                     Cell::Text => {
                         odd += 1;
@@ -401,7 +571,7 @@ fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option
         }
     }
     // Last resort: the first row that is all numbers.
-    rows.iter().position(|(_, f)| is_numeric_row(f, decimal_comma))
+    rows.iter().position(|(_, f)| is_numeric_row(f, ns))
 }
 
 /// Moves the data start up over rows that belong to the data block although a
@@ -409,7 +579,7 @@ fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option
 /// has the field count of the block and at least as many numbers (or
 /// missing-value markers) as text cells; a name row has no numbers at all, so
 /// it stays a header line.
-fn extend_back(rows: &[(usize, Vec<String>)], start: usize, decimal_comma: bool) -> usize {
+fn extend_back(rows: &[(usize, Vec<String>)], start: usize, ns: NumStyle) -> usize {
     let width = rows[start].1.len();
     let mut s = start;
     while s > 0 {
@@ -419,7 +589,7 @@ fn extend_back(rows: &[(usize, Vec<String>)], start: usize, decimal_comma: bool)
         }
         let (mut good, mut marks, mut odd) = (0, 0, 0);
         for v in f {
-            match classify(v, decimal_comma) {
+            match classify(v, ns) {
                 Cell::Number | Cell::Date => good += 1,
                 Cell::Marker => marks += 1,
                 Cell::Text => odd += 1,
@@ -461,7 +631,9 @@ fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usiz
 fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
     let lines: Vec<&str> = split_records(text);
     let delimiter = match opts.delimiter {
-        Delimiter::Auto => auto_delimiter(&lines, opts.decimal_comma),
+        Delimiter::Auto => {
+            auto_delimiter(&lines, opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space))
+        }
         d => d,
     };
     let all: Vec<(usize, Vec<String>)> = lines
@@ -470,10 +642,12 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
         .filter(|(_, l)| !l.trim().is_empty())
         .map(|(i, l)| (i, split_fields(l, delimiter)))
         .collect();
+    let (decimal_comma, thousands, thousands_found) = resolve_style(opts, &all);
+    let ns = NumStyle::new(decimal_comma, thousands);
 
     let (header_lines, start) = match opts.header_lines {
         Some(h) => (h, all.iter().position(|(i, _)| *i >= h)),
-        None => match find_data_start(&all, opts.decimal_comma) {
+        None => match find_data_start(&all, ns) {
             Some(s) => (all[s].0, Some(s)),
             None => (0, if all.is_empty() { None } else { Some(0) }),
         },
@@ -503,8 +677,19 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
     }
     Analysis {
         lines,
-        detected: Detected { delimiter, header_lines, long_name_line, units_line, comments_line, columns },
+        detected: Detected {
+            delimiter,
+            header_lines,
+            long_name_line,
+            units_line,
+            comments_line,
+            columns,
+            decimal_comma,
+            thousands,
+        },
         rows,
+        thousands_found,
+        ns,
     }
 }
 
@@ -527,11 +712,85 @@ pub fn preview(text: &str, opts: &AsciiOptions, max_rows: usize) -> Vec<Vec<Stri
 /// Rows that consist only of empty fields are skipped. Quoted fields may span
 /// lines; line numbers in the options then count records, not physical lines.
 pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
-    if opts.decimal_comma && matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(',')) {
+    let comma_decimal = opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space);
+    if comma_decimal && matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(',')) {
         return Err(IoError::InvalidOption(
             "the decimal separator and the field delimiter cannot both be a comma".to_string(),
         ));
     }
+    if opts.decimal_comma && opts.thousands == Thousands::Comma {
+        return Err(IoError::InvalidOption(
+            "the decimal separator and the thousands separator cannot both be a comma".to_string(),
+        ));
+    }
+    if opts.blocks == Blocks::Sheets {
+        return parse_blocks(text, file_stem, opts);
+    }
+    parse_block(text, file_stem, opts)
+}
+
+/// Splits the text at blank lines into blocks that each hold data. A block of text without any
+/// numeric row (a title, a header) belongs to the data block that follows it; one at the end is dropped.
+fn split_blocks(text: &str, opts: &AsciiOptions) -> Vec<String> {
+    let whole = analyze(text, opts);
+    let ns = whole.ns;
+    let delimiter = whole.detected.delimiter;
+    let mut blocks: Vec<Vec<&str>> = vec![Vec::new()];
+    for rec in split_records(text) {
+        if rec.trim().is_empty() {
+            if !blocks.last().is_some_and(Vec::is_empty) {
+                blocks.push(Vec::new());
+            }
+        } else if let Some(b) = blocks.last_mut() {
+            b.push(rec);
+        }
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut pending: Vec<&str> = Vec::new();
+    for b in blocks.into_iter().filter(|b| !b.is_empty()) {
+        let numeric = b.iter().any(|l| is_numeric_row(&split_fields(l, delimiter), ns));
+        pending.extend(b);
+        if numeric {
+            out.push(pending.join("\n"));
+            pending.clear();
+        }
+    }
+    out
+}
+
+/// Reads each block of data (see [`Blocks`]) as its own sheet; sheets after the first are named
+/// `name_2`, `name_3`, ...
+fn parse_blocks(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
+    let chunks = split_blocks(text, opts);
+    if chunks.len() < 2 {
+        return parse_block(text, file_stem, opts);
+    }
+    let mut fixed = opts.clone();
+    fixed.delimiter = analyze(text, opts).detected.delimiter;
+    let mut first: Option<AsciiImport> = None;
+    let mut sheets = Vec::new();
+    let mut warnings = Vec::new();
+    for (i, chunk) in chunks.iter().enumerate() {
+        let mut part = parse_block(chunk, file_stem, &fixed)?;
+        let name = if i == 0 { sheet_name(file_stem) } else { sheet_name(&format!("{file_stem}_{}", i + 1)) };
+        for w in part.warnings.drain(..) {
+            warnings.push(format!("block {}: {w}", i + 1));
+        }
+        let mut sheet = part.workbook.sheets.remove(0);
+        sheet.name = name;
+        sheets.push(sheet);
+        first.get_or_insert(part);
+    }
+    let mut result = first.ok_or_else(|| IoError::NoData {
+        source_name: file_stem.to_string(),
+        detail: "no data rows were found".to_string(),
+    })?;
+    result.workbook.sheets = sheets;
+    result.warnings = warnings;
+    Ok(result)
+}
+
+fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
     let a = analyze(text, opts);
     if a.rows.is_empty() {
         let detail = if text.trim().is_empty() { "the file is empty" } else { "no data rows were found" };
@@ -559,7 +818,38 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
             }
         }
     }
-    let used: Vec<usize> = [d.long_name_line, d.units_line, d.comments_line].into_iter().filter(|n| *n > 0).collect();
+    if a.thousands_found {
+        let sep = match d.thousands {
+            Thousands::Comma => "comma",
+            Thousands::Dot => "dot",
+            Thousands::Space => "space",
+            _ => "apostrophe",
+        };
+        warnings.push(format!(
+            "numbers with a {sep} as thousands separator were found; the separator was removed (see the thousands separator option)"
+        ));
+    }
+    // Parameter rows: (name, cells, first column that gets a value).
+    let params: Vec<(String, Vec<String>, usize)> = opts
+        .param_lines
+        .iter()
+        .enumerate()
+        .map(|(k, &line)| {
+            let cells = label_row(line);
+            let generic = format!("Param{}", k + 1);
+            if opts.param_name_from_first_cell {
+                let name = cells.first().map_or("", |c| c.trim().trim_end_matches(':').trim());
+                (if name.is_empty() { generic } else { name.to_string() }, cells, 1)
+            } else {
+                (generic, cells, 0)
+            }
+        })
+        .collect();
+    let used: Vec<usize> = [d.long_name_line, d.units_line, d.comments_line]
+        .into_iter()
+        .chain(opts.param_lines.iter().copied())
+        .filter(|n| *n > 0)
+        .collect();
     let dropped = a
         .lines
         .iter()
@@ -595,7 +885,7 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
             sheet.columns.push(col);
             continue;
         }
-        let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, opts.decimal_comma)).collect();
+        let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, a.ns)).collect();
         let parsed = numbers.iter().filter(|n| n.is_some()).count();
         // Missing-value markers (`n.d.`, `<LOD`, `NA`, ...) are neither numbers nor evidence of text.
         let markers = cells.iter().zip(&numbers).filter(|(c, n)| n.is_none() && is_missing_marker(c)).count();
@@ -629,6 +919,15 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
         col.units = units[j].clone();
         col.comments = comments[j].clone();
         sheet.columns.push(col);
+    }
+    for (j, col) in sheet.columns.iter_mut().enumerate() {
+        for (name, cells, from) in &params {
+            if j >= *from
+                && let Some(v) = cells.get(j).filter(|v| !v.trim().is_empty())
+            {
+                col.params.insert(name.clone(), v.trim().to_string());
+            }
+        }
     }
 
     let mut workbook = Workbook::new(WindowId(0), "Book1");
@@ -805,13 +1104,224 @@ mod tests {
         for (s, v) in
             [("1e-5", 1e-5), ("1E5", 1e5), ("+3.2", 3.2), (".5", 0.5), ("-.5e3", -500.0), ("inf", f64::INFINITY)]
         {
-            assert_eq!(parse_number(s, false), Some(v), "{s}");
+            assert_eq!(parse_number(s, NumStyle::new(false, Thousands::Off)), Some(v), "{s}");
         }
-        assert!(parse_number("NaN", false).unwrap().is_nan());
-        assert_eq!(parse_number("1,5", false), None);
-        assert_eq!(parse_number("1,5", true), Some(1.5));
-        assert_eq!(parse_number("abc", false), None);
-        assert_eq!(parse_number("", false), None);
+        assert!(parse_number("NaN", NumStyle::new(false, Thousands::Off)).unwrap().is_nan());
+        assert_eq!(parse_number("1,5", NumStyle::new(false, Thousands::Off)), None);
+        assert_eq!(parse_number("1,5", NumStyle::new(true, Thousands::Off)), Some(1.5));
+        assert_eq!(parse_number("abc", NumStyle::new(false, Thousands::Off)), None);
+        assert_eq!(parse_number("", NumStyle::new(false, Thousands::Off)), None);
+    }
+
+    fn with(thousands: Thousands) -> AsciiOptions {
+        AsciiOptions { thousands, ..AsciiOptions::default() }
+    }
+
+    #[test]
+    fn comma_thousands_are_found_when_a_number_shows_them() {
+        let text = "name\tvalue\na\t1,234.5\nb\t2,345.25\nc\t1,000,000.5\nd\t7\n";
+        let imp = parse(text);
+        assert_eq!(imp.detected.thousands, Thousands::Comma);
+        assert!(!imp.detected.decimal_comma);
+        assert_eq!(col(&imp, 1).numeric().unwrap(), &[1234.5, 2345.25, 1_000_000.5, 7.0]);
+        assert!(imp.warnings.iter().any(|w| w.contains("thousands")), "{:?}", imp.warnings);
+        // Chosen by hand there is nothing to report.
+        let chosen = parse_ascii(text, "f", &with(Thousands::Comma)).unwrap();
+        assert!(chosen.warnings.is_empty(), "{:?}", chosen.warnings);
+        assert_eq!(col(&chosen, 1).numeric().unwrap(), col(&imp, 1).numeric().unwrap());
+    }
+
+    #[test]
+    fn a_lone_1_234_proves_nothing_until_the_option_says_so() {
+        let text = "x\ty\n1\t1,234\n2\t2,345\n3\t3,456\n";
+        let auto = parse(text);
+        assert_eq!(auto.detected.thousands, Thousands::Off);
+        assert!(col(&auto, 1).text().is_some(), "left as text, nothing is guessed");
+        let comma = parse_ascii(text, "f", &with(Thousands::Comma)).unwrap();
+        assert_eq!(col(&comma, 1).numeric().unwrap(), &[1234.0, 2345.0, 3456.0]);
+        // The same cells are 1.234 ... with a decimal comma.
+        let dec = parse_ascii(text, "f", &AsciiOptions { decimal_comma: true, ..AsciiOptions::default() }).unwrap();
+        assert_eq!(col(&dec, 1).numeric().unwrap(), &[1.234, 2.345, 3.456]);
+    }
+
+    #[test]
+    fn dot_thousands_with_decimal_comma_match_the_origin_run() {
+        // Reference: Origin 2016 `impasc` with the "1.000,00" separator setting read a file of these
+        // four cells (made by us) as 1234.5, 2345.25, 12000 and 7.
+        let text = "x;y\n1;1.234,5\n2;2.345,25\n3;12.000\n4;7\n";
+        let imp = parse(text);
+        assert_eq!((imp.detected.thousands, imp.detected.decimal_comma), (Thousands::Dot, true));
+        assert_eq!(col(&imp, 1).numeric().unwrap(), &[1234.5, 2345.25, 12000.0, 7.0]);
+        let chosen = parse_ascii(text, "f", &with(Thousands::Dot)).unwrap();
+        assert_eq!(col(&chosen, 1).numeric().unwrap(), &[1234.5, 2345.25, 12000.0, 7.0]);
+    }
+
+    #[test]
+    fn decimal_comma_alone_matches_the_origin_run() {
+        // Reference: with the "1.000,00" setting Origin read 1,5 / 2,25 / 3,5 / 7,125 as 1.5, 2.25, 3.5, 7.125.
+        let imp = parse_ascii(
+            "x\ty\n1\t1,5\n2\t2,25\n3\t3,5\n4\t7,125\n",
+            "f",
+            &AsciiOptions { decimal_comma: true, ..AsciiOptions::default() },
+        )
+        .unwrap();
+        assert_eq!(col(&imp, 1).numeric().unwrap(), &[1.5, 2.25, 3.5, 7.125]);
+        // A plain dot decimal stays a decimal point under a decimal comma.
+        assert_eq!(parse_number("1.5", NumStyle::new(true, Thousands::Off)), Some(1.5));
+    }
+
+    #[test]
+    fn space_and_apostrophe_thousands() {
+        let sp = parse("x\ty\n1\t1 234,5\n2\t2\u{a0}345,25\n3\t12 000\n4\t7\n");
+        assert_eq!((sp.detected.thousands, sp.detected.decimal_comma), (Thousands::Space, true));
+        assert_eq!(col(&sp, 1).numeric().unwrap(), &[1234.5, 2345.25, 12000.0, 7.0]);
+        let sp_dot = parse("x\ty\n1\t1 234.5\n2\t2 345.25\n3\t7\n");
+        assert_eq!((sp_dot.detected.thousands, sp_dot.detected.decimal_comma), (Thousands::Space, false));
+        assert_eq!(col(&sp_dot, 1).numeric().unwrap(), &[1234.5, 2345.25, 7.0]);
+        let ap = parse("x\ty\n1\t1'234.5\n2\t2'345.25\n3\t1'000'000\n");
+        assert_eq!(ap.detected.thousands, Thousands::Apostrophe);
+        assert_eq!(col(&ap, 1).numeric().unwrap(), &[1234.5, 2345.25, 1_000_000.0]);
+    }
+
+    #[test]
+    fn grouping_must_sit_between_groups_of_three() {
+        let ns = NumStyle::new(false, Thousands::Comma);
+        assert_eq!(parse_number("1,234", ns), Some(1234.0));
+        assert_eq!(parse_number("-12,345,678.25", ns), Some(-12_345_678.25));
+        assert_eq!(parse_number("1,234.5e3", ns), Some(1_234_500.0));
+        assert_eq!(parse_number("1,23", ns), None);
+        assert_eq!(parse_number("1234,567", ns), None);
+        assert_eq!(parse_number("1,234,5", ns), None);
+        assert_eq!(parse_number("1,234.5.6", ns), None);
+        assert_eq!(parse_number("1234.5", ns), Some(1234.5), "no grouping at all is fine");
+        let dot = NumStyle::new(false, Thousands::Dot);
+        assert_eq!(parse_number("1.234", dot), Some(1234.0));
+        assert_eq!(parse_number("12.5", dot), Some(12.5), "a short group after the dot is a decimal point");
+    }
+
+    #[test]
+    fn two_kinds_of_evidence_cancel_out() {
+        let imp = parse("x\ty\n1\t1,234.5\n2\t1.234,5\n3\t7\n");
+        assert_eq!(imp.detected.thousands, Thousands::Off);
+    }
+
+    #[test]
+    fn thousands_in_quoted_csv_fields() {
+        let imp = parse("name,value\n\"a\",\"1,234.5\"\n\"b\",\"2,345.5\"\n\"c\",\"7\"\n");
+        assert_eq!(imp.detected.delimiter, Delimiter::Comma);
+        assert_eq!(col(&imp, 1).numeric().unwrap(), &[1234.5, 2345.5, 7.0]);
+        let off =
+            parse_ascii("name,value\n\"a\",\"1,234.5\"\n\"b\",\"2,345.5\"\n\"c\",\"7\"\n", "f", &with(Thousands::Off))
+                .unwrap();
+        // Without the separator the first two rows are not numbers, so they count as header lines.
+        assert!(!col(&off, 1).numeric().unwrap().contains(&1234.5));
+        let bad = AsciiOptions { decimal_comma: true, thousands: Thousands::Comma, ..AsciiOptions::default() };
+        assert!(matches!(parse_ascii("1\n", "f", &bad), Err(IoError::InvalidOption(_))));
+    }
+
+    /// An export of an ICP-OES run: sample names, one line per element with its wavelength, a units
+    /// line, a date-time column, and entries below the detection limit.
+    const ICP_RUN: &str = "\
+Sample Name,Fe 238.204,Cu 324.754,Zn 213.857,Measured\n\
+Wavelength (nm),238.204,324.754,213.857,\n\
+Units,mg/L,mg/L,mg/L,\n\
+Blank,<LOD,0.021,n.d.,2026-05-04 09:15:22\n\
+Std 1,1.02,0.98,1.10,2026-05-04 09:17:40\n\
+Std 2,5.11,4.97,5.30,2026-05-04 09:19:58\n\
+Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
+
+    #[test]
+    fn icp_oes_export_with_parameter_rows() {
+        let opts = AsciiOptions {
+            header_lines: Some(3),
+            long_name_line: Some(1),
+            units_line: Some(3),
+            comments_line: Some(0),
+            param_lines: vec![2],
+            ..AsciiOptions::default()
+        };
+        let imp = parse_ascii(ICP_RUN, "run1", &opts).unwrap();
+        let sheet = &imp.workbook.sheets[0];
+        assert_eq!(sheet.columns.len(), 5);
+        let names = &sheet.columns[0];
+        assert_eq!(names.text().unwrap(), ["Blank", "Std 1", "Std 2", "Sample A"]);
+        assert_eq!(names.designation, Designation::Label);
+        assert!(names.params.is_empty(), "the first cell of a parameter row is its name");
+        let fe = &sheet.columns[1];
+        assert_eq!((fe.long_name.as_str(), fe.units.as_str()), ("Fe 238.204", "mg/L"));
+        assert_eq!(fe.params.get("Wavelength (nm)").map(String::as_str), Some("238.204"));
+        let v = fe.numeric().unwrap();
+        assert!(v[0].is_nan());
+        assert_eq!(&v[1..], &[1.02, 5.11, 12.4]);
+        assert!(sheet.columns[3].numeric().unwrap()[0].is_nan());
+        // The date-time column holds Origin date numbers and displays as date-time.
+        let t = &sheet.columns[4];
+        assert!(matches!(t.format, NumberFormat::DateTime(..)), "{:?}", t.format);
+        let s = t.numeric().unwrap();
+        assert!((s[1] - s[0] - 138.0 / 86400.0).abs() < 1e-9);
+        // No-value entries are reported, not hidden.
+        let joined = imp.warnings.join("\n");
+        assert!(joined.contains("no-value marker"), "{joined}");
+        assert!(imp.warnings.iter().all(|w| !w.contains("header line")), "{joined}");
+    }
+
+    #[test]
+    fn icp_oes_export_is_detected_without_any_option() {
+        let imp = parse(ICP_RUN);
+        let sheet = &imp.workbook.sheets[0];
+        assert_eq!(imp.detected.header_lines, 3);
+        assert_eq!(sheet.columns[0].text().unwrap().len(), 4);
+        assert_eq!(sheet.columns[1].numeric().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn parameter_rows_can_be_named_generically() {
+        let text = "Sample,A,B\nWavelength,10,20\nPurpose,x,y\n1,2,3\n2,3,4\n3,4,5\n";
+        let opts = AsciiOptions {
+            header_lines: Some(3),
+            long_name_line: Some(1),
+            units_line: Some(0),
+            comments_line: Some(0),
+            param_lines: vec![2, 3],
+            param_name_from_first_cell: false,
+            ..AsciiOptions::default()
+        };
+        let imp = parse_ascii(text, "p", &opts).unwrap();
+        let c = &imp.workbook.sheets[0].columns;
+        assert_eq!(c[0].params.get("Param1").map(String::as_str), Some("Wavelength"));
+        assert_eq!(c[2].params.get("Param1").map(String::as_str), Some("20"));
+        assert_eq!(c[2].params.get("Param2").map(String::as_str), Some("y"));
+        // By first cell: the first column carries no value and the rows are named from it.
+        let named = parse_ascii(text, "p", &AsciiOptions { param_name_from_first_cell: true, ..opts }).unwrap();
+        let c = &named.workbook.sheets[0].columns;
+        assert!(c[0].params.is_empty());
+        assert_eq!(c[1].params.get("Wavelength").map(String::as_str), Some("10"));
+        assert_eq!(c[2].params.get("Purpose").map(String::as_str), Some("y"));
+    }
+
+    #[test]
+    fn blocks_become_sheets_when_asked() {
+        // The shape of a file we ran through Origin: a title line, then two tables with the same header.
+        let text = "junk header line\nTime\tA\ns\tmV\n1\t10\n2\t20\n3\t30\n\nTime\tA\ns\tmV\n7\t70\n8\t80\n9\t90\n";
+        let one = parse(text);
+        assert_eq!(one.workbook.sheets.len(), 1);
+        let two =
+            parse_ascii(text, "blocks", &AsciiOptions { blocks: Blocks::Sheets, ..AsciiOptions::default() }).unwrap();
+        let sheets = &two.workbook.sheets;
+        assert_eq!(sheets.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["blocks", "blocks_2"]);
+        for (s, first) in sheets.iter().zip([1.0, 7.0]) {
+            assert_eq!((s.columns[0].long_name.as_str(), s.columns[0].units.as_str()), ("Time", "s"));
+            assert_eq!(s.columns[0].numeric().unwrap()[0], first);
+            assert_eq!(s.columns[1].numeric().unwrap().len(), 3);
+        }
+        // Without a blank line there is one block and one sheet.
+        let single = parse_ascii(
+            "x,y\n1,2\n3,4\n5,6\n",
+            "s",
+            &AsciiOptions { blocks: Blocks::Sheets, ..AsciiOptions::default() },
+        )
+        .unwrap();
+        assert_eq!(single.workbook.sheets.len(), 1);
     }
 
     #[test]

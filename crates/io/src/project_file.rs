@@ -28,6 +28,9 @@ struct Manifest {
     version: u32,
     #[serde(default)]
     app: String,
+    /// Set on a companion file that Sheaf wrote next to an `.opj` (see `crate::save`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    companion: bool,
 }
 
 fn numeric_member(id: u64) -> String {
@@ -42,18 +45,37 @@ fn text_member(id: u64) -> String {
 /// `path` and then renamed over it, so a crash never leaves a half-written
 /// project behind.
 pub fn save(project: &Project, path: &Path) -> Result<(), IoError> {
+    save_marked(project, path, false)
+}
+
+/// Like [`save`], and marks the file as a companion of an `.opj` that Sheaf wrote, so that Sheaf
+/// can tell it from a project the user made and delete it when it is no longer needed.
+pub fn save_companion(project: &Project, path: &Path) -> Result<(), IoError> {
+    save_marked(project, path, true)
+}
+
+/// True when `path` is a project file that Sheaf wrote as a companion of an `.opj`. False for any
+/// other file, including one that cannot be read.
+pub fn is_companion(path: &Path) -> bool {
+    let Ok(file) = File::open(path) else { return false };
+    let Ok(mut archive) = ZipArchive::new(BufReader::new(file)) else { return false };
+    let Ok(Some(bytes)) = read_member(&mut archive, path, MANIFEST) else { return false };
+    serde_json::from_slice::<Manifest>(&bytes).is_ok_and(|m| m.format == FORMAT_NAME && m.companion)
+}
+
+fn save_marked(project: &Project, path: &Path, companion: bool) -> Result<(), IoError> {
     let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".to_string());
     let tmp: PathBuf = parent.join(format!(".{name}.{}.tmp", std::process::id()));
-    let result =
-        write_archive(project, path, &tmp).and_then(|()| std::fs::rename(&tmp, path).map_err(|e| IoError::io(path, e)));
+    let result = write_archive(project, path, &tmp, companion)
+        .and_then(|()| std::fs::rename(&tmp, path).map_err(|e| IoError::io(path, e)));
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     result
 }
 
-fn write_archive(project: &Project, path: &Path, tmp: &Path) -> Result<(), IoError> {
+fn write_archive(project: &Project, path: &Path, tmp: &Path, companion: bool) -> Result<(), IoError> {
     let zip_err = |source: ZipError| IoError::Zip { path: path.to_path_buf(), source };
     let io_err = |source: std::io::Error| IoError::io(path, source);
     let json_err = |member: &str, source: serde_json::Error| IoError::Json {
@@ -87,6 +109,7 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path) -> Result<(), IoErr
         format: FORMAT_NAME.to_string(),
         version: FORMAT_VERSION,
         app: env!("CARGO_PKG_VERSION").to_string(),
+        companion,
     };
     put(&mut zip, MANIFEST, &serde_json::to_vec_pretty(&manifest).map_err(|e| json_err(MANIFEST, e))?)?;
     put(&mut zip, PROJECT, &serde_json::to_vec_pretty(project).map_err(|e| json_err(PROJECT, e))?)?;

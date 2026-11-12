@@ -83,6 +83,10 @@ pub enum IoError {
     #[error("cannot write an Origin project (.opj): {reason}")]
     OpjWrite { reason: String },
 
+    /// A file named like the companion exists and Sheaf did not write it, so it is not replaced.
+    #[error("'{}' already exists and is not a companion file written by Sheaf, so it was not replaced; move or rename it and save again", path.display())]
+    CompanionExists { path: PathBuf },
+
     /// Two columns of a project share one identifier, so their data would collide.
     #[error("'{}' cannot be saved: column id {id} is used by more than one column", path.display())]
     DuplicateColumnId { path: PathBuf, id: u64 },

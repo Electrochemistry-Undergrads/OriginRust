@@ -67,7 +67,7 @@ impl AnalysisKind {
             AnalysisKind::CurveMath => "Simple Math...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
-            AnalysisKind::PeakChain => "Analyze Peaks...",
+            AnalysisKind::PeakChain => "Peak Analyzer...",
             AnalysisKind::Statistics => "Statistics on Columns...",
         }
     }

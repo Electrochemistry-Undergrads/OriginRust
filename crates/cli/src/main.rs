@@ -9,7 +9,7 @@
 //! sheaf plot data.csv -o fig.pdf --template line --y B,C
 //! sheaf fit peak.csv --model Gauss --x-range 0.4:0.9 --plot fit.png
 //! sheaf fit --list
-//! sheaf import run1.txt run2.txt -o lab.sheaf
+//! sheaf import run1.txt run2.txt -o lab.opj
 //! sheaf export lab.sheaf --graph Graph1 -o fig.svg
 //! ```
 

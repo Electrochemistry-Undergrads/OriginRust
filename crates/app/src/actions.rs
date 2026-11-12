@@ -79,6 +79,10 @@ pub enum Action {
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     RenameWindow(WindowId),
+    /// Window > Cascade, Tile Horizontally, Tile Vertically.
+    Cascade,
+    TileHorizontally,
+    TileVertically,
     About,
     Quit,
 }

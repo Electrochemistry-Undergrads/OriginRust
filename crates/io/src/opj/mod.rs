@@ -19,7 +19,7 @@ mod testutil;
 mod window;
 mod write;
 
-pub use write::{OpjWrite, write, write_file, write_named};
+pub use write::{OpjWrite, julian_day_now, write, write_file, write_named};
 
 use crate::error::IoError;
 use dataset::DataSetInfo;

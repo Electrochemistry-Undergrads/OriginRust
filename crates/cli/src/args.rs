@@ -130,7 +130,8 @@ pub struct FitArgs {
     /// Resolution of a PNG figure in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Save the project with the results to this .sheaf file.
+    /// Save the project with the results to this file: .opj (also when no extension is given, with a
+    /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     /// Write the parameter sheet as delimited text (.tsv or .txt gives tabs, anything else commas).
@@ -222,7 +223,8 @@ pub struct ImportArgs {
     /// all its workbooks.
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
-    /// The project file to write.
+    /// The project file to write: .opj (the default, also when no extension is given) or .sheaf.
+    /// An .opj that cannot hold everything gets a companion .opj.sheaf.
     #[arg(short, long, visible_alias = "into")]
     pub output: PathBuf,
     /// Add the workbooks to the existing project at --output instead of starting a new one.
@@ -350,7 +352,8 @@ pub struct PlotArgs {
     /// For a project input: render this existing graph instead of making a new one.
     #[arg(long)]
     pub graph: Option<String>,
-    /// Also save the resulting project (data plus the new graph) to this .sheaf file.
+    /// Also save the resulting project (data plus the new graph) to this file: .opj (the default,
+    /// with a companion .opj.sheaf if needed) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     #[command(flatten)]
@@ -423,7 +426,8 @@ pub struct TargetArgs {
     /// 0.2:0.6 (write negative limits as --x-range=-0.5:0.1).
     #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
     pub x_range: Option<String>,
-    /// Save the project with the results to this .sheaf file.
+    /// Save the project with the results to this file: .opj (also when no extension is given, with a
+    /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
     /// Write the sheet that holds the results as delimited text (.tsv or .txt gives tabs, anything

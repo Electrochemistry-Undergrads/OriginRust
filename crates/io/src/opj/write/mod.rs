@@ -55,7 +55,7 @@ pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite,
 }
 
 /// The current time as a Julian day number, the unit of the time stamps in the file.
-fn julian_day_now() -> f64 {
+pub fn julian_day_now() -> f64 {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64());
     secs / 86_400.0 + 2_440_587.5
 }

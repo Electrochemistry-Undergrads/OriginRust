@@ -10,8 +10,8 @@ use sheaf_core::{Color, ColumnId, Project, WindowId};
 use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands};
 use sheaf_io::batch::{BatchLayout, BatchOptions};
 use sheaf_io::chi::ChiOptions;
-use sheaf_io::{ImportKind, Imported, project_file};
-use std::path::Path;
+use sheaf_io::{ImportKind, Imported};
+use std::path::{Path, PathBuf};
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
@@ -30,11 +30,17 @@ pub(crate) fn is_project(path: &Path) -> bool {
 }
 
 /// Opens a `.sheaf` project or imports an Origin `.opj` project.
+/// Origin files this run read as a project (Sheaf reads only part of them).
+static FOREIGN_INPUTS: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
 pub(crate) fn load_project(path: &Path) -> Result<Project> {
     let opened =
         sheaf_io::open_project(path).with_context(|| format!("could not open project '{}'", path.display()))?;
     for w in &opened.warnings {
         eprintln!("note: {w}");
+    }
+    if opened.foreign {
+        FOREIGN_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).push(path.to_path_buf());
     }
     Ok(opened.project)
 }
@@ -183,7 +189,8 @@ fn info(a: InfoArgs) -> Result<()> {
     Ok(())
 }
 
-fn import(a: ImportArgs) -> Result<()> {
+fn import(mut a: ImportArgs) -> Result<()> {
+    a.output = sheaf_io::save::default_extension(&a.output);
     if a.files.iter().any(|f| f == &a.output) {
         bail!("the output '{}' is also one of the inputs", a.output.display());
     }
@@ -257,16 +264,50 @@ fn import(a: ImportArgs) -> Result<()> {
     Ok(())
 }
 
-/// Saves as a `.sheaf` project. Refuses to write over an Origin project file.
+/// Saves the project: `.opj` by default (a path without extension gets `.opj`), with a companion
+/// `<name>.opj.sheaf` when the Origin file cannot hold everything; an explicit `.sheaf` path writes
+/// a Sheaf project. When the Origin writer refuses the project only the companion is written, and
+/// that is reported as an error because the file asked for does not exist.
 pub(crate) fn save_project(project: &Project, path: &Path) -> Result<()> {
-    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj")) {
+    // Saving over the Origin file this run read would replace it with a partial rewrite: keep a copy.
+    let target = sheaf_io::save::default_extension(path);
+    let over_input = {
+        let inputs = FOREIGN_INPUTS.lock().unwrap_or_else(|e| e.into_inner());
+        inputs.iter().any(|i| match (std::fs::canonicalize(i), std::fs::canonicalize(&target)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => *i == target,
+        })
+    };
+    if over_input
+        && let Some(b) = sheaf_io::save::backup_original(&target)
+            .with_context(|| format!("could not keep a copy of '{}'", target.display()))?
+    {
+        println!("kept the original Origin file as {}", b.display());
+    }
+    let outcome =
+        sheaf_io::save::save_project(project, path).with_context(|| format!("could not save '{}'", path.display()))?;
+    report_save(&outcome)
+}
+
+fn report_save(outcome: &sheaf_io::save::SaveOutcome) -> Result<()> {
+    if let Some(reason) = &outcome.refusal {
+        let companion = outcome.companion.as_ref().map(|c| c.display().to_string()).unwrap_or_default();
+        println!("saved {companion} (the whole project)");
         bail!(
-            "'{}' is an Origin project name; save as a .sheaf file instead (`sheaf export PROJECT -o file.opj` writes an Origin project)",
-            path.display()
+            "'{}' was not written because Origin cannot store the project: {reason}. Rename as it says and save again; the project is safe in '{companion}'",
+            outcome.path.display()
         );
     }
-    project_file::save(project, path).with_context(|| format!("could not save '{}'", path.display()))?;
-    println!("saved {}", path.display());
+    println!("saved {}", outcome.path.display());
+    if let Some(c) = &outcome.companion {
+        println!("saved {} (the whole project; the .opj cannot hold everything)", c.display());
+        for w in &outcome.warnings {
+            eprintln!("warning: only {} holds: {w}", c.display());
+        }
+    }
+    if let Some(c) = &outcome.companion_removed {
+        println!("removed {} (nothing is lost in the .opj any more)", c.display());
+    }
     Ok(())
 }
 
@@ -550,13 +591,7 @@ fn export_opj(a: &ExportArgs) -> Result<()> {
         p.adopt_workbook(read_data_file(&a.project, &a.read)?.workbook);
         p
     };
-    let warnings = sheaf_io::opj::write_file(&project, &a.output)
-        .with_context(|| format!("could not write '{}'", a.output.display()))?;
-    for w in &warnings {
-        eprintln!("warning: {w}");
-    }
-    println!("wrote {}", a.output.display());
-    Ok(())
+    save_project(&project, &a.output)
 }
 
 fn export(a: ExportArgs) -> Result<()> {

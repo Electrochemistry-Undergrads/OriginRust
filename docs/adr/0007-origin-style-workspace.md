@@ -31,7 +31,7 @@ app must stay testable with `egui_kittest` and `--screenshot`.
    `docs/spec/project-file-format.md` and ADR 0004 first; absent geometry means cascade).
 2. **Menus follow the active window.** `menu_bar` takes the active window type (none, workbook,
    graph) and builds the matching list from section 1 of the spec (workbook: File, Edit, View,
-   Plot, Column, Worksheet, Analysis, Statistics, Tools, Format, Window, Help; graph: File, Edit,
+   Plot, Column, Worksheet, Analysis, Statistics, Image, Tools, Format, Window, Help; graph: File, Edit,
    View, Graph, Data, Analysis, Gadgets, Tools, Format, Window, Help; none: File, View, Tools,
    Window, Help). Items for features Sheaf does not have yet are shown greyed with their Origin
    name, so a user sees where the command lives. A menu-tree table in code (`menus.rs`) is the

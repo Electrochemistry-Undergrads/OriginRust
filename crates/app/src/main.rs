@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! sheaf-app                      start with an empty project
-//! sheaf-app lab.sheaf            open a project
+//! sheaf-app lab.sheaf            open a project (Save writes .opj by default)
 //! sheaf-app old.opj              import the workbooks of an Origin project
 //! sheaf-app run1.txt run2.txt    import data files with default settings and plot them
 //! ```
@@ -10,7 +10,8 @@
 //! Two more options exist so the interface can be checked without a person
 //! at the screen: `--screenshot FILE.png` saves a picture of the window after
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
-//! `graph-settings:plots`, `column`, `export`, `import:FILE`, `focus:Book1`).
+//! `graph-settings:plots`, `column`, `export`, `import:FILE`, `focus:Book1`, `menu:Plot` to
+//! hold a top-level menu open).
 
 // In release builds on Windows, do not open a console window next to the app.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -20,6 +21,9 @@ mod app;
 mod dialogs;
 mod graph_view;
 mod grid;
+mod menus;
+mod theme;
+mod workspace;
 
 use std::path::PathBuf;
 

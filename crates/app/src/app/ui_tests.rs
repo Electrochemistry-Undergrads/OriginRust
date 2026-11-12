@@ -5,7 +5,7 @@
 
 use super::*;
 use egui_kittest::Harness;
-use egui_kittest::kittest::{By, Queryable};
+use egui_kittest::kittest::{By, NodeT, Queryable};
 use sheaf_core::graph::ScaleKind;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -66,10 +66,43 @@ fn click_containing(h: &mut Harness<'static, SheafApp>, label: &str) {
     settle(h);
 }
 
+/// The menu entry with this text: the one whose label is exactly the text, otherwise the one
+/// whose label contains it (entries with a shortcut carry it in the label, "Undo Import data
+/// Ctrl+Z"). When a submenu and its first entry have the same name, the one further right is the
+/// entry.
+fn menu_entry<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> egui_kittest::Node<'a> {
+    // The label without the arrow egui draws after a submenu and without a trailing shortcut.
+    let name = |n: &egui_kittest::Node<'_>| {
+        let label = n.accesskit_node().label().unwrap_or_default().to_string();
+        let label = label.trim_end_matches(" \u{23f5}").to_string();
+        match label.rsplit_once(' ') {
+            Some((head, key)) if key.contains('+') => head.to_string(),
+            _ => label,
+        }
+    };
+    let pick =
+        |nodes: Vec<egui_kittest::Node<'a>>| nodes.into_iter().max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x));
+    let all: Vec<egui_kittest::Node<'a>> = h.query_all_by_label_contains(text).collect();
+    let exact: Vec<egui_kittest::Node<'a>> = all
+        .iter()
+        .filter(|n| name(n) == text || n.accesskit_node().label().as_deref() == Some(text))
+        .cloned()
+        .collect();
+    pick(exact).or_else(|| pick(all)).unwrap_or_else(|| panic!("no menu entry {text:?}"))
+}
+
+/// Opens the menus along the path and clicks the last entry:
+/// `menu_path(h, &["Plot", "Symbol", "Scatter"])`.
+fn menu_path(h: &mut Harness<'static, SheafApp>, path: &[&str]) {
+    for text in path {
+        menu_entry(h, text).click();
+        settle(h);
+    }
+}
+
 /// Opens a menu of the menu bar and clicks one of its entries.
 fn menu(h: &mut Harness<'static, SheafApp>, menu: &str, entry: &str) {
-    click(h, menu);
-    click_containing(h, entry);
+    menu_path(h, &[menu, entry]);
 }
 
 fn right_click(h: &mut Harness<'static, SheafApp>, label: &str) {
@@ -98,20 +131,49 @@ fn a_data_file_given_at_start_is_imported_and_plotted() {
     // Both windows are listed in the project explorer ...
     assert_eq!(h.query_all_by_label("Book1 - sample").count(), 1);
     assert_eq!(h.query_all_by_label("Graph1 - sample").count(), 1);
-    // ... and have a tab (the tab titles are drawn by the docking library and are not exposed).
-    assert_eq!(h.state().dock.iter_all_tabs().count(), 2);
+    // ... and are open as child windows of the workspace, each with its own title bar.
+    assert_eq!(h.state().workspace.shown().len(), 2);
+    assert!(h.query_by_label("Title Book1 - sample").is_some());
+    assert!(h.query_by_label("Title Graph1 - sample").is_some());
 }
 
 #[test]
 fn menu_new_workbook_then_undo_and_redo() {
     let mut h = start(Vec::new());
     assert_eq!(project(&h).windows.len(), 0);
-    menu(&mut h, "Worksheet", "New Workbook");
+    menu_path(&mut h, &["File", "New", "Worksheet..."]);
     assert_eq!(project(&h).workbooks().count(), 1);
     assert_eq!(project(&h).workbooks().next().unwrap().sheet().columns.len(), 2);
     menu(&mut h, "Edit", "Undo New workbook");
     assert_eq!(project(&h).windows.len(), 0);
-    menu(&mut h, "Edit", "Redo New workbook");
+    // With no window the menu bar has no Edit menu (Origin's bar for this case), but the keys
+    // still work: Ctrl+Shift+Z is Redo.
+    assert!(h.query_by_label("Edit").is_none());
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().count(), 1);
+    menu(&mut h, "Edit", "Undo New workbook");
+    assert_eq!(project(&h).windows.len(), 0);
+}
+
+#[test]
+fn undo_and_redo_are_reachable_with_the_mouse_when_no_window_is_open() {
+    let mut h = start(Vec::new());
+    menu_path(&mut h, &["File", "New", "Worksheet..."]);
+    menu(&mut h, "Edit", "Undo New workbook");
+    assert_eq!(project(&h).windows.len(), 0);
+    assert!(h.query_by_label("Edit").is_none());
+    // Redo from the File menu of the short bar.
+    menu(&mut h, "File", "Redo");
+    assert_eq!(project(&h).workbooks().count(), 1);
+    menu(&mut h, "Edit", "Undo New workbook");
+    assert_eq!(project(&h).windows.len(), 0);
+    // Undo from the File menu: redo, delete the window, then undo the delete with no window.
+    menu(&mut h, "File", "Redo");
+    h.state_mut().doc.apply("Delete window", |p| p.windows.clear());
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), 0);
+    menu(&mut h, "File", "Undo");
     assert_eq!(project(&h).workbooks().count(), 1);
 }
 
@@ -123,7 +185,7 @@ fn selecting_a_column_header_and_plotting_it_makes_a_graph_of_that_column() {
     let book = project(&h).workbooks().next().unwrap().id;
     let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
     assert_eq!(h.state().books[&book].selected, vec![c]);
-    menu(&mut h, "Plot", "Scatter");
+    menu_path(&mut h, &["Plot", "Symbol", "Scatter"]);
     let graphs: Vec<_> = project(&h).graphs().collect();
     assert_eq!(graphs.len(), 2);
     let plots = &graphs[1].layers[0].plots;
@@ -298,7 +360,7 @@ fn edit_cell(h: &mut Harness<'static, SheafApp>, short: &str, row: usize, text: 
 fn graph_settings_change_the_axis_live_and_undo_as_one_step() {
     let mut h = start(vec![data_file("axis")]);
     click(&mut h, "Graph1 - sample");
-    menu(&mut h, "Graph", "Y Axis...");
+    menu_path(&mut h, &["Format", "Axes", "Y Axis..."]);
     assert!(h.state().graph_props.is_some());
     let scale = |h: &Harness<'static, SheafApp>| project(h).graphs().next().unwrap().layers[0].y_axis.scale;
     assert_eq!(scale(&h), ScaleKind::Linear);
@@ -471,26 +533,24 @@ fn sorting_and_filtering_a_sheet() {
 }
 
 #[test]
-fn ctrl_z_and_ctrl_y_undo_and_redo() {
+fn ctrl_z_and_ctrl_shift_z_undo_and_redo() {
     let mut h = start(vec![data_file("keys")]);
     assert_eq!(h.state().doc.undo_label(), Some("Import data"));
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
     settle(&mut h);
     assert_eq!(project(&h).windows.len(), 0, "Ctrl+Z undid the import");
     assert_eq!(h.state().doc.redo_label(), Some("Import data"));
-    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Y);
+    // Ctrl+Y is Origin's key for Nonlinear Curve Fit, so redo is Ctrl+Shift+Z.
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z);
     settle(&mut h);
-    assert_eq!(project(&h).workbooks().count(), 1, "Ctrl+Y redid it");
+    assert_eq!(project(&h).workbooks().count(), 1, "Ctrl+Shift+Z redid it");
 }
 
 #[test]
-fn the_graph_menu_opens_the_export_window_and_close_closes_it() {
+fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
     let mut h = start(vec![data_file("export")]);
     click(&mut h, "Graph1 - sample");
-    click(&mut h, "Graph");
-    // The graph toolbar has an "Export..." button too; the menu entry is drawn on top of it.
-    h.get_all_by_label("Export...").last().expect("the menu entry").click();
-    settle(&mut h);
+    menu_path(&mut h, &["File", "Export", "Graphs..."]);
     assert!(h.state().export.is_some(), "the export window is open");
     assert!(h.query_by_label("Save as...").is_some());
     click(&mut h, "Close");
@@ -501,7 +561,7 @@ fn the_graph_menu_opens_the_export_window_and_close_closes_it() {
 fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
     let mut h = start(vec![data_file("ranges")]);
     click(&mut h, "Book1 - sample");
-    menu(&mut h, "Analysis", "Integrate Ranges");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Integrate Ranges..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "Add range");
     click(&mut h, "OK");
@@ -521,7 +581,7 @@ fn subtract_reference_data_runs_from_the_analysis_menu_in_one_undo_step() {
     let mut h = start(vec![data_file("subref-a"), data_file("subref-b")]);
     assert_eq!(project(&h).workbooks().count(), 2);
     click(&mut h, "Book1 - sample");
-    menu(&mut h, "Analysis", "Subtract Reference Data");
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Reference Data..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "OK closes the window");
@@ -545,7 +605,7 @@ fn subtract_reference_data_runs_from_the_analysis_menu_in_one_undo_step() {
 fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
     let mut h = start(vec![data_file("math")]);
     click(&mut h, "Book1 - sample");
-    menu(&mut h, "Analysis", "Simple Math");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Simple Curve Math..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     // With no other column to use as reference the operand is the constant, 1 for a start.
     click(&mut h, "OK");
@@ -656,7 +716,7 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     std::fs::write(&path, text).unwrap();
     let mut h = start(vec![path]);
     click(&mut h, "Book1 - peaks");
-    menu(&mut h, "Analysis", "Analyze Peaks...");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
     assert!(h.state().analysis.is_some(), "the Analyze Peaks window is open");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "OK closes the window");
@@ -673,4 +733,515 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     settle(&mut h);
     let b = project(&h).workbooks().next().unwrap();
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
+}
+
+/// A folder for the project files of one save test.
+fn save_dir(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-save-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn ctrl_s(h: &mut Harness<'static, SheafApp>) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::S);
+    settle(h);
+}
+
+#[test]
+fn ctrl_s_saves_an_opj_with_a_companion_for_the_graph_and_reopening_brings_the_graph_back() {
+    let dir = save_dir("graph");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-graph")]);
+    assert_eq!(project(&h).graphs().count(), 1, "the import made a graph");
+    h.state_mut().path = Some(opj.clone());
+    ctrl_s(&mut h);
+    let companion = dir.join("lab.opj.sheaf");
+    assert!(opj.exists(), "the .opj is written");
+    assert!(companion.exists(), "the companion is written");
+    assert!(!dir.join("lab.sheaf").exists(), "a user's own lab.sheaf name is not used");
+    assert!(!h.state().doc.dirty);
+    assert!(h.state().status.contains("lab.opj.sheaf"), "{}", h.state().status);
+    let (title, text) = h.state().message.clone().expect("a message says what only the companion holds");
+    assert!(title.contains("companion") && text.contains("graph"), "{title}: {text}");
+    assert_eq!(h.state().path.as_deref(), Some(opj.as_path()));
+
+    let h2 = start(vec![opj.clone()]);
+    assert_eq!(project(&h2).graphs().count(), 1, "the graph is back");
+    assert_eq!(project(&h2).workbooks().count(), 1);
+    assert_eq!(h2.state().path.as_deref(), Some(opj.as_path()), "it saves to the .opj again");
+    assert!(h2.state().status.contains("companion"), "{}", h2.state().status);
+}
+
+#[test]
+fn a_workbook_only_save_writes_no_companion_and_deletes_an_old_one() {
+    let dir = save_dir("clean");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-clean")]);
+    h.state_mut().path = Some(opj.clone());
+    ctrl_s(&mut h);
+    assert!(dir.join("lab.opj.sheaf").exists());
+    // Drop the graph: now the .opj holds everything.
+    h.state_mut().message = None;
+    h.state_mut().doc.apply("Delete graph", |p| p.windows.retain(|w| matches!(w, Window::Workbook(_))));
+    settle(&mut h);
+    ctrl_s(&mut h);
+    assert!(opj.exists());
+    assert!(!dir.join("lab.opj.sheaf").exists(), "the companion Sheaf wrote is deleted");
+    assert!(h.state().message.is_none(), "nothing to report");
+    assert!(h.state().status.starts_with("Saved"), "{}", h.state().status);
+}
+
+#[test]
+fn a_project_origin_refuses_is_saved_as_the_companion_only_with_an_explanation() {
+    let dir = save_dir("refuse");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-refuse")]);
+    h.state_mut().doc.apply("Rename sheet", |p| {
+        if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+            b.sheets[0].name = "a sheet name that is far too long for Origin to store".into();
+        }
+    });
+    settle(&mut h);
+    h.state_mut().path = Some(opj.clone());
+    ctrl_s(&mut h);
+    assert!(!opj.exists(), "no half-written .opj");
+    assert!(dir.join("lab.opj.sheaf").exists());
+    let (title, text) = h.state().message.clone().expect("the refusal is explained");
+    assert!(title.contains("could not be written") && text.contains("too long"), "{title}: {text}");
+    assert!(!h.state().doc.dirty, "the data is safe in the companion");
+}
+
+#[test]
+fn a_project_opened_from_sheaf_keeps_saving_to_sheaf() {
+    let dir = save_dir("keep-sheaf");
+    let sheaf = dir.join("lab.sheaf");
+    let mut h = start(vec![data_file("save-keep")]);
+    h.state_mut().save_to(sheaf.clone());
+    assert!(sheaf.exists());
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "no .opj and no companion");
+    let mut h2 = start(vec![sheaf.clone()]);
+    assert_eq!(h2.state().path.as_deref(), Some(sheaf.as_path()));
+    h2.state_mut().doc.apply("Touch", |_| {});
+    ctrl_s(&mut h2);
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "Ctrl+S wrote the same .sheaf");
+}
+
+#[test]
+fn a_name_without_a_known_extension_is_saved_as_opj() {
+    let dir = save_dir("ext");
+    let mut h = start(vec![data_file("save-ext")]);
+    assert!(h.state_mut().save_to(dir.join("lab")));
+    assert!(dir.join("lab.opj").exists());
+    assert!(!dir.join("lab").exists());
+}
+
+#[test]
+fn saving_over_an_imported_origin_file_keeps_a_copy_of_the_original() {
+    let dir = save_dir("keep-original");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-orig")]);
+    assert!(h.state_mut().save_to(opj.clone()));
+    // Pretend Origin wrote this file: its bytes are what the copy must hold.
+    let original = std::fs::read(&opj).unwrap();
+    let mut h2 = start(vec![]);
+    h2.state_mut().foreign_source = Some(opj.clone());
+    h2.state_mut().doc.apply("Touch", |_| {});
+    assert!(h2.state_mut().save_to(opj.clone()));
+    assert_eq!(std::fs::read(dir.join("lab.opj.bak")).unwrap(), original);
+    assert!(h2.state().status.contains("lab.opj.bak"));
+}
+
+/// A mouse click at a point of the screen.
+fn click_at(h: &mut Harness<'static, SheafApp>, at: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    settle(h);
+}
+
+fn window_ids(h: &Harness<'static, SheafApp>) -> (WindowId, WindowId) {
+    let p = project(h);
+    (p.workbooks().next().unwrap().id, p.graphs().next().unwrap().id)
+}
+
+#[test]
+fn clicking_a_window_makes_it_the_active_one_and_brings_it_to_the_front() {
+    let mut h = start(vec![data_file("activate")]);
+    let (book, graph) = window_ids(&h);
+    assert_eq!(h.state().active, Some(graph), "the newest window is active");
+    click(&mut h, "Title Book1 - sample");
+    assert_eq!(h.state().active, Some(book));
+    assert_eq!(h.state().workspace.shown().last(), Some(&book), "and on top of the stack");
+    assert_eq!(bar_names(&h).get(4).map(String::as_str), Some("Column"), "the workbook's menu bar");
+    // A click into the body of the other window, in the part the first one does not cover.
+    let title = h.get_by_label("Title Graph1 - sample").rect().center();
+    click_at(&mut h, title + egui::vec2(0.0, 315.0));
+    assert_eq!(h.state().active, Some(graph));
+    assert_eq!(h.state().workspace.shown().last(), Some(&graph));
+    assert_eq!(bar_names(&h).get(4).map(String::as_str), Some("Data"), "the graph's menu bar");
+}
+
+#[test]
+fn maximise_fills_the_workspace_and_restore_gives_the_old_size_back() {
+    let mut h = start(vec![data_file("maximise")]);
+    let width = |h: &Harness<'static, SheafApp>| h.get_by_label("Title Graph1 - sample").rect().width();
+    let (_, graph) = window_ids(&h);
+    let normal = width(&h);
+    assert!(normal < 700.0);
+    click(&mut h, "Maximise Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Maximised));
+    assert!(width(&h) > 1000.0, "fills the area right of the project list: {}", width(&h));
+    click(&mut h, "Restore Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Normal));
+    assert!((width(&h) - normal).abs() < 2.0, "back to {normal}, is {}", width(&h));
+}
+
+#[test]
+fn minimise_makes_a_bar_and_clicking_the_bar_restores() {
+    let mut h = start(vec![data_file("minimise")]);
+    let (book, graph) = window_ids(&h);
+    click(&mut h, "Minimise Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Minimised));
+    assert!(h.query_by_label("Title Graph1 - sample").is_none());
+    assert_eq!(h.state().active, Some(book), "the next window becomes active");
+    click(&mut h, "Restore Graph1 - sample");
+    assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Normal));
+    assert_eq!(h.state().active, Some(graph));
+}
+
+#[test]
+fn closing_a_window_hides_it_and_keeps_its_data_until_it_is_shown_again() {
+    let mut h = start(vec![data_file("close")]);
+    let (book, graph) = window_ids(&h);
+    click(&mut h, "Close Graph1 - sample");
+    assert!(h.query_by_label("Title Graph1 - sample").is_none(), "no longer in the workspace");
+    assert_eq!(project(&h).graphs().count(), 1, "but still in the project");
+    assert_eq!(project(&h).graphs().next().unwrap().layers[0].plots.len(), 2);
+    assert_eq!(h.state().active, Some(book));
+    // The project explorer still lists it, and clicking it shows it again.
+    click(&mut h, "Graph1 - sample");
+    assert_eq!(h.state().active, Some(graph));
+    assert!(h.query_by_label("Title Graph1 - sample").is_some());
+    // A closed window is not reopened by the next change of the project.
+    click(&mut h, "Close Graph1 - sample");
+    menu_path(&mut h, &["File", "New", "Worksheet..."]);
+    assert!(h.query_by_label("Title Graph1 - sample").is_none());
+}
+
+#[test]
+fn a_million_row_workbook_scrolls_quickly_inside_a_window() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-big-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("big.csv");
+    let mut text = String::from(
+        "x,y
+",
+    );
+    for i in 0..1_000_000 {
+        text.push_str(&format!(
+            "{i},{}
+",
+            i % 977
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().row_count(), 1_000_000);
+    // Scroll with the mouse wheel over the cells of the workbook, frame after frame.
+    click(&mut h, "Title Book1 - big");
+    let at = h.get_by_label("Title Book1 - big").rect().center() + egui::vec2(0.0, 120.0);
+    h.event(egui::Event::PointerMoved(at));
+    let frames = 30;
+    let started = std::time::Instant::now();
+    for _ in 0..frames {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, -40.0),
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    // The view really moved: row numbers far below the first screen are drawn.
+    let deepest = h
+        .query_all(By::new().role(egui::accesskit::Role::Label))
+        .filter_map(|n| n.value().and_then(|v| v.parse::<usize>().ok()))
+        .max()
+        .unwrap_or(0);
+    assert!(deepest > 1000, "the grid did not scroll (deepest row shown: {deepest})");
+    let per_frame = started.elapsed().as_secs_f64() * 1000.0 / frames as f64;
+    println!("1,000,000 rows in a window: {per_frame:.1} ms per frame while scrolling");
+    assert!(per_frame < 150.0, "scrolling is too slow: {per_frame:.1} ms per frame");
+}
+
+// ----- menu bars per window type, the Window menu, shortcuts -----------------------------
+
+/// The names of the top-level menus on screen, left to right.
+fn bar_names(h: &Harness<'static, SheafApp>) -> Vec<String> {
+    let mut nodes: Vec<_> = h
+        .query_all(By::new().role(egui::accesskit::Role::Button))
+        .filter(|n| n.rect().min.y < 20.0 && n.rect().min.x < 800.0)
+        .map(|n| (n.rect().min.x, n.accesskit_node().label().unwrap_or_default().to_string()))
+        .collect();
+    nodes.sort_by(|a, b| a.0.total_cmp(&b.0));
+    nodes.into_iter().map(|(_, l)| l).collect()
+}
+
+const WORKBOOK_BAR: [&str; 13] = [
+    "File",
+    "Edit",
+    "View",
+    "Plot",
+    "Column",
+    "Worksheet",
+    "Analysis",
+    "Statistics",
+    "Image",
+    "Tools",
+    "Format",
+    "Window",
+    "Help",
+];
+const GRAPH_BAR: [&str; 11] =
+    ["File", "Edit", "View", "Graph", "Data", "Analysis", "Gadgets", "Tools", "Format", "Window", "Help"];
+const NO_WINDOW_BAR: [&str; 5] = ["File", "View", "Tools", "Window", "Help"];
+
+/// True when the entry is drawn and can be clicked.
+fn entry_enabled(h: &Harness<'static, SheafApp>, text: &str) -> bool {
+    !menu_entry(h, text).accesskit_node().is_disabled()
+}
+
+/// Closes open menus.
+fn close_menus(h: &mut Harness<'static, SheafApp>) {
+    for _ in 0..4 {
+        h.key_press(egui::Key::Escape);
+        settle(h);
+    }
+}
+
+#[test]
+fn activating_a_workbook_and_then_a_graph_swaps_the_menu_bar() {
+    let mut h = start(vec![data_file("bars")]);
+    // The graph was made last and is active.
+    assert_eq!(bar_names(&h), GRAPH_BAR);
+    click(&mut h, "Title Book1 - sample");
+    assert_eq!(bar_names(&h), WORKBOOK_BAR);
+    // The graph's title bar is partly under the workbook: use the Window menu.
+    menu_path(&mut h, &["Window", "2 Graph1 - sample"]);
+    assert_eq!(bar_names(&h), GRAPH_BAR);
+    // Closing every window leaves the short bar.
+    click(&mut h, "Close Graph1 - sample");
+    click(&mut h, "Close Book1 - sample");
+    assert_eq!(bar_names(&h), NO_WINDOW_BAR);
+    // An open window brings its own bar back.
+    click(&mut h, "Book1 - sample");
+    assert_eq!(bar_names(&h), WORKBOOK_BAR);
+}
+
+/// Opens the menus along the path, checks that the last entry is there and can be used, and
+/// closes the menus again.
+fn assert_reachable(h: &mut Harness<'static, SheafApp>, path: &[&str]) {
+    let (last, parents) = path.split_last().unwrap();
+    for text in parents {
+        menu_entry(h, text).click();
+        settle(h);
+    }
+    assert!(entry_enabled(h, last), "{path:?} is greyed");
+    close_menus(h);
+}
+
+#[test]
+fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
+    let mut h = start(vec![data_file("reach-book")]);
+    click(&mut h, "Title Book1 - sample");
+    click_text(&mut h, "C(Y)");
+    let paths: &[&[&str]] = &[
+        &["File", "New", "Project"],
+        &["File", "New", "Worksheet..."],
+        &["File", "Open..."],
+        &["File", "Save Project"],
+        &["File", "Save Project As..."],
+        &["File", "Import", "Single ASCII..."],
+        &["File", "Import", "Multiple ASCII..."],
+        &["File", "Import", "Comma Delimited (CSV)..."],
+        &["File", "Export", "Worksheet as ASCII..."],
+        &["File", "Exit"],
+        &["Edit", "Undo"],
+        &["Edit", "Delete"],
+        &["Plot", "Line", "Line"],
+        &["Plot", "Symbol", "Scatter"],
+        &["Plot", "Line + Symbol", "Line + Symbol"],
+        &["Plot", "User Templates", "Cyclic voltammetry overlay"],
+        &["Column", "Set As", "X"],
+        &["Column", "Set As", "Y"],
+        &["Column", "Set As", "Z"],
+        &["Column", "Set As", "Label"],
+        &["Column", "Set As", "Disregard"],
+        &["Column", "Set As", "Y Error"],
+        &["Column", "Set As", "X Error"],
+        &["Column", "Set Column Values..."],
+        &["Column", "Recalculate"],
+        &["Column", "Add New Columns..."],
+        &["Worksheet", "Sort Worksheet", "Ascending"],
+        &["Worksheet", "Sort Worksheet", "Descending"],
+        &["Worksheet", "Worksheet Query..."],
+        &["Analysis", "Mathematics", "Simple Curve Math..."],
+        &["Analysis", "Mathematics", "Differentiate..."],
+        &["Analysis", "Mathematics", "Integrate..."],
+        &["Analysis", "Mathematics", "Integrate Ranges..."],
+        &["Analysis", "Mathematics", "Interpolate/Extrapolate..."],
+        &["Analysis", "Mathematics", "Normalize Columns..."],
+        &["Analysis", "Data Manipulation", "Subtract Reference Data..."],
+        &["Analysis", "Fitting", "Linear Fit..."],
+        &["Analysis", "Fitting", "Polynomial Fit..."],
+        &["Analysis", "Fitting", "Nonlinear Curve Fit..."],
+        &["Analysis", "Signal Processing", "Smooth..."],
+        &["Analysis", "Peaks and Baseline", "Find Peaks..."],
+        &["Analysis", "Peaks and Baseline", "Subtract Baseline..."],
+        &["Statistics", "Descriptive Statistics", "Statistics on Columns..."],
+        &["Format", "Column..."],
+        &["Window", "Cascade"],
+        &["Window", "Tile Horizontally"],
+        &["Window", "Tile Vertically"],
+        &["Window", "Properties..."],
+        &["Help", "About Sheaf..."],
+    ];
+    for path in paths {
+        assert_reachable(&mut h, path);
+    }
+}
+
+#[test]
+fn every_command_of_a_graph_is_reachable_from_its_origin_menu() {
+    let mut h = start(vec![data_file("reach-graph")]);
+    assert_eq!(bar_names(&h), GRAPH_BAR);
+    let paths: &[&[&str]] = &[
+        &["File", "Export", "Graphs..."],
+        &["File", "Import", "Single ASCII..."],
+        &["Edit", "Undo"],
+        &["Graph", "Legend", "Legend Properties..."],
+        &["Format", "Page Properties..."],
+        &["Format", "Plot Properties..."],
+        &["Format", "Axes", "X Axis..."],
+        &["Format", "Axes", "Y Axis..."],
+        &["Window", "Cascade"],
+        &["Window", "Properties..."],
+        &["Help", "About Sheaf..."],
+    ];
+    for path in paths {
+        assert_reachable(&mut h, path);
+    }
+}
+
+#[test]
+fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
+    let mut h = start(vec![data_file("grey")]);
+    click(&mut h, "Title Book1 - sample");
+    menu_path(&mut h, &["Plot", "Column/Bar/Pie"]);
+    assert!(!entry_enabled(&h, "Stacked Column"), "an item Sheaf lacks is greyed");
+    menu_entry(&h, "Stacked Column").hover();
+    h.run_steps(30);
+    assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
+    close_menus(&mut h);
+    // A greyed item with a shortcut still shows the key.
+    click(&mut h, "File");
+    assert!(!entry_enabled(&h, "Print... Ctrl+P"));
+}
+
+#[test]
+fn a_command_that_needs_a_selection_is_greyed_until_a_column_is_selected() {
+    let mut h = start(vec![data_file("needs")]);
+    click(&mut h, "Title Book1 - sample");
+    click(&mut h, "Column");
+    assert!(!entry_enabled(&h, "Set Column Values... Ctrl+Q"), "no column is selected");
+    close_menus(&mut h);
+    click_text(&mut h, "C(Y)");
+    click(&mut h, "Column");
+    assert!(entry_enabled(&h, "Set Column Values... Ctrl+Q"));
+}
+
+#[test]
+fn window_menu_lists_the_windows_in_order_and_choosing_one_activates_it() {
+    let mut h = start(vec![data_file("windows")]);
+    let (book, graph) = window_ids(&h);
+    assert_eq!(h.state().active, Some(graph));
+    click(&mut h, "Window");
+    // Numbered in project order; the active window (the graph) is the one the tick is drawn at.
+    assert!(h.query_by_label("1 Book1 - sample").is_some());
+    assert!(h.query_by_label("2 Graph1 - sample").is_some());
+    assert_eq!(h.state().menu_context().active, Some(graph));
+    h.get_by_label("1 Book1 - sample").click();
+    settle(&mut h);
+    assert_eq!(h.state().active, Some(book), "choosing a window in the list activates it");
+    assert_eq!(bar_names(&h), WORKBOOK_BAR);
+}
+
+#[test]
+fn cascade_and_tile_arrange_the_windows() {
+    let mut h = start(vec![data_file("tile")]);
+    let rect = |h: &Harness<'static, SheafApp>, title: &str| h.get_by_label(&format!("Title {title}")).rect();
+    menu_path(&mut h, &["Window", "Tile Vertically"]);
+    let (a, b) = (rect(&h, "Book1 - sample"), rect(&h, "Graph1 - sample"));
+    assert!((a.min.y - b.min.y).abs() < 1.0, "side by side: same top");
+    assert!(a.max.x <= b.min.x + 8.0 || b.max.x <= a.min.x + 8.0, "and not on each other: {a:?} {b:?}");
+    menu_path(&mut h, &["Window", "Tile Horizontally"]);
+    let (a, b) = (rect(&h, "Book1 - sample"), rect(&h, "Graph1 - sample"));
+    assert!((a.min.x - b.min.x).abs() < 1.0, "one above the other: same left edge");
+    assert!((a.min.y - b.min.y).abs() > 100.0);
+    menu_path(&mut h, &["Window", "Cascade"]);
+    let (a, b) = (rect(&h, "Book1 - sample"), rect(&h, "Graph1 - sample"));
+    assert!(((b.min - a.min).x - 26.0).abs() < 1.0 && ((b.min - a.min).y - 26.0).abs() < 1.0, "{a:?} {b:?}");
+}
+
+#[test]
+fn origins_keys_run_the_commands_they_belong_to() {
+    let mut h = start(vec![data_file("keys2")]);
+    click(&mut h, "Title Book1 - sample");
+    click_text(&mut h, "C(Y)");
+    // Ctrl+Q is Set Column Values ...
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Q);
+    settle(&mut h);
+    assert!(h.state().set_values.is_some());
+    h.get_all_by_label("Cancel").last().unwrap().click();
+    settle(&mut h);
+    // ... Ctrl+D adds a column ...
+    let columns = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheet().columns.len();
+    let before = columns(&h);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::D);
+    settle(&mut h);
+    assert_eq!(columns(&h), before + 1);
+    // ... and Ctrl+Y is Origin's key for Nonlinear Curve Fit, not redo.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Y);
+    settle(&mut h);
+    assert!(h.state().fit.is_some(), "the fit window opened");
+    assert_eq!(columns(&h), before + 1, "and nothing was redone");
+    // Ctrl+I is no longer Import (Origin has Zoom In there): it does nothing in a workbook.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::I);
+    settle(&mut h);
+    assert!(h.state().import.is_none());
+}
+
+#[test]
+fn alt_and_the_underlined_letter_opens_a_top_level_menu() {
+    let mut h = start(vec![data_file("alt")]);
+    click(&mut h, "Title Book1 - sample");
+    h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::F);
+    settle(&mut h);
+    assert!(h.query_by_label("Save Project Ctrl+S").is_some(), "Alt+F opens File");
+    h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::C);
+    settle(&mut h);
+    assert!(h.query_by_label("Save Project Ctrl+S").is_none());
+    assert!(h.query_by_label_contains("Set Column Values").is_some(), "Alt+C opens Column");
+    // Alt+K is the letter of Worksheet.
+    h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::K);
+    settle(&mut h);
+    assert!(h.query_by_label_contains("Sort Worksheet").is_some());
 }

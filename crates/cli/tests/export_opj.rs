@@ -36,7 +36,7 @@ fn a_data_file_becomes_an_origin_project() {
     let out = dir.join("out.opj");
     let (ok, stdout, stderr) = sheaf(&["export", data.to_str().unwrap(), "-o", out.to_str().unwrap()]);
     assert!(ok, "{stderr}");
-    assert!(stdout.contains("wrote"), "{stdout}");
+    assert!(stdout.contains("saved"), "{stdout}");
     let imp = sheaf_io::opj::read_opj(&out).unwrap();
     assert_eq!(imp.version, "9.3");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);

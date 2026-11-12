@@ -41,7 +41,11 @@ publication figures), P1 is common Origin use, P2 is later.
       `912ba75`, follow-up `b336226`)
 - [ ] A person clicks through the desktop app once (the four desktop-app items above were checked
       with screenshots of every window, not with mouse and keyboard)
-- [ ] Check the CH Instruments importer against real export files from the owner
+- [ ] Check the CH Instruments importer against real export files from the owner (the owner's two
+      real text exports are being checked on branch `chi-text-real` by the second session)
+- [x] Read CH Instruments binary `.bin` files (CV, i-t, chronopotentiometry), detected by content;
+      checked against two runs that have a text export; the owner's six `.bin` files import and plot
+      correctly by eye (`2ca7d26`, `docs/spec/chi-binary-format.md`)
 
 ## Milestone 3: analysis, part 1
 

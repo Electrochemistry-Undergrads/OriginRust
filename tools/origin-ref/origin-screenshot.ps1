@@ -20,6 +20,12 @@
 
 .EXAMPLE
   .\origin-screenshot.ps1 -Setup gui-setup.labtalk.txt -OutDir C:\tmp\shots -Steps 'plain=','file=%f','analysis=%a'
+
+  A step list passed through "powershell -File" with commas arrives as ONE string, so only the
+  first step would run. Use -StepsFile (one "name=keys" step per line) instead; it also lets a
+  step hold commas in mouse positions. The actions of a step are separated by "|": SendKeys
+  text, @L:x,y left click, @R:x,y right click, @D:x,y double click, @M:x,y move, @W:ms wait and
+  @X:text, which runs LabTalk text in Origin (for example @X:win -a Graph1; picks a window).
 #>
 param(
   [string]$Setup = '',
@@ -28,6 +34,7 @@ param(
   [int]$SettleMs = 1500,
   [int]$Width = 1600,
   [int]$Height = 1000,
+  [string]$StepsFile = '',  # one "name=keys" step per line (blank lines and lines starting with # are skipped)
   [switch]$FullScreen   # save the whole primary screen, so dialogs outside the main window show
 )
 $ErrorActionPreference = 'Stop'
@@ -49,16 +56,22 @@ public static class SheafWin {
 }
 "@
 [void][SheafWin]::SetProcessDPIAware()
+# Passing -Steps through "powershell -File" with commas delivers ONE string, so only the first
+# step would be run. -StepsFile avoids that (and lets a step hold commas in mouse positions).
+if ($StepsFile -ne '') {
+  $Steps = @(Get-Content -LiteralPath $StepsFile | Where-Object { $_.Trim() -ne '' -and -not $_.TrimStart().StartsWith('#') })
+}
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $out = (Resolve-Path $OutDir).Path
 
 # A step's keys may hold several actions separated by "|". An action starting with "@" is a mouse
 # action at a screen position x,y (the window is placed at 0,0): @L:x,y left click, @R:x,y right
-# click, @D:x,y double click, @M:x,y only move, @W:ms wait. Anything else is sent as SendKeys.
+# click, @D:x,y double click, @M:x,y only move, @W:ms wait, @X:text runs LabTalk text in Origin. Anything else is sent as SendKeys.
 function Invoke-Action([string]$a) {
   if ($a.StartsWith('@')) {
     $kind = $a.Substring(1, 1)
     $arg = $a.Substring(3)
+    if ($kind -eq 'X') { [void]$origin.Execute($arg); Start-Sleep -Milliseconds 500; return }  # run LabTalk
     if ($kind -eq 'W') { Start-Sleep -Milliseconds ([int]$arg); return }
     $xy = $arg -split ','
     [void][SheafWin]::SetCursorPos([int]$xy[0], [int]$xy[1])

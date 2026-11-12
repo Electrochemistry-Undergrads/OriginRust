@@ -2733,3 +2733,24 @@ fn copy_page_puts_the_graph_on_the_clipboard_at_300_dpi() {
     let got = h.state().copied_page.expect("a picture was copied");
     assert!(got[0].abs_diff(expected[0]) <= 1 && got[1].abs_diff(expected[1]) <= 1, "{got:?} vs {expected:?}");
 }
+
+#[test]
+fn the_data_reader_pins_a_point_and_steps_through_the_rows() {
+    let mut h = start(vec![data_file("reader")]);
+    let at = on(&h, 0, ObjectKind::Plot(0));
+    bar_button!(h, "Tools", "Data Reader").click();
+    settle(&mut h);
+    assert!(graph_ui(&h).reader, "the tool is on");
+    assert!(!bar_button!(h, "Tools", "Pointer").accesskit_node().is_disabled());
+    click_at(&mut h, at + egui::vec2(4.0, 4.0));
+    let p = graph_ui(&h).reader_point.expect("a click pins the nearest point");
+    assert_eq!((p.layer, p.plot), (0, 0));
+    h.event(egui::Event::PointerMoved(at));
+    h.key_press(egui::Key::ArrowRight);
+    settle(&mut h);
+    assert_eq!(graph_ui(&h).reader_point.unwrap().row, p.row + 1, "Right steps to the next row");
+    assert!(graph(&h).layers[0].plots.iter().all(|pl| pl.visible), "the reader changes nothing");
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    assert!(!graph_ui(&h).reader);
+}

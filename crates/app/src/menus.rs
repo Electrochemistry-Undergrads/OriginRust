@@ -106,6 +106,10 @@ pub enum Cmd {
     },
     /// Go to the workbook a plot's data is in.
     GoTo(WindowId),
+    /// The Pointer tool of the Tools toolbar (switches the Data Reader off).
+    Pointer,
+    /// The Data Reader tool of the Tools toolbar.
+    DataReader,
     /// Edit > Copy Page: the graph as a picture on the clipboard.
     CopyPage,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
@@ -180,6 +184,8 @@ pub struct MenuContext<'a> {
     pub panels: [bool; 4],
     /// The active layer of the active graph (0 when there is none).
     pub layer: usize,
+    /// True while the active graph's Data Reader is on (the Tools toolbar shows it pressed).
+    pub reader: bool,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -1644,6 +1650,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SelectPlot { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot }
         }
         Cmd::GoTo(id) => Action::Focus(*id),
+        Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, reader: false },
+        Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, reader: true },
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
@@ -1972,6 +1980,7 @@ mod tests {
             open: None,
             panels: [true; 4],
             layer: 0,
+            reader: false,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

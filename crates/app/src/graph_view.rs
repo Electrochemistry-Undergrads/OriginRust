@@ -18,6 +18,7 @@ use crate::actions::{Action, GraphOp};
 use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
 use crate::menus::{self, MenuContext, WindowKind};
+use crate::reader;
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
 use sheaf_core::{Document, Project, WindowId};
 use sheaf_plot::LayerGeometry;
@@ -56,6 +57,10 @@ pub struct GraphUi {
     pub gadget: Option<Integrator>,
     /// Where the gadget's range was drawn in the last frame.
     pub gadget_rect: Option<Rect>,
+    /// The Data Reader tool is on.
+    pub reader: bool,
+    /// The data point the Data Reader pinned with a click.
+    pub reader_point: Option<reader::Point>,
 }
 
 impl GraphUi {
@@ -205,12 +210,43 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // The Data Reader takes the clicks on the page while it is on.
+    if state.reader {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        let hover =
+            response.hover_pos().and_then(|p| reader::nearest(doc.project(), graph_id, &t.geometry, &to_screen, p));
+        if response.clicked() && hover.is_some() {
+            state.reader_point = hover;
+        }
+        if let Some(p) = state.reader_point
+            && response.hovered()
+        {
+            let step = ui.input(|i| {
+                i.key_pressed(egui::Key::ArrowRight) as isize - i.key_pressed(egui::Key::ArrowLeft) as isize
+            });
+            if step != 0 {
+                state.reader_point = Some(reader::step(doc.project(), graph_id, p, step));
+            }
+        }
+        if let Some(p) = state.reader_point {
+            reader::draw(&painter, doc.project(), graph_id, &t.geometry, &to_screen, p, true);
+        }
+        if let Some(p) = hover.filter(|h| Some(*h) != state.reader_point) {
+            reader::draw(&painter, doc.project(), graph_id, &t.geometry, &to_screen, p, false);
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.reader = false;
+            state.reader_point = None;
+        }
+    }
+
     // Clicks on the page.
     let layer_of = |hit: Hit| match hit {
         Hit::Object { layer, .. } | Hit::Layer(layer) => Some(layer),
         Hit::Page => None,
     };
     if response.clicked()
+        && !state.reader
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
@@ -223,6 +259,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
     if response.double_clicked()
+        && !state.reader
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
@@ -262,7 +299,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             .ok()
             .and_then(|o| o.get(gadget.plot).copied())
             .unwrap_or((0.0, 0.0));
-        let c = graph_context(graph_id, state.active_layer);
+        let c = graph_context(graph_id, state.active_layer, state.reader);
         state.gadget_rect = gadget.show(ui, doc.project(), graph_id, geom, fit, &to_screen, offset, &c, actions);
         state.gadget = Some(gadget);
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -302,7 +339,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
 
     // The right-click menus.
-    let c = graph_context(graph_id, state.active_layer);
+    let c = graph_context(graph_id, state.active_layer, state.reader);
     let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected);
     let target = state.menu_on;
     let mut shown = response.context_menu(|ui| {
@@ -324,7 +361,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 }
 
 /// The menu context of a graph window's own menus.
-fn graph_context(graph_id: WindowId, layer: usize) -> MenuContext<'static> {
+fn graph_context(graph_id: WindowId, layer: usize, reader: bool) -> MenuContext<'static> {
     MenuContext {
         kind: WindowKind::Graph,
         book: None,
@@ -338,6 +375,7 @@ fn graph_context(graph_id: WindowId, layer: usize) -> MenuContext<'static> {
         open: None,
         panels: [true; 4],
         layer,
+        reader,
     }
 }
 

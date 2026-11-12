@@ -25,6 +25,7 @@ mod graph_view;
 mod grid;
 mod menus;
 mod panels;
+mod reader;
 mod theme;
 mod toolbar;
 mod workspace;

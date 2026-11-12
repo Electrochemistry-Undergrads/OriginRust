@@ -741,6 +741,14 @@ impl SheafApp {
             Action::ActivateLayer { graph, layer } => {
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
+            Action::GraphTool { graph, reader } => {
+                let state = self.graphs.entry(graph).or_default();
+                state.reader = reader;
+                state.reader_point = None;
+                if reader {
+                    self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends");
+                }
+            }
             Action::CopyPage(graph) => self.copy_page(graph, ctx),
             Action::StartIntegrate { graph } => self.start_integrate(graph),
             Action::Gadget { graph, op } => self.gadget(graph, op),
@@ -1163,6 +1171,7 @@ impl SheafApp {
             open: self.open_menu.as_deref(),
             panels: self.panels.shown_flags(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
+            reader: graph.and_then(|g| self.graphs.get(&g)).is_some_and(|s| s.reader),
         }
     }
 
@@ -1565,6 +1574,13 @@ impl SheafApp {
                 "focus" => {
                     if let Some(id) = named {
                         self.focus(id);
+                    }
+                }
+                "reader" => {
+                    if let Some(id) = first_graph {
+                        let state = self.graphs.entry(id).or_default();
+                        state.reader = true;
+                        state.reader_point = Some(crate::reader::Point { layer: 0, plot: 0, row: 2 });
                     }
                 }
                 "integrate" => {

@@ -129,7 +129,13 @@ pub fn anova_one_way(groups: &[&[f64]]) -> Result<Anova, AnovaError> {
     let (df_model, df_error) = (k - 1.0, n - k);
     let (ms_model, ms_error) = (ss_model / df_model, ss_error / df_error);
     let f = ms_model / ms_error;
-    let p = FisherSnedecor::new(df_model, df_error).map(|d| 1.0 - d.cdf(f)).unwrap_or(f64::NAN);
+    let p = if f.is_nan() {
+        f64::NAN
+    } else if f.is_infinite() {
+        0.0
+    } else {
+        FisherSnedecor::new(df_model, df_error).map(|d| 1.0 - d.cdf(f)).unwrap_or(f64::NAN)
+    };
     let ss_total = ss_model + ss_error;
     let root_mse = ms_error.sqrt();
     Ok(Anova {
@@ -165,8 +171,8 @@ impl Anova {
                 let (gi, gj) = (&self.groups[i], &self.groups[j]);
                 let diff = gj.mean - gi.mean;
                 let se = (mse * (1.0 / gi.n as f64 + 1.0 / gj.n as f64)).sqrt();
-                let t = diff.abs() / se;
-                let p_lsd = 2.0 * t_dist.cdf(-t);
+                let t = if se == 0.0 { if diff == 0.0 { 0.0 } else { f64::INFINITY } } else { diff.abs() / se };
+                let p_lsd = if t.is_infinite() { 0.0 } else { 2.0 * t_dist.cdf(-t) };
                 let (stat, p, half) = match method {
                     MeansComparison::FisherLsd => (t, p_lsd, t_crit(alpha) * se),
                     MeansComparison::Bonferroni => (t, (m * p_lsd).min(1.0), t_crit(alpha / m) * se),
@@ -182,7 +188,11 @@ impl Anova {
                         let f = t * t / (k as f64 - 1.0);
                         let dist = FisherSnedecor::new(k as f64 - 1.0, dfe).expect("positive degrees of freedom");
                         let crit = dist.inverse_cdf(1.0 - alpha);
-                        (f, 1.0 - dist.cdf(f), ((k as f64 - 1.0) * crit).sqrt() * se)
+                        (
+                            f,
+                            if f.is_infinite() { 0.0 } else { 1.0 - dist.cdf(f) },
+                            ((k as f64 - 1.0) * crit).sqrt() * se,
+                        )
                     }
                 };
                 out.push(Comparison {
@@ -271,6 +281,9 @@ pub fn ptukey(q: f64, k: f64, df: f64) -> f64 {
     if q <= 0.0 {
         return 0.0;
     }
+    if q.is_infinite() {
+        return 1.0;
+    }
     if df > 5000.0 {
         return range_cdf(q, k);
     }
@@ -313,6 +326,28 @@ pub fn qtukey(p: f64, k: f64, df: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn constant_groups_do_not_hang_or_panic() {
+        let (a, b, c) = ([3.0; 3], [4.0; 3], [5.0; 3]);
+        let an = anova_one_way(&[&a, &b, &c]).unwrap();
+        assert_eq!(an.p, 0.0);
+        for m in [
+            MeansComparison::Tukey,
+            MeansComparison::Bonferroni,
+            MeansComparison::Sidak,
+            MeansComparison::FisherLsd,
+            MeansComparison::Scheffe,
+        ] {
+            let r = an.compare(m, 0.05);
+            assert_eq!(r.len(), 3);
+            assert!(r.iter().all(|c| c.significant));
+        }
+        let same = anova_one_way(&[&[3.0; 6], &[3.0; 4]]).unwrap();
+        assert!(same.p.is_nan());
+        let r = same.compare(MeansComparison::Tukey, 0.05);
+        assert!(!r[0].significant);
+    }
+
     use super::*;
 
     #[test]

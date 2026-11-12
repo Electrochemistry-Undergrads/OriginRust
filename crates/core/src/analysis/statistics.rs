@@ -112,7 +112,11 @@ fn ttest(spec: &TTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
             Err(AnalysisError::BadOption(format!("the {what} needs exactly two columns, {} were chosen", inputs.len())))
         }
     };
-    let few = |name: &str| AnalysisError::BadOption(format!("{name} has fewer than two numbers in the chosen rows"));
+    let few = |name: &str| {
+        AnalysisError::BadOption(format!(
+            "{name} has fewer than two numbers in the chosen rows, or no spread and a mean equal to the test value"
+        ))
+    };
     let mut notes = Vec::new();
     let table = match spec.kind {
         TTestKind::OneSample { mean } => {
@@ -191,7 +195,7 @@ fn ttest(spec: &TTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
             }
             .ok_or_else(|| {
                 AnalysisError::BadOption(format!(
-                    "the {name} needs at least two numbers{} in each column",
+                    "the {name} needs at least two numbers{} in each column, and the result must not be 0/0 (identical constant columns)",
                     if matches!(spec.kind, TTestKind::Paired { .. }) { " in rows where both have one" } else { "" }
                 ))
             })?;

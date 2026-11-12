@@ -89,6 +89,9 @@ fn finish(
     }
     let dist = StudentsT::new(0.0, 1.0, df).ok()?;
     let t = (estimate - hypothesized) / se;
+    if t.is_nan() {
+        return None;
+    }
     let p = match tail {
         Tail::Two => 2.0 * dist.cdf(-t.abs()),
         Tail::Upper => dist.cdf(-t),
@@ -195,6 +198,14 @@ mod tests {
         let p = ttest_two(&a, &b, 0.0, Tail::Two, 0.05, true).unwrap();
         let w = ttest_two(&a, &b, 0.0, Tail::Two, 0.05, false).unwrap();
         assert!((p.t - w.t).abs() < 1e-12 && (p.df - w.df).abs() < 1e-12);
+    }
+
+    #[test]
+    fn zero_spread_with_matching_mean_gives_nothing_and_does_not_panic() {
+        assert!(ttest_one(&[3.0; 6], 3.0, Tail::Two, 0.05).is_none());
+        assert!(ttest_two(&[3.0; 6], &[3.0; 6], 0.0, Tail::Two, 0.05, true).is_none());
+        let r = ttest_one(&[3.0; 6], 2.0, Tail::Two, 0.05).unwrap();
+        assert_eq!(r.p, 0.0);
     }
 
     #[test]

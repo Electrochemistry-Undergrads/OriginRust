@@ -19,11 +19,13 @@ These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11
 
 - **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed; CI runs on push.
 - **Milestones 1 to 3 are done** and tagged. Milestone 2 still needs the owner for two checks.
-- **Milestone 4 (fitting)** is on `main`; its review found 11 confirmed problems (the worst: the
-  starting values of the `Gaussian` function were in the wrong order). Workflow
-  `m4-review-fixes` (run `wf_2d162dcb-b82`) fixes 10 of them in worktrees
-  `.claude/worktrees/wf_2d162dcb-b82-{1,2,3}`; the roadmap wording (the 11th) is fixed on `main`.
-  After merging: tag `m4-fitting`.
+- **Milestone 4 (fitting) is done** and tagged `m4-fitting`: its 11 review findings were fixed,
+  reviewed again and merged (`fe407b1`, `0ac9546`, `83a09de`).
+- **CH Instruments binary files**: the owner put six `.bin` files in the repo root (i-t, CV,
+  chronopotentiometry; git-ignored, never commit them). Workflow `chi-binary-reader` (run
+  `wf_5085cfd4-c57`) builds a reader in a worktree, then a review. CH Instruments programs on the
+  Desktop must not be started without the owner's go-ahead (a potentiostat may be connected; their
+  `.ini`/`.cfg` files are the owner's settings).
 - **Milestone 5**: workbooks and basic graphs are read from `.opj` and merged (`d3c3a3f`). Origin's
   text escapes `\f:`, `\p`, `\x`, `\v` are now understood in labels. Known gaps: 34 of 41 graphs of
   the owner's "Integration of Delithiation SF data" project are missed; XRD curves that Origin
@@ -33,12 +35,11 @@ These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11
   (branch with `docs/spec/gui-look.md` and ADR 0007), and a first `.opj` writer for workbooks
   verified in Origin (branch, then review).
 
-All checks pass on `main` at `fdf2c61`.
+All checks pass on `main` at `c64f3f3` (405 tests).
 
 ## Exact next step
 
-1. Merge the three `m4-review-fixes` branches after reading their reviews; full checks; tag
-   `m4-fitting`.
+1. Merge the CH Instruments binary reader after its review; full checks.
 2. Write `docs/spec/feature-parity.md` from the audit; merge the GUI study and the `.opj` writer.
 3. Make `.opj` the default format (with the `.sheaf` copy safeguard), then graph writing.
 4. Rebuild the app shell in Origin's style following ADR 0007, step by step with click tests.
@@ -71,6 +72,11 @@ cargo run -p sheaf-app -- data.csv --show fit:nonlinear --screenshot window.png
 `node re-workspace/scratch/gen_chi.js re-workspace/scratch/cli`.
 
 ## Needs from me (the owner)
+
+0. For the `.bin` reader: export one of the `.bin` files (ideally `CV_after_1stDelith.bin` and one
+   i-t file) as text from the CH Instruments program and put the `.txt` next to it, so the reader
+   can be checked number by number. Or allow me to run a copy of the CH Instruments program myself
+   (only when no experiment is running).
 
 1. **Try the app** (`cargo run --release -p sheaf-app`), import one of your real CH Instruments
    files, try Analysis > Integrate and Analysis > Fit, and tell me what is wrong or missing. Real

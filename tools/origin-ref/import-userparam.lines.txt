@@ -1,0 +1,13 @@
+newbook;
+impasc fname:="%WORK%hdr.txt" options.Hdr.UParamsFrom:=2 options.Hdr.UParamsTo:=2 options.Hdr.Units:=3 options.Hdr.CommsFrom:=4 options.Hdr.CommsTo:=4;
+$wks.userParam1$
+$wks.userParam2$
+$wks.userParam3$
+$col(1)[UserParameter0]$
+$col(2)[UserParameter0]$
+$col(3)[UserParameter0]$
+$wks.col2.UserParameter0$
+$wks.col1.UserParameter0$
+$col(2)[Wavelength]$
+$col(2)[Wavelength]$
+$wks.col2.Wavelength$

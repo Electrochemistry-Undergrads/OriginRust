@@ -591,3 +591,29 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
     assert_eq!(col.cell_text(0), NumberFormat::Date(DatePattern::Iso).format(col.numeric().unwrap()[0]));
     assert_eq!(col.cell_text(0), "2026-11-11");
 }
+
+#[test]
+fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_separators() {
+    let mut h = start(vec![data_file("modes")]);
+    click(&mut h, "Book1 - sample");
+    // A second file, tab separated, with thousands separators in the first column.
+    let more = data_file("modes").with_file_name("more.txt");
+    std::fs::write(&more, "w\tz\n1,000.5\t1\n2,000.5\t2\n3,000.5\t3\n4,000.5\t4\n").unwrap();
+    h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(more), ..Default::default() });
+    settle(&mut h);
+    assert!(h.state().import.is_some());
+    // The window found the separator by itself and says so.
+    assert!(h.query_by_label_contains("found: comma").is_some());
+    // Put the data into the active sheet as new columns.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New book")).click();
+    settle(&mut h);
+    click(&mut h, "New columns");
+    click(&mut h, "Import");
+    assert!(h.state().import.is_none());
+    assert_eq!(project(&h).workbooks().count(), 1, "no new book was made");
+    let book = project(&h).workbooks().next().unwrap();
+    assert_eq!(book.sheet().columns.len(), 5);
+    assert_eq!(column(&h, "D"), [1000.5, 2000.5, 3000.5, 4000.5]);
+    assert_eq!(column(&h, "E"), [1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5], "the first file's columns are untouched");
+}

@@ -17,6 +17,7 @@ use egui_dock::{DockArea, DockState, TabViewer};
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
+use sheaf_io::batch::{ImportMode, Target, place_workbook};
 use sheaf_io::project_file;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -159,7 +160,7 @@ impl SheafApp {
                 Err(e) => errors.push(e.to_string()),
             }
         }
-        self.finish_import(items, errors, true, None);
+        self.finish_import(items, errors, true, None, ImportMode::NewBook);
     }
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
@@ -276,6 +277,7 @@ impl SheafApp {
         errors: Vec<String>,
         plot: bool,
         template: Option<Template>,
+        mode: ImportMode,
     ) {
         let count = items.len();
         let mut notes: Vec<String> = errors;
@@ -284,20 +286,29 @@ impl SheafApp {
                 notes.push(format!("{}: {w}", i.workbook.long_name));
             }
         }
+        // The modes other than "New book" put every file into the sheet that was active when the
+        // import started. Only the first file may replace its data; the others become new sheets.
+        let target = self.import_target().map(|t| t.0);
         if count > 0 {
-            self.doc.apply("Import data", move |p| {
-                for imported in items {
+            let placement_notes = self.doc.apply("Import data", move |p| {
+                let mut placement_notes = Vec::new();
+                for (n, imported) in items.into_iter().enumerate() {
                     let t = template.unwrap_or(imported.suggested_template);
-                    let book = p.adopt_workbook(imported.workbook);
+                    let this_mode = if n > 0 && mode == ImportMode::ReplaceSheet { ImportMode::NewSheet } else { mode };
+                    let placed = place_workbook(p, imported.workbook, this_mode, target);
+                    placement_notes.extend(placed.warnings);
+                    let book = placed.book;
                     if plot {
-                        let sheet = p.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+                        let sheet = placed.sheet;
                         let ys = p.default_plot_columns(book, sheet, t);
                         if !ys.is_empty() {
                             let _ = p.plot_columns(t, &ys);
                         }
                     }
                 }
+                placement_notes
             });
+            notes.extend(placement_notes);
             self.status = format!("Imported {count} file(s)");
         }
         if !notes.is_empty() {
@@ -916,14 +927,24 @@ impl SheafApp {
         });
     }
 
+    /// The sheet that data is imported into when the import window is not set to "New book": the
+    /// active sheet of the active workbook, with a label for the window.
+    fn import_target(&self) -> Option<(Target, String)> {
+        let id = self.active?;
+        let book = self.doc.project().workbook(id)?;
+        let sheet = book.active_sheet.min(book.sheets.len().checked_sub(1)?);
+        Some((Target { book: id, sheet }, format!("{} / {}", book.name, book.sheets[sheet].name)))
+    }
+
     fn dialogs(&mut self, ctx: &egui::Context) {
+        let import_target = self.import_target();
         if let Some(d) = &mut self.import {
-            match d.show(ctx) {
+            match d.show(ctx, import_target.as_ref().map(|t| t.1.as_str())) {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import = None,
-                ImportOutcome::Done { items, errors, plot, template } => {
+                ImportOutcome::Done { items, errors, plot, template, mode } => {
                     self.import = None;
-                    self.finish_import(items, errors, plot, template);
+                    self.finish_import(items, errors, plot, template, mode);
                 }
             }
         }

@@ -21,6 +21,31 @@ pub(crate) fn decode_cp1252(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// The Windows-1252 byte of a character, or `None` when the code page has no such character.
+pub(crate) fn encode_cp1252_char(c: char) -> Option<u8> {
+    match u32::from(c) {
+        n @ (0x00..=0x7F | 0xA0..=0xFF) => Some(n as u8),
+        // The bytes 0x80..=0x9F: the table gives the character each one decodes to, which also
+        // covers the five bytes the code page leaves undefined (they decode to a control character).
+        _ => CP1252_HIGH.iter().position(|&h| h == c).map(|i| 0x80 + i as u8),
+    }
+}
+
+/// Encodes text as Windows-1252. The flag is true when a character had no byte and was replaced by `?`.
+pub(crate) fn encode_cp1252(text: &str) -> (Vec<u8>, bool) {
+    let mut lossy = false;
+    let bytes = text
+        .chars()
+        .map(|c| {
+            encode_cp1252_char(c).unwrap_or_else(|| {
+                lossy = true;
+                b'?'
+            })
+        })
+        .collect();
+    (bytes, lossy)
+}
+
 /// The bytes before the first NUL (or all of them).
 pub(crate) fn c_bytes(bytes: &[u8]) -> &[u8] {
     match bytes.iter().position(|&b| b == 0) {
@@ -72,6 +97,21 @@ mod tests {
         assert_eq!(decode_cp1252(&[0xB0, b'C']), "\u{b0}C");
         assert_eq!(decode_cp1252(&[0x80, 0x93, 0x94, 0xE9]), "\u{20AC}\u{201C}\u{201D}\u{e9}");
         assert_eq!(decode_cp1252(&[0x81]), "\u{81}");
+    }
+
+    #[test]
+    fn cp1252_encoding_is_the_inverse_of_decoding_and_marks_what_does_not_fit() {
+        for b in 0..=255u8 {
+            let c = decode_cp1252(&[b]).chars().next().unwrap();
+            assert_eq!(encode_cp1252_char(c), Some(b), "byte {b:#04x}");
+        }
+        assert_eq!(
+            encode_cp1252("5\u{b0}C \u{b5}m caf\u{e9}"),
+            (vec![b'5', 0xB0, b'C', b' ', 0xB5, b'm', b' ', b'c', b'a', b'f', 0xE9], false)
+        );
+        assert_eq!(encode_cp1252("\u{20AC}"), (vec![0x80], false));
+        assert_eq!(encode_cp1252("a\u{394}b"), (b"a?b".to_vec(), true));
+        assert_eq!(encode_cp1252("\u{1F600}"), (b"?".to_vec(), true));
     }
 
     #[test]

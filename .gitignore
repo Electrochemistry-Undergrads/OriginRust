@@ -27,6 +27,8 @@ re-workspace/
 # Text exports the owner drops into the repo root (CH Instruments and others): never commit
 /*.txt
 /*.csv
+# The one project file that our own writer made (never written by Origin); see docs/spec/opj-format.md, section 13
+!crates/io/tests/fixtures/sheaf-written.opj
 
 # Secrets, logs, machine-specific files
 .env

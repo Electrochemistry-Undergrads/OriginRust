@@ -48,8 +48,18 @@ fitted curve and the residuals, and adds the fitted curve to the graph of the da
    app and no graph shows the data, the app makes one (data as symbols, fit as a line). The
    command-line program does the same when it is asked for an image (`--plot out.png`).
 6. **Undo.** Each fit is one undo step named "Fit". On error nothing changes.
-7. **The command-line program** prints the report as text tables (parameters, statistics,
-   ANOVA) and can export the sheets like other analysis results.
+7. **Bands (added later).** A request may ask for confidence and/or prediction bands at a
+   level of its own (default 95 %, separate from the level of the parameter limits). The band
+   limits are extra Y columns of the `FitCurveN` sheet after the curve, in the order lower and
+   upper confidence limit, lower and upper prediction limit, and by default also dashed
+   (confidence) or dotted (prediction) line plots in the graphs that receive the curve. The
+   engine hands the project a function that evaluates the bands at the curve's x values, so the
+   core stays independent of how an engine gets them (see `docs/spec/fitting-bands.md`). An
+   engine without bands makes a band request an error.
+8. **Iteration controls (added later).** `max_iterations` (400) and `tolerance` (1e-9) belong to
+   the request and are passed to the nonlinear engine; closed-form fits ignore them.
+9. **The command-line program** prints the report as text tables (parameters, statistics,
+   ANOVA), lists the bands written, and can export the sheets like other analysis results.
 
 ## Reasons
 

@@ -41,7 +41,11 @@ publication figures), P1 is common Origin use, P2 is later.
       `912ba75`, follow-up `b336226`)
 - [ ] A person clicks through the desktop app once (the four desktop-app items above were checked
       with screenshots of every window, not with mouse and keyboard)
-- [ ] Check the CH Instruments importer against real export files from the owner
+- [ ] Check the CH Instruments importer against real export files from the owner (the owner's two
+      real text exports are being checked on branch `chi-text-real` by the second session)
+- [x] Read CH Instruments binary `.bin` files (CV, i-t, chronopotentiometry), detected by content;
+      checked against two runs that have a text export; the owner's six `.bin` files import and plot
+      correctly by eye (`2ca7d26`, `docs/spec/chi-binary-format.md`)
 
 ## Milestone 3: analysis, part 1
 
@@ -101,21 +105,42 @@ The owner asked for three things: the desktop app should look and work like Orig
 carry over; Sheaf should have all of Origin's features (checked, not assumed); and `.opj` should be
 the default project format.
 
-- [ ] Feature parity audit: every feature, menu item, toolbar button, dialog and shortcut of Origin
+- [x] Feature parity audit: every feature, menu item, toolbar button, dialog and shortcut of Origin
       2016 compared with Sheaf's code; result in `docs/spec/feature-parity.md` with the order of
-      work
-- [ ] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
-      design record `docs/adr/0007-origin-style-workspace.md`
-- [ ] Origin-style workspace: child windows inside the main window instead of tabs, Project
-      Explorer, menus that follow the active window type with Origin's names and order, toolbars
-      and the Tools bar (our own icons), right-click menus and double-click actions as in Origin
-- [ ] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
-      verified by opening the files in Origin 2016 and comparing every cell
+      work (231 rows: 34 done, 91 partial, 106 missing; of the 103 P0 rows 28 done, 61 partial,
+      14 missing; judged from code, nothing was run)
+- [x] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
+      design record `docs/adr/0007-origin-style-workspace.md` (accepted; 13-step plan)
+- [ ] Origin-style workspace (ADR 0007): done: theme, child windows in a grey workspace instead of
+      tabs, Window menu (Cascade, Tile), menu bars per window type with Origin's names, order,
+      Alt letters and shortcuts (Ctrl+K import, Ctrl+Q set values, Ctrl+Y fit; redo moved to
+      Ctrl+Shift+Z because Origin has none), commands Sheaf lacks shown greyed. To do: workbook
+      look, toolbars, Project Explorer and panels, graph-window mouse actions, dialogs in Origin's
+      layout, window positions saved in the project
+- [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
+      verified by opening the files in Origin 2016 and comparing every cell (`sheaf export ... -o
+      x.opj`; seven test projects up to 100000 rows opened in Origin with no difference)
 - [ ] Write `.opj`: graphs
-- [ ] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
-      everything a project holds (graphs at first), saving also writes a `.sheaf` copy next to the
-      `.opj` and says what only the copy holds; the copy is dropped once nothing would be lost
-- [ ] Close the gaps from the parity audit in its order of work
+- [x] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
+      everything a project holds (graphs at first), saving also writes a `<name>.opj.sheaf`
+      companion and says what only it holds; opening the `.opj` uses the companion when it is at
+      least as new; saving over an Origin-made `.opj` keeps a `.opj.bak` first (ADR 0008)
+- [ ] Close the gaps from the parity audit in its order of work. Done so far (each built by an
+      agent, reviewed by another, fixed, merged on 2026-11-12):
+  - [x] Subtract Reference Data and Simple Math (+ - * / power with a constant or a reference
+        curve), matching Origin's subtract_ref and mathtool to 1e-10
+  - [x] Integrating several ranges at once into one table (area, peak, width per range)
+  - [x] Date and time columns: Origin's date numbers, detection in CSV import, display formats,
+        date axis labels
+  - [x] Column formulas that recalculate (Set Column Values None, Auto, Manual), inside one undo
+        step, cycles refused
+  - [x] Fit confidence and prediction bands (closed form of Origin's straight-line bands checked
+        with numbers from Origin), maximum iterations and tolerance, 27 more starting values
+  - [x] Import: thousands separators, parameter rows, data blocks as sheets, import modes (new
+        book, sheet, columns, rows), batch import of folders and patterns (`sheaf import`)
+  - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,
+        multi-peak Gauss or Lorentz fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
+        limit rules and the multi-peak fit are not yet compared with Origin's Peak Analyzer
 
 ## Milestone 6: breadth
 

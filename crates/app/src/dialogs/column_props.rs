@@ -134,18 +134,51 @@ impl ColumnPropsDialog {
 }
 
 fn format_ui(ui: &mut egui::Ui, format: &mut NumberFormat) {
+    use sheaf_core::datetime::{DatePattern, TimePattern};
     let (mut kind, digits) = match *format {
         NumberFormat::General => (0, 3),
         NumberFormat::Decimal(d) => (1, d),
         NumberFormat::Scientific(d) => (2, d),
         NumberFormat::Significant(d) => (3, d),
+        NumberFormat::Date(_) => (4, 0),
+        NumberFormat::Time(_) => (5, 0),
+        NumberFormat::DateTime(..) => (6, 0),
     };
-    let names = ["Automatic", "Decimal places", "Scientific", "Significant digits"];
+    let names = ["Automatic", "Decimal places", "Scientific", "Significant digits", "Date", "Time", "Date and time"];
     egui::ComboBox::from_id_salt("column_format").selected_text(names[kind]).show_ui(ui, |ui| {
         for (i, n) in names.iter().enumerate() {
             ui.selectable_value(&mut kind, i, *n);
         }
     });
+    if kind >= 4 {
+        // The patterns of the current format, or the defaults when the kind has just been chosen.
+        let (mut date, mut time) = match *format {
+            NumberFormat::Date(d) => (d, TimePattern::Hms),
+            NumberFormat::Time(t) => (DatePattern::Iso, t),
+            NumberFormat::DateTime(d, t) => (d, t),
+            _ => (DatePattern::Iso, TimePattern::Hms),
+        };
+        if kind != 5 {
+            egui::ComboBox::from_id_salt("column_date_pattern").selected_text(date.label()).show_ui(ui, |ui| {
+                for p in DatePattern::ALL {
+                    ui.selectable_value(&mut date, p, p.label());
+                }
+            });
+        }
+        if kind != 4 {
+            egui::ComboBox::from_id_salt("column_time_pattern").selected_text(time.label()).show_ui(ui, |ui| {
+                for p in TimePattern::ALL {
+                    ui.selectable_value(&mut time, p, p.label());
+                }
+            });
+        }
+        *format = match kind {
+            4 => NumberFormat::Date(date),
+            5 => NumberFormat::Time(time),
+            _ => NumberFormat::DateTime(date, time),
+        };
+        return;
+    }
     let mut d = digits;
     if kind != 0 {
         ui.add(DragValue::new(&mut d).range(0..=15));

@@ -4,7 +4,8 @@
 use eframe::egui::{self, Color32, DragValue, RichText};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::template::Template;
-use sheaf_io::ascii::{AsciiOptions, Delimiter};
+use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands};
+use sheaf_io::batch::ImportMode;
 use sheaf_io::chi::ChiOptions;
 use sheaf_io::{ImportKind, Imported};
 use std::io::Read;
@@ -28,6 +29,10 @@ pub struct ImportDialog {
     plot: bool,
     /// The graph template; `None` uses what the importer suggests for each file.
     template: Option<Template>,
+    /// Where the data goes: a new book, or into the sheet that is active in the project.
+    mode: ImportMode,
+    /// Name of the active sheet (book and sheet), when there is one to put data into.
+    target: Option<String>,
     preview: Option<Result<Imported, String>>,
     /// What detection found for the file and options it was computed for, so that it is not
     /// repeated every frame.
@@ -73,6 +78,7 @@ pub enum ImportOutcome {
         errors: Vec<String>,
         plot: bool,
         template: Option<Template>,
+        mode: ImportMode,
     },
 }
 
@@ -86,6 +92,8 @@ impl ImportDialog {
             ascii: AsciiOptions::default(),
             other_delimiter: "|".to_string(),
             plot: true,
+            mode: ImportMode::NewBook,
+            target: None,
             template: None,
             preview: None,
             detection: None,
@@ -97,7 +105,11 @@ impl ImportDialog {
         sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii).map_err(|e| e.to_string())
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) -> ImportOutcome {
+    pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {
+        self.target = target.map(str::to_string);
+        if self.target.is_none() {
+            self.mode = ImportMode::NewBook;
+        }
         if self.files.is_empty() {
             return ImportOutcome::Cancelled;
         }
@@ -161,7 +173,7 @@ impl ImportDialog {
                 Err(e) => errors.push(e),
             }
         }
-        ImportOutcome::Done { items, errors, plot: self.plot, template: self.template }
+        ImportOutcome::Done { items, errors, plot: self.plot, template: self.template, mode: self.mode }
     }
 
     fn files_ui(&mut self, ui: &mut egui::Ui) {
@@ -298,8 +310,44 @@ impl ImportDialog {
             ui.label("Numbers");
             ui.checkbox(&mut o.decimal_comma, "Comma as decimal separator");
             ui.end_row();
+            ui.label("Thousands separator");
+            ui.horizontal(|ui| {
+                let name = |t: Thousands| match t {
+                    Thousands::Auto => "Detect",
+                    Thousands::Off => "None",
+                    Thousands::Comma => "Comma (1,234.5)",
+                    Thousands::Dot => "Dot (1.234,5)",
+                    Thousands::Space => "Space (1 234,5)",
+                    Thousands::Apostrophe => "Apostrophe (1'234.5)",
+                };
+                egui::ComboBox::from_id_salt("ascii_thousands").selected_text(name(o.thousands)).show_ui(ui, |ui| {
+                    for t in [
+                        Thousands::Auto,
+                        Thousands::Off,
+                        Thousands::Comma,
+                        Thousands::Dot,
+                        Thousands::Space,
+                        Thousands::Apostrophe,
+                    ] {
+                        ui.selectable_value(&mut o.thousands, t, name(t));
+                    }
+                });
+                if let (Thousands::Auto, Some(d)) = (o.thousands, &detected)
+                    && d.thousands != Thousands::Off
+                {
+                    ui.weak(format!("found: {}", name(d.thousands).to_lowercase()));
+                }
+            });
+            ui.end_row();
             ui.label("Columns");
             ui.checkbox(&mut o.first_column_x, "The first column is X");
+            ui.end_row();
+            ui.label("Dates and times");
+            let mut as_text = o.dates == sheaf_io::ascii::DateImport::AsText;
+            if ui.checkbox(&mut as_text, "Keep as text").changed() {
+                o.dates =
+                    if as_text { sheaf_io::ascii::DateImport::AsText } else { sheaf_io::ascii::DateImport::Detect };
+            }
             ui.end_row();
             ui.label("Skip data rows");
             ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
@@ -309,6 +357,26 @@ impl ImportDialog {
 
     fn after_ui(&mut self, ui: &mut egui::Ui) {
         ui.label(RichText::new("After the import").strong());
+        ui.horizontal(|ui| {
+            ui.label("Put the data in");
+            egui::ComboBox::from_id_salt("import_mode").selected_text(self.mode.label()).show_ui(ui, |ui| {
+                for m in ImportMode::ALL {
+                    let usable = m == ImportMode::NewBook || self.target.is_some();
+                    ui.add_enabled_ui(usable, |ui| {
+                        ui.selectable_value(&mut self.mode, m, m.label());
+                    });
+                }
+            });
+        });
+        match (&self.target, self.mode) {
+            (Some(t), m) if m != ImportMode::NewBook => {
+                ui.weak(format!("Active sheet: {t}"));
+            }
+            (None, _) => {
+                ui.weak("Open or select a workbook to add to its sheets.");
+            }
+            _ => {}
+        }
         ui.checkbox(&mut self.plot, "Make a graph of each file");
         ui.add_enabled_ui(self.plot, |ui| {
             ui.horizontal(|ui| {

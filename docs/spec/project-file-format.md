@@ -20,6 +20,15 @@ Every column has exactly one data member; an empty numeric column has a zero-len
 Members are stored with DEFLATE compression. `manifest.json` is the first member so that a reader
 can check the format without reading the rest.
 
+## Companion file of an `.opj` (optional manifest key)
+
+`manifest.json` may carry `"companion": true`. Sheaf sets it only on the file it writes as
+`<name>.opj.sheaf` beside an Origin project `<name>.opj` that could not hold the whole project
+(see `docs/adr/0008-opj-default-with-companion.md`). A reader that does not know the key ignores it,
+so the format version stays 1. The key tells Sheaf that it wrote the file itself: only such a file
+is opened in place of the `.opj`, and only such a file is deleted when a later save to the `.opj`
+loses nothing. A project the user saved as `<name>.sheaf` never has the key and is never deleted.
+
 ## Reading rules
 
 1. Read `manifest.json`. If `format` is not `sheaf-project`, the file is not a project. If `version`

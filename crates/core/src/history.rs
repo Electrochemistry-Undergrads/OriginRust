@@ -76,6 +76,9 @@ impl Document {
         let before = self.project.clone();
         match change(&mut self.project) {
             Ok(value) => {
+                // Recalculating columns follow their inputs inside the same undo step, so Undo
+                // restores the source and everything computed from it together.
+                self.project.recalculate_since(&before);
                 if self.project != before {
                     let merge = token != 0 && self.undo.last().is_some_and(|s| s.merge_token == token);
                     if !merge {

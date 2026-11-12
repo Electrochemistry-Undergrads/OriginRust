@@ -231,3 +231,170 @@ fn mistakes_give_a_message_and_a_failure_code() {
         assert!(stderr.contains(expect), "{args:?}: expected '{expect}' in: {stderr}");
     }
 }
+
+#[test]
+fn integrate_ranges_prints_one_row_per_interval_and_column() {
+    let dir = scratch("ranges");
+    let data = data_file(&dir);
+    let export = dir.join("ranges.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "integrate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--ranges",
+        "0:4,4:10",
+        "--row-ranges",
+        "1:3",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(lines[0].contains("Absolute area") && lines[0].contains("Peak X"), "{}", lines[0]);
+    assert!(lines[1].contains("range 1") && lines[2].contains("range 2") && lines[3].contains("range 3"), "{stdout}");
+    // y = t: the areas under 0..4, 4..10 and rows 1..3 (t = 0..2) are 8, 42 and 2. In the
+    // exported sheet the label comes first, then First row, Last row, X start, X end, Area (counted here from the right, after a units row).
+    let exported = std::fs::read_to_string(&export).unwrap();
+    let areas: Vec<&str> = exported.lines().skip(2).map(|l| l.rsplit(',').nth(4).unwrap()).collect();
+    assert_eq!(areas, ["8", "42", "2"], "{exported}");
+}
+
+#[test]
+fn subtract_ref_and_math_use_a_reference_from_another_file() {
+    let dir = scratch("math");
+    let data = data_file(&dir);
+    // reference: x = 2, 4, 6 and y = x / 2
+    let blank = dir.join("blank.csv");
+    std::fs::write(&blank, "t,ref\ns,A\n2,1\n4,2\n6,3\n").unwrap();
+    let export = dir.join("sub.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "subtract-ref",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--ref",
+        "ref",
+        "--ref-file",
+        blank.to_str().unwrap(),
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Subtract reference"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&export).unwrap().lines().skip(2).map(str::to_string).collect();
+    // t, flat, ramp, then the new column behind its source: ramp minus the reference (x / 2)
+    assert_eq!(rows[0], "0,2,0,0");
+    assert_eq!(rows[10], "10,2,10,5");
+    // Common range only: a new sheet with t = 2..6.
+    let out = dir.join("common.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "math",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--op",
+        "divide",
+        "--ref",
+        "ref",
+        "--ref-file",
+        blank.to_str().unwrap(),
+        "--common",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let body: Vec<&str> = text.lines().skip(2).collect();
+    assert_eq!(body.len(), 5, "{text}");
+    assert!(body.iter().all(|l| l.ends_with(",2")), "{text}");
+    // A constant, with a negative value.
+    let (ok, stdout, stderr) = sheaf(&["analyze", "math", data.to_str().unwrap(), "--y", "ramp", "--value", "-3"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Curve math"), "{stdout}");
+}
+
+#[test]
+fn curve_math_and_range_mistakes_are_explained() {
+    let dir = scratch("math-errors");
+    let data = data_file(&dir);
+    let d = data.to_str().unwrap();
+    for (args, expect) in [
+        (vec!["analyze", "math", d], "--value NUMBER or --ref COLUMN"),
+        (vec!["analyze", "subtract-ref", d, "--value", "1"], "--ref COLUMN"),
+        (vec!["analyze", "math", d, "--op", "divide", "--value", "0"], "divide by 0"),
+        (vec!["analyze", "math", d, "--ref", "nope"], "'nope' was not found"),
+        (vec!["analyze", "integrate", d, "--ranges", "1-4"], "not a valid X range"),
+        (vec!["analyze", "integrate", d, "--ranges", "1:4", "--absolute"], "do not apply"),
+    ] {
+        let (ok, _, stderr) = sheaf(&args);
+        assert!(!ok, "{args:?} should fail");
+        assert!(stderr.contains(expect), "{args:?}: expected '{expect}' in: {stderr}");
+    }
+}
+
+#[test]
+fn info_shows_a_date_time_column_and_the_option_keeps_text() {
+    let dir = scratch("dates");
+    let path = dir.join("icp.csv");
+    std::fs::write(&path, "Time,Cu\n2026-11-11 13:45:10,1.25\n2026-11-11 13:47:42,12.5\n2026-11-11 13:50:15,24.9\n")
+        .unwrap();
+    let (ok, stdout, stderr) = sheaf(&["info", path.to_str().unwrap()]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains(" date ") && stdout.contains("<2026-11-11 13:45:10 to 2026-11-11 13:50:15>"), "{stdout}");
+    let (ok, stdout, _) = sheaf(&["info", path.to_str().unwrap(), "--dates-as-text"]);
+    assert!(ok);
+    assert!(stdout.contains(" text") && !stdout.contains(" date "), "{stdout}");
+}
+
+/// Two Gauss peaks (centres 6 and 13) on a sloped baseline, one X and one Y column.
+fn peak_file(dir: &Path) -> PathBuf {
+    let mut text = String::from("t,i\ns,A\n");
+    for k in 0..400 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, s: f64, h: f64| h * (-(x - c) * (x - c) / (2.0 * s * s)).exp();
+        text.push_str(&format!("{x},{}\n", 0.1 + 0.01 * x + g(6.0, 0.4, 1.0) + g(13.0, 0.5, 0.6)));
+    }
+    let path = dir.join("peaks.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn peaks_chain_integrates_and_fits_every_peak() {
+    let dir = scratch("peakchain");
+    let data = peak_file(&dir);
+    let export = dir.join("result.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--baseline",
+        "minima",
+        "--baseline-points",
+        "4",
+        "--min-height",
+        "0.3",
+        "--integrate",
+        "--fit",
+        "gauss",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Area (C)") && stdout.contains("Fit center"), "{stdout}");
+    assert!(stdout.contains("Peak 1 of") && stdout.contains("Peak 2 of"), "{stdout}");
+    assert!(stdout.contains("Gauss fit of 2 peaks") && stdout.contains("PeakAnalysis1"), "{stdout}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(exported.lines().next().unwrap().contains("Area"), "{exported}");
+
+    // Without any chain option the plain peak finder runs, as before.
+    let (ok, stdout, _) = sheaf(&["analyze", "peaks", data.to_str().unwrap()]);
+    assert!(ok && stdout.contains("Peaks1") && !stdout.contains("Area"), "{stdout}");
+
+    let (ok, _, stderr) = sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline", "anchors"]);
+    assert!(!ok && stderr.contains("--anchors"), "{stderr}");
+}

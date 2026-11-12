@@ -1,14 +1,16 @@
 //! `sheaf fit`: fit a model to worksheet columns without a window and print Origin-style tables.
 
 use crate::analyze::{parse_pair, short_number};
-use crate::args::{FitArgs, WeightKind};
+use crate::args::{BandKind, FitArgs, WeightKind};
 use crate::commands::{
     is_project, load_project, named_columns, pick_book, pick_sheet, read_data_file, save_project, write_sheet,
 };
 use anyhow::{Context, Result, anyhow, bail};
 use sheaf_core::Project;
 use sheaf_core::analysis::RowRange;
-use sheaf_core::fitting::{FitModel, FitOutcome, FitRequest, FitWeighting, ParamSetting, builtin_functions};
+use sheaf_core::fitting::{
+    BandChoice, FitModel, FitOutcome, FitRequest, FitWeighting, ParamSetting, builtin_functions,
+};
 
 /// Reads `--model`: `linear`, `poly:N` or a built-in function name.
 fn model_from(text: &str) -> Result<FitModel> {
@@ -189,6 +191,14 @@ fn print_outcome(o: &FitOutcome) {
         rows.push(vec!["Corrected Total".into(), a.total_df.to_string(), short_number(a.total_ss)]);
         print_columns(&rows);
     }
+    if !o.band_columns.is_empty() {
+        let level = o.bands.as_ref().map_or(f64::NAN, |b| b.level * 100.0);
+        println!();
+        println!("Bands at {}% confidence level, written to the curve sheet:", short_number(level));
+        for b in &o.band_columns {
+            println!("  {}", b.what);
+        }
+    }
     for w in &r.warnings {
         eprintln!("warning: {w}");
     }
@@ -205,6 +215,21 @@ pub fn fit(a: FitArgs) -> Result<()> {
     if !(a.confidence > 0.0 && a.confidence < 1.0) {
         bail!("--confidence must be between 0 and 1, for example 0.95");
     }
+    if !(a.level > 0.0 && a.level < 100.0) {
+        bail!("--level is a percentage between 0 and 100, for example --level 95");
+    }
+    if a.max_iterations == 0 {
+        bail!("--max-iterations must be at least 1");
+    }
+    if !(a.tolerance > 0.0 && a.tolerance.is_finite()) {
+        bail!("--tolerance must be a positive number, for example 1e-9");
+    }
+    let bands = match a.bands {
+        BandKind::None => BandChoice::None,
+        BandKind::Confidence => BandChoice::Confidence,
+        BandKind::Prediction => BandChoice::Prediction,
+        BandKind::Both => BandChoice::Both,
+    };
     let model = match (&a.formula, &a.fdf) {
         (Some(f), _) => {
             FitModel::Formula { formula: f.clone(), params: a.params.iter().map(|p| p.trim().to_string()).collect() }
@@ -280,6 +305,10 @@ pub fn fit(a: FitArgs) -> Result<()> {
         request.weighting = weighting;
         request.y_error = errors.get(i).or(errors.first()).copied();
         request.confidence_level = a.confidence;
+        request.bands = bands;
+        request.band_level = a.level / 100.0;
+        request.max_iterations = a.max_iterations;
+        request.tolerance = a.tolerance;
         let outcome = project.fit(&request)?;
         print_outcome(&outcome);
         if first.is_none() {

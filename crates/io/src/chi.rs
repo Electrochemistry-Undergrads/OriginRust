@@ -14,7 +14,9 @@ use sheaf_core::{Column, ColumnData, ColumnId, Designation, WindowId, Workbook, 
 use std::ops::Range;
 
 /// Number of leading lines searched for the column header line.
-const HEADER_SEARCH_LINES: usize = 200;
+/// A CV with many segments lists its peaks segment by segment before the column header (a real
+/// export has the header at line 6906), so the window is large.
+const HEADER_SEARCH_LINES: usize = 100_000;
 /// A current that stays at one value for this many rows is reported as clipped.
 const CLIP_MIN_ROWS: usize = 20;
 /// Relative tolerance for "the same value" when looking for clipping.
@@ -81,23 +83,30 @@ pub struct ChiImport {
 
 /// One column of a column-header line: `Potential/V` is ("Potential", "V").
 #[derive(Clone, Debug, PartialEq)]
-struct HeaderCol {
-    long: String,
-    unit: String,
+pub(crate) struct HeaderCol {
+    pub(crate) long: String,
+    pub(crate) unit: String,
+}
+
+impl HeaderCol {
+    pub(crate) fn new(long: &str, unit: &str) -> Self {
+        HeaderCol { long: long.to_string(), unit: unit.to_string() }
+    }
 }
 
 #[derive(Debug)]
-struct Block {
-    header: Vec<HeaderCol>,
+pub(crate) struct Block {
+    pub(crate) header: Vec<HeaderCol>,
     /// One vector of values per header column.
-    data: Vec<Vec<f64>>,
-    /// For each row, the step of the last digit the file printed in the
-    /// first column (`2.023e+3` gives 1, `742.6` gives 0.1).
-    x_step: Vec<f64>,
+    pub(crate) data: Vec<Vec<f64>>,
+    /// For each row of a text file, the step of the last digit the file
+    /// printed in the first column (`2.023e+3` gives 1, `742.6` gives 0.1).
+    /// Empty for binary files, whose values are exact.
+    pub(crate) x_step: Vec<f64>,
 }
 
 impl Block {
-    fn new(header: Vec<HeaderCol>) -> Self {
+    pub(crate) fn new(header: Vec<HeaderCol>) -> Self {
         Block { data: vec![Vec::new(); header.len()], header, x_step: Vec::new() }
     }
 }
@@ -166,7 +175,7 @@ fn find_header(lines: &[&str]) -> Option<usize> {
     lines.iter().take(HEADER_SEARCH_LINES).position(|l| parse_header_line(l).is_some())
 }
 
-/// True when the text has a CHI column-header line within its first 200 lines.
+/// True when the text has a CHI column-header line within its first 100000 lines.
 pub fn looks_like_chi(text: &str) -> bool {
     let lines: Vec<&str> = text.lines().collect();
     find_header(&lines).is_some()
@@ -234,7 +243,24 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
             detail: "the column header is followed by no numeric rows".to_string(),
         });
     }
+    Ok(assemble(blocks, technique, meta, file_stem, opts, None))
+}
 
+/// Turns data blocks into a workbook: scan splitting, mA and charge columns,
+/// clipping warnings. Shared by the text and the binary importer, so that a
+/// file gives the same workbook whichever way it was saved.
+///
+/// `clip_digits` is `Some(4)` for binary files: the text export keeps 4 significant digits of a
+/// current, so two stored values that agree to 4 digits count as the same value when looking for a
+/// pinned current. `None` compares exactly (text files already are rounded).
+pub(crate) fn assemble(
+    blocks: Vec<Block>,
+    technique: String,
+    meta: Vec<(String, String)>,
+    file_stem: &str,
+    opts: &ChiOptions,
+    clip_digits: Option<usize>,
+) -> ChiImport {
     let mut warnings = Vec::new();
     let mut scans = 0;
     let mut segments = 0;
@@ -254,7 +280,7 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
         {
             warnings.push(note);
         }
-        let built = build_sheet(&block, &technique, &meta, opts, &mut warnings);
+        let built = build_sheet(&block, &technique, &meta, opts, clip_digits, &mut warnings);
         scans += built.scans;
         segments += built.segments;
         for mut sheet in built.sheets {
@@ -275,7 +301,7 @@ pub fn parse_chi(text: &str, file_stem: &str, opts: &ChiOptions) -> Result<ChiIm
     let mut workbook = Workbook::new(WindowId(0), "Book1");
     workbook.long_name = file_stem.to_string();
     workbook.sheets = sheets;
-    Ok(ChiImport { workbook, technique, scans, segments, meta, warnings })
+    ChiImport { workbook, technique, scans, segments, meta, warnings }
 }
 
 fn is_time(h: &HeaderCol) -> bool {
@@ -465,8 +491,13 @@ fn read_blocks(lines: &[&str]) -> Vec<Block> {
     blocks
 }
 
+/// A current column in A: `Current/A`, or `i1/A`, `i2/A`, ... in files with several channels.
 fn is_current_a(h: &HeaderCol) -> bool {
-    h.long.eq_ignore_ascii_case("current") && h.unit == "A"
+    if h.unit != "A" {
+        return false;
+    }
+    let long = h.long.to_ascii_lowercase();
+    long == "current" || long.strip_prefix('i').is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// A column that is being assembled; `milliamp` marks a column whose formula
@@ -514,6 +545,7 @@ fn build_sheet(
     technique: &str,
     meta: &[(String, String)],
     opts: &ChiOptions,
+    clip_digits: Option<usize>,
     warnings: &mut Vec<String>,
 ) -> Built {
     let first = &block.header[0];
@@ -535,26 +567,31 @@ fn build_sheet(
                         .to_string(),
                 );
             }
-            let sheet = scan_sheet(block, ci, &ranges, opts, warnings);
+            let sheet = scan_sheet(block, ci, &ranges, opts, clip_digits, warnings);
             return Built { sheets: vec![sheet], scans: ranges.len(), segments: 0 };
         }
         warnings.push("the potential does not sweep back and forth, so the file was not split into scans".to_string());
     }
 
     let mut drafts = Vec::new();
+    let several = block.header.iter().filter(|h| is_current_a(h)).count() > 1;
     for (j, (h, values)) in block.header.iter().zip(&block.data).enumerate() {
         let designation = if j == 0 { Designation::X } else { Designation::Y };
         drafts.push(draft(designation, &h.long, &h.unit, "", values.clone()));
         if is_current_a(h) && opts.add_milliamp {
-            drafts.push(milliamp_draft(values, ""));
+            drafts.push(milliamp_draft(values, if several { &h.long } else { "" }));
         }
     }
-    if let Some(ci) = current_idx {
+    // With several current channels the charge columns and the warnings name the channel.
+    let currents: Vec<usize> = (0..block.header.len()).filter(|&j| is_current_a(&block.header[j])).collect();
+    for &ci in &currents {
+        let channel = if currents.len() > 1 { block.header[ci].long.as_str() } else { "" };
         if is_time && opts.add_charge {
             let charge = running_charge(&block.data[0], &block.data[ci]);
-            drafts.push(draft(Designation::Y, "Charge", "C", "", charge));
+            drafts.push(draft(Designation::Y, "Charge", "C", channel, charge));
         }
-        warnings.extend(clipping_warnings(None, first, &block.data[0], &block.data[ci]));
+        let who = (!channel.is_empty()).then_some(channel);
+        warnings.extend(clipping_warnings(who, first, &block.data[0], &block.data[ci], clip_digits));
     }
     let mut built = Built { sheets: vec![finish_sheet("Data", drafts)], scans: 0, segments: 0 };
 
@@ -601,15 +638,22 @@ pub fn chrono_segments(time: &[f64], potential: &[f64], meta: &[(String, String)
     let by_time = meta
         .iter()
         .any(|(k, v)| k.to_ascii_lowercase().starts_with("current switching") && v.trim().eq_ignore_ascii_case("time"));
-    let cathodic_first = meta.iter().find(|(k, _)| k.eq_ignore_ascii_case("Init P/N")).and_then(|(_, v)| {
-        match v.trim().to_ascii_uppercase().as_str() {
-            "N" => Some(true),
-            "P" => Some(false),
+    // Text exports write `Init P/N = N`; the binary reader writes `Initial Polarity = Cathodic`.
+    let cathodic_first = meta
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("Init P/N") || k.eq_ignore_ascii_case("Initial Polarity"))
+        .and_then(|(_, v)| match v.trim().to_ascii_lowercase().as_str() {
+            "n" | "cathodic" => Some(true),
+            "p" | "anodic" => Some(false),
             _ => None,
-        }
-    });
-    let cathodic_time = header_number(meta, "Cathodic Time (s)").filter(|t| *t > 0.0);
-    let anodic_time = header_number(meta, "Anodic Time (s)").filter(|t| *t > 0.0);
+        });
+    let seconds = |name: &str| {
+        header_number(meta, &format!("{name} (s)"))
+            .or_else(|| header_number(meta, &format!("{name} (sec)")))
+            .filter(|t| *t > 0.0)
+    };
+    let cathodic_time = seconds("Cathodic Time");
+    let anodic_time = seconds("Anodic Time");
     if by_time && let (Some(first), Some(tc), Some(ta)) = (cathodic_first, cathodic_time, anodic_time) {
         return segments_by_time(time, first, tc, ta);
     }
@@ -823,6 +867,7 @@ fn scan_sheet(
     ci: usize,
     ranges: &[Range<usize>],
     opts: &ChiOptions,
+    clip_digits: Option<usize>,
     warnings: &mut Vec<String>,
 ) -> Worksheet {
     let mut drafts = Vec::new();
@@ -835,7 +880,7 @@ fn scan_sheet(
         if opts.add_milliamp {
             drafts.push(milliamp_draft(current, &comment));
         }
-        warnings.extend(clipping_warnings(Some(&comment), &block.header[0], potential, current));
+        warnings.extend(clipping_warnings(Some(&comment), &block.header[0], potential, current, clip_digits));
     }
     finish_sheet("Scans", drafts)
 }
@@ -853,9 +898,31 @@ fn running_charge(time: &[f64], current: &[f64]) -> Vec<f64> {
     q
 }
 
+/// `v` rounded to `digits` significant digits (what a text export would show).
+fn round_significant(v: f64, digits: usize) -> f64 {
+    if v == 0.0 || !v.is_finite() {
+        return v;
+    }
+    format!("{:.*e}", digits.saturating_sub(1), v).parse().unwrap_or(v)
+}
+
 /// Looks for a current that is stuck at its largest positive or negative
 /// value for [`CLIP_MIN_ROWS`] or more consecutive rows.
-fn clipping_warnings(scan: Option<&str>, x: &HeaderCol, xs: &[f64], current: &[f64]) -> Vec<String> {
+fn clipping_warnings(
+    scan: Option<&str>,
+    x: &HeaderCol,
+    xs: &[f64],
+    current: &[f64],
+    clip_digits: Option<usize>,
+) -> Vec<String> {
+    let rounded: Vec<f64>;
+    let current = match clip_digits {
+        Some(d) => {
+            rounded = current.iter().map(|&v| round_significant(v, d)).collect();
+            &rounded[..]
+        }
+        None => current,
+    };
     let mut out = Vec::new();
     for positive in [true, false] {
         let extreme = current

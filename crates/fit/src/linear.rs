@@ -12,6 +12,7 @@
 //! always evaluated in the basis that was solved, not from the converted coefficients, so the
 //! cancellation in the conversion does not reach them.
 
+use crate::bands::Bands;
 use crate::dist::{f_upper_p, t_critical, t_two_sided_p};
 use crate::report::{Anova, FitError, FitReport, FitStatus, Parameter, Statistics, Weighting};
 use nalgebra::{DMatrix, DVector};
@@ -141,7 +142,7 @@ pub fn fit_linear_with_curve(x: &[f64], y: &[f64], opts: &LinearOptions) -> Resu
     let pts = collect_points(x, y, &opts.weighting)?;
     let fixed = [opts.fix_intercept, opts.fix_slope];
     let solved = solve(&pts, 1, &fixed, opts.scale_errors_by_reduced_chi_sqr)?;
-    let curve = FittedCurve(solved.basis.clone());
+    let curve = FittedCurve::new(solved.basis.clone(), solved.dof, solved.rss);
     let report = build_report(
         "Linear".to_string(),
         "y = Intercept + Slope*x".to_string(),
@@ -176,7 +177,7 @@ pub fn fit_polynomial_with_curve(
     let mut fixed = vec![None; order + 1];
     fixed[0] = opts.fix_intercept;
     let solved = solve(&pts, order, &fixed, opts.scale_errors_by_reduced_chi_sqr)?;
-    let curve = FittedCurve(solved.basis.clone());
+    let curve = FittedCurve::new(solved.basis.clone(), solved.dof, solved.rss);
     let mut names = vec!["Intercept".to_string()];
     let mut eq = String::from("y = Intercept");
     for k in 1..=order {
@@ -200,11 +201,31 @@ pub fn fit_polynomial_with_curve(
 /// (centred and scaled x), not from the coefficients in powers of x, which lose digits when x is
 /// far from zero relative to its spread.
 #[derive(Debug, Clone)]
-pub struct FittedCurve(Basis);
+pub struct FittedCurve {
+    basis: Basis,
+    dof: usize,
+    /// Reduced chi-square: the weighted residual sum of squares over the degrees of freedom.
+    reduced_chi_sqr: f64,
+}
 
 impl FittedCurve {
+    fn new(basis: Basis, dof: usize, rss: f64) -> Self {
+        FittedCurve { basis, dof, reduced_chi_sqr: if dof > 0 { rss / dof as f64 } else { f64::NAN } }
+    }
+
     pub fn eval(&self, x: f64) -> f64 {
-        self.0.eval(x)
+        self.basis.eval(x)
+    }
+
+    /// Confidence and prediction bands of the fitted line or polynomial at the given x values,
+    /// at confidence `level` (0.95 for 95 %). See [`crate::bands`] for the formulas. The bands
+    /// always use the covariance scaled by the reduced chi-square, whatever the option for the
+    /// parameter errors was, as Origin does.
+    pub fn bands(&self, xs: &[f64], level: f64) -> Result<Bands, FitError> {
+        check_level(level)?;
+        let mean: Vec<f64> = xs.iter().map(|&x| self.basis.eval(x)).collect();
+        let var: Vec<f64> = xs.iter().map(|&x| self.basis.gradient_variance(x) * self.reduced_chi_sqr).collect();
+        Ok(Bands::from_variances(xs, &mean, &var, self.reduced_chi_sqr, self.dof, level))
     }
 }
 
@@ -212,19 +233,42 @@ impl FittedCurve {
 #[derive(Debug, Clone)]
 enum Basis {
     /// `y = sum c_j u^j` with `u = (x - centre) / spread`; every coefficient was free.
-    Centred { centre: f64, spread: f64, c: Vec<f64> },
+    Centred { centre: f64, spread: f64, c: Vec<f64>, cov: Vec<f64> },
     /// `y = fixed part + sum c_j (x / scale)^k_j` over the free powers `k_j`.
-    Scaled { scale: f64, free: Vec<usize>, c: Vec<f64>, fixed: Vec<(usize, f64)> },
+    Scaled { scale: f64, free: Vec<usize>, c: Vec<f64>, fixed: Vec<(usize, f64)>, cov: Vec<f64> },
 }
 
 impl Basis {
+    /// `g' C g` for the gradient `g` of the curve value with respect to the solved coefficients and
+    /// their covariance `C` before any scaling by the reduced chi-square.
+    fn gradient_variance(&self, x: f64) -> f64 {
+        let (g, cov): (Vec<f64>, &Vec<f64>) = match self {
+            Basis::Centred { centre, spread, c, cov } => {
+                let u = (x - centre) / spread;
+                (std::iter::successors(Some(1.0), |p| Some(p * u)).take(c.len()).collect(), cov)
+            }
+            Basis::Scaled { scale, free, cov, .. } => {
+                let t = x / scale;
+                (free.iter().map(|&k| t.powi(k as i32)).collect(), cov)
+            }
+        };
+        let m = g.len();
+        let mut v = 0.0;
+        for i in 0..m {
+            for j in 0..m {
+                v += g[i] * cov[i + j * m] * g[j];
+            }
+        }
+        v
+    }
+
     fn eval(&self, x: f64) -> f64 {
         match self {
-            Basis::Centred { centre, spread, c } => {
+            Basis::Centred { centre, spread, c, .. } => {
                 let u = (x - centre) / spread;
                 c.iter().rev().fold(0.0, |s, cj| s * u + cj)
             }
-            Basis::Scaled { scale, free, c, fixed } => {
+            Basis::Scaled { scale, free, c, fixed, .. } => {
                 let t = x / scale;
                 let mut s: f64 = fixed.iter().map(|(k, v)| v * x.powi(*k as i32)).sum();
                 for (cj, k) in c.iter().zip(free) {
@@ -301,8 +345,12 @@ fn solve(pts: &Points, order: usize, fixed: &[Option<f64>], scale_by_chi: bool) 
             }
         }
         let coef: Vec<f64> = (&t * &c).iter().copied().collect();
-        let cov = &t * cov_u * t.transpose();
-        (Basis::Centred { centre: xm, spread, c: c.iter().copied().collect() }, coef, cov)
+        let cov = &t * &cov_u * t.transpose();
+        (
+            Basis::Centred { centre: xm, spread, c: c.iter().copied().collect(), cov: cov_u.iter().copied().collect() },
+            coef,
+            cov,
+        )
     } else {
         let xmax = pts.x.iter().fold(0.0_f64, |acc, x| acc.max(x.abs()));
         let scale = if xmax > 0.0 { xmax } else { 1.0 };
@@ -333,7 +381,13 @@ fn solve(pts: &Points, order: usize, fixed: &[Option<f64>], scale_by_chi: bool) 
             coef[*k] = *v;
         }
         (
-            Basis::Scaled { scale, free: free.clone(), c: c.iter().copied().collect(), fixed: fixed_list.clone() },
+            Basis::Scaled {
+                scale,
+                free: free.clone(),
+                c: c.iter().copied().collect(),
+                fixed: fixed_list.clone(),
+                cov: cov_c.iter().copied().collect(),
+            },
             coef,
             cov,
         )

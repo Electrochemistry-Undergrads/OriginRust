@@ -28,9 +28,30 @@ use sheaf_calc as calc;
 use sheaf_expr::Expr;
 
 pub use sheaf_calc::{
-    AreaType, Boundary, DiffOptions, InterpMethod, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions,
+    AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions,
     SmoothMethod, SmoothOptions, SplineBoundary,
 };
+pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
+pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
+
+/// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
+/// every peak the search found, started at the found centre, width and height.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PeakFitSpec {
+    pub shape: PeakShape,
+    pub baseline: FitBaseline,
+}
+
+/// What [`Tool::PeakChain`] does: baseline, peak search, per-peak integration and (optionally)
+/// a multi-peak fit, in one run with one result sheet.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PeakChainSpec {
+    pub chain: ChainOptions,
+    /// Add the integration columns (area, area percent, FWHM, limits).
+    pub integrate: bool,
+    /// Fit all found peaks together and add the fit columns.
+    pub fit: Option<PeakFitSpec>,
+}
 
 /// Which rows of the chosen columns a tool works on.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -103,15 +124,51 @@ impl Default for InterpSpec {
     }
 }
 
+/// What [`Tool::IntegrateRanges`] does: the integral of each of several ranges of every chosen
+/// column, in one results table.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntegrateRangesSpec {
+    /// The ranges to integrate, one table row each per input column. [`RowRange::XBetween`] takes
+    /// the first unbroken run of rows inside the X interval, [`RowRange::Rows`] counts worksheet
+    /// rows. The request's own row range, if any, is applied first: X intervals are searched
+    /// inside it and row ranges are cut to it.
+    pub ranges: Vec<RowRange>,
+    /// Subtract the straight line through the first and last point of each range first.
+    pub end_point_baseline: bool,
+}
+
+/// The second operand of [`Tool::CurveMath`].
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CurveOperand {
+    Constant(f64),
+    /// A reference curve: this Y column, with the X column Sheaf finds for it (the nearest X
+    /// column to its left, row numbers if there is none). It may be in any sheet of the project.
+    Reference(ColumnId),
+}
+
+/// What [`Tool::CurveMath`] does: `y op operand` for every chosen Y column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurveMathSpec {
+    pub op: CurveOp,
+    pub operand: CurveOperand,
+    /// Reference only: restrict the result to the X range both curves cover (the data and the
+    /// reference are then evaluated on the merged X values of both and the result is a new sheet
+    /// with its own X column). Off: one value per data row, new column beside the data.
+    pub common_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Tool {
     Integrate(IntegrateSpec),
+    IntegrateRanges(IntegrateRangesSpec),
+    CurveMath(CurveMathSpec),
     Differentiate(DiffOptions),
     Smooth(SmoothOptions),
     Normalize(NormalizeMethod),
     SubtractBaseline(BaselineSpec),
     Interpolate(InterpSpec),
     FindPeaks(PeakOptions),
+    PeakChain(PeakChainSpec),
     Statistics,
 }
 
@@ -120,21 +177,29 @@ impl Tool {
     pub fn name(&self) -> &'static str {
         match self {
             Tool::Integrate(_) => "Integrate",
+            Tool::IntegrateRanges(_) => "Integrate ranges",
+            Tool::CurveMath(spec) => match (spec.operand, spec.op) {
+                (CurveOperand::Reference(_), CurveOp::Subtract) => "Subtract reference",
+                _ => "Curve math",
+            },
             Tool::Differentiate(_) => "Differentiate",
             Tool::Smooth(_) => "Smooth",
             Tool::Normalize(_) => "Normalize",
             Tool::SubtractBaseline(_) => "Subtract baseline",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Find peaks",
+            Tool::PeakChain(_) => "Analyze peaks",
             Tool::Statistics => "Statistics",
         }
     }
 
     fn sheet_prefix(&self) -> &'static str {
         match self {
-            Tool::Integrate(_) => "Integrate",
+            Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
+            Tool::CurveMath(_) => "Math",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Peaks",
+            Tool::PeakChain(_) => "PeakAnalysis",
             Tool::Statistics => "Statistics",
             _ => "Result",
         }
@@ -174,9 +239,17 @@ impl ResultTable {
     fn push_row(&mut self, label: String, values: Vec<f64>, units: Vec<String>) {
         self.rows.push((label, values));
         self.row_units.push(units);
-        self.units = (0..self.headers.len())
-            .map(|i| if self.mixed_units(i) { String::new() } else { self.unit(0, i).to_string() })
-            .collect();
+        // Kept up to date row by row (a rescan of all rows here made big tables quadratic).
+        let last = self.rows.len() - 1;
+        if last == 0 {
+            self.units = (0..self.headers.len()).map(|i| self.unit(0, i).to_string()).collect();
+        } else {
+            for i in 0..self.headers.len() {
+                if self.unit(last, i) != self.unit(0, i) {
+                    self.units[i].clear();
+                }
+            }
+        }
     }
 
     /// The unit of the number in row `row`, column `col`.
@@ -204,6 +277,8 @@ pub struct Report {
     pub table: Option<ResultTable>,
     /// One sentence for a status line, for example "Integrate: 3 columns, results in sheet Integrate1".
     pub message: String,
+    /// Further plain-English lines, for example the goodness of fit of a multi-peak fit.
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -372,6 +447,136 @@ pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
         .expect("the name sequence is unbounded")
 }
 
+/// The peak chain for every input column: one table row per peak, a baseline column beside each
+/// source and, with a fit, the fitted curve.
+fn run_peak_chain(
+    spec: &PeakChainSpec,
+    inputs: &[Input<'_>],
+    beside: &mut Vec<NewColumn>,
+    notes: &mut Vec<String>,
+) -> Result<ResultTable, AnalysisError> {
+    let mut headers: Vec<&str> = vec!["Row", "Center", "Height"];
+    if spec.integrate {
+        headers.extend(["Area", "Area %", "FWHM", "Left limit", "Right limit"]);
+    }
+    if spec.fit.is_some() {
+        headers.extend(["Fit center", "Fit height", "Fit FWHM", "Fit area", "Fit area %"]);
+    }
+    let mut t = ResultTable::new(&headers);
+    for inp in inputs {
+        let (xs, ys) = (inp.xs(), inp.ys());
+        let result = calc::analyze_peaks(xs, ys, &spec.chain).map_err(|e| match e {
+            calc::ChainError::NoBaseline => AnalysisError::BadOption(format!(
+                "column {}: the baseline could not be made (anchor points need at least two different X values, and the data at least two points)",
+                inp.short
+            )),
+            calc::ChainError::UnsortedX => AnalysisError::BadOption(format!(
+                "column {}: X is not sorted; sort the rows along X before analysing peaks",
+                inp.short
+            )),
+        })?;
+        if result.peaks.is_empty() {
+            return Err(AnalysisError::BadOption(format!(
+                "no peaks were found in column {}; lower the height filter or change the search method",
+                inp.short
+            )));
+        }
+        if !matches!(spec.chain.baseline, ChainBaseline::None) {
+            beside.push(NewColumn {
+                after: inp.id,
+                long_name: format!("Baseline of {}", inp.name),
+                units: inp.units.clone(),
+                comments: format!("Baseline of {}{}", inp.short, inp.range_note()),
+                data: inp.aligned(&result.baseline),
+            });
+        }
+        // The multi-peak fit, started at the found peaks.
+        let mut fitted_peaks: Vec<[f64; 5]> = Vec::new();
+        if let Some(fs) = spec.fit {
+            let n = xs.len();
+            let (y0, m) = match (fs.baseline, &spec.chain.baseline) {
+                (_, ChainBaseline::None) => {
+                    (ys.iter().copied().filter(|v| v.is_finite()).fold(f64::INFINITY, f64::min), 0.0)
+                }
+                (FitBaseline::Constant, _) => {
+                    let v: Vec<f64> = result.baseline.iter().copied().filter(|b| b.is_finite()).collect();
+                    (v.iter().sum::<f64>() / v.len().max(1) as f64, 0.0)
+                }
+                (FitBaseline::Linear, _) => {
+                    let ok: Vec<usize> =
+                        (0..n).filter(|&i| result.baseline[i].is_finite() && xs[i].is_finite()).collect();
+                    let (f, l) = (ok[0], ok[ok.len() - 1]);
+                    let (b0, b1) = (result.baseline[f], result.baseline[l]);
+                    let m = if xs[l] == xs[f] { 0.0 } else { (b1 - b0) / (xs[l] - xs[f]) };
+                    (b0 - m * xs[f], m)
+                }
+            };
+            let finite_x = xs.iter().copied().filter(|v| v.is_finite());
+            let span = finite_x.clone().fold(f64::NEG_INFINITY, f64::max) - finite_x.fold(f64::INFINITY, f64::min);
+            let starts: Vec<sheaf_fit::multipeak::PeakStart> = result
+                .peaks
+                .iter()
+                .map(|p| sheaf_fit::multipeak::PeakStart {
+                    center: p.center,
+                    fwhm: if p.fwhm > 0.0 { p.fwhm } else { span / 20.0 },
+                    height: ys[p.index] - (y0 + m * p.center),
+                })
+                .collect();
+            let mut func =
+                sheaf_fit::multipeak::multi_peak_function(fs.shape, fs.baseline, &starts).with_initial("y0", y0);
+            if fs.baseline == FitBaseline::Linear {
+                func = func.with_initial("m", m);
+            }
+            let report = sheaf_fit::nlsf::fit(&func, xs, ys, &sheaf_fit::nlsf::FitOptions::default()).map_err(|e| {
+                AnalysisError::BadOption(format!("column {}: the multi-peak fit failed: {e}", inp.short))
+            })?;
+            let get = |name: String| report.param(&name).map_or(f64::NAN, |p| p.value);
+            let mut total = 0.0;
+            for k in 1..=starts.len() {
+                let (xc, w, a) = (get(format!("xc{k}")), get(format!("w{k}")), get(format!("A{k}")));
+                total += a;
+                fitted_peaks.push([xc, fs.shape.height(w, a), fs.shape.fwhm(w), a, 0.0]);
+            }
+            for p in fitted_peaks.iter_mut() {
+                p[4] = if total != 0.0 { 100.0 * p[3] / total } else { f64::NAN };
+            }
+            notes.push(format!(
+                "{}: {} fit of {} peaks, R^2 = {:.6}, reduced chi-square = {:.6e}, {} iterations{}",
+                inp.label,
+                fs.shape.name(),
+                starts.len(),
+                report.stats.r_squared,
+                report.stats.reduced_chi_sqr,
+                report.stats.iterations.unwrap_or(0),
+                if report.warnings.is_empty() { String::new() } else { format!(" ({})", report.warnings.join("; ")) }
+            ));
+            beside.push(NewColumn {
+                after: inp.id,
+                long_name: format!("Peak fit of {}", inp.name),
+                units: inp.units.clone(),
+                comments: format!("{} multi-peak fit of {}{}", fs.shape.name(), inp.short, inp.range_note()),
+                data: inp.aligned(&report.fitted),
+            });
+        }
+        let xu = &inp.x_units;
+        let area_unit = unit_product(&inp.units, xu);
+        for (i, p) in result.peaks.iter().enumerate() {
+            let mut v = vec![(p.index + inp.first + 1) as f64, p.center, p.height];
+            let mut u = vec![String::new(), xu.clone(), inp.units.clone()];
+            if spec.integrate {
+                v.extend([p.area, p.area_percent, p.fwhm, p.left_x, p.right_x]);
+                u.extend([area_unit.clone(), "%".to_string(), xu.clone(), xu.clone(), xu.clone()]);
+            }
+            if spec.fit.is_some() {
+                v.extend(fitted_peaks[i]);
+                u.extend([xu.clone(), inp.units.clone(), xu.clone(), area_unit.clone(), "%".to_string()]);
+            }
+            t.push_row(format!("Peak {} of {}", i + 1, inp.label), v, u);
+        }
+    }
+    Ok(t)
+}
+
 impl Project {
     /// Runs an analysis tool on worksheet columns. See the module text for
     /// where the results go. On error nothing is changed.
@@ -424,8 +629,12 @@ impl Project {
         let mut beside: Vec<NewColumn> = Vec::new();
         let mut on_sheet: Vec<SheetColumn> = Vec::new();
         let mut table: Option<ResultTable> = None;
+        let mut notes: Vec<String> = Vec::new();
 
         match &request.tool {
+            Tool::PeakChain(spec) => {
+                table = Some(run_peak_chain(spec, &inputs, &mut beside, &mut notes)?);
+            }
             Tool::Integrate(spec) => {
                 let mut t =
                     ResultTable::new(&["Area", "X start", "X end", "Peak X", "Peak height", "Width at half height"]);
@@ -457,6 +666,174 @@ impl Project {
                     }
                 }
                 table = Some(t);
+            }
+            Tool::IntegrateRanges(spec) => {
+                if spec.ranges.is_empty() {
+                    return Err(AnalysisError::BadOption("give at least one range to integrate".into()));
+                }
+                let mut t = ResultTable::new(&[
+                    "First row",
+                    "Last row",
+                    "X start",
+                    "X end",
+                    "Area",
+                    "Absolute area",
+                    "Peak X",
+                    "Peak height",
+                    "Width at half height",
+                ]);
+                for inp in &inputs {
+                    for (k, range) in spec.ranges.iter().enumerate() {
+                        let (f, l) = match *range {
+                            RowRange::All => (inp.first, inp.last),
+                            RowRange::Rows(from, to) => {
+                                let (f, l) = resolve_rows(*range, &inp.short, &inp.x, inp.y.len())?;
+                                let (f, l) = (f.max(inp.first), l.min(inp.last));
+                                if f > l {
+                                    return Err(AnalysisError::BadRows(from, to, inp.short.clone(), inp.y.len()));
+                                }
+                                (f, l)
+                            }
+                            RowRange::XBetween(..) => {
+                                let (f, l) = resolve_rows(*range, &inp.short, inp.xs(), inp.last + 1 - inp.first)?;
+                                (f + inp.first, l + inp.first)
+                            }
+                        };
+                        let (xs, ys) = (&inp.x[f..=l], &inp.y[f..=l]);
+                        let options = |area_type| calc::IntegrateOptions {
+                            area_type,
+                            end_point_baseline: spec.end_point_baseline,
+                            rows: None,
+                        };
+                        // Worksheet rows (1-based) of the first and last point that is actually used:
+                        // points with a missing X or Y are skipped by the integration.
+                        let usable = |i: &usize| xs[*i].is_finite() && ys[*i].is_finite();
+                        let first_used = (0..xs.len()).find(usable).map_or(f + 1, |i| f + i + 1);
+                        let last_used = (0..xs.len()).rev().find(usable).map_or(f + 1, |i| f + i + 1);
+                        let math = calc::integrate(xs, ys, &options(AreaType::Mathematical))
+                            .ok_or_else(|| AnalysisError::TooFewPoints(inp.short.clone()))?;
+                        let abs = calc::integrate(xs, ys, &options(AreaType::Absolute))
+                            .ok_or_else(|| AnalysisError::TooFewPoints(inp.short.clone()))?;
+                        let area_unit = unit_product(&inp.units, &inp.x_units);
+                        let xu = &inp.x_units;
+                        t.push_row(
+                            format!("{}, range {}", inp.label, k + 1),
+                            vec![
+                                first_used as f64,
+                                last_used as f64,
+                                math.x1,
+                                math.x2,
+                                math.area,
+                                abs.area,
+                                math.peak_x,
+                                math.peak_height,
+                                math.width,
+                            ],
+                            vec![
+                                String::new(),
+                                String::new(),
+                                xu.clone(),
+                                xu.clone(),
+                                area_unit.clone(),
+                                area_unit,
+                                xu.clone(),
+                                inp.units.clone(),
+                                xu.clone(),
+                            ],
+                        );
+                    }
+                }
+                table = Some(t);
+            }
+            Tool::CurveMath(spec) => {
+                let reference = match spec.operand {
+                    CurveOperand::Constant(c) => {
+                        if !c.is_finite() {
+                            return Err(AnalysisError::BadOption(format!("{c} is not a usable operand")));
+                        }
+                        if spec.op == CurveOp::Divide && c == 0.0 {
+                            return Err(AnalysisError::BadOption("cannot divide by 0".into()));
+                        }
+                        None
+                    }
+                    CurveOperand::Reference(id) => {
+                        let (_, rsheet, rcol) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+                        let ry = rcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
+                        let at = rsheet.column_index(id).expect("the column was located in this sheet");
+                        let x_col = rsheet.x_for(at).filter(|x| x.id != id && x.data.is_numeric());
+                        let rx: Vec<f64> = match x_col.and_then(Column::numeric) {
+                            Some(v) => (0..ry.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
+                            None => (1..=ry.len()).map(|i| i as f64).collect(),
+                        };
+                        Some((rcol.short_name.clone(), rcol.display_name().to_string(), rx, ry))
+                    }
+                };
+                let word = match spec.op {
+                    CurveOp::Add => "plus",
+                    CurveOp::Subtract => "minus",
+                    CurveOp::Multiply => "times",
+                    CurveOp::Divide => "divided by",
+                    CurveOp::Power => "to the power of",
+                };
+                for inp in &inputs {
+                    let units = match (spec.op, reference.is_some()) {
+                        (CurveOp::Add | CurveOp::Subtract, _) => inp.units.clone(),
+                        (CurveOp::Multiply | CurveOp::Divide, false) => inp.units.clone(),
+                        _ => String::new(),
+                    };
+                    match (&reference, spec.operand) {
+                        (None, CurveOperand::Constant(c)) => {
+                            beside.push(NewColumn {
+                                after: inp.id,
+                                long_name: format!("{} {word} {c}", inp.name),
+                                units,
+                                comments: format!("{} {word} {c}{}", inp.short, inp.range_note()),
+                                data: inp.aligned(&calc::curve_math_const(inp.ys(), spec.op, c)),
+                            });
+                        }
+                        (Some((rshort, rname, rx, ry)), _) => {
+                            let valid =
+                                rx.iter().zip(ry.iter()).filter(|(a, b)| a.is_finite() && b.is_finite()).count();
+                            if valid < 2 {
+                                return Err(AnalysisError::TooFewPoints(rshort.clone()));
+                            }
+                            let r = calc::curve_math_ref(inp.xs(), inp.ys(), rx, ry, spec.op, spec.common_only)
+                                .ok_or_else(|| {
+                                    AnalysisError::BadOption(format!(
+                                        "column {} and the reference column {rshort} share no X range",
+                                        inp.short
+                                    ))
+                                })?;
+                            let long_name = format!("{} {word} {rname}", inp.name);
+                            let comments = format!("{} {word} reference {rshort}{}", inp.short, inp.range_note());
+                            if spec.common_only {
+                                on_sheet.push(SheetColumn {
+                                    designation: Designation::X,
+                                    long_name: inp.x_name.clone(),
+                                    units: inp.x_units.clone(),
+                                    comments: String::new(),
+                                    data: ColumnData::numeric(r.x),
+                                });
+                                on_sheet.push(SheetColumn {
+                                    designation: Designation::Y,
+                                    long_name,
+                                    units,
+                                    comments: format!("{comments}, common X range only"),
+                                    data: ColumnData::numeric(r.y),
+                                });
+                            } else {
+                                beside.push(NewColumn {
+                                    after: inp.id,
+                                    long_name,
+                                    units,
+                                    comments,
+                                    data: inp.aligned(&r.y),
+                                });
+                            }
+                        }
+                        (None, CurveOperand::Reference(_)) => unreachable!("the reference was read above"),
+                    }
+                }
             }
             Tool::Differentiate(options) => {
                 if !(1..=9).contains(&options.order) {
@@ -784,7 +1161,7 @@ impl Project {
             }
             (None, _) => format!("{}: {columns}, results in new columns {added}", request.tool.name()),
         };
-        Ok(Report { book: book_id, sheet: sheet_index, new_columns, new_sheet, table, message })
+        Ok(Report { book: book_id, sheet: sheet_index, new_columns, new_sheet, table, message, notes })
     }
 
     /// Sorts all rows of a sheet by the values of one column. Rows keep
@@ -876,6 +1253,9 @@ impl Project {
                 c.id = self.new_column_id();
                 c.data = take_rows(&c.data, &keep, n);
                 c.formula = None;
+                c.recalc = crate::column::RecalcMode::None;
+                c.formula_state = crate::column::FormulaState::Current;
+                c.formula_rows = None;
                 copy.columns.push(c);
             }
             let b = self.workbook_mut(book).expect("checked above");
@@ -1249,5 +1629,312 @@ mod tests {
         assert_eq!(p.numeric(flat).unwrap(), [2.0, 2.0]);
         assert!(matches!(p.filter_sheet(book, 0, "col(Nope) > 1", false), Err(AnalysisError::Condition(_))));
         assert!(matches!(p.filter_sheet(book, 0, "1 +", false), Err(AnalysisError::Condition(_))));
+    }
+
+    /// A second workbook with a reference curve X = 2, 4, 6 and Y = 1, 2, 3 (that is x / 2).
+    fn add_reference(p: &mut Project) -> ColumnId {
+        let book = p.add_workbook("blank");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![2.0, 4.0, 6.0])).unwrap();
+        p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap()
+    }
+
+    fn curve_math(op: CurveOp, operand: CurveOperand, common_only: bool) -> Tool {
+        Tool::CurveMath(CurveMathSpec { op, operand, common_only })
+    }
+
+    #[test]
+    fn subtracting_a_reference_from_another_workbook_adds_a_column_beside_the_data() {
+        let (mut p, book, _, ramp) = sample();
+        let reference = add_reference(&mut p);
+        let tool = curve_math(CurveOp::Subtract, CurveOperand::Reference(reference), false);
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        // y = x minus the reference x / 2, also outside 2..6 where its end segments are continued
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        for (i, v) in out.iter().enumerate() {
+            assert!((v - i as f64 / 2.0).abs() < 1e-12, "row {i}: {v}");
+        }
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[3].id, r.new_columns[0], "right behind its source column");
+        assert_eq!(ws.columns[3].units, "A");
+        assert_eq!(ws.columns[3].long_name, "Current minus B");
+        assert!(r.message.starts_with("Subtract reference"), "{}", r.message);
+        assert!(r.new_sheet.is_none());
+    }
+
+    #[test]
+    fn common_range_only_puts_the_result_on_a_new_sheet_with_its_own_x() {
+        let (mut p, book, _, ramp) = sample();
+        let reference = add_reference(&mut p);
+        let tool = curve_math(CurveOp::Divide, CurveOperand::Reference(reference), true);
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.columns[0].numeric().unwrap(), [2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(rs.columns[0].units, "s");
+        assert_eq!(rs.columns[1].numeric().unwrap(), [2.0; 5], "x divided by x / 2");
+        assert_eq!(rs.columns[1].units, "", "a ratio of two curves has no unit");
+        // The data sheet is untouched.
+        assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3);
+    }
+
+    #[test]
+    fn constants_work_and_bad_operands_change_nothing() {
+        let (mut p, _, flat, ramp) = sample();
+        let r = p
+            .analyze(&request(&[flat, ramp], curve_math(CurveOp::Multiply, CurveOperand::Constant(3.0), false)))
+            .unwrap();
+        assert_eq!(p.numeric(r.new_columns[0]).unwrap(), [6.0; 11]);
+        assert_eq!(p.numeric(r.new_columns[1]).unwrap()[10], 30.0);
+        assert_eq!(p.column(r.new_columns[1]).unwrap().units, "A", "scaling keeps the unit");
+        let before = p.clone();
+        for (tool, why) in [
+            (curve_math(CurveOp::Divide, CurveOperand::Constant(0.0), false), "divide by 0"),
+            (curve_math(CurveOp::Add, CurveOperand::Constant(f64::NAN), false), "NaN operand"),
+        ] {
+            assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))), "{why}");
+            assert_eq!(p, before, "{why}");
+        }
+        // A reference with one point, a column that is gone, and a reference that does not overlap.
+        let one = {
+            let b = p.add_workbook("one");
+            p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap()
+        };
+        let tool = curve_math(CurveOp::Add, CurveOperand::Reference(one), false);
+        assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::TooFewPoints(_))));
+        let far = {
+            let b = p.add_workbook("far");
+            p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![50.0, 60.0])).unwrap();
+            p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap()
+        };
+        let tool = curve_math(CurveOp::Add, CurveOperand::Reference(far), true);
+        assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))));
+    }
+
+    fn ranges(list: &[(f64, f64)], end_point_baseline: bool) -> Tool {
+        Tool::IntegrateRanges(IntegrateRangesSpec {
+            ranges: list.iter().map(|&(a, b)| RowRange::XBetween(a, b)).collect(),
+            end_point_baseline,
+        })
+    }
+
+    #[test]
+    fn several_ranges_give_one_table_row_each_per_column() {
+        let (mut p, book, flat, ramp) = sample();
+        let r = p.analyze(&request(&[flat, ramp], ranges(&[(0.0, 4.0), (4.0, 10.0)], false))).unwrap();
+        let t = r.table.as_ref().unwrap();
+        assert_eq!(t.rows.len(), 4);
+        assert_eq!(t.rows[0].0, "B: Current, Scan 1, range 1");
+        assert_eq!(t.rows[3].0, "C: Current, Scan 2, range 2");
+        let col = |name: &str| t.headers.iter().position(|h| h == name).unwrap();
+        let area: Vec<f64> = t.rows.iter().map(|r| r.1[col("Area")]).collect();
+        assert_eq!(area, [8.0, 12.0, 8.0, 42.0]);
+        assert_eq!(t.rows[3].1[col("First row")], 5.0);
+        assert_eq!(t.rows[3].1[col("Last row")], 11.0);
+        assert_eq!(t.rows[3].1[col("Peak X")], 10.0);
+        assert_eq!(t.rows[3].1[col("Peak height")], 10.0);
+        assert_eq!(t.unit(0, col("Area")), "C");
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.name, "Integrate1");
+        assert_eq!(rs.columns[0].text().unwrap().len(), 4);
+        assert!(r.new_columns.len() > 4 && p.workbook(book).unwrap().sheets[0].columns.len() == 3);
+    }
+
+    /// First row and Last row are worksheet rows, also when a missing value sits inside the range
+    /// or at its start.
+    #[test]
+    fn range_rows_are_worksheet_rows_with_missing_values() {
+        let (mut p, _, _, ramp) = sample();
+        let col = p.column_mut(ramp).unwrap();
+        let mut y: Vec<f64> = (0..=10).map(f64::from).collect();
+        y[3] = f64::NAN; // row 4
+        y[4] = f64::NAN; // row 5
+        col.data = ColumnData::numeric(y);
+        let rows = |tool: Tool, p: &mut Project| {
+            let t = p.analyze(&request(&[ramp], tool)).unwrap().table.unwrap();
+            (t.rows[0].1[0], t.rows[0].1[1])
+        };
+        let by_rows = |a, b| {
+            Tool::IntegrateRanges(IntegrateRangesSpec { ranges: vec![RowRange::Rows(a, b)], end_point_baseline: false })
+        };
+        assert_eq!(rows(by_rows(1, 5), &mut p), (1.0, 3.0), "the range ends in missing values");
+        assert_eq!(rows(by_rows(4, 8), &mut p), (6.0, 8.0), "the range starts in missing values");
+        assert_eq!(rows(by_rows(1, 8), &mut p), (1.0, 8.0), "a gap in the middle changes nothing");
+        assert_eq!(rows(ranges(&[(0.0, 7.0)], false), &mut p), (1.0, 8.0));
+    }
+
+    #[test]
+    fn ranges_report_absolute_area_and_honour_the_baseline() {
+        let (mut p, _, _, ramp) = sample();
+        // y = x - 5 over 0..10 has equal positive and negative parts.
+        let col = p.column_mut(ramp).unwrap();
+        col.data = ColumnData::numeric((0..=10).map(|i| f64::from(i) - 5.0).collect());
+        let r = p.analyze(&request(&[ramp], ranges(&[(0.0, 10.0), (5.0, 10.0)], false))).unwrap();
+        let t = r.table.unwrap();
+        let (area, abs) =
+            (t.headers.iter().position(|h| h == "Area"), t.headers.iter().position(|h| h == "Absolute area"));
+        let (area, abs) = (area.unwrap(), abs.unwrap());
+        assert_eq!(t.rows[0].1[area], 0.0);
+        assert_eq!(t.rows[0].1[abs], 25.0);
+        assert_eq!(t.rows[1].1[area], 12.5);
+        let r = p.analyze(&request(&[ramp], ranges(&[(0.0, 10.0)], true))).unwrap();
+        assert_eq!(r.table.unwrap().rows[0].1[area], 0.0, "a straight line minus itself");
+    }
+
+    #[test]
+    fn range_lists_respect_the_row_range_and_refuse_bad_input() {
+        let (mut p, _, _, ramp) = sample();
+        // Row ranges, cut to the request's rows 3..=9 (x = 2..8).
+        let tool = Tool::IntegrateRanges(IntegrateRangesSpec {
+            ranges: vec![RowRange::Rows(1, 5), RowRange::XBetween(6.0, 20.0)],
+            end_point_baseline: false,
+        });
+        let r = p.analyze(&Request { columns: vec![ramp], rows: RowRange::Rows(3, 9), tool }).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.rows[0].1[4], 6.0, "rows 3 to 5, x = 2..4");
+        assert_eq!(t.rows[1].1[4], 14.0, "x = 6..8, the end of the chosen rows");
+        let before = p.clone();
+        for (tool, why) in [
+            (Tool::IntegrateRanges(IntegrateRangesSpec { ranges: vec![], end_point_baseline: false }), "no ranges"),
+            (ranges(&[(20.0, 30.0)], false), "no row inside the interval"),
+            (ranges(&[(4.2, 4.4)], false), "one point only"),
+        ] {
+            assert!(p.analyze(&request(&[ramp], tool)).is_err(), "{why}");
+            assert_eq!(p, before, "{why}");
+        }
+    }
+
+    /// Two Gauss peaks on a slope, in a sheet with X in s and Y in A.
+    fn two_peaks() -> (Project, WindowId, ColumnId) {
+        let mut p = Project::new();
+        let book = p.add_workbook("peaks");
+        let x: Vec<f64> = (0..400).map(|i| i as f64 * 0.05).collect();
+        let y: Vec<f64> = x
+            .iter()
+            .map(|&x| {
+                0.1 + 0.01 * x
+                    + (-(x - 6.0).powi(2) / (2.0 * 0.4 * 0.4)).exp()
+                    + 0.6 * (-(x - 13.0).powi(2) / (2.0 * 0.5 * 0.5)).exp()
+            })
+            .collect();
+        let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        p.column_mut(xc).unwrap().units = "s".into();
+        p.column_mut(yc).unwrap().units = "A".into();
+        (p, book, yc)
+    }
+
+    fn chain(integrate: bool, fit: Option<PeakFitSpec>) -> Tool {
+        Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions {
+                baseline: ChainBaseline::AutoMinima(4),
+                find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
+                limits: LimitMode::Baseline,
+            },
+            integrate,
+            fit,
+        })
+    }
+
+    #[test]
+    fn peak_chain_gives_a_row_per_peak_with_area_and_baseline_column() {
+        let (mut p, book, y) = two_peaks();
+        let r = p.analyze(&request(&[y], chain(true, None))).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.rows.len(), 2);
+        assert_eq!(t.headers[3], "Area");
+        let exact = 0.4 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[0].1[3] - exact).abs() < 0.02 * exact, "{}", t.rows[0].1[3]);
+        assert!((t.rows[0].1[1] - 6.0).abs() < 1e-9);
+        assert_eq!(t.unit(0, 3), "C");
+        assert!((t.rows[0].1[4] + t.rows[1].1[4] - 100.0).abs() < 1e-9);
+        let ws = &p.workbook(book).unwrap().sheets;
+        assert_eq!(ws.len(), 2);
+        assert!(ws[1].name.starts_with("PeakAnalysis"));
+        assert_eq!(r.new_columns.len(), 1 + t.headers.len() + 1, "baseline column, label, and numbers");
+        assert_eq!(ws[0].columns.len(), 3, "baseline column beside the source");
+    }
+
+    #[test]
+    fn peak_chain_fit_reports_each_peak() {
+        let (mut p, _, y) = two_peaks();
+        let fit = PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear };
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        assert!((t.rows[0].1[h("Fit FWHM")] - 0.4 * 2.354_820).abs() < 1e-3);
+        let exact = 0.4 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[0].1[h("Fit area")] - exact).abs() < 1e-3);
+        assert!((t.rows[0].1[h("Fit area %")] + t.rows[1].1[h("Fit area %")] - 100.0).abs() < 1e-9);
+        assert_eq!(r.notes.len(), 1);
+        assert!(r.notes[0].contains("R^2"));
+    }
+
+    #[test]
+    fn peak_chain_errors_change_nothing() {
+        let (mut p, _, y) = two_peaks();
+        let before = p.clone();
+        let none = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions {
+                find: FindOptions { filter: PeakFilter::Height(50.0), ..FindOptions::default() },
+                ..ChainOptions::default()
+            },
+            integrate: true,
+            fit: None,
+        });
+        assert!(matches!(p.analyze(&request(&[y], none)), Err(AnalysisError::BadOption(m)) if m.contains("no peaks")));
+        let bad = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions {
+                baseline: ChainBaseline::Anchors(vec![(1.0, 0.0)], InterpMethod::Linear),
+                ..ChainOptions::default()
+            },
+            integrate: false,
+            fit: None,
+        });
+        assert!(p.analyze(&request(&[y], bad)).is_err());
+        assert_eq!(p, before);
+    }
+
+    #[test]
+    fn peak_chain_survives_a_missing_end_point_and_refuses_unsorted_x() {
+        let (mut p, book, y) = two_peaks();
+        let xcol = p.workbook(book).unwrap().sheets[0].columns[0].id;
+        let y0 = p.column_mut(y).unwrap().numeric_mut().unwrap();
+        y0[0] = f64::NAN;
+        y0[120] = f64::NAN; // inside the first peak
+        let end = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions {
+                baseline: ChainBaseline::EndPoints,
+                find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
+                ..ChainOptions::default()
+            },
+            integrate: true,
+            fit: Some(PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear }),
+        });
+        let t = p.analyze(&request(&[y], end.clone())).unwrap().table.unwrap();
+        assert_eq!(t.rows.len(), 2);
+        for r in &t.rows {
+            assert!(r.1.iter().all(|v| v.is_finite()), "{:?}", r.1);
+        }
+        assert!((t.rows[0].1[4] + t.rows[1].1[4] - 100.0).abs() < 1e-9);
+        // Unsorted X: refused, nothing changes.
+        let mut q = p.clone();
+        q.column_mut(xcol).unwrap().numeric_mut().unwrap().swap(10, 300);
+        let snapshot = q.clone();
+        assert!(matches!(q.analyze(&request(&[y], end)), Err(AnalysisError::BadOption(m)) if m.contains("not sorted")));
+        assert_eq!(q, snapshot);
+    }
+
+    #[test]
+    fn a_big_result_table_is_built_in_linear_time() {
+        let mut t = ResultTable::new(&["a"]);
+        for i in 0..50_000 {
+            t.push_row(format!("r{i}"), vec![i as f64], vec![if i == 40_000 { "s".into() } else { "A".into() }]);
+        }
+        assert_eq!(t.units, vec![String::new()], "mixed units give an empty shared unit");
+        let mut u = ResultTable::new(&["a"]);
+        u.push_row("r".into(), vec![1.0], vec!["A".into()]);
+        u.push_row("r".into(), vec![2.0], vec!["A".into()]);
+        assert_eq!(u.units, vec!["A".to_string()]);
     }
 }

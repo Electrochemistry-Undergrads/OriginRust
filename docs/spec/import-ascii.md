@@ -168,6 +168,31 @@ Origin keeps a menu of ready patterns (also stored in Origin.ini `[Column Custom
 
 Behavior [W wkscol-datetime]: unless a date format is given or recognised, date/time strings arrive as text (left-aligned) and the user converts the column by setting its format. Internal date value = a double, days (fraction = time of day) in a Julian-day-based system. Whether the automatic pass recognises ISO-like "2020-01-31 12:00:00" without a user pattern is **[?]**; plan to recognise ISO 8601 and the pattern list above.
 
+### Observed in Origin 2016 (black-box runs of `impasc`, 2026-11-12) [F]
+
+Files were small CSVs we wrote (US regional settings on the test machine). Origin's own automatic pass only turns some strings into dates; everything else arrives as text (column format 7) and stays left-aligned:
+
+| String in the file | What the default import gave |
+|---|---|
+| `13:45`, `01:05` | Time column (format 3, `HH:mm`), value 0.5729166667 for 13:45 |
+| `13:45:10.250` | Time column, fraction kept (0.5730353009) |
+| `13/11/2026`, `02/12/2026` | Date column (format 4) read month first: row 1 (day 13) did not appear in the column, and row 2 was read as 12 February (value 2461083); Origin gave no warning |
+| `2026-11-11 13:45:10`, `2026-11-11` | text |
+| `11/11/2026 1:45:10 PM`, `11-Nov-2026` | text |
+
+Setting the column to Date (format 4, subformat 11) afterwards converts text that matches the system pattern: `11/11/2026 1:45:10 PM` became 2461355.5730324076 and `11/12/2026 1:05:00 AM` became 2461356.045138889. The ISO strings turned into missing values. `11-Nov-2026` converted to the wrong date (11 November read as 12 November, and 12-Nov as 12 December), so Origin's conversion of day-month-name strings is not something to copy. The `Dates.*` option names we guessed for `impasc` were rejected; Origin's import wizard has a per-column date format that we did not drive.
+
+Decision for Sheaf: recognise more than Origin's automatic pass does, because the owner's instruments write ISO and day-month-name strings. The numbers stored are the ones Origin uses (see `workbook-model.md`).
+
+### What Sheaf implements (crates/io/src/ascii.rs)
+
+- A column is a date column when every filled cell reads as a date, a time of day, or a date with time of one kind. Recognised: `yyyy-MM-dd` (also with `/` or `.`), a `T` or a space then a clock, `M/d/yyyy` and `d/M/yyyy` (also with `-`), `dd.MM.yyyy` (always day first), `11-Nov-2026`, `11 November 2026`, `13:45`, `13:45:10.250`, and 12-hour clocks with AM or PM. No-value markers (`n.d.`, `--`) and empty cells in the column become missing values.
+- Display format: the first date pattern seen and the most precise clock pattern in the column, so the text shown matches the file.
+- Day and month order: when only one order reads every cell (a day above 12 or a month above 12 somewhere), that order is used silently. When both fit, the option `date_order` decides (default month first, like Origin on a US setup) and the import warns that the dates are ambiguous. CLI: `--day-first`.
+- A column with any cell that is not a date, such as a stray word, stays text; the choice `DateImport::AsText` (CLI `--dates-as-text`, import dialog "Keep as text") keeps every date column as text.
+- Date cells also count as numbers when the importer looks for where the data starts, so a time stamp column does not hide the header.
+- Export writes date columns as displayed (ISO date-time when that is the column's format), so the file reads back to the same numbers.
+
 ## 9. Partial import (P1)
 
 Origin groups these under `Partials`; rows and columns each have: first, last, read-count and skip-count (read R, skip S, repeat), plus a custom list.
@@ -283,3 +308,27 @@ Observed structure from the owner's domain knowledge (not from Origin): a CH Ins
 8. Behavior on ragged lines (fewer or more cells than the structure) and blank lines.
 9. Discrepancy: CSV filter file has book renaming off and header lines 0, the documentation says otherwise.
 10. Full list of numeric-separator options beyond the four confirmed.
+
+Sheaf's own guard on clock times: minutes (and seconds, when present) must have two digits, so ratios or codes such as 1:2 or 2:3 stay text instead of becoming times of day. Date-format cells holding numbers outside about year -100000 to 100000 are shown as plain numbers rather than as a date.
+
+## 15. Number separators, import modes, header rows, data blocks and batch import (P0)
+
+### Observed in Origin 2016 (black-box runs of `impasc`, 2026-11-12) [F]
+
+The scripts are `tools/origin-ref/import-*.lines.txt`, the input files `tools/origin-ref/import-inputs/` (written by us). The option names that the 2016 `impasc` accepts on the command line are short ones, not the ones in the documentation: `options.FileStruct.NumericSeparator`, `options.impmode`, `options.Hdr.UParamsFrom` / `UParamsTo`, `Units`, `CommsFrom` / `CommsTo`, `AutoSubHdr`, `SubHdrLns`, `MainHdrLns`. The documented names (`NumSep`, `Mode`, `Headers.*`) were refused.
+
+- **Number separator.** `NumericSeparator` 0 is the "1,000.00" reading and 1 is the "1.000,00" reading. With 0, a file whose first rows hold `1,234.5`, `2,345.25`, `12,000` was not recognised from the first row: the automatic header detection took the rows with thousands separators as header text, and only the later rows (`7`, `1,000,000.5`) arrived as numbers. Under 0 a decimal comma was silently dropped: `1,5` became 15 and `7,125` became 7125. With 1, `1.234,5` became 1234.5, `12.000` became 12000, `1,5` became 1.5; `1,234.5` became 1.2345 (the dot was dropped) and `1,000,000.5` stayed text. Origin therefore does not check that the groups have three digits.
+- **Import modes** (`impmode`, run on a second file after a first one was imported): 0 replaced the data of the sheet, and the sheet and book long name took the new file's name; 1 appended the columns to the right, each with its own long name and units; 2 appended the rows under the data and kept the labels of the first file (the new file's labels were not used); 3 made a new book; 4 added a second sheet to the book. The value 5 behaved like 3.
+- **Header lines.** With four lines of text above the data (a name line, a "Wavelength" line, a units line and a comment line) the default import used line 1 as long name, line 2 as units, and lines 3 and 4 joined with a line break as the comment. Setting the user-parameter range to line 2 made one user parameter row, named `UserParameter0` (a generic name, not the text in the line), holding all cells of line 2 including the first one (`Wavelength`).
+- **Several blocks.** A file with a title line, a table with a name and a units line, a blank line, and the same name and units lines followed by a second table arrived as the second table only (three rows); the first table was not imported.
+
+### What Sheaf does (crates/io/src/ascii.rs, batch.rs; dialog; CLI)
+
+- **Thousands separator** (`AsciiOptions::thousands`, CLI `--thousands`, import window "Thousands separator"). Choices: detect (default), none, comma (`1,234.5`), dot (`1.234,5`), space or no-break space (`1 234,5`), apostrophe (`1'234.5`). Dot and space make the comma the decimal separator (Origin's reading); comma and apostrophe keep the dot. A separator is accepted only between groups of three digits (`1,23` and `1234,567` are not numbers), which is stricter than Origin, so `1,5` under the comma setting is a missing value and a warning, not 15. Detection adopts a separator when some cell shows it without doubt: two or more groups (`1,234,567`), groups followed by the decimal character (`1,234.5`, `1.234,5`), or any grouped number with a space or an apostrophe. A lone `1,234` proves nothing and stays text (it is 1234 with the comma option and 1.234 with the decimal-comma option). Evidence for two different separators cancels out and nothing is removed. When the separator was found by detection the import warns once; when it was chosen it does not. Detection looks at all rows, so the rows that Origin took for headers are read as data. The comma as field delimiter cannot be combined with a decimal comma (error, as before); a comma thousands separator in a comma-delimited file works only inside quotes.
+- **Import modes** (`batch::ImportMode`, `batch::place_workbook`): new book, new sheet in the target book (the sheet name is the file name, `_2`, `_3` ... on a clash), replace the data of the target sheet (the sheet takes the new name, as in Origin), new columns (right of the existing ones; a clashing short name gets the next free one), new rows (column by column in order, labels of the first file kept; a column that changes type, text against numbers, gets missing values for the new rows and a warning; extra columns are added with missing values above; short columns are padded). Without a target every mode makes a new book. As in Origin, only the first file of a multi-file import may replace data; the dialog makes the others new sheets.
+- **Header rows to parameter rows** (`AsciiOptions::param_lines`, CLI `--param-lines 2,3`). Each listed header line becomes a named parameter row of the columns (`Column::params`): the name is the first cell of the line (a trailing colon is dropped; empty gives `Param<k>`) and the first column gets no value. With `param_name_from_first_cell = false` the rows are named `Param<k>` and the first column is included, which is closer to Origin's `UserParameter0`. Parameter lines are not reported as dropped header lines. The long name, units and comments lines are chosen as before (`--long-name-line`, `--units-line`, `--comments-line`). Known difference: the automatic label detection looks at three lines directly above the data at most, where Origin used a longer block and joined the comment lines.
+- **Several blocks** (`AsciiOptions::blocks`, CLI `--blocks-as-sheets`). By default a blank line is skipped and the file is one table (Origin kept only the last block in the run above; Sheaf does not copy that). With `Blocks::Sheets` the text is cut at blank lines into blocks that hold at least one numeric row; a block of text only (a title or header) belongs to the data block after it. Each block is read with its own header detection and becomes a sheet named after the file, then `file_2`, `file_3`.
+- **Batch import** (`batch::import_batch`, `batch::expand_inputs`, CLI `sheaf import <files, folders or patterns> --into project.sheaf --mode books|sheets|columns|rows`). A folder gives its `.txt .csv .tsv .dat .asc .prn .tab .bin` files; `*` and `?` in the last path part match file names without regard to letter case; the files are taken in natural order (`icp_2` before `icp_10`). Layouts: one book per file (default, the old behaviour); one book with a sheet per file named after the file; one sheet with the columns of all files side by side, each column's comment and its `SourceFile` parameter row holding the file name (`--file-name-comments` does this in the other layouts too); one sheet with the rows stacked. The shared book is named by `--book-name` or the folder name. Every file goes through `import_file`, so CHI text and binary files in the batch use the CHI importers and may add several sheets; in the columns and rows layouts only the first sheet of a file is used, with a warning. A file that cannot be read is reported and skipped; the others are saved and the exit code is non-zero.
+- **Import window.** "Put the data in" (new book, new sheet, replace the data, new columns, new rows; the last four act on the sheet that is active in the project and are disabled when there is none) and "Thousands separator". File > Import and dropping already accepted several files.
+
+Not done: file name trimming for sheet and book names (`FNameToShtFrom/To`), per-file modes (`FirstMode` against `Mode`), parameter and block options in the import window, joining several comment lines.

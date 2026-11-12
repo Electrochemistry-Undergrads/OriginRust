@@ -80,20 +80,69 @@ fn print_table(t: &analysis::ResultTable) {
 /// works on Y columns.
 enum Job {
     Tool(Tool),
-    Sort { by: String, descending: bool },
-    Filter { condition: String, in_place: bool },
+    /// Curve math; the reference column is looked up once the project is loaded.
+    Math {
+        op: MathKind,
+        operand: OperandArgs,
+    },
+    Sort {
+        by: String,
+        descending: bool,
+    },
+    Filter {
+        condition: String,
+        in_place: bool,
+    },
 }
 
 fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
     Ok(match tool {
-        AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative } => (
-            target,
-            Job::Tool(Tool::Integrate(IntegrateSpec {
-                area_type: if absolute { analysis::AreaType::Absolute } else { analysis::AreaType::Mathematical },
-                end_point_baseline: baseline,
-                cumulative: !no_cumulative,
-            })),
-        ),
+        AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative, ranges, row_ranges } => {
+            if ranges.is_empty() && row_ranges.is_empty() {
+                (
+                    target,
+                    Job::Tool(Tool::Integrate(IntegrateSpec {
+                        area_type: if absolute {
+                            analysis::AreaType::Absolute
+                        } else {
+                            analysis::AreaType::Mathematical
+                        },
+                        end_point_baseline: baseline,
+                        cumulative: !no_cumulative,
+                    })),
+                )
+            } else {
+                if absolute || no_cumulative {
+                    bail!(
+                        "--absolute and --no-cumulative do not apply to --ranges: the result table always \
+                         has both the signed and the absolute area and no running integral"
+                    );
+                }
+                let mut list = Vec::new();
+                for text in &ranges {
+                    let (a, b) = parse_pair::<f64>(text, "X range", "0.2:0.6")?;
+                    list.push(analysis::RowRange::XBetween(a, b));
+                }
+                for text in &row_ranges {
+                    let (a, b) = parse_pair::<usize>(text, "row range", "120:480")?;
+                    list.push(analysis::RowRange::Rows(a, b));
+                }
+                (
+                    target,
+                    Job::Tool(Tool::IntegrateRanges(analysis::IntegrateRangesSpec {
+                        ranges: list,
+                        end_point_baseline: baseline,
+                    })),
+                )
+            }
+        }
+        AnalyzeTool::SubtractRef { target, operand } => {
+            if operand.reference.is_none() {
+                bail!("subtract-ref needs the reference curve: --ref COLUMN (use 'math --value' for a constant)");
+            }
+            (target, Job::Math { op: MathKind::Subtract, operand })
+        }
+        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand }),
         AnalyzeTool::Differentiate { target, order, smooth, poly, points } => {
             (target, Job::Tool(Tool::Differentiate(analysis::DiffOptions { order, smooth, poly, npts: points })))
         }
@@ -167,7 +216,24 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Peaks { target, direction, points, min_height, count, all } => {
+        AnalyzeTool::Peaks {
+            target,
+            direction,
+            points,
+            min_height,
+            count,
+            all,
+            method,
+            smooth,
+            min_width,
+            baseline,
+            baseline_points,
+            anchors,
+            limits,
+            integrate,
+            fit,
+            fit_baseline,
+        } => {
             let direction = match direction {
                 PeakKind::Both => analysis::PeakDirection::Both,
                 PeakKind::Positive => analysis::PeakDirection::Positive,
@@ -179,7 +245,73 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 (None, None, true) => analysis::PeakFilter::None,
                 (None, None, false) => analysis::PeakFilter::Height(0.0),
             };
-            (target, Job::Tool(Tool::FindPeaks(analysis::PeakOptions { npts: points, direction, filter })))
+            let chain = integrate
+                || fit.is_some()
+                || method.is_some()
+                || smooth > 0
+                || min_width > 0.0
+                || baseline.is_some()
+                || anchors.is_some()
+                || limits.is_some();
+            if !chain {
+                (target, Job::Tool(Tool::FindPeaks(analysis::PeakOptions { npts: points, direction, filter })))
+            } else {
+                let baseline = match (baseline, &anchors) {
+                    (Some(PeakBaselineKind::Anchors), None) => bail!("--baseline anchors needs --anchors X1:Y1,X2:Y2"),
+                    (None | Some(PeakBaselineKind::Anchors), Some(text)) => {
+                        let mut pts = Vec::new();
+                        for part in text.split(',') {
+                            pts.push(parse_pair::<f64>(part, "anchor point", "1.5:0.02")?);
+                        }
+                        if pts.len() < 2 {
+                            bail!("--anchors needs at least two points, for example 0:0.1,20:0.3");
+                        }
+                        analysis::ChainBaseline::Anchors(pts, analysis::InterpMethod::Linear)
+                    }
+                    (Some(PeakBaselineKind::None), Some(_)) => {
+                        bail!("--anchors cannot be combined with --baseline none")
+                    }
+                    (Some(PeakBaselineKind::EndPoints), _) => analysis::ChainBaseline::EndPoints,
+                    (Some(PeakBaselineKind::Minima), _) => analysis::ChainBaseline::AutoMinima(baseline_points),
+                    (Some(PeakBaselineKind::None) | None, None) => analysis::ChainBaseline::None,
+                };
+                let method = match method.unwrap_or(PeakMethodKind::LocalMax) {
+                    PeakMethodKind::LocalMax => analysis::FindMethod::LocalMax,
+                    PeakMethodKind::Window => analysis::FindMethod::Window,
+                    PeakMethodKind::FirstDerivative => analysis::FindMethod::FirstDerivative,
+                    PeakMethodKind::SecondDerivative => analysis::FindMethod::SecondDerivative,
+                };
+                let limits = match limits.unwrap_or(PeakLimitKind::Baseline) {
+                    PeakLimitKind::Baseline => analysis::LimitMode::Baseline,
+                    PeakLimitKind::HalfHeight => analysis::LimitMode::HalfHeight,
+                };
+                let fit = fit.map(|shape| analysis::PeakFitSpec {
+                    shape: match shape {
+                        PeakFitKind::Gauss => analysis::PeakShape::Gauss,
+                        PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
+                    },
+                    baseline: match fit_baseline {
+                        PeakFitBaselineKind::Constant => analysis::FitBaseline::Constant,
+                        PeakFitBaselineKind::Linear => analysis::FitBaseline::Linear,
+                    },
+                });
+                let find = analysis::FindOptions {
+                    method,
+                    npts: points,
+                    smooth_points: smooth,
+                    direction,
+                    filter,
+                    min_fwhm: min_width,
+                };
+                (
+                    target,
+                    Job::Tool(Tool::PeakChain(analysis::PeakChainSpec {
+                        chain: analysis::ChainOptions { baseline, find, limits },
+                        integrate,
+                        fit,
+                    })),
+                )
+            }
         }
         AnalyzeTool::Stats { target } => (target, Job::Tool(Tool::Statistics)),
         AnalyzeTool::Sort { target, by, descending } => {
@@ -208,6 +340,62 @@ fn whole_sheet_only(target: &TargetArgs, tool: &str) -> Result<()> {
     }
 }
 
+/// Finds the reference column (loading its file if one was named) and builds the tool.
+fn math_tool(
+    project: &mut Project,
+    book: sheaf_core::WindowId,
+    sheet: usize,
+    op: MathKind,
+    operand: &OperandArgs,
+    read: &ReadOptions,
+) -> Result<Tool> {
+    let op = match op {
+        MathKind::Add => analysis::CurveOp::Add,
+        MathKind::Subtract => analysis::CurveOp::Subtract,
+        MathKind::Multiply => analysis::CurveOp::Multiply,
+        MathKind::Divide => analysis::CurveOp::Divide,
+        MathKind::Power => analysis::CurveOp::Power,
+    };
+    let operand_value = match (&operand.reference, operand.value) {
+        (None, Some(v)) => analysis::CurveOperand::Constant(v),
+        (None, None) => bail!("give the second operand: --value NUMBER or --ref COLUMN"),
+        (Some(name), _) => {
+            let (rb, rs) = match &operand.ref_file {
+                Some(file) => {
+                    let loaded = if is_project(file) {
+                        load_project(file)?
+                    } else {
+                        let mut p = Project::new();
+                        p.adopt_workbook(read_data_file(file, read)?.workbook);
+                        p
+                    };
+                    let from = pick_book(&loaded, operand.ref_book.as_deref())?;
+                    let book = loaded.workbook(from).expect("picked above").clone();
+                    let id = project.adopt_workbook(book);
+                    (id, pick_sheet(project, id, operand.ref_sheet.as_deref())?)
+                }
+                None => {
+                    let rb = match &operand.ref_book {
+                        Some(n) => pick_book(project, Some(n))?,
+                        None => book,
+                    };
+                    let rs = match (&operand.ref_sheet, rb == book) {
+                        (Some(n), _) => pick_sheet(project, rb, Some(n))?,
+                        (None, true) => sheet,
+                        (None, false) => pick_sheet(project, rb, None)?,
+                    };
+                    (rb, rs)
+                }
+            };
+            analysis::CurveOperand::Reference(named_columns(project, rb, rs, std::slice::from_ref(name))?[0])
+        }
+    };
+    if operand.common && matches!(operand_value, analysis::CurveOperand::Constant(_)) {
+        bail!("--common only applies to a reference curve");
+    }
+    Ok(Tool::CurveMath(analysis::CurveMathSpec { op, operand: operand_value, common_only: operand.common }))
+}
+
 pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     let (target, job) = job_from(a.tool)?;
     let mut project = if is_project(&target.input) {
@@ -219,6 +407,10 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     };
     let book = pick_book(&project, target.book.as_deref())?;
     let sheet = pick_sheet(&project, book, target.sheet.as_deref())?;
+    let job = match job {
+        Job::Math { op, operand } => Job::Tool(math_tool(&mut project, book, sheet, op, &operand, &target.read)?),
+        other => other,
+    };
 
     // The sheet that holds the results, for --export.
     let result_sheet = match job {
@@ -246,9 +438,13 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             if let Some(t) = &report.table {
                 print_table(t);
             }
+            for note in &report.notes {
+                println!("{note}");
+            }
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)
         }
+        Job::Math { .. } => unreachable!("curve math was turned into a tool above"),
         Job::Sort { by, descending } => {
             let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;

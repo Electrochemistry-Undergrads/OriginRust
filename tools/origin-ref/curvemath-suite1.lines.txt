@@ -1,0 +1,20 @@
+newbook;
+col(A) = data(0, 10, 0.5);
+col(B) = 2*col(A) + 1;
+col(C) = data(1.5, 8.5, 1);
+col(D) = col(C)^2 + 3*sin(col(C));
+subtract_ref iy1:=(col(A),col(B)) iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(E),col(F));
+subtract_ref iy1:=(col(A),col(B)) iy2:=(col(C),col(D)) common:=1 rescale:=0 oy:=(col(G),col(H));
+mathtool iy1:=(col(A),col(B)) operator:=add operand:=1 iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(I),col(J));
+mathtool iy1:=(col(A),col(B)) operator:=sub operand:=1 iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(K),col(L));
+mathtool iy1:=(col(A),col(B)) operator:=mul operand:=1 iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(M),col(N));
+mathtool iy1:=(col(A),col(B)) operator:=div operand:=1 iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(O),col(P));
+mathtool iy1:=(col(A),col(B)) operator:=pow operand:=1 iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(Q),col(R));
+mathtool iy1:=(col(A),col(B)) operator:=div operand:=1 iy2:=(col(C),col(D)) common:=1 rescale:=0 oy:=(col(S),col(T));
+mathtool iy1:=(col(A),col(B)) operator:=add operand:=0 const:=3.5 rescale:=0 oy:=(col(U),col(V));
+mathtool iy1:=(col(A),col(B)) operator:=sub operand:=0 const:=3.5 rescale:=0 oy:=(col(W),col(X));
+mathtool iy1:=(col(A),col(B)) operator:=mul operand:=0 const:=3.5 rescale:=0 oy:=(col(Y),col(Z));
+mathtool iy1:=(col(A),col(B)) operator:=div operand:=0 const:=4 rescale:=0 oy:=(col(AA),col(AB));
+mathtool iy1:=(col(A),col(B)) operator:=div operand:=0 const:=0 rescale:=0 oy:=(col(AC),col(AD));
+mathtool iy1:=(col(A),col(B)) operator:=pow operand:=0 const:=2 rescale:=0 oy:=(col(AE),col(AF));
+#[Book1]Sheet1

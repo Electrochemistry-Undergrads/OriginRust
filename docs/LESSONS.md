@@ -109,3 +109,17 @@ use a smaller thread (256 KiB) and were checked to fail without the fix.
 
 `--x-min -1` is rejected; write `--x-min=-1`. Tests and examples of the command-line program
 use the `=` form for values that can be negative.
+
+## Parallel build folders fill the disk
+
+Each agent's build folder (`target/wt-<name>`) grows to several gigabytes with debug info. On
+2026-11-12 the disk reached 97% full with fourteen such folders. Agents now build with
+`CARGO_PROFILE_DEV_DEBUG=0`, and the lead deletes a branch's build folder when the branch is merged
+(`cmd /c "rd /s /q target\wt-<name>"` is much faster than `rm -rf` on Windows). Check `df -h /c`
+before starting several builds at once.
+
+## Two sessions on one repository need a written split
+
+The owner sometimes starts a second Claude session on the same repository. The sessions agree by
+message which crates and files each one owns. Only the lead merges to `main` and edits HANDOFF.md,
+ROADMAP.md and LESSONS.md. The other session works on named branches and reports them to the lead.

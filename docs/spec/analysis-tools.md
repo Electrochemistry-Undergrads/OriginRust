@@ -227,8 +227,8 @@ the ripple minima of a positive curve are not negative peaks. Height filter with
 with `|y| >= v`; with `v = 0` the threshold is 20 % of the largest `|y|` of the data (fits two data
 sets; whether the maximum is of `|y|` or of `y` was not separated). Number filter: the `value`
 largest `|y|`, reported in row order. If no peak exists Origin stops the script with an error; our
-function returns an empty result. The `smooth` option (smoothing before the search) is not
-implemented. The window search and derivative methods are not implemented.
+function returns an empty result. The other search methods and smoothing before the search are
+part of the peak chain (section 11); only the local maximum method is checked against `pkfind`.
 
 ## 8. Descriptive statistics (`stats`, `colstats`)
 
@@ -247,9 +247,176 @@ the two neighbours) and rounded to the nearest whole position otherwise (`.25` g
 Median: the usual one. The `stats` X-function returns mean, sd, n, min, max, sum, missing for the same
 numbers (checked for two columns).
 
+## 9. Curve math: subtract a reference curve and simple math (`subtract_ref`, `mathtool`)
+
+Origin has two menu items for this: Analysis > Mathematics > Subtract Reference Data (`subtract_ref`)
+and Analysis > Mathematics > Simple Math (`mathtool`). `subtract_ref` is `mathtool` fixed to the
+operator Subtract and the operand Reference Data. Inputs of `mathtool` (from its X-Function file):
+the data curve `iy1` (X and Y), `operator` (add, sub, div, mul, pow; default add), `operand`
+(Constant or Reference Data), the reference curve `iy2`, the constant `const`, `common` ("use common
+range only", off by default) and `rescale` (rescales the source graph; a graph action, not
+implemented). The output `oy` is an X and a Y column.
+
+Observed (Origin 2016, scripts `curvemath-suite1..3.lines.txt`; the Rust test is
+`crates/calc/tests/origin_curvemath.rs`, relative tolerance 1e-10):
+
+- Operations are `y op operand` with the data on the left: `y + r`, `y - r`, `y * r`, `y / r`,
+  `y ^ r`. With a constant the operand is the same number for every row.
+- The reference is interpolated onto the X values of the data with straight lines between its
+  points (the default, and the only choice offered). Outside the reference's X range the first or
+  last segment of the reference is continued as a straight line (so a data point left of the
+  reference gets the straight-line extension, not the end value, and no missing value). Checked
+  with data reaching 1.5 below and 1.5 above the reference.
+- Without "common range only" the output has one row per data row, at the data's X values and in
+  the data's order; the data need not be sorted.
+- With "common range only" the result covers X from the larger of the two minima to the smaller of
+  the two maxima (both ends included). Its X values are the sorted union of the data's and the
+  reference's X values inside that range, and both curves are interpolated linearly onto them (so
+  the data are also interpolated, not only the reference). Checked with unsorted data and a
+  reference on a different grid.
+- Division by zero (by the constant 0, or by a reference value that is exactly 0 at that X) gives a
+  missing value. For the constant 0 Origin refuses to run the X-Function at all.
+- A reference sorted by X is handled as expected, including two reference points with the same X
+  (the segment left of them uses the first, the segment right of them the second). An unsorted
+  reference was probed too, and Origin's result there is odd: inside the range it equals the
+  sorted result, but outside the range it continued the ends differently (constant below the
+  lowest X, a different slope above the highest). We do not reproduce this; we sort the reference
+  and continue its end segments, which is what Origin does for a sorted reference. Not compared:
+  missing values inside the data or the reference, a reference with fewer than two points.
+
+Sheaf: `sheaf_calc::curve_math_ref`, `curve_math_const` and `CurveOp` (add, subtract, multiply,
+divide, power; non-finite results become missing values). The project operation is
+`Tool::CurveMath(CurveMathSpec)` of `Project::analyze` (ADR 0005), one undo step named "Subtract
+reference" or "Curve math". The reference is any numeric column of the project (another sheet or
+workbook too); its X is the nearest X column to its left, or row numbers. Where results go, which
+follows ADR 0005 and differs a little from Origin's X and Y output pair: without common range, a
+new Y column directly behind each source column (rows outside a chosen row range are missing),
+named "<name> minus <reference name>" and so on, with unit of the source for add and subtract and
+for scaling by a constant, and no unit otherwise. With common range only, a new sheet `Math1` with
+an X column and a Y column per input. The reference needs at least two valid points; an empty
+common range and division by the constant 0 are refused and change nothing. Origin's power
+operator is included; the owner asked only for the four basic ones.
+
+Command line: `sheaf analyze subtract-ref FILE --y B --ref COLUMN [--ref-file F] [--ref-book B]
+[--ref-sheet S] [--common]` and `sheaf analyze math --op add|subtract|multiply|divide|power
+(--value N | --ref COLUMN ...)`. The reference column is searched in the same sheet unless a file,
+book or sheet is named; a file named with `--ref-file` is added to the project as a workbook (and
+so appears in `--save`). Window: Analysis > Subtract Reference Data... and Simple Math..., with a
+list of all other numeric Y columns of the project as references.
+
+## 10. Integrating several ranges at once (`integ1` per range)
+
+Origin's Integrate reports for one curve and one range: `area`, `x0`/`y0` (position and signed
+height of the largest-magnitude point after the baseline), `dx` (width at half height, measured as
+in section 1), the first and last point of the range (`x1`, `x2`, `i1`, `i2`). It does not report
+a separate absolute area; that comes from running it with `type:=abs`. Sheaf's range table is
+those same numbers per range, with the absolute area added, so it reuses the checked numerics of
+section 1 for every row (there is no new Origin fixture: each row is one `integ1` run on the range's
+rows).
+
+Sheaf: `Tool::IntegrateRanges(IntegrateRangesSpec)`. Input: a list of ranges, each an X interval
+(the first unbroken run of rows inside it, as for the row choice of ADR 0005) or a row range, and
+the end-point-baseline switch, which is applied to each range separately (the line through that
+range's own first and last point). The request's own row range is applied first: X intervals are
+searched inside it and row ranges are cut to it, so the two sweeps of a cyclic voltammogram are
+separated with a row range, since an X interval always finds the first pass. Result: a table with
+one row per input column and range, labelled "<column label>, range N", and the numbers First row,
+Last row (worksheet rows), X start, X end (X of the first and last point used), Area, Absolute
+area, Peak X, Peak height, Width at half height; also written as the new sheet `Integrate1`. The
+area unit is the product of the Y and X units (current times time is charge). No running-integral
+columns are added. A range with fewer than two points, or no row inside it, is an error and
+nothing changes. One undo step, named "Integrate ranges".
+
+Typical uses: the anodic and cathodic peak of a cyclic voltammogram (one row range per sweep) and
+the charge of each cycle. Not done: choosing the ranges by dragging on a graph, anchor-point
+baselines per peak, and splitting a curve into peaks automatically (Origin's Peak Analyzer).
+
+Command line: `sheaf analyze integrate FILE --ranges 0.2:0.5,0.6:0.9 [--row-ranges 1:200,201:400]
+[--baseline]`; `--absolute` and `--no-cumulative` do not apply and are refused with a message.
+Window: Analysis > Integrate Ranges... (a list of X intervals with Add range and Remove).
+
+## 11. Peak chain (Sheaf's Peak Analyzer)
+
+Origin's Peak Analyzer is a wizard with the goals create baseline, subtract baseline, find peaks,
+integrate peaks and fit peaks. Sheaf runs the same goals in one tool, `Tool::PeakChain`
+(`crates/calc/src/peakchain.rs`, `crates/fit/src/multipeak.rs`, the glue in `crates/core/src/analysis.rs`).
+What was measured in Origin: the local-maximum search (section 7) and `integ1` (section 1), used here
+as the reference for the area, centre, height and half-height width of each peak. The wizard itself
+was not driven, so the rules for baselines, limits and the other search methods below are Sheaf's own
+choices, written to behave like the wizard's defaults; they are marked "own".
+
+Steps, in order:
+
+1. Baseline (own): none, a constant, the straight line through the first and last point, anchor
+   points joined by linear or spline interpolation (the `baseline` module), or an automatic mode that
+   takes the lowest point of each of n equal stretches of the (lightly smoothed) data as an anchor and
+   joins the anchors by straight lines. The baseline is subtracted; all later numbers use the
+   corrected curve.
+2. Search (own, except local maximum): methods local maximum (section 7, `npts` neighbours), window
+   search (the largest point of a window of `npts` points each side), first derivative (plus-to-minus
+   sign change of a Savitzky-Golay derivative) and second derivative (a negative minimum of the second
+   derivative, which also finds a shoulder that has no maximum of its own). Optional Savitzky-Golay
+   smoothing before the search; the reported row is the largest raw point next to the smoothed
+   maximum. Direction positive, negative or both. Filters: height (0 means 20 % of the largest
+   magnitude, as in `pkfind`), a number of highest peaks, and a minimum full width at half height.
+3. Limits (own): walking outwards from the peak point, a peak ends where the corrected curve reaches
+   zero (the baseline), found by linear interpolation between two points, but never beyond the valley
+   (the point nearest the baseline) between it and the neighbouring peak, so overlapping peaks share
+   the valley as their common limit and their areas add up to the area under both. With the half
+   height option the limits are the points where the curve falls to half the peak height.
+4. Result per peak: row of the peak point, centre (X of the peak point), height above the baseline,
+   area (trapezoids between the two limits, including the interpolated end pieces), area percent (share
+   of the sum of all areas), FWHM (interpolated half-height crossings inside the limits), left and right
+   limit (X). A negative peak has negative height and area.
+   Data rules (own, not compared with Origin): rows where X or Y is missing are skipped in every step
+   (the baseline and corrected curve are missing there, an area is the integral over the valid rows,
+   and the end-points line goes through the first and last valid rows), so the integration columns and
+   the fit columns agree. X must run one way, rising or falling; otherwise the tool refuses with "X is
+   not sorted" and changes nothing. The area of a positive peak is positive whichever way X runs
+   (Origin's `integ1` gives a negative area for falling X, section 1; the table here follows the
+   fit columns instead, so the two sets of columns have one sign).
+5. Multi-peak fit (own model, Origin's functions): a sum of Gauss or Lorentz peaks plus a constant or
+   sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak, in Origin's parameterisation
+   (Gauss `A/(w sqrt(pi/2)) exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz
+   `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`). Starting values come from the found peaks (centre, FWHM,
+   height above the baseline), with widths bounded to stay positive. The fit uses the nonlinear engine
+   of `crates/fit`. The report has centre, height, FWHM, area and area percent per peak, plus a line of
+   R squared, reduced chi-square and iterations. The fit uses the data, not the corrected curve, so
+   the baseline is fitted along with the peaks.
+
+Output (ADR 0005): a new sheet `PeakAnalysis1` with one row per peak and column, headers Row, Center,
+Height, then (with integration) Area, Area %, FWHM, Left limit, Right limit, then (with a fit) Fit
+center, Fit height, Fit FWHM, Fit area, Fit area %. A baseline column and, with a fit, a fitted-curve
+column are added beside each source column. No peaks found, or a baseline that cannot be made, is an
+error and changes nothing. One undo step named "Analyze peaks".
+
+Checked against Origin (`crates/calc/tests/origin_peakchain.rs`, script
+`tools/origin-ref/peaks-integ.lines.txt`): generated data (401 points, slope 0.01, one separate peak,
+two overlapping peaks, a small ripple). Sheaf found three peaks and its limits; Origin's `integ1` then
+integrated the corrected curve over exactly those rows. Agreement: peak position and height exactly,
+area within 2e-4 absolute (Sheaf also integrates the sliver up to the interpolated baseline crossing,
+below 1.1e-4 here), width at half height within 1e-9 where Origin's half-height crossing lies inside
+the rows. For the second peak the valley side never reaches half height inside its limits; Origin
+extends the width beyond the rows and Sheaf stops at the limit, so that width is not compared. Not
+checked against Origin: the choice of limits itself, the automatic baseline, the derivative methods,
+and the multi-peak fit (it is tested against closed-form data in `multipeak.rs` and in the core and
+CLI tests, not against Origin's Peak Analyzer fit).
+
+Not done: anchor points chosen on a graph, a second-derivative-zero baseline, the wizard's
+interactive preview, separate widths or shapes per peak, constraints, and fitting inside a row range
+other than the request's range.
+
+Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivative|second-derivative]
+[--smooth N] [--min-width W] [--baseline none|end-points|minima|anchors] [--baseline-points N]
+[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz]
+[--fit-baseline constant|linear]`, together with the existing `--points`, `--min-height`, `--count`,
+`--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
+Analyze Peaks... (command line `--show analysis:peak-chain`).
+
 ## Files
 
-Reference scripts (all in `tools/origin-ref/`): `integ-suite1..6`, `diff-suite1`, `smooth-suite1`,
+Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with
+`run-labtalk-lines.ps1`, they print the result sheet), `integ-suite1..6`, `diff-suite1`, `smooth-suite1`,
 `smooth-fftprobe`, `smooth-fft-grid`, `smooth-fft-edge`, `smooth-fft-big`, `interp-bspline`, `normalize-suite1`, `interp-suite1`, `pkfind-suite1`, `pkfind-suite2`,
 `colstats-suite1..3`. Run with `run-labtalk-data.ps1`. Raw dumps (git-ignored):
 `re-workspace/scratch/sheaf-calc/*.json`.

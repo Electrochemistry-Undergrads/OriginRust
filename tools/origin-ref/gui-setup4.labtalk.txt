@@ -1,0 +1,23 @@
+// Our own data for studying Origin's interface (second study): a workbook with a text column
+// and number columns, a line graph and a column graph made from it. Book1 is left active.
+newbook name:="Book1";
+wks.ncols = 4;
+col(A) = data(1, 10, 1);
+col(B) = col(A) * 2 + 1;
+col(C) = sin(col(A));
+col(D) = col(A) ^ 2 / 10;
+col(A)[L]$ = "Conc";
+col(A)[U]$ = "mM";
+col(B)[L]$ = "Signal";
+col(B)[U]$ = "mA";
+col(B)[C]$ = "Scan 1";
+col(C)[L]$ = "Wave";
+col(D)[L]$ = "Square";
+wks.addcol(Label);
+wks.col5.type = 4;
+range rl = 5;
+rl[1]$ = "alpha"; rl[2]$ = "beta"; rl[3]$ = "gamma";
+plotxy iy:=(1,2:3) plot:=200;
+win -a Book1;
+plotxy iy:=(1,2:3) plot:=203;
+win -a Book1;

@@ -1,5 +1,5 @@
-//! The application window: menus, project explorer, docked workbook and
-//! graph tabs, dialogs, and the one place where user actions change the
+//! The application window: menus, project explorer, the workspace with its
+//! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
 use crate::actions::Action;
@@ -12,11 +12,14 @@ use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi};
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText, Sense, Stroke};
-use egui_dock::{DockArea, DockState, TabViewer};
+use crate::menus::{self, MenuContext, WindowKind};
+use crate::theme;
+use crate::workspace::{self, WindowInfo, Workspace};
+use eframe::egui::{self, RichText, Sense};
 use sheaf_core::project::Window;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
+use sheaf_io::batch::{ImportMode, Target, place_workbook};
 use sheaf_io::project_file;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -45,7 +48,7 @@ enum Pending {
     Quit,
 }
 
-/// More new windows than this at once are not all opened as tabs.
+/// More new windows than this at once are not all opened.
 const MAX_TABS_AT_ONCE: usize = 8;
 
 struct RenameDialog {
@@ -56,8 +59,10 @@ struct RenameDialog {
 pub struct SheafApp {
     doc: Document,
     path: Option<PathBuf>,
-    dock: DockState<WindowId>,
-    /// Windows that already got a tab once. A tab the user closed is not reopened by itself.
+    /// The Origin file the project was imported from; saving over it first keeps a `.bak` copy.
+    foreign_source: Option<PathBuf>,
+    workspace: Workspace,
+    /// Windows that were already shown once. A window the user closed is not reopened by itself.
     known: HashSet<WindowId>,
     active: Option<WindowId>,
     books: HashMap<WindowId, BookUi>,
@@ -81,6 +86,8 @@ pub struct SheafApp {
     /// Folder of the last imported Origin project, used as the start folder of file choosers.
     import_folder: Option<PathBuf>,
     quit_confirmed: bool,
+    /// A top-level menu that is held open (`--show menu:NAME`).
+    open_menu: Option<String>,
     shown_title: String,
     startup: Startup,
     frame: u64,
@@ -88,15 +95,12 @@ pub struct SheafApp {
 
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
-        cc.egui_ctx.set_theme(egui::Theme::Light);
-        cc.egui_ctx.all_styles_mut(|s| {
-            s.spacing.item_spacing = egui::vec2(8.0, 5.0);
-            s.interaction.selectable_labels = false;
-        });
+        theme::apply(&cc.egui_ctx);
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
-            dock: DockState::new(Vec::new()),
+            foreign_source: None,
+            workspace: Workspace::default(),
             known: HashSet::new(),
             active: None,
             books: HashMap::new(),
@@ -118,13 +122,14 @@ impl SheafApp {
             pending_path: None,
             import_folder: None,
             quit_confirmed: false,
+            open_menu: None,
             shown_title: String::new(),
             startup,
             frame: 0,
         };
         let paths = std::mem::take(&mut app.startup.paths);
         app.open_paths(paths, false);
-        app.sync_tabs();
+        app.sync_windows();
         app.run_startup_show();
         app
     }
@@ -159,7 +164,7 @@ impl SheafApp {
                 Err(e) => errors.push(e.to_string()),
             }
         }
-        self.finish_import(items, errors, true, None);
+        self.finish_import(items, errors, true, None, ImportMode::NewBook);
     }
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
@@ -168,14 +173,22 @@ impl SheafApp {
             Ok(opened) => {
                 self.doc.replace(opened.project);
                 self.reset_views();
+                self.foreign_source = opened.foreign.then(|| path.clone());
                 if opened.foreign {
-                    // Not saved back to the Origin file: the project has no file name yet.
-                    self.status = format!("Imported {}; save it as a Sheaf project to keep changes", path.display());
+                    // Not saved back to the Origin file by itself (Sheaf reads only part of what
+                    // Origin keeps there): the project has no file name yet.
+                    self.status = format!(
+                        "Imported {}; use Save Project As to keep changes as an Origin project",
+                        path.display()
+                    );
                     self.import_folder = path.parent().map(Path::to_path_buf);
                     self.path = None;
+                } else if opened.companion_used {
+                    self.status = format!("Opened the companion of {} (graphs included)", path.display());
+                    self.path = opened.save_path;
                 } else {
                     self.status = format!("Opened {}", path.display());
-                    self.path = Some(path);
+                    self.path = opened.save_path;
                 }
                 if !opened.warnings.is_empty() {
                     self.message = Some((
@@ -193,7 +206,7 @@ impl SheafApp {
     }
 
     fn reset_views(&mut self) {
-        self.dock = DockState::new(Vec::new());
+        self.workspace = Workspace::default();
         self.known.clear();
         self.books.clear();
         self.graphs.clear();
@@ -211,40 +224,77 @@ impl SheafApp {
         let path = match (&self.path, ask) {
             (Some(p), false) => p.clone(),
             _ => {
+                let suggested = self
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Untitled.opj".to_string());
+                // The default format is .opj; a project that came from a .sheaf file offers
+                // .sheaf first because it keeps saving there.
+                let keeps_sheaf =
+                    self.path.as_ref().and_then(|p| p.extension()).is_some_and(|e| e.eq_ignore_ascii_case("sheaf"));
+                let origin = ("Origin project (*.opj)", "opj");
+                let sheaf = ("Sheaf project (*.sheaf)", project_file::EXTENSION);
+                let (first, second) = if keeps_sheaf { (sheaf, origin) } else { (origin, sheaf) };
                 let mut chooser = rfd::FileDialog::new()
                     .set_title("Save project")
-                    .add_filter("Sheaf project", &[project_file::EXTENSION])
-                    .set_file_name(
-                        self.path
-                            .as_ref()
-                            .and_then(|p| p.file_name())
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| format!("Untitled.{}", project_file::EXTENSION)),
-                    );
+                    .add_filter(first.0, &[first.1])
+                    .add_filter(second.0, &[second.1])
+                    .set_file_name(suggested);
                 if let Some(dir) = self.folder() {
                     chooser = chooser.set_directory(dir);
                 }
-                let Some(mut p) = chooser.save_file() else {
+                let Some(p) = chooser.save_file() else {
                     return false;
                 };
-                // Always a Sheaf project: never write over a file of another program.
-                let is_sheaf = p
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case(project_file::EXTENSION));
-                if !is_sheaf {
-                    let mut name = p.file_name().map(|n| n.to_os_string()).unwrap_or_default();
-                    name.push(format!(".{}", project_file::EXTENSION));
-                    p.set_file_name(name);
-                }
                 p
             }
         };
-        match project_file::save(self.doc.project(), &path) {
-            Ok(()) => {
+        self.save_to(path)
+    }
+
+    /// Writes the project to `path`. Only `.opj` and `.sheaf` names are written as they are; any
+    /// other name gets `.opj` added, so a file of another program is never written over. The
+    /// rules (companion file, refusal) are in `sheaf_io::save`.
+    fn save_to(&mut self, mut path: PathBuf) -> bool {
+        let known = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("opj") || e.eq_ignore_ascii_case(project_file::EXTENSION));
+        if !known {
+            let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+            name.push(".opj");
+            path.set_file_name(name);
+        }
+        let mut backup = None;
+        if self.foreign_source.as_ref().is_some_and(|src| same_file(src, &path)) {
+            match sheaf_io::save::backup_original(&path) {
+                Ok(b) => backup = b,
+                Err(e) => {
+                    self.message = Some(("Could not keep a copy of the original".to_string(), e.to_string()));
+                    return false;
+                }
+            }
+        }
+        match sheaf_io::save::save_project(self.doc.project(), &path) {
+            Ok(outcome) => {
+                // The project is safe on disk either way: in the .opj, or in the companion when
+                // the .opj was refused.
                 self.doc.dirty = false;
-                self.status = format!("Saved {}", path.display());
+                self.status = outcome.status();
+                if let Some(b) = &backup {
+                    self.status.push_str(&format!("; the original Origin file is kept as {}", b.display()));
+                }
                 self.path = Some(path);
+                if let Some(text) = outcome.details() {
+                    let title = if outcome.refusal.is_some() {
+                        "The Origin project could not be written"
+                    } else {
+                        "Saved with a companion file"
+                    };
+                    self.message = Some((title.to_string(), text));
+                }
                 true
             }
             Err(e) => {
@@ -276,6 +326,7 @@ impl SheafApp {
         errors: Vec<String>,
         plot: bool,
         template: Option<Template>,
+        mode: ImportMode,
     ) {
         let count = items.len();
         let mut notes: Vec<String> = errors;
@@ -284,20 +335,29 @@ impl SheafApp {
                 notes.push(format!("{}: {w}", i.workbook.long_name));
             }
         }
+        // The modes other than "New book" put every file into the sheet that was active when the
+        // import started. Only the first file may replace its data; the others become new sheets.
+        let target = self.import_target().map(|t| t.0);
         if count > 0 {
-            self.doc.apply("Import data", move |p| {
-                for imported in items {
+            let placement_notes = self.doc.apply("Import data", move |p| {
+                let mut placement_notes = Vec::new();
+                for (n, imported) in items.into_iter().enumerate() {
                     let t = template.unwrap_or(imported.suggested_template);
-                    let book = p.adopt_workbook(imported.workbook);
+                    let this_mode = if n > 0 && mode == ImportMode::ReplaceSheet { ImportMode::NewSheet } else { mode };
+                    let placed = place_workbook(p, imported.workbook, this_mode, target);
+                    placement_notes.extend(placed.warnings);
+                    let book = placed.book;
                     if plot {
-                        let sheet = p.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+                        let sheet = placed.sheet;
                         let ys = p.default_plot_columns(book, sheet, t);
                         if !ys.is_empty() {
                             let _ = p.plot_columns(t, &ys);
                         }
                     }
                 }
+                placement_notes
             });
+            notes.extend(placement_notes);
             self.status = format!("Imported {count} file(s)");
         }
         if !notes.is_empty() {
@@ -305,31 +365,33 @@ impl SheafApp {
         }
     }
 
-    // ----- tabs ----------------------------------------------------------
+    // ----- windows -------------------------------------------------------
 
-    /// Gives every new window of the project a tab and drops tabs of windows that are gone.
-    fn sync_tabs(&mut self) {
-        let ids: Vec<WindowId> = self.doc.project().windows.iter().map(Window::id).collect();
-        let set: HashSet<WindowId> = ids.iter().copied().collect();
-        self.dock.retain_tabs(|t| set.contains(t));
+    /// Gives every new window of the project a place in the workspace and drops those that are gone.
+    fn sync_windows(&mut self) {
+        let ids: Vec<(WindowId, bool)> =
+            self.doc.project().windows.iter().map(|w| (w.id(), matches!(w, Window::Graph(_)))).collect();
+        let set: HashSet<WindowId> = ids.iter().map(|(id, _)| *id).collect();
+        self.workspace.retain(|id| set.contains(&id));
         self.known.retain(|k| set.contains(k));
         self.books.retain(|k, _| set.contains(k));
         self.graphs.retain(|k, _| set.contains(k));
         // A project with very many windows (an imported Origin project can have dozens) opens
-        // only its first few as tabs; the others are opened from the project explorer.
-        let new: Vec<WindowId> = ids.into_iter().filter(|id| self.known.insert(*id)).collect();
+        // only its first few; the others are opened from the project explorer.
+        let new: Vec<(WindowId, bool)> = ids.into_iter().filter(|(id, _)| self.known.insert(*id)).collect();
         let shown = if new.len() > MAX_TABS_AT_ONCE { 1 } else { new.len() };
-        for id in new.into_iter().take(shown) {
-            self.dock.push_to_focused_leaf(id);
+        for (k, (id, graph)) in new.into_iter().enumerate() {
+            self.workspace.add(id, graph, k < shown);
         }
     }
 
     fn focus(&mut self, id: WindowId) {
-        if let Some((surface, node, tab)) = self.dock.find_tab(&id) {
-            self.dock.set_active_tab((surface, node, tab));
-            self.dock.set_focused_node_and_surface((surface, node));
-        } else if self.doc.project().window(id).is_some() {
-            self.dock.push_to_focused_leaf(id);
+        if self.doc.project().window(id).is_some() {
+            if !self.workspace.contains(id) {
+                let graph = self.doc.project().graph(id).is_some();
+                self.workspace.add(id, graph, false);
+            }
+            self.workspace.activate(id);
         }
     }
 
@@ -368,7 +430,7 @@ impl SheafApp {
                     None => {
                         let mut chooser = rfd::FileDialog::new()
                             .set_title("Import data files")
-                            .add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn"])
+                            .add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn", "bin"])
                             .add_filter("All files", &["*"]);
                         if let Some(dir) = self.folder() {
                             chooser = chooser.set_directory(dir);
@@ -414,6 +476,27 @@ impl SheafApp {
                         }
                     }
                 });
+            }
+            Action::Recalculate(columns) => {
+                let columns: Vec<ColumnId> = columns
+                    .into_iter()
+                    .filter(|c| self.doc.project().column(*c).is_some_and(|c| c.is_locked()))
+                    .collect();
+                let result = self.doc.edit("Recalculate", |p| {
+                    for c in &columns {
+                        p.recalculate(*c)?;
+                    }
+                    Ok::<(), sheaf_core::formula::FormulaError>(())
+                });
+                self.status = match result {
+                    Ok(()) if columns.is_empty() => "No selected column recalculates".to_string(),
+                    Ok(()) => "Recalculated".to_string(),
+                    Err(e) => format!("Could not recalculate: {e}"),
+                };
+            }
+            Action::SetCell { column, .. } if self.doc.project().column(column).is_some_and(|c| c.is_locked()) => {
+                self.status =
+                    "That column is calculated from a formula; change the formula in Set Column Values".to_string();
             }
             Action::SetCell { column, row, text } => {
                 let beyond_end = self.doc.project().column(column).is_none_or(|c| row >= c.len());
@@ -484,6 +567,9 @@ impl SheafApp {
                     self.rename = Some(RenameDialog { window: id, long_name });
                 }
             }
+            Action::Cascade => self.workspace.cascade(),
+            Action::TileHorizontally => self.workspace.tile_horizontally(),
+            Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
             Action::Quit => {
                 if self.doc.dirty {
@@ -638,195 +724,52 @@ impl SheafApp {
 
     // ----- drawing -------------------------------------------------------
 
+    /// What the menus need to know about the program right now.
+    fn menu_context(&self) -> MenuContext<'_> {
+        let project = self.doc.project();
+        let book = self.active.filter(|id| project.workbook(*id).is_some());
+        let graph = self.active.filter(|id| project.graph(*id).is_some());
+        let kind = match (book, graph) {
+            (Some(_), _) => WindowKind::Workbook,
+            (_, Some(_)) => WindowKind::Graph,
+            _ => WindowKind::None,
+        };
+        let selected: &[ColumnId] = book.and_then(|b| self.books.get(&b)).map(|s| s.selected.as_slice()).unwrap_or(&[]);
+        MenuContext {
+            kind,
+            book,
+            graph,
+            active: self.active,
+            selected,
+            undo: self.doc.undo_label(),
+            redo: self.doc.redo_label(),
+            windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
+            open: self.open_menu.as_deref(),
+        }
+    }
+
+    /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands
+    /// Sheaf has), and nothing else.
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
-        let cmd = |key| KeyboardShortcut::new(Modifiers::COMMAND, key);
-        let cmd_shift = |key| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, key);
         let typing = ctx.wants_keyboard_input();
+        let menu_ctx = self.menu_context();
         ctx.input_mut(|i| {
-            if i.consume_shortcut(&cmd_shift(Key::S)) {
-                actions.push(Action::SaveProjectAs);
-            }
-            if i.consume_shortcut(&cmd(Key::S)) {
-                actions.push(Action::SaveProject);
-            }
-            if i.consume_shortcut(&cmd(Key::O)) {
-                actions.push(Action::OpenProject);
-            }
-            if i.consume_shortcut(&cmd(Key::N)) {
-                actions.push(Action::NewProject);
-            }
-            if i.consume_shortcut(&cmd(Key::I)) {
-                actions.push(Action::Import(None));
-            }
-            if !typing {
-                if i.consume_shortcut(&cmd_shift(Key::Z)) || i.consume_shortcut(&cmd(Key::Y)) {
-                    actions.push(Action::Redo);
+            for (keys, cmd) in menus::shortcuts() {
+                if typing && !menus::works_while_typing(&cmd) {
+                    continue;
                 }
-                if i.consume_shortcut(&cmd(Key::Z)) {
-                    actions.push(Action::Undo);
+                if i.consume_shortcut(&keys)
+                    && let Ok(action) = menus::resolve(&cmd, &menu_ctx)
+                {
+                    actions.push(action);
                 }
             }
         });
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        let project = self.doc.project();
-        let active_book = self.active.filter(|id| project.workbook(*id).is_some());
-        let active_graph = self.active.filter(|id| project.graph(*id).is_some());
-        let selected: Vec<ColumnId> =
-            active_book.and_then(|b| self.books.get(&b)).map(|s| s.selected.clone()).unwrap_or_default();
-        let item = |ui: &mut egui::Ui, enabled: bool, text: &str, shortcut: &str| {
-            let mut button = egui::Button::new(text);
-            if !shortcut.is_empty() {
-                button = button.shortcut_text(shortcut);
-            }
-            let clicked = ui.add_enabled(enabled, button).clicked();
-            if clicked {
-                ui.close();
-            }
-            clicked
-        };
-
-        egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                if item(ui, true, "New Project", "Ctrl+N") {
-                    actions.push(Action::NewProject);
-                }
-                if item(ui, true, "Open Project...", "Ctrl+O") {
-                    actions.push(Action::OpenProject);
-                }
-                if item(ui, true, "Save Project", "Ctrl+S") {
-                    actions.push(Action::SaveProject);
-                }
-                if item(ui, true, "Save Project As...", "Ctrl+Shift+S") {
-                    actions.push(Action::SaveProjectAs);
-                }
-                ui.separator();
-                if item(ui, true, "Import Data...", "Ctrl+I") {
-                    actions.push(Action::Import(None));
-                }
-                ui.separator();
-                if item(ui, active_graph.is_some(), "Export Graph...", "")
-                    && let Some(g) = active_graph
-                {
-                    actions.push(Action::ExportGraph(g));
-                }
-                if item(ui, active_book.is_some(), "Export Worksheet...", "")
-                    && let Some(b) = active_book
-                {
-                    actions.push(Action::ExportData(b));
-                }
-                ui.separator();
-                if item(ui, true, "Quit", "") {
-                    actions.push(Action::Quit);
-                }
-            });
-            ui.menu_button("Edit", |ui| {
-                let undo = self.doc.undo_label().map(|l| format!("Undo {l}")).unwrap_or_else(|| "Undo".to_string());
-                let redo = self.doc.redo_label().map(|l| format!("Redo {l}")).unwrap_or_else(|| "Redo".to_string());
-                if item(ui, self.doc.undo_label().is_some(), &undo, "Ctrl+Z") {
-                    actions.push(Action::Undo);
-                }
-                if item(ui, self.doc.redo_label().is_some(), &redo, "Ctrl+Y") {
-                    actions.push(Action::Redo);
-                }
-            });
-            ui.menu_button("Worksheet", |ui| {
-                if item(ui, true, "New Workbook", "") {
-                    actions.push(Action::NewWorkbook);
-                }
-                ui.separator();
-                match active_book {
-                    Some(book) => {
-                        grid::column_menu(ui, book, &selected, actions);
-                        ui.separator();
-                        grid::sheet_menu(ui, book, &selected, actions);
-                    }
-                    None => {
-                        ui.weak("Open a workbook to work with columns");
-                    }
-                }
-            });
-            ui.menu_button("Plot", |ui| match active_book {
-                Some(book) => {
-                    let what = if selected.is_empty() {
-                        "all Y columns of the sheet".to_string()
-                    } else {
-                        format!("{} selected column(s)", selected.len())
-                    };
-                    ui.weak(format!("Plots {what}"));
-                    for t in Template::ALL {
-                        if item(ui, true, t.label(), "") {
-                            actions.push(Action::PlotColumns { book, columns: selected.clone(), template: t });
-                        }
-                    }
-                }
-                None => {
-                    ui.weak("Open a workbook to plot its columns");
-                }
-            });
-            ui.menu_button("Analysis", |ui| match active_book {
-                Some(book) => {
-                    let what = if selected.is_empty() {
-                        "the Y columns of the sheet".to_string()
-                    } else {
-                        format!("{} selected column(s)", selected.len())
-                    };
-                    ui.weak(format!("Works on {what}"));
-                    for kind in AnalysisKind::ALL {
-                        if item(ui, true, kind.menu_label(), "") {
-                            actions.push(Action::Analyze { book, columns: selected.clone(), kind });
-                        }
-                    }
-                    ui.separator();
-                    for (kind, label) in FitKind::MENU {
-                        if item(ui, true, label, "") {
-                            actions.push(Action::Fit { book, column: selected.first().copied(), kind });
-                        }
-                    }
-                }
-                None => {
-                    ui.weak("Open a workbook to analyze its columns");
-                }
-            });
-            ui.menu_button("Graph", |ui| {
-                let on = active_graph.is_some();
-                for (text, tab) in [
-                    ("X Axis...", PropsTab::XAxis),
-                    ("Y Axis...", PropsTab::YAxis),
-                    ("Plots...", PropsTab::Plots),
-                    ("Legend...", PropsTab::Legend),
-                    ("Page...", PropsTab::Page),
-                ] {
-                    if item(ui, on, text, "")
-                        && let Some(graph) = active_graph
-                    {
-                        actions.push(Action::GraphProperties { graph, tab });
-                    }
-                }
-                ui.separator();
-                if item(ui, on, "Export...", "")
-                    && let Some(g) = active_graph
-                {
-                    actions.push(Action::ExportGraph(g));
-                }
-            });
-            ui.menu_button("Window", |ui| {
-                if project.windows.is_empty() {
-                    ui.weak("The project has no windows");
-                }
-                for w in &project.windows {
-                    if item(ui, true, &w.title(), "") {
-                        actions.push(Action::Focus(w.id()));
-                    }
-                }
-            });
-            ui.menu_button("Help", |ui| {
-                if item(ui, true, &format!("About {APP_NAME}"), "") {
-                    actions.push(Action::About);
-                }
-            });
-        });
+        let menu_ctx = self.menu_context();
+        menus::show_bar(ui, &menu_ctx, actions);
     }
 
     fn explorer(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -895,14 +838,24 @@ impl SheafApp {
         });
     }
 
+    /// The sheet that data is imported into when the import window is not set to "New book": the
+    /// active sheet of the active workbook, with a label for the window.
+    fn import_target(&self) -> Option<(Target, String)> {
+        let id = self.active?;
+        let book = self.doc.project().workbook(id)?;
+        let sheet = book.active_sheet.min(book.sheets.len().checked_sub(1)?);
+        Some((Target { book: id, sheet }, format!("{} / {}", book.name, book.sheets[sheet].name)))
+    }
+
     fn dialogs(&mut self, ctx: &egui::Context) {
+        let import_target = self.import_target();
         if let Some(d) = &mut self.import {
-            match d.show(ctx) {
+            match d.show(ctx, import_target.as_ref().map(|t| t.1.as_str())) {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import = None,
-                ImportOutcome::Done { items, errors, plot, template } => {
+                ImportOutcome::Done { items, errors, plot, template, mode } => {
                     self.import = None;
-                    self.finish_import(items, errors, plot, template);
+                    self.finish_import(items, errors, plot, template, mode);
                 }
             }
         }
@@ -1077,6 +1030,7 @@ impl SheafApp {
             let first_column = project.workbooks().next().and_then(|b| b.sheet().columns.first()).map(|c| c.id);
             let named = project.window_by_name(arg).map(Window::id);
             match name {
+                "menu" => self.open_menu = Some(arg.to_string()),
                 "focus" => {
                     if let Some(id) = named {
                         self.focus(id);
@@ -1205,71 +1159,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
 /// A small drawn icon: a table for workbooks, a curve on axes for graphs.
 fn window_icon(ui: &mut egui::Ui, graph: bool) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), Sense::hover());
-    let r = rect.shrink(1.0);
-    let painter = ui.painter();
-    let line = Stroke::new(1.0_f32, ui.visuals().text_color().gamma_multiply(0.75));
-    if graph {
-        painter.line_segment([r.left_top(), r.left_bottom()], line);
-        painter.line_segment([r.left_bottom(), r.right_bottom()], line);
-        let accent = Stroke::new(1.5_f32, egui::Color32::from_rgb(40, 110, 200));
-        let pts: Vec<egui::Pos2> = [(0.1, 0.8), (0.35, 0.45), (0.6, 0.6), (0.95, 0.1)]
-            .iter()
-            .map(|(x, y)| egui::pos2(r.left() + x * r.width(), r.top() + y * r.height()))
-            .collect();
-        painter.add(egui::Shape::line(pts, accent));
-    } else {
-        painter.rect_stroke(r, 1.0, line, egui::StrokeKind::Inside);
-        let third_w = r.width() / 3.0;
-        let third_h = r.height() / 3.0;
-        for k in 1..3 {
-            let x = r.left() + third_w * k as f32;
-            let y = r.top() + third_h * k as f32;
-            painter.line_segment([egui::pos2(x, r.top()), egui::pos2(x, r.bottom())], line);
-            painter.line_segment([egui::pos2(r.left(), y), egui::pos2(r.right(), y)], line);
-        }
-    }
-}
-
-struct Tabs<'a> {
-    doc: &'a Document,
-    books: &'a mut HashMap<WindowId, BookUi>,
-    graphs: &'a mut HashMap<WindowId, GraphUi>,
-    actions: &'a mut Vec<Action>,
-}
-
-impl TabViewer for Tabs<'_> {
-    type Tab = WindowId;
-
-    fn title(&mut self, tab: &mut WindowId) -> egui::WidgetText {
-        match self.doc.project().window(*tab) {
-            Some(w) => w.title().into(),
-            None => "(closed)".into(),
-        }
-    }
-
-    fn id(&mut self, tab: &mut WindowId) -> egui::Id {
-        egui::Id::new(("window_tab", tab.0))
-    }
-
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut WindowId) {
-        match self.doc.project().window(*tab) {
-            Some(Window::Workbook(_)) => {
-                let state = self.books.entry(*tab).or_default();
-                grid::show(ui, self.doc, *tab, state, self.actions);
-            }
-            Some(Window::Graph(_)) => {
-                let state = self.graphs.entry(*tab).or_default();
-                graph_view::show(ui, self.doc, *tab, state, self.actions);
-            }
-            None => {
-                ui.label("This window no longer exists.");
-            }
-        }
-    }
-
-    fn scroll_bars(&self, _tab: &WindowId) -> [bool; 2] {
-        [false, false]
-    }
+    workspace::paint_window_icon(ui.painter(), rect, graph);
 }
 
 impl eframe::App for SheafApp {
@@ -1287,8 +1177,8 @@ impl eframe::App for SheafApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.pending = Some(Pending::Quit);
         }
+        self.active = self.workspace.active();
         self.shortcuts(ctx, &mut actions);
-        self.active = self.dock.find_active_focused().map(|(_, tab)| *tab);
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| self.menu_bar(ui, &mut actions));
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
@@ -1306,32 +1196,37 @@ impl eframe::App for SheafApp {
             .default_width(200.0)
             .width_range(120.0..=420.0)
             .show(ctx, |ui| self.explorer(ui, &mut actions));
-        egui::CentralPanel::default().frame(egui::Frame::central_panel(&ctx.style()).inner_margin(0.0)).show(
-            ctx,
-            |ui| {
-                if self.doc.project().windows.is_empty() {
-                    self.welcome(ui, &mut actions);
-                } else {
-                    let mut tabs = Tabs {
-                        doc: &self.doc,
-                        books: &mut self.books,
-                        graphs: &mut self.graphs,
-                        actions: &mut actions,
-                    };
-                    DockArea::new(&mut self.dock)
-                        .style(egui_dock::Style::from_egui(ui.style().as_ref()))
-                        .show_leaf_collapse_buttons(false)
-                        .show_leaf_close_all_buttons(false)
-                        .show_inside(ui, &mut tabs);
-                }
-            },
-        );
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::WORKSPACE_GREY)).show(ctx, |ui| {
+            if self.doc.project().windows.is_empty() {
+                self.welcome(ui, &mut actions);
+            } else {
+                let doc = &self.doc;
+                let books = &mut self.books;
+                let graphs = &mut self.graphs;
+                let actions = &mut actions;
+                let info = |id: WindowId| {
+                    doc.project()
+                        .window(id)
+                        .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
+                };
+                let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
+                    Some(Window::Workbook(_)) => {
+                        grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                    }
+                    Some(Window::Graph(_)) => {
+                        graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
+                    }
+                    None => {}
+                };
+                self.workspace.show(ui, doc.dirty, &info, &mut content);
+            }
+        });
 
         self.dialogs(ctx);
         for action in actions {
             self.apply(action, ctx);
         }
-        self.sync_tabs();
+        self.sync_windows();
 
         let name = self
             .path
@@ -1350,3 +1245,11 @@ impl eframe::App for SheafApp {
 
 #[cfg(test)]
 mod ui_tests;
+
+/// True when both paths name the same file (or, if one is missing, the same path text).
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
+    }
+}

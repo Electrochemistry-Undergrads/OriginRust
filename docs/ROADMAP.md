@@ -119,8 +119,10 @@ the default project format.
       label rows, selection, clipboard and right-click menus; toolbars; Project Explorer, Object
       Manager, logs and status bar; graph window (2026-11-12, `0e23919`): page on grey ground,
       layer icons and an active layer, click to select, double-click opens the settings of that
-      axis, plot or legend, Origin's right-click menus per object, Delete, Ctrl+R. To do: dialogs
-      in Origin's layout (axis dialog, Plot Details), window positions saved in the project
+      axis, plot or legend, Origin's right-click menus per object, Delete, Ctrl+R; window places
+      saved in the project (`fb9471c`); the axis dialog and Plot Details in Origin's layout with
+      OK, Cancel, Apply. To do: the other dialogs (import, fit, analysis tools, column properties)
+      in Origin's layout, and a person clicking through the app once
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin 2016 and comparing every cell (`sheaf export ... -o
       x.opj`; seven test projects up to 100000 rows opened in Origin with no difference)
@@ -148,6 +150,8 @@ the default project format.
         Tukey, Bonferroni, Sidak, Fisher LSD and Scheffe, frequency counts with a histogram graph,
         five normality tests, checked against Origin (the automatic bin size matches Origin in
         about 57 % of cases)
+  - [x] The Integrate gadget on graphs (Gadgets > Integrate): drag a range, see the shaded area
+        and its value live, write it to a sheet; same rows and rule as Analysis > Integrate
   - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,
         multi-peak Gauss or Lorentz fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
         limit rules and the multi-peak fit are not yet compared with Origin's Peak Analyzer

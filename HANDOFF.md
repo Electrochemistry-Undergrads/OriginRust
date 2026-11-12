@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-11-12, about 14:00, by the lead Claude Code session. Only one session should
+Last updated: 2026-11-12, about 15:00, by the lead Claude Code session. Only one session should
 merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lead).
 
 ## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
@@ -29,6 +29,9 @@ merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lea
     right-click menus per object, Delete, Ctrl+R, Layer Contents (F12), Plot Setup. Picking uses new
     `sheaf_plot::hit` (the scene records which items belong to which object).
   - The "popup that swallows the next click" bug was not reproduced; a UI test now guards it.
+  - Window places saved in the project (ADR 0007 step 10, `fb9471c`), the axis dialog and Plot
+    Details in Origin's layout with OK/Cancel/Apply (step 9, by a subagent), and the Integrate
+    gadget (Gadgets > Integrate). 889 tests pass on `main`.
 - **Running when this was written**: a subagent on branch `worktree-agent-a175d68f1d5696c0d` (worktree
   `.claude/worktrees/agent-a175d68f1d5696c0d`) writes column formulas and nested folders into `.opj` and reads them back,
   checked in Origin through COM. If this session ended before merging it, look for that branch
@@ -37,13 +40,12 @@ merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lea
 ## Exact next step
 
 1. Merge the `.opj` formulas-and-folders branch when it is done (full checks after the merge).
-2. ADR 0007 step 9: dialogs in Origin's layout — the axis dialog (Horizontal/Vertical list; tabs
-   Scale, Tick Labels, Title, Grids, Line and Ticks) and Plot Details (layer/plot tree at the left,
-   tabs at the right), from `docs/spec/gui-look.md` section 5. Then step 10: window positions saved
-   in the project.
+2. The other dialogs in Origin's layout (import wizard, NLFit, analysis tools, column
+   properties; `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's
+   long name is on Plot Details' Page tab; a plot's legend text is on its Group tab.
 3. Write the new graph features into `.opj` (linked layers, offsets, bar spacing, tick label
    sources) so the companion is rarely needed; tick number formats in written graphs.
-4. App controls the graph work exposes only in the CLI: per-plot left/right axis, offsets editor.
+4. A per-plot left/right axis choice in the app (offsets are now in Plot Details > Stack).
 5. Then the parity-audit gaps in their order.
 
 The small points of the graph review are fixed too: `--offsets` gives its values to stack members

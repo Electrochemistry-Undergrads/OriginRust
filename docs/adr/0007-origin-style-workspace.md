@@ -1,11 +1,11 @@
 # ADR 0007: An Origin-style workspace in egui
 
-Status: proposed (2026-11-12). Replaces the tab-and-dock layout chosen in ADR 0003 for the main
+Status: accepted (2026-11-12). Replaces the tab-and-dock layout chosen in ADR 0003 for the main
 window. Description of the target look: `docs/spec/gui-look.md`.
 
 ## Context
 
-The owner wants Sheaf to look and work like Origin 2016 so that his skills carry over. The
+The owner wants Sheaf to look and work like Origin 2016 so that their skills carry over. The
 study (pictures in the git-ignored scratch folder, text in `gui-look.md`) shows an MDI program: one
 main window with menus, toolbars, auto-hide panels and a grey workspace in which workbooks and
 graphs are floating child windows. Sheaf today uses `egui_dock` tabs, one menu bar for everything
@@ -70,9 +70,11 @@ app must stay testable with `egui_kittest` and `--screenshot`.
 9. **Saving as .opj.** The owner also wants exported projects to be `.opj`. That is not a look
    change and is separate: a writer in `crates/io/src/opj/` built from `docs/spec/opj-format.md`
    and checked by reading the result back with our reader and by opening it in Origin 2016 through
-   COM and comparing cells. File > Save Project (As) will write `.opj` by default; `.sheaf` stays
-   as the lossless native format. Graph content is written only as far as the reader understands
-   it, with a warning for anything dropped. See the plan.
+   COM and comparing cells. The owner decided (2026-11-11) that `.opj` is the default format of
+   File > Save Project, Save Project As and the command line's `--save`. While the writer cannot
+   store everything a project holds (graphs at first), saving also writes a `.sheaf` copy next to
+   the `.opj` and says what only the copy holds; the copy is dropped once nothing would be lost.
+   `.sheaf` stays available as a lossless format.
 
 ## What stays different, and why
 
@@ -83,7 +85,7 @@ app must stay testable with `egui_kittest` and `--screenshot`.
 - **Features Sheaf lacks** appear as greyed items so the layout matches. "All of Origin's
   features" cannot be reached in this project: Origin has hundreds (3D graphs, Origin C, LabTalk,
   Apps, matrix and image tools, database access). `feature-inventory.md` sets the real scope with
-  P0/P1/P2 tags. The honest statement to the owner: his own workflows first, then the rest by
+  P0/P1/P2 tags. The honest statement to the owner: their own workflows first, then the rest by
   priority.
 - The "Apps" panel, online help and licence items are not reproduced.
 - egui is immediate mode: text rendering, hover colours and control metrics will differ from

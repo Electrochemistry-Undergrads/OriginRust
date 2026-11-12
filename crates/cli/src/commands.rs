@@ -735,7 +735,8 @@ fn plot(a: PlotArgs) -> Result<()> {
     };
     apply_style(&mut project, graph, &a.style, a.panels.is_some())?;
 
-    sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
+    let size = export_size(a.image_width.as_deref(), a.image_height.as_deref(), a.dpi)?;
+    sheaf_plot::export_file_sized(&project, graph, &a.output, a.dpi, size)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());
     if let Some(path) = &a.save {
@@ -1084,7 +1085,8 @@ fn export(a: ExportArgs) -> Result<()> {
     let mut project = load_project(&a.project)?;
     let graph = pick_graph(&project, a.graph.as_deref())?;
     apply_style(&mut project, graph, &a.style, false)?;
-    sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
+    let size = export_size(a.image_width.as_deref(), a.image_height.as_deref(), a.dpi)?;
+    sheaf_plot::export_file_sized(&project, graph, &a.output, a.dpi, size)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());
     Ok(())
@@ -1114,4 +1116,52 @@ pub(crate) fn write_sheet(ws: &sheaf_core::Worksheet, path: &Path) -> Result<()>
         .with_context(|| format!("could not write '{}'", path.display()))?;
     println!("wrote {}", path.display());
     Ok(())
+}
+
+/// The export size from `--image-width` and `--image-height`.
+fn export_size(width: Option<&str>, height: Option<&str>, dpi: f64) -> Result<sheaf_plot::ExportSize> {
+    let inches = |text: Option<&str>, what: &str| -> Result<Option<f64>> {
+        text.map(|t| parse_length_inches(t, dpi).with_context(|| format!("--image-{what} '{t}'"))).transpose()
+    };
+    Ok(sheaf_plot::ExportSize { width_in: inches(width, "width")?, height_in: inches(height, "height")? })
+}
+
+/// A length with its unit (`in`, `cm`, `mm`, `pt` or `px`, the last at `dpi`) in inches.
+pub(crate) fn parse_length_inches(text: &str, dpi: f64) -> Result<f64> {
+    let t = text.trim().to_ascii_lowercase();
+    let split = t.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(t.len());
+    let (number, unit) = t.split_at(split);
+    let value: f64 =
+        number.trim().parse().map_err(|_| anyhow::anyhow!("'{text}' is not a length such as 3.5in or 8.5cm"))?;
+    let per_inch = match unit.trim() {
+        "in" | "inch" | "inches" => 1.0,
+        "cm" => 2.54,
+        "mm" => 25.4,
+        "pt" => 72.0,
+        "px" if dpi > 0.0 => dpi,
+        "" => bail!("'{text}' needs a unit: in, cm, mm, pt or px"),
+        other => bail!("'{other}' is not a unit; use in, cm, mm, pt or px"),
+    };
+    if !(value.is_finite() && value > 0.0) {
+        bail!("a length must be positive, not '{text}'");
+    }
+    Ok(value / per_inch)
+}
+
+#[cfg(test)]
+mod length_tests {
+    use super::parse_length_inches;
+
+    #[test]
+    fn lengths_need_a_unit_and_convert_to_inches() {
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-12;
+        assert!(close(parse_length_inches("3.5in", 300.0).unwrap(), 3.5));
+        assert!(close(parse_length_inches("8.5 cm", 300.0).unwrap(), 8.5 / 2.54));
+        assert!(close(parse_length_inches("85mm", 300.0).unwrap(), 85.0 / 25.4));
+        assert!(close(parse_length_inches("252pt", 300.0).unwrap(), 3.5));
+        assert!(close(parse_length_inches("1050PX", 300.0).unwrap(), 3.5));
+        for bad in ["3.5", "3.5furlong", "-2in", "0cm", "in", "abc"] {
+            assert!(parse_length_inches(bad, 300.0).is_err(), "{bad}");
+        }
+    }
 }

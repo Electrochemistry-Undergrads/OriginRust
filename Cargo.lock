@@ -3189,6 +3189,7 @@ dependencies = [
  "sheaf-core",
  "svg2pdf",
  "thiserror 2.0.21",
+ "tiff",
  "ttf-parser",
  "usvg",
 ]

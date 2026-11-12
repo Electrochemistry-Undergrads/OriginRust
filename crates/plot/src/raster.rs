@@ -66,3 +66,49 @@ pub(crate) fn to_pdf(svg: &str, fonts: &SystemFonts) -> Result<Vec<u8>, PlotErro
     svg2pdf::to_pdf(&tree, svg2pdf::ConversionOptions::default(), svg2pdf::PageOptions::default())
         .map_err(|e| PlotError::Pdf(e.to_string()))
 }
+
+/// Encodes the picture as an LZW-compressed RGB TIFF with the resolution recorded. Transparent
+/// pixels are laid on white, since many programs that take TIFF figures mishandle an alpha channel.
+pub(crate) fn encode_tiff(r: &Raster, dpi: f64) -> Result<Vec<u8>, PlotError> {
+    let err = |e: tiff::TiffError| PlotError::Tiff(e.to_string());
+    let mut rgb = Vec::with_capacity(r.rgba.len() / 4 * 3);
+    for px in r.rgba.as_chunks::<4>().0 {
+        let a = u32::from(px[3]);
+        for &c in &px[..3] {
+            rgb.push(((u32::from(c) * a + 255 * (255 - a) + 127) / 255) as u8);
+        }
+    }
+    let mut out = std::io::Cursor::new(Vec::new());
+    {
+        let mut enc =
+            tiff::encoder::TiffEncoder::new(&mut out).map_err(err)?.with_compression(tiff::encoder::Compression::Lzw);
+        let mut image = enc.new_image::<tiff::encoder::colortype::RGB8>(r.width, r.height).map_err(err)?;
+        let hundredths = (dpi * 100.0).round().clamp(1.0, f64::from(u32::MAX)) as u32;
+        image.resolution(tiff::tags::ResolutionUnit::Inch, tiff::encoder::Rational { n: hundredths, d: 100 });
+        image.write_data(&rgb).map_err(err)?;
+    }
+    Ok(out.into_inner())
+}
+
+/// The SVG with its page drawn `scale` times as large: the size on the root element changes,
+/// the drawing inside keeps its units through the `viewBox`. Used for an export size that
+/// differs from the page size.
+pub(crate) fn scale_svg(svg: &str, scale: f64) -> String {
+    // The root element starts `<svg ... width="Wpt" height="Hpt" viewBox=...` (svg.rs).
+    let Some(end) = svg.find("viewBox=") else { return svg.to_string() };
+    let (head, rest) = svg.split_at(end);
+    let mut out = String::with_capacity(svg.len() + 16);
+    let mut h = head;
+    for attr in ["width=\"", "height=\""] {
+        let Some(i) = h.find(attr) else { return svg.to_string() };
+        let start = i + attr.len();
+        let Some(len) = h[start..].find("pt\"") else { return svg.to_string() };
+        let Ok(v) = h[start..start + len].parse::<f64>() else { return svg.to_string() };
+        out.push_str(&h[..start]);
+        crate::scene::push_num(&mut out, v * scale);
+        h = &h[start + len..];
+    }
+    out.push_str(h);
+    out.push_str(rest);
+    out
+}

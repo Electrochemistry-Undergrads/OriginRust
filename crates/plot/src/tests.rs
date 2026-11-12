@@ -2203,3 +2203,51 @@ fn an_area_plot_fills_down_to_zero_and_breaks_at_gaps() {
         scene.layers[0].plots.iter().any(|i| matches!(i, crate::scene::Item::Path { fill: None, stroke: Some(_), .. }))
     );
 }
+
+#[test]
+fn export_size_scales_the_whole_page() {
+    let none = ExportSize::default();
+    assert_eq!(none.scale(720.0, 540.0).unwrap(), 1.0);
+    // 5 in wide on a 10 in page: half size.
+    let w = ExportSize { width_in: Some(5.0), height_in: None };
+    assert!((w.scale(720.0, 540.0).unwrap() - 0.5).abs() < 1e-12);
+    // Both given: the page fits inside both.
+    let both = ExportSize { width_in: Some(5.0), height_in: Some(2.0) };
+    assert!((both.scale(720.0, 540.0).unwrap() - 2.0 * 72.0 / 540.0).abs() < 1e-12);
+    for bad in [0.0, -1.0, f64::NAN, 1e9] {
+        assert!(ExportSize { width_in: Some(bad), height_in: None }.scale(720.0, 540.0).is_err(), "{bad}");
+    }
+    // Only the root size of the SVG changes; the drawing keeps its units through the viewBox.
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"720pt\" height=\"540pt\" viewBox=\"0 0 720 540\">\n<rect width=\"10\"/></svg>";
+    let half = raster::scale_svg(svg, 0.5);
+    assert!(half.contains("width=\"360pt\" height=\"270pt\" viewBox=\"0 0 720 540\""), "{half}");
+    assert!(half.contains("<rect width=\"10\"/>"));
+}
+
+#[test]
+fn sized_exports_and_tiff() {
+    let (p, g) = project(Template::Line, vec![0.0, 1.0, 2.0], vec![vec![0.0, 1.0, 4.0]]);
+    let page = p.graph(g).unwrap().page.clone();
+    let half = ExportSize { width_in: Some(page.width_pt / 72.0 / 2.0), height_in: None };
+    // PNG: the pixel width follows the export width at the chosen resolution.
+    let png = export_bytes(&p, g, "png", 100.0, half).unwrap();
+    let width = u32::from_be_bytes([png[16], png[17], png[18], png[19]]);
+    assert_eq!(f64::from(width), (page.width_pt / 72.0 / 2.0 * 100.0).ceil());
+    // PDF: the page size follows it too.
+    let pdf = String::from_utf8_lossy(&export_bytes(&p, g, "pdf", 300.0, half).unwrap()).into_owned();
+    let media = pdf.split("MediaBox [0 0 ").nth(1).expect("a MediaBox");
+    let pdf_width: f64 = media.split_whitespace().next().unwrap().parse().unwrap();
+    assert!((pdf_width - page.width_pt / 2.0).abs() < 0.01, "the PDF page is half as wide: {pdf_width}");
+    // TIFF: an RGB image on white with the resolution recorded.
+    let tif = render_tiff(&p, g, 150.0).unwrap();
+    let mut dec = tiff::decoder::Decoder::new(std::io::Cursor::new(tif)).unwrap();
+    let (w, h) = dec.dimensions().unwrap();
+    assert_eq!(f64::from(w), (page.width_pt / 72.0 * 150.0).ceil());
+    assert!(h > 0);
+    assert_eq!(dec.colortype().unwrap(), tiff::ColorType::RGB(8));
+    let res = dec.get_tag_u32_vec(tiff::tags::Tag::XResolution).unwrap();
+    assert_eq!(res, vec![15000, 100], "150 dpi");
+    let tiff::decoder::DecodingResult::U8(pixels) = dec.read_image().unwrap() else { panic!("8-bit image") };
+    assert_eq!(&pixels[..3], &[255, 255, 255], "the corner of the page is white");
+    assert!(matches!(export_bytes(&p, g, "bmp", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
+}

@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 40 | 106 | 84 | 230 |
+| All rows | 40 | 107 | 83 | 230 |
 | P0 | 31 | 68 | 2 | 101 |
-| P1 and P2 together | 9 | 38 | 82 | 129 |
+| P1 and P2 together | 9 | 39 | 81 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -319,9 +319,9 @@ Cross-cutting findings:
 | PNG with dpi and size | File > Export Graphs | `render_png`; dialog; CLI | ✓ | always 24-bit RGBA | P0 |
 | SVG | export type | `render_svg` | ✓ | | P0 |
 | PDF | expPDFw | `render_pdf`, text kept as text | ◐ | no PDF options, multi-page, several graphs | P0 |
-| Size, margin and units | Image Settings | page size and dpi only | ◐ | no width and height override, unit choice, margin modes | P0 |
+| Size, margin and units | Image Settings | page size and dpi; export width and height in in, cm, mm, pt or px that scale the whole picture (CLI `--image-width`/`--image-height`, the app's export window "Scale to") | ◐ | no margin modes; the app sets the width only | P0 |
 | One scene renderer for screen and exports | | `layout.rs` to `scene.rs` | ✓ | | P0 |
-| Other image types | EMF, WMF, TIF, JPG, EPS, BMP, GIF, AI and more | none | ✗ | EMF, TIF, EPS are P1; the rest P2 | P1 |
+| Other image types | EMF, WMF, TIF, JPG, EPS, BMP, GIF, AI and more | TIFF (LZW, RGB, resolution recorded) in the app and CLI | ◐ | EMF and EPS are P1; the rest P2 | P1 |
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
 | Export preview | Preview button | none | ✗ | | P1 |
 | Send to PowerPoint or Word | Graph menu | none | ✗ | | P2 |

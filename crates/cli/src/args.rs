@@ -25,6 +25,97 @@ pub enum Command {
     /// Run an analysis tool on worksheet columns: integrate, differentiate, smooth, normalize,
     /// baseline, interpolate, peaks, stats, sort, filter.
     Analyze(AnalyzeArgs),
+    /// Fit a model to a column: straight line, polynomial, a built-in function, a formula or an
+    /// Origin .FDF function. Prints the parameters, statistics and ANOVA table.
+    Fit(FitArgs),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum WeightKind {
+    /// Every point counts the same.
+    None,
+    /// 1 / error² from the Y-error column.
+    Instrumental,
+    /// 1 / y.
+    Statistical,
+}
+
+#[derive(Args, Debug)]
+pub struct FitArgs {
+    /// A data file, a .sheaf project or an Origin .opj project. Not needed with --list.
+    #[arg(required_unless_present = "list")]
+    pub input: Option<PathBuf>,
+    /// List the built-in fit functions and exit.
+    #[arg(long)]
+    pub list: bool,
+    /// The model: linear, poly:ORDER (for example poly:3), or the name of a built-in function
+    /// such as Gauss, Lorentz, ExpDec1, Boltzmann (see --list).
+    #[arg(short, long, default_value = "linear", conflicts_with_all = ["formula", "fdf"])]
+    pub model: String,
+    /// A formula to fit instead of --model, for example "y0 + A*exp(-x/t)"; give its parameters
+    /// with --params.
+    #[arg(long, requires = "params")]
+    pub formula: Option<String>,
+    /// Parameter names of --formula, comma-separated.
+    #[arg(long, value_delimiter = ',')]
+    pub params: Vec<String>,
+    /// Fit the function defined in this Origin .FDF file.
+    #[arg(long, value_name = "FILE")]
+    pub fdf: Option<PathBuf>,
+    /// Starting values, for example --init xc=0.45,w=0.05.
+    #[arg(long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
+    pub init: Vec<String>,
+    /// Parameters held at a value, for example --fix Intercept=0.
+    #[arg(long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
+    pub fix: Vec<String>,
+    /// Bounds, for example --bounds w=0:,A=0:100 (leave a side empty for no bound).
+    #[arg(long, value_delimiter = ',', value_name = "NAME=LOW:HIGH", allow_hyphen_values = true)]
+    pub bounds: Vec<String>,
+    /// How points are weighted. Instrumental weighting uses the Y-error column given with
+    /// --yerr, or the one that belongs to the Y column in a project.
+    #[arg(long, value_enum, default_value_t = WeightKind::None)]
+    pub weight: WeightKind,
+    /// The Y-error column(s) for --weight instrumental, by short or long name: one for all fitted
+    /// columns, or one per --y column in the same order.
+    #[arg(long, value_delimiter = ',', value_name = "COLUMNS")]
+    pub yerr: Vec<String>,
+    /// Confidence level of the parameter limits.
+    #[arg(long, default_value_t = 0.95)]
+    pub confidence: f64,
+    /// Y columns to fit, comma-separated short or long names; each is fitted on its own
+    /// (default: the columns a plot of the sheet would show).
+    #[arg(short, long, value_delimiter = ',')]
+    pub y: Vec<String>,
+    /// For a project input: the workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// The sheet, by name (default: the workbook's active sheet).
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// Fit only these worksheet rows, counted from 1, for example 120:480.
+    #[arg(long, value_name = "FROM:TO", conflicts_with = "x_range")]
+    pub rows: Option<String>,
+    /// Fit only the first unbroken run of rows whose X value lies in this interval (write
+    /// negative limits as --x-range=-0.5:0.1).
+    #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
+    pub x_range: Option<String>,
+    /// Draw the data with the fitted curve and write the figure (.png, .svg or .pdf). With
+    /// several columns, only the first one is drawn.
+    #[arg(long, value_name = "FIGURE")]
+    pub plot: Option<PathBuf>,
+    /// Resolution of a PNG figure in dots per inch.
+    #[arg(long, default_value_t = 300.0)]
+    pub dpi: f64,
+    /// Save the project with the results to this .sheaf file.
+    #[arg(long, value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
+    /// Write the parameter sheet as delimited text (.tsv or .txt gives tabs, anything else commas).
+    /// With several columns, only the first one's. The statistics and curve sheets are kept with
+    /// --save and can be written with export-data.
+    #[arg(long, value_name = "FILE")]
+    pub export: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]

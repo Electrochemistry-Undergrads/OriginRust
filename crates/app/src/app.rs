@@ -6,6 +6,7 @@ use crate::actions::Action;
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
+use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::set_values::SetValuesDialog;
@@ -66,6 +67,7 @@ pub struct SheafApp {
     column_props: Option<ColumnPropsDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
+    fit: Option<FitDialog>,
     filter: Option<FilterDialog>,
     export: Option<ExportDialog>,
     rename: Option<RenameDialog>,
@@ -104,6 +106,7 @@ impl SheafApp {
             column_props: None,
             set_values: None,
             analysis: None,
+            fit: None,
             filter: None,
             export: None,
             rename: None,
@@ -441,6 +444,13 @@ impl SheafApp {
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
+            Action::Fit { book, column, kind } => {
+                let column = column.filter(|c| self.doc.project().column(*c).is_some_and(|c| c.data.is_numeric()));
+                self.fit = FitDialog::new(self.doc.project(), book, column, kind);
+                if self.fit.is_none() {
+                    self.status = "Nothing to fit: choose a column that holds numbers and is set as Y".to_string();
+                }
+            }
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
             Action::FilterRows(book) => {
                 self.filter = FilterDialog::new(self.doc.project(), book);
@@ -768,6 +778,12 @@ impl SheafApp {
                             actions.push(Action::Analyze { book, columns: selected.clone(), kind });
                         }
                     }
+                    ui.separator();
+                    for (kind, label) in FitKind::MENU {
+                        if item(ui, true, label, "") {
+                            actions.push(Action::Fit { book, column: selected.first().copied(), kind });
+                        }
+                    }
                 }
                 None => {
                     ui.weak("Open a workbook to analyze its columns");
@@ -915,6 +931,21 @@ impl SheafApp {
                         self.show_sheet(report.book, sheet);
                     }
                     self.status = report.message;
+                }
+            }
+        }
+        if let Some(d) = &mut self.fit {
+            match d.show(ctx, &mut self.doc) {
+                FitDialogOutcome::Open => {}
+                FitDialogOutcome::Closed => self.fit = None,
+                FitDialogOutcome::Done(outcome, new_graph) => {
+                    self.fit = None;
+                    // Show the parameters; a graph made for the fit opens as its own tab.
+                    self.show_sheet(outcome.book, outcome.param_sheet);
+                    if let Some(g) = new_graph.or(outcome.graphs.first().copied()) {
+                        self.focus(g);
+                    }
+                    self.status = outcome.message;
                 }
             }
         }
@@ -1078,6 +1109,13 @@ impl SheafApp {
                     let book = project.workbooks().next().map(|b| b.id);
                     if let (Some(book), Some(kind)) = (book, AnalysisKind::from_name(arg)) {
                         self.open_analysis(book, Vec::new(), kind);
+                        self.focus(book);
+                    }
+                }
+                "fit" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let (Some(book), Some(kind)) = (book, FitKind::from_name(arg)) {
+                        self.fit = FitDialog::new(self.doc.project(), book, None, kind);
                         self.focus(book);
                     }
                 }

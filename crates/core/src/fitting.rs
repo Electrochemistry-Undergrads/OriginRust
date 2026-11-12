@@ -136,6 +136,9 @@ pub struct FitData {
 pub struct FittedModel {
     pub report: FitReport,
     pub curve: Box<dyn Fn(f64) -> f64>,
+    /// Quantities computed from the fitted parameters, such as `FWHM` of a peak or the
+    /// half-life of a decay, as (name, value).
+    pub derived: Vec<(String, f64)>,
 }
 
 /// What [`Project::fit_with`] did.
@@ -155,6 +158,8 @@ pub struct FitOutcome {
     pub curve_y: ColumnId,
     /// Graphs to which the fitted curve was added.
     pub graphs: Vec<WindowId>,
+    /// Derived quantities (see [`FittedModel::derived`]); also on the statistics sheet.
+    pub derived: Vec<(String, f64)>,
     /// One sentence for a status line.
     pub message: String,
 }
@@ -224,7 +229,7 @@ fn sheet_column(
 }
 
 /// Rows of the statistics sheet: name, number, text.
-fn stats_rows(r: &FitReport, source: &str, rows_note: &str) -> Vec<(String, f64, String)> {
+fn stats_rows(r: &FitReport, derived: &[(String, f64)], source: &str, rows_note: &str) -> Vec<(String, f64, String)> {
     let nan = f64::NAN;
     let t = |n: &str, s: &str| (n.to_string(), nan, s.to_string());
     let v = |n: &str, x: f64| (n.to_string(), x, String::new());
@@ -263,6 +268,9 @@ fn stats_rows(r: &FitReport, source: &str, rows_note: &str) -> Vec<(String, f64,
             out.push(v("ANOVA uncorrected total sum of squares", a.uncorrected_total_ss));
         }
         out.extend([v("F value", a.f_value), v("Prob>F", a.prob_f)]);
+    }
+    for (name, value) in derived {
+        out.push((name.clone(), *value, "derived from the fitted parameters".to_string()));
     }
     for w in &r.warnings {
         out.push(t("Warning", w));
@@ -404,8 +412,15 @@ impl Project {
         }
 
         let sheets = &self.workbook(book_id).expect("workbook exists").sheets;
-        let mut param_ws = Worksheet::new(free_sheet_name(sheets, request.model.sheet_prefix()));
-        let mut stats_ws = Worksheet::new(format!("{}Stats", param_ws.name));
+        // The parameter sheet and its "Stats" companion share a number; take the first number
+        // for which neither name is in use (a sheet may have been renamed or deleted since).
+        let taken = |name: &str| sheets.iter().any(|s| s.name.eq_ignore_ascii_case(name));
+        let param_name = (1..)
+            .map(|n| format!("{}{n}", request.model.sheet_prefix()))
+            .find(|name| !taken(name) && !taken(&format!("{name}Stats")))
+            .expect("the name sequence is unbounded");
+        let mut param_ws = Worksheet::new(param_name.clone());
+        let mut stats_ws = Worksheet::new(format!("{param_name}Stats"));
         let mut curve_ws = Worksheet::new(free_sheet_name(sheets, "FitCurve"));
 
         let p = &report.params;
@@ -430,7 +445,7 @@ impl Project {
             sheet_column(self, &mut param_ws, designation, &name, "", data);
         }
 
-        let rows = stats_rows(&report, &source_label, &rows_note);
+        let rows = stats_rows(&report, &fitted.derived, &source_label, &rows_note);
         sheet_column(
             self,
             &mut stats_ws,
@@ -538,8 +553,17 @@ impl Project {
             curve_x: curve_x_id,
             curve_y: curve_y_id,
             graphs,
+            derived: fitted.derived,
             message,
         })
+    }
+
+    /// Fits one column with the engine of `sheaf-fit` that the request's model calls for, and
+    /// places the results (see the module text and [`Project::fit_with`]).
+    pub fn fit(&mut self, request: &FitRequest) -> Result<FitOutcome, FitRequestError> {
+        let model = request.model.clone();
+        let settings = request.params.clone();
+        self.fit_with(request, move |data| run_engine(&model, &settings, data))
     }
 
     /// Makes a graph that shows the fitted data as symbols and the fitted curve as a line
@@ -568,6 +592,201 @@ impl Project {
             auto_color: false,
         });
         Ok(graph)
+    }
+}
+
+pub use sheaf_fit::library::FunctionInfo;
+
+/// The built-in fit functions with their category, parameters and formula, for menus and
+/// `sheaf fit --list`.
+pub fn builtin_functions() -> Vec<FunctionInfo> {
+    sheaf_fit::library::list()
+}
+
+/// The parameter names of a model, in the order the report lists them. For an `.FDF` model the
+/// text is parsed; a file that cannot be used gives an error that says why.
+pub fn model_parameters(model: &FitModel) -> Result<Vec<String>, FitError> {
+    Ok(match model {
+        FitModel::Linear => vec!["Intercept".into(), "Slope".into()],
+        FitModel::Polynomial { order } => {
+            std::iter::once("Intercept".to_string()).chain((1..=*order).map(|k| format!("B{k}"))).collect()
+        }
+        FitModel::BuiltIn(name) => sheaf_fit::library::get(name)
+            .ok_or_else(|| FitError::BadFunction(format!("there is no built-in fit function named '{name}'")))?
+            .params
+            .into_iter()
+            .map(|p| p.name)
+            .collect(),
+        FitModel::Formula { params, .. } => params.clone(),
+        FitModel::Fdf(text) => {
+            sheaf_fit::fdf::parse_fdf(text)?.to_fit_function()?.params.into_iter().map(|p| p.name).collect()
+        }
+    })
+}
+
+/// Turns the request's weighting into the engines' form.
+fn weighting(d: &FitData) -> Result<sheaf_fit::Weighting, FitError> {
+    Ok(match d.weighting {
+        FitWeighting::None => sheaf_fit::Weighting::None,
+        FitWeighting::Statistical => sheaf_fit::Weighting::Statistical,
+        FitWeighting::Instrumental => sheaf_fit::Weighting::Instrumental(
+            d.y_error.clone().ok_or_else(|| FitError::BadFunction("instrumental weighting needs Y errors".into()))?,
+        ),
+    })
+}
+
+/// Fails with a message that names the unknown parameter and the ones that exist.
+fn unknown_param(name: &str, known: &[&str]) -> FitError {
+    FitError::BadFunction(format!("the model has no parameter '{name}'; its parameters are {}", known.join(", ")))
+}
+
+/// The value a fixed parameter is held at.
+fn fixed_value(s: &ParamSetting) -> Result<f64, FitError> {
+    match s.initial {
+        Some(v) if v.is_finite() => Ok(v),
+        _ => Err(FitError::BadFunction(format!("parameter {} is fixed but has no value to hold it at", s.name))),
+    }
+}
+
+/// Settings of a linear or polynomial fit: only fixed values are possible, for the named parameters.
+fn closed_form_fixed(settings: &[ParamSetting], allowed: &[&str]) -> Result<Vec<(String, f64)>, FitError> {
+    let mut fixed = Vec::new();
+    for s in settings {
+        if !allowed.contains(&s.name.as_str()) {
+            return Err(if s.name == "Intercept" || s.name == "Slope" || s.name.starts_with('B') {
+                FitError::BadFunction(format!(
+                    "parameter {} cannot be fixed in this fit; only {} can",
+                    s.name,
+                    allowed.join(" and ")
+                ))
+            } else {
+                unknown_param(&s.name, allowed)
+            });
+        }
+        if s.lower.is_some() || s.upper.is_some() {
+            return Err(FitError::BadFunction(format!(
+                "a linear or polynomial fit has no bounds (parameter {}); use a nonlinear fit of the same formula",
+                s.name
+            )));
+        }
+        if s.fixed {
+            fixed.push((s.name.clone(), fixed_value(s)?));
+        } else if s.initial.is_some() {
+            return Err(FitError::BadFunction(format!(
+                "a linear or polynomial fit needs no start values (parameter {}); to hold it at a value, fix it",
+                s.name
+            )));
+        }
+    }
+    Ok(fixed)
+}
+
+/// The value of a polynomial with coefficients in increasing order (`Intercept`, `B1`, ...).
+fn polynomial(coefficients: &[f64], x: f64) -> f64 {
+    coefficients.iter().rev().fold(0.0, |acc, c| acc * x + c)
+}
+
+fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Result<FittedModel, FitError> {
+    use sheaf_fit::{linear, nlsf};
+    let w = weighting(d)?;
+    match model {
+        FitModel::Linear => {
+            let fixed = closed_form_fixed(settings, &["Intercept", "Slope"])?;
+            let get = |n: &str| fixed.iter().find(|(name, _)| name == n).map(|(_, v)| *v);
+            let opts = linear::LinearOptions {
+                fix_intercept: get("Intercept"),
+                fix_slope: get("Slope"),
+                weighting: w,
+                confidence_level: d.confidence_level,
+                ..Default::default()
+            };
+            let report = linear::fit_linear(&d.x, &d.y, &opts)?;
+            let c: Vec<f64> = report.params.iter().map(|p| p.value).collect();
+            Ok(FittedModel { report, curve: Box::new(move |x| polynomial(&c, x)), derived: Vec::new() })
+        }
+        FitModel::Polynomial { order } => {
+            let fixed = closed_form_fixed(settings, &["Intercept"])?;
+            let opts = linear::PolyOptions {
+                fix_intercept: fixed.first().map(|(_, v)| *v),
+                weighting: w,
+                confidence_level: d.confidence_level,
+                ..Default::default()
+            };
+            let report = linear::fit_polynomial(&d.x, &d.y, *order, &opts)?;
+            let c: Vec<f64> = report.params.iter().map(|p| p.value).collect();
+            Ok(FittedModel { report, curve: Box::new(move |x| polynomial(&c, x)), derived: Vec::new() })
+        }
+        FitModel::BuiltIn(_) | FitModel::Formula { .. } | FitModel::Fdf(_) => {
+            let (mut func, library_name) = match model {
+                FitModel::BuiltIn(name) => {
+                    let f = sheaf_fit::library::get(name).ok_or_else(|| {
+                        FitError::BadFunction(format!(
+                            "there is no built-in fit function named '{name}' (sheaf fit --list shows them all)"
+                        ))
+                    })?;
+                    let n = f.name.clone();
+                    (f, Some(n))
+                }
+                FitModel::Formula { formula, params } => {
+                    let names: Vec<&str> = params.iter().map(String::as_str).collect();
+                    (nlsf::FitFunction::from_formula("User defined", formula, &names)?, None)
+                }
+                FitModel::Fdf(text) => (sheaf_fit::fdf::parse_fdf(text)?.to_fit_function()?, None),
+                _ => unreachable!("matched above"),
+            };
+            for s in settings {
+                let Some(at) = func.params.iter().position(|p| p.name == s.name) else {
+                    let known: Vec<&str> = func.params.iter().map(|p| p.name.as_str()).collect();
+                    return Err(unknown_param(&s.name, &known));
+                };
+                let p = &mut func.params[at];
+                if let Some(v) = s.initial {
+                    p.initial = v;
+                }
+                if s.fixed {
+                    p.initial = fixed_value(s)?;
+                    p.fixed = true;
+                }
+                if s.lower.is_some() {
+                    p.lower = s.lower;
+                }
+                if s.upper.is_some() {
+                    p.upper = s.upper;
+                }
+                if let (Some(lo), Some(hi)) = (p.lower, p.upper)
+                    && lo > hi
+                {
+                    return Err(FitError::BadFunction(format!(
+                        "the lower bound of {} ({lo}) is above its upper bound ({hi})",
+                        p.name
+                    )));
+                }
+                // A value the user gave must lie within the bounds (the function's own bounds
+                // included); otherwise the fit would start, or stay, outside them.
+                if s.initial.is_some() || s.fixed {
+                    let v = p.initial;
+                    let what = if p.fixed { "fixed value" } else { "start value" };
+                    if let Some(lo) = p.lower.filter(|lo| v < *lo) {
+                        return Err(FitError::BadFunction(format!(
+                            "the {what} of {} ({v}) is below its lower bound ({lo})",
+                            p.name
+                        )));
+                    }
+                    if let Some(hi) = p.upper.filter(|hi| v > *hi) {
+                        return Err(FitError::BadFunction(format!(
+                            "the {what} of {} ({v}) is above its upper bound ({hi})",
+                            p.name
+                        )));
+                    }
+                }
+            }
+            let opts = nlsf::FitOptions { weighting: w, confidence_level: d.confidence_level, ..Default::default() };
+            let report = nlsf::fit(&func, &d.x, &d.y, &opts)?;
+            let values: Vec<f64> = report.params.iter().map(|p| p.value).collect();
+            let derived =
+                library_name.map(|n| sheaf_fit::library::derived_values(&n, &report.params)).unwrap_or_default();
+            Ok(FittedModel { report, curve: Box::new(move |x| func.eval(&values, x)), derived })
+        }
     }
 }
 
@@ -643,7 +862,7 @@ mod tests {
             status: FitStatus::Exact,
             warnings: vec!["a test warning".into()],
         };
-        Ok(FittedModel { report, curve: Box::new(f) })
+        Ok(FittedModel { report, curve: Box::new(f), derived: vec![("Twice the slope".into(), 2.0 * slope)] })
     }
 
     /// Book1 with X = 0..9 (V), Y = 2 + 3x with one missing value (mA), and Y errors.
@@ -745,6 +964,22 @@ mod tests {
     }
 
     #[test]
+    fn report_sheet_names_never_collide_with_kept_stats_sheets() {
+        let (mut p, book, _, y, _) = sample();
+        let first = p.fit_with(&FitRequest::new(y, FitModel::Linear), line_engine).unwrap();
+        // Rename the parameter sheet but keep its statistics sheet, then fit again.
+        p.workbook_mut(book).unwrap().sheets[first.param_sheet].name = "My parameters".into();
+        let second = p.fit_with(&FitRequest::new(y, FitModel::Linear), line_engine).unwrap();
+        let b = p.workbook(book).unwrap();
+        assert_eq!(b.sheets[second.param_sheet].name, "FitLinear2");
+        assert_eq!(b.sheets[second.stats_sheet].name, "FitLinear2Stats");
+        let mut names: Vec<String> = b.sheets.iter().map(|s| s.name.to_ascii_lowercase()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), b.sheets.len(), "all sheet names differ");
+    }
+
+    #[test]
     fn a_new_graph_shows_data_as_symbols_and_the_fit_as_a_line() {
         let (mut p, _, _, y, _) = sample();
         let out = p.fit_with(&FitRequest::new(y, FitModel::Linear), line_engine).unwrap();
@@ -834,6 +1069,172 @@ mod tests {
         assert_eq!(FitModel::Polynomial { order: 3 }.sheet_prefix(), "FitPolynomial");
         assert_eq!(FitModel::BuiltIn("Gauss".into()).sheet_prefix(), "FitNL");
         assert_eq!(FitModel::Fdf(String::new()).sheet_prefix(), "FitNL");
+    }
+
+    /// A sheet with X = 0..40 step 0.25 and the given Y values.
+    fn sheet_with(f: impl Fn(f64) -> f64) -> (Project, ColumnId) {
+        let mut p = Project::new();
+        let book = p.add_workbook("data");
+        let xs: Vec<f64> = (0..=160).map(|i| f64::from(i) * 0.25).collect();
+        let ys: Vec<f64> = xs.iter().map(|x| f(*x)).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(xs)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(ys)).unwrap();
+        (p, y)
+    }
+
+    fn value(out: &FitOutcome, name: &str) -> f64 {
+        out.report.param(name).unwrap_or_else(|| panic!("no parameter {name}")).value
+    }
+
+    #[test]
+    fn real_engines_recover_known_models() {
+        // Straight line, polynomial, a built-in peak and a typed formula, all without noise.
+        let (mut p, y) = sheet_with(|x| 1.5 - 0.25 * x);
+        let out = p.fit(&FitRequest::new(y, FitModel::Linear)).unwrap();
+        assert!((value(&out, "Intercept") - 1.5).abs() < 1e-9 && (value(&out, "Slope") + 0.25).abs() < 1e-9);
+        let curve = p.numeric(out.curve_y).unwrap();
+        assert!((curve[999] - (1.5 - 0.25 * 40.0)).abs() < 1e-9);
+
+        let (mut p, y) = sheet_with(|x| 2.0 - x + 0.05 * x * x);
+        let out = p.fit(&FitRequest::new(y, FitModel::Polynomial { order: 2 })).unwrap();
+        let c: Vec<f64> = out.report.params.iter().map(|q| q.value).collect();
+        assert!((c[0] - 2.0).abs() < 1e-8 && (c[1] + 1.0).abs() < 1e-8 && (c[2] - 0.05).abs() < 1e-9, "{c:?}");
+        assert_eq!(p.workbook(out.book).unwrap().sheets[out.param_sheet].name, "FitPolynomial1");
+
+        // Gauss in Origin's area form: y0 + A/(w*sqrt(pi/2)) * exp(-2((x-xc)/w)^2).
+        let gauss = |x: f64| {
+            0.5 + 12.0 / (3.0 * (std::f64::consts::PI / 2.0).sqrt()) * (-2.0 * ((x - 18.0) / 3.0).powi(2)).exp()
+        };
+        let (mut p, y) = sheet_with(gauss);
+        let out = p.fit(&FitRequest::new(y, FitModel::BuiltIn("gauss".into()))).unwrap();
+        for (name, want) in [("y0", 0.5), ("xc", 18.0), ("w", 3.0), ("A", 12.0)] {
+            assert!((value(&out, name) - want).abs() < 1e-6, "{name}: {}", value(&out, name));
+        }
+        assert_eq!(p.workbook(out.book).unwrap().sheets[out.param_sheet].name, "FitNL1");
+        // The curve follows the fitted parameters.
+        let (cx, cy) = (p.numeric(out.curve_x).unwrap(), p.numeric(out.curve_y).unwrap());
+        assert!(cx.iter().zip(cy).all(|(x, y)| (gauss(*x) - y).abs() < 1e-6));
+
+        let (mut p, y) = sheet_with(|x| 3.0 + 7.0 * (-x / 4.0).exp());
+        let model =
+            FitModel::Formula { formula: "y0 + A*exp(-x/t)".into(), params: vec!["y0".into(), "A".into(), "t".into()] };
+        let mut req = FitRequest::new(y, model);
+        req.params = vec![
+            ParamSetting { name: "A".into(), initial: Some(5.0), ..Default::default() },
+            ParamSetting { name: "t".into(), initial: Some(2.0), ..Default::default() },
+        ];
+        let out = p.fit(&req).unwrap();
+        for (name, want) in [("y0", 3.0), ("A", 7.0), ("t", 4.0)] {
+            assert!((value(&out, name) - want).abs() < 1e-6, "{name}: {}", value(&out, name));
+        }
+    }
+
+    #[test]
+    fn parameter_settings_are_applied_and_checked() {
+        let (mut p, y) = sheet_with(|x| 1.0 + 2.0 * x);
+        // A fixed intercept of a linear fit.
+        let mut req = FitRequest::new(y, FitModel::Linear);
+        req.params =
+            vec![ParamSetting { name: "Intercept".into(), initial: Some(0.0), fixed: true, ..Default::default() }];
+        let out = p.fit(&req).unwrap();
+        assert_eq!(value(&out, "Intercept"), 0.0);
+        assert!(out.report.param("Intercept").unwrap().fixed);
+
+        // A fixed parameter of a nonlinear fit stays where it was put.
+        let mut req =
+            FitRequest::new(y, FitModel::Formula { formula: "a + b*x".into(), params: vec!["a".into(), "b".into()] });
+        req.params = vec![ParamSetting { name: "a".into(), initial: Some(1.0), fixed: true, ..Default::default() }];
+        let out = p.fit(&req).unwrap();
+        assert_eq!(value(&out, "a"), 1.0);
+        assert!((value(&out, "b") - 2.0).abs() < 1e-8);
+
+        let before = p.clone();
+        for (settings, model, why) in [
+            (ParamSetting { name: "Nope".into(), ..Default::default() }, FitModel::Linear, "unknown name"),
+            (
+                ParamSetting { name: "B1".into(), initial: Some(1.0), fixed: true, ..Default::default() },
+                FitModel::Polynomial { order: 2 },
+                "only the intercept can be fixed",
+            ),
+            (
+                ParamSetting { name: "Slope".into(), lower: Some(0.0), ..Default::default() },
+                FitModel::Linear,
+                "no bounds",
+            ),
+            (
+                ParamSetting { name: "Slope".into(), fixed: true, ..Default::default() },
+                FitModel::Linear,
+                "fixed without a value",
+            ),
+            (
+                ParamSetting { name: "w".into(), lower: Some(2.0), upper: Some(1.0), ..Default::default() },
+                FitModel::BuiltIn("Gauss".into()),
+                "crossed bounds",
+            ),
+        ] {
+            let mut req = FitRequest::new(y, model);
+            req.params = vec![settings];
+            let err = p.fit(&req).unwrap_err();
+            assert!(matches!(err, FitRequestError::Fit(FitError::BadFunction(_))), "{why}: {err}");
+        }
+        // Values outside the bounds, and start values of a closed-form fit.
+        for (settings, model, why) in [
+            (
+                ParamSetting { name: "w".into(), initial: Some(3.0), fixed: true, lower: Some(5.0), upper: Some(6.0) },
+                FitModel::BuiltIn("Gauss".into()),
+                "fixed value below the lower bound",
+            ),
+            (
+                ParamSetting { name: "w".into(), initial: Some(9.0), upper: Some(6.0), ..Default::default() },
+                FitModel::BuiltIn("Gauss".into()),
+                "start value above the upper bound",
+            ),
+            (
+                ParamSetting { name: "w".into(), initial: Some(-1.0), ..Default::default() },
+                FitModel::BuiltIn("Gauss".into()),
+                "start value below the function's own lower bound of 0",
+            ),
+            (
+                ParamSetting { name: "Intercept".into(), initial: Some(100.0), ..Default::default() },
+                FitModel::Linear,
+                "a start value for a closed-form fit",
+            ),
+        ] {
+            let mut req = FitRequest::new(y, model);
+            req.params = vec![settings];
+            let err = p.fit(&req).unwrap_err();
+            assert!(matches!(err, FitRequestError::Fit(FitError::BadFunction(_))), "{why}: {err}");
+        }
+        let err = p.fit(&FitRequest::new(y, FitModel::BuiltIn("NoSuchFunction".into()))).unwrap_err();
+        assert!(err.to_string().contains("--list"), "{err}");
+        assert_eq!(p, before, "failed fits change nothing");
+    }
+
+    #[test]
+    fn built_in_peaks_report_derived_quantities() {
+        let (mut p, y) = sheet_with(|x| {
+            12.0 / (3.0 * (std::f64::consts::PI / 2.0).sqrt()) * (-2.0 * ((x - 18.0) / 3.0).powi(2)).exp()
+        });
+        let out = p.fit(&FitRequest::new(y, FitModel::BuiltIn("Gauss".into()))).unwrap();
+        if let Some((_, fwhm)) = out.derived.iter().find(|(n, _)| n.eq_ignore_ascii_case("FWHM")) {
+            // For Origin's Gauss, w is twice the standard deviation: FWHM = w * sqrt(ln 4).
+            assert!((fwhm - 3.0 * 4f64.ln().sqrt()).abs() < 1e-5, "{fwhm}");
+            let ss = &p.workbook(out.book).unwrap().sheets[out.stats_sheet];
+            assert!(ss.columns[0].text().unwrap().iter().any(|n| n.eq_ignore_ascii_case("FWHM")));
+        } else {
+            panic!("Gauss has no FWHM among {:?}", out.derived);
+        }
+    }
+
+    #[test]
+    fn the_test_engine_derived_value_reaches_the_stats_sheet() {
+        let (mut p, _, _, y, _) = sample();
+        let out = p.fit_with(&FitRequest::new(y, FitModel::Linear), line_engine).unwrap();
+        assert_eq!(out.derived.len(), 1);
+        let ss = &p.workbook(out.book).unwrap().sheets[out.stats_sheet];
+        let names = ss.columns[0].text().unwrap();
+        let at = names.iter().position(|n| n == "Twice the slope").unwrap();
+        assert!((ss.columns[1].numeric().unwrap()[at] - 6.0).abs() < 1e-12);
     }
 
     #[test]

@@ -316,6 +316,33 @@ fn an_analysis_tool_runs_from_its_window_and_shows_the_result_sheet() {
 }
 
 #[test]
+fn a_linear_fit_runs_from_its_window_adds_the_curve_to_the_graph_and_undoes_in_one_step() {
+    let mut h = start(vec![data_file("fit")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let plots_before = project(&h).graphs().next().unwrap().layers[0].plots.len();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Linear }, &ctx);
+    settle(&mut h);
+    assert!(h.state().fit.is_some(), "the Fit window is open");
+    click(&mut h, "OK");
+    assert!(h.state().fit.is_none(), "OK closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    let names: Vec<&str> = b.sheets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["sample", "FitLinear1", "FitLinear1Stats", "FitCurve1"]);
+    assert_eq!(b.active_sheet, 1, "the parameter sheet is shown");
+    // "up" is exactly 0.5 + 2t.
+    let values = b.sheets[1].column_by_name("Value").unwrap().numeric().unwrap();
+    assert!((values[0] - 0.5).abs() < 1e-12 && (values[1] - 2.0).abs() < 1e-12, "{values:?}");
+    assert_eq!(project(&h).graphs().next().unwrap().layers[0].plots.len(), plots_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Fit"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 3), "one undo removes everything the fit added");
+    assert_eq!(project(&h).graphs().next().unwrap().layers[0].plots.len(), plots_before);
+}
+
+#[test]
 fn sorting_and_filtering_a_sheet() {
     let mut h = start(vec![data_file("sort")]);
     let book = project(&h).workbooks().next().unwrap().id;

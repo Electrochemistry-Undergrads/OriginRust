@@ -10,13 +10,13 @@ use sheaf_core::analysis::{self, BaselineSpec, IntegrateSpec, InterpSpec, Tool};
 use sheaf_core::template::Template;
 
 /// Reads "FROM:TO" as two numbers.
-fn parse_pair<T: std::str::FromStr>(text: &str, what: &str, example: &str) -> Result<(T, T)> {
+pub(crate) fn parse_pair<T: std::str::FromStr>(text: &str, what: &str, example: &str) -> Result<(T, T)> {
     let parsed = text.split_once(':').and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)));
     parsed.ok_or_else(|| anyhow!("'{text}' is not a valid {what}; write it as FROM:TO, for example {example}"))
 }
 
 /// A number with six significant digits, without trailing zeros.
-fn short_number(v: f64) -> String {
+pub(crate) fn short_number(v: f64) -> String {
     if v.is_nan() {
         return "--".to_string();
     }

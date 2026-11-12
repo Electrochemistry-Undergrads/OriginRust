@@ -6,6 +6,7 @@
 //! every change one place where it becomes an undo step.
 
 use crate::dialogs::analysis::AnalysisKind;
+use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
@@ -45,6 +46,13 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
         kind: AnalysisKind,
+    },
+    /// Open the Fit window for a column of a workbook (or, without one, the first Y column of
+    /// the active sheet), starting with a model of this kind.
+    Fit {
+        book: WindowId,
+        column: Option<ColumnId>,
+        kind: FitKind,
     },
     /// Sort the rows of the sheet that holds this column by the column's values.
     SortSheet {

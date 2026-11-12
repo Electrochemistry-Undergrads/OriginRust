@@ -10,7 +10,7 @@ use sheaf_core::{Color, ColumnId, Project, WindowId};
 use sheaf_io::ascii::{AsciiOptions, Delimiter};
 use sheaf_io::chi::ChiOptions;
 use sheaf_io::{ImportKind, Imported};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
@@ -29,11 +29,17 @@ pub(crate) fn is_project(path: &Path) -> bool {
 }
 
 /// Opens a `.sheaf` project or imports an Origin `.opj` project.
+/// Origin files this run read as a project (Sheaf reads only part of them).
+static FOREIGN_INPUTS: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
 pub(crate) fn load_project(path: &Path) -> Result<Project> {
     let opened =
         sheaf_io::open_project(path).with_context(|| format!("could not open project '{}'", path.display()))?;
     for w in &opened.warnings {
         eprintln!("note: {w}");
+    }
+    if opened.foreign {
+        FOREIGN_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).push(path.to_path_buf());
     }
     Ok(opened.project)
 }
@@ -207,6 +213,21 @@ fn import(mut a: ImportArgs) -> Result<()> {
 /// a Sheaf project. When the Origin writer refuses the project only the companion is written, and
 /// that is reported as an error because the file asked for does not exist.
 pub(crate) fn save_project(project: &Project, path: &Path) -> Result<()> {
+    // Saving over the Origin file this run read would replace it with a partial rewrite: keep a copy.
+    let target = sheaf_io::save::default_extension(path);
+    let over_input = {
+        let inputs = FOREIGN_INPUTS.lock().unwrap_or_else(|e| e.into_inner());
+        inputs.iter().any(|i| match (std::fs::canonicalize(i), std::fs::canonicalize(&target)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => *i == target,
+        })
+    };
+    if over_input
+        && let Some(b) = sheaf_io::save::backup_original(&target)
+            .with_context(|| format!("could not keep a copy of '{}'", target.display()))?
+    {
+        println!("kept the original Origin file as {}", b.display());
+    }
     let outcome =
         sheaf_io::save::save_project(project, path).with_context(|| format!("could not save '{}'", path.display()))?;
     report_save(&outcome)

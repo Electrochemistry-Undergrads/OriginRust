@@ -173,3 +173,32 @@ fn companion_names() {
     assert_eq!(companion_target(Path::new("d/x.opj.sheaf")), Some(PathBuf::from("d/x.opj")));
     assert_eq!(companion_target(Path::new("d/x.sheaf")), None);
 }
+
+#[test]
+fn a_companion_name_held_by_a_users_own_file_is_never_replaced() {
+    let dir = scratch("clobber");
+    let companion = dir.join("lab.opj.sheaf");
+    // A plain .sheaf project (not marked as a companion) sits under the companion's name.
+    project_file::save(&workbook_project(), &companion).unwrap();
+    let before = std::fs::read(&companion).unwrap();
+    let err = save_project(&project_with_graph(), &dir.join("lab.opj")).unwrap_err();
+    assert!(matches!(err, IoError::CompanionExists { .. }), "{err}");
+    assert_eq!(std::fs::read(&companion).unwrap(), before);
+    assert!(!dir.join("lab.opj").exists(), "nothing is half-written");
+    // A workbook-only save needs no companion and goes through.
+    save_project(&workbook_project(), &dir.join("lab.opj")).unwrap();
+    assert_eq!(std::fs::read(&companion).unwrap(), before);
+}
+
+#[test]
+fn the_original_file_is_copied_once_before_it_is_replaced() {
+    let dir = scratch("backup");
+    let f = dir.join("x.opj");
+    std::fs::write(&f, b"original").unwrap();
+    let b = backup_original(&f).unwrap().expect("a copy is made");
+    assert_eq!(std::fs::read(&b).unwrap(), b"original");
+    std::fs::write(&f, b"rewritten").unwrap();
+    assert!(backup_original(&f).unwrap().is_none(), "the first copy is kept");
+    assert_eq!(std::fs::read(&b).unwrap(), b"original");
+    assert!(backup_original(&dir.join("missing.opj")).unwrap().is_none());
+}

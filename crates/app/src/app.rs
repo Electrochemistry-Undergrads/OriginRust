@@ -56,6 +56,8 @@ struct RenameDialog {
 pub struct SheafApp {
     doc: Document,
     path: Option<PathBuf>,
+    /// The Origin file the project was imported from; saving over it first keeps a `.bak` copy.
+    foreign_source: Option<PathBuf>,
     dock: DockState<WindowId>,
     /// Windows that already got a tab once. A tab the user closed is not reopened by itself.
     known: HashSet<WindowId>,
@@ -96,6 +98,7 @@ impl SheafApp {
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
+            foreign_source: None,
             dock: DockState::new(Vec::new()),
             known: HashSet::new(),
             active: None,
@@ -168,6 +171,7 @@ impl SheafApp {
             Ok(opened) => {
                 self.doc.replace(opened.project);
                 self.reset_views();
+                self.foreign_source = opened.foreign.then(|| path.clone());
                 if opened.foreign {
                     // Not saved back to the Origin file by itself (Sheaf reads only part of what
                     // Origin keeps there): the project has no file name yet.
@@ -261,12 +265,25 @@ impl SheafApp {
             name.push(".opj");
             path.set_file_name(name);
         }
+        let mut backup = None;
+        if self.foreign_source.as_ref().is_some_and(|src| same_file(src, &path)) {
+            match sheaf_io::save::backup_original(&path) {
+                Ok(b) => backup = b,
+                Err(e) => {
+                    self.message = Some(("Could not keep a copy of the original".to_string(), e.to_string()));
+                    return false;
+                }
+            }
+        }
         match sheaf_io::save::save_project(self.doc.project(), &path) {
             Ok(outcome) => {
                 // The project is safe on disk either way: in the .opj, or in the companion when
                 // the .opj was refused.
                 self.doc.dirty = false;
                 self.status = outcome.status();
+                if let Some(b) = &backup {
+                    self.status.push_str(&format!("; the original Origin file is kept as {}", b.display()));
+                }
                 self.path = Some(path);
                 if let Some(text) = outcome.details() {
                     let title = if outcome.refusal.is_some() {
@@ -1402,3 +1419,11 @@ impl eframe::App for SheafApp {
 
 #[cfg(test)]
 mod ui_tests;
+
+/// True when both paths name the same file (or, if one is missing, the same path text).
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
+    }
+}

@@ -45,3 +45,8 @@ the app and the command line only show the result.
 Two files can exist per project; they should be kept together. Sheaf trusts file times to decide
 which is newer, so copying only the `.opj` into the companion's folder with a later time makes the
 companion look old (the user is told in that case).
+
+## Safeguards added after review
+
+- Saving over the Origin file a project was imported from (the app's Save As onto the same name, or a CLI `--save`/`-o` naming an `.opj` input) first copies the original to `<name>.opj.bak`. The first copy is never replaced, so it stays the true original.
+- A file named `<name>.opj.sheaf` that Sheaf did not write (no companion mark) is never replaced. The save fails with a message before anything is written, and the user moves or renames that file.

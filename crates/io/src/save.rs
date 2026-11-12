@@ -112,6 +112,7 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
     let written = match opj::write_named(project, name, opj::julian_day_now()) {
         Ok(w) => w,
         Err(IoError::OpjWrite { reason }) => {
+            ensure_companion_free(&companion)?;
             // Nothing of the .opj is written; the companion keeps the data.
             project_file::save_companion(project, &companion)?;
             outcome.refusal = Some(reason);
@@ -120,6 +121,10 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
         }
         Err(e) => return Err(e),
     };
+    if !written.warnings.is_empty() {
+        // Checked before anything is written, so a refusal leaves every file as it was.
+        ensure_companion_free(&companion)?;
+    }
     write_atomically(&path, &written.bytes)?;
     outcome.main_written = true;
     if written.warnings.is_empty() {
@@ -134,6 +139,31 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
         outcome.warnings = written.warnings;
     }
     Ok(outcome)
+}
+
+/// Fails when `companion` is a file Sheaf did not write (the user's own file).
+fn ensure_companion_free(companion: &Path) -> Result<(), IoError> {
+    if companion.exists() && !project_file::is_companion(companion) {
+        return Err(IoError::CompanionExists { path: companion.to_path_buf() });
+    }
+    Ok(())
+}
+
+/// Before an Origin file that Sheaf only partly reads is replaced by Sheaf's own output, keeps
+/// the original: copies `path` to `<path>.bak` unless that copy exists already (the first copy is
+/// the true original). Returns the copy when one was made.
+pub fn backup_original(path: &Path) -> Result<Option<PathBuf>, IoError> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    name.push(".bak");
+    let backup = path.with_file_name(name);
+    if backup.exists() {
+        return Ok(None);
+    }
+    std::fs::copy(path, &backup).map_err(|e| IoError::io(&backup, e))?;
+    Ok(Some(backup))
 }
 
 /// Writes to a temporary file next to `path` and renames it over `path`.

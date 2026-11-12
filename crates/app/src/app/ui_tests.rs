@@ -692,3 +692,19 @@ fn a_name_without_a_known_extension_is_saved_as_opj() {
     assert!(dir.join("lab.opj").exists());
     assert!(!dir.join("lab").exists());
 }
+
+#[test]
+fn saving_over_an_imported_origin_file_keeps_a_copy_of_the_original() {
+    let dir = save_dir("keep-original");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-orig")]);
+    assert!(h.state_mut().save_to(opj.clone()));
+    // Pretend Origin wrote this file: its bytes are what the copy must hold.
+    let original = std::fs::read(&opj).unwrap();
+    let mut h2 = start(vec![]);
+    h2.state_mut().foreign_source = Some(opj.clone());
+    h2.state_mut().doc.apply("Touch", |_| {});
+    assert!(h2.state_mut().save_to(opj.clone()));
+    assert_eq!(std::fs::read(dir.join("lab.opj.bak")).unwrap(), original);
+    assert!(h2.state().status.contains("lab.opj.bak"));
+}

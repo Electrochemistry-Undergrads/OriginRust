@@ -1,0 +1,55 @@
+// Reference run for the confidence and prediction bands of a straight-line fit (docs/spec/fitting-bands.md).
+// Origin has no scripting route to the band columns of its fit dialogs without changing the user's dialog
+// settings, so this script takes the ingredients from Origin (the regression, its residual SSR and degrees of
+// freedom, the Student t quantile, the mean and spread of x) and evaluates the closed form for a straight line,
+//   confidence half width = t * RMSE * sqrt(1/n + (x - xbar)^2 / Sxx)
+//   prediction half width = t * RMSE * sqrt(1 + 1/n + (x - xbar)^2 / Sxx)
+// which is the form written in the Origin C source that ships with Origin 2016 (FitterOperation.h).
+// x = 1..12, y = 2 + 0.5 x + 0.3 sin(3 x).
+newbook;
+col(A) = data(1,12,1); col(B) = 2 + 0.5*col(A) + 0.3*sin(3*col(A));
+nlbegin iy:=(1,2) func:=line nltree:=tt;
+nlfit;
+nlend output:=1;
+double n1 = 12;
+double ssr1 = tt.SSR;
+double dof1 = tt.Dof;
+fitlr iy:=(1,2);
+double a1 = fitlr.a;
+double b1 = fitlr.b;
+double rmse1 = sqrt(ssr1/dof1);
+stats col(A);
+double xbar1 = stats.mean;
+double sxx1 = (stats.n-1)*stats.sd^2;
+double t95_1 = tinv(0.975, dof1);
+double t90_1 = tinv(0.95, dof1);
+?a1
+?b1
+?n1
+?ssr1
+?dof1
+?rmse1
+?xbar1
+?sxx1
+?t95_1
+?t90_1
+double xs = 0.5;
+?rmse1*sqrt(1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 3.3;
+?rmse1*sqrt(1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 6.5;
+?rmse1*sqrt(1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 9.9;
+?rmse1*sqrt(1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 14;
+?rmse1*sqrt(1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 0.5;
+?rmse1*sqrt(1 + 1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 3.3;
+?rmse1*sqrt(1 + 1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 6.5;
+?rmse1*sqrt(1 + 1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 9.9;
+?rmse1*sqrt(1 + 1/n1 + (xs-xbar1)^2/sxx1)
+double xs = 14;
+?rmse1*sqrt(1 + 1/n1 + (xs-xbar1)^2/sxx1)

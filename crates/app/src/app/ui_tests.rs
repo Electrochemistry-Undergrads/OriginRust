@@ -425,6 +425,27 @@ fn a_linear_fit_runs_from_its_window_adds_the_curve_to_the_graph_and_undoes_in_o
 }
 
 #[test]
+fn the_fit_window_offers_bands_and_iteration_controls() {
+    let mut h = start(vec![data_file("fitbands")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Linear }, &ctx);
+    settle(&mut h);
+    // The controls are there and have Origin's defaults.
+    h.get_by_label("Maximum iterations");
+    h.get_by_label("Band confidence level");
+    click(&mut h, "Confidence and prediction");
+    click(&mut h, "OK");
+    assert!(h.state().fit.is_none(), "OK closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    let curve = b.sheets.iter().find(|s| s.name == "FitCurve1").expect("the curve sheet");
+    let names: Vec<&str> = curve.columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert!(names.iter().any(|n| n.starts_with("LCL")), "{names:?}");
+    assert!(names.iter().any(|n| n.starts_with("UPL")), "{names:?}");
+    assert_eq!(curve.columns.len(), 2 + 4, "the curve and four band columns");
+}
+
+#[test]
 fn sorting_and_filtering_a_sheet() {
     let mut h = start(vec![data_file("sort")]);
     let book = project(&h).workbooks().next().unwrap().id;

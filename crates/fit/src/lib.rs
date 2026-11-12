@@ -10,6 +10,7 @@
 //!
 //! Missing values (NaN) in x, y or the weights drop that point from the fit.
 
+pub mod bands;
 pub mod dist;
 pub mod fdf;
 pub mod library;
@@ -17,4 +18,5 @@ pub mod linear;
 pub mod nlsf;
 pub mod report;
 
+pub use bands::Bands;
 pub use report::{Anova, FitError, FitReport, FitStatus, Parameter, Statistics, Weighting};

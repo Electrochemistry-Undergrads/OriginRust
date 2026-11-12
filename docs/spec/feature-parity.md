@@ -211,12 +211,12 @@ Cross-cutting findings:
 | Nonlinear fit engine | Levenberg-Marquardt, bounds, fixed, weights | `fit/nlsf.rs`; verified against Origin on 21 cases | ✓ | | P0 |
 | Fit report | parameters, errors, t, p, limits, chi-square, R-square, ANOVA | `fit/report.rs`; separate sheets | ✓ | covariance and correlation matrices not written | P0 |
 | Core function set | Gauss, Lorentz, Voigt, exponentials, Boltzmann, Hill | `functions.json`, categorised list | ✓ | | P0 |
-| Automatic initial guess | nlfn | own guesses for about 26 functions | ◐ | others start from fixed values; no toggle | P0 |
+| Automatic initial guess | nlfn | own guesses for 53 functions: peaks, exponentials, sigmoids, power laws, hyperbolas, polynomials to order 5 | ◐ | the rest of the 206 start from fixed values; no toggle | P0 |
 | Fitted curve and residual output | NLFit Output | curve sheet, plot to graph | ✓ | number of points and output choices not in dialog | P1 |
 | .FDF import | Fitting Function Builder | `fit/fdf.rs` | ✓ | 188 of 237 installed files build | P1 |
 | Full function library | 237 functions, 30 categories | 206 in JSON, 188 more via .FDF | ◐ | 22 surface, 3 multi-variable and some others missing; some categories not offered. The UI auditor's estimate of about 23 functions conflicts with this; the fitting auditor's grep of the JSON is taken as correct | P1 |
-| Fit control options | iterations, tolerance, Simplex, One Iteration, Revert | LM only; options exist in library | ◐ | not reachable from dialog or CLI; no Simplex | P1 |
-| Confidence and prediction bands | NLFit Output | none | ✗ | | P1 |
+| Fit control options | iterations, tolerance, Simplex, One Iteration, Revert | LM only; maximum iterations and tolerance in the API, `sheaf fit` and the Fit window | ◐ | no Simplex, One Iteration or Revert | P1 |
+| Confidence and prediction bands | NLFit Output | `fit/bands.rs`; extra FitCurve columns and dashed plots; `--bands`/`--level`; Fit window | ✓ | band columns checked against Origin's closed form for a line, not read from Origin | P1 |
 | Linear fit report details | covariance on sheets, residual plots | covariance only in library | ◐ | | P1 |
 | User function and builder | F8, F9 | formula only; `.FDF` | ◐ | cannot save or reuse; no builder | P1 |
 | Exponential, Sigmoidal, Single Peak shortcuts | Fitting menu | choose in Nonlinear Curve Fit | ◐ | no dedicated entries | P1 |

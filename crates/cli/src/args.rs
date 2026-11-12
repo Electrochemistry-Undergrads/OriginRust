@@ -40,6 +40,18 @@ pub enum WeightKind {
     Statistical,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum BandKind {
+    /// No bands.
+    None,
+    /// The band that holds the true curve with the chosen probability.
+    Confidence,
+    /// The wider band that holds a new observation with the chosen probability.
+    Prediction,
+    /// Both bands.
+    Both,
+}
+
 #[derive(Args, Debug)]
 pub struct FitArgs {
     /// A data file, a .sheaf project or an Origin .opj project. Not needed with --list.
@@ -82,6 +94,18 @@ pub struct FitArgs {
     /// Confidence level of the parameter limits.
     #[arg(long, default_value_t = 0.95)]
     pub confidence: f64,
+    /// Bands around the fitted curve, written to the FitCurve sheet and drawn in the figure.
+    #[arg(long, value_enum, default_value_t = BandKind::None)]
+    pub bands: BandKind,
+    /// Confidence level of the bands in percent (95 means 95 %).
+    #[arg(long, default_value_t = 95.0, value_name = "PERCENT")]
+    pub level: f64,
+    /// Most iterations of a nonlinear fit.
+    #[arg(long, default_value_t = 400, value_name = "N")]
+    pub max_iterations: usize,
+    /// Convergence tolerance of a nonlinear fit.
+    #[arg(long, default_value_t = 1e-9)]
+    pub tolerance: f64,
     /// Y columns to fit, comma-separated short or long names; each is fitted on its own
     /// (default: the columns a plot of the sheet would show).
     #[arg(short, long, value_delimiter = ',')]

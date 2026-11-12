@@ -24,6 +24,9 @@ re-workspace/
 
 # The owner's instrument data files (CH Instruments binary files and similar): never commit
 *.bin
+# Text exports the owner drops into the repo root (CH Instruments and others): never commit
+/*.txt
+/*.csv
 
 # Secrets, logs, machine-specific files
 .env

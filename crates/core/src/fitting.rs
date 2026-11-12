@@ -77,7 +77,7 @@ pub enum FitWeighting {
     None,
     /// `w = 1 / err^2` from the Y-error column ("Instrumental").
     Instrumental,
-    /// `w = 1 / y` ("Statistical").
+    /// `w = 1 / abs(y)` ("Statistical").
     Statistical,
 }
 

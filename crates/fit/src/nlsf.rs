@@ -252,7 +252,18 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
             check_len(err.len(), n_all)?;
             err.iter().map(|e| if *e > 0.0 { 1.0 / (e * e) } else { f64::NAN }).collect()
         }
-        Weighting::Statistical => y.iter().map(|v| if *v > 0.0 { 1.0 / v } else { f64::NAN }).collect(),
+        Weighting::Statistical => {
+            // Same rule as the linear fits: w = 1 / |y| (Origin's result for a negative y equals
+            // this), and a y of exactly zero cannot be weighted.
+            if y.contains(&0.0) {
+                return Err(FitError::Failed(
+                    "statistical weighting needs y different from zero (the weight is 1/|y|); \
+                     a point with y = 0 cannot be weighted"
+                        .to_string(),
+                ));
+            }
+            y.iter().map(|v| 1.0 / v.abs()).collect()
+        }
         Weighting::Direct(w) => {
             check_len(w.len(), n_all)?;
             // A weight of zero means the point does not take part in the fit; it is left out
@@ -660,6 +671,62 @@ mod tests {
         let (x, y) = data();
         let opts = FitOptions { weighting: Weighting::Direct(vec![0.0; x.len()]), ..FitOptions::default() };
         assert!(matches!(fit(&user(), &x, &y, &opts), Err(FitError::TooFewPoints { .. })));
+    }
+
+    #[test]
+    fn statistical_weights_use_the_absolute_value_of_y() {
+        // Cathodic currents: all y negative. The weight is 1/|y|, so the fit equals the fit of the
+        // mirrored data (y -> -y) with the same weights.
+        let t: Vec<f64> = (0..40).map(|i| 0.25 * i as f64).collect();
+        let y: Vec<f64> = t
+            .iter()
+            .enumerate()
+            .map(|(i, t)| -2e-6 - 1e-5 * (-t / 1.5).exp() + 1e-8 * (37.0 * i as f64).sin())
+            .collect();
+        let mirrored: Vec<f64> = y.iter().map(|v| -v).collect();
+        let opts = FitOptions { weighting: Weighting::Statistical, ..FitOptions::default() };
+        let neg = fit(&user(), &t, &y, &opts).unwrap();
+        let pos = fit(&user(), &t, &mirrored, &opts).unwrap();
+        assert_eq!(neg.stats.n_points, 40);
+        assert!((neg.param("t").unwrap().value - 1.5).abs() < 0.05, "{}", neg.param("t").unwrap().value);
+        assert!((neg.param("t").unwrap().value - pos.param("t").unwrap().value).abs() < 1e-6);
+        assert!((neg.param("y0").unwrap().value + pos.param("y0").unwrap().value).abs() < 1e-12);
+    }
+
+    #[test]
+    fn statistical_weights_on_negative_y_match_origin() {
+        // Origin 2016, nlfit ExpDec1 with statistical weights on this data (script
+        // tools/origin-ref/nlfit-negative-stat.lines.txt): the fit of the negated data gives the
+        // negated parameters of the fit of the positive data, t1 unchanged.
+        let t: Vec<f64> = (1..=30).map(|i| 0.3 * i as f64).collect();
+        let y: Vec<f64> = t
+            .iter()
+            .enumerate()
+            .map(|(k, t)| {
+                let d = (k + 1) as f64;
+                -(1.5 + 4.0 * (-t / 2.0).exp() + 0.02 * (37.0 * d).sin() + 0.015 * (101.3 * d).sin())
+            })
+            .collect();
+        let opts = FitOptions { weighting: Weighting::Statistical, ..FitOptions::default() };
+        // ExpDec1 from the library, so that its starting-value routine is used (a start at 1 for
+        // every parameter ends in a different, worse minimum).
+        let f = crate::library::get("ExpDec1").unwrap();
+        let r = fit(&f, &t, &y, &opts).unwrap();
+        let v = |n: &str| r.param(n).unwrap().value;
+        assert!((v("y0") + 1.495_489_362_101_76).abs() < 1e-6, "{}", v("y0"));
+        assert!((v("A1") + 3.993_133_656_464_53).abs() < 1e-6, "{}", v("A1"));
+        assert!((v("t1") - 2.011_509_367_437_72).abs() < 1e-6, "{}", v("t1"));
+    }
+
+    #[test]
+    fn statistical_weights_refuse_a_zero_y_and_say_why() {
+        let (x, mut y) = data();
+        y[7] = 0.0;
+        let opts = FitOptions { weighting: Weighting::Statistical, ..FitOptions::default() };
+        match fit(&user(), &x, &y, &opts) {
+            Err(FitError::Failed(m)) => assert!(m.contains("statistical weighting") && m.contains("zero"), "{m}"),
+            other => panic!("expected a clear error, got {other:?}"),
+        }
     }
 
     #[test]

@@ -91,7 +91,7 @@ pub enum Weighting {
     None,
     /// `w = 1 / err^2` from a y-error column ("Instrumental").
     Instrumental(Vec<f64>),
-    /// `w = 1 / y` ("Statistical").
+    /// `w = 1 / abs(y)` ("Statistical"); a y of zero is refused.
     Statistical,
     /// `w` given directly ("Direct Weighting").
     Direct(Vec<f64>),

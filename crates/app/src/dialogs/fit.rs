@@ -505,7 +505,7 @@ impl FitDialog {
                         ui.radio_value(&mut self.weighting, FitWeighting::Instrumental, "Error bars (1/err²)")
                             .on_disabled_hover_text("The column has no Y-error column next to it.");
                     });
-                    ui.radio_value(&mut self.weighting, FitWeighting::Statistical, "1/y");
+                    ui.radio_value(&mut self.weighting, FitWeighting::Statistical, STATISTICAL_LABEL);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Confidence level");
@@ -567,6 +567,10 @@ impl FitDialog {
     }
 }
 
+/// Label of the statistical weighting radio button: the weight is 1/|y|, so
+/// it works for negative currents too.
+const STATISTICAL_LABEL: &str = "1/|y|";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -585,6 +589,11 @@ mod tests {
             )
             .unwrap();
         (p, book, y)
+    }
+
+    #[test]
+    fn statistical_weighting_label_names_the_absolute_value() {
+        assert!(STATISTICAL_LABEL.contains("|y|"));
     }
 
     #[test]

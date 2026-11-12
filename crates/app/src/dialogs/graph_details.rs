@@ -332,8 +332,36 @@ fn plot_tab(
     }
 }
 
+/// The Y axis of a plot, left or right. Choosing the other side moves the plot to the right Y
+/// layer of its panel (made when there is none) or back to the panel's own layer, and the tree
+/// follows the plot to its new place.
+fn y_axis_choice(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, node: &mut Node) -> bool {
+    let on_right = graph.right_y_member(l) == Some(l);
+    let mut want = on_right;
+    grid(ui, "plot_y_axis", |ui| {
+        ui.label("Y axis");
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut want, false, "Left");
+            ui.selectable_value(&mut want, true, "Right");
+        });
+        ui.end_row();
+    });
+    if want != on_right
+        && let Ok((layer, plot)) = graph.set_plot_y_axis(l, p, want)
+    {
+        *node = Node::Plot(layer, plot);
+        return true;
+    }
+    false
+}
+
 /// Origin's Group tab for a plot: where it stands in the layer and the colours of the group.
 fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &[Vec<String>], node: &mut Node) {
+    if y_axis_choice(ui, graph, l, p, node) {
+        // The plot is somewhere else now; the tab is drawn for it in the next frame.
+        return;
+    }
+    ui.add_space(6.0);
     let layer = &mut graph.layers[l];
     let count = layer.plots.len();
     grid(ui, "plot_group", |ui| {

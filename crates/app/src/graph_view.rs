@@ -408,7 +408,8 @@ fn menu_for(
                     return Vec::new();
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
-                menus::graph_plot_menu(layer, p, plot.kind, book)
+                let on_right = graph.right_y_member(layer) == Some(layer);
+                menus::graph_plot_menu(layer, p, plot.kind, on_right, book)
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
                 let y = kind == ObjectKind::YAxis;
@@ -496,6 +497,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     let layer_index = match op {
         GraphOp::SetPlotKind { layer, .. }
         | GraphOp::HidePlot { layer, .. }
+        | GraphOp::MovePlotToAxis { layer, .. }
         | GraphOp::HideAxis { layer, .. }
         | GraphOp::ToggleGrids { layer, .. }
         | GraphOp::Rescale { layer }
@@ -507,6 +509,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HideOtherLayers { layer } => layer,
     };
     if layer_index >= layers {
+        return;
+    }
+    if let GraphOp::MovePlotToAxis { layer, plot, right } = op {
+        // An empty layer left behind is kept; a request that cannot be met changes nothing.
+        let _ = g.set_plot_y_axis(layer, plot, right);
         return;
     }
     if let GraphOp::HideOtherLayers { layer } = op {
@@ -571,7 +578,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),
-        GraphOp::HideOtherLayers { .. } => unreachable!("handled above"),
+        GraphOp::HideOtherLayers { .. } | GraphOp::MovePlotToAxis { .. } => unreachable!("handled above"),
     }
 }
 

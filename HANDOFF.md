@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-11-12, about 16:30, by the lead Claude Code session. Only one session should
+Last updated: 2026-11-12, about 17:00, by the lead Claude Code session. Only one session should
 merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lead).
 
 ## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
@@ -41,19 +41,48 @@ merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lea
   Code, Parameters, Bounds; Fit tries without writing, Done keeps the result) and the import dialog
   as Origin's tree of option groups. 917 tests pass on `main`. No subagent is running.
 
+## What is left (overview, 2026-11-12)
+
+The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
+figures) works end to end. The parity table (`docs/spec/feature-parity.md`, recount with
+`python tools/parity-count.py`) has 230 rows: 38 done, 101 partial, 91 missing; of the 101 P0 rows
+30 done, 65 partial, 6 missing. These counts predate the work of 2026-11-12 afternoon (graph window,
+dialogs, gadget, Data Reader, area plots, formulas and folders in `.opj`); the rows were not
+updated, so the real "done" numbers are higher. Updating the rows is a task of its own.
+
+1. **Checks only the owner can do**: a click-through of the app by a person; the i-t text importer
+   against a real export; the `.bin` details (chronopotentiometry sample interval, current sign,
+   exact comparison for `GCD(0.5C).bin`) need text exports of the same runs.
+2. **Origin look and feel (ADR 0007)**: column properties and the analysis-tool dialogs are not
+   in Origin's layout; no Import Wizard (Ctrl+3); NLFit lacks "1 Iteration" and "Fit till
+   converged" (the fit engine needs single steps); no per-plot left/right Y axis choice in the
+   app (the CLI has it); many menu items are greyed because the feature is missing.
+3. **`.opj` files**: saving does not yet write double-Y, stack offsets, panels, bar spacing, area
+   plots, tick number formats or window places (the companion keeps them); the reader misses 34 of
+   41 graphs of "Integration of Delithiation SF data", does not read plot groups, legend frames or
+   plot offsets (XRD curves drawn offset in Origin come in on top of each other); `.opju` is not
+   supported.
+4. **Breadth (milestone 6)**: reciprocal and other scales, stacked/fill area, pie, box,
+   histogram plot type, bubble, polar, ternary; matrices, contour plots and heatmaps (nothing yet);
+   statistics beyond t-tests, one-way ANOVA, frequency counts and normality (two-way ANOVA,
+   nonparametric tests, correlation); analysis templates (batch import exists); an embedded
+   scripting language; 3D graphs (last).
+5. **Smaller points**: automatic axis ranges can leave a wide empty band; plot groups and
+   log-axis tick labels do not look like Origin's; B-spline with smoothing factor 0 differs from
+   Origin.
+
 ## Exact next step
 
-1. The Import Wizard (Ctrl+3) has no dialog yet; NLFit lacks "1 Iteration" and "Fit till
-   converged" (the fit engine would need single steps).
-2. The other dialogs in Origin's layout (import wizard, NLFit, analysis tools, column
-   properties; `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's
-   long name is on Plot Details' Page tab; a plot's legend text is on its Group tab.
-3. Write the new graph features into `.opj` (linked layers, offsets, bar spacing, tick label
-   sources, area plots) so the companion is rarely needed; tick number formats in written graphs.
-   The way the formula work was done (`tools/origin-ref/opj-verify-features.ps1`, spec 13.10)
-   is the model.
-4. A per-plot left/right axis choice in the app (offsets are now in Plot Details > Stack).
-5. Then the parity-audit gaps in their order.
+1. Write the new graph features into `.opj` (linked layers for double-Y and panels, stack
+   offsets, bar spacing, tick label sources, area plots, tick number formats) so the companion is
+   rarely needed. The formula work is the model: `tools/origin-ref/opj-verify-features.ps1`, spec
+   13.10, checked by opening the written files in Origin 2016.
+2. The remaining dialogs in Origin's layout (analysis tools, column properties, Import Wizard;
+   `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's long name is
+   on Plot Details' Page tab; a plot's legend text is on its Group tab.
+3. A per-plot left/right axis choice in the app (offsets are already in Plot Details > Stack).
+4. Update the rows of `docs/spec/feature-parity.md` for the work of 2026-11-12, then follow its
+   order of work (matrices and heatmaps are the largest missing area).
 
 The small points of the graph review are fixed too: `--offsets` gives its values to stack members
 (a fitted curve takes none), and deleting a column drops the tick labels and offsets that name it.
@@ -92,6 +121,8 @@ is at about 88 %). `re-workspace/scratch/gen_chi.js` (local only) writes synthet
 2. Example figures you make most often, to match their style.
 3. How you choose integration limits in Origin (by rows, by potential, or by dragging on the graph).
 4. Do you plot charge/discharge curves against time or capacity, and per gram (needs the mass)?
+4a. NLFit: should Fit keep its results and leave the dialog open, as in Origin? (Today Fit only
+   tries and Done writes.)
 5. May I delete the remote branch `chi-text-real` on GitHub? It holds a few numbers from your
    charge-discharge file in a spec paragraph (the merged copy on `main` does not).
 

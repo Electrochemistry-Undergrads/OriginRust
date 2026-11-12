@@ -67,8 +67,11 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    converged" (the fit engine needs single steps); many menu items are greyed because the
    feature is missing. (A plot can now be put on the right Y axis from Plot Details > Group and
    from its right-click menu, `0d74eee`.)
-3. **`.opj` files**: saving does not yet write double-Y, stack offsets, panels, bar spacing, area
-   plots, tick number formats or window places (the companion keeps them); the reader does not
+3. **`.opj` files**: saving now writes double-Y (right Y layer and its legend), stack offsets (Y
+   only), bar gaps, axis sides and automatic axis colours (spec opj-format.md 13.12); it still does
+   not write panels, X offsets, the overlap of bars, waterfall, area plots, tick number formats or
+   window places (the companion keeps them); two column plots in one layer open in Origin on top
+   of each other (no plot group is written); the reader does not
    read plot groups, legend frames, panel links or sparklines (the small previews in a sheet's
    sparkline row, which Origin lists as graphs); `.opju` is not supported.
 4. **Breadth (milestone 6)**: reciprocal and other scales, stacked/fill area, pie, box,
@@ -82,9 +85,9 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
 
 ## Exact next step
 
-1. Write the new graph features into `.opj` (linked layers for double-Y and panels, stack
-   offsets, bar spacing, tick label sources, area plots, tick number formats) so the companion is
-   rarely needed. The formula work is the model: `tools/origin-ref/opj-verify-features.ps1`, spec
+1. Write the rest of the new graph features into `.opj` (linked layers for panels, tick label
+   sources, area plots, tick number formats, plot groups for bars side by side) so the companion is
+   rarely needed (double-Y, stack offsets, bar gaps and axis sides are written, 13.12). The formula work is the model: `tools/origin-ref/opj-verify-features.ps1`, spec
    13.10, checked by opening the written files in Origin 2016.
 2. The remaining dialogs in Origin's layout (analysis tools, column properties, Import Wizard;
    `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's long name is

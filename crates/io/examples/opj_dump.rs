@@ -193,7 +193,7 @@ fn print_graphs(imp: &sheaf_io::opj::OpjImport) {
             );
             for (name, a) in [("x", &l.x_axis), ("y", &l.y_axis)] {
                 println!(
-                    "    {name} axis {:?} from {:?} to {:?} step {:?} minor {} title {:?} labels {} ticks {:?}/{:?} opposite {}",
+                    "    {name} axis {:?} from {:?} to {:?} step {:?} minor {} title {:?} labels {} ticks {:?}/{:?} opposite {} side {:?}",
                     a.scale,
                     a.min,
                     a.max,
@@ -203,7 +203,8 @@ fn print_graphs(imp: &sheaf_io::opj::OpjImport) {
                     a.show_tick_labels,
                     a.major_tick,
                     a.minor_tick,
-                    a.show_opposite
+                    a.show_opposite,
+                    a.side
                 );
             }
             for p in &l.plots {

@@ -15,6 +15,8 @@ mod feature_tests;
 mod glayout;
 mod graph;
 #[cfg(test)]
+mod graph_feature_tests;
+#[cfg(test)]
 mod graph_tests;
 #[rustfmt::skip]
 mod graph_tables;

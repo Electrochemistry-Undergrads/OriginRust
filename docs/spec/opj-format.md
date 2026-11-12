@@ -491,8 +491,9 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 | `0x4C` | u16 | plot type: 200 line, 201 scatter, 202 line and symbol, 203 column; 487 (`0x1E7`) is a Y error plot |
 | `0xC2` | 4 bytes | fill colour of a column: red, green, blue, then 1 when the colour was chosen freely (the owner's bars are 0, 107, 172, 1) |
 | `0x132` | 4 bytes | colour: a list position then three zero bytes, or red, green, blue, 1; `F7 FF FF FF` means "automatic" |
-| `0x1B2` | f64 | X offset of the curve in a stacked layer, in axis units; 0 in every file seen [inf] (graphing.md 13.10) |
-| `0x1CA` | f64 | Y offset of the curve in a stacked layer, in axis units: the offset Origin drew it with (graphing.md 13.10) |
+| `0x1B2` | f64 | X offset of the curve in a stacked layer, in axis units; 0 in every file seen, and Origin ignored a value written there (13.12) |
+| `0x1CA` | f64 | Y offset of the curve in a stacked layer, in axis units: the offset Origin drew it with; Origin moves the curve by it when the layer header byte `0xFD` is `0x50` (13.12) |
+| `0x1C2` | f64 | Y factor of the curve (1.0; 3.0 stretched a curve three times) [obs, 13.12] |
 
 "Automatic" colours follow the list by plot position: the first plot black, the second red, and so
 on. The reader gives each automatic plot the list colour of its position in the layer. Note that
@@ -874,7 +875,9 @@ colour, fonts other than Origin's default, text colours outside Origin's list (t
 is used), grid colour, width and dash (Origin's default grid style appears), legend background colour, a
 plot's row range, symbols on every n-th point only, hidden plots, plots whose data are not columns of a
 workbook, axis ranges that follow the data in a way other than Origin's own (the limits for the current
-data are written), and graphs with no layer (not written at all).
+data are written), and graphs with no layer (not written at all). Section 13.12 adds what was written later:
+stack offsets, the right Y layer of a double-Y graph with its legend, the gap of column bars, axis sides and
+automatic axis colours; the warnings of this paragraph for those no longer apply.
 
 **Minimum records [obs, partial].** Every block above is written because Origin writes it. The constant
 bytes come from graphs that Origin 2016 saved (`opj-make-from-labtalk.ps1`; the tables in
@@ -1064,3 +1067,75 @@ reader of this crate read the same tree back from Origin's file. The four privat
 folder with 2, 11, 27 and 53 windows) read as a root with one folder whose windows have the right names. The cargo tests
 (`write/feature_tests.rs`) write and read back nested folders, empty folders, graphs in folders, refused names, the depth
 limit, the size block and truncations of the file.
+
+### 13.12 Graph features that the file holds: stack offsets, double-Y, bar gap, axis sides and colours [orig]
+
+Code: `write/graph.rs` (`Role`, `LayerCtx`, `unwritten_layer_features`, `axis_spec`), `write/glayout.rs` (`LinkSpec`,
+`link_annotation`, `axis_blocks`), tests in `write/graph_feature_tests.rs`. Found on 2026-11-12 by patching single bytes
+of files the writer made and loading them in Origin 2016 (`tools/origin-ref/opj-verify-graph-features.ps1` prints, per
+layer, `layer.link`, `x.link`, `y.link`, `unit`, `showAxes`, `showLabels`, the axis colours, and exports a PNG;
+`cargo run -p sheaf-io --example opj_write_graph_features -- FOLDER` writes the test files). Pictures and reports are
+in the git-ignored `re-workspace/scratch/opj-write-graphs/`.
+
+**Stacked curves.**
+- A layer header byte at `0xFD` set to `0x50` makes Origin move every curve by the Y offset kept in its record
+  (f64 at `0x1CA`). It needs no plot group and the curves keep the colours written in their records. With `0x10`
+  or `0x40` alone nothing moves. This is how all three modes are written: the offsets are worked out as the model draws
+  them (`sheaf_core::stack::places`, shared with the renderer) and written as they are, so Auto, Constant and Individual
+  layers all look the same in Origin. A written layer reads back as `Stack::Individual` with those offsets.
+- Origin itself writes the Auto mode another way: the curves are a plot group (byte `0x06` is `0x29` on the first
+  curve and `0x19` on the others), the layer header f64 at `0x135` holds Origin's "no value" double and the f64 at
+  `0x13D` the gap as a fraction (0.1 for 10 %). Origin then works the offsets out again when it loads the file and
+  ignores the stored ones. The same fields give the Constant mode when `0x135` holds the step: member k is moved by k
+  times the step (steps 1 to 5 and 40 tried). The writer does not use this, because a plot group also hands out the
+  group's colours. The offsets Origin computed for one test (60, 170.0489, 176.0959) equal what `places` gives to
+  the last digit that was compared, so the rule of graphing.md 13.4 is the one Origin uses.
+- The byte `0x13A` of the curve record (any value tried from `0x01` to `0x80`, on the first or on all curves), `0x148`
+  and the bytes `0x13`, `0x1B`, `0x1E`, `0x72` and `0x194` changed nothing.
+- X offsets: no field was found that Origin honours. The f64 at `0x1B2` was written as 3.0 on one curve, with the `0xFD`
+  byte set and with several other values of the bytes `0xFC` and `0xFD`, and the curve did not move. The f64 at `0x1C2` is
+  a Y factor (3.0 stretched the curve three times); `0x1BA`, `0x1D2`, `0x1DA` and `0x1AA` changed nothing. The writer
+  drops X offsets and says so in a warning. The Y range of the layer header covers the moved curves.
+
+**Double-Y (a layer that Origin links to its parent).**
+- Layer header byte `0x0AB` holds the 1-based number of the parent layer. With only that byte set, Origin reports
+  `layer.link` = the parent. In Origin's own files `0x12D` is the position of the layer among the layers (1 for the
+  second), `0x02E` is 9 and bit `0x80` of `0x0FC` is set; the writer sets them too (they did not change the link).
+  `layer.unit` reports 1 (percent of the page) for the written layer, where Origin's own file says 7 (percent of
+  the linked layer); where the unit is kept was not found. The layer has the same frame as its parent in the page
+  units at `0x71`, so both pictures stand over each other.
+- The straight X link is the object pair `X2`, `X1` in the linked layer: a 131-byte header and a 20-byte style block
+  whose first byte is `*` (`glayout::link_annotation`). With them `layer.x.link` is 1; without, 0. (With a custom link
+  Origin writes the text `X1` in that block instead.) The X range is written the same in both layers.
+- Axis visibility, as in graphing.md 12.7: the right layer shows in its Y group the second edge's tick labels (block 4)
+  and line (block 5) and nothing on the first edge; its X group shows the top line (block 5) only. Origin reported
+  `showAxes` 2 and 2, `showLabels` 0 and 2 for the layer, equal to what Origin reports for its own DoubleY graph. The
+  labels, line width, ticks and colours of the second edge are the fields that blocks 4 and 5 hold as blocks 2 and 3 do
+  for the first edge (label size at `0x15` of block 4, width at `0x15` and tick byte `0x25` of block 5). The right title
+  is the text object `YR` (header byte `0x42` is `0x84`, angle 900). The parent keeps its own axes; the top line of
+  its box is written in the right layer.
+- The parent's legend lists both layers: `\l(1.1) %(1.1)`, CR LF, `\l(2.1) %(2.1)` (layer, plot). Origin drew one
+  legend with the entries of both layers.
+- What Origin showed for `gf-doubley.opj` (one curve on each side; two on each side; a cyclic voltammogram with a right
+  axis): the right axis with its own scale and title, the same X range, one legend with all curves, the right axis in
+  the colour of its curve for the template's automatic colours. What differs from Origin's own file: `layer.unit`; the
+  PNG of the voltammogram cuts the right tick labels at the page edge because its frame reaches 0.92 of the page.
+
+**Bar gap.** The width of the bars in percent of the spacing, times 50, goes to `0x19` and `0x11A` of every column
+record (`(100 - gap) * 50`, graphing.md 14.7). Origin drew gaps of 0, 20 and 60 percent as written. The overlap was
+looked for with `set -ov`, `-vo`, `-bo`, `-ol`, `-vl` and other options and with `layer.overlap`: no record or header byte
+changed, so the overlap stays in a warning. Note that two column plots written like this are drawn on top of each other
+in Origin, not side by side, because the writer sets no plot group on them (byte `0x06` is 9); that was so before.
+
+**Axis sides and colours.** The visibility bits of 12.7 are written for every axis: `AxisSide::Opposite` puts the labels,
+line, ticks and colour on the second edge, `AxisSide::Hidden` shows nothing of the group. Origin reported `showAxes` 2 and
+`showLabels` 2 for a top X axis, 2 and 2 for a right Y axis, 0 and 0 for hidden axes, and an automatic axis colour (-9) after
+the colour of the axis line, the labels and the second edge are set to `F7 FF` (and `F7 FF FF FF` at `0x92` and `0x16A`).
+The reader reads the same fields: nothing shown is a hidden axis; labels or a line only on the second edge is an
+axis on the second edge (`graph.rs`, `axis_side`; the owner's five projects have no hidden or opposite axes, so their
+import did not change). The title of a top axis is `XT`.
+
+**Still in warnings** after this section: X offsets and the waterfall; a linked layer that is not the right Y axis of a
+double-Y graph (panels, a linked Y scale); a right layer whose X scale is not linked; the overlap of bars; the line on the near
+side of an axis that is drawn on the opposite side; rotated tick labels, tick label sources and the colour of axis titles
+that follow the plot.

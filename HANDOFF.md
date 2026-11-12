@@ -64,8 +64,9 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    exact comparison for `GCD(0.5C).bin`) need text exports of the same runs.
 2. **Origin look and feel (ADR 0007)**: column properties and the analysis-tool dialogs are not
    in Origin's layout; no Import Wizard (Ctrl+3); NLFit lacks "1 Iteration" and "Fit till
-   converged" (the fit engine needs single steps); no per-plot left/right Y axis choice in the
-   app (the CLI has it); many menu items are greyed because the feature is missing.
+   converged" (the fit engine needs single steps); many menu items are greyed because the
+   feature is missing. (A plot can now be put on the right Y axis from Plot Details > Group and
+   from its right-click menu, `0d74eee`.)
 3. **`.opj` files**: saving does not yet write double-Y, stack offsets, panels, bar spacing, area
    plots, tick number formats or window places (the companion keeps them); the reader does not
    read plot groups, legend frames, panel links or sparklines (the small previews in a sheet's
@@ -88,9 +89,13 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
 2. The remaining dialogs in Origin's layout (analysis tools, column properties, Import Wizard;
    `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's long name is
    on Plot Details' Page tab; a plot's legend text is on its Group tab.
-3. A per-plot left/right axis choice in the app (offsets are already in Plot Details > Stack).
-4. Update the rows of `docs/spec/feature-parity.md` for the work of 2026-11-12, then follow its
-   order of work (matrices and heatmaps are the largest missing area).
+3. Done on 2026-11-12: the per-plot left/right axis choice in the app (`0d74eee`), and the rows of
+   `docs/spec/feature-parity.md` brought up to date by reading the code (`00a84db`: 40 done, 106
+   partial, 84 missing of 230; P0 31 / 68 / 2).
+4. Follow the parity table's order of work. Its stage 1 step 6 (publication figures: free text
+   labels, legend options, Origin's colour list, size and margin options, TIFF, EMF, EPS) and
+   stage 2 step 3 (the generic analysis dialog with Preview and Auto Apply) are the largest open
+   P0 parts; matrices and heatmaps are the largest missing area overall.
 
 The small points of the graph review are fixed too: `--offsets` gives its values to stack members
 (a fitted curve takes none), and deleting a column drops the tick labels and offsets that name it.

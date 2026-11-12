@@ -76,6 +76,8 @@ enum Escape {
     Literal,
     /// `\x(hhhh)`: one character given by its hexadecimal code.
     Unicode,
+    /// `\(nnn)`: one character given by its decimal code, for example `\(40)` for `(`.
+    Decimal,
 }
 
 /// Longest font name accepted in `\f:Name(..)`; longer text is not an escape.
@@ -86,6 +88,9 @@ const MAX_FONT_NAME: usize = 64;
 fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
     let mut inner = st;
     let code = *chars.get(pos + 1)?;
+    if code == '(' {
+        return Some((Escape::Decimal, pos + 2));
+    }
     if chars.get(pos + 2) == Some(&'(') {
         let esc = match code {
             'b' => {
@@ -190,6 +195,14 @@ fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth:
                     match ch {
                         Some(ch) => push(out, ch, Style { greek: false, ..st }),
                         None => format!("\\x({code})").chars().for_each(|c| push(out, c, st)),
+                    }
+                }
+                Escape::Decimal => {
+                    let code = take_enclosed(chars, pos);
+                    let ch = code.trim().parse::<u32>().ok().and_then(char::from_u32).filter(|c| !c.is_control());
+                    match ch {
+                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
+                        None => format!("\\({code})").chars().for_each(|c| push(out, c, st)),
                     }
                 }
             }
@@ -329,6 +342,17 @@ mod tests {
         let r = parse("a\\+(b");
         assert_eq!(r.len(), 2);
         assert_eq!(r[1].text, "b");
+    }
+
+    #[test]
+    fn decimal_character_codes() {
+        // An XRD title as Origin 2016 stored it: brackets written as character codes.
+        assert_eq!(plain("2\\g(q) \\(40)degree\\(41)"), "2θ (degree)");
+        assert_eq!(plain("\\(176)C"), "°C");
+        assert!(parse("\\b(\\(65))").iter().all(|r| r.bold), "the character keeps the style around it");
+        // A code that is not a printable character stays as written.
+        assert_eq!(plain("\\(7)x"), "\\(7)x");
+        assert_eq!(plain("\\(abc)"), "\\(abc)");
     }
 
     #[test]

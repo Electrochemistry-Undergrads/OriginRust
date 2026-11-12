@@ -1429,7 +1429,7 @@ fn copy_gives_tab_separated_text_and_paste_puts_it_back_in_one_undo_step() {
 }
 
 #[test]
-fn copy_full_precision_writes_every_digit_and_plain_copy_what_the_cells_show() {
+fn plain_copy_and_copy_full_precision_both_write_every_digit() {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fullprec-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -1439,7 +1439,13 @@ fn copy_full_precision_writes_every_digit_and_plain_copy_what_the_cells_show() {
     click(&mut h, "Book1 - sample");
     click_text(&mut h, "B(Y1)");
     ctrl(&mut h, egui::Key::C);
-    assert_eq!(h.state().copied, "0.12346\n5\n", "plain Copy is what the cells show");
+    assert_eq!(
+        h.state().copied,
+        "0.1234567891234
+5
+",
+        "plain Copy keeps every digit"
+    );
     menu_path(&mut h, &["Edit", "Copy", "Copy full precision"]);
     assert_eq!(h.state().copied, "0.1234567891234\n5\n");
 }
@@ -1793,6 +1799,15 @@ fn the_sheet_tab_menu_adds_duplicates_renames_and_deletes_sheets() {
     click(&mut h, "OK");
     assert_eq!(project(&h).workbooks().next().unwrap().sheets[1].name, "Run 2");
     assert_eq!(h.state().doc.undo_label(), Some("Rename sheet"));
+
+    // Names are compared without regard to case: "RUN 2" would clash with "Run 2".
+    right_click_tab(&mut h, &first);
+    menu_entry(&h, "Name and Comments...").click();
+    settle(&mut h);
+    h.state_mut().sheet_name.as_mut().expect("the dialog is open").name = "RUN 2".to_string();
+    click(&mut h, "OK");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets[0].name, first, "the clash was refused");
+    assert!(h.state().status.contains("no other sheet"), "{}", h.state().status);
 
     // Delete removes the sheet; the last sheet cannot be deleted.
     right_click_tab(&mut h, "Run 2");

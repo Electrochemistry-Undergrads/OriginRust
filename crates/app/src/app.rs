@@ -670,7 +670,8 @@ impl SheafApp {
             CellOp::Copy(_) | CellOp::Cut => {
                 let kind = if let CellOp::Copy(k) = op { k } else { CopyKind::Plain };
                 let options = CopyOptions {
-                    full_precision: kind == CopyKind::FullPrecision,
+                    // Copy never drops digits: a copy and paste inside Sheaf must give back the same numbers.
+                    full_precision: true,
                     label_rows: kind == CopyKind::WithLabels,
                 };
                 let text = sheet.copy_text(&t.columns, t.rows.clone(), options);
@@ -1178,11 +1179,9 @@ impl SheafApp {
                     if ui.button("OK").clicked() {
                         let (book, sheet, name) = (d.book, d.sheet, d.name.clone());
                         let name = name.trim().to_string();
-                        let taken = self
-                            .doc
-                            .project()
-                            .workbook(book)
-                            .is_none_or(|b| b.sheets.iter().enumerate().any(|(i, s)| i != sheet && s.name == name));
+                        let taken = self.doc.project().workbook(book).is_none_or(|b| {
+                            b.sheets.iter().enumerate().any(|(i, s)| i != sheet && s.name.eq_ignore_ascii_case(&name))
+                        });
                         if name.is_empty() || taken {
                             self.status = "A sheet needs a name that no other sheet of the workbook has".to_string();
                         } else {

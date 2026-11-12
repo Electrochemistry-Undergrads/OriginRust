@@ -184,13 +184,13 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Peak finding | Peak Analyzer, local maximum | `calc/peaks.rs`, checked; Find Peaks | ◐ | no window search, derivative methods, smoothing, width filter | P0 |
+| Peak finding | Peak Analyzer, local maximum | `calc/peaks.rs`, checked; `calc/peakchain.rs` adds window search, derivative methods, smoothing, width filter (own rules, spec section 11); Find Peaks and Analyze Peaks windows | ◐ | only the local maximum method is checked against Origin | P0 |
 | Baseline modes | constant, points, dataset, end points, ALS | Minimum, Constant, End points, Line | ◐ | no anchors (library function not reachable), dataset baseline, ALS, auto detect, preview | P0 |
 | Baseline subtraction | pa_basesubtr | new Y column beside source | ✓ | limited by modes | P0 |
-| Per-peak integration | area, centre, height, FWHM per peak | Integrate Ranges window, `analyze integrate --ranges` | ◐ | one table row per typed range with area, absolute area, peak, FWHM (spec section 10); no automatic peak split, no picking on a graph | P0 |
+| Per-peak integration | area, centre, height, FWHM per peak | `analyze peaks --integrate`, Analysis > Analyze Peaks (automatic limits at the baseline or valley, result table); Integrate Ranges for typed ranges | ◐ | areas, heights and widths checked against `integ1` over the same rows; the choice of limits is Sheaf's own; no picking on a graph | P0 |
 | CV charge with sloped baseline | integ1 with baseline | end-point baseline over typed range | ◐ | no foot picking, no anodic and cathodic split, no scan-rate division | P0 |
-| Peak Analyzer wizard | goal, baseline, peaks, results | separate dialogs | ✗ | | P0 |
-| Multiple peak fit | Peaks and Baseline | one peak function at a time | ◐ | no multi-peak model, no starting values from found peaks, no area report | P0 |
+| Peak Analyzer wizard | goal, baseline, peaks, results | one dialog runs baseline, search, integration and fit (spec section 11) | ◐ | no wizard pages or preview, baseline anchors not picked on a graph | P0 |
+| Multiple peak fit | Peaks and Baseline | sum of Gauss or Lorentz peaks on a constant or sloped baseline, started from found peaks, per-peak report (`fit/multipeak.rs`) | ◐ | one shape for all peaks, no constraints, not compared with Origin's own multi-peak fit | P0 |
 | Peak results layout | Origin result sheets | Integrate and Find Peaks sheets | ◐ | no area percent, FWHM, separate baseline sheet | P0 |
 | Multi-curve peak analysis | paMultiY | tools accept several Y columns | ◐ | not one run with one result set | P1 |
 

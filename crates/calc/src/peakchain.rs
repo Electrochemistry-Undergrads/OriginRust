@@ -1,0 +1,527 @@
+//! The peak analysis chain: baseline, find peaks, integrate every peak.
+//!
+//! This follows the goals of Origin's Peak Analyzer (create a baseline, subtract it, find peaks,
+//! integrate peaks) as separate steps that [`analyze_peaks`] runs in order. The pieces that
+//! Origin documents numerically are checked against it (`tests/origin_peakchain.rs`); the rules
+//! are in `docs/spec/analysis-tools.md`.
+//!
+//! Steps:
+//!
+//! 1. The baseline is built from the chosen mode and subtracted from the data.
+//! 2. Peaks are found on the corrected curve with one of the four methods of `pkFind`
+//!    (local maximum, window search, first derivative, second derivative), optionally after
+//!    smoothing, then filtered by height or number.
+//! 3. Each peak is integrated between its limits: the places where the corrected curve meets
+//!    the baseline (or the half height), but never beyond the valley that separates it from a
+//!    neighbouring peak. Neighbouring peaks that overlap therefore share the valley point.
+//!
+//! Rows are 0-based indices here. The data must be ordered along X (rising or falling).
+
+use crate::baseline::{BaselineMethod, subtract_baseline};
+use crate::differentiate::{DiffOptions, differentiate};
+use crate::interp::{InterpMethod, SplineBoundary};
+use crate::peaks::{PeakDirection, PeakFilter, PeakOptions, find_peaks};
+use crate::smooth::{SmoothOptions, smooth};
+
+/// How peaks are located (the `method` of `pkFind`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FindMethod {
+    /// A point larger than its `npts` neighbours on each side.
+    #[default]
+    LocalMax,
+    /// The largest point of a window of `npts` points on each side.
+    Window,
+    /// A sign change of the first derivative from plus to minus.
+    FirstDerivative,
+    /// A minimum of the second derivative (also finds shoulders hidden in a bigger peak).
+    SecondDerivative,
+}
+
+/// Settings of the peak search.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FindOptions {
+    pub method: FindMethod,
+    /// Neighbours compared (local maximum, window search) or half the window of the derivative.
+    pub npts: usize,
+    /// Savitzky-Golay window (order 2) applied before the search; 0 or 1 means no smoothing.
+    pub smooth_points: usize,
+    pub direction: PeakDirection,
+    /// Height or number filter. `Height(0.0)` keeps peaks of at least 20 % of the largest
+    /// magnitude, as `pkFind` does.
+    pub filter: PeakFilter,
+    /// Drop peaks narrower than this FWHM (in X units); 0 keeps all.
+    pub min_fwhm: f64,
+}
+
+impl Default for FindOptions {
+    fn default() -> Self {
+        FindOptions {
+            method: FindMethod::LocalMax,
+            npts: 2,
+            smooth_points: 0,
+            direction: PeakDirection::Positive,
+            filter: PeakFilter::Height(0.0),
+            min_fwhm: 0.0,
+        }
+    }
+}
+
+/// Where a peak starts and ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LimitMode {
+    /// Where the corrected curve reaches zero (the baseline) or the valley to the next peak.
+    #[default]
+    Baseline,
+    /// Where the curve falls to half the peak height (area of the upper half only).
+    HalfHeight,
+}
+
+/// How the baseline is made.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChainBaseline {
+    /// Data are used as they are.
+    None,
+    Constant(f64),
+    /// Straight line through the first and last point.
+    EndPoints,
+    /// Curve through given anchor points.
+    Anchors(Vec<(f64, f64)>, InterpMethod),
+    /// `n` anchors, each the lowest point of one of `n` equal stretches of the data (found on a
+    /// lightly smoothed copy), joined by straight lines. This is Sheaf's own automatic mode.
+    AutoMinima(usize),
+}
+
+/// Everything [`analyze_peaks`] needs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChainOptions {
+    pub baseline: ChainBaseline,
+    pub find: FindOptions,
+    pub limits: LimitMode,
+}
+
+impl Default for ChainOptions {
+    fn default() -> Self {
+        ChainOptions { baseline: ChainBaseline::None, find: FindOptions::default(), limits: LimitMode::Baseline }
+    }
+}
+
+/// One peak with its integration figures (the columns of the Peak Analyzer's result table).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PeakInfo {
+    /// 0-based index of the peak point.
+    pub index: usize,
+    /// X of the peak point (the centre).
+    pub center: f64,
+    /// Height above the baseline (negative for a negative peak).
+    pub height: f64,
+    /// Integral between the limits of the baseline-corrected curve.
+    pub area: f64,
+    /// Share of the sum of all areas, in percent.
+    pub area_percent: f64,
+    /// Full width at half height, interpolated, within the limits.
+    pub fwhm: f64,
+    pub left_x: f64,
+    pub right_x: f64,
+    /// 0-based index of the first and last data point inside the limits.
+    pub left_index: usize,
+    pub right_index: usize,
+}
+
+/// Result of [`analyze_peaks`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChainResult {
+    pub baseline: Vec<f64>,
+    pub corrected: Vec<f64>,
+    pub peaks: Vec<PeakInfo>,
+}
+
+/// Anchors of [`ChainBaseline::AutoMinima`].
+pub fn auto_minima_anchors(x: &[f64], y: &[f64], n: usize) -> Vec<(f64, f64)> {
+    let len = x.len().min(y.len());
+    let n = n.max(2).min(len.max(2));
+    let ys = if len >= 7 { smooth(&y[..len], &SmoothOptions::default()) } else { y[..len].to_vec() };
+    let mut out = Vec::new();
+    for k in 0..n {
+        let a = k * len / n;
+        let b = ((k + 1) * len / n).max(a + 1).min(len);
+        let mut best = a;
+        for i in a..b {
+            if ys[i].is_finite() && (!ys[best].is_finite() || ys[i] < ys[best]) {
+                best = i;
+            }
+        }
+        out.push((x[best], y[best]));
+    }
+    out
+}
+
+fn baseline_method(x: &[f64], y: &[f64], b: &ChainBaseline) -> Option<BaselineMethod> {
+    let n = x.len().min(y.len());
+    Some(match b {
+        ChainBaseline::None => BaselineMethod::Constant(0.0),
+        ChainBaseline::Constant(c) => BaselineMethod::Constant(*c),
+        ChainBaseline::EndPoints => BaselineMethod::Line((x[0], y[0]), (x[n - 1], y[n - 1])),
+        ChainBaseline::Anchors(points, method) => {
+            if points.len() < 2 {
+                return None;
+            }
+            let mut p = points.clone();
+            p.sort_by(|a, b| a.0.total_cmp(&b.0));
+            BaselineMethod::Anchors { points: p, method: *method, boundary: SplineBoundary::NotAKnot }
+        }
+        ChainBaseline::AutoMinima(k) => {
+            let mut p = auto_minima_anchors(x, y, *k);
+            p.dedup_by(|a, b| a.0 == b.0);
+            if p.len() < 2 {
+                return None;
+            }
+            BaselineMethod::Anchors { points: p, method: InterpMethod::Linear, boundary: SplineBoundary::NotAKnot }
+        }
+    })
+}
+
+/// Finds the peak points of an already baseline-corrected curve; returns 0-based indices in
+/// ascending order. A negative direction mirrors the curve; `Both` returns both kinds.
+pub fn find_peak_indices(x: &[f64], c: &[f64], opts: &FindOptions) -> Vec<usize> {
+    let mut all = Vec::new();
+    if opts.direction != PeakDirection::Negative {
+        all.extend(positive_peaks(x, c, opts));
+    }
+    if opts.direction != PeakDirection::Positive {
+        let m: Vec<f64> = c.iter().map(|v| -v).collect();
+        all.extend(positive_peaks(x, &m, opts));
+    }
+    all.sort_unstable();
+    all.dedup();
+    all
+}
+
+fn positive_peaks(x: &[f64], c: &[f64], opts: &FindOptions) -> Vec<usize> {
+    let n = x.len().min(c.len());
+    let c = &c[..n];
+    let ys = if opts.smooth_points >= 3 {
+        smooth(c, &SmoothOptions { npts: opts.smooth_points, ..SmoothOptions::default() })
+    } else {
+        c.to_vec()
+    };
+    let k = opts.npts.max(1);
+    let mut found: Vec<usize> = Vec::new();
+    match opts.method {
+        FindMethod::LocalMax => {
+            let o = PeakOptions { npts: k, direction: PeakDirection::Positive, filter: PeakFilter::None };
+            found = find_peaks(&x[..n], &ys, &o).rows.iter().map(|r| r - 1).collect();
+        }
+        FindMethod::Window => {
+            if n > 2 * k {
+                for i in k..n - k {
+                    let v = ys[i];
+                    if v > 0.0 && ys[i - k..i].iter().all(|&a| v > a) && ys[i + 1..=i + k].iter().all(|&a| v >= a) {
+                        found.push(i);
+                    }
+                }
+            }
+        }
+        FindMethod::FirstDerivative => {
+            let d = differentiate(&x[..n], &ys, &DiffOptions { order: 1, smooth: true, poly: 2, npts: 2 * k + 1 });
+            for i in 1..n {
+                if d[i - 1] > 0.0 && d[i] <= 0.0 {
+                    let j = if ys[i - 1] >= ys[i] { i - 1 } else { i };
+                    if ys[j] > 0.0 {
+                        found.push(j);
+                    }
+                }
+            }
+        }
+        FindMethod::SecondDerivative => {
+            let d = differentiate(&x[..n], &ys, &DiffOptions { order: 2, smooth: true, poly: 3, npts: 2 * k + 1 });
+            for i in 1..n.saturating_sub(1) {
+                if d[i].is_finite() && d[i] < 0.0 && d[i] < d[i - 1] && d[i] <= d[i + 1] && ys[i] > 0.0 {
+                    found.push(i);
+                }
+            }
+        }
+    }
+    found.dedup();
+    match opts.filter {
+        PeakFilter::None => {}
+        PeakFilter::Height(h) => {
+            let thr = if h == 0.0 {
+                0.2 * ys.iter().filter(|a| a.is_finite()).fold(0.0_f64, |m, a| m.max(a.abs()))
+            } else {
+                h
+            };
+            found.retain(|&i| ys[i] >= thr);
+        }
+        PeakFilter::Number(m) => {
+            found.sort_by(|&a, &b| ys[b].total_cmp(&ys[a]).then(a.cmp(&b)));
+            found.truncate(m);
+            found.sort_unstable();
+        }
+    }
+    // The point reported is the largest raw point next to the smoothed maximum.
+    if opts.smooth_points >= 3 {
+        let r = opts.smooth_points / 2;
+        for i in found.iter_mut() {
+            let (a, b) = (i.saturating_sub(r), (*i + r).min(n - 1));
+            let mut best = *i;
+            for j in a..=b {
+                if c[j] > c[best] {
+                    best = j;
+                }
+            }
+            *i = best;
+        }
+        found.dedup();
+    }
+    found
+}
+
+/// Integrates each peak of the corrected curve `c` between its limits. `peaks` are 0-based
+/// indices in ascending order; the sign of each peak follows `c`.
+pub fn integrate_peaks(x: &[f64], c: &[f64], peaks: &[usize], mode: LimitMode) -> Vec<PeakInfo> {
+    let n = x.len().min(c.len());
+    let mut out: Vec<PeakInfo> = Vec::with_capacity(peaks.len());
+    // Valley between neighbours of the same sign: the point closest to the baseline.
+    let valley = |a: usize, b: usize| -> usize {
+        let sign = if c[a] >= 0.0 { 1.0 } else { -1.0 };
+        let mut best = a;
+        for i in a..=b {
+            if sign * c[i] < sign * c[best] {
+                best = i;
+            }
+        }
+        best
+    };
+    for (k, &p) in peaks.iter().enumerate() {
+        if p >= n {
+            continue;
+        }
+        let sign = if c[p] >= 0.0 { 1.0 } else { -1.0 };
+        let level = match mode {
+            LimitMode::Baseline => 0.0,
+            LimitMode::HalfHeight => c[p] / 2.0,
+        };
+        let lo_bound = if k > 0 { valley(peaks[k - 1], p) } else { 0 };
+        let hi_bound = if k + 1 < peaks.len() { valley(p, peaks[k + 1]) } else { n - 1 };
+        // Left limit: walk out until the curve is at or below the level.
+        let (mut li, mut lx, mut ly) = (p, x[p], c[p]);
+        let mut j = p;
+        while j > lo_bound {
+            if sign * (c[j - 1] - level) <= 0.0 {
+                let (ya, yb) = (c[j - 1], c[j]);
+                lx = if yb == ya { x[j] } else { x[j - 1] + (level - ya) * (x[j] - x[j - 1]) / (yb - ya) };
+                ly = level;
+                li = j;
+                break;
+            }
+            j -= 1;
+            li = j;
+            lx = x[j];
+            ly = c[j];
+        }
+        let (mut ri, mut rx, mut ry) = (p, x[p], c[p]);
+        let mut j = p;
+        while j < hi_bound {
+            if sign * (c[j + 1] - level) <= 0.0 {
+                let (ya, yb) = (c[j], c[j + 1]);
+                rx = if yb == ya { x[j] } else { x[j] + (level - ya) * (x[j + 1] - x[j]) / (yb - ya) };
+                ry = level;
+                ri = j;
+                break;
+            }
+            j += 1;
+            ri = j;
+            rx = x[j];
+            ry = c[j];
+        }
+        // Area: trapezoids over the limit points and the data points between them.
+        let mut area = 0.0;
+        let (mut px, mut py) = (lx, ly);
+        for i in li..=ri {
+            if x[i] == px && i == li && ly == c[i] {
+                continue;
+            }
+            area += (x[i] - px) * (py + c[i]) / 2.0;
+            px = x[i];
+            py = c[i];
+        }
+        area += (rx - px) * (py + ry) / 2.0;
+        // Width at half height inside the limits.
+        let half = c[p] / 2.0;
+        let mut wl = lx;
+        let mut i = p;
+        while i > li {
+            if sign * (c[i - 1] - half) <= 0.0 {
+                wl = x[i - 1] + (half - c[i - 1]) * (x[i] - x[i - 1]) / (c[i] - c[i - 1]);
+                break;
+            }
+            i -= 1;
+        }
+        let mut wr = rx;
+        let mut i = p;
+        while i < ri {
+            if sign * (c[i + 1] - half) <= 0.0 {
+                wr = x[i] + (half - c[i]) * (x[i + 1] - x[i]) / (c[i + 1] - c[i]);
+                break;
+            }
+            i += 1;
+        }
+        out.push(PeakInfo {
+            index: p,
+            center: x[p],
+            height: c[p],
+            area,
+            area_percent: 0.0,
+            fwhm: (wr - wl).abs(),
+            left_x: lx,
+            right_x: rx,
+            left_index: li,
+            right_index: ri,
+        });
+    }
+    let total: f64 = out.iter().map(|p| p.area).sum();
+    for p in out.iter_mut() {
+        p.area_percent = if total != 0.0 { 100.0 * p.area / total } else { f64::NAN };
+    }
+    out
+}
+
+/// Runs the chain on `y(x)`. Returns `None` when the baseline cannot be made (fewer than two
+/// anchors, or fewer than two points).
+pub fn analyze_peaks(x: &[f64], y: &[f64], opts: &ChainOptions) -> Option<ChainResult> {
+    let n = x.len().min(y.len());
+    if n < 2 {
+        return None;
+    }
+    let method = baseline_method(&x[..n], &y[..n], &opts.baseline)?;
+    let (corrected, baseline) = subtract_baseline(&x[..n], &y[..n], &method);
+    let mut idx = find_peak_indices(&x[..n], &corrected, &opts.find);
+    let mut peaks = integrate_peaks(&x[..n], &corrected, &idx, opts.limits);
+    if opts.find.min_fwhm > 0.0 && peaks.iter().any(|p| p.fwhm < opts.find.min_fwhm) {
+        idx = peaks.iter().filter(|p| p.fwhm >= opts.find.min_fwhm).map(|p| p.index).collect();
+        peaks = integrate_peaks(&x[..n], &corrected, &idx, opts.limits);
+    }
+    Some(ChainResult { baseline, corrected, peaks })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gauss(x: f64, c: f64, s: f64, h: f64) -> f64 {
+        h * (-(x - c).powi(2) / (2.0 * s * s)).exp()
+    }
+
+    fn grid() -> Vec<f64> {
+        (0..401).map(|i| i as f64 * 0.05).collect()
+    }
+
+    #[test]
+    fn separate_peaks_have_their_gaussian_area() {
+        let x = grid();
+        let y: Vec<f64> = x.iter().map(|&x| gauss(x, 5.0, 0.4, 1.0) + gauss(x, 14.0, 0.6, 0.5)).collect();
+        let r = analyze_peaks(&x, &y, &ChainOptions::default()).unwrap();
+        assert_eq!(r.peaks.len(), 2);
+        let a1 = 1.0 * 0.4 * (2.0 * std::f64::consts::PI).sqrt();
+        let a2 = 0.5 * 0.6 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((r.peaks[0].area - a1).abs() < 2e-3 * a1, "{}", r.peaks[0].area);
+        assert!((r.peaks[1].area - a2).abs() < 2e-3 * a2);
+        assert!((r.peaks[0].fwhm - 0.4 * 2.354_820).abs() < 2e-3);
+        assert!((r.peaks[0].area_percent + r.peaks[1].area_percent - 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn overlapping_peaks_split_at_the_valley() {
+        let x = grid();
+        let y: Vec<f64> = x.iter().map(|&x| gauss(x, 9.0, 0.5, 1.0) + gauss(x, 10.2, 0.5, 0.8)).collect();
+        let r = analyze_peaks(&x, &y, &ChainOptions::default()).unwrap();
+        assert_eq!(r.peaks.len(), 2);
+        assert_eq!(r.peaks[0].right_index, r.peaks[1].left_index);
+        assert!(r.peaks[0].right_x > 9.0 && r.peaks[0].right_x < 10.2);
+        let total = r.peaks[0].area + r.peaks[1].area;
+        let exact = (1.0 + 0.8) * 0.5 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((total - exact).abs() < 5e-3 * exact);
+    }
+
+    #[test]
+    fn sloped_baseline_by_end_points_and_by_minima() {
+        let x = grid();
+        let y: Vec<f64> = x.iter().map(|&x| 0.2 + 0.03 * x + gauss(x, 10.0, 0.5, 1.0)).collect();
+        let exact = 0.5 * (2.0 * std::f64::consts::PI).sqrt();
+        for b in [ChainBaseline::EndPoints, ChainBaseline::AutoMinima(4)] {
+            let o = ChainOptions {
+                baseline: b,
+                find: FindOptions { filter: PeakFilter::Height(0.3), ..Default::default() },
+                ..Default::default()
+            };
+            let r = analyze_peaks(&x, &y, &o).unwrap();
+            assert_eq!(r.peaks.len(), 1);
+            assert!((r.peaks[0].area - exact).abs() < 0.01 * exact, "{}", r.peaks[0].area);
+        }
+    }
+
+    #[test]
+    fn negative_peaks_and_methods() {
+        let x = grid();
+        let y: Vec<f64> = x.iter().map(|&x| gauss(x, 6.0, 0.5, 1.0) - gauss(x, 14.0, 0.5, 0.9)).collect();
+        let o = ChainOptions {
+            find: FindOptions { direction: PeakDirection::Both, ..Default::default() },
+            ..Default::default()
+        };
+        let r = analyze_peaks(&x, &y, &o).unwrap();
+        assert_eq!(r.peaks.len(), 2);
+        assert!(r.peaks[1].area < 0.0 && r.peaks[1].height < 0.0);
+        for m in [FindMethod::Window, FindMethod::FirstDerivative, FindMethod::SecondDerivative] {
+            let o =
+                ChainOptions { find: FindOptions { method: m, npts: 5, ..Default::default() }, ..Default::default() };
+            let r = analyze_peaks(&x, &y, &o).unwrap();
+            assert_eq!(r.peaks.len(), 1, "{m:?}");
+            assert!((r.peaks[0].center - 6.0).abs() < 0.06, "{m:?}");
+        }
+    }
+
+    #[test]
+    fn second_derivative_finds_a_shoulder() {
+        let x = grid();
+        let y: Vec<f64> = x.iter().map(|&x| gauss(x, 10.0, 0.5, 1.0) + gauss(x, 11.3, 0.5, 0.45)).collect();
+        let lm = analyze_peaks(&x, &y, &ChainOptions::default()).unwrap();
+        assert_eq!(lm.peaks.len(), 1);
+        let o = ChainOptions {
+            find: FindOptions {
+                method: FindMethod::SecondDerivative,
+                npts: 5,
+                filter: PeakFilter::None,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = analyze_peaks(&x, &y, &o).unwrap();
+        assert_eq!(r.peaks.len(), 2, "{:?}", r.peaks.iter().map(|p| p.center).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn width_filter_drops_narrow_spikes() {
+        let x = grid();
+        let y: Vec<f64> = x.iter().map(|&x| gauss(x, 6.0, 0.5, 1.0) + gauss(x, 14.0, 0.03, 0.9)).collect();
+        let mut o = ChainOptions::default();
+        assert_eq!(analyze_peaks(&x, &y, &o).unwrap().peaks.len(), 2);
+        o.find.min_fwhm = 0.5;
+        assert_eq!(analyze_peaks(&x, &y, &o).unwrap().peaks.len(), 1);
+    }
+
+    #[test]
+    fn half_height_limits_and_edges() {
+        let x = grid();
+        let y: Vec<f64> = x.iter().map(|&x| gauss(x, 10.0, 0.5, 1.0)).collect();
+        let o = ChainOptions { limits: LimitMode::HalfHeight, ..Default::default() };
+        let r = analyze_peaks(&x, &y, &o).unwrap();
+        let p = &r.peaks[0];
+        assert!((p.right_x - p.left_x - 0.5 * 2.354_820).abs() < 2e-3);
+        assert!(analyze_peaks(&x[..1], &y[..1], &o).is_none());
+        let bad = ChainOptions {
+            baseline: ChainBaseline::Anchors(vec![(1.0, 0.0)], InterpMethod::Linear),
+            ..Default::default()
+        };
+        assert!(analyze_peaks(&x, &y, &bad).is_none());
+    }
+}

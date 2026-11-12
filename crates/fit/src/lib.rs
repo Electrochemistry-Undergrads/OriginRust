@@ -14,6 +14,7 @@ pub mod dist;
 pub mod fdf;
 pub mod library;
 pub mod linear;
+pub mod multipeak;
 pub mod nlsf;
 pub mod report;
 

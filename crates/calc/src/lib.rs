@@ -15,6 +15,7 @@ pub mod differentiate;
 pub mod integrate;
 pub mod interp;
 pub mod normalize;
+pub mod peakchain;
 pub mod peaks;
 pub mod smooth;
 pub mod stats;
@@ -26,6 +27,10 @@ pub use differentiate::{DiffOptions, differentiate};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
 pub use normalize::{NormalizeMethod, normalize};
+pub use peakchain::{
+    ChainBaseline, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo, analyze_peaks,
+    auto_minima_anchors, find_peak_indices, integrate_peaks,
+};
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use smooth::{Boundary, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{Stats, quantile_origin, stats};

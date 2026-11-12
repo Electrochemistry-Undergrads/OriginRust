@@ -12,6 +12,9 @@ use sheaf_core::analysis::{
     IntegrateSpec, InterpMethod, InterpSpec, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions, Report, Request,
     RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
+use sheaf_core::analysis::{
+    ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec, PeakFitSpec, PeakShape,
+};
 use sheaf_core::column::Designation;
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
@@ -30,11 +33,13 @@ pub enum AnalysisKind {
     CurveMath,
     Interpolate,
     Peaks,
+    /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
+    PeakChain,
     Statistics,
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 11] = [
+    pub const ALL: [AnalysisKind; 12] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -45,6 +50,7 @@ impl AnalysisKind {
         AnalysisKind::CurveMath,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
+        AnalysisKind::PeakChain,
         AnalysisKind::Statistics,
     ];
 
@@ -61,6 +67,7 @@ impl AnalysisKind {
             AnalysisKind::CurveMath => "Simple Math...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
+            AnalysisKind::PeakChain => "Analyze Peaks...",
             AnalysisKind::Statistics => "Statistics on Columns...",
         }
     }
@@ -82,6 +89,7 @@ impl AnalysisKind {
             "math" => AnalysisKind::CurveMath,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
+            "peak-chain" => AnalysisKind::PeakChain,
             "statistics" => AnalysisKind::Statistics,
             _ => return None,
         })
@@ -111,6 +119,20 @@ enum BaselineKind {
     EndPoints,
     Line,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChainBaselineKind {
+    None,
+    EndPoints,
+    Minima,
+}
+
+const FIND_METHODS: [(&str, FindMethod); 4] = [
+    ("Local maximum", FindMethod::LocalMax),
+    ("Window search", FindMethod::Window),
+    ("First derivative", FindMethod::FirstDerivative),
+    ("Second derivative", FindMethod::SecondDerivative),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PeakKeep {
@@ -172,6 +194,13 @@ pub struct AnalysisDialog {
     peak_keep: PeakKeep,
     peak_height: f64,
     peak_count: usize,
+    chain_baseline: ChainBaselineKind,
+    chain_minima: usize,
+    find_method: usize,
+    chain_half_height: bool,
+    chain_integrate: bool,
+    chain_fit: Option<PeakShape>,
+    chain_fit_linear: bool,
     /// X intervals of "Integrate Ranges".
     ranges: Vec<(f64, f64)>,
     curve_op: CurveOp,
@@ -266,6 +295,13 @@ impl AnalysisDialog {
             peak_keep: PeakKeep::Default,
             peak_height: 0.0,
             peak_count: 1,
+            chain_baseline: ChainBaselineKind::Minima,
+            chain_minima: 5,
+            find_method: 0,
+            chain_half_height: false,
+            chain_integrate: true,
+            chain_fit: None,
+            chain_fit_linear: true,
             problem: None,
         })
     }
@@ -327,6 +363,33 @@ impl AnalysisDialog {
                     PeakKeep::All => PeakFilter::None,
                 },
                 ..self.peaks
+            }),
+            AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
+                chain: ChainOptions {
+                    baseline: match self.chain_baseline {
+                        ChainBaselineKind::None => ChainBaseline::None,
+                        ChainBaselineKind::EndPoints => ChainBaseline::EndPoints,
+                        ChainBaselineKind::Minima => ChainBaseline::AutoMinima(self.chain_minima),
+                    },
+                    find: FindOptions {
+                        method: FIND_METHODS[self.find_method].1,
+                        npts: self.peaks.npts,
+                        direction: self.peaks.direction,
+                        filter: match self.peak_keep {
+                            PeakKeep::Default => PeakFilter::Height(0.0),
+                            PeakKeep::Height => PeakFilter::Height(self.peak_height),
+                            PeakKeep::Count => PeakFilter::Number(self.peak_count),
+                            PeakKeep::All => PeakFilter::None,
+                        },
+                        ..FindOptions::default()
+                    },
+                    limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
+                },
+                integrate: self.chain_integrate,
+                fit: self.chain_fit.map(|shape| PeakFitSpec {
+                    shape,
+                    baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
+                }),
             }),
             AnalysisKind::Statistics => Tool::Statistics,
         })
@@ -592,7 +655,31 @@ impl AnalysisDialog {
                 });
                 ui.weak("The interpolated curves go to a new sheet.");
             }
-            AnalysisKind::Peaks => {
+            AnalysisKind::Peaks | AnalysisKind::PeakChain => {
+                let chain = self.kind == AnalysisKind::PeakChain;
+                if chain {
+                    ui.horizontal(|ui| {
+                        ui.label("Baseline");
+                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::None, "None");
+                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::EndPoints, "End points");
+                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::Minima, "Lowest points of");
+                        ui.add_enabled(
+                            self.chain_baseline == ChainBaselineKind::Minima,
+                            DragValue::new(&mut self.chain_minima).range(2..=1000),
+                        );
+                        ui.label("stretches");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Search method");
+                        egui::ComboBox::from_id_salt("peak_find_method")
+                            .selected_text(FIND_METHODS[self.find_method].0)
+                            .show_ui(ui, |ui| {
+                                for (i, (name, _)) in FIND_METHODS.iter().enumerate() {
+                                    ui.selectable_value(&mut self.find_method, i, *name);
+                                }
+                            });
+                    });
+                }
                 ui.horizontal(|ui| {
                     ui.label("Direction");
                     ui.radio_value(&mut self.peaks.direction, PeakDirection::Both, "Both");
@@ -619,7 +706,23 @@ impl AnalysisDialog {
                     );
                 });
                 ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
-                ui.weak("Peak positions and heights go to a new sheet.");
+                if chain {
+                    ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak");
+                    ui.checkbox(&mut self.chain_integrate, "Integrate every peak (area, area %, FWHM, limits)");
+                    ui.horizontal(|ui| {
+                        ui.label("Fit all peaks together");
+                        ui.radio_value(&mut self.chain_fit, None, "No fit");
+                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Gauss), "Gauss");
+                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Lorentz), "Lorentz");
+                    });
+                    ui.add_enabled(
+                        self.chain_fit.is_some(),
+                        egui::Checkbox::new(&mut self.chain_fit_linear, "Sloped baseline in the fit"),
+                    );
+                    ui.weak("Peaks, areas and fit results go to a new sheet; the baseline goes beside the data.");
+                } else {
+                    ui.weak("Peak positions and heights go to a new sheet.");
+                }
             }
             AnalysisKind::Statistics => {
                 ui.weak("Count, mean, standard deviation, sum, minimum, quartiles and maximum go to a new sheet.");

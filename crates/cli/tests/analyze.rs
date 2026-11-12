@@ -349,3 +349,52 @@ fn info_shows_a_date_time_column_and_the_option_keeps_text() {
     assert!(ok);
     assert!(stdout.contains(" text") && !stdout.contains(" date "), "{stdout}");
 }
+
+/// Two Gauss peaks (centres 6 and 13) on a sloped baseline, one X and one Y column.
+fn peak_file(dir: &Path) -> PathBuf {
+    let mut text = String::from("t,i\ns,A\n");
+    for k in 0..400 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, s: f64, h: f64| h * (-(x - c) * (x - c) / (2.0 * s * s)).exp();
+        text.push_str(&format!("{x},{}\n", 0.1 + 0.01 * x + g(6.0, 0.4, 1.0) + g(13.0, 0.5, 0.6)));
+    }
+    let path = dir.join("peaks.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn peaks_chain_integrates_and_fits_every_peak() {
+    let dir = scratch("peakchain");
+    let data = peak_file(&dir);
+    let export = dir.join("result.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--baseline",
+        "minima",
+        "--baseline-points",
+        "4",
+        "--min-height",
+        "0.3",
+        "--integrate",
+        "--fit",
+        "gauss",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Area (C)") && stdout.contains("Fit center"), "{stdout}");
+    assert!(stdout.contains("Peak 1 of") && stdout.contains("Peak 2 of"), "{stdout}");
+    assert!(stdout.contains("Gauss fit of 2 peaks") && stdout.contains("PeakAnalysis1"), "{stdout}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(exported.lines().next().unwrap().contains("Area"), "{exported}");
+
+    // Without any chain option the plain peak finder runs, as before.
+    let (ok, stdout, _) = sheaf(&["analyze", "peaks", data.to_str().unwrap()]);
+    assert!(ok && stdout.contains("Peaks1") && !stdout.contains("Area"), "{stdout}");
+
+    let (ok, _, stderr) = sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline", "anchors"]);
+    assert!(!ok && stderr.contains("--anchors"), "{stderr}");
+}

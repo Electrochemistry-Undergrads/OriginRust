@@ -1,0 +1,22 @@
+// Reference run for the peak chain: integ1 over the rows that Sheaf picks as peak limits,
+// on baseline-corrected generated data (rows 55:108, 144:197, 197:237, 1-based).
+newbook;
+col(A) = data(0, 20, 0.05);
+col(B) = 0.05 + 0.01*col(A) + exp(-(col(A)-4)^2/(2*0.4^2)) + 0.7*exp(-(col(A)-9)^2/(2*0.5^2)) + 0.55*exp(-(col(A)-10.2)^2/(2*0.5^2)) + 0.004*sin(37*col(A)) + 0.003*cos(91*col(A));
+col(C) = col(B) - (0.05 + 0.01*col(A));
+integ1 iy:=(col(A),col(C))[55:108] oy:=col(D);
+?integ1.area
+?integ1.x0
+?integ1.y0
+?integ1.dx
+integ1 iy:=(col(A),col(C))[144:197] oy:=col(E);
+?integ1.area
+?integ1.x0
+?integ1.y0
+?integ1.dx
+integ1 iy:=(col(A),col(C))[197:237] oy:=col(F);
+?integ1.area
+?integ1.x0
+?integ1.y0
+?integ1.dx
+?wks.nrows

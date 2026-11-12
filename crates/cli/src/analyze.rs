@@ -216,7 +216,24 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Peaks { target, direction, points, min_height, count, all } => {
+        AnalyzeTool::Peaks {
+            target,
+            direction,
+            points,
+            min_height,
+            count,
+            all,
+            method,
+            smooth,
+            min_width,
+            baseline,
+            baseline_points,
+            anchors,
+            limits,
+            integrate,
+            fit,
+            fit_baseline,
+        } => {
             let direction = match direction {
                 PeakKind::Both => analysis::PeakDirection::Both,
                 PeakKind::Positive => analysis::PeakDirection::Positive,
@@ -228,7 +245,73 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 (None, None, true) => analysis::PeakFilter::None,
                 (None, None, false) => analysis::PeakFilter::Height(0.0),
             };
-            (target, Job::Tool(Tool::FindPeaks(analysis::PeakOptions { npts: points, direction, filter })))
+            let chain = integrate
+                || fit.is_some()
+                || method.is_some()
+                || smooth > 0
+                || min_width > 0.0
+                || baseline.is_some()
+                || anchors.is_some()
+                || limits.is_some();
+            if !chain {
+                (target, Job::Tool(Tool::FindPeaks(analysis::PeakOptions { npts: points, direction, filter })))
+            } else {
+                let baseline = match (baseline, &anchors) {
+                    (Some(PeakBaselineKind::Anchors), None) => bail!("--baseline anchors needs --anchors X1:Y1,X2:Y2"),
+                    (None | Some(PeakBaselineKind::Anchors), Some(text)) => {
+                        let mut pts = Vec::new();
+                        for part in text.split(',') {
+                            pts.push(parse_pair::<f64>(part, "anchor point", "1.5:0.02")?);
+                        }
+                        if pts.len() < 2 {
+                            bail!("--anchors needs at least two points, for example 0:0.1,20:0.3");
+                        }
+                        analysis::ChainBaseline::Anchors(pts, analysis::InterpMethod::Linear)
+                    }
+                    (Some(PeakBaselineKind::None), Some(_)) => {
+                        bail!("--anchors cannot be combined with --baseline none")
+                    }
+                    (Some(PeakBaselineKind::EndPoints), _) => analysis::ChainBaseline::EndPoints,
+                    (Some(PeakBaselineKind::Minima), _) => analysis::ChainBaseline::AutoMinima(baseline_points),
+                    (Some(PeakBaselineKind::None) | None, None) => analysis::ChainBaseline::None,
+                };
+                let method = match method.unwrap_or(PeakMethodKind::LocalMax) {
+                    PeakMethodKind::LocalMax => analysis::FindMethod::LocalMax,
+                    PeakMethodKind::Window => analysis::FindMethod::Window,
+                    PeakMethodKind::FirstDerivative => analysis::FindMethod::FirstDerivative,
+                    PeakMethodKind::SecondDerivative => analysis::FindMethod::SecondDerivative,
+                };
+                let limits = match limits.unwrap_or(PeakLimitKind::Baseline) {
+                    PeakLimitKind::Baseline => analysis::LimitMode::Baseline,
+                    PeakLimitKind::HalfHeight => analysis::LimitMode::HalfHeight,
+                };
+                let fit = fit.map(|shape| analysis::PeakFitSpec {
+                    shape: match shape {
+                        PeakFitKind::Gauss => analysis::PeakShape::Gauss,
+                        PeakFitKind::Lorentz => analysis::PeakShape::Lorentz,
+                    },
+                    baseline: match fit_baseline {
+                        PeakFitBaselineKind::Constant => analysis::FitBaseline::Constant,
+                        PeakFitBaselineKind::Linear => analysis::FitBaseline::Linear,
+                    },
+                });
+                let find = analysis::FindOptions {
+                    method,
+                    npts: points,
+                    smooth_points: smooth,
+                    direction,
+                    filter,
+                    min_fwhm: min_width,
+                };
+                (
+                    target,
+                    Job::Tool(Tool::PeakChain(analysis::PeakChainSpec {
+                        chain: analysis::ChainOptions { baseline, find, limits },
+                        integrate,
+                        fit,
+                    })),
+                )
+            }
         }
         AnalyzeTool::Stats { target } => (target, Job::Tool(Tool::Statistics)),
         AnalyzeTool::Sort { target, by, descending } => {
@@ -354,6 +437,9 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             let report = project.analyze(&analysis::Request { columns, rows, tool })?;
             if let Some(t) = &report.table {
                 print_table(t);
+            }
+            for note in &report.notes {
+                println!("{note}");
             }
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)

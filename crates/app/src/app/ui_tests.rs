@@ -591,3 +591,39 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
     assert_eq!(col.cell_text(0), NumberFormat::Date(DatePattern::Iso).format(col.numeric().unwrap()[0]));
     assert_eq!(col.cell_text(0), "2026-11-11");
 }
+
+/// Analysis > Analyze Peaks... runs the chain on a curve with two peaks on a slope: the window
+/// opens from the menu, OK adds the baseline column and the result sheet, one undo removes both.
+#[test]
+fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-peakchain-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("peaks.csv");
+    let mut text = String::from("t,i\n");
+    for k in 0..400 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, s: f64, a: f64| a * (-(x - c) * (x - c) / (2.0 * s * s)).exp();
+        text.push_str(&format!("{x},{}\n", 0.1 + 0.01 * x + g(6.0, 0.4, 1.0) + g(13.0, 0.5, 0.6)));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    click(&mut h, "Book1 - peaks");
+    menu(&mut h, "Analysis", "Analyze Peaks...");
+    assert!(h.state().analysis.is_some(), "the Analyze Peaks window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert!(b.sheets[1].name.starts_with("PeakAnalysis"), "{}", b.sheets[1].name);
+    assert_eq!(b.sheets[0].columns.len(), 3, "a baseline column beside the data");
+    let center = b.sheets[1].column_by_name("Center").unwrap().numeric().unwrap().to_vec();
+    assert_eq!(center.len(), 2);
+    assert!((center[0] - 6.0).abs() < 1e-9 && (center[1] - 13.0).abs() < 1e-9, "{center:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Analyze peaks"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
+}

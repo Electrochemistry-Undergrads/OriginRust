@@ -5,7 +5,8 @@ that turn out to be wrong.
 
 ## The GitHub repository exists; pushing works
 
-The private repository is https://github.com/UlanS1/OriginRust. In the first two sessions
+The private repository is https://github.com/Electrochemistry-Undergrads/OriginRust (moved there
+from the owner's personal account on 2026-11-12). In the first two sessions
 `gh repo create` was refused by Claude Code's automatic permission check in auto mode ("data
 exfiltration"). In the fourth session (2026-11-11), with the owner's permission mode set to
 bypass, `gh repo create OriginRust --private --source . --remote origin --push` worked at once.

@@ -1,5 +1,17 @@
 # Handoff
 
+## Standing rules from the owner (2026-11-12)
+
+- **Subagents:** use Sonnet subagents when work needs delegating (building, research, reviews),
+  and Haiku subagents for testing (running the test suites, click tests, checking outputs).
+- **No co-author line:** never add a `Co-Authored-By: Claude ...` line, or a "Generated with
+  Claude Code" line, to commits or pull requests; say so in every subagent prompt too. The whole
+  history on GitHub was rewritten on 2026-11-12 to remove these lines, so every commit hash older
+  than that changed; branches made before it must be rebased onto the new `main` (match commits by
+  tree) before merging.
+- **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing of
+  it may live on the owner's personal account (UlanS1).
+
 Last updated: 2026-11-12, about 16:00, by session 05b367c2 ("Sonnet subagents from
 ORIGIN_RUST_PROMPT"). The owner asked this session to finish the open work while the session
 `originrust-3a` had made no change since 14:23, so this session now merges to `main` and edits this
@@ -32,7 +44,7 @@ original. 944 tests pass on `main`.
 
 ## Where things stand
 
-- **GitHub** (private): https://github.com/UlanS1/OriginRust. CI runs on push.
+- **GitHub** (private): https://github.com/Electrochemistry-Undergrads/OriginRust. CI runs on push.
 - Milestones 1 to 5 are done and tagged (milestone 2 still needs the owner for two checks; milestone
   5 misses some graphs of one owner project). Owner requests: parity audit, interface study, `.opj`
   writer for workbooks and graphs, `.opj` as default with companion: done.

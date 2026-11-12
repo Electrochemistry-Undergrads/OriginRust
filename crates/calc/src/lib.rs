@@ -24,5 +24,5 @@ pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integra
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
 pub use normalize::{NormalizeMethod, normalize};
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
-pub use smooth::{Boundary, SmoothMethod, SmoothOptions, smooth};
+pub use smooth::{Boundary, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{Stats, quantile_origin, stats};

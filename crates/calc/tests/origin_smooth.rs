@@ -2,7 +2,7 @@
 //!
 //! Reference script: `tools/origin-ref/smooth-suite1.labtalk.txt` (run with `run-labtalk-data.ps1`).
 //! Input: x = 0..10 step 0.1 (101 points), y = sin(x) + 0.3 cos(7x) + 0.05 x^2 (the row-20 copy has
-//! a missing value). Tolerance: relative 1e-10. The FFT filter is not implemented.
+//! a missing value). Tolerance: relative 1e-10. The FFT filter is in `origin_smooth_fft.rs`.
 
 use sheaf_calc::{Boundary, SmoothMethod, SmoothOptions, smooth};
 #[allow(dead_code)]

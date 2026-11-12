@@ -1,5 +1,5 @@
-//! Smoothing (Origin `smooth`): adjacent averaging (plain or weighted), Savitzky-Golay and the
-//! percentile filter, with Origin's boundary conditions. The FFT filter is not implemented.
+//! Smoothing (Origin `smooth`): adjacent averaging (plain or weighted), Savitzky-Golay, the
+//! percentile filter (with Origin's boundary conditions) and the FFT filter.
 //!
 //! Window: `npts` points means `2 * (npts / 2) + 1` points centred on the point, so an even
 //! `npts` behaves like the next odd number. Missing values are removed before smoothing and put
@@ -33,6 +33,11 @@ pub enum SmoothMethod {
     SavitzkyGolay { poly_order: usize },
     /// Percentile of the window, taken as a data value (no interpolation).
     Percentile { percent: f64 },
+    /// Low-pass FFT filter with a parabolic window; `npts` sets the cutoff frequency
+    /// `1 / (2 dx npts)` instead of a window length. Needs the X values (see [`smooth_xy`]);
+    /// `boundary` does not apply. Origin's script-only options (padding, old filter, baseline
+    /// choice) are not offered; the defaults are used.
+    FftFilter,
 }
 
 /// Options of [`smooth`].
@@ -137,17 +142,90 @@ fn smooth_valid(y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
                     polyfit_centered(&xs, &ys, 0.0, poly_order).map_or(y[i], |(c, _)| c[0])
                 }
             }
+            SmoothMethod::FftFilter => unreachable!("handled before the loop"),
         };
     }
     out
 }
 
-/// Smooths `y`. The result has the length of the input; missing values stay NaN.
+/// FFT filter of Origin 2016 (`smooth method:=fft`, default script options), for points with
+/// ascending X. Rules (all observed, see `docs/spec/analysis-tools.md`):
+///
+/// 1. A straight baseline is subtracted: the line from the mean of the first `w` points (at the
+///    first X) to the mean of the last `w` points (at the last X), `w = max(10, n / 100)` for
+///    `n > 10` and `1` otherwise.
+/// 2. The remainder is transformed with a plain length-`n` FFT (no padding). With `R` the X range
+///    the bin spacing is `df = 1 / R`, and the cutoff is `fc = 1 / (dx * 2 * npts)`, `dx = R / (n-1)`.
+/// 3. Cosine part `k` is kept when `(k + 1) df <= fc`, sine part `k` when `k df <= fc` (the sine
+///    part of the first bin is always kept); a kept part is multiplied by `1 - (k df / fc)^2`
+///    (by 1 for `k = 1`). The mean is kept. The Nyquist bin of an even `n` is dropped.
+/// 4. After the inverse transform the baseline is added back.
+fn fft_filter(x: &[f64], y: &[f64], npts: usize) -> Vec<f64> {
+    use rustfft::{FftPlanner, num_complex::Complex};
+    let n = y.len();
+    if n < 2 {
+        return y.to_vec();
+    }
+    let range = x[n - 1] - x[0];
+    if range.is_nan() || range <= 0.0 || range.is_infinite() {
+        return y.to_vec();
+    }
+    let dx = range / (n - 1) as f64;
+    let df = 1.0 / range;
+    let fc = 1.0 / dx / (2.0 * npts.max(1) as f64);
+    let w = if n > 10 { (n / 100).max(10) } else { 1 };
+    let a = y[..w].iter().sum::<f64>() / w as f64;
+    let b = y[n - w..].iter().sum::<f64>() / w as f64;
+    let base: Vec<f64> = x.iter().map(|&xi| a + (b - a) * (xi - x[0]) / range).collect();
+    let mut buf: Vec<Complex<f64>> = y.iter().zip(&base).map(|(yi, bi)| Complex::new(yi - bi, 0.0)).collect();
+    let mut planner = FftPlanner::<f64>::new();
+    planner.plan_fft_forward(n).process(&mut buf);
+    let mut spec = vec![Complex::new(0.0, 0.0); n];
+    spec[0] = buf[0];
+    for k in 1..=(n - 1) / 2 {
+        let weight = if k == 1 {
+            1.0
+        } else {
+            let r = k as f64 * df / fc;
+            1.0 - r * r
+        };
+        let keep_cos = (k + 1) as f64 * df <= fc;
+        let keep_sin = k == 1 || k as f64 * df <= fc;
+        let re = if keep_cos { buf[k].re * weight } else { 0.0 };
+        let im = if keep_sin { buf[k].im * weight } else { 0.0 };
+        spec[k] = Complex::new(re, im);
+        spec[n - k] = Complex::new(re, -im);
+    }
+    planner.plan_fft_inverse(n).process(&mut spec);
+    spec.iter().zip(&base).map(|(s, bi)| s.re / n as f64 + bi).collect()
+}
+
+/// Smooths `y` taking the row number as X (it matters only for the FFT filter, whose cutoff
+/// depends on the X spacing). The result has the length of the input; missing values stay NaN.
 pub fn smooth(y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
-    let idx = valid_indices(y.len(), |i| y[i].is_finite());
+    let x: Vec<f64> = (0..y.len()).map(|i| i as f64).collect();
+    smooth_xy(&x, y, opts)
+}
+
+/// Smooths `y` against the X values `x` (same length). Rows where X or Y is missing are removed
+/// before smoothing and come back as NaN. The FFT filter sorts the points by X first (Origin does
+/// the same) and returns the values in the original row order; the other methods work in row order.
+pub fn smooth_xy(x: &[f64], y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
+    let fft = opts.method == SmoothMethod::FftFilter;
+    let idx = valid_indices(y.len(), |i| y[i].is_finite() && (!fft || x.get(i).is_some_and(|v| v.is_finite())));
+    let mut out = vec![f64::NAN; y.len()];
+    if fft {
+        let mut order = idx;
+        order.sort_by(|&a, &b| x[a].total_cmp(&x[b]));
+        let xv: Vec<f64> = order.iter().map(|&i| x[i]).collect();
+        let yv: Vec<f64> = order.iter().map(|&i| y[i]).collect();
+        for (&i, v) in order.iter().zip(fft_filter(&xv, &yv, opts.npts)) {
+            out[i] = v;
+        }
+        return out;
+    }
     let yv: Vec<f64> = idx.iter().map(|&i| y[i]).collect();
     let sm = smooth_valid(&yv, opts);
-    let mut out = vec![f64::NAN; y.len()];
     for (&i, v) in idx.iter().zip(sm) {
         out[i] = v;
     }

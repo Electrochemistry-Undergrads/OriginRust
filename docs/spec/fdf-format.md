@@ -107,7 +107,7 @@ Expression syntax that must be supported by an expression evaluator:
 |---|---|
 | Operators | `+ - * /` and `^` for power. `^` binds tighter than unary minus in all observed uses, e.g. `-ln(x/xc)^2` means `-(ln(x/xc)^2)` [inferred from intent]. Comparison `< <= == > >=` appears in conditions. |
 | Constants | `PI` / `pi` / `Pi` (case varies), `NANUM` (missing value), literal numbers possibly with a trailing dot (`1.`, `3.`). |
-| Functions | `exp ln log log10 sqrt abs fabs sin cos tan asin acos atan sinh cosh tanh erf floor gamma pow(a,b)`. `log` is used with the natural-log meaning (LogNormal2D) [inferred]. Function names occur in mixed case in a few files (Sqrt, Exp in non-expression text). |
+| Functions | `exp ln log log10 sqrt abs fabs sin cos tan asin acos atan sinh cosh tanh erf floor gamma pow(a,b)`. `log` in a formula is taken as the natural logarithm (LogNormal2D; not checked, no library function depends on it); in a derived-parameter line it is LabTalk's base-10 log (checked: `log(100)` is 2 in Origin 2016), which the importer writes as `log10`. Function names occur in mixed case in a few files (Sqrt, Exp in non-expression text). |
 | Origin-specific calls | `nlf_voigt(x,y0,xc,A,wG,wL)`, `nlf_pearsoniv(x,y0,A,m,v,alpha,lam)`, `bessel_i1`, `gamcdf(x,a,b)` (gamma CDF, shape a, scale b), `normcdf(z)` (standard normal CDF), `wblcdf(x,a,b)`, `log_gamma`, `SqrWav(a,b,x0,T,x)`. |
 | Identifiers | Parameter names, the independent variable(s), `double` temporaries, `PI`. |
 
@@ -115,7 +115,7 @@ A formula may also be wrapped by Origin-style comment text that restates the mat
 
 ### Formula kinds for the importer
 
-Rule used to build `data/fit-functions.json`: after removing comments and preprocessor lines, if the text is exactly one assignment whose left side is a dependent variable and whose right side parses with the grammar above (identifiers limited to parameters, variables, `pi`), the function is `"expression"` and the right-hand side is stored (powers written `^`, `pow(a,b)` rewritten to `a^b`, `PI` to `pi`, `log` to `ln`). Otherwise it is `"procedural"` and `formula` is null; where possible `formula_math` holds a hand-written mathematical statement.
+Rule used to build `data/fit-functions.json`: after removing comments and preprocessor lines, if the text is exactly one assignment whose left side is a dependent variable and whose right side parses with the grammar above (identifiers limited to parameters, variables, `pi`), the function is `"expression"` and the right-hand side is stored (powers written `^`, `pow(a,b)` rewritten to `a^b`, `PI` to `pi`, `log` to `ln` in formulas, but to `log10` in derived parameters, which are LabTalk). Otherwise it is `"procedural"` and `formula` is null; where possible `formula_math` holds a hand-written mathematical statement.
 
 ### Constraints section
 
@@ -206,6 +206,6 @@ The first group, `[Origin Basic Functions]`, lists 21 functions (Allometric1, Be
 * Exact meaning of the `X`/`I` and `ON`/`OFF` flags in bounds (inferred above).
 * Exact meaning of `Duplicate Offset`/`Duplicate Unit` (inferred: shared-prefix length index and block length).
 * Operator precedence of unary minus versus `^` in Origin's expression parser (assumed `^` first).
-* Whether `log` means natural or base-10 logarithm in Origin expression code (the evidence suggests natural).
+* Whether `log` in the Origin C formula text is natural (the evidence suggests so; derived parameters are LabTalk and base 10, which was checked).
 * Whether the hidden categories (Asymptotic etc.) are reachable in the dialog.
 * How `Peak Area` is used when both amplitude and area flags exist.

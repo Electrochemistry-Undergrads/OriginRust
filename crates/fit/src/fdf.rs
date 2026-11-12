@@ -5,7 +5,7 @@
 //! file is written in a C-like dialect. It is translated to the expression language of
 //! `sheaf-expr`: comments are dropped, temporaries (`double t = ...;`) are substituted,
 //! `if / else if / else` blocks that assign the dependent variable become conditional
-//! expressions, `log` (natural logarithm in these files) becomes `ln`, and `PI` and `NANUM` are
+//! expressions, `log` becomes `ln` in a formula (Origin C) but `log10` in a derived parameter (LabTalk), and `PI` and `NANUM` are
 //! mapped to `pi` and `na()`. Functions whose body calls a native routine, uses a loop or leaves
 //! the result unassigned on some path cannot be translated; they import with `formula: None`.
 //!
@@ -209,7 +209,7 @@ pub fn parse_fdf(text: &str) -> Result<FdfFunction, FitError> {
     let dtext = strip_comments(&sec.text(&["derived parameters", "derivedparameters"]));
     for stmt in dtext.split(';') {
         if let Some((lhs, rhs)) = split_assignment(stmt)
-            && let Ok(e) = translate_expression(rhs)
+            && let Ok(e) = translate_expression(rhs, "log10")
         {
             derived.push((lhs.to_string(), e));
         }
@@ -311,8 +311,10 @@ fn split_assignment(stmt: &str) -> Option<(&str, &str)> {
     Some((lhs, s[i + 1..].trim()))
 }
 
-/// C dialect to expression language, for one expression.
-fn translate_expression(s: &str) -> Result<String, String> {
+/// C dialect to expression language, for one expression. `log_as` is what a call to `log` becomes:
+/// the formula section is Origin C (natural logarithm, `ln`), the derived-parameter section is
+/// LabTalk (base 10, `log10`).
+fn translate_expression(s: &str, log_as: &str) -> Result<String, String> {
     let chars: Vec<char> = s.chars().collect();
     let mut out = String::new();
     let mut i = 0;
@@ -328,7 +330,7 @@ fn translate_expression(s: &str) -> Result<String, String> {
             let is_call = next == Some(&'(');
             let low = id.to_ascii_lowercase();
             if is_call && low == "log" {
-                out.push_str("ln");
+                out.push_str(log_as);
             } else if is_call && low == "fabs" {
                 out.push_str("abs");
             } else if !is_call && low == "pi" {
@@ -465,7 +467,7 @@ impl Parser<'_> {
     }
 
     fn resolve(&self, text: &str) -> Result<String, String> {
-        let mut t = translate_expression(text)?;
+        let mut t = translate_expression(text, "ln")?;
         for (n, v) in self.temps.iter().rev() {
             t = substitute(&t, n, v);
         }
@@ -569,7 +571,7 @@ mod tests {
 Lower Bounds=--(X,Off),--(X,Off),0.0(X,ON)\r\nUpper Bounds=--,--,--\r\nInitial Values=0(V),--(V),1(V)\r\n\r\n\
 [Formula]\r\n// a decay\r\ny = y0 + A1*exp(-x/t1);\r\n\r\n\
 [Independent Variables]\r\nx=\r\n[Dependent Variables]\r\ny=\r\n\
-[Derived Parameters]\r\nk = 1/t1;\r\ntau = t1*log(2); // half life\r\n";
+[Derived Parameters]\r\nk = 1/t1;\r\ntau = t1*log(2); // half life\r\nB = 10^(log(0.25)/t1);\r\n";
 
     #[test]
     fn simple_function_parses() {
@@ -580,8 +582,9 @@ Lower Bounds=--(X,Off),--(X,Off),0.0(X,ON)\r\nUpper Bounds=--,--,--\r\nInitial V
         assert_eq!(f.params[0].initial, Some(0.0));
         assert_eq!(f.params[1].initial, None);
         assert_eq!(f.formula.as_deref(), Some("y0 + A1*exp(-x/t1)"));
-        // log is the natural logarithm in FDF bodies.
-        assert_eq!(f.derived[1], ("tau".to_string(), "t1*ln(2)".to_string()));
+        // In the derived-parameter section log is LabTalk's base-10 logarithm.
+        assert_eq!(f.derived[1], ("tau".to_string(), "t1*log10(2)".to_string()));
+        assert_eq!(f.derived[2].1, "10^(log10(0.25)/t1)");
         let ff = f.to_fit_function().unwrap();
         assert_eq!(ff.params[2].lower, Some(0.0));
         assert_eq!(ff.params[0].lower, None);

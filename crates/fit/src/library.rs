@@ -414,9 +414,9 @@ fn init_for(name: &str) -> Option<InitFn> {
             vec![g.baseline, g.xc, g.fwhm / 2.354_820_045, g.height]
         }),
         "Gaussian" => Arc::new(|x, y| {
-            // y0 + A/(sqrt(2 pi) s) exp(...) style: use width and area from the peak.
+            // Parameters are (y0, xc, A, w) with A the area and w the FWHM.
             let g = peak_guess(x, y);
-            vec![g.baseline, g.xc, g.fwhm / 2.354_820_045, g.area]
+            vec![g.baseline, g.xc, g.area, g.fwhm]
         }),
         "Lorentz" => Arc::new(|x, y| {
             let g = peak_guess(x, y);
@@ -615,6 +615,55 @@ mod tests {
         let d = derived_values("Gauss", &params);
         let fwhm = d.iter().find(|(n, _)| n == "FWHM").unwrap().1;
         assert!((fwhm - 2.0 * (2.0 * std::f64::consts::LN_2).sqrt()).abs() < 1e-12);
+    }
+
+    fn named(pairs: &[(&str, f64)]) -> Vec<Parameter> {
+        pairs
+            .iter()
+            .map(|(n, v)| Parameter {
+                name: n.to_string(),
+                value: *v,
+                std_error: f64::NAN,
+                fixed: false,
+                t_value: f64::NAN,
+                prob_t: f64::NAN,
+                lcl: f64::NAN,
+                ucl: f64::NAN,
+                dependency: f64::NAN,
+            })
+            .collect()
+    }
+
+    fn derived(name: &str, pairs: &[(&str, f64)], what: &str) -> f64 {
+        derived_values(name, &named(pairs)).iter().find(|(n, _)| n == what).unwrap().1
+    }
+
+    #[test]
+    fn ec20_and_ec80_use_base_ten_logarithms() {
+        // Logistic: y = A2 + (A1 - A2) / (1 + (x/x0)^p) falls to 80 % of its way at x0 * 0.25^(1/p).
+        let l = [("A1", 0.0), ("A2", 1.0), ("x0", 5.0), ("p", 2.0)];
+        assert!((derived("Logistic", &l, "EC20") - 2.5).abs() < 1e-12);
+        assert!((derived("Logistic", &l, "EC50") - 5.0).abs() < 1e-12);
+        assert!((derived("Logistic", &l, "EC80") - 10.0).abs() < 1e-12);
+        // DoseResp: x is a base-10 logarithm, EC values are 10^(LOGx0 + log10(0.25 or 4)/p).
+        let d = [("A1", 0.0), ("A2", 1.0), ("LOGx0", 1.0), ("p", 2.0)];
+        assert!((derived("DoseResp", &d, "EC20") - 5.0).abs() < 1e-12);
+        assert!((derived("DoseResp", &d, "EC80") - 20.0).abs() < 1e-12);
+        // The derived values agree with the model: A1 is the level at small x, so
+        // y = 1 - 1/(1 + (x/5)^2) is 0.2 at EC20 and 0.8 at EC80.
+        let f = get("Logistic").unwrap();
+        let p: Vec<f64> = l.iter().map(|x| x.1).collect();
+        assert!((f.eval(&p, 2.5) - 0.2).abs() < 1e-12);
+        assert!((f.eval(&p, 10.0) - 0.8).abs() < 1e-12);
+    }
+
+    #[test]
+    fn logistic5_ec50_is_the_half_level() {
+        let l = [("Amin", 0.0), ("Amax", 1.0), ("x0", 5.0), ("h", 2.0), ("s", 0.7)];
+        let ec50 = derived("Logistic5", &l, "EC50");
+        let f = get("Logistic5").unwrap();
+        let p: Vec<f64> = l.iter().map(|x| x.1).collect();
+        assert!((f.eval(&p, ec50) - 0.5).abs() < 1e-12, "{ec50}");
     }
 
     #[test]

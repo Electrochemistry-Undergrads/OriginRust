@@ -7,6 +7,8 @@
 
 use crate::error::IoError;
 use sheaf_core::column::default_short_name;
+use sheaf_core::datetime::{self, DateOrder};
+use sheaf_core::format::NumberFormat;
 use sheaf_core::{Column, ColumnData, ColumnId, Designation, WindowId, Workbook, Worksheet};
 use std::collections::HashMap;
 
@@ -33,6 +35,16 @@ pub enum Delimiter {
     Other(char),
 }
 
+/// What to do with columns of dates and times of day.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum DateImport {
+    /// Import them as numbers (Origin's date numbers) with a date or time display format.
+    #[default]
+    Detect,
+    /// Keep the text exactly as written.
+    AsText,
+}
+
 /// Import settings. `None` means "detect"; for the line numbers, `Some(0)` means "there is none".
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AsciiOptions {
@@ -53,6 +65,11 @@ pub struct AsciiOptions {
     pub skip_rows: usize,
     /// Stop after this many data rows.
     pub max_rows: Option<usize>,
+    /// Whether date and time columns become numbers or stay text.
+    pub dates: DateImport,
+    /// Which order `11/12/2026` is read in when the file does not settle it
+    /// (a day above 12 anywhere in the column does settle it).
+    pub date_order: DateOrder,
 }
 
 impl Default for AsciiOptions {
@@ -67,6 +84,8 @@ impl Default for AsciiOptions {
             first_column_x: true,
             skip_rows: 0,
             max_rows: None,
+            dates: DateImport::Detect,
+            date_order: DateOrder::Mdy,
         }
     }
 }
@@ -202,6 +221,8 @@ fn is_missing_marker(field: &str) -> bool {
 enum Cell {
     Empty,
     Number,
+    /// A date or a time of day.
+    Date,
     Marker,
     Text,
 }
@@ -211,11 +232,18 @@ fn classify(field: &str, decimal_comma: bool) -> Cell {
         Cell::Empty
     } else if parse_number(field, decimal_comma).is_some() {
         Cell::Number
+    } else if looks_like_date(field) {
+        Cell::Date
     } else if is_missing_marker(field) {
         Cell::Marker
     } else {
         Cell::Text
     }
+}
+
+fn looks_like_date(field: &str) -> bool {
+    field.trim_start().starts_with(|c: char| c.is_ascii_digit())
+        && (datetime::parse(field, DateOrder::Mdy).is_some() || datetime::parse(field, DateOrder::Dmy).is_some())
 }
 
 /// No cell is plain text (missing-value markers are allowed) and there is at
@@ -225,7 +253,7 @@ fn is_numeric_row(fields: &[String], decimal_comma: bool) -> bool {
     for f in fields {
         match classify(f, decimal_comma) {
             Cell::Text => return false,
-            Cell::Number => any = true,
+            Cell::Number | Cell::Date => any = true,
             Cell::Empty | Cell::Marker => {}
         }
     }
@@ -339,8 +367,10 @@ fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option
     // most half of the cells in its numeric columns being text.
     for i in 0..rows.len() {
         let first = &rows[i].1;
-        let numeric: Vec<bool> =
-            first.iter().map(|f| matches!(classify(f, decimal_comma), Cell::Number | Cell::Marker)).collect();
+        let numeric: Vec<bool> = first
+            .iter()
+            .map(|f| matches!(classify(f, decimal_comma), Cell::Number | Cell::Date | Cell::Marker))
+            .collect();
         let others_are_text = first.iter().zip(&numeric).all(|(f, n)| *n || !f.trim().is_empty());
         if !numeric.contains(&true) || !others_are_text {
             continue;
@@ -362,7 +392,7 @@ fn find_data_start(rows: &[(usize, Vec<String>)], decimal_comma: bool) -> Option
                         odd += 1;
                         filled += 1;
                     }
-                    Cell::Number | Cell::Marker => filled += 1,
+                    Cell::Number | Cell::Date | Cell::Marker => filled += 1,
                 }
             }
         }
@@ -390,7 +420,7 @@ fn extend_back(rows: &[(usize, Vec<String>)], start: usize, decimal_comma: bool)
         let (mut good, mut marks, mut odd) = (0, 0, 0);
         for v in f {
             match classify(v, decimal_comma) {
-                Cell::Number => good += 1,
+                Cell::Number | Cell::Date => good += 1,
                 Cell::Marker => marks += 1,
                 Cell::Text => odd += 1,
                 Cell::Empty => {}
@@ -545,6 +575,26 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
     let mut sheet = Worksheet::new(sheet_name(file_stem));
     for j in 0..ncols {
         let cells: Vec<&str> = a.rows.iter().map(|r| r.get(j).map_or("", String::as_str)).collect();
+        if opts.dates == DateImport::Detect
+            && let Some(dc) = detect_date_column(&cells, opts.date_order)
+        {
+            if dc.ambiguous {
+                warnings.push(format!(
+                    "column {}: the dates can be read day first or month first; read {}",
+                    default_short_name(j),
+                    if dc.order == DateOrder::Mdy { "month first (M/d/yyyy)" } else { "day first (dd/MM/yyyy)" }
+                ));
+            }
+            let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Y };
+            let mut col =
+                Column::new(ColumnId(j as u64 + 1), default_short_name(j), designation, ColumnData::numeric(dc.values));
+            col.format = dc.format;
+            col.long_name = long_names[j].clone();
+            col.units = units[j].clone();
+            col.comments = comments[j].clone();
+            sheet.columns.push(col);
+            continue;
+        }
         let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, opts.decimal_comma)).collect();
         let parsed = numbers.iter().filter(|n| n.is_some()).count();
         // Missing-value markers (`n.d.`, `<LOD`, `NA`, ...) are neither numbers nor evidence of text.
@@ -585,6 +635,64 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
     workbook.long_name = file_stem.to_string();
     workbook.sheets = vec![sheet];
     Ok(AsciiImport { workbook, detected: d, warnings })
+}
+
+/// A column whose cells are all dates, or all times of day, or all both.
+struct DateColumn {
+    /// NaN for an empty cell or a no-value marker.
+    values: Vec<f64>,
+    format: NumberFormat,
+    /// Some cell reads differently with the other day and month order, and both orders fit every cell.
+    ambiguous: bool,
+    order: DateOrder,
+}
+
+/// Reads a whole column as dates when every filled cell is a date or time of the same kind.
+/// The order that fits every cell is used; when both fit, `prefer` decides and the column is
+/// marked ambiguous if that changes any value.
+fn detect_date_column(cells: &[&str], prefer: DateOrder) -> Option<DateColumn> {
+    let filled: Vec<&str> = cells.iter().copied().filter(|c| !c.trim().is_empty() && !is_missing_marker(c)).collect();
+    if filled.is_empty() {
+        return None;
+    }
+    let read_all = |order: DateOrder| -> Option<Vec<datetime::Parsed>> {
+        filled.iter().map(|c| datetime::parse(c, order)).collect()
+    };
+    let other = if prefer == DateOrder::Mdy { DateOrder::Dmy } else { DateOrder::Mdy };
+    let (order, parsed, both) = match (read_all(prefer), read_all(other)) {
+        (Some(p), Some(_)) => (prefer, p, true),
+        (Some(p), None) => (prefer, p, false),
+        (None, Some(p)) => (other, p, false),
+        (None, None) => return None,
+    };
+    let kind = |f: &NumberFormat| std::mem::discriminant(f);
+    if !parsed.iter().all(|p| kind(&p.format) == kind(&parsed[0].format)) {
+        return None;
+    }
+    // One display format for the column: the first date pattern and the most precise time pattern.
+    let format = match parsed[0].format {
+        NumberFormat::Date(d) => NumberFormat::Date(d),
+        NumberFormat::Time(_) => NumberFormat::Time(
+            parsed.iter().filter_map(|p| if let NumberFormat::Time(t) = p.format { Some(t) } else { None }).max()?,
+        ),
+        NumberFormat::DateTime(d, _) => NumberFormat::DateTime(
+            d,
+            parsed
+                .iter()
+                .filter_map(|p| if let NumberFormat::DateTime(_, t) = p.format { Some(t) } else { None })
+                .max()?,
+        ),
+        _ => return None,
+    };
+    let mut it = parsed.iter();
+    let values = cells
+        .iter()
+        .map(|c| {
+            if c.trim().is_empty() || is_missing_marker(c) { f64::NAN } else { it.next().map_or(f64::NAN, |p| p.value) }
+        })
+        .collect();
+    let ambiguous = both && parsed.iter().any(|p| p.ambiguous);
+    Some(DateColumn { values, format, ambiguous, order })
 }
 
 fn sheet_name(stem: &str) -> String {
@@ -856,6 +964,123 @@ mod tests {
         let imp = parse("id,v\nNA,1\nND,2\nnd,3\n");
         assert_eq!(col(&imp, 0).text().unwrap(), ["NA", "ND", "nd"]);
         assert!(col(&imp, 1).numeric().is_some());
+    }
+
+    const ICP: &str = "Time,Cu 324.754,Zn 213.857,Sample\n\
+        2026-11-11 13:45:10,1.25,0.50,blank\n\
+        2026-11-11 13:47:42,12.5,<LOD,std 1\n\
+        2026-11-11 13:50:15,24.9,5.10,std 2\n\
+        2026-11-11 13:52:47,n.d.,10.2,std 3\n";
+
+    #[test]
+    fn an_icp_like_file_gets_a_date_time_column() {
+        use sheaf_core::datetime::{DatePattern, TimePattern};
+        let imp = parse(ICP);
+        let t = col(&imp, 0);
+        assert_eq!(t.long_name, "Time");
+        assert_eq!(t.designation, Designation::X);
+        assert_eq!(t.format, NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hms));
+        let v = t.numeric().unwrap();
+        assert_eq!(v.len(), 4);
+        // Same number Origin 2016 computes for 2026-11-11 13:45:10.
+        assert!((v[0] - 2_461_355.573_032_407_6).abs() < 1e-9);
+        assert!((v[1] - v[0] - 152.0 / 86_400.0).abs() < 1e-9);
+        assert_eq!(t.cell_text(2), "2026-11-11 13:50:15");
+        assert!(col(&imp, 1).numeric().is_some());
+        assert_eq!(col(&imp, 3).text().unwrap()[0], "blank");
+        assert!(imp.warnings.iter().all(|w| !w.contains("day first")), "{:?}", imp.warnings);
+    }
+
+    #[test]
+    fn ratios_such_as_1_2_stay_text() {
+        let imp = parse(
+            "ratio,v
+1:1,1
+1:2,2
+2:3,3
+",
+        );
+        assert!(col(&imp, 0).text().is_some());
+        assert_eq!(col(&imp, 0).text().unwrap()[1], "1:2");
+    }
+
+    #[test]
+    fn dates_can_be_kept_as_text() {
+        let opts = AsciiOptions { dates: DateImport::AsText, ..AsciiOptions::default() };
+        let imp = parse_ascii(ICP, "f", &opts).unwrap();
+        assert_eq!(col(&imp, 0).text().unwrap()[0], "2026-11-11 13:45:10");
+        assert_eq!(col(&imp, 0).format, NumberFormat::General);
+    }
+
+    #[test]
+    fn the_origin_sample_strings_import_as_origin_numbers() {
+        // The same strings were imported by Origin 2016 and read back (see docs/spec/import-ascii.md).
+        let us = parse("when,v\n11/11/2026 1:45:10 PM,1\n11/12/2026 1:05:00 AM,2\n11/13/2026 1:05:00 AM,3\n");
+        let v = col(&us, 0).numeric().unwrap();
+        assert!((v[0] - 2_461_355.573_032_407_6).abs() < 1e-9);
+        assert!((v[1] - 2_461_356.045_138_889).abs() < 1e-9);
+        let named = parse("when,v\n11-Nov-2026,1\n12-Nov-2026,2\n13-Nov-2026,3\n");
+        assert_eq!(col(&named, 0).numeric().unwrap(), [2_461_355.0, 2_461_356.0, 2_461_357.0]);
+        assert_eq!(col(&named, 0).cell_text(0), "11-Nov-2026");
+        let clock = parse("when,v\n13:45,1\n01:05,2\n02:05,3\n");
+        let v = col(&clock, 0).numeric().unwrap();
+        assert!((v[0] - 0.572_916_666_666_666_6).abs() < 1e-15);
+        assert_eq!(col(&clock, 0).cell_text(1), "01:05");
+        let ms = parse("when,v\n13:45:10.250,1\n01:05:00,2\n02:05:00,3\n");
+        assert!((col(&ms, 0).numeric().unwrap()[0] - 0.573_035_300_925_925_9).abs() < 1e-12);
+        assert_eq!(col(&ms, 0).cell_text(0), "13:45:10.250");
+    }
+
+    #[test]
+    fn day_and_month_order_is_taken_from_the_rows_that_decide_it() {
+        // 13 and 27 cannot be months: the column is day first, with no warning.
+        let imp = parse("d,v\n13/11/2026,1\n02/12/2026,2\n27/12/2026,3\n");
+        let v = col(&imp, 0).numeric().unwrap();
+        assert_eq!(v[1], sheaf_core::datetime::date_value(2026, 12, 2).unwrap());
+        assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
+        // Nothing decides: month first (the default), with a warning.
+        let imp = parse("d,v\n02/12/2026,1\n03/12/2026,2\n04/12/2026,3\n");
+        assert_eq!(col(&imp, 0).numeric().unwrap()[0], sheaf_core::datetime::date_value(2026, 2, 12).unwrap());
+        assert!(imp.warnings.iter().any(|w| w.contains("month first")), "{:?}", imp.warnings);
+        // ... and the option can choose day first.
+        let opts = AsciiOptions { date_order: DateOrder::Dmy, ..AsciiOptions::default() };
+        let imp = parse_ascii("d,v\n02/12/2026,1\n03/12/2026,2\n04/12/2026,3\n", "f", &opts).unwrap();
+        assert_eq!(col(&imp, 0).numeric().unwrap()[0], sheaf_core::datetime::date_value(2026, 12, 2).unwrap());
+        assert!(imp.warnings.iter().any(|w| w.contains("day first")), "{:?}", imp.warnings);
+        // Only month first fits: no warning.
+        let imp = parse("d,v\n11/13/2026,1\n11/14/2026,2\n11/15/2026,3\n");
+        assert_eq!(col(&imp, 0).numeric().unwrap()[0], sheaf_core::datetime::date_value(2026, 11, 13).unwrap());
+        assert!(imp.warnings.is_empty());
+    }
+
+    #[test]
+    fn text_with_a_few_odd_cells_stays_text_and_missing_dates_are_blank() {
+        let imp = parse("d,v\n2026-11-11,1\nsoon,2\n2026-11-13,3\n");
+        assert!(col(&imp, 0).text().is_some());
+        let imp = parse("d,v\n2026-11-11,1\n,2\nn.d.,4\n2026-11-13,3\n");
+        let v = col(&imp, 0).numeric().unwrap();
+        assert!(v[1].is_nan() && v[2].is_nan() && v[3].is_finite());
+        assert_eq!(col(&imp, 0).cell_text(1), "--");
+    }
+
+    #[test]
+    fn mixed_time_precision_uses_the_most_precise_pattern() {
+        let imp = parse("t,v\n13:45,1\n13:46:30,2\n13:47,3\n");
+        assert_eq!(col(&imp, 0).cell_text(0), "13:45:00");
+    }
+
+    #[test]
+    fn formulas_use_date_columns_as_numbers() {
+        use sheaf_core::Project;
+        let imp = parse(ICP);
+        let mut p = Project::new();
+        p.adopt_workbook(imp.workbook);
+        let ids: Vec<_> = p.workbooks().next().unwrap().sheets[0].columns.iter().map(|c| c.id).collect();
+        // Minutes since the first row, using the date column in arithmetic.
+        p.set_column_values(ids[2], "(col(A) - col(A)[1]) * 1440", None).unwrap();
+        let v = p.numeric(ids[2]).unwrap();
+        assert!(v[0].abs() < 1e-9);
+        assert!((v[1] - 152.0 / 60.0).abs() < 1e-6, "{v:?}");
     }
 
     #[test]

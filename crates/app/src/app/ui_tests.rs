@@ -534,3 +534,60 @@ fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
     assert_eq!(plus[0].numeric().unwrap(), [3.5, 5.5, 7.5, 9.5]);
     assert_eq!(h.state().doc.undo_label(), Some("Curve math"));
 }
+
+fn date_file(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("icp.csv");
+    std::fs::write(&path, "Time,Cu\n2026-11-11 13:45:10,1.5\n2026-11-11 13:50:15,2.5\n2026-11-11 13:55:20,3.5\n")
+        .unwrap();
+    path
+}
+
+#[test]
+fn the_import_window_imports_dates_as_numbers_or_keeps_them_as_text() {
+    use sheaf_core::format::NumberFormat;
+    // Default: a date column with a date-time format, shown as text in the cells.
+    let mut h = start(Vec::new());
+    h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates")), ..Default::default() });
+    settle(&mut h);
+    click(&mut h, "Import");
+    let book = project(&h).workbooks().next().unwrap();
+    let col = book.sheet().column_by_name("A").unwrap();
+    assert!(matches!(col.format, NumberFormat::DateTime(..)));
+    assert_eq!(col.cell_text(0), "2026-11-11 13:45:10");
+    // Keep as text: the same file arrives as text cells.
+    let mut h = start(Vec::new());
+    h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates-text")), ..Default::default() });
+    settle(&mut h);
+    click(&mut h, "Keep as text");
+    click(&mut h, "Import");
+    let book = project(&h).workbooks().next().unwrap();
+    let col = book.sheet().column_by_name("A").unwrap();
+    assert!(col.numeric().is_none());
+    assert_eq!(col.cell_text(0), "2026-11-11 13:45:10");
+}
+
+#[test]
+fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
+    use sheaf_core::datetime::DatePattern;
+    use sheaf_core::format::NumberFormat;
+    let mut h = start(Vec::new());
+    h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates-props")), ..Default::default() });
+    settle(&mut h);
+    click(&mut h, "Import");
+    click(&mut h, "Book1 - icp");
+    right_click_text(&mut h, "A(X)");
+    click(&mut h, "Properties...");
+    // The format box starts on "Date and time" for the imported column.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Date and time")).click();
+    settle(&mut h);
+    click(&mut h, "Date");
+    click(&mut h, "OK");
+    let book = project(&h).workbooks().next().unwrap();
+    let col = book.sheet().column_by_name("A").unwrap();
+    assert!(matches!(col.format, NumberFormat::Date(_)), "{:?}", col.format);
+    assert_eq!(col.cell_text(0), NumberFormat::Date(DatePattern::Iso).format(col.numeric().unwrap()[0]));
+    assert_eq!(col.cell_text(0), "2026-11-11");
+}

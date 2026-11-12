@@ -299,6 +299,7 @@ impl Column {
     /// values as needed; text that is not a number becomes a missing value.
     /// Returns `false` when the text could not be read as a number.
     pub fn set_cell_text(&mut self, row: usize, text: &str) -> bool {
+        let is_date = self.format.is_date_time();
         match &mut self.data {
             ColumnData::Numeric(v) => {
                 let v = Arc::make_mut(v);
@@ -308,7 +309,11 @@ impl Column {
                 } else {
                     match t.parse::<f64>() {
                         Ok(x) => (x, true),
-                        Err(_) => (f64::NAN, false),
+                        // A date column also takes dates and times as typed text.
+                        Err(_) => match is_date.then(|| crate::datetime::parse(t, Default::default())).flatten() {
+                            Some(p) => (p.value, true),
+                            None => (f64::NAN, false),
+                        },
                     }
                 };
                 if row >= v.len() {

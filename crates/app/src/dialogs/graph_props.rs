@@ -333,10 +333,12 @@ fn axis_ui(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, 
                 TickFormat::Auto => 0,
                 TickFormat::Decimal(_) => 1,
                 TickFormat::Scientific(_) => 2,
+                // Set automatically for a date column; the menu shows it as Automatic.
+                TickFormat::DateTime(_) => 0,
             };
             let digits = match axis.tick_format {
                 TickFormat::Decimal(d) | TickFormat::Scientific(d) => d,
-                TickFormat::Auto => 2,
+                TickFormat::Auto | TickFormat::DateTime(_) => 2,
             };
             let before = kind;
             egui::ComboBox::from_id_salt(format!("{id}_fmt"))

@@ -66,6 +66,12 @@ fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
     }
     o.header_lines = r.header_lines;
     o.decimal_comma = r.decimal_comma;
+    if r.dates_as_text {
+        o.dates = sheaf_io::ascii::DateImport::AsText;
+    }
+    if r.day_first {
+        o.date_order = sheaf_core::datetime::DateOrder::Dmy;
+    }
     Ok(o)
 }
 
@@ -91,8 +97,27 @@ fn describe(project: &Project) {
                 for s in &b.sheets {
                     println!("  sheet {} ({} columns, {} rows)", s.name, s.columns.len(), s.row_count());
                     for c in &s.columns {
-                        let kind = if c.data.is_numeric() { "" } else { " text" };
+                        let kind = if !c.data.is_numeric() {
+                            " text"
+                        } else if c.format.is_date_time() {
+                            " date"
+                        } else {
+                            ""
+                        };
                         let mut label = c.long_name.clone();
+                        // A date column shows its first and last value as they appear in the worksheet.
+                        if c.format.is_date_time()
+                            && let Some(v) = c.numeric()
+                            && let (Some(first), Some(last)) =
+                                (v.iter().find(|x| x.is_finite()), v.iter().rev().find(|x| x.is_finite()))
+                        {
+                            let sep = if label.is_empty() { "" } else { " " };
+                            label.push_str(&format!(
+                                "{sep}<{} to {}>",
+                                c.format.format(*first),
+                                c.format.format(*last)
+                            ));
+                        }
                         if !c.units.is_empty() {
                             label.push_str(&format!(" ({})", c.units));
                         }

@@ -168,6 +168,31 @@ Origin keeps a menu of ready patterns (also stored in Origin.ini `[Column Custom
 
 Behavior [W wkscol-datetime]: unless a date format is given or recognised, date/time strings arrive as text (left-aligned) and the user converts the column by setting its format. Internal date value = a double, days (fraction = time of day) in a Julian-day-based system. Whether the automatic pass recognises ISO-like "2020-01-31 12:00:00" without a user pattern is **[?]**; plan to recognise ISO 8601 and the pattern list above.
 
+### Observed in Origin 2016 (black-box runs of `impasc`, 2026-11-12) [F]
+
+Files were small CSVs we wrote (US regional settings on the test machine). Origin's own automatic pass only turns some strings into dates; everything else arrives as text (column format 7) and stays left-aligned:
+
+| String in the file | What the default import gave |
+|---|---|
+| `13:45`, `01:05` | Time column (format 3, `HH:mm`), value 0.5729166667 for 13:45 |
+| `13:45:10.250` | Time column, fraction kept (0.5730353009) |
+| `13/11/2026`, `02/12/2026` | Date column (format 4) read month first: row 1 (day 13) did not appear in the column, and row 2 was read as 12 February (value 2461083); Origin gave no warning |
+| `2026-11-11 13:45:10`, `2026-11-11` | text |
+| `11/11/2026 1:45:10 PM`, `11-Nov-2026` | text |
+
+Setting the column to Date (format 4, subformat 11) afterwards converts text that matches the system pattern: `11/11/2026 1:45:10 PM` became 2461355.5730324076 and `11/12/2026 1:05:00 AM` became 2461356.045138889. The ISO strings turned into missing values. `11-Nov-2026` converted to the wrong date (11 November read as 12 November, and 12-Nov as 12 December), so Origin's conversion of day-month-name strings is not something to copy. The `Dates.*` option names we guessed for `impasc` were rejected; Origin's import wizard has a per-column date format that we did not drive.
+
+Decision for Sheaf: recognise more than Origin's automatic pass does, because the owner's instruments write ISO and day-month-name strings. The numbers stored are the ones Origin uses (see `workbook-model.md`).
+
+### What Sheaf implements (crates/io/src/ascii.rs)
+
+- A column is a date column when every filled cell reads as a date, a time of day, or a date with time of one kind. Recognised: `yyyy-MM-dd` (also with `/` or `.`), a `T` or a space then a clock, `M/d/yyyy` and `d/M/yyyy` (also with `-`), `dd.MM.yyyy` (always day first), `11-Nov-2026`, `11 November 2026`, `13:45`, `13:45:10.250`, and 12-hour clocks with AM or PM. No-value markers (`n.d.`, `--`) and empty cells in the column become missing values.
+- Display format: the first date pattern seen and the most precise clock pattern in the column, so the text shown matches the file.
+- Day and month order: when only one order reads every cell (a day above 12 or a month above 12 somewhere), that order is used silently. When both fit, the option `date_order` decides (default month first, like Origin on a US setup) and the import warns that the dates are ambiguous. CLI: `--day-first`.
+- A column with any cell that is not a date, such as a stray word, stays text; the choice `DateImport::AsText` (CLI `--dates-as-text`, import dialog "Keep as text") keeps every date column as text.
+- Date cells also count as numbers when the importer looks for where the data starts, so a time stamp column does not hide the header.
+- Export writes date columns as displayed (ISO date-time when that is the column's format), so the file reads back to the same numbers.
+
 ## 9. Partial import (P1)
 
 Origin groups these under `Partials`; rows and columns each have: first, last, read-count and skip-count (read R, skip S, repeat), plus a custom list.
@@ -283,3 +308,5 @@ Observed structure from the owner's domain knowledge (not from Origin): a CH Ins
 8. Behavior on ragged lines (fewer or more cells than the structure) and blank lines.
 9. Discrepancy: CSV filter file has book renaming off and header lines 0, the documentation says otherwise.
 10. Full list of numeric-separator options beyond the four confirmed.
+
+Sheaf's own guard on clock times: minutes (and seconds, when present) must have two digits, so ratios or codes such as 1:2 or 2:3 stay text instead of becoming times of day. Date-format cells holding numbers outside about year -100000 to 100000 are shown as plain numbers rather than as a date.

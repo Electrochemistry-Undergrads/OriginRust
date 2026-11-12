@@ -1,6 +1,7 @@
 //! Axis resolution: turns the axis settings and the data range into limits,
 //! tick positions and tick label text (spec section 2).
 
+use sheaf_core::datetime::{self, DatePattern, TimePattern};
 use sheaf_core::graph::{AutoRange, Axis, ScaleKind, TickFormat};
 
 /// The multiplication sign used in scientific tick labels.
@@ -112,6 +113,11 @@ pub fn symmetric_limit(max_abs: f64) -> (f64, f64) {
     (clean(n * step), step)
 }
 
+/// [`clean`], except on a date axis, where values are about 2.4e6 and 12 digits is too coarse.
+fn clean_d(v: f64, date: bool) -> f64 {
+    if date { v } else { clean(v) }
+}
+
 /// Rounds to 12 significant digits to remove floating-point noise.
 fn clean(v: f64) -> f64 {
     if v == 0.0 || !v.is_finite() {
@@ -171,15 +177,18 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
         }
     }
     let fixed_step = axis.major_step.filter(|s| s.is_finite() && *s > 0.0);
+    let date = matches!(axis.tick_format, TickFormat::DateTime(_));
+    let auto_step = |raw: f64| if date { date_step(raw) } else { nice_step(raw) };
     let fixed_min = axis.min.filter(|v| v.is_finite());
     let fixed_max = axis.max.filter(|v| v.is_finite());
 
     let (mut min, mut max, mut step) = match axis.auto_range {
         AutoRange::Nice => {
-            let step = fixed_step.unwrap_or_else(|| nice_step((hi - lo) / 5.0));
-            (clean((lo / step + 1e-9).floor() * step), clean((hi / step - 1e-9).ceil() * step), step)
+            let step = fixed_step.unwrap_or_else(|| auto_step((hi - lo) / 5.0));
+            // Date numbers are large (about 2.4e6): they are not rounded to 12 digits (a second is 1e-5 days).
+            (clean_d((lo / step + 1e-9).floor() * step, date), clean_d((hi / step - 1e-9).ceil() * step, date), step)
         }
-        AutoRange::Tight => (lo, hi, fixed_step.unwrap_or_else(|| nice_step((hi - lo) / 5.0))),
+        AutoRange::Tight => (lo, hi, fixed_step.unwrap_or_else(|| auto_step((hi - lo) / 5.0))),
         AutoRange::SymmetricZero => {
             let m = lo.abs().max(hi.abs());
             match fixed_step {
@@ -225,16 +234,16 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
         max = min + 1.0;
     }
     if overridden {
-        step = fixed_step.unwrap_or_else(|| nice_step((max - min) / 5.0));
+        step = fixed_step.unwrap_or_else(|| auto_step((max - min) / 5.0));
     }
 
-    let (major, step) = linear_major(min, max, step);
+    let (major, step) = linear_major(min, max, step, date);
     let minor = linear_minor(min, max, step, axis.minor_ticks);
     let labels = linear_labels(axis, &major, step);
     ResolvedAxis { min, max, step, scale: ScaleKind::Linear, major, minor, labels, reversed: false }
 }
 
-fn linear_major(min: f64, max: f64, mut step: f64) -> (Vec<f64>, f64) {
+fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64) {
     let eps = 1e-9 * (max - min);
     loop {
         let k0 = ((min - eps) / step).ceil();
@@ -246,7 +255,7 @@ fn linear_major(min: f64, max: f64, mut step: f64) -> (Vec<f64>, f64) {
         let mut v = Vec::new();
         let mut k = k0;
         while k <= k1 {
-            let t = clean(k * step);
+            let t = clean_d(k * step, date);
             v.push(if t.abs() <= eps { 0.0 } else { t });
             k += 1.0;
         }
@@ -329,6 +338,9 @@ fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
     } else {
         1.0
     };
+    if let TickFormat::DateTime(pat) = axis.tick_format {
+        return date_labels(major, step, pat);
+    }
     let vals: Vec<f64> = major.iter().map(|v| clean(v / div)).collect();
     match axis.tick_format {
         TickFormat::Auto => {
@@ -343,7 +355,46 @@ fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
         }
         TickFormat::Decimal(d) => vals.iter().map(|v| decimal(*v, usize::from(d.min(15)))).collect(),
         TickFormat::Scientific(d) => vals.iter().map(|v| scientific(*v, Some(usize::from(d.min(15))))).collect(),
+        TickFormat::DateTime(_) => unreachable!("handled above"),
     }
+}
+
+/// Tick steps for a date axis, in seconds: 1, 2, 5, 10, 15 and 30 seconds, the same in minutes,
+/// 1, 2, 3, 6 and 12 hours, 1, 2 and 5 days and a week. Longer spans use the usual 1-2-5 steps in days.
+const DATE_STEPS_S: [f64; 21] = [
+    1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0, 10_800.0, 21_600.0,
+    43_200.0, 86_400.0, 172_800.0, 432_000.0, 604_800.0,
+];
+
+fn date_step(raw_days: f64) -> f64 {
+    if !(raw_days.is_finite() && raw_days > 0.0) {
+        return 1.0;
+    }
+    let raw_s = raw_days * 86_400.0;
+    match DATE_STEPS_S.iter().find(|s| **s >= raw_s) {
+        Some(s) => s / 86_400.0,
+        None => nice_step(raw_days),
+    }
+}
+
+/// Tick labels of a date axis. Steps of a day or more show the date; shorter steps show the time of
+/// day, with the date in front when the ticks cover more than one calendar day.
+fn date_labels(major: &[f64], step: f64, pat: DatePattern) -> Vec<String> {
+    // Tick values carry a few milliseconds of rounding noise; the smallest step is one second.
+    let major: Vec<f64> = major.iter().map(|v| (v * 86_400.0).round() / 86_400.0).collect();
+    let major = major.as_slice();
+    if step >= 1.0 - 1e-9 {
+        return major.iter().map(|v| datetime::format_date(*v, pat)).collect();
+    }
+    let time = if step < 1.0 / 1440.0 - 1e-12 { TimePattern::Hms } else { TimePattern::Hm };
+    let multi_day = match (major.first(), major.last()) {
+        (Some(a), Some(b)) => a.floor() != b.floor(),
+        _ => false,
+    };
+    major
+        .iter()
+        .map(|v| if multi_day { datetime::format_date_time(*v, pat, time) } else { datetime::format_time(*v, time) })
+        .collect()
 }
 
 /// Smallest number of decimals (0..=10) that represents `step` exactly enough.
@@ -597,6 +648,34 @@ mod tests {
         let l = resolve_axis(&a, None).labels;
         assert_eq!(l[0], "0.0");
         assert_eq!(l[1], "1.0\u{d7}10\\+(3)");
+    }
+
+    #[test]
+    fn date_axis_uses_round_times_and_date_labels() {
+        use sheaf_core::datetime::{date_value, time_value};
+        let mut a = axis();
+        a.tick_format = TickFormat::DateTime(DatePattern::Iso);
+        let d0 = date_value(2026, 11, 1).unwrap();
+        // Thirty days: weekly steps, labelled as dates.
+        let r = resolve_axis(&a, Some((d0, d0 + 30.0)));
+        assert!(r.labels.len() >= 4 && r.labels.len() <= 12, "{:?}", r.labels);
+        assert!(r.labels.iter().all(|l| l.len() == 10 && l.starts_with("2026-")), "{:?}", r.labels);
+        assert!((r.step - 7.0).abs() < 1e-9, "{}", r.step);
+        // Six hours on one day: two-hour ticks labelled with the time only.
+        let t0 = d0 + time_value(9, 0, 0.0).unwrap();
+        let r = resolve_axis(&a, Some((t0, t0 + 6.0 / 24.0)));
+        assert!(r.labels.iter().all(|l| l.len() == 5 && l.as_bytes()[2] == b':'), "{:?}", r.labels);
+        assert!((r.step - 2.0 / 24.0).abs() < 1e-9, "{}", r.step);
+        assert_eq!(r.labels[0], "08:00");
+        // Across midnight the date is part of the label.
+        let t1 = d0 + time_value(20, 0, 0.0).unwrap();
+        let r = resolve_axis(&a, Some((t1, t1 + 8.0 / 24.0)));
+        assert!(r.labels.iter().any(|l| l.starts_with("2026-11-02 ")), "{:?}", r.labels);
+        // Two minutes: second steps show seconds.
+        let r = resolve_axis(&a, Some((t0, t0 + 120.0 / 86_400.0)));
+        assert!(r.labels[0].len() == 8, "{:?}", r.labels);
+        // A plain axis is not affected.
+        assert_eq!(resolve_axis(&axis(), Some((0.0, 1.0))).labels, vec!["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"]);
     }
 
     #[test]

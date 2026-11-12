@@ -40,6 +40,8 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// Recalculate these columns now. Columns without a recalculating formula are skipped.
+    Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
     /// for the columns a plot of the active sheet would show.
     Analyze {

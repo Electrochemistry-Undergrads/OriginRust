@@ -243,6 +243,58 @@ fn set_column_values_fills_the_column_from_a_formula() {
 }
 
 #[test]
+fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_recalculated() {
+    let mut h = start(vec![data_file("recalc")]);
+    click(&mut h, "Book1 - sample");
+    // C = col(B)*2, set to recalculate automatically.
+    right_click_text(&mut h, "C(Y)");
+    click(&mut h, "Set Column Values...");
+    h.event(egui::Event::Text("col(B)*2".to_string()));
+    settle(&mut h);
+    click(&mut h, "Auto");
+    click(&mut h, "OK");
+    assert_eq!(column(&h, "C"), [5.0, 9.0, 13.0, 17.0]);
+    let mark = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().recalc;
+    assert_eq!(mark, sheaf_core::RecalcMode::Auto);
+    grid_text(&h, "auto");
+
+    // Edit a source cell: the Auto column changes in the same undo step. (The double click
+    // that opens the cell editor is covered by the tests above; here the finished edit is
+    // sent as the action the editor produces.)
+    edit_cell(&mut h, "B", 1, "10");
+    assert_eq!(column(&h, "B"), [2.5, 10.0, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [5.0, 20.0, 13.0, 17.0]);
+    menu(&mut h, "Edit", "Undo Edit cell");
+    assert_eq!(column(&h, "B")[1], 4.5);
+    assert_eq!(column(&h, "C")[1], 9.0);
+
+    // Make it Manual: the next source edit only marks the column, Recalculate updates it.
+    right_click_text(&mut h, "C(Y)");
+    click(&mut h, "Set Column Values...");
+    click(&mut h, "Manual");
+    click(&mut h, "OK");
+    edit_cell(&mut h, "B", 2, "1");
+    assert_eq!(column(&h, "C")[2], 13.0, "a Manual column keeps its values");
+    grid_text(&h, "pending");
+    // The cells of a calculated column cannot be typed over.
+    edit_cell(&mut h, "C", 0, "99");
+    assert_eq!(column(&h, "C")[0], 5.0);
+    right_click_text(&mut h, "C(Y)");
+    click(&mut h, "Recalculate");
+    assert_eq!(column(&h, "C")[2], 2.0);
+    assert_eq!(h.state().doc.undo_label(), Some("Recalculate"));
+}
+
+/// Stores text in a cell the way the cell editor does when it is left.
+fn edit_cell(h: &mut Harness<'static, SheafApp>, short: &str, row: usize, text: &str) {
+    let book = project(h).workbooks().next().unwrap();
+    let column = book.sheet().column_by_name(short).unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column, row, text: text.to_string() }, &ctx);
+    settle(h);
+}
+
+#[test]
 fn graph_settings_change_the_axis_live_and_undo_as_one_step() {
     let mut h = start(vec![data_file("axis")]);
     click(&mut h, "Graph1 - sample");

@@ -108,6 +108,49 @@ impl ColumnData {
     }
 }
 
+/// When a column formula runs again after the columns it reads have changed (the "Recalculate"
+/// choice of Set Column Values).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RecalcMode {
+    /// The formula ran once; the values are plain data afterwards.
+    #[default]
+    None,
+    /// The column is recalculated whenever a column it reads changes.
+    Auto,
+    /// The column is only marked as out of date; the user recalculates it.
+    Manual,
+}
+
+impl RecalcMode {
+    pub const ALL: [RecalcMode; 3] = [RecalcMode::None, RecalcMode::Auto, RecalcMode::Manual];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            RecalcMode::None => "None",
+            RecalcMode::Auto => "Auto",
+            RecalcMode::Manual => "Manual",
+        }
+    }
+}
+
+/// How up to date a recalculating formula column is (the colour of Origin's lock icon).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FormulaState {
+    /// The values match the current inputs.
+    #[default]
+    Current,
+    /// An input changed and the user has not recalculated yet.
+    Pending,
+    /// The formula cannot run: a column it reads is gone or renamed, or the formula is circular.
+    Broken,
+}
+
+fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Column {
     pub id: ColumnId,
@@ -127,6 +170,15 @@ pub struct Column {
     /// The "set column values" expression that produced this column, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formula: Option<String>,
+    /// Whether and when the formula runs again. Only meaningful with a formula.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub recalc: RecalcMode,
+    /// Whether the values are current. Always `Current` for mode `None`.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub formula_state: FormulaState,
+    /// The 0-based rows the formula fills; `None` means all rows its inputs have.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula_rows: Option<std::ops::Range<usize>>,
     /// Extra label rows (name -> value), for example instrument settings.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, String>,
@@ -141,6 +193,12 @@ pub struct Column {
 }
 
 impl Column {
+    /// True for a column whose values come from a formula that keeps running (mode Auto or
+    /// Manual). Origin shows a lock on such a column and refuses hand edits of its cells.
+    pub fn is_locked(&self) -> bool {
+        self.formula.is_some() && self.recalc != RecalcMode::None
+    }
+
     pub fn new(id: ColumnId, short_name: impl Into<String>, designation: Designation, data: ColumnData) -> Self {
         Column {
             id,
@@ -151,6 +209,9 @@ impl Column {
             designation,
             format: NumberFormat::default(),
             formula: None,
+            recalc: RecalcMode::None,
+            formula_state: FormulaState::Current,
+            formula_rows: None,
             params: BTreeMap::new(),
             fit_result: false,
             data,

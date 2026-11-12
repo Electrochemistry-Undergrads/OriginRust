@@ -31,6 +31,9 @@ pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
 /// Appends the items of one plot to `out`.
 pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
+    if plot.kind == PlotKind::Area {
+        draw_area(out, pd, geom);
+    }
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
     }
@@ -94,6 +97,41 @@ impl Run {
             }
             previous = k;
         }
+    }
+}
+
+/// The fill of an area plot: one closed shape per unbroken run of points, from the page height of
+/// Y = 0 (or the nearer frame edge when 0 cannot be placed or lies outside) up to the curve. Very
+/// long runs are thinned to about 20000 points, which looks the same at any export size.
+fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let f = geom.frame;
+    let zero = geom.data_to_page(0.0, if pd.oy == 0.0 { 0.0 } else { pd.oy }).1;
+    let base = if zero.is_finite() { zero.clamp(f.y, f.y + f.h) } else { f.y + f.h };
+    let step = ((pd.end - pd.start) / 20_000).max(1);
+    let mut d = String::new();
+    let mut run: Vec<(f64, f64)> = Vec::new();
+    let close = |run: &mut Vec<(f64, f64)>, d: &mut String| {
+        if run.len() >= 2 {
+            move_to(d, run[0].0, base);
+            for &(x, y) in run.iter() {
+                line_to(d, x, y);
+            }
+            line_to(d, run[run.len() - 1].0, base);
+            d.push('Z');
+        }
+        run.clear();
+    };
+    let mut i = pd.start;
+    while i < pd.end {
+        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
+            Some(p) => run.push(p),
+            None => close(&mut run, &mut d),
+        }
+        i = if i + step < pd.end || i + 1 == pd.end { i + step } else { pd.end - 1 };
+    }
+    close(&mut run, &mut d);
+    if !d.is_empty() {
+        out.push(Item::Path { d, fill: Some(pd.plot.symbol.color), stroke: None });
     }
 }
 

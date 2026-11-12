@@ -638,7 +638,7 @@ fn plot_menu() -> Vec<Entry> {
                 "Q-Q Plot",
             ],
         ),
-        grey_sub("&Area", &["Area", "Stacked Area", "Fill Area"]),
+        sub("&Area", vec![item("&Area", Cmd::Plot(Template::Area)), grey("Stacked Area"), grey("Fill Area")]),
         grey_sub(
             "Contour/&Heat Map",
             &[
@@ -1258,6 +1258,7 @@ pub fn graph_plot_menu(layer: usize, plot: usize, kind: PlotKind, book: Option<(
                 change("Scatter", PlotKind::Scatter),
                 change("Line + Symbol", PlotKind::LineSymbol),
                 change("Column", PlotKind::Column),
+                change("Area", PlotKind::Area),
             ],
         ),
         grey("Change X"),

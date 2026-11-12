@@ -84,6 +84,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Scatter => "Scatter",
         PlotKind::LineSymbol => "Line + Symbol",
         PlotKind::Column => "Column / Bar",
+        PlotKind::Area => "Area",
     }
 }
 
@@ -121,7 +122,9 @@ pub fn dialog_body(
                 if let Node::Plot(l, p) = *node {
                     let plot = &mut graph.layers[l].plots[p];
                     egui::ComboBox::from_id_salt("plot_type").selected_text(kind_name(plot.kind)).show_ui(ui, |ui| {
-                        for k in [PlotKind::Line, PlotKind::Scatter, PlotKind::LineSymbol, PlotKind::Column] {
+                        for k in
+                            [PlotKind::Line, PlotKind::Scatter, PlotKind::LineSymbol, PlotKind::Column, PlotKind::Area]
+                        {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }
                     });

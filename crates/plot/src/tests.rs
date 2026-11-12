@@ -2168,3 +2168,32 @@ fn a_point_of_the_page_is_traced_back_to_the_axis_plot_legend_or_layer_under_it(
     // The top edge of a line graph has no axis line: inside the frame it is the layer, above it the page.
     assert_eq!(hit_test(&scene, (f.x + f.w * 0.5, f.y - 8.0), 1.0), Hit::Page);
 }
+
+#[test]
+fn an_area_plot_fills_down_to_zero_and_breaks_at_gaps() {
+    let x: Vec<f64> = (0..6).map(f64::from).collect();
+    let y = vec![1.0, 2.0, f64::NAN, 2.0, 3.0, 1.0];
+    let (mut p, g) = project(Template::Line, x, vec![y]);
+    p.graph_mut(g).unwrap().layers[0].plots[0].kind = PlotKind::Area;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let fills: Vec<&str> = scene.layers[0]
+        .plots
+        .iter()
+        .filter_map(|i| match i {
+            crate::scene::Item::Path { d, fill: Some(_), .. } => Some(d.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(fills.len(), 1, "one path");
+    assert_eq!(fills[0].matches('Z').count(), 2, "two closed shapes, split at the gap");
+    // The fill starts on the page height of Y = 0.
+    let mut geom = layout_geometry(&p, g).unwrap().remove(0);
+    geom.frame = scene.layers[0].clip;
+    let zero = geom.data_to_page(0.0, 0.0).1;
+    let first = crate::hit::path_points(fills[0])[0];
+    assert!((first.1 - zero).abs() < 0.01 || (first.1 - (geom.frame.y + geom.frame.h)).abs() < 0.01);
+    // A line is drawn over the fill.
+    assert!(
+        scene.layers[0].plots.iter().any(|i| matches!(i, crate::scene::Item::Path { fill: None, stroke: Some(_), .. }))
+    );
+}

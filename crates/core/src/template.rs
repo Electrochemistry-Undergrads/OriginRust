@@ -36,14 +36,17 @@ pub enum Template {
     /// filled from the palette with a thin black outline, in a closed box with ticks pointing in.
     /// With a text X column (sample names) the names are written under the bars.
     Column,
+    /// Area plot (Origin's "Area"): the line template with each curve filled down to Y = 0.
+    Area,
 }
 
 impl Template {
-    pub const ALL: [Template; 8] = [
+    pub const ALL: [Template; 9] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
         Template::Column,
+        Template::Area,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -61,6 +64,7 @@ impl Template {
             Template::StackedLines => "stacked",
             Template::Waterfall => "waterfall",
             Template::Column => "column",
+            Template::Area => "area",
         }
     }
 
@@ -74,6 +78,7 @@ impl Template {
             Template::StackedLines => "Stacked lines (Y offsets)",
             Template::Waterfall => "Waterfall",
             Template::Column => "Column",
+            Template::Area => "Area",
         }
     }
 
@@ -93,6 +98,7 @@ impl Template {
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
             Template::Column => column(id, name),
+            Template::Area => general(id, name, PlotKind::Area),
         }
     }
 }
@@ -374,7 +380,8 @@ mod tests {
         assert_eq!(Template::from_name("Waterfall"), Some(Template::Waterfall));
         assert_eq!(Template::from_name("column"), Some(Template::Column));
         assert_eq!(Template::from_name("nope"), None);
-        assert_eq!(Template::ALL.len(), 8);
+        assert_eq!(Template::from_name("area"), Some(Template::Area));
+        assert_eq!(Template::ALL.len(), 9);
     }
 
     #[test]

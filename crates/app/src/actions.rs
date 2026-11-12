@@ -173,6 +173,8 @@ pub enum Action {
         graph: WindowId,
         op: GraphOp,
     },
+    /// Copy Page: the graph as a picture on the clipboard.
+    CopyPage(WindowId),
     /// Gadgets > Integrate on a graph.
     StartIntegrate {
         graph: WindowId,

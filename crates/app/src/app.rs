@@ -91,6 +91,8 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
+    /// The pixel size of the last page put on the clipboard by Copy Page.
+    copied_page: Option<[usize; 2]>,
     about: bool,
     /// Which toolbars are shown.
     toolbars: Toolbars,
@@ -139,6 +141,7 @@ impl SheafApp {
             rename: None,
             sheet_name: None,
             copied: String::new(),
+            copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
             panels: Panels::default(),
@@ -426,6 +429,22 @@ impl SheafApp {
             self.doc.project().window_places.iter().filter(|p| added.contains(&p.window)).copied().collect();
         if !places.is_empty() {
             self.workspace.restore(&places);
+        }
+    }
+
+    /// Copy Page (Ctrl+J): the graph as a picture on the clipboard, at 300 dpi, to paste into a
+    /// document or a presentation (Origin also offers a vector copy; Sheaf's vector forms are the
+    /// SVG and PDF exports).
+    fn copy_page(&mut self, graph: WindowId, ctx: &egui::Context) {
+        const DPI: f64 = 300.0;
+        match sheaf_plot::render_raster(self.doc.project(), graph, DPI / 72.0) {
+            Ok(r) => {
+                let size = [r.width as usize, r.height as usize];
+                ctx.copy_image(egui::ColorImage::from_rgba_unmultiplied(size, &r.rgba));
+                self.copied_page = Some(size);
+                self.say(format!("Copied the page as a picture of {} x {} pixels (300 dpi)", size[0], size[1]));
+            }
+            Err(e) => self.warn(format!("Could not copy the page: {e}")),
         }
     }
 
@@ -722,6 +741,7 @@ impl SheafApp {
             Action::ActivateLayer { graph, layer } => {
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
+            Action::CopyPage(graph) => self.copy_page(graph, ctx),
             Action::StartIntegrate { graph } => self.start_integrate(graph),
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {

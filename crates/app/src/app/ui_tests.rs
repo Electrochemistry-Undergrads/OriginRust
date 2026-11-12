@@ -2723,3 +2723,13 @@ fn the_integrate_gadget_shows_a_range_and_new_output_writes_the_area_to_a_sheet(
     settle(&mut h);
     assert!(graph_ui(&h).gadget.is_none());
 }
+
+#[test]
+fn copy_page_puts_the_graph_on_the_clipboard_at_300_dpi() {
+    let mut h = start(vec![data_file("copypage")]);
+    menu(&mut h, "Edit", "Copy Page");
+    let page = &graph(&h).page;
+    let expected = [(page.width_pt / 72.0 * 300.0).round() as usize, (page.height_pt / 72.0 * 300.0).round() as usize];
+    let got = h.state().copied_page.expect("a picture was copied");
+    assert!(got[0].abs_diff(expected[0]) <= 1 && got[1].abs_diff(expected[1]) <= 1, "{got:?} vs {expected:?}");
+}

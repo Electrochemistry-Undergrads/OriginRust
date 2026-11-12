@@ -154,62 +154,83 @@ pub fn anova_one_way(groups: &[&[f64]]) -> Result<Anova, AnovaError> {
 
 impl Anova {
     /// All pairwise comparisons of the group means with the given method, at significance level `alpha`
-    /// (the confidence level of the intervals is `1 - alpha`). Pairs come in the order (1,2), (1,3), ..., (2,3), ...
+    /// (the confidence level of the intervals is `1 - alpha`). Pairs come in Origin's order: (1,2), (1,3), (2,3), (1,4), (2,4), (3,4), ...
     pub fn compare(&self, method: MeansComparison, alpha: f64) -> Vec<Comparison> {
-        let k = self.groups.len();
-        let pairs = k * (k - 1) / 2;
-        let dfe = self.error.df;
-        let mse = self.error.mean_sq;
-        let t_dist = StudentsT::new(0.0, 1.0, dfe).expect("positive degrees of freedom");
-        let t_crit = |a: f64| t_dist.inverse_cdf(1.0 - a / 2.0);
-        let m = pairs as f64;
-        let mut out = Vec::with_capacity(pairs);
-        // The critical values depend on the number of groups only, so they are found once.
-        let q_crit = (method == MeansComparison::Tukey).then(|| qtukey(1.0 - alpha, k as f64, dfe));
-        for i in 0..k {
-            for j in i + 1..k {
-                let (gi, gj) = (&self.groups[i], &self.groups[j]);
-                let diff = gj.mean - gi.mean;
-                let se = (mse * (1.0 / gi.n as f64 + 1.0 / gj.n as f64)).sqrt();
-                let t = if se == 0.0 { if diff == 0.0 { 0.0 } else { f64::INFINITY } } else { diff.abs() / se };
-                let p_lsd = if t.is_infinite() { 0.0 } else { 2.0 * t_dist.cdf(-t) };
-                let (stat, p, half) = match method {
-                    MeansComparison::FisherLsd => (t, p_lsd, t_crit(alpha) * se),
-                    MeansComparison::Bonferroni => (t, (m * p_lsd).min(1.0), t_crit(alpha / m) * se),
-                    MeansComparison::Sidak => {
-                        (t, 1.0 - (1.0 - p_lsd).powf(m), t_crit(1.0 - (1.0 - alpha).powf(1.0 / m)) * se)
-                    }
-                    MeansComparison::Tukey => {
-                        let q = std::f64::consts::SQRT_2 * t;
-                        let half = q_crit.expect("found above") / std::f64::consts::SQRT_2 * se;
-                        (q, 1.0 - ptukey(q, k as f64, dfe), half)
-                    }
-                    MeansComparison::Scheffe => {
-                        let f = t * t / (k as f64 - 1.0);
-                        let dist = FisherSnedecor::new(k as f64 - 1.0, dfe).expect("positive degrees of freedom");
-                        let crit = dist.inverse_cdf(1.0 - alpha);
-                        (
-                            f,
-                            if f.is_infinite() { 0.0 } else { 1.0 - dist.cdf(f) },
-                            ((k as f64 - 1.0) * crit).sqrt() * se,
-                        )
-                    }
-                };
-                out.push(Comparison {
-                    i,
-                    j,
-                    diff,
-                    se,
-                    stat,
-                    p,
-                    lcl: diff - half,
-                    ucl: diff + half,
-                    significant: p < alpha,
-                });
-            }
+        let levels: Vec<(usize, f64)> = self.groups.iter().map(|g| (g.n, g.mean)).collect();
+        let mut out = compare_means(&levels, self.error.mean_sq, self.error.df, method, alpha);
+        // The one-way table reports the size of the statistic; the two-way table keeps the sign.
+        for c in &mut out {
+            c.stat = c.stat.abs();
         }
         out
     }
+}
+
+/// All pairwise comparisons of means, the way Origin's ANOVA tools do them: `levels` holds the size and
+/// mean of each group (or factor level, or cell), `mse` and `dfe` the error mean square and its degrees of
+/// freedom from the ANOVA table. The statistic of the t-based methods keeps the sign of the difference
+/// (the studentized range q and Scheffe's F are never negative).
+pub fn compare_means(
+    levels: &[(usize, f64)],
+    mse: f64,
+    dfe: f64,
+    method: MeansComparison,
+    alpha: f64,
+) -> Vec<Comparison> {
+    let k = levels.len();
+    let pairs = k * k.saturating_sub(1) / 2;
+    let mut out = Vec::with_capacity(pairs);
+    // A non-finite error mean square (infinite data) gives no usable comparisons; statrs would panic on NaN.
+    if !mse.is_finite() || !dfe.is_finite() || levels.iter().any(|l| !l.1.is_finite()) {
+        return out;
+    }
+    let Ok(t_dist) = StudentsT::new(0.0, 1.0, dfe) else {
+        return out;
+    };
+    let t_crit = |a: f64| t_dist.inverse_cdf(1.0 - a / 2.0);
+    let m = pairs as f64;
+    // The critical values depend on the number of groups only, so they are found once.
+    let q_crit = (method == MeansComparison::Tukey).then(|| qtukey(1.0 - alpha, k as f64, dfe));
+    // Origin lists the pairs column by column: (1,2), (1,3), (2,3), (1,4), (2,4), (3,4), ...
+    for j in 1..k {
+        for i in 0..j {
+            let ((ni, mi), (nj, mj)) = (levels[i], levels[j]);
+            let diff = mj - mi;
+            let se = (mse * (1.0 / ni as f64 + 1.0 / nj as f64)).sqrt();
+            let t = if se == 0.0 { if diff == 0.0 { 0.0 } else { f64::INFINITY.copysign(diff) } } else { diff / se };
+            let p_lsd = if t.is_infinite() { 0.0 } else { 2.0 * t_dist.cdf(-t.abs()) };
+            let (stat, p, half) = match method {
+                MeansComparison::FisherLsd => (t, p_lsd, t_crit(alpha) * se),
+                MeansComparison::Bonferroni => (t, (m * p_lsd).min(1.0), t_crit(alpha / m) * se),
+                MeansComparison::Sidak => {
+                    (t, 1.0 - (1.0 - p_lsd).powf(m), t_crit(1.0 - (1.0 - alpha).powf(1.0 / m)) * se)
+                }
+                MeansComparison::Tukey => {
+                    let q = std::f64::consts::SQRT_2 * t.abs();
+                    let half = q_crit.expect("found above") / std::f64::consts::SQRT_2 * se;
+                    (q, 1.0 - ptukey(q, k as f64, dfe), half)
+                }
+                MeansComparison::Scheffe => {
+                    let f = t * t / (k as f64 - 1.0);
+                    let dist = FisherSnedecor::new(k as f64 - 1.0, dfe).expect("positive degrees of freedom");
+                    let crit = dist.inverse_cdf(1.0 - alpha);
+                    (f, if f.is_infinite() { 0.0 } else { 1.0 - dist.cdf(f) }, ((k as f64 - 1.0) * crit).sqrt() * se)
+                }
+            };
+            out.push(Comparison {
+                i,
+                j,
+                diff,
+                se,
+                stat,
+                p,
+                lcl: diff - half,
+                ucl: diff + half,
+                significant: p < alpha,
+            });
+        }
+    }
+    out
 }
 
 // ----- studentized range distribution ----------------------------------------------------------
@@ -268,7 +289,7 @@ fn range_cdf(w: f64, k: f64) -> f64 {
     let norm = Normal::new(0.0, 1.0).expect("standard normal");
     let phi = |z: f64| (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
     // The integrand is k phi(z) [Phi(z) - Phi(z - w)]^(k - 1); it is negligible outside [-9, 9 + w].
-    let panels = (((w + 18.0) / 1.5).ceil() as usize).max(8);
+    let panels = (((w + 18.0) / 3.0).ceil() as usize).max(6);
     let v = k * integrate(|z| phi(z) * (norm.cdf(z) - norm.cdf(z - w)).powf(k - 1.0), -9.0, 9.0 + w, panels);
     v.clamp(0.0, 1.0)
 }
@@ -293,7 +314,7 @@ pub fn ptukey(q: f64, k: f64, df: f64) -> f64 {
     let density = |s: f64| if s <= 0.0 { 0.0 } else { (ln_c + (df - 1.0) * s.ln() - df * s * s / 2.0).exp() };
     let spread = 12.0 / (2.0 * df).sqrt();
     let (lo, hi) = ((1.0 - spread).max(0.0), 1.0 + spread + if df < 4.0 { 6.0 } else { 0.0 });
-    let panels = ((hi - lo) / 0.05).ceil().clamp(16.0, 400.0) as usize;
+    let panels = ((hi - lo) * (2.0 * df).sqrt() / 2.0).ceil().clamp(8.0, 400.0) as usize;
     integrate(|s| density(s) * range_cdf(q * s, k), lo, hi, panels).clamp(0.0, 1.0)
 }
 
@@ -317,7 +338,7 @@ pub fn qtukey(p: f64, k: f64, df: f64) -> f64 {
         } else {
             hi = mid;
         }
-        if hi - lo < 1e-11 * hi {
+        if hi - lo < 1e-9 * hi {
             break;
         }
     }
@@ -326,6 +347,24 @@ pub fn qtukey(p: f64, k: f64, df: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn infinite_data_do_not_panic_in_comparisons() {
+        let (a, b, c) = ([1.0, 2.0, 3.0], [2.0, f64::INFINITY, 4.0], [5.0, 6.0, 8.0]);
+        let an = anova_one_way(&[&a, &b, &c]).unwrap();
+        for m in [MeansComparison::FisherLsd, MeansComparison::Tukey, MeansComparison::Scheffe, MeansComparison::Sidak]
+        {
+            let _ = compare_means(&[(3, 2.0), (3, f64::INFINITY), (3, 6.0)], an.error.mean_sq, an.error.df, m, 0.05);
+        }
+    }
+
+    #[test]
+    fn tukey_with_few_error_degrees_of_freedom_is_fast() {
+        let t = std::time::Instant::now();
+        let q = qtukey(0.95, 4.0, 3.0);
+        assert!((q - 6.8200).abs() < 0.01, "q = {q}");
+        assert!(t.elapsed().as_secs_f64() < 2.0);
+    }
+
     #[test]
     fn constant_groups_do_not_hang_or_panic() {
         let (a, b, c) = ([3.0; 3], [4.0; 3], [5.0; 3]);

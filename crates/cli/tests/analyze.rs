@@ -464,3 +464,149 @@ fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
     assert!(ok, "{err}");
     assert!(info.contains("Graph1"), "{info}");
 }
+
+/// The unbalanced two-way design of the Origin reference runs (cells of 3, 2, 4, 1, 3, 2 numbers), with the
+/// level of factor A as text.
+fn design_file(dir: &Path) -> PathBuf {
+    let a = [1, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1];
+    let b = [1, 3, 2, 1, 3, 3, 2, 1, 3, 2, 2, 3, 3, 2, 1];
+    let y = [
+        14.214, 14.2532, 16.6664, 16.5478, 12.8569, 12.067, 14.8418, 14.8812, 13.4589, 15.412, 17.199, 14.2347,
+        11.9925, 13.4436, 14.5733,
+    ];
+    let mut text = String::from("dose,batch,response\n");
+    for i in 0..15 {
+        text.push_str(&format!("{},{},{}\n", if a[i] == 1 { "low" } else { "high" }, b[i], y[i]));
+    }
+    let path = dir.join("design.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn anova2_runs_on_indexed_and_raw_data_and_reports_origins_sums_of_squares() {
+    let dir = scratch("anova2");
+    let data = design_file(&dir);
+    let file = data.to_str().unwrap();
+    let export = dir.join("anova2.csv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "anova2",
+        file,
+        "--y",
+        "dose,batch,response",
+        "--comparison",
+        "bonferroni",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    // Origin's type III sums of squares for this unbalanced design: 9.7878 for A, 13.6434 for B.
+    assert!(
+        out.contains("dose*batch") && out.contains("Model") && out.contains("9.7878") && out.contains("13.6434"),
+        "{out}"
+    );
+    assert!(
+        out.contains("Bonferroni means comparison") && out.contains("type III") && out.contains("ANOVA2Way1"),
+        "{out}"
+    );
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(exported.contains("Sum of Squares") && exported.contains("dose: low"), "{exported}");
+
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova2", file, "--y", "dose,batch,response", "--no-interaction", "--comparison", "none"]);
+    assert!(ok, "{err}");
+    assert!(!out.contains("dose*batch") && out.contains("9.74949"), "{out}");
+
+    // Raw layout: one column per cell of a balanced 2 x 2 design.
+    let raw = dir.join("raw.csv");
+    std::fs::write(&raw, "xu,xv,yu,yv\n1,4,3,8\n2,5,5,9\n").unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "anova2",
+        raw.to_str().unwrap(),
+        "--raw",
+        "--y",
+        "xu,xv,yu,yv",
+        "--levels-a",
+        "x,x,y,y",
+        "--levels-b",
+        "u,v,u,v",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Factor A*Factor B"), "{out}");
+
+    // Wrong number of columns, and levels that do not match the columns.
+    let (ok, _, err) = sheaf(&["analyze", "anova2", file, "--y", "dose,response"]);
+    assert!(!ok && err.contains("FACTOR_A,FACTOR_B,DATA"), "{err}");
+    let (ok, _, err) = sheaf(&[
+        "analyze",
+        "anova2",
+        raw.to_str().unwrap(),
+        "--raw",
+        "--y",
+        "xu,xv",
+        "--levels-a",
+        "x",
+        "--levels-b",
+        "u,v",
+    ]);
+    assert!(!ok && err.contains("one level of factor A"), "{err}");
+}
+
+#[test]
+fn rank_tests_and_correlation_run_from_the_command_line() {
+    let dir = scratch("ranks");
+    let path = dir.join("ranks.csv");
+    // Columns of 9, 7 and 11 numbers with ties (the Origin reference samples); the shorter ones end early.
+    std::fs::write(
+        &path,
+        "a,b,c\n1.1,2.2,3.3\n2.3,3.1,1.1\n2.3,4.0,5.0\n4.0,4.0,2.2\n5.5,8.8,8.0\n6.1,10.5,7.5\n7.2,11.0,1.0\n7.2,,9.1\n9.9,,4.4\n,,6.0\n,,12.5\n",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+
+    let (ok, out, err) = sheaf(&["analyze", "mannwhitney", file, "--y", "a,b", "--exact"]);
+    assert!(ok, "{err}");
+    // U = 26, exact p = 0.586189, asymptotic p = 0.594998 (Origin: 0.58618881 and 0.59499846).
+    assert!(
+        out.contains("a vs b") && out.contains("26") && out.contains("0.586189") && out.contains("0.594998"),
+        "{out}"
+    );
+    assert!(out.contains("MannWhitney1"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "mannwhitney", file, "--y", "a,b,c"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+
+    let (ok, out, err) = sheaf(&["analyze", "signrank", file, "--y", "a", "--median", "3"]);
+    assert!(ok, "{err}");
+    // T+ = 38, exact p = 0.0664062, asymptotic p = 0.0750477.
+    assert!(out.contains("38") && out.contains("0.0664062") && out.contains("0.0750477"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "signrank", file, "--y", "a,b", "--test", "paired", "--tail", "lower"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Wilcoxon signed rank test") && out.contains("a vs b"), "{out}");
+
+    let (ok, out, err) = sheaf(&["analyze", "kruskal", file, "--y", "a,b,c"]);
+    assert!(ok, "{err}");
+    // chi-square = 0.2929 with 2 degrees of freedom, p = 0.8638 (Origin: 0.29286571 and 0.86378374).
+    assert!(
+        out.contains("chi-square(2) = 0.2929") && out.contains("p = 0.8638") && out.contains("KruskalWallis1"),
+        "{out}"
+    );
+
+    let (ok, out, err) = sheaf(&["analyze", "corr", file, "--y", "a,b,c", "--spearman", "--kendall"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("a vs b")
+            && out.contains("Pearson r")
+            && out.contains("Kendall tau")
+            && out.contains("Correlation1"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&["analyze", "corr", file, "--y", "a,b", "--listwise", "--no-pearson", "--spearman"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("listwise") && !out.contains("Pearson"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "corr", file, "--y", "a"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "corr", file, "--y", "a,b", "--no-pearson"]);
+    assert!(!ok && err.contains("at least one of Pearson"), "{err}");
+}

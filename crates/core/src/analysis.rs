@@ -17,7 +17,7 @@
 //! - Tools that give a few numbers per input column (integration results,
 //!   statistics) add a new sheet to the workbook with one row per input
 //!   column, and return the same table in the [`Report`].
-//! - The statistics tools (t-tests, one-way ANOVA, normality tests, histogram) put their tables on
+//! - The statistics tools (t-tests, ANOVA, nonparametric tests, correlation, normality tests, histogram) put their tables on
 //!   a new sheet of their own; see the `statistics` submodule and `docs/spec/statistics.md`.
 //! - Tools whose result has its own length (interpolated curve, list of
 //!   peaks) add a new sheet with an X and a Y column per input column.
@@ -221,6 +221,113 @@ impl Default for NormalitySpec {
     }
 }
 
+/// How [`TwoWayAnovaSpec`] finds the two factors in the chosen columns.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TwoWayLayout {
+    /// Origin's "Indexed Data": three columns, the level of factor A, the level of factor B and the data of
+    /// each row, in this order. The factor columns may hold text or numbers; a row with an empty factor
+    /// cell or no number is left out.
+    Indexed,
+    /// Origin's "Raw Data": every chosen column holds the data of one cell of the design; `levels` gives
+    /// the level of factor A and of factor B of each column, in the order of the columns.
+    Raw { levels: Vec<(String, String)> },
+}
+
+/// What [`Tool::TwoWayAnova`] does.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TwoWayAnovaSpec {
+    pub layout: TwoWayLayout,
+    /// Fit the interaction of the two factors (Origin's "Interactions" check box).
+    pub interaction: bool,
+    /// Means comparison of the levels of each factor (and of the cells when there is an interaction).
+    pub comparison: Option<MeansComparison>,
+    pub alpha: f64,
+}
+
+impl Default for TwoWayAnovaSpec {
+    fn default() -> Self {
+        TwoWayAnovaSpec {
+            layout: TwoWayLayout::Indexed,
+            interaction: true,
+            comparison: Some(MeansComparison::Tukey),
+            alpha: 0.05,
+        }
+    }
+}
+
+/// What [`Tool::MannWhitney`] does: two chosen columns, two independent samples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MannWhitneySpec {
+    /// The alternative about the first column: `Upper` is "tends to be larger".
+    pub tail: Tail,
+    /// Exact p-value (permutation distribution of the rank sum) instead of the normal approximation.
+    pub exact: bool,
+    pub alpha: f64,
+}
+
+impl Default for MannWhitneySpec {
+    fn default() -> Self {
+        MannWhitneySpec { tail: Tail::Two, exact: false, alpha: 0.05 }
+    }
+}
+
+/// Which signed rank test [`SignedRankSpec`] runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SignedRankKind {
+    /// Each chosen column against a hypothesized median.
+    OneSample { median: f64 },
+    /// Exactly two chosen columns; the rows where both have a number are paired and the first minus the
+    /// second is tested.
+    Paired,
+}
+
+/// What [`Tool::SignedRank`] does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SignedRankSpec {
+    pub kind: SignedRankKind,
+    pub tail: Tail,
+    /// Decide with the exact p-value where there is one (up to 80 non-zero differences, as Origin reports
+    /// it); the asymptotic one is always in the table.
+    pub exact: bool,
+    pub alpha: f64,
+}
+
+impl Default for SignedRankSpec {
+    fn default() -> Self {
+        SignedRankSpec { kind: SignedRankKind::OneSample { median: 0.0 }, tail: Tail::Two, exact: true, alpha: 0.05 }
+    }
+}
+
+/// What [`Tool::KruskalWallis`] does: every chosen column is a group.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KruskalWallisSpec {
+    pub alpha: f64,
+}
+
+impl Default for KruskalWallisSpec {
+    fn default() -> Self {
+        KruskalWallisSpec { alpha: 0.05 }
+    }
+}
+
+/// What [`Tool::Correlation`] does: the coefficients of every pair of the chosen columns.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CorrelationSpec {
+    pub pearson: bool,
+    pub spearman: bool,
+    pub kendall: bool,
+    /// Leave out every row where any column has no number (default: pair by pair).
+    pub listwise: bool,
+    /// Level for the sentence that names the significant pairs.
+    pub alpha: f64,
+}
+
+impl Default for CorrelationSpec {
+    fn default() -> Self {
+        CorrelationSpec { pearson: true, spearman: false, kendall: false, listwise: false, alpha: 0.05 }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tool {
     Integrate(IntegrateSpec),
@@ -238,6 +345,11 @@ pub enum Tool {
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
     Normality(NormalitySpec),
+    TwoWayAnova(TwoWayAnovaSpec),
+    MannWhitney(MannWhitneySpec),
+    SignedRank(SignedRankSpec),
+    KruskalWallis(KruskalWallisSpec),
+    Correlation(CorrelationSpec),
 }
 
 impl Tool {
@@ -266,6 +378,14 @@ impl Tool {
             Tool::Anova(_) => "One-way ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Normality(_) => "Normality test",
+            Tool::TwoWayAnova(_) => "Two-way ANOVA",
+            Tool::MannWhitney(_) => "Mann-Whitney test",
+            Tool::SignedRank(spec) => match spec.kind {
+                SignedRankKind::OneSample { .. } => "One-sample Wilcoxon signed rank test",
+                SignedRankKind::Paired => "Paired Wilcoxon signed rank test",
+            },
+            Tool::KruskalWallis(_) => "Kruskal-Wallis test",
+            Tool::Correlation(_) => "Correlation coefficients",
         }
     }
 
@@ -281,6 +401,11 @@ impl Tool {
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Normality(_) => "Normality",
+            Tool::TwoWayAnova(_) => "ANOVA2Way",
+            Tool::MannWhitney(_) => "MannWhitney",
+            Tool::SignedRank(_) => "SignedRank",
+            Tool::KruskalWallis(_) => "KruskalWallis",
+            Tool::Correlation(_) => "Correlation",
             _ => "Result",
         }
     }
@@ -701,7 +826,9 @@ impl Project {
         let sheet = &book.sheets[sheet_index];
 
         let mut inputs = Vec::with_capacity(request.columns.len());
-        for id in &request.columns {
+        // The two-way ANOVA reads its columns itself: the factor columns may hold text.
+        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_));
+        for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
                     AnalysisError::DifferentSheets
@@ -743,7 +870,20 @@ impl Project {
         let mut graph_plots: Vec<(usize, usize)> = Vec::new();
 
         match &request.tool {
-            Tool::TTest(_) | Tool::Anova(_) | Tool::Histogram(_) | Tool::Normality(_) => {
+            Tool::TwoWayAnova(spec) => {
+                let out = statistics::two_way_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::TTest(_)
+            | Tool::Anova(_)
+            | Tool::Histogram(_)
+            | Tool::Normality(_)
+            | Tool::MannWhitney(_)
+            | Tool::SignedRank(_)
+            | Tool::KruskalWallis(_)
+            | Tool::Correlation(_) => {
                 let out = statistics::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
@@ -1214,7 +1354,7 @@ impl Project {
         }
 
         // Everything was computed; now change the project.
-        let count = inputs.len();
+        let count = request.columns.len();
         drop(inputs);
         let mut new_columns = Vec::with_capacity(beside.len());
         let mut added_names: Vec<String> = Vec::new();

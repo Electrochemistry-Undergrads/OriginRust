@@ -621,6 +621,14 @@ pub enum TailArg {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SignRankKindArg {
+    /// Each column against --median.
+    OneSample,
+    /// Two columns, rows paired.
+    Paired,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ComparisonArg {
     Tukey,
     Bonferroni,
@@ -979,6 +987,91 @@ pub enum AnalyzeTool {
         #[arg(long, value_enum, default_value_t = ComparisonArg::Tukey)]
         comparison: ComparisonArg,
         /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Two-way ANOVA. Indexed data (default): --y FACTOR_A,FACTOR_B,DATA names three columns, the first two
+    /// holding the levels (text or numbers) of each row. With --raw every --y column is one cell of the
+    /// design and --levels-a / --levels-b give its levels. Sums of squares are Origin's (type III for
+    /// unequal cell sizes). The tables go to a new sheet.
+    Anova2 {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Every chosen column is one cell of the design (Origin's "Raw Data").
+        #[arg(long, requires_all = ["levels_a", "levels_b"])]
+        raw: bool,
+        /// Raw data: the level of factor A of each --y column, comma-separated.
+        #[arg(long, value_delimiter = ',')]
+        levels_a: Vec<String>,
+        /// Raw data: the level of factor B of each --y column, comma-separated.
+        #[arg(long, value_delimiter = ',')]
+        levels_b: Vec<String>,
+        /// Leave the interaction of the two factors out of the model.
+        #[arg(long)]
+        no_interaction: bool,
+        #[arg(long, value_enum, default_value_t = ComparisonArg::Tukey)]
+        comparison: ComparisonArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Mann-Whitney test of two columns (two independent samples). The alternative is about the first
+    /// column.
+    Mannwhitney {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Exact p-value (permutation distribution of the rank sum) instead of the normal approximation.
+        #[arg(long)]
+        exact: bool,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Wilcoxon signed rank test: each column against a hypothesized median (one-sample), or two columns
+    /// as pairs.
+    Signrank {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = SignRankKindArg::OneSample)]
+        test: SignRankKindArg,
+        /// One-sample test: the hypothesized median.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        median: f64,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Decide with the asymptotic p-value even where an exact one exists (up to 80 differences).
+        #[arg(long)]
+        asymptotic: bool,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Kruskal-Wallis test: every chosen column is a group.
+    Kruskal {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Correlation coefficients (Pearson unless --no-pearson, optionally Spearman and Kendall) with p-values
+    /// for every pair of the chosen columns, as a table of pairs and as matrices on a new sheet.
+    Corr {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long)]
+        spearman: bool,
+        #[arg(long)]
+        kendall: bool,
+        /// Leave Pearson's coefficient out.
+        #[arg(long)]
+        no_pearson: bool,
+        /// Leave out every row where any column has no number (default: pair by pair).
+        #[arg(long)]
+        listwise: bool,
+        /// Level for the sentence that names the significant pairs.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },

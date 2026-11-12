@@ -95,6 +95,26 @@ enum Job {
     },
 }
 
+fn tail_of(tail: TailArg) -> analysis::Tail {
+    match tail {
+        TailArg::Two => analysis::Tail::Two,
+        TailArg::Upper => analysis::Tail::Upper,
+        TailArg::Lower => analysis::Tail::Lower,
+    }
+}
+
+fn comparison_of(comparison: ComparisonArg) -> Option<analysis::MeansComparison> {
+    use analysis::MeansComparison as M;
+    match comparison {
+        ComparisonArg::Tukey => Some(M::Tukey),
+        ComparisonArg::Bonferroni => Some(M::Bonferroni),
+        ComparisonArg::Sidak => Some(M::Sidak),
+        ComparisonArg::Lsd => Some(M::FisherLsd),
+        ComparisonArg::Scheffe => Some(M::Scheffe),
+        ComparisonArg::None => None,
+    }
+}
+
 fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
     Ok(match tool {
         AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative, ranges, row_ranges } => {
@@ -320,25 +340,73 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 TTestKindArg::TwoSample => analysis::TTestKind::TwoSample { equal_variance: !unequal, difference },
                 TTestKindArg::Paired => analysis::TTestKind::Paired { difference },
             };
-            let tail = match tail {
-                TailArg::Two => analysis::Tail::Two,
-                TailArg::Upper => analysis::Tail::Upper,
-                TailArg::Lower => analysis::Tail::Lower,
-            };
-            (target, Job::Tool(Tool::TTest(analysis::TTestSpec { kind, tail, alpha })))
+            (target, Job::Tool(Tool::TTest(analysis::TTestSpec { kind, tail: tail_of(tail), alpha })))
         }
         AnalyzeTool::Anova { target, comparison, alpha } => {
-            use analysis::MeansComparison as M;
-            let comparison = match comparison {
-                ComparisonArg::Tukey => Some(M::Tukey),
-                ComparisonArg::Bonferroni => Some(M::Bonferroni),
-                ComparisonArg::Sidak => Some(M::Sidak),
-                ComparisonArg::Lsd => Some(M::FisherLsd),
-                ComparisonArg::Scheffe => Some(M::Scheffe),
-                ComparisonArg::None => None,
-            };
-            (target, Job::Tool(Tool::Anova(analysis::AnovaSpec { alpha, comparison })))
+            (target, Job::Tool(Tool::Anova(analysis::AnovaSpec { alpha, comparison: comparison_of(comparison) })))
         }
+        AnalyzeTool::Anova2 { target, raw, levels_a, levels_b, no_interaction, comparison, alpha } => {
+            let layout = if raw {
+                if levels_a.len() != target.y.len() || levels_b.len() != target.y.len() {
+                    bail!(
+                        "--raw needs one level of factor A (--levels-a) and one of factor B (--levels-b) for each \
+                         of the {} --y columns; {} and {} were given",
+                        target.y.len(),
+                        levels_a.len(),
+                        levels_b.len()
+                    );
+                }
+                analysis::TwoWayLayout::Raw { levels: levels_a.into_iter().zip(levels_b).collect() }
+            } else {
+                if target.y.len() != 3 {
+                    bail!(
+                        "the two-way ANOVA with indexed data needs --y FACTOR_A,FACTOR_B,DATA (three columns), \
+                         or --raw with --levels-a and --levels-b"
+                    );
+                }
+                analysis::TwoWayLayout::Indexed
+            };
+            (
+                target,
+                Job::Tool(Tool::TwoWayAnova(analysis::TwoWayAnovaSpec {
+                    layout,
+                    interaction: !no_interaction,
+                    comparison: comparison_of(comparison),
+                    alpha,
+                })),
+            )
+        }
+        AnalyzeTool::Mannwhitney { target, tail, exact, alpha } => {
+            (target, Job::Tool(Tool::MannWhitney(analysis::MannWhitneySpec { tail: tail_of(tail), exact, alpha })))
+        }
+        AnalyzeTool::Signrank { target, test, median, tail, asymptotic, alpha } => {
+            let kind = match test {
+                SignRankKindArg::OneSample => analysis::SignedRankKind::OneSample { median },
+                SignRankKindArg::Paired => analysis::SignedRankKind::Paired,
+            };
+            (
+                target,
+                Job::Tool(Tool::SignedRank(analysis::SignedRankSpec {
+                    kind,
+                    tail: tail_of(tail),
+                    exact: !asymptotic,
+                    alpha,
+                })),
+            )
+        }
+        AnalyzeTool::Kruskal { target, alpha } => {
+            (target, Job::Tool(Tool::KruskalWallis(analysis::KruskalWallisSpec { alpha })))
+        }
+        AnalyzeTool::Corr { target, spearman, kendall, no_pearson, listwise, alpha } => (
+            target,
+            Job::Tool(Tool::Correlation(analysis::CorrelationSpec {
+                pearson: !no_pearson,
+                spearman,
+                kendall,
+                listwise,
+                alpha,
+            })),
+        ),
         AnalyzeTool::Histogram { target, bin_size, bins, min, max, below, above, no_graph } => {
             let size = match (bin_size, bins) {
                 (Some(w), _) => analysis::BinSize::Width(w),

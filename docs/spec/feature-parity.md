@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 40 | 108 | 82 | 230 |
+| All rows | 41 | 108 | 81 | 230 |
 | P0 | 31 | 69 | 1 | 101 |
-| P1 and P2 together | 9 | 39 | 81 | 129 |
+| P1 and P2 together | 10 | 39 | 80 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -240,12 +240,12 @@ Cross-cutting findings:
 | Aggregate functions in formulas | Set Column Values | sum, mean, median, sd, var, count | ✓ | | P0 |
 | Row statistics | Statistics on Rows | none | ✗ | | P1 |
 | Moments, quantiles | quantiles, moments | quartiles only | ◐ | no arbitrary percentile | P1 |
-| Correlation | corrcoef | Pearson r inside line fit only | ◐ | no matrix, no rank correlations | P1 |
+| Correlation | corrcoef | Pearson, Spearman and Kendall coefficients with p-values for every pair of columns, pairwise or listwise, as matrices and a table of pairs; Statistics menu, `analyze corr`; checked against `corrcoef` (`statistics.md` section 9) | ✓ | no partial correlation, scatter matrix or confidence ellipses; Origin's Kendall p-values with missing values differ from the textbook formula we use | P1 |
 | t-tests | Hypothesis Testing | one-sample, two-sample (pooled and Welch) and paired t-test with tails, level and confidence interval; Statistics menu, `analyze ttest`; checked against `ttest1`, `ttest2`, `ttestpair` (`statistics.md`) | ✓ | no test of equal variance, no summary-data input | P1 |
 | Frequency counts, binning | freqcounts | counts, cumulative, percent, given or automatic bins, outlier rows; Statistics menu, `analyze histogram`; checked against `freqcounts` | ◐ | the automatic bin size is a fitted rule (about 57 % agreement) | P1 |
 | Variance and proportion tests | vartest | none | ✗ | | P2 |
-| ANOVA | one, two, three-way, RM | one-way with summary table and Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe comparisons; checked against Origin's library | ◐ | no two-way, three-way or repeated measures | P2 |
-| Nonparametric tests | Mann-Whitney, Kruskal-Wallis and others | none | ✗ | | P2 |
+| ANOVA | one, two, three-way, RM | one-way and two-way (indexed or raw data, with or without interaction, unbalanced designs with Origin's type III sums of squares) with Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe comparisons; Statistics menu, `analyze anova`, `analyze anova2`; checked against Origin's library | ◐ | no three-way or repeated measures, no Holm or Dunnett comparisons, no power analysis or means plots | P2 |
+| Nonparametric tests | Mann-Whitney, Kruskal-Wallis and others | Mann-Whitney (asymptotic and exact), one-sample and paired Wilcoxon signed rank (exact and asymptotic), Kruskal-Wallis; Statistics menu, `analyze mannwhitney`, `signrank`, `kruskal`; checked against `mwtest`, `signrank1`, `signrank2`, `kwanova` | ◐ | no Friedman, median, sign or two-sample Kolmogorov-Smirnov test; no indexed input form | P2 |
 | Normality, outlier tests, distribution fit | Shapiro-Wilk, Grubbs | Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson | ◐ | no outlier tests, no distribution fit, no probability plot | P2 |
 | Multivariate analysis | PCA, clustering | none | ✗ | | P2 |
 | Survival, power, ROC | Statistics menu | none | ✗ | | P2 |

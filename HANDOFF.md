@@ -55,21 +55,19 @@ through (they are held for approval and expire), so the split is written here:
 - **Done on 2026-11-12**: the parity audit (`docs/spec/feature-parity.md`), the interface study
   (`docs/spec/gui-look.md`, ADR 0007 accepted), the `.opj` writer for workbooks (verified in
   Origin 2016), the CH Instruments `.bin` reader, curve math, multi-range integration, date and
-  time columns, recalculating formulas.
+  time columns, recalculating formulas, fit bands and controls, CSV/ICP-OES import extras with
+  batch import, the peak analysis chain.
 - **Running**: workflow `origin-look-1` (run `wf_24c63ee8-83e`): `.opj` as the default save format
   with a `<name>.opj.sheaf` companion when content would be lost, then ADR 0007 steps 1 to 4
   (theme, child windows, Window menu, menus per window type), all in one worktree branch, each
-  step reviewed with screenshots; in parallel, the missing Origin pictures (step 13). Workflow
-  `p0-gaps-2` (run `wf_6cd84962-406`): fit bands and controls, CSV/ICP-OES import extras with
-  batch import, a peak analysis chain. The second session works on `chi-text-real` and
+  step reviewed with screenshots; in parallel, the missing Origin pictures (step 13). The second session works on `chi-text-real` and
   `graph-p0` (double Y is committed there).
 
-All checks pass on `main` at `6cec89f` (507 tests).
+All checks pass on `main` at `928a233` (571 tests). Parity counts are recomputed with `python tools/parity-count.py`.
 
 ## Exact next step
 
-1. Merge the `origin-look-1` branch (after looking at its screenshots) and the `p0-gaps-2`
-   branches after their reviews; full checks after each merge. Merge `chi-text-real` and
+1. Merge the `origin-look-1` branch (after looking at its screenshots) after its reviews; full checks after each merge. Merge `chi-text-real` and
    `graph-p0` (second session) when its note says they are ready.
 2. Continue ADR 0007: steps 5 to 10 (workbook look, toolbars, panels, graph window look and mouse
    actions, dialogs in Origin's layout, window geometry in the project file).

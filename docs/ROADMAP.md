@@ -130,6 +130,13 @@ the default project format.
         date axis labels
   - [x] Column formulas that recalculate (Set Column Values None, Auto, Manual), inside one undo
         step, cycles refused
+  - [x] Fit confidence and prediction bands (closed form of Origin's straight-line bands checked
+        with numbers from Origin), maximum iterations and tolerance, 27 more starting values
+  - [x] Import: thousands separators, parameter rows, data blocks as sheets, import modes (new
+        book, sheet, columns, rows), batch import of folders and patterns (`sheaf import`)
+  - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,
+        multi-peak Gauss or Lorentz fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
+        limit rules and the multi-peak fit are not yet compared with Origin's Peak Analyzer
 
 ## Milestone 6: breadth
 

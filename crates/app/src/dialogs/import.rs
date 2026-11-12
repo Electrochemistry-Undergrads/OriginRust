@@ -292,6 +292,13 @@ impl ImportDialog {
             ui.label("Columns");
             ui.checkbox(&mut o.first_column_x, "The first column is X");
             ui.end_row();
+            ui.label("Dates and times");
+            let mut as_text = o.dates == sheaf_io::ascii::DateImport::AsText;
+            if ui.checkbox(&mut as_text, "Keep as text").changed() {
+                o.dates =
+                    if as_text { sheaf_io::ascii::DateImport::AsText } else { sheaf_io::ascii::DateImport::Detect };
+            }
+            ui.end_row();
             ui.label("Skip data rows");
             ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
             ui.end_row();

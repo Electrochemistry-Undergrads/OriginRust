@@ -3,13 +3,17 @@
 use crate::ticks::{ResolvedAxis, resolve_axis};
 use crate::{LayerGeometry, Rect};
 use sheaf_core::Project;
-use sheaf_core::graph::{Layer, Page, Plot, ScaleKind};
+use sheaf_core::datetime::DatePattern;
+use sheaf_core::format::NumberFormat;
+use sheaf_core::graph::{Layer, Page, Plot, ScaleKind, TickFormat};
 
 /// A visible plot whose Y column holds numbers, with its data resolved.
 pub(crate) struct PlotData<'a> {
     pub plot: &'a Plot,
     /// X values; `None` plots against the row number (1, 2, 3, ...).
     pub x: Option<&'a [f64]>,
+    /// How the X column shows its values (a date format makes a date axis).
+    pub x_format: Option<NumberFormat>,
     pub y: &'a [f64],
     pub err: Option<&'a [f64]>,
     /// Half-open row range that is drawn.
@@ -38,12 +42,13 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> Vec<PlotDat
     for plot in layer.plots.iter().filter(|p| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
+        let x_format = plot.x.and_then(|id| project.column(id)).map(|c| c.format);
         let err = plot.y_error.and_then(|id| project.numeric(id));
         let (start, end) = match plot.rows {
             Some((s, e)) => (s.min(y.len()), e.min(y.len())),
             None => (0, y.len()),
         };
-        out.push(PlotData { plot, x, y, err, start, end: end.max(start) });
+        out.push(PlotData { plot, x, x_format, y, err, start, end: end.max(start) });
     }
     out
 }
@@ -86,7 +91,20 @@ pub(crate) fn resolve_layer(layer: &Layer, page: &Page, pds: &[PlotData]) -> Lay
         h: f.height * page.height_pt,
     };
     let (xr, yr) = data_range(pds, layer.x_axis.scale, layer.y_axis.scale);
-    let x: ResolvedAxis = resolve_axis(&layer.x_axis, xr);
+    // An X column in a date, time or date-time format gives date tick labels, unless the axis has a format of its own.
+    let date_pattern = pds.iter().find_map(|pd| match pd.x_format {
+        Some(NumberFormat::Date(d) | NumberFormat::DateTime(d, _)) => Some(d),
+        Some(NumberFormat::Time(_)) => Some(DatePattern::default()),
+        _ => None,
+    });
+    let x: ResolvedAxis = match date_pattern {
+        Some(d) if layer.x_axis.tick_format == TickFormat::Auto => {
+            let mut axis = layer.x_axis.clone();
+            axis.tick_format = TickFormat::DateTime(d);
+            resolve_axis(&axis, xr)
+        }
+        _ => resolve_axis(&layer.x_axis, xr),
+    };
     let y: ResolvedAxis = resolve_axis(&layer.y_axis, yr);
     LayerGeometry { frame, x, y }
 }

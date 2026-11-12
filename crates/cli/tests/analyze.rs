@@ -231,3 +231,17 @@ fn mistakes_give_a_message_and_a_failure_code() {
         assert!(stderr.contains(expect), "{args:?}: expected '{expect}' in: {stderr}");
     }
 }
+
+#[test]
+fn info_shows_a_date_time_column_and_the_option_keeps_text() {
+    let dir = scratch("dates");
+    let path = dir.join("icp.csv");
+    std::fs::write(&path, "Time,Cu\n2026-11-11 13:45:10,1.25\n2026-11-11 13:47:42,12.5\n2026-11-11 13:50:15,24.9\n")
+        .unwrap();
+    let (ok, stdout, stderr) = sheaf(&["info", path.to_str().unwrap()]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains(" date ") && stdout.contains("<2026-11-11 13:45:10 to 2026-11-11 13:50:15>"), "{stdout}");
+    let (ok, stdout, _) = sheaf(&["info", path.to_str().unwrap(), "--dates-as-text"]);
+    assert!(ok);
+    assert!(stdout.contains(" text") && !stdout.contains(" date "), "{stdout}");
+}

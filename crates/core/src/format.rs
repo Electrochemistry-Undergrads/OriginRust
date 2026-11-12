@@ -1,5 +1,6 @@
 //! Turning numbers into text for worksheet cells and tick labels.
 
+use crate::datetime::{self, DatePattern, TimePattern};
 use serde::{Deserialize, Serialize};
 
 /// How a numeric column shows its values.
@@ -16,6 +17,12 @@ pub enum NumberFormat {
     Scientific(u8),
     /// A fixed number of significant digits.
     Significant(u8),
+    /// The number is a date (days, see `datetime`), shown as text such as `2026-11-11`.
+    Date(DatePattern),
+    /// The number is a time of day (a fraction of a day), shown as `13:45:10`.
+    Time(TimePattern),
+    /// The number is a date with a time of day, shown as `2026-11-11 13:45:10`.
+    DateTime(DatePattern, TimePattern),
 }
 
 impl NumberFormat {
@@ -32,7 +39,15 @@ impl NumberFormat {
             NumberFormat::Decimal(d) => format!("{:.*}", usize::from(d), v),
             NumberFormat::Scientific(d) => format_scientific(v, usize::from(d)),
             NumberFormat::Significant(d) => format_general(v, usize::from(d.max(1))),
+            NumberFormat::Date(d) => datetime::format_date(v, d),
+            NumberFormat::Time(t) => datetime::format_time(datetime::time_only_fraction(v), t),
+            NumberFormat::DateTime(d, t) => datetime::format_date_time(v, d, t),
         }
+    }
+
+    /// True for the date, time and date-time formats.
+    pub fn is_date_time(&self) -> bool {
+        matches!(self, NumberFormat::Date(_) | NumberFormat::Time(_) | NumberFormat::DateTime(..))
     }
 }
 
@@ -97,5 +112,34 @@ mod tests {
         assert_eq!(NumberFormat::Scientific(2).format(0.000015), "1.50E-5");
         assert_eq!(NumberFormat::Significant(3).format(1234.5), "1.23E3");
         assert_eq!(NumberFormat::General.format(f64::NAN), "--");
+    }
+
+    #[test]
+    fn date_time_formats_show_text_and_missing_stays_dashes() {
+        let v = 2_461_355.573_032_407_6;
+        assert_eq!(NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hms).format(v), "2026-11-11 13:45:10");
+        assert_eq!(NumberFormat::Date(DatePattern::Mdy).format(v), "11/11/2026");
+        assert_eq!(NumberFormat::Time(TimePattern::Hm).format(0.572_916_666_666_666_6), "13:45");
+        // A time-only cell ignores a whole-day part.
+        assert_eq!(NumberFormat::Time(TimePattern::Hms).format(v), "13:45:10");
+        assert_eq!(NumberFormat::Date(DatePattern::Iso).format(f64::NAN), "--");
+        assert!(NumberFormat::Time(TimePattern::Hm).is_date_time());
+        assert!(!NumberFormat::General.is_date_time());
+    }
+
+    #[test]
+    fn old_project_files_and_new_formats_serialize() {
+        let old: NumberFormat = serde_json::from_str(r#"{"kind":"decimal","digits":2}"#).unwrap();
+        assert_eq!(old, NumberFormat::Decimal(2));
+        let none: NumberFormat = serde_json::from_str(r#"{"kind":"general"}"#).unwrap();
+        assert_eq!(none, NumberFormat::General);
+        for f in [
+            NumberFormat::Date(DatePattern::DMonY),
+            NumberFormat::Time(TimePattern::HmsMs),
+            NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hm),
+        ] {
+            let json = serde_json::to_string(&f).unwrap();
+            assert_eq!(serde_json::from_str::<NumberFormat>(&json).unwrap(), f, "{json}");
+        }
     }
 }

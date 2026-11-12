@@ -121,6 +121,26 @@ Display never changes the stored value. A cell too narrow for the number is roun
 
 Date/time: a Date/Time column stores a double: whole part = day count in a Julian-day-based system (valid range 0100-01-01 to 9999-12-31), fraction = time of day; the zero point is noon on 4713-BC Jan 1 with a 12-hour offset in the default system; newer systems exist (not in 2016). Precision about 0.0001 s. Display tokens: M MM MMM MMMM, d dd ddd dddd, D (weekday 1-7), y yy yyyy, q, h hh H HH, m mm, s ss, # to #### fractional seconds, t tt (AM/PM), DDD for day count (IRIG-style); literals in single quotes; custom strings up to 60 chars. [W] (P0 only if the owner imports time-stamped logs.)
 
+### Observed in Origin 2016 (black-box runs, 2026-11-12) [F]
+
+Runs went through `tools/origin-ref` (`run-labtalk-lines.ps1`) on inputs we made ourselves.
+
+- **Date numbers.** `date(2026,11,11)` is 2461355, `date(1970,1,1)` is 2440587, `date(1900,1,1)` is 2415020 and `date(2000,1,1)` is 2451544. So a date at midnight is a whole number, equal to the number of days since 1970-01-01 plus 2440587 (the astronomical day number minus one). A date with a time is that whole number plus the day fraction: 2026-11-11 13:45:10 is 2461355.5730324076. A cell holding 2461000.5 shows as 11/21/2025 (the whole part picks the day; .5 is noon of that day). Sheaf stores exactly this number, so that a later `.opj` writer produces what Origin reads.
+- **Time of day.** `time(13,45,10)` is 0.57303240740740735, the fraction of a day. A Time column holds only the fraction. Fractional seconds are kept (13:45:10.250 imports as 0.5730353009).
+- **Format codes in LabTalk.** `wks.col1.format` is 3 for Time, 4 for Date and 7 for Text & Numeric (the default of an imported text column). `wks.col1.subformat` picks the display pattern.
+- **Date subformats** (value 2026-11-11 13:45:10 unless noted): 1 `11/11/2026` (month, day, year without leading zeros: 2026-02-05 shows `2/5/2026`), 2 `Wednesday, November 11, 2026`, 3 `Nov 11`, 4 `11/11`, 5 `11`, 6 `Wed`, 7 `W`, 8 `2026`, 9 `26`, 10 `11/11/2026 13:45`, 11 `11/11/2026 13:45:10`, 12 `261111`, 13 `261111 13:45`, 14 `261111 13:45:10`, 15 `261111 1345`, 16 `261111 134510`, 17 `Nov`, 18 `N`, 19 `Q4`, 20 `11-11-2026` (`2-5-2026` for February 5). Time of day is 24-hour in the date-time patterns.
+- **Time subformats**: 1 `13:45`, 2 `13`, 3 `13:45:10`, 4 `13:45:10.00`, 5 `01 PM`, 6 `01:45 PM`, 7 `45:10`, 8 `45:10.00`, 9 `1345`, 10 `134510`, 11 `13:45:10.000`, 12 `000`, 13 `000:13`, 14 `000:13:45` (the last ones count elapsed days).
+- **Display truncates**: 01:05:09.123 shown as `hh:mm:ss` reads `01:05:09`. A missing cell shows `--`.
+- **Odd corner**: `date(1,1,1)` returned 2451910 (year 1 taken as 2001), so very old dates through that function are not a reliable reference.
+
+### What Sheaf implements (crates/core/src/datetime.rs, format.rs)
+
+- Cells stay `f64`. `NumberFormat` gained `Date(pattern)`, `Time(pattern)` and `DateTime(date pattern, time pattern)`; project files written before this change still load because the old variants are unchanged.
+- Date patterns: `M/d/yyyy`, `M-d-yyyy`, `dd/MM/yyyy`, `dd-MM-yyyy`, `dd.MM.yyyy`, `yyyy-MM-dd`, `dd-MMM-yyyy`. Time patterns: `HH:mm`, `HH:mm:ss`, `HH:mm:ss.fff`. Origin's other display patterns (weekday and month names, 12-hour, elapsed, quarter) are not built yet.
+- The calendar is the proleptic Gregorian one; no time zone, no leap seconds. Display rounds to the millisecond and then truncates to the unit shown, like Origin.
+- Typing a date or time into a date column sets the number; the formula engine sees plain numbers, so `col(A) - col(A)[1]` gives days (times 1440 for minutes). Origin's `date()` and `time()` functions are not in the expression language yet.
+- A date column as X gives date tick labels (see `docs/spec/graphing.md` for ticks): steps are round times (1 to 30 s, 1 to 30 min, 1 to 12 h, 1 to 7 days, then 1-2-5 days); a step of a day or more shows the date, a shorter one the time of day, with the date added when the axis crosses midnight. Calendar months and years are not tick steps yet.
+
 ## 7. Internal data types (numeric columns) (P1)
 
 | Code (`-fi` / numerictype) | Name | Bytes | Range / notes |

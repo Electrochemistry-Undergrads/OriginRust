@@ -155,6 +155,12 @@ pub struct ReadOptions {
     /// Delimited text: numbers use a comma as the decimal separator.
     #[arg(long)]
     pub decimal_comma: bool,
+    /// Delimited text: keep date and time columns as text instead of reading them as date numbers.
+    #[arg(long)]
+    pub dates_as_text: bool,
+    /// Delimited text: read 11/12/2026 as 11 December (default: 12 November) when the file does not decide.
+    #[arg(long)]
+    pub day_first: bool,
 }
 
 #[derive(Args, Debug)]

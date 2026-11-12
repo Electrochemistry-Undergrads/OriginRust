@@ -10,6 +10,7 @@
 pub mod analysis;
 pub mod color;
 pub mod column;
+pub mod datetime;
 pub mod fitting;
 pub mod format;
 pub mod formula;

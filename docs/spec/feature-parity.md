@@ -76,7 +76,7 @@ Cross-cutting findings:
 | Data-start detection | auto header lines | `detect()` with preview | ✓ | rule differs slightly from Origin's, not compared by black-box run | P0 |
 | Header, long name, units, comments lines | File Header group | detected and overridable | ◐ | no parameter rows, no name+unit splitter, no leading-character rule, no count from bottom | P0 |
 | Non-numeric text, missing markers | NonNum, LeadingZeros | marker list, 80 percent rule, warning | ◐ | no choice of treatment, no mixed text and number column | P0 |
-| Date and time detection | DateFormat, TimeFormat | none | ✗ | time stamps arrive as text; no date or time column type | P0 |
+| Date and time detection | DateFormat, TimeFormat | `ascii.rs`: ISO, M/d/yyyy, d/M/yyyy, dd.MM.yyyy, d-Mon-yyyy, clocks with AM or PM; order rule and warning; option to keep text | ◐ | no custom pattern list, no per-column choice, no two-digit years | P0 |
 | Import mode and naming | replace, new columns, rows, books, sheets | each file becomes a new book named from the file | ◐ | no replace, append, new-sheet modes; no name trimming | P0 |
 | Number separators | NumSep | decimal comma only | ◐ | no thousands separators | P0 |
 | CH Instruments files | owner's workflow | `io/src/chi.rs`: CV, i-t, LSV, scan splitting, mA, charge, sign, clip warning, run parameters | ✓ | no real CHI file checked yet per the spec | P0 |
@@ -101,7 +101,7 @@ Cross-cutting findings:
 | Label rows: long name, units, comments | worksheet header | grid rows and properties dialog | ✓ | | P0 |
 | Parameter, user parameter, F(x) rows, show or hide label rows | label rows | stored in model, not shown | ◐ | not shown or editable; no sampling-interval row | P0 |
 | Plot designations | Column > Set As | X, Y, Z, yEr, xEr, Label, Disregard | ✓ | no Group or Subject; Y-finds-X is nearest-left only | P0 |
-| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric or text only | ◐ | no date, time, month, weekday, mixed | P0 |
+| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday, mixed; fewer display patterns than Origin; Column Properties dialog sets the display pattern only | P0 |
 | Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
 | Missing values | shown as `--` | NaN shown as `--` | ✓ | cannot tell empty from missing | P0 |
 | Reference notation in formulas | `[Book]Sheet!Col`, cell(), `col(A)$`, `[L]` | `col`, `wcol`, index, range, `i` | ◐ | no other sheet or book, no cell(), no label access, no x/y shorthand | P0 |
@@ -121,7 +121,7 @@ Cross-cutting findings:
 | Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | fixed layout | ✗ | | P1 |
 | Before-formula script, multi-column set | Set Column Values | none | ✗ | one column only | P1 |
 | Fill Column With | row numbers, random, patterns | only formula `i` | ◐ | no random, series or dates | P1 |
-| Date and time arithmetic | date columns | none | ✗ | | P1 |
+| Date and time arithmetic | date columns | columns are plain numbers in formulas (days) | ◐ | no `date()`, `time()` or date functions | P1 |
 | String functions and text in formulas | text functions | text reads as missing | ✗ | | P1 |
 | Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | none | ✗ | | P1 |
 | External links, Paste Link | Edit menu | none | ✗ | | P2 |
@@ -283,7 +283,7 @@ Cross-cutting findings:
 | Units and sizing | cm, mm, pixel, scale modes | inches and percent | ◐ | | P0 |
 | Axis scale and range | many scale types, rescale modes | linear, log10, from and to, nice, tight, symmetric | ◐ | no reverse, ln, log2, probability, custom ticks, rescale margins | P0 |
 | Axis line and ticks | Line and Ticks tab | direction, length, width, colour | ◐ | no separate tick colour, offset, arrows | P0 |
-| Tick labels | Tick Labels tab | font, number format, divisor | ◐ | no rotation, prefix and suffix, date or text labels, minor labels | P0 |
+| Tick labels | Tick Labels tab | font, number format, divisor | ◐ | no rotation, prefix and suffix, text labels, minor labels; date labels follow a date X column automatically, not chosen in the dialog and no month or year steps | P0 |
 | Axis titles | Title tab | default from long name and units | ◐ | no `%(?X)` substitution, rotation, offset | P0 |
 | Opposite and central axes | top and right, axis at value | top and right line and ticks only | ◐ | no labels or titles there; no axis at zero | P0 |
 | Symmetric Y about zero | set by hand | automatic | ✓ | | P0 |
@@ -328,7 +328,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | each tool writes a new result sheet | ✗ | | P0 |
-| Column Properties dialog | Format dialog | name, long name, units, comments, plot as, number format | ◐ | no date, time, text types, width, Prev and Next | P0 |
+| Column Properties dialog | Format dialog | name, long name, units, comments, plot as, number format incl. date, time, date and time | ◐ | no text type, width, Prev and Next | P0 |
 | Context menus | header, cell, row, corner, graph objects | column header menu; graph menu | ◐ | no Fill, Mask, Normalize, Statistics entries; no cell, row, corner menus | P0 |
 | Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |
 

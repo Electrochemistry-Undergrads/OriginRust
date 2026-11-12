@@ -68,6 +68,11 @@ fn write_line(out: &mut dyn Write, fields: impl Iterator<Item = String>, delimit
 
 fn cell(col: &Column, row: usize, delimiter: char) -> String {
     match &col.data {
+        // Dates and times are written as shown in the worksheet, so another program reads them as dates.
+        ColumnData::Numeric(v) if col.format.is_date_time() => v
+            .get(row)
+            .filter(|x| x.is_finite())
+            .map_or_else(String::new, |x| quote_if_needed(&col.format.format(*x), delimiter)),
         ColumnData::Numeric(v) => v.get(row).map_or_else(String::new, |x| format_number(*x)),
         ColumnData::Text(v) => v.get(row).map_or_else(String::new, |s| quote_if_needed(s, delimiter)),
     }
@@ -184,6 +189,28 @@ mod tests {
                 _ => panic!("column kinds differ"),
             }
         }
+    }
+
+    #[test]
+    fn date_columns_are_written_as_shown_and_read_back_equal() {
+        use sheaf_core::datetime::{DatePattern, TimePattern};
+        use sheaf_core::format::NumberFormat;
+        let mut s = Worksheet::new("S");
+        let mut t = Column::new(
+            ColumnId(1),
+            "A",
+            Designation::X,
+            ColumnData::numeric(vec![2_461_355.573_032_407_6, f64::NAN, 2_461_356.0]),
+        );
+        t.format = NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hms);
+        let y = Column::new(ColumnId(2), "B", Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0]));
+        s.columns = vec![t, y];
+        let text = export(&s, &AsciiExportOptions::default());
+        assert_eq!(text, "2026-11-11 13:45:10,1\n,2\n2026-11-12 00:00:00,3\n");
+        let back = parse_ascii(&text, "S", &AsciiOptions::default()).unwrap().workbook;
+        let c = &back.sheets[0].columns[0];
+        assert_eq!(c.format, s.columns[0].format);
+        assert!((c.numeric().unwrap()[0] - 2_461_355.573_032_407_6).abs() < 1e-9);
     }
 
     #[test]

@@ -4,18 +4,22 @@
 //! parameter is held fixed) are written down in `docs/spec/fitting-linear.md` together with the
 //! Origin numbers they were checked against.
 //!
-//! Numerics: the straight line is solved from sums about the weighted means, which stays accurate
-//! when x is far from zero. A polynomial is solved by QR decomposition of the weighted design
-//! matrix built on a centred and scaled x, and the coefficients and their covariance are then
-//! converted back to powers of the original x.
+//! Numerics: the weighted design matrix is decomposed by QR, never through the normal equations.
+//! When every coefficient is free the basis is `u^k` with `u = (x - mean) / spread`, which stays
+//! accurate when x is far from zero (for example 100000 to 100010); the coefficients and their
+//! covariance are then converted to powers of the original x. When a coefficient is held fixed,
+//! the free powers of `x / max|x|` are used. Fitted values and the residual sum of squares are
+//! always evaluated in the basis that was solved, not from the converted coefficients, so the
+//! cancellation in the conversion does not reach them.
 
 use crate::dist::{f_upper_p, t_critical, t_two_sided_p};
-use crate::report::{
-    Anova, FitError, FitReport, FitStatus, Parameter, Statistics, Weighting,
-};
+use crate::report::{Anova, FitError, FitReport, FitStatus, Parameter, Statistics, Weighting};
 use nalgebra::{DMatrix, DVector};
 
 /// Options of [`fit_linear`]. The defaults are those of Origin's Linear Fit dialog.
+///
+/// Instrumental weighting carries the y-error values inside [`Weighting::Instrumental`], one per
+/// input row, so there is no separate error argument.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinearOptions {
     /// Hold the intercept at this value.
@@ -26,7 +30,8 @@ pub struct LinearOptions {
     /// Confidence level of the confidence limits.
     pub confidence_level: f64,
     /// Multiply the covariance by the reduced chi-square (the usual least-squares standard
-    /// errors). If false, the covariance is `(X'WX)^-1` as given by the weights alone.
+    /// errors; Origin's default). If false, the covariance is `(X'WX)^-1` from the weights alone,
+    /// which is only meaningful when the weights are true inverse variances.
     pub scale_errors_by_reduced_chi_sqr: bool,
 }
 
@@ -73,10 +78,7 @@ struct Points {
 
 fn collect_points(x: &[f64], y: &[f64], weighting: &Weighting) -> Result<Points, FitError> {
     if x.len() != y.len() {
-        return Err(FitError::LengthMismatch {
-            x: x.len(),
-            y: y.len(),
-        });
+        return Err(FitError::LengthMismatch { x: x.len(), y: y.len() });
     }
     let side: Option<&Vec<f64>> = match weighting {
         Weighting::Instrumental(v) | Weighting::Direct(v) => Some(v),
@@ -85,26 +87,31 @@ fn collect_points(x: &[f64], y: &[f64], weighting: &Weighting) -> Result<Points,
     if let Some(v) = side
         && v.len() != x.len()
     {
-        return Err(FitError::LengthMismatch {
-            x: x.len(),
-            y: v.len(),
-        });
+        return Err(FitError::LengthMismatch { x: x.len(), y: v.len() });
     }
-    let mut p = Points {
-        index: Vec::new(),
-        x: Vec::new(),
-        y: Vec::new(),
-        w: Vec::new(),
-    };
+    let mut p = Points { index: Vec::new(), x: Vec::new(), y: Vec::new(), w: Vec::new() };
     for i in 0..x.len() {
         let w = match weighting {
             Weighting::None => 1.0,
             Weighting::Instrumental(e) => 1.0 / (e[i] * e[i]),
-            Weighting::Statistical => 1.0 / y[i],
+            // Origin weights by 1 / |y| (checked with a negative y); a y of zero is refused.
+            Weighting::Statistical => 1.0 / y[i].abs(),
             Weighting::Direct(w) => w[i],
         };
-        if x[i].is_nan() || y[i].is_nan() || w.is_nan() || w.is_infinite() {
+        if x[i].is_nan() || y[i].is_nan() || w.is_nan() {
             continue;
+        }
+        if x[i].is_infinite() || y[i].is_infinite() {
+            return Err(FitError::Failed(
+                "x and y must be finite numbers (use a missing value to leave a point out)".to_string(),
+            ));
+        }
+        if w <= 0.0 || w.is_infinite() {
+            return Err(FitError::Failed(
+                "weights must be positive and finite (an error of zero or a statistical \
+                 weight from a y that is not positive cannot be used)"
+                    .to_string(),
+            ));
         }
         p.index.push(i);
         p.x.push(x[i]);
@@ -117,63 +124,33 @@ fn collect_points(x: &[f64], y: &[f64], weighting: &Weighting) -> Result<Points,
 /// Fit a straight line `y = Intercept + Slope * x`.
 pub fn fit_linear(x: &[f64], y: &[f64], opts: &LinearOptions) -> Result<FitReport, FitError> {
     let pts = collect_points(x, y, &opts.weighting)?;
-    let mut fixed: Vec<(usize, f64)> = Vec::new();
-    if let Some(a) = opts.fix_intercept {
-        fixed.push((0, a));
-    }
-    if let Some(b) = opts.fix_slope {
-        fixed.push((1, b));
-    }
-    let core = fit_core(
-        &pts,
-        1,
-        &fixed,
-        opts.scale_errors_by_reduced_chi_sqr,
-        opts.confidence_level,
-    )?;
-    let names = vec!["Intercept".to_string(), "Slope".to_string()];
+    let fixed = [opts.fix_intercept, opts.fix_slope];
+    let solved = solve(&pts, 1, &fixed, opts.scale_errors_by_reduced_chi_sqr)?;
     Ok(build_report(
         "Linear".to_string(),
-        "y = Intercept + B1*x".to_string(),
-        names,
+        "y = Intercept + Slope*x".to_string(),
+        vec!["Intercept".to_string(), "Slope".to_string()],
         &pts,
         x.len(),
-        core,
+        solved,
         opts.confidence_level,
         true,
     ))
 }
 
 /// Fit a polynomial `y = Intercept + B1*x + B2*x^2 + ...` of the given order (at least 1).
-pub fn fit_polynomial(
-    x: &[f64],
-    y: &[f64],
-    order: usize,
-    opts: &PolyOptions,
-) -> Result<FitReport, FitError> {
+pub fn fit_polynomial(x: &[f64], y: &[f64], order: usize, opts: &PolyOptions) -> Result<FitReport, FitError> {
     if order == 0 {
-        return Err(FitError::BadFunction(
-            "a polynomial needs order 1 or more".to_string(),
-        ));
+        return Err(FitError::BadFunction("a polynomial needs order 1 or more".to_string()));
     }
     let pts = collect_points(x, y, &opts.weighting)?;
-    let mut fixed = Vec::new();
-    if let Some(a) = opts.fix_intercept {
-        fixed.push((0, a));
-    }
-    let core = fit_core(
-        &pts,
-        order,
-        &fixed,
-        opts.scale_errors_by_reduced_chi_sqr,
-        opts.confidence_level,
-    )?;
+    let mut fixed = vec![None; order + 1];
+    fixed[0] = opts.fix_intercept;
+    let solved = solve(&pts, order, &fixed, opts.scale_errors_by_reduced_chi_sqr)?;
     let mut names = vec!["Intercept".to_string()];
-    for k in 1..=order {
-        names.push(format!("B{k}"));
-    }
     let mut eq = String::from("y = Intercept");
     for k in 1..=order {
+        names.push(format!("B{k}"));
         eq.push_str(&format!(" + B{k}*x^{k}"));
     }
     Ok(build_report(
@@ -182,239 +159,191 @@ pub fn fit_polynomial(
         names,
         &pts,
         x.len(),
-        core,
+        solved,
         opts.confidence_level,
         order == 1,
     ))
 }
 
-/// Result of the numerical part, before it is laid out as a report.
-struct Core {
-    /// All coefficients in powers of the original x, fixed ones included.
-    coef: Vec<f64>,
-    /// Covariance of all coefficients (fixed ones zero), row-major.
-    cov: Vec<f64>,
-    fixed: Vec<bool>,
-    dof: usize,
-    rss: f64,
-    /// Weighted total sum of squares about the weighted mean of y.
-    tss: f64,
-    /// Weighted sum of y squared.
-    uncorrected_tss: f64,
-    /// Pearson's r from the weighted sums, straight-line fits only.
-    pearson: f64,
+/// How the solved coefficients are turned back into curve values.
+enum Basis {
+    /// `y = sum c_j u^j` with `u = (x - centre) / spread`; every coefficient was free.
+    Centred { centre: f64, spread: f64, c: Vec<f64> },
+    /// `y = fixed part + sum c_j (x / scale)^k_j` over the free powers `k_j`.
+    Scaled { scale: f64, free: Vec<usize>, c: Vec<f64>, fixed: Vec<(usize, f64)> },
 }
 
-/// Weighted least squares of a polynomial of `order` with some coefficients held fixed.
-fn fit_core(
-    pts: &Points,
-    order: usize,
-    fixed: &[(usize, f64)],
-    scale: bool,
-    _level: f64,
-) -> Result<Core, FitError> {
+impl Basis {
+    fn eval(&self, x: f64) -> f64 {
+        match self {
+            Basis::Centred { centre, spread, c } => {
+                let u = (x - centre) / spread;
+                c.iter().rev().fold(0.0, |s, cj| s * u + cj)
+            }
+            Basis::Scaled { scale, free, c, fixed } => {
+                let t = x / scale;
+                let mut s: f64 = fixed.iter().map(|(k, v)| v * x.powi(*k as i32)).sum();
+                for (cj, k) in c.iter().zip(free) {
+                    s += cj * t.powi(*k as i32);
+                }
+                s
+            }
+        }
+    }
+}
+
+/// Result of the numerical part, before it is laid out as a report.
+struct Solved {
+    /// All coefficients in powers of the original x, fixed ones included.
+    coef: Vec<f64>,
+    /// Covariance of all coefficients (fixed ones zero), row-major, after the optional scaling.
+    cov: Vec<f64>,
+    fixed: Vec<bool>,
+    basis: Basis,
+    dof: usize,
+    /// Weighted residual sum of squares.
+    rss: f64,
+    /// Total sum of squares: about the weighted mean of y, or about zero when the intercept is
+    /// held fixed.
+    tss: f64,
+    /// Degrees of freedom of the total sum of squares.
+    total_df: usize,
+}
+
+/// Weighted least squares of a polynomial of `order`; `fixed[k]` holds coefficient k at a value.
+fn solve(pts: &Points, order: usize, fixed: &[Option<f64>], scale_by_chi: bool) -> Result<Solved, FitError> {
     let n = pts.x.len();
     let m = order + 1;
-    let free: Vec<usize> = (0..m).filter(|k| !fixed.iter().any(|f| f.0 == *k)).collect();
+    let free: Vec<usize> = (0..m).filter(|k| fixed[*k].is_none()).collect();
     let nfree = free.len();
-    if n < nfree || n == 0 {
-        return Err(FitError::TooFewPoints {
-            have: n,
-            need: nfree,
-        });
+    if nfree == 0 {
+        return Err(FitError::BadFunction("at least one parameter must be left free".to_string()));
+    }
+    if n < nfree {
+        return Err(FitError::TooFewPoints { have: n, need: nfree });
     }
     let dof = n - nfree;
-
-    // Weighted means for centring and the sums used by the statistics.
     let sw: f64 = pts.w.iter().sum();
-    let xm: f64 = pts.x.iter().zip(&pts.w).map(|(x, w)| x * w).sum::<f64>() / sw;
-    let ym: f64 = pts.y.iter().zip(&pts.w).map(|(y, w)| y * w).sum::<f64>() / sw;
-    let mut sxx = 0.0;
-    let mut sxy = 0.0;
-    let mut syy = 0.0;
-    let mut syy_raw = 0.0;
-    for i in 0..n {
-        let dx = pts.x[i] - xm;
-        let dy = pts.y[i] - ym;
-        sxx += pts.w[i] * dx * dx;
-        sxy += pts.w[i] * dx * dy;
-        syy += pts.w[i] * dy * dy;
-        syy_raw += pts.w[i] * pts.y[i] * pts.y[i];
-    }
-    let pearson = sxy / (sxx * syy).sqrt();
-
-    // Scale for the basis: u = (x - xm) / xs with xs the spread of x.
-    let xs = if sxx > 0.0 && sw > 0.0 {
-        (sxx / sw).sqrt()
-    } else {
-        1.0
-    };
-    let u: Vec<f64> = pts.x.iter().map(|x| (x - xm) / xs).collect();
-
-    // Coefficients in u: y = sum c_k u^k. Fixed coefficients in x are moved to the right side
-    // through the same transform, so the problem is solved in terms of the free x-coefficients.
-    // Columns: x^k = (xm + xs*u)^k expanded in u.
-    // t[k][j] = coefficient of u^j in x^k.
-    let mut t = DMatrix::<f64>::zeros(m, m);
-    for k in 0..m {
-        let mut binom = 1.0;
-        for j in 0..=k {
-            // C(k, j) * xm^(k-j) * xs^j
-            t[(k, j)] = binom * xm.powi((k - j) as i32) * xs.powi(j as i32);
-            binom = binom * (k - j) as f64 / (j + 1) as f64;
-        }
-    }
-    // Design matrix in the u basis columns j = 0..m; build the design in x^k terms via t:
-    // value of x^k at point i = sum_j t[k][j] u_i^j.
-    let mut basis = DMatrix::<f64>::zeros(n, m); // column k: x^k evaluated stably
-    for i in 0..n {
-        for k in 0..m {
-            let mut s = 0.0;
-            let mut up = 1.0;
-            for j in 0..=k {
-                s += t[(k, j)] * up;
-                up *= u[i];
-            }
-            basis[(i, k)] = s;
-        }
-    }
-    // The above equals x^k but is evaluated by Horner-free expansion; it is only used to pick
-    // the right-hand side offset of fixed terms. For the solve we use u-powers directly.
-    let _ = basis;
-
-    // Solve for the free coefficients in a basis of u-powers when no coefficient is fixed.
-    // With the intercept fixed (the only supported fixed coefficient of a polynomial) the
-    // problem becomes y - a0 = sum_{k>=1} B_k x^k, which has no constant term, so the basis is
-    // x^k scaled by a column norm instead of centred.
-    let all_free = fixed.is_empty();
     let sqrt_w: Vec<f64> = pts.w.iter().map(|w| w.sqrt()).collect();
+    let fixed_list: Vec<(usize, f64)> = (0..m).filter_map(|k| fixed[k].map(|v| (k, v))).collect();
 
-    let coef: Vec<f64>;
-    let mut cov_free: DMatrix<f64>;
-    let mut fixed_vals = vec![0.0; m];
-    for (k, v) in fixed {
-        fixed_vals[*k] = *v;
-    }
-
-    if all_free {
+    // Weighted mean of y, and (when every coefficient is free) of x.
+    let ym: f64 = pts.y.iter().zip(&pts.w).map(|(y, w)| y * w).sum::<f64>() / sw;
+    let (basis, coef, cov_unscaled) = if fixed_list.is_empty() {
+        let xm: f64 = pts.x.iter().zip(&pts.w).map(|(x, w)| x * w).sum::<f64>() / sw;
+        let sxx: f64 = pts.x.iter().zip(&pts.w).map(|(x, w)| w * (x - xm) * (x - xm)).sum();
+        let spread = if sxx > 0.0 { (sxx / sw).sqrt() } else { 1.0 };
         let mut a = DMatrix::<f64>::zeros(n, m);
         for i in 0..n {
+            let u = (pts.x[i] - xm) / spread;
             let mut up = 1.0;
             for j in 0..m {
                 a[(i, j)] = sqrt_w[i] * up;
-                up *= u[i];
+                up *= u;
             }
         }
         let b = DVector::from_iterator(n, (0..n).map(|i| sqrt_w[i] * pts.y[i]));
-        let (c, ctc_inv) = solve_ls(&a, &b)?;
-        // Convert from u-powers to x-powers: x-coefficient vector a_x, with u = (x - xm)/xs:
-        // sum_j c_j ((x - xm)/xs)^j = sum_k a_k x^k  =>  a_k = sum_{j>=k} c_j xs^-j C(j,k) (-xm)^(j-k)
-        let mut tr = DMatrix::<f64>::zeros(m, m);
+        let (c, cov_u) = solve_qr(&a, &b)?;
+        // Powers of u to powers of x: coefficient k of x is
+        // sum over j >= k of c_j * C(j, k) * (-centre)^(j-k) / spread^j.
+        let mut t = DMatrix::<f64>::zeros(m, m);
         for j in 0..m {
-            let mut binom = 1.0; // C(j, k) starting at k = 0
+            let mut binom = 1.0;
             for k in 0..=j {
-                tr[(k, j)] = binom * (-xm).powi((j - k) as i32) / xs.powi(j as i32);
+                t[(k, j)] = binom * (-xm).powi((j - k) as i32) / spread.powi(j as i32);
                 binom = binom * (j - k) as f64 / (k + 1) as f64;
             }
         }
-        coef = (&tr * &c).iter().copied().collect();
-        cov_free = &tr * ctc_inv * tr.transpose();
+        let coef: Vec<f64> = (&t * &c).iter().copied().collect();
+        let cov = &t * cov_u * t.transpose();
+        (Basis::Centred { centre: xm, spread, c: c.iter().copied().collect() }, coef, cov)
     } else {
-        // Intercept fixed: columns x^k for k in free, scaled by their norms.
-        let nf = free.len();
-        let mut a = DMatrix::<f64>::zeros(n, nf);
-        let mut scales = vec![1.0; nf];
-        for (col, &k) in free.iter().enumerate() {
-            // Use powers of x / xmax to keep the columns near unit size.
-            let xmax = pts.x.iter().fold(0.0_f64, |m, x| m.max(x.abs()));
-            let sc = if xmax > 0.0 { xmax.powi(k as i32) } else { 1.0 };
-            scales[col] = sc;
-            for i in 0..n {
-                a[(i, col)] = sqrt_w[i] * pts.x[i].powi(k as i32) / sc;
+        let xmax = pts.x.iter().fold(0.0_f64, |acc, x| acc.max(x.abs()));
+        let scale = if xmax > 0.0 { xmax } else { 1.0 };
+        let mut a = DMatrix::<f64>::zeros(n, nfree);
+        for i in 0..n {
+            let t = pts.x[i] / scale;
+            for (col, &k) in free.iter().enumerate() {
+                a[(i, col)] = sqrt_w[i] * t.powi(k as i32);
             }
         }
         let b = DVector::from_iterator(
             n,
             (0..n).map(|i| {
-                let mut r = pts.y[i];
-                for (k, v) in fixed {
-                    r -= v * pts.x[i].powi(*k as i32);
-                }
-                sqrt_w[i] * r
+                let off: f64 = fixed_list.iter().map(|(k, v)| v * pts.x[i].powi(*k as i32)).sum();
+                sqrt_w[i] * (pts.y[i] - off)
             }),
         );
-        let (c, ctc_inv) = solve_ls(&a, &b)?;
-        let mut full = fixed_vals.clone();
-        let mut cf = DMatrix::<f64>::zeros(m, m);
+        let (c, cov_c) = solve_qr(&a, &b)?;
+        let mut coef = vec![0.0; m];
+        let mut cov = DMatrix::<f64>::zeros(m, m);
         for (col, &k) in free.iter().enumerate() {
-            full[k] = c[col] / scales[col];
+            coef[k] = c[col] / scale.powi(k as i32);
             for (col2, &k2) in free.iter().enumerate() {
-                cf[(k, k2)] = ctc_inv[(col, col2)] / (scales[col] * scales[col2]);
+                cov[(k, k2)] = cov_c[(col, col2)] / (scale.powi(k as i32) * scale.powi(k2 as i32));
             }
         }
-        coef = full;
-        cov_free = cf;
-    }
+        for (k, v) in &fixed_list {
+            coef[*k] = *v;
+        }
+        (
+            Basis::Scaled { scale, free: free.clone(), c: c.iter().copied().collect(), fixed: fixed_list.clone() },
+            coef,
+            cov,
+        )
+    };
 
-    // Residuals and sums of squares, evaluated in the centred basis for accuracy.
     let mut rss = 0.0;
     for i in 0..n {
-        let r = pts.y[i] - eval_poly(&coef, pts.x[i], xm);
+        let r = pts.y[i] - basis.eval(pts.x[i]);
         rss += pts.w[i] * r * r;
     }
-    let _ = (syy_raw,);
-    let tss = syy;
 
-    // Scale the covariance by the reduced chi-square if asked.
-    if scale && dof > 0 {
-        cov_free *= rss / dof as f64;
+    // Origin measures the total about zero when the intercept is held fixed, and about the
+    // weighted mean otherwise.
+    let intercept_fixed = fixed[0].is_some();
+    let (tss, total_df) = if intercept_fixed {
+        let t: f64 = pts.y.iter().zip(&pts.w).map(|(y, w)| w * y * y).sum();
+        (t, n)
+    } else {
+        let t: f64 = pts.y.iter().zip(&pts.w).map(|(y, w)| w * (y - ym) * (y - ym)).sum();
+        (t, n - 1)
+    };
+
+    let mut cov = cov_unscaled;
+    if scale_by_chi {
+        cov *= if dof > 0 { rss / dof as f64 } else { f64::NAN };
     }
-    let fixed_flags: Vec<bool> = (0..m).map(|k| fixed.iter().any(|f| f.0 == k)).collect();
-    Ok(Core {
+    Ok(Solved {
         coef,
-        cov: cov_free.transpose().iter().copied().collect(),
-        fixed: fixed_flags,
+        cov: cov.transpose().iter().copied().collect(),
+        fixed: (0..m).map(|k| fixed[k].is_some()).collect(),
+        basis,
         dof,
         rss,
         tss,
-        uncorrected_tss: syy_raw,
-        pearson,
+        total_df,
     })
 }
 
-/// Value of the polynomial with the coefficients `coef` (powers of x) at `x`, evaluated about
-/// `xm` so cancellation stays small for x far from zero.
-fn eval_poly(coef: &[f64], x: f64, _xm: f64) -> f64 {
-    let mut s = 0.0;
-    for c in coef.iter().rev() {
-        s = s * x + c;
-    }
-    s
-}
-
 /// Least squares of `a * c = b` by QR; returns `c` and `(A'A)^-1`.
-fn solve_ls(a: &DMatrix<f64>, b: &DVector<f64>) -> Result<(DVector<f64>, DMatrix<f64>), FitError> {
-    let qr = a.clone().qr();
-    let q = qr.q();
-    let r = qr.r();
+fn solve_qr(a: &DMatrix<f64>, b: &DVector<f64>) -> Result<(DVector<f64>, DMatrix<f64>), FitError> {
+    let singular =
+        || FitError::Failed("the fit is singular: the x values do not determine all the coefficients".to_string());
     let k = a.ncols();
-    let qtb = q.transpose() * b;
+    let qr = a.clone().qr();
+    let r = qr.r();
     let rk = r.rows(0, k).into_owned();
-    let diag_min = (0..k).map(|i| rk[(i, i)].abs()).fold(f64::INFINITY, f64::min);
-    let diag_max = (0..k).map(|i| rk[(i, i)].abs()).fold(0.0, f64::max);
-    if diag_min <= diag_max * 1e-14 {
-        return Err(FitError::Failed(
-            "the fit is singular: the x values do not determine all the coefficients".to_string(),
-        ));
+    let diag: Vec<f64> = (0..k).map(|i| rk[(i, i)].abs()).collect();
+    let diag_min = diag.iter().copied().fold(f64::INFINITY, f64::min);
+    let diag_max = diag.iter().copied().fold(0.0, f64::max);
+    if diag_min.is_nan() || diag_min <= diag_max * 1e-13 {
+        return Err(singular());
     }
+    let qtb = qr.q().transpose() * b;
     let rhs = qtb.rows(0, k).into_owned();
-    let c = rk
-        .clone()
-        .solve_upper_triangular(&rhs)
-        .ok_or_else(|| FitError::Failed("singular matrix".to_string()))?;
-    let rinv = rk
-        .solve_upper_triangular(&DMatrix::identity(k, k))
-        .ok_or_else(|| FitError::Failed("singular matrix".to_string()))?;
+    let c = rk.clone().solve_upper_triangular(&rhs).ok_or_else(singular)?;
+    let rinv = rk.solve_upper_triangular(&DMatrix::identity(k, k)).ok_or_else(singular)?;
     let cov = &rinv * rinv.transpose();
     Ok((c, cov))
 }
@@ -426,17 +355,18 @@ fn build_report(
     names: Vec<String>,
     pts: &Points,
     n_input: usize,
-    core: Core,
+    solved: Solved,
     level: f64,
     straight_line: bool,
 ) -> FitReport {
     let m = names.len();
     let n = pts.x.len();
-    let tcrit = t_critical(level, core.dof);
+    let dof = solved.dof;
+    let tcrit = t_critical(level, dof);
     let params: Vec<Parameter> = (0..m)
         .map(|k| {
-            let value = core.coef[k];
-            if core.fixed[k] {
+            let value = solved.coef[k];
+            if solved.fixed[k] {
                 Parameter {
                     name: names[k].clone(),
                     value,
@@ -449,7 +379,8 @@ fn build_report(
                     dependency: f64::NAN,
                 }
             } else {
-                let se = core.cov[k * m + k].max(0.0).sqrt();
+                let var = solved.cov[k * m + k];
+                let se = if var.is_nan() { f64::NAN } else { var.max(0.0).sqrt() };
                 let t = value / se;
                 Parameter {
                     name: names[k].clone(),
@@ -457,7 +388,7 @@ fn build_report(
                     std_error: se,
                     fixed: false,
                     t_value: t,
-                    prob_t: t_two_sided_p(t, core.dof),
+                    prob_t: t_two_sided_p(t, dof),
                     lcl: value - tcrit * se,
                     ucl: value + tcrit * se,
                     dependency: f64::NAN,
@@ -466,35 +397,52 @@ fn build_report(
         })
         .collect();
 
-    let nfree = core.fixed.iter().filter(|f| !**f).count();
-    let rss = core.rss;
-    let reduced = rss / core.dof as f64;
-    let r2 = 1.0 - rss / core.tss;
-    let adj = 1.0 - reduced / (core.tss / (n as f64 - 1.0));
-    let model_df = nfree.saturating_sub(usize::from(!core.fixed[0]));
-    let model_ss = core.tss - rss;
-    let model_ms = model_ss / model_df.max(1) as f64;
-    let f = model_ms / reduced;
+    let rss = solved.rss;
+    let reduced = if dof > 0 { rss / dof as f64 } else { f64::NAN };
+    let r2 = 1.0 - rss / solved.tss;
+    let adj = 1.0 - reduced / (solved.tss / solved.total_df as f64);
+    let model_df = solved.total_df - dof;
+    let model_ss = solved.tss - rss;
+    let (model_ms, f, prob_f) = if model_df > 0 && dof > 0 {
+        let ms = model_ss / model_df as f64;
+        let f = ms / reduced;
+        (ms, f, f_upper_p(f, model_df, dof))
+    } else {
+        (f64::NAN, f64::NAN, f64::NAN)
+    };
     let anova = Anova {
         model_df,
         model_ss,
         model_ms,
-        error_df: core.dof,
+        error_df: dof,
         error_ss: rss,
         error_ms: reduced,
-        total_df: n - 1,
-        total_ss: core.tss,
-        uncorrected_total_ss: core.uncorrected_tss,
+        total_df: solved.total_df,
+        total_ss: solved.tss,
+        uncorrected_total_ss: f64::NAN,
         f_value: f,
-        prob_f: f_upper_p(f, model_df, core.dof),
+        prob_f,
     };
 
     let mut fitted = vec![f64::NAN; n_input];
     let mut residuals = vec![f64::NAN; n_input];
     for (j, &i) in pts.index.iter().enumerate() {
-        let fv = eval_poly(&core.coef, pts.x[j], 0.0);
+        let fv = solved.basis.eval(pts.x[j]);
         fitted[i] = fv;
         residuals[i] = pts.y[j] - fv;
+    }
+    // Pearson's r: the square root of R-square with the sign of the slope. For a free
+    // straight line this is the usual correlation coefficient; Origin reports the same
+    // definition when a parameter is held fixed.
+    let pearson_r = if straight_line {
+        let sign = if solved.coef[1] < 0.0 { -1.0 } else { 1.0 };
+        Some(sign * r2.sqrt())
+    } else {
+        None
+    };
+    let mut warnings = Vec::new();
+    if dof == 0 {
+        warnings.push("as many free parameters as points: the errors and probabilities are undefined".to_string());
     }
     FitReport {
         model,
@@ -502,24 +450,20 @@ fn build_report(
         params,
         stats: Statistics {
             n_points: n,
-            dof: core.dof,
+            dof,
             rss,
             reduced_chi_sqr: reduced,
             r_squared: r2,
             adj_r_squared: adj,
-            pearson_r: if straight_line {
-                Some(core.pearson)
-            } else {
-                None
-            },
+            pearson_r,
             iterations: None,
         },
         anova: Some(anova),
-        covariance: core.cov,
+        covariance: solved.cov,
         confidence_level: level,
         fitted,
         residuals,
         status: FitStatus::Exact,
-        warnings: Vec::new(),
+        warnings,
     }
 }

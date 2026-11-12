@@ -1,0 +1,252 @@
+// Reference run for linear and polynomial fits (docs/spec/fitting-linear.md).
+// Lines that contain only ### separate chunks; run-labtalk-chunks.ps1 executes each chunk
+// separately so that one failing command does not stop the rest.
+// Each chunk group makes a new workbook (Book1, Book2, ...) with data from a fixed formula and
+// then calls fitlr (straight line), fitpoly (polynomial) and/or the nonlinear fitter (nlbegin,
+// nlfit, nlend with the built-in Line, Poly4 functions), copying results into variables.
+// Book numbers: 1 noisy line, 2 line through the origin, 3 fixed intercept and slope,
+// 4 instrumental weights (error column C), 5 statistical weights, 6 missing values,
+// 7 x from 100000 to 100010, 8 noisy cubic fitted with orders 2 to 5, 9 exact line,
+// 10 order 9 on x from -1 to 1, 11 order 2 with the intercept fixed at 1.
+###
+newbook;
+col(A) = data(1,10,1); col(B) = 2 + 0.5*col(A) + 0.3*sin(3*col(A));
+###
+nlbegin iy:=(col(A),col(B)) func:=line nltree:=nlt; nlfit; nlend output:=1;
+double n1_ChiSqr = nlt.ChiSqr;
+double n1_SSR = nlt.SSR;
+double n1_COD = nlt.COD;
+double n1_r = nlt.r;
+double n1_Dof = nlt.Dof;
+double n1_FitStatus = nlt.FitStatus;
+###
+fitlr iy:=(1,2)  ;
+double c1_a = fitlr.a;
+double c1_b = fitlr.b;
+double c1_aerr = fitlr.aerr;
+double c1_berr = fitlr.berr;
+double c1_r = fitlr.r;
+double c1_pts = fitlr.pts;
+###
+fitpoly iy:=(1,2) polyorder:=1 coef:=cv err:=ev  ;
+double c1p_AdjRSq = fitpoly.AdjRSq;
+double c1p_RSqCOD = fitpoly.RSqCOD;
+double c1p_N = fitpoly.N;
+double c1p_c1 = cv[1]; double c1p_e1 = ev[1];
+double c1p_c2 = cv[2]; double c1p_e2 = ev[2];
+###
+newbook;
+col(A) = data(1,10,1); col(B) = 0.8*col(A) + 0.2*sin(2*col(A)+1);
+###
+fitlr iy:=(1,2) fixint:=1 intercept:=0 ;
+double c2_a = fitlr.a;
+double c2_b = fitlr.b;
+double c2_aerr = fitlr.aerr;
+double c2_berr = fitlr.berr;
+double c2_r = fitlr.r;
+double c2_pts = fitlr.pts;
+###
+fitpoly iy:=(1,2) polyorder:=1 coef:=cv err:=ev fixint:=1 intercept:=0 ;
+double c2p_AdjRSq = fitpoly.AdjRSq;
+double c2p_RSqCOD = fitpoly.RSqCOD;
+double c2p_N = fitpoly.N;
+double c2p_c1 = cv[1]; double c2p_e1 = ev[1];
+double c2p_c2 = cv[2]; double c2p_e2 = ev[2];
+###
+newbook;
+col(A) = data(1,10,1); col(B) = 2 + 0.5*col(A) + 0.3*sin(3*col(A));
+###
+fitlr iy:=(1,2) fixslope:=1 slope:=0.5 ;
+double c3_a = fitlr.a;
+double c3_b = fitlr.b;
+double c3_aerr = fitlr.aerr;
+double c3_berr = fitlr.berr;
+double c3_r = fitlr.r;
+double c3_pts = fitlr.pts;
+###
+fitlr iy:=(1,2) fixint:=1 intercept:=1.5 ;
+double c3b_a = fitlr.a;
+double c3b_b = fitlr.b;
+double c3b_aerr = fitlr.aerr;
+double c3b_berr = fitlr.berr;
+double c3b_r = fitlr.r;
+double c3b_pts = fitlr.pts;
+###
+fitpoly iy:=(1,2) polyorder:=1 coef:=cv err:=ev fixint:=1 intercept:=1.5 ;
+double c3p_AdjRSq = fitpoly.AdjRSq;
+double c3p_RSqCOD = fitpoly.RSqCOD;
+double c3p_N = fitpoly.N;
+double c3p_c1 = cv[1]; double c3p_e1 = ev[1];
+double c3p_c2 = cv[2]; double c3p_e2 = ev[2];
+###
+newbook;
+col(A) = data(1,10,1); col(B) = 2 + 0.5*col(A) + 0.3*sin(3*col(A)); col(C) = 0.1 + 0.05*col(A);
+###
+nlbegin iy:=(col(A),col(B),col(C)) weight:=ins func:=line nltree:=nlt; nlfit; nlend output:=1;
+double n4_ChiSqr = nlt.ChiSqr;
+double n4_SSR = nlt.SSR;
+double n4_COD = nlt.COD;
+double n4_r = nlt.r;
+double n4_Dof = nlt.Dof;
+double n4_FitStatus = nlt.FitStatus;
+###
+newbook;
+col(A) = data(1,10,1); col(B) = 2 + 0.5*col(A) + 0.3*sin(3*col(A));
+###
+nlbegin iy:=(col(A),col(B)) weight:=stat func:=line nltree:=nlt; nlfit; nlend output:=1;
+double n5_ChiSqr = nlt.ChiSqr;
+double n5_SSR = nlt.SSR;
+double n5_COD = nlt.COD;
+double n5_r = nlt.r;
+double n5_Dof = nlt.Dof;
+double n5_FitStatus = nlt.FitStatus;
+###
+newbook;
+col(A) = data(1,10,1); col(B) = 2 + 0.5*col(A) + 0.3*sin(3*col(A)); col(B)[4] = 0/0; col(A)[7] = 0/0;
+###
+nlbegin iy:=(col(A),col(B)) func:=line nltree:=nlt; nlfit; nlend output:=1;
+double n6_ChiSqr = nlt.ChiSqr;
+double n6_SSR = nlt.SSR;
+double n6_COD = nlt.COD;
+double n6_r = nlt.r;
+double n6_Dof = nlt.Dof;
+double n6_FitStatus = nlt.FitStatus;
+###
+fitlr iy:=(1,2)  ;
+double c6_a = fitlr.a;
+double c6_b = fitlr.b;
+double c6_aerr = fitlr.aerr;
+double c6_berr = fitlr.berr;
+double c6_r = fitlr.r;
+double c6_pts = fitlr.pts;
+###
+fitpoly iy:=(1,2) polyorder:=1 coef:=cv err:=ev  ;
+double c6p_AdjRSq = fitpoly.AdjRSq;
+double c6p_RSqCOD = fitpoly.RSqCOD;
+double c6p_N = fitpoly.N;
+double c6p_c1 = cv[1]; double c6p_e1 = ev[1];
+double c6p_c2 = cv[2]; double c6p_e2 = ev[2];
+###
+newbook;
+col(A) = 100000 + data(0,10,1); col(B) = 1 + 0.001*(col(A)-100000) + 0.002*sin(7*col(A));
+###
+fitlr iy:=(1,2)  ;
+double c7_a = fitlr.a;
+double c7_b = fitlr.b;
+double c7_aerr = fitlr.aerr;
+double c7_berr = fitlr.berr;
+double c7_r = fitlr.r;
+double c7_pts = fitlr.pts;
+###
+fitpoly iy:=(1,2) polyorder:=1 coef:=cv err:=ev  ;
+double c7p_AdjRSq = fitpoly.AdjRSq;
+double c7p_RSqCOD = fitpoly.RSqCOD;
+double c7p_N = fitpoly.N;
+double c7p_c1 = cv[1]; double c7p_e1 = ev[1];
+double c7p_c2 = cv[2]; double c7p_e2 = ev[2];
+###
+fitpoly iy:=(1,2) polyorder:=2 coef:=cv err:=ev  ;
+double c7q_AdjRSq = fitpoly.AdjRSq;
+double c7q_RSqCOD = fitpoly.RSqCOD;
+double c7q_N = fitpoly.N;
+double c7q_c1 = cv[1]; double c7q_e1 = ev[1];
+double c7q_c2 = cv[2]; double c7q_e2 = ev[2];
+double c7q_c3 = cv[3]; double c7q_e3 = ev[3];
+###
+newbook;
+col(A) = data(0,11,1); col(B) = 1 - 2*col(A) + 0.5*col(A)^2 + 0.1*col(A)^3 + 0.5*cos(5*col(A));
+###
+fitpoly iy:=(1,2) polyorder:=2 coef:=cv err:=ev  ;
+double c8p2_AdjRSq = fitpoly.AdjRSq;
+double c8p2_RSqCOD = fitpoly.RSqCOD;
+double c8p2_N = fitpoly.N;
+double c8p2_c1 = cv[1]; double c8p2_e1 = ev[1];
+double c8p2_c2 = cv[2]; double c8p2_e2 = ev[2];
+double c8p2_c3 = cv[3]; double c8p2_e3 = ev[3];
+###
+fitpoly iy:=(1,2) polyorder:=3 coef:=cv err:=ev  ;
+double c8p3_AdjRSq = fitpoly.AdjRSq;
+double c8p3_RSqCOD = fitpoly.RSqCOD;
+double c8p3_N = fitpoly.N;
+double c8p3_c1 = cv[1]; double c8p3_e1 = ev[1];
+double c8p3_c2 = cv[2]; double c8p3_e2 = ev[2];
+double c8p3_c3 = cv[3]; double c8p3_e3 = ev[3];
+double c8p3_c4 = cv[4]; double c8p3_e4 = ev[4];
+###
+fitpoly iy:=(1,2) polyorder:=4 coef:=cv err:=ev  ;
+double c8p4_AdjRSq = fitpoly.AdjRSq;
+double c8p4_RSqCOD = fitpoly.RSqCOD;
+double c8p4_N = fitpoly.N;
+double c8p4_c1 = cv[1]; double c8p4_e1 = ev[1];
+double c8p4_c2 = cv[2]; double c8p4_e2 = ev[2];
+double c8p4_c3 = cv[3]; double c8p4_e3 = ev[3];
+double c8p4_c4 = cv[4]; double c8p4_e4 = ev[4];
+double c8p4_c5 = cv[5]; double c8p4_e5 = ev[5];
+###
+nlbegin iy:=(col(A),col(B)) func:=poly4 nltree:=nlt; nlfit; nlend output:=1;
+double n8p4_ChiSqr = nlt.ChiSqr;
+double n8p4_SSR = nlt.SSR;
+double n8p4_COD = nlt.COD;
+double n8p4_r = nlt.r;
+double n8p4_Dof = nlt.Dof;
+double n8p4_FitStatus = nlt.FitStatus;
+###
+fitpoly iy:=(1,2) polyorder:=5 coef:=cv err:=ev  ;
+double c8p5_AdjRSq = fitpoly.AdjRSq;
+double c8p5_RSqCOD = fitpoly.RSqCOD;
+double c8p5_N = fitpoly.N;
+double c8p5_c1 = cv[1]; double c8p5_e1 = ev[1];
+double c8p5_c2 = cv[2]; double c8p5_e2 = ev[2];
+double c8p5_c3 = cv[3]; double c8p5_e3 = ev[3];
+double c8p5_c4 = cv[4]; double c8p5_e4 = ev[4];
+double c8p5_c5 = cv[5]; double c8p5_e5 = ev[5];
+double c8p5_c6 = cv[6]; double c8p5_e6 = ev[6];
+###
+###
+newbook;
+col(A) = data(1,8,1); col(B) = 3 + 2*col(A);
+###
+fitlr iy:=(1,2)  ;
+double c9_a = fitlr.a;
+double c9_b = fitlr.b;
+double c9_aerr = fitlr.aerr;
+double c9_berr = fitlr.berr;
+double c9_r = fitlr.r;
+double c9_pts = fitlr.pts;
+###
+nlbegin iy:=(col(A),col(B)) func:=line nltree:=nlt; nlfit; nlend output:=1;
+double n9_ChiSqr = nlt.ChiSqr;
+double n9_SSR = nlt.SSR;
+double n9_COD = nlt.COD;
+double n9_r = nlt.r;
+double n9_Dof = nlt.Dof;
+double n9_FitStatus = nlt.FitStatus;
+###
+newbook;
+col(A) = data(-1,1,0.1); col(B) = exp(col(A)) + 0.01*cos(11*col(A));
+###
+fitpoly iy:=(1,2) polyorder:=9 coef:=cv err:=ev  ;
+double c10p_AdjRSq = fitpoly.AdjRSq;
+double c10p_RSqCOD = fitpoly.RSqCOD;
+double c10p_N = fitpoly.N;
+double c10p_c1 = cv[1]; double c10p_e1 = ev[1];
+double c10p_c2 = cv[2]; double c10p_e2 = ev[2];
+double c10p_c3 = cv[3]; double c10p_e3 = ev[3];
+double c10p_c4 = cv[4]; double c10p_e4 = ev[4];
+double c10p_c5 = cv[5]; double c10p_e5 = ev[5];
+double c10p_c6 = cv[6]; double c10p_e6 = ev[6];
+double c10p_c7 = cv[7]; double c10p_e7 = ev[7];
+double c10p_c8 = cv[8]; double c10p_e8 = ev[8];
+double c10p_c9 = cv[9]; double c10p_e9 = ev[9];
+double c10p_c10 = cv[10]; double c10p_e10 = ev[10];
+###
+newbook;
+col(A) = data(0,11,1); col(B) = 1 - 2*col(A) + 0.5*col(A)^2 + 0.1*col(A)^3 + 0.5*cos(5*col(A));
+###
+fitpoly iy:=(1,2) polyorder:=2 coef:=cv err:=ev fixint:=1 intercept:=1 ;
+double c11p_AdjRSq = fitpoly.AdjRSq;
+double c11p_RSqCOD = fitpoly.RSqCOD;
+double c11p_N = fitpoly.N;
+double c11p_c1 = cv[1]; double c11p_e1 = ev[1];
+double c11p_c2 = cv[2]; double c11p_e2 = ev[2];
+double c11p_c3 = cv[3]; double c11p_e3 = ev[3];

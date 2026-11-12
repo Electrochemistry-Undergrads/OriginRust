@@ -347,9 +347,19 @@ fn exponential_guess(x: &[f64], y: &[f64], decay: bool) -> (f64, f64, f64) {
 
 /// Level of x where y crosses the middle between its smallest and largest value.
 fn x_at_half(x: &[f64], y: &[f64]) -> f64 {
+    x_at_fraction(x, y, 0.5)
+}
+
+/// Level of x where y first crosses `lo + fraction * (hi - lo)`, with `lo` and `hi` the smallest and
+/// largest y; the middle of the x range if it never does.
+fn x_at_fraction(x: &[f64], y: &[f64], fraction: f64) -> f64 {
     let (x, y) = sorted(x, y);
     let (lo, hi) = min_max(&y);
-    let mid = 0.5 * (lo + hi);
+    x_at_level(&x, &y, lo + fraction * (hi - lo))
+}
+
+/// Level of x where the (x-sorted) curve first crosses the y level `mid`.
+fn x_at_level(x: &[f64], y: &[f64], mid: f64) -> f64 {
     for i in 1..x.len() {
         let (a, b) = (y[i - 1] - mid, y[i] - mid);
         if a == 0.0 {
@@ -362,6 +372,35 @@ fn x_at_half(x: &[f64], y: &[f64]) -> f64 {
     0.5 * (x[0] + x[x.len() - 1])
 }
 
+/// Width in x between the 25 % and 75 % levels of a sigmoid (positive); zero if it is not defined.
+fn quartile_width(x: &[f64], y: &[f64]) -> f64 {
+    (x_at_fraction(x, y, 0.75) - x_at_fraction(x, y, 0.25)).abs()
+}
+
+/// Steepness `k` of a logistic curve `1 / (1 + exp(-k (x - xc)))` from the width between its
+/// quarter and three-quarter levels (which is `2 ln 3 / k`), positive when y rises with x.
+fn logistic_k(x: &[f64], y: &[f64]) -> f64 {
+    let w = quartile_width(x, y);
+    let (_, ys) = sorted(x, y);
+    let k = if w > 0.0 { 2.0 * 3f64.ln() / w } else { 1.0 };
+    if ys[0] > ys[ys.len() - 1] { -k } else { k }
+}
+
+/// Starting values of `V x / (K + x)`: the straight line of `1/y` against `1/x` (Lineweaver-Burk),
+/// kept only if it gives a positive `V` and `K`; otherwise the largest y and the half-way x.
+fn hyperbola_guess(x: &[f64], y: &[f64]) -> (f64, f64) {
+    let (ix, iy): (Vec<f64>, Vec<f64>) =
+        x.iter().zip(y).filter(|(a, b)| **a > 0.0 && **b > 0.0).map(|(a, b)| (1.0 / a, 1.0 / b)).unzip();
+    if ix.len() >= 2 {
+        let (c, m) = line_fit(&ix, &iy);
+        if c > 0.0 && m > 0.0 && c.is_finite() && m.is_finite() {
+            return (1.0 / c, m / c);
+        }
+    }
+    let (_, hi) = min_max(y);
+    (hi, x_at_half(x, y).abs().max(1e-300))
+}
+
 /// Smallest and largest-x end levels: `(low-x end, high-x end)` of y, taken as the extreme values
 /// in the direction of the overall trend.
 fn sigmoid_levels(x: &[f64], y: &[f64]) -> (f64, f64) {
@@ -370,6 +409,15 @@ fn sigmoid_levels(x: &[f64], y: &[f64]) -> (f64, f64) {
     let (lo, hi) = min_max(&y);
     let _ = x;
     if y[0] > y[n - 1] { (hi, lo) } else { (lo, hi) }
+}
+
+/// Coefficients (ascending powers, `degree + 1` of them) of a least-squares polynomial, or the
+/// lower-order fit padded with zeros when there are too few points.
+fn poly_guess(x: &[f64], y: &[f64], degree: usize) -> Vec<f64> {
+    let d = degree.min(x.len().saturating_sub(1));
+    let mut c = poly_fit(x, y, d);
+    c.resize(degree + 1, 0.0);
+    c
 }
 
 fn init_for(name: &str) -> Option<InitFn> {
@@ -493,6 +541,137 @@ fn init_for(name: &str) -> Option<InitFn> {
             vec![lo, hi, x_at_half(x, y), 1.0]
         }),
         "Sine" => Arc::new(sine_guess),
+        "Poly4" => Arc::new(|x, y| poly_guess(x, y, 4)),
+        "Poly5" => Arc::new(|x, y| poly_guess(x, y, 5)),
+        "Constant" => Arc::new(|_, y| vec![y.iter().sum::<f64>() / y.len().max(1) as f64]),
+        "LineMod" => Arc::new(|x, y| {
+            // y = a (x - b): slope a and the x where the line crosses zero.
+            let (c0, c1) = line_fit(x, y);
+            if c1 != 0.0 && c1.is_finite() { vec![c1, -c0 / c1] } else { vec![0.0, 0.0] }
+        }),
+        "Power1" => Arc::new(|x, y| {
+            // y = A |x - xc|^P with xc starting at zero.
+            let (lx, ly): (Vec<f64>, Vec<f64>) =
+                x.iter().zip(y).filter(|(a, b)| **a > 0.0 && **b > 0.0).map(|(a, b)| (a.ln(), b.ln())).unzip();
+            if lx.len() < 2 {
+                return vec![0.0, 1.0, 1.0];
+            }
+            let (a, b) = line_fit(&lx, &ly);
+            vec![0.0, a.exp(), b]
+        }),
+        "PearsonVII" => Arc::new(|x, y| {
+            let g = peak_guess(x, y);
+            vec![g.baseline, g.xc, g.area, g.fwhm, 1.5]
+        }),
+        "PsdVoigt2" => Arc::new(|x, y| {
+            let g = peak_guess(x, y);
+            vec![g.baseline, g.xc, g.area, g.fwhm, g.fwhm, 0.5]
+        }),
+        "Asym2Sig" => Arc::new(|x, y| {
+            let g = peak_guess(x, y);
+            vec![g.baseline, g.xc, g.height, 0.6 * g.fwhm, 0.15 * g.fwhm, 0.15 * g.fwhm]
+        }),
+        "AsymmetricGaussian" => Arc::new(|x, y| {
+            let g = peak_guess(x, y);
+            let w = g.fwhm / 2.354_820_045;
+            vec![g.baseline, g.xc, w, w, g.height]
+        }),
+        "Logistpk" => Arc::new(|x, y| {
+            // Peak value A at xc; the full width at half height is 3.5255 w.
+            let g = peak_guess(x, y);
+            vec![g.baseline, g.xc, g.fwhm / 3.525_494, g.height]
+        }),
+        "LogNormal" => Arc::new(|x, y| {
+            // The mode is xc exp(-w^2) and the relative width about 2.355 w.
+            let g = peak_guess(x, y);
+            let w = if g.xc > 0.0 { (g.fwhm / (2.354_820_045 * g.xc)).clamp(0.01, 2.0) } else { 0.3 };
+            vec![g.baseline, g.xc.abs().max(1e-300) * (w * w).exp(), w, g.area]
+        }),
+        "ExpDecay1" => Arc::new(|x, y| {
+            // y0, x0, A1, t1; x0 and A1 are interchangeable, so x0 starts at zero.
+            let (y0, a, m) = exponential_guess(x, y, true);
+            vec![y0, 0.0, a, -1.0 / m]
+        }),
+        "ExpDecay2" => Arc::new(|x, y| {
+            let (y0, a, m) = exponential_guess(x, y, true);
+            let t = -1.0 / m;
+            vec![y0, 0.0, a / 2.0, 0.9 * t, a / 2.0, 1.1 * t]
+        }),
+        "ExpDecay3" => Arc::new(|x, y| {
+            let (y0, a, m) = exponential_guess(x, y, true);
+            let t = -1.0 / m;
+            vec![y0, 0.0, a / 3.0, 0.8 * t, a / 3.0, t, a / 3.0, 1.2 * t]
+        }),
+        "ExpGro2" => Arc::new(|x, y| {
+            let (y0, a, m) = exponential_guess(x, y, false);
+            let t = 1.0 / m;
+            vec![y0, a / 2.0, 0.9 * t, a / 2.0, 1.1 * t]
+        }),
+        "ExpGrow2" => Arc::new(|x, y| {
+            let (y0, a, m) = exponential_guess(x, y, false);
+            let t = 1.0 / m;
+            vec![y0, 0.0, a / 2.0, 0.9 * t, a / 2.0, 1.1 * t]
+        }),
+        "Asymptotic2" => Arc::new(|x, y| {
+            // y = a - b exp(-k x)
+            let (y0, a, m) = exponential_guess(x, y, true);
+            vec![y0, -a, -m]
+        }),
+        "BoxLucas1" => Arc::new(|x, y| {
+            // y = a (1 - exp(-b x)): the plateau and the rate of the approach to it.
+            let (y0, _, m) = exponential_guess(x, y, true);
+            vec![y0, -m]
+        }),
+        "Exp2P" => Arc::new(|x, y| {
+            // y = a b^x: a straight line through ln y.
+            let (xs, ls): (Vec<f64>, Vec<f64>) =
+                x.iter().zip(y).filter(|(_, b)| **b > 0.0).map(|(a, b)| (*a, b.ln())).unzip();
+            if xs.len() < 2 {
+                return vec![1.0, 1.0];
+            }
+            let (c0, c1) = line_fit(&xs, &ls);
+            vec![c0.exp(), c1.exp()]
+        }),
+        "SLogistic1" => Arc::new(|x, y| {
+            let (_, hi) = min_max(y);
+            vec![hi, x_at_half(x, y), logistic_k(x, y)]
+        }),
+        "SLogistic4" => Arc::new(|x, y| {
+            // y = b + (a - b) / (1 + exp(-k (x - xc))): b is the level at small x, a at large x.
+            let (b, a) = sigmoid_levels(x, y);
+            vec![a, b, x_at_half(x, y), logistic_k(x, y).abs()]
+        }),
+        "SGompertz" => Arc::new(|x, y| {
+            // y = a exp(-exp(-k (x - xc))): a straight line through ln(-ln(y / a)) against x.
+            let (_, hi) = min_max(y);
+            let a = hi * 1.02;
+            let (xs, ys) = sorted(x, y);
+            let xc = x_at_level(&xs, &ys, a / std::f64::consts::E);
+            let (px, pz): (Vec<f64>, Vec<f64>) = xs
+                .iter()
+                .zip(&ys)
+                .filter(|(_, v)| **v > 0.05 * a && **v < 0.95 * a)
+                .map(|(u, v)| (*u, (-(v / a).ln()).ln()))
+                .unzip();
+            let k = if px.len() >= 2 { -line_fit(&px, &pz).1 } else { 1.0 };
+            vec![a, xc, if k > 0.0 && k.is_finite() { k } else { 1.0 }]
+        }),
+        "Hill1" => Arc::new(|x, y| {
+            // START + (END - START) x^n / (k^n + x^n); n from the ratio of the 75 % and 25 % levels.
+            let (start, end) = sigmoid_levels(x, y);
+            let (x25, x75) = (x_at_fraction(x, y, 0.25), x_at_fraction(x, y, 0.75));
+            let n = if x25 > 0.0 && x75 > x25 { (9f64.ln() / (x75 / x25).ln()).clamp(0.2, 20.0) } else { 1.0 };
+            vec![start, end, x_at_half(x, y).abs().max(1e-300), n]
+        }),
+        "MichaelisMenten" | "OneSiteBind" | "Hyperbl" => Arc::new(|x, y| {
+            let (v, k) = hyperbola_guess(x, y);
+            vec![v, k]
+        }),
+        "RectHyperbola" => Arc::new(|x, y| {
+            // y = a b x / (1 + b x): a is the plateau and 1/b the half-saturation x.
+            let (v, k) = hyperbola_guess(x, y);
+            vec![v, 1.0 / k]
+        }),
         _ => return None,
     };
     Some(f)

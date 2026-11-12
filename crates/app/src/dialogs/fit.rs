@@ -9,8 +9,8 @@
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::RowRange;
 use sheaf_core::fitting::{
-    FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, ParamSetting, builtin_functions,
-    model_parameters,
+    BandChoice, FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, ParamSetting,
+    builtin_functions, model_parameters,
 };
 use sheaf_core::{ColumnId, Designation, Document, Project, WindowId};
 use std::path::PathBuf;
@@ -130,6 +130,12 @@ pub struct FitDialog {
     weighting: FitWeighting,
     has_error_column: bool,
     confidence: f64,
+    bands: BandChoice,
+    /// Confidence level of the bands, in percent.
+    band_level: f64,
+    max_iterations: usize,
+    /// The tolerance is 10^-digits (Origin's default 1e-9 is 9 digits).
+    tolerance_digits: u32,
     row_mode: RowMode,
     rows_in_sheet: usize,
     from: usize,
@@ -185,6 +191,10 @@ impl FitDialog {
             weighting: FitWeighting::None,
             has_error_column: false,
             confidence: 95.0,
+            bands: BandChoice::None,
+            band_level: 95.0,
+            max_iterations: 400,
+            tolerance_digits: 9,
             row_mode: RowMode::All,
             rows_in_sheet,
             from: 1,
@@ -286,6 +296,10 @@ impl FitDialog {
             .collect();
         r.weighting = self.weighting;
         r.confidence_level = self.confidence / 100.0;
+        r.bands = self.bands;
+        r.band_level = self.band_level / 100.0;
+        r.max_iterations = self.max_iterations;
+        r.tolerance = 10f64.powi(-(self.tolerance_digits as i32));
         r.rows = match self.row_mode {
             RowMode::All => RowRange::All,
             RowMode::Rows => RowRange::Rows(self.from, self.to),
@@ -517,6 +531,26 @@ impl FitDialog {
                     ui.add(DragValue::new(&mut self.confidence).range(50.0..=99.99).speed(0.1).suffix(" %"));
                 });
                 ui.horizontal(|ui| {
+                    ui.label("Bands");
+                    ui.radio_value(&mut self.bands, BandChoice::None, "No bands");
+                    ui.radio_value(&mut self.bands, BandChoice::Confidence, "Confidence bands");
+                    ui.radio_value(&mut self.bands, BandChoice::Prediction, "Prediction bands");
+                    ui.radio_value(&mut self.bands, BandChoice::Both, "Confidence and prediction");
+                });
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(self.bands != BandChoice::None, |ui| {
+                        ui.label("Band confidence level");
+                        ui.add(DragValue::new(&mut self.band_level).range(50.0..=99.99).speed(0.1).suffix(" %"));
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Maximum iterations");
+                    ui.add(DragValue::new(&mut self.max_iterations).range(1..=100_000).speed(1.0));
+                    ui.label("Tolerance 1e-");
+                    ui.add(DragValue::new(&mut self.tolerance_digits).range(3..=15))
+                        .on_hover_text("Nonlinear fits only; a straight line or polynomial is solved directly.");
+                });
+                ui.horizontal(|ui| {
                     ui.label("Rows");
                     ui.radio_value(&mut self.row_mode, RowMode::All, "All");
                     ui.radio_value(&mut self.row_mode, RowMode::Rows, "From row");
@@ -643,6 +677,13 @@ mod tests {
         assert_eq!(r.params[0].lower, Some(0.1));
         assert!(r.params[0].initial.is_none());
         assert_eq!(r.confidence_level, 0.95);
+        assert_eq!((r.bands, r.band_level, r.max_iterations, r.tolerance), (BandChoice::None, 0.95, 400, 1e-9));
+        d.bands = BandChoice::Both;
+        d.band_level = 90.0;
+        d.max_iterations = 50;
+        d.tolerance_digits = 12;
+        let r = d.request().unwrap();
+        assert_eq!((r.bands, r.band_level, r.max_iterations, r.tolerance), (BandChoice::Both, 0.9, 50, 1e-12));
 
         // Switching to a straight line keeps only fixed values.
         let (p, book, y) = project();

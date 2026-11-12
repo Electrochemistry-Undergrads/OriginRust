@@ -215,3 +215,45 @@ fn params_without_formula_is_refused() {
     assert!(!ok);
     assert!(stderr.contains("--formula"), "{stderr}");
 }
+
+#[test]
+fn bands_are_listed_drawn_and_checked() {
+    let dir = scratch("bands");
+    let data = data_file(&dir);
+    let d = data.to_str().unwrap();
+    let figure = dir.join("bands.svg");
+    let (ok, stdout, stderr) =
+        sheaf(&["fit", d, "--y", "noisy", "--bands", "both", "--level", "90", "--plot", figure.to_str().unwrap()]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Bands at 90% confidence level"), "{stdout}");
+    assert!(stdout.contains("upper prediction limit") && stdout.contains("lower confidence limit"), "{stdout}");
+    let svg = std::fs::read_to_string(&figure).unwrap();
+    assert!(svg.contains("upper confidence limit"), "the bands are in the legend");
+
+    let (ok, stdout, _) = sheaf(&["fit", d, "--y", "noisy", "--bands", "prediction"]);
+    assert!(ok);
+    assert!(stdout.contains("95%") && stdout.contains("prediction limit") && !stdout.contains("confidence limit"));
+    let (ok, stdout, _) = sheaf(&["fit", d, "--y", "noisy"]);
+    assert!(ok && !stdout.contains("Bands at"));
+
+    for level in ["0", "100", "-5"] {
+        let (ok, _, stderr) = sheaf(&["fit", d, "--bands", "both", &format!("--level={level}")]);
+        assert!(!ok && stderr.contains("--level"), "{level}: {stderr}");
+    }
+}
+
+#[test]
+fn iteration_controls_are_passed_on_and_checked() {
+    let dir = scratch("iterations");
+    let data = data_file(&dir);
+    let d = data.to_str().unwrap();
+    let (ok, stdout, stderr) =
+        sheaf(&["fit", d, "--y", "decay", "-m", "ExpDec1", "--max-iterations", "300", "--tolerance", "1e-12"]);
+    assert!(ok, "stderr: {stderr}");
+    let t1: f64 = row(&stdout, "t1")[1].parse().unwrap();
+    assert!((t1 - 4.0).abs() < 1e-5, "{stdout}");
+    let (ok, _, stderr) = sheaf(&["fit", d, "--y", "decay", "-m", "ExpDec1", "--max-iterations", "0"]);
+    assert!(!ok && stderr.contains("--max-iterations"), "{stderr}");
+    let (ok, _, stderr) = sheaf(&["fit", d, "--y", "decay", "-m", "ExpDec1", "--tolerance", "0"]);
+    assert!(!ok && stderr.contains("--tolerance"), "{stderr}");
+}

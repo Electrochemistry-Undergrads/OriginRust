@@ -1,44 +1,49 @@
 # Handoff
 
-Last updated: 2026-11-11, about 21:10, by the Claude Code session `originrust-3a` (the fourth
-session, resumed after its usage limit). A fifth session in Claude Desktop ("Sonnet subagents from
-ORIGIN_RUST_PROMPT") did the work from 17:30 to 18:40 and then stopped; the owner asked this
-session to continue. Only one session should work on the repository at a time.
+Last updated: 2026-11-11, about 23:30, by the Claude Code session `originrust-3a` (the lead). Only
+one session should work on the repository at a time.
+
+## The owner's new requests (2026-11-11, evening)
+
+1. The desktop app should **look and work like Origin** (OriginPro 2016), so the owner's skills
+   carry over: same window arrangement, menu names and order, dialogs, right-click menus,
+   double-click actions and shortcuts. Icons, artwork and help text stay our own (clean-room rule).
+2. Sheaf should have **all of Origin's features**, and this must be checked, not assumed.
+3. **`.opj` is to be the default project format** (Save, Save As, `--save`, export). Agreed
+   safeguard: while the writer cannot store everything (graphs at first), saving also writes a
+   `.sheaf` copy next to the `.opj` and says what only the copy holds.
+
+These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11-11").
 
 ## Where things stand
 
 - **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed; CI runs on push.
-- **Milestones 1 to 3 are done** and tagged `m1-foundations`, `m2-first-slice`, `m3-analysis`.
-  Milestone 2 still needs the owner for two checks (a hands-on try of the app, real CH Instruments
-  files).
-- **Milestone 4 (fitting) is on `main`**: linear and polynomial fits, the nonlinear engine, 206
-  built-in functions, user formulas, `.FDF` import, `Project::fit`, `sheaf fit` and the app's Fit
-  window. Each part was reviewed on its branch. Still owed: the milestone review of the merged
-  whole, then the tag `m4-fitting`.
-- **Milestone 5 (Origin projects)**: the reader for workbooks is on `main`. On the branch
-  `worktree-wf_7107af90-7f2-7` (worktree `.claude/worktrees/wf_7107af90-7f2-7`): the cell-by-cell
-  comparison with Origin (the owner's five projects match exactly) and reading of basic graphs. Its
-  review found that workbooks of pre-9 projects are also read as bogus graphs; an agent is fixing
-  that now (workflow "opj-review-fixes"), then the branch is merged.
+- **Milestones 1 to 3 are done** and tagged. Milestone 2 still needs the owner for two checks.
+- **Milestone 4 (fitting)** is on `main`; its review found 11 confirmed problems (the worst: the
+  starting values of the `Gaussian` function were in the wrong order). Workflow
+  `m4-review-fixes` (run `wf_2d162dcb-b82`) fixes 10 of them in worktrees
+  `.claude/worktrees/wf_2d162dcb-b82-{1,2,3}`; the roadmap wording (the 11th) is fixed on `main`.
+  After merging: tag `m4-fitting`.
+- **Milestone 5**: workbooks and basic graphs are read from `.opj` and merged (`d3c3a3f`). Origin's
+  text escapes `\f:`, `\p`, `\x`, `\v` are now understood in labels. Known gaps: 34 of 41 graphs of
+  the owner's "Integration of Delithiation SF data" project are missed; XRD curves that Origin
+  draws offset are drawn on top of each other (plot offsets are not read).
+- **Running** (workflow `parity-gui-opj`, run `wf_c5d04af1-669`): a feature parity audit (its
+  text is returned, to be written to `docs/spec/feature-parity.md`), a study of Origin's interface
+  (branch with `docs/spec/gui-look.md` and ADR 0007), and a first `.opj` writer for workbooks
+  verified in Origin (branch, then review).
 
-All checks pass on `main` at `cf81d6b`: `cargo fmt --check`, `cargo clippy --workspace
---all-targets -- -D warnings`, `cargo test --workspace`.
-
-Checked by hand in this session: `sheaf fit peak.csv -m Gauss --plot` on a synthetic peak gives the
-built-in parameters back and a correct figure; screenshots of the Fit, Smooth and Interpolate
-windows look right; a new click test picks the FFT filter in the Smooth window and checks its result.
+All checks pass on `main` at `fdf2c61`.
 
 ## Exact next step
 
-1. When the OPJ fix and its review finish: merge `worktree-wf_7107af90-7f2-7` into `main`, run the
-   full checks, push, tick milestone 5's first two items.
-2. Independent review of milestone 4 (fitting) on `main`; fix the confirmed findings; tag
+1. Merge the three `m4-review-fixes` branches after reading their reviews; full checks; tag
    `m4-fitting`.
-3. Then milestone 6 by the owner's priorities: column and bar charts with text labels (ICP-OES),
-   stacked and offset plots and multi-panel layouts (XRD), error bars, double Y, log scales.
-4. Clean up: remove merged worktrees and branches (`git worktree remove`, `git branch -d`); the
-   three `wf_7107af90-7f2-*` worktrees are marked locked by a stopped workflow, so
-   `git worktree unlock` them first.
+2. Write `docs/spec/feature-parity.md` from the audit; merge the GUI study and the `.opj` writer.
+3. Make `.opj` the default format (with the `.sheaf` copy safeguard), then graph writing.
+4. Rebuild the app shell in Origin's style following ADR 0007, step by step with click tests.
+5. Then the gaps from the parity audit in its order (column and bar charts with text labels,
+   offset and stacked plots, multi-panel, double Y, log scales are P0 for the owner).
 
 ## Open questions noted by the agents (no answer needed to continue)
 

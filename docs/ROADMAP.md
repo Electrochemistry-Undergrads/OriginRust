@@ -93,6 +93,28 @@ publication figures), P1 is common Origin use, P2 is later.
       plot offsets, legend frames
 - [ ] (Later, if needed) `.opju`
 
+## Owner's requests of 2026-11-11 (they come before milestone 6)
+
+The owner asked for three things: the desktop app should look and work like Origin so their skills
+carry over; Sheaf should have all of Origin's features (checked, not assumed); and `.opj` should be
+the default project format.
+
+- [ ] Feature parity audit: every feature, menu item, toolbar button, dialog and shortcut of Origin
+      2016 compared with Sheaf's code; result in `docs/spec/feature-parity.md` with the order of
+      work
+- [ ] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
+      design record `docs/adr/0007-origin-style-workspace.md`
+- [ ] Origin-style workspace: child windows inside the main window instead of tabs, Project
+      Explorer, menus that follow the active window type with Origin's names and order, toolbars
+      and the Tools bar (our own icons), right-click menus and double-click actions as in Origin
+- [ ] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
+      verified by opening the files in Origin 2016 and comparing every cell
+- [ ] Write `.opj`: graphs
+- [ ] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
+      everything a project holds (graphs at first), saving also writes a `.sheaf` copy next to the
+      `.opj` and says what only the copy holds; the copy is dropped once nothing would be lost
+- [ ] Close the gaps from the parity audit in its order of work
+
 ## Milestone 6: breadth
 
 - [ ] More 2D graph types: column and bar, area, error bars, double-Y, multi-panel, log and

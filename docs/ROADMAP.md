@@ -94,10 +94,12 @@ publication figures), P1 is common Origin use, P2 is later.
       Origin cell by cell; `tools/origin-ref/opj-compare-cells.py`)
 - [x] Read basic graphs: page, layers, axes, titles and text, line, scatter and column plots with
       error bars (checked on graphs built in Origin 2016 and the owner's projects; graphs of files
-      older than Origin 9 are read but not verified; the reader finds 7 of the 41 graphs Origin
-      lists in one owner project: windows without axis blocks are missed)
-- [ ] Graphs the reader misses (34 of 41 in "Integration of Delithiation SF data"), plot groups,
-      plot offsets, legend frames
+      older than Origin 9 are read but not verified)
+- [x] The graphs Origin lists that the reader does not read, explained: in the owner's projects
+      only sparkline previews, which are not graph windows (opj-format.md 10.0, checked with
+      Origin's own window list on 14 projects); stacked-curve offsets and double-Y layers are read
+      (`8a3de72`)
+- [ ] Plot groups, legend frames, panel links
 - [ ] (Later, if needed) `.opju`
 
 ## Owner's requests of 2026-11-11 (they come before milestone 6)

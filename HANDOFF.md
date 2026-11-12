@@ -1,7 +1,16 @@
 # Handoff
 
-Last updated: 2026-11-12, about 17:00, by the lead Claude Code session. Only one session should
-merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lead).
+Last updated: 2026-11-12, about 16:00, by session 05b367c2 ("Sonnet subagents from
+ORIGIN_RUST_PROMPT"). The owner asked this session to finish the open work while the session
+`originrust-3a` had made no change since 14:23, so this session now merges to `main` and edits this
+file, docs/ROADMAP.md and docs/LESSONS.md. If `originrust-3a` resumes, read
+`re-workspace/scratch/peer-notes.md` first; only one session should merge at a time.
+
+**Merged at about 16:00:** branch `opj-graph-read` (`e46863f`): the `.opj` reader keeps the offsets
+of stacked curves (the owner's XRD graphs now draw apart, as in Origin), reads the second layer of a
+double-Y graph as a linked layer, and the `\(nnn)` text escape works. The "34 of 41 graphs missed"
+in "Integration of Delithiation SF data" are sparkline previews, not graph windows: the file holds
+7 graphs and all are read (opj-format.md 10.0).
 
 ## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
 
@@ -58,10 +67,9 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    converged" (the fit engine needs single steps); no per-plot left/right Y axis choice in the
    app (the CLI has it); many menu items are greyed because the feature is missing.
 3. **`.opj` files**: saving does not yet write double-Y, stack offsets, panels, bar spacing, area
-   plots, tick number formats or window places (the companion keeps them); the reader misses 34 of
-   41 graphs of "Integration of Delithiation SF data", does not read plot groups, legend frames or
-   plot offsets (XRD curves drawn offset in Origin come in on top of each other); `.opju` is not
-   supported.
+   plots, tick number formats or window places (the companion keeps them); the reader does not
+   read plot groups, legend frames, panel links or sparklines (the small previews in a sheet's
+   sparkline row, which Origin lists as graphs); `.opju` is not supported.
 4. **Breadth (milestone 6)**: reciprocal and other scales, stacked/fill area, pie, box,
    histogram plot type, bubble, polar, ternary; matrices, contour plots and heatmaps (nothing yet);
    statistics beyond t-tests, one-way ANOVA, frequency counts and normality (two-way ANOVA,

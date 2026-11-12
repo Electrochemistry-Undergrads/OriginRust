@@ -297,9 +297,9 @@ Cross-cutting findings:
 | Plot groups and increments | Group tab | colour only | ◐ | no line or symbol increments, modes | P0 |
 | Colour palettes | Q01 to Q08, S, D lists | editable list of 9 | ◐ | not Origin's decoded default list; no named lists | P0 |
 | Legend | Legend object | corners or manual, font, frame | ◐ | no substitution syntax, update modes, multi-column, drag | P0 |
-| Text objects and escapes | text tool, escapes | `markup.rs` renders many escapes | ◐ | cannot create or edit free text labels in app or CLI; several escapes unsupported | P0 |
+| Text objects and escapes | text tool, escapes | `markup.rs` renders many escapes | ◐ | free text labels can be added (Text tool, Graph > Add Text..., `--label`), edited (double click) and dragged; no colour, font or attachment choice; several escapes unsupported | P0 |
 | Fonts | Format > Font | per axis and legend | ◐ | no underline, no default-font setting | P0 |
-| Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label | ◐ | objects cannot be dragged or resized; no text or drawing tools | P0 |
+| Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label | ◐ | only text labels can be dragged; nothing can be resized; no drawing tools | P0 |
 | Plot Details dialog | tree, Apply, OK, Cancel | Plot Details in Origin's layout: a tree at the left (graph, layers, plots), tabs for what is chosen, OK, Cancel, Apply; the axis dialog has the same buttons | ◐ | no Worksheet button; the Group tab has no increments; some tabs are grey (layer Background); Special Ticks and Breaks of the axis dialog are grey | P0 |
 | Grids | Grids tab | major and minor with style | ◐ | no opposite grid or zero line | P1 |
 | Axis breaks | Breaks tab | none | ✗ | | P1 |

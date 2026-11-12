@@ -2,7 +2,7 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, LabelRow, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, LabelRow, SheetOp};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
@@ -10,6 +10,7 @@ use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::set_values::SetValuesDialog;
+use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
 use crate::menus::{self, MenuContext, WindowKind};
@@ -82,6 +83,7 @@ pub struct SheafApp {
     import: Option<ImportDialog>,
     graph_props: Option<GraphPropsDialog>,
     column_props: Option<ColumnPropsDialog>,
+    text_dialog: Option<TextDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -133,6 +135,7 @@ impl SheafApp {
             import: None,
             graph_props: None,
             column_props: None,
+            text_dialog: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -743,13 +746,37 @@ impl SheafApp {
             Action::ActivateLayer { graph, layer } => {
                 self.graphs.entry(graph).or_default().active_layer = layer;
             }
-            Action::GraphTool { graph, reader } => {
+            Action::GraphTool { graph, tool } => {
                 let state = self.graphs.entry(graph).or_default();
-                state.reader = reader;
+                state.reader = tool == GraphTool::Reader;
+                state.text_tool = tool == GraphTool::Text;
                 state.reader_point = None;
-                if reader {
-                    self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends");
+                match tool {
+                    GraphTool::Reader => {
+                        self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends")
+                    }
+                    GraphTool::Text => self.say("Text: click where the text goes; Esc ends"),
+                    GraphTool::Pointer => {}
                 }
+            }
+            Action::AddText { graph, layer, at } => {
+                let state = self.graphs.entry(graph).or_default();
+                state.text_tool = false;
+                let layer = layer.unwrap_or(state.active_layer);
+                self.text_dialog = TextDialog::new_label(&self.doc, graph, layer, at.unwrap_or((0.5, 0.5)));
+            }
+            Action::EditText { graph, layer, label } => {
+                self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label);
+            }
+            Action::MoveLabel { graph, layer, label, x, y } => {
+                self.doc.apply("Move text", |p| {
+                    if let Some(l) =
+                        p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.labels.get_mut(label))
+                    {
+                        l.x = x;
+                        l.y = y;
+                    }
+                });
             }
             Action::CopyPage(graph) => self.copy_page(graph, ctx),
             Action::StartIntegrate { graph } => self.start_integrate(graph),
@@ -1173,7 +1200,7 @@ impl SheafApp {
             open: self.open_menu.as_deref(),
             panels: self.panels.shown_flags(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
-            reader: graph.and_then(|g| self.graphs.get(&g)).is_some_and(|s| s.reader),
+            tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
         }
     }
 
@@ -1332,6 +1359,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.column_props = None;
+        }
+        if let Some(d) = &mut self.text_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.text_dialog = None;
         }
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)
@@ -1583,6 +1615,17 @@ impl SheafApp {
                         let state = self.graphs.entry(id).or_default();
                         state.reader = true;
                         state.reader_point = Some(crate::reader::Point { layer: 0, plot: 0, row: 2 });
+                    }
+                }
+                // text:N opens the Text window of the N-th label (from 1) of the first graph's
+                // first layer and selects it.
+                "text" => {
+                    if let (Some(id), Ok(n)) = (first_graph, arg.parse::<usize>()) {
+                        let label = n.saturating_sub(1);
+                        self.text_dialog = TextDialog::edit(&self.doc, id, 0, label);
+                        self.graphs.entry(id).or_default().selected =
+                            Some((0, sheaf_plot::scene::ObjectKind::Label(label)));
+                        self.focus(id);
                     }
                 }
                 "integrate" => {

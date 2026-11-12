@@ -2906,3 +2906,106 @@ fn the_data_reader_pins_a_point_and_steps_through_the_rows() {
     settle(&mut h);
     assert!(!graph_ui(&h).reader);
 }
+
+// ----- free text labels ---------------------------------------------------------------------
+
+fn labels<'a>(h: &'a Harness<'static, SheafApp>) -> &'a [sheaf_core::graph::TextLabel] {
+    &graph(h).layers[0].labels
+}
+
+/// Types into the text box of the Text window (it has the keyboard when the window opens).
+fn type_into_text_window(h: &mut Harness<'static, SheafApp>, text: &str, replace: bool) {
+    if replace {
+        h.event(egui::Event::Key {
+            key: egui::Key::A,
+            physical_key: Some(egui::Key::A),
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        });
+        h.step();
+    }
+    h.event(egui::Event::Text(text.to_string()));
+    settle(h);
+}
+
+#[test]
+fn add_text_places_a_label_and_double_click_edits_it_each_change_one_undo_step() {
+    let mut h = start(vec![data_file("addtext")]);
+    assert!(labels(&h).is_empty());
+    menu(&mut h, "Graph", "Add Text...");
+    assert!(h.state().text_dialog.is_some(), "the Text window opened");
+    type_into_text_window(&mut h, r"\b(Zn-LMO)", false);
+    click(&mut h, "OK");
+    assert!(h.state().text_dialog.is_none());
+    assert_eq!(labels(&h).len(), 1);
+    assert_eq!(labels(&h)[0].text, r"\b(Zn-LMO)");
+    assert_eq!((labels(&h)[0].x, labels(&h)[0].y), (0.5, 0.5), "the middle of the layer");
+    assert_eq!(h.state().doc.undo_label(), Some("Add text"));
+
+    // A double click opens it; a changed text, size and rotation are one step.
+    let at = on(&h, 0, ObjectKind::Label(0));
+    double_click_at(&mut h, at);
+    assert!(h.state().text_dialog.is_some(), "double click opens the Text window");
+    type_into_text_window(&mut h, "Peak 311", true);
+    click(&mut h, "OK");
+    assert_eq!(labels(&h).len(), 1);
+    assert_eq!(labels(&h)[0].text, "Peak 311");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit text"));
+    menu(&mut h, "Edit", "Undo Edit text");
+    assert_eq!(labels(&h)[0].text, r"\b(Zn-LMO)");
+    menu(&mut h, "Edit", "Undo Add text");
+    assert!(labels(&h).is_empty());
+}
+
+#[test]
+fn an_empty_text_or_cancel_adds_no_label() {
+    let mut h = start(vec![data_file("emptytext")]);
+    menu(&mut h, "Graph", "Add Text...");
+    click(&mut h, "OK");
+    assert!(h.state().text_dialog.is_none());
+    assert!(labels(&h).is_empty());
+    menu(&mut h, "Graph", "Add Text...");
+    type_into_text_window(&mut h, "x", false);
+    click(&mut h, "Cancel");
+    assert!(labels(&h).is_empty());
+    assert!(!h.state().doc.dirty || h.state().doc.undo_label() != Some("Add text"));
+}
+
+#[test]
+fn the_text_tool_places_a_label_where_the_page_is_clicked() {
+    let mut h = start(vec![data_file("texttool")]);
+    bar_button!(h, "Tools", "Text").click();
+    settle(&mut h);
+    assert!(graph_ui(&h).text_tool, "the tool is on");
+    let frame = sheaf_plot::layout_geometry(project(&h), graph(&h).id).unwrap()[0].frame;
+    // A quarter of the way across and down the frame.
+    let at = graph_ui(&h).page_point(frame.x + frame.w * 0.25, frame.y + frame.h * 0.75).unwrap();
+    click_at(&mut h, at);
+    assert!(h.state().text_dialog.is_some(), "the click opened the Text window");
+    assert!(!graph_ui(&h).text_tool, "the tool ends after one label");
+    type_into_text_window(&mut h, "After Delithiation", false);
+    click(&mut h, "OK");
+    let l = &labels(&h)[0];
+    assert_eq!(l.text, "After Delithiation");
+    assert!((l.x - 0.25).abs() < 0.01 && (l.y - 0.75).abs() < 0.01, "{} {}", l.x, l.y);
+}
+
+#[test]
+fn a_label_is_dragged_to_a_new_place_in_one_undo_step() {
+    let mut h = start(vec![data_file("dragtext")]);
+    menu(&mut h, "Graph", "Add Text...");
+    type_into_text_window(&mut h, "Zn-LMO", false);
+    click(&mut h, "OK");
+    let before = (labels(&h)[0].x, labels(&h)[0].y);
+    let at = on(&h, 0, ObjectKind::Label(0));
+    click_at(&mut h, at);
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Label(0))));
+    drag(&mut h, at, at + egui::vec2(60.0, -40.0));
+    let after = (labels(&h)[0].x, labels(&h)[0].y);
+    assert!(after.0 > before.0 && after.1 < before.1, "{before:?} -> {after:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Move text"));
+    assert!(h.state().text_dialog.is_none(), "a drag is not a double click");
+    menu(&mut h, "Edit", "Undo Move text");
+    assert_eq!((labels(&h)[0].x, labels(&h)[0].y), before);
+}

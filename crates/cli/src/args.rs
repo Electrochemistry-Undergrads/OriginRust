@@ -401,6 +401,12 @@ pub struct StyleArgs {
     /// --bar-overlap=-20).
     #[arg(long, value_name = "PCT", allow_hyphen_values = true)]
     pub bar_overlap: Option<f64>,
+    /// Add a free text label to the first layer: "TEXT@X,Y", where X and Y are fractions of the
+    /// layer frame (0,0 is its top left corner, 1,1 its bottom right; the label's text starts
+    /// there). The text may use Origin's escapes, for example --label "\b(Zn-LMO)@0.85,0.1".
+    /// Repeat the option for more labels.
+    #[arg(long, value_name = "TEXT@X,Y")]
+    pub label: Vec<String>,
 }
 
 #[derive(Args, Debug)]

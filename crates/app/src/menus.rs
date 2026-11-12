@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -110,6 +110,15 @@ pub enum Cmd {
     Pointer,
     /// The Data Reader tool of the Tools toolbar.
     DataReader,
+    /// The Text tool of the Tools toolbar.
+    TextTool,
+    /// Add Text...: a new text label in the active layer.
+    AddText,
+    /// Properties of a text label (its text window).
+    EditText {
+        layer: usize,
+        label: usize,
+    },
     /// Edit > Copy Page: the graph as a picture on the clipboard.
     CopyPage,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
@@ -184,8 +193,8 @@ pub struct MenuContext<'a> {
     pub panels: [bool; 4],
     /// The active layer of the active graph (0 when there is none).
     pub layer: usize,
-    /// True while the active graph's Data Reader is on (the Tools toolbar shows it pressed).
-    pub reader: bool,
+    /// The active graph's tool (the Tools toolbar shows it pressed).
+    pub tool: crate::actions::GraphTool,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -916,6 +925,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("Add Error Bars..."),
         grey("Add Function Graph..."),
         grey("Add Straight Line..."),
+        item("Add Text...", Cmd::AddText),
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
         grey("Merge Graph Windows..."),
         sep(),
@@ -1336,7 +1346,7 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
         grey("Bring to the front"),
         grey("Push to the back"),
         sep(),
-        grey("Properties..."),
+        item("Properties...", Cmd::EditText { layer, label }),
     ]
 }
 
@@ -1366,7 +1376,7 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
 /// The menu of the page outside the plots and axes, or of the inside of a layer.
 pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
     vec![
-        grey("Add Text..."),
+        item("Add Text...", Cmd::AddText),
         grey("Layer Management..."),
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
         grey("Add Shortcut to Favorites"),
@@ -1661,8 +1671,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SelectPlot { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot }
         }
         Cmd::GoTo(id) => Action::Focus(*id),
-        Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, reader: false },
-        Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, reader: true },
+        Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
+        Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
+        Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
+        Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
+        Cmd::EditText { layer, label } => {
+            Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
+        }
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
@@ -1991,7 +2006,7 @@ mod tests {
             open: None,
             panels: [true; 4],
             layer: 0,
-            reader: false,
+            tool: Default::default(),
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

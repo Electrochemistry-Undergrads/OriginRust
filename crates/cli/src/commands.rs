@@ -2,7 +2,7 @@
 
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
-use sheaf_core::graph::{Graph, LineStyle, PlotKind, Stack, TickDirection, TickLabelSource};
+use sheaf_core::graph::{Graph, LineStyle, PlotKind, Stack, TextLabel, TickDirection, TickLabelSource};
 use sheaf_core::panels::{MAX_PANELS, PanelLayout, PanelOrder};
 use sheaf_core::project::Window;
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
@@ -449,6 +449,7 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_pane
     require_range("--x-label-angle", s.x_label_angle, -90.0, 90.0)?;
     require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
+    let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
     // The layers the options act on, in legend order, and the panels among them.
@@ -529,7 +530,30 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_pane
             layer.plot_offset_mut(column).y = *y;
         }
     }
+    if let Some(layer) = g.layers.first_mut() {
+        for (text, x, y) in labels {
+            let font = layer.new_label_font();
+            layer.labels.push(TextLabel::new(text, x, y, font));
+        }
+    }
     Ok(())
+}
+
+/// Reads one `--label` value, "TEXT@X,Y": the text up to the last `@`, then two fractions of the
+/// layer frame.
+fn parse_label(value: &str) -> Result<(String, f64, f64)> {
+    let usage = "--label must look like \"TEXT@X,Y\", with X and Y fractions of the layer frame (0,0 is the top left corner), for example \"Zn-LMO@0.85,0.1\"";
+    let Some((text, at)) = value.rsplit_once('@') else {
+        bail!("--label \"{value}\": there is no @ before the position; {usage}");
+    };
+    if text.is_empty() {
+        bail!("--label \"{value}\": the text is empty; {usage}");
+    }
+    let number = |s: &str| s.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    let Some((x, y)) = at.split_once(',').and_then(|(x, y)| Some((number(x)?, number(y)?))) else {
+        bail!("--label \"{value}\": the position \"{at}\" is not two numbers X,Y; {usage}");
+    };
+    Ok((text.to_string(), x, y))
 }
 
 /// Fails with a clear message unless `value` (when given) is a number from `lo` to `hi`.

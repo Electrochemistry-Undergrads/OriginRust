@@ -386,12 +386,34 @@ seen are `0x1F`/`0x5F` for graph layers, `0x5E`/`0x7E` for workbook sheets and `
   blocks has the bit set (the reader's graph count for the five owner projects is the same before
   and after: 26, 1, 7, 8 and 17).
 
-What the rule does not do: it does not find every graph. Origin lists graph windows that the
-reader does not read, mostly because their layers have no axis blocks (39 windows of the 9.x files
-have the bit and no axis blocks). Examples by name in the files above: `FitLine`, `ResIndp`, `Radar`
-and many windows called `sparkline...`. Why the reader misses each of them was not looked into. That
-gap was there before and is unchanged. The bit's meaning ("this layer is a graph layer") is inferred from the correlation above;
-no second source states it [inf].
+What the rule does not find, and why (looked into on 2026-11-12: Origin 2016's own list of each
+project through `tools/origin-ref/opj-list-windows.ps1`, compared with a block-by-block walk of the
+same files; 14 projects with Origin's list, the five owner projects and nine samples, 531 windows):
+
+- **Graphs that are not windows in the file.** Most graphs Origin lists that the reader does not
+  read have no window record at all: 453 of the 658 graphs Origin listed in those 14 projects. Their
+  names are `sparkline`, `sparkline1`, ..., `FitLine...`, `ResIndp...`, `ResidualA`, `ANOVA3Way...`
+  and similar. Origin builds them when it opens the project, from data kept inside workbook sheets
+  and analysis reports. In the owner's project "Integration of Delithiation SF data" the file has
+  41 windows, 34 workbooks and 7 graphs, and the reader reads all 7. The other 34 graphs Origin lists
+  are the sparklines of the six workbooks whose sheets show a sparkline row, one per column (5, 5, 5,
+  5, 7 and 7). Such a workbook's first layer annotation (`__LayerInfoStora`) holds a block 2 of
+  8 to 12 KB that starts with `@${[0|5|_Storage_Ebdded_pages_Data_|...`; in other workbooks that
+  block is a stub of a few bytes. The payload is escaped and probably compressed. It is not plain
+  zlib or deflate, and it was not decoded [obs for the location, inf for the content]. A sparkline
+  is a small preview of one column inside the sheet, not a figure the owner made, so the reader
+  leaves these out on purpose. The other four owner projects have no such gap: the reader's graph
+  count equals Origin's (26, 1, 8 and 17).
+- **Windows with the bit but no axis blocks** (39 windows in all the files seen): 37 are OpenGL 3D
+  graphs (an annotation named `__O3DGL`, flag byte `0x5F`), 1 is a radar plot (`Radar`), and 1
+  (`Graph1U` of the sample "2D and Contour Graphs") has no axis blocks in its first layer but has
+  them in layers 2 to 4. None is in the owner's projects. A rule that needs only the bit would
+  find all of them, and no workbook or matrix: over the 531 windows, the bit is set on exactly the
+  205 windows Origin lists as graphs. But the reader has nothing to draw for 3D or radar layers, so
+  the rule keeps the axis-block test.
+
+The bit's meaning ("this layer is a graph layer") is inferred from the correlation above; no second
+source states it [inf].
 
 ### 10.1 Window header (graphs)
 

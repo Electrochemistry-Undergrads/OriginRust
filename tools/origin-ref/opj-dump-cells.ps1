@@ -39,7 +39,8 @@
 param(
   [Parameter(Mandatory = $true)][string]$Project,
   [Parameter(Mandatory = $true)][string]$Out,
-  [switch]$CopyFirst
+  [switch]$CopyFirst,
+  [int]$AllRowsLimit = 0
 )
 $ErrorActionPreference = 'Stop'
 $inv = [Globalization.CultureInfo]::InvariantCulture
@@ -60,6 +61,7 @@ function IsMissing($v) {
 }
 
 function SampleRows([int]$used) {
+  if ($used -gt 0 -and $used -le $AllRowsLimit) { return 0..($used - 1) }
   $rows = New-Object 'System.Collections.Generic.SortedSet[int]'
   for ($r = 0; $r -lt [Math]::Min(3, $used); $r++) { [void]$rows.Add($r) }
   for ($r = [Math]::Max(0, $used - 3); $r -lt $used; $r++) { [void]$rows.Add($r) }
@@ -87,11 +89,17 @@ $w.NewLine = "`n"
 try {
   $origin = New-Object -ComObject Origin.Application
   # The COM collections (WorksheetPages, Pages) stay empty after Load in a hidden instance, so the
-  # structure is read with LabTalk (results come back through LTStr and LTVar) and the cell data
-  # with GetWorksheet, which returns a whole sheet as a two-dimensional array.
+  # structure and the cells are read with LabTalk (results come back through LTStr and LTVar).
+  # GetWorksheet answered only for some sheets (it returned an error number for the others).
   function Lt([string]$script) { [void]$origin.Execute($script) }
   function LtS([string]$script, [string]$var) { Lt $script; return [string]$origin.LTStr($var) }
   function LtN([string]$script, [string]$var) { Lt $script; return [double]$origin.LTVar($var) }
+  # Text of a cell as Origin shows it; $null when Origin refuses (row past the column's data).
+  function CellText([int]$r, [int]$c) {
+    $okc = $origin.Execute("string cs`$ = cell($r, $c)`$;")
+    if (-not $okc) { return $null }
+    return [string]$origin.LTStr('cs$')
+  }
   $ok = $origin.Load($opened, $true)
   $w.WriteLine("# project: loaded=$ok")
   $nb = [int](LtN 'double nb = 0; doc -e W { nb++; }' 'nb')
@@ -124,15 +132,29 @@ try {
           $type = [int](LtN "double ty = wks.col$c1.type;" 'ty')
           $role = $LabTalkTypes[$type]
           if ($null -eq $role) { $role = "Type$type" }
-          # Used rows: walk up from the bottom to the last cell that holds a number or text.
-          Lt ("double us = 0; double uv = 0; string ut`$ = `"`"; for (us = $rowsStored; us > 0; us--) { uv = cell(us, $c1); if (uv != NANUM) { break; } ut`$ = cell(us, $c1)`$; if (ut`$ != `"`" && ut`$ != `"--`") { break; } }")
+          # Used rows: the last cell that holds a number or text. cell(r,c)$ makes the script fail
+          # for rows past the end of a column's data, so numbers are scanned first (they need no
+          # text), then the text length is found by bisection and scanned for text below it.
+          Lt ("double us = 0; for (us = $rowsStored; us > 0; us--) { if (cell(us, $c1) != NANUM) { break; } }")
           $used = [int]$origin.LTVar('us')
+          if ($null -ne (CellText 1 $c1)) {
+            $lo = 1; $hi = $rowsStored
+            while ($lo -lt $hi) {
+              $mid = [int][Math]::Ceiling(($lo + $hi) / 2)
+              if ($null -ne (CellText $mid $c1)) { $lo = $mid } else { $hi = $mid - 1 }
+            }
+            for ($r = $lo; $r -gt $used; $r--) {
+              $t = CellText $r $c1
+              if ($t -ne '' -and $t -ne '--') { $used = $r; break }
+            }
+          }
           $w.WriteLine("COL`t$i`t" + (Esc $short) + "`t" + (Esc $lname) + "`t" + (Esc $units) + "`t" + (Esc $comm) + "`t$role`t$used")
           foreach ($r in (SampleRows $used)) {
             $r1 = $r + 1
-            Lt "double cv = cell($r1, $c1); string cs`$ = cell($r1, $c1)`$;"
+            Lt "double cv = cell($r1, $c1);"
             $v = [double]$origin.LTVar('cv')
-            $t = [string]$origin.LTStr('cs$')
+            $t = ''
+            if (IsMissing $v) { $t = CellText $r1 $c1 }
             if (-not (IsMissing $v)) { $w.WriteLine("CELL`t$i`t$r`tN`t" + $v.ToString('R', $inv)) }
             elseif ($t.Length -gt 0 -and $t -ne '--') { $w.WriteLine("CELL`t$i`t$r`tT`t" + (Esc $t)) }
             else { $w.WriteLine("CELL`t$i`t$r`tM`t") }

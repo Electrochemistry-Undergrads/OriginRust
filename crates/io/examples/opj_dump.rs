@@ -1,7 +1,7 @@
 //! Prints the structure of an Origin project file: workbooks, sheets and columns with
 //! short name, long name, units, comments, role, type, row count and the first values.
 //!
-//! Usage: `cargo run -p sheaf-io --example opj_dump -- <file.opj> [--values N] [--summary] [--cells]`
+//! Usage: `cargo run -p sheaf-io --example opj_dump -- <file.opj> [--values N] [--summary] [--cells] [--all-rows LIMIT]`
 //!
 //! With `--cells` it prints instead a tab-separated listing in the same format that
 //! `tools/origin-ref/opj-dump-cells.ps1` writes for Origin itself, so the two can be compared
@@ -17,7 +17,8 @@
 //! Row and column indices start at 0. "Used rows" is the position of the last cell that is not
 //! missing, plus one. The sampled rows are the first three, the last three and twenty spread
 //! evenly over the used rows. In text, backslash, tab, line feed and carriage return are written
-//! as a backslash followed by `\`, `t`, `n` or `r`. Numbers print with the shortest text that
+//! as a backslash followed by `\`, `t`, `n` or `r`. With `--all-rows LIMIT`, every row of a
+//! column with at most LIMIT used rows is listed instead of the sample. Numbers print with the shortest text that
 //! reads back as the same double.
 
 use sheaf_core::column::ColumnData;
@@ -29,12 +30,14 @@ fn main() {
     let mut values = 3usize;
     let mut summary = false;
     let mut cells = false;
+    let mut all_rows = 0usize;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--values" => values = args.next().and_then(|n| n.parse().ok()).unwrap_or(3),
             "--summary" => summary = true,
             "--cells" => cells = true,
+            "--all-rows" => all_rows = args.next().and_then(|n| n.parse().ok()).unwrap_or(0),
             _ => path = Some(a),
         }
     }
@@ -51,7 +54,7 @@ fn main() {
         }
     };
     if cells {
-        print_cells(&imp);
+        print_cells(&imp, all_rows);
         return;
     }
     println!("{path}");
@@ -100,7 +103,10 @@ fn main() {
 }
 
 /// Rows to print for a column with `used` used rows: first 3, last 3 and 20 spread evenly.
-fn sample_rows(used: usize) -> Vec<usize> {
+fn sample_rows(used: usize, all_rows: usize) -> Vec<usize> {
+    if used <= all_rows {
+        return (0..used).collect();
+    }
     let mut rows = std::collections::BTreeSet::new();
     rows.extend(0..3.min(used));
     rows.extend(used.saturating_sub(3)..used);
@@ -124,7 +130,7 @@ fn escape(s: &str) -> String {
     out
 }
 
-fn print_cells(imp: &sheaf_io::opj::OpjImport) {
+fn print_cells(imp: &sheaf_io::opj::OpjImport, all_rows: usize) {
     for w in &imp.workbooks {
         println!("BOOK\t{}\t{}", escape(&w.name), escape(&w.long_name));
         for s in &w.sheets {
@@ -142,7 +148,7 @@ fn print_cells(imp: &sheaf_io::opj::OpjImport) {
                     escape(&c.comments),
                     c.designation
                 );
-                for r in sample_rows(used) {
+                for r in sample_rows(used, all_rows) {
                     match &c.data {
                         ColumnData::Numeric(v) if v[r].is_nan() => println!("CELL\t{i}\t{r}\tM\t"),
                         ColumnData::Numeric(v) => println!("CELL\t{i}\t{r}\tN\t{:?}", v[r]),

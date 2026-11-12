@@ -368,7 +368,7 @@ impl SheafApp {
                     None => {
                         let mut chooser = rfd::FileDialog::new()
                             .set_title("Import data files")
-                            .add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn"])
+                            .add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn", "bin"])
                             .add_filter("All files", &["*"]);
                         if let Some(dir) = self.folder() {
                             chooser = chooser.set_directory(dir);

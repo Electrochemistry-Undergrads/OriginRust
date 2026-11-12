@@ -1,11 +1,12 @@
 //! File input and output of the application: instrument files (CH
-//! Instruments text, delimited text), text export, and the project file.
+//! Instruments text and binary, delimited text), text export, and the project file.
 //!
 //! Importers return plain [`sheaf_core::Workbook`] values with placeholder
 //! identifiers; hand them to `Project::adopt_workbook` to give them real ones.
 
 pub mod ascii;
 pub mod chi;
+pub mod chi_bin;
 mod error;
 pub mod export;
 pub mod opj;
@@ -86,36 +87,48 @@ pub fn import_file(
     chi_opts: &chi::ChiOptions,
     ascii_opts: &ascii::AsciiOptions,
 ) -> Result<Imported, IoError> {
-    let text = read_text_file(path)?;
+    let bytes = std::fs::read(path).map_err(|e| IoError::io(path, e))?;
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let shown = path.display().to_string();
+    // A CH Instruments binary file is recognised by its first bytes, whatever its extension.
+    if kind != ImportKind::Ascii && chi_bin::looks_like_chi_bin(&bytes) {
+        let r = chi_bin::parse_chi_bin(&bytes, &stem, chi_opts).map_err(|e| name_file(e, &shown))?;
+        return Ok(finish_chi(r, shown));
+    }
+    let text = decode_text(&bytes, path)?;
     let use_chi = match kind {
         ImportKind::Auto => chi::looks_like_chi(&text),
         ImportKind::Chi => true,
         ImportKind::Ascii => false,
     };
-    let mut imported = if use_chi {
+    if use_chi {
         let r = chi::parse_chi(&text, &stem, chi_opts).map_err(|e| name_file(e, &shown))?;
-        let cv = r.scans > 0 || r.technique.to_ascii_lowercase().contains("cyclic voltammetry");
-        Imported {
-            workbook: r.workbook,
-            format: "chi",
-            suggested_template: if cv { Template::CyclicVoltammetry } else { Template::Line },
-            meta: r.meta,
-            warnings: r.warnings,
-        }
-    } else {
-        let r = ascii::parse_ascii(&text, &stem, ascii_opts).map_err(|e| name_file(e, &shown))?;
-        Imported {
-            workbook: r.workbook,
-            format: "ascii",
-            suggested_template: Template::Line,
-            meta: Vec::new(),
-            warnings: r.warnings,
-        }
-    };
-    imported.workbook.source = Some(ImportSource { path: shown, importer: imported.format.to_string() });
-    Ok(imported)
+        return Ok(finish_chi(r, shown));
+    }
+    let r = ascii::parse_ascii(&text, &stem, ascii_opts).map_err(|e| name_file(e, &shown))?;
+    let mut workbook = r.workbook;
+    workbook.source = Some(ImportSource { path: shown, importer: "ascii".to_string() });
+    Ok(Imported {
+        workbook,
+        format: "ascii",
+        suggested_template: Template::Line,
+        meta: Vec::new(),
+        warnings: r.warnings,
+    })
+}
+
+/// Wraps the result of either CH Instruments reader (text or binary).
+fn finish_chi(r: chi::ChiImport, shown: String) -> Imported {
+    let cv = r.scans > 0 || r.technique.to_ascii_lowercase().contains("cyclic voltammetry");
+    let mut workbook = r.workbook;
+    workbook.source = Some(ImportSource { path: shown, importer: "chi".to_string() });
+    Imported {
+        workbook,
+        format: "chi",
+        suggested_template: if cv { Template::CyclicVoltammetry } else { Template::Line },
+        meta: r.meta,
+        warnings: r.warnings,
+    }
 }
 
 /// Parsers only know the file stem; messages shown to the user carry the full path.
@@ -123,6 +136,7 @@ fn name_file(e: IoError, shown: &str) -> IoError {
     match e {
         IoError::NoData { detail, .. } => IoError::NoData { source_name: shown.to_string(), detail },
         IoError::NotChi { .. } => IoError::NotChi { source_name: shown.to_string() },
+        IoError::ChiBinary { detail, .. } => IoError::ChiBinary { source_name: shown.to_string(), detail },
         other => other,
     }
 }
@@ -165,6 +179,45 @@ mod tests {
         assert!(e.to_string().contains("empty.txt"), "{e}");
         let e = import_file(&dir.join("nope.txt"), ImportKind::Auto, &chi, &ascii).unwrap_err();
         assert!(matches!(e, IoError::Io { .. }));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_chi_binary_file_is_recognised_by_its_first_bytes_not_its_name() {
+        let dir = temp("bin");
+        let bytes = chi_bin::tests::cv_file(1.2, 1.2, 0.2, 0.001, false, 4000, |i| i as f32 * 1e-7);
+        // The extension says nothing: the bytes decide.
+        for name in ["run.bin", "run.dat", "run"] {
+            std::fs::write(dir.join(name), &bytes).unwrap();
+        }
+        let (chi, ascii) = (chi::ChiOptions::default(), ascii::AsciiOptions::default());
+        for name in ["run.bin", "run.dat", "run"] {
+            for kind in [ImportKind::Auto, ImportKind::Chi] {
+                let a = import_file(&dir.join(name), kind, &chi, &ascii).unwrap();
+                assert_eq!((a.format, a.suggested_template), ("chi", Template::CyclicVoltammetry), "{name}");
+                assert_eq!(a.workbook.source.as_ref().unwrap().importer, "chi");
+                assert_eq!(a.workbook.long_name, Path::new(name).file_stem().unwrap().to_string_lossy());
+                assert!(a.meta.iter().any(|(k, v)| k == "Technique" && v == "Cyclic Voltammetry"));
+            }
+        }
+        // Reading it as delimited text is refused with the usual message about binary data.
+        let e = import_file(&dir.join("run.bin"), ImportKind::Ascii, &chi, &ascii).unwrap_err();
+        assert!(matches!(e, IoError::NotText { .. }), "{e}");
+        // A damaged file names the file in full.
+        std::fs::write(dir.join("cut.bin"), &bytes[..40]).unwrap();
+        let e = import_file(&dir.join("cut.bin"), ImportKind::Auto, &chi, &ascii).unwrap_err();
+        assert!(matches!(e, IoError::ChiBinary { .. }) && e.to_string().contains("cut.bin"), "{e}");
+        // Other bytes that merely end in .bin are not taken for CHI files.
+        std::fs::write(
+            dir.join("table.bin"),
+            "x,y
+1,2
+3,4
+5,6
+",
+        )
+        .unwrap();
+        assert_eq!(import_file(&dir.join("table.bin"), ImportKind::Auto, &chi, &ascii).unwrap().format, "ascii");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

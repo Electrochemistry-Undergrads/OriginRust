@@ -25,9 +25,14 @@ pub enum IoError {
     /// The file was expected to be a CH Instruments export but is not.
     #[error(
         "'{source_name}' is not a CH Instruments text file: no column header such as \
-         'Potential/V, Current/A' was found in the first 200 lines"
+         'Potential/V, Current/A' was found in the first 100000 lines"
     )]
     NotChi { source_name: String },
+
+    /// A CH Instruments binary file (`.bin`) that cannot be read: damaged, cut short, or of a
+    /// technique whose layout is not known.
+    #[error("'{source_name}' is a CH Instruments binary file that cannot be read: {detail}")]
+    ChiBinary { source_name: String, detail: String },
 
     /// An import option has a value that cannot work.
     #[error("invalid import option: {0}")]

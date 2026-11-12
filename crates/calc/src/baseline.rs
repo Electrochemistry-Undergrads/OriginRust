@@ -39,7 +39,12 @@ fn baseline_values(x: &[f64], method: &BaselineMethod) -> (Vec<f64>, ()) {
         BaselineMethod::Anchors { points, method, boundary } => {
             let ax: Vec<f64> = points.iter().map(|p| p.0).collect();
             let ay: Vec<f64> = points.iter().map(|p| p.1).collect();
-            let o = InterpOptions { method: *method, boundary: *boundary, extrapolation: Extrapolation::Extrapolate };
+            let o = InterpOptions {
+                method: *method,
+                boundary: *boundary,
+                extrapolation: Extrapolation::Extrapolate,
+                ..Default::default()
+            };
             interp1(&ax, &ay, x, &o)
         }
     };

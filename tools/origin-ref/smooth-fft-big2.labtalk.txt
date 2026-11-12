@@ -1,0 +1,9 @@
+newbook;
+wks.nCols=9;
+col(1) = data(0, 19999*0.01, 0.01);
+col(2) = sin(12345.678*col(1))+2*col(1)+0.5;
+smooth iy:=(col(1),col(2)) method:=fft npts:=5 oy:=col(3);
+smooth iy:=(col(1),col(2)) method:=fft npts:=50 oy:=col(4);
+col(5) = data(0, 49999*0.01, 0.01);
+col(6) = sin(12345.678*col(5))+2*col(5)+0.5;
+smooth iy:=(col(5),col(6)) method:=fft npts:=5 oy:=col(7);

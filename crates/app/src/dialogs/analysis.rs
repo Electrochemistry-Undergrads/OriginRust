@@ -85,6 +85,7 @@ enum SmoothKind {
     Average,
     Weighted,
     Percentile,
+    Fft,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -220,6 +221,7 @@ impl AnalysisDialog {
                     SmoothKind::Average => SmoothMethod::AdjacentAveraging { weighted: false },
                     SmoothKind::Weighted => SmoothMethod::AdjacentAveraging { weighted: true },
                     SmoothKind::Percentile => SmoothMethod::Percentile { percent: self.smooth_percent },
+                    SmoothKind::Fft => SmoothMethod::FftFilter,
                 },
                 npts: self.smooth_points,
                 boundary: self.boundary,
@@ -286,7 +288,11 @@ impl AnalysisDialog {
                     ui.horizontal(|ui| {
                         ui.label("Polynomial order");
                         ui.add(DragValue::new(&mut self.diff.poly).range(1..=9));
-                        ui.label("Points of window");
+                        ui.label(if self.smooth_kind == SmoothKind::Fft {
+                            "Points of window (cutoff)"
+                        } else {
+                            "Points of window"
+                        });
                         ui.add(DragValue::new(&mut self.diff.npts).range(3..=1001));
                     });
                 });
@@ -300,6 +306,7 @@ impl AnalysisDialog {
                             SmoothKind::Average => "Adjacent averaging",
                             SmoothKind::Weighted => "Weighted adjacent averaging",
                             SmoothKind::Percentile => "Percentile filter",
+                            SmoothKind::Fft => "FFT filter",
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::SavitzkyGolay, "Savitzky-Golay");
@@ -310,6 +317,7 @@ impl AnalysisDialog {
                                 "Weighted adjacent averaging",
                             );
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::Percentile, "Percentile filter");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Fft, "FFT filter");
                         });
                 });
                 ui.horizontal(|ui| {
@@ -327,21 +335,26 @@ impl AnalysisDialog {
                         _ => {}
                     }
                 });
-                ui.horizontal(|ui| {
-                    ui.label("At the ends");
-                    egui::ComboBox::from_id_salt("smooth_boundary")
-                        .selected_text(boundary_label(self.boundary))
-                        .show_ui(ui, |ui| {
-                            for b in [
-                                Boundary::None,
-                                Boundary::Reflect,
-                                Boundary::Repeat,
-                                Boundary::Periodic,
-                                Boundary::Extrapolate,
-                            ] {
-                                ui.selectable_value(&mut self.boundary, b, boundary_label(b));
-                            }
-                        });
+                if self.smooth_kind == SmoothKind::Fft {
+                    ui.weak("The FFT filter keeps frequencies below 1 / (2 dx points); larger values smooth more.");
+                }
+                ui.add_enabled_ui(self.smooth_kind != SmoothKind::Fft, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("At the ends");
+                        egui::ComboBox::from_id_salt("smooth_boundary")
+                            .selected_text(boundary_label(self.boundary))
+                            .show_ui(ui, |ui| {
+                                for b in [
+                                    Boundary::None,
+                                    Boundary::Reflect,
+                                    Boundary::Repeat,
+                                    Boundary::Periodic,
+                                    Boundary::Extrapolate,
+                                ] {
+                                    ui.selectable_value(&mut self.boundary, b, boundary_label(b));
+                                }
+                            });
+                    });
                 });
             }
             AnalysisKind::Normalize => {
@@ -394,7 +407,17 @@ impl AnalysisDialog {
                     ui.radio_value(&mut self.interp.method, InterpMethod::Linear, "Linear");
                     ui.radio_value(&mut self.interp.method, InterpMethod::CubicSpline, "Cubic spline");
                     ui.radio_value(&mut self.interp.method, InterpMethod::Akima, "Akima spline");
+                    ui.radio_value(&mut self.interp.method, InterpMethod::BSpline, "Cubic B-spline");
                 });
+                if self.interp.method == InterpMethod::BSpline {
+                    ui.horizontal(|ui| {
+                        ui.label("Smoothing factor");
+                        ui.add(DragValue::new(&mut self.interp.smoothing).speed(0.01).range(0.0..=1.0e12));
+                    });
+                    ui.weak(
+                        "The factor is the allowed sum of squared residuals, as in Origin's sf. 0 gives the                          interpolating cubic spline, which is not Origin's automatic smoothing for 0.",
+                    );
+                }
                 if self.interp.method == InterpMethod::CubicSpline {
                     ui.horizontal(|ui| {
                         ui.label("Spline ends");

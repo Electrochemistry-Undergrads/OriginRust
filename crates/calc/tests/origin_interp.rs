@@ -3,7 +3,7 @@
 //! Reference script: `tools/origin-ref/interp-suite1.labtalk.txt` (run with `run-labtalk-data.ps1`).
 //! Data: x = 10 ((i-1)/10)^1.3 for i = 1..11 (uneven), y = sin(x) + 0.1 x; targets
 //! -1..11 step 0.37 (33 points, inside and outside the data). Tolerance: relative 1e-10.
-//! The cubic B-spline method (a smoothing spline) is not implemented and not tested.
+//! The cubic B-spline method is in `origin_bspline.rs`.
 
 use sheaf_calc::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
 #[allow(dead_code)]
@@ -533,7 +533,7 @@ fn interp1_matches_origin_for_every_method_and_extrapolation_option() {
         ),
     ];
     for (name, method, boundary, extrapolation, want) in cases {
-        let got = interp1(&x, &y, &at, &InterpOptions { method, boundary, extrapolation });
+        let got = interp1(&x, &y, &at, &InterpOptions { method, boundary, extrapolation, ..Default::default() });
         check(name, &got, want, 1e-10);
     }
 }

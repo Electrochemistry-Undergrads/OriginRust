@@ -103,6 +103,7 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 SmoothKind::Average => analysis::SmoothMethod::AdjacentAveraging { weighted: false },
                 SmoothKind::WeightedAverage => analysis::SmoothMethod::AdjacentAveraging { weighted: true },
                 SmoothKind::Percentile => analysis::SmoothMethod::Percentile { percent },
+                SmoothKind::Fft => analysis::SmoothMethod::FftFilter,
             };
             let boundary = match boundary {
                 BoundaryKind::None => analysis::Boundary::None,
@@ -143,18 +144,28 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::SubtractBaseline(spec)))
         }
-        AnalyzeTool::Interpolate { target, method, points, x_min, x_max } => {
+        AnalyzeTool::Interpolate { target, method, points, x_min, x_max, smoothing } => {
             let method = match method {
                 InterpKind::Linear => analysis::InterpMethod::Linear,
                 InterpKind::Spline => analysis::InterpMethod::CubicSpline,
                 InterpKind::Akima => analysis::InterpMethod::Akima,
+                InterpKind::BSpline => analysis::InterpMethod::BSpline,
             };
             let range = match (x_min, x_max) {
                 (None, None) => None,
                 (Some(lo), Some(hi)) => Some((lo, hi)),
                 _ => bail!("give both --x-min and --x-max, or neither"),
             };
-            (target, Job::Tool(Tool::Interpolate(InterpSpec { method, npts: points, range, ..InterpSpec::default() })))
+            (
+                target,
+                Job::Tool(Tool::Interpolate(InterpSpec {
+                    method,
+                    npts: points,
+                    range,
+                    smoothing,
+                    ..InterpSpec::default()
+                })),
+            )
         }
         AnalyzeTool::Peaks { target, direction, points, min_height, count, all } => {
             let direction = match direction {

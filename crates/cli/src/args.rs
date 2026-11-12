@@ -346,6 +346,9 @@ pub enum SmoothKind {
     WeightedAverage,
     /// A percentile of the window (50 is a median filter).
     Percentile,
+    /// FFT low-pass filter; `--points` sets the cutoff frequency 1 / (2 dx points), larger values
+    /// smooth more (it is not a window length).
+    Fft,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -385,6 +388,10 @@ pub enum InterpKind {
     Linear,
     Spline,
     Akima,
+    /// Cubic B-spline. With `--smoothing` above 0 it is Origin's smoothing spline; with 0 it is
+    /// the interpolating spline, which is not what Origin computes for its default factor 0.
+    #[value(name = "bspline")]
+    BSpline,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -483,6 +490,10 @@ pub enum AnalyzeTool {
         /// Last X of the result (default: the largest X of the data).
         #[arg(long, allow_hyphen_values = true)]
         x_max: Option<f64>,
+        /// B-spline smoothing factor: the allowed sum of squared residuals (matches Origin's `sf`).
+        /// 0 interpolates the points; Origin's automatic factor for 0 is not reproduced.
+        #[arg(long, default_value_t = 0.0)]
+        smoothing: f64,
     },
     /// Find the peaks of each curve; positions and heights go to a new sheet.
     Peaks {

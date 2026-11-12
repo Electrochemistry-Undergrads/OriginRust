@@ -84,6 +84,81 @@ fn a_row_range_with_baseline_and_a_saved_project() {
 }
 
 #[test]
+fn the_fft_filter_and_the_b_spline_can_be_chosen() {
+    let dir = scratch("fft-bspline");
+    let data = data_file(&dir);
+    let out = dir.join("out.csv");
+    // A constant column goes through the FFT filter unchanged.
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "smooth",
+        data.to_str().unwrap(),
+        "--y",
+        "flat",
+        "--method",
+        "fft",
+        "--points",
+        "3",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.lines().any(|l| l == "5,2,2,5"), "{text}");
+
+    // The interpolating B-spline reproduces a straight line.
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "interpolate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--method",
+        "bspline",
+        "--points",
+        "5",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.lines().any(|l| l == "2.5,2.5"), "{text}");
+
+    // A smoothing factor above zero gives a smoothing spline; a negative one is refused.
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "interpolate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--method",
+        "bspline",
+        "--smoothing",
+        "0.5",
+        "--points",
+        "5",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let middle: f64 = text.lines().nth(3).unwrap().split(',').nth(1).unwrap().parse().unwrap();
+    assert!((middle - 2.5).abs() < 1e-9, "{text}");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "interpolate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--method",
+        "bspline",
+        "--smoothing=-0.5",
+    ]);
+    assert!(!ok);
+    assert!(stderr.contains("smoothing factor"), "{stderr}");
+}
+
+#[test]
 fn smooth_sort_and_filter_write_what_they_say() {
     let dir = scratch("misc");
     let data = data_file(&dir);

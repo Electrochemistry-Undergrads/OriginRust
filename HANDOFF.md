@@ -37,14 +37,14 @@ merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lea
   (a subagent; checked in Origin 2016, where the formulas recalculate), and area plots. A save to
   `.opj` now needs the companion only for graph features the writer does not know yet. 915 tests
   pass on `main`.
-- **Running when this was written**: a subagent on branch `worktree-agent-a23ee953326faea53`
-  (worktree `.claude/worktrees/agent-a23ee953326faea53`) reworks the nonlinear fit dialog and the
-  import dialog into Origin's layout (only `crates/app`). If this session ended before merging it,
-  read `git log main..worktree-agent-a23ee953326faea53`, run the checks and merge.
+- Also merged: the nonlinear fit dialog (Origin's NLFit layout: Category/Function, Settings pages,
+  Code, Parameters, Bounds; Fit tries without writing, Done keeps the result) and the import dialog
+  as Origin's tree of option groups. 917 tests pass on `main`. No subagent is running.
 
 ## Exact next step
 
-1. Merge the fit/import dialogs branch when it is done (full checks after the merge).
+1. The Import Wizard (Ctrl+3) has no dialog yet; NLFit lacks "1 Iteration" and "Fit till
+   converged" (the fit engine would need single steps).
 2. The other dialogs in Origin's layout (import wizard, NLFit, analysis tools, column
    properties; `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's
    long name is on Plot Details' Page tab; a plot's legend text is on its Group tab.
@@ -59,6 +59,9 @@ The small points of the graph review are fixed too: `--offsets` gives its values
 (a fitted curve takes none), and deleting a column drops the tick labels and offsets that name it.
 
 ## Open questions noted by the agents (no answer needed to continue)
+
+- NLFit: should Fit write its results and keep the dialog open, as Origin does (today Fit only
+  tries and Done writes)? Should Cancel then undo them?
 
 - Fit reports show the standard error of a fixed parameter as blank (Origin's sheet stores 0).
 - Origin's bound handling can stop above the true constrained minimum; Sheaf copies it.

@@ -699,7 +699,7 @@ fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_sep
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5], "the first file's columns are untouched");
 }
 
-/// Analysis > Analyze Peaks... runs the chain on a curve with two peaks on a slope: the window
+/// Analysis > Peaks and Baseline > Peak Analyzer... runs the chain on a curve with two peaks on a slope: the window
 /// opens from the menu, OK adds the baseline column and the result sheet, one undo removes both.
 #[test]
 fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
@@ -717,7 +717,7 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     let mut h = start(vec![path]);
     click(&mut h, "Book1 - peaks");
     menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
-    assert!(h.state().analysis.is_some(), "the Analyze Peaks window is open");
+    assert!(h.state().analysis.is_some(), "the Peak Analyzer window is open");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "OK closes the window");
     let b = project(&h).workbooks().next().unwrap();

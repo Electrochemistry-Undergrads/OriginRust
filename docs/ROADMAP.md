@@ -67,8 +67,10 @@ publication figures), P1 is common Origin use, P2 is later.
 
 ## Milestone 4: fitting
 
-- [x] Linear and polynomial fits with full statistics (match Origin's fitlr, fitpoly and nlfit to
-      1e-9; Origin's Linear Fit dialog report could not be scripted, see `docs/spec/fitting-linear.md`)
+- [x] Linear and polynomial fits with full statistics (coefficients and errors match Origin's fitlr
+      and fitpoly to 1e-9 and the nlfit report values to 1e-6; badly scaled x to 1e-7; confidence
+      limits, unscaled errors, direct weights and Prob>F were not compared with Origin; Origin's
+      Linear Fit dialog report could not be scripted; see `docs/spec/fitting-linear.md`)
 - [x] Nonlinear least squares (Levenberg-Marquardt) with bounds and fixed parameters (21 fits match
       Origin's NLFit to 5e-10 with the same iteration counts)
 - [x] Built-in function library covering Origin's common categories (206 functions; only Gauss,
@@ -81,8 +83,14 @@ publication figures), P1 is common Origin use, P2 is later.
 ## Milestone 5: Origin project import
 
 - [x] Specification of the `.opj` container from public sources and inspection of sample files
-- [ ] Read workbooks and column data from Origin 2016-era `.opj`
-- [ ] Read basic graphs
+- [x] Read workbooks and column data from Origin 2016-era `.opj` (the owner's five projects match
+      Origin cell by cell; `tools/origin-ref/opj-compare-cells.py`)
+- [x] Read basic graphs: page, layers, axes, titles and text, line, scatter and column plots with
+      error bars (checked on graphs built in Origin 2016 and the owner's projects; graphs of files
+      older than Origin 9 are read but not verified; the reader finds 7 of the 41 graphs Origin
+      lists in one owner project: windows without axis blocks are missed)
+- [ ] Graphs the reader misses (34 of 41 in "Integration of Delithiation SF data"), plot groups,
+      plot offsets, legend frames
 - [ ] (Later, if needed) `.opju`
 
 ## Milestone 6: breadth

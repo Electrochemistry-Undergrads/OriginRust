@@ -1,6 +1,6 @@
 //! Reading the numbers of the plots of a layer.
 
-use crate::Rect;
+use crate::{Rect, stack};
 use sheaf_core::Project;
 use sheaf_core::graph::{Frame, Layer, Page, Plot, ScaleKind};
 
@@ -14,15 +14,28 @@ pub(crate) struct PlotData<'a> {
     /// Half-open row range that is drawn.
     pub start: usize,
     pub end: usize,
+    /// Offsets of a stacked layer, in axis units, added to every point (graphing spec 13).
+    pub ox: f64,
+    pub oy: f64,
+    /// The plot's place in the stack, for the waterfall shift.
+    pub member: Option<usize>,
 }
 
 impl PlotData<'_> {
-    /// X value of row `i` (NaN when the X column is shorter than the Y column).
+    /// X value of row `i` as drawn, with the stack offset (NaN when the X column is shorter than
+    /// the Y column).
     pub fn x_at(&self, i: usize) -> f64 {
-        match self.x {
+        let x = match self.x {
             None => (i + 1) as f64,
             Some(x) => x.get(i).copied().unwrap_or(f64::NAN),
-        }
+        };
+        // Adding 0 would turn -0 into +0; leave unstacked values exactly as they are.
+        if self.ox == 0.0 { x } else { x + self.ox }
+    }
+
+    /// Y value of row `i` as drawn, with the stack offset.
+    pub fn y_at(&self, i: usize) -> f64 {
+        if self.oy == 0.0 { self.y[i] } else { self.y[i] + self.oy }
     }
 
     pub fn err_at(&self, i: usize) -> f64 {
@@ -30,21 +43,37 @@ impl PlotData<'_> {
     }
 }
 
-/// The drawable plots of a layer, in plot order. A plot whose Y column is
-/// missing or not numeric is skipped.
-pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> Vec<PlotData<'a>> {
-    let mut out = Vec::new();
-    for plot in layer.plots.iter().filter(|p| p.visible) {
+/// The plots of a layer as they are drawn.
+pub(crate) struct LayerData<'a> {
+    /// The visible plots whose Y column holds numbers, in plot order.
+    pub plots: Vec<PlotData<'a>>,
+    /// The number of members of the layer's stack, hidden plots included.
+    pub members: usize,
+}
+
+/// The half-open row range of a plot whose Y column has `len` rows, clamped to the column.
+pub(crate) fn row_range(plot: &Plot, len: usize) -> (usize, usize) {
+    let (start, end) = match plot.rows {
+        Some((s, e)) => (s.min(len), e.min(len)),
+        None => (0, len),
+    };
+    (start, end.max(start))
+}
+
+/// The drawable plots of a layer, in plot order, with their stack offsets. A plot that is hidden
+/// or whose Y column is missing or not numeric is skipped (a hidden plot still keeps its place in
+/// the stack).
+pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'a> {
+    let (places, members) = stack::places(project, layer);
+    let mut plots = Vec::new();
+    for (plot, place) in layer.plots.iter().zip(places).filter(|(p, _)| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
         let err = plot.y_error.and_then(|id| project.numeric(id));
-        let (start, end) = match plot.rows {
-            Some((s, e)) => (s.min(y.len()), e.min(y.len())),
-            None => (0, y.len()),
-        };
-        out.push(PlotData { plot, x, y, err, start, end: end.max(start) });
+        let (start, end) = row_range(plot, y.len());
+        plots.push(PlotData { plot, x, y, err, start, end, ox: place.ox, oy: place.oy, member: place.member });
     }
-    out
+    LayerData { plots, members }
 }
 
 /// Which coordinate of the plots an axis shows.
@@ -54,8 +83,8 @@ pub(crate) enum Dim {
     Y,
 }
 
-/// Finite data range of one coordinate over all rows where both X and Y are
-/// finite. On a log axis only positive values count.
+/// Finite data range of one coordinate, as drawn (with the stack offsets), over all rows where
+/// both X and Y are finite. On a log axis only positive values count.
 pub(crate) fn axis_range<'p, 'a: 'p>(
     pds: impl IntoIterator<Item = &'p PlotData<'a>>,
     dim: Dim,
@@ -64,7 +93,7 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
     let mut r: Option<(f64, f64)> = None;
     for pd in pds {
         for i in pd.start..pd.end {
-            let (x, y) = (pd.x_at(i), pd.y[i]);
+            let (x, y) = (pd.x_at(i), pd.y_at(i));
             if !(x.is_finite() && y.is_finite()) {
                 continue;
             }

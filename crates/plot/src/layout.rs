@@ -4,11 +4,15 @@
 //! Layers that are linked to another layer (the right Y axis of a double-Y
 //! graph, graphing spec section 12) are laid out together with it as one
 //! group: they share its frame and, when linked, its X axis.
+//!
+//! A layer drawn as a waterfall (graphing spec section 13.6) lays its axes out
+//! on a smaller front frame and draws each later curve moved right and up.
 
-use crate::data::{self, Dim, PlotData};
+use crate::data::{self, Dim, LayerData, PlotData};
 use crate::fonts::TextMeasurer;
 use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
 use crate::scene::{Anchor, Cap, Item, Join, LayerScene, Scene, Stroke, line_to, move_to};
+use crate::stack;
 use crate::text::{self, ASCENT, DESCENT};
 use crate::ticks::{ResolvedAxis, resolve_axis};
 use crate::{LayerGeometry, PlotError, Rect};
@@ -22,13 +26,13 @@ use sheaf_core::{Project, WindowId};
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<Vec<PlotData>> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds: Vec<LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
     let geoms = graph_geometry(g, &pds, m);
     let mut layers: Vec<LayerScene> =
-        (0..g.layers.len()).map(|i| layer_scene(project, g, i, &geoms[i], &pds[i], m)).collect();
+        (0..g.layers.len()).map(|i| layer_scene(project, g, i, &geoms[i], &pds[i].plots, m)).collect();
     // A legend that lists the plots of every layer is drawn after all layers, so that no
     // layer's curves cover it.
-    let every_plot: Vec<&PlotData> = pds.iter().flatten().collect();
+    let every_plot: Vec<&PlotData> = pds.iter().flat_map(|d| d.plots.iter()).collect();
     for (i, layer) in g.layers.iter().enumerate() {
         if layer.legend.scope == LegendScope::Graph
             && let Some(last) = layers.last_mut()
@@ -50,7 +54,10 @@ const PAGE_MARGIN: f64 = 3.0;
 /// nominal frame from the model, moved inwards just enough that the tick labels and titles of
 /// every member stay inside the page (spec section 3, "Keeping labels on the page"); the members'
 /// frames follow from it. When everything already fits, the frames are the nominal ones.
-pub(crate) fn graph_geometry(g: &Graph, pds: &[Vec<PlotData>], m: &dyn TextMeasurer) -> Vec<LayerGeometry> {
+///
+/// A layer drawn as a waterfall gets the front frame of spec 13.6 as its frame and the whole
+/// fitted frame as its clip rectangle.
+pub(crate) fn graph_geometry(g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer) -> Vec<LayerGeometry> {
     let mut out: Vec<Option<LayerGeometry>> = vec![None; g.layers.len()];
     for root in 0..g.layers.len() {
         if g.root_of(root) == root {
@@ -65,7 +72,7 @@ pub(crate) fn graph_geometry(g: &Graph, pds: &[Vec<PlotData>], m: &dyn TextMeasu
 fn group_geometry(
     g: &Graph,
     members: &[usize],
-    pds: &[Vec<PlotData>],
+    pds: &[LayerData],
     m: &dyn TextMeasurer,
 ) -> Vec<(usize, LayerGeometry)> {
     let root = members[0];
@@ -75,10 +82,11 @@ fn group_geometry(
         i == root || g.valid_link(i).is_some_and(|l| (if dim == Dim::X { l.x } else { l.y }) == ScaleLink::Straight)
     };
     let shared = |dim: Dim, axis: &Axis| {
-        let sources = members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].iter());
+        let sources = members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter());
         resolve_axis(axis, data::axis_range(sources, dim, axis.scale))
     };
-    let own = |i: usize, dim: Dim, axis: &Axis| resolve_axis(axis, data::axis_range(pds[i].iter(), dim, axis.scale));
+    let own =
+        |i: usize, dim: Dim, axis: &Axis| resolve_axis(axis, data::axis_range(pds[i].plots.iter(), dim, axis.scale));
     let (root_x, root_y) = (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis));
     let axes: Vec<(ResolvedAxis, ResolvedAxis)> = members
         .iter()
@@ -99,7 +107,18 @@ fn group_geometry(
         label_edges(&mut edges, &g.layers[i], frame_of(nominal, i), x, y, m);
     }
     let f = fit_on_page(nominal, &edges, &g.page);
-    members.iter().zip(axes).map(|(&i, (x, y))| (i, LayerGeometry { frame: frame_of(f, i), x, y })).collect()
+    members
+        .iter()
+        .zip(axes)
+        .map(|(&i, (x, y))| {
+            let clip = frame_of(f, i);
+            let frame = match stack::waterfall(g, i) {
+                Some((sx, sy)) => stack::front_frame(clip, pds[i].members, sx, sy),
+                None => clip,
+            };
+            (i, LayerGeometry { frame, clip, x, y })
+        })
+        .collect()
 }
 
 /// The outermost extent of the tick labels and titles of a group, in page points.
@@ -178,17 +197,41 @@ fn layer_scene(
     m: &dyn TextMeasurer,
 ) -> LayerScene {
     let layer = &g.layers[index];
-    let mut scene = LayerScene { clip: geom.frame, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new() };
-    draw_grid(&mut scene.grid, layer, geom);
-    for pd in pds {
-        draw_plot(&mut scene.plots, pd, geom);
+    let mut scene = LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new() };
+    let waterfall = stack::waterfall(g, index);
+    // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
+    // through the curves behind the front frame.
+    let (x_axis, y_axis);
+    let (xa, ya) = if waterfall.is_some() {
+        x_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.x_axis.clone() };
+        y_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.y_axis.clone() };
+        (&x_axis, &y_axis)
+    } else {
+        draw_grid(&mut scene.grid, layer, geom);
+        (&layer.x_axis, &layer.y_axis)
+    };
+    match waterfall {
+        None => {
+            for pd in pds {
+                draw_plot(&mut scene.plots, pd, geom);
+            }
+        }
+        Some((sx, sy)) => {
+            // Back to front, so that the first curve is on top; member k moves by k shifts.
+            for pd in pds.iter().rev() {
+                let k = pd.member.unwrap_or(0) as f64;
+                let mut moved = geom.clone();
+                moved.frame.x += k * sx * geom.frame.w;
+                moved.frame.y -= k * sy * geom.frame.h;
+                draw_plot(&mut scene.plots, pd, &moved);
+            }
+        }
     }
     let out = &mut scene.overlay;
     let f = geom.frame;
-    let (xa, ya) = (&layer.x_axis, &layer.y_axis);
     let first_color = plot_color(pds);
     let (xp, yp) = (AxisPaint::new(xa, first_color), AxisPaint::new(ya, first_color));
-    draw_axis_lines(out, layer, f, xp.line, yp.line);
+    draw_axis_lines(out, xa, ya, f, xp.line, yp.line);
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
     draw_ticks(out, ya, &geom.y, f, false, yp.line);
     let x_edge = (xa.side != AxisSide::Hidden).then(|| draw_x_labels(out, xa, &geom.x, f, &xp.labels, m));
@@ -290,8 +333,7 @@ fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
 
 /// Draws the axis lines of a layer: each shown axis on its own edge and, with `show_opposite`,
 /// on the edge across. `xc` and `yc` are the axes' line colors.
-fn draw_axis_lines(out: &mut Vec<Item>, layer: &Layer, f: Rect, xc: Color, yc: Color) {
-    let (xa, ya) = (&layer.x_axis, &layer.y_axis);
+fn draw_axis_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, f: Rect, xc: Color, yc: Color) {
     let (l, r, t, b) = (f.x, f.x + f.w, f.y, f.y + f.h);
     let shown = |a: &Axis| a.side != AxisSide::Hidden;
     let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
@@ -560,25 +602,27 @@ fn edge_ticks(g: &Graph, index: usize) -> EdgeTicks {
     fn add(slot: &mut Option<f64>, v: f64) {
         *slot = Some(slot.map_or(v, |old| old.max(v)));
     }
-    fn axis(a: &Axis, main: &mut Option<f64>, across: &mut Option<f64>) {
+    // `across` is `None` when the axis draws no ticks on the edge across (a waterfall never does).
+    fn axis(a: &Axis, main: &mut Option<f64>, across: Option<&mut Option<f64>>) {
         let inward =
             if matches!(a.major_tick, TickDirection::In | TickDirection::Both) { a.major_tick_len_pt } else { 0.0 };
         add(main, inward);
-        if a.opposite_ticks {
+        if let Some(across) = across.filter(|_| a.opposite_ticks) {
             add(across, inward);
         }
     }
     let mut e = EdgeTicks::default();
     for i in g.group(index) {
         let (xa, ya) = (&g.layers[i].x_axis, &g.layers[i].y_axis);
+        let opposite = stack::waterfall(g, i).is_none();
         match xa.side {
-            AxisSide::Normal => axis(xa, &mut e.bottom, &mut e.top),
-            AxisSide::Opposite => axis(xa, &mut e.top, &mut e.bottom),
+            AxisSide::Normal => axis(xa, &mut e.bottom, opposite.then_some(&mut e.top)),
+            AxisSide::Opposite => axis(xa, &mut e.top, opposite.then_some(&mut e.bottom)),
             AxisSide::Hidden => {}
         }
         match ya.side {
-            AxisSide::Normal => axis(ya, &mut e.left, &mut e.right),
-            AxisSide::Opposite => axis(ya, &mut e.right, &mut e.left),
+            AxisSide::Normal => axis(ya, &mut e.left, opposite.then_some(&mut e.right)),
+            AxisSide::Opposite => axis(ya, &mut e.right, opposite.then_some(&mut e.left)),
             AxisSide::Hidden => {}
         }
     }

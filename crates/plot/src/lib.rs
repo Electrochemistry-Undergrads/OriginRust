@@ -17,6 +17,7 @@ pub mod markup;
 mod plots;
 mod raster;
 pub mod scene;
+mod stack;
 mod svg;
 mod text;
 pub mod ticks;
@@ -35,6 +36,9 @@ pub enum PlotError {
     /// The project has no graph with this id.
     #[error("there is no graph with id {0:?} in the project")]
     NoSuchGraph(WindowId),
+    /// The graph has no layer with this index.
+    #[error("the graph has no layer {0}")]
+    NoSuchLayer(usize),
     /// The scene could not be written as SVG.
     #[error("could not build the SVG: {0}")]
     Svg(String),
@@ -71,8 +75,11 @@ pub struct Rect {
 /// The GUI uses this for read-outs, zooming and hit testing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerGeometry {
-    /// The rectangle data is drawn in, in page points.
+    /// The rectangle the axes are drawn on and data is mapped into, in page points.
     pub frame: Rect,
+    /// The rectangle data is clipped to. It is `frame`, except in a waterfall, where `frame` is
+    /// the smaller front frame and later curves are drawn moved into the rest of this rectangle.
+    pub clip: Rect,
     /// The resolved X axis.
     pub x: ticks::ResolvedAxis,
     /// The resolved Y axis.
@@ -117,8 +124,18 @@ pub struct Raster {
 /// scale is linked, its parent's X axis.
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<Vec<data::PlotData>> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
     Ok(layout::graph_geometry(g, &pds, SystemFonts::shared()))
+}
+
+/// The offsets `(x, y)`, in axis units, at which each plot of a layer is drawn, one pair per plot
+/// in plot order (graphing spec section 13). They are `(0, 0)` unless the layer stacks its curves;
+/// in automatic mode they are computed from the current data. The desktop app copies them into
+/// the layer when the user switches to individual offsets, so that the picture does not jump.
+pub fn stack_offsets(project: &Project, graph: WindowId, layer: usize) -> Result<Vec<(f64, f64)>, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let layer = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
+    Ok(stack::places(project, layer).0.into_iter().map(|p| (p.ox, p.oy)).collect())
 }
 
 /// Renders a graph as SVG text, measuring text with the installed fonts.

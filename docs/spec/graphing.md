@@ -334,7 +334,7 @@ Unsupported codes and a bare backslash are dropped silently. Literal backslash: 
 | Symbol | Scatter, ScatterCentral, Errbar (scatter + error bars), DropLine, Bubble | P0 scatter and errbar; P1 dropline; P2 others |
 | Line & Symbol | Line+Symbol, Lser3 (line series) | P0 |
 | Columns & Bars | Column, ColumnLabel, gColumn (grouped), Bar, StackColumn, StackColP, StackBar, StackBarP, FloatCol, FloatBar, Pie, PieBW | P1 column/bar/stack; P2 rest |
-| Multi-Curve | DoubleY (two Y axes), 3Ys_Y-YY, 3Ys_Y-Y-Y, 4Ys_Y-YYY, 4Ys_YY-YY, OffsetstackY, Waterfall, Pan2Vert, Pan2Horz, Pan4, Pan9, Stack, Inset, RightY, RightTop, OffsetY, OffsetXY | P0 DoubleY and many-curve overlay in one layer; P1 Stack, panels, OffsetY, RightY; P2 rest |
+| Multi-Curve | DoubleY (two Y axes), 3Ys_Y-YY, 3Ys_Y-Y-Y, 4Ys_Y-YYY, 4Ys_YY-YY, OffsetstackY (stacked lines by Y offsets, section 13), Waterfall (section 13), Pan2Vert, Pan2Horz, Pan4, Pan9, Stack, Inset, RightY, RightTop, OffsetY and OffsetXY (despite their names: multiple Y, and X and Y, axes, one layer per axis; GP-DY-01, not offset curves) | P0 DoubleY, stacked lines and many-curve overlay in one layer; P1 Stack, panels, OffsetY, RightY; P2 rest |
 | 3D XYY | Water3D, Walls, Ribbon, Bar3D (+ OpenGL versions) | P2 |
 | Statistics | Box, Hist, HistCumu, Xbarr, ParetoRaw, PPNormal, PPExp, PPLog, PPWeibull, QQ, ScatterMatrix, gBox | P1 Hist, Box; P2 rest |
 | Area | Area, FillLine, StackArea | P1 (peak shading) |
@@ -678,3 +678,253 @@ Tick positions of the left and right axes are not aligned with each other (Origi
 - Origin's distance between the right tick labels and the right title, and the right title's size (not measured; Sheaf mirrors its left-side rule).
 - Why Origin's DoubleY template uses finer automatic tick steps than the Line template for the same data (X -1..11 step 2 against -2.5..12.5 step 5); related to U4.
 - Whether the owner wants coloured Y axes on double-Y figures (the DoubleY template colours them; `--axis-colors fixed` turns it off) and a symmetric right axis on CV-style figures.
+
+---
+
+## 13. Stacked lines by Y offsets and waterfall (P0, GP-OFF-01)
+
+Status: researched on 2026-11-12 with Origin 2016 runs through COM on our own synthetic data (scripts and outputs in `re-workspace/scratch/graph-p0/`, git-ignored), plus a read-only look at the settings and counts of the owner's stacked XRD graphs. Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. The model decision is recorded in ADR 0009.
+
+### 13.1 What Origin 2016 does
+
+- **The idea.** "Stacked Lines by Y Offsets" (template `OffsetStackY.otp`) draws several curves in one layer, each moved up by its own amount so that they do not overlap. Only the drawing changes; the worksheet data stay as they are [W:stacklineyoffset-graph].
+- **Offset modes.** The plot group of a layer has one of these modes, chosen on the Stack tab of Plot Details or with Graph > Offset Grouped Data in Layer [W:pd-dialog-stack-tab, pd-offset-tab]:
+  - None.
+  - Cumulative: each plot's Y values are added point by point to those of the plots before it. Stacked columns and areas use it; that is GP-COL-01, not this section.
+  - Constant: a fixed step per plot; the first plot does not move.
+  - Auto: offsets computed from the curve heights and a gap.
+  - Individual: each plot has its own X and Y offset (set on the Offset tab, or by dragging a curve after clicking it twice).
+- **Only group members move.** A plot added to the layer later outside the group kept offset 0 [COM].
+- **The 2016 template uses Auto with a 10 % gap** [COM]. The current help says the template uses Individual offsets [W]; that is probably a later change.
+- **The Auto rule in Origin 2016** [COM, checked on seven data sets and on the owner's files]:
+  - H is the largest height (largest minus smallest Y) of any curve of the group, and the gap is 10 % of H;
+  - the first curve does not move;
+  - every later curve is moved up so that its lowest point lies one gap above the highest point of the curve before it, after that curve was moved.
+
+  The current help describes a gap computed pair by pair; for the first check row of 13.11 that rule would give 141 for the fourth curve, while Origin 2016 gave 150.
+- **Details of Auto** [COM]:
+  - missing values are ignored;
+  - a flat curve has height 0, and when every curve was flat the gap was 1;
+  - offsets are added in data units, also on a log10 Y axis;
+  - hidden plots keep their place, so hiding one curve does not move the others;
+  - the offsets are computed again when the data change (seen after a rescale; a hidden instance without a rescale kept the stored numbers, so Origin recomputes when it redraws [INF]);
+  - the X offset is always 0.
+- **Axes and legend** [COM]:
+  - the automatic axis range includes the moved curves (data 0..151 gave a Y axis from -10 to 160);
+  - Y tick labels show the axis coordinate, which is a true value only for the first curve; there is no option to label each curve with its own values;
+  - the template shows Y tick labels, a Y title that says the values are offset, and a legend with a frame;
+  - the legend keeps plot order, so the lowest curve is listed first.
+- **How the owner uses it.** Eleven stacked graphs of 2 or 6 XRD patterns, all Auto 10 %, all with the Y tick labels hidden, a closed box, X ticks pointing out, no legend, and the curve names typed as text next to the curves. Offsets seen: 0, 1.1, 2.2, 3.3, 4.399, 5.499 on normalised patterns, and 0, 1052, 2251, 3143, 4029, 4847 on raw counts.
+- **Scripting.** `get <plot> -sy` and `-sx` read the offsets; `set -sy` and `set -sx` are refused by 2016, so Individual offsets cannot be set by script in that version [COM].
+- **Waterfall.** Origin's 2D waterfall (template `WATERFAL.otp`) is pseudo-3D [COM]:
+  - each curve is drawn on its own plane, the first at the back and the last at the front;
+  - the planes are shifted by a layer-wide X and Y percentage (`layer -y X,Y`; the 2016 template reports -31.97 and -89.77);
+  - a Z axis names the curves, and the Y axis at the right of the back plane shows raw data;
+  - curves have a white fill that hides the curves behind them ("Show Hidden Lines" is off by default [W:customizewaterfall]);
+  - swapping the Z axis limits reverses the order;
+  - there are no offsets per plot.
+
+  Sheaf draws a simpler 2D form (13.6).
+
+### 13.2 Model
+
+```rust
+pub struct Layer {
+    // ... existing fields ...
+    #[serde(default, skip_serializing_if = "Stack::is_none")]
+    pub stack: Stack,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plot_offsets: Vec<PlotOffset>,
+}
+
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Stack {
+    None,                                             // default
+    Auto { gap_percent: f64 },                        // 13.4.1
+    Constant { step: f64 },                           // 13.4.2
+    Individual,                                       // 13.4.3
+    Waterfall { dx_percent: f64, dy_percent: f64 },   // 13.6
+}
+
+pub struct PlotOffset {
+    pub column: ColumnId,          // the Y column of the curve
+    pub x: f64,                    // default 0; not written when 0
+    pub y: f64,                    // default 0; not written when 0
+    pub follows: Option<ColumnId>, // default None; not written when None
+}
+```
+
+| `stack` | stored as | meaning |
+|---|---|---|
+| None | absent, or `{"kind":"none"}` | no offsets |
+| Auto | `{"kind":"auto","gap_percent":10.0}` | 13.4.1 |
+| Constant | `{"kind":"constant","step":500.0}` | 13.4.2 |
+| Individual | `{"kind":"individual"}` | 13.4.3 |
+| Waterfall | `{"kind":"waterfall","dx_percent":5.0,"dy_percent":10.0}` | 13.6 |
+
+- Both new fields have serde defaults and are not written while they have their default, so files written before this feature load unchanged and graphs that do not stack are saved exactly as before. `FORMAT_VERSION` stays 1; an older Sheaf ignores the fields and draws the curves unstacked.
+- **Per-curve settings live on the layer, found by the curve's Y column** (`Layer::plot_offset`, `plot_offset_mut`, `follows`). `Plot` itself is unchanged, so the code that builds plots (importers, fits, the app) needs to know nothing about stacking, and an offset stays with its curve when plots are reordered or removed. Two plots of the same column in one layer share one entry.
+- `x` and `y` are offsets in axis units. They are used only in Individual mode; other modes leave them in place, so switching back to Individual restores them.
+- `follows = Some(C)` gives the curve no place of its own in the stack: it takes the offset, and the waterfall shift, of the first member whose Y column is C. A curve cannot follow its own column (such an entry is ignored). When a fit adds its curve to a layer that shows the data, and when `Project::plot_fit` makes a graph of data and fit, the fitted curve gets an entry that follows the data column.
+- The renderer treats a stored number that is not finite as 0. A negative gap or step is allowed: the curves overlap, or stack downwards.
+
+### 13.3 Members of the stack
+
+The members of a layer are its plots, in plot order, whose Y column exists and holds numbers and which do not follow another column (13.2). Hidden plots are members. The member index k counts members from 0.
+
+The extent of a member is taken over its plotted rows (the row range, clamped to the column length as in drawing), using only rows where X and Y are both finite; without an X column, X is the row number. `lo` is the smallest and `hi` the largest Y of those rows. A member with no such row has no extent.
+
+### 13.4 Offsets (ox, oy) per plot, in axis units
+
+13.4.1 **Auto.**
+1. H is the largest `hi - lo` over the members that have an extent. If no member has an extent, or H is 0, H = 10.
+2. gap = `gap_percent * H / 100`.
+3. Go through the members in order, with `top` unset at the start:
+   - a member without an extent gets (0, 0), and `top` stays as it is;
+   - the first member with an extent gets (0, 0), and `top = hi`;
+   - every later member with an extent gets `oy = top + gap - lo`, and then `top = hi + oy`.
+4. ox is always 0.
+
+The offsets are computed again at every drawing, so they follow the data.
+
+13.4.2 **Constant.** Member k gets (0, k × step).
+
+13.4.3 **Individual.** Each member gets the `x` and `y` of the layer's entry for its Y column, or (0, 0) when there is none.
+
+13.4.4 **None and Waterfall.** Every member gets (0, 0).
+
+13.4.5 **Followers** get the pair (and the member index) of the first member whose Y column is the followed column; without such a member, (0, 0) and no member index. Plots whose Y column holds no numbers get (0, 0) and are not drawn.
+
+`sheaf_plot::stack_offsets(project, graph, layer)` returns these pairs, one per plot in plot order. The app will use it to copy the offsets in effect into the layer when the user switches to Individual, so that the picture does not jump.
+
+### 13.5 Drawing
+
+- Every use of a data point (x, y) uses (x + ox, y + oy) instead:
+  - lines and symbols;
+  - error bars, from y + oy - e to y + oy + e;
+  - column bars, from oy to y + oy;
+  - the data range for automatic axis limits (figure-rendering.md section 2, step 1).
+- When an offset is 0 the value is used exactly as stored, so a layer with `stack` None is drawn exactly as before, with byte-identical SVG.
+- Worksheets, analysis tools and fits always use the stored values.
+- Limits, ticks and tick labels follow figure-rendering.md section 2, applied to the moved values. Tick labels show axis coordinates; no curve is labelled with its own values. Read-outs in the app show axis coordinates.
+- The legend is unchanged (plot order).
+
+Check: the SVG of an Auto-stacked graph is byte-identical to the SVG of an unstacked graph whose Y columns were shifted beforehand by the offsets of 13.4.
+
+### 13.6 Waterfall (Sheaf's 2D form)
+
+The waterfall is drawn only for a layer that is not linked to another layer and has no linked layers. In a graph with a right Y axis, `Waterfall` is drawn like `None` (the command line refuses that combination, 13.8).
+
+Let n be the number of members (13.3), `sx = dx_percent / 100` and `sy = dy_percent / 100`. Let F be the layer frame in points after the label fit of figure-rendering.md section 3.
+
+The front frame B:
+- `B.w = F.w / (1 + (n - 1) |sx|)`;
+- `B.h = F.h / (1 + (n - 1) |sy|)`;
+- `B.x = F.x` when sx >= 0, otherwise `F.x + F.w - B.w`;
+- `B.y = F.y + F.h - B.h` when sy >= 0, otherwise `F.y`;
+- when n <= 1, B = F.
+
+So the last member, moved by n - 1 shifts, ends exactly at the opposite corner of F.
+
+Drawing rules:
+- The layer geometry's `frame` is B and its `clip` is F (`LayerGeometry::clip`; in every other mode the two are equal).
+- Axis limits come from the unmoved data of the visible plots.
+- Axes, ticks, tick labels, titles, the legend and free text are laid out on B.
+- Member k and its followers are drawn with every page point moved by `(k sx B.w, -k sy B.h)`: positive values move later curves right and up.
+- Plots are drawn in reverse plot order, so the first plot is on top.
+- Data are clipped to F.
+- Opposite axis lines, opposite ticks and grid lines are not drawn, even when set.
+- No Z axis, planes or fill that hides the curves behind are drawn.
+- The label fit of figure-rendering.md section 3 is done for F. With a negative DX (or DY) the later curves move left (or down) past the front frame's Y (or X) axis and are drawn over its tick labels and title; hide them (`--no-y-tick-labels`) or use positive shifts.
+
+Check values (F = 100, 50, 300, 200 pt; 3 members; 5 % and 10 %): B = 100, 83.333, 272.727, 166.667; member 2 is moved by (27.273, -33.333). With -5 %: B.x = 127.273.
+
+### 13.7 Templates
+
+- **`stacked`** (`Template::StackedLines`, label "Stacked lines (Y offsets)"): the `line` template with
+  - `stack = Auto { gap_percent: 10 }`;
+  - Y tick labels hidden, and Y major and minor ticks `None`;
+  - `show_opposite` on both axes, without opposite ticks (a closed box);
+  - the X axis and the legend as in `line`.
+
+  This follows the owner's XRD figures rather than Origin's template, which shows Y tick labels.
+- **`waterfall`** (`Template::Waterfall`): the `line` template with `Waterfall { dx_percent: 5, dy_percent: 10 }`. These numbers are Sheaf's own.
+
+Both are in `Template::ALL`, so the desktop app's Plot menu lists them already.
+
+### 13.8 Command line
+
+These options work on `sheaf plot` and `sheaf export` and act on the first layer:
+
+| option | effect |
+|---|---|
+| `--stack none` | no offsets |
+| `--stack auto` | Auto with a 10 % gap |
+| `--stack auto:GAP` | Auto with GAP percent; GAP is a finite number of at least 0 |
+| `--stack step:STEP` | Constant with STEP axis units; may be negative (`--stack=step:-500`) |
+| `--offsets Y1,Y2,...` | Individual; plot k gets `y = Yk`; plots after the list keep their offsets; more values than plots is an error |
+| `--waterfall DX,DY` | Waterfall; DX and DY in percent, each from -100 to 100 |
+| `--no-y-tick-labels` | hide the Y tick labels |
+| `--no-y-ticks` | Y major and minor ticks `None` |
+
+- `--stack`, `--offsets` and `--waterfall` exclude each other.
+- Values that start with a minus sign need the `=` form, for example `--offsets=-100,0`.
+- Error messages name the option and the bad value.
+- `--waterfall` on a graph with a right Y axis, and `-t waterfall` together with `--y2`, are refused.
+- `-t stacked` and `-t waterfall` choose the templates.
+
+Examples: `sheaf plot xrd.csv -t stacked -o xrd.png`; `sheaf export p.sheaf --graph Graph1 --stack step:500 --no-y-tick-labels -o g.pdf`; `sheaf plot a.xy b.xy c.xy --stack auto --no-legend -o fig.svg`.
+
+### 13.9 Desktop app (later, with ADR 0007)
+
+- The Plot menu lists "Stacked lines (Y offsets)" and "Waterfall" today, through `Template::ALL`.
+- The Graph menu gets "Offset Grouped Data in Layer" with None, Constant..., Auto... and Individual. Cumulative stays disabled until GP-COL-01 exists.
+- The Plots tab gets an "Offsets" section with the mode and its numbers; in Individual mode, X and Y fields for the selected plot.
+- Choosing Individual first copies `stack_offsets` into the layer's entries, so the picture does not jump.
+- Hit testing in the graph view will use the moved values. Dragging a curve to set its offset is P2.
+
+### 13.10 Origin project files
+
+In the 515-byte curve record (opj-format.md section 10.5) [COM, byte comparisons of files saved by Origin with and without stacking, and the same pattern in the owner's files]:
+- f64 at `0x1CA` is the Y offset in axis units;
+- f64 at `0x1B2` is probably the X offset; it was 0 in every file seen [INF];
+- f64 at `0x1BA`, `0x1C2`, `0x1D2` and `0x1DA` is 1.0 in graph curves, probably multipliers [INF];
+- u8 `0x13A` = `0x30` and u8 `0x148` = 10 in every curve of an Auto-stacked layer, and 0 in a plain line graph; probably the mode code and the gap percent [INF].
+
+The 361-byte layer header also differs at f64 `0x13D` (0.1 stacked, 0.08 plain) and `0x135` (Origin's "no value" stacked, 0 plain); their meaning is unknown.
+
+Import rule (not yet implemented; the reader ignores these fields today, which is why the owner's XRD curves are drawn on top of each other): if any curve of a layer has a non-zero offset, set `stack = Individual` and add an entry with that curve's offsets for its Y column. This redraws the graph exactly as Origin saved it. Mapping `0x13A`/`0x148` to Auto can follow once the mode codes are confirmed. A future writer needs the same bytes.
+
+### 13.11 Check values (Origin 2016, Auto, gap 10 %, X = 0, 1, ..., 20)
+
+| Y of the curves, in plot order | offsets |
+|---|---|
+| x/2; 1000+5x; -5+x/2; x/20 | 0; -980; 135; 150 |
+| x; 50-x/2; -5+x/4; 2x-10 | 0; -16; 43; 57 |
+| x/2; 1000+10x; -5+x/2; x/20 | 0; -970; 255; 280 |
+| first row, with the last value of the third curve missing | 0; -980; 135; 149.5 |
+| first row, with the second plot hidden | 0; -980; 135; 150 |
+| 7; x/2; 7 | 0; 8; 12 |
+| 7; 7; 7 | 0; 1; 2 |
+| 10+x; 1+x/20, on a log10 Y axis | 0; 31 |
+
+With the second plot of the first row hidden, the visible curves span 0..10, 130..140 and 150..151, so the data range for the axis is still 0..151.
+
+### 13.12 Deliberate differences from Origin 2016
+
+- The `stacked` template hides the Y tick labels and ticks and closes the box (the owner's style); Origin's template shows them.
+- The waterfall is a flat 2D drawing without a Z axis, planes or hiding fill, with its own default shifts, and it draws the first curve in front.
+- Individual offsets are stored per Y column, not per plot.
+- A fitted curve moves with its data (`follows`); Origin's behaviour for fit curves in a stacked layer was not tested.
+- The automatic axis range follows Sheaf's rule (figure-rendering.md section 2), not Origin's rescale rule, so the limits differ (0..200 instead of -10..160 for the first check row).
+
+### 13.13 Unknowns
+
+- Origin 2016's codes for the modes other than Auto: None, Constant, Individual and Cumulative cannot be set by script in 2016 (`set -sy` is refused and there is no layer property). Confirming them needs a click test of Graph > Offset Grouped Data in Layer and a byte comparison.
+- The storage of X offsets and multipliers (13.10) is inferred; the layer header differences are unexplained.
+- Whether the Auto gap percent can be edited in the 2016 dialog. Only 10 was seen, so the H = 10 rule for flat curves is confirmed only at 10 %.
+- Whether Origin's Auto uses a plot's display row range for the curve heights; Sheaf uses the plotted rows.
+- What Origin's Data Reader shows on a moved curve (the stored or the moved value).
+- Origin's exact waterfall geometry.
+- Owner preferences: whether the stacked template should hide the legend (he deletes it and types the curve names next to the curves); whether he wants an option that writes each curve's name at its right end (a possible follow-up); whether hidden curves should keep their place (Origin's behaviour, adopted here).
+- The current online help describes Individual offsets in the template and a pairwise Auto gap; neither matches Origin 2016, and later versions may differ.

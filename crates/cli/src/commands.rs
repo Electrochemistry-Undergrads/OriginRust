@@ -2,10 +2,10 @@
 
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
-use sheaf_core::graph::{Graph, LineStyle};
+use sheaf_core::graph::{Graph, LineStyle, Stack, TickDirection};
 
 use sheaf_core::project::Window;
-use sheaf_core::template::Template;
+use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
 use sheaf_core::{Color, ColumnId, Project, WindowId};
 use sheaf_io::ascii::{AsciiOptions, Delimiter};
 use sheaf_io::chi::ChiOptions;
@@ -314,7 +314,9 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
     check_limits("y2", s.y2_min, s.y2_max)?;
     let colors: Vec<Color> =
         s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
+    let stack = stack_option(s)?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
+    check_stack_fits(g, s)?;
     let right = g.right_y_member(0);
     let wants_y2 = s.y2_title.is_some() || s.y2_min.is_some() || s.y2_max.is_some() || s.y2_step.is_some();
     if wants_y2 && right.is_none() {
@@ -360,6 +362,82 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
     layer.y_axis.max = s.y_max.or(layer.y_axis.max);
     layer.x_axis.major_step = s.x_step.or(layer.x_axis.major_step);
     layer.y_axis.major_step = s.y_step.or(layer.y_axis.major_step);
+    if let Some(stack) = stack {
+        layer.stack = stack;
+    }
+    if !s.offsets.is_empty() {
+        layer.stack = Stack::Individual;
+        let columns: Vec<ColumnId> = layer.plots.iter().map(|p| p.y).collect();
+        for (column, y) in columns.into_iter().zip(&s.offsets) {
+            layer.plot_offset_mut(column).y = *y;
+        }
+    }
+    if s.no_y_tick_labels {
+        layer.y_axis.show_tick_labels = false;
+    }
+    if s.no_y_ticks {
+        layer.y_axis.major_tick = TickDirection::None;
+        layer.y_axis.minor_tick = TickDirection::None;
+    }
+    Ok(())
+}
+
+/// The stack mode asked for with `--stack` or `--waterfall`, checked (`--offsets` is applied
+/// separately because it also sets offsets).
+fn stack_option(s: &StyleArgs) -> Result<Option<Stack>> {
+    if let Some(text) = &s.stack {
+        return parse_stack(text).map(Some);
+    }
+    if s.waterfall.is_empty() {
+        return Ok(None);
+    }
+    let [dx, dy] = s.waterfall[..] else {
+        bail!("--waterfall needs two numbers, DX,DY in percent (got {} number(s))", s.waterfall.len());
+    };
+    for v in [dx, dy] {
+        if !(v.is_finite() && (-100.0..=100.0).contains(&v)) {
+            bail!("--waterfall takes percentages from -100 to 100 (got {v})");
+        }
+    }
+    Ok(Some(Stack::Waterfall { dx_percent: dx, dy_percent: dy }))
+}
+
+/// Reads the value of `--stack`: `none`, `auto`, `auto:GAP` or `step:STEP`.
+fn parse_stack(text: &str) -> Result<Stack> {
+    let t = text.trim().to_ascii_lowercase();
+    let number = |v: &str| v.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    if t == "none" {
+        return Ok(Stack::None);
+    }
+    if t == "auto" {
+        return Ok(STACK_AUTO_DEFAULT);
+    }
+    if let Some(gap) = t.strip_prefix("auto:") {
+        return match number(gap) {
+            Some(g) if g >= 0.0 => Ok(Stack::Auto { gap_percent: g }),
+            _ => bail!("--stack auto:GAP needs a gap in percent that is a number of at least 0 (got '{gap}')"),
+        };
+    }
+    if let Some(step) = t.strip_prefix("step:") {
+        return match number(step) {
+            Some(v) => Ok(Stack::Constant { step: v }),
+            None => bail!("--stack step:STEP needs a step that is a number (got '{step}')"),
+        };
+    }
+    bail!("--stack must be none, auto, auto:GAP or step:STEP (got '{text}')")
+}
+
+/// Refuses stack options that do not fit the graph: more `--offsets` than the first layer has
+/// curves, and a waterfall in a graph with a right Y axis (a waterfall is drawn only for a layer
+/// on its own).
+fn check_stack_fits(g: &Graph, s: &StyleArgs) -> Result<()> {
+    let plots = g.layers.first().map_or(0, |l| l.plots.len());
+    if s.offsets.len() > plots {
+        bail!("--offsets gives {} values but the graph has {} curve(s)", s.offsets.len(), plots);
+    }
+    if !s.waterfall.is_empty() && g.group(0).len() > 1 {
+        bail!("--waterfall cannot be used on a graph with a right Y axis");
+    }
     Ok(())
 }
 
@@ -403,6 +481,9 @@ fn plot(a: PlotArgs) -> Result<()> {
     let first = &a.inputs[0];
     if a.inputs.len() > 1 && a.inputs.iter().any(|p| is_project(p)) {
         bail!("a project cannot be combined with other inputs; give one project, or one or more data files");
+    }
+    if !a.y2.is_empty() && a.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
+        bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
     }
     let (mut project, suggested) = if is_project(first) {
         (load_project(first)?, Template::Line)

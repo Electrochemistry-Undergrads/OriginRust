@@ -785,7 +785,7 @@ fn squares_and_line() -> (Project, WindowId) {
 /// installed fonts).
 fn fixed_geometry(p: &Project, g: WindowId) -> Vec<LayerGeometry> {
     let graph = p.graph(g).unwrap();
-    let pds: Vec<Vec<data::PlotData>> = graph.layers.iter().map(|l| data::collect(p, l)).collect();
+    let pds: Vec<data::LayerData> = graph.layers.iter().map(|l| data::collect(p, l)).collect();
     layout::graph_geometry(graph, &pds, &FixedMetrics)
 }
 
@@ -1084,4 +1084,362 @@ fn a_right_axis_on_the_cv_template_keeps_the_closed_black_box() {
         colors.extend(single_lines(&layer.overlay, 1.0).into_iter().map(|(_, c)| c));
     }
     assert_eq!(colors, vec![Color::BLACK; 4], "four black edges");
+}
+
+// ----- stacked curves and waterfall (graphing spec section 13) --------------
+
+use sheaf_core::graph::Stack;
+
+const AUTO10: Stack = Stack::Auto { gap_percent: 10.0 };
+
+/// A curve given as a function of X.
+type Of = &'static dyn Fn(f64) -> f64;
+
+/// Origin's first check data: x/2, 1000 + 5x, -5 + x/2 and x/20.
+const ORIGIN_CHECK: [Of; 4] = [&|x| x / 2.0, &|x| 1000.0 + 5.0 * x, &|x| -5.0 + x / 2.0, &|x| x / 20.0];
+
+fn x0_20() -> Vec<f64> {
+    (0..=20).map(f64::from).collect()
+}
+
+/// A line graph of the curves `fs` over X = 0, 1, ..., 20 whose layer has the stack mode `stack`.
+fn stacked(stack: Stack, fs: &[Of]) -> (Project, WindowId) {
+    let x = x0_20();
+    let ys = fs.iter().map(|f| x.iter().map(|v| f(*v)).collect()).collect();
+    let (mut p, g) = project(Template::Line, x, ys);
+    p.graph_mut(g).unwrap().layers[0].stack = stack;
+    (p, g)
+}
+
+fn y_offsets(p: &Project, g: WindowId) -> Vec<f64> {
+    let offsets = stack_offsets(p, g, 0).unwrap();
+    assert!(offsets.iter().all(|(ox, _)| *ox == 0.0), "{offsets:?}");
+    offsets.into_iter().map(|(_, oy)| oy).collect()
+}
+
+fn assert_offsets(p: &Project, g: WindowId, want: &[f64]) {
+    let got = y_offsets(p, g);
+    assert!(got.len() == want.len() && got.iter().zip(want).all(|(a, b)| near(*a, *b)), "{got:?}, want {want:?}");
+}
+
+/// The data range of the drawn Y values of the first layer (before rounding to ticks).
+fn y_range(p: &Project, g: WindowId) -> Option<(f64, f64)> {
+    let layer = &p.graph(g).unwrap().layers[0];
+    data::axis_range(data::collect(p, layer).plots.iter(), data::Dim::Y, layer.y_axis.scale)
+}
+
+fn plot_column(p: &Project, g: WindowId, index: usize) -> sheaf_core::ColumnId {
+    p.graph(g).unwrap().layers[0].plots[index].y
+}
+
+fn set_values(p: &mut Project, column: sheaf_core::ColumnId, values: Vec<f64>) {
+    p.column_mut(column).unwrap().data = ColumnData::numeric(values);
+}
+
+#[test]
+fn auto_offsets_stack_like_origin_2016_and_follow_the_data() {
+    let (mut p, g) = stacked(AUTO10, &ORIGIN_CHECK);
+    assert_offsets(&p, g, &[0.0, -980.0, 135.0, 150.0]);
+    assert_eq!(y_range(&p, g), Some((0.0, 151.0)), "the axis range covers the moved curves");
+    // The offsets are computed again from the data: the second curve becomes 1000 + 10x.
+    let c = plot_column(&p, g, 1);
+    set_values(&mut p, c, x0_20().iter().map(|x| 1000.0 + 10.0 * x).collect());
+    assert_offsets(&p, g, &[0.0, -970.0, 255.0, 280.0]);
+}
+
+#[test]
+fn auto_offsets_use_the_tallest_curve_for_the_gap() {
+    let (p, g) = stacked(AUTO10, &[&|x| x, &|x| 50.0 - x / 2.0, &|x| -5.0 + x / 4.0, &|x| 2.0 * x - 10.0]);
+    assert_offsets(&p, g, &[0.0, -16.0, 43.0, 57.0]);
+}
+
+#[test]
+fn auto_offsets_ignore_missing_values() {
+    let (mut p, g) = stacked(AUTO10, &ORIGIN_CHECK);
+    let c = plot_column(&p, g, 2);
+    let mut values = p.numeric(c).unwrap().to_vec();
+    values[20] = f64::NAN;
+    set_values(&mut p, c, values);
+    assert_offsets(&p, g, &[0.0, -980.0, 135.0, 149.5]);
+}
+
+#[test]
+fn auto_offsets_of_flat_curves() {
+    let (p, g) = stacked(AUTO10, &[&|_| 7.0, &|x| x / 2.0, &|_| 7.0]);
+    assert_offsets(&p, g, &[0.0, 8.0, 12.0]);
+    // All flat: the height counts as 10, so the gap is 1.
+    let (p, g) = stacked(AUTO10, &[&|_| 7.0, &|_| 7.0, &|_| 7.0]);
+    assert_offsets(&p, g, &[0.0, 1.0, 2.0]);
+}
+
+#[test]
+fn auto_offsets_are_added_in_data_units_on_a_log_axis() {
+    let (mut p, g) = stacked(AUTO10, &[&|x| 10.0 + x, &|x| 1.0 + x / 20.0]);
+    p.graph_mut(g).unwrap().layers[0].y_axis.scale = ScaleKind::Log10;
+    assert_offsets(&p, g, &[0.0, 31.0]);
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    assert_eq!(data::axis_range(d.plots[1..].iter(), data::Dim::Y, ScaleKind::Log10), Some((32.0, 33.0)));
+}
+
+#[test]
+fn hidden_plots_keep_their_place_in_the_stack() {
+    let (mut p, g) = stacked(AUTO10, &ORIGIN_CHECK);
+    p.graph_mut(g).unwrap().layers[0].plots[1].visible = false;
+    assert_offsets(&p, g, &[0.0, -980.0, 135.0, 150.0]);
+    // The automatic range comes from the visible curves: 0..10, 130..140 and 150..151.
+    assert_eq!(y_range(&p, g), Some((0.0, 151.0)));
+    let svg = svg_of(&p, g);
+    assert_eq!(paths_in(with_class(&doc(&svg), "plots")[0]).len(), 3);
+
+    let (mut p, g) = stacked(Stack::Constant { step: 500.0 }, &ORIGIN_CHECK);
+    p.graph_mut(g).unwrap().layers[0].plots[1].visible = false;
+    assert_offsets(&p, g, &[0.0, 500.0, 1000.0, 1500.0]);
+}
+
+#[test]
+fn constant_steps_may_be_negative_and_numbers_that_are_not_finite_count_as_0() {
+    let three: [Of; 3] = [&|x| x, &|x| x, &|x| x];
+    let (p, g) = stacked(Stack::Constant { step: -2.0 }, &three);
+    assert_offsets(&p, g, &[0.0, -2.0, -4.0]);
+    let (p, g) = stacked(Stack::Constant { step: f64::NAN }, &three);
+    assert_offsets(&p, g, &[0.0, 0.0, 0.0]);
+    // A gap that is not finite is no gap: each curve starts where the one before it ends.
+    let (p, g) = stacked(Stack::Auto { gap_percent: f64::INFINITY }, &ORIGIN_CHECK);
+    assert_offsets(&p, g, &[0.0, -990.0, 115.0, 120.0]);
+}
+
+#[test]
+fn a_curve_without_numbers_has_no_offset_and_the_next_one_stacks_on_the_one_before() {
+    let (mut p, g) = stacked(AUTO10, &[&|x| x, &|_| f64::NAN, &|x| 50.0 + x]);
+    assert_offsets(&p, g, &[0.0, 0.0, -28.0]);
+    // A curve of a text column is not a member either.
+    let book = p.workbooks().next().unwrap().id;
+    let text = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into(); 21])).unwrap();
+    p.add_plot(g, 0, text).unwrap();
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let last = layer.plots.pop().unwrap();
+    layer.plots.insert(1, last);
+    assert_offsets(&p, g, &[0.0, 0.0, 0.0, -28.0]);
+}
+
+#[test]
+fn individual_offsets_move_each_curve_and_are_ignored_in_other_modes() {
+    let (mut p, g) = stacked(Stack::None, &[&|x| x, &|x| 2.0 * x]);
+    let plain = svg_of(&p, g);
+    let b = plot_column(&p, g, 1);
+    {
+        let entry = p.graph_mut(g).unwrap().layers[0].plot_offset_mut(b);
+        entry.x = 1.5;
+        entry.y = 100.0;
+    }
+    assert_eq!(svg_of(&p, g), plain, "stored offsets do nothing without the individual mode");
+    p.graph_mut(g).unwrap().layers[0].stack = Stack::Individual;
+    assert_eq!(stack_offsets(&p, g, 0).unwrap(), vec![(0.0, 0.0), (1.5, 100.0)]);
+    let d = data::collect(&p, &p.graph(g).unwrap().layers[0]);
+    assert_eq!((d.plots[1].x_at(0), d.plots[1].y_at(0)), (1.5, 100.0), "the first point (0, 0) is moved");
+    // The drawn curve starts there.
+    let geom = &fixed_geometry(&p, g)[0];
+    let (px, py) = geom.data_to_page(1.5, 100.0);
+    let mut start = String::new();
+    scene::move_to(&mut start, px, py);
+    let svg = svg_of(&p, g);
+    let path = paths_in(with_class(&doc(&svg), "plots")[0])[1].attribute("d").unwrap().to_string();
+    assert!(path.starts_with(&start), "{path} should start with {start}");
+    // An offset that is not finite counts as 0.
+    p.graph_mut(g).unwrap().layers[0].plot_offset_mut(b).y = f64::INFINITY;
+    assert_eq!(stack_offsets(&p, g, 0).unwrap()[1], (1.5, 0.0));
+}
+
+#[test]
+fn a_fitted_curve_moves_with_its_data_and_takes_no_place_of_its_own() {
+    // Curves: B, A, the fit of A, C.
+    let fs: [Of; 4] = [&|x| x / 20.0, &|x| x / 2.0, &|x| x / 2.0 + 0.25, &|x| 1000.0 + 5.0 * x];
+    let (mut p, g) = stacked(AUTO10, &fs);
+    let (a, fit) = (plot_column(&p, g, 1), plot_column(&p, g, 2));
+    p.graph_mut(g).unwrap().layers[0].plot_offset_mut(fit).follows = Some(a);
+    // B 0..1, A moved to 11..21, C moved so that it starts 10 above: 31 - 1000.
+    assert_offsets(&p, g, &[0.0, 11.0, 11.0, -969.0]);
+    let (q, h) = stacked(AUTO10, &[fs[0], fs[1], fs[3]]);
+    assert_offsets(&q, h, &[0.0, 11.0, -969.0]);
+    let d = data::collect(&p, &p.graph(g).unwrap().layers[0]);
+    let members: Vec<Option<usize>> = d.plots.iter().map(|pd| pd.member).collect();
+    assert_eq!(members, vec![Some(0), Some(1), Some(1), Some(2)]);
+    assert_eq!(d.members, 3);
+    // A curve that follows a column the layer does not plot stays where it is.
+    p.graph_mut(g).unwrap().layers[0].plot_offset_mut(fit).follows = Some(sheaf_core::ColumnId(999_999));
+    assert_eq!(y_offsets(&p, g)[2], 0.0);
+}
+
+#[test]
+fn a_stacked_graph_draws_exactly_like_data_that_were_shifted_beforehand() {
+    let (p, g) = stacked(AUTO10, &ORIGIN_CHECK);
+    let offsets = y_offsets(&p, g);
+    let x = x0_20();
+    let shifted: Vec<Vec<f64>> = ORIGIN_CHECK
+        .iter()
+        .zip(&offsets)
+        .map(|(f, o)| x.iter().map(|v| if *o == 0.0 { f(*v) } else { f(*v) + o }).collect())
+        .collect();
+    let (q, h) = project(Template::Line, x, shifted);
+    assert_eq!(svg_of(&p, g), svg_of(&q, h));
+}
+
+#[test]
+fn bars_and_error_bars_start_from_the_offset() {
+    let (mut p, g) = project(Template::Scatter, vec![1.0, 2.0], vec![vec![5.0, 6.0]]);
+    let book = p.workbooks().next().unwrap().id;
+    let err = p.add_column(book, 0, Designation::YError, ColumnData::numeric(vec![1.0, 1.0])).unwrap();
+    {
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        layer.stack = Stack::Individual;
+        let y = layer.plots[0].y;
+        layer.plot_offset_mut(y).y = 100.0;
+        layer.plots[0].kind = PlotKind::Column;
+        layer.plots[0].y_error = Some(err);
+    }
+    let geom = &fixed_geometry(&p, g)[0];
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let bars: Vec<Rect> = scene.layers[0]
+        .plots
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Rect { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(bars.len(), 2);
+    let (top, base) = (geom.data_to_page(1.0, 105.0).1, geom.data_to_page(1.0, 100.0).1);
+    assert!(near(bars[0].y, top) && near(bars[0].y + bars[0].h, base), "{:?}", bars[0]);
+    // The error bar of the first point runs from 106 down to 104.
+    let error_bars = scene.layers[0]
+        .plots
+        .iter()
+        .find_map(|it| match it {
+            scene::Item::Path { d, .. } => Some(d.clone()),
+            _ => None,
+        })
+        .unwrap();
+    let mut want = String::new();
+    let (bx, high) = geom.data_to_page(1.0, 106.0);
+    scene::move_to(&mut want, bx, high);
+    scene::line_to(&mut want, bx, geom.data_to_page(1.0, 104.0).1);
+    assert!(error_bars.starts_with(&want), "{error_bars} should start with {want}");
+}
+
+#[test]
+fn stack_offsets_need_a_graph_and_a_layer() {
+    let (p, g) = stacked(AUTO10, &[&|x| x]);
+    assert_eq!(stack_offsets(&p, g, 0).unwrap(), vec![(0.0, 0.0)]);
+    assert!(matches!(stack_offsets(&p, g, 1), Err(PlotError::NoSuchLayer(1))));
+    assert!(matches!(stack_offsets(&p, WindowId(999), 0), Err(PlotError::NoSuchGraph(_))));
+}
+
+fn near3(a: f64, b: f64) -> bool {
+    (a - b).abs() < 5e-4
+}
+
+#[test]
+fn the_waterfall_front_frame_follows_the_spec() {
+    let f = Rect { x: 100.0, y: 50.0, w: 300.0, h: 200.0 };
+    let b = stack::front_frame(f, 3, 0.05, 0.1);
+    assert!(near3(b.x, 100.0) && near3(b.y, 83.333) && near3(b.w, 272.727) && near3(b.h, 166.667), "{b:?}");
+    // The third curve is moved by two shifts and ends at the top right corner of f.
+    assert!(near3(2.0 * 0.05 * b.w, 27.273) && near3(2.0 * 0.1 * b.h, 33.333));
+    assert!(near(b.x + 2.0 * 0.05 * b.w + b.w, f.x + f.w) && near(b.y - 2.0 * 0.1 * b.h, f.y));
+    // Moving left: the front frame sits at the right side.
+    assert!(near3(stack::front_frame(f, 3, -0.05, 0.1).x, 127.273));
+    // Moving down: the front frame sits at the top.
+    assert_eq!(stack::front_frame(f, 3, 0.05, -0.1).y, f.y);
+    assert_eq!(stack::front_frame(f, 1, 0.05, 0.1), f);
+    assert_eq!(stack::front_frame(f, 0, 0.05, 0.1), f);
+}
+
+#[test]
+fn a_waterfall_draws_later_curves_moved_and_the_first_on_top() {
+    let three: [Of; 3] = [&|x| x, &|x| x, &|x| x];
+    let (mut p, g) = stacked(Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 }, &three);
+    {
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+            axis.show_opposite = true;
+            axis.opposite_ticks = true;
+            axis.major_grid = Some(sheaf_core::graph::LineStyle::solid(Color::rgb(200, 200, 200), 0.5));
+        }
+        layer.legend.visible = false;
+    }
+    let geom = fixed_geometry(&p, g)[0].clone();
+    let mut plain = p.clone();
+    plain.graph_mut(g).unwrap().layers[0].stack = Stack::None;
+    let f = fixed_geometry(&plain, g)[0].frame;
+    assert_eq!(geom.clip, f, "data are clipped to the whole frame");
+    let b = stack::front_frame(f, 3, 0.05, 0.1);
+    assert_eq!(geom.frame, b, "the axes are on the front frame");
+    assert_eq!((geom.y.min, geom.y.max), (0.0, 20.0), "limits from the unmoved data");
+
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let layer = &scene.layers[0];
+    assert_eq!(layer.clip, f);
+    assert!(layer.grid.is_empty(), "no grid");
+    let curves: Vec<(&str, Color)> = layer
+        .plots
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Path { d, stroke: Some(s), .. } => Some((d.as_str(), s.color)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(curves.len(), 3);
+    let (x0, y0) = geom.data_to_page(0.0, 0.0);
+    for (i, (d, _)) in curves.iter().enumerate() {
+        // Drawn back to front: the third curve (two shifts) first.
+        let k = (2 - i) as f64;
+        let mut start = String::new();
+        scene::move_to(&mut start, x0 + k * 0.05 * b.w, y0 - k * 0.1 * b.h);
+        assert!(d.starts_with(&start), "curve {i}: {d} should start with {start}");
+    }
+    let first_color = p.graph(g).unwrap().layers[0].plots[0].line.color;
+    assert_eq!(curves[2].1, first_color, "the first curve is drawn last, on top");
+    // Only the bottom and left axis lines: no opposite lines, no closed box.
+    assert_eq!(single_lines(&layer.overlay, 1.0).len(), 2);
+    assert!(!layer.overlay.iter().any(|it| matches!(it, scene::Item::Path { d, .. } if d.ends_with('Z'))));
+    // No opposite ticks: every tick path starts on the bottom or the left edge.
+    for it in &layer.overlay {
+        if let scene::Item::Path { d, stroke: Some(s), .. } = it
+            && s.width == 1.0
+            && d.matches('M').count() > 1
+        {
+            let n: Vec<f64> = d[1..].split(['L', ' ', 'M']).take(2).map(|v| v.parse().unwrap()).collect();
+            assert!(near3(n[0], b.x) || near3(n[1], b.y + b.h), "{d}");
+        }
+    }
+}
+
+#[test]
+fn a_waterfall_in_a_graph_with_a_right_axis_is_drawn_without_shifts() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let (p, g) = double_y(
+        Template::Waterfall,
+        vec![curve("A", "V", &x, |v| v), curve("B", "V", &x, |v| v + 1.0)],
+        vec![curve("C", "mA", &x, |v| -v)],
+    );
+    assert!(matches!(p.graph(g).unwrap().layers[0].stack, Stack::Waterfall { .. }));
+    for geom in fixed_geometry(&p, g) {
+        assert_eq!(geom.frame, geom.clip);
+    }
+    let mut plain = p.clone();
+    for layer in &mut plain.graph_mut(g).unwrap().layers {
+        layer.stack = Stack::None;
+    }
+    assert_eq!(svg_of(&p, g), svg_of(&plain, g));
+}
+
+#[test]
+fn golden_stacked_template() {
+    check_golden("stacked", Template::StackedLines);
+}
+
+#[test]
+fn golden_waterfall_template() {
+    check_golden("waterfall", Template::Waterfall);
 }

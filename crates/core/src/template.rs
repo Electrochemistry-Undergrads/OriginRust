@@ -26,11 +26,24 @@ pub enum Template {
     /// on the right (Origin's "Double-Y"). Selected columns alternate between the left and the
     /// right axis, and each Y axis is drawn in the color of its first curve.
     DoubleY,
+    /// Curves stacked above each other with a gap (Origin's "Stacked Lines by Y Offsets"): the
+    /// line template with automatic offsets and a 10 % gap, no Y tick labels and no Y ticks, and
+    /// a closed box, as in the owner's XRD figures.
+    StackedLines,
+    /// A simple two-dimensional waterfall: each later curve is drawn moved right and up.
+    Waterfall,
 }
 
 impl Template {
-    pub const ALL: [Template; 5] =
-        [Template::Line, Template::Scatter, Template::LineSymbol, Template::CyclicVoltammetry, Template::DoubleY];
+    pub const ALL: [Template; 7] = [
+        Template::Line,
+        Template::Scatter,
+        Template::LineSymbol,
+        Template::CyclicVoltammetry,
+        Template::DoubleY,
+        Template::StackedLines,
+        Template::Waterfall,
+    ];
 
     /// The name used on the command line and in menus.
     pub fn name(&self) -> &'static str {
@@ -40,6 +53,8 @@ impl Template {
             Template::LineSymbol => "line-symbol",
             Template::CyclicVoltammetry => "cv",
             Template::DoubleY => "double-y",
+            Template::StackedLines => "stacked",
+            Template::Waterfall => "waterfall",
         }
     }
 
@@ -50,6 +65,8 @@ impl Template {
             Template::LineSymbol => "Line + Symbol",
             Template::CyclicVoltammetry => "Cyclic voltammetry overlay",
             Template::DoubleY => "Double Y",
+            Template::StackedLines => "Stacked lines (Y offsets)",
+            Template::Waterfall => "Waterfall",
         }
     }
 
@@ -66,6 +83,8 @@ impl Template {
             Template::LineSymbol => general(id, name, PlotKind::LineSymbol),
             Template::CyclicVoltammetry => cyclic_voltammetry(id, name),
             Template::DoubleY => double_y(id, name),
+            Template::StackedLines => stacked_lines(id, name),
+            Template::Waterfall => waterfall(id, name),
         }
     }
 }
@@ -152,6 +171,8 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             },
             default_kind: kind,
             link: None,
+            stack: Stack::None,
+            plot_offsets: Vec::new(),
         }],
     }
 }
@@ -205,6 +226,37 @@ fn double_y(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// Offsets that stack the curves with a gap of 10 % of the tallest curve, as Origin 2016's
+/// "Stacked Lines by Y Offsets" does.
+pub const STACK_AUTO_DEFAULT: Stack = Stack::Auto { gap_percent: 10.0 };
+
+/// The shift of the waterfall template: 5 % of the front frame to the right and 10 % up per
+/// curve. These are Sheaf's own values.
+pub const WATERFALL_DEFAULT: Stack = Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 };
+
+fn stacked_lines(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Line);
+    let layer = &mut g.layers[0];
+    layer.stack = STACK_AUTO_DEFAULT;
+    // The Y values on the axis are true only for the first curve, so the Y axis shows neither
+    // tick labels nor ticks; a closed box frames the curves.
+    let y = &mut layer.y_axis;
+    y.show_tick_labels = false;
+    y.major_tick = TickDirection::None;
+    y.minor_tick = TickDirection::None;
+    for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+        axis.show_opposite = true;
+        axis.opposite_ticks = false;
+    }
+    g
+}
+
+fn waterfall(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Line);
+    g.layers[0].stack = WATERFALL_DEFAULT;
+    g
+}
+
 /// Builds the layer that gives layer `parent_index` (whose content is `parent`) a right Y axis:
 /// a layer linked to it with the same X scale, its own Y scale, and the parent's style.
 ///
@@ -218,6 +270,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     let mut l = parent.clone();
     l.plots.clear();
     l.labels.clear();
+    l.plot_offsets.clear();
     l.link = Some(LayerLink { parent: parent_index, x: ScaleLink::Straight, y: ScaleLink::None });
     l.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
     l.x_axis.side = AxisSide::Hidden;
@@ -274,7 +327,46 @@ mod tests {
         }
         assert_eq!(Template::from_name("CV"), Some(Template::CyclicVoltammetry));
         assert_eq!(Template::from_name("double-y"), Some(Template::DoubleY));
+        assert_eq!(Template::from_name("stacked"), Some(Template::StackedLines));
+        assert_eq!(Template::from_name("Waterfall"), Some(Template::Waterfall));
         assert_eq!(Template::from_name("nope"), None);
+    }
+
+    #[test]
+    fn stacked_template_stacks_with_a_10_percent_gap_in_a_closed_box() {
+        let g = Template::StackedLines.new_graph(WindowId(1), "Graph1");
+        assert_eq!(g.layers.len(), 1);
+        let l = &g.layers[0];
+        assert_eq!(l.stack, Stack::Auto { gap_percent: 10.0 });
+        assert!(!l.y_axis.show_tick_labels);
+        assert_eq!((l.y_axis.major_tick, l.y_axis.minor_tick), (TickDirection::None, TickDirection::None));
+        assert!(l.x_axis.show_opposite && l.y_axis.show_opposite, "closed box");
+        assert!(!l.x_axis.opposite_ticks && !l.y_axis.opposite_ticks);
+        // The X axis and the legend are those of the line template.
+        let line = Template::Line.new_graph(WindowId(1), "Graph1");
+        assert_eq!(l.x_axis.major_tick, line.layers[0].x_axis.major_tick);
+        assert!(l.x_axis.show_tick_labels);
+        assert_eq!(l.legend, line.layers[0].legend);
+        assert_eq!(l.default_kind, PlotKind::Line);
+    }
+
+    #[test]
+    fn waterfall_template_is_the_line_template_with_a_waterfall() {
+        let g = Template::Waterfall.new_graph(WindowId(1), "Graph1");
+        let mut line = Template::Line.new_graph(WindowId(1), "Graph1");
+        assert_eq!(g.layers[0].stack, Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 });
+        line.layers[0].stack = g.layers[0].stack;
+        assert_eq!(g, line);
+        // Every other template has no offsets.
+        for t in
+            [Template::Line, Template::Scatter, Template::LineSymbol, Template::CyclicVoltammetry, Template::DoubleY]
+        {
+            let g = t.new_graph(WindowId(1), "G");
+            assert!(g.layers.iter().all(|l| l.stack.is_none() && l.plot_offsets.is_empty()));
+            // ... and their files are written as before.
+            let json = serde_json::to_string(&g).unwrap();
+            assert!(!json.contains("\"stack\"") && !json.contains("plot_offsets"), "{json}");
+        }
     }
 
     #[test]
@@ -313,7 +405,9 @@ mod tests {
             font: Font::new(DEFAULT_FONT, 9.0),
             rotation_deg: 0.0,
         });
+        g.layers[0].plot_offset_mut(crate::ids::ColumnId(4)).y = 3.0;
         let r = right_y_layer(&g.layers[0], 0);
+        assert!(r.plot_offsets.is_empty(), "offsets belong to the parent's curves");
         assert_eq!(r.y_axis.major_tick, TickDirection::In);
         assert_eq!(r.y_axis.auto_range, AutoRange::SymmetricZero);
         assert_eq!(r.default_line, g.layers[0].default_line);

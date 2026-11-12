@@ -128,7 +128,7 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let mut run: Option<Run> = None;
     for i in pd.start..pd.end {
-        match geom.checked_data_to_page(pd.x_at(i), pd.y[i]) {
+        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => {
                 let strip = (p.0 / STRIP_PT).floor() as i64;
                 match &mut run {
@@ -214,7 +214,8 @@ fn near_frame(geom: &LayerGeometry, p: (f64, f64), margin: f64) -> bool {
     p.0 >= f.x - margin && p.0 <= f.x + f.w + margin && p.1 >= f.y - margin && p.1 <= f.y + f.h + margin
 }
 
-/// Bars from zero to each value, 70 percent of the smallest spacing between X values wide.
+/// Bars from zero to each value, 70 percent of the smallest spacing between X values wide. In a
+/// stacked layer the bars start at the plot's offset instead of zero.
 fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
     let mut xs: Vec<f64> = (pd.start..pd.end).map(|i| pd.x_at(i)).filter(|x| x.is_finite()).collect();
@@ -223,9 +224,9 @@ fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let half = if spacing.is_finite() { 0.35 * spacing } else { 0.35 };
     let stroke = (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt));
     for i in pd.start..pd.end {
-        let (x, y) = (pd.x_at(i), pd.y[i]);
+        let (x, y) = (pd.x_at(i), pd.y_at(i));
         let (Some(a), Some(b), Some(top)) = (
-            geom.checked_data_to_page(x - half, 0.0),
+            geom.checked_data_to_page(x - half, pd.oy),
             geom.checked_data_to_page(x + half, y),
             geom.checked_data_to_page(x, y),
         ) else {
@@ -249,7 +250,7 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let width = if column { plot.line.width_pt.max(0.5) } else { (plot.line.width_pt / 2.0).max(0.5) };
     let mut d = String::new();
     for i in pd.start..pd.end {
-        let (x, y, e) = (pd.x_at(i), pd.y[i], pd.err_at(i));
+        let (x, y, e) = (pd.x_at(i), pd.y_at(i), pd.err_at(i));
         if !e.is_finite() {
             continue;
         }
@@ -281,7 +282,7 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let thin = (pd.end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
     for i in (pd.start..pd.end).step_by(every) {
-        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y[i]) else { continue };
+        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
             continue;
         }

@@ -253,6 +253,32 @@ pub struct StyleArgs {
     /// Hide the legend.
     #[arg(long)]
     pub no_legend: bool,
+    /// Move the curves apart: none; auto (each curve above the one before it with a gap of 10 %
+    /// of the tallest curve); auto:GAP (gap in percent); step:STEP (curve k moved up by k * STEP
+    /// axis units; write a negative step as --stack=step:-500).
+    #[arg(long, value_name = "MODE", conflicts_with_all = ["offsets", "waterfall"])]
+    pub stack: Option<String>,
+    /// Move each curve up by its own amount in axis units, in plot order, for example
+    /// --offsets=0,1000,2000 (curves after the list keep their offsets).
+    #[arg(
+        long,
+        value_delimiter = ',',
+        value_name = "Y1,Y2,...",
+        allow_hyphen_values = true,
+        conflicts_with = "waterfall"
+    )]
+    pub offsets: Vec<f64>,
+    /// Draw a waterfall: curve k moved right by k * DX and up by k * DY percent of the front frame
+    /// (each from -100 to 100), for example --waterfall 5,10.
+    #[arg(long, value_delimiter = ',', value_name = "DX,DY", allow_hyphen_values = true)]
+    pub waterfall: Vec<f64>,
+    /// Hide the Y tick labels (stacked curves: the values on the axis are true only for the first
+    /// curve).
+    #[arg(long)]
+    pub no_y_tick_labels: bool,
+    /// Draw no Y ticks.
+    #[arg(long)]
+    pub no_y_ticks: bool,
 }
 
 #[derive(Args, Debug)]
@@ -266,9 +292,9 @@ pub struct PlotArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Figure template: line, scatter, line-symbol, cv or double-y (default: what the importer
-    /// suggests). double-y puts the 1st, 3rd, ... Y column on the left axis and the 2nd, 4th, ...
-    /// on a right axis.
+    /// Figure template: line, scatter, line-symbol, cv, double-y, stacked or waterfall (default:
+    /// what the importer suggests). double-y puts the 1st, 3rd, ... Y column on the left axis and
+    /// the 2nd, 4th, ... on a right axis; stacked moves each curve above the one before it.
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460.8pt" height="345.6pt" viewBox="0 0 460.8 345.6">
+<rect x="0" y="0" width="460.8" height="345.6" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="73.728" y="24.192" width="359.424" height="259.2"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+<path d="M145.613 218.592L152.801 209.589L159.99 201.971L167.178 195.665L174.367 190.598L181.555 186.698L188.744 183.892L195.932 182.106L203.121 181.267L210.309 181.304L217.498 182.142L224.686 183.709L231.875 185.933L239.063 188.739L246.252 192.056L253.44 195.811L260.628 199.93L267.817 204.34L275.005 208.969L282.194 213.744L289.382 218.592L296.571 223.44L303.759 228.215L310.948 232.844L318.136 237.254L325.325 241.373L332.513 245.128L339.702 248.445L346.89 251.251L354.079 253.475L361.267 255.042L368.456 255.88L375.644 255.917L382.833 255.078L390.021 253.292L397.21 250.486L404.398 246.586L411.587 241.519L418.775 235.213L425.964 227.595L433.152 218.592" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M145.613 147.053L152.801 140.601L159.99 135.141L167.178 130.622L174.367 126.991L181.555 124.196L188.744 122.184L195.932 120.904L203.121 120.303L210.309 120.329L217.498 120.93L224.686 122.054L231.875 123.647L239.063 125.658L246.252 128.036L253.44 130.726L260.628 133.678L267.817 136.839L275.005 140.156L282.194 143.579L289.382 147.053L296.571 150.527L303.759 153.949L310.948 157.267L318.136 160.428L325.325 163.379L332.513 166.07L339.702 168.447L346.89 170.459L354.079 172.052L361.267 173.175L368.456 173.776L375.644 173.802L382.833 173.201L390.021 171.921L397.21 169.91L404.398 167.115L411.587 163.484L418.775 158.965L425.964 153.505L433.152 147.053" fill="none" stroke="#DC1E1E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M145.613 97.597L152.801 93.921L159.99 90.81L167.178 88.236L174.367 86.167L181.555 84.574L188.744 83.428L195.932 82.699L203.121 82.356L210.309 82.371L217.498 82.714L224.686 83.354L231.875 84.262L239.063 85.408L246.252 86.762L253.44 88.295L260.628 89.977L267.817 91.778L275.005 93.668L282.194 95.618L289.382 97.597L296.571 99.577L303.759 101.527L310.948 103.417L318.136 105.218L325.325 106.9L332.513 108.433L339.702 109.787L346.89 110.933L354.079 111.841L361.267 112.481L368.456 112.824L375.644 112.838L382.833 112.496L390.021 111.767L397.21 110.621L404.398 109.028L411.587 106.959L418.775 104.384L425.964 101.274L433.152 97.597" fill="none" stroke="#1E50DC" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="overlay">
+<path d="M73.728 24.192L433.152 24.192L433.152 283.392L73.728 283.392Z" fill="none" stroke="#000000" stroke-width="1"/>
+<path d="M73.728 283.392L73.728 288.392M193.536 283.392L193.536 288.392M313.344 283.392L313.344 288.392M433.152 283.392L433.152 288.392M133.632 283.392L133.632 285.892M253.44 283.392L253.44 285.892M373.248 283.392L373.248 285.892" fill="none" stroke="#000000" stroke-width="1"/>
+<text x="73.728" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="193.536" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.0</text>
+<text x="313.344" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.5</text>
+<text x="433.152" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">1.0</text>
+<text x="253.44" y="322.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="62.388" y="153.792" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle" transform="rotate(-90 62.388 153.792)">Current 1 (mA)</text>
+<path d="M353.952 44.542L378.152 44.542" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="383.652" y="47.347" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="11" fill="#000000">Scan 1</text>
+<path d="M353.952 58.842L378.152 58.842" fill="none" stroke="#DC1E1E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="383.652" y="61.647" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="11" fill="#000000">Scan 2</text>
+<path d="M353.952 73.142L378.152 73.142" fill="none" stroke="#1E50DC" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="383.652" y="75.947" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="11" fill="#000000">Scan 3</text>
+</g>
+</g>
+</svg>

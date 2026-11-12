@@ -517,6 +517,8 @@ impl Project {
                         visible: true,
                         auto_color: false,
                     });
+                    // In a stacked layer the fitted curve moves with its data.
+                    layer.plot_offset_mut(curve_y_id).follows = Some(id);
                     touched = true;
                 }
                 if touched {
@@ -587,6 +589,7 @@ impl Project {
             visible: true,
             auto_color: false,
         });
+        layer.plot_offset_mut(outcome.curve_y).follows = Some(source);
         Ok(graph)
     }
 }
@@ -973,6 +976,7 @@ mod tests {
         assert_eq!((fit.x, fit.y, fit.kind), (Some(out.curve_x), out.curve_y, PlotKind::Line));
         assert!(color_distance(fit.line.color, layer.plots[0].line.color) > 120);
         assert!(!fit.auto_color, "adding more plots must not recolor the fit");
+        assert_eq!(layer.follows(out.curve_y), Some(y), "in a stacked layer the fit moves with its data");
         assert!(p.graph(other).unwrap().layers[0].plots.is_empty());
 
         // Without add_to_graphs nothing is added.
@@ -1013,6 +1017,7 @@ mod tests {
         assert_eq!(plots[0].kind, PlotKind::Scatter);
         assert_eq!(plots[1].kind, PlotKind::Line);
         assert_eq!(plots[1].y, out.curve_y);
+        assert_eq!(p.graph(g).unwrap().layers[0].follows(out.curve_y), Some(y));
     }
 
     #[test]

@@ -22,7 +22,9 @@ The same holds for shell here-documents (`cat >> file <<'EOF'`, `python - <<'EOF
 contains Rust or Python code with single quotes, such as a `'\t'` character or a `'''` string: three
 times in one session bash refused the whole command ("unexpected EOF while looking for matching
 quote"), so nothing ran. For a patch that touches many places, write a small Python script with the
-Write tool into the scratch folder and run that file.
+Write tool into the scratch folder and run that file. It happened again with bodies that held an
+apostrophe in a comment (`layer's`) or a Rust lifetime (`&'static`), even inside `<<'EOF'`; the
+Write and Edit tools always work.
 
 ## `cargo test` does not refresh the program in `target/debug`
 

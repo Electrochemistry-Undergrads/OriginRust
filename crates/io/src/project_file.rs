@@ -309,6 +309,30 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_keeps_stack_settings() {
+        let dir = TempDir::new("stack");
+        let path = dir.file("stack.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap().id;
+        let second = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 6.0, 7.0, 8.0])).unwrap();
+        let first = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+        let g = p.plot_columns(Template::StackedLines, &[first, second]).unwrap();
+        {
+            let layer = &mut p.graph_mut(g).unwrap().layers[0];
+            layer.plot_offset_mut(second).y = 250.0;
+            layer.plot_offset_mut(first).follows = Some(second);
+        }
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let layer = &back.graph(g).unwrap().layers[0];
+        assert_eq!(layer.stack, sheaf_core::graph::Stack::Auto { gap_percent: 10.0 });
+        assert_eq!(layer.plot_offset(second).map(|o| o.y), Some(250.0));
+        assert_eq!(layer.follows(first), Some(second));
+        assert_eq!(back.graph(g), p.graph(g));
+    }
+
+    #[test]
     fn member_names_follow_the_spec() {
         let dir = TempDir::new("members");
         let path = dir.file("demo.sheaf");

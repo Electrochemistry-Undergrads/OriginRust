@@ -23,7 +23,8 @@ SVG structure.
 
 Input: the axis settings and the finite data values of all visible plots of the layer for that
 axis (for a plot without an X column, the X values are the row numbers 1, 2, 3, ...). Rows where
-X or Y is missing are ignored. With no finite data the range is 0..1.
+X or Y is missing are ignored. With no finite data the range is 0..1. In a layer that stacks its
+curves the values are taken as drawn, with each plot's offsets added (graphing.md section 13.5).
 
 Step 1, data range `[lo, hi]`. If `lo == hi`, widen: `lo -= 0.5*|lo|`, `hi += 0.5*|hi|`, or
 `-1..1` when the value is 0. For a log10 axis only positive values count; with none, use 1..10.
@@ -71,6 +72,9 @@ For each layer, in this drawing order (later items are on top). A layer linked t
 (the right Y axis of a double-Y graph) is laid out together with it: it shares its frame and,
 when linked, its X axis, and the rules for axes on the top and right edges, hidden axes, axis
 colours that follow the first curve and a legend for the whole graph are in graphing.md section 12.
+A layer drawn as a waterfall lays its axes, labels and legend out on a smaller front frame, clips
+data to the whole frame, draws each later curve moved right and up, and draws no grid and no
+opposite lines or ticks (graphing.md section 13.6).
 
 1. Page background rectangle (once per graph).
 2. Grid lines, if set: minor first, then major; spanning the frame at each tick position.
@@ -145,7 +149,9 @@ font file is installed. The SVG `y` of a text element is its baseline.
 
 - Convert each (x, y) row to page coordinates with the resolved axes (linear or log10). Rows with a
   missing or non-finite coordinate (or a non-positive value on a log axis) break the line: the
-  curve is drawn as separate pieces on each side of the gap.
+  curve is drawn as separate pieces on each side of the gap. In a layer that stacks its curves,
+  the row is drawn at (x + ox, y + oy) with the plot's offsets, and column bars start at oy
+  instead of 0 (graphing.md section 13.5).
 - `Straight`: one polyline per piece. `StepHorizontal` / `StepVertical`: add the intermediate
   corner. `Spline`: a Catmull-Rom spline through the points (uniform parameterisation, tension 0.5),
   written as cubic Bézier segments: for points P0..P3 the segment P1→P2 has control points

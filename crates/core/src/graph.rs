@@ -122,6 +122,71 @@ pub struct Layer {
     /// link is valid, `frame` is read as fractions of the parent's frame instead of the page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<LayerLink>,
+    /// How the plots are moved against each other so that they do not overlap (stacked lines,
+    /// waterfall). Only the drawing moves; the data stay as they are.
+    #[serde(default, skip_serializing_if = "Stack::is_none")]
+    pub stack: Stack,
+    /// Settings of single curves for [`Layer::stack`], found by the curve's Y column: the offsets
+    /// of [`Stack::Individual`] mode and which curve a fitted curve moves with.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plot_offsets: Vec<PlotOffset>,
+}
+
+/// How the plots of a layer are moved against each other (Origin's "Offset Grouped Data in
+/// Layer" and its "Stacked Lines by Y Offsets" and "Waterfall" graphs). The rules are in the
+/// graphing spec, section 13.
+///
+/// The members of the stack are the plots whose Y column holds numbers and that do not follow
+/// another curve (see [`PlotOffset::follows`]), in plot order. Hidden plots are members too, so
+/// that hiding a curve does not move the others.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Stack {
+    /// No offsets.
+    #[default]
+    None,
+    /// The first member stays where it is. Every later member is moved up until its lowest point
+    /// lies one gap above the highest point of the member before it (after that one was moved).
+    /// The gap is `gap_percent` percent of the height of the tallest member. Recomputed from the
+    /// data at every drawing.
+    Auto { gap_percent: f64 },
+    /// Member k (counted from 0) is moved up by `k * step` axis units.
+    Constant { step: f64 },
+    /// Each member is moved by its own offset from [`Layer::plot_offsets`].
+    Individual,
+    /// A simple two-dimensional waterfall: member k is drawn moved right by `k * dx_percent` and
+    /// up by `k * dy_percent` percent of the front frame, which shrinks to make room. Drawn only
+    /// for a layer that is not linked to another and has no linked layers.
+    Waterfall { dx_percent: f64, dy_percent: f64 },
+}
+
+impl Stack {
+    pub fn is_none(&self) -> bool {
+        *self == Stack::None
+    }
+}
+
+/// Stack settings of the curves of one Y column in a layer (an entry of
+/// [`Layer::plot_offsets`]).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlotOffset {
+    /// The Y column of the curve.
+    pub column: ColumnId,
+    /// Offset in X, in axis units; used in [`Stack::Individual`] mode.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub x: f64,
+    /// Offset in Y, in axis units; used in [`Stack::Individual`] mode.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub y: f64,
+    /// When set, the curve has no place of its own in the stack: it takes the offset (and the
+    /// waterfall shift) of the first member whose Y column is this one. A fitted curve drawn over
+    /// its data uses it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follows: Option<ColumnId>,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 /// How a layer follows its parent layer.
@@ -207,6 +272,28 @@ impl Layer {
             p.auto_color = true;
         }
         self.recolor_automatic();
+    }
+
+    /// The stack settings of the curves of Y column `column`, if any were stored.
+    pub fn plot_offset(&self, column: ColumnId) -> Option<&PlotOffset> {
+        self.plot_offsets.iter().find(|o| o.column == column)
+    }
+
+    /// The stack settings of Y column `column`, added with no offset when missing.
+    pub fn plot_offset_mut(&mut self, column: ColumnId) -> &mut PlotOffset {
+        let i = match self.plot_offsets.iter().position(|o| o.column == column) {
+            Some(i) => i,
+            None => {
+                self.plot_offsets.push(PlotOffset { column, x: 0.0, y: 0.0, follows: None });
+                self.plot_offsets.len() - 1
+            }
+        };
+        &mut self.plot_offsets[i]
+    }
+
+    /// The column whose curve the curves of `column` move with, when they follow one.
+    pub fn follows(&self, column: ColumnId) -> Option<ColumnId> {
+        self.plot_offset(column).and_then(|o| o.follows).filter(|leader| *leader != column)
     }
 }
 
@@ -665,6 +752,57 @@ mod tests {
         assert!(json.contains(r#""scope":"graph""#), "{json}");
         let back: Layer = serde_json::from_str(&json).unwrap();
         assert_eq!(back, layer);
+    }
+
+    #[test]
+    fn a_layer_saved_before_stacking_has_no_offsets_and_is_written_as_before() {
+        let layer: Layer = serde_json::from_str(OLD_LAYER).expect("an old layer loads");
+        assert_eq!(layer.stack, Stack::None);
+        assert!(layer.plot_offsets.is_empty());
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(!json.contains("\"stack\"") && !json.contains("plot_offsets"), "{json}");
+    }
+
+    #[test]
+    fn stack_modes_are_written_with_a_kind_and_read_back() {
+        let cases = [
+            (Stack::None, r#"{"kind":"none"}"#),
+            (Stack::Auto { gap_percent: 10.0 }, r#"{"kind":"auto","gap_percent":10.0}"#),
+            (Stack::Constant { step: -500.0 }, r#"{"kind":"constant","step":-500.0}"#),
+            (Stack::Individual, r#"{"kind":"individual"}"#),
+            (
+                Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 },
+                r#"{"kind":"waterfall","dx_percent":5.0,"dy_percent":10.0}"#,
+            ),
+        ];
+        for (stack, text) in cases {
+            assert_eq!(serde_json::to_string(&stack).unwrap(), text);
+            assert_eq!(serde_json::from_str::<Stack>(text).unwrap(), stack);
+        }
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        layer.stack = Stack::Auto { gap_percent: 10.0 };
+        layer.plot_offset_mut(ColumnId(7)).y = 100.0;
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains(r#""stack":{"kind":"auto","gap_percent":10.0}"#), "{json}");
+        assert!(json.contains(r#""plot_offsets":[{"column":7,"y":100.0}]"#), "{json}");
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), layer);
+    }
+
+    #[test]
+    fn plot_offsets_are_found_by_column_and_added_once() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        let entry: PlotOffset = serde_json::from_str(r#"{"column":3}"#).unwrap();
+        assert_eq!(entry, PlotOffset { column: ColumnId(3), x: 0.0, y: 0.0, follows: None });
+        assert_eq!(layer.plot_offset(ColumnId(3)), None);
+        layer.plot_offset_mut(ColumnId(3)).x = 1.5;
+        layer.plot_offset_mut(ColumnId(3)).follows = Some(ColumnId(2));
+        assert_eq!(layer.plot_offsets.len(), 1);
+        assert_eq!(layer.plot_offset(ColumnId(3)).map(|o| o.x), Some(1.5));
+        assert_eq!(layer.follows(ColumnId(3)), Some(ColumnId(2)));
+        // A curve cannot follow itself.
+        layer.plot_offset_mut(ColumnId(4)).follows = Some(ColumnId(4));
+        assert_eq!(layer.follows(ColumnId(4)), None);
+        assert_eq!(layer.follows(ColumnId(9)), None);
     }
 
     fn graph_of(links: &[Option<usize>]) -> Graph {

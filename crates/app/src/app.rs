@@ -1201,7 +1201,27 @@ impl SheafApp {
             panels: self.panels.shown_flags(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
+            curve: graph.and_then(|g| self.graph_curve(g)),
         }
+    }
+
+    /// The data the Analysis menu works on in graph `g` (see `MenuContext::curve`): the selected
+    /// plot, or else the first visible plot of numbers in the active layer; with the workbook that
+    /// holds its Y column.
+    fn graph_curve(&self, g: WindowId) -> Option<(WindowId, ColumnId)> {
+        let project = self.doc.project();
+        let graph = project.graph(g)?;
+        let state = self.graphs.get(&g);
+        let selected = state.and_then(|s| match s.selected {
+            Some((layer, sheaf_plot::scene::ObjectKind::Plot(i))) => graph.layers.get(layer)?.plots.get(i).map(|p| p.y),
+            _ => None,
+        });
+        let layer = state.map_or(0, |s| s.active_layer);
+        let y = selected.or_else(|| {
+            graph.layers.get(layer)?.plots.iter().find(|p| p.visible && project.numeric(p.y).is_some()).map(|p| p.y)
+        })?;
+        let (book, _, _) = project.locate(y)?;
+        Some((book.id, y))
     }
 
     /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands

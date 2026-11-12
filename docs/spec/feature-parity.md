@@ -20,8 +20,8 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 40 | 107 | 83 | 230 |
-| P0 | 31 | 68 | 2 | 101 |
+| All rows | 40 | 108 | 82 | 230 |
+| P0 | 31 | 69 | 1 | 101 |
 | P1 and P2 together | 9 | 39 | 81 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
@@ -202,7 +202,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Gadgets and data cursors | integrate, statistics, quick fit, quick peaks, FFT, rise time on a graph region | Gadgets > Integrate on the active graph; the Data Reader tool snaps to the nearest data point, a click pins it and the arrow keys step through rows | ◐ | Statistics, Quick Fit, Quick Sigmoidal Fit, Quick Peaks, Differentiate, Interpolate, Intersect, Rise Time, Cluster, FFT, Vertical Cursor and Go To are grey | P0 |
-| Analysis menu on the active graph | graph Analysis menu | the graph's menu bar has an Analysis menu in Origin's layout, but its tools say to activate a workbook | ✗ | tools run on worksheet columns only; the Integrate gadget is the one tool that runs on a graph | P0 |
+| Analysis menu on the active graph | graph Analysis menu | with a graph active, the Analysis menu's tools and fits run on the selected data plot, or else the active layer's first plot (`MenuContext::curve`); results go to its workbook, and a fit draws its curve on the graph | ◐ | results of tools other than fits are not drawn on the graph; one plot at a time; the Integrate gadget is the other tool that runs on a graph | P0 |
 | Data menu | display range, markers, mask points, remove bad points | the graph's menu bar has a Data menu; every item is grey | ✗ |  | P1 |
 
 ## 9 Fitting

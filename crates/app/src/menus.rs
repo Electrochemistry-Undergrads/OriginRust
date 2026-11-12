@@ -41,7 +41,7 @@ const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
 const NO_REDO: &str = "Nothing to redo";
-const ANALYSIS_ON_BOOK: &str = "Analysis runs on worksheet columns: activate a workbook window";
+const ANALYSIS_ON_BOOK: &str = "The active layer has no data plot to analyse: plot a worksheet column first";
 
 /// Which menu bar is shown.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -174,6 +174,7 @@ impl Menu {
 }
 
 /// What the menus need to know about the program to enable items and name the windows.
+#[derive(Clone)]
 pub struct MenuContext<'a> {
     pub kind: WindowKind,
     pub book: Option<WindowId>,
@@ -195,6 +196,10 @@ pub struct MenuContext<'a> {
     pub layer: usize,
     /// The active graph's tool (the Tools toolbar shows it pressed).
     pub tool: crate::actions::GraphTool,
+    /// On a graph: the data the Analysis menu works on, as Origin's menu does on the active data
+    /// plot: the workbook and Y column of the selected plot, or else of the active layer's first
+    /// visible plot of numbers. `None` when the graph has no such plot.
+    pub curve: Option<(WindowId, ColumnId)>,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -1647,15 +1652,23 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SortSheet { column: one()?, descending: *cmd == Cmd::SortDescending }
         }
         Cmd::FilterRows => Action::FilterRows(book?),
-        Cmd::Analyze(kind) => match c.book {
-            Some(book) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
-            None if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
-            None => return Err(NEED_BOOK),
+        // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
+        // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
+        Cmd::Analyze(kind) => match (c.book, c.curve) {
+            (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::Analyze { book, columns: vec![y], kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
         },
-        Cmd::Fit(kind) => match c.book {
-            Some(book) => Action::Fit { book, column: c.selected.first().copied(), kind: *kind },
-            None if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
-            None => return Err(NEED_BOOK),
+        Cmd::Fit(kind) => match (c.book, c.curve) {
+            (Some(book), _) => Action::Fit { book, column: c.selected.first().copied(), kind: *kind },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::Fit { book, column: Some(y), kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
         },
         Cmd::GraphProps(tab) => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, tab: *tab, plot: None }
@@ -2007,9 +2020,21 @@ mod tests {
             panels: [true; 4],
             layer: 0,
             tool: Default::default(),
+            curve: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);
+        assert_eq!(resolve(&Cmd::Fit(FitKind::Linear), &c).unwrap_err(), ANALYSIS_ON_BOOK);
+        // With a data plot on the graph, the Analysis menu works on it (Origin's active data plot).
+        let on_plot = MenuContext { curve: Some((WindowId(5), ColumnId(9))), ..c.clone() };
+        assert!(matches!(
+            resolve(&Cmd::Analyze(AnalysisKind::Smooth), &on_plot),
+            Ok(Action::Analyze { book: WindowId(5), ref columns, kind: AnalysisKind::Smooth }) if *columns == [ColumnId(9)]
+        ));
+        assert!(matches!(
+            resolve(&Cmd::Fit(FitKind::Linear), &on_plot),
+            Ok(Action::Fit { book: WindowId(5), column: Some(ColumnId(9)), kind: FitKind::Linear })
+        ));
         assert!(matches!(resolve(&Cmd::ExportGraph, &c), Ok(Action::ExportGraph(WindowId(2)))));
         assert_eq!(resolve(&Cmd::Undo, &c).unwrap_err(), NO_UNDO);
         assert!(matches!(resolve(&Cmd::Import, &c), Ok(Action::Import(None))));

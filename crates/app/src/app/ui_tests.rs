@@ -3009,3 +3009,24 @@ fn a_label_is_dragged_to_a_new_place_in_one_undo_step() {
     menu(&mut h, "Edit", "Undo Move text");
     assert_eq!((labels(&h)[0].x, labels(&h)[0].y), before);
 }
+
+/// With a graph active, the Analysis menu works on its data plot, as Origin's does on the active
+/// data plot: the selected plot, or else the active layer's first plot. The results go to the
+/// plot's workbook.
+#[test]
+fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
+    let mut h = start(vec![data_file("graph-analysis")]);
+    show_window(&mut h, "Graph1 - sample");
+    let (book, gid, ys) = {
+        let p = project(&h);
+        let g = p.graphs().next().unwrap();
+        (p.workbooks().next().unwrap().id, g.id, g.layers[0].plots.iter().map(|pl| pl.y).collect::<Vec<_>>())
+    };
+    assert_eq!(h.state().menu_context().curve, Some((book, ys[0])), "the first plot of the active layer");
+    h.state_mut().graphs.get_mut(&gid).unwrap().selected = Some((0, sheaf_plot::scene::ObjectKind::Plot(1)));
+    assert_eq!(h.state().menu_context().curve, Some((book, ys[1])), "a selected plot wins");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Integrate..."]);
+    let dialog =
+        h.state().analysis.as_ref().expect("the Integrate window is open, not a message to activate a workbook");
+    assert_eq!(dialog.columns(), &[ys[1]]);
+}

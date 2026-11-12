@@ -458,6 +458,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         panels: [true; 4],
         layer,
         tool,
+        curve: None,
     }
 }
 

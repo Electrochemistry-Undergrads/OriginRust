@@ -8,9 +8,58 @@
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
+use crate::panels::PanelId;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
 use std::path::PathBuf;
+
+/// How Copy writes the cells (the Copy submenu of the Edit menu).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopyKind {
+    /// What the cells show.
+    Plain,
+    /// Every digit of the numbers.
+    FullPrecision,
+    /// The label rows above the values, which are written as shown.
+    WithLabels,
+}
+
+/// What to do with the selected cells of a worksheet.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CellOp {
+    Copy(CopyKind),
+    Cut,
+    /// Paste what is on the clipboard: asks the system for the text, which comes back as `PasteText`.
+    Paste,
+    PasteText(String),
+    /// Empty the cells (the Delete key).
+    Clear,
+}
+
+/// One of the label rows above the data of a column.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LabelRow {
+    LongName,
+    Units,
+    Comments,
+    /// The F(x)= row: editing it opens Set Column Values.
+    Formula,
+    /// A user parameter row, by name.
+    Param(String),
+}
+
+/// What to do with a sheet tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SheetOp {
+    /// A new empty sheet after the last one.
+    Add,
+    /// A new empty sheet before the active one.
+    Insert,
+    Delete,
+    Duplicate,
+    /// Open the window that asks for a new name.
+    RenameDialog,
+}
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -37,6 +86,22 @@ pub enum Action {
     SelectSheet {
         book: WindowId,
         sheet: usize,
+    },
+    /// Copy, cut, paste or clear the selected cells of a workbook.
+    Cells {
+        book: WindowId,
+        op: CellOp,
+    },
+    /// Change one label row of a column (a double click on the label cell).
+    SetLabel {
+        column: ColumnId,
+        row: LabelRow,
+        text: String,
+    },
+    /// Add, insert, delete, duplicate or rename the active sheet of a workbook.
+    Sheet {
+        book: WindowId,
+        op: SheetOp,
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
@@ -76,13 +141,47 @@ pub enum Action {
     ExportData(WindowId),
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
+    /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
+    HideWindow(WindowId),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
+    /// Put a window into a folder of the project explorer (the path of indices; empty is the root).
+    MoveWindow {
+        window: WindowId,
+        folder: Vec<usize>,
+    },
+    /// A new empty folder inside the folder at this path.
+    NewFolder(Vec<usize>),
+    /// Show or hide one plot of a graph (the tick boxes of the Object Manager).
+    SetPlotVisible {
+        graph: WindowId,
+        layer: usize,
+        plot: usize,
+        visible: bool,
+    },
+    /// Show or hide all plots of a layer.
+    SetLayerVisible {
+        graph: WindowId,
+        layer: usize,
+        visible: bool,
+    },
+    /// Select a plot in the Object Manager (and in Plot Details when that is open).
+    SelectPlot {
+        graph: WindowId,
+        layer: usize,
+        plot: usize,
+    },
+    /// Show or hide a side panel (View > Project Explorer and the others).
+    TogglePanel(PanelId),
+    /// Empty the Messages Log or the Results Log.
+    ClearLog(PanelId),
     RenameWindow(WindowId),
     /// Window > Cascade, Tile Horizontally, Tile Vertically.
     Cascade,
     TileHorizontally,
     TileVertically,
     About,
+    /// Open the window of View > Toolbars.
+    Toolbars,
     Quit,
 }

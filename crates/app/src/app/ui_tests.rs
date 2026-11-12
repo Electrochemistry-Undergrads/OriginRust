@@ -18,7 +18,17 @@ fn data_file(tag: &str) -> PathBuf {
     path
 }
 
+/// Starts the application with the Project Explorer docked, so that its rows are on screen for
+/// the tests that click them (a panel in the auto-hide strip is only on screen while the mouse is
+/// on its tab; the tests of that behaviour use `start_auto_hide`).
 fn start(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
+    let mut h = start_auto_hide(paths);
+    h.state_mut().panels.set_pinned(PanelId::Explorer, true);
+    settle(&mut h);
+    h
+}
+
+fn start_auto_hide(paths: Vec<PathBuf>) -> Harness<'static, SheafApp> {
     let startup = Startup { paths, screenshot: None, show: Vec::new() };
     // Short frames: a double click needs both clicks within 0.3 s of simulated time, and every
     // pointer event of a click is a frame of its own.
@@ -35,15 +45,25 @@ fn settle(h: &mut Harness<'static, SheafApp>) {
     h.run_steps(6);
 }
 
+/// Shows and activates a window by a double click on its row in the project explorer (a single
+/// click only selects the row, as in Origin).
+fn show_window(h: &mut Harness<'static, SheafApp>, label: &str) {
+    let at = h.get_by_label(label).rect().center();
+    double_click_at(h, at);
+    // So that the next click is not counted with these two.
+    pause(h);
+}
+
 fn click(h: &mut Harness<'static, SheafApp>, label: &str) {
     h.get_by_label(label).click();
     settle(h);
 }
 
-/// Clicks the text drawn in the grid (a column head such as "C(Y)" or a cell such as "4.5").
+/// Clicks the text drawn in the grid (a column head such as "C(Y1)" or a cell such as "4.5").
 /// Plain labels expose their text as a value, not as a label; the click lands in the middle of
 /// the text, where the grid has its click area for the header or cell.
 fn click_text(h: &mut Harness<'static, SheafApp>, text: &str) {
+    pause(h);
     grid_text(h, text).click();
     settle(h);
 }
@@ -62,8 +82,16 @@ fn grid_text<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> egui_kitte
 /// Clicks the one widget whose label contains the text (menu entries carry
 /// their keyboard shortcut in the label, for example "Undo Import data Ctrl+Z").
 fn click_containing(h: &mut Harness<'static, SheafApp>, label: &str) {
-    h.get_by_label_contains(label).click();
+    not_toolbar(h, label).into_iter().next().unwrap_or_else(|| panic!("nothing is labelled {label:?}")).click();
     settle(h);
+}
+
+/// The widgets whose label contains the text, leaving out toolbar buttons, whose labels
+/// ("Standard toolbar: Copy") carry the names of the menu entries they stand for.
+fn not_toolbar<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> Vec<egui_kittest::Node<'a>> {
+    h.query_all_by_label_contains(text)
+        .filter(|n| !n.accesskit_node().label().unwrap_or_default().contains(" toolbar: "))
+        .collect()
 }
 
 /// The menu entry with this text: the one whose label is exactly the text, otherwise the one
@@ -82,7 +110,7 @@ fn menu_entry<'a>(h: &'a Harness<'static, SheafApp>, text: &'a str) -> egui_kitt
     };
     let pick =
         |nodes: Vec<egui_kittest::Node<'a>>| nodes.into_iter().max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x));
-    let all: Vec<egui_kittest::Node<'a>> = h.query_all_by_label_contains(text).collect();
+    let all: Vec<egui_kittest::Node<'a>> = not_toolbar(h, text);
     let exact: Vec<egui_kittest::Node<'a>> = all
         .iter()
         .filter(|n| name(n) == text || n.accesskit_node().label().as_deref() == Some(text))
@@ -180,8 +208,8 @@ fn undo_and_redo_are_reachable_with_the_mouse_when_no_window_is_open() {
 #[test]
 fn selecting_a_column_header_and_plotting_it_makes_a_graph_of_that_column() {
     let mut h = start(vec![data_file("plot")]);
-    click(&mut h, "Book1 - sample");
-    click_text(&mut h, "C(Y)");
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
     let book = project(&h).workbooks().next().unwrap().id;
     let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
     assert_eq!(h.state().books[&book].selected, vec![c]);
@@ -196,7 +224,7 @@ fn selecting_a_column_header_and_plotting_it_makes_a_graph_of_that_column() {
 #[test]
 fn double_click_edits_a_cell_and_enter_stores_the_value() {
     let mut h = start(vec![data_file("edit")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     let cell = grid_text(&h, "4.5");
     cell.click();
     cell.click();
@@ -214,7 +242,7 @@ fn double_click_edits_a_cell_and_enter_stores_the_value() {
 #[test]
 fn enter_then_clicking_elsewhere_leaves_the_next_cell_alone() {
     let mut h = start(vec![data_file("enter")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     let cell = grid_text(&h, "4.5");
     cell.click();
     cell.click();
@@ -225,7 +253,7 @@ fn enter_then_clicking_elsewhere_leaves_the_next_cell_alone() {
     let editing = h.state().books.values().next().unwrap().editing.clone();
     assert_eq!(editing.map(|e| (e.1, e.2)), Some((2, "6.5".to_string())), "the next cell is shown with its value");
     // Click somewhere else to leave the editor.
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     h.key_press(egui::Key::Tab);
     settle(&mut h);
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
@@ -247,8 +275,8 @@ fn editing_a_cell_starts_from_the_full_precision_value_and_unchanged_text_stores
     )
     .unwrap();
     let mut h = start(vec![path]);
-    click(&mut h, "Book1 - sample");
-    let shown = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().cell_text(0);
+    show_window(&mut h, "Book1 - sample");
+    let shown = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().shown_text(0);
     assert_ne!(shown, "0.1234567891234", "the grid shows a rounded value");
     let cell = grid_text(&h, &shown);
     cell.click();
@@ -271,10 +299,9 @@ fn editing_a_cell_starts_from_the_full_precision_value_and_unchanged_text_stores
 #[test]
 fn the_column_menu_changes_the_designation() {
     let mut h = start(vec![data_file("designation")]);
-    click(&mut h, "Book1 - sample");
-    right_click_text(&mut h, "C(Y)");
-    click_containing(&mut h, "Set as");
-    click(&mut h, "Y error");
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    menu_path(&mut h, &["Set As", "Y Error"]);
     let book = project(&h).workbooks().next().unwrap();
     assert_eq!(book.sheet().column_by_name("C").unwrap().designation, Designation::YError);
 }
@@ -282,9 +309,9 @@ fn the_column_menu_changes_the_designation() {
 #[test]
 fn set_column_values_fills_the_column_from_a_formula() {
     let mut h = start(vec![data_file("formula")]);
-    click(&mut h, "Book1 - sample");
-    right_click_text(&mut h, "C(Y)");
-    click(&mut h, "Set Column Values...");
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text("col(B)*2 + i".to_string()));
     settle(&mut h);
     click(&mut h, "OK");
@@ -294,8 +321,8 @@ fn set_column_values_fills_the_column_from_a_formula() {
     assert!(h.state().set_values.is_none(), "OK closes the window");
 
     // A formula with a mistake keeps the window open, shows the problem and changes nothing.
-    right_click_text(&mut h, "C(Y)");
-    click(&mut h, "Set Column Values...");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
     h.event(egui::Event::Text("col(Nope)".to_string()));
     settle(&mut h);
@@ -307,10 +334,10 @@ fn set_column_values_fills_the_column_from_a_formula() {
 #[test]
 fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_recalculated() {
     let mut h = start(vec![data_file("recalc")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     // C = col(B)*2, set to recalculate automatically.
-    right_click_text(&mut h, "C(Y)");
-    click(&mut h, "Set Column Values...");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text("col(B)*2".to_string()));
     settle(&mut h);
     click(&mut h, "Auto");
@@ -318,7 +345,7 @@ fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_rec
     assert_eq!(column(&h, "C"), [5.0, 9.0, 13.0, 17.0]);
     let mark = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().recalc;
     assert_eq!(mark, sheaf_core::RecalcMode::Auto);
-    grid_text(&h, "auto");
+    h.get_by_label("Lock of column C: auto, current");
 
     // Edit a source cell: the Auto column changes in the same undo step. (The double click
     // that opens the cell editor is covered by the tests above; here the finished edit is
@@ -331,17 +358,17 @@ fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_rec
     assert_eq!(column(&h, "C")[1], 9.0);
 
     // Make it Manual: the next source edit only marks the column, Recalculate updates it.
-    right_click_text(&mut h, "C(Y)");
-    click(&mut h, "Set Column Values...");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
     click(&mut h, "Manual");
     click(&mut h, "OK");
     edit_cell(&mut h, "B", 2, "1");
     assert_eq!(column(&h, "C")[2], 13.0, "a Manual column keeps its values");
-    grid_text(&h, "pending");
+    h.get_by_label("Lock of column C: manual, pending");
     // The cells of a calculated column cannot be typed over.
     edit_cell(&mut h, "C", 0, "99");
     assert_eq!(column(&h, "C")[0], 5.0);
-    right_click_text(&mut h, "C(Y)");
+    right_click_text(&mut h, "C(Y1)");
     click(&mut h, "Recalculate");
     assert_eq!(column(&h, "C")[2], 2.0);
     assert_eq!(h.state().doc.undo_label(), Some("Recalculate"));
@@ -359,7 +386,7 @@ fn edit_cell(h: &mut Harness<'static, SheafApp>, short: &str, row: usize, text: 
 #[test]
 fn graph_settings_change_the_axis_live_and_undo_as_one_step() {
     let mut h = start(vec![data_file("axis")]);
-    click(&mut h, "Graph1 - sample");
+    show_window(&mut h, "Graph1 - sample");
     menu_path(&mut h, &["Format", "Axes", "Y Axis..."]);
     assert!(h.state().graph_props.is_some());
     let scale = |h: &Harness<'static, SheafApp>| project(h).graphs().next().unwrap().layers[0].y_axis.scale;
@@ -549,7 +576,7 @@ fn ctrl_z_and_ctrl_shift_z_undo_and_redo() {
 #[test]
 fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
     let mut h = start(vec![data_file("export")]);
-    click(&mut h, "Graph1 - sample");
+    show_window(&mut h, "Graph1 - sample");
     menu_path(&mut h, &["File", "Export", "Graphs..."]);
     assert!(h.state().export.is_some(), "the export window is open");
     assert!(h.query_by_label("Save as...").is_some());
@@ -560,7 +587,7 @@ fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
 #[test]
 fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
     let mut h = start(vec![data_file("ranges")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Analysis", "Mathematics", "Integrate Ranges..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "Add range");
@@ -580,7 +607,7 @@ fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
 fn subtract_reference_data_runs_from_the_analysis_menu_in_one_undo_step() {
     let mut h = start(vec![data_file("subref-a"), data_file("subref-b")]);
     assert_eq!(project(&h).workbooks().count(), 2);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Reference Data..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
@@ -604,7 +631,7 @@ fn subtract_reference_data_runs_from_the_analysis_menu_in_one_undo_step() {
 #[test]
 fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
     let mut h = start(vec![data_file("math")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Analysis", "Mathematics", "Simple Curve Math..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     // With no other column to use as reference the operand is the constant, 1 for a start.
@@ -658,8 +685,11 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
     h.input_mut().dropped_files.push(egui::DroppedFile { path: Some(date_file("dates-props")), ..Default::default() });
     settle(&mut h);
     click(&mut h, "Import");
-    click(&mut h, "Book1 - icp");
-    right_click_text(&mut h, "A(X)");
+    show_window(&mut h, "Book1 - icp");
+    // The long menu of a column head needs a tall window to show all its items.
+    h.set_size(egui::vec2(1280.0, 1400.0));
+    settle(&mut h);
+    right_click_text(&mut h, "A(X1)");
     click(&mut h, "Properties...");
     // The format box starts on "Date and time" for the imported column.
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Date and time")).click();
@@ -676,7 +706,7 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
 #[test]
 fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_separators() {
     let mut h = start(vec![data_file("modes")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     // A second file, tab separated, with thousands separators in the first column.
     let more = data_file("modes").with_file_name("more.txt");
     std::fs::write(&more, "w\tz\n1,000.5\t1\n2,000.5\t2\n3,000.5\t3\n4,000.5\t4\n").unwrap();
@@ -715,7 +745,7 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     }
     std::fs::write(&path, text).unwrap();
     let mut h = start(vec![path]);
-    click(&mut h, "Book1 - peaks");
+    show_window(&mut h, "Book1 - peaks");
     menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
     assert!(h.state().analysis.is_some(), "the Peak Analyzer window is open");
     click(&mut h, "OK");
@@ -886,6 +916,7 @@ fn saving_over_an_imported_origin_file_keeps_a_copy_of_the_original() {
 
 /// A mouse click at a point of the screen.
 fn click_at(h: &mut Harness<'static, SheafApp>, at: egui::Pos2) {
+    pause(h);
     h.event(egui::Event::PointerMoved(at));
     for pressed in [true, false] {
         h.event(egui::Event::PointerButton {
@@ -930,7 +961,7 @@ fn maximise_fills_the_workspace_and_restore_gives_the_old_size_back() {
     assert!(normal < 700.0);
     click(&mut h, "Maximise Graph1 - sample");
     assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Maximised));
-    assert!(width(&h) > 1000.0, "fills the area right of the project list: {}", width(&h));
+    assert!(width(&h) > 850.0, "fills the area right of the docked project explorer: {}", width(&h));
     click(&mut h, "Restore Graph1 - sample");
     assert_eq!(h.state().workspace.mode(graph), Some(crate::workspace::Mode::Normal));
     assert!((width(&h) - normal).abs() < 2.0, "back to {normal}, is {}", width(&h));
@@ -959,7 +990,7 @@ fn closing_a_window_hides_it_and_keeps_its_data_until_it_is_shown_again() {
     assert_eq!(project(&h).graphs().next().unwrap().layers[0].plots.len(), 2);
     assert_eq!(h.state().active, Some(book));
     // The project explorer still lists it, and clicking it shows it again.
-    click(&mut h, "Graph1 - sample");
+    show_window(&mut h, "Graph1 - sample");
     assert_eq!(h.state().active, Some(graph));
     assert!(h.query_by_label("Title Graph1 - sample").is_some());
     // A closed window is not reopened by the next change of the project.
@@ -1074,7 +1105,7 @@ fn activating_a_workbook_and_then_a_graph_swaps_the_menu_bar() {
     click(&mut h, "Close Book1 - sample");
     assert_eq!(bar_names(&h), NO_WINDOW_BAR);
     // An open window brings its own bar back.
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     assert_eq!(bar_names(&h), WORKBOOK_BAR);
 }
 
@@ -1094,7 +1125,7 @@ fn assert_reachable(h: &mut Harness<'static, SheafApp>, path: &[&str]) {
 fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
     let mut h = start(vec![data_file("reach-book")]);
     click(&mut h, "Title Book1 - sample");
-    click_text(&mut h, "C(Y)");
+    click_text(&mut h, "C(Y1)");
     let paths: &[&[&str]] = &[
         &["File", "New", "Project"],
         &["File", "New", "Worksheet..."],
@@ -1195,7 +1226,7 @@ fn a_command_that_needs_a_selection_is_greyed_until_a_column_is_selected() {
     click(&mut h, "Column");
     assert!(!entry_enabled(&h, "Set Column Values... Ctrl+Q"), "no column is selected");
     close_menus(&mut h);
-    click_text(&mut h, "C(Y)");
+    click_text(&mut h, "C(Y1)");
     click(&mut h, "Column");
     assert!(entry_enabled(&h, "Set Column Values... Ctrl+Q"));
 }
@@ -1237,7 +1268,7 @@ fn cascade_and_tile_arrange_the_windows() {
 fn origins_keys_run_the_commands_they_belong_to() {
     let mut h = start(vec![data_file("keys2")]);
     click(&mut h, "Title Book1 - sample");
-    click_text(&mut h, "C(Y)");
+    click_text(&mut h, "C(Y1)");
     // Ctrl+Q is Set Column Values ...
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Q);
     settle(&mut h);
@@ -1271,11 +1302,1070 @@ fn alt_and_the_underlined_letter_opens_a_top_level_menu() {
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::C);
     settle(&mut h);
     assert!(h.query_by_label("Save Project Ctrl+S").is_none());
-    assert!(h.query_by_label_contains("Set Column Values").is_some(), "Alt+C opens Column");
+    assert!(!not_toolbar(&h, "Set Column Values").is_empty(), "Alt+C opens Column");
     // Alt+K is the letter of Worksheet.
     h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::K);
     settle(&mut h);
-    assert!(h.query_by_label_contains("Sort Worksheet").is_some());
+    assert!(!not_toolbar(&h, "Sort Worksheet").is_empty());
+}
+
+// ----- the workbook window as in Origin: selection, clipboard, label cells, right-click menus -----
+
+/// The centre of the text drawn in the grid.
+fn text_pos(h: &Harness<'static, SheafApp>, text: &str) -> egui::Pos2 {
+    grid_text(h, text).rect().center()
+}
+
+/// Press at one point, drag to another and release.
+fn drag(h: &mut Harness<'static, SheafApp>, from: egui::Pos2, to: egui::Pos2) {
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.event(egui::Event::PointerMoved(from.lerp(to, 0.5)));
+    h.step();
+    h.event(egui::Event::PointerMoved(to));
+    h.step();
+    h.event(button(to, false));
+    h.step();
+    settle(h);
+}
+
+/// Lets more than a double-click interval of simulated time pass, so that the next click is not
+/// counted as the second click of a double click (egui counts clicks by time only).
+fn pause(h: &mut Harness<'static, SheafApp>) {
+    h.run_steps(25);
+}
+
+/// A click on the text drawn in the grid with Shift, Ctrl or both held.
+fn click_text_with(h: &mut Harness<'static, SheafApp>, text: &str, modifiers: egui::Modifiers) {
+    pause(h);
+    let at = text_pos(h, text);
+    h.event(egui::Event::PointerMoved(at));
+    h.step();
+    for pressed in [true, false] {
+        h.input_mut().modifiers = modifiers;
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers });
+        h.step();
+    }
+    h.input_mut().modifiers = egui::Modifiers::NONE;
+    settle(h);
+}
+
+/// Two quick clicks at one point (a double click).
+fn double_click_at(h: &mut Harness<'static, SheafApp>, at: egui::Pos2) {
+    // Long enough after the last click that this is not counted as part of it.
+    h.run_steps(25);
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false, true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    settle(h);
+}
+
+fn book_ui<'a>(h: &'a Harness<'static, SheafApp>) -> &'a BookUi {
+    h.state().books.values().next().expect("a workbook window was drawn")
+}
+
+fn sheet<'a>(h: &'a Harness<'static, SheafApp>) -> &'a sheaf_core::Worksheet {
+    project(h).workbooks().next().unwrap().sheet()
+}
+
+fn column_id(h: &Harness<'static, SheafApp>, short: &str) -> ColumnId {
+    sheet(h).column_by_name(short).unwrap().id
+}
+
+/// Drags over the cells showing these two texts.
+fn select_block(h: &mut Harness<'static, SheafApp>, from: &str, to: &str) {
+    let (a, b) = (text_pos(h, from), text_pos(h, to));
+    drag(h, a, b);
+}
+
+fn paste(h: &mut Harness<'static, SheafApp>, text: &str) {
+    h.event(egui::Event::Paste(text.to_string()));
+    settle(h);
+}
+
+fn ctrl(h: &mut Harness<'static, SheafApp>, key: egui::Key) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, key);
+    settle(h);
+}
+
+#[test]
+fn clicking_headers_selects_columns_rows_and_everything_and_dragging_selects_a_block() {
+    let mut h = start(vec![data_file("select")]);
+    show_window(&mut h, "Book1 - sample");
+    let (a, b, c) = (column_id(&h, "A"), column_id(&h, "B"), column_id(&h, "C"));
+
+    // A click on a column name selects the column; Ctrl extends by one, Shift by a range.
+    click_text(&mut h, "B(Y1)");
+    assert_eq!(book_ui(&h).sel, Sel::Columns);
+    assert_eq!(book_ui(&h).selected, vec![b]);
+    click_text_with(&mut h, "C(Y1)", egui::Modifiers::COMMAND);
+    settle(&mut h);
+    assert_eq!(book_ui(&h).selected, vec![b, c]);
+    click_text_with(&mut h, "C(Y1)", egui::Modifiers::COMMAND);
+    settle(&mut h);
+    assert_eq!(book_ui(&h).selected, vec![b], "Ctrl-click on a selected column takes it out again");
+    click_text(&mut h, "C(Y1)");
+    click_text_with(&mut h, "A(X1)", egui::Modifiers::SHIFT);
+    settle(&mut h);
+    assert_eq!(book_ui(&h).selected, vec![a, b, c], "Shift-click selects the range");
+
+    // The same selection is what Plot acts on.
+    click_text(&mut h, "B(Y1)");
+    click_text_with(&mut h, "C(Y1)", egui::Modifiers::SHIFT);
+    settle(&mut h);
+    menu_path(&mut h, &["Plot", "Symbol", "Scatter"]);
+    let plots = &project(&h).graphs().last().unwrap().layers[0].plots;
+    assert_eq!(plots.len(), 2, "both selected columns are plotted");
+
+    // A click on a row number selects the row, with the cells themselves not filled.
+    let title_x = text_pos(&h, "Long Name").x;
+    let row_y = text_pos(&h, "6.5").y;
+    click_at(&mut h, egui::pos2(title_x, row_y));
+    assert_eq!(book_ui(&h).sel, Sel::Rows { anchor: 2, end: 2 });
+    assert!(book_ui(&h).selected.is_empty());
+    let target = book_ui(&h).target(sheet(&h)).unwrap();
+    assert_eq!((target.columns, target.rows), (vec![0, 1, 2], 2..3));
+
+    // The corner above the row numbers selects everything.
+    let corner_y = text_pos(&h, "A(X1)").y;
+    click_at(&mut h, egui::pos2(title_x, corner_y));
+    assert_eq!(book_ui(&h).sel, Sel::All);
+    assert_eq!(book_ui(&h).selected, vec![a, b, c]);
+
+    // Dragging over cells selects a block; the columns it touches are the selected columns.
+    select_block(&mut h, "2.5", "20.5");
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
+    assert_eq!(book_ui(&h).selected, vec![b, c]);
+    let target = book_ui(&h).target(sheet(&h)).unwrap();
+    assert_eq!((target.columns, target.rows, target.top_left), (vec![1, 2], 0..2, (1, 0)));
+    // Showing another sheet or deleting the columns leaves nothing stale behind.
+    menu(&mut h, "Column", "Add New Columns...");
+    menu(&mut h, "Edit", "Undo Add column");
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
+}
+
+#[test]
+fn copy_gives_tab_separated_text_and_paste_puts_it_back_in_one_undo_step() {
+    let mut h = start(vec![data_file("copypaste")]);
+    show_window(&mut h, "Book1 - sample");
+    select_block(&mut h, "2.5", "20.5");
+    ctrl(&mut h, egui::Key::C);
+    assert_eq!(h.state().copied, "2.5\t30.5\n4.5\t20.5\n");
+    assert_eq!(h.state().doc.undo_label(), Some("Import data"), "copying changes nothing");
+
+    // Paste at the cell two rows down (Ctrl+V reaches the program as an event with the text).
+    click_text(&mut h, "6.5");
+    let copied = h.state().copied.clone();
+    paste(&mut h, &copied);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 2.5, 4.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 30.5, 20.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Paste"));
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (2, 3) }, "the pasted block is selected");
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+
+    // The Edit menu does the same: Copy including label rows writes the label rows first.
+    select_block(&mut h, "2.5", "20.5");
+    menu_path(&mut h, &["Edit", "Copy", "Copy including label rows"]);
+    assert!(h.state().copied.starts_with("up\tdown\n\t\n\t\n"), "{:?}", h.state().copied);
+    assert!(h.state().copied.ends_with("2.5\t30.5\n4.5\t20.5\n"));
+}
+
+#[test]
+fn plain_copy_and_copy_full_precision_both_write_every_digit() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fullprec-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sample.csv");
+    std::fs::write(&path, "t,v\n1,0.1234567891234\n2,5\n").unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "B(Y1)");
+    ctrl(&mut h, egui::Key::C);
+    assert_eq!(
+        h.state().copied,
+        "0.1234567891234
+5
+",
+        "plain Copy keeps every digit"
+    );
+    menu_path(&mut h, &["Edit", "Copy", "Copy full precision"]);
+    assert_eq!(h.state().copied, "0.1234567891234\n5\n");
+}
+
+#[test]
+fn paste_that_is_larger_than_the_sheet_adds_rows_and_columns_with_numbers_and_text() {
+    let mut h = start(vec![data_file("grow")]);
+    show_window(&mut h, "Book1 - sample");
+    // The last cell of column B: a 2 x 3 block runs past the last row and the last column.
+    click_text(&mut h, "8.5");
+    paste(&mut h, "5\t6\t7\n8\t9\t10\n");
+    let s = sheet(&h);
+    assert_eq!(s.columns.len(), 4, "one column was added");
+    assert_eq!(s.row_count(), 5, "and one row");
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 5.0, 8.0]);
+    assert_eq!(column(&h, "C")[3..], [6.0, 9.0]);
+    let d = s.column_by_name("D").unwrap().numeric().unwrap();
+    assert_eq!(d[3..], [7.0, 10.0]);
+    assert!(h.state().status.contains("1 new column"), "{}", h.state().status);
+    assert_eq!(h.state().doc.undo_label(), Some("Paste"));
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(sheet(&h).columns.len(), 3);
+    assert_eq!(sheet(&h).row_count(), 4);
+
+    // Words stay text, numbers stay numbers; a comma-separated block works as well.
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::NewWorkbook, &ctx);
+    settle(&mut h);
+    let book = project(&h).workbooks().last().unwrap().id;
+    h.state_mut().focus(book);
+    settle(&mut h);
+    let sheet = project(&h).workbook(book).unwrap().sheet().clone();
+    h.state_mut().books.entry(book).or_default().select_cells(&sheet, (0, 0), (0, 0));
+    paste(&mut h, "alpha,1.5\nbeta,2\ngamma,x\n");
+    let s = project(&h).workbook(book).unwrap().sheet();
+    assert_eq!(s.columns.len(), 2);
+    assert_eq!(s.columns[0].text().unwrap(), ["alpha", "beta", "gamma"]);
+    assert_eq!(s.columns[1].text().unwrap(), ["1.5", "2", "x"], "a column with a word in it stays text");
+}
+
+#[test]
+fn delete_clears_the_selected_cells_and_cut_also_copies_each_in_one_undo_step() {
+    let mut h = start(vec![data_file("clear")]);
+    show_window(&mut h, "Book1 - sample");
+    select_block(&mut h, "2.5", "20.5");
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert!(column(&h, "B")[..2].iter().all(|x| x.is_nan()));
+    assert_eq!(column(&h, "B")[2..], [6.5, 8.5]);
+    assert!(column(&h, "C")[..2].iter().all(|x| x.is_nan()));
+    assert_eq!(h.state().doc.undo_label(), Some("Clear cells"));
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+
+    // A selected column is emptied completely; the Delete key does not delete the column.
+    click_text(&mut h, "C(Y1)");
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert!(column(&h, "C").is_empty());
+    assert_eq!(sheet(&h).columns.len(), 3);
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+
+    // Cut copies first, then clears, as one step.
+    select_block(&mut h, "6.5", "10.5");
+    ctrl(&mut h, egui::Key::X);
+    assert_eq!(h.state().copied, "6.5\t10.5\n");
+    assert_eq!(h.state().doc.undo_label(), Some("Cut cells"));
+    assert_eq!(column(&h, "B")[2..].iter().filter(|x| x.is_nan()).count(), 1);
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+}
+
+#[test]
+fn a_calculated_column_is_left_alone_by_clear_and_paste() {
+    let mut h = start(vec![data_file("locked")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    h.event(egui::Event::Text("col(B)*2".to_string()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    click_text(&mut h, "C(Y1)");
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert_eq!(column(&h, "C"), [5.0, 9.0, 13.0, 17.0]);
+    assert!(h.state().status.contains("formula"), "{}", h.state().status);
+}
+
+#[test]
+fn double_clicking_a_label_cell_edits_it_in_place_as_one_undo_step() {
+    let mut h = start(vec![data_file("labels")]);
+    show_window(&mut h, "Book1 - sample");
+    // The cell under the column name in the Long Name row, then Units and Comments.
+    let x = text_pos(&h, "B(Y1)").x;
+    for (title, text) in [("Long Name", "Signal"), ("Units", "mA"), ("Comments", "Scan 1")] {
+        let at = egui::pos2(x, text_pos(&h, title).y);
+        double_click_at(&mut h, at);
+        assert!(book_ui(&h).editing_label.is_some(), "{title} is being edited");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.event(egui::Event::Text(text.to_string()));
+        settle(&mut h);
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert!(book_ui(&h).editing_label.is_none());
+        assert_eq!(h.state().doc.undo_label(), Some("Edit label"));
+    }
+    let b = sheet(&h).column_by_name("B").unwrap();
+    assert_eq!((b.long_name.as_str(), b.units.as_str(), b.comments.as_str()), ("Signal", "mA", "Scan 1"));
+    // The label is drawn in the band.
+    grid_text(&h, "Signal");
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().comments, "");
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().units, "mA", "one step undoes one label");
+    ctrl(&mut h, egui::Key::Z);
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().long_name, "up", "all three edits are undone");
+    // Escape leaves the label as it was.
+    let at = egui::pos2(x, text_pos(&h, "Units").y);
+    double_click_at(&mut h, at);
+    h.event(egui::Event::Text("zzz".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().units, "");
+}
+
+#[test]
+fn a_user_parameter_gets_a_label_row_with_its_name_and_the_head_shows_designation_and_group() {
+    let mut h = start(vec![data_file("params")]);
+    show_window(&mut h, "Book1 - sample");
+    // Heads: "A(X1)" is the X column, the Y columns after it belong to the same data set.
+    for head in ["A(X1)", "B(Y1)", "C(Y1)"] {
+        grid_text(&h, head);
+    }
+    let b = column_id(&h, "B");
+    h.state_mut().doc.apply("Set parameter", |p| {
+        p.column_mut(b).unwrap().params.insert("Sample".to_string(), "S-7".to_string());
+    });
+    settle(&mut h);
+    grid_text(&h, "Sample");
+    grid_text(&h, "S-7");
+    // The label rows are in Origin's order above the data.
+    let ys: Vec<f32> =
+        ["Long Name", "Units", "Comments", "F(x)=", "Sample", "2.5"].iter().map(|t| text_pos(&h, t).y).collect();
+    assert!(ys.windows(2).all(|w| w[0] < w[1]), "{ys:?}");
+    // A second X column starts the next data set.
+    right_click_text(&mut h, "C(Y1)");
+    menu_path(&mut h, &["Set As", "X"]);
+    grid_text(&h, "C(X2)");
+}
+
+#[test]
+fn the_lock_mark_shows_the_recalculate_mode_and_the_state_of_a_formula_column() {
+    let mut h = start(vec![data_file("lock")]);
+    show_window(&mut h, "Book1 - sample");
+    assert!(h.query_by_label_contains("Lock of column").is_none(), "no lock without a formula");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    h.event(egui::Event::Text("col(B)*2".to_string()));
+    settle(&mut h);
+    click(&mut h, "Auto");
+    click(&mut h, "OK");
+    h.get_by_label("Lock of column C: auto, current");
+    // The formula text is in the F(x)= row.
+    grid_text(&h, "col(B)*2");
+}
+
+/// The y positions of these entries of an open menu, which must grow in this order.
+fn assert_in_order(h: &Harness<'static, SheafApp>, names: &[&str]) {
+    let ys: Vec<f32> = names.iter().map(|n| menu_entry(h, n).rect().min.y).collect();
+    assert!(ys.windows(2).all(|w| w[0] < w[1]), "{names:?} are not in this order on the menu: {ys:?}");
+}
+
+#[test]
+fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
+    let mut h = start(vec![data_file("headmenu")]);
+    h.set_size(egui::vec2(1280.0, 1400.0));
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    assert_eq!(book_ui(&h).selected, vec![column_id(&h, "C")], "right-clicking selects the column first");
+    assert_in_order(
+        &h,
+        &[
+            "Plot",
+            "Cut",
+            "Copy",
+            "Copy Columns to...",
+            "Paste",
+            "Insert",
+            "Delete",
+            "Clear",
+            "Remove Links",
+            "Set As",
+            "Set As Categorical",
+            "Set Column Values...",
+            "Set Multiple Columns Values...",
+            "Fill Column with",
+            "Set Sampling Interval...",
+            "Show X Column...",
+            "Filter",
+            "Mask",
+            "Mask Cells by Condition...",
+            "Sort Column",
+            "Sort Worksheet",
+            "Sort Columns by Label...",
+            "Reverse Order",
+            "Normalize...",
+            "Frequency Count...",
+            "Statistics on Columns...",
+            "Hide/Unhide Columns",
+            "Move Columns",
+            "Swap Columns...",
+            "Column Width...",
+            "Slide Show of Dependent Graphs",
+            "Add or Update Sparklines...",
+            "Format Cells...",
+            "Properties...",
+        ],
+    );
+    // What Sheaf has is enabled, the rest is greyed.
+    for have in ["Plot", "Cut", "Copy", "Paste", "Delete", "Clear", "Set As", "Properties...", "Normalize..."] {
+        assert!(entry_enabled(&h, have), "{have} should be enabled");
+    }
+    for lack in ["Insert", "Copy Columns to...", "Set As Categorical", "Frequency Count...", "Column Width..."] {
+        assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
+    }
+    // Clear empties the column and one undo brings it back.
+    click_containing(&mut h, "Clear");
+    assert!(column(&h, "C").is_empty());
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+    // Add New Columns adds one.
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Add New Columns...");
+    assert_eq!(sheet(&h).columns.len(), 4);
+    // Normalize opens its window for the selected column; Statistics on Columns too.
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Normalize...");
+    assert!(h.state().analysis.is_some());
+    h.state_mut().analysis = None;
+    settle(&mut h);
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Statistics on Columns...");
+    assert!(h.state().analysis.is_some());
+    h.state_mut().analysis = None;
+    settle(&mut h);
+    // Delete removes the selected column.
+    right_click_text(&mut h, "B(Y1)");
+    menu_entry(&h, "Delete").click();
+    settle(&mut h);
+    assert_eq!(sheet(&h).columns.len(), 3, "four columns, one deleted");
+    assert!(sheet(&h).column_by_name("B").is_none());
+}
+
+#[test]
+fn the_cell_and_row_menus_copy_and_clear_and_grey_what_sheaf_lacks() {
+    let mut h = start(vec![data_file("cellmenu")]);
+    h.set_size(egui::vec2(1280.0, 1400.0));
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "6.5");
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 2) }, "right-clicking selects the cell");
+    assert_in_order(
+        &h,
+        &["Cut", "Copy", "Paste", "Paste Transpose", "Insert", "Clear", "Insert Graph...", "Format Cells..."],
+    );
+    assert!(entry_enabled(&h, "Copy"));
+    assert!(!entry_enabled(&h, "Paste Transpose"));
+    assert!(!entry_enabled(&h, "Insert Graph..."));
+    click_containing(&mut h, "Clear");
+    assert!(column(&h, "B")[2].is_nan());
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "B")[2], 6.5);
+
+    // The row number's menu is the short list.
+    let title_x = text_pos(&h, "Long Name").x;
+    let at = egui::pos2(title_x, text_pos(&h, "6.5").y);
+    h.event(egui::Event::PointerMoved(at));
+    h.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.step();
+    h.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    settle(&mut h);
+    assert_eq!(book_ui(&h).sel, Sel::Rows { anchor: 2, end: 2 });
+    assert_in_order(&h, &["Cut", "Copy", "Paste", "Insert", "Delete", "Clear", "Insert Graph...", "Format Cells..."]);
+    assert!(h.query_by_label("Paste Transpose").is_none(), "the row menu is the short form");
+    click_containing(&mut h, "Copy");
+    assert_eq!(h.state().copied, "3\t6.5\t10.5\n");
+}
+
+/// Right-clicks the tab of a sheet.
+fn right_click_tab(h: &mut Harness<'static, SheafApp>, name: &str) {
+    right_click(h, name);
+}
+
+#[test]
+fn the_sheet_tab_menu_adds_duplicates_renames_and_deletes_sheets() {
+    let mut h = start(vec![data_file("tabs")]);
+    show_window(&mut h, "Book1 - sample");
+    let first = sheet(&h).name.clone();
+    right_click_tab(&mut h, &first);
+    assert_in_order(
+        &h,
+        &[
+            "Insert",
+            "Delete",
+            "Add",
+            "Add Graph as Sheet...",
+            "Add Notes as Sheet",
+            "Duplicate Without Data",
+            "Duplicate",
+            "Sheet Name to Show",
+            "Name and Comments...",
+            "Navigate...",
+        ],
+    );
+    assert!(!entry_enabled(&h, "Add Notes as Sheet"));
+    menu_entry(&h, "Add").click();
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 2);
+    assert_eq!(project(&h).workbooks().next().unwrap().active_sheet, 1, "the new sheet is shown");
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+
+    // Duplicate copies the data under new column ids.
+    right_click_tab(&mut h, &first);
+    menu_entry(&h, "Duplicate").click();
+    settle(&mut h);
+    let book = project(&h).workbooks().next().unwrap();
+    assert_eq!(book.sheets.len(), 2);
+    assert_eq!(book.sheets[1].columns.len(), 3);
+    assert_ne!(book.sheets[1].columns[0].id, book.sheets[0].columns[0].id);
+    assert_eq!(book.sheets[1].columns[1].numeric(), book.sheets[0].columns[1].numeric());
+    let copy_name = book.sheets[1].name.clone();
+
+    // Name and Comments asks for a name and renames the sheet.
+    right_click_tab(&mut h, &copy_name);
+    menu_entry(&h, "Name and Comments...").click();
+    settle(&mut h);
+    h.state_mut().sheet_name.as_mut().expect("the dialog is open").name = "Run 2".to_string();
+    click(&mut h, "OK");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets[1].name, "Run 2");
+    assert_eq!(h.state().doc.undo_label(), Some("Rename sheet"));
+
+    // Names are compared without regard to case: "RUN 2" would clash with "Run 2".
+    right_click_tab(&mut h, &first);
+    menu_entry(&h, "Name and Comments...").click();
+    settle(&mut h);
+    h.state_mut().sheet_name.as_mut().expect("the dialog is open").name = "RUN 2".to_string();
+    click(&mut h, "OK");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets[0].name, first, "the clash was refused");
+    assert!(h.state().status.contains("no other sheet"), "{}", h.state().status);
+
+    // Delete removes the sheet; the last sheet cannot be deleted.
+    right_click_tab(&mut h, "Run 2");
+    menu_entry(&h, "Delete").click();
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+    right_click_tab(&mut h, &first);
+    menu_entry(&h, "Delete").click();
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+    assert!(h.state().status.contains("at least one sheet"));
+}
+
+#[test]
+fn the_corner_menu_lists_the_grid_switches_greyed() {
+    let mut h = start(vec![data_file("corner")]);
+    show_window(&mut h, "Book1 - sample");
+    let title_x = text_pos(&h, "Long Name").x;
+    let at = egui::pos2(title_x, text_pos(&h, "A(X1)").y);
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    settle(&mut h);
+    assert_in_order(
+        &h,
+        &[
+            "Row Labels for Column Label Rows",
+            "Column Header",
+            "Row Header",
+            "Column Grid",
+            "Row Grid",
+            "Page Break Preview Lines",
+        ],
+    );
+    assert!(!entry_enabled(&h, "Column Grid"));
+}
+
+#[test]
+fn the_grid_shows_five_decimals_and_blank_for_missing_values() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-five-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sample.csv");
+    std::fs::write(&path, "t,v\n1,0.841470984807897\n2,\n3,-0.7568\n").unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - sample");
+    grid_text(&h, "0.84147");
+    grid_text(&h, "-0.7568");
+    assert!(h.query_all(By::new().role(egui::accesskit::Role::Label).value("--")).next().is_none());
+}
+
+// ----- toolbars --------------------------------------------------------------------------------
+
+macro_rules! bar_button {
+    ($h:expr, $bar:expr, $tip:expr) => {
+        $h.get_by_label(&format!("{} toolbar: {}", $bar, $tip))
+    };
+}
+
+fn bar_button_shown(h: &Harness<'static, SheafApp>, bar: &str, tip: &str) -> bool {
+    h.query_by_label(&format!("{bar} toolbar: {tip}")).is_some()
+}
+
+#[test]
+fn clicking_line_in_the_2d_graphs_bar_with_a_column_selected_makes_a_line_graph() {
+    let mut h = start(vec![data_file("tb-line")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
+    let before = project(&h).graphs().count();
+    bar_button!(h, "2D Graphs", "Line").click();
+    settle(&mut h);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let plots = &graphs[before].layers[0].plots;
+    assert_eq!(plots.len(), 1);
+    assert_eq!(plots[0].y, c);
+}
+
+#[test]
+fn a_bar_is_hidden_and_shown_again_from_view_toolbars() {
+    let mut h = start(Vec::new());
+    assert!(bar_button_shown(&h, "Tools", "Pointer"));
+    menu(&mut h, "View", "Toolbars...");
+    settle(&mut h);
+    h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Tools").click();
+    settle(&mut h);
+    assert!(!bar_button_shown(&h, "Tools", "Pointer"), "the Tools bar is hidden");
+    assert!(bar_button_shown(&h, "Standard", "Open"), "the other bars stay");
+    h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Tools").click();
+    settle(&mut h);
+    assert!(bar_button_shown(&h, "Tools", "Pointer"), "and shown again");
+}
+
+#[test]
+fn ctrl_t_opens_the_toolbars_window() {
+    let mut h = start(Vec::new());
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::T);
+    settle(&mut h);
+    assert!(h.state().toolbars.dialog);
+}
+
+#[test]
+fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
+    let mut h = start(vec![data_file("tb-grey")]);
+    show_window(&mut h, "Book1 - sample");
+    let windows = project(&h).windows.len();
+    // Column is a 2D type Sheaf lacks: greyed, a click changes nothing.
+    assert!(bar_button!(h, "2D Graphs", "Column").accesskit_node().is_disabled());
+    bar_button!(h, "2D Graphs", "Column").click();
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), windows);
+    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Column")));
+    // Line needs a selected column.
+    click_text(&mut h, "C(Y1)");
+    assert!(!bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());
+    // Set as X is enabled only with columns selected; Pointer is on.
+    assert!(!bar_button!(h, "Standard", "Set as X").accesskit_node().is_disabled());
+    assert!(!bar_button!(h, "Tools", "Pointer").accesskit_node().is_disabled());
+    assert!(bar_button!(h, "Tools", "Zoom In").accesskit_node().is_disabled());
+}
+
+#[test]
+fn toolbar_buttons_follow_the_window_type() {
+    let mut h = start(vec![data_file("tb-kind")]);
+    click(&mut h, "Title Graph1 - sample");
+    // In a graph window the plot buttons have no worksheet to plot from.
+    assert!(bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());
+    assert!(bar_button!(h, "Standard", "Add New Columns").accesskit_node().is_disabled());
+    assert!(!bar_button!(h, "Standard", "Open").accesskit_node().is_disabled());
+}
+
+// ----- the side panels (ADR 0007, step 7) -------------------------------------------------
+
+fn move_pointer(h: &mut Harness<'static, SheafApp>, at: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(at));
+    settle(h);
+}
+
+/// A point in the middle of the grey workspace, away from every panel and window.
+fn empty_workspace_point() -> egui::Pos2 {
+    egui::pos2(900.0, 650.0)
+}
+
+/// True when a plain label (the status bar boxes, the log lines) shows exactly this text.
+fn label_text(h: &Harness<'static, SheafApp>, text: &str) -> bool {
+    h.query(By::new().role(egui::accesskit::Role::Label).value(text)).is_some()
+}
+
+/// True when some plain label shows text that contains this.
+fn label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
+    h.query_all(By::new().role(egui::accesskit::Role::Label))
+        .any(|n| n.accesskit_node().value().is_some_and(|v| v.contains(text)))
+}
+
+#[test]
+fn the_explorer_slides_out_when_the_mouse_is_on_its_tab_and_goes_when_the_mouse_leaves() {
+    let mut h = start_auto_hide(vec![data_file("hover")]);
+    // At rest only the vertical tab names are on screen, not the rows.
+    assert!(h.query_by_label("Project Explorer tab").is_some());
+    assert!(h.query_by_label("Book1 - sample").is_none());
+    assert_eq!(h.state().panels.flyout(), None);
+    h.get_by_label("Project Explorer tab").hover();
+    settle(&mut h);
+    assert_eq!(h.state().panels.flyout(), Some(PanelId::Explorer));
+    assert!(h.query_by_label("Book1 - sample").is_some(), "the window list is shown");
+    assert!(h.query_by_label("Graph1 - sample").is_some());
+    // Moving into the panel keeps it open; moving to the workspace closes it.
+    let row = h.get_by_label("Book1 - sample").rect().center();
+    move_pointer(&mut h, row);
+    assert_eq!(h.state().panels.flyout(), Some(PanelId::Explorer));
+    move_pointer(&mut h, empty_workspace_point());
+    assert_eq!(h.state().panels.flyout(), None);
+    assert!(h.query_by_label("Book1 - sample").is_none());
+}
+
+#[test]
+fn a_click_on_the_tab_keeps_the_panel_open_until_a_click_elsewhere() {
+    let mut h = start_auto_hide(vec![data_file("sticky")]);
+    click(&mut h, "Project Explorer tab");
+    move_pointer(&mut h, empty_workspace_point());
+    assert_eq!(h.state().panels.flyout(), Some(PanelId::Explorer), "opened by a click, it stays");
+    click_at(&mut h, empty_workspace_point());
+    assert_eq!(h.state().panels.flyout(), None);
+}
+
+#[test]
+fn the_pin_docks_the_explorer_and_the_same_button_lets_it_go_back_to_the_strip() {
+    let mut h = start_auto_hide(vec![data_file("pin")]);
+    h.get_by_label("Project Explorer tab").hover();
+    settle(&mut h);
+    click(&mut h, "Pin Project Explorer");
+    assert!(h.state().panels.is_pinned(PanelId::Explorer));
+    assert_eq!(h.state().panels.flyout(), None);
+    assert!(h.query_by_label("Project Explorer tab").is_none(), "a docked panel has no tab");
+    move_pointer(&mut h, empty_workspace_point());
+    assert!(h.query_by_label("Book1 - sample").is_some(), "still on screen with the mouse elsewhere");
+    click(&mut h, "Auto Hide Project Explorer");
+    assert!(!h.state().panels.is_pinned(PanelId::Explorer));
+    assert!(h.query_by_label("Project Explorer tab").is_some());
+    click_at(&mut h, empty_workspace_point());
+    assert!(h.query_by_label("Book1 - sample").is_none());
+}
+
+#[test]
+fn alt_1_and_the_view_menu_hide_and_show_the_project_explorer() {
+    let mut h = start_auto_hide(vec![data_file("alt1")]);
+    assert!(h.state().panels.is_shown(PanelId::Explorer));
+    h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::Num1);
+    settle(&mut h);
+    assert!(!h.state().panels.is_shown(PanelId::Explorer));
+    assert!(h.query_by_label("Project Explorer tab").is_none(), "its tab is gone");
+    h.key_press_modifiers(egui::Modifiers::ALT, egui::Key::Num1);
+    settle(&mut h);
+    assert!(h.state().panels.is_shown(PanelId::Explorer));
+    assert!(h.query_by_label("Book1 - sample").is_some(), "shown again, slid out");
+    // The same through the menu.
+    menu(&mut h, "View", "Project Explorer");
+    assert!(!h.state().panels.is_shown(PanelId::Explorer));
+    // The X button of the panel hides it too.
+    menu(&mut h, "View", "Project Explorer");
+    assert!(h.state().panels.is_shown(PanelId::Explorer));
+    click(&mut h, "Close Project Explorer");
+    assert!(!h.state().panels.is_shown(PanelId::Explorer));
+}
+
+#[test]
+fn a_double_click_shows_and_activates_a_window_and_a_single_click_only_selects_the_row() {
+    let mut h = start(vec![data_file("dbl")]);
+    let (book, graph) = window_ids(&h);
+    click(&mut h, "Close Graph1 - sample");
+    assert_eq!(h.state().active, Some(book));
+    pause(&mut h);
+    click(&mut h, "Graph1 - sample");
+    assert_eq!(h.state().panels.explorer.selected, Some(graph), "the row is selected");
+    assert_eq!(h.state().active, Some(book), "but nothing is activated");
+    assert!(h.query_by_label("Title Graph1 - sample").is_none());
+    show_window(&mut h, "Graph1 - sample");
+    assert_eq!(h.state().active, Some(graph));
+    assert!(h.query_by_label("Title Graph1 - sample").is_some());
+}
+
+#[test]
+fn the_explorer_lists_name_long_name_short_name_and_type_with_the_active_window_in_bold() {
+    let mut h = start(vec![data_file("cols")]);
+    let (book, graph) = window_ids(&h);
+    for head in ["Name", "Long Name", "Short Name", "Type"] {
+        assert!(h.query_by_label(&format!("Sort by {head}")).is_some(), "{head}");
+    }
+    assert_eq!(h.state().panels.explorer.bold, vec![graph], "the graph was made last and is active");
+    show_window(&mut h, "Book1 - sample");
+    assert_eq!(h.state().panels.explorer.bold, vec![book]);
+    // The folder tree shows the root, named after the project (this one has no file yet).
+    assert!(h.query_by_label("UNTITLED").is_some());
+}
+
+#[test]
+fn the_window_menu_of_the_explorer_has_origins_commands_and_the_live_ones_work() {
+    let mut h = start(vec![data_file("ctx")]);
+    let (book, graph) = window_ids(&h);
+    right_click(&mut h, "Book1 - sample");
+    for name in ["Show", "Hide", "Rename...", "Delete", "Duplicate", "Properties..."] {
+        assert!(h.query_by_label(name).is_some(), "{name}");
+    }
+    assert!(h.get_by_label("Duplicate").accesskit_node().is_disabled(), "Sheaf cannot duplicate a window yet");
+    click(&mut h, "Hide");
+    assert!(!h.state().workspace.is_shown(book));
+    assert_eq!(project(&h).workbooks().count(), 1, "hiding keeps the data");
+    right_click(&mut h, "Graph1 - sample");
+    click(&mut h, "Properties...");
+    assert!(h.state().rename.as_ref().is_some_and(|r| r.window == graph));
+    click(&mut h, "Cancel");
+    right_click(&mut h, "Book1 - sample");
+    click(&mut h, "Show");
+    assert!(h.state().workspace.is_shown(book));
+    assert_eq!(h.state().active, Some(book));
+}
+
+#[test]
+fn windows_move_into_folders_and_the_list_shows_the_selected_folder() {
+    let mut h = start(vec![data_file("folders")]);
+    let (book, graph) = window_ids(&h);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::NewFolder(Vec::new()), &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).root.folders.len(), 1);
+    assert_eq!(h.state().panels.explorer.folder, vec![0], "the new folder is selected");
+    assert!(h.query_by_label("Folder1").is_some(), "and shown in the tree");
+    h.state_mut().apply(Action::MoveWindow { window: book, folder: vec![0] }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).root.folders[0].windows, [book]);
+    // Folder1 is selected: its list holds the book only.
+    assert!(h.query_by_label("Book1 - sample").is_some());
+    assert!(h.query_by_label("Graph1 - sample").is_none());
+    click(&mut h, "UNTITLED");
+    assert!(h.query_by_label("Book1 - sample").is_none(), "the root lists what no folder holds");
+    assert!(h.query_by_label("Graph1 - sample").is_some());
+    assert_eq!(h.state().panels.explorer.folder, Vec::<usize>::new());
+    // One undo step moves it back, another removes the folder.
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(project(&h).root.folders[0].windows.is_empty());
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(project(&h).root.folders.is_empty());
+    assert!(project(&h).window(graph).is_some());
+}
+
+#[test]
+fn dragging_a_row_onto_a_folder_moves_the_window_into_it() {
+    let mut h = start(vec![data_file("drag")]);
+    let (book, _) = window_ids(&h);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::NewFolder(Vec::new()), &ctx);
+    click(&mut h, "UNTITLED");
+    pause(&mut h);
+    let from = h.get_by_label("Book1 - sample").rect().center();
+    let to = h.get_by_label("Folder1").rect().center();
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    for k in 1..=6 {
+        h.event(egui::Event::PointerMoved(from + (to - from) * (k as f32 / 6.0)));
+        h.step();
+    }
+    h.event(button(to, false));
+    h.step();
+    settle(&mut h);
+    assert_eq!(project(&h).root.folders[0].windows, [book], "dropped on the folder");
+    assert_eq!(h.state().doc.undo_label(), Some("Move window"));
+}
+
+/// How many pixels of the rendered graph are close to this colour.
+fn pixels_like(h: &Harness<'static, SheafApp>, graph: WindowId, c: sheaf_core::Color) -> usize {
+    let raster = sheaf_plot::render_raster(project(h), graph, 1.0).expect("the graph renders");
+    let near = |a: u8, b: u8| a.abs_diff(b) < 24;
+    raster
+        .rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| near(p[0], c.r) && near(p[1], c.g) && near(p[2], c.b) && p[3] > 200)
+        .count()
+}
+
+#[test]
+fn the_object_manager_lists_the_plots_and_a_tick_box_hides_one_from_the_graph() {
+    let mut h = start_auto_hide(vec![data_file("om")]);
+    let (_, graph) = window_ids(&h);
+    h.get_by_label("Object Manager tab").hover();
+    settle(&mut h);
+    assert_eq!(h.state().panels.flyout(), Some(PanelId::Objects));
+    assert!(h.query_by_label("Show layer: Layer1").is_some());
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    assert_eq!(plots.len(), 2);
+    let second = plots[1].line.color;
+    let before = pixels_like(&h, graph, second);
+    assert!(before > 20, "the second plot is drawn: {before}");
+    let tick = format!("Show plot: {}", project(&h).plot_label(&plots[1]));
+    assert!(h.query_by_label(&tick).is_some());
+    click(&mut h, &tick);
+    assert!(!project(&h).graph(graph).unwrap().layers[0].plots[1].visible);
+    assert!(project(&h).graph(graph).unwrap().layers[0].plots[0].visible, "the other plot stays");
+    assert_eq!(pixels_like(&h, graph, second), 0, "it is gone from the rendered graph");
+    assert_eq!(h.state().doc.undo_label(), Some("Hide plot"));
+    // The tick comes back with Undo, and the layer's tick box acts on all of its plots.
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert!(pixels_like(&h, graph, second) > 20);
+    click(&mut h, "Show layer: Layer1");
+    assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| !p.visible));
+    click(&mut h, "Show layer: Layer1");
+    assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.visible));
+}
+
+/// Where the row of the docked Object Manager with this label is (the same name can also be in
+/// a dialog, which lies further left).
+fn in_right_panel(h: &Harness<'static, SheafApp>, label: &str) -> egui::Pos2 {
+    h.query_all_by_label(label)
+        .max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x))
+        .unwrap_or_else(|| panic!("no {label:?}"))
+        .rect()
+        .center()
+}
+
+#[test]
+fn the_object_manager_selection_is_the_one_of_plot_details() {
+    let mut h = start(vec![data_file("om-sel")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let name = project(&h).plot_label(&plots[1]);
+    // A double click on the second plot opens Plot Details with that plot selected.
+    let at = in_right_panel(&h, &name);
+    double_click_at(&mut h, at);
+    let dialog = h.state().graph_props.as_ref().expect("Plot Details is open");
+    assert_eq!(dialog.selected_plot(), 1);
+    // Choosing the first one in the Object Manager moves the selection of the dialog.
+    pause(&mut h);
+    let first = project(&h).plot_label(&plots[0]);
+    let at = in_right_panel(&h, &first);
+    click_at(&mut h, at);
+    assert_eq!(h.state().graph_props.as_ref().unwrap().selected_plot(), 0);
+    assert_eq!(h.state().panels.objects.selected, Some((0, Some(0))));
+}
+
+#[test]
+fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
+    let mut h = start(vec![data_file("stats")]);
+    show_window(&mut h, "Book1 - sample");
+    assert!(label_text(&h, "AU : ON") && label_text(&h, "Radian"), "Origin always shows these two");
+    let sheet_name = project(&h).workbooks().next().unwrap().sheet().name.clone();
+    assert!(label_text(&h, &format!("[Book1]{sheet_name}!")), "the active sheet");
+    assert!(!label_containing(&h, "Average="), "nothing selected, no statistics");
+    // Column B holds 2.5, 4.5, 6.5, 8.5.
+    click_text(&mut h, "B(Y1)");
+    assert!(label_text(&h, "Average=5.5 Sum=22 Count=4"));
+    // A block of two cells: 4.5 and 6.5.
+    let b = column_id(&h, "B");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let sheet = project(&h).workbook(book).unwrap().sheet().clone();
+    let i = sheet.column_index(b).unwrap();
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (i, 1), (i, 2));
+    settle(&mut h);
+    assert!(label_text(&h, "Average=5.5 Sum=11 Count=2"));
+    h.state_mut().books.get_mut(&book).unwrap().clear_selection();
+    settle(&mut h);
+    assert!(!label_containing(&h, "Average="));
+}
+
+#[test]
+fn the_status_bar_shows_the_hint_of_the_toolbar_button_under_the_mouse() {
+    let mut h = start(vec![data_file("hint")]);
+    assert!(label_containing(&h, "Imported"));
+    let button = h.get_by_label("Standard toolbar: Open").rect().center();
+    move_pointer(&mut h, button);
+    move_pointer(&mut h, button + egui::vec2(1.0, 0.0));
+    assert!(label_text(&h, "Open"), "the hint");
+    move_pointer(&mut h, empty_workspace_point());
+    move_pointer(&mut h, empty_workspace_point() + egui::vec2(1.0, 0.0));
+    assert!(!label_text(&h, "Open"));
+    assert!(label_containing(&h, "Imported"), "the last message comes back");
+}
+
+#[test]
+fn the_messages_log_keeps_what_the_status_bar_said_and_can_be_cleared() {
+    let mut h = start(vec![data_file("log")]);
+    assert!(h.state().logs.messages.iter().any(|m| m.text.contains("Imported 1 file")));
+    // A warning is logged as a warning.
+    h.state_mut().warn("Nothing to plot: test");
+    assert_eq!(h.state().logs.messages.last().unwrap().level, crate::panels::logs::Level::Warning);
+    // Showing the panel lists them, and Clear empties it.
+    h.state_mut().panels.open(PanelId::Messages);
+    settle(&mut h);
+    assert!(label_containing(&h, "Imported 1 file(s)"));
+    click(&mut h, "Clear Messages");
+    assert!(h.state().logs.messages.is_empty());
+    assert!(label_containing(&h, "No messages yet"));
+}
+
+#[test]
+fn a_message_box_is_logged_once_and_a_tool_report_goes_to_the_results_log() {
+    let mut h = start(vec![data_file("results")]);
+    h.state_mut().message = Some(("Could not save the project".to_string(), "disk full".to_string()));
+    settle(&mut h);
+    settle(&mut h);
+    let hits = h.state().logs.messages.iter().filter(|m| m.text.contains("disk full")).count();
+    assert_eq!(hits, 1, "the box stays on screen for many frames but is logged once");
+    h.state_mut().message = None;
+    settle(&mut h);
+    // Integrate writes a report: the Results Log gets it and its tab appears.
+    assert!(!h.state().panels.is_shown(PanelId::Results));
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Analyze { book, columns: Vec::new(), kind: AnalysisKind::Integrate }, &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().logs.results.len(), 1);
+    assert!(h.state().logs.results[0].title.contains("Integrate"));
+    assert!(h.state().panels.is_shown(PanelId::Results));
+    assert!(h.query_by_label("Results Log tab").is_some());
+    h.state_mut().panels.open(PanelId::Results);
+    settle(&mut h);
+    click(&mut h, "Clear Results");
+    assert!(h.state().logs.results.is_empty());
 }
 
 /// Statistics > Hypothesis Testing > Two-Sample t-Test... opens the window with the two Y columns of the sheet; OK adds a result
@@ -1283,7 +2373,7 @@ fn alt_and_the_underlined_letter_opens_a_top_level_menu() {
 #[test]
 fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
     let mut h = start(vec![data_file("ttest")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Statistics", "Hypothesis Testing", "Two-Sample t-Test..."]);
     assert!(h.state().analysis.is_some(), "the t-test window is open");
     click(&mut h, "OK");
@@ -1307,7 +2397,7 @@ fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
 #[test]
 fn the_statistics_menu_makes_a_histogram_graph() {
     let mut h = start(vec![data_file("histogram")]);
-    click(&mut h, "Book1 - sample");
+    show_window(&mut h, "Book1 - sample");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Frequency Counts..."]);
     click(&mut h, "OK");

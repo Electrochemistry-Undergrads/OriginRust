@@ -136,7 +136,17 @@ impl Writer {
         };
         self.graphs += 1;
         self.windows.extend(framed(&window_header(&spec)));
-        for layer in &graph.layers {
+        for (index, layer) in graph.layers.iter().enumerate() {
+            unwritten_layer_features(graph, index, &mut notes);
+            // A linked layer's frame is a part of its parent's frame; Origin gets the place on the page.
+            let placed;
+            let layer = match graph.link_parent(index) {
+                Some(parent) => {
+                    placed = Layer { frame: within(graph.layers[parent].frame, layer.frame), ..layer.clone() };
+                    &placed
+                }
+                None => layer,
+            };
             let bytes = self.graph_layer(project, layer, page, &Sets { map: sets }, &mut notes);
             self.windows.extend(bytes);
         }
@@ -586,6 +596,59 @@ fn data_ranges(project: &Project, layer: &Layer, plots: &[&Plot]) -> (Option<(f6
 
 /// A frame that lies inside the page. Origin loads a frame with no width, a negative corner or a
 /// size beyond the page but draws a blank picture, so such a frame is replaced and named in a warning.
+/// The page place of a frame given as fractions of `parent` (a page frame).
+fn within(parent: sheaf_core::graph::Frame, f: sheaf_core::graph::Frame) -> sheaf_core::graph::Frame {
+    sheaf_core::graph::Frame {
+        left: parent.left + f.left * parent.width,
+        top: parent.top + f.top * parent.height,
+        width: f.width * parent.width,
+        height: f.height * parent.height,
+    }
+}
+
+/// Notes for the parts of layer `index` that the writer does not store yet (the double-Y, stack,
+/// column and panel features of graphing spec sections 12 to 15). Each note makes the save keep a
+/// companion file with the whole project.
+fn unwritten_layer_features(graph: &Graph, index: usize, notes: &mut Vec<String>) {
+    let layer = &graph.layers[index];
+    if graph.link_parent(index).is_some() {
+        notes.push(
+            "a layer linked to another one (the right Y axis of a double-Y graph, or a panel of a stack) was written as an independent layer at the same place; the link and the shared axis are not kept"
+                .into(),
+        );
+    }
+    if layer.stack != Stack::None || !layer.plot_offsets.is_empty() {
+        notes.push(
+            "offsets of stacked or waterfall curves were not written; the curves are drawn where their data lies"
+                .into(),
+        );
+    }
+    if layer.bars != BarSpacing::default() {
+        notes.push("the gap and overlap of column bars were not written; Origin's defaults are used".into());
+    }
+    if layer.legend.scope != LegendScope::Layer {
+        notes
+            .push("a legend that lists the plots of several layers was written with its own layer's plots only".into());
+    }
+    for axis in [&layer.x_axis, &layer.y_axis] {
+        if axis.side != AxisSide::Normal {
+            notes.push("an axis on the opposite side, or a hidden axis, was written as a normal axis".into());
+        }
+        if axis.tick_label_source != TickLabelSource::Auto {
+            notes.push("the choice of tick labels (numbers, or the cells of a column) was not written".into());
+        }
+        if axis.tick_label_angle_deg != 0.0 {
+            notes.push("rotated tick labels were not written".into());
+        }
+        if axis.hide_end_label {
+            notes.push("a hidden tick label at the end of an axis was not written".into());
+        }
+        if axis.color_follows_plot || axis.title_color_follows_plot {
+            notes.push("axis colours that follow the first plot's colour were not written".into());
+        }
+    }
+}
+
 fn sane_frame(f: sheaf_core::graph::Frame, notes: &mut Vec<String>) -> sheaf_core::graph::Frame {
     use sheaf_core::graph::Frame;
     let ok = [f.left, f.top, f.width, f.height].iter().all(|v| v.is_finite())

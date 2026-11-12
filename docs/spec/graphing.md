@@ -436,7 +436,7 @@ Method: draw an overlay of four XY columns with the default template; read Plot 
 
 ## 12. Double-Y graphs, right Y axes and linked layers (P0, GP-DY-01)
 
-Tags as elsewhere in this document, plus **[COM]** for behaviour observed in Origin 2016 through COM/LabTalk on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). The design decision is recorded in ADR 0008.
+Tags as elsewhere in this document, plus **[COM]** for behaviour observed in Origin 2016 through COM/LabTalk on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). The design decision is recorded in ADR 0009.
 
 ### 12.1 What Origin 2016 does
 
@@ -638,7 +638,7 @@ So in the DoubleY template layer 0 draws the bottom, left and top lines and laye
 
 Examples: `sheaf plot cycles.csv -y Capacity --y2 Efficiency -o fig.png`; `sheaf plot it.txt -t cv -y "i/mA" --y2 "Q/C" --y2-title "Charge (C)" -o fig.svg`; `sheaf plot data.csv -t double-y -o fig.pdf`.
 
-**Desktop app** (later, with ADR 0007): the Plot menu's multi-axis group with "Double-Y" (today it appears as a template in the Plot menu); a Graph toolbar button that adds a Right-Y layer; a "Left axis / Right axis" choice per plot that calls `move_plot_to_layer`, creating the right layer the first time; layer icons 1 and 2 that choose the layer the dialogs edit. Today the graph settings dialog edits layer 0 only.
+**Desktop app** (later, with ADR 0007): the Plot menu's multi-axis group with "Double-Y" (today it appears as a template in the Plot menu); a Graph toolbar button that adds a Right-Y layer; a "Left axis / Right axis" choice per plot that calls `move_plot_to_layer`, creating the right layer the first time; layer icons 1 and 2 that choose the layer the dialogs edit. Done in part: the layer icons choose the active layer, which the graph settings and the Graph and Format menus edit.
 
 ### 12.7 Origin project files (for the .opj reader and writer)
 
@@ -683,7 +683,7 @@ Tick positions of the left and right axes are not aligned with each other (Origi
 
 ## 13. Stacked lines by Y offsets and waterfall (P0, GP-OFF-01)
 
-Status: researched on 2026-11-12 with Origin 2016 runs through COM on our own synthetic data (scripts and outputs in `re-workspace/scratch/graph-p0/`, git-ignored), plus a read-only look at the settings and counts of the owner's stacked XRD graphs. Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. The model decision is recorded in ADR 0009.
+Status: researched on 2026-11-12 with Origin 2016 runs through COM on our own synthetic data (scripts and outputs in `re-workspace/scratch/graph-p0/`, git-ignored), plus a read-only look at the settings and counts of the owner's stacked XRD graphs. Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. The model decision is recorded in ADR 0010.
 
 ### 13.1 What Origin 2016 does
 
@@ -1135,7 +1135,7 @@ Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t colu
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin 2016's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin 2016 runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. Where the current online help **[W]** and Origin 2016 disagree, Origin 2016 decides.
 
-A multi-panel graph is one page with several layers, one per panel. Each panel has its own frame, axes, plots and legend. Panels that share an axis are linked layers, the model of ADR 0008 (section 12): no second link model is needed.
+A multi-panel graph is one page with several layers, one per panel. Each panel has its own frame, axes, plots and legend. Panels that share an axis are linked layers, the model of ADR 0009 (section 12): no second link model is needed.
 
 ### 15.1 What Origin 2016 does
 

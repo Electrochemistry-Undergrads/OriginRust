@@ -1,4 +1,4 @@
-# ADR 0009: Stacked curves are a layer setting; curve offsets are stored on the layer
+# ADR 0010: Stacked curves are a layer setting; curve offsets are stored on the layer
 
 Status: accepted (2026-11-12)
 

@@ -1,6 +1,6 @@
 //! Multi-panel graphs (graphing spec section 15): several layers on one page, placed in the cells
 //! of a grid, each with its own axes, plots and legend. Panels that share an axis are linked
-//! layers (ADR 0008): every panel after the first is linked to the first one, so a vertical stack
+//! layers (ADR 0009): every panel after the first is linked to the first one, so a vertical stack
 //! of panels shares one X scale.
 //!
 //! A [`PanelLayout`] is an instruction, not something stored in the graph: applying it writes the

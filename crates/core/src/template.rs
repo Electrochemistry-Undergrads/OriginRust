@@ -308,6 +308,12 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     l.plots.clear();
     l.labels.clear();
     l.plot_offsets.clear();
+    // The right axis has curves of its own: they are not stacked, and its values are shown even
+    // when the stacked parent hides its own (offset) Y values.
+    if l.stack != Stack::None {
+        l.stack = Stack::None;
+        l.y_axis.show_tick_labels = true;
+    }
     l.link = Some(LayerLink { parent: parent_index, x: ScaleLink::Straight, y: ScaleLink::None });
     l.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
     l.x_axis.side = AxisSide::Hidden;
@@ -497,5 +503,12 @@ mod tests {
         assert_eq!(right_y_layer(&two, 0).palette.colors, vec![Color::RED, Color::BLACK]);
         two.palette.colors.clear();
         assert!(right_y_layer(&two, 0).palette.colors.is_empty());
+        // The right layer of a stacked graph is not stacked and shows its values.
+        let mut stacked = g.layers[0].clone();
+        stacked.stack = Stack::Constant { step: 2.0 };
+        stacked.y_axis.show_tick_labels = false;
+        let r = right_y_layer(&stacked, 0);
+        assert_eq!(r.stack, Stack::None);
+        assert!(r.y_axis.show_tick_labels);
     }
 }

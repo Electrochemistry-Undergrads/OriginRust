@@ -587,6 +587,15 @@ impl Project {
             return Ok(());
         }
         let plot = g.layers[from].plots.remove(index);
+        // The curve's stack settings (its own offset, or the curve it follows) go with it, unless
+        // another curve of the same column stays behind.
+        let column = plot.y;
+        if !g.layers[from].plots.iter().any(|p| p.y == column)
+            && let Some(i) = g.layers[from].plot_offsets.iter().position(|o| o.column == column)
+        {
+            let settings = g.layers[from].plot_offsets.remove(i);
+            *g.layers[to].plot_offset_mut(column) = settings;
+        }
         g.layers[to].plots.push(plot);
         g.layers[from].recolor_automatic();
         g.layers[to].recolor_automatic();
@@ -791,6 +800,18 @@ mod tests {
         assert_eq!(graph.layers[right].plots[0].line.color, graph.layers[right].palette.colors[0]);
         assert_eq!(p.move_plot_to_layer(g, 0, 7, right), Err(ProjectError::NoSuchPlot(7)));
         assert_eq!(p.move_plot_to_layer(g, 0, 0, 9), Err(ProjectError::NoSuchLayer(9)));
+    }
+
+    #[test]
+    fn a_moved_plot_keeps_its_stack_settings() {
+        let (mut p, ys) = four_ys();
+        let g = p.plot_columns(Template::Line, &ys[..2]).unwrap();
+        let right = p.add_right_y_layer(g, 0).unwrap();
+        p.graph_mut(g).unwrap().layers[0].plot_offset_mut(ys[1]).y = 7.0;
+        p.move_plot_to_layer(g, 0, 1, right).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert!(graph.layers[0].plot_offset(ys[1]).is_none());
+        assert_eq!(graph.layers[right].plot_offset(ys[1]).map(|o| o.y), Some(7.0));
     }
 
     #[test]

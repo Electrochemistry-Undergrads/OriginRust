@@ -1,4 +1,4 @@
-# ADR 0008: A second Y axis is a linked layer
+# ADR 0009: A second Y axis is a linked layer
 
 Status: accepted (2026-11-12)
 

@@ -1,0 +1,175 @@
+use super::*;
+use crate::{open_project, project_file};
+use sheaf_core::column::{Column, ColumnData, Designation};
+use sheaf_core::ids::{ColumnId, WindowId};
+use sheaf_core::project::Window;
+use sheaf_core::template::Template;
+use sheaf_core::worksheet::{Workbook, Worksheet};
+use std::time::{Duration, SystemTime};
+
+fn scratch(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-io-save-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn workbook_project() -> Project {
+    let mut sheet = Worksheet::new("Data");
+    sheet.columns = vec![
+        Column::new(ColumnId(0), "A", Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])),
+        Column::new(ColumnId(0), "B", Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])),
+    ];
+    let mut book = Workbook::new(WindowId(0), "Book1");
+    book.sheets = vec![sheet];
+    let mut p = Project::new();
+    p.adopt_named_workbook(book);
+    p
+}
+
+fn project_with_graph() -> Project {
+    let mut p = workbook_project();
+    p.add_graph(Template::Line);
+    p
+}
+
+fn set_mtime(path: &Path, when: SystemTime) {
+    let f = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+    f.set_modified(when).unwrap();
+}
+
+#[test]
+fn a_name_without_extension_becomes_opj() {
+    let dir = scratch("ext");
+    let out = save_project(&workbook_project(), &dir.join("lab")).unwrap();
+    assert_eq!(out.path, dir.join("lab.opj"));
+    assert!(dir.join("lab.opj").exists());
+    assert!(!dir.join("lab").exists());
+}
+
+#[test]
+fn an_explicit_sheaf_path_stays_a_sheaf_project_without_companion() {
+    let dir = scratch("sheaf");
+    let out = save_project(&project_with_graph(), &dir.join("lab.sheaf")).unwrap();
+    assert!(out.main_written && out.companion.is_none());
+    assert_eq!(project_file::load(&dir.join("lab.sheaf")).unwrap().graphs().count(), 1);
+    assert!(!project_file::is_companion(&dir.join("lab.sheaf")));
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+}
+
+#[test]
+fn a_project_with_a_graph_writes_the_opj_and_a_companion_that_holds_the_graph() {
+    let dir = scratch("graph");
+    let opj = dir.join("lab.opj");
+    let out = save_project(&project_with_graph(), &opj).unwrap();
+    assert!(out.main_written);
+    let companion = dir.join("lab.opj.sheaf");
+    assert_eq!(out.companion.as_deref(), Some(companion.as_path()));
+    assert!(out.warnings.iter().any(|w| w.contains("graph")), "{:?}", out.warnings);
+    assert!(out.status().contains("lab.opj.sheaf"));
+    assert!(out.details().unwrap().contains("Graph1") || out.details().unwrap().contains("graph"));
+    assert!(project_file::is_companion(&companion));
+    // The user's own lab.sheaf is a different name and is not created.
+    assert!(!dir.join("lab.sheaf").exists());
+    // The opj alone has no graph; opening it picks the companion, which has.
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.companion_used && !opened.foreign);
+    assert_eq!(opened.project.graphs().count(), 1);
+    assert_eq!(opened.save_path.as_deref(), Some(opj.as_path()));
+    assert!(opened.warnings[0].contains("lab.opj.sheaf"));
+}
+
+#[test]
+fn a_workbook_only_project_has_no_companion_and_an_old_marked_companion_is_deleted() {
+    let dir = scratch("clean");
+    let opj = dir.join("lab.opj");
+    save_project(&project_with_graph(), &opj).unwrap();
+    let companion = dir.join("lab.opj.sheaf");
+    assert!(companion.exists());
+    let out = save_project(&workbook_project(), &opj).unwrap();
+    assert!(out.companion.is_none() && out.warnings.is_empty());
+    assert_eq!(out.companion_removed.as_deref(), Some(companion.as_path()));
+    assert!(!companion.exists());
+    assert!(out.details().is_none());
+}
+
+#[test]
+fn a_companion_that_sheaf_did_not_write_is_never_deleted() {
+    let dir = scratch("foreign-companion");
+    let opj = dir.join("lab.opj");
+    let theirs = dir.join("lab.opj.sheaf");
+    project_file::save(&workbook_project(), &theirs).unwrap();
+    let out = save_project(&workbook_project(), &opj).unwrap();
+    assert!(out.companion_removed.is_none());
+    assert!(theirs.exists());
+    // And it is not trusted when opening either.
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.foreign && !opened.companion_used);
+}
+
+#[test]
+fn a_refused_project_writes_the_companion_only_and_leaves_the_old_opj_alone() {
+    let dir = scratch("refuse");
+    let opj = dir.join("lab.opj");
+    save_project(&workbook_project(), &opj).unwrap();
+    let before = std::fs::read(&opj).unwrap();
+    let mut p = workbook_project();
+    if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+        b.sheets[0].name = "a sheet name that is far too long for Origin to store".into();
+    }
+    let out = save_project(&p, &opj).unwrap();
+    assert!(!out.main_written);
+    assert!(out.refusal.is_some());
+    assert_eq!(std::fs::read(&opj).unwrap(), before, "the old .opj is untouched");
+    let companion = dir.join("lab.opj.sheaf");
+    assert!(project_file::is_companion(&companion));
+    assert!(out.status().contains("Could not write"));
+    assert!(out.details().unwrap().contains("not written"));
+    assert_eq!(project_file::load(&companion).unwrap().workbooks().count(), 1);
+    assert!(std::fs::read_dir(&dir).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp")));
+}
+
+#[test]
+fn a_refused_project_with_no_old_opj_writes_no_opj() {
+    let dir = scratch("refuse-new");
+    let mut p = workbook_project();
+    if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+        b.sheets[0].name = "a sheet name that is far too long for Origin to store".into();
+    }
+    let out = save_project(&p, &dir.join("lab.opj")).unwrap();
+    assert!(!out.main_written);
+    assert!(!dir.join("lab.opj").exists());
+    assert!(dir.join("lab.opj.sheaf").exists());
+}
+
+#[test]
+fn a_newer_opj_is_opened_and_the_older_companion_is_not_used() {
+    let dir = scratch("newer");
+    let opj = dir.join("lab.opj");
+    save_project(&project_with_graph(), &opj).unwrap();
+    // Origin saved the .opj later.
+    set_mtime(&opj, SystemTime::now() + Duration::from_secs(3600));
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.foreign && !opened.companion_used);
+    assert_eq!(opened.project.graphs().count(), 0);
+    assert!(opened.warnings.iter().any(|w| w.contains("older") && w.contains("not used")), "{:?}", opened.warnings);
+}
+
+#[test]
+fn opening_a_companion_by_name_saves_to_its_opj() {
+    let dir = scratch("by-name");
+    let opj = dir.join("lab.opj");
+    save_project(&project_with_graph(), &opj).unwrap();
+    let opened = open_project(&dir.join("lab.opj.sheaf")).unwrap();
+    assert_eq!(opened.save_path.as_deref(), Some(opj.as_path()));
+    let plain = dir.join("plain.sheaf");
+    project_file::save(&workbook_project(), &plain).unwrap();
+    assert_eq!(open_project(&plain).unwrap().save_path.as_deref(), Some(plain.as_path()));
+}
+
+#[test]
+fn companion_names() {
+    assert_eq!(companion_path(Path::new("d/x.opj")), PathBuf::from("d/x.opj.sheaf"));
+    assert_eq!(companion_target(Path::new("d/x.opj.sheaf")), Some(PathBuf::from("d/x.opj")));
+    assert_eq!(companion_target(Path::new("d/x.sheaf")), None);
+}

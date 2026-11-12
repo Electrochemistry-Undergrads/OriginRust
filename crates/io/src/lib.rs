@@ -11,6 +11,7 @@ mod error;
 pub mod export;
 pub mod opj;
 pub mod project_file;
+pub mod save;
 mod text;
 
 pub use error::IoError;
@@ -26,9 +27,14 @@ use std::path::Path;
 pub struct OpenedProject {
     pub project: sheaf_core::Project,
     /// True when the file is in another program's format (an Origin `.opj`
-    /// project). Such a project cannot be saved back to that file; it has
-    /// to be saved as a `.sheaf` project under a new name.
+    /// project) and no companion was used. Such a project is not saved back to
+    /// that file by itself; the user saves it under a name of their choice.
     pub foreign: bool,
+    /// The file a plain Save should write: the file itself for a `.sheaf` project, the `.opj` for
+    /// a companion, `None` for a foreign project.
+    pub save_path: Option<std::path::PathBuf>,
+    /// True when the companion `x.opj.sheaf` was opened instead of `x.opj`.
+    pub companion_used: bool,
     /// Things that were skipped or need a look.
     pub warnings: Vec<String>,
 }
@@ -39,19 +45,78 @@ pub fn is_project_file(path: &Path) -> bool {
     ext.eq_ignore_ascii_case(project_file::EXTENSION) || ext.eq_ignore_ascii_case("opj")
 }
 
+fn modified(path: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+
 /// Opens a Sheaf project (`.sheaf`) or imports an Origin project (`.opj`).
+///
+/// For `x.opj` with a companion `x.opj.sheaf` that Sheaf wrote beside it: the companion (the whole
+/// project) is opened when it is at least as new as the `.opj`; when the `.opj` is newer, it was
+/// changed in Origin, so the `.opj` is read and a warning says the companion was not used.
 pub fn open_project(path: &Path) -> Result<OpenedProject, IoError> {
     let is_opj = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj"));
     if is_opj {
+        let companion = save::companion_path(path);
+        let mut extra = Vec::new();
+        if companion.exists() && project_file::is_companion(&companion) {
+            let newer_or_same = match (modified(&companion), modified(path)) {
+                (Some(c), Some(o)) => c >= o,
+                _ => false,
+            };
+            if newer_or_same {
+                match project_file::load(&companion) {
+                    Ok(project) => {
+                        return Ok(OpenedProject {
+                            project,
+                            foreign: false,
+                            save_path: Some(path.to_path_buf()),
+                            companion_used: true,
+                            warnings: vec![format!(
+                                "Opened {} (the whole project, with graphs) instead of {}, because it is at least as new.",
+                                companion.display(),
+                                path.display()
+                            )],
+                        });
+                    }
+                    Err(e) => extra.push(format!(
+                        "The companion {} could not be read ({e}); the .opj was opened instead.",
+                        companion.display()
+                    )),
+                }
+            } else {
+                extra.push(format!(
+                    "{} is older than {} (which was changed after Sheaf saved it, for example in Origin), so it was not used. Graphs that only the companion held are not in this project.",
+                    companion.display(),
+                    path.display()
+                ));
+            }
+        }
         let mut import = opj::read_opj(path)?;
         let mut warnings = std::mem::take(&mut import.warnings);
         warnings.insert(
             0,
             format!("Imported from an Origin {} project. Workbooks and basic graphs are read.", import.version),
         );
-        Ok(OpenedProject { project: import.into_project(), foreign: true, warnings })
+        warnings.splice(1..1, extra);
+        Ok(OpenedProject {
+            project: import.into_project(),
+            foreign: true,
+            save_path: None,
+            companion_used: false,
+            warnings,
+        })
     } else {
-        Ok(OpenedProject { project: project_file::load(path)?, foreign: false, warnings: Vec::new() })
+        // A companion opened by name still saves to the .opj it belongs to.
+        let save_path = if project_file::is_companion(path) { save::companion_target(path) } else { None };
+        let save_path = save_path.or_else(|| Some(path.to_path_buf()));
+        Ok(OpenedProject {
+            project: project_file::load(path)?,
+            foreign: false,
+            save_path,
+            companion_used: false,
+            warnings: Vec::new(),
+        })
     }
 }
 

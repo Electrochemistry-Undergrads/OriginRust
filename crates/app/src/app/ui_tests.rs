@@ -591,3 +591,104 @@ fn column_properties_switch_a_date_time_column_to_a_date_only_format() {
     assert_eq!(col.cell_text(0), NumberFormat::Date(DatePattern::Iso).format(col.numeric().unwrap()[0]));
     assert_eq!(col.cell_text(0), "2026-11-11");
 }
+
+/// A folder for the project files of one save test.
+fn save_dir(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-save-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn ctrl_s(h: &mut Harness<'static, SheafApp>) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::S);
+    settle(h);
+}
+
+#[test]
+fn ctrl_s_saves_an_opj_with_a_companion_for_the_graph_and_reopening_brings_the_graph_back() {
+    let dir = save_dir("graph");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-graph")]);
+    assert_eq!(project(&h).graphs().count(), 1, "the import made a graph");
+    h.state_mut().path = Some(opj.clone());
+    ctrl_s(&mut h);
+    let companion = dir.join("lab.opj.sheaf");
+    assert!(opj.exists(), "the .opj is written");
+    assert!(companion.exists(), "the companion is written");
+    assert!(!dir.join("lab.sheaf").exists(), "a user's own lab.sheaf name is not used");
+    assert!(!h.state().doc.dirty);
+    assert!(h.state().status.contains("lab.opj.sheaf"), "{}", h.state().status);
+    let (title, text) = h.state().message.clone().expect("a message says what only the companion holds");
+    assert!(title.contains("companion") && text.contains("graph"), "{title}: {text}");
+    assert_eq!(h.state().path.as_deref(), Some(opj.as_path()));
+
+    let h2 = start(vec![opj.clone()]);
+    assert_eq!(project(&h2).graphs().count(), 1, "the graph is back");
+    assert_eq!(project(&h2).workbooks().count(), 1);
+    assert_eq!(h2.state().path.as_deref(), Some(opj.as_path()), "it saves to the .opj again");
+    assert!(h2.state().status.contains("companion"), "{}", h2.state().status);
+}
+
+#[test]
+fn a_workbook_only_save_writes_no_companion_and_deletes_an_old_one() {
+    let dir = save_dir("clean");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-clean")]);
+    h.state_mut().path = Some(opj.clone());
+    ctrl_s(&mut h);
+    assert!(dir.join("lab.opj.sheaf").exists());
+    // Drop the graph: now the .opj holds everything.
+    h.state_mut().message = None;
+    h.state_mut().doc.apply("Delete graph", |p| p.windows.retain(|w| matches!(w, Window::Workbook(_))));
+    settle(&mut h);
+    ctrl_s(&mut h);
+    assert!(opj.exists());
+    assert!(!dir.join("lab.opj.sheaf").exists(), "the companion Sheaf wrote is deleted");
+    assert!(h.state().message.is_none(), "nothing to report");
+    assert!(h.state().status.starts_with("Saved"), "{}", h.state().status);
+}
+
+#[test]
+fn a_project_origin_refuses_is_saved_as_the_companion_only_with_an_explanation() {
+    let dir = save_dir("refuse");
+    let opj = dir.join("lab.opj");
+    let mut h = start(vec![data_file("save-refuse")]);
+    h.state_mut().doc.apply("Rename sheet", |p| {
+        if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+            b.sheets[0].name = "a sheet name that is far too long for Origin to store".into();
+        }
+    });
+    settle(&mut h);
+    h.state_mut().path = Some(opj.clone());
+    ctrl_s(&mut h);
+    assert!(!opj.exists(), "no half-written .opj");
+    assert!(dir.join("lab.opj.sheaf").exists());
+    let (title, text) = h.state().message.clone().expect("the refusal is explained");
+    assert!(title.contains("could not be written") && text.contains("too long"), "{title}: {text}");
+    assert!(!h.state().doc.dirty, "the data is safe in the companion");
+}
+
+#[test]
+fn a_project_opened_from_sheaf_keeps_saving_to_sheaf() {
+    let dir = save_dir("keep-sheaf");
+    let sheaf = dir.join("lab.sheaf");
+    let mut h = start(vec![data_file("save-keep")]);
+    h.state_mut().save_to(sheaf.clone());
+    assert!(sheaf.exists());
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "no .opj and no companion");
+    let mut h2 = start(vec![sheaf.clone()]);
+    assert_eq!(h2.state().path.as_deref(), Some(sheaf.as_path()));
+    h2.state_mut().doc.apply("Touch", |_| {});
+    ctrl_s(&mut h2);
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "Ctrl+S wrote the same .sheaf");
+}
+
+#[test]
+fn a_name_without_a_known_extension_is_saved_as_opj() {
+    let dir = save_dir("ext");
+    let mut h = start(vec![data_file("save-ext")]);
+    assert!(h.state_mut().save_to(dir.join("lab")));
+    assert!(dir.join("lab.opj").exists());
+    assert!(!dir.join("lab").exists());
+}

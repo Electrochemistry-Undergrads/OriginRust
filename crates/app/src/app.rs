@@ -169,13 +169,20 @@ impl SheafApp {
                 self.doc.replace(opened.project);
                 self.reset_views();
                 if opened.foreign {
-                    // Not saved back to the Origin file: the project has no file name yet.
-                    self.status = format!("Imported {}; save it as a Sheaf project to keep changes", path.display());
+                    // Not saved back to the Origin file by itself (Sheaf reads only part of what
+                    // Origin keeps there): the project has no file name yet.
+                    self.status = format!(
+                        "Imported {}; use Save Project As to keep changes as an Origin project",
+                        path.display()
+                    );
                     self.import_folder = path.parent().map(Path::to_path_buf);
                     self.path = None;
+                } else if opened.companion_used {
+                    self.status = format!("Opened the companion of {} (graphs included)", path.display());
+                    self.path = opened.save_path;
                 } else {
                     self.status = format!("Opened {}", path.display());
-                    self.path = Some(path);
+                    self.path = opened.save_path;
                 }
                 if !opened.warnings.is_empty() {
                     self.message = Some((
@@ -211,40 +218,64 @@ impl SheafApp {
         let path = match (&self.path, ask) {
             (Some(p), false) => p.clone(),
             _ => {
+                let suggested = self
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "Untitled.opj".to_string());
+                // The default format is .opj; a project that came from a .sheaf file offers
+                // .sheaf first because it keeps saving there.
+                let keeps_sheaf =
+                    self.path.as_ref().and_then(|p| p.extension()).is_some_and(|e| e.eq_ignore_ascii_case("sheaf"));
+                let origin = ("Origin project (*.opj)", "opj");
+                let sheaf = ("Sheaf project (*.sheaf)", project_file::EXTENSION);
+                let (first, second) = if keeps_sheaf { (sheaf, origin) } else { (origin, sheaf) };
                 let mut chooser = rfd::FileDialog::new()
                     .set_title("Save project")
-                    .add_filter("Sheaf project", &[project_file::EXTENSION])
-                    .set_file_name(
-                        self.path
-                            .as_ref()
-                            .and_then(|p| p.file_name())
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| format!("Untitled.{}", project_file::EXTENSION)),
-                    );
+                    .add_filter(first.0, &[first.1])
+                    .add_filter(second.0, &[second.1])
+                    .set_file_name(suggested);
                 if let Some(dir) = self.folder() {
                     chooser = chooser.set_directory(dir);
                 }
-                let Some(mut p) = chooser.save_file() else {
+                let Some(p) = chooser.save_file() else {
                     return false;
                 };
-                // Always a Sheaf project: never write over a file of another program.
-                let is_sheaf = p
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case(project_file::EXTENSION));
-                if !is_sheaf {
-                    let mut name = p.file_name().map(|n| n.to_os_string()).unwrap_or_default();
-                    name.push(format!(".{}", project_file::EXTENSION));
-                    p.set_file_name(name);
-                }
                 p
             }
         };
-        match project_file::save(self.doc.project(), &path) {
-            Ok(()) => {
+        self.save_to(path)
+    }
+
+    /// Writes the project to `path`. Only `.opj` and `.sheaf` names are written as they are; any
+    /// other name gets `.opj` added, so a file of another program is never written over. The
+    /// rules (companion file, refusal) are in `sheaf_io::save`.
+    fn save_to(&mut self, mut path: PathBuf) -> bool {
+        let known = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("opj") || e.eq_ignore_ascii_case(project_file::EXTENSION));
+        if !known {
+            let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+            name.push(".opj");
+            path.set_file_name(name);
+        }
+        match sheaf_io::save::save_project(self.doc.project(), &path) {
+            Ok(outcome) => {
+                // The project is safe on disk either way: in the .opj, or in the companion when
+                // the .opj was refused.
                 self.doc.dirty = false;
-                self.status = format!("Saved {}", path.display());
+                self.status = outcome.status();
                 self.path = Some(path);
+                if let Some(text) = outcome.details() {
+                    let title = if outcome.refusal.is_some() {
+                        "The Origin project could not be written"
+                    } else {
+                        "Saved with a companion file"
+                    };
+                    self.message = Some((title.to_string(), text));
+                }
                 true
             }
             Err(e) => {

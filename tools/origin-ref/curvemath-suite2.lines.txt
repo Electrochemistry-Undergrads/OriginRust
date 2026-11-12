@@ -1,0 +1,20 @@
+newbook;
+col(A) = {5, 1, 9, 3, 7, 4, 6};
+col(B) = 10*col(A);
+col(C) = {8.5, 1.5, 5.5, 3.5, 5.5};
+col(D) = col(C)^2;
+col(D)[5] = 99;
+subtract_ref iy1:=(col(A),col(B)) iy2:=(col(C),col(D)) common:=0 rescale:=0 oy:=(col(E),col(F));
+subtract_ref iy1:=(col(A),col(B)) iy2:=(col(C),col(D)) common:=1 rescale:=0 oy:=(col(G),col(H));
+col(I) = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+col(J) = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+col(K) = {2, 4, 6, 8, 10};
+col(L) = {0, 2, 0, 4, 5};
+mathtool iy1:=(col(I),col(J)) operator:=div operand:=1 iy2:=(col(K),col(L)) common:=0 rescale:=0 oy:=(col(M),col(N));
+col(O) = {0, 1, 2, 3, 4, 5};
+col(P) = {1, 2, 3, 4, 5, 6};
+col(P)[3] = ;
+col(Q) = {1, 2, 3};
+col(R) = {1, 1, 1};
+mathtool iy1:=(col(O),col(P)) operator:=add operand:=1 iy2:=(col(Q),col(R)) common:=0 rescale:=0 oy:=(col(S),col(T));
+#[Book1]Sheet1

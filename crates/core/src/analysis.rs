@@ -28,7 +28,7 @@ use sheaf_calc as calc;
 use sheaf_expr::Expr;
 
 pub use sheaf_calc::{
-    AreaType, Boundary, DiffOptions, InterpMethod, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions,
+    AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions,
     SmoothMethod, SmoothOptions, SplineBoundary,
 };
 
@@ -103,9 +103,44 @@ impl Default for InterpSpec {
     }
 }
 
+/// What [`Tool::IntegrateRanges`] does: the integral of each of several ranges of every chosen
+/// column, in one results table.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntegrateRangesSpec {
+    /// The ranges to integrate, one table row each per input column. [`RowRange::XBetween`] takes
+    /// the first unbroken run of rows inside the X interval, [`RowRange::Rows`] counts worksheet
+    /// rows. The request's own row range, if any, is applied first: X intervals are searched
+    /// inside it and row ranges are cut to it.
+    pub ranges: Vec<RowRange>,
+    /// Subtract the straight line through the first and last point of each range first.
+    pub end_point_baseline: bool,
+}
+
+/// The second operand of [`Tool::CurveMath`].
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CurveOperand {
+    Constant(f64),
+    /// A reference curve: this Y column, with the X column Sheaf finds for it (the nearest X
+    /// column to its left, row numbers if there is none). It may be in any sheet of the project.
+    Reference(ColumnId),
+}
+
+/// What [`Tool::CurveMath`] does: `y op operand` for every chosen Y column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurveMathSpec {
+    pub op: CurveOp,
+    pub operand: CurveOperand,
+    /// Reference only: restrict the result to the X range both curves cover (the data and the
+    /// reference are then evaluated on the merged X values of both and the result is a new sheet
+    /// with its own X column). Off: one value per data row, new column beside the data.
+    pub common_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Tool {
     Integrate(IntegrateSpec),
+    IntegrateRanges(IntegrateRangesSpec),
+    CurveMath(CurveMathSpec),
     Differentiate(DiffOptions),
     Smooth(SmoothOptions),
     Normalize(NormalizeMethod),
@@ -120,6 +155,11 @@ impl Tool {
     pub fn name(&self) -> &'static str {
         match self {
             Tool::Integrate(_) => "Integrate",
+            Tool::IntegrateRanges(_) => "Integrate ranges",
+            Tool::CurveMath(spec) => match (spec.operand, spec.op) {
+                (CurveOperand::Reference(_), CurveOp::Subtract) => "Subtract reference",
+                _ => "Curve math",
+            },
             Tool::Differentiate(_) => "Differentiate",
             Tool::Smooth(_) => "Smooth",
             Tool::Normalize(_) => "Normalize",
@@ -132,7 +172,8 @@ impl Tool {
 
     fn sheet_prefix(&self) -> &'static str {
         match self {
-            Tool::Integrate(_) => "Integrate",
+            Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
+            Tool::CurveMath(_) => "Math",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Peaks",
             Tool::Statistics => "Statistics",
@@ -457,6 +498,169 @@ impl Project {
                     }
                 }
                 table = Some(t);
+            }
+            Tool::IntegrateRanges(spec) => {
+                if spec.ranges.is_empty() {
+                    return Err(AnalysisError::BadOption("give at least one range to integrate".into()));
+                }
+                let mut t = ResultTable::new(&[
+                    "First row",
+                    "Last row",
+                    "X start",
+                    "X end",
+                    "Area",
+                    "Absolute area",
+                    "Peak X",
+                    "Peak height",
+                    "Width at half height",
+                ]);
+                for inp in &inputs {
+                    for (k, range) in spec.ranges.iter().enumerate() {
+                        let (f, l) = match *range {
+                            RowRange::All => (inp.first, inp.last),
+                            RowRange::Rows(from, to) => {
+                                let (f, l) = resolve_rows(*range, &inp.short, &inp.x, inp.y.len())?;
+                                let (f, l) = (f.max(inp.first), l.min(inp.last));
+                                if f > l {
+                                    return Err(AnalysisError::BadRows(from, to, inp.short.clone(), inp.y.len()));
+                                }
+                                (f, l)
+                            }
+                            RowRange::XBetween(..) => {
+                                let (f, l) = resolve_rows(*range, &inp.short, inp.xs(), inp.last + 1 - inp.first)?;
+                                (f + inp.first, l + inp.first)
+                            }
+                        };
+                        let (xs, ys) = (&inp.x[f..=l], &inp.y[f..=l]);
+                        let options = |area_type| calc::IntegrateOptions {
+                            area_type,
+                            end_point_baseline: spec.end_point_baseline,
+                            rows: None,
+                        };
+                        let math = calc::integrate(xs, ys, &options(AreaType::Mathematical))
+                            .ok_or_else(|| AnalysisError::TooFewPoints(inp.short.clone()))?;
+                        let abs = calc::integrate(xs, ys, &options(AreaType::Absolute))
+                            .ok_or_else(|| AnalysisError::TooFewPoints(inp.short.clone()))?;
+                        let area_unit = unit_product(&inp.units, &inp.x_units);
+                        let xu = &inp.x_units;
+                        t.push_row(
+                            format!("{}, range {}", inp.label, k + 1),
+                            vec![
+                                (f + math.i1) as f64,
+                                (f + math.i2) as f64,
+                                math.x1,
+                                math.x2,
+                                math.area,
+                                abs.area,
+                                math.peak_x,
+                                math.peak_height,
+                                math.width,
+                            ],
+                            vec![
+                                String::new(),
+                                String::new(),
+                                xu.clone(),
+                                xu.clone(),
+                                area_unit.clone(),
+                                area_unit,
+                                xu.clone(),
+                                inp.units.clone(),
+                                xu.clone(),
+                            ],
+                        );
+                    }
+                }
+                table = Some(t);
+            }
+            Tool::CurveMath(spec) => {
+                let reference = match spec.operand {
+                    CurveOperand::Constant(c) => {
+                        if !c.is_finite() {
+                            return Err(AnalysisError::BadOption(format!("{c} is not a usable operand")));
+                        }
+                        if spec.op == CurveOp::Divide && c == 0.0 {
+                            return Err(AnalysisError::BadOption("cannot divide by 0".into()));
+                        }
+                        None
+                    }
+                    CurveOperand::Reference(id) => {
+                        let (_, rsheet, rcol) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+                        let ry = rcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
+                        let at = rsheet.column_index(id).expect("the column was located in this sheet");
+                        let x_col = rsheet.x_for(at).filter(|x| x.id != id && x.data.is_numeric());
+                        let rx: Vec<f64> = match x_col.and_then(Column::numeric) {
+                            Some(v) => (0..ry.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
+                            None => (1..=ry.len()).map(|i| i as f64).collect(),
+                        };
+                        Some((rcol.short_name.clone(), rcol.display_name().to_string(), rx, ry))
+                    }
+                };
+                let word = match spec.op {
+                    CurveOp::Add => "plus",
+                    CurveOp::Subtract => "minus",
+                    CurveOp::Multiply => "times",
+                    CurveOp::Divide => "divided by",
+                    CurveOp::Power => "to the power of",
+                };
+                for inp in &inputs {
+                    let units = match (spec.op, reference.is_some()) {
+                        (CurveOp::Add | CurveOp::Subtract, _) => inp.units.clone(),
+                        (CurveOp::Multiply | CurveOp::Divide, false) => inp.units.clone(),
+                        _ => String::new(),
+                    };
+                    match (&reference, spec.operand) {
+                        (None, CurveOperand::Constant(c)) => {
+                            beside.push(NewColumn {
+                                after: inp.id,
+                                long_name: format!("{} {word} {c}", inp.name),
+                                units,
+                                comments: format!("{} {word} {c}{}", inp.short, inp.range_note()),
+                                data: inp.aligned(&calc::curve_math_const(inp.ys(), spec.op, c)),
+                            });
+                        }
+                        (Some((rshort, rname, rx, ry)), _) => {
+                            let valid =
+                                rx.iter().zip(ry.iter()).filter(|(a, b)| a.is_finite() && b.is_finite()).count();
+                            if valid < 2 {
+                                return Err(AnalysisError::TooFewPoints(rshort.clone()));
+                            }
+                            let r = calc::curve_math_ref(inp.xs(), inp.ys(), rx, ry, spec.op, spec.common_only)
+                                .ok_or_else(|| {
+                                    AnalysisError::BadOption(format!(
+                                        "column {} and the reference column {rshort} share no X range",
+                                        inp.short
+                                    ))
+                                })?;
+                            let long_name = format!("{} {word} {rname}", inp.name);
+                            let comments = format!("{} {word} reference {rshort}{}", inp.short, inp.range_note());
+                            if spec.common_only {
+                                on_sheet.push(SheetColumn {
+                                    designation: Designation::X,
+                                    long_name: inp.x_name.clone(),
+                                    units: inp.x_units.clone(),
+                                    comments: String::new(),
+                                    data: ColumnData::numeric(r.x),
+                                });
+                                on_sheet.push(SheetColumn {
+                                    designation: Designation::Y,
+                                    long_name,
+                                    units,
+                                    comments: format!("{comments}, common X range only"),
+                                    data: ColumnData::numeric(r.y),
+                                });
+                            } else {
+                                beside.push(NewColumn {
+                                    after: inp.id,
+                                    long_name,
+                                    units,
+                                    comments,
+                                    data: inp.aligned(&r.y),
+                                });
+                            }
+                        }
+                        (None, CurveOperand::Reference(_)) => unreachable!("the reference was read above"),
+                    }
+                }
             }
             Tool::Differentiate(options) => {
                 if !(1..=9).contains(&options.order) {
@@ -1249,5 +1453,153 @@ mod tests {
         assert_eq!(p.numeric(flat).unwrap(), [2.0, 2.0]);
         assert!(matches!(p.filter_sheet(book, 0, "col(Nope) > 1", false), Err(AnalysisError::Condition(_))));
         assert!(matches!(p.filter_sheet(book, 0, "1 +", false), Err(AnalysisError::Condition(_))));
+    }
+
+    /// A second workbook with a reference curve X = 2, 4, 6 and Y = 1, 2, 3 (that is x / 2).
+    fn add_reference(p: &mut Project) -> ColumnId {
+        let book = p.add_workbook("blank");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![2.0, 4.0, 6.0])).unwrap();
+        p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap()
+    }
+
+    fn curve_math(op: CurveOp, operand: CurveOperand, common_only: bool) -> Tool {
+        Tool::CurveMath(CurveMathSpec { op, operand, common_only })
+    }
+
+    #[test]
+    fn subtracting_a_reference_from_another_workbook_adds_a_column_beside_the_data() {
+        let (mut p, book, _, ramp) = sample();
+        let reference = add_reference(&mut p);
+        let tool = curve_math(CurveOp::Subtract, CurveOperand::Reference(reference), false);
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        // y = x minus the reference x / 2, also outside 2..6 where its end segments are continued
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        for (i, v) in out.iter().enumerate() {
+            assert!((v - i as f64 / 2.0).abs() < 1e-12, "row {i}: {v}");
+        }
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[3].id, r.new_columns[0], "right behind its source column");
+        assert_eq!(ws.columns[3].units, "A");
+        assert_eq!(ws.columns[3].long_name, "Current minus B");
+        assert!(r.message.starts_with("Subtract reference"), "{}", r.message);
+        assert!(r.new_sheet.is_none());
+    }
+
+    #[test]
+    fn common_range_only_puts_the_result_on_a_new_sheet_with_its_own_x() {
+        let (mut p, book, _, ramp) = sample();
+        let reference = add_reference(&mut p);
+        let tool = curve_math(CurveOp::Divide, CurveOperand::Reference(reference), true);
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.columns[0].numeric().unwrap(), [2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(rs.columns[0].units, "s");
+        assert_eq!(rs.columns[1].numeric().unwrap(), [2.0; 5], "x divided by x / 2");
+        assert_eq!(rs.columns[1].units, "", "a ratio of two curves has no unit");
+        // The data sheet is untouched.
+        assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3);
+    }
+
+    #[test]
+    fn constants_work_and_bad_operands_change_nothing() {
+        let (mut p, _, flat, ramp) = sample();
+        let r = p
+            .analyze(&request(&[flat, ramp], curve_math(CurveOp::Multiply, CurveOperand::Constant(3.0), false)))
+            .unwrap();
+        assert_eq!(p.numeric(r.new_columns[0]).unwrap(), [6.0; 11]);
+        assert_eq!(p.numeric(r.new_columns[1]).unwrap()[10], 30.0);
+        assert_eq!(p.column(r.new_columns[1]).unwrap().units, "A", "scaling keeps the unit");
+        let before = p.clone();
+        for (tool, why) in [
+            (curve_math(CurveOp::Divide, CurveOperand::Constant(0.0), false), "divide by 0"),
+            (curve_math(CurveOp::Add, CurveOperand::Constant(f64::NAN), false), "NaN operand"),
+        ] {
+            assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))), "{why}");
+            assert_eq!(p, before, "{why}");
+        }
+        // A reference with one point, a column that is gone, and a reference that does not overlap.
+        let one = {
+            let b = p.add_workbook("one");
+            p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap()
+        };
+        let tool = curve_math(CurveOp::Add, CurveOperand::Reference(one), false);
+        assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::TooFewPoints(_))));
+        let far = {
+            let b = p.add_workbook("far");
+            p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![50.0, 60.0])).unwrap();
+            p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap()
+        };
+        let tool = curve_math(CurveOp::Add, CurveOperand::Reference(far), true);
+        assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))));
+    }
+
+    fn ranges(list: &[(f64, f64)], end_point_baseline: bool) -> Tool {
+        Tool::IntegrateRanges(IntegrateRangesSpec {
+            ranges: list.iter().map(|&(a, b)| RowRange::XBetween(a, b)).collect(),
+            end_point_baseline,
+        })
+    }
+
+    #[test]
+    fn several_ranges_give_one_table_row_each_per_column() {
+        let (mut p, book, flat, ramp) = sample();
+        let r = p.analyze(&request(&[flat, ramp], ranges(&[(0.0, 4.0), (4.0, 10.0)], false))).unwrap();
+        let t = r.table.as_ref().unwrap();
+        assert_eq!(t.rows.len(), 4);
+        assert_eq!(t.rows[0].0, "B: Current, Scan 1, range 1");
+        assert_eq!(t.rows[3].0, "C: Current, Scan 2, range 2");
+        let col = |name: &str| t.headers.iter().position(|h| h == name).unwrap();
+        let area: Vec<f64> = t.rows.iter().map(|r| r.1[col("Area")]).collect();
+        assert_eq!(area, [8.0, 12.0, 8.0, 42.0]);
+        assert_eq!(t.rows[3].1[col("First row")], 5.0);
+        assert_eq!(t.rows[3].1[col("Last row")], 11.0);
+        assert_eq!(t.rows[3].1[col("Peak X")], 10.0);
+        assert_eq!(t.rows[3].1[col("Peak height")], 10.0);
+        assert_eq!(t.unit(0, col("Area")), "C");
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.name, "Integrate1");
+        assert_eq!(rs.columns[0].text().unwrap().len(), 4);
+        assert!(r.new_columns.len() > 4 && p.workbook(book).unwrap().sheets[0].columns.len() == 3);
+    }
+
+    #[test]
+    fn ranges_report_absolute_area_and_honour_the_baseline() {
+        let (mut p, _, _, ramp) = sample();
+        // y = x - 5 over 0..10 has equal positive and negative parts.
+        let col = p.column_mut(ramp).unwrap();
+        col.data = ColumnData::numeric((0..=10).map(|i| f64::from(i) - 5.0).collect());
+        let r = p.analyze(&request(&[ramp], ranges(&[(0.0, 10.0), (5.0, 10.0)], false))).unwrap();
+        let t = r.table.unwrap();
+        let (area, abs) =
+            (t.headers.iter().position(|h| h == "Area"), t.headers.iter().position(|h| h == "Absolute area"));
+        let (area, abs) = (area.unwrap(), abs.unwrap());
+        assert_eq!(t.rows[0].1[area], 0.0);
+        assert_eq!(t.rows[0].1[abs], 25.0);
+        assert_eq!(t.rows[1].1[area], 12.5);
+        let r = p.analyze(&request(&[ramp], ranges(&[(0.0, 10.0)], true))).unwrap();
+        assert_eq!(r.table.unwrap().rows[0].1[area], 0.0, "a straight line minus itself");
+    }
+
+    #[test]
+    fn range_lists_respect_the_row_range_and_refuse_bad_input() {
+        let (mut p, _, _, ramp) = sample();
+        // Row ranges, cut to the request's rows 3..=9 (x = 2..8).
+        let tool = Tool::IntegrateRanges(IntegrateRangesSpec {
+            ranges: vec![RowRange::Rows(1, 5), RowRange::XBetween(6.0, 20.0)],
+            end_point_baseline: false,
+        });
+        let r = p.analyze(&Request { columns: vec![ramp], rows: RowRange::Rows(3, 9), tool }).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.rows[0].1[4], 6.0, "rows 3 to 5, x = 2..4");
+        assert_eq!(t.rows[1].1[4], 14.0, "x = 6..8, the end of the chosen rows");
+        let before = p.clone();
+        for (tool, why) in [
+            (Tool::IntegrateRanges(IntegrateRangesSpec { ranges: vec![], end_point_baseline: false }), "no ranges"),
+            (ranges(&[(20.0, 30.0)], false), "no row inside the interval"),
+            (ranges(&[(4.2, 4.4)], false), "one point only"),
+        ] {
+            assert!(p.analyze(&request(&[ramp], tool)).is_err(), "{why}");
+            assert_eq!(p, before, "{why}");
+        }
     }
 }

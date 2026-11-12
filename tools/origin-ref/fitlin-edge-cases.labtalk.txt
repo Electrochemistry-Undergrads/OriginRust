@@ -1,0 +1,35 @@
+newbook;
+col(A) = {1,2}; col(B) = {2.1,3.9};
+###
+fitlr iy:=(1,2);
+double e1_a = fitlr.a; double e1_b = fitlr.b; double e1_aerr = fitlr.aerr; double e1_berr = fitlr.berr; double e1_r = fitlr.r; double e1_pts = fitlr.pts;
+###
+fitpoly iy:=(1,2) polyorder:=1 coef:=cv err:=ev;
+double e1_adj = fitpoly.AdjRSq; double e1_cod = fitpoly.RSqCOD; double e1_se = ev[2];
+###
+nlbegin iy:=(col(A),col(B)) func:=line nltree:=nlt; nlfit; nlend output:=1;
+double e1_dof = nlt.Dof;
+###
+newbook;
+col(A) = data(1,5,1); col(B) = {1,2,0,4,5}; col(C) = {0.1,0.1,0,0.1,0.1};
+###
+nlbegin iy:=(col(A),col(B)) func:=line nltree:=nlt weight:=stat; nlfit; nlend output:=1;
+double e2_ok = nlt.Dof; double e2_a = nlt.A;
+###
+newbook;
+col(A) = data(1,5,1); col(B) = {1,2,0.5,4,5}; col(C) = {0.1,0.1,0,0.1,0.1};
+###
+nlbegin iy:=(col(A),col(B),col(C)) func:=line nltree:=nlt weight:=ins; nlfit; nlend output:=1;
+double e3_ok = nlt.Dof; double e3_a = nlt.A;
+###
+newbook;
+col(A) = data(1,5,1); col(B) = {1,2,-0.5,4,5};
+###
+nlbegin iy:=(col(A),col(B)) func:=line nltree:=nlt weight:=stat; nlfit; nlend output:=1;
+double e4_ok = nlt.Dof; double e4_a = nlt.A;
+###
+newbook;
+col(A) = {1,2,3}; col(B) = {1.1,2.3,2.9};
+###
+fitpoly iy:=(1,2) polyorder:=2 coef:=cv err:=ev;
+double e5_adj = fitpoly.AdjRSq; double e5_cod = fitpoly.RSqCOD; double e5_se = ev[2]; double e5_c1 = cv[1];

@@ -104,7 +104,7 @@ The small points of the graph review are fixed too: `--offsets` gives its values
 - Origin's bound handling can stop above the true constrained minimum; Sheaf copies it.
 - `.opj` graphs: plot groups (Origin's colour increments) are not modelled; legend frames and
   Origin-style log tick labels are not drawn.
-- The automatic axis range can leave a wide empty band (data from -0.2 to 1.0 gave -0.5 to 1.0).
+- Automatic axis ranges: measured in Origin 2016 (graphing.md section 4): Origin pads by 8 % of the span and rounds to half a major step, so it leaves a wider band than Sheaf (-0.2..1.0 gives -0.5..1.25 in Origin, -0.5..1.0 in Sheaf). Should Sheaf copy Origin's padding? Its step rule was not found.
 
 ## Commands that verify the current state
 

@@ -1,0 +1,161 @@
+// Origin 2016 autoscale probe: Y linear from lo to hi over 101 rows; X 0..100 then a second X range.
+newbook; col(A)=data(0,100,1); col(B)=-0.2+(1-(-0.2))*col(A)/100; col(C)=-0.2+(1-(-0.2))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf1=layer.y.from; double yt1=layer.y.to; double yi1=layer.y.inc; double xf1=layer.x.from; double xt1=layer.x.to; double xi1=layer.x.inc; double ym1=layer.y.minorticks;
+?yf1
+?yt1
+?yi1
+?xf1
+?xt1
+?xi1
+?ym1
+newbook; col(A)=data(0,100,1); col(B)=0+(1-(0))*col(A)/100; col(C)=0+(1-(0))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf2=layer.y.from; double yt2=layer.y.to; double yi2=layer.y.inc; double xf2=layer.x.from; double xt2=layer.x.to; double xi2=layer.x.inc; double ym2=layer.y.minorticks;
+?yf2
+?yt2
+?yi2
+?xf2
+?xt2
+?xi2
+?ym2
+newbook; col(A)=data(0,100,1); col(B)=0.13+(9.2-(0.13))*col(A)/100; col(C)=0.13+(9.2-(0.13))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf3=layer.y.from; double yt3=layer.y.to; double yi3=layer.y.inc; double xf3=layer.x.from; double xt3=layer.x.to; double xi3=layer.x.inc; double ym3=layer.y.minorticks;
+?yf3
+?yt3
+?yi3
+?xf3
+?xt3
+?xi3
+?ym3
+newbook; col(A)=data(0,100,1); col(B)=-30+(33.55-(-30))*col(A)/100; col(C)=-30+(33.55-(-30))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf4=layer.y.from; double yt4=layer.y.to; double yi4=layer.y.inc; double xf4=layer.x.from; double xt4=layer.x.to; double xi4=layer.x.inc; double ym4=layer.y.minorticks;
+?yf4
+?yt4
+?yi4
+?xf4
+?xt4
+?xi4
+?ym4
+newbook; col(A)=data(0,100,1); col(B)=0+(10-(0))*col(A)/100; col(C)=0+(10-(0))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf5=layer.y.from; double yt5=layer.y.to; double yi5=layer.y.inc; double xf5=layer.x.from; double xt5=layer.x.to; double xi5=layer.x.inc; double ym5=layer.y.minorticks;
+?yf5
+?yt5
+?yi5
+?xf5
+?xt5
+?xi5
+?ym5
+newbook; col(A)=data(0,100,1); col(B)=0.001+(0.0123-(0.001))*col(A)/100; col(C)=0.001+(0.0123-(0.001))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf6=layer.y.from; double yt6=layer.y.to; double yi6=layer.y.inc; double xf6=layer.x.from; double xt6=layer.x.to; double xi6=layer.x.inc; double ym6=layer.y.minorticks;
+?yf6
+?yt6
+?yi6
+?xf6
+?xt6
+?xi6
+?ym6
+newbook; col(A)=data(0,100,1); col(B)=-0.0047+(0.0061-(-0.0047))*col(A)/100; col(C)=-0.0047+(0.0061-(-0.0047))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf7=layer.y.from; double yt7=layer.y.to; double yi7=layer.y.inc; double xf7=layer.x.from; double xt7=layer.x.to; double xi7=layer.x.inc; double ym7=layer.y.minorticks;
+?yf7
+?yt7
+?yi7
+?xf7
+?xt7
+?xi7
+?ym7
+newbook; col(A)=data(0,100,1); col(B)=100+(1000-(100))*col(A)/100; col(C)=100+(1000-(100))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf8=layer.y.from; double yt8=layer.y.to; double yi8=layer.y.inc; double xf8=layer.x.from; double xt8=layer.x.to; double xi8=layer.x.inc; double ym8=layer.y.minorticks;
+?yf8
+?yt8
+?yi8
+?xf8
+?xt8
+?xi8
+?ym8
+newbook; col(A)=data(0,100,1); col(B)=3.2+(3.8-(3.2))*col(A)/100; col(C)=3.2+(3.8-(3.2))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf9=layer.y.from; double yt9=layer.y.to; double yi9=layer.y.inc; double xf9=layer.x.from; double xt9=layer.x.to; double xi9=layer.x.inc; double ym9=layer.y.minorticks;
+?yf9
+?yt9
+?yi9
+?xf9
+?xt9
+?xi9
+?ym9
+newbook; col(A)=data(0,100,1); col(B)=0+(25000-(0))*col(A)/100; col(C)=0+(25000-(0))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf10=layer.y.from; double yt10=layer.y.to; double yi10=layer.y.inc; double xf10=layer.x.from; double xt10=layer.x.to; double xi10=layer.x.inc; double ym10=layer.y.minorticks;
+?yf10
+?yt10
+?yi10
+?xf10
+?xt10
+?xi10
+?ym10
+newbook; col(A)=data(0,100,1); col(B)=-0.0012+(0.0015-(-0.0012))*col(A)/100; col(C)=-0.0012+(0.0015-(-0.0012))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf11=layer.y.from; double yt11=layer.y.to; double yi11=layer.y.inc; double xf11=layer.x.from; double xt11=layer.x.to; double xi11=layer.x.inc; double ym11=layer.y.minorticks;
+?yf11
+?yt11
+?yi11
+?xf11
+?xt11
+?xi11
+?ym11
+newbook; col(A)=data(0,100,1); col(B)=0.4+(0.995-(0.4))*col(A)/100; col(C)=0.4+(0.995-(0.4))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf12=layer.y.from; double yt12=layer.y.to; double yi12=layer.y.inc; double xf12=layer.x.from; double xt12=layer.x.to; double xi12=layer.x.inc; double ym12=layer.y.minorticks;
+?yf12
+?yt12
+?yi12
+?xf12
+?xt12
+?xi12
+?ym12
+newbook; col(A)=data(0,100,1); col(B)=12+(77-(12))*col(A)/100; col(C)=12+(77-(12))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf13=layer.y.from; double yt13=layer.y.to; double yi13=layer.y.inc; double xf13=layer.x.from; double xt13=layer.x.to; double xi13=layer.x.inc; double ym13=layer.y.minorticks;
+?yf13
+?yt13
+?yi13
+?xf13
+?xt13
+?xi13
+?ym13
+newbook; col(A)=data(0,100,1); col(B)=0+(5800-(0))*col(A)/100; col(C)=0+(5800-(0))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf14=layer.y.from; double yt14=layer.y.to; double yi14=layer.y.inc; double xf14=layer.x.from; double xt14=layer.x.to; double xi14=layer.x.inc; double ym14=layer.y.minorticks;
+?yf14
+?yt14
+?yi14
+?xf14
+?xt14
+?xi14
+?ym14
+newbook; col(A)=data(0,100,1); col(B)=-5+(5-(-5))*col(A)/100; col(C)=-5+(5-(-5))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf15=layer.y.from; double yt15=layer.y.to; double yi15=layer.y.inc; double xf15=layer.x.from; double xt15=layer.x.to; double xi15=layer.x.inc; double ym15=layer.y.minorticks;
+?yf15
+?yt15
+?yi15
+?xf15
+?xt15
+?xi15
+?ym15
+newbook; col(A)=data(0,100,1); col(B)=1+(2-(1))*col(A)/100; col(C)=1+(2-(1))*col(A)/100;
+plotxy iy:=(3,2) plot:=200;
+double yf16=layer.y.from; double yt16=layer.y.to; double yi16=layer.y.inc; double xf16=layer.x.from; double xt16=layer.x.to; double xi16=layer.x.inc; double ym16=layer.y.minorticks;
+?yf16
+?yt16
+?yi16
+?xf16
+?xt16
+?xi16
+?ym16

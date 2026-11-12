@@ -1,0 +1,121 @@
+// Origin 2016 autoscale probe (graphing.md section 4): for each case, Y runs linearly from lo to hi over 101 rows and Origin picks the axis limits and step of a new line graph.
+newbook; col(A)=data(0,100,1); col(B)=0+(0.89-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf1=layer.y.from; double yt1=layer.y.to; double yi1=layer.y.inc;
+?yf1
+?yt1
+?yi1
+newbook; col(A)=data(0,100,1); col(B)=0+(0.9-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf2=layer.y.from; double yt2=layer.y.to; double yi2=layer.y.inc;
+?yf2
+?yt2
+?yi2
+newbook; col(A)=data(0,100,1); col(B)=0+(0.905-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf3=layer.y.from; double yt3=layer.y.to; double yi3=layer.y.inc;
+?yf3
+?yt3
+?yi3
+newbook; col(A)=data(0,100,1); col(B)=0+(0.91-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf4=layer.y.from; double yt4=layer.y.to; double yi4=layer.y.inc;
+?yf4
+?yt4
+?yi4
+newbook; col(A)=data(0,100,1); col(B)=0+(0.92-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf5=layer.y.from; double yt5=layer.y.to; double yi5=layer.y.inc;
+?yf5
+?yt5
+?yi5
+newbook; col(A)=data(0,100,1); col(B)=0+(0.925-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf6=layer.y.from; double yt6=layer.y.to; double yi6=layer.y.inc;
+?yf6
+?yt6
+?yi6
+newbook; col(A)=data(0,100,1); col(B)=0+(0.93-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf7=layer.y.from; double yt7=layer.y.to; double yi7=layer.y.inc;
+?yf7
+?yt7
+?yi7
+newbook; col(A)=data(0,100,1); col(B)=0+(0.935-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf8=layer.y.from; double yt8=layer.y.to; double yi8=layer.y.inc;
+?yf8
+?yt8
+?yi8
+newbook; col(A)=data(0,100,1); col(B)=0+(8.95-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf9=layer.y.from; double yt9=layer.y.to; double yi9=layer.y.inc;
+?yf9
+?yt9
+?yi9
+newbook; col(A)=data(0,100,1); col(B)=0+(9-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf10=layer.y.from; double yt10=layer.y.to; double yi10=layer.y.inc;
+?yf10
+?yt10
+?yi10
+newbook; col(A)=data(0,100,1); col(B)=0+(9.05-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf11=layer.y.from; double yt11=layer.y.to; double yi11=layer.y.inc;
+?yf11
+?yt11
+?yi11
+newbook; col(A)=data(0,100,1); col(B)=0+(9.1-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf12=layer.y.from; double yt12=layer.y.to; double yi12=layer.y.inc;
+?yf12
+?yt12
+?yi12
+newbook; col(A)=data(0,100,1); col(B)=5+(5.9-(5))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf13=layer.y.from; double yt13=layer.y.to; double yi13=layer.y.inc;
+?yf13
+?yt13
+?yi13
+newbook; col(A)=data(0,100,1); col(B)=5+(5.905-(5))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf14=layer.y.from; double yt14=layer.y.to; double yi14=layer.y.inc;
+?yf14
+?yt14
+?yi14
+newbook; col(A)=data(0,100,1); col(B)=-3+(6-(-3))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf15=layer.y.from; double yt15=layer.y.to; double yi15=layer.y.inc;
+?yf15
+?yt15
+?yi15
+newbook; col(A)=data(0,100,1); col(B)=-3+(6.05-(-3))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf16=layer.y.from; double yt16=layer.y.to; double yi16=layer.y.inc;
+?yf16
+?yt16
+?yi16
+newbook; col(A)=data(0,100,1); col(B)=0+(0.45-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf17=layer.y.from; double yt17=layer.y.to; double yi17=layer.y.inc;
+?yf17
+?yt17
+?yi17
+newbook; col(A)=data(0,100,1); col(B)=0+(0.452-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf18=layer.y.from; double yt18=layer.y.to; double yi18=layer.y.inc;
+?yf18
+?yt18
+?yi18
+newbook; col(A)=data(0,100,1); col(B)=0+(0.455-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf19=layer.y.from; double yt19=layer.y.to; double yi19=layer.y.inc;
+?yf19
+?yt19
+?yi19
+newbook; col(A)=data(0,100,1); col(B)=0+(0.46-(0))*col(A)/100;
+plotxy iy:=(1,2) plot:=200;
+double yf20=layer.y.from; double yt20=layer.y.to; double yi20=layer.y.inc;
+?yf20
+?yt20
+?yi20

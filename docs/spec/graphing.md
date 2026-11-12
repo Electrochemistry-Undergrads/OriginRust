@@ -207,6 +207,14 @@ Custom tick positions and labels per tick. Reference lines are not documented fo
 
 **Observed:** rescale combines data min/max, the rescale margin percent, rounding to the tick increment and the minor tick count; the result is "approximately" min-margin..max+margin and lands on tick positions. With margin 0 and 0 minor ticks, Normal rescale gives exact data limits [W:axesref-scale]. The exact increment rule is not documented.
 
+**Measured in Origin 2016 (2026-11-12, `tools/origin-ref/autoscale*.lines.txt`, 56 cases).** For a new line graph (`plotxy`, the default template) whose Y data run linearly from `lo` to `hi`:
+- The minor tick count is 1 (one minor tick between majors) in every case.
+- The limits are `floor((lo - 0.08 * span) / h) * h` and `ceil((hi + 0.08 * span) / h) * h`, where `span = hi - lo` and `h` is half the major step (the minor tick spacing). This holds in all 56 cases. The margin was pinned between 7.53 % and 8.11 % of the span; 8 % is taken. So the limits need not be multiples of the major step: 0..19.2 gives -2..21 with step 2.
+- The major step is always 1, 2 or 5 times a power of ten, but it is not a simple function of the span: 0.45 and 0.89..0.905 give 0.2, 0.91..1.2 give 0.5, 3.85 gives 1, 3.9..9.05 give 2, 9.07..10 give 5, 19.2..20.5 give 2, 63.55 and 65 give 20, 92.7 gives 50, 900 gives 200, 5800 gives 2000, 25000 gives 10000. The rule that gives these was not found [U4].
+- Examples (lo..hi → from..to, step): -0.2..1.0 → -0.5..1.25, 0.5; 0..1 → -0.25..1.25, 0.5; 0..10 → -2.5..12.5, 5; -0.0047..0.0061 → -0.0075..0.0075, 0.005; 0.4..0.995 → 0.3..1.1, 0.2; 12..77 → 0..90, 20; 100..1000 → 0..1100, 200.
+
+Sheaf's own rule (figure-rendering.md section 2) is kept for now: it pads less (data -0.2..1.0 gives -0.5..1.0, where Origin gives -0.5..1.25), so the "wide empty band" noted in HANDOFF is smaller in Sheaf than in Origin. Copying Origin's 8 % margin and half-step rounding is an open choice for the owner, and the step rule would still differ.
+
 **Proposed rule (INF; validate against Origin on ~10 datasets):**
 1. span = max - min (guard span 0).
 2. wanted about 5 to 8 major intervals; raw = span/6; step = smallest of {1, 2, 2.5, 5} x 10^k that is >= raw.

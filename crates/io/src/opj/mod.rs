@@ -163,6 +163,13 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
         .filter(|w| graph::is_graph(w))
         .map(|w| graph::build(w, &b.column_of_set, &mut b.warnings))
         .collect();
+    if !graphs.is_empty() && version_before_9(&version) {
+        b.warnings.push(format!(
+            "This project was saved by Origin {version}, before version 9. Graph details of such files (page \
+             size, frames, axes, plots) were not verified; only 9.x projects were checked, so a graph may be \
+             wrong."
+        ));
+    }
     if workbooks.is_empty() && !b.sets.is_empty() {
         b.warnings.push(
             "No workbook could be matched to its columns; the columns were grouped by their stored names, \
@@ -191,6 +198,11 @@ fn origin_version(header: &[u8]) -> String {
     }
     let s = format!("{v:.2}");
     s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// True when `version` (as returned by [`origin_version`]) is a number below 9.0.
+fn version_before_9(version: &str) -> bool {
+    version.parse::<f64>().is_ok_and(|v| v < 9.0)
 }
 
 #[derive(Default)]

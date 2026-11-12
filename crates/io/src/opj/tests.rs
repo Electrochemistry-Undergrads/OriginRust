@@ -317,3 +317,64 @@ fn local_figure_project_gives_a_column_graph() {
     assert_eq!((layer.y_axis.min, layer.y_axis.max), (Some(0.0), Some(3.25)));
     assert!(layer.labels.len() >= 6);
 }
+
+/// A project with one workbook `Book1` (two columns) and optionally one graph `Graph1` whose
+/// curve points at the second column. Every layer carries six axis blocks in each group, as
+/// Origin 8.x writes them for workbooks too.
+fn project_with_axis_blocks(version: f64, with_graph: bool) -> Vec<u8> {
+    let mut b = FileBuilder { version, ..FileBuilder::default() };
+    b.dataset("Book1_A", 0x5001, 8, &doubles(&[1.0, 2.0, 3.0]));
+    b.dataset("Book1_B", 0x5001, 8, &doubles(&[4.0, 5.0, 6.0]));
+    b.window_with("Book1", "", &[("Sheet1", &[(1, 3, "A", b""), (2, 0, "B", b"")])], false, 6);
+    if with_graph {
+        b.window_with("Graph1", "", &[("Layer1", &[(2, 96, "", b"")])], true, 6);
+    }
+    b.build()
+}
+
+#[test]
+fn a_pre_9_workbook_with_axis_blocks_is_not_read_as_a_graph() {
+    let imp = read(project_with_axis_blocks(8.1, false)).unwrap();
+    assert_eq!(imp.version, "8.1");
+    assert_eq!(imp.workbooks.len(), 1);
+    assert!(imp.graphs.is_empty(), "the workbook must not be read a second time as a graph");
+    assert!(!imp.warnings.iter().any(|w| w.contains("Graph")), "{:?}", imp.warnings);
+    assert!(!imp.warnings.iter().any(|w| w.contains("before version 9")), "no graph, so nothing to caution about");
+}
+
+#[test]
+fn a_pre_9_graph_is_read_with_a_warning_that_it_was_not_verified() {
+    let imp = read(project_with_axis_blocks(8.1, true)).unwrap();
+    assert_eq!(imp.workbooks.len(), 1);
+    assert_eq!(imp.graphs.len(), 1);
+    assert_eq!(imp.graphs[0].name, "Graph1");
+    assert!(
+        imp.warnings.iter().any(|w| w.contains("before version 9") && w.contains("not verified")),
+        "{:?}",
+        imp.warnings
+    );
+}
+
+#[test]
+fn a_9x_graph_is_read_without_the_version_warning() {
+    let imp = read(project_with_axis_blocks(9.3, true)).unwrap();
+    assert_eq!(imp.workbooks.len(), 1);
+    assert_eq!(imp.graphs.len(), 1);
+    assert_eq!(imp.graphs[0].layers[0].plots.len(), 1);
+    assert!(!imp.warnings.iter().any(|w| w.contains("before version 9")), "{:?}", imp.warnings);
+}
+
+/// Origin's installed sample "Simple XY.opj" (Origin 8.1) holds one workbook and one graph, and
+/// Origin itself reports one graph for it. Skipped when the sample is not installed.
+#[test]
+fn local_pre_9_sample_has_one_graph() {
+    let path = Path::new(r"C:\Program Files\OriginLab\Origin2016\Samples\COM Server and Client\Simple XY.opj");
+    let Ok(bytes) = std::fs::read(path) else {
+        eprintln!("opj: sample Simple XY.opj not found; skipping");
+        return;
+    };
+    let imp = read(bytes).unwrap();
+    assert_eq!(imp.graphs.len(), 1);
+    assert_eq!(imp.graphs[0].name, "Graph1");
+    assert!(!imp.warnings.iter().any(|w| w.contains("plot type 0")), "{:?}", imp.warnings);
+}

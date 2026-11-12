@@ -23,6 +23,8 @@ const CURVE_UNITS_PER_POINT: f64 = 500.0;
 const PAGE_WIDTH_AT: usize = 0x23;
 const PAGE_HEIGHT_AT: usize = 0x25;
 // Layer header.
+const LAYER_KIND_AT: usize = 0x02;
+const LAYER_GRAPH_BIT: u8 = 0x01;
 const X_MIN_AT: usize = 0x0F;
 const X_MAX_AT: usize = 0x17;
 const X_STEP_AT: usize = 0x1F;
@@ -109,10 +111,15 @@ fn f64_at(b: &[u8], at: usize) -> f64 {
     }
 }
 
-/// True for a window that holds a graph: its layers carry axis blocks (workbooks and
-/// matrices have none).
+/// True for a window that holds a graph (spec section 10.0): its first layer header has the
+/// graph-layer bit set and the layer carries axis blocks. Origin 8.x and older projects write
+/// axis blocks for workbook and matrix layers too, so the blocks alone do not decide; the bit
+/// is clear in every workbook and matrix layer seen.
 pub(crate) fn is_graph(w: &Window) -> bool {
-    w.layers.iter().any(|l| l.axes.first().is_some_and(|g| g.len() >= 6))
+    w.layers.first().is_some_and(|l| {
+        l.header.get(LAYER_KIND_AT).is_some_and(|b| b & LAYER_GRAPH_BIT != 0)
+            && l.axes.first().is_some_and(|g| g.len() >= 6)
+    })
 }
 
 /// Reads one graph window. `column_of_set` maps the 0-based position of a data set to the column

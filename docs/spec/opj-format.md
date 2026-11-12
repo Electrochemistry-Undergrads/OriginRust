@@ -195,7 +195,7 @@ This structure was checked by walking all 55 files to the end of the window list
 window is a workbook is not stated in the window header in any way that was identified
 (sizes 195, 244, 280, 343, 346, 552, 634 all occur). The reader decides from names:
 a window is a workbook if some data set is named `<window name>_...` [inf]. Graph and matrix
-windows have no such data sets.
+windows have no such data sets. Which windows are graphs is decided from the layer header, see 10.0.
 
 ### 4.1 Window header (`0x02`..) [obs]
 
@@ -210,6 +210,8 @@ windows have no such data sets.
 For header sizes of 195 and less the label is absent.
 
 ### 4.2 Layer header (361 bytes in 9.x) [obs]
+
+Offset `0x02`: bit 0 is set in graph layers and clear in workbook and matrix layers (section 10.0).
 
 Offset `0xD2`: 32 bytes, NUL padded, the sheet name. It is preceded at `0xD0` by two bytes that read
 `Pd` (workbook sheets) or `PdM` (matrix sheets, `M` as the first letter of the name) in the files
@@ -334,12 +336,55 @@ Everything else described here held across all of these versions.
 
 ## 10. Graphs [obs unless marked]
 
-Graph windows are windows whose layers have axis blocks (six 515-byte blocks in each of the three
-axis groups of section 4). `crates/io/src/opj/graph.rs` turns them into `sheaf_core::graph::Graph`.
-Offsets below were found by building graphs in Origin 2016 with known settings
+Graph windows are told apart as described in 10.0. `crates/io/src/opj/graph.rs` turns them into
+`sheaf_core::graph::Graph`.
+
+**Version coverage.** Every offset in this section was found and checked on files written by Origin
+9.x (the owner's projects and graphs built in Origin 2016). Projects saved by Origin 7.0 to 8.6 have
+the same block structure, and the rule in 10.0 was checked against them, but the offsets of the page
+size, frame, axes and curve records were *not* checked on any pre-9 file. For a file older than 9.0
+the reader still imports the graphs that 10.0 identifies, and adds a warning that their details are
+not verified. Offsets below were found by building graphs in Origin 2016 with known settings
 (`tools/origin-ref/opj-make-test-graphs.ps1`, and one-property-at-a-time variations whose records
 were compared byte by byte), by comparing with the graph in the owner's figure project, and with the
 public description of the format [pub]. All numbers are little-endian.
+
+### 10.0 Which windows are graphs
+
+Rule used by the reader: a window is a graph when the layer header of its **first layer** has bit 0
+(`0x01`) of the byte at offset `0x02` set, **and** that layer has axis blocks (six 515-byte blocks in
+the first of the three axis groups of section 4).
+
+Why the axis blocks alone are not enough: in projects saved by Origin 8.x and 7.x, the layers of
+workbooks and matrices carry the same six axis blocks as graph layers. Origin 9.x writes none for
+them. A reader that went by the blocks read every older workbook a second time as a bogus graph (its
+columns became "plots" of type 0, with a tiny frame and the default page).
+
+Evidence for the bit (offset `0x02` of the layer header is the low byte of a flag word; the values
+seen are `0x1F`/`0x5F` for graph layers, `0x5E`/`0x7E` for workbook sheets and `0xDE` for matrices) [obs]:
+
+- Over the 54 sample projects of Origin 2016, the five owner projects and 634 windows in all, the
+  bit is clear in every layer of all 360 windows that are workbooks by the name rule of section 4,
+  and set in every layer of every other window that has axis blocks except two; those two (one in
+  `2D Bin and Fit.opj`, one in `Calling Fortran.OPJ`, both Origin 8.x) have the flag word `0xDE`, and
+  Origin lists both as matrices.
+- Cross-check against Origin 2016 itself, on 33 projects (23 saved by versions 7.0 to 8.6, 10 by
+  9.x including the five owner projects): `tools/origin-ref/opj-list-windows.ps1` opens a copy of each
+  in a hidden Origin and lists the windows of `doc -e W` (workbooks), `doc -e P` (graphs) and
+  `doc -e M` (matrices). Before the fix the reader named 37 graph windows that Origin does not list
+  as graphs (workbooks and matrices of 8.x projects, for example `Book1` in `Simple XY.opj`, which
+  has one workbook and one graph). After the fix it names none: every graph window the reader finds
+  is a window Origin lists as a graph.
+- The rule does not change anything for 9.x projects: in all 9.x files seen, every window with axis
+  blocks has the bit set (the reader's graph count for the five owner projects is the same before
+  and after: 26, 1, 7, 8 and 17).
+
+What the rule does not do: it does not find every graph. Origin lists graph windows that the
+reader does not read, mostly because their layers have no axis blocks (39 windows of the 9.x files
+have the bit and no axis blocks). Examples by name in the files above: `FitLine`, `ResIndp`, `Radar`
+and many windows called `sparkline...`. Why the reader misses each of them was not looked into. That
+gap was there before and is unchanged. The bit's meaning ("this layer is a graph layer") is inferred from the correlation above;
+no second source states it [inf].
 
 ### 10.1 Window header (graphs)
 

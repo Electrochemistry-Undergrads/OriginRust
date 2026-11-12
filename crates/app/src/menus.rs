@@ -106,6 +106,8 @@ pub enum Cmd {
     },
     /// Go to the workbook a plot's data is in.
     GoTo(WindowId),
+    /// Edit > Copy Page: the graph as a picture on the clipboard.
+    CopyPage,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
     IntegrateGadget,
     /// A command of the open gadget's right-click menu.
@@ -420,9 +422,9 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         ]));
     } else {
         v.push(grey("Cu&t"));
+        v.push(grey("Copy"));
+        v.push(keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage));
         v.extend(greys(&[
-            "Copy",
-            "Copy Page",
             "Paste",
             "Paste Link",
             "Paste Special",
@@ -1351,7 +1353,7 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
         grey("Layer Management..."),
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
         grey("Add Shortcut to Favorites"),
-        grey_keyed("Copy Page", ctrl(Key::J)),
+        keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
         grey("View Full Screen"),
         sep(),
@@ -1642,6 +1644,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SelectPlot { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot }
         }
         Cmd::GoTo(id) => Action::Focus(*id),
+        Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,

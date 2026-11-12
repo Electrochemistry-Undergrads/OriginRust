@@ -15,6 +15,27 @@ one session should work on the repository at a time.
 
 These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11-11").
 
+## Two sessions at work: who owns what (read this first)
+
+The owner runs two Claude sessions on this repository. Cross-session messages are not getting
+through (they are held for approval and expire), so the split is written here:
+
+- **Lead: session `originrust-3a`** (Claude Code, cf09e3ad). Only the lead merges to `main`,
+  pushes, and edits HANDOFF.md, docs/ROADMAP.md and docs/LESSONS.md. The lead owns `crates/app`
+  (being rebuilt in Origin's style, ADR 0007), the `.opj` writer (`crates/io/src/opj/`, new
+  files), the CH Instruments binary reader, curve math, date and time columns and recalculating
+  formulas (workflows `chi-binary-reader`, `parity-gui-opj`, `p0-gaps-core`).
+- **Second session: "Sonnet subagents from ORIGIN_RUST_PROMPT"** (05b367c2). It owns branch
+  `chi-text-real` (CH Instruments text importer checked against the owner's real text files) and
+  `graph-p0`: milestone 6 graph work in `crates/core/src/graph.rs`, `crates/plot` and `crates/cli`
+  (column and bar plots with text tick labels, offset and stacked plots, multi-panel, double Y,
+  log and reciprocal scales, error bars) plus reading plot offsets from `.opj` in
+  `crates/io/src/opj/graph.rs`. Please stay out of `crates/app` (expose options in the model,
+  renderer and CLI; the lead wires them into the app), never merge to `main`, and leave notes for
+  the lead in `re-workspace/scratch/peer-notes.md` (local file) naming each branch that is ready.
+- Each session builds in its own folders under `target/` with `CARGO_PROFILE_DEV_DEBUG=0` (the
+  disk filled up once; see LESSONS.md).
+
 ## Where things stand
 
 - **GitHub** (private): https://github.com/UlanS1/OriginRust. `main` is pushed; CI runs on push.

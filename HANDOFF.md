@@ -52,23 +52,29 @@ through (they are held for approval and expire), so the split is written here:
   text escapes `\f:`, `\p`, `\x`, `\v` are now understood in labels. Known gaps: 34 of 41 graphs of
   the owner's "Integration of Delithiation SF data" project are missed; XRD curves that Origin
   draws offset are drawn on top of each other (plot offsets are not read).
-- **Running** (workflow `parity-gui-opj`, run `wf_c5d04af1-669`): a feature parity audit (its
-  text is returned, to be written to `docs/spec/feature-parity.md`), a study of Origin's interface
-  (branch with `docs/spec/gui-look.md` and ADR 0007), and a first `.opj` writer for workbooks
-  verified in Origin (branch, then review).
+- **Done on 2026-11-12**: the parity audit (`docs/spec/feature-parity.md`), the interface study
+  (`docs/spec/gui-look.md`, ADR 0007 accepted), the `.opj` writer for workbooks (verified in
+  Origin 2016), the CH Instruments `.bin` reader, curve math, multi-range integration, date and
+  time columns, recalculating formulas.
+- **Running**: workflow `origin-look-1` (run `wf_24c63ee8-83e`): `.opj` as the default save format
+  with a `<name>.opj.sheaf` companion when content would be lost, then ADR 0007 steps 1 to 4
+  (theme, child windows, Window menu, menus per window type), all in one worktree branch, each
+  step reviewed with screenshots; in parallel, the missing Origin pictures (step 13). Workflow
+  `p0-gaps-2` (run `wf_6cd84962-406`): fit bands and controls, CSV/ICP-OES import extras with
+  batch import, a peak analysis chain. The second session works on `chi-text-real` and
+  `graph-p0` (double Y is committed there).
 
-All checks pass on `main` at `d79b05c` (485 tests).
+All checks pass on `main` at `6cec89f` (507 tests).
 
 ## Exact next step
 
-1. Merge the `parity-gui-opj` branches (GUI study, `.opj` writer) after their reviews; full checks
-   after each merge. Merge `chi-text-real` (second session) when its note says it is ready. (The
-   `p0-gaps-core` branches are merged: curve math, multi-range integration, date and time
-   columns, recalculating formulas.)
-2. Write `docs/spec/feature-parity.md` from the audit; merge the GUI study and the `.opj` writer.
-3. Make `.opj` the default format (with the `.sheaf` copy safeguard), then graph writing.
-4. Rebuild the app shell in Origin's style following ADR 0007, step by step with click tests.
-5. Then the gaps from the parity audit in its order (column and bar charts with text labels,
+1. Merge the `origin-look-1` branch (after looking at its screenshots) and the `p0-gaps-2`
+   branches after their reviews; full checks after each merge. Merge `chi-text-real` and
+   `graph-p0` (second session) when its note says they are ready.
+2. Continue ADR 0007: steps 5 to 10 (workbook look, toolbars, panels, graph window look and mouse
+   actions, dialogs in Origin's layout, window geometry in the project file).
+3. Write graphs into `.opj` so the `.opj.sheaf` companion is no longer needed.
+4. Then the gaps from the parity audit in its order (column and bar charts with text labels,
    offset and stacked plots, multi-panel, double Y, log scales are P0 for the owner).
 
 ## Open questions noted by the agents (no answer needed to continue)

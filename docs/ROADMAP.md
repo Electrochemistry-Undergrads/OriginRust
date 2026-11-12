@@ -109,13 +109,14 @@ the default project format.
       2016 compared with Sheaf's code; result in `docs/spec/feature-parity.md` with the order of
       work (231 rows: 34 done, 91 partial, 106 missing; of the 103 P0 rows 28 done, 61 partial,
       14 missing; judged from code, nothing was run)
-- [ ] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
-      design record `docs/adr/0007-origin-style-workspace.md`
+- [x] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
+      design record `docs/adr/0007-origin-style-workspace.md` (accepted; 13-step plan)
 - [ ] Origin-style workspace: child windows inside the main window instead of tabs, Project
       Explorer, menus that follow the active window type with Origin's names and order, toolbars
       and the Tools bar (our own icons), right-click menus and double-click actions as in Origin
-- [ ] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
-      verified by opening the files in Origin 2016 and comparing every cell
+- [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
+      verified by opening the files in Origin 2016 and comparing every cell (`sheaf export ... -o
+      x.opj`; seven test projects up to 100000 rows opened in Origin with no difference)
 - [ ] Write `.opj`: graphs
 - [ ] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
       everything a project holds (graphs at first), saving also writes a `.sheaf` copy next to the

@@ -235,21 +235,15 @@ fn build_layer(
             axis.min = None;
             axis.max = None;
         }
-        if let Some(blocks) = layer.axes.get(group) {
-            apply_axis_blocks(axis, blocks);
-            // A Y axis shown on the right only, or a later layer's Y axis with tick labels on the
-            // right (the second layer of a double-Y graph): drawn on the right edge. The model
-            // draws one side of an axis, so a left side such a layer also shows is left out.
-            let right_labels = !first && shown(blocks, AXIS_OPPOSITE_LABELS);
-            if group == 1 && (right_side_only(blocks) || right_labels) {
-                if shown(blocks, AXIS_LABELS) {
-                    notes.push("a layer shows its Y axis on both sides; only the right side is drawn".into());
-                }
-                axis.side = AxisSide::Opposite;
-                axis.show_tick_labels = shown(blocks, AXIS_OPPOSITE_LABELS);
-                axis.show_opposite = false;
-                axis.opposite_ticks = false;
+        if let Some(blocks) = layer.axes.get(group).filter(|b| b.len() >= 6) {
+            let side = axis_side(blocks, first);
+            apply_axis_blocks(axis, blocks, side);
+            axis.side = side;
+            if side == AxisSide::Opposite && shown(blocks, AXIS_LABELS) {
+                notes.push("a layer shows an axis on both sides; only the opposite side is drawn".into());
             }
+        } else if let Some(blocks) = layer.axes.get(group) {
+            apply_axis_blocks(axis, blocks, AxisSide::Normal);
         }
         axis.show_title = false;
     }
@@ -272,10 +266,11 @@ fn build_layer(
                 // The bottom and left titles, and the right title of a layer whose Y axis is drawn
                 // on the right (the second layer of a double-Y graph).
                 let axis = match name.as_str() {
-                    "XB" => &mut out.x_axis,
+                    "XB" if out.x_axis.side != AxisSide::Opposite => &mut out.x_axis,
+                    "XT" if out.x_axis.side == AxisSide::Opposite => &mut out.x_axis,
                     "YL" if out.y_axis.side != AxisSide::Opposite => &mut out.y_axis,
                     "YR" if out.y_axis.side == AxisSide::Opposite => &mut out.y_axis,
-                    "YL" => continue,
+                    "XB" | "YL" => continue,
                     _ => {
                         notes.push("a title on the top or right axis was not imported".into());
                         continue;
@@ -328,13 +323,21 @@ fn shown(blocks: &[Vec<u8>], k: usize) -> bool {
     blocks.get(k).is_some_and(|b| u8_at(b, AXIS_FLAGS_AT) & AXIS_SHOWN_BIT != 0)
 }
 
-/// An axis group that shows the opposite side (line or tick labels) and nothing on the primary
-/// side: for Y, a right axis only (graphing spec 12.7).
-fn right_side_only(blocks: &[Vec<u8>]) -> bool {
-    blocks.len() >= 6
-        && !shown(blocks, AXIS_LABELS)
-        && !shown(blocks, AXIS_LINE)
-        && (shown(blocks, AXIS_OPPOSITE_LABELS) || shown(blocks, AXIS_OPPOSITE))
+/// The edge an axis is drawn on, from the visibility bits of its blocks (graphing spec 12.7): nothing
+/// shown is a hidden axis; tick labels or a line on the opposite side and no labels on the primary
+/// side is an axis on the opposite side, unless the primary line is also drawn and the opposite side
+/// has no labels (that is a box whose primary labels are off). A layer after the first whose
+/// opposite side has tick labels is a right Y layer or like it: its axis is on the opposite side.
+fn axis_side(blocks: &[Vec<u8>], first: bool) -> AxisSide {
+    let (labels, line) = (shown(blocks, AXIS_LABELS), shown(blocks, AXIS_LINE));
+    let (far_labels, far_line) = (shown(blocks, AXIS_OPPOSITE_LABELS), shown(blocks, AXIS_OPPOSITE));
+    if !(labels || line || far_labels || far_line) {
+        AxisSide::Hidden
+    } else if ((far_labels || far_line) && !labels && (far_labels || !line)) || (!first && far_labels) {
+        AxisSide::Opposite
+    } else {
+        AxisSide::Normal
+    }
 }
 
 /// Turns the second layer of a double-Y graph (and any layer like it) into a layer linked to the
@@ -375,16 +378,22 @@ fn link_right_y_layers(graph: &mut Graph, w: &Window) {
     }
 }
 
-fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>]) {
-    if let Some(b) = blocks.get(AXIS_LABELS) {
+/// Reads the blocks of an axis group: the tick labels and the line of the edge the axis is drawn on
+/// (blocks 2 and 3, or 4 and 5 on the opposite side) and whether the other edge has a line too.
+fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>], side: AxisSide) {
+    let (labels, line, far_line) = match side {
+        AxisSide::Opposite => (AXIS_OPPOSITE_LABELS, AXIS_OPPOSITE, AXIS_LINE),
+        _ => (AXIS_LABELS, AXIS_LINE, AXIS_OPPOSITE),
+    };
+    if let Some(b) = blocks.get(labels) {
         let size = u8_at(b, AXIS_FONT_AT);
         if (4..=96).contains(&size) {
             axis.tick_font.size_pt = f64::from(size);
             axis.title_font.size_pt = f64::from(size);
         }
-        axis.show_tick_labels = u8_at(b, AXIS_FLAGS_AT) & 0x40 != 0;
+        axis.show_tick_labels = u8_at(b, AXIS_FLAGS_AT) & AXIS_SHOWN_BIT != 0;
     }
-    if let Some(b) = blocks.get(AXIS_LINE) {
+    if let Some(b) = blocks.get(line) {
         axis.color_follows_plot = u16_at(b, AXIS_COLOR_AT) == AXIS_AUTO_COLOR;
         let width = f64::from(u16_at(b, AXIS_LINE_WIDTH_AT)) / CURVE_UNITS_PER_POINT;
         if width > 0.0 && width < 20.0 {
@@ -394,10 +403,10 @@ fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>]) {
         axis.major_tick = tick_direction((code >> 4) & 3);
         axis.minor_tick = tick_direction((code >> 6) & 3);
     }
-    if let Some(b) = blocks.get(AXIS_OPPOSITE) {
-        let on = u8_at(b, AXIS_FLAGS_AT) & 0x40 != 0;
-        axis.show_opposite = on;
-    }
+    // A line on the other edge too closes the box; on an axis drawn on the opposite side that edge
+    // is not drawn (the model has one line per axis there).
+    axis.show_opposite = side != AxisSide::Opposite && shown(blocks, far_line);
+    axis.opposite_ticks = false;
 }
 
 fn tick_direction(code: u8) -> TickDirection {
@@ -778,6 +787,7 @@ mod tests {
         blocks[AXIS_LABELS][AXIS_FLAGS_AT] = if labels { 0x40 } else { 0 };
         put_u16(&mut blocks[AXIS_LINE], AXIS_LINE_WIDTH_AT, 1500);
         blocks[AXIS_LINE][AXIS_TICKS_AT] = ticks;
+        blocks[AXIS_LINE][AXIS_FLAGS_AT] = 0x40;
         blocks[AXIS_OPPOSITE][AXIS_FLAGS_AT] = if opposite { 0x40 } else { 0 };
         blocks
     }
@@ -972,6 +982,7 @@ mod tests {
         second.columns = vec![curve(5, 1, 200, [0xF7, 0xFF, 0xFF, 0xFF])];
         let mut y = axis_sides(false, false, true, true);
         put_u16(&mut y[AXIS_LINE], AXIS_COLOR_AT, AXIS_AUTO_COLOR);
+        put_u16(&mut y[AXIS_OPPOSITE], AXIS_COLOR_AT, AXIS_AUTO_COLOR);
         second.axes = vec![axis_sides(false, false, false, true), y, Vec::new()];
         w.layers[0].annotations[2] = text_annotation("legend", "\\l(1.1) %(1.1)", 18, [3000, 400, 4000, 700]);
         w.layers[0].axes[0] = axis_sides(true, true, false, false);

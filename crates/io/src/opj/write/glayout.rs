@@ -96,13 +96,38 @@ impl AxisScale {
     }
 }
 
+/// A layer that Origin links to an earlier one (the right Y axis of a double-Y graph).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct LinkSpec {
+    /// 1-based number of the parent layer.
+    pub parent: u8,
+    /// 0-based position of the layer in the window.
+    pub index: u8,
+}
+
 pub(super) struct LayerSpec {
     /// Left, top, right and bottom of the frame in page units.
     pub frame: [u16; 4],
     pub page: (u16, u16),
     pub x: AxisScale,
     pub y: AxisScale,
+    /// Set for a layer linked to its parent.
+    pub link: Option<LinkSpec>,
+    /// The curves of the layer carry their own offsets (stacked lines).
+    pub offsets: bool,
 }
+
+/// Header bytes of a linked layer (spec section 13.12): the parent's number, the position among the
+/// layers, a unit code and a flag bit.
+const LINK_PARENT_AT: usize = 0xAB;
+const LINK_INDEX_AT: usize = 0x12D;
+const LINK_UNIT_AT: usize = 0x2E;
+const LINK_FLAGS_AT: usize = 0xFC;
+const LINK_UNIT: u8 = 9;
+const LINK_FLAG: u8 = 0x80;
+/// Layer header byte that makes Origin move the curves by the offsets stored in their records.
+const OFFSETS_AT: usize = 0xFD;
+const OFFSETS_ON: u8 = 0x50;
 
 pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
     let mut h = vec![0u8; 361];
@@ -135,26 +160,47 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
     for (i, v) in outer.iter().enumerate() {
         put(&mut h, 0x79 + 2 * i, &v.to_le_bytes());
     }
+    if let Some(link) = l.link {
+        h[LINK_PARENT_AT] = link.parent;
+        h[LINK_INDEX_AT] = link.index;
+        h[LINK_UNIT_AT] = LINK_UNIT;
+        h[LINK_FLAGS_AT] |= LINK_FLAG;
+    }
+    if l.offsets {
+        h[OFFSETS_AT] = OFFSETS_ON;
+    }
     h
 }
 
 // ----- axis blocks -----------------------------------------------------------------------------
 
 /// What the six blocks of one axis say.
+///
+/// An axis has two edges (bottom and top for X, left and right for Y). Blocks 2 and 3 hold the tick
+/// labels and the line with its ticks of the first edge, blocks 4 and 5 the same for the second.
+/// The axis' own labels, line, ticks and colours go to the edge it is drawn on; the other edge keeps
+/// only the closing line when `far_line` is set.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct AxisBlocks {
     pub label_pt: u8,
     pub labels_shown: bool,
+    /// The axis line and its ticks are drawn (false for an axis that is hidden).
+    pub line_shown: bool,
+    /// The axis is on the second edge (top or right).
+    pub second_edge: bool,
     /// Axis line width in 1/500 point.
     pub line_width: u16,
     /// Direction codes of the major and minor ticks: 0 none, 1 in, 2 out, 3 both.
     pub major_ticks: u8,
     pub minor_ticks: u8,
-    pub opposite: bool,
+    /// A line on the other edge too (closes the box).
+    pub far_line: bool,
     pub grid_major: bool,
     pub grid_minor: bool,
     pub line_color: Code,
     pub label_color: Code,
+    /// Line, ticks and labels take the colour of the layer's first plot.
+    pub follows_plot: bool,
     /// The tick labels are the texts of the X column of the first plot.
     pub text_labels: bool,
 }
@@ -167,6 +213,13 @@ fn show(b: &mut [u8], on: bool) {
     } else {
         b[0x26] &= !SHOWN;
     }
+}
+
+fn put_colour(b: &mut [u8], c: Code) {
+    b[0x0f] = c.0[0];
+    b[0x10] = if c == Code::AUTO { c.0[1] } else { 0 };
+    put(b, 0x92, &c.0);
+    put(b, 0x16a, &c.0);
 }
 
 /// The six blocks of axis group X (`group` 0) or Y (1); the Z group has fixed blocks.
@@ -189,11 +242,15 @@ pub(super) fn axis_blocks(group: usize, a: &AxisBlocks) -> Vec<Vec<u8>> {
     }
     show(&mut blocks[0], a.grid_minor);
     show(&mut blocks[1], a.grid_major);
+    // the blocks of the edge the axis is on, and of the other edge
+    let (own_labels, own_line, far_labels, far_line) = if a.second_edge { (4, 5, 2, 3) } else { (2, 3, 4, 5) };
     {
-        let b = &mut blocks[2];
+        let b = &mut blocks[own_labels];
         b[0x15] = a.label_pt;
         show(b, a.labels_shown);
-        if a.label_color != Code::AUTO && a.label_color != Code::index(0) {
+        if a.follows_plot {
+            put_colour(b, Code::AUTO);
+        } else if a.label_color != Code::AUTO && a.label_color != Code::index(0) {
             b[0x0f] = a.label_color.position();
             b[0x10] = 0;
             put(b, 0x92, &a.label_color.0);
@@ -201,10 +258,13 @@ pub(super) fn axis_blocks(group: usize, a: &AxisBlocks) -> Vec<Vec<u8>> {
         }
     }
     {
-        let b = &mut blocks[3];
+        let b = &mut blocks[own_line];
         put(b, 0x15, &a.line_width.to_le_bytes());
         b[0x25] = (a.major_ticks & 3) << 4 | (a.minor_ticks & 3) << 6;
-        if a.line_color != Code::index(0) {
+        show(b, a.line_shown);
+        if a.follows_plot {
+            put_colour(b, Code::AUTO);
+        } else if a.line_color != Code::index(0) {
             b[0x0f] = a.line_color.position();
             put(b, 0x92, &a.line_color.0);
             put(b, 0x16a, &a.line_color.0);
@@ -216,7 +276,13 @@ pub(super) fn axis_blocks(group: usize, a: &AxisBlocks) -> Vec<Vec<u8>> {
         blocks[4][0x23] = 1;
         blocks[4][0x25] = 1;
     }
-    show(&mut blocks[5], a.opposite);
+    // the other edge: no labels, and a line only to close the box
+    show(&mut blocks[far_labels], false);
+    show(&mut blocks[far_line], a.far_line);
+    if a.follows_plot {
+        put_colour(&mut blocks[far_labels], Code::AUTO);
+        put_colour(&mut blocks[far_line], Code::AUTO);
+    }
     blocks
 }
 
@@ -254,8 +320,16 @@ pub(super) struct CurveSpec {
     pub symbol: Code,
     /// Fill of a column.
     pub fill: Code,
+    /// Width of the bars of a column plot in percent of the X spacing.
+    pub bar_width_pct: f64,
+    /// How far the curve is drawn from its data in a stacked layer, in axis units: X and Y.
+    pub offset: (f64, f64),
     pub serial: u32,
 }
+
+/// Where a curve record keeps its X and Y offset (spec section 13.10).
+const X_OFFSET_AT: usize = 0x1B2;
+const Y_OFFSET_AT: usize = 0x1CA;
 
 pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     let mut r = vec![0u8; 515];
@@ -276,6 +350,8 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     put(&mut r, 0x4c, &ptype.to_le_bytes());
     put(&mut r, 0x1e2, &c.serial.to_le_bytes());
     r[0x1e9] = 8;
+    put(&mut r, X_OFFSET_AT, &c.offset.0.to_le_bytes());
+    put(&mut r, Y_OFFSET_AT, &c.offset.1.to_le_bytes());
     if c.kind == CurveKind::Error {
         return r;
     }
@@ -296,6 +372,10 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     if c.kind == CurveKind::Column {
         put(&mut r, 0xc2, &c.fill.0);
         r[0x1e] |= 0x10;
+        // the width of the bars, also kept a second time (spec section 14.7)
+        let width = (c.bar_width_pct.clamp(0.0, 100.0) * 50.0).round() as u16;
+        put(&mut r, 0x19, &width.to_le_bytes());
+        put(&mut r, 0x11a, &width.to_le_bytes());
     }
     r
 }
@@ -348,6 +428,10 @@ pub(super) fn annotation(a: &AnnSpec) -> Vec<u8> {
     put(&mut h, 0x1b, &a.relative.1.to_le_bytes());
     put(&mut h, 0x25, &((a.text.len() + 10) as u16).to_le_bytes());
     put_name(&mut h, 0x46, 24, a.name);
+    if a.name == "YR" {
+        // the title of a right Y axis
+        h[0x42] = 0x84;
+    }
     h[0x33] = a.color;
     h[0x6b] = a.color;
     put(&mut h, 0x67, &a.serial.to_le_bytes());
@@ -370,6 +454,21 @@ pub(super) fn annotation(a: &AnnSpec) -> Vec<u8> {
     let mut out = framed(&h);
     out.extend(framed(&b1));
     out.extend(framed(&text));
+    out.extend(framed(&[]));
+    out
+}
+
+/// The object that makes an X scale follow the parent layer's ("X1" and "X2" in a layer linked
+/// straight to its parent): four blocks, with a short style block that holds an asterisk.
+pub(super) fn link_annotation(name: &str) -> Vec<u8> {
+    let mut h = vec![0u8; 131];
+    fill(&mut h, ANN_LINK_HEADER);
+    put_name(&mut h, 0x46, 24, name);
+    let mut style = vec![0u8; 20];
+    style[0] = b'*';
+    let mut out = framed(&h);
+    out.extend(framed(&style));
+    out.extend(framed(&[]));
     out.extend(framed(&[]));
     out
 }

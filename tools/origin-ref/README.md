@@ -43,3 +43,10 @@ What they showed is written down in `docs/spec/import-ascii.md`, section 15.
 folder tree with the windows of each folder and, per column, the recalculate mode and formula text that Origin reports.
 `cargo run -p sheaf-io --example opj_write_features -- FOLDER` writes the files it was used on; the results are in
 `docs/spec/opj-format.md`, sections 13.10 and 13.11.
+
+## Graph features of written projects (stack offsets, double-Y, bar gap, axis sides)
+
+`opj-verify-graph-features.ps1` is `opj-verify-graphs.ps1` with more per layer: `layer.link`, `x.link`, `y.link`,
+`layer.unit`, `showAxes` and `showLabels` of both axes, the axis colours, and a PNG per graph. Pass several files in one call
+(`-Files @('a.opj','b.opj') -OutDir DIR`). `cargo run -p sheaf-io --example opj_write_graph_features -- FOLDER` writes the
+files it was used on (`gf-doubley`, `gf-stack`, `gf-bars`, `gf-axes`); the findings are in `docs/spec/opj-format.md`, section 13.12.

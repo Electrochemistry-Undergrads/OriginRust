@@ -445,31 +445,9 @@ fn an_area_plot_is_written_as_a_line_and_named() {
 }
 
 #[test]
-fn double_y_stacks_and_column_settings_are_named_and_linked_layers_keep_their_place() {
-    // A double-Y graph: the right layer is linked and its frame is the whole of its parent's.
+fn rotated_tick_labels_are_named() {
     let mut p = source();
-    graph_with(&mut p, Template::Line, &[(0, 1)], |_| {});
-    let g = p.graphs().next().unwrap().id;
-    let right = p.add_right_y_layer(g, 0).unwrap();
-    let c = ids(&p);
-    p.add_plot_xy(g, right, Some(c[0]), c[2], None).unwrap();
-    let (imp, warnings) = round_trip(&p);
-    assert!(warnings.iter().any(|w| w.contains("linked to another one")), "{warnings:?}");
-    let read = &imp.graphs[0];
-    assert_eq!(read.layers.len(), 2);
-    let (f0, f1) = (read.layers[0].frame, read.layers[1].frame);
-    assert!(near(f0.left, f1.left) && near(f0.width, f1.width) && near(f0.height, f1.height), "{f0:?} {f1:?}");
-
-    // Stack offsets, bar spacing and rotated tick labels are each named.
-    let mut p = source();
-    graph_with(&mut p, Template::Line, &[(0, 1), (0, 2)], |g| {
-        let l = &mut g.layers[0];
-        l.stack = Stack::Constant { step: 5.0 };
-        l.bars = BarSpacing { gap_pct: 40.0, overlap_pct: -10.0 };
-        l.x_axis.tick_label_angle_deg = 45.0;
-    });
+    graph_with(&mut p, Template::Line, &[(0, 1), (0, 2)], |g| g.layers[0].x_axis.tick_label_angle_deg = 45.0);
     let (_, warnings) = round_trip(&p);
-    for part in ["stacked", "column bars", "rotated tick labels"] {
-        assert!(warnings.iter().any(|w| w.contains(part)), "{part}: {warnings:?}");
-    }
+    assert!(warnings.iter().any(|w| w.contains("rotated tick labels")), "{warnings:?}");
 }

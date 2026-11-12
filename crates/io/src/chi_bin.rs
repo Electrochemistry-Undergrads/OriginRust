@@ -304,7 +304,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             header.extend(current_cols(0));
             let mut data = vec![cv_potential(init, high, low, step, positive, n)];
             data.extend(channel_data);
-            Block { header, data }
+            Block { header, data, x_step: Vec::new() }
         }
         Technique::Amperometry => {
             let step = h.dec(INTERVAL);
@@ -334,7 +334,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             header.extend(current_cols(0));
             let mut data = vec![(1..=n).map(|k| grid(k, step)).collect::<Vec<_>>()];
             data.extend(channel_data);
-            Block { header, data }
+            Block { header, data, x_step: Vec::new() }
         }
         Technique::Chronopotentiometry => {
             let step = h.dec(INTERVAL);
@@ -371,6 +371,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             Block {
                 header: vec![HeaderCol::new("Time", "s"), HeaderCol::new("Potential", "V")],
                 data: vec![(1..=n).map(|k| grid(k, step)).collect(), potential],
+                x_step: Vec::new(),
             }
         }
     };

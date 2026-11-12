@@ -222,9 +222,18 @@ impl ImportDialog {
         match shown_format {
             "chi" => {
                 ui.checkbox(&mut self.chi.split_scans, "Split cyclic voltammetry into scans");
+                ui.checkbox(
+                    &mut self.chi.split_segments,
+                    "Add a sheet with each charge and discharge segment (chronopotentiometry)",
+                );
                 ui.checkbox(&mut self.chi.add_milliamp, "Add the current in mA");
                 ui.checkbox(&mut self.chi.add_charge, "Add the charge to current-vs-time files");
                 ui.checkbox(&mut self.chi.invert_current, "Invert the sign of the current");
+                ui.checkbox(&mut self.chi.exact_time, "Recompute rounded times from the sampling interval")
+                    .on_hover_text(
+                        "The file prints times with 4 significant digits (whole seconds above 1000 s). \
+                         When every time fits the sampling interval in the file header, the exact times are used.",
+                    );
             }
             "ascii" => self.ascii_ui(ui),
             _ => {}

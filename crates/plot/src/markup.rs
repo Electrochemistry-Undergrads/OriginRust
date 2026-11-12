@@ -1,6 +1,8 @@
 //! Text markup of labels (spec section 5): `\b(..)` bold, `\i(..)` italic,
-//! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek. Escapes nest.
-//! A backslash that does not start one of these escapes is literal.
+//! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
+//! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
+//! text of `\u(..)`, `\s(..)` and `\cN(..)` is kept without underline, strikethrough or color.
+//! Escapes nest. A backslash that does not start one of these escapes is literal.
 
 /// Scale of superscript and subscript text relative to its surroundings.
 pub const SCRIPT_SCALE: f64 = 0.65;
@@ -66,42 +68,132 @@ fn push(out: &mut Vec<Run>, c: char, st: Style) {
     out.push(Run { text: c.to_string(), bold: st.bold, italic: st.italic, scale: st.scale, rise: st.rise });
 }
 
+/// What a recognised escape does with the text in its parentheses.
+enum Escape {
+    /// The text is parsed further with this style.
+    Styled(Style),
+    /// `\v(..)`: the text is taken as it is, without escapes.
+    Literal,
+    /// `\x(hhhh)`: one character given by its hexadecimal code.
+    Unicode,
+}
+
+/// Longest font name accepted in `\f:Name(..)`; longer text is not an escape.
+const MAX_FONT_NAME: usize = 64;
+
+/// Recognises an escape starting at the backslash at `pos`. Returns what it does and the index of
+/// the first character inside its parentheses.
+fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
+    let mut inner = st;
+    let code = *chars.get(pos + 1)?;
+    if chars.get(pos + 2) == Some(&'(') {
+        let esc = match code {
+            'b' => {
+                inner.bold = true;
+                Escape::Styled(inner)
+            }
+            'i' => {
+                inner.italic = true;
+                Escape::Styled(inner)
+            }
+            'g' => {
+                inner.greek = true;
+                Escape::Styled(inner)
+            }
+            '+' => {
+                inner.rise = st.rise + SUP_RISE * st.scale;
+                inner.scale = st.scale * SCRIPT_SCALE;
+                Escape::Styled(inner)
+            }
+            '-' => {
+                inner.rise = st.rise - SUB_DROP * st.scale;
+                inner.scale = st.scale * SCRIPT_SCALE;
+                Escape::Styled(inner)
+            }
+            // Underline and strikethrough are not drawn; their text is kept.
+            'u' | 's' => Escape::Styled(inner),
+            'v' => Escape::Literal,
+            'x' => Escape::Unicode,
+            _ => return None,
+        };
+        return Some((esc, pos + 3));
+    }
+    match code {
+        // `\f:Name(..)`: the font itself is not switched (labels keep their own font), but a
+        // switch away from the Symbol font ends Greek mapping, and a switch to it starts it.
+        'f' if chars.get(pos + 2) == Some(&':') => {
+            let start = pos + 3;
+            let open = (start..chars.len().min(start + MAX_FONT_NAME + 1)).find(|&i| chars[i] == '(')?;
+            let name: String = chars[start..open].iter().collect();
+            if name.contains(['\\', ')']) {
+                return None;
+            }
+            inner.greek = name.trim().eq_ignore_ascii_case("symbol");
+            Some((Escape::Styled(inner), open + 1))
+        }
+        // `\pN(..)` size in percent of the surrounding text; `\cN(..)` color, which is not drawn.
+        'p' | 'c' => {
+            let digits = chars[pos + 2..].iter().take_while(|c| c.is_ascii_digit()).count();
+            let open = pos + 2 + digits;
+            if digits == 0 || digits > 4 || chars.get(open) != Some(&'(') {
+                return None;
+            }
+            if code == 'p' {
+                let percent: f64 = chars[pos + 2..open].iter().collect::<String>().parse().ok()?;
+                if percent > 0.0 {
+                    inner.scale = st.scale * percent / 100.0;
+                }
+            }
+            Some((Escape::Styled(inner), open + 1))
+        }
+        _ => None,
+    }
+}
+
+/// Copies text up to the `)` that matches an already opened `(`, balancing inner parentheses,
+/// and moves `pos` past it.
+fn take_enclosed(chars: &[char], pos: &mut usize) -> String {
+    let mut depth = 0usize;
+    let mut text = String::new();
+    while let Some(&c) = chars.get(*pos) {
+        *pos += 1;
+        match c {
+            ')' if depth == 0 => break,
+            ')' => depth -= 1,
+            '(' => depth += 1,
+            _ => {}
+        }
+        text.push(c);
+    }
+    text
+}
+
 fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth: usize, out: &mut Vec<Run>) {
     let mut parens = 0usize;
     while *pos < chars.len() {
         let c = chars[*pos];
-        if c == '\\' && depth < MAX_DEPTH && chars.get(*pos + 2) == Some(&'(') {
-            let mut inner = st;
-            let known = match chars.get(*pos + 1) {
-                Some('b') => {
-                    inner.bold = true;
-                    true
+        if c == '\\'
+            && depth < MAX_DEPTH
+            && let Some((esc, start)) = escape_at(chars, *pos, st)
+        {
+            *pos = start;
+            match esc {
+                Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out),
+                Escape::Literal => {
+                    let plain = Style { greek: false, ..st };
+                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, plain));
                 }
-                Some('i') => {
-                    inner.italic = true;
-                    true
+                Escape::Unicode => {
+                    let code = take_enclosed(chars, pos);
+                    let ch =
+                        u32::from_str_radix(code.trim(), 16).ok().and_then(char::from_u32).filter(|c| !c.is_control());
+                    match ch {
+                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
+                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, st)),
+                    }
                 }
-                Some('g') => {
-                    inner.greek = true;
-                    true
-                }
-                Some('+') => {
-                    inner.rise = st.rise + SUP_RISE * st.scale;
-                    inner.scale = st.scale * SCRIPT_SCALE;
-                    true
-                }
-                Some('-') => {
-                    inner.rise = st.rise - SUB_DROP * st.scale;
-                    inner.scale = st.scale * SCRIPT_SCALE;
-                    true
-                }
-                _ => false,
-            };
-            if known {
-                *pos += 3;
-                parse_seq(chars, pos, inner, true, depth + 1, out);
-                continue;
             }
+            continue;
         }
         if in_escape {
             if c == ')' && parens == 0 {
@@ -245,6 +337,30 @@ mod tests {
         assert_eq!(plain("\\g(D)E"), "ΔE");
         assert_eq!(plain("\\g(abgdpw)"), "αβγδπω");
         assert_eq!(plain("\\g(W) \\g(1)"), "Ω 1");
+    }
+
+    #[test]
+    fn a_font_switch_inside_greek_ends_the_greek_letters() {
+        // The X title of an XRD graph saved by Origin 2016.
+        assert_eq!(plain("\\b(2\\g(q \\f:Default: Arial((degree))))"), "2θ (degree)");
+        assert!(parse("\\b(2\\g(q \\f:Default: Arial((degree))))").iter().all(|r| r.bold));
+        assert_eq!(plain("\\f:Symbol(a)b"), "αb");
+        assert_eq!(plain("\\f:Times New Roman(x)"), "x");
+        // Not an escape: no parenthesis, or a parenthesis too far away.
+        assert_eq!(plain("\\f:Arial"), "\\f:Arial");
+        assert_eq!(plain(&format!("\\f:{}(x)", "n".repeat(100))), format!("\\f:{}(x)", "n".repeat(100)));
+    }
+
+    #[test]
+    fn size_color_underline_literal_and_unicode_escapes() {
+        let r = parse("a\\p200(b)");
+        assert_eq!(r[1].text, "b");
+        assert!((r[1].scale - 2.0).abs() < 1e-12);
+        assert_eq!(plain("\\c4(red) \\u(under) \\s(gone)"), "red under gone");
+        assert_eq!(plain("5\\v(\\b(x))Cu"), "5\\b(x)Cu");
+        assert_eq!(plain("\\g(\\x(03b8))"), "θ");
+        assert_eq!(plain("\\x(zz)"), "\\x(zz)");
+        assert_eq!(plain("\\p(x) \\c(y) \\p12345(z)"), "\\p(x) \\c(y) \\p12345(z)");
     }
 
     #[test]

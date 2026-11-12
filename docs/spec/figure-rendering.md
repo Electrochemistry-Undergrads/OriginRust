@@ -162,8 +162,14 @@ font file is installed. The SVG `y` of a text element is its baseline.
 Label text may contain a small markup, compatible with the most used escapes of Origin text
 labels: `\b(text)` bold, `\i(text)` italic, `\+(text)` superscript, `\-(text)` subscript,
 `\g(text)` Greek (each Latin letter maps to the Greek letter of the Symbol-font layout, e.g. `m` →
-μ, `D` → Δ). Escapes nest. Superscripts and subscripts are drawn at 0.65 × size, raised by 0.35 ×
-size or lowered by 0.15 × size. A backslash followed by anything else is literal. Each run is
+μ, `D` → Δ). Also understood: `\pN(text)` at N percent of the surrounding size; `\f:Name(text)`, a
+font switch, where the font is not changed (the label keeps its own font) but Greek mapping is on
+inside the text only when the name is `Symbol` (so `\g(q \f:Arial((deg)))` gives "θ (deg)");
+`\x(hhhh)` the character with that hexadecimal code (not a control character); `\v(text)` the text
+literally, without escapes. `\u(text)`, `\s(text)` and `\cN(text)` keep their text but underline,
+strikethrough and color are not drawn. Escapes nest. Superscripts and subscripts are drawn at 0.65
+× size, raised by 0.35 × size or lowered by 0.15 × size. A backslash followed by anything else is
+literal. Each run is
 written as its own SVG `<text>` element at a computed position, so no renderer-specific text
 layout is involved.
 

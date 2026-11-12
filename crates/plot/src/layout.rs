@@ -486,7 +486,7 @@ fn layer_scene(
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
     pds.first().map(|pd| match pd.plot.kind {
         PlotKind::Scatter | PlotKind::Column => pd.plot.symbol.color,
-        PlotKind::Line | PlotKind::LineSymbol => pd.plot.line.color,
+        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area => pd.plot.line.color,
     })
 }
 
@@ -949,9 +949,9 @@ fn draw_legend(
             symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
             out.push(symbol_item(d, &plot.symbol));
         }
-        if plot.kind == PlotKind::Column {
+        if matches!(plot.kind, PlotKind::Column | PlotKind::Area) {
             // A small bar: as long as a line sample, one font size high, filled and outlined
-            // like the bars.
+            // like the bars (an area plot is shown the same way).
             out.push(Item::Rect {
                 rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
                 fill: Some(plot.symbol.color),

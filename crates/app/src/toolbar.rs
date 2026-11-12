@@ -337,7 +337,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(PlotColumn, "Column", Cmd::Plot(Template::Column), "Column"),
             g(PlotBar, "Bar"),
             g(PlotPie, "Pie"),
-            g(PlotArea, "Area"),
+            b(PlotArea, "Area", Cmd::Plot(Template::Area), "Area"),
             g(PlotStackedArea, "Stacked Area"),
             g(PlotHlc, "High-Low-Close"),
             g(PlotBox, "Box Chart"),

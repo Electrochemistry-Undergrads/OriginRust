@@ -656,11 +656,14 @@ pub enum PlotKind {
     /// Vertical bars from zero up to each value. The bar is filled with the
     /// symbol color and outlined with the line style.
     Column,
+    /// A line with the area between it and Y = 0 filled with the symbol color (Origin's Area
+    /// plot). Where 0 is outside the Y axis the fill reaches the edge of the frame.
+    Area,
 }
 
 impl PlotKind {
     pub fn has_line(&self) -> bool {
-        matches!(self, PlotKind::Line | PlotKind::LineSymbol)
+        matches!(self, PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area)
     }
 
     pub fn has_symbols(&self) -> bool {

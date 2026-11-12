@@ -228,6 +228,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
                 assert_eq!(got.symbol.color, Color::rgb(10, 10, 200));
             }
             PlotKind::Column => assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of a bar"),
+            PlotKind::Area => unreachable!("written as a line, tested below"),
         }
     }
     for (k, s) in SymbolShape::ALL.iter().enumerate() {
@@ -432,6 +433,15 @@ fn damaged_graph_files_never_panic_the_reader() {
     for cut in (0..bytes.len()).step_by(997) {
         let _ = read_opj_from(Cursor::new(bytes[..cut].to_vec()), Path::new("cut.opj"));
     }
+}
+
+#[test]
+fn an_area_plot_is_written_as_a_line_and_named() {
+    let mut p = source();
+    graph_with(&mut p, Template::Area, &[(0, 1)], |_| {});
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.iter().any(|w| w.contains("area plot")), "{warnings:?}");
+    assert_eq!(imp.graphs[0].layers[0].plots[0].kind, PlotKind::Line);
 }
 
 #[test]

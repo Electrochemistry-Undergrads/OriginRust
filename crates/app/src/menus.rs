@@ -275,6 +275,13 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         keyed("&Save Project", ctrl(Key::S), Cmd::SaveProject),
         keyed("Save Project &As...", ctrl_shift(Key::S), Cmd::SaveProjectAs),
     ];
+    if kind == WindowKind::None {
+        // Origin's short bar has no Edit menu, but deleting the last window is an undoable
+        // step, so Undo and Redo stay reachable with the mouse here.
+        v.push(sep());
+        v.push(keyed("&Undo", ctrl(Key::Z), Cmd::Undo));
+        v.push(keyed("&Redo", ctrl_shift(Key::Z), Cmd::Redo));
+    }
     if kind != WindowKind::None {
         v.push(sep());
         v.push(grey("Save Window As..."));
@@ -292,7 +299,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         sep(),
         grey_keyed("&Print...", ctrl(Key::P)),
         grey("Print Pre&view"),
-        grey("Page Set&up..."),
+        grey("Page Setup..."),
         sep(),
         sub(
             "&Import",

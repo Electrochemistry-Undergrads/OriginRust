@@ -157,6 +157,27 @@ fn menu_new_workbook_then_undo_and_redo() {
 }
 
 #[test]
+fn undo_and_redo_are_reachable_with_the_mouse_when_no_window_is_open() {
+    let mut h = start(Vec::new());
+    menu_path(&mut h, &["File", "New", "Worksheet..."]);
+    menu(&mut h, "Edit", "Undo New workbook");
+    assert_eq!(project(&h).windows.len(), 0);
+    assert!(h.query_by_label("Edit").is_none());
+    // Redo from the File menu of the short bar.
+    menu(&mut h, "File", "Redo");
+    assert_eq!(project(&h).workbooks().count(), 1);
+    menu(&mut h, "Edit", "Undo New workbook");
+    assert_eq!(project(&h).windows.len(), 0);
+    // Undo from the File menu: redo, delete the window, then undo the delete with no window.
+    menu(&mut h, "File", "Redo");
+    h.state_mut().doc.apply("Delete window", |p| p.windows.clear());
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), 0);
+    menu(&mut h, "File", "Undo");
+    assert_eq!(project(&h).workbooks().count(), 1);
+}
+
+#[test]
 fn selecting_a_column_header_and_plotting_it_makes_a_graph_of_that_column() {
     let mut h = start(vec![data_file("plot")]);
     click(&mut h, "Book1 - sample");

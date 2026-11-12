@@ -410,7 +410,13 @@ impl AnalysisDialog {
                     ui.radio_value(&mut self.interp.method, InterpMethod::BSpline, "Cubic B-spline");
                 });
                 if self.interp.method == InterpMethod::BSpline {
-                    ui.weak("Interpolating cubic spline (smoothing factor 0); Origin's automatic smoothing is not reproduced.");
+                    ui.horizontal(|ui| {
+                        ui.label("Smoothing factor");
+                        ui.add(DragValue::new(&mut self.interp.smoothing).speed(0.01).range(0.0..=1.0e12));
+                    });
+                    ui.weak(
+                        "The factor is the allowed sum of squared residuals, as in Origin's sf. 0 gives the                          interpolating cubic spline, which is not Origin's automatic smoothing for 0.",
+                    );
                 }
                 if self.interp.method == InterpMethod::CubicSpline {
                     ui.horizontal(|ui| {

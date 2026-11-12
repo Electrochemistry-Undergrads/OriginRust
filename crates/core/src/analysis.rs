@@ -86,7 +86,8 @@ pub struct InterpSpec {
     pub npts: usize,
     /// X range of the result; `None` is the X range of the data.
     pub range: Option<(f64, f64)>,
-    /// Smoothing factor of the B-spline method; only 0 (interpolating) is implemented.
+    /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
+    /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
     pub smoothing: f64,
 }
 
@@ -584,9 +585,9 @@ impl Project {
                 if spec.npts < 2 {
                     return Err(AnalysisError::BadOption("interpolation needs at least two result points".into()));
                 }
-                if spec.method == InterpMethod::BSpline && spec.smoothing != 0.0 {
+                if spec.method == InterpMethod::BSpline && !(spec.smoothing >= 0.0 && spec.smoothing.is_finite()) {
                     return Err(AnalysisError::BadOption(
-                        "the B-spline smoothing factor must be 0: smoothing splines are not implemented yet".into(),
+                        "the B-spline smoothing factor must be a number of at least 0".into(),
                     ));
                 }
                 let options = calc::InterpOptions {
@@ -1112,8 +1113,13 @@ mod tests {
         let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
         let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
         assert_eq!(ws.columns.len(), 2);
+        // a positive smoothing factor is accepted; a negative one is refused
         let smoothing = InterpSpec { smoothing: 0.5, ..spec };
-        let err = p.analyze(&request(&[ramp], Tool::Interpolate(smoothing))).unwrap_err();
+        let r = p.analyze(&request(&[ramp], Tool::Interpolate(smoothing))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(ws.columns[1].numeric().unwrap().iter().all(|v| v.is_finite()));
+        let negative = InterpSpec { smoothing: -0.5, ..spec };
+        let err = p.analyze(&request(&[ramp], Tool::Interpolate(negative))).unwrap_err();
         assert!(err.to_string().contains("smoothing factor"), "{err}");
     }
 

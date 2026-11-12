@@ -124,7 +124,7 @@ fn the_fft_filter_and_the_b_spline_can_be_chosen() {
     let text = std::fs::read_to_string(&out).unwrap();
     assert!(text.lines().any(|l| l == "2.5,2.5"), "{text}");
 
-    // A smoothing factor above zero is refused with a reason.
+    // A smoothing factor above zero gives a smoothing spline; a negative one is refused.
     let (ok, _, stderr) = sheaf(&[
         "analyze",
         "interpolate",
@@ -135,6 +135,24 @@ fn the_fft_filter_and_the_b_spline_can_be_chosen() {
         "bspline",
         "--smoothing",
         "0.5",
+        "--points",
+        "5",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let middle: f64 = text.lines().nth(3).unwrap().split(',').nth(1).unwrap().parse().unwrap();
+    assert!((middle - 2.5).abs() < 1e-9, "{text}");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "interpolate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--method",
+        "bspline",
+        "--smoothing=-0.5",
     ]);
     assert!(!ok);
     assert!(stderr.contains("smoothing factor"), "{stderr}");

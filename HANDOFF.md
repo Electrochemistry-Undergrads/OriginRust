@@ -12,6 +12,15 @@ double-Y graph as a linked layer, and the `\(nnn)` text escape works. The "34 of
 in "Integration of Delithiation SF data" are sparkline previews, not graph windows: the file holds
 7 graphs and all are read (opj-format.md 10.0).
 
+**Merged later on 2026-11-12 (this session):** per-plot left/right Y axis in the app (`e2443c8`), the
+parity table brought up to date (`90de8dd`), Origin-style log tick labels (`c467f42`), TIFF export
+and export sizes that scale the whole figure (`dc334f6`), free text labels (`eb211ee`: Graph > Add
+Text, the T tool, the Text window, dragging, `sheaf plot --label`), the Analysis menu on a graph's
+data plot (`94f48b2`), and .opj writing of stack offsets, double-Y layers, bar gaps, axis sides and
+automatic axis colours (opj-format.md 13.12). Round trip checked on the owner's XRD project: Origin
+file -> Sheaf -> `sheaf export -o x.opj` -> Origin 2016 draws the stacked six-pattern figure as the
+original. 944 tests pass on `main`.
+
 ## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
 
 1. The desktop app should **look and work like Origin** (OriginPro 2016): same window arrangement,

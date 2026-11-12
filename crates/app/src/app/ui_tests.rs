@@ -2576,3 +2576,30 @@ fn deleting_a_column_drops_the_stack_settings_and_tick_labels_that_name_it() {
     assert!(l.plot_offset(y1).is_none());
     assert_eq!(l.plot_offset(y2).and_then(|o| o.follows), None);
 }
+
+#[test]
+fn the_integrate_gadget_shows_a_range_and_new_output_writes_the_area_to_a_sheet() {
+    let mut h = start(vec![data_file("gadget")]);
+    menu(&mut h, "Gadgets", "Integrate...");
+    let g = graph_ui(&h).gadget.expect("the gadget is open");
+    assert_eq!((g.layer, g.plot), (0, 0));
+    assert!(g.x0 < g.x1, "over the middle of the X axis");
+    let range = graph_ui(&h).gadget_rect.expect("and drawn");
+    // Drag the right edge further right: the range grows.
+    drag(&mut h, range.right_center(), range.right_center() + egui::vec2(40.0, 0.0));
+    assert!(graph_ui(&h).gadget.unwrap().x1 > g.x1);
+    let range = graph_ui(&h).gadget_rect.unwrap();
+    right_click_at(&mut h, range.center());
+    click(&mut h, "Baseline: Line Through End Points");
+    assert!(graph_ui(&h).gadget.unwrap().end_point_baseline);
+    let sheets = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheets.len();
+    let before = sheets(&h);
+    right_click_at(&mut h, range.center());
+    click(&mut h, "New Output");
+    assert_eq!(h.state().doc.undo_label(), Some("Integrate"));
+    assert!(sheets(&h) > before, "the result sheet");
+    // Esc closes the gadget.
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    assert!(graph_ui(&h).gadget.is_none());
+}

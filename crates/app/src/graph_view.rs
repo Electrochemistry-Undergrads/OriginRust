@@ -16,6 +16,7 @@
 
 use crate::actions::{Action, GraphOp};
 use crate::dialogs::graph_props::PropsTab;
+use crate::gadget::Integrator;
 use crate::menus::{self, MenuContext, WindowKind};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
 use sheaf_core::{Document, Project, WindowId};
@@ -51,6 +52,10 @@ pub struct GraphUi {
     menu_on: Option<MenuTarget>,
     /// Where the page was drawn in the last frame (screen rectangle) and UI points per page point.
     view: Option<(Rect, f32)>,
+    /// The open Integrate gadget, if any.
+    pub gadget: Option<Integrator>,
+    /// Where the gadget's range was drawn in the last frame.
+    pub gadget_rect: Option<Rect>,
 }
 
 impl GraphUi {
@@ -249,6 +254,22 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // The Integrate gadget, over the picture and above the page's clicks.
+    if let Some(mut gadget) = state.gadget
+        && let Some(geom) = t.geometry.get(gadget.layer)
+    {
+        let offset = sheaf_plot::stack_offsets(doc.project(), graph_id, gadget.layer)
+            .ok()
+            .and_then(|o| o.get(gadget.plot).copied())
+            .unwrap_or((0.0, 0.0));
+        let c = graph_context(graph_id, state.active_layer);
+        state.gadget_rect = gadget.show(ui, doc.project(), graph_id, geom, fit, &to_screen, offset, &c, actions);
+        state.gadget = Some(gadget);
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.gadget = None;
+        }
+    }
+
     // Layer icons: after the page, so that they get the clicks on them.
     let mut icon_menu = None;
     for i in 0..layers {
@@ -281,20 +302,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
 
     // The right-click menus.
-    let c = MenuContext {
-        kind: WindowKind::Graph,
-        book: None,
-        graph: Some(graph_id),
-        active: Some(graph_id),
-        selected: &[],
-        cells: false,
-        undo: None,
-        redo: None,
-        windows: Vec::new(),
-        open: None,
-        panels: [true; 4],
-        layer: state.active_layer,
-    };
+    let c = graph_context(graph_id, state.active_layer);
     let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected);
     let target = state.menu_on;
     let mut shown = response.context_menu(|ui| {
@@ -312,6 +320,24 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
     if shown.is_none() && !response.secondary_clicked() {
         state.menu_on = None;
+    }
+}
+
+/// The menu context of a graph window's own menus.
+fn graph_context(graph_id: WindowId, layer: usize) -> MenuContext<'static> {
+    MenuContext {
+        kind: WindowKind::Graph,
+        book: None,
+        graph: Some(graph_id),
+        active: Some(graph_id),
+        selected: &[],
+        cells: false,
+        undo: None,
+        redo: None,
+        windows: Vec::new(),
+        open: None,
+        panels: [true; 4],
+        layer,
     }
 }
 

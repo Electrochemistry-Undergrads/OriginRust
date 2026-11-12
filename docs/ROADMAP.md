@@ -101,9 +101,10 @@ The owner asked for three things: the desktop app should look and work like Orig
 carry over; Sheaf should have all of Origin's features (checked, not assumed); and `.opj` should be
 the default project format.
 
-- [ ] Feature parity audit: every feature, menu item, toolbar button, dialog and shortcut of Origin
+- [x] Feature parity audit: every feature, menu item, toolbar button, dialog and shortcut of Origin
       2016 compared with Sheaf's code; result in `docs/spec/feature-parity.md` with the order of
-      work
+      work (231 rows: 34 done, 91 partial, 106 missing; of the 103 P0 rows 28 done, 61 partial,
+      14 missing; judged from code, nothing was run)
 - [ ] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
       design record `docs/adr/0007-origin-style-workspace.md`
 - [ ] Origin-style workspace: child windows inside the main window instead of tabs, Project

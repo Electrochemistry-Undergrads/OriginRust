@@ -2,15 +2,17 @@
 
 A snapshot. Update a row when its feature lands; re-run the audit after each milestone.
 
-Date: 2026-11-11.
+Date: 2026-11-12 (first written 2026-11-11; rows brought up to date with the code on 2026-11-12).
 
-This document answers the owner's question: does Sheaf have all of Origin's features? The short answer is no. Sheaf does the owner's daily jobs well, but it has about a third of what Origin offers in some areas and almost nothing in others. It writes .opj files from the command line only (the app does not yet), and its window layout and menus differ clearly from Origin's.
+This document answers the owner's question: does Sheaf have all of Origin's features? The short answer is no. Sheaf does the owner's daily jobs well, but it has about a third of what Origin offers in some areas and almost nothing in others. Since the first version of this table the app has gained Origin's window arrangement, menus, shortcuts, right-click menus, graph window and several dialogs, and it saves .opj by default, so those gaps are much smaller; what Sheaf still lacks is mostly breadth: matrices, contour and heat maps, 3D, many plot families, most statistics beyond the basic tests, scripting, and the generic analysis dialog.
 
 ## How the audit was made
 
-Five auditing agents compared the specs in `docs/spec/` with the Rust code. Status was judged from the code: the agents opened the function and checked that a menu entry, dialog or command-line subcommand reaches it. They merged the several hundred audit rows into the 231 rows below, so one row can stand for several Origin features. The counts therefore count rows, not individual Origin features.
+Five auditing agents compared the specs in `docs/spec/` with the Rust code. Status was judged from the code: the agents opened the function and checked that a menu entry, dialog or command-line subcommand reaches it. They merged the several hundred audit rows into the 230 rows below, so one row can stand for several Origin features. The counts therefore count rows, not individual Origin features.
 
 What was not done: nobody built or ran the app or the CLI, so wiring was judged from reading code and not by clicking. Nobody ran Origin through `tools/origin-ref/`, so the Origin side of every row comes from the specs, and many spec items are themselves marked unverified. No test suite was run, so numeric accuracy is only as good as the claims already recorded in the specs.
+
+Update of 2026-11-12: this update was made by reading code on 2026-11-12, again without building or running anything. Each row whose subject the work since the first version touches (app shell, graph window, dialogs, gadget, Data Reader, Copy Page, area, double-Y, stack, column and panel graphs, .opj saving and reading, CH Instruments .bin and chronopotentiometry, import dialog and NLFit dialog) was checked by opening the menu table in `crates/app/src/menus.rs`, the command-line options in `crates/cli/src/args.rs` and the function behind each entry. A row whose feature could not be confirmed that way keeps its earlier status. The rows were not re-checked against Origin.
 
 Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's daily work and the owner's explicit requests, P1 is useful, P2 is rare.
 
@@ -18,49 +20,50 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 38 | 101 | 91 | 230 |
-| P0 | 30 | 65 | 6 | 101 |
-| P1 and P2 together | 8 | 36 | 85 | 129 |
+| All rows | 40 | 106 | 84 | 230 |
+| P0 | 31 | 68 | 2 | 101 |
+| P1 and P2 together | 9 | 38 | 82 | 129 |
 
-By priority alone: 103 rows are P0, 86 are P1 and 42 are P2. The P1 and P2 rows were not counted separately by status.
+By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
-Reading the counts: the P0 rows are mostly present but often only partly (61 of 103 are partial). The 14 missing P0 rows are the real holes. The main ones are .opj saving, toolbars and the Origin look, copy and paste of cells, date and time columns, recalculation of column formulas, Double-Y graphs, offset and waterfall plots, per-peak integration with the Peak Analyzer, subtracting a reference curve, simple curve math, graph gadgets and analysis from a graph, and the shared analysis dialog frame.
+Reading the counts: the P0 rows are mostly present but often only partly (68 of 101 are partial). Only 2 P0 rows are missing altogether: the Analysis menu on a graph window (its tools run on worksheet columns only) and the shared analysis dialog frame with Preview and Auto Apply. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
 
 Cross-cutting findings:
-- Column formulas now recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
+- Column formulas recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
 - Analysis and fit results are static sheets, not linked to their source data.
-- The core model holds several layers per graph, but the app edits only the first.
-- `crates/io/src/opj/write` writes workbooks and graphs as Origin 2016 projects (CLI `sheaf export -o x.opj`); the app does not use it yet, and matrices, notes, folders and fit results are not written.
+- The core model holds several layers per graph (linked layers carry double-Y and panels) and the graph window edits any layer; a per-plot choice of left or right Y axis is only on the command line.
+- `crates/io/src/opj/write` writes workbooks, graphs, column formulas and nested folders as Origin 2016 projects. The app saves .opj by default and writes a companion `.opj.sheaf` file for what the writer cannot hold (linked layers, stack offsets, bar gap, area fill, some tick settings, window places); matrices, notes and fit results are not written.
+- Many menu entries and toolbar buttons exist only as grey placeholders with Origin's names; they are counted as missing, not as done.
 
 ## 1 Project, windows and menus
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Project save and open, own format | File > Save/Open, Ctrl+S/O | .sheaf zip; New/Open/Save/Save As; prompt on quit; CLI | ✓ | none | P0 |
-| Save project as .opj (owner's request) | File > Save Project As | `io/src/opj/write`; CLI `export -o x.opj` | ◐ | workbooks and graphs are written and open in Origin 2016 (spec 13.9); the app has no menu entry yet; folders, matrices, notes, grid style, legend icons for spline curves not written | P0 |
-| Open .opj workbooks and basic graphs | File > Open | `io/src/opj`; app, drag and drop, CLI | ◐ | skips matrices, notes, layouts, folders, fit results, formulas, masks, column formats; .opju not read; saved as .sheaf copy; pre-9 graphs unverified | P0 |
+| Project save and open, own format | File > Save/Open, Ctrl+S/O | File > Save Project and Save Project As write `.opj` by default (ADR 0008) and a `<name>.opj.sheaf` companion when something cannot be stored; `.sheaf` zip also works; New, Open (a companion opens with its `.opj`), prompt on quit; CLI | ✓ | Save As offers the Origin project type first | P0 |
+| Save project as .opj (owner's request) | File > Save Project As | File > Save Project and Save Project As in the app, CLI `export -o x.opj` and `plot --save`; writer in `io/src/opj/write` stores workbooks, graphs, column formulas with their recalculate mode and nested folders | ◐ | opens in Origin 2016 (spec 13.9, 13.10); not re-run in Origin on 2026-11-12. The writer names what it leaves out and the companion keeps it: the link of double-Y and panel layers, stack offsets, bar gap, area fill (written as a line), tick label source, rotated tick labels, tick number formats, window places; matrices, notes and fit results are not written | P0 |
+| Open .opj workbooks and basic graphs | File > Open | `io/src/opj`; app (File > Open, drag and drop), CLI; reads workbooks, graphs, column formulas with their recalculate mode, nested folders, stacked-curve offsets and the second layer of a double-Y graph | ◐ | skips matrices, notes, layouts, fit results, masks, plot groups, legend frames, panel links and sparkline previews (the previews are not graph windows, opj-format.md 10.0); dates read as day numbers; .opju not read; pre-9 graphs unverified | P0 |
 | Undo and redo | Edit > Undo, Ctrl+Z | full history, labelled, Ctrl+Z/Y | ✓ | superset of Origin's one level; Alt+Backspace unbound | P0 |
 | Project Explorer | View > Project Explorer, Alt+1 | auto-hide panel on the left edge (slides out on hover, pin to dock, X and Alt+1 hide it): folder tree over a window list (Name, Long Name, Short Name, Type, sortable), active window in bold, double click shows, right-click Show/Hide/Rename/Delete/Export/Properties, drag a window onto a folder, New Folder | ◐ | no Duplicate, search or filters; folders cannot be renamed or deleted; Properties only edits the long name; no multi-select, F2 or Del keys | P0 |
-| Menu bar per window type | menus differ for book, graph, layout, matrix | one bar: File, Edit, Worksheet, Plot, Analysis, Graph, Window, Help | ◐ | no View, Column, Statistics, Gadgets, Tools, Format menus; Edit holds only undo and redo; bar does not change with the active window | P0 |
-| Analysis and Statistics menu structure | Mathematics, Signal Processing, Fitting, Peaks and Baseline submenus; Statistics menu | one flat Analysis menu: 8 tools and 3 fit entries | ◐ | no submenus, no Statistics or Gadgets menu, not extensible | P0 |
+| Menu bar per window type | menus differ for book, graph, layout, matrix | three bars that follow the active window, with Origin's names and order: none, workbook (File, Edit, View, Plot, Column, Worksheet, Analysis, Statistics, Image, Tools, Format, Window, Help) and graph (File, Edit, View, Graph, Data, Analysis, Gadgets, Tools, Format, Window, Help); `menus.rs` | ◐ | no bars for matrix, layout, notes or image windows (those windows do not exist); items whose feature is missing are drawn grey with a tip; Alt plus a letter opens a top menu but letters inside an open menu do not work | P0 |
+| Analysis and Statistics menu structure | Mathematics, Signal Processing, Fitting, Peaks and Baseline submenus; Statistics menu | Analysis has Mathematics, Data Manipulation, Fitting, Signal Processing and Peaks and Baseline submenus; Statistics has Descriptive Statistics, Hypothesis Testing, ANOVA and more; the graph bar has a Gadgets menu | ◐ | most entries are grey; on a graph window the Analysis entries say to activate a workbook; no user-extensible menus | P0 |
 | Toolbars | about 30, View > Toolbars | Standard, Edit, Format, Graph, 2D Graphs, Tools and Object Edit bars with drawn icons; View > Toolbars shows and hides each | ◐ | buttons for features Sheaf lacks are greyed (most of 2D Graphs, Graph, Format, Tools, Object Edit); no Style, Mask, Layout, 3D bars; bars are not draggable or customisable | P0 |
-| Origin look: MDI windows, classic chrome | main window | egui default style, tabs, left panel | ✗ | layout and chrome differ | P0 |
-| Keyboard shortcuts | Ctrl+K import, Ctrl+Q set values, Ctrl+D, Ctrl+R, F-keys, Alt+n | Ctrl+N/O/S/Shift+S/I/Z/Y | ◐ | import is Ctrl+I (Origin: Ctrl+K, where Ctrl+I is zoom); most Origin keys unbound | P0 |
-| New window kinds | File > New: Worksheet, Matrix, Graph, Image, Excel, Layout, Notes, Function Plot, from Template | Worksheet > New Workbook only | ◐ | no empty graph, matrix, image, layout, notes, function plot, new-from-template | P1 |
+| Origin look: MDI windows, classic chrome | main window | child windows with title bar, minimise, maximise and close in a grey workspace; Cascade, Tile Horizontally, Tile Vertically; window places saved in the project and restored on opening; light theme with small text, square corners and flat controls (`workspace.rs`, `theme.rs`) | ◐ | colours are measured and icons drawn by us, not Origin's; controls are egui's; not compared with Origin side by side in this pass (code read only) | P0 |
+| Keyboard shortcuts | Ctrl+K import, Ctrl+Q set values, Ctrl+D, Ctrl+R, F-keys, Alt+n | Ctrl+N, O, S, Shift+S; Ctrl+K import; Ctrl+Q Set Column Values; Ctrl+D Add New Columns; Ctrl+Y Nonlinear Curve Fit; Ctrl+R Rescale; Ctrl+J Copy Page; Ctrl+T Toolbars; Ctrl+Z, Shift+Ctrl+Z; Ctrl+C, X, V; Delete; F2 Page Properties; F12 Layer Contents; Alt+1, 2, 6, 8 panels; Alt+Enter Properties | ◐ | many Origin keys are listed in the menus but grey and do nothing (F5, F7 to F11, Ctrl+U, Ctrl+3, Ctrl+4, Ctrl+I and Ctrl+M zoom, view keys, Alt+3, 4, 5, 7) | P0 |
+| New window kinds | File > New: Worksheet, Matrix, Graph, Image, Excel, Layout, Notes, Function Plot, from Template | File > New > Project and Worksheet; the Plot menu makes a graph from the selected columns | ◐ | no empty graph, matrix, image, layout, notes, function plot, new-from-template (grey in File > New) | P1 |
 | Append project | File > Append | CLI `import --append` (workbooks only) | ◐ | none in the app; graphs not merged | P1 |
 | Open Excel, sample project, Close | File menu | none | ✗ | Close of active window missing; Explorer Delete only | P1 |
 | Save Window As, Save Template As, analysis template | File menu | none | ✗ | no .otp/.otw-style files; only 4 built-in figure templates | P1 |
 | Print, Print Preview, Page Setup | File > Print, Ctrl+P | none | ✗ | graphs can only be exported to files | P1 |
 | Recent projects, books, graphs, imports | File > Recent | none | ✗ | | P1 |
 | Exit | File > Exit | File > Quit with save prompt | ✓ | | P1 |
-| Window properties and rename | Alt+Enter | long name only | ◐ | short name automatic; no comments field or Properties dialog | P1 |
-| Window menu | cascade, tile, duplicate, split, refresh | lists windows and focuses one | ◐ | no cascade, tile, Duplicate, Split, Refresh | P1 |
+| Window properties and rename | Alt+Enter | Alt+Enter, Window > Properties and the Explorer's Properties open a small window for the long name | ◐ | short name automatic; no comments field or full Properties dialog | P1 |
+| Window menu | cascade, tile, duplicate, split, refresh | Cascade, Tile Horizontally, Tile Vertically, Properties (Alt+Enter) and the list of windows that focuses one | ◐ | no Arrange Icons, Refresh, Duplicate, Duplicate (Batch Plotting), Split or Folders | P1 |
 | Preferences | Tools > Options, Ctrl+U | none | ✗ | no settings stored | P1 |
 | Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | Object Manager (right edge: layers and plots of the active graph with tick boxes that show or hide plots), Messages Log and Results Log (left edge, with Clear), status bar with hints, Average, Sum and Count of the selected cells, AU : ON, active sheet, Radian | ◐ | no Command Window, Code Builder, Quick Help, Smart Hint Log or Data Display; Results Log holds only the analysis and fit summaries; Object Manager has no plot groups and no layer-level settings | P1 |
-| Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | page fitted to window | ◐ | no user zoom or view commands | P1 |
+| Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | page fitted to window; Axis Zoom In and Axis Zoom Out in an axis right-click menu; Rescale to Show All | ◐ | no Page, Print, Window or Draft view; no zoom tool, whole-page zoom or pan (the Zoom In and Zoom Out buttons are grey) | P1 |
 | Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | none | ✗ | | P1 |
 | Set As Begin, End, Reset | Edit menu | none | ✗ | analysis dialogs take row ranges individually | P1 |
-| Copy graph page to clipboard | Edit > Copy Page, Ctrl+J | none | ✗ | | P1 |
+| Copy graph page to clipboard | Edit > Copy Page, Ctrl+J | Edit > Copy Page, Ctrl+J and the graph's right-click menu put the page on the clipboard as a 300 dpi picture | ✓ | a bitmap only; no vector or metafile form; not tried with another program | P1 |
 | Copy and paste format between graphs | Edit > Copy Format | "Use this style for all plots" button | ◐ | | P1 |
 | Save or duplicate project without data | File menu | none | ✗ | | P2 |
 | Other window types | Matrix, layout, notes, image, Excel windows; matrix operations, image processing, gridding, 3D | Window enum is workbook and graph only; project note text exists | ✗ | no matrix, layout, notes, image windows; no per-type menus | P2 |
@@ -79,13 +82,13 @@ Cross-cutting findings:
 | Date and time detection | DateFormat, TimeFormat | `ascii.rs`: ISO, M/d/yyyy, d/M/yyyy, dd.MM.yyyy, d-Mon-yyyy, clocks with AM or PM; order rule and warning; option to keep text | ◐ | no custom pattern list, no per-column choice, no two-digit years | P0 |
 | Import mode and naming | replace, new columns, rows, books, sheets | `io/src/batch.rs`: new book, new sheet, replace, new columns, new rows; import window; file name in sheet name or comment row | ✓ | no name trimming (FNameToShtFrom/To), no separate first-file mode | P0 |
 | Number separators | NumSep | comma, dot, space, apostrophe grouping and decimal comma; found when unambiguous; option in window and CLI | ✓ | stricter than Origin: groups must have three digits | P0 |
-| CH Instruments files | owner's workflow | `io/src/chi.rs`: CV, i-t, LSV, scan splitting, mA, charge, sign, clip warning, run parameters | ✓ | no real CHI file checked yet per the spec | P0 |
+| CH Instruments files | owner's workflow | `io/src/chi.rs`: CV, i-t, LSV, scan splitting, chronopotentiometry segments (one column group per charge or discharge segment), mA, charge, sign, clip warning, run parameters; `io/src/chi_bin.rs` reads `.bin` files directly into the same workbook | ✓ | a CV and a chronopotentiometry text export of the owner's were checked; the i-t text importer has not been checked against a real export, and the owner's `.bin` files have no text export to compare with (chi-binary-format.md) | P0 |
 | Batch import of many files | multiple files | dialog, drops, CLI `sheaf import <folder or pattern> --mode books/sheets/columns/rows`; CHI files go through the CHI importers | ✓ | | P0 |
 | Partial import | row, column ranges, read/skip patterns | skip rows, max rows | ◐ | no column range or patterns; max rows has no dialog control | P1 |
 | Fixed width, multi-character delimiter | ASCII options | none | ✗ | | P1 |
 | Encoding | none in Origin 2016 | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
-| Import wizard, re-import | Ctrl+3, Ctrl+4 | one-page dialog; source path recorded | ◐ | no re-import command, no remembered settings | P1 |
+| Import wizard, re-import | Ctrl+3, Ctrl+4 | one dialog in Origin's layout: a list of option pages (Import Options, Import Mode, Header Lines, Column Designation, Partial Import, Miscellaneous, File Info) with a preview; source path recorded | ◐ | no Import Wizard (Ctrl+3), no re-import command (Ctrl+4), no remembered settings | P1 |
 | Excel import | File > Import > Excel | none | ✗ | no spreadsheet crate | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | none | ✗ | | P2 |
@@ -109,8 +112,8 @@ Cross-cutting findings:
 | Add, delete, move columns | Ctrl+D | add one, delete | ◐ | no insert at position, count dialog, move, swap, hide, no row insert or delete | P0 |
 | Sampling interval, Show X Column | Column menu | none | ◐ | no Set Sampling Interval, no Show X Column | P0 |
 | Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click edit with undo; select column, row, block or all; Ctrl+C, X, V and Delete as one undo step each | ◐ | no fill, Paste Transpose, Paste Special, insert or delete of cells (columns and rows only move by Delete of whole columns); no Select... dialog; no keyboard cursor | P0 |
-| Multiple sheets per book | tabs menu | tabs switch only; analysis adds result sheets | ◐ | cannot add, rename, move, delete a sheet | P0 |
-| Set Column Values | Ctrl+Q | dialog with formula, rows from and to | ◐ | no Ctrl+Q, no function picker | P0 |
+| Multiple sheets per book | tabs menu | sheet tabs; right-click a tab: Insert, Delete, Add, Duplicate, Name and Comments; analysis adds result sheets | ◐ | a sheet cannot be moved; no Add Graph as Sheet, Duplicate Without Data or Navigate | P0 |
+| Set Column Values | Ctrl+Q | Ctrl+Q dialog with formula, rows from and to, and the Recalculate choice (None, Auto, Manual) | ◐ | no function picker; no before-formula script or multi-column set | P0 |
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
 | Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
 | Simple math on curves | Analysis > Mathematics > Simple Math | Simple Math window, `analyze math`, `Tool::CurveMath` | ✓ | add, subtract, multiply, divide, power with a constant or a reference; checked against Origin (spec section 9); no graph rescale | P0 |
@@ -132,9 +135,9 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Batch processing with analysis template | File > Batch Processing | shell loops over the CLI | ◐ | no batch command, glob, saved template or combined result table | P0 |
+| Batch processing with analysis template | File > Batch Processing | batch import of many files into books, sheets, columns or rows (dialog and `sheaf import`); analysis by shell loops over the CLI | ◐ | no analysis template, saved batch or combined result table; File > Batch Processing is grey | P0 |
 | X-Function mechanism | X-Function Builder | analysis dialogs and `sheaf analyze` subcommands | ◐ | no common mechanism, no user tools, nothing callable by name | P1 |
-| Command-line control | Origin automation | `info`, `import`, `plot`, `export`, `export-data`, `analyze`, `fit` | ✓ | commands are independent; `export-data` reads .sheaf only | P1 |
+| Command-line control | Origin automation | `info`, `import`, `plot` (templates, panels, stacks, double-Y; `--save` writes .opj), `export`, `export-data`, `analyze` (integrate, subtract-ref, math, differentiate, smooth, normalize, baseline, interpolate, peaks, stats, ttest, anova, histogram, normality, sort), `fit` | ✓ | commands are independent; `export-data` reads .sheaf only | P1 |
 | Batch plotting | Duplicate (Batch Plotting) | one overlay figure per CLI call | ◐ | no graph per book or sheet, no app command | P1 |
 | Export worksheet as text | File > Export > Worksheet | `write_delimited`; CSV or TSV by extension | ◐ | no options dialog; no semicolon, label rows, selected range, full-precision switch | P1 |
 | Write xlsx | export worksheets | none | ✗ | | P1 |
@@ -151,7 +154,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Integrate | Mathematics > Integrate | `calc/integrate.rs`, checked against Origin; dialog; CLI | ✓ | | P0 |
-| Integrate range, baseline, charge | integ1 with limits and baseline | typed rows or X range, end-point baseline, unit-aware area | ◐ | baseline is end-point line only; range typed, not picked on graph | P0 |
+| Integrate range, baseline, charge | integ1 with limits and baseline | typed rows or X range (Integrate window, `analyze integrate`), several ranges at once (Integrate Ranges), and the Integrate gadget on a graph: a range whose edges and body are dragged, live area, baseline zero or end-point line, New Output writes a sheet; unit-aware area | ◐ | baseline is zero or the end-point line only; the gadget starts over the middle half of the X axis and has no settings dialog | P0 |
 | Differentiate | order 1 to 9, smoothing | `calc/differentiate.rs` | ✓ | higher orders with smoothing not checked against Origin | P0 |
 | Subtract straight line | subtract_line | Subtract Baseline: Line, End points | ◐ | typed coordinates, no on-graph pick | P0 |
 | Subtract reference curve | subtract_ref | Subtract Reference Data window, `analyze subtract-ref` | ✓ | linear interpolation, common range option, checked against Origin (spec section 9) | P0 |
@@ -198,9 +201,9 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Gadgets and data cursors | integrate, statistics, quick fit, quick peaks, FFT, rise time on a graph region | coordinate read-out only | ✗ | none exist | P0 |
-| Analysis menu on the active graph | graph Analysis menu | Analysis menu is workbook-only | ✗ | | P0 |
-| Data menu | display range, markers, mask points, remove bad points | none | ✗ | | P1 |
+| Gadgets and data cursors | integrate, statistics, quick fit, quick peaks, FFT, rise time on a graph region | Gadgets > Integrate on the active graph; the Data Reader tool snaps to the nearest data point, a click pins it and the arrow keys step through rows | ◐ | Statistics, Quick Fit, Quick Sigmoidal Fit, Quick Peaks, Differentiate, Interpolate, Intersect, Rise Time, Cluster, FFT, Vertical Cursor and Go To are grey | P0 |
+| Analysis menu on the active graph | graph Analysis menu | the graph's menu bar has an Analysis menu in Origin's layout, but its tools say to activate a workbook | ✗ | tools run on worksheet columns only; the Integrate gadget is the one tool that runs on a graph | P0 |
+| Data menu | display range, markers, mask points, remove bad points | the graph's menu bar has a Data menu; every item is grey | ✗ |  | P1 |
 
 ## 9 Fitting
 
@@ -215,7 +218,7 @@ Cross-cutting findings:
 | Fitted curve and residual output | NLFit Output | curve sheet, plot to graph | ✓ | number of points and output choices not in dialog | P1 |
 | .FDF import | Fitting Function Builder | `fit/fdf.rs` | ✓ | 188 of 237 installed files build | P1 |
 | Full function library | 237 functions, 30 categories | 206 in JSON, 188 more via .FDF | ◐ | 22 surface, 3 multi-variable and some others missing; some categories not offered. The UI auditor's estimate of about 23 functions conflicts with this; the fitting auditor's grep of the JSON is taken as correct | P1 |
-| Fit control options | iterations, tolerance, Simplex, One Iteration, Revert | LM only; maximum iterations and tolerance in the API, `sheaf fit` and the Fit window | ◐ | no Simplex, One Iteration or Revert | P1 |
+| Fit control options | iterations, tolerance, Simplex, One Iteration, Revert | LM only; maximum iterations and tolerance in the API, `sheaf fit` and the NLFit-style dialog (its algorithm box is grey) | ◐ | no Simplex, One Iteration or Revert (the fit dialog has no single-step button) | P1 |
 | Confidence and prediction bands | NLFit Output | `fit/bands.rs`; extra FitCurve columns and dashed plots; `--bands`/`--level`; Fit window | ✓ | band columns checked against Origin's closed form for a line, not read from Origin | P1 |
 | Linear fit report details | covariance on sheets, residual plots | covariance only in library | ◐ | | P1 |
 | User function and builder | F8, F9 | formula only; `.FDF` | ◐ | cannot save or reuse; no builder | P1 |
@@ -255,14 +258,14 @@ Cross-cutting findings:
 | Cyclic voltammetry overlay | owner's workflow | built-in template; CLI `cv` | ✓ | | P0 |
 | Overlay of many curves with grouping | Layer Contents | works across sheets and books | ◐ | grouping steps colour only | P0 |
 | Error bars | Y, X, XY | symmetric Y only | ◐ | no X, direction, cap, style options; no dialog to attach error column | P0 |
-| Double-Y, multiple Y axes | Multi-Curve | none | ✗ | one layer, one Y axis in the UI | P0 |
-| Y offsets, waterfall | Multi-Curve | none | ✗ | | P0 |
-| Column and bar charts | Column/Bar/Pie | `PlotKind::Column` drawn, created only by .opj import | ◐ | not creatable from menu, dialog or CLI; no bar, stacked, floating | P0 |
+| Double-Y, multiple Y axes | Multi-Curve | Plot > Multi-Y > Double-Y alternates the selected columns between the left and right axis; CLI `plot -t double-y` and `--y2`; the right axis is a linked layer with its own title and range, each axis in the colour of its first curve; the .opj reader keeps the second layer | ◐ | no per-plot left or right axis choice in the app (the CLI has it); 3Ys, 4Ys and Multiple Y Axes are grey; the .opj writer does not store the link, so the companion keeps it | P0 |
+| Y offsets, waterfall | Multi-Curve | Plot > Y-offset/Waterfall > Stacked Lines by Y Offsets and Waterfall; CLI `--stack`, `--offsets`, `--waterfall`; offsets per plot in Plot Details > Stack; the .opj reader keeps stacked offsets | ◐ | simple two-dimensional waterfall only: no colour mapping, no 3D waterfall; offsets are not written to .opj (the companion keeps them); a fitted curve takes no offset | P0 |
+| Column and bar charts | Column/Bar/Pie | Plot > Column/Bar/Pie > Column and CLI `plot -t column`; several Y columns side by side; a text X column gives sample names as tick labels; gap and overlap in Plot Details (Spacing) and `--bar-gap`; Change Plot to Column | ◐ | no horizontal bar, stacked, floating or indexed-group columns, no pie; bar spacing is not written to .opj | P0 |
 | Plot from selection | plotxy | uses designations | ◐ | no plotxy-style dialog | P0 |
-| Layer Contents, add and remove data | F12 | Plots tab add, remove, reorder | ◐ | no separate X/Y/error assignment, no row range | P0 |
+| Layer Contents, add and remove data | F12 | F12 or Graph > Layer Contents opens Plot Details on the layer: plots can be added from any sheet, removed and reordered; Plot Setup opens the same page | ◐ | no separate X/Y/error assignment, no row range | P0 |
 | Spline and step connect | Line > Connect | Catmull-Rom spline, steps | ◐ | no B-spline, Bezier, segments; spline skipped above 2000 points | P1 |
-| Multi-panel and stack | 4 Panel, 9 Panel | none | ✗ | | P1 |
-| Area and fill | Plot > Area | none | ✗ | | P1 |
+| Multi-panel and stack | 4 Panel, 9 Panel | CLI `plot --panels stack` or RxC (Stack, Vertical 2 Panel, Horizontal 2 Panel, 4 Panel) with `--panel-y`, `--per-panel`, gaps and margins; panels are linked layers that share X, and the graph window edits each layer | ◐ | no menu entry or dialog in the app (Plot > Multi-Panel is grey); panel links are not written to .opj | P1 |
+| Area and fill | Plot > Area | Plot > Area > Area, CLI `plot -t area`, Change Plot to Area: the line is filled down to Y = 0 with the symbol colour | ◐ | no stacked area, no fill to another baseline, no transparency; written to .opj as a line (the companion keeps the fill) | P1 |
 | Drop lines, bubble, colour mapped | Plot > Symbol | none | ✗ | | P1 |
 | Histogram, box chart, statistics plots | Plot > Statistics | histogram tool makes a column plot of the bin counts | ◐ | bars have gaps, no distribution curve, no box chart or other statistics plots | P1 |
 | Pie | Plot > Pie | none | ✗ | | P2 |
@@ -279,34 +282,34 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Graph object model | page, layers, axes, plots, objects | `core/graph.rs` | ◐ | only layer 0 used; no top and right axes with own scale; no drawn objects | P0 |
+| Graph object model | page, layers, axes, plots, objects | `core/graph.rs`: several layers per graph, linked layers (double-Y, panels), an active layer, plot offsets, bar spacing; the graph window selects layers and objects | ◐ | no drawn objects (lines, arrows, shapes); layers have no background of their own yet; a top or right axis with its own scale exists only as a linked layer | P0 |
 | Units and sizing | cm, mm, pixel, scale modes | inches and percent | ◐ | | P0 |
-| Axis scale and range | many scale types, rescale modes | linear, log10, from and to, nice, tight, symmetric | ◐ | no reverse, ln, log2, probability, custom ticks, rescale margins | P0 |
+| Axis scale and range | many scale types, rescale modes | axis dialog, Scale tab: linear, log10, from and to, round out to ticks, exact data range, symmetric about zero, major step, minor tick count | ◐ | no reverse (box is grey), ln, log2, probability, custom ticks, rescale margin (grey) | P0 |
 | Axis line and ticks | Line and Ticks tab | direction, length, width, colour | ◐ | no separate tick colour, offset, arrows | P0 |
-| Tick labels | Tick Labels tab | font, number format, divisor | ◐ | no rotation, prefix and suffix, text labels, minor labels; date labels follow a date X column automatically, not chosen in the dialog and no month or year steps | P0 |
+| Tick labels | Tick Labels tab | axis dialog, Tick Labels tab: font, number format, divisor, rotation of X labels, text from a dataset (sample names), hide last label | ◐ | no prefix and suffix (grey), no minor labels; date labels follow a date X column automatically, not chosen in the dialog, and no month or year steps | P0 |
 | Axis titles | Title tab | default from long name and units | ◐ | no `%(?X)` substitution, rotation, offset | P0 |
-| Opposite and central axes | top and right, axis at value | top and right line and ticks only | ◐ | no labels or titles there; no axis at zero | P0 |
+| Opposite and central axes | top and right, axis at value | top and right line and ticks; a right Y axis with labels and title as a linked layer (double-Y) | ◐ | no axis at zero; labels on an opposite side only through a linked layer | P0 |
 | Symmetric Y about zero | set by hand | automatic | ✓ | | P0 |
 | Auto-scale and tick algorithm | automatic | `ticks.rs` from a proposed rule | ◐ | never validated against Origin | P0 |
-| Rescale command | Ctrl+R | none | ◐ | fixed range cannot be re-fit except by hand | P0 |
-| Line style, width, colour | Line tab | 8 dash styles, connect | ◐ | no transparency, fill under curve; dash patterns are guesses | P0 |
+| Rescale command | Ctrl+R | Ctrl+R, Graph > Rescale to Show All, the Rescale button, and the right-click menus of an axis, a layer and the page: fixed limits go back to automatic | ✓ | no Rescale for X only or Y only | P0 |
+| Line style, width, colour | Line tab | 8 dash styles, connect; area plots fill under the curve with the symbol colour | ◐ | no transparency; dash patterns are guesses | P0 |
 | Symbols | Symbol tab | 8 shapes, size, filled or open | ◐ | Origin has 20 shapes, 12 interiors; no separate fill and edge colour | P0 |
 | Plot groups and increments | Group tab | colour only | ◐ | no line or symbol increments, modes | P0 |
 | Colour palettes | Q01 to Q08, S, D lists | editable list of 9 | ◐ | not Origin's decoded default list; no named lists | P0 |
 | Legend | Legend object | corners or manual, font, frame | ◐ | no substitution syntax, update modes, multi-column, drag | P0 |
 | Text objects and escapes | text tool, escapes | `markup.rs` renders many escapes | ◐ | cannot create or edit free text labels in app or CLI; several escapes unsupported | P0 |
 | Fonts | Format > Font | per axis and legend | ◐ | no underline, no default-font setting | P0 |
-| Direct editing on the graph | select, drag, double-click | double-click opens a tab by region | ◐ | no object selection, handles, dragging | P0 |
-| Plot Details dialog | tree, Apply, OK, Cancel | tabs, live apply | ◐ | no tree, no Worksheet button | P0 |
+| Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label | ◐ | objects cannot be dragged or resized; no text or drawing tools | P0 |
+| Plot Details dialog | tree, Apply, OK, Cancel | Plot Details in Origin's layout: a tree at the left (graph, layers, plots), tabs for what is chosen, OK, Cancel, Apply; the axis dialog has the same buttons | ◐ | no Worksheet button; the Group tab has no increments; some tabs are grey (layer Background); Special Ticks and Breaks of the axis dialog are grey | P0 |
 | Grids | Grids tab | major and minor with style | ◐ | no opposite grid or zero line | P1 |
 | Axis breaks | Breaks tab | none | ✗ | | P1 |
 | Reference lines, special ticks | add line | none | ✗ | | P1 |
 | Drawn lines, arrows, shapes | Tools toolbar | none | ✗ | | P1 |
 | Themes | Theme Organizer | none | ✗ | | P1 |
-| Graph templates | Save Template As | 4 built-in only | ◐ | cannot save or load; .otp not read | P1 |
-| Layer arrangement, merge | Arrange Layers | one layer frame editable | ◐ | | P1 |
+| Graph templates | Save Template As | 9 built-in in the Plot menu: Line, Scatter, Line + Symbol, Column, Area, Cyclic voltammetry, Double-Y, Stacked Lines, Waterfall | ◐ | cannot save or load; .otp not read | P1 |
+| Layer arrangement, merge | Arrange Layers | layer frame editable in Plot Details (Size); panel layouts by CLI | ◐ | no Arrange Layers dialog, no Merge Graph Windows (grey) | P1 |
 | Backgrounds and frames | Background tab | page background, legend background | ◐ | no layer fill, border | P1 |
-| Data reader, zoom, pan | Gadgets, zoom tool | free-cursor read-out | ◐ | no snapping, zoom or pan | P1 |
+| Data reader, zoom, pan | Gadgets, zoom tool | Data Reader tool (Tools toolbar): snaps to the nearest data point, a click pins it, Left and Right step through rows, a label shows plot, row, X and Y; axis zoom in the axis menu | ◐ | no region zoom, pan or zoom tool; no Data Display window | P1 |
 | Layer display options | clip, data on top | none | ✗ | | P2 |
 
 ## 13 Export
@@ -336,6 +339,8 @@ Cross-cutting findings:
 
 Each stage assumes the earlier ones. (Stages, not the numbered milestones of `docs/ROADMAP.md`.) Effort is not estimated here.
 
+Progress on 2026-11-12, from reading code: in stage 1, steps 2 to 5, 7 and 8 and most of step 3 are in place (date and time columns, batch import, Double-Y, offsets and waterfall, creatable column plots, the Peak Analyzer chain, reference subtraction and curve math, fit bands and controls, recalculating formulas, cell copy and paste); step 1 still waits for the owner's text exports, and step 6 (free text labels, legend options, Origin's colour list, size and margin options, TIFF, EMF, EPS) is mostly open. In stage 2, .opj writing, child windows, toolbars, Origin's menus and shortcuts, the Project Explorer, Plot Details as a tree and the axis dialog are in place; the generic analysis dialog with Preview and Auto Apply and the dialogs for column properties and the analysis tools are not. In stage 3, t-tests and frequency counts are done; the rest of the stage is open.
+
 **Stage 1. Daily electrochemistry and ICP-OES work (P0 gaps).**
 1. CH Instruments: confirm against real CV and i-t files, since the spec says none was checked.
 2. CSV and ICP-OES: date and time columns, non-numeric handling, import into an existing sheet or new sheets, thousands separators, parameter rows, and a batch command over folders.
@@ -359,6 +364,7 @@ Each stage assumes the earlier ones. (Stages, not the numbered milestones of `do
 ## Areas and sources the auditors could not judge
 
 - Nothing was run: no app, CLI, test suite or Origin. Every status is from reading code.
+- The update of 2026-11-12 did not re-check rows the new work does not touch, and did not open Origin, so the new rows have the same limits. Not confirmed in this pass: that the written `.opj` of the newer graph features opens in Origin (the writer names what it leaves out, and the companion keeps it), whether the Copy Page picture pastes into other programs, and the look of the app against Origin side by side.
 - Numeric accuracy of each tool beyond what the specs and tests already claim.
 - Whether the app shows import warnings for every .opj fidelity limit.
 - The default shape of a new workbook in the app, and the exact count of expression functions (about 50 is an estimate).

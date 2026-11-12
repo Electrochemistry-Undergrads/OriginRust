@@ -223,6 +223,18 @@ fn b(icon: Icon, tip: &'static str, cmd: Cmd, menu: &'static str) -> Item {
     Item::Button(Button { icon, tip, cmd: Some(cmd), menu, on: false })
 }
 
+/// A tool of the Tools toolbar: it has no menu entry in Origin; it is drawn pressed while it is
+/// the graph's tool.
+fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
+    Item::Button(Button { icon, tip, cmd: Some(cmd), menu: "", on: false })
+}
+
+/// True for the commands of tools (no menu entry; pressed while on).
+#[cfg(test)]
+fn is_tool(cmd: &Cmd) -> bool {
+    matches!(cmd, Cmd::Pointer | Cmd::DataReader)
+}
+
 /// A button for a feature Sheaf lacks.
 fn g(icon: Icon, tip: &'static str) -> Item {
     Item::Button(Button { icon, tip, cmd: None, menu: "", on: false })
@@ -336,11 +348,11 @@ fn build(bar: Bar) -> Vec<Item> {
             g(PlotRadar, "Radar"),
         ],
         Bar::Tools => vec![
-            Item::Button(Button { icon: Pointer, tip: "Pointer", cmd: None, menu: "", on: true }),
+            tool(Pointer, "Pointer", Cmd::Pointer),
             g(ZoomIn, "Zoom In"),
             g(ZoomOut, "Zoom Out"),
             b(Rescale, "Rescale", Cmd::Rescale, "Rescale to Show All"),
-            g(DataReader, "Data Reader"),
+            tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),
             g(Text, "Text"),
             g(Arrow, "Arrow"),
@@ -459,14 +471,19 @@ fn text_box(ui: &mut Ui, text: &str, width: f32, name: &str) {
 
 fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions: &mut Vec<Action>) {
     let resolved = button.cmd.as_ref().map(|cmd| menus::resolve(cmd, c));
-    let enabled = button.on || matches!(resolved, Some(Ok(_)));
-    let sense = if enabled && !button.on { Sense::click() } else { Sense::hover() };
+    let on = match button.cmd {
+        Some(Cmd::Pointer) => !c.reader,
+        Some(Cmd::DataReader) => c.reader,
+        _ => button.on,
+    };
+    let enabled = on || matches!(resolved, Some(Ok(_)));
+    let sense = if enabled && !on { Sense::click() } else { Sense::hover() };
     let (rect, response) = ui.allocate_exact_size(vec2(CELL, CELL), sense);
     let label = format!("{} toolbar: {}", bar.name(), button.tip);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &label));
 
     let painter = ui.painter();
-    let frame = if button.on || (enabled && response.is_pointer_button_down_on()) {
+    let frame = if on || (enabled && response.is_pointer_button_down_on()) {
         Some((Color32::from_rgb(204, 228, 247), Color32::from_rgb(0, 84, 153)))
     } else if enabled && response.hovered() {
         Some((Color32::from_rgb(229, 241, 251), theme::ACCENT))
@@ -485,7 +502,7 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
 
     let reason = match &resolved {
         Some(Err(why)) => Some(*why),
-        None if !button.on => Some(NOT_YET),
+        None if !on => Some(NOT_YET),
         _ => None,
     };
     let name = if matches!(button.cmd, Some(Cmd::Undo | Cmd::Redo)) && enabled {
@@ -1104,6 +1121,10 @@ mod tests {
     fn every_button_with_a_command_sends_the_command_of_the_menu_entry_it_is_named_after() {
         for (bar, button) in buttons() {
             let Some(cmd) = &button.cmd else { continue };
+            if is_tool(cmd) {
+                assert!(button.menu.is_empty(), "{}: tools have no menu entry", button.tip);
+                continue;
+            }
             let mut found = false;
             for kind in [WindowKind::None, WindowKind::Workbook, WindowKind::Graph] {
                 for m in menus::bar(kind) {
@@ -1121,13 +1142,13 @@ mod tests {
     }
 
     #[test]
-    fn buttons_without_a_command_are_greyed_and_only_the_pointer_is_a_tool_that_is_on() {
+    fn buttons_without_a_command_are_greyed_and_tools_are_only_on_the_tools_bar() {
         for (bar, button) in buttons() {
-            if button.cmd.is_none() {
-                assert_eq!(button.on, button.tip == "Pointer" && bar == Bar::Tools, "{}: {}", bar.name(), button.tip);
-            } else {
-                assert!(!button.on);
-                assert!(!button.menu.is_empty(), "{}: {} has no menu name", bar.name(), button.tip);
+            assert!(!button.on, "{}: {}", bar.name(), button.tip);
+            match &button.cmd {
+                Some(cmd) if is_tool(cmd) => assert_eq!(bar, Bar::Tools, "{}", button.tip),
+                Some(_) => assert!(!button.menu.is_empty(), "{}: {} has no menu name", bar.name(), button.tip),
+                None => {}
             }
         }
     }

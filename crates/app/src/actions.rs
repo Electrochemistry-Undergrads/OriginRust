@@ -173,6 +173,11 @@ pub enum Action {
         graph: WindowId,
         op: GraphOp,
     },
+    /// Switches a graph's tool: the Data Reader (`reader`) or the pointer.
+    GraphTool {
+        graph: WindowId,
+        reader: bool,
+    },
     /// Copy Page: the graph as a picture on the clipboard.
     CopyPage(WindowId),
     /// Gadgets > Integrate on a graph.

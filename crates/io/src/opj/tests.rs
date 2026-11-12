@@ -17,6 +17,7 @@ fn into_project_keeps_window_names_and_drops_trailing_missing_cells() {
     let import = OpjImport {
         workbooks: vec![book],
         graphs: Vec::new(),
+        folders: Vec::new(),
         version: "9.3".into(),
         signature: String::new(),
         warnings: Vec::new(),

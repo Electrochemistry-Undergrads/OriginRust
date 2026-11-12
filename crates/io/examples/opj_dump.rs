@@ -100,11 +100,25 @@ fn main() {
                     missing,
                     first.join(", ")
                 );
+                if let Some(f) = &c.formula {
+                    println!("             formula '{f}' recalculate {} rows {:?}", c.recalc.label(), c.formula_rows);
+                }
             }
         }
     }
+    if !imp.folders.is_empty() {
+        println!("folders (windows not listed are in the root):");
+        print_folders(&imp.folders, 1);
+    }
     for w in &imp.warnings {
         println!("warning: {w}");
+    }
+}
+
+fn print_folders(folders: &[sheaf_io::opj::OpjFolder], depth: usize) {
+    for f in folders {
+        println!("{}{}/  windows [{}]", "  ".repeat(depth), f.name, f.windows.join(", "));
+        print_folders(&f.folders, depth + 1);
     }
 }
 

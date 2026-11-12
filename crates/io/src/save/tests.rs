@@ -33,18 +33,18 @@ fn project_with_graph() -> Project {
     p
 }
 
-/// A project the .opj cannot hold completely: column B has a column formula, and the writer
-/// stores only its values.
+/// A project the .opj cannot hold completely: the long name of column B has a character outside
+/// Windows-1252, which the writer replaces by a question mark.
 fn lossy_project() -> Project {
     let mut p = workbook_project();
     if let Some(Window::Workbook(b)) = p.windows.first_mut() {
-        b.sheets[0].columns[1].formula = Some("col(A)+3".into());
+        b.sheets[0].columns[1].long_name = "\u{3a9} (ohm)".into();
     }
     p
 }
 
-fn formula_of_b(p: &Project) -> Option<String> {
-    p.workbooks().next().and_then(|b| b.sheets[0].columns.get(1)).and_then(|c| c.formula.clone())
+fn long_name_of_b(p: &Project) -> Option<String> {
+    p.workbooks().next().and_then(|b| b.sheets[0].columns.get(1)).map(|c| c.long_name.clone())
 }
 
 fn set_mtime(path: &Path, when: SystemTime) {
@@ -72,6 +72,28 @@ fn an_explicit_sheaf_path_stays_a_sheaf_project_without_companion() {
 }
 
 #[test]
+fn formulas_and_folders_are_written_into_the_opj_and_need_no_companion() {
+    use sheaf_core::column::RecalcMode;
+    let dir = scratch("formula-folder");
+    let opj = dir.join("lab.opj");
+    let mut p = workbook_project();
+    let b = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+    p.set_column_values_with(b, "col(A)+3", None, RecalcMode::Auto).unwrap();
+    let book = p.windows[0].id();
+    p.root.folders.push(sheaf_core::project::Folder { name: "Runs".into(), windows: vec![book], ..Default::default() });
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.main_written && out.companion.is_none(), "{:?}", out.warnings);
+    assert!(!dir.join("lab.opj.sheaf").exists());
+    let opened = open_project(&opj).unwrap();
+    assert!(!opened.companion_used);
+    let col = &opened.project.workbooks().next().unwrap().sheets[0].columns[1];
+    assert_eq!((col.formula.as_deref(), col.recalc), (Some("col(A)+3"), RecalcMode::Auto));
+    assert_eq!(opened.project.root.folders.len(), 1);
+    assert_eq!(opened.project.root.folders[0].name, "Runs");
+    assert_eq!(opened.project.root.folders[0].windows, [opened.project.windows[0].id()]);
+}
+
+#[test]
 fn a_graph_is_written_into_the_opj_and_needs_no_companion() {
     let dir = scratch("graph");
     let opj = dir.join("lab.opj");
@@ -91,16 +113,16 @@ fn a_project_the_opj_cannot_hold_gets_a_companion_that_opening_uses() {
     assert!(out.main_written);
     let companion = dir.join("lab.opj.sheaf");
     assert_eq!(out.companion.as_deref(), Some(companion.as_path()));
-    assert!(out.warnings.iter().any(|w| w.contains("formula")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("Windows-1252")), "{:?}", out.warnings);
     assert!(out.status().contains("lab.opj.sheaf"));
-    assert!(out.details().unwrap().contains("formula"));
+    assert!(out.details().unwrap().contains("Windows-1252"));
     assert!(project_file::is_companion(&companion));
     // The user's own lab.sheaf is a different name and is not created.
     assert!(!dir.join("lab.sheaf").exists());
-    // The opj alone has the values only; opening it picks the companion, which has the formula.
+    // The opj alone has a question mark; opening it picks the companion, which has the character.
     let opened = open_project(&opj).unwrap();
     assert!(opened.companion_used && !opened.foreign);
-    assert_eq!(formula_of_b(&opened.project).as_deref(), Some("col(A)+3"));
+    assert_eq!(long_name_of_b(&opened.project).as_deref(), Some("\u{3a9} (ohm)"));
     assert_eq!(opened.save_path.as_deref(), Some(opj.as_path()));
     assert!(opened.warnings[0].contains("lab.opj.sheaf"));
 }
@@ -177,7 +199,7 @@ fn a_newer_opj_is_opened_and_the_older_companion_is_not_used() {
     set_mtime(&opj, SystemTime::now() + Duration::from_secs(3600));
     let opened = open_project(&opj).unwrap();
     assert!(opened.foreign && !opened.companion_used);
-    assert_eq!(formula_of_b(&opened.project), None, "the .opj itself holds no formula");
+    assert_eq!(long_name_of_b(&opened.project).as_deref(), Some("? (ohm)"), "the .opj itself has the question mark");
     assert!(opened.warnings.iter().any(|w| w.contains("older") && w.contains("not used")), "{:?}", opened.warnings);
 }
 

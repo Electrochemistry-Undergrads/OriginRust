@@ -5,6 +5,8 @@ pub mod analysis;
 pub mod column_props;
 pub mod export;
 pub mod fit;
+pub mod graph_axis;
+pub mod graph_details;
 pub mod graph_props;
 pub mod import;
 pub mod set_values;

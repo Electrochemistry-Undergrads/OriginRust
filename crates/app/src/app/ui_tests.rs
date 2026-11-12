@@ -2686,6 +2686,68 @@ fn a_click_selects_a_plot_and_its_menu_changes_the_plot_type_in_one_undo_step() 
 }
 
 #[test]
+fn the_plot_menu_moves_a_plot_to_the_right_y_axis_and_back_as_one_undo_step() {
+    let mut h = start(vec![data_file("gright")]);
+    let before = graph(&h).clone();
+    assert_eq!(before.layers.len(), 1);
+    let second = before.layers[0].plots[1].y;
+    let at = on(&h, 0, ObjectKind::Plot(1));
+    click_at(&mut h, at);
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Move to Left Y Axis").is_none(), "it is on the left now");
+    click(&mut h, "Move to Right Y Axis");
+    let g = graph(&h);
+    assert_eq!(g.layers.len(), 2, "a right Y layer was made");
+    assert_eq!(g.right_y_member(0), Some(1));
+    assert_eq!(g.layers[0].plots.len(), 1);
+    assert_eq!(g.layers[1].plots.len(), 1);
+    assert_eq!(g.layers[1].plots[0].y, second);
+    assert_eq!(h.state().doc.undo_label(), Some("Move plot to right Y axis"));
+    // Now its menu offers the way back; the empty right layer stays.
+    let at = on(&h, 1, ObjectKind::Plot(0));
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Move to Right Y Axis").is_none());
+    click(&mut h, "Move to Left Y Axis");
+    let g = graph(&h);
+    assert_eq!(g.layers.len(), 2, "Origin keeps the empty layer");
+    assert!(g.layers[1].plots.is_empty());
+    assert_eq!(g.layers[0].plots.len(), 2);
+    // Undo steps back one move at a time.
+    menu(&mut h, "Edit", "Undo Move plot to left Y axis");
+    assert_eq!(graph(&h).layers[1].plots.len(), 1);
+    menu(&mut h, "Edit", "Undo Move plot to right Y axis");
+    assert_eq!(*graph(&h), before);
+}
+
+#[test]
+fn plot_details_chooses_the_y_axis_of_a_plot() {
+    let mut h = start(vec![data_file("gdetail")]);
+    let before = graph(&h).clone();
+    let second = before.layers[0].plots[1].y;
+    let at = on(&h, 0, ObjectKind::Plot(1));
+    double_click_at(&mut h, at);
+    assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    click(&mut h, "Group");
+    click(&mut h, "Right");
+    let g = graph(&h);
+    assert_eq!(g.layers.len(), 2);
+    assert_eq!(g.layers[1].plots[0].y, second);
+    assert_eq!(g.right_y_member(0), Some(1));
+    let d = h.state().graph_props.as_ref().unwrap();
+    assert_eq!((d.layer, d.selected_plot()), (1, 0), "the dialog follows the plot");
+    // The same choice made again changes nothing; Left brings it back.
+    click(&mut h, "Left");
+    let g = graph(&h);
+    assert_eq!(g.layers[0].plots.len(), 2);
+    assert!(g.layers[1].plots.is_empty());
+    assert_eq!(g.layers[0].plots[1].y, second);
+    // The dialog's edits are one undo step.
+    assert_eq!(h.state().doc.undo_label(), Some("Change graph settings"));
+    h.state_mut().doc.undo();
+    assert_eq!(*graph(&h), before);
+}
+
+#[test]
 fn the_axis_menu_hides_grids_zooms_and_rescales() {
     let mut h = start(vec![data_file("gaxis")]);
     let at = on(&h, 0, ObjectKind::YAxis);

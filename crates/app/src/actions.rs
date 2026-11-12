@@ -67,6 +67,9 @@ pub enum SheetOp {
 pub enum GraphOp {
     /// Change Plot to: line, scatter, line + symbol, column.
     SetPlotKind { layer: usize, plot: usize, kind: PlotKind },
+    /// Move to Right Y Axis / Move to Left Y Axis: the plot goes to the right Y layer of its
+    /// panel (made when there is none) or back to the panel's own layer.
+    MovePlotToAxis { layer: usize, plot: usize, right: bool },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).

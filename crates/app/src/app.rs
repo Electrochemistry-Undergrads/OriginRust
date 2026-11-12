@@ -533,6 +533,8 @@ impl SheafApp {
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
+            GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
+            GraphOp::MovePlotToAxis { .. } => "Move plot to left Y axis",
             GraphOp::HidePlot { .. } => unreachable!("handled above"),
         };
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).

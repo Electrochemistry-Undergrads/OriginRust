@@ -1242,7 +1242,13 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
 
 /// The menu of a plot: what was picked, so the commands act on it. `book` is the workbook the
 /// plot's data is in, with its title.
-pub fn graph_plot_menu(layer: usize, plot: usize, kind: PlotKind, book: Option<(WindowId, String)>) -> Vec<Entry> {
+pub fn graph_plot_menu(
+    layer: usize,
+    plot: usize,
+    kind: PlotKind,
+    on_right: bool,
+    book: Option<(WindowId, String)>,
+) -> Vec<Entry> {
     let change = |label: &str, to: PlotKind| {
         if to == kind {
             grey(label)
@@ -1264,6 +1270,10 @@ pub fn graph_plot_menu(layer: usize, plot: usize, kind: PlotKind, book: Option<(
         grey("Change X"),
         grey("Change Y"),
         sep(),
+        item(
+            if on_right { "Move to Left Y Axis" } else { "Move to Right Y Axis" },
+            Cmd::GraphEdit(GraphOp::MovePlotToAxis { layer, plot, right: !on_right }),
+        ),
         item("Hide Data Plot", Cmd::GraphEdit(GraphOp::HidePlot { layer, plot })),
     ];
     match book {

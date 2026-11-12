@@ -245,8 +245,12 @@ Sheaf's `Tool::Correlation` (coefficients chosen with flags, listwise or pairwis
 names the significant pairs) writes `Correlation1`: the descriptive table, and for each coefficient the matrix of r
 (variable names down the side, one column per variable), the matrix of p-values and, when pairs have different
 counts, the matrix of N; the report table has one row per pair with N, r and p of every coefficient.
-Kendall's tau is computed over all pairs of points, so its time grows with the square of the number of rows
-(a few thousand rows are instant; hundreds of thousands are not).
+Kendall's score is counted in O(n log n) time (sort by one column, count the inversions of the other by a merge
+sort, correct for ties), so hundreds of thousands of rows take well under a second.
+
+Two-way ANOVA lists the pairwise comparison of the cells only when the design has at most 64 cells, because the
+pairs grow with the square of the cells and Tukey's studentized range probabilities are costly. The factor
+comparisons are always listed. Comparisons are left out (not a panic) when the data contain an infinite value.
 
 ## 5 Where results go (ADR 0005)
 

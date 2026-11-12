@@ -263,14 +263,42 @@ impl TwoWayAnova {
 
     /// Pairwise comparison of the cells (every combination of a level of A and a level of B), as Origin does
     /// when the interaction is on.
+    ///
+    /// With more than `MAX_CELL_COMPARISON_CELLS` cells the list is left out: the pairs grow with the square
+    /// of the cells and the studentized range probabilities of Tukey's method would take minutes.
     pub fn compare_cells(&self, method: MeansComparison, alpha: f64) -> Vec<Comparison> {
+        if self.cells.len() > MAX_CELL_COMPARISON_CELLS {
+            return Vec::new();
+        }
         self.compare(&self.cells, method, alpha)
     }
 }
 
+/// The most cells whose pairwise comparison is listed.
+pub const MAX_CELL_COMPARISON_CELLS: usize = 64;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_design_with_many_cells_skips_the_cell_comparison_instead_of_stalling() {
+        let (mut a, mut b, mut y) = (Vec::new(), Vec::new(), Vec::new());
+        for i in 0..9 {
+            for j in 0..9 {
+                for r in 0..3 {
+                    a.push(i);
+                    b.push(j);
+                    y.push((i * 3 + j * 5 + r * 7 % 4) as f64 + 0.1 * r as f64);
+                }
+            }
+        }
+        let t = std::time::Instant::now();
+        let r = anova_two_way(&a, &b, &y, true).unwrap();
+        assert!(r.compare_cells(MeansComparison::Tukey, 0.05).is_empty());
+        assert_eq!(r.compare_a(MeansComparison::Tukey, 0.05).len(), 36);
+        assert!(t.elapsed().as_secs_f64() < 10.0);
+    }
 
     #[test]
     fn a_balanced_design_splits_the_total_sum_of_squares_exactly() {

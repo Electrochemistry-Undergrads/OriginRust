@@ -50,8 +50,8 @@ static void putcomp(Worksheet &wks, int at, int test, const vector<int> &fac, in
 	put(wks, at + 9, c9);
 }
 
-// inter: 1 with interaction; method: 0 none, else the means comparison type of the library (1 Bonferroni,
-// 2 Tukey, 3 Scheffe, 4 Sidak, 5 Fisher, 6 Bonferroni-Holm, 7 Sidak-Holm, 8 Dunnett).
+// inter: 1 with interaction; method: 0 none, else the means comparison type of the library (1 Tukey,
+// 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe; the library's header lists another order, these are measured).
 double sheaf_anova2(int inter, int nA, int nB, int method, double alpha)
 {
 	Worksheet wks = Project.ActiveLayer();

@@ -54,19 +54,70 @@ fn pearson_r(x: &[f64], y: &[f64]) -> f64 {
     (sxy / (sxx * syy).sqrt()).clamp(-1.0, 1.0)
 }
 
-/// Kendall's score `S` (concordant minus discordant pairs) and the tie groups of both samples.
+/// Strictly descending pairs (i < j with v[i] > v[j]) of `v`, counted by a merge sort; `v` is sorted by the call.
+fn inversions(v: &mut Vec<f64>) -> f64 {
+    let n = v.len();
+    let mut buf = vec![0.0; n];
+    let mut count = 0.0;
+    let mut width = 1;
+    while width < n {
+        let mut lo = 0;
+        while lo < n {
+            let (mid, hi) = ((lo + width).min(n), (lo + 2 * width).min(n));
+            let (mut i, mut j, mut k) = (lo, mid, lo);
+            while i < mid && j < hi {
+                if v[i] <= v[j] {
+                    buf[k] = v[i];
+                    i += 1;
+                } else {
+                    buf[k] = v[j];
+                    count += (mid - i) as f64;
+                    j += 1;
+                }
+                k += 1;
+            }
+            while i < mid {
+                buf[k] = v[i];
+                i += 1;
+                k += 1;
+            }
+            while j < hi {
+                buf[k] = v[j];
+                j += 1;
+                k += 1;
+            }
+            lo += 2 * width;
+        }
+        std::mem::swap(v, &mut buf);
+        width *= 2;
+    }
+    count
+}
+
+/// Kendall's score `S` (concordant minus discordant pairs) and the tie groups of both samples, in
+/// O(n log n): after sorting by x then y, the discordant pairs are the strict inversions of y.
 fn kendall_score(x: &[f64], y: &[f64]) -> (f64, Vec<usize>, Vec<usize>) {
     let n = x.len();
-    let mut s = 0.0;
-    for i in 0..n {
-        for j in i + 1..n {
-            let (dx, dy) = (x[i] - x[j], y[i] - y[j]);
-            if dx != 0.0 && dy != 0.0 {
-                s += if (dx > 0.0) == (dy > 0.0) { 1.0 } else { -1.0 };
-            }
+    let mut idx: Vec<usize> = (0..n).collect();
+    idx.sort_by(|&a, &b| x[a].total_cmp(&x[b]).then(y[a].total_cmp(&y[b])));
+    let (tx, ty) = (midranks(x).1, midranks(y).1);
+    let pairs = |g: &[usize]| g.iter().map(|&t| (t * (t - 1)) as f64 / 2.0).sum::<f64>();
+    // Pairs tied in both samples: runs of equal (x, y) in the sorted order.
+    let mut both = 0.0;
+    let mut run = 1usize;
+    for w in 1..=n {
+        if w < n && x[idx[w]] == x[idx[w - 1]] && y[idx[w]] == y[idx[w - 1]] {
+            run += 1;
+        } else {
+            both += (run * (run.max(1) - 1)) as f64 / 2.0;
+            run = 1;
         }
     }
-    (s, midranks(x).1, midranks(y).1)
+    let n0 = (n * n.saturating_sub(1)) as f64 / 2.0;
+    let comparable = n0 - pairs(&tx) - pairs(&ty) + both;
+    let mut ys: Vec<f64> = idx.iter().map(|&i| y[i]).collect();
+    let discordant = inversions(&mut ys);
+    (comparable - 2.0 * discordant, tx, ty)
 }
 
 /// The correlation of two columns; pairs with a NaN are left out.
@@ -215,6 +266,38 @@ mod tests {
         assert_eq!(list.get(0, 2).n, 5);
         assert_eq!(pair.get(1, 0), correlation(&b, &a, CorrKind::Pearson));
         assert!((pair.get(0, 1).r - pair.get(1, 0).r).abs() < 1e-15);
+    }
+
+    #[test]
+    fn kendall_fast_score_matches_the_pair_loop_with_ties() {
+        let mut seed = 12345u64;
+        let mut next = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((seed >> 33) % 9) as f64
+        };
+        for n in [2usize, 3, 10, 57] {
+            let x: Vec<f64> = (0..n).map(|_| next()).collect();
+            let y: Vec<f64> = (0..n).map(|_| next()).collect();
+            let mut s = 0.0;
+            for i in 0..n {
+                for j in i + 1..n {
+                    let (dx, dy) = (x[i] - x[j], y[i] - y[j]);
+                    if dx != 0.0 && dy != 0.0 {
+                        s += if (dx > 0.0) == (dy > 0.0) { 1.0 } else { -1.0 };
+                    }
+                }
+            }
+            assert_eq!(kendall_score(&x, &y).0, s, "n = {n}");
+        }
+    }
+
+    #[test]
+    fn kendall_of_many_rows_is_fast() {
+        let n = 200_000usize;
+        let x: Vec<f64> = (0..n).map(|i| ((i * 7919) % 10007) as f64).collect();
+        let y: Vec<f64> = (0..n).map(|i| ((i * 104729) % 10009) as f64).collect();
+        let c = correlation(&x, &y, CorrKind::Kendall);
+        assert!(c.r.is_finite());
     }
 
     #[test]

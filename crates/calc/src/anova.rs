@@ -180,6 +180,10 @@ pub fn compare_means(
     let k = levels.len();
     let pairs = k * k.saturating_sub(1) / 2;
     let mut out = Vec::with_capacity(pairs);
+    // A non-finite error mean square (infinite data) gives no usable comparisons; statrs would panic on NaN.
+    if !mse.is_finite() || !dfe.is_finite() || levels.iter().any(|l| !l.1.is_finite()) {
+        return out;
+    }
     let Ok(t_dist) = StudentsT::new(0.0, 1.0, dfe) else {
         return out;
     };
@@ -285,7 +289,7 @@ fn range_cdf(w: f64, k: f64) -> f64 {
     let norm = Normal::new(0.0, 1.0).expect("standard normal");
     let phi = |z: f64| (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
     // The integrand is k phi(z) [Phi(z) - Phi(z - w)]^(k - 1); it is negligible outside [-9, 9 + w].
-    let panels = (((w + 18.0) / 1.5).ceil() as usize).max(8);
+    let panels = (((w + 18.0) / 3.0).ceil() as usize).max(6);
     let v = k * integrate(|z| phi(z) * (norm.cdf(z) - norm.cdf(z - w)).powf(k - 1.0), -9.0, 9.0 + w, panels);
     v.clamp(0.0, 1.0)
 }
@@ -310,7 +314,7 @@ pub fn ptukey(q: f64, k: f64, df: f64) -> f64 {
     let density = |s: f64| if s <= 0.0 { 0.0 } else { (ln_c + (df - 1.0) * s.ln() - df * s * s / 2.0).exp() };
     let spread = 12.0 / (2.0 * df).sqrt();
     let (lo, hi) = ((1.0 - spread).max(0.0), 1.0 + spread + if df < 4.0 { 6.0 } else { 0.0 });
-    let panels = ((hi - lo) / 0.05).ceil().clamp(16.0, 400.0) as usize;
+    let panels = ((hi - lo) * (2.0 * df).sqrt() / 2.0).ceil().clamp(8.0, 400.0) as usize;
     integrate(|s| density(s) * range_cdf(q * s, k), lo, hi, panels).clamp(0.0, 1.0)
 }
 
@@ -334,7 +338,7 @@ pub fn qtukey(p: f64, k: f64, df: f64) -> f64 {
         } else {
             hi = mid;
         }
-        if hi - lo < 1e-11 * hi {
+        if hi - lo < 1e-9 * hi {
             break;
         }
     }
@@ -343,6 +347,24 @@ pub fn qtukey(p: f64, k: f64, df: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn infinite_data_do_not_panic_in_comparisons() {
+        let (a, b, c) = ([1.0, 2.0, 3.0], [2.0, f64::INFINITY, 4.0], [5.0, 6.0, 8.0]);
+        let an = anova_one_way(&[&a, &b, &c]).unwrap();
+        for m in [MeansComparison::FisherLsd, MeansComparison::Tukey, MeansComparison::Scheffe, MeansComparison::Sidak]
+        {
+            let _ = compare_means(&[(3, 2.0), (3, f64::INFINITY), (3, 6.0)], an.error.mean_sq, an.error.df, m, 0.05);
+        }
+    }
+
+    #[test]
+    fn tukey_with_few_error_degrees_of_freedom_is_fast() {
+        let t = std::time::Instant::now();
+        let q = qtukey(0.95, 4.0, 3.0);
+        assert!((q - 6.8200).abs() < 0.01, "q = {q}");
+        assert!(t.elapsed().as_secs_f64() < 2.0);
+    }
+
     #[test]
     fn constant_groups_do_not_hang_or_panic() {
         let (a, b, c) = ([3.0; 3], [4.0; 3], [5.0; 3]);

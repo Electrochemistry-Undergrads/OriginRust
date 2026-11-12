@@ -227,7 +227,7 @@ pub fn signed_rank(d: &[f64], tail: Tail) -> SignedRank {
     let n = nonzero.len();
     let abs: Vec<f64> = nonzero.iter().map(|v| v.abs()).collect();
     let (ranks, ties) = midranks(&abs);
-    let t_plus: f64 = nonzero.iter().zip(&ranks).filter(|(v, _)| **v > 0.0).map(|(_, r)| r).sum();
+    let t_plus: f64 = nonzero.iter().zip(&ranks).filter(|(v, _)| **v > 0.0).map(|(_, r)| r).sum::<f64>() + 0.0;
     let total = (n * (n + 1)) as f64 / 2.0;
     let t_minus = total - t_plus;
     let nf = n as f64;
@@ -421,6 +421,12 @@ mod tests {
     fn nan_pairs_drop_out_of_paired_tests() {
         let s = signed_rank_paired(&[1.0, f64::NAN, 3.0, 4.0], &[0.0, 2.0, f64::NAN, 1.0], Tail::Two);
         assert_eq!(s.n, 2);
+    }
+
+    #[test]
+    fn signed_rank_statistic_is_never_negative_zero() {
+        let s = signed_rank(&[-1.0, -2.0, -3.0], Tail::Two);
+        assert_eq!(format!("{}", s.t_plus), "0");
     }
 
     #[test]

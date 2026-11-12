@@ -120,7 +120,15 @@ the default project format.
 - [ ] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
       everything a project holds (graphs at first), saving also writes a `.sheaf` copy next to the
       `.opj` and says what only the copy holds; the copy is dropped once nothing would be lost
-- [ ] Close the gaps from the parity audit in its order of work
+- [ ] Close the gaps from the parity audit in its order of work. Done so far (each built by an
+      agent, reviewed by another, fixed, merged on 2026-11-12):
+  - [x] Subtract Reference Data and Simple Math (+ - * / power with a constant or a reference
+        curve), matching Origin's subtract_ref and mathtool to 1e-10
+  - [x] Integrating several ranges at once into one table (area, peak, width per range)
+  - [x] Date and time columns: Origin's date numbers, detection in CSV import, display formats,
+        date axis labels
+  - [x] Column formulas that recalculate (Set Column Values None, Auto, Manual), inside one undo
+        step, cycles refused
 
 ## Milestone 6: breadth
 

@@ -57,13 +57,14 @@ through (they are held for approval and expire), so the split is written here:
   (branch with `docs/spec/gui-look.md` and ADR 0007), and a first `.opj` writer for workbooks
   verified in Origin (branch, then review).
 
-All checks pass on `main` at `2ca7d26` (422 tests).
+All checks pass on `main` at `d79b05c` (485 tests).
 
 ## Exact next step
 
-1. Merge the `parity-gui-opj` branches (GUI study, `.opj` writer) and the `p0-gaps-core`
-   branches (curve math, date and time columns, recalculating formulas) after their reviews; full
-   checks after each merge. Merge `chi-text-real` (second session) when its note says it is ready.
+1. Merge the `parity-gui-opj` branches (GUI study, `.opj` writer) after their reviews; full checks
+   after each merge. Merge `chi-text-real` (second session) when its note says it is ready. (The
+   `p0-gaps-core` branches are merged: curve math, multi-range integration, date and time
+   columns, recalculating formulas.)
 2. Write `docs/spec/feature-parity.md` from the audit; merge the GUI study and the `.opj` writer.
 3. Make `.opj` the default format (with the `.sheaf` copy safeguard), then graph writing.
 4. Rebuild the app shell in Origin's style following ADR 0007, step by step with click tests.

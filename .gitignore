@@ -22,6 +22,9 @@ re-workspace/
 *.fdf
 *.oif
 
+# The one project file that our own writer made (never written by Origin); see docs/spec/opj-format.md, section 13
+!crates/io/tests/fixtures/sheaf-written.opj
+
 # Secrets, logs, machine-specific files
 .env
 *.log

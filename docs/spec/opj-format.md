@@ -2,7 +2,8 @@
 
 Status: written while building `crates/io/src/opj/`. Covers what the reader needs: workbooks,
 sheets, columns and their values (checked cell by cell against Origin, section 12) and basic graphs
-(section 10). Matrices and notes are only sketched.
+(section 10). Matrices and notes are only sketched. Section 13 describes what the writer does and
+what Origin 2016 needed to open a written file.
 
 Provenance tags used on statements:
 
@@ -563,3 +564,197 @@ LabTalk designation codes: 1 Y, 2 disregard, 3 Y error, 4 X, 5 label, 6 Z, 7 X e
 row counts and every listed cell agree, numbers to the last bit. Not compared: the cells that were
 not sampled in the large project, hidden columns, column widths and number formats, matrices
 (`doc -e M` was not run), and the "set column values" formulas.
+
+## 13. Writing
+
+The writer is `crates/io/src/opj/write/` (`sheaf_io::opj::write`, `write_file`). It writes the
+workbooks of a project in the format of Origin 2016 (version 9.3). Graphs are not written yet; they
+are left out with a warning. Tags: **[orig]** checked by opening the written file in Origin 2016
+(sections 13.7 and 13.8), **[obs]** copied from what Origin writes, **[inf]** a guess that Origin
+accepted without showing a difference.
+
+### 13.1 Order of the file [orig]
+
+```
+signature line                      CPYA 4.3168 226 W64 #
+header block (111), empty block
+data sets:   { header (147), data, mask (empty) } per column, all workbooks, sheets in order
+             an empty block
+windows:     { window header, { layer header, empty block (no annotations),
+                                { column record (515), note } per column,
+                                5 empty blocks } per sheet,
+               an empty block (end of the layer list) } per workbook
+             an empty block
+parameters:  the line "\0\n"
+notes:       an empty block, the results log note, an empty block
+tree:        the folder tree (13.5)
+records:     eight attribute records (13.6)       the file ends after the last one
+```
+
+Windows follow the order of the project. Data sets are numbered from 1 in file order; the column
+record of a column holds the number of its data set. The name of a data set is
+`<window>_<short name>`, with `@<n>` added for the sheets after the first, where `n` is the position
+of the sheet in the workbook counted from 1 (the first sheet has no suffix).
+
+### 13.2 Values [orig]
+
+Every column is stored as text-or-number cells (section 3.4), whether it holds text or not, and
+every column of a sheet gets the same number of rows: the longest column of the sheet, padded with
+missing cells (32 rows for a sheet whose columns are all empty, which is what a new Origin sheet
+has).
+
+- A number is a cell of 10 bytes: `00 00` and the double. A missing number (NaN in our model) is the
+  double -1.23456789e-300 (section 3.5). Infinities are stored as they are.
+- Text is a cell of `size` bytes: `01 00`, the text in Windows-1252, padding with NUL. `size` is the
+  longest text plus 3 (the two header bytes and one terminator) and at least 10, so a text column of
+  short words has 10-byte cells like a number column. An empty text is written as a missing number.
+  The size is a single byte, so a text is at most 252 bytes.
+- Header fields written for a data set: `0x16` type word (13.3), `0x18` 3 for a column with at least one value
+  and 1 for an empty one, `0x19` rows, `0x1D` position of the first cell that holds a value (0-based),
+  `0x21` position after the last one (both 0 for an empty column), `0x25` and `0x2D` the double 1.0,
+  `0x3D` cell size, `0x3E` the byte 0x14, `0x52` the data-set number of the column this one belongs
+  to (below), `0x58` the name. A few more bytes are constant (`0x02`: 01, `0x06`: FA, `0x0A`: A0 0F 01,
+  `0x71`: CA 10) [obs].
+- "Belongs to" (`0x52` of the data set and `0x23` of the column record): a Y column belongs to the
+  nearest X column on its left, an error, Z or label column to the nearest Y column on its left, an
+  unused column (in the record only) to the nearest X column; 0 when there is none [obs from a
+  project with every role; the reader does not use it, Origin loaded files with it set this way].
+
+### 13.3 Roles and type words [orig]
+
+| role | record byte `0x11` | type word (data set `0x16`, record `0x25`) |
+|---|---|---|
+| X | 3 | 0x5121 |
+| Y | 0 | 0x6121 |
+| Z | 5 | 0x6120 |
+| Y error | 2 | 0x6130 |
+| X error | 6 | 0x6130 |
+| label | 4 | 0x6120 |
+| unused | 1 | 0x4121 |
+
+The high byte of the type word is 0x5 for X, 0x6 for Y and 0x4 for an unused column in files from
+Origin, and the low byte is 0x30 for error columns and 0x20 for Z and label columns [obs]. The
+column record also marks error columns in byte `0x20`: 3 for a Y error and 0x13 for an X error [obs].
+
+### 13.4 Windows, layers, column records
+
+Window header (195 bytes plus the label and one NUL, so a window without long name has 196) [orig]:
+the short name at `0x02` (25 bytes), the window rectangle at `0x1B` (left, top, right, bottom as 16-bit numbers)
+followed by the screen size 1920 x 1080 [obs], at `0x29` the number of the active sheet [inf], the
+text `ORIGIN` at `0x45`, two time stamps at `0x73` and `0x7B` (creation and change, Julian day
+numbers as doubles, for example 2461000.5), the label at `0xC3`. The writer puts each new window 26
+pixels right of and below the one before (as Origin does) and writes the long name as the label,
+without the storage tail Origin adds (section 4.1). The other non-zero bytes of the header are
+constants copied from Origin [obs] and were not examined.
+
+Layer header (361 bytes) [orig]: byte `0x02` is 0x5E (bit 0 clear: a workbook sheet), the name at `0xD2`
+(31 bytes at most) after the two bytes `Pd`, at `0x17` a double with the number of columns (at most
+4), at `0x2B` and `0x151` the number of columns as a 16-bit number, at `0x101` a 16-bit counter that
+runs through the sheets of the project from 802 [obs], at `0x12D` the position of the sheet in its
+workbook [obs]. Many other constant bytes were copied from Origin [obs].
+
+Column record (515 bytes) [orig]: `0x00` is 0x10; `0x04` the data-set number (16 bits, so a project
+holds at most 65535 columns); `0x07` and `0x0B` the same first and after-last positions as in the
+data-set header [obs]; `0x11` the role; `0x12` the short name (12 bytes, so 11 characters; the name
+in the data set is the full one); `0x1E` is 9; `0x23` "belongs to"; `0x25` the type word; `0x33`
+is 1; `0x39` is 0x20; `0x4A` is 0x43 for the first two columns of a sheet and 0 for the others
+(Origin does the same); doubles 1.0 at `0x1D2` and `0x1DA`; `0x1E9` is 8.
+
+Note block of a column [orig]: long name, CR LF, units, CR LF, comments, a NUL; trailing empty
+parts are left out and a column with no labels gets an empty block. A line break inside a comment is
+written as CR LF and read back as CR LF. Long names and units cannot hold line breaks (they are
+replaced by spaces). Text that contains `@${` would be read as the start of stored data and is refused.
+
+There are no annotations in a written sheet. Origin writes four per sheet (internal storage objects
+named `__LayerInfoStorage`, `__LayerGridStyle`, `__WIPR`, `__WIOTN`); a file without them opened in
+Origin with all names, labels and cells intact [orig]. Whether anything is lost without them (for
+example the sheet's grid style) was not examined.
+
+### 13.5 The folder tree [orig]
+
+After the notes comes a tree of folders, written here as one root folder that holds every
+window. The root folder is named after the project (the file name without extension). Every token
+below is a block (section 2.2) unless it says "line", which is a 4-byte number and a newline with no body:
+
+```
+block of 4 bytes     S = (total size of everything below up to and including the closing block) - 4
+block of 16 bytes    DE 36 10 03, then zeros
+block of 32 bytes    byte 2 is 1; at offset 16 and 24 two doubles: the Julian day of creation and of change
+empty block
+block                the project name, NUL terminated
+line                 the number 2
+block of 36 bytes    47 11 11 11 01, then zeros
+block of 28 bytes    4D 11 11 11 01, then zeros
+block of 4 bytes     the number of windows listed (every written window, in file order)
+per window:  empty block, block of 8 bytes (u32 0, u32 index of the window), empty block
+block of 4 bytes     the number of sub-folders: 0
+empty block
+block of 8 bytes     00 10 00 00 08 00 00 00        (closes the tree)
+```
+
+The results log note before the tree is: the empty block, a block of 80 zero bytes, the block
+`ResultsLog` + NUL, a block of one NUL, an empty block. Origin 2016 writes the log window in every project; the writer
+writes it empty.
+Folders with sub-folders (several `Folder` blocks nested inside the root) are written by Origin with
+the same pieces repeated; this writer does not write them. In a project with folders, windows are
+listed with the index of their position in the file; the 53 windows of one folder of a private
+project were numbered 0 to 52 [obs].
+
+### 13.6 The attribute records [orig]
+
+The file ends with eight records. Each has a 28-byte head, a newline, a body and a newline (the body
+and its newline are as in section 2.2; an empty body is just the newline). The head is the number
+0x1000, the index 0 to 7, the size of the body and 16 zero bytes. The bodies written:
+0 and 1 empty (Origin keeps the command history and the variables of the session here, as text
+that begins with `<OriginStorage>`; the writer leaves them empty), 2 and 3 the 20 bytes `25 11 11 11 00 00 01 00 ...` and
+`28 11 11 11 00 00 01 00 ...` with zeros, 4 empty, 5 the 24 bytes `3E 11 11 11 01` and zeros, 6 four
+zero bytes, 7 the 32 bytes `5D 11 11 11 01 00 01 00` and zeros. Records 5, 6, 7 were identical in all
+files from Origin that were examined; records 0 to 3 are larger in files from long sessions.
+
+### 13.7 What Origin needs [orig]
+
+Tried in Origin 2016 with small files; "opens" means `Origin.Application.Load` returned true and the
+workbook list was complete.
+
+| file | result |
+|---|---|
+| a project from Origin without annotations in the sheets | opens, all names and cells intact |
+| the same, cut after the window list except for the line `\0` (nothing after the windows but the parameter terminator) | Origin stops responding (the COM call fails with "remote procedure call failed") |
+| the same file cut at the end of the notes; cut after the project name of the tree; cut inside the first attribute record; and a file with no tail at all (with and without annotations) | the same failure, each time |
+| written by this writer, attribute records 0 and 1 empty, no annotations, no label storage | opens, everything intact |
+
+So the whole tail through the last attribute record has to be present; the annotations, the storage
+text in labels and the session history are not needed. (The files with a cut tail and the one without annotations were made by another
+session by cutting or editing a small project that Origin wrote; they were opened here again to check.)
+
+### 13.8 Verification
+
+`cargo test -p sheaf-io` writes projects and reads them back with the reader of this crate: names, long
+names, units, comments, roles, text, numbers bit for bit, missing values, 20000 rows, accents,
+several sheets. `crates/io/tests/fixtures/sheaf-written.opj` is such a file (written by this writer, never
+by Origin; a test checks that the writer still makes exactly these bytes).
+
+Origin itself: `tools/origin-ref/opj-verify-written.ps1` loads each file in a hidden Origin 2016 through
+COM (with a time limit; modal dialogs would otherwise hang a hidden instance), lists the workbooks,
+sheets, short names, long names, units, comments, roles and cells, and compares with the listing of
+our reader (`opj-compare-cells.py`, numbers bit for bit). The files come from
+`cargo run -p sheaf-io --example opj_write_samples -- FOLDER`.
+
+Files opened in Origin 2016 (hidden instance, one run per file, `Load` returned true each time):
+
+| file | content | workbooks / sheets / columns | cells compared | result |
+|---|---|---|---|---|
+| `sheaf-written.opj` (the fixture) | all roles, text, missing values, accents, three-line comment, a gap at the top of a column | 2 / 3 / 10 | 33 (every row) | no difference |
+| `kinds.opj` | the same plus a third sheet in the first workbook | 2 / 4 / 14 | 48 (every row) | no difference |
+| `limits.opj` | 100-character long name, 300-character comment, 31-character sheet name, 24-byte data-set name, 252-byte text, a column name with a space, accented window, sheet and column names, a window without long name, extreme doubles | 3 / 3 / 6 | 17 (every row) | no difference, except that Origin's listing shows -0.0 as 0 (the listing script prints through .NET, so whether Origin kept the sign was not established) |
+| `wide.opj` | 200 rows, 13 columns per workbook, gaps, text with accents and degree signs | 3 / 3 / 39 | 7797 (every row) | no difference, numbers to the last bit |
+| `edge.opj` | a sheet with no columns | 2 / 3 / 2 | 3 | no difference |
+| `empty.opj` | no window at all | 0 / 0 / 0 | 0 | opens, no workbook |
+| `big.opj` | 3 columns of 100000 rows | 1 / 1 / 3 | 72 (sampled: first and last rows and 20 spread rows) | no difference |
+
+"No difference" means window names, long names, sheet names, short names, units, comments, roles,
+used row counts and every listed cell agree between Origin and our reader, and the reader's result
+equals the project that was written (the cargo tests). Not checked: how the window looks in Origin
+(column widths, window position; no picture was taken), saving the opened file again from Origin, other
+Origin versions (only 2016 was available; the file claims version 9.3 and Origin 7 to 9.1 were not
+tried), and everything that is not a workbook.

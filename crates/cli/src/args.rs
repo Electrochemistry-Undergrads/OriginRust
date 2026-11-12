@@ -267,12 +267,14 @@ pub struct PlotArgs {
 
 #[derive(Args, Debug)]
 pub struct ExportArgs {
-    /// A .sheaf project or an Origin .opj project (its graphs are read).
+    /// A .sheaf project or an Origin .opj project (its graphs are read). For an output ending in
+    /// .opj a data file (CH Instruments text, CSV or other delimited text) is also accepted.
     pub project: PathBuf,
-    /// Name of the graph (default: the only graph of the project).
+    /// Name of the graph (default: the only graph of the project). Not used for .opj output.
     #[arg(long)]
     pub graph: Option<String>,
-    /// The figure to write: .png, .svg or .pdf.
+    /// What to write: a figure (.png, .svg or .pdf) or, with .opj, the whole project as an Origin
+    /// 2016 project file (workbooks only for now; graphs are skipped with a warning).
     #[arg(short, long)]
     pub output: PathBuf,
     /// Resolution of PNG output in dots per inch.
@@ -280,6 +282,8 @@ pub struct ExportArgs {
     pub dpi: f64,
     #[command(flatten)]
     pub style: StyleArgs,
+    #[command(flatten)]
+    pub read: ReadOptions,
 }
 
 #[derive(Args, Debug)]

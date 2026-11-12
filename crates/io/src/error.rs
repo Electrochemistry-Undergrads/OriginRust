@@ -74,6 +74,10 @@ pub enum IoError {
     #[error("'{}' is not a readable Origin project (.opj): {reason}", path.display())]
     OpjFormat { path: PathBuf, reason: String },
 
+    /// The project holds something that an Origin project cannot store, or a name Origin would refuse.
+    #[error("cannot write an Origin project (.opj): {reason}")]
+    OpjWrite { reason: String },
+
     /// Two columns of a project share one identifier, so their data would collide.
     #[error("'{}' cannot be saved: column id {id} is used by more than one column", path.display())]
     DuplicateColumnId { path: PathBuf, id: u64 },

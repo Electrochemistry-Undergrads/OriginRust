@@ -1,4 +1,5 @@
-//! Reader for Origin project files (`.opj`, written by Origin 7.5 to 2016).
+//! Reader and writer for Origin project files (`.opj`, written by Origin 7.5 to 2016). The writer
+//! (`write.rs`) saves workbooks in the format of Origin 2016.
 //!
 //! It reads workbooks, their sheets and columns (names, long names, units, comments,
 //! designations), the column values and basic graphs (axes, titles, plots; see `graph.rs`).
@@ -16,6 +17,9 @@ mod strings;
 #[cfg(test)]
 mod testutil;
 mod window;
+mod write;
+
+pub use write::{OpjWrite, write, write_file, write_named};
 
 use crate::error::IoError;
 use dataset::DataSetInfo;

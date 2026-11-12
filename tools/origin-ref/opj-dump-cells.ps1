@@ -40,7 +40,10 @@ param(
   [Parameter(Mandatory = $true)][string]$Project,
   [Parameter(Mandatory = $true)][string]$Out,
   [switch]$CopyFirst,
-  [int]$AllRowsLimit = 0
+  [int]$AllRowsLimit = 0,
+  # Seconds after which the Origin instance this script started is killed (a modal dialog in a
+  # hidden instance would otherwise hang the run for ever). The script then fails with an error.
+  [int]$TimeoutSec = 600
 )
 $ErrorActionPreference = 'Stop'
 $inv = [Globalization.CultureInfo]::InvariantCulture
@@ -84,10 +87,16 @@ $lock = New-Object System.Threading.Mutex($false, 'Global\SheafOriginReference')
 try { $held = $lock.WaitOne([TimeSpan]::FromMinutes(30)) } catch [System.Threading.AbandonedMutexException] { $held = $true }
 if (-not $held) { throw 'Another Origin reference run held the lock for more than 30 minutes.' }
 $origin = $null
+$started = @()
 $w = New-Object IO.StreamWriter($Out, $false, (New-Object Text.UTF8Encoding($false)))
 $w.NewLine = "`n"
 try {
+  $before = @(Get-Process | Where-Object { $_.Name -like 'Origin*' -or $_.Name -like 'ORIGIN~*' } | ForEach-Object { $_.Id })
   $origin = New-Object -ComObject Origin.Application
+  # Watchdog: kills only the process id(s) that appeared when this script started Origin.
+  $started = @(Get-Process | Where-Object { ($_.Name -like 'Origin*' -or $_.Name -like 'ORIGIN~*') -and $before -notcontains $_.Id } | ForEach-Object { $_.Id })
+  Add-Type -TypeDefinition 'using System; using System.Diagnostics; using System.Threading; public static class OpjWatchdog { static Timer t; public static void Start(int[] pids, int ms) { t = new Timer(delegate { foreach (int p in pids) { try { Process.GetProcessById(p).Kill(); } catch { } } }, null, ms, Timeout.Infinite); } public static void Stop() { if (t != null) t.Dispose(); } }' -ErrorAction SilentlyContinue
+  [OpjWatchdog]::Start([int[]]$started, $TimeoutSec * 1000)
   # The COM collections (WorksheetPages, Pages) stay empty after Load in a hidden instance, so the
   # structure and the cells are read with LabTalk (results come back through LTStr and LTVar).
   # GetWorksheet answered only for some sheets (it returned an error number for the others).
@@ -167,6 +176,7 @@ try {
   }
 }
 finally {
+  try { [OpjWatchdog]::Stop() } catch { }
   $w.Dispose()
   if ($null -ne $origin) {
     # The project was opened read-only and nothing was changed; Exit does not save.
@@ -174,6 +184,8 @@ finally {
     [void][Runtime.InteropServices.Marshal]::ReleaseComObject($origin)
     Start-Sleep -Seconds 2
   }
+  # Whatever happened, the Origin process this script started does not outlive it (only that process id).
+  foreach ($p in $started) { try { $pr = Get-Process -Id $p -ErrorAction Stop; if (-not $pr.HasExited) { $pr.Kill() } } catch { } }
   $lock.ReleaseMutex()
   $lock.Dispose()
   if ($null -ne $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue }

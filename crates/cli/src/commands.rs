@@ -179,7 +179,10 @@ fn import(a: ImportArgs) -> Result<()> {
 /// Saves as a `.sheaf` project. Refuses to write over an Origin project file.
 pub(crate) fn save_project(project: &Project, path: &Path) -> Result<()> {
     if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj")) {
-        bail!("'{}' is an Origin project name; save as a .sheaf file instead", path.display());
+        bail!(
+            "'{}' is an Origin project name; save as a .sheaf file instead (`sheaf export PROJECT -o file.opj` writes an Origin project)",
+            path.display()
+        );
     }
     project_file::save(project, path).with_context(|| format!("could not save '{}'", path.display()))?;
     println!("saved {}", path.display());
@@ -445,8 +448,47 @@ fn overlay_files(project: &mut Project, template: Template, a: &PlotArgs) -> Res
     Ok(graph)
 }
 
+fn is_opj(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj"))
+}
+
+/// Writes the whole project (or the data file as a one-workbook project) as an Origin project.
+fn export_opj(a: &ExportArgs) -> Result<()> {
+    if a.graph.is_some() {
+        bail!("--graph is for figures; an .opj output holds the whole project");
+    }
+    if let (Ok(input), Ok(output)) = (std::fs::canonicalize(&a.project), std::fs::canonicalize(&a.output))
+        && input == output
+    {
+        bail!("the output '{}' is also the input", a.output.display());
+    }
+    let project = if is_project(&a.project) {
+        load_project(&a.project)?
+    } else {
+        let mut p = Project::new();
+        p.adopt_workbook(read_data_file(&a.project, &a.read)?.workbook);
+        p
+    };
+    let warnings = sheaf_io::opj::write_file(&project, &a.output)
+        .with_context(|| format!("could not write '{}'", a.output.display()))?;
+    for w in &warnings {
+        eprintln!("warning: {w}");
+    }
+    println!("wrote {}", a.output.display());
+    Ok(())
+}
+
 fn export(a: ExportArgs) -> Result<()> {
+    if is_opj(&a.output) {
+        return export_opj(&a);
+    }
     require_positive("--dpi", Some(a.dpi))?;
+    if !is_project(&a.project) {
+        bail!(
+            "'{}' is not a project; figures are exported from a .sheaf or .opj project (use `sheaf plot` for a data file)",
+            a.project.display()
+        );
+    }
     let mut project = load_project(&a.project)?;
     let graph = pick_graph(&project, a.graph.as_deref())?;
     apply_style(&mut project, graph, &a.style)?;

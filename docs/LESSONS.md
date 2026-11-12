@@ -144,3 +144,20 @@ into that binary and still points at A. After A was removed, the fit fixtures fa
 ("file not found") on `main` although the files were there. When a worktree that shared the build
 folder is removed, run `cargo clean -p <crate>` for the workspace crates (cheap: dependencies stay)
 before trusting a test failure about a missing fixture.
+
+## A shared build folder keeps the source path of the worktree that built a test
+
+Tests that read data files through `env!("CARGO_MANIFEST_DIR")` (for example
+`crates/fit/tests/origin_nlsf.rs`) have that path compiled in. When several worktrees build into
+one `CARGO_TARGET_DIR` and the worktree that last built a crate is deleted, cargo may reuse the
+test program and the test fails with "The system cannot find the path specified" although the file
+is there. It is not a real failure: `cargo clean -p <crate>` for the workspace crates (or a build
+folder per worktree) fixes it. Seen on 2026-11-12 after removing the `export-options` worktree.
+
+## Origin writes to the owner's user folder when an export path is empty
+
+`expGraph` with an empty `path:=` (for example when a `%WORK%` placeholder ends in a backslash
+inside quotes and the command fails over to defaults) writes into
+`Documents/OriginLab/2016/User Files`, the owner's folder. Always pass an explicit folder without a
+trailing backslash, as `tools/origin-ref/opj-verify-graphs.ps1` does, and check the folder after a
+failed export. On 2026-11-12 two probe PNGs landed there and were moved back out at once.

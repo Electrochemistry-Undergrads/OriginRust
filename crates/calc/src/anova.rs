@@ -1,0 +1,382 @@
+//! One-way analysis of variance with the usual means comparisons.
+//!
+//! The summary table, the descriptive statistics of the groups and the means comparisons (Tukey,
+//! Bonferroni, Sidak, Fisher's least significant difference, Scheffe) follow what Origin 2016
+//! reports for "One-Way ANOVA" (see `docs/spec/statistics.md`).
+
+use crate::hypothesis::SampleStats;
+use statrs::distribution::{ContinuousCDF, FisherSnedecor, Normal, StudentsT};
+use statrs::function::gamma::ln_gamma;
+
+/// The rows of the ANOVA summary table.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AnovaRow {
+    pub df: f64,
+    pub sum_sq: f64,
+    pub mean_sq: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Anova {
+    /// Descriptive statistics of each group, in the order given.
+    pub groups: Vec<SampleStats>,
+    /// Between groups ("Model" in Origin's table).
+    pub model: AnovaRow,
+    /// Within groups ("Error").
+    pub error: AnovaRow,
+    /// Corrected total.
+    pub total: AnovaRow,
+    pub f: f64,
+    pub p: f64,
+    /// Share of the total variation that the groups explain: `SS model / SS total`.
+    pub r_squared: f64,
+    /// Square root of the error mean square.
+    pub root_mse: f64,
+    /// `root_mse` divided by the grand mean.
+    pub cov: f64,
+    pub grand_mean: f64,
+}
+
+/// The method of a means comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeansComparison {
+    Tukey,
+    Bonferroni,
+    Sidak,
+    /// Fisher's least significant difference: no adjustment for the number of comparisons.
+    FisherLsd,
+    Scheffe,
+}
+
+impl MeansComparison {
+    pub const ALL: [MeansComparison; 5] = [
+        MeansComparison::Tukey,
+        MeansComparison::Bonferroni,
+        MeansComparison::Sidak,
+        MeansComparison::FisherLsd,
+        MeansComparison::Scheffe,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            MeansComparison::Tukey => "Tukey",
+            MeansComparison::Bonferroni => "Bonferroni",
+            MeansComparison::Sidak => "Sidak",
+            MeansComparison::FisherLsd => "Fisher LSD",
+            MeansComparison::Scheffe => "Scheffe",
+        }
+    }
+}
+
+/// One pairwise comparison of the means of group `i` and group `j` (`i < j`, counted from 0).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Comparison {
+    pub i: usize,
+    pub j: usize,
+    /// `mean(j) - mean(i)`.
+    pub diff: f64,
+    /// Standard error of the difference, `sqrt(MSE (1/ni + 1/nj))`.
+    pub se: f64,
+    /// The statistic the p-value comes from: the studentized range q for Tukey, F for Scheffe, |t| for the others.
+    pub stat: f64,
+    pub p: f64,
+    pub lcl: f64,
+    pub ucl: f64,
+    /// True where `p < alpha`.
+    pub significant: bool,
+}
+
+/// Why an ANOVA could not be computed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnovaError {
+    /// Fewer than two groups.
+    TooFewGroups,
+    /// A group has no numbers.
+    EmptyGroup(usize),
+    /// Every group has one number: there is no within-group variation to compare with.
+    NoReplication,
+}
+
+impl std::fmt::Display for AnovaError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AnovaError::TooFewGroups => write!(f, "an ANOVA needs at least two groups"),
+            AnovaError::EmptyGroup(i) => write!(f, "group {} has no numbers", i + 1),
+            AnovaError::NoReplication => {
+                write!(f, "every group has a single number; the ANOVA needs at least one group with two")
+            }
+        }
+    }
+}
+
+/// One-way ANOVA of the groups; NaN entries are ignored.
+pub fn anova_one_way(groups: &[&[f64]]) -> Result<Anova, AnovaError> {
+    if groups.len() < 2 {
+        return Err(AnovaError::TooFewGroups);
+    }
+    let stats: Vec<SampleStats> = groups.iter().map(|g| SampleStats::of(g)).collect();
+    if let Some(i) = stats.iter().position(|s| s.n == 0) {
+        return Err(AnovaError::EmptyGroup(i));
+    }
+    let k = stats.len() as f64;
+    let n: f64 = stats.iter().map(|s| s.n as f64).sum();
+    if n <= k {
+        return Err(AnovaError::NoReplication);
+    }
+    let grand_mean = stats.iter().map(|s| s.mean * s.n as f64).sum::<f64>() / n;
+    let ss_model: f64 = stats.iter().map(|s| s.n as f64 * (s.mean - grand_mean).powi(2)).sum();
+    let ss_error: f64 = stats.iter().filter(|s| s.n > 1).map(|s| (s.n as f64 - 1.0) * s.sd * s.sd).sum();
+    let (df_model, df_error) = (k - 1.0, n - k);
+    let (ms_model, ms_error) = (ss_model / df_model, ss_error / df_error);
+    let f = ms_model / ms_error;
+    let p = if f.is_nan() {
+        f64::NAN
+    } else if f.is_infinite() {
+        0.0
+    } else {
+        FisherSnedecor::new(df_model, df_error).map(|d| 1.0 - d.cdf(f)).unwrap_or(f64::NAN)
+    };
+    let ss_total = ss_model + ss_error;
+    let root_mse = ms_error.sqrt();
+    Ok(Anova {
+        groups: stats,
+        model: AnovaRow { df: df_model, sum_sq: ss_model, mean_sq: ms_model },
+        error: AnovaRow { df: df_error, sum_sq: ss_error, mean_sq: ms_error },
+        total: AnovaRow { df: n - 1.0, sum_sq: ss_total, mean_sq: ss_total / (n - 1.0) },
+        f,
+        p,
+        r_squared: ss_model / ss_total,
+        root_mse,
+        cov: root_mse / grand_mean,
+        grand_mean,
+    })
+}
+
+impl Anova {
+    /// All pairwise comparisons of the group means with the given method, at significance level `alpha`
+    /// (the confidence level of the intervals is `1 - alpha`). Pairs come in the order (1,2), (1,3), ..., (2,3), ...
+    pub fn compare(&self, method: MeansComparison, alpha: f64) -> Vec<Comparison> {
+        let k = self.groups.len();
+        let pairs = k * (k - 1) / 2;
+        let dfe = self.error.df;
+        let mse = self.error.mean_sq;
+        let t_dist = StudentsT::new(0.0, 1.0, dfe).expect("positive degrees of freedom");
+        let t_crit = |a: f64| t_dist.inverse_cdf(1.0 - a / 2.0);
+        let m = pairs as f64;
+        let mut out = Vec::with_capacity(pairs);
+        // The critical values depend on the number of groups only, so they are found once.
+        let q_crit = (method == MeansComparison::Tukey).then(|| qtukey(1.0 - alpha, k as f64, dfe));
+        for i in 0..k {
+            for j in i + 1..k {
+                let (gi, gj) = (&self.groups[i], &self.groups[j]);
+                let diff = gj.mean - gi.mean;
+                let se = (mse * (1.0 / gi.n as f64 + 1.0 / gj.n as f64)).sqrt();
+                let t = if se == 0.0 { if diff == 0.0 { 0.0 } else { f64::INFINITY } } else { diff.abs() / se };
+                let p_lsd = if t.is_infinite() { 0.0 } else { 2.0 * t_dist.cdf(-t) };
+                let (stat, p, half) = match method {
+                    MeansComparison::FisherLsd => (t, p_lsd, t_crit(alpha) * se),
+                    MeansComparison::Bonferroni => (t, (m * p_lsd).min(1.0), t_crit(alpha / m) * se),
+                    MeansComparison::Sidak => {
+                        (t, 1.0 - (1.0 - p_lsd).powf(m), t_crit(1.0 - (1.0 - alpha).powf(1.0 / m)) * se)
+                    }
+                    MeansComparison::Tukey => {
+                        let q = std::f64::consts::SQRT_2 * t;
+                        let half = q_crit.expect("found above") / std::f64::consts::SQRT_2 * se;
+                        (q, 1.0 - ptukey(q, k as f64, dfe), half)
+                    }
+                    MeansComparison::Scheffe => {
+                        let f = t * t / (k as f64 - 1.0);
+                        let dist = FisherSnedecor::new(k as f64 - 1.0, dfe).expect("positive degrees of freedom");
+                        let crit = dist.inverse_cdf(1.0 - alpha);
+                        (
+                            f,
+                            if f.is_infinite() { 0.0 } else { 1.0 - dist.cdf(f) },
+                            ((k as f64 - 1.0) * crit).sqrt() * se,
+                        )
+                    }
+                };
+                out.push(Comparison {
+                    i,
+                    j,
+                    diff,
+                    se,
+                    stat,
+                    p,
+                    lcl: diff - half,
+                    ucl: diff + half,
+                    significant: p < alpha,
+                });
+            }
+        }
+        out
+    }
+}
+
+// ----- studentized range distribution ----------------------------------------------------------
+
+/// Nodes and weights of the 16-point Gauss-Legendre rule on [-1, 1].
+fn gauss_legendre_16() -> &'static [(f64, f64); 16] {
+    static RULE: std::sync::OnceLock<[(f64, f64); 16]> = std::sync::OnceLock::new();
+    RULE.get_or_init(|| {
+        let n = 16usize;
+        let mut out = [(0.0, 0.0); 16];
+        for i in 0..n / 2 {
+            // Newton iteration for the i-th positive root of the Legendre polynomial P16.
+            let mut x = (std::f64::consts::PI * (i as f64 + 0.75) / (n as f64 + 0.5)).cos();
+            let mut dp = 1.0;
+            for _ in 0..100 {
+                let (mut p0, mut p1) = (1.0, x);
+                for k in 2..=n {
+                    let kf = k as f64;
+                    let p2 = ((2.0 * kf - 1.0) * x * p1 - (kf - 1.0) * p0) / kf;
+                    p0 = p1;
+                    p1 = p2;
+                }
+                dp = n as f64 * (x * p1 - p0) / (x * x - 1.0);
+                let dx = p1 / dp;
+                x -= dx;
+                if dx.abs() < 1e-15 {
+                    break;
+                }
+            }
+            let w = 2.0 / ((1.0 - x * x) * dp * dp);
+            out[i] = (-x, w);
+            out[n - 1 - i] = (x, w);
+        }
+        out
+    })
+}
+
+/// Integral of `f` over [a, b] with `panels` panels of the 16-point rule.
+fn integrate(f: impl Fn(f64) -> f64, a: f64, b: f64, panels: usize) -> f64 {
+    let rule = gauss_legendre_16();
+    let h = (b - a) / panels as f64;
+    let mut sum = 0.0;
+    for p in 0..panels {
+        let (lo, mid) = (a + h * p as f64, a + h * (p as f64 + 0.5));
+        sum += rule.iter().map(|(x, w)| w * f(mid + x * h / 2.0)).sum::<f64>() * h / 2.0;
+        let _ = lo;
+    }
+    sum
+}
+
+/// Probability that the range of `k` independent standard normal numbers is at most `w`.
+fn range_cdf(w: f64, k: f64) -> f64 {
+    if w <= 0.0 {
+        return 0.0;
+    }
+    let norm = Normal::new(0.0, 1.0).expect("standard normal");
+    let phi = |z: f64| (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
+    // The integrand is k phi(z) [Phi(z) - Phi(z - w)]^(k - 1); it is negligible outside [-9, 9 + w].
+    let panels = (((w + 18.0) / 1.5).ceil() as usize).max(8);
+    let v = k * integrate(|z| phi(z) * (norm.cdf(z) - norm.cdf(z - w)).powf(k - 1.0), -9.0, 9.0 + w, panels);
+    v.clamp(0.0, 1.0)
+}
+
+/// Distribution function of the studentized range with `k` means and `df` degrees of freedom.
+pub fn ptukey(q: f64, k: f64, df: f64) -> f64 {
+    if q.is_nan() || k < 2.0 || df < 1.0 {
+        return f64::NAN;
+    }
+    if q <= 0.0 {
+        return 0.0;
+    }
+    if q.is_infinite() {
+        return 1.0;
+    }
+    if df > 5000.0 {
+        return range_cdf(q, k);
+    }
+    // The range is divided by s = sqrt(chi-square / df); s has the density below.
+    let half = df / 2.0;
+    let ln_c = std::f64::consts::LN_2 + half * half.ln() - ln_gamma(half);
+    let density = |s: f64| if s <= 0.0 { 0.0 } else { (ln_c + (df - 1.0) * s.ln() - df * s * s / 2.0).exp() };
+    let spread = 12.0 / (2.0 * df).sqrt();
+    let (lo, hi) = ((1.0 - spread).max(0.0), 1.0 + spread + if df < 4.0 { 6.0 } else { 0.0 });
+    let panels = ((hi - lo) / 0.05).ceil().clamp(16.0, 400.0) as usize;
+    integrate(|s| density(s) * range_cdf(q * s, k), lo, hi, panels).clamp(0.0, 1.0)
+}
+
+/// Quantile of the studentized range: the `q` with `ptukey(q, k, df) = p`.
+pub fn qtukey(p: f64, k: f64, df: f64) -> f64 {
+    if !(p > 0.0 && p < 1.0) || k < 2.0 || df < 1.0 {
+        return f64::NAN;
+    }
+    let (mut lo, mut hi) = (0.0, 4.0);
+    while ptukey(hi, k, df) < p {
+        lo = hi;
+        hi *= 2.0;
+        if hi > 1e4 {
+            return f64::INFINITY;
+        }
+    }
+    for _ in 0..60 {
+        let mid = 0.5 * (lo + hi);
+        if ptukey(mid, k, df) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+        if hi - lo < 1e-11 * hi {
+            break;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn constant_groups_do_not_hang_or_panic() {
+        let (a, b, c) = ([3.0; 3], [4.0; 3], [5.0; 3]);
+        let an = anova_one_way(&[&a, &b, &c]).unwrap();
+        assert_eq!(an.p, 0.0);
+        for m in [
+            MeansComparison::Tukey,
+            MeansComparison::Bonferroni,
+            MeansComparison::Sidak,
+            MeansComparison::FisherLsd,
+            MeansComparison::Scheffe,
+        ] {
+            let r = an.compare(m, 0.05);
+            assert_eq!(r.len(), 3);
+            assert!(r.iter().all(|c| c.significant));
+        }
+        let same = anova_one_way(&[&[3.0; 6], &[3.0; 4]]).unwrap();
+        assert!(same.p.is_nan());
+        let r = same.compare(MeansComparison::Tukey, 0.05);
+        assert!(!r[0].significant);
+    }
+
+    use super::*;
+
+    #[test]
+    fn studentized_range_matches_published_critical_values() {
+        // Table values of the 5 % point: q(3 means, 20 df) = 3.578, q(4, 10) = 4.327, q(2, 5) = 3.635.
+        assert!((qtukey(0.95, 3.0, 20.0) - 3.5779).abs() < 2e-3);
+        assert!((qtukey(0.95, 4.0, 10.0) - 4.3266).abs() < 2e-3);
+        assert!((qtukey(0.95, 2.0, 5.0) - 3.6354).abs() < 2e-3);
+        // With two means the range is |t| times sqrt 2.
+        let t = StudentsT::new(0.0, 1.0, 7.0).unwrap().inverse_cdf(0.975);
+        assert!((qtukey(0.95, 2.0, 7.0) - t * std::f64::consts::SQRT_2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn two_groups_agree_with_the_t_test() {
+        let a = [1.0, 2.0, 3.0, 4.5];
+        let b = [3.0, 4.0, 6.0, 7.0, 7.5];
+        let an = anova_one_way(&[&a, &b]).unwrap();
+        let t = crate::hypothesis::ttest_two(&b, &a, 0.0, crate::hypothesis::Tail::Two, 0.05, true).unwrap();
+        assert!((an.f - t.t * t.t).abs() < 1e-10);
+        assert!((an.p - t.p).abs() < 1e-10);
+        let tukey = an.compare(MeansComparison::Tukey, 0.05);
+        assert!((tukey[0].p - t.p).abs() < 1e-6);
+    }
+
+    #[test]
+    fn errors_are_named() {
+        assert_eq!(anova_one_way(&[&[1.0, 2.0]]), Err(AnovaError::TooFewGroups));
+        assert_eq!(anova_one_way(&[&[1.0, 2.0], &[f64::NAN]]), Err(AnovaError::EmptyGroup(1)));
+        assert_eq!(anova_one_way(&[&[1.0], &[2.0]]), Err(AnovaError::NoReplication));
+    }
+}

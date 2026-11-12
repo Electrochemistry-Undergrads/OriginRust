@@ -48,7 +48,7 @@ fn a_data_file_becomes_an_origin_project() {
 }
 
 #[test]
-fn a_sheaf_project_with_a_graph_is_written_with_a_warning() {
+fn a_sheaf_project_with_a_graph_is_written_with_its_graph() {
     let dir = scratch("project");
     let data = data_file(&dir);
     let project = dir.join("lab.sheaf");
@@ -57,11 +57,14 @@ fn a_sheaf_project_with_a_graph_is_written_with_a_warning() {
     let out = dir.join("lab.opj");
     let (ok, _, stderr) = sheaf(&["export", project.to_str().unwrap(), "-o", out.to_str().unwrap()]);
     assert!(ok, "{stderr}");
-    assert!(stderr.contains("warning") && stderr.contains("graph"), "{stderr}");
     let imp = sheaf_io::opj::read_opj(&out).unwrap();
     assert_eq!(imp.workbooks.len(), 1);
-    assert!(imp.graphs.is_empty());
-    // the file can be exported again (as a project, then to a figure is not possible: no graph)
+    assert_eq!(imp.graphs.len(), 1, "the graph is written: {stderr}");
+    // the graph of the written file can be exported as a figure, and the file as a project again
+    let png = dir.join("fig.png");
+    let (ok, _, stderr) = sheaf(&["export", out.to_str().unwrap(), "-o", png.to_str().unwrap()]);
+    assert!(ok, "{stderr}");
+    assert!(png.metadata().unwrap().len() > 1000);
     let again = dir.join("again.opj");
     let (ok, _, stderr) = sheaf(&["export", out.to_str().unwrap(), "-o", again.to_str().unwrap()]);
     assert!(ok, "{stderr}");

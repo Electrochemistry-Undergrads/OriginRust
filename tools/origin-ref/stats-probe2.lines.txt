@@ -1,0 +1,12 @@
+newbook;
+col(A) = data(1, 8, 1); col(A) = 10 + 2*sin(3*col(A)) + col(A)/4;
+col(B) = data(1, 10, 1); col(B) = 11.5 + 2.5*cos(2*col(B)) + col(B)/5;
+TwoSampletTest irng:=(1,2);
+TwoSampletTest irng:=(1,2) type:=0;
+TwoSampletTest irng:=(1,2) type:=1 rt:=tr1;
+?tr1.GetNumNodes()
+tree -pa tr1;
+TwoSampletTest irng:=(1,2) type:=0 rt:=tr2 rd:=[<new>];
+?tr2.GetNumNodes()
+$page.name$
+list;

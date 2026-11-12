@@ -10,7 +10,7 @@ one session should work on the repository at a time.
    double-click actions and shortcuts. Icons, artwork and help text stay our own (clean-room rule).
 2. Sheaf should have **all of Origin's features**, and this must be checked, not assumed.
 3. **`.opj` is to be the default project format** (Save, Save As, `--save`, export). Agreed
-   safeguard: while the writer cannot store everything (graphs at first), saving also writes a
+   safeguard: while the writer cannot store everything (formulas, folders, some graph details), saving also writes a
    `.sheaf` copy next to the `.opj` and says what only the copy holds.
 
 These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11-11").
@@ -35,6 +35,10 @@ through (they are held for approval and expire), so the split is written here:
   the lead in `re-workspace/scratch/peer-notes.md` (local file) naming each branch that is ready.
 - Each session builds in its own folders under `target/` with `CARGO_PROFILE_DEV_DEBUG=0` (the
   disk filled up once; see LESSONS.md).
+- ADR numbers: `main` has ADR 0008 (`.opj` default with companion). The `graph-p0` branch's ADRs
+  0008 (linked layers) and 0009 (stack offsets) become 0009 and 0010 when the lead merges them;
+  the next free number after that is 0011.
+- Merged from the second session so far: `chi-text-real` (squashed as `89e617a`).
 
 ## Where things stand
 
@@ -57,28 +61,33 @@ through (they are held for approval and expire), so the split is written here:
   Origin 2016), the CH Instruments `.bin` reader, curve math, multi-range integration, date and
   time columns, recalculating formulas, fit bands and controls, CSV/ICP-OES import extras with
   batch import, the peak analysis chain.
-- **Merged on 2026-11-12 (afternoon)**: `.opj` is the default save format with a `.opj.sheaf`
+- **Merged on 2026-11-12 (morning)**: `.opj` is the default save format with a `.opj.sheaf`
   companion (ADR 0008); the app shell has Origin's theme, child windows, Window menu and menu bars
   per window type (ADR 0007 steps 1 to 4); `docs/spec/gui-look.md` completed from a second set of
   pictures (`re-workspace/scratch/gui-study2/`, local only).
-- **Running**: workflow `p0-gaps-3` (run `wf_5a289106-226`): graphs written into `.opj`, and basic
-  statistics (t-tests, ANOVA, histograms, normality). Its statistics menu entry was written
-  against the old menu code: when merging, place it in `crates/app/src/menus.rs`. Workflow
-  `origin-look-2`: ADR 0007 steps 5 to 7 (workbook look with cell selection and copy/paste,
-  toolbars, Project Explorer and panels). The second session works on `chi-text-real` and
-  `graph-p0` (double Y is committed there).
+- **Merged on 2026-11-12 (midday)**: graphs written into `.opj` (Origin opened 18 written graphs;
+  the companion is now needed only for formulas, folders and graph details the writer lacks),
+  basic statistics (Statistics menu: t-tests, one-way ANOVA, frequency counts, normality), and the
+  second session's CH Instruments text work (`89e617a`, squashed so no numbers from the owner's
+  files enter the history). Note: the second session pushed its branch `chi-text-real` to GitHub
+  with a few numbers from the owner's charge-discharge file in a spec paragraph; delete that
+  remote branch when the second session no longer needs it (ask the owner).
+- **Running**: workflow `origin-look-2` (run `wf_4cb25432-db5`): ADR 0007 steps 5 to 7 (workbook
+  look with selection and copy/paste, toolbars, Project Explorer and panels). The second session
+  works on `graph-p0` (double Y, stacked and waterfall plots committed there).
 - **Known app bug** (seen by an agent, not traced): after a click into the graph body a popup layer
   of about 450 x 470 px can stay on screen and swallow the next click on a window title below it.
 
-All checks pass on `main` at `2a1b35c` (621 tests). Parity counts are recomputed with `python tools/parity-count.py`.
+All checks pass on `main` at `4b02ea3` (687 tests). Parity counts are recomputed with `python tools/parity-count.py`.
 
 ## Exact next step
 
-1. Merge the `p0-gaps-3` and `origin-look-2` branches after their reviews; full checks after each merge. Merge `chi-text-real` and
+1. Merge the `origin-look-2` branch after its reviews; full checks after each merge. Merge `chi-text-real` and
    `graph-p0` (second session) when its note says they are ready.
 2. Continue ADR 0007: steps 8 to 10 (graph window look and mouse actions, dialogs in Origin's
    layout, window geometry in the project file), and fix the popup bug above.
-3. Write graphs into `.opj` so the `.opj.sheaf` companion is no longer needed.
+3. Write column formulas (and folders) into `.opj`, so the `.opj.sheaf` companion is rarely
+   needed; tick number formats in written graphs.
 4. Then the gaps from the parity audit in its order (column and bar charts with text labels,
    offset and stacked plots, multi-panel, double Y, log scales are P0 for the owner).
 

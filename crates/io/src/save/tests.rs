@@ -33,6 +33,20 @@ fn project_with_graph() -> Project {
     p
 }
 
+/// A project the .opj cannot hold completely: column B has a column formula, and the writer
+/// stores only its values.
+fn lossy_project() -> Project {
+    let mut p = workbook_project();
+    if let Some(Window::Workbook(b)) = p.windows.first_mut() {
+        b.sheets[0].columns[1].formula = Some("col(A)+3".into());
+    }
+    p
+}
+
+fn formula_of_b(p: &Project) -> Option<String> {
+    p.workbooks().next().and_then(|b| b.sheets[0].columns.get(1)).and_then(|c| c.formula.clone())
+}
+
 fn set_mtime(path: &Path, when: SystemTime) {
     let f = std::fs::OpenOptions::new().write(true).open(path).unwrap();
     f.set_modified(when).unwrap();
@@ -58,23 +72,35 @@ fn an_explicit_sheaf_path_stays_a_sheaf_project_without_companion() {
 }
 
 #[test]
-fn a_project_with_a_graph_writes_the_opj_and_a_companion_that_holds_the_graph() {
+fn a_graph_is_written_into_the_opj_and_needs_no_companion() {
     let dir = scratch("graph");
     let opj = dir.join("lab.opj");
     let out = save_project(&project_with_graph(), &opj).unwrap();
+    assert!(out.main_written && out.companion.is_none(), "{:?}", out.warnings);
+    assert!(!dir.join("lab.opj.sheaf").exists());
+    let opened = open_project(&opj).unwrap();
+    assert!(!opened.companion_used);
+    assert_eq!(opened.project.graphs().count(), 1, "the graph is read back from the .opj");
+}
+
+#[test]
+fn a_project_the_opj_cannot_hold_gets_a_companion_that_opening_uses() {
+    let dir = scratch("lossy");
+    let opj = dir.join("lab.opj");
+    let out = save_project(&lossy_project(), &opj).unwrap();
     assert!(out.main_written);
     let companion = dir.join("lab.opj.sheaf");
     assert_eq!(out.companion.as_deref(), Some(companion.as_path()));
-    assert!(out.warnings.iter().any(|w| w.contains("graph")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("formula")), "{:?}", out.warnings);
     assert!(out.status().contains("lab.opj.sheaf"));
-    assert!(out.details().unwrap().contains("Graph1") || out.details().unwrap().contains("graph"));
+    assert!(out.details().unwrap().contains("formula"));
     assert!(project_file::is_companion(&companion));
     // The user's own lab.sheaf is a different name and is not created.
     assert!(!dir.join("lab.sheaf").exists());
-    // The opj alone has no graph; opening it picks the companion, which has.
+    // The opj alone has the values only; opening it picks the companion, which has the formula.
     let opened = open_project(&opj).unwrap();
     assert!(opened.companion_used && !opened.foreign);
-    assert_eq!(opened.project.graphs().count(), 1);
+    assert_eq!(formula_of_b(&opened.project).as_deref(), Some("col(A)+3"));
     assert_eq!(opened.save_path.as_deref(), Some(opj.as_path()));
     assert!(opened.warnings[0].contains("lab.opj.sheaf"));
 }
@@ -83,7 +109,7 @@ fn a_project_with_a_graph_writes_the_opj_and_a_companion_that_holds_the_graph() 
 fn a_workbook_only_project_has_no_companion_and_an_old_marked_companion_is_deleted() {
     let dir = scratch("clean");
     let opj = dir.join("lab.opj");
-    save_project(&project_with_graph(), &opj).unwrap();
+    save_project(&lossy_project(), &opj).unwrap();
     let companion = dir.join("lab.opj.sheaf");
     assert!(companion.exists());
     let out = save_project(&workbook_project(), &opj).unwrap();
@@ -146,12 +172,12 @@ fn a_refused_project_with_no_old_opj_writes_no_opj() {
 fn a_newer_opj_is_opened_and_the_older_companion_is_not_used() {
     let dir = scratch("newer");
     let opj = dir.join("lab.opj");
-    save_project(&project_with_graph(), &opj).unwrap();
+    save_project(&lossy_project(), &opj).unwrap();
     // Origin saved the .opj later.
     set_mtime(&opj, SystemTime::now() + Duration::from_secs(3600));
     let opened = open_project(&opj).unwrap();
     assert!(opened.foreign && !opened.companion_used);
-    assert_eq!(opened.project.graphs().count(), 0);
+    assert_eq!(formula_of_b(&opened.project), None, "the .opj itself holds no formula");
     assert!(opened.warnings.iter().any(|w| w.contains("older") && w.contains("not used")), "{:?}", opened.warnings);
 }
 
@@ -159,7 +185,7 @@ fn a_newer_opj_is_opened_and_the_older_companion_is_not_used() {
 fn opening_a_companion_by_name_saves_to_its_opj() {
     let dir = scratch("by-name");
     let opj = dir.join("lab.opj");
-    save_project(&project_with_graph(), &opj).unwrap();
+    save_project(&lossy_project(), &opj).unwrap();
     let opened = open_project(&dir.join("lab.opj.sheaf")).unwrap();
     assert_eq!(opened.save_path.as_deref(), Some(opj.as_path()));
     let plain = dir.join("plain.sheaf");
@@ -181,7 +207,7 @@ fn a_companion_name_held_by_a_users_own_file_is_never_replaced() {
     // A plain .sheaf project (not marked as a companion) sits under the companion's name.
     project_file::save(&workbook_project(), &companion).unwrap();
     let before = std::fs::read(&companion).unwrap();
-    let err = save_project(&project_with_graph(), &dir.join("lab.opj")).unwrap_err();
+    let err = save_project(&lossy_project(), &dir.join("lab.opj")).unwrap_err();
     assert!(matches!(err, IoError::CompanionExists { .. }), "{err}");
     assert_eq!(std::fs::read(&companion).unwrap(), before);
     assert!(!dir.join("lab.opj").exists(), "nothing is half-written");

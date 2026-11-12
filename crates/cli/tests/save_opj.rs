@@ -30,7 +30,7 @@ fn sheaf(args: &[&str]) -> (bool, String, String) {
 }
 
 #[test]
-fn import_without_extension_writes_opj_and_a_companion_with_the_graph() {
+fn import_without_extension_writes_an_opj_that_holds_the_graph() {
     let dir = scratch("import");
     let data = data_file(&dir);
     let out = dir.join("lab");
@@ -39,23 +39,52 @@ fn import_without_extension_writes_opj_and_a_companion_with_the_graph() {
     assert!(stdout.contains("lab.opj"), "{stdout}");
     assert!(dir.join("lab.opj").exists());
     assert!(!dir.join("lab").exists());
-    let companion = dir.join("lab.opj.sheaf");
-    assert!(sheaf_io::project_file::is_companion(&companion));
-    assert!(stderr.contains("graph"), "{stderr}");
-    // Reading the .opj by name finds the companion, graph included.
+    assert!(!dir.join("lab.opj.sheaf").exists(), "graphs are written into the .opj; no companion");
     let opened = sheaf_io::open_project(&dir.join("lab.opj")).unwrap();
-    assert!(opened.companion_used);
-    assert_eq!(opened.project.graphs().count(), 1);
+    assert!(!opened.companion_used);
+    assert_eq!(opened.project.graphs().count(), 1, "the graph is read back from the .opj");
+}
+
+/// A .sheaf project of the data file whose second column has a column formula, which the .opj
+/// writer cannot store (only the values are written).
+fn project_with_formula(dir: &Path) -> PathBuf {
+    let data = data_file(dir);
+    let sheaf_path = dir.join("formula.sheaf");
+    assert!(sheaf(&["import", data.to_str().unwrap(), "-o", sheaf_path.to_str().unwrap()]).0);
+    let mut project = sheaf_io::project_file::load(&sheaf_path).unwrap();
+    if let Some(sheaf_core::Window::Workbook(b)) = project.windows.first_mut() {
+        b.sheets[0].columns[1].formula = Some("col(A)*2".into());
+    }
+    sheaf_io::project_file::save(&project, &sheaf_path).unwrap();
+    sheaf_path
 }
 
 #[test]
-fn a_workbook_only_save_removes_an_old_companion() {
-    let dir = scratch("remove");
-    let data = data_file(&dir);
+fn an_opj_that_cannot_hold_everything_gets_a_companion_that_opening_uses() {
+    let dir = scratch("companion");
+    let source = project_with_formula(&dir);
     let out = dir.join("lab.opj");
-    let with_graph = sheaf(&["import", data.to_str().unwrap(), "--plot", "-o", out.to_str().unwrap()]);
-    assert!(with_graph.0, "{}", with_graph.2);
+    let (ok, _, stderr) = sheaf(&["export", source.to_str().unwrap(), "-o", out.to_str().unwrap()]);
+    assert!(ok, "{stderr}");
+    assert!(out.exists());
+    let companion = dir.join("lab.opj.sheaf");
+    assert!(sheaf_io::project_file::is_companion(&companion));
+    assert!(stderr.contains("formula"), "{stderr}");
+    let opened = sheaf_io::open_project(&out).unwrap();
+    assert!(opened.companion_used);
+    let book = opened.project.workbooks().next().unwrap();
+    assert_eq!(book.sheets[0].columns[1].formula.as_deref(), Some("col(A)*2"));
+}
+
+#[test]
+fn a_save_that_loses_nothing_removes_an_old_companion() {
+    let dir = scratch("remove");
+    let source = project_with_formula(&dir);
+    let out = dir.join("lab.opj");
+    let first = sheaf(&["export", source.to_str().unwrap(), "-o", out.to_str().unwrap()]);
+    assert!(first.0, "{}", first.2);
     assert!(dir.join("lab.opj.sheaf").exists());
+    let data = dir.join("data.csv");
     let (ok, stdout, stderr) = sheaf(&["import", data.to_str().unwrap(), "-o", out.to_str().unwrap()]);
     assert!(ok, "{stderr}");
     assert!(!dir.join("lab.opj.sheaf").exists());

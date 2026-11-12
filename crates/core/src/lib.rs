@@ -8,6 +8,7 @@
 //! name says otherwise.
 
 pub mod analysis;
+pub mod clipboard;
 pub mod color;
 pub mod column;
 pub mod datetime;
@@ -22,6 +23,7 @@ pub mod project;
 pub mod template;
 pub mod worksheet;
 
+pub use clipboard::{CopyOptions, PasteReport};
 pub use color::Color;
 pub use column::{Column, ColumnData, Designation, FormulaState, RecalcMode};
 pub use graph::{Axis, Graph, Layer, Plot};

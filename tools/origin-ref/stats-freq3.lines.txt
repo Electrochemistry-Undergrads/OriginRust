@@ -1,0 +1,17 @@
+newbook;
+// value v appears 2^v times, so the counts of a bin show which values it holds (0 once, 1 twice, 2 four times, ...)
+int kk = 1;
+loop(vv, 0, 10) { loop(mm, 1, 2^vv) { col(A)[kk] = vv; kk++; } }
+?kk
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=0 max:=10;
+#[Book1]FreqCounts1
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8 outleft:=1 outright:=1;
+#[Book1]FreqCounts2
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8 outleft:=1;
+#[Book1]FreqCounts3
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8 outright:=1;
+#[Book1]FreqCounts4
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8 cmin:=1 cmax:=1;
+#[Book1]FreqCounts5
+freqcounts irng:=[Book1]Sheet1!col(A) stepby:=1 min:=2 max:=8 intervals:=3 outleft:=1 outright:=1;
+#[Book1]FreqCounts6

@@ -5,14 +5,16 @@ block of header lines that describe the run, then a column-header line, then num
 document says how the importer recognises such a file, which header facts it keeps, how it turns the
 rows into worksheet columns, and how a cyclic voltammetry (CV) run with several cycles is split into
 separate scans. The scan-splitting rule and the clipping check were taken from the owner's own
-Python workflow (his `cv_overlay.py`), so results match the spreadsheets he already has.
+Python workflow (their `cv_overlay.py`), so results match the spreadsheets they already have.
 
 The binary `.bin` files of the same program are read by `chi_bin.rs` and described in
 `chi-binary-format.md`; they give the same workbooks as the text files.
 
 Sources: the owner's script (observed), public knowledge of the CHI export layout (observed in
-many published data sets), and inference where marked. **No real CHI file has been checked yet in
-this project**; see "Unknowns".
+many published data sets), two real exports from the owner's CHI627E (a 4-segment cyclic
+voltammetry file with a `Results:` block and a 4-segment chronopotentiometry file, checked on
+2026-11-11; the files stay on the owner's computer), and inference where marked. Current-vs-time
+(i-t) files have not been checked against a real export yet; see "Unknowns".
 
 ## 1. File layout
 
@@ -35,7 +37,16 @@ Sample Interval (V) = 0.001
 Quiet Time (sec) = 2
 Sensitivity (A/V) = 1e-3
 
-Results / peak list lines (optional, technique dependent)
+Results:                              <- optional results block (technique dependent)
+
+Channel 1:
+Segment 1:
+Ep = 0.812V                           <- peak potential, current and area of segment 1
+ip = -6.500e-4A
+Ah = -5.000e-2C
+
+Segment 2:
+...
 
 Potential/V, Current/A                <- column header line
                                       <- (often one blank line)
@@ -49,6 +60,14 @@ Facts the importer relies on:
   Windows-1252 for bytes that are not valid UTF-8.
 - **Parameter lines** have the form `name = value`. Everything before the first ` = ` is the name;
   leading and trailing spaces are trimmed from both parts.
+- **The results block** starts with the heading line `Results:`. A heading is a line that is a name
+  followed by a colon and nothing else. Inside the block, `Channel N:` and `Segment N:` headings
+  say what the following `name = value` lines belong to, so the importer names those lines after
+  their headings: `Segment 2: Ep`. The channel is added (`Channel 2, Segment 1: Ep`) only when the
+  block lists more than one channel. Values keep their unit suffix as text (`0.812V`).
+- **Numbers** are printed with 4 significant digits, in plain (`1.200`) or exponent form
+  (`2.023e+3`). Above 1000 s a time therefore comes in whole seconds and several rows show the same
+  time; see 2.5.
 - **The column header line** is the last line before the data whose fields (split on comma or tab)
   each have the form `Quantity/Unit` and whose first field is one of the known X quantities below.
   Matching is case-insensitive. Each field gives one column: the text before the last `/` is the
@@ -64,7 +83,7 @@ Known first-column quantities and the technique they imply when line 2 is missin
 | First column | Typical technique (line 2) | Meaning of rows |
 |---|---|---|
 | `Potential/V` | Cyclic Voltammetry, Linear Sweep Voltammetry, Differential Pulse Voltammetry, Square Wave Voltammetry | current vs. potential |
-| `Time/sec` (also `Time/s`) | Amperometric i-t Curve, Chronoamperometry, Chronocoulometry, Open Circuit Potential - Time, Bulk Electrolysis | signal vs. time |
+| `Time/sec` (also `Time/s`) | Amperometric i-t Curve, Chronoamperometry, Chronocoulometry, Chronopotentiometry, Open Circuit Potential - Time, Bulk Electrolysis | signal vs. time |
 | `Freq/Hz` | A.C. Impedance | impedance vs. frequency |
 
 Other common column names: `Current/A`, `Charge/C`, `Potential/V` (as a Y column in OCP files),
@@ -142,19 +161,117 @@ of `m`, add a warning naming the scan, the pinned value in mA, the number of row
 (or time) range of the run. A real peak top repeats at most about 5 rows at CHI's 4 significant
 digits, so it does not trigger the warning.
 
+### 2.4 Chronopotentiometry: charge and discharge segments
+
+Applies when the first column is time, the file has a `Potential/V` column, the technique line
+contains "Chronopotentiometry", and option `split_segments` is on (default). The `Data` sheet of
+2.1 is kept (the whole run against time is the usual figure), and a second sheet `Segments` is
+added when the run has two segments or more.
+
+The instrument switches the current either when the potential reaches a limit or after a set time.
+The header line whose name starts with `Current Switching` (the owner's CHI627E prints `Current
+Switching Polarity = Potential`) says which. The importer uses the header to decide where the
+switches are; the potential alone is not enough, because a time-switched run can drift back a
+little before its switch, and a spike that relaxes can look like a turn.
+
+**Runs switched on time.** When the `Current Switching ...` value is `Time` and the header gives
+`Init P/N` (`N`: the first current is cathodic, `P`: anodic), `Cathodic Time (s)` and `Anodic Time
+(s)`, the switching times are `T1`, `T1 + T2`, `2 T1 + T2`, ... where the first and second
+durations follow `Init P/N` and alternate. A row belongs to the segment whose switching time it has
+not passed (a row exactly at a switching time ends the segment). Each segment's clock starts at
+its switching time, exactly. A gap in the data longer than a segment leaves that segment out.
+
+**All other runs** are split where the potential turns back, on the potential values `E[0..n)`:
+
+1. Let `h` be 5% of `max(E) - min(E)`. If `h` is 0, there is one segment.
+2. Walk the rows (missing values are skipped). Until the direction is known, keep the lowest and
+   highest value so far; the direction becomes "rising" when a value is `h` or more above the
+   lowest, and "falling" when it is `h` or more below the highest. The running extreme is then the
+   highest (rising) or lowest (falling) row since the lowest or highest row.
+3. While rising, a value at or above the running extreme moves the extreme to that row. A value `h`
+   or more below the extreme is a **turn**. When the header has `High E Limit (V)` and `Low E Limit
+   (V)`, a turn counts only if the extreme is within 2% of the limit span of the High limit, or if
+   the stretch has lasted the segment's maximum time (`Anodic Time (s)` for a rising stretch, less
+   1.5 sampling steps; time counted from the last row of the stretch before). A turn that does not
+   count is ignored and the walk goes on. A counted turn ends the segment at the extreme row (it is
+   the segment's last row); the direction becomes falling and the running extreme is the lowest row
+   after the old extreme. Falling works the same way with the signs swapped (Low limit, `Cathodic
+   Time (s)`). On equal values the later row is the extreme. Without limits in the header every
+   turn counts.
+4. A rising stretch is an **anodic** segment and a falling one **cathodic**. A run whose direction
+   never became clear is one segment, named by `Init P/N` when the header has it, otherwise by
+   whether its last value is above its first.
+5. A stretch of 2 rows or fewer is joined to the next one (the last one to the one before it), so
+   no row is lost.
+
+Noise of a few millivolts never turns the direction, because `h` is tens of millivolts for a
+normal run. Checked on a real potential-switched 4-segment file: the first three segments end at
+the rows of the potential minimum, maximum and minimum (where two rows tie, the later one wins),
+and the last ends at the file's last row. The tests check the same rule on generated files.
+
+For segment `k` the sheet gets, in this order:
+
+| Column | Designation | Long name | Unit | Comments |
+|---|---|---|---|---|
+| time since the segment began | X | `Time` | `s` | `Segment k (cathodic)` or `(anodic)` |
+| potential | Y | `Potential` | `V` | same |
+| capacity (only when the header has `Cathodic Current (A)` and `Anodic Current (A)`) | Y | `Capacity` | `mAh` | same |
+
+For runs split by turns, a segment's clock starts at the time of the last row of the segment before
+it. The first segment's clock starts at 0 when its first time is between 0 and 1.5 sampling steps;
+otherwise at its first time. (Runs switched on time use the switching times, as said above.)
+Capacity is the magnitude of the segment's current (cathodic current for a cathodic segment, anodic
+for an anodic one) times the segment time, divided by 3.6 to give mAh. It is positive in both
+directions, as charge and discharge curves are usually drawn. The capacity columns are there
+whenever both current lines hold a number; a current of 0 gives a capacity of 0.
+
+### 2.5 Rounded times
+
+Because of the 4 significant digits, a 0.2 s sampling interval shows as `1.000e+3`, `1.000e+3`,
+`1.000e+3`, `1.001e+3`, ... above 1000 s. The importer recomputes the times when option
+`exact_time` is on (default) and all of these hold:
+
+1. The header has a sampling interval in seconds: a line whose name starts with
+   `Data Storage Interval` or `Sample Interval` and ends with `(s)` or `(sec)`, with a positive
+   number as its value. (`Sample Interval (V)` of a CV file does not count.)
+2. Row `k` (0-based) is expected at `(m + k) * dt`, where `dt` is the interval and `m` is the first
+   time divided by `dt`, rounded to a whole number.
+3. Every time in the column is within half a unit of its last printed digit of that expected value
+   (`2.023e+3` may be off by 0.5 s, `742.6` by 0.05 s).
+4. At least one time differs from its expected value.
+
+The time column is then replaced by the expected values, computed as `(m + k) / (1 / dt)` when
+`1 / dt` is a whole number so that values such as 0.6 come out exact. The import reports how many
+times were rounded and the interval used. If any row breaks rule 3 the file's times are kept
+unchanged and no note is given. The running charge of 2.1 and the segment times of 2.4 use the
+recomputed times.
+
 ## 3. Options
 
 | Option | Meaning | Default |
 |---|---|---|
 | `split_scans` | Split a CV file into scans as in 2.2 | on |
+| `split_segments` | Add the `Segments` sheet to a chronopotentiometry file as in 2.4 | on |
 | `add_milliamp` | Add a current column in mA next to each current column in A | on |
 | `add_charge` | For time-based files with current, add the running charge | on |
 | `invert_current` | Multiply current by -1 (for files recorded with the cathodic-positive convention) | off |
+| `exact_time` | Recompute rounded times from the sampling interval as in 2.5 | on |
+
+The command-line program turns the defaults off with `--no-split-scans`, `--no-split-segments`,
+`--no-milliamp`, `--no-charge` and `--keep-file-times`, and turns current inversion on with
+`--invert-current`.
 
 ## 4. Unknowns
 
-- The exact header text of each technique in the owner's CHI software version, and whether his i-t
-  files use `Time/sec` or `Time/s`. The importer accepts both. Needs real files from the owner.
-- Whether his files contain several data blocks (for example multi-segment chronoamperometry with a
+- The exact header text of each technique in the owner's CHI software version. Confirmed for
+  cyclic voltammetry and chronopotentiometry from a CHI627E (`Time/sec`, `Potential/V`,
+  `Current/A`; in the CV file a reduction current is negative). Current-vs-time files are not
+  confirmed yet; the importer accepts `Time/sec` and `Time/s`.
+- Whether the owner plots charge and discharge curves against time or against capacity, and
+  whether capacity should be per gram of electrode material (that needs the mass, which the file
+  does not have).
+- What CHI's `Ah` result is exactly (it is much smaller than the charge of the whole segment, so it
+  is probably a peak area above a baseline). It is kept as text and not recomputed.
+- Whether their files contain several data blocks (for example multi-segment chronoamperometry with a
   header per step). The importer handles repeated header lines by appending rows when the header is
   identical, and by starting a new sheet when it differs.

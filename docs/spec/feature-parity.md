@@ -4,7 +4,7 @@ A snapshot. Update a row when its feature lands; re-run the audit after each mil
 
 Date: 2026-11-11.
 
-This document answers the owner's question: does Sheaf have all of Origin's features? The short answer is no. Sheaf does the owner's daily jobs well, but it has about a third of what Origin offers in some areas and almost nothing in others. It does not yet write .opj files, and its window layout and menus differ clearly from Origin's.
+This document answers the owner's question: does Sheaf have all of Origin's features? The short answer is no. Sheaf does the owner's daily jobs well, but it has about a third of what Origin offers in some areas and almost nothing in others. It writes .opj files from the command line only (the app does not yet), and its window layout and menus differ clearly from Origin's.
 
 ## How the audit was made
 
@@ -18,9 +18,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 37 | 94 | 99 | 230 |
-| P0 | 30 | 63 | 8 | 101 |
-| P1 and P2 together | 7 | 31 | 91 | 129 |
+| All rows | 38 | 101 | 91 | 230 |
+| P0 | 30 | 65 | 6 | 101 |
+| P1 and P2 together | 8 | 36 | 85 | 129 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 42 are P2. The P1 and P2 rows were not counted separately by status.
 
@@ -30,20 +30,20 @@ Cross-cutting findings:
 - Column formulas now recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
 - Analysis and fit results are static sheets, not linked to their source data.
 - The core model holds several layers per graph, but the app edits only the first.
-- There is no .opj writer. `crates/io/src/opj` only reads.
+- `crates/io/src/opj/write` writes workbooks and graphs as Origin 2016 projects (CLI `sheaf export -o x.opj`); the app does not use it yet, and matrices, notes, folders and fit results are not written.
 
 ## 1 Project, windows and menus
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Project save and open, own format | File > Save/Open, Ctrl+S/O | .sheaf zip; New/Open/Save/Save As; prompt on quit; CLI | ✓ | none | P0 |
-| Save project as .opj (owner's request) | File > Save Project As | none | ✗ | no writer anywhere; app and CLI write only .sheaf, PNG, SVG, PDF, CSV/TSV | P0 |
+| Save project as .opj (owner's request) | File > Save Project As | `io/src/opj/write`; CLI `export -o x.opj` | ◐ | workbooks and graphs are written and open in Origin 2016 (spec 13.9); the app has no menu entry yet; folders, matrices, notes, grid style, legend icons for spline curves not written | P0 |
 | Open .opj workbooks and basic graphs | File > Open | `io/src/opj`; app, drag and drop, CLI | ◐ | skips matrices, notes, layouts, folders, fit results, formulas, masks, column formats; .opju not read; saved as .sheaf copy; pre-9 graphs unverified | P0 |
 | Undo and redo | Edit > Undo, Ctrl+Z | full history, labelled, Ctrl+Z/Y | ✓ | superset of Origin's one level; Alt+Backspace unbound | P0 |
-| Project Explorer | View > Project Explorer, Alt+1 | flat window list, right-click Show/Rename/Export/Delete | ◐ | no folder tree or editing UI (model has folders), no filters, Duplicate, Properties, search; cannot be hidden | P0 |
+| Project Explorer | View > Project Explorer, Alt+1 | auto-hide panel on the left edge (slides out on hover, pin to dock, X and Alt+1 hide it): folder tree over a window list (Name, Long Name, Short Name, Type, sortable), active window in bold, double click shows, right-click Show/Hide/Rename/Delete/Export/Properties, drag a window onto a folder, New Folder | ◐ | no Duplicate, search or filters; folders cannot be renamed or deleted; Properties only edits the long name; no multi-select, F2 or Del keys | P0 |
 | Menu bar per window type | menus differ for book, graph, layout, matrix | one bar: File, Edit, Worksheet, Plot, Analysis, Graph, Window, Help | ◐ | no View, Column, Statistics, Gadgets, Tools, Format menus; Edit holds only undo and redo; bar does not change with the active window | P0 |
 | Analysis and Statistics menu structure | Mathematics, Signal Processing, Fitting, Peaks and Baseline submenus; Statistics menu | one flat Analysis menu: 8 tools and 3 fit entries | ◐ | no submenus, no Statistics or Gadgets menu, not extensible | P0 |
-| Toolbars | about 30, View > Toolbars | none (a small button row inside a graph) | ✗ | all families missing: standard, edit, graph, 2D plots, column, worksheet data, style, format, mask, tools | P0 |
+| Toolbars | about 30, View > Toolbars | Standard, Edit, Format, Graph, 2D Graphs, Tools and Object Edit bars with drawn icons; View > Toolbars shows and hides each | ◐ | buttons for features Sheaf lacks are greyed (most of 2D Graphs, Graph, Format, Tools, Object Edit); no Style, Mask, Layout, 3D bars; bars are not draggable or customisable | P0 |
 | Origin look: MDI windows, classic chrome | main window | egui default style, tabs, left panel | ✗ | layout and chrome differ | P0 |
 | Keyboard shortcuts | Ctrl+K import, Ctrl+Q set values, Ctrl+D, Ctrl+R, F-keys, Alt+n | Ctrl+N/O/S/Shift+S/I/Z/Y | ◐ | import is Ctrl+I (Origin: Ctrl+K, where Ctrl+I is zoom); most Origin keys unbound | P0 |
 | New window kinds | File > New: Worksheet, Matrix, Graph, Image, Excel, Layout, Notes, Function Plot, from Template | Worksheet > New Workbook only | ◐ | no empty graph, matrix, image, layout, notes, function plot, new-from-template | P1 |
@@ -56,7 +56,7 @@ Cross-cutting findings:
 | Window properties and rename | Alt+Enter | long name only | ◐ | short name automatic; no comments field or Properties dialog | P1 |
 | Window menu | cascade, tile, duplicate, split, refresh | lists windows and focuses one | ◐ | no cascade, tile, Duplicate, Split, Refresh | P1 |
 | Preferences | Tools > Options, Ctrl+U | none | ✗ | no settings stored | P1 |
-| Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | one-line status bar | ✗ | results go to sheets; no log | P1 |
+| Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | Object Manager (right edge: layers and plots of the active graph with tick boxes that show or hide plots), Messages Log and Results Log (left edge, with Clear), status bar with hints, Average, Sum and Count of the selected cells, AU : ON, active sheet, Radian | ◐ | no Command Window, Code Builder, Quick Help, Smart Hint Log or Data Display; Results Log holds only the analysis and fit summaries; Object Manager has no plot groups and no layer-level settings | P1 |
 | Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | page fitted to window | ◐ | no user zoom or view commands | P1 |
 | Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | none | ✗ | | P1 |
 | Set As Begin, End, Reset | Edit menu | none | ✗ | analysis dialogs take row ranges individually | P1 |
@@ -99,7 +99,7 @@ Cross-cutting findings:
 | Names and limits | 13-char book, 18-char column | validation of characters only | ◐ | length limits and uniqueness not enforced in the UI | P0 |
 | New worksheet default shape | A(X), B(Y), 30 rows | `Project::add_workbook` | ◐ | not compared with Origin's | P0 |
 | Label rows: long name, units, comments | worksheet header | grid rows and properties dialog | ✓ | | P0 |
-| Parameter, user parameter, F(x) rows, show or hide label rows | label rows | stored in model, not shown | ◐ | not shown or editable; no sampling-interval row | P0 |
+| Parameter, user parameter, F(x) rows, show or hide label rows | label rows | F(x)= row with a lock mark and one row per user parameter, shown and edited in place | ◐ | rows cannot be hidden (corner menu items greyed); no way to add a new parameter row; no sampling-interval row | P0 |
 | Plot designations | Column > Set As | X, Y, Z, yEr, xEr, Label, Disregard | ✓ | no Group or Subject; Y-finds-X is nearest-left only | P0 |
 | Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday, mixed; fewer display patterns than Origin; Column Properties dialog sets the display pattern only | P0 |
 | Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
@@ -108,7 +108,7 @@ Cross-cutting findings:
 | Sorting | nested, range, columns | one key for the whole sheet | ◐ | no nested keys, no range or column sort | P0 |
 | Add, delete, move columns | Ctrl+D | add one, delete | ◐ | no insert at position, count dialog, move, swap, hide, no row insert or delete | P0 |
 | Sampling interval, Show X Column | Column menu | none | ◐ | no Set Sampling Interval, no Show X Column | P0 |
-| Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click edit with undo, column select | ◐ | no cell or range selection, no clipboard code at all | P0 |
+| Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click edit with undo; select column, row, block or all; Ctrl+C, X, V and Delete as one undo step each | ◐ | no fill, Paste Transpose, Paste Special, insert or delete of cells (columns and rows only move by Delete of whole columns); no Select... dialog; no keyboard cursor | P0 |
 | Multiple sheets per book | tabs menu | tabs switch only; analysis adds result sheets | ◐ | cannot add, rename, move, delete a sheet | P0 |
 | Set Column Values | Ctrl+Q | dialog with formula, rows from and to | ◐ | no Ctrl+Q, no function picker | P0 |
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
@@ -238,12 +238,12 @@ Cross-cutting findings:
 | Row statistics | Statistics on Rows | none | ✗ | | P1 |
 | Moments, quantiles | quantiles, moments | quartiles only | ◐ | no arbitrary percentile | P1 |
 | Correlation | corrcoef | Pearson r inside line fit only | ◐ | no matrix, no rank correlations | P1 |
-| t-tests | Hypothesis Testing | t distribution only | ✗ | | P1 |
-| Frequency counts, binning | freqcounts | none | ✗ | no histogram | P1 |
+| t-tests | Hypothesis Testing | one-sample, two-sample (pooled and Welch) and paired t-test with tails, level and confidence interval; Statistics menu, `analyze ttest`; checked against `ttest1`, `ttest2`, `ttestpair` (`statistics.md`) | ✓ | no test of equal variance, no summary-data input | P1 |
+| Frequency counts, binning | freqcounts | counts, cumulative, percent, given or automatic bins, outlier rows; Statistics menu, `analyze histogram`; checked against `freqcounts` | ◐ | the automatic bin size is a fitted rule (about 57 % agreement) | P1 |
 | Variance and proportion tests | vartest | none | ✗ | | P2 |
-| ANOVA | one, two, three-way, RM | none | ✗ | | P2 |
+| ANOVA | one, two, three-way, RM | one-way with summary table and Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe comparisons; checked against Origin's library | ◐ | no two-way, three-way or repeated measures | P2 |
 | Nonparametric tests | Mann-Whitney, Kruskal-Wallis and others | none | ✗ | | P2 |
-| Normality, outlier tests, distribution fit | Shapiro-Wilk, Grubbs | none | ✗ | | P2 |
+| Normality, outlier tests, distribution fit | Shapiro-Wilk, Grubbs | Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson | ◐ | no outlier tests, no distribution fit, no probability plot | P2 |
 | Multivariate analysis | PCA, clustering | none | ✗ | | P2 |
 | Survival, power, ROC | Statistics menu | none | ✗ | | P2 |
 
@@ -264,7 +264,7 @@ Cross-cutting findings:
 | Multi-panel and stack | 4 Panel, 9 Panel | none | ✗ | | P1 |
 | Area and fill | Plot > Area | none | ✗ | | P1 |
 | Drop lines, bubble, colour mapped | Plot > Symbol | none | ✗ | | P1 |
-| Histogram, box chart, statistics plots | Plot > Statistics | none | ✗ | | P1 |
+| Histogram, box chart, statistics plots | Plot > Statistics | histogram tool makes a column plot of the bin counts | ◐ | bars have gaps, no distribution curve, no box chart or other statistics plots | P1 |
 | Pie | Plot > Pie | none | ✗ | | P2 |
 | Polar, ternary, radar, Smith, wind rose | Specialized | none | ✗ | | P2 |
 | Stock | Plot > Stock | none | ✗ | | P2 |
@@ -329,7 +329,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | each tool writes a new result sheet | ✗ | | P0 |
 | Column Properties dialog | Format dialog | name, long name, units, comments, plot as, number format incl. date, time, date and time | ◐ | no text type, width, Prev and Next | P0 |
-| Context menus | header, cell, row, corner, graph objects | column header menu; graph menu | ◐ | no Fill, Mask, Normalize, Statistics entries; no cell, row, corner menus | P0 |
+| Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
 | Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |
 
 ## Order of work

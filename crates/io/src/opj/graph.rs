@@ -53,11 +53,18 @@ const CURVE_SHAPE_AT: usize = 0x17;
 const CURVE_SIZE_AT: usize = 0x19;
 /// In a column plot the size field holds the bar width in percent of the X spacing, times 50.
 const CURVE_BAR_WIDTH_PER_PERCENT: f64 = 50.0;
+/// 0 for a solid symbol, 1 and above for an open one.
+const CURVE_SYMBOL_FILL_AT: usize = 0x18;
 const CURVE_X_AT: usize = 0x23;
 const CURVE_TYPE_AT: usize = 0x4C;
 const CURVE_FILL_AT: usize = 0xC2;
-const CURVE_FILL_FLAG_AT: usize = 0xC5;
+/// The colour of the symbols (and the outline of column bars): a list position, a free colour or
+/// "automatic" (spec 10.5).
 const CURVE_LINE_COLOR_AT: usize = 0x132;
+/// The colour of the line.
+const CURVE_PLOT_LINE_COLOR_AT: usize = 0x16A;
+const CURVE_FILL_USED_AT: usize = 0x1E;
+const CURVE_FILL_USED_BIT: u8 = 0x10;
 // Annotation: header holds the rectangle and the name, block 1 the text style, block 2 the text.
 const ANN_RECT_AT: usize = 0x03;
 const ANN_NAME_AT: usize = 0x46;
@@ -409,7 +416,7 @@ pub(crate) fn clean_markup(s: &str) -> String {
 }
 
 /// Text without any escape, for measuring.
-fn strip_escapes(s: &str) -> String {
+pub(crate) fn strip_escapes(s: &str) -> String {
     let chars: Vec<char> = s.chars().collect();
     let mut out = String::new();
     // true for a bracket that opened an escape (its closing bracket is not text).
@@ -439,14 +446,28 @@ fn strip_escapes(s: &str) -> String {
     out
 }
 
-/// A colour written as four bytes: a palette position (last byte 0), a red, green, blue triple
-/// (last byte 1), or "automatic" (anything else).
-fn color4(b: &[u8], at: usize, automatic: usize) -> Color {
+/// A colour written as four bytes (a list position and three zero bytes, or red, green, blue and
+/// 1); `None` for "automatic" and anything else.
+fn color_code(b: &[u8], at: usize) -> Option<Color> {
     let g = |k: usize| u8_at(b, at + k);
     match g(3) {
-        0 => palette_color(usize::from(g(0))),
-        1 => Color::rgb(g(0), g(1), g(2)),
-        _ => palette_color(automatic),
+        0 => Some(palette_color(usize::from(g(0)))),
+        1 => Some(Color::rgb(g(0), g(1), g(2))),
+        _ => None,
+    }
+}
+
+/// The line connection: 1 straight, 5 to 10 smooth curves, 11 and 12 steps (spec 10.5).
+fn connect_kind(code: u8, notes: &mut Vec<String>) -> Connect {
+    match code {
+        5..=10 => Connect::Spline,
+        11 => Connect::StepHorizontal,
+        12 => Connect::StepVertical,
+        0 | 1 => Connect::Straight,
+        _ => {
+            notes.push("some line connections (segments, other steps) are not supported and are drawn straight".into());
+            Connect::Straight
+        }
     }
 }
 
@@ -476,7 +497,7 @@ fn read_curve(
     notes: &mut Vec<String>,
 ) {
     let r = &rec.record;
-    if r.len() < CURVE_LINE_COLOR_AT + 4 {
+    if r.len() < CURVE_PLOT_LINE_COLOR_AT + 4 {
         notes.push("a plot record is too short and was skipped".into());
         return;
     }
@@ -512,7 +533,15 @@ fn read_curve(
             PlotKind::LineSymbol
         }
     };
-    let line_color = color4(r, CURVE_LINE_COLOR_AT, index);
+    let symbol_code = color_code(r, CURVE_LINE_COLOR_AT);
+    let line_code = color_code(r, CURVE_PLOT_LINE_COLOR_AT);
+    let automatic = palette_color(index);
+    // A scatter plot has no line: its colour is the symbol colour. Elsewhere the line has its own.
+    let line_color = match kind {
+        PlotKind::Scatter => symbol_code.or(line_code),
+        _ => line_code.or(symbol_code),
+    }
+    .unwrap_or(automatic);
     let width = f64::from(u16_at(r, CURVE_WIDTH_AT)) / CURVE_UNITS_PER_POINT;
     let width = if width > 0.0 && width < 20.0 { width } else { 1.0 };
     let dash_code = usize::from(u8_at(r, CURVE_DASH_AT));
@@ -521,13 +550,13 @@ fn read_curve(
     let size = if size > 0.0 && size < 60.0 { size } else { 5.0 };
     let shape = if shape_code == 0 { SymbolShape::Square } else { symbol_shape(shape_code, notes) };
     let fill = if kind == PlotKind::Column {
-        if u8_at(r, CURVE_FILL_FLAG_AT) == 1 {
-            Color::rgb(u8_at(r, CURVE_FILL_AT), u8_at(r, CURVE_FILL_AT + 1), u8_at(r, CURVE_FILL_AT + 2))
+        if u8_at(r, CURVE_FILL_USED_AT) & CURVE_FILL_USED_BIT != 0 {
+            color_code(r, CURVE_FILL_AT).unwrap_or_else(|| palette_color(index))
         } else {
             palette_color(index)
         }
     } else {
-        line_color
+        symbol_code.unwrap_or(line_color)
     };
     let auto = u8_at(r, CURVE_LINE_COLOR_AT + 3) != 0 && u8_at(r, CURVE_LINE_COLOR_AT + 3) != 1;
     let mut plot = Plot {
@@ -536,8 +565,20 @@ fn read_curve(
         y_error: None,
         rows: None,
         kind,
-        line: LineStyle { color: line_color, width_pt: width, dash, connect: Connect::Straight },
-        symbol: SymbolStyle { shape, size_pt: size, color: fill, filled: true, edge_width_pt: 0.75, every: 1 },
+        line: LineStyle {
+            color: line_color,
+            width_pt: width,
+            dash,
+            connect: if kind == PlotKind::Column { Connect::Straight } else { connect_kind(connect, notes) },
+        },
+        symbol: SymbolStyle {
+            shape,
+            size_pt: size,
+            color: fill,
+            filled: kind == PlotKind::Column || u8_at(r, CURVE_SYMBOL_FILL_AT) == 0,
+            edge_width_pt: 0.75,
+            every: 1,
+        },
         label: None,
         visible: true,
         auto_color: false,
@@ -557,7 +598,6 @@ fn read_curve(
     if x_set != 0 && column(x_set).is_none() {
         notes.push("a plot's X data is not a worksheet column; it was plotted against the row number".into());
     }
-    let _ = connect;
     layer.plots.push(plot);
 }
 
@@ -609,6 +649,7 @@ mod tests {
         r[CURVE_CONNECT_AT] = 1;
         r[CURVE_DASH_AT] = 2;
         r[CURVE_LINE_COLOR_AT..CURVE_LINE_COLOR_AT + 4].copy_from_slice(&color);
+        r[CURVE_PLOT_LINE_COLOR_AT..CURVE_PLOT_LINE_COLOR_AT + 4].copy_from_slice(&color);
         WinColumn {
             dataset: y.into(),
             designation: 0,

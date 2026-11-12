@@ -124,8 +124,11 @@ use the `=` form for values that can be negative.
 Each agent's build folder (`target/wt-<name>`) grows to several gigabytes with debug info. On
 2026-11-12 the disk reached 97% full with fourteen such folders. Agents now build with
 `CARGO_PROFILE_DEV_DEBUG=0`, and the lead deletes a branch's build folder when the branch is merged
-(`cmd /c "rd /s /q target\wt-<name>"` is much faster than `rm -rf` on Windows). Check `df -h /c`
-before starting several builds at once.
+with `tools/clean-target.sh wt-<name> ...`, which uses Windows' `rd` (much faster than `rm -rf`)
+and checks that each folder is gone. A first version of this cleanup ran `rd` in a Bash loop with
+`target\$d` in the path; Bash passed the name through unexpanded, `rd` failed in the background,
+and nobody noticed until the disk was at 98% again. Check `df -h /c` before starting several
+builds at once, and look at the result of every cleanup.
 
 ## Two sessions on one repository need a written split
 

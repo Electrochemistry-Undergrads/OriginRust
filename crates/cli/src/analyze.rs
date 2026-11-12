@@ -314,6 +314,43 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             }
         }
         AnalyzeTool::Stats { target } => (target, Job::Tool(Tool::Statistics)),
+        AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha } => {
+            let kind = match test {
+                TTestKindArg::OneSample => analysis::TTestKind::OneSample { mean },
+                TTestKindArg::TwoSample => analysis::TTestKind::TwoSample { equal_variance: !unequal, difference },
+                TTestKindArg::Paired => analysis::TTestKind::Paired { difference },
+            };
+            let tail = match tail {
+                TailArg::Two => analysis::Tail::Two,
+                TailArg::Upper => analysis::Tail::Upper,
+                TailArg::Lower => analysis::Tail::Lower,
+            };
+            (target, Job::Tool(Tool::TTest(analysis::TTestSpec { kind, tail, alpha })))
+        }
+        AnalyzeTool::Anova { target, comparison, alpha } => {
+            use analysis::MeansComparison as M;
+            let comparison = match comparison {
+                ComparisonArg::Tukey => Some(M::Tukey),
+                ComparisonArg::Bonferroni => Some(M::Bonferroni),
+                ComparisonArg::Sidak => Some(M::Sidak),
+                ComparisonArg::Lsd => Some(M::FisherLsd),
+                ComparisonArg::Scheffe => Some(M::Scheffe),
+                ComparisonArg::None => None,
+            };
+            (target, Job::Tool(Tool::Anova(analysis::AnovaSpec { alpha, comparison })))
+        }
+        AnalyzeTool::Histogram { target, bin_size, bins, min, max, below, above, no_graph } => {
+            let size = match (bin_size, bins) {
+                (Some(w), _) => analysis::BinSize::Width(w),
+                (None, Some(n)) => analysis::BinSize::Count(n),
+                (None, None) => analysis::BinSize::Auto,
+            };
+            let freq = analysis::FreqOptions { min, max, size, below, above };
+            (target, Job::Tool(Tool::Histogram(analysis::HistogramSpec { freq, graph: !no_graph })))
+        }
+        AnalyzeTool::Normality { target, alpha } => {
+            (target, Job::Tool(Tool::Normality(analysis::NormalitySpec { alpha })))
+        }
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })

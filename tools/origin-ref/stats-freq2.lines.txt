@@ -1,0 +1,20 @@
+newbook;
+col(A) = data(0, 10, 1);
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=0 max:=10;
+#[Book1]FreqCounts1
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8 outleft:=1 outright:=1;
+#[Book1]FreqCounts2
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8;
+#[Book1]FreqCounts3
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8 outleft:=1;
+#[Book1]FreqCounts4
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=2 max:=8 outright:=1;
+#[Book1]FreqCounts5
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=1 max:=8;
+#[Book1]FreqCounts6
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=3 min:=0 max:=10;
+#[Book1]FreqCounts7
+freqcounts irng:=[Book1]Sheet1!col(A) stepby:=1 min:=0 max:=10 intervals:=4;
+#[Book1]FreqCounts8
+freqcounts irng:=[Book1]Sheet1!col(A) inc:=2 min:=0 max:=10 freq:=1 cumulfreq:=1;
+#[Book1]FreqCounts9

@@ -384,6 +384,42 @@ pub enum NormalizeKind {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum MathKind {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    /// The curve raised to the operand.
+    Power,
+}
+
+/// The second operand of curve math: a number, or a reference column.
+#[derive(Args, Debug, Clone)]
+pub struct OperandArgs {
+    /// A constant operand.
+    #[arg(long, allow_hyphen_values = true, conflicts_with = "reference")]
+    pub value: Option<f64>,
+    /// The Y column of the reference curve (short or long name); its X column is the nearest
+    /// X column to its left. By default it is searched in the same sheet.
+    #[arg(long = "ref", value_name = "COLUMN")]
+    pub reference: Option<String>,
+    /// Take the reference from this data file (or project) instead.
+    #[arg(long, value_name = "FILE", requires = "reference")]
+    pub ref_file: Option<PathBuf>,
+    /// The workbook that holds the reference (a project input, or the --ref-file project).
+    #[arg(long, requires = "reference")]
+    pub ref_book: Option<String>,
+    /// The sheet that holds the reference.
+    #[arg(long, requires = "reference")]
+    pub ref_sheet: Option<String>,
+    /// Only the X range that data and reference both cover, at the merged X values of both; the
+    /// result goes to a new sheet. Without it every data row gets a value, the reference being
+    /// continued as a straight line outside its range.
+    #[arg(long, requires = "reference")]
+    pub common: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum InterpKind {
     Linear,
     Spline,
@@ -416,6 +452,35 @@ pub enum AnalyzeTool {
         /// Do not add a column with the running integral.
         #[arg(long)]
         no_cumulative: bool,
+        /// Integrate several X intervals at once, for example 0.2:0.5,0.6:0.9 (write negative
+        /// limits as --ranges=-0.5:0.1,0.2:0.4). One result row per interval and column, with
+        /// the signed and the absolute area, peak position and height and the half-height width.
+        /// Each interval is the first unbroken run of rows inside it; for the return sweep of a
+        /// cyclic voltammogram use --row-ranges. The baseline option applies to each interval.
+        #[arg(long, value_delimiter = ',', value_name = "FROM:TO,...", allow_hyphen_values = true)]
+        ranges: Vec<String>,
+        /// Like --ranges, but worksheet rows counted from 1, for example 1:200,201:400 (the
+        /// charge of each cycle).
+        #[arg(long, value_delimiter = ',', value_name = "FROM:TO,...")]
+        row_ranges: Vec<String>,
+    },
+    /// Subtract a reference curve (a blank scan, a background) from each curve. The reference
+    /// is interpolated linearly onto the X values of the data.
+    SubtractRef {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[command(flatten)]
+        operand: OperandArgs,
+    },
+    /// Combine each curve with a constant or a reference curve: add, subtract, multiply,
+    /// divide or raise to a power (Origin's Simple Math).
+    Math {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = MathKind::Subtract)]
+        op: MathKind,
+        #[command(flatten)]
+        operand: OperandArgs,
     },
     /// Derivative of each curve with respect to its X column.
     Differentiate {

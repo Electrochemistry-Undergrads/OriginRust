@@ -136,6 +136,11 @@ frame is exactly the nominal one, so figures that fit are unchanged. Because lab
 frame, one move is exact. The same geometry is used by the screen view (`layout_geometry`).
 Axes drawn on the right or top edge move the right or top side in the same way, and a layer with
 linked layers takes the outermost labels of all of them into account (graphing.md section 12.3).
+When linked layers lie outside the first layer's frame (the panels of a stack), the moves apply to
+the rectangle that holds all their frames, and every frame is moved and scaled with it, so the
+panels stay aligned (graphing.md section 15.5). An axis with `hide_end_label` leaves out the tick
+label at its far end (top of a Y axis, right end of an X axis), and touching panels with the same
+axis title draw it once, centred on them.
 
 ### Reversed axes
 

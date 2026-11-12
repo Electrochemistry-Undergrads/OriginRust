@@ -506,6 +506,7 @@ mod tests {
             title_color_follows_plot: false,
             tick_label_source: Default::default(),
             tick_label_angle_deg: 0.0,
+            hide_end_label: false,
         }
     }
 

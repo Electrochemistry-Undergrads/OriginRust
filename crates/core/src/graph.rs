@@ -72,9 +72,39 @@ impl Graph {
         (0..self.layers.len()).filter(|&i| i == root || self.link_parent(i) == Some(root)).collect()
     }
 
-    /// The linked layer that gives layer `index`'s group its right Y axis, if there is one.
+    /// The place of layer `index` inside the frame of its root, as fractions of that frame: the
+    /// whole frame `{0, 0, 1, 1}` for a root, and the layer's own `frame` for a validly linked
+    /// layer. A right Y layer has the place of the layer it belongs to; a panel linked to the first
+    /// panel of a stack has a place of its own (graphing spec section 15).
+    pub fn place(&self, index: usize) -> Frame {
+        match self.link_parent(index) {
+            Some(_) => self.layers[index].frame,
+            None => Frame::WHOLE,
+        }
+    }
+
+    /// The layers of layer `index`'s group that are drawn in the same frame as it (the same
+    /// [`Graph::place`]), in layer order: a layer and its right Y layer, but not the other panels
+    /// of a stack. Empty when there is no such layer.
+    pub fn same_frame(&self, index: usize) -> Vec<usize> {
+        if index >= self.layers.len() {
+            return Vec::new();
+        }
+        let place = self.place(index);
+        self.group(index).into_iter().filter(|&i| self.place(i) == place).collect()
+    }
+
+    /// The panels of the graph, in layer order: every layer except those drawn in the frame of an
+    /// earlier layer of their group (a right Y layer is part of the panel it lies over). A graph
+    /// with one layer, or a double-Y graph, has one panel.
+    pub fn panels(&self) -> Vec<usize> {
+        (0..self.layers.len()).filter(|&i| self.same_frame(i).first() == Some(&i)).collect()
+    }
+
+    /// The linked layer that gives the frame of layer `index` its right Y axis, if there is one: a
+    /// member of the layer's group, drawn in the same frame, whose Y axis is on the right.
     pub fn right_y_member(&self, index: usize) -> Option<usize> {
-        self.group(index)
+        self.same_frame(index)
             .into_iter()
             .find(|&i| self.link_parent(i).is_some() && self.layers[i].y_axis.side == AxisSide::Opposite)
     }
@@ -105,6 +135,12 @@ pub struct Frame {
     pub height: f64,
 }
 
+impl Frame {
+    /// The whole rectangle it is measured in: the whole page, or the whole frame of the parent
+    /// layer for a linked layer.
+    pub const WHOLE: Frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
+}
+
 /// One set of axes with the plots drawn in it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
@@ -122,9 +158,10 @@ pub struct Layer {
     pub default_line: LineStyle,
     pub default_symbol: SymbolStyle,
     pub default_kind: PlotKind,
-    /// Set when this layer is drawn over another layer of the graph and follows it (a double-Y
-    /// graph is a layer with a right Y axis linked to the layer with the left one). While the
-    /// link is valid, `frame` is read as fractions of the parent's frame instead of the page.
+    /// Set when this layer follows another layer of the graph: a double-Y graph is a layer with a
+    /// right Y axis linked to the layer with the left one, and the panels of a stack are linked to
+    /// the first panel to share its X axis. While the link is valid, `frame` is read as fractions
+    /// of the parent's frame instead of the page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<LayerLink>,
     /// How the plots are moved against each other so that they do not overlap (stacked lines,
@@ -302,7 +339,8 @@ pub enum LegendScope {
     /// The plots of its own layer.
     #[default]
     Layer,
-    /// The plots of every layer of the graph, layer by layer.
+    /// The plots of every layer drawn in its layer's frame ([`Graph::same_frame`]: the layer and
+    /// its right Y layer), layer by layer. In a graph of one panel that is every layer.
     Graph,
 }
 
@@ -484,6 +522,11 @@ pub struct Axis {
     /// Counter-clockwise rotation of the tick labels in degrees. Used for X axes; a Y axis ignores it.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub tick_label_angle_deg: f64,
+    /// Leave out the tick label at the far end of the axis: the top end of a Y axis, the right
+    /// end of an X axis. Panels that touch use it, so that the labels at the joint do not run into
+    /// the labels of the next panel (graphing spec section 15).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub hide_end_label: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -916,6 +959,43 @@ mod tests {
         let bars: BarSpacing = serde_json::from_str(r#"{"overlap_pct":-50.0}"#).unwrap();
         assert_eq!(bars, BarSpacing { gap_pct: 20.0, overlap_pct: -50.0 });
         assert_eq!(serde_json::from_str::<TickLabelSource>(r#"{"kind":"auto"}"#).unwrap(), TickLabelSource::Auto);
+    }
+
+    #[test]
+    fn a_layer_saved_before_panels_shows_every_end_label_and_is_written_as_before() {
+        let layer: Layer = serde_json::from_str(OLD_LAYER).expect("an old layer loads");
+        assert!(!layer.x_axis.hide_end_label && !layer.y_axis.hide_end_label);
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(!json.contains("hide_end_label"), "{json}");
+        let mut layer = layer;
+        layer.y_axis.hide_end_label = true;
+        let json = serde_json::to_string(&layer).unwrap();
+        assert_eq!(json.matches(r#""hide_end_label":true"#).count(), 1, "{json}");
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), layer);
+    }
+
+    #[test]
+    fn layers_drawn_in_one_frame_form_one_panel() {
+        // Layer 1 covers layer 0 (a right Y axis), layer 2 sits above it (a second panel), layer 3
+        // covers layer 2, and layer 4 is a graph of its own.
+        let mut g = graph_of(&[None, Some(0), Some(0), Some(0), None]);
+        g.layers[1].frame = Frame::WHOLE;
+        g.layers[2].frame = Frame { left: 0.0, top: -1.0, width: 1.0, height: 1.0 };
+        g.layers[3].frame = g.layers[2].frame;
+        g.layers[3].y_axis.side = AxisSide::Opposite;
+        g.layers[1].y_axis.side = AxisSide::Opposite;
+        assert_eq!(g.place(0), Frame::WHOLE);
+        assert_eq!(g.place(2), g.layers[2].frame);
+        assert_eq!(g.place(4), Frame::WHOLE, "a root's place is its whole frame");
+        assert_eq!(g.group(0), vec![0, 1, 2, 3]);
+        assert_eq!(g.same_frame(0), vec![0, 1]);
+        assert_eq!(g.same_frame(3), vec![2, 3]);
+        assert_eq!(g.same_frame(4), vec![4]);
+        assert_eq!(g.same_frame(9), Vec::<usize>::new());
+        assert_eq!(g.panels(), vec![0, 2, 4]);
+        assert_eq!(g.right_y_member(0), Some(1));
+        assert_eq!(g.right_y_member(2), Some(3));
+        assert_eq!(g.right_y_member(4), None);
     }
 
     #[test]

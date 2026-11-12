@@ -17,7 +17,7 @@ pub enum Command {
     /// Import data files into a project file.
     Import(ImportArgs),
     /// Make a figure from a data file or a project and write it as PNG, SVG or PDF.
-    Plot(PlotArgs),
+    Plot(Box<PlotArgs>),
     /// Write a graph of a project as PNG, SVG or PDF.
     Export(ExportArgs),
     /// Write a worksheet of a project as delimited text.
@@ -433,10 +433,63 @@ pub struct PlotArgs {
     /// with a companion .opj.sheaf if needed) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
+    /// Make a graph of several panels: stack (one column of panels that share the X axis, the
+    /// first at the bottom, as Origin's Stack command), or ROWSxCOLUMNS such as 2x1 (Origin's
+    /// Vertical 2 Panel), 1x2 (Horizontal 2 Panel) or 2x2 (4 Panel). Each Y column gets its own
+    /// panel; with several files, each file does. Style options act on every panel; touching
+    /// panels with the same Y title (for example from --y-title) show it once.
+    #[arg(long, value_name = "stack|RxC", conflicts_with_all = ["graph", "y2"])]
+    pub panels: Option<String>,
+    /// The Y columns of one panel, comma-separated short or long names. Give it once per panel, in
+    /// panel order, for example --panel-y B,C --panel-y D. With several files, each panel gets
+    /// these columns of every file.
+    #[arg(long = "panel-y", value_name = "COLUMNS", requires = "panels", conflicts_with_all = ["y", "per_panel"])]
+    pub panel_y: Vec<String>,
+    /// How many curves go into each panel, in order, for example --per-panel 2,1,1.
+    #[arg(long, value_delimiter = ',', value_name = "N,N,...", requires = "panels")]
+    pub per_panel: Vec<usize>,
+    /// The gap between panels in percent of the page, from 0 to 50: one number for both
+    /// directions, or H,V (default: 0 for a stack; for a grid, the room the template leaves around
+    /// its frame).
+    #[arg(long, value_delimiter = ',', value_name = "PCT|H,V", allow_hyphen_values = true, requires = "panels")]
+    pub panel_gap: Vec<f64>,
+    /// The margins around the panels in percent of the page, from 0 to 90: L,R,T,B (default: 15,
+    /// 10, 10, 10 for a stack; for a grid, the template's margins).
+    #[arg(long, value_delimiter = ',', value_name = "L,R,T,B", allow_hyphen_values = true, requires = "panels")]
+    pub panel_margins: Vec<f64>,
+    /// Where the first panel goes (default: at the bottom for a stack and a single column, at the
+    /// top left otherwise).
+    #[arg(long, value_enum, requires = "panels")]
+    pub panel_order: Option<PanelOrderArg>,
+    /// The axes the panels share (default: x for a stack, none for a grid).
+    #[arg(long, value_enum, requires = "panels")]
+    pub panel_link: Option<PanelLinkArg>,
     #[command(flatten)]
     pub style: StyleArgs,
     #[command(flatten)]
     pub read: ReadOptions,
+}
+
+/// Where the first panel goes (`sheaf plot --panel-order`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PanelOrderArg {
+    /// Row by row from the bottom left: the first panel is at the bottom.
+    BottomUp,
+    /// Row by row from the top left.
+    TopDown,
+}
+
+/// The axes the panels share (`sheaf plot --panel-link`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PanelLinkArg {
+    /// One X axis for every panel.
+    X,
+    /// One Y axis for every panel.
+    Y,
+    /// Both.
+    Xy,
+    /// Every panel has its own axes.
+    None,
 }
 
 #[derive(Args, Debug)]

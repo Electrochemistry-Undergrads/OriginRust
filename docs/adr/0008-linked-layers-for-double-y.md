@@ -61,3 +61,7 @@ Sheaf uses linked layers (option 1), as Origin 2016 does.
 - Differences from Origin 2016 that follow from this design (shared X range from all linked data,
   colours that increment within each layer, one legend for the graph) are listed in graphing.md
   section 12.8.
+- Multi-panel graphs (graphing.md section 15, added later) use the same links: the panels of a
+  stack are linked to the first panel with a straight X link, and each keeps a place of its own,
+  stored like every linked frame as fractions of the parent's frame. A layer and its right Y layer
+  share a place; the layers with a place of their own are the graph's panels.

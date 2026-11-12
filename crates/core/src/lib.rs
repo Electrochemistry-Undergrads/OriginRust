@@ -17,6 +17,7 @@ pub mod formula;
 pub mod graph;
 pub mod history;
 pub mod ids;
+pub mod panels;
 pub mod project;
 pub mod template;
 pub mod worksheet;

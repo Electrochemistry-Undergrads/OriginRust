@@ -3,7 +3,7 @@
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
 use sheaf_core::graph::{Graph, LineStyle, PlotKind, Stack, TickDirection, TickLabelSource};
-
+use sheaf_core::panels::{MAX_PANELS, PanelLayout, PanelOrder};
 use sheaf_core::project::Window;
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
 use sheaf_core::{Color, ColumnId, Project, WindowId};
@@ -17,7 +17,7 @@ pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Info(a) => info(a),
         Command::Import(a) => import(a),
-        Command::Plot(a) => plot(a),
+        Command::Plot(a) => plot(*a),
         Command::Export(a) => export(a),
         Command::ExportData(a) => export_data(a),
         Command::Analyze(a) => crate::analyze::analyze(a),
@@ -426,12 +426,15 @@ fn check_limits(axis: &str, min: Option<f64>, max: Option<f64>) -> Result<()> {
 
 /// Applies the style options of the command line to a graph.
 ///
-/// The options act on the first layer and the layers linked to it (its right Y axis): `--x-*`
-/// and `--y-*` (with `--x-labels` and `--x-label-angle`) set the first layer, whose X axis linked
-/// layers follow; `--y2-*` set the right Y axis; `--bar-gap` and `--bar-overlap` set every layer of
-/// the group; colors, labels and line widths count the plots in legend order, first layer first.
-/// Further layers of a graph read from an Origin project are left alone.
-fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<()> {
+/// The options act on the first layer and the layers linked to it (its right Y axis, or the other
+/// panels of a stack); with `every_panel` (a graph just made with `--panels`) they act on every
+/// layer. Among those layers, the panels ([`Graph::panels`]) take `--x-*` and `--y-*` (with
+/// `--x-labels`, `--x-label-angle`, `--stack`, `--no-y-tick-labels` and `--no-y-ticks`); a linked
+/// X axis follows the first panel's. `--y2-*` set the first panel's right Y axis; `--bar-gap` and
+/// `--bar-overlap` set every layer; colors, labels and line widths count the plots in legend order,
+/// layer by layer. `--offsets` and `--waterfall` need a graph of one panel. Further layers of a
+/// graph read from an Origin project are left alone.
+fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_panel: bool) -> Result<()> {
     require_page_size("--width", s.width)?;
     require_page_size("--height", s.height)?;
     require_positive("--line-width", s.line_width)?;
@@ -446,7 +449,13 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
-    check_stack_fits(g, s)?;
+    // The layers the options act on, in legend order, and the panels among them.
+    let roots: Vec<usize> =
+        if every_panel { (0..g.layers.len()).filter(|&i| g.root_of(i) == i).collect() } else { vec![0] };
+    let styled: Vec<usize> = roots.iter().flat_map(|&r| g.group(r)).collect();
+    let panels = g.panels();
+    let mains: Vec<usize> = styled.iter().copied().filter(|i| panels.contains(i)).collect();
+    check_stack_fits(g, s, mains.len())?;
     let right = g.right_y_member(0);
     let wants_y2 = s.y2_title.is_some() || s.y2_min.is_some() || s.y2_max.is_some() || s.y2_step.is_some();
     if wants_y2 && right.is_none() {
@@ -461,7 +470,6 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
     if let Some(h) = s.height {
         g.page.height_pt = h * 72.0;
     }
-    let group = g.group(0);
     if let Some(r) = right {
         let y2 = &mut g.layers[r].y_axis;
         if let Some(t) = &s.y2_title {
@@ -472,52 +480,54 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs) -> Result<
         y2.major_step = s.y2_step.or(y2.major_step);
     }
     if let Some(mode) = s.axis_colors {
-        for &i in &group {
+        for &i in &styled {
             g.layers[i].y_axis.color_follows_plot = mode == AxisColors::Plot;
         }
     }
-    for &i in &group {
+    for &i in &styled {
         let bars = &mut g.layers[i].bars;
         bars.gap_pct = s.bar_gap.unwrap_or(bars.gap_pct);
         bars.overlap_pct = s.bar_overlap.unwrap_or(bars.overlap_pct);
     }
-    style_plots(g, &group, s, &colors);
-    let Some(layer) = g.layers.first_mut() else {
-        return Ok(());
-    };
-    if let Some(t) = &s.x_title {
-        layer.x_axis.title = Some(t.clone());
+    style_plots(g, &styled, s, &colors);
+    for &i in &mains {
+        let layer = &mut g.layers[i];
+        if let Some(t) = &s.x_title {
+            layer.x_axis.title = Some(t.clone());
+        }
+        if let Some(t) = &s.y_title {
+            layer.y_axis.title = Some(t.clone());
+        }
+        layer.x_axis.min = s.x_min.or(layer.x_axis.min);
+        layer.x_axis.max = s.x_max.or(layer.x_axis.max);
+        layer.y_axis.min = s.y_min.or(layer.y_axis.min);
+        layer.y_axis.max = s.y_max.or(layer.y_axis.max);
+        layer.x_axis.major_step = s.x_step.or(layer.x_axis.major_step);
+        layer.y_axis.major_step = s.y_step.or(layer.y_axis.major_step);
+        if let Some(stack) = stack {
+            layer.stack = stack;
+        }
+        if s.no_y_tick_labels {
+            layer.y_axis.show_tick_labels = false;
+        }
+        if s.no_y_ticks {
+            layer.y_axis.major_tick = TickDirection::None;
+            layer.y_axis.minor_tick = TickDirection::None;
+        }
+        if let Some(source) = x_labels {
+            layer.x_axis.tick_label_source = source;
+        }
+        layer.x_axis.tick_label_angle_deg = s.x_label_angle.unwrap_or(layer.x_axis.tick_label_angle_deg);
     }
-    if let Some(t) = &s.y_title {
-        layer.y_axis.title = Some(t.clone());
-    }
-    layer.x_axis.min = s.x_min.or(layer.x_axis.min);
-    layer.x_axis.max = s.x_max.or(layer.x_axis.max);
-    layer.y_axis.min = s.y_min.or(layer.y_axis.min);
-    layer.y_axis.max = s.y_max.or(layer.y_axis.max);
-    layer.x_axis.major_step = s.x_step.or(layer.x_axis.major_step);
-    layer.y_axis.major_step = s.y_step.or(layer.y_axis.major_step);
-    if let Some(stack) = stack {
-        layer.stack = stack;
-    }
-    if !s.offsets.is_empty() {
+    if !s.offsets.is_empty()
+        && let Some(layer) = g.layers.first_mut()
+    {
         layer.stack = Stack::Individual;
         let columns: Vec<ColumnId> = layer.plots.iter().map(|p| p.y).collect();
         for (column, y) in columns.into_iter().zip(&s.offsets) {
             layer.plot_offset_mut(column).y = *y;
         }
     }
-    if s.no_y_tick_labels {
-        layer.y_axis.show_tick_labels = false;
-    }
-    if s.no_y_ticks {
-        layer.y_axis.major_tick = TickDirection::None;
-        layer.y_axis.minor_tick = TickDirection::None;
-    }
-    if let Some(source) = x_labels {
-        layer.x_axis.tick_label_source = source;
-    }
-    layer.x_axis.tick_label_angle_deg = s.x_label_angle.unwrap_or(layer.x_axis.tick_label_angle_deg);
     Ok(())
 }
 
@@ -607,10 +617,14 @@ fn parse_stack(text: &str) -> Result<Stack> {
     bail!("--stack must be none, auto, auto:GAP or step:STEP (got '{text}')")
 }
 
-/// Refuses stack options that do not fit the graph: more `--offsets` than the first layer has
-/// curves, and a waterfall in a graph with a right Y axis (a waterfall is drawn only for a layer
-/// on its own).
-fn check_stack_fits(g: &Graph, s: &StyleArgs) -> Result<()> {
+/// Refuses stack options that do not fit the graph: `--offsets` or `--waterfall` on a graph of
+/// several panels (`panels` is the number of panels the options act on), more `--offsets` than
+/// the first layer has curves, and a waterfall in a graph with a right Y axis (a waterfall is drawn
+/// only for a layer on its own).
+fn check_stack_fits(g: &Graph, s: &StyleArgs, panels: usize) -> Result<()> {
+    if panels > 1 && (!s.offsets.is_empty() || !s.waterfall.is_empty()) {
+        bail!("--offsets and --waterfall work on a graph of one panel; this graph has {panels} panels");
+    }
     let plots = g.layers.first().map_or(0, |l| l.plots.len());
     if s.offsets.len() > plots {
         bail!("--offsets gives {} values but the graph has {} curve(s)", s.offsets.len(), plots);
@@ -685,6 +699,8 @@ fn plot(a: PlotArgs) -> Result<()> {
 
     let graph = if let Some(name) = &a.graph {
         pick_graph(&project, Some(name))?
+    } else if let Some(spec) = &a.panels {
+        panel_graph(&mut project, template_from(a.template.as_deref(), suggested)?, spec, &a)?
     } else if a.inputs.len() > 1 {
         overlay_files(&mut project, template_from(a.template.as_deref(), suggested)?, &a)?
     } else {
@@ -703,7 +719,7 @@ fn plot(a: PlotArgs) -> Result<()> {
             project.plot_columns_double_y(template, &left, &right)?
         }
     };
-    apply_style(&mut project, graph, &a.style)?;
+    apply_style(&mut project, graph, &a.style, a.panels.is_some())?;
 
     sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
@@ -712,6 +728,193 @@ fn plot(a: PlotArgs) -> Result<()> {
         save_project(&project, path)?;
     }
     Ok(())
+}
+
+/// The shape asked for with `--panels`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum PanelShape {
+    Stack,
+    Grid { rows: usize, cols: usize },
+}
+
+/// Reads the value of `--panels`: `stack`, or ROWSxCOLUMNS such as `2x2`.
+fn parse_panels(text: &str) -> Result<PanelShape> {
+    let t = text.trim().to_ascii_lowercase();
+    if t == "stack" {
+        return Ok(PanelShape::Stack);
+    }
+    let bad = || anyhow!("--panels must be 'stack' or ROWSxCOLUMNS such as 2x2 (got '{text}')");
+    let (r, c) = t.split_once('x').ok_or_else(bad)?;
+    let rows: usize = r.trim().parse().map_err(|_| bad())?;
+    let cols: usize = c.trim().parse().map_err(|_| bad())?;
+    if rows == 0 || cols == 0 || rows.saturating_mul(cols) > MAX_PANELS {
+        bail!("--panels {text}: rows x columns must be from 1 to {MAX_PANELS} panels (got {rows} x {cols})");
+    }
+    Ok(PanelShape::Grid { rows, cols })
+}
+
+/// The curves of each panel, before `--per-panel`, and the legend text of the curves that need
+/// one (several files: the file name).
+///
+/// With several files, each file is one group (its `-y` or default columns), or with `--panel-y`
+/// each group takes the named columns of every file. With one input, each plotted Y column (`-y`
+/// or the default columns) is a group, or `--panel-y` names the columns of each group.
+fn panel_groups(
+    project: &Project,
+    template: Template,
+    a: &PlotArgs,
+) -> Result<(Vec<Vec<ColumnId>>, Vec<(ColumnId, String)>)> {
+    let split = |spec: &String| -> Vec<String> { spec.split(',').map(|n| n.trim().to_string()).collect() };
+    let mut labels = Vec::new();
+    if a.inputs.len() > 1 {
+        let books: Vec<WindowId> = project.workbooks().map(|b| b.id).collect();
+        let mut sheets = Vec::new();
+        for &book in &books {
+            sheets.push((book, pick_sheet(project, book, a.sheet.as_deref())?));
+        }
+        let mut groups = Vec::new();
+        if a.panel_y.is_empty() {
+            for &(book, sheet) in &sheets {
+                let ys = if a.y.is_empty() {
+                    project.default_plot_columns(book, sheet, template)
+                } else {
+                    named_columns(project, book, sheet, &a.y)?
+                };
+                labels.extend(ys.iter().copied().zip(overlay_labels(project, book, &ys)));
+                groups.push(ys);
+            }
+        } else {
+            for spec in &a.panel_y {
+                let mut group = Vec::new();
+                for &(book, sheet) in &sheets {
+                    let ys = named_columns(project, book, sheet, &split(spec))?;
+                    labels.extend(ys.iter().copied().zip(overlay_labels(project, book, &ys)));
+                    group.extend(ys);
+                }
+                groups.push(group);
+            }
+        }
+        return Ok((groups, labels));
+    }
+    let book = pick_book(project, a.book.as_deref())?;
+    let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+    if !a.panel_y.is_empty() {
+        let groups =
+            a.panel_y.iter().map(|spec| named_columns(project, book, sheet, &split(spec))).collect::<Result<_>>()?;
+        return Ok((groups, labels));
+    }
+    let ys = if a.y.is_empty() {
+        project.default_plot_columns(book, sheet, template)
+    } else {
+        named_columns(project, book, sheet, &a.y)?
+    };
+    Ok((ys.into_iter().map(|y| vec![y]).collect(), labels))
+}
+
+/// Puts the curves of `groups`, in order, into panels of `--per-panel` curves each.
+fn regroup(groups: Vec<Vec<ColumnId>>, per_panel: &[usize]) -> Result<Vec<Vec<ColumnId>>> {
+    if per_panel.is_empty() {
+        return Ok(groups);
+    }
+    if per_panel.contains(&0) {
+        bail!("--per-panel counts must be 1 or more");
+    }
+    let curves: Vec<ColumnId> = groups.into_iter().flatten().collect();
+    let sum: usize = per_panel.iter().sum();
+    if sum != curves.len() {
+        bail!("--per-panel counts add up to {sum} but there are {} curves", curves.len());
+    }
+    let mut rest = &curves[..];
+    Ok(per_panel
+        .iter()
+        .map(|&n| {
+            let (head, tail) = rest.split_at(n);
+            rest = tail;
+            head.to_vec()
+        })
+        .collect())
+}
+
+/// The layout of `--panels` with the `--panel-*` options applied.
+fn panel_layout(shape: PanelShape, panels: usize, template: Template, a: &PlotArgs) -> Result<PanelLayout> {
+    let mut layout = match shape {
+        PanelShape::Stack => {
+            if panels > MAX_PANELS {
+                bail!("--panels stack can hold at most {MAX_PANELS} panels, but there are {panels} to stack");
+            }
+            PanelLayout::stack(panels)
+        }
+        PanelShape::Grid { rows, cols } => {
+            PanelLayout::grid(rows, cols, &template.new_graph(WindowId(0), "").layers[0].frame)
+        }
+    };
+    let check = |option: &str, v: f64, hi: f64| -> Result<f64> {
+        if v.is_finite() && (0.0..=hi).contains(&v) {
+            Ok(v)
+        } else {
+            bail!("{option} must be from 0 to {hi} percent of the page (got {v})")
+        }
+    };
+    match a.panel_gap[..] {
+        [] => {}
+        [both] => {
+            layout.h_gap = check("--panel-gap", both, 50.0)?;
+            layout.v_gap = layout.h_gap;
+        }
+        [h, v] => {
+            layout.h_gap = check("--panel-gap", h, 50.0)?;
+            layout.v_gap = check("--panel-gap", v, 50.0)?;
+        }
+        _ => bail!("--panel-gap takes one number, or two as H,V (got {} numbers)", a.panel_gap.len()),
+    }
+    match a.panel_margins[..] {
+        [] => {}
+        [l, r, t, b] => {
+            layout.margin_left = check("--panel-margins", l, 90.0)?;
+            layout.margin_right = check("--panel-margins", r, 90.0)?;
+            layout.margin_top = check("--panel-margins", t, 90.0)?;
+            layout.margin_bottom = check("--panel-margins", b, 90.0)?;
+        }
+        _ => bail!("--panel-margins takes four numbers, L,R,T,B (got {} numbers)", a.panel_margins.len()),
+    }
+    if let Some(order) = a.panel_order {
+        layout.order = match order {
+            PanelOrderArg::BottomUp => PanelOrder::BottomUp,
+            PanelOrderArg::TopDown => PanelOrder::TopDown,
+        };
+    }
+    if let Some(link) = a.panel_link {
+        (layout.link_x, layout.link_y) = match link {
+            PanelLinkArg::X => (true, false),
+            PanelLinkArg::Y => (false, true),
+            PanelLinkArg::Xy => (true, true),
+            PanelLinkArg::None => (false, false),
+        };
+    }
+    Ok(layout)
+}
+
+/// One graph with several panels (`--panels`), graphing spec section 15.6.
+fn panel_graph(project: &mut Project, template: Template, spec: &str, a: &PlotArgs) -> Result<WindowId> {
+    let shape = parse_panels(spec)?;
+    if matches!(template, Template::DoubleY | Template::Waterfall) {
+        bail!("the {} template cannot be used with --panels; choose another template", template.name());
+    }
+    let (groups, labels) = panel_groups(project, template, a)?;
+    if groups.iter().all(|g| g.is_empty()) {
+        bail!("there are no numeric Y columns to plot");
+    }
+    let groups = regroup(groups, &a.per_panel)?;
+    let layout = panel_layout(shape, groups.len(), template, a)?;
+    let graph = project.plot_panels(template, &groups, &layout)?;
+    if let Some(g) = project.graph_mut(graph) {
+        for plot in g.layers.iter_mut().flat_map(|l| l.plots.iter_mut()) {
+            if let Some((_, label)) = labels.iter().find(|(c, _)| *c == plot.y) {
+                plot.label = Some(label.clone());
+            }
+        }
+    }
+    Ok(graph)
 }
 
 /// The Y columns of one sheet for the left and the right axis.
@@ -866,7 +1069,7 @@ fn export(a: ExportArgs) -> Result<()> {
     }
     let mut project = load_project(&a.project)?;
     let graph = pick_graph(&project, a.graph.as_deref())?;
-    apply_style(&mut project, graph, &a.style)?;
+    apply_style(&mut project, graph, &a.style, false)?;
     sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());

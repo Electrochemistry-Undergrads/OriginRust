@@ -4,6 +4,7 @@
 use crate::column::{Column, ColumnData, Designation};
 use crate::graph::{Graph, LegendScope, Plot};
 use crate::ids::{ColumnId, WindowId};
+use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
 use crate::template::{Template, right_y_layer};
 use crate::worksheet::{Workbook, Worksheet};
 use serde::{Deserialize, Serialize};
@@ -84,6 +85,8 @@ pub enum ProjectError {
     NoSuchLayer(usize),
     #[error("the layer has no plot {0}")]
     NoSuchPlot(usize),
+    #[error("{0}")]
+    Panels(#[from] PanelError),
 }
 
 impl Project {
@@ -467,27 +470,98 @@ impl Project {
     }
 
     /// Gives layer `parent` of a graph a right Y axis and returns the index of the layer that
-    /// carries it. When the parent's group already has such a layer, that layer is returned and
-    /// nothing changes. Otherwise a new layer linked to the parent (or to the parent's own parent
-    /// when `parent` is itself linked) is appended (see [`right_y_layer`]); the parent then no
-    /// longer draws a line or ticks on its right edge, and its legend lists the plots of every
-    /// layer.
+    /// carries it. The axis belongs to the panel `parent` is drawn in (the first layer of
+    /// [`Graph::same_frame`]). When that panel already has such a layer, that layer is returned and
+    /// nothing changes. Otherwise a new layer (see [`right_y_layer`]) is appended, linked to the
+    /// panel's root with the panel's X scale and covering the panel; the panel then no longer draws
+    /// a line or ticks on its right edge, and its legend lists the plots of both layers.
+    ///
+    /// A panel of a multi-panel graph whose X scale is not shared with the first panel cannot get
+    /// a right Y axis, because a link always goes to a root layer.
     pub fn add_right_y_layer(&mut self, graph: WindowId, parent: usize) -> Result<usize, ProjectError> {
         let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
         if parent >= g.layers.len() {
             return Err(ProjectError::NoSuchLayer(parent));
         }
-        let root = g.root_of(parent);
-        if let Some(existing) = g.right_y_member(root) {
+        let panel = g.same_frame(parent)[0];
+        if let Some(existing) = g.right_y_member(panel) {
             return Ok(existing);
         }
-        let layer = right_y_layer(&g.layers[root], root);
-        let p = &mut g.layers[root];
+        let root = g.root_of(panel);
+        if g.valid_link(panel).is_some_and(|l| l.x != crate::graph::ScaleLink::Straight) {
+            return Err(PanelError::RightAxis.into());
+        }
+        let mut layer = right_y_layer(&g.layers[panel], root);
+        layer.frame = g.place(panel);
+        let p = &mut g.layers[panel];
         p.y_axis.show_opposite = false;
         p.y_axis.opposite_ticks = false;
         p.legend.scope = LegendScope::Graph;
         g.layers.push(layer);
         Ok(g.layers.len() - 1)
+    }
+
+    /// Creates a multi-panel graph of `template` (graphing spec section 15.4) and returns its id.
+    ///
+    /// Each group of Y columns goes into one panel, in order; with more groups than cells, group g
+    /// goes into panel `g mod cells`, as Origin's panel templates deal the columns out. Every panel
+    /// is a copy of the template's layer, placed by `layout`, linked to the first panel when the
+    /// layout links an axis, and with the labels at joints without a gap hidden. Each panel gets
+    /// the template's palette from its first color, as Origin starts the colors again in every
+    /// layer. The page follows `layout.page`; the long name comes from the first column's workbook.
+    pub fn plot_panels(
+        &mut self,
+        template: Template,
+        groups: &[Vec<ColumnId>],
+        layout: &PanelLayout,
+    ) -> Result<WindowId, ProjectError> {
+        let cells = layout.frames()?.len();
+        if groups.is_empty() {
+            return Err(PanelError::NoGroups.into());
+        }
+        for y in groups.iter().flatten() {
+            self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
+        }
+        let mut g = template.new_graph(WindowId(0), "");
+        if g.layers.len() != 1 {
+            return Err(PanelError::Template(template.name()).into());
+        }
+        let base = g.layers[0].clone();
+        let count = groups.len().min(cells);
+        let first = groups.iter().flatten().next();
+        let long_name = first.and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
+        let (w, h) = (g.page.width_pt, g.page.height_pt);
+        match layout.page {
+            PanelPage::Keep => {}
+            PanelPage::Upright => {
+                if w > h {
+                    (g.page.width_pt, g.page.height_pt) = (h, w);
+                }
+            }
+            PanelPage::Tiled => {
+                g.page.width_pt = w * layout.cols as f64;
+                g.page.height_pt = h * layout.rows as f64;
+            }
+        }
+        panel_layers(&mut g, &base, count, layout)?;
+        let graph = WindowId(self.fresh_id());
+        g.id = graph;
+        g.name = self.unique_name("Graph");
+        self.windows.push(Window::Graph(g));
+        for (k, group) in groups.iter().enumerate() {
+            for y in group {
+                self.add_plot(graph, k % cells, *y)?;
+            }
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            for layer in &mut g.layers {
+                layer.apply_palette();
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
     }
 
     /// Moves plot `index` of layer `from` to the end of layer `to` (for example from the left Y
@@ -738,6 +812,149 @@ mod tests {
         }
         let missing = ColumnId(999);
         assert_eq!(p.plot_columns_double_y(Template::Line, &[missing], &[]), Err(ProjectError::NoSuchColumn(missing)));
+    }
+
+    /// A sheet with X and the Y columns B to G.
+    fn six_ys() -> (Project, Vec<ColumnId>) {
+        let (mut p, mut ys) = four_ys();
+        let book = p.workbooks().next().unwrap().id;
+        for k in 0..2 {
+            ys.push(p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![f64::from(k); 3])).unwrap());
+        }
+        (p, ys)
+    }
+
+    fn singles(ys: &[ColumnId]) -> Vec<Vec<ColumnId>> {
+        ys.iter().map(|y| vec![*y]).collect()
+    }
+
+    #[test]
+    fn a_stack_links_every_panel_to_the_bottom_one_and_hides_the_inner_x_labels() {
+        use crate::graph::{LayerLink, ScaleLink};
+        let (mut p, ys) = four_ys();
+        let g = p.plot_panels(Template::Line, &singles(&ys[..3]), &PanelLayout::stack(3)).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers.len(), 3);
+        // The Line template's page (6.4 x 4.8 inch) turned upright.
+        let line = Template::Line.new_graph(WindowId(0), "").page;
+        assert_eq!((graph.page.width_pt, graph.page.height_pt), (line.height_pt, line.width_pt));
+        assert!((graph.page.width_pt - 345.6).abs() < 1e-9);
+        assert_eq!(graph.layers[0].link, None);
+        for k in [1, 2] {
+            assert_eq!(graph.layers[k].link, Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None }));
+            assert_eq!(graph.link_parent(k), Some(0));
+        }
+        for (k, y) in ys[..3].iter().enumerate() {
+            assert_eq!(plot_ys(&p, g, k), vec![*y]);
+        }
+        let x_shown: Vec<bool> =
+            graph.layers.iter().map(|l| l.x_axis.show_tick_labels && l.x_axis.show_title).collect();
+        assert_eq!(x_shown, vec![true, false, false]);
+        let end_hidden: Vec<bool> = graph.layers.iter().map(|l| l.y_axis.hide_end_label).collect();
+        assert_eq!(end_hidden, vec![true, true, false]);
+        // Every panel starts the palette again, as Origin does in every layer.
+        let first = graph.layers[0].palette.colors[0];
+        assert!(graph.layers.iter().all(|l| l.plots[0].line.color == first));
+        assert_eq!(graph.long_name, "demo");
+        assert_eq!(graph.panels(), vec![0, 1, 2]);
+        // With a gap of 1, every panel shows its X labels and nothing is hidden.
+        let gap = PanelLayout { v_gap: 1.0, ..PanelLayout::stack(3) };
+        let g = p.plot_panels(Template::Line, &singles(&ys[..3]), &gap).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert!(graph.layers.iter().all(|l| l.x_axis.show_tick_labels && l.x_axis.show_title));
+        assert!(graph.layers.iter().all(|l| !l.y_axis.hide_end_label));
+    }
+
+    #[test]
+    fn a_cv_stack_keeps_the_cv_style_in_every_panel() {
+        use crate::graph::{AutoRange, TickDirection};
+        let (mut p, ys) = four_ys();
+        let g = p.plot_panels(Template::CyclicVoltammetry, &singles(&ys[..2]), &PanelLayout::stack(2)).unwrap();
+        let graph = p.graph(g).unwrap();
+        let cv = Template::CyclicVoltammetry.new_graph(WindowId(0), "").page;
+        assert_eq!((graph.page.width_pt, graph.page.height_pt), (cv.height_pt, cv.width_pt));
+        assert!((graph.page.width_pt - 259.2).abs() < 1e-9 && (graph.page.height_pt - 360.0).abs() < 1e-9);
+        for l in &graph.layers {
+            assert_eq!(l.y_axis.auto_range, AutoRange::SymmetricZero);
+            assert!(l.x_axis.show_opposite && l.y_axis.show_opposite);
+            assert_eq!((l.x_axis.major_tick, l.y_axis.major_tick), (TickDirection::In, TickDirection::In));
+        }
+    }
+
+    #[test]
+    fn a_grid_deals_extra_groups_out_in_turn_like_origins_4_panel() {
+        let (mut p, ys) = six_ys();
+        let layout = PanelLayout::grid(2, 2, &Template::Line.new_graph(WindowId(0), "").layers[0].frame);
+        let g = p.plot_panels(Template::Line, &singles(&ys), &layout).unwrap();
+        assert_eq!(plot_ys(&p, g, 0), vec![ys[0], ys[4]]);
+        assert_eq!(plot_ys(&p, g, 1), vec![ys[1], ys[5]]);
+        assert_eq!(plot_ys(&p, g, 2), vec![ys[2]]);
+        assert_eq!(plot_ys(&p, g, 3), vec![ys[3]]);
+        let graph = p.graph(g).unwrap();
+        // Twice the Line template's page in both directions; no links.
+        let line = Template::Line.new_graph(WindowId(0), "").page;
+        assert_eq!((graph.page.width_pt, graph.page.height_pt), (2.0 * line.width_pt, 2.0 * line.height_pt));
+        assert!((graph.page.width_pt - 921.6).abs() < 1e-9 && (graph.page.height_pt - 691.2).abs() < 1e-9);
+        assert!(graph.layers.iter().all(|l| l.link.is_none() && l.x_axis.show_tick_labels));
+        // The second plot of a panel takes the palette's second color.
+        let layer = &graph.layers[0];
+        assert_eq!(layer.plots[1].line.color, layer.palette.colors[1]);
+        // Three groups in a 2 x 2 grid give three panels; the fourth cell stays empty.
+        let g = p.plot_panels(Template::Line, &singles(&ys[..3]), &layout).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers.len(), 3);
+        let tops: Vec<f64> = graph.layers.iter().map(|l| l.frame.top).collect();
+        assert!(tops[0] == tops[1] && tops[2] > tops[0], "{tops:?}");
+    }
+
+    #[test]
+    fn panel_graphs_need_groups_existing_columns_and_a_one_layer_template() {
+        let (mut p, ys) = four_ys();
+        let before = p.windows.len();
+        let stack = PanelLayout::stack(2);
+        assert_eq!(p.plot_panels(Template::Line, &[], &stack), Err(ProjectError::Panels(PanelError::NoGroups)));
+        let missing = ColumnId(999);
+        assert_eq!(
+            p.plot_panels(Template::Line, &[vec![ys[0]], vec![missing]], &stack),
+            Err(ProjectError::NoSuchColumn(missing))
+        );
+        assert_eq!(
+            p.plot_panels(Template::DoubleY, &singles(&ys[..2]), &stack),
+            Err(ProjectError::Panels(PanelError::Template("double-y")))
+        );
+        let bad = PanelLayout { margin_left: 60.0, margin_right: 40.0, ..stack };
+        assert_eq!(
+            p.plot_panels(Template::Line, &singles(&ys[..2]), &bad),
+            Err(ProjectError::Panels(PanelError::NoRoom))
+        );
+        assert_eq!(p.windows.len(), before, "no graph is left behind");
+        // A group may hold several columns; an empty group gives an empty panel.
+        let g = p.plot_panels(Template::Line, &[vec![ys[0], ys[1]], vec![]], &stack).unwrap();
+        assert_eq!(plot_ys(&p, g, 0), vec![ys[0], ys[1]]);
+        assert!(plot_ys(&p, g, 1).is_empty());
+    }
+
+    #[test]
+    fn a_right_y_axis_belongs_to_the_panel_it_is_added_to() {
+        let (mut p, ys) = four_ys();
+        let g = p.plot_panels(Template::Line, &singles(&ys[..2]), &PanelLayout::stack(2)).unwrap();
+        let r = p.add_right_y_layer(g, 1).unwrap();
+        assert_eq!(r, 2);
+        assert_eq!(p.add_right_y_layer(g, 1), Ok(2), "asked again, the same layer");
+        assert_eq!(p.add_right_y_layer(g, 2), Ok(2), "asked from the right layer itself");
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.link_parent(2), Some(0), "links go to the root");
+        assert_eq!(graph.layers[2].frame, graph.layers[1].frame, "it covers panel 1");
+        assert_eq!(graph.same_frame(1), vec![1, 2]);
+        assert_eq!(graph.right_y_member(0), None, "panel 0 has no right axis");
+        assert_eq!(graph.layers[1].legend.scope, LegendScope::Graph);
+        assert_eq!(graph.layers[0].legend.scope, LegendScope::Layer);
+        assert_eq!(graph.panels(), vec![0, 1]);
+        // A panel that does not share X with the root cannot get one.
+        let side = PanelLayout { link_x: false, link_y: true, ..PanelLayout::stack(2) };
+        let g = p.plot_panels(Template::Line, &singles(&ys[..2]), &side).unwrap();
+        assert_eq!(p.add_right_y_layer(g, 1), Err(ProjectError::Panels(PanelError::RightAxis)));
+        assert_eq!(p.add_right_y_layer(g, 0), Ok(2), "the root can");
     }
 
     #[test]

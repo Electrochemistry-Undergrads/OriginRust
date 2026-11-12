@@ -145,7 +145,7 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | GP-OFF-01 | Stacked lines by Y offsets and waterfall | Shifted curves | P0 | GR 8, GR 13; UI A2 | stacked lines done (model, renderer, Auto as in Origin 2016, Constant, Individual, `-t stacked`, `--stack`, `--offsets`); a simple 2D waterfall (`-t waterfall`, `--waterfall`); app controls, Cumulative mode and reading offsets from .opj not yet |
 | GP-COL-01 | Column and bar charts | Grouped, stacked, floating, 100 percent | P1 | GR 8, GR 14; UI A2 | column charts done (bars side by side per layer, gap and overlap, bars from zero, `-t column`, `--bar-gap`, `--bar-overlap`, the gap read from .opj); horizontal bars, stacked, floating and 100 percent, plot groups and app controls not yet |
 | GP-SPL-01 | Spline and step connection | Smooth and stair-step lines | P1 | GR 5.2 | |
-| GP-PAN-01 | Multi-panel and stack graphs | Several layers per page | P1 | GR 8; XF plotstack, layarrange | |
+| GP-PAN-01 | Multi-panel and stack graphs | Several layers per page | P1 | GR 8, GR 15; XF plotstack, layarrange | done in the model, renderer and command line (`sheaf plot --panels stack` with a shared X axis and the inner X labels hidden, `--panels RxC` grids, `--panel-y`, `--per-panel`, `--panel-gap`, `--panel-margins`, `--panel-order`, `--panel-link`; Arrange Layers as `Graph::arrange`); app menus, panel labels (a), (b) and reading layer links from .opj not yet |
 | GP-AREA-01 | Area and fill-area plots | Filled regions | P1 | UI A2 | |
 | GP-DROP-01 | Drop lines, bubble, colour mapped | Third-variable plots | P1 | UI A2 | |
 | GP-HIST-01 | Histogram | Binned counts | P1 | UI A2 | |

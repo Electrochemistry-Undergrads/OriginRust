@@ -611,7 +611,7 @@ So in the DoubleY template layer 0 draws the bottom, left and top lines and laye
 
 ### 12.5 Legend and colours
 
-- **Graph scope.** A legend with scope `Graph` lists every visible drawable plot of every layer: layer 0's plots in plot order, then layer 1's, and so on. Rows look as before. The box is placed in its own layer's frame. It is drawn after all layers of the graph (at the end of the last layer's drawing), so that no layer's curves cover it.
+- **Graph scope.** A legend with scope `Graph` lists every visible drawable plot of every layer drawn in its layer's frame (`Graph::same_frame`, section 15.2; in a graph of one panel that is every layer): layer 0's plots in plot order, then layer 1's, and so on. Rows look as before. The box is placed in its own layer's frame. It is drawn after all layers of the graph (at the end of the last layer's drawing), so that no layer's curves cover it.
 - **Margins.** A legend in a corner keeps `0.8 * font size` plus the inward length of the major ticks from each frame edge. The tick length counts for every axis of the legend's group that draws ticks pointing `In` or `Both` on that edge (its main edge, or the edge across with `opposite_ticks`). For a single layer this is the rule of figure-rendering.md; on a CV-style graph with a right axis the legend also keeps clear of the right axis's inward ticks.
 - **No entries.** A legend with no entries is not drawn.
 - **Automatic colours** are handed out per layer from that layer's palette (`Layer::recolor_automatic`). A plot that moves between layers takes the new layer's automatic colour unless its colour was chosen by hand. In the DoubleY template the first left curve is black and the first right curve is the third Sheaf palette colour, blue (30, 80, 220), as in Origin. Unlike Origin, a second curve on the same axis gets the next colour.
@@ -619,7 +619,7 @@ So in the DoubleY template layer 0 draws the bottom, left and top lines and laye
 ### 12.6 Commands
 
 **Project API.**
-- `Project::add_right_y_layer(graph, parent) -> Result<usize, ProjectError>`: when `parent`'s group already has a right-Y member, returns it and changes nothing; otherwise appends `right_y_layer(root)` (the root of `parent`'s group), changes the root as in 12.2 and returns the new index.
+- `Project::add_right_y_layer(graph, parent) -> Result<usize, ProjectError>`: when the panel that `parent` is drawn in already has a right-Y member, returns it and changes nothing; otherwise appends `right_y_layer` of that panel, linked to the panel's root and placed over the panel, changes the panel as in 12.2 and returns the new index. In a graph of one panel the panel is the root, as before; for the panels of a multi-panel graph see section 15.4.
 - `Project::move_plot_to_layer(graph, from, index, to)`: moves the plot to the end of layer `to` and hands out automatic colours again in both layers.
 - `Project::plot_columns_double_y(template, left, right)`: makes the graph from `template`, adds the right layer (the DoubleY template already has it), plots `left` in layer 0 and `right` in the right layer, applies each layer's palette, and takes the long name from the first column's workbook.
 - `Project::plot_columns(DoubleY, ys)` alternates the columns as Origin does (1st, 3rd, ... left; 2nd, 4th, ... right). `Project::default_plot_columns` returns every numeric Y column for the DoubleY template, because a double-Y graph exists to show different units. The desktop app's Plot menu lists the template through `Template::ALL`, so "Double Y" works there through these two functions.
@@ -632,7 +632,7 @@ So in the DoubleY template layer 0 draws the bottom, left and top lines and laye
 
 **Style options** (`sheaf plot` and `sheaf export`):
 - `--y2-title TEXT`, `--y2-min`, `--y2-max`, `--y2-step` (negative values are written with `=`, for example `--y2-min=-1`) set the right Y axis of layer 0's group. On a graph without one they are an error ("the graph has no right Y axis ...").
-- `--x-*` and `--y-*` set layer 0. Linked layers follow its X.
+- `--x-*` and `--y-*` set layer 0. Linked layers follow its X. (In a graph of several panels they set every panel of layer 0's group; section 15.6.)
 - `--axis-colors plot|fixed` sets `color_follows_plot` on the Y axes of layer 0's group. When it is absent the template decides.
 - `--colors`, `--labels` and `--line-width` apply to the plots of layer 0's group in legend order (layer 0's plots first). `--no-legend` hides every legend of that group. Further layers of a graph read from an Origin project (multi-panel graphs) are left alone, as before.
 
@@ -1128,3 +1128,201 @@ Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t colu
 - The error bar cap width on columns, and whether error bar ends widen the automatic Y range.
 - Where an `.opj` stores the tick label type and dataset and the overlap; the meaning of record byte `0x06` (14.7) needs a second check.
 - Owner preferences for the `column` template: ticks, box, minor ticks, legend frame, colours.
+
+---
+
+## 15. Multi-panel graphs (P0, GP-PAN-01)
+
+Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin 2016's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin 2016 runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. Where the current online help **[W]** and Origin 2016 disagree, Origin 2016 decides.
+
+A multi-panel graph is one page with several layers, one per panel. Each panel has its own frame, axes, plots and legend. Panels that share an axis are linked layers, the model of ADR 0008 (section 12): no second link model is needed.
+
+### 15.1 What Origin 2016 does
+
+**Pages** [COM]: the plain Line template and the panel templates (PAN2VERT, PAN2HORZ, PAN4, PAN9) have a landscape page of 10.72 x 8.205 in. The STACK template's page is 11.413 x 7.973 in, and the Stack command turns it upright (7.973 x 11.413 in). A merged graph gets a landscape page of 11.41 x 7.973 in.
+
+**Panel templates** [COM]. Layer rectangles in percent of the page (left, top, width, height):
+
+| Template | Layers |
+|---|---|
+| PAN2VERT (Vertical 2 Panel) | layer 1 is the lower panel, (15.00, 50.01, 75.05, 35.06); layer 2 is the upper one, top 4.81, same size |
+| PAN2HORZ (Horizontal 2 Panel) | layer 1 on the left, (15.02, 9.99, 34.98, 75.04); layer 2 on the right, left 59.13, same size |
+| PAN4 (4 Panel) | row by row from the top left; lefts 15.02 and 53.08, tops 9.99 and 49.56, each 34.98 x 35.04 |
+| PAN9 (9 Panel) | row by row from the top left; lefts 15.02, 40.78, 65.50, tops 9.99, 36.38, 63.70, each 21.70 x 21.71 |
+
+The gaps are uneven, so these rectangles are set by hand in the templates, not computed. In these templates:
+- layers 2 and up follow layer 1's position only (unit "% of linked layer"); their scales are not linked;
+- every panel shows its own tick labels, titles and legend, with ticks pointing out;
+- text is drawn smaller in small panels: by 0.5 in PAN4 and 0.3 in PAN9;
+- the selected Y columns are dealt out in turn: column k goes to layer ((k - 1) mod n) + 1, so PAN2VERT with four columns gives the lower layer Y1 and Y3, and PAN4 with six gives layer 1 Y1 and Y5, layer 2 Y2 and Y6, layer 3 Y3 and layer 4 Y4 (the help speaks of splitting the columns into groups; 2016 alternates them);
+- layers without a column stay empty, with axes from 0 to 10;
+- colours start again in every layer.
+
+**Stack command** (defaults from its definition file, results [COM]):
+- portrait page, line plots, one panel per Y column, layer 1 at the bottom; a Y column that follows a second X column keeps that X column;
+- margins 15 (left) and 10 (right, top, bottom) percent of the page, no gap; each panel is (100 - 10 - 10 - (n - 1) x gap) / n high and 75 wide;
+- layers 2 and up are linked to layer 1 with the X axis linked one to one ("Straight") and Y not linked; the shared X range covers the data of every panel (X from -1 to 1 in one panel and 0 to 2 in another gave -1.5 to 2.5 in both);
+- with no gap, only the bottom panel shows X tick labels and the X title; inner panels show neither; the top panel shows tick labels on its top axis but no title;
+- with a gap of 1 or more, every panel shows its X tick labels and title (the current help gives a threshold of 2);
+- every panel keeps its left Y tick labels, its Y title, a Y line on both sides and its own framed legend at the top left; ticks point in;
+- at a joint, the top Y label of the lower panel touches the bottom Y label of the panel above; with a gap, an X title can run into the panel below; Origin prevents neither;
+- the 2016 command has no Y link, no single Y title and no common scale option; later versions added them [W].
+
+Check values [COM]: 3 panels gave (14.99, 63.33, 75, 26.68) for layer 1 and tops 36.67 and 9.99 for layers 2 and 3; 2 panels with a gap of 5 gave height 37.5 and tops 52.51 and 9.99.
+
+**Arrange Layers** (`layarrange`): 2016 defaults are gaps of 5 and margins of 15 on every side. Width = (100 - left - right - (cols - 1) x h_gap) / cols and height likewise; layers fill the grid row by row from the top left. Check: 4 layers in 4 x 1 gave tops 15, 33.76, 52.51 and 71.26, height 13.75, width 69.99 [COM].
+
+**Merge Graph** (`merge_graph`): 2016 defaults are gaps 5 and 5 and margins 15 (left), 10 (right), 10 (top) and 15 (bottom). 2 graphs gave 2 x 1, 3 gave 2 x 2 with one empty cell and no layer in it, 4 gave 2 x 2 and 5 gave 3 x 2 (fits rows = ceil(sqrt(n)) and cols = ceil(n / rows) [INF]). The rectangles follow the Arrange Layers formula exactly; merged layers are not linked and text is scaled (0.46 for 2 x 2, 0.36 for 3 x 2) [COM].
+
+### 15.2 Model
+
+Panels use the fields of section 12 and one new axis field.
+
+| Where | Field | Default | Meaning |
+|---|---|---|---|
+| Layer | `link` (section 12.2) | `None` | Panels 1 and up of a graph whose panels share an axis are linked to panel 0, with `x` or `y` (or both) `Straight`. |
+| Layer | `frame` | | For a linked panel, as for every linked layer, fractions of panel 0's frame (Origin's "% of linked layer"): the panel right above a panel of the same size is `{0, -1, 1, 1}`. |
+| Axis | `hide_end_label` | false | The tick label at unit position 1 (the top end of a Y axis, the right end of an X axis) is not drawn. |
+
+- `hide_end_label` has a serde default and is not written while false, so older files load unchanged and other graphs are saved as before. `FORMAT_VERSION` stays 1; an older Sheaf ignores the field and draws every end label.
+- A link to panel 0 is valid only while panel 0 is not linked itself (section 12.2); an invalid link draws the panel as an independent layer, with its frame read as page fractions.
+
+**Places and panels** (functions of `Graph`, no stored data):
+- `place(i)`: the frame of layer i as fractions of its root's frame: `{0, 0, 1, 1}` (`Frame::WHOLE`) for a root, the layer's own `frame` for a validly linked layer.
+- `same_frame(i)`: the layers of i's group with the same place, in layer order (a layer and its right Y layer, but not the other panels of a stack).
+- `panels()`: every layer that is the first of its `same_frame` list. A one-layer graph and a double-Y graph have one panel.
+- `page_frame(i)`: the frame of layer i in page fractions.
+- `right_y_member(i)` (section 12.2) looks only at the layers of `same_frame(i)`, so each panel can have its own right Y axis.
+
+### 15.3 Panel layout
+
+A `PanelLayout` (`sheaf_core::panels`) is an instruction, not stored in the graph. Lengths are in percent of the page: the margins left and right and the horizontal gap of its width, the others of its height.
+
+| Field | Meaning |
+|---|---|
+| `rows`, `cols` | grid size, each at least 1, at most 64 cells |
+| `h_gap`, `v_gap` | gaps between neighbouring columns and rows, 0 to 50 |
+| `margin_left`, `margin_right`, `margin_top`, `margin_bottom` | 0 to 90 |
+| `order` | `TopDown`: panel k fills the cells row by row from the top left. `BottomUp`: the rows are counted from the bottom, so panel 0 is at the bottom left. |
+| `link_x`, `link_y` | panels 1 and up are linked to panel 0 on that axis |
+| `page` | `Keep` (the template's page), `Upright` (the template's page turned upright: width and height swapped when it is wider than tall) or `Tiled` (`cols` times the template's width by `rows` times its height) |
+
+Constructors:
+- `stack(n)`: Origin's Stack command: n x 1, gaps 0, margins 15, 10, 10, 10 (left, right, top, bottom), `BottomUp`, X linked, `Upright`.
+- `grid(rows, cols, frame)`: Sheaf's grid for a template whose layer sits at `frame` on its page. The page is `Tiled`, and each panel sits in its cell where the template puts its layer, so every panel has the room of a single graph of the template and its labels fit as they do there: with the template's margins a (left), b (right), c (top) and d (bottom) in percent, the margins are a / cols, b / cols, c / rows and d / rows, and the gaps (a + b) / cols and (c + d) / rows. One column fills `BottomUp`, as Origin's Vertical 2 Panel; several columns fill `TopDown`, as its 4 Panel and 9 Panel. No links.
+- `arrange(rows, cols)`: Origin's Arrange Layers defaults: gaps 5, margins 15 on every side, `TopDown`, no links, `Keep`.
+
+**Frames.** With all values in percent:
+- cell width w = (100 - margin_left - margin_right - (cols - 1) x h_gap) / cols;
+- cell height h = (100 - margin_top - margin_bottom - (rows - 1) x v_gap) / rows;
+- panel k is in column c = k mod cols and row r = k div cols (`TopDown`) or rows - 1 - k div cols (`BottomUp`), rows counted from the top;
+- its page frame is left = (margin_left + c (w + h_gap)) / 100, top = (margin_top + r (h + v_gap)) / 100, width = w / 100, height = h / 100.
+
+**Validation**, in this order: a grid size outside the limits ("a panel grid needs at least 1 row and 1 column and at most 64 panels (got R x C)"); a gap that is not a number from 0 to 50; a margin that is not a number from 0 to 90; w or h below 1 ("the margins and gaps leave no room for the panels").
+
+Check values (fractions of the page; the first four agree with Origin's numbers in 15.1 within 0.0002):
+- `stack(3)`: width 0.75, height 0.266667, left 0.15; panel 0 at top 0.633333, panel 1 at 0.366667, panel 2 at 0.10.
+- `stack(2)` with `v_gap` 5: height 0.375, tops 0.525 and 0.10.
+- `arrange(4, 1)`: width 0.70, height 0.1375, tops 0.15, 0.3375, 0.525, 0.7125.
+- Merge Graph's defaults as an `arrange(2, 2)` with margins 15, 10, 10, 15: (0.15, 0.10), (0.55, 0.10), (0.15, 0.50), (0.55, 0.50), each 0.35 x 0.35; with 3 rows, height 0.216667 and panel 4 at (0.15, 0.633333).
+- `grid(2, 2, frame of the line template)`: margins 8, 3, 3.5, 9, gaps 11 and 12.5; each panel 0.39 x 0.375, panel 1 at (0.58, 0.035).
+
+**Arranging an existing graph** (`Graph::arrange`, Origin's Arrange Layers): the panels of the graph (`panels()`, in layer order) go into the cells in order. A root gets the cell as its frame; a linked panel gets the cell as fractions of its root's new frame, and so do the layers drawn in its frame (its right Y layer). Links, axes and the page are not changed. More panels than cells is an error ("the layout has N cell(s) but the graph has M panels").
+
+### 15.4 Building a panel graph
+
+`Project::plot_panels(template, groups, layout)` takes a template, a list of groups (each a list of Y columns, in order) and a layout:
+
+1. Checks: the layout is valid (15.3); there is at least one group ("there is nothing to put in the panels"); every column exists; the template has one layer ("the 'double-y' template has more than one layer and cannot be used for panels"). Nothing is added to the project when a check fails.
+2. Panels: P = min(number of groups, rows x cols). Group g goes to panel g mod (rows x cols), so extra groups are dealt out in turn, as Origin's panel templates do. Cells without a group get no layer, as in Merge Graph. An empty group gives a panel without plots.
+3. Page: from the template's page by `layout.page`.
+4. Layers: P copies of the template's layer. With `link_x` or `link_y`, panels 1 and up get `link = {parent: 0, x, y}` with `Straight` on the linked axes. The frames follow 15.3, linked panels as fractions of panel 0's frame.
+5. Joined rows: when `v_gap` is 0 and `link_x` is on,
+   - a panel with another panel directly below it (same column, next row) gets `x_axis.show_tick_labels = false` and `x_axis.show_title = false`, and its X ticks (major and minor) that point `Out` or `Both` point `In`, so that they do not reach into the panel below;
+   - a panel with another panel directly above it gets `y_axis.hide_end_label = true`.
+6. Joined columns: when `h_gap` is 0 and `link_y` is on,
+   - a panel with another panel directly to its left gets `y_axis.show_tick_labels = false` and `y_axis.show_title = false`, and its Y ticks that point `Out` or `Both` point `In`;
+   - a panel with another panel directly to its right gets `x_axis.hide_end_label = true`.
+7. Plots: the Y columns of each group are added to their panel with `add_plot` (X and error columns from the sheet's designations). Then every layer's palette is applied from its first colour, as Origin starts the colours again in every layer.
+8. Everything else comes from the template: the Y axis rules (for example symmetric about zero in the cyclic voltammetry template), ticks, box, legend and fonts.
+9. The graph's long name is the long name of the workbook of the first column.
+
+`Project::add_right_y_layer(graph, i)` (section 12.6) gives the panel that layer i is drawn in a right Y axis: the new layer is linked to the panel's root with the X axis `Straight`, its frame is the panel's place, and the panel's legend lists the plots of both layers. A linked panel whose X axis is not linked to its root cannot get one ("this panel does not share the X axis of the first panel, so it cannot get a right Y axis"), because links do not chain.
+
+### 15.5 Drawing
+
+Panels use the group drawing of section 12.3 with these additions:
+
+1. **Shared axes.** A linked panel's axis on a `Straight` link is its root's resolved axis, whose automatic range covers the data of every panel linked on that axis (section 12.3, step 2). Its own fonts, tick directions and lengths, visibility flags, `hide_end_label` and title still apply.
+2. **Keeping labels on the page.** The group's label edges are measured as in section 12.3, step 4, and the shifts are applied to the rectangle that holds the nominal frames of all members (for a stack, the whole stack). Every member's frame is then moved and scaled with that rectangle, so the panels stay aligned and touching, and the largest label of any panel decides for all. A group whose members all lie inside the root's frame (every double-Y graph) gives exactly the frames of section 12.3, so existing figures are unchanged.
+3. **End labels.** An axis with `hide_end_label` skips the tick label whose tick has unit position at least 1 - 1e-9, also in the label measurement of rule 2.
+4. **One title for touching panels.** Within a linked group, the panels whose axis (X or Y) is on its normal side and shows its title are put in order along that axis. A run of panels that touch along the axis (for Y titles: the same left side and width, each one's bottom equal to the next one's top, within 1e-6 relative) and whose title texts are equal draws the title once: by the run's panel with the lowest layer index, centred on the whole run, beyond the outermost tick label edge of the run, in that panel's title font and colour. The other panels of the run draw no title. So `--y-title "Intensity (a.u.)"` on a stack gives one Y title for the stack. Panels with different titles keep their own, as in Origin.
+5. **Legend margins** (section 12.5) count the inward ticks of the layers in the legend's frame only (`same_frame`), and a legend with scope `Graph` lists the plots of the layers in its frame only: a layer and its right Y layer, not the other panels.
+6. Layers are drawn in layer order, each as before. A graph without panels, and every existing golden image, draws byte for byte as before.
+
+Check values (fixed text metrics, golden images `cv-stack.svg` and `grid-2x2.svg` in `crates/plot/tests/golden/`):
+- A two-panel Line stack with X from -1 to 1 in panel 0 and 0 to 2 in panel 1 gives both panels the X axis -1..2 with major ticks -1, 0, 1, 2; with the X link set to `None` the panels get -1..1 and 0..2.
+- A two-panel cyclic voltammetry stack with currents reaching ±0.9 in both panels gives each panel the Y axis -1.2..1.2 with step 0.4; the lower panel draws six Y tick labels (no 1.2), the upper panel seven, and the upper panel draws no X tick labels and no X title.
+
+### 15.6 Command line (`sheaf plot`)
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `--panels` | `stack`, or `RxC` such as `2x1`, `1x2`, `2x2` | off | make a panel graph: `stack(n)` with n = the number of groups, or `grid(R, C, frame of the template)` |
+| `--panel-y` | comma-separated column names; repeat the option once per panel | | the Y columns of each panel, in panel order |
+| `--per-panel` | `N,N,...`, each 1 or more | | how many consecutive curves go into each panel |
+| `--panel-gap` | `PCT` (both) or `H,V`, each 0 to 50 | from the layout | gaps in percent of the page |
+| `--panel-margins` | `L,R,T,B`, each 0 to 90 | from the layout | margins in percent of the page |
+| `--panel-order` | `bottom-up`, `top-down` | from the layout | where the first panel goes |
+| `--panel-link` | `x`, `y`, `xy`, `none` | stack `x`, grid `none` | the axes the panels share |
+
+How the groups are made:
+- One input (a data file, or a project with `--book` and `--sheet`): each plotted Y column (`-y`, or the default columns) is a group; with `--panel-y`, each occurrence is a group of the named columns.
+- Several data files: each file is a group (its `-y` or default columns), and the legend names the file (plus the column when the file gives several curves), as for an overlay; with `--panel-y`, each group takes the named columns of every file, in file order.
+- `--per-panel` then cuts the list of all curves, in order, into panels of the given sizes; the counts must add up to the number of curves ("--per-panel counts add up to S but there are N curves").
+
+Rules and messages:
+- The `--panel-*` options and `--per-panel` need `--panels`; `--panels` cannot be combined with `--graph` or `--y2`; `--panel-y` cannot be combined with `-y` or `--per-panel` (clap's messages).
+- `--panels` must be "stack" or `RxC` ("--panels must be 'stack' or ROWSxCOLUMNS such as 2x2 (got 'X')"); R x C must be 1 to 64 ("--panels 0x2: rows x columns must be from 1 to 64 panels (got 0 x 2)"); a stack holds at most 64 panels.
+- `--panel-gap` and `--panel-margins` give "--panel-gap must be from 0 to 50 percent of the page (got 60)" and "--panel-margins takes four numbers, L,R,T,B (got 2 numbers)".
+- The double-y and waterfall templates are refused ("the double-y template cannot be used with --panels; choose another template").
+- Style options act on every panel: `--x-*`, `--y-*`, `--x-labels`, `--x-label-angle`, `--stack`, `--no-y-tick-labels` and `--no-y-ticks` set each panel (a linked X axis follows panel 0's); `--colors`, `--labels` and `--line-width` count the plots across the graph in layer order, so `--colors black,red,blue` colours a three-panel stack panel by panel; `--no-legend`, `--axis-colors`, `--bar-gap` and `--bar-overlap` act on every layer. `--offsets` and `--waterfall` are refused on a graph of several panels ("--offsets and --waterfall work on a graph of one panel; this graph has 3 panels").
+- `sheaf export` keeps its rule of section 12.6: the options act on layer 0's group. For a saved stack that group is every panel; for a saved grid without links it is panel 0 only.
+
+Examples:
+
+```
+sheaf plot before.txt after.txt -t cv --panels stack -o cv-stack.png
+sheaf plot xrd.csv -t stacked --panels stack --panel-order top-down --y-title "Intensity (a.u.)" --no-legend -o xrd.pdf
+sheaf plot cycling.csv --panels 2x1 --panel-y "Q LMO,Q Al-LMO" --panel-y "CE LMO,CE Al-LMO" --panel-gap 0 --panel-link x -o cycling.png
+sheaf plot xrd.csv --panels 2x2 -o grid.svg
+```
+
+### 15.7 Desktop app (later, with ADR 0007)
+
+- Plot > Multi-Panel with Origin's names: Vertical 2 Panel (`grid(2, 1, ...)`), Horizontal 2 Panel (`grid(1, 2, ...)`), 4 Panel (`grid(2, 2, ...)`), 9 Panel (`grid(3, 3, ...)`) and Stack... (a dialog with the options of 15.6), each through `Project::plot_panels`.
+- Graph > Arrange Layers... calls `Graph::arrange` with `PanelLayout::arrange` as the starting values.
+- A layer selector in the graph settings; a change to the scale of a linked axis is written to its root. A double-click picks the panel under the pointer (`layout_geometry` gives each panel's frame).
+
+### 15.8 Origin project files
+
+The `.opj` reader reads every layer of an Origin graph as an independent layer with the limits stored in the file, so the owner's stacks and panel graphs already draw at Origin's ranges without links. Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading links, and writing panel graphs, needs that first.
+
+### 15.9 Deliberate differences from Origin 2016
+
+- Text keeps its size. Grids get a larger page (the template's page per cell) instead of Origin's text scale factor, and their gaps are the room the template leaves around its frame, not Merge Graph's 5 percent, which is too narrow for full-size labels.
+- At a joint without a gap, the lower panel leaves out its top Y label (and a panel with a neighbour on the right its right X label); Origin lets the labels touch.
+- At such a joint, X (or Y) ticks that would point into the neighbouring panel point into their own panel instead.
+- Touching panels of one group with the same title draw it once, centred on them. Origin 2016 has no single title option.
+- The top panel of a stack has no tick labels on its top axis; Sheaf cannot draw top or right tick labels on a normal axis yet.
+- Empty grid cells get no layer, as in Merge Graph; Origin's panel templates keep empty layers.
+- Grids with one column fill from the bottom (as PAN2VERT), grids with several columns from the top left (as PAN4 and PAN9); the order can be changed with `--panel-order`.
+- The shared X range always covers every linked panel's data (Origin: the layer rescaled last decides, section 12.8).
+
+### 15.10 Unknowns
+
+- Whether the shared X range of Origin's Stack is a property of the link or set once by the command; it matters after the data change.
+- The `.opj` bytes of layer links (15.8).
+- Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
+- Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
+- Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns, horizontal stacks, and the defaults of the Layer Management dialog's Arrange tab.

@@ -2,6 +2,7 @@
 
 use super::*;
 use sheaf_core::graph::{Connect, PlotKind, ScaleKind, SymbolShape, TickDirection, TickLabelSource};
+use sheaf_core::panels::{PanelLayout, PanelOrder};
 use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnData, Designation};
 
@@ -1899,4 +1900,233 @@ fn golden_column_template() {
     let ys = vec![vec![12.4, 15.8, 18.2, 9.6, 0.3], vec![3.1, 2.7, 2.2, 3.4, 0.1], vec![0.82, 1.05, 0.61, 1.42, 0.02]];
     let (p, g) = names_project(Template::Column, &["LMO-1", "LMO-2", "Al-LMO", "Ni-LMO", "Blank"], ys);
     compare_golden("column", &svg_of(&p, g));
+}
+
+// ----- multi-panel graphs (graphing spec section 15) ---------------------------------------
+
+/// A panel graph of `template` with one panel per curve. Each curve is in a workbook of its own
+/// (named after the curve), with X "Potential (V)" and Y named after the curve.
+fn panel_graph(template: Template, layout: &PanelLayout, curves: Vec<Curve>) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let mut groups = Vec::new();
+    for c in curves {
+        let book = p.add_workbook(c.name);
+        let x = p.add_column(book, 0, Designation::X, ColumnData::numeric(c.x)).unwrap();
+        {
+            let col = p.column_mut(x).unwrap();
+            col.long_name = "Potential".into();
+            col.units = "V".into();
+        }
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(c.y)).unwrap();
+        let col = p.column_mut(y).unwrap();
+        col.long_name = c.name.into();
+        col.units = c.unit.into();
+        groups.push(vec![y]);
+    }
+    let g = p.plot_panels(template, &groups, layout).unwrap();
+    (p, g)
+}
+
+/// The tick labels of a Y axis on the left (right-aligned texts) in one layer's drawing.
+fn left_labels(scene: &scene::Scene, layer: usize) -> Vec<String> {
+    texts_of(&scene.layers[layer].overlay)
+        .into_iter()
+        .filter(|t| t.anchor == scene::Anchor::End && t.rotate_ccw == 0.0)
+        .map(|t| t.text.clone())
+        .collect()
+}
+
+/// Centred, unturned texts in one layer's drawing: X tick labels and the X title.
+fn centred_texts(scene: &scene::Scene, layer: usize) -> Vec<String> {
+    texts_of(&scene.layers[layer].overlay)
+        .into_iter()
+        .filter(|t| t.anchor == scene::Anchor::Middle && t.rotate_ccw == 0.0)
+        .map(|t| t.text.clone())
+        .collect()
+}
+
+#[test]
+fn the_panels_of_a_stack_share_one_x_axis_that_covers_every_panel() {
+    let a: Vec<f64> = (0..=20).map(|i| -1.0 + 0.1 * f64::from(i)).collect();
+    let b: Vec<f64> = (0..=20).map(|i| 0.1 * f64::from(i)).collect();
+    let curves = vec![curve("A", "mA", &a, |v| v), curve("B", "mA", &b, |v| 10.0 * v)];
+    let (mut p, g) = panel_graph(Template::Line, &PanelLayout::stack(2), curves);
+    let geoms = fixed_geometry(&p, g);
+    for geom in &geoms {
+        assert_eq!((geom.x.min, geom.x.max), (-1.0, 2.0));
+        assert_eq!(geom.x.major, vec![-1.0, 0.0, 1.0, 2.0]);
+    }
+    // Each panel has its own Y axis.
+    assert_eq!((geoms[0].y.min, geoms[0].y.max), (-1.0, 1.0));
+    assert_eq!((geoms[1].y.min, geoms[1].y.max), (0.0, 20.0));
+    // Panel 1 sits right on top of panel 0, as wide as it.
+    let (f0, f1) = (geoms[0].frame, geoms[1].frame);
+    assert!(near(f1.y + f1.h, f0.y) && near(f1.x, f0.x) && near(f1.w, f0.w) && near(f1.h, f0.h), "{f0:?} {f1:?}");
+    // The Y labels and titles need a little more than the 15 % margin, so both panels lose the same
+    // width on the left; the right side (90 %) and the top of the stack (10 %) stay.
+    assert!(f0.x > 0.15 * 345.6 && near(f0.x + f0.w, 0.90 * 345.6) && near(f1.y, 0.10 * 460.8), "{f0:?} {f1:?}");
+    // Limits set on the first panel apply to both.
+    p.graph_mut(g).unwrap().layers[0].x_axis.max = Some(3.0);
+    assert!(fixed_geometry(&p, g).iter().all(|geom| geom.x.max == 3.0));
+    p.graph_mut(g).unwrap().layers[0].x_axis.max = None;
+    // Without the X link each panel has its own X range; the panel keeps its place.
+    p.graph_mut(g).unwrap().layers[1].link.as_mut().unwrap().x = sheaf_core::graph::ScaleLink::None;
+    let geoms = fixed_geometry(&p, g);
+    assert_eq!((geoms[0].x.min, geoms[0].x.max), (-1.0, 1.0));
+    assert_eq!((geoms[1].x.min, geoms[1].x.max), (0.0, 2.0));
+    assert!(near(geoms[1].frame.y + geoms[1].frame.h, geoms[0].frame.y));
+}
+
+#[test]
+fn a_panel_with_an_invalid_link_is_drawn_on_its_own() {
+    use sheaf_core::graph::{LayerLink, ScaleLink};
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    for (layer, parent) in [(0, 0), (1, 5), (1, 1)] {
+        let curves = vec![curve("A", "mA", &x, |v| v), curve("B", "mA", &x, |v| -v)];
+        let (mut p, g) = panel_graph(Template::Line, &PanelLayout::stack(2), curves);
+        p.graph_mut(g).unwrap().layers[layer].link =
+            Some(LayerLink { parent, x: ScaleLink::Straight, y: ScaleLink::None });
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.link_parent(1), None, "layer {layer} -> {parent}");
+        let geoms = fixed_geometry(&p, g);
+        assert_eq!(geoms.len(), 2);
+        svg_of(&p, g);
+        layout_geometry(&p, g).unwrap();
+    }
+}
+
+#[test]
+fn a_cv_stack_hides_the_top_label_of_the_lower_panel_and_the_inner_x_axis_labels() {
+    let x: Vec<f64> = (0..=10).map(|i| -0.2 + 0.08 * f64::from(i)).collect();
+    let down = |v: f64| 0.9 - 0.18 * ((v + 0.2) / 0.08);
+    let curves = vec![curve("Before", "mA", &x, down), curve("After", "mA", &x, |v| -down(v))];
+    let (p, g) = panel_graph(Template::CyclicVoltammetry, &PanelLayout::stack(2), curves);
+    let geoms = fixed_geometry(&p, g);
+    for geom in &geoms {
+        assert!(near(geom.y.min, -1.2) && near(geom.y.max, 1.2) && near(geom.y.step, 0.4), "{:?}", geom.y);
+    }
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let (lower, upper) = (left_labels(&scene, 0), left_labels(&scene, 1));
+    assert_eq!(lower.len(), 6, "{lower:?}");
+    assert!(!lower.contains(&"1.2".to_string()) && lower.contains(&"\u{2212}1.2".to_string()), "{lower:?}");
+    assert_eq!(upper.len(), 7, "{upper:?}");
+    assert!(upper.contains(&"1.2".to_string()) && upper.contains(&"\u{2212}1.2".to_string()), "{upper:?}");
+    // Only the bottom panel shows X tick labels and the X title.
+    assert!(centred_texts(&scene, 1).is_empty(), "{:?}", centred_texts(&scene, 1));
+    assert!(centred_texts(&scene, 0).contains(&"Potential (V)".to_string()));
+    // Each panel keeps its Y title and its legend.
+    for (layer, name) in [(0, "Before"), (1, "After")] {
+        let texts = texts_of(&scene.layers[layer].overlay);
+        assert!(texts.iter().any(|t| t.rotate_ccw == 90.0 && t.text == format!("{name} (mA)")));
+        assert!(texts.iter().any(|t| t.anchor == scene::Anchor::Start && t.text == name));
+    }
+}
+
+#[test]
+fn the_panels_of_a_stack_move_together_to_keep_wide_labels_on_the_page() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let curves = vec![curve("Narrow", "V", &x, |v| v / 10.0), curve("Wide", "counts", &x, |v| 450000.0 + 1000.0 * v)];
+    let layout = PanelLayout { margin_left: 1.0, ..PanelLayout::stack(2) };
+    let (p, g) = panel_graph(Template::Line, &layout, curves);
+    let geoms = fixed_geometry(&p, g);
+    let nominal = 0.01 * 345.6;
+    let (f0, f1) = (geoms[0].frame, geoms[1].frame);
+    assert!(f0.x > nominal + 20.0, "the wide labels of panel 1 move both panels: {f0:?}");
+    assert!(near(f0.x, f1.x) && near(f0.w, f1.w), "{f0:?} {f1:?}");
+    assert!(near(f0.x + f0.w, nominal + 0.89 * 345.6), "the right side stays: {f0:?}");
+    // The title of the wide panel now starts 3 pt inside the page.
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let title = texts_of(&scene.layers[1].overlay).into_iter().find(|t| t.rotate_ccw == 90.0).unwrap();
+    assert!(near(title.x - 0.72 * title.size, 3.0), "{title:?}");
+}
+
+#[test]
+fn a_stack_without_room_below_shrinks_as_a_whole_to_keep_the_x_title_on_the_page() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    for order in [PanelOrder::BottomUp, PanelOrder::TopDown] {
+        let curves = vec![curve("A", "V", &x, |v| v), curve("B", "V", &x, |v| -v), curve("C", "V", &x, |v| v * v)];
+        let layout = PanelLayout { margin_bottom: 0.0, order, ..PanelLayout::stack(3) };
+        let (p, g) = panel_graph(Template::Line, &layout, curves);
+        let geoms = fixed_geometry(&p, g);
+        let mut frames: Vec<Rect> = geoms.iter().map(|g| g.frame).collect();
+        frames.sort_by(|a, b| a.y.total_cmp(&b.y));
+        // Still touching, equally high, and the top stays where it was.
+        assert!(near(frames[0].y, 0.10 * 460.8), "{frames:?}");
+        for w in frames.windows(2) {
+            assert!(near(w[0].y + w[0].h, w[1].y) && near(w[0].h, w[1].h), "{frames:?}");
+        }
+        let svg = svg_of(&p, g);
+        let d = doc(&svg);
+        let title = d.descendants().find(|n| n.has_tag_name("text") && n.text() == Some("Potential (V)")).unwrap();
+        let y: f64 = title.attribute("y").unwrap().parse().unwrap();
+        let size: f64 = title.attribute("font-size").unwrap().parse().unwrap();
+        assert!((y + 0.21 * size - (460.8 - 3.0)).abs() < 1e-2, "{order:?}: the title ends at {}", y + 0.21 * size);
+    }
+}
+
+#[test]
+fn panels_side_by_side_that_share_y_hide_the_inner_y_labels_and_the_joint_x_label() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let curves = vec![curve("A", "V", &x, |v| v), curve("B", "V", &x, |v| 2.0 * v)];
+    let layout = PanelLayout { h_gap: 0.0, link_y: true, ..PanelLayout::arrange(1, 2) };
+    let (p, g) = panel_graph(Template::Line, &layout, curves);
+    let geoms = fixed_geometry(&p, g);
+    assert_eq!((geoms[0].y.min, geoms[0].y.max), (0.0, 20.0), "one Y range for both");
+    assert_eq!(geoms[1].y, geoms[0].y);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert!(left_labels(&scene, 1).is_empty());
+    assert!(!texts_of(&scene.layers[1].overlay).iter().any(|t| t.rotate_ccw == 90.0), "no second Y title");
+    // Panel 0 leaves out its right-most X label (10), which would meet panel 1's first one (0).
+    let x0 = centred_texts(&scene, 0);
+    assert!(x0.contains(&"8".to_string()) && !x0.contains(&"10".to_string()), "{x0:?}");
+    assert!(centred_texts(&scene, 1).contains(&"10".to_string()));
+}
+
+#[test]
+fn a_right_y_axis_in_a_panel_lists_only_that_panels_curves_and_follows_the_shared_x() {
+    let a: Vec<f64> = (0..=10).map(f64::from).collect();
+    let b: Vec<f64> = (5..=20).map(f64::from).collect();
+    let curves = vec![curve("A", "V", &a, |v| v), curve("B", "V", &b, |v| v)];
+    let (mut p, g) = panel_graph(Template::Line, &PanelLayout::stack(2), curves);
+    let right = p.add_right_y_layer(g, 1).unwrap();
+    let book = p.workbooks().nth(1).unwrap().id;
+    let q = p.add_column(book, 0, Designation::Y, ColumnData::numeric(b.iter().map(|v| v * 0.01).collect())).unwrap();
+    p.column_mut(q).unwrap().long_name = "Q".into();
+    p.column_mut(q).unwrap().units = "C".into();
+    p.add_plot(g, right, q).unwrap();
+    let geoms = fixed_geometry(&p, g);
+    assert_eq!(geoms[right].frame, geoms[1].frame);
+    assert!(geoms.iter().all(|geom| geom.x == geoms[0].x), "one X axis for all");
+    assert_eq!((geoms[0].x.min, geoms[0].x.max), (0.0, 20.0));
+    let svg = svg_of(&p, g);
+    for name in ["A", "B", "Q"] {
+        assert_eq!(svg.matches(&format!(">{name}</text>")).count(), 1, "{name} is listed once");
+    }
+    // Panel 1's legend (drawn last) lists B and Q; panel 0's lists A.
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let last: Vec<String> = texts_of(&scene.layers[right].overlay)
+        .into_iter()
+        .filter(|t| t.anchor == scene::Anchor::Start)
+        .map(|t| t.text.clone())
+        .collect();
+    assert!(last.ends_with(&["B".to_string(), "Q".to_string()]), "{last:?}");
+}
+
+#[test]
+fn golden_cv_stack() {
+    let (x, shape) = golden_data();
+    let mk = |name: &'static str, amp: f64| Curve { name, unit: "mA", x: x.clone(), y: shape(amp) };
+    let curves = vec![mk("Pristine", 30.0), mk("10 cycles", 21.5), mk("100 cycles", 12.25)];
+    let (p, g) = panel_graph(Template::CyclicVoltammetry, &PanelLayout::stack(3), curves);
+    compare_golden("cv-stack", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_grid_of_four_panels() {
+    let (x, shape) = golden_data();
+    let mk = |name: &'static str, amp: f64| Curve { name, unit: "mA", x: x.clone(), y: shape(amp) };
+    let curves = vec![mk("A", 30.0), mk("B", 21.5), mk("C", 12.25), mk("D", 5.5)];
+    let frame = Template::Line.new_graph(WindowId(0), "").layers[0].frame;
+    let (p, g) = panel_graph(Template::Line, &PanelLayout::grid(2, 2, &frame), curves);
+    compare_golden("grid-2x2", &svg_of(&p, g));
 }

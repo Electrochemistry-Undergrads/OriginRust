@@ -120,8 +120,9 @@ pub struct Raster {
 }
 
 /// Frame rectangles and resolved axes of every layer of a graph, in layer order. A layer linked
-/// to another one (the right Y axis of a double-Y graph) has its parent's frame and, when its X
-/// scale is linked, its parent's X axis.
+/// to another one has its frame placed relative to its parent's (the same frame for the right Y
+/// axis of a double-Y graph, its own place for a panel of a stack) and, when its X scale is
+/// linked, its parent's X axis.
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();

@@ -332,6 +332,27 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_keeps_a_stack_of_panels() {
+        use sheaf_core::panels::PanelLayout;
+        let dir = TempDir::new("panels");
+        let path = dir.file("stack.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap().id;
+        let second = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 6.0, 7.0, 8.0])).unwrap();
+        let first = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+        let g =
+            p.plot_panels(Template::CyclicVoltammetry, &[vec![first], vec![second]], &PanelLayout::stack(2)).unwrap();
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let graph = back.graph(g).unwrap();
+        assert_eq!(back.graph(g), p.graph(g));
+        assert_eq!(graph.link_parent(1), Some(0), "the link survives");
+        assert_eq!(graph.panels(), vec![0, 1]);
+        assert!(graph.layers[0].y_axis.hide_end_label && !graph.layers[1].x_axis.show_tick_labels);
+    }
+
+    #[test]
     fn round_trip_keeps_stack_settings() {
         let dir = TempDir::new("stack");
         let path = dir.file("stack.sheaf");

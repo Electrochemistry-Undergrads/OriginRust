@@ -45,15 +45,15 @@ fn import_without_extension_writes_an_opj_that_holds_the_graph() {
     assert_eq!(opened.project.graphs().count(), 1, "the graph is read back from the .opj");
 }
 
-/// A .sheaf project of the data file whose second column has a column formula, which the .opj
-/// writer cannot store (only the values are written).
+/// A .sheaf project of the data file whose second column has a long name with a character outside
+/// Windows-1252, which the .opj writer cannot store as it is.
 fn project_with_formula(dir: &Path) -> PathBuf {
     let data = data_file(dir);
     let sheaf_path = dir.join("formula.sheaf");
     assert!(sheaf(&["import", data.to_str().unwrap(), "-o", sheaf_path.to_str().unwrap()]).0);
     let mut project = sheaf_io::project_file::load(&sheaf_path).unwrap();
     if let Some(sheaf_core::Window::Workbook(b)) = project.windows.first_mut() {
-        b.sheets[0].columns[1].formula = Some("col(A)*2".into());
+        b.sheets[0].columns[1].long_name = "Current \u{3a9}".into();
     }
     sheaf_io::project_file::save(&project, &sheaf_path).unwrap();
     sheaf_path
@@ -69,11 +69,11 @@ fn an_opj_that_cannot_hold_everything_gets_a_companion_that_opening_uses() {
     assert!(out.exists());
     let companion = dir.join("lab.opj.sheaf");
     assert!(sheaf_io::project_file::is_companion(&companion));
-    assert!(stderr.contains("formula"), "{stderr}");
+    assert!(stderr.contains("1252"), "{stderr}");
     let opened = sheaf_io::open_project(&out).unwrap();
     assert!(opened.companion_used);
     let book = opened.project.workbooks().next().unwrap();
-    assert_eq!(book.sheets[0].columns[1].formula.as_deref(), Some("col(A)*2"));
+    assert_eq!(book.sheets[0].columns[1].long_name, "Current \u{3a9}");
 }
 
 #[test]

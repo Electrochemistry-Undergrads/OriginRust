@@ -901,10 +901,16 @@ fn ctrl_s(h: &mut Harness<'static, SheafApp>) {
 
 /// Gives the second column of the first sheet a column formula, which the .opj writer cannot
 /// store (only the values are written), so saving needs the companion.
-fn add_formula(h: &mut Harness<'static, SheafApp>) {
-    h.state_mut().doc.apply("Set formula", |p| {
-        if let Some(Window::Workbook(b)) = p.windows.first_mut() {
-            b.sheets[0].columns[1].formula = Some("col(A)*2".into());
+/// Makes the first plot an area plot, which the .opj writer stores as a line plot (so the save
+/// needs the companion).
+fn add_lossy(h: &mut Harness<'static, SheafApp>) {
+    set_first_kind(h, PlotKind::Area);
+}
+
+fn set_first_kind(h: &mut Harness<'static, SheafApp>, kind: PlotKind) {
+    h.state_mut().doc.apply("Change plot type", |p| {
+        if let Some(g) = p.windows.iter_mut().find_map(|w| if let Window::Graph(g) = w { Some(g) } else { None }) {
+            g.layers[0].plots[0].kind = kind;
         }
     });
     settle(h);
@@ -915,7 +921,7 @@ fn ctrl_s_saves_an_opj_with_a_companion_for_what_it_cannot_hold_and_reopening_us
     let dir = save_dir("formula");
     let opj = dir.join("lab.opj");
     let mut h = start(vec![data_file("save-formula")]);
-    add_formula(&mut h);
+    add_lossy(&mut h);
     h.state_mut().path = Some(opj.clone());
     ctrl_s(&mut h);
     let companion = dir.join("lab.opj.sheaf");
@@ -925,12 +931,11 @@ fn ctrl_s_saves_an_opj_with_a_companion_for_what_it_cannot_hold_and_reopening_us
     assert!(!h.state().doc.dirty);
     assert!(h.state().status.contains("lab.opj.sheaf"), "{}", h.state().status);
     let (title, text) = h.state().message.clone().expect("a message says what only the companion holds");
-    assert!(title.contains("companion") && text.contains("formula"), "{title}: {text}");
+    assert!(title.contains("companion") && text.contains("area plot"), "{title}: {text}");
     assert_eq!(h.state().path.as_deref(), Some(opj.as_path()));
 
     let h2 = start(vec![opj.clone()]);
-    let book = project(&h2).workbooks().next().unwrap();
-    assert_eq!(book.sheets[0].columns[1].formula.as_deref(), Some("col(A)*2"), "the formula is back");
+    assert_eq!(graph(&h2).layers[0].plots[0].kind, PlotKind::Area, "the area plot is back");
     assert_eq!(project(&h2).graphs().count(), 1, "the graph is back");
     assert_eq!(h2.state().path.as_deref(), Some(opj.as_path()), "it saves to the .opj again");
     assert!(h2.state().status.contains("companion"), "{}", h2.state().status);
@@ -956,18 +961,13 @@ fn a_save_that_loses_nothing_writes_no_companion_and_deletes_an_old_one() {
     let dir = save_dir("clean");
     let opj = dir.join("lab.opj");
     let mut h = start(vec![data_file("save-clean")]);
-    add_formula(&mut h);
+    add_lossy(&mut h);
     h.state_mut().path = Some(opj.clone());
     ctrl_s(&mut h);
     assert!(dir.join("lab.opj.sheaf").exists());
-    // Drop the formula: now the .opj holds everything.
+    // Back to a line plot: now the .opj holds everything.
     h.state_mut().message = None;
-    h.state_mut().doc.apply("Clear formula", |p| {
-        if let Some(Window::Workbook(b)) = p.windows.first_mut() {
-            b.sheets[0].columns[1].formula = None;
-        }
-    });
-    settle(&mut h);
+    set_first_kind(&mut h, PlotKind::Line);
     ctrl_s(&mut h);
     assert!(opj.exists());
     assert!(!dir.join("lab.opj.sheaf").exists(), "the companion Sheaf wrote is deleted");

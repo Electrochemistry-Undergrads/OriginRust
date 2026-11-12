@@ -7,9 +7,11 @@ Status: accepted (2026-11-12). Extends ADR 0004 (project file) and item 9 of ADR
 The owner decided that File > Save Project, Save Project As, Ctrl+S and the command line's saves
 write Origin `.opj` projects. The writer (`sheaf_io::opj`, spec section 13 of `opj-format.md`)
 stored workbooks only when this was decided; since 2026-11-12 it also writes graphs (section 13.9).
-It still leaves out folders, column formulas with their recalculate mode, graph details it does not
-know (section 13.9 lists them) and characters outside Windows-1252, and it refuses names Origin
-cannot store. A save must never lose data.
+Since the afternoon of 2026-11-12 it also writes column formulas with their recalculate mode and
+the folder tree (sections 13.10 and 13.11, checked in Origin 2016). It still leaves out graph
+details it does not know (section 13.9 lists them; also the double-Y, stack, panel, column-spacing
+and area features of the graphing spec sections 12 to 15) and characters outside Windows-1252, and
+it refuses names Origin cannot store. A save must never lose data.
 
 ## Decision
 

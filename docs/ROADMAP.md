@@ -129,8 +129,10 @@ the default project format.
 - [x] Write `.opj`: graphs (page, layers, axes, line, scatter, line+symbol and column plots, error
       bars, text, legend; Origin 2016 opened 18 written graphs and their exported pictures match
       Sheaf's by eye; tick number formats, plot groups and some details are not written yet)
+- [x] Write `.opj`: column formulas with None/Auto/Manual recalculation and nested folders,
+      read back by Sheaf and checked in Origin 2016 (formulas recalculate there; `6bf5148`)
 - [x] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
-      everything a project holds (formulas, folders, some graph details), saving also writes a `<name>.opj.sheaf`
+      everything a project holds (some graph details), saving also writes a `<name>.opj.sheaf`
       companion and says what only it holds; opening the `.opj` uses the companion when it is at
       least as new; saving over an Origin-made `.opj` keeps a `.opj.bak` first (ADR 0008)
 - [ ] Close the gaps from the parity audit in its order of work. Done so far (each built by an
@@ -150,6 +152,7 @@ the default project format.
         Tukey, Bonferroni, Sidak, Fisher LSD and Scheffe, frequency counts with a histogram graph,
         five normality tests, checked against Origin (the automatic bin size matches Origin in
         about 57 % of cases)
+  - [x] Area plots (Plot > Area, Change Plot to > Area, `sheaf plot -t area`)
   - [x] Copy Page (Ctrl+J, a 300 dpi picture on the clipboard) and the Data Reader tool (snaps to
         data points, pins one, arrow keys step through rows)
   - [x] The Integrate gadget on graphs (Gadgets > Integrate): drag a range, see the shaded area

@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-11-12, about 15:00, by the lead Claude Code session. Only one session should
+Last updated: 2026-11-12, about 16:30, by the lead Claude Code session. Only one session should
 merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lead).
 
 ## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
@@ -33,24 +33,25 @@ merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lea
     Details in Origin's layout with OK/Cancel/Apply (step 9, by a subagent), and the Integrate
     gadget (Gadgets > Integrate). Then Copy Page (Ctrl+J), the Data Reader tool and the Rescale and
     Column toolbar buttons. All checks pass on `main` (`ba9f527`).
-- **Running when this was written**: a subagent on branch `worktree-agent-a175d68f1d5696c0d` (worktree
-  `.claude/worktrees/agent-a175d68f1d5696c0d`) writes column formulas and nested folders into `.opj` and reads them back,
-  checked in Origin through COM. If this session ended before merging it, look for that branch
-  (`git log main..worktree-agent-a175d68f1d5696c0d`), read its commit messages, run the checks and merge.
-
-Also running: a subagent on branch `worktree-agent-a23ee953326faea53` reworks the nonlinear fit
-dialog and the import dialog into Origin's layout (only `crates/app`). If this session ended, check
-that branch the same way.
+- **Merged later on 2026-11-12**: column formulas and nested folders in written `.opj` files
+  (a subagent; checked in Origin 2016, where the formulas recalculate), and area plots. A save to
+  `.opj` now needs the companion only for graph features the writer does not know yet. 915 tests
+  pass on `main`.
+- **Running when this was written**: a subagent on branch `worktree-agent-a23ee953326faea53`
+  (worktree `.claude/worktrees/agent-a23ee953326faea53`) reworks the nonlinear fit dialog and the
+  import dialog into Origin's layout (only `crates/app`). If this session ended before merging it,
+  read `git log main..worktree-agent-a23ee953326faea53`, run the checks and merge.
 
 ## Exact next step
 
-1. Merge the `.opj` formulas-and-folders branch and the fit/import dialogs branch when they are done
-   (full checks after each merge).
+1. Merge the fit/import dialogs branch when it is done (full checks after the merge).
 2. The other dialogs in Origin's layout (import wizard, NLFit, analysis tools, column
    properties; `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's
    long name is on Plot Details' Page tab; a plot's legend text is on its Group tab.
 3. Write the new graph features into `.opj` (linked layers, offsets, bar spacing, tick label
-   sources) so the companion is rarely needed; tick number formats in written graphs.
+   sources, area plots) so the companion is rarely needed; tick number formats in written graphs.
+   The way the formula work was done (`tools/origin-ref/opj-verify-features.ps1`, spec 13.10)
+   is the model.
 4. A per-plot left/right axis choice in the app (offsets are now in Plot Details > Stack).
 5. Then the parity-audit gaps in their order.
 

@@ -1,0 +1,31 @@
+newbook;
+col(A) = data(1, 8, 1); col(A) = 10 + 2*sin(3*col(A)) + col(A)/4;
+col(B) = data(1, 10, 1); col(B) = 11.5 + 2.5*cos(2*col(B)) + col(B)/5;
+wks.addcol(); col(C) = data(1, 20, 1); col(C) = exp(1.1*sin(2.3*col(C)))*3;
+wks.addcol(); col(D) = data(1, 40, 1); col(D) = 5 + 3*sin(1.7*col(D)) + 2*cos(0.37*col(D)^1.2);
+wks.addcol(); col(E) = data(1, 5, 1); col(E) = col(E)^2;
+int rc = run.LoadOC(%WORK%stats-ref.c, 16);
+?rc
+double r0 = sheaf_norm(0, 6);
+double r1 = sheaf_norm(1, 32);
+double r2 = sheaf_norm(2, 58);
+double r3 = sheaf_norm(3, 84);
+double r4 = sheaf_norm(4, 110);
+#[Book1]Sheet1
+double s, d, p;
+swtest irng:=col(A) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+swtest irng:=col(C) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(A) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(A) stat:=s df:=d prob:=p;
+?s
+?d
+?p

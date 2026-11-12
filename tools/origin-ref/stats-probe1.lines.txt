@@ -1,0 +1,10 @@
+newbook;
+col(A) = data(1, 8, 1); col(A) = 10 + 2*sin(3*col(A)) + col(A)/4;
+col(B) = data(1, 10, 1); col(B) = 11.5 + 2.5*cos(2*col(B)) + col(B)/5;
+ttest1 -h;
+ttest2 -h;
+ttestpair -h;
+anova1 -h;
+freqcounts -h;
+normtest -h;
+#[Book1]Sheet1

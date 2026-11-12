@@ -1,0 +1,14 @@
+newbook;
+wks.addcol(); wks.addcol(); wks.addcol(); wks.addcol(); wks.addcol();
+col(D) = data(1, 600, 1);
+col(E) = sin(col(D)*12.9898)*43758.5453; col(E) = abs(col(E) - int(col(E)));
+col(F) = sin(col(D)*78.233)*43758.5453; col(F) = abs(col(F) - int(col(F)));
+col(G) = sin(col(D)*37.719)*43758.5453; col(G) = abs(col(G) - int(col(G)));
+col(A) = int(exp(col(E)*ln(667))*3 + 0.5);
+col(C) = int(10^(col(F)*4 - 1.5)*1000 + 0.5)/1000;
+col(B) = int((col(G)*2 - 0.6) * 10^int(col(E)*3) * 1000 + 0.5)/1000;
+col(C) = col(B) + col(C);
+int rc = run.LoadOC(%WORK%stats-ref.c, 16);
+?rc
+double r = sheaf_round(0, 1, 2, 7);
+#[Book1]Sheet1

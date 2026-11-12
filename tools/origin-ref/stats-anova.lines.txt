@@ -1,0 +1,19 @@
+newbook;
+col(A) = data(1, 8, 1); col(A) = 10 + 2*sin(3*col(A)) + col(A)/4;
+col(B) = data(1, 10, 1); col(B) = 11.5 + 2.5*cos(2*col(B)) + col(B)/5;
+wks.addcol(); col(C) = data(1, 7, 1); col(C) = 12.2 + 1.8*sin(7*col(C)) + col(C)/8;
+int rc = run.LoadOC(%WORK%stats-ref.c, 16);
+?rc
+double r1 = sheaf_anova(0, 1, 2, 1, 4, 0.05);
+?r1
+double r2 = sheaf_anova(0, 1, 2, 2, 16, 0.05);
+?r2
+double r3 = sheaf_anova(0, 1, 2, 3, 28, 0.05);
+?r3
+double r4 = sheaf_anova(0, 1, 2, 4, 40, 0.05);
+?r4
+double r5 = sheaf_anova(0, 1, 2, 5, 52, 0.05);
+?r5
+double r6 = sheaf_anova(0, 1, 2, 1, 64, 0.01);
+?r6
+#[Book1]Sheet1

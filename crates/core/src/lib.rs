@@ -20,6 +20,7 @@ pub mod history;
 pub mod ids;
 pub mod panels;
 pub mod project;
+pub mod stack;
 pub mod template;
 pub mod worksheet;
 

@@ -203,7 +203,8 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         open: None,
         panels: [true; 4],
         layer: 0,
-        reader: false,
+        tool: Default::default(),
+        curve: None,
     }
 }
 

@@ -10,3 +10,4 @@ pub mod graph_details;
 pub mod graph_props;
 pub mod import;
 pub mod set_values;
+pub mod text_object;

@@ -16,6 +16,16 @@ SVG structure.
   symbol sizes) are already in points and are used unchanged.
 - PNG at `dpi` dots per inch has `ceil(page_width_pt * dpi / 72)` by `ceil(page_height_pt * dpi /
   72)` pixels. The DPI is recorded in the PNG `pHYs` chunk.
+- TIFF is the same picture as PNG, laid on white (no alpha channel, since many programs that take
+  TIFF figures mishandle one), stored as 8-bit RGB with LZW compression and the DPI in the
+  `XResolution`/`YResolution` tags (unit inch).
+- **Export size.** By default a figure has the size of the page. An export width and/or height
+  (`ExportSize`; CLI `--image-width`, `--image-height` with a unit in, cm, mm, pt or px; the app's
+  export window "Scale to" a width in in or cm) scales the whole page, text and lines included, as
+  Origin's export image size does with its aspect ratio kept. With both, the page is scaled to fit
+  inside both. Only the root `width`/`height` of the SVG change; the `viewBox` keeps the drawing in
+  page points, so SVG, PDF, PNG and TIFF all follow. A scale below 0.01 or above 100 is refused.
+  (The CLI's `--width` and `--height` are different: they change the page itself and keep text sizes.)
 - The layer frame is the rectangle `left, top, width, height` (fractions of the page) converted to
   points. Data is clipped to the frame.
 
@@ -71,7 +81,9 @@ Step 5, tick label text. The shown number is `value / tick_label_divisor`.
   real multiplication sign and a superscript exponent, mantissa trimmed of trailing zeros.
 - `Decimal(d)`: fixed d decimals. `Scientific(d)`: `m×10^e` with d mantissa decimals.
 - Negative numbers use the real minus sign U+2212. Negative zero prints as `0`.
-- Log axes label powers of ten as `10` with a superscript exponent.
+- Log axes label their powers of ten as Origin 2016 does (checked on two graphs exported from
+  Origin): with the `Auto` format as plain numbers from `0.001` to `1000000`, and as `1E7`,
+  `1E−4` beyond; with `Scientific(d)` as `10` with a superscript exponent.
 - An axis with a label column (sample names) shows the cell of row k at a major tick at the whole
   number k, and nothing at other ticks (graphing.md section 14.3).
 

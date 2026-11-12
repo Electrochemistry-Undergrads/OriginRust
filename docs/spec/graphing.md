@@ -652,11 +652,11 @@ Examples: `sheaf plot cycles.csv -y Capacity --y2 Efficiency -o fig.png`; `sheaf
 
 Observed on one Origin 2016 project [COM; one sample each]:
 - **Frame.** Both layer records store the same absolute frame (layer header `0x71`, page units).
-- **Linked-layer header bytes.** The linked layer differs from its parent at header `0x0AB` (= 1, probably the parent's number, unconfirmed), `0x12D` (= 1), `0x02E` (1 becomes 9) and bit `0x80` of `0x0FC`. Turning the X link off changed none of them.
-- **X link.** A straight X link shows as annotations named `X1` and `X2` in the linked layer; with the X link off, `X1` was gone.
+- **Linked-layer header bytes.** The linked layer differs from its parent at header `0x0AB` (= 1), `0x12D` (= 1), `0x02E` (1 becomes 9) and bit `0x80` of `0x0FC`. Turning the X link off changed none of them. Writing experiment (opj-format.md 13.12): `0x0AB` is the 1-based number of the parent layer and alone makes Origin report `layer.link`; in a three-layer graph the third layer linked to the second had `0x0AB` = 2, and `0x12D` was the layer's position (1, 2).
+- **X link.** A straight X link shows as annotations named `X1` and `X2` in the linked layer; with the X link off, `X1` was gone. Writing experiment: the pair, with a 20-byte style block starting with `*`, gives `layer.x.link` = 1 and without it the value is 0; a custom link has the text `X1` in that block.
 - **Axis visibility.** In each axis group, bit `0x40` of byte `0x26` of blocks 2, 3, 4 and 5 means: block 2 primary-side tick labels shown; block 3 primary line and ticks shown; block 4 opposite-side tick labels shown; block 5 opposite line shown. For Y, primary is left and opposite is right. This corrects opj-format.md section 10.3, which calls block 4 "title (not used)".
 - **Automatic axis colour.** Stored as `F7 FF` at block 3 offset `0x0F` and as `F7 FF FF FF` at `0x92` and `0x16A`; black is 0 there.
-- **Right title and legend.** The right title is the text object `YR` of the linked layer. The DoubleY template names its legend object `legend` in lower case.
+- **Right title and legend.** The right title is the text object `YR` of the linked layer. The DoubleY template names its legend object `legend` in lower case. The writer (13.12) writes the legend as `\l(1.1) %(1.1)`, CR LF, `\l(2.1) %(2.1)` (layer, plot) in the parent, and Origin drew the entries of both layers.
 
 Reader rule (implemented in `crates/io/src/opj/graph.rs`, `link_right_y_layers`):
 - the Y axis of a layer is drawn on the right (`y_axis.side = Opposite`, title from `YR`) when its Y group shows the opposite side (block 4 labels or block 5 line) and nothing on the left, or, for any layer after the first, when it shows tick labels on the right (block 4). In the second case a left side the layer also shows is not drawn, and the import notes it;
@@ -680,7 +680,7 @@ Tick positions of the left and right axes are not aligned with each other (Origi
 
 ### 12.9 Unknowns
 
-- The meaning of the linked layer's header bytes listed in 12.7, and where Origin stores the straight X link.
+- The meaning of `0x12D`, `0x02E` and bit `0x80` of `0x0FC` of the linked layer's header (12.7; they were not needed for Origin to link the layer), and where Origin keeps the unit "percent of the linked layer" (`layer.unit` is 1 for a written layer, 7 for Origin's own).
 - Whether Origin's blue for layer 2 is stored in the template or follows from a colour-list rule.
 - Whether Origin 2016 offers "title colour follows plot" for axis titles (it appears in current help).
 - How Origin splits a selection with two X columns (documented, not run).
@@ -902,7 +902,7 @@ In the 515-byte curve record (opj-format.md section 10.5) [COM, byte comparisons
 
 The 361-byte layer header also differs at f64 `0x13D` (0.1 stacked, 0.08 plain) and `0x135` (Origin's "no value" stacked, 0 plain); their meaning is unknown.
 
-Import rule (implemented): if any curve of a layer has a non-zero, finite offset (Origin's "no value" double counts as 0), set `stack = Individual` and add an entry with each curve's offsets for its Y column (the first curve of a column wins). This redraws the graph exactly as Origin saved it. Mapping `0x13A`/`0x148` to Auto can follow once the mode codes are confirmed. A future writer needs the same bytes. Checked on the owner's XRD project: its six-pattern graph stores six increasing offsets (the first 0) and now draws each pattern in the band of its label, as in the owner's figure.
+Import rule (implemented): if any curve of a layer has a non-zero, finite offset (Origin's "no value" double counts as 0), set `stack = Individual` and add an entry with each curve's offsets for its Y column (the first curve of a column wins). This redraws the graph exactly as Origin saved it. Mapping `0x13A`/`0x148` to Auto can follow once the mode codes are confirmed. The writer (opj-format.md 13.12) does not need the mode fields: Origin moves every curve by the offset in its record when the layer header byte `0xFD` is `0x50`, whatever the mode was, and without a plot group. For the Auto mode Origin's own files use a plot group (byte `0x06` of the records: `0x29` on the first curve, `0x19` on the others), the no-value double at header `0x135` and the gap fraction at `0x13D`, and then computes the offsets again at load. The same fields with a step at `0x135` give the Constant mode (curve k moved by k times the step). The offsets Origin computed agree with 13.4. No X offset field was found (`0x1B2` is ignored); the f64 at `0x1C2` is a Y factor. Checked on the owner's XRD project: its six-pattern graph stores six increasing offsets (the first 0) and now draws each pattern in the band of its label, as in the owner's figure.
 
 ### 13.11 Check values (Origin 2016, Auto, gap 10 %, X = 0, 1, ..., 20)
 
@@ -1091,7 +1091,7 @@ In the 515-byte curve record (opj-format.md section 10.5) [COM, byte comparisons
 - u16 at `0x19`, the symbol size field of other plot types, holds the bar width of a column plot in percent of the spacing, times 50: 4000 is a gap of 20, 3000 of 40, 2250 of 55, 2000 of 60. A copy at `0x11A` holds the same number. The owner's projects use 2000, 2250, 3000, 3600 and 4000.
 - The reader sets the layer's `bars.gap_pct` = 100 - width / 50 from the layer's first column plot, when the width lies within 0..100 percent.
 - Byte `0x06` of the record probably marks plot groups [INF]: bit `0x20` on the first plot of a group and bit `0x10` on the others (a lone column plot had neither), in a test file and in the owner's two grouped layers. Not read yet: every layer of the owner's projects with more than one column plot is a group, which is what Sheaf draws.
-- Where Origin stores the tick label type, its dataset and the overlap is not known.
+- Where Origin stores the tick label type and its dataset is not known. The overlap was looked for in 2026-11 (opj-format.md 13.12): `set` options and `layer.overlap` changed no byte, so it was not found. The writer writes the gap at `0x19` and `0x11A` of every column record; Origin drew gaps of 0, 20 and 60 percent as written.
 
 ### 14.8 Command line
 
@@ -1335,3 +1335,37 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
 - Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns, horizontal stacks, and the defaults of the Layer Management dialog's Arrange tab.
+
+## 16. Free text labels (P0, GP-TXT-01)
+
+### 16.1 What Origin 2016 does
+
+- A free text object has its text (with the escapes of section 7), a font, a size, a colour, a rotation and a place. Its attachment is *page*, *layer frame* or *layer and scales* (section 1.6).
+- It is made with the Text tool of the Tools toolbar (click on the page, type in a box on the graph) and with the page's right-click command "Add Text...". A double click on it opens its text and format settings; it is moved by dragging, removed with Delete [W:attachment-scaling-object]. [INF] The tool ends after one label.
+- Pictures of the owner's figures show labels of two kinds: curve names such as "Zn-LMO" and "After Delithiation", and peak indices such as "311".
+
+### 16.2 Sheaf's model and anchor rule (Sheaf choice)
+
+- A label belongs to one layer (`Layer::labels`) and is attached to the *layer frame*: its anchor is `(x, y)`, fractions of the layer's frame, `(0, 0)` the top left corner, `(1, 1)` the bottom right. Values outside 0 to 1 are allowed and put the label outside the frame. The anchor follows the frame when the layer moves or the page is resized and ignores the axis range.
+- The anchor is the start of the text, at the vertical middle of its first character, so a label with rotation 0 grows to the right of the point, and a rotated one grows along its angle (counter-clockwise degrees).
+- A new label's font is the layer's legend font, upright and black; the text window changes size, bold, italic and rotation. Bold and italic of single words are written with `\b(..)` and `\i(..)`.
+- Sheaf has no "page" or "layer and scales" attachment; labels read from `.opj` files are stored in the same frame fractions by the reader.
+
+### 16.3 Commands
+
+**Desktop app.**
+- Graph > Add Text... and the page's right-click "Add Text...": open the Text window for a new label in the active layer, placed in the middle of its frame (`0.5, 0.5`).
+- The Text tool of the Tools toolbar: a click on the page places the label at that point in the layer under the click (a click outside every frame uses the active layer) and opens the Text window. The tool ends after one label, or with Esc.
+- The Text window has the text (several lines; escapes allowed), Size, Bold, Italic and Rotation, and OK, Apply and Cancel. A new label is in the project only after OK or Apply; Cancel, or OK with no text, adds none. OK or Apply on an existing label with no text is refused with a message (Delete removes a label).
+- Double click on a label, or its right-click "Properties...", opens the window for it. A click selects it; dragging it moves it (the selection handles follow the pointer; the label moves when the button is let go). Delete removes it.
+- Each of Add text, Edit text, Move text and Delete text is one undo step.
+- `sheaf-app --show text:N` opens the Text window of the N-th label of the first graph (for pictures).
+
+**Command line** (`sheaf plot` and `sheaf export`, style option):
+- `--label "TEXT@X,Y"`, repeatable: adds a label to layer 0 at the fractions `X`, `Y` of its frame. The text is everything before the last `@`, so it may hold `@`; escapes are kept as written (`--label "\b(Zn-LMO)@0.85,0.1"`).
+- A value without `@`, with an empty text, or whose position is not two finite numbers is an error that quotes the value and shows the form `TEXT@X,Y`; no file is written.
+- The labels are added after the other style options, in the order given, and are saved with `--save`.
+
+### 16.4 Not done
+
+- Colour, font family, attachment choice, resizing and a background or frame for a label; copy and paste of labels; "Bring to the front" and "Push to the back"; editing text in place on the graph.

@@ -2686,6 +2686,68 @@ fn a_click_selects_a_plot_and_its_menu_changes_the_plot_type_in_one_undo_step() 
 }
 
 #[test]
+fn the_plot_menu_moves_a_plot_to_the_right_y_axis_and_back_as_one_undo_step() {
+    let mut h = start(vec![data_file("gright")]);
+    let before = graph(&h).clone();
+    assert_eq!(before.layers.len(), 1);
+    let second = before.layers[0].plots[1].y;
+    let at = on(&h, 0, ObjectKind::Plot(1));
+    click_at(&mut h, at);
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Move to Left Y Axis").is_none(), "it is on the left now");
+    click(&mut h, "Move to Right Y Axis");
+    let g = graph(&h);
+    assert_eq!(g.layers.len(), 2, "a right Y layer was made");
+    assert_eq!(g.right_y_member(0), Some(1));
+    assert_eq!(g.layers[0].plots.len(), 1);
+    assert_eq!(g.layers[1].plots.len(), 1);
+    assert_eq!(g.layers[1].plots[0].y, second);
+    assert_eq!(h.state().doc.undo_label(), Some("Move plot to right Y axis"));
+    // Now its menu offers the way back; the empty right layer stays.
+    let at = on(&h, 1, ObjectKind::Plot(0));
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Move to Right Y Axis").is_none());
+    click(&mut h, "Move to Left Y Axis");
+    let g = graph(&h);
+    assert_eq!(g.layers.len(), 2, "Origin keeps the empty layer");
+    assert!(g.layers[1].plots.is_empty());
+    assert_eq!(g.layers[0].plots.len(), 2);
+    // Undo steps back one move at a time.
+    menu(&mut h, "Edit", "Undo Move plot to left Y axis");
+    assert_eq!(graph(&h).layers[1].plots.len(), 1);
+    menu(&mut h, "Edit", "Undo Move plot to right Y axis");
+    assert_eq!(*graph(&h), before);
+}
+
+#[test]
+fn plot_details_chooses_the_y_axis_of_a_plot() {
+    let mut h = start(vec![data_file("gdetail")]);
+    let before = graph(&h).clone();
+    let second = before.layers[0].plots[1].y;
+    let at = on(&h, 0, ObjectKind::Plot(1));
+    double_click_at(&mut h, at);
+    assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    click(&mut h, "Group");
+    click(&mut h, "Right");
+    let g = graph(&h);
+    assert_eq!(g.layers.len(), 2);
+    assert_eq!(g.layers[1].plots[0].y, second);
+    assert_eq!(g.right_y_member(0), Some(1));
+    let d = h.state().graph_props.as_ref().unwrap();
+    assert_eq!((d.layer, d.selected_plot()), (1, 0), "the dialog follows the plot");
+    // The same choice made again changes nothing; Left brings it back.
+    click(&mut h, "Left");
+    let g = graph(&h);
+    assert_eq!(g.layers[0].plots.len(), 2);
+    assert!(g.layers[1].plots.is_empty());
+    assert_eq!(g.layers[0].plots[1].y, second);
+    // The dialog's edits are one undo step.
+    assert_eq!(h.state().doc.undo_label(), Some("Change graph settings"));
+    h.state_mut().doc.undo();
+    assert_eq!(*graph(&h), before);
+}
+
+#[test]
 fn the_axis_menu_hides_grids_zooms_and_rescales() {
     let mut h = start(vec![data_file("gaxis")]);
     let at = on(&h, 0, ObjectKind::YAxis);
@@ -2971,4 +3033,128 @@ fn the_statistics_menu_computes_correlation_coefficients() {
     // The Pearson matrix: column "up" holds r(up, up) = 1 and r(down, up) = -1 (the data are straight lines).
     assert!((up[0] - 1.0).abs() < 1e-12 && (up[1] + 1.0).abs() < 1e-12, "{up:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Correlation coefficients"));
+}
+
+// ----- free text labels ---------------------------------------------------------------------
+
+fn labels<'a>(h: &'a Harness<'static, SheafApp>) -> &'a [sheaf_core::graph::TextLabel] {
+    &graph(h).layers[0].labels
+}
+
+/// Types into the text box of the Text window (it has the keyboard when the window opens).
+fn type_into_text_window(h: &mut Harness<'static, SheafApp>, text: &str, replace: bool) {
+    if replace {
+        h.event(egui::Event::Key {
+            key: egui::Key::A,
+            physical_key: Some(egui::Key::A),
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        });
+        h.step();
+    }
+    h.event(egui::Event::Text(text.to_string()));
+    settle(h);
+}
+
+#[test]
+fn add_text_places_a_label_and_double_click_edits_it_each_change_one_undo_step() {
+    let mut h = start(vec![data_file("addtext")]);
+    assert!(labels(&h).is_empty());
+    menu(&mut h, "Graph", "Add Text...");
+    assert!(h.state().text_dialog.is_some(), "the Text window opened");
+    type_into_text_window(&mut h, r"\b(Zn-LMO)", false);
+    click(&mut h, "OK");
+    assert!(h.state().text_dialog.is_none());
+    assert_eq!(labels(&h).len(), 1);
+    assert_eq!(labels(&h)[0].text, r"\b(Zn-LMO)");
+    assert_eq!((labels(&h)[0].x, labels(&h)[0].y), (0.5, 0.5), "the middle of the layer");
+    assert_eq!(h.state().doc.undo_label(), Some("Add text"));
+
+    // A double click opens it; a changed text, size and rotation are one step.
+    let at = on(&h, 0, ObjectKind::Label(0));
+    double_click_at(&mut h, at);
+    assert!(h.state().text_dialog.is_some(), "double click opens the Text window");
+    type_into_text_window(&mut h, "Peak 311", true);
+    click(&mut h, "OK");
+    assert_eq!(labels(&h).len(), 1);
+    assert_eq!(labels(&h)[0].text, "Peak 311");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit text"));
+    menu(&mut h, "Edit", "Undo Edit text");
+    assert_eq!(labels(&h)[0].text, r"\b(Zn-LMO)");
+    menu(&mut h, "Edit", "Undo Add text");
+    assert!(labels(&h).is_empty());
+}
+
+#[test]
+fn an_empty_text_or_cancel_adds_no_label() {
+    let mut h = start(vec![data_file("emptytext")]);
+    menu(&mut h, "Graph", "Add Text...");
+    click(&mut h, "OK");
+    assert!(h.state().text_dialog.is_none());
+    assert!(labels(&h).is_empty());
+    menu(&mut h, "Graph", "Add Text...");
+    type_into_text_window(&mut h, "x", false);
+    click(&mut h, "Cancel");
+    assert!(labels(&h).is_empty());
+    assert!(!h.state().doc.dirty || h.state().doc.undo_label() != Some("Add text"));
+}
+
+#[test]
+fn the_text_tool_places_a_label_where_the_page_is_clicked() {
+    let mut h = start(vec![data_file("texttool")]);
+    bar_button!(h, "Tools", "Text").click();
+    settle(&mut h);
+    assert!(graph_ui(&h).text_tool, "the tool is on");
+    let frame = sheaf_plot::layout_geometry(project(&h), graph(&h).id).unwrap()[0].frame;
+    // A quarter of the way across and down the frame.
+    let at = graph_ui(&h).page_point(frame.x + frame.w * 0.25, frame.y + frame.h * 0.75).unwrap();
+    click_at(&mut h, at);
+    assert!(h.state().text_dialog.is_some(), "the click opened the Text window");
+    assert!(!graph_ui(&h).text_tool, "the tool ends after one label");
+    type_into_text_window(&mut h, "After Delithiation", false);
+    click(&mut h, "OK");
+    let l = &labels(&h)[0];
+    assert_eq!(l.text, "After Delithiation");
+    assert!((l.x - 0.25).abs() < 0.01 && (l.y - 0.75).abs() < 0.01, "{} {}", l.x, l.y);
+}
+
+#[test]
+fn a_label_is_dragged_to_a_new_place_in_one_undo_step() {
+    let mut h = start(vec![data_file("dragtext")]);
+    menu(&mut h, "Graph", "Add Text...");
+    type_into_text_window(&mut h, "Zn-LMO", false);
+    click(&mut h, "OK");
+    let before = (labels(&h)[0].x, labels(&h)[0].y);
+    let at = on(&h, 0, ObjectKind::Label(0));
+    click_at(&mut h, at);
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Label(0))));
+    drag(&mut h, at, at + egui::vec2(60.0, -40.0));
+    let after = (labels(&h)[0].x, labels(&h)[0].y);
+    assert!(after.0 > before.0 && after.1 < before.1, "{before:?} -> {after:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Move text"));
+    assert!(h.state().text_dialog.is_none(), "a drag is not a double click");
+    menu(&mut h, "Edit", "Undo Move text");
+    assert_eq!((labels(&h)[0].x, labels(&h)[0].y), before);
+}
+
+/// With a graph active, the Analysis menu works on its data plot, as Origin's does on the active
+/// data plot: the selected plot, or else the active layer's first plot. The results go to the
+/// plot's workbook.
+#[test]
+fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
+    let mut h = start(vec![data_file("graph-analysis")]);
+    show_window(&mut h, "Graph1 - sample");
+    let (book, gid, ys) = {
+        let p = project(&h);
+        let g = p.graphs().next().unwrap();
+        (p.workbooks().next().unwrap().id, g.id, g.layers[0].plots.iter().map(|pl| pl.y).collect::<Vec<_>>())
+    };
+    assert_eq!(h.state().menu_context().curve, Some((book, ys[0])), "the first plot of the active layer");
+    h.state_mut().graphs.get_mut(&gid).unwrap().selected = Some((0, sheaf_plot::scene::ObjectKind::Plot(1)));
+    assert_eq!(h.state().menu_context().curve, Some((book, ys[1])), "a selected plot wins");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Integrate..."]);
+    let dialog =
+        h.state().analysis.as_ref().expect("the Integrate window is open, not a message to activate a workbook");
+    assert_eq!(dialog.columns(), &[ys[1]]);
 }

@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -41,7 +41,7 @@ const NEED_ONE_COLUMN: &str = "Select exactly one column first";
 const NEED_WINDOW: &str = "Activate a window first";
 const NO_UNDO: &str = "Nothing to undo";
 const NO_REDO: &str = "Nothing to redo";
-const ANALYSIS_ON_BOOK: &str = "Analysis runs on worksheet columns: activate a workbook window";
+const ANALYSIS_ON_BOOK: &str = "The active layer has no data plot to analyse: plot a worksheet column first";
 
 /// Which menu bar is shown.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -110,6 +110,15 @@ pub enum Cmd {
     Pointer,
     /// The Data Reader tool of the Tools toolbar.
     DataReader,
+    /// The Text tool of the Tools toolbar.
+    TextTool,
+    /// Add Text...: a new text label in the active layer.
+    AddText,
+    /// Properties of a text label (its text window).
+    EditText {
+        layer: usize,
+        label: usize,
+    },
     /// Edit > Copy Page: the graph as a picture on the clipboard.
     CopyPage,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
@@ -165,6 +174,7 @@ impl Menu {
 }
 
 /// What the menus need to know about the program to enable items and name the windows.
+#[derive(Clone)]
 pub struct MenuContext<'a> {
     pub kind: WindowKind,
     pub book: Option<WindowId>,
@@ -184,8 +194,12 @@ pub struct MenuContext<'a> {
     pub panels: [bool; 4],
     /// The active layer of the active graph (0 when there is none).
     pub layer: usize,
-    /// True while the active graph's Data Reader is on (the Tools toolbar shows it pressed).
-    pub reader: bool,
+    /// The active graph's tool (the Tools toolbar shows it pressed).
+    pub tool: crate::actions::GraphTool,
+    /// On a graph: the data the Analysis menu works on, as Origin's menu does on the active data
+    /// plot: the workbook and Y column of the selected plot, or else of the active layer's first
+    /// visible plot of numbers. `None` when the graph has no such plot.
+    pub curve: Option<(WindowId, ColumnId)>,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -924,6 +938,7 @@ fn graph_menu() -> Vec<Entry> {
         grey("Add Error Bars..."),
         grey("Add Function Graph..."),
         grey("Add Straight Line..."),
+        item("Add Text...", Cmd::AddText),
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
         grey("Merge Graph Windows..."),
         sep(),
@@ -1250,7 +1265,13 @@ pub fn sheet_tab_menu() -> Vec<Entry> {
 
 /// The menu of a plot: what was picked, so the commands act on it. `book` is the workbook the
 /// plot's data is in, with its title.
-pub fn graph_plot_menu(layer: usize, plot: usize, kind: PlotKind, book: Option<(WindowId, String)>) -> Vec<Entry> {
+pub fn graph_plot_menu(
+    layer: usize,
+    plot: usize,
+    kind: PlotKind,
+    on_right: bool,
+    book: Option<(WindowId, String)>,
+) -> Vec<Entry> {
     let change = |label: &str, to: PlotKind| {
         if to == kind {
             grey(label)
@@ -1272,6 +1293,10 @@ pub fn graph_plot_menu(layer: usize, plot: usize, kind: PlotKind, book: Option<(
         grey("Change X"),
         grey("Change Y"),
         sep(),
+        item(
+            if on_right { "Move to Left Y Axis" } else { "Move to Right Y Axis" },
+            Cmd::GraphEdit(GraphOp::MovePlotToAxis { layer, plot, right: !on_right }),
+        ),
         item("Hide Data Plot", Cmd::GraphEdit(GraphOp::HidePlot { layer, plot })),
     ];
     match book {
@@ -1334,7 +1359,7 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
         grey("Bring to the front"),
         grey("Push to the back"),
         sep(),
-        grey("Properties..."),
+        item("Properties...", Cmd::EditText { layer, label }),
     ]
 }
 
@@ -1364,7 +1389,7 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
 /// The menu of the page outside the plots and axes, or of the inside of a layer.
 pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
     vec![
-        grey("Add Text..."),
+        item("Add Text...", Cmd::AddText),
         grey("Layer Management..."),
         grey_sub("New Layer(Axes)", &["Horizontal Axis Layer...", "Vertical Axis Layer..."]),
         grey("Add Shortcut to Favorites"),
@@ -1635,15 +1660,23 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SortSheet { column: one()?, descending: *cmd == Cmd::SortDescending }
         }
         Cmd::FilterRows => Action::FilterRows(book?),
-        Cmd::Analyze(kind) => match c.book {
-            Some(book) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
-            None if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
-            None => return Err(NEED_BOOK),
+        // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
+        // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
+        Cmd::Analyze(kind) => match (c.book, c.curve) {
+            (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::Analyze { book, columns: vec![y], kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
         },
-        Cmd::Fit(kind) => match c.book {
-            Some(book) => Action::Fit { book, column: c.selected.first().copied(), kind: *kind },
-            None if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
-            None => return Err(NEED_BOOK),
+        Cmd::Fit(kind) => match (c.book, c.curve) {
+            (Some(book), _) => Action::Fit { book, column: c.selected.first().copied(), kind: *kind },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::Fit { book, column: Some(y), kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
         },
         Cmd::GraphProps(tab) => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, tab: *tab, plot: None }
@@ -1659,8 +1692,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SelectPlot { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot }
         }
         Cmd::GoTo(id) => Action::Focus(*id),
-        Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, reader: false },
-        Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, reader: true },
+        Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
+        Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
+        Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
+        Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
+        Cmd::EditText { layer, label } => {
+            Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
+        }
         Cmd::CopyPage => Action::CopyPage(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
@@ -1989,10 +2027,22 @@ mod tests {
             open: None,
             panels: [true; 4],
             layer: 0,
-            reader: false,
+            tool: Default::default(),
+            curve: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);
+        assert_eq!(resolve(&Cmd::Fit(FitKind::Linear), &c).unwrap_err(), ANALYSIS_ON_BOOK);
+        // With a data plot on the graph, the Analysis menu works on it (Origin's active data plot).
+        let on_plot = MenuContext { curve: Some((WindowId(5), ColumnId(9))), ..c.clone() };
+        assert!(matches!(
+            resolve(&Cmd::Analyze(AnalysisKind::Smooth), &on_plot),
+            Ok(Action::Analyze { book: WindowId(5), ref columns, kind: AnalysisKind::Smooth }) if *columns == [ColumnId(9)]
+        ));
+        assert!(matches!(
+            resolve(&Cmd::Fit(FitKind::Linear), &on_plot),
+            Ok(Action::Fit { book: WindowId(5), column: Some(ColumnId(9)), kind: FitKind::Linear })
+        ));
         assert!(matches!(resolve(&Cmd::ExportGraph, &c), Ok(Action::ExportGraph(WindowId(2)))));
         assert_eq!(resolve(&Cmd::Undo, &c).unwrap_err(), NO_UNDO);
         assert!(matches!(resolve(&Cmd::Import, &c), Ok(Action::Import(None))));

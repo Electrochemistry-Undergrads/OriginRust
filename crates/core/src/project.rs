@@ -517,26 +517,7 @@ impl Project {
     /// A panel of a multi-panel graph whose X scale is not shared with the first panel cannot get
     /// a right Y axis, because a link always goes to a root layer.
     pub fn add_right_y_layer(&mut self, graph: WindowId, parent: usize) -> Result<usize, ProjectError> {
-        let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
-        if parent >= g.layers.len() {
-            return Err(ProjectError::NoSuchLayer(parent));
-        }
-        let panel = g.same_frame(parent)[0];
-        if let Some(existing) = g.right_y_member(panel) {
-            return Ok(existing);
-        }
-        let root = g.root_of(panel);
-        if g.valid_link(panel).is_some_and(|l| l.x != crate::graph::ScaleLink::Straight) {
-            return Err(PanelError::RightAxis.into());
-        }
-        let mut layer = right_y_layer(&g.layers[panel], root);
-        layer.frame = g.place(panel);
-        let p = &mut g.layers[panel];
-        p.y_axis.show_opposite = false;
-        p.y_axis.opposite_ticks = false;
-        p.legend.scope = LegendScope::Graph;
-        g.layers.push(layer);
-        Ok(g.layers.len() - 1)
+        self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?.add_right_y_layer(parent)
     }
 
     /// Creates a multi-panel graph of `template` (graphing spec section 15.4) and returns its id.
@@ -612,7 +593,38 @@ impl Project {
         index: usize,
         to: usize,
     ) -> Result<(), ProjectError> {
-        let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
+        self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?.move_plot_to_layer(from, index, to)
+    }
+}
+
+impl Graph {
+    /// [`Project::add_right_y_layer`] on the graph itself (Plot Details edits a copy of it).
+    pub fn add_right_y_layer(&mut self, parent: usize) -> Result<usize, ProjectError> {
+        let g = self;
+        if parent >= g.layers.len() {
+            return Err(ProjectError::NoSuchLayer(parent));
+        }
+        let panel = g.same_frame(parent)[0];
+        if let Some(existing) = g.right_y_member(panel) {
+            return Ok(existing);
+        }
+        let root = g.root_of(panel);
+        if g.valid_link(panel).is_some_and(|l| l.x != crate::graph::ScaleLink::Straight) {
+            return Err(PanelError::RightAxis.into());
+        }
+        let mut layer = right_y_layer(&g.layers[panel], root);
+        layer.frame = g.place(panel);
+        let p = &mut g.layers[panel];
+        p.y_axis.show_opposite = false;
+        p.y_axis.opposite_ticks = false;
+        p.legend.scope = LegendScope::Graph;
+        g.layers.push(layer);
+        Ok(g.layers.len() - 1)
+    }
+
+    /// [`Project::move_plot_to_layer`] on the graph itself.
+    pub fn move_plot_to_layer(&mut self, from: usize, index: usize, to: usize) -> Result<(), ProjectError> {
+        let g = self;
         for layer in [from, to] {
             if layer >= g.layers.len() {
                 return Err(ProjectError::NoSuchLayer(layer));
@@ -638,6 +650,25 @@ impl Project {
         g.layers[from].recolor_automatic();
         g.layers[to].recolor_automatic();
         Ok(())
+    }
+
+    /// Puts plot `index` of layer `layer` on the right Y axis of its panel (`right`) or on the
+    /// left one. The right Y layer is added when the panel has none; the left axis belongs to the
+    /// panel's first layer. A plot already on that axis stays where it is. Returns the plot's
+    /// layer and index after the move. A layer left without plots is kept, as Origin keeps it.
+    pub fn set_plot_y_axis(&mut self, layer: usize, index: usize, right: bool) -> Result<(usize, usize), ProjectError> {
+        if layer >= self.layers.len() {
+            return Err(ProjectError::NoSuchLayer(layer));
+        }
+        if index >= self.layers[layer].plots.len() {
+            return Err(ProjectError::NoSuchPlot(index));
+        }
+        let to = if right { self.add_right_y_layer(layer)? } else { self.same_frame(layer)[0] };
+        if to == layer {
+            return Ok((layer, index));
+        }
+        self.move_plot_to_layer(layer, index, to)?;
+        Ok((to, self.layers[to].plots.len() - 1))
     }
 }
 
@@ -838,6 +869,27 @@ mod tests {
         assert_eq!(graph.layers[right].plots[0].line.color, graph.layers[right].palette.colors[0]);
         assert_eq!(p.move_plot_to_layer(g, 0, 7, right), Err(ProjectError::NoSuchPlot(7)));
         assert_eq!(p.move_plot_to_layer(g, 0, 0, 9), Err(ProjectError::NoSuchLayer(9)));
+    }
+
+    #[test]
+    fn set_plot_y_axis_makes_the_right_layer_and_moves_back_leaving_it_empty() {
+        let (mut p, ys) = four_ys();
+        let g = p.plot_columns(Template::Line, &ys[..3]).unwrap();
+        let graph = p.graph_mut(g).unwrap();
+        assert_eq!(graph.set_plot_y_axis(0, 1, false), Ok((0, 1)), "already left");
+        assert_eq!(graph.layers.len(), 1);
+        assert_eq!(graph.set_plot_y_axis(0, 1, true), Ok((1, 0)));
+        assert_eq!(graph.layers.len(), 2);
+        assert_eq!(graph.right_y_member(0), Some(1));
+        assert_eq!(graph.set_plot_y_axis(1, 0, true), Ok((1, 0)), "already right");
+        assert_eq!(graph.set_plot_y_axis(0, 1, true), Ok((1, 1)), "the second Y column joins it");
+        assert_eq!(graph.layers.len(), 2, "the right layer is reused");
+        assert_eq!(graph.set_plot_y_axis(1, 0, false), Ok((0, 1)));
+        assert_eq!(graph.set_plot_y_axis(1, 0, false), Ok((0, 2)));
+        assert_eq!(graph.layers.len(), 2, "the empty right layer stays");
+        assert!(graph.layers[1].plots.is_empty());
+        assert_eq!(graph.set_plot_y_axis(0, 9, true), Err(ProjectError::NoSuchPlot(9)));
+        assert_eq!(graph.set_plot_y_axis(5, 0, true), Err(ProjectError::NoSuchLayer(5)));
     }
 
     #[test]

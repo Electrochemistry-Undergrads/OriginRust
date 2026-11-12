@@ -1,5 +1,17 @@
 # Handoff
 
+## Standing rules from the owner (2026-11-12)
+
+- **Subagents:** use Sonnet subagents when work needs delegating (building, research, reviews),
+  and Haiku subagents for testing (running the test suites, click tests, checking outputs).
+- **No co-author line:** never add a `Co-Authored-By: Claude ...` line, or a "Generated with
+  Claude Code" line, to commits or pull requests; say so in every subagent prompt too. The whole
+  history on GitHub was rewritten on 2026-11-12 to remove these lines, so every commit hash older
+  than that changed; branches made before it must be rebased onto the new `main` (match commits by
+  tree) before merging.
+- **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing of
+  it may live on the owner's personal account (UlanS1).
+
 Last updated: 2026-11-12, about 16:00, by session 05b367c2 ("Sonnet subagents from
 ORIGIN_RUST_PROMPT"). The owner asked this session to finish the open work while the session
 `originrust-3a` had made no change since 14:23, so this session now merges to `main` and edits this
@@ -12,6 +24,15 @@ double-Y graph as a linked layer, and the `\(nnn)` text escape works. The "34 of
 in "Integration of Delithiation SF data" are sparkline previews, not graph windows: the file holds
 7 graphs and all are read (opj-format.md 10.0).
 
+**Merged later on 2026-11-12 (this session):** per-plot left/right Y axis in the app (`e2443c8`), the
+parity table brought up to date (`90de8dd`), Origin-style log tick labels (`c467f42`), TIFF export
+and export sizes that scale the whole figure (`dc334f6`), free text labels (`eb211ee`: Graph > Add
+Text, the T tool, the Text window, dragging, `sheaf plot --label`), the Analysis menu on a graph's
+data plot (`94f48b2`), and .opj writing of stack offsets, double-Y layers, bar gaps, axis sides and
+automatic axis colours (opj-format.md 13.12). Round trip checked on the owner's XRD project: Origin
+file -> Sheaf -> `sheaf export -o x.opj` -> Origin 2016 draws the stacked six-pattern figure as the
+original. 944 tests pass on `main`.
+
 ## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
 
 1. The desktop app should **look and work like Origin** (OriginPro 2016): same window arrangement,
@@ -23,7 +44,7 @@ in "Integration of Delithiation SF data" are sparkline previews, not graph windo
 
 ## Where things stand
 
-- **GitHub** (private): https://github.com/UlanS1/OriginRust. CI runs on push.
+- **GitHub** (private): https://github.com/Electrochemistry-Undergrads/OriginRust. CI runs on push.
 - Milestones 1 to 5 are done and tagged (milestone 2 still needs the owner for two checks; milestone
   5 misses some graphs of one owner project). Owner requests: parity audit, interface study, `.opj`
   writer for workbooks and graphs, `.opj` as default with companion: done.
@@ -64,10 +85,14 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    exact comparison for `GCD(0.5C).bin`) need text exports of the same runs.
 2. **Origin look and feel (ADR 0007)**: column properties and the analysis-tool dialogs are not
    in Origin's layout; no Import Wizard (Ctrl+3); NLFit lacks "1 Iteration" and "Fit till
-   converged" (the fit engine needs single steps); no per-plot left/right Y axis choice in the
-   app (the CLI has it); many menu items are greyed because the feature is missing.
-3. **`.opj` files**: saving does not yet write double-Y, stack offsets, panels, bar spacing, area
-   plots, tick number formats or window places (the companion keeps them); the reader does not
+   converged" (the fit engine needs single steps); many menu items are greyed because the
+   feature is missing. (A plot can now be put on the right Y axis from Plot Details > Group and
+   from its right-click menu, `0d74eee`.)
+3. **`.opj` files**: saving now writes double-Y (right Y layer and its legend), stack offsets (Y
+   only), bar gaps, axis sides and automatic axis colours (spec opj-format.md 13.12); it still does
+   not write panels, X offsets, the overlap of bars, waterfall, area plots, tick number formats or
+   window places (the companion keeps them); two column plots in one layer open in Origin on top
+   of each other (no plot group is written); the reader does not
    read plot groups, legend frames, panel links or sparklines (the small previews in a sheet's
    sparkline row, which Origin lists as graphs); `.opju` is not supported.
 4. **Breadth (milestone 6)**: reciprocal and other scales, stacked/fill area, pie, box,
@@ -75,22 +100,26 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    statistics beyond t-tests, one-way ANOVA, frequency counts and normality (two-way ANOVA,
    nonparametric tests, correlation); analysis templates (batch import exists); an embedded
    scripting language; 3D graphs (last).
-5. **Smaller points**: automatic axis ranges can leave a wide empty band; plot groups and
-   log-axis tick labels do not look like Origin's; B-spline with smoothing factor 0 differs from
-   Origin.
+5. **Smaller points**: Origin pads automatic axis ranges more than Sheaf (measured, an open
+   choice below); plot groups do not look like Origin's; B-spline with smoothing factor 0 differs
+   from Origin. Log-axis tick labels now follow Origin (plain numbers from 0.001 to 1000000).
 
 ## Exact next step
 
-1. Write the new graph features into `.opj` (linked layers for double-Y and panels, stack
-   offsets, bar spacing, tick label sources, area plots, tick number formats) so the companion is
-   rarely needed. The formula work is the model: `tools/origin-ref/opj-verify-features.ps1`, spec
+1. Write the rest of the new graph features into `.opj` (linked layers for panels, tick label
+   sources, area plots, tick number formats, plot groups for bars side by side) so the companion is
+   rarely needed (double-Y, stack offsets, bar gaps and axis sides are written, 13.12). The formula work is the model: `tools/origin-ref/opj-verify-features.ps1`, spec
    13.10, checked by opening the written files in Origin 2016.
 2. The remaining dialogs in Origin's layout (analysis tools, column properties, Import Wizard;
    `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's long name is
    on Plot Details' Page tab; a plot's legend text is on its Group tab.
-3. A per-plot left/right axis choice in the app (offsets are already in Plot Details > Stack).
-4. Update the rows of `docs/spec/feature-parity.md` for the work of 2026-11-12, then follow its
-   order of work (matrices and heatmaps are the largest missing area).
+3. Done on 2026-11-12: the per-plot left/right axis choice in the app (`0d74eee`), and the rows of
+   `docs/spec/feature-parity.md` brought up to date by reading the code (`00a84db`: 40 done, 106
+   partial, 84 missing of 230; P0 31 / 68 / 2).
+4. Follow the parity table's order of work. Its stage 1 step 6 (publication figures: free text
+   labels, legend options, Origin's colour list, size and margin options, TIFF, EMF, EPS) and
+   stage 2 step 3 (the generic analysis dialog with Preview and Auto Apply) are the largest open
+   P0 parts; matrices and heatmaps are the largest missing area overall.
 
 The small points of the graph review are fixed too: `--offsets` gives its values to stack members
 (a fitted curve takes none), and deleting a column drops the tick labels and offsets that name it.
@@ -102,8 +131,8 @@ The small points of the graph review are fixed too: `--offsets` gives its values
 
 - Fit reports show the standard error of a fixed parameter as blank (Origin's sheet stores 0).
 - Origin's bound handling can stop above the true constrained minimum; Sheaf copies it.
-- `.opj` graphs: plot groups (Origin's colour increments) are not modelled; legend frames and
-  Origin-style log tick labels are not drawn.
+- `.opj` graphs: plot groups (Origin's colour increments) are not modelled; legend frames are not
+  drawn.
 - Automatic axis ranges: measured in Origin 2016 (graphing.md section 4): Origin pads by 8 % of the span and rounds to half a major step, so it leaves a wider band than Sheaf (-0.2..1.0 gives -0.5..1.25 in Origin, -0.5..1.0 in Sheaf). Should Sheaf copy Origin's padding? Its step rule was not found.
 
 ## Commands that verify the current state

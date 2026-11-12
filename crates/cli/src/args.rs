@@ -401,6 +401,12 @@ pub struct StyleArgs {
     /// --bar-overlap=-20).
     #[arg(long, value_name = "PCT", allow_hyphen_values = true)]
     pub bar_overlap: Option<f64>,
+    /// Add a free text label to the first layer: "TEXT@X,Y", where X and Y are fractions of the
+    /// layer frame (0,0 is its top left corner, 1,1 its bottom right; the label's text starts
+    /// there). The text may use Origin's escapes, for example --label "\b(Zn-LMO)@0.85,0.1".
+    /// Repeat the option for more labels.
+    #[arg(long, value_name = "TEXT@X,Y")]
+    pub label: Vec<String>,
 }
 
 #[derive(Args, Debug)]
@@ -414,6 +420,15 @@ pub struct PlotArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
+    /// Width of the exported picture, with a unit: in, cm, mm, pt or px (for example 3.5in or
+    /// 8.5cm; px counts at --dpi). The whole page is scaled to it, text and lines included, as
+    /// Origin's export image size does; --width instead changes the page and keeps the text size.
+    #[arg(long, value_name = "LENGTH")]
+    pub image_width: Option<String>,
+    /// Height of the exported picture, with a unit as for --image-width. With both, the picture is
+    /// scaled to fit inside both.
+    #[arg(long, value_name = "LENGTH")]
+    pub image_height: Option<String>,
     /// Figure template: line, scatter, line-symbol, column, cv, double-y, stacked or waterfall
     /// (default: what the importer suggests). column draws one group of bars per row, the Y columns
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
@@ -515,6 +530,15 @@ pub struct ExportArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
+    /// Width of the exported picture, with a unit: in, cm, mm, pt or px (for example 3.5in or
+    /// 8.5cm; px counts at --dpi). The whole page is scaled to it, text and lines included, as
+    /// Origin's export image size does; --width instead changes the page and keeps the text size.
+    #[arg(long, value_name = "LENGTH")]
+    pub image_width: Option<String>,
+    /// Height of the exported picture, with a unit as for --image-width. With both, the picture is
+    /// scaled to fit inside both.
+    #[arg(long, value_name = "LENGTH")]
+    pub image_height: Option<String>,
     #[command(flatten)]
     pub style: StyleArgs,
     #[command(flatten)]

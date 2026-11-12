@@ -347,7 +347,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
     for e in e_min..=e_max {
         if e.rem_euclid(k) == 0 {
             major.push(pow10(e));
-            labels.push(format!("10\\+({})", signed(e)));
+            labels.push(log_label(e, axis.tick_format));
         }
     }
     let mut minor = Vec::new();
@@ -362,6 +362,23 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
         }
     }
     ResolvedAxis { min, max, step: pow10(k), scale: ScaleKind::Log10, major, minor, labels, reversed: false }
+}
+
+/// The label of the major tick at `10^e` on a log axis. With the automatic format it is written as
+/// Origin 2016 writes it: as a plain number from 0.001 to 1000000, and as `1E7`, `1E−4` beyond
+/// (graphing.md section 3.3). The scientific format gives `10` with a superscript exponent.
+fn log_label(e: i32, format: TickFormat) -> String {
+    match format {
+        TickFormat::Scientific(_) => format!("10\\+({})", signed(e)),
+        _ if (-3..=6).contains(&e) => {
+            if e >= 0 {
+                format!("1{}", "0".repeat(e as usize))
+            } else {
+                format!("0.{}1", "0".repeat((-e - 1) as usize))
+            }
+        }
+        _ => format!("1E{}", signed(e)),
+    }
 }
 
 fn signed(e: i32) -> String {
@@ -744,13 +761,23 @@ mod tests {
         let r = resolve_axis(&a, Some((3.0, 7000.0)));
         assert_eq!((r.min, r.max), (1.0, 10000.0));
         assert_eq!(r.major, vec![1.0, 10.0, 100.0, 1000.0, 10000.0]);
-        assert_eq!(r.labels[2], "10\\+(2)");
+        assert_eq!(r.labels, vec!["1", "10", "100", "1000", "10000"], "plain numbers, as Origin 2016 writes them");
         assert_eq!(r.minor.len(), 4 * 8);
         assert!(close(r.to_unit(100.0), 0.5));
         assert!(close(r.from_unit(0.25), 10.0));
         assert!(r.to_unit(-1.0).is_nan());
         let r = resolve_axis(&a, Some((0.001, 1.0)));
+        assert_eq!(r.labels[0], "0.001");
+        // Beyond 0.001 and 1000000 Origin writes 1E-4 and 1E7.
+        assert_eq!(log_label(-4, TickFormat::Auto), "1E\u{2212}4");
+        assert_eq!(log_label(7, TickFormat::Auto), "1E7");
+        assert_eq!(log_label(6, TickFormat::Auto), "1000000");
+        assert_eq!(log_label(0, TickFormat::Decimal(2)), "1");
+        // The scientific format keeps powers of ten.
+        a.tick_format = TickFormat::Scientific(0);
+        let r = resolve_axis(&a, Some((0.001, 1.0)));
         assert_eq!(r.labels[0], "10\\+(\u{2212}3)");
+        a.tick_format = TickFormat::Auto;
         // Exact powers of ten stay where they are.
         let r = resolve_axis(&a, Some((10.0, 1000.0)));
         assert_eq!((r.min, r.max), (10.0, 1000.0));

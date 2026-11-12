@@ -2,7 +2,7 @@
 
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
-use sheaf_core::graph::{Graph, LineStyle, PlotKind, Stack, TickDirection, TickLabelSource};
+use sheaf_core::graph::{Graph, LineStyle, PlotKind, Stack, TextLabel, TickDirection, TickLabelSource};
 use sheaf_core::panels::{MAX_PANELS, PanelLayout, PanelOrder};
 use sheaf_core::project::Window;
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
@@ -449,6 +449,7 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_pane
     require_range("--x-label-angle", s.x_label_angle, -90.0, 90.0)?;
     require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
+    let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
     // The layers the options act on, in legend order, and the panels among them.
@@ -529,7 +530,30 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_pane
             layer.plot_offset_mut(column).y = *y;
         }
     }
+    if let Some(layer) = g.layers.first_mut() {
+        for (text, x, y) in labels {
+            let font = layer.new_label_font();
+            layer.labels.push(TextLabel::new(text, x, y, font));
+        }
+    }
     Ok(())
+}
+
+/// Reads one `--label` value, "TEXT@X,Y": the text up to the last `@`, then two fractions of the
+/// layer frame.
+fn parse_label(value: &str) -> Result<(String, f64, f64)> {
+    let usage = "--label must look like \"TEXT@X,Y\", with X and Y fractions of the layer frame (0,0 is the top left corner), for example \"Zn-LMO@0.85,0.1\"";
+    let Some((text, at)) = value.rsplit_once('@') else {
+        bail!("--label \"{value}\": there is no @ before the position; {usage}");
+    };
+    if text.is_empty() {
+        bail!("--label \"{value}\": the text is empty; {usage}");
+    }
+    let number = |s: &str| s.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    let Some((x, y)) = at.split_once(',').and_then(|(x, y)| Some((number(x)?, number(y)?))) else {
+        bail!("--label \"{value}\": the position \"{at}\" is not two numbers X,Y; {usage}");
+    };
+    Ok((text.to_string(), x, y))
 }
 
 /// Fails with a clear message unless `value` (when given) is a number from `lo` to `hi`.
@@ -735,7 +759,8 @@ fn plot(a: PlotArgs) -> Result<()> {
     };
     apply_style(&mut project, graph, &a.style, a.panels.is_some())?;
 
-    sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
+    let size = export_size(a.image_width.as_deref(), a.image_height.as_deref(), a.dpi)?;
+    sheaf_plot::export_file_sized(&project, graph, &a.output, a.dpi, size)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());
     if let Some(path) = &a.save {
@@ -1084,7 +1109,8 @@ fn export(a: ExportArgs) -> Result<()> {
     let mut project = load_project(&a.project)?;
     let graph = pick_graph(&project, a.graph.as_deref())?;
     apply_style(&mut project, graph, &a.style, false)?;
-    sheaf_plot::export_file(&project, graph, &a.output, a.dpi)
+    let size = export_size(a.image_width.as_deref(), a.image_height.as_deref(), a.dpi)?;
+    sheaf_plot::export_file_sized(&project, graph, &a.output, a.dpi, size)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());
     Ok(())
@@ -1114,4 +1140,52 @@ pub(crate) fn write_sheet(ws: &sheaf_core::Worksheet, path: &Path) -> Result<()>
         .with_context(|| format!("could not write '{}'", path.display()))?;
     println!("wrote {}", path.display());
     Ok(())
+}
+
+/// The export size from `--image-width` and `--image-height`.
+fn export_size(width: Option<&str>, height: Option<&str>, dpi: f64) -> Result<sheaf_plot::ExportSize> {
+    let inches = |text: Option<&str>, what: &str| -> Result<Option<f64>> {
+        text.map(|t| parse_length_inches(t, dpi).with_context(|| format!("--image-{what} '{t}'"))).transpose()
+    };
+    Ok(sheaf_plot::ExportSize { width_in: inches(width, "width")?, height_in: inches(height, "height")? })
+}
+
+/// A length with its unit (`in`, `cm`, `mm`, `pt` or `px`, the last at `dpi`) in inches.
+pub(crate) fn parse_length_inches(text: &str, dpi: f64) -> Result<f64> {
+    let t = text.trim().to_ascii_lowercase();
+    let split = t.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(t.len());
+    let (number, unit) = t.split_at(split);
+    let value: f64 =
+        number.trim().parse().map_err(|_| anyhow::anyhow!("'{text}' is not a length such as 3.5in or 8.5cm"))?;
+    let per_inch = match unit.trim() {
+        "in" | "inch" | "inches" => 1.0,
+        "cm" => 2.54,
+        "mm" => 25.4,
+        "pt" => 72.0,
+        "px" if dpi > 0.0 => dpi,
+        "" => bail!("'{text}' needs a unit: in, cm, mm, pt or px"),
+        other => bail!("'{other}' is not a unit; use in, cm, mm, pt or px"),
+    };
+    if !(value.is_finite() && value > 0.0) {
+        bail!("a length must be positive, not '{text}'");
+    }
+    Ok(value / per_inch)
+}
+
+#[cfg(test)]
+mod length_tests {
+    use super::parse_length_inches;
+
+    #[test]
+    fn lengths_need_a_unit_and_convert_to_inches() {
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-12;
+        assert!(close(parse_length_inches("3.5in", 300.0).unwrap(), 3.5));
+        assert!(close(parse_length_inches("8.5 cm", 300.0).unwrap(), 8.5 / 2.54));
+        assert!(close(parse_length_inches("85mm", 300.0).unwrap(), 85.0 / 25.4));
+        assert!(close(parse_length_inches("252pt", 300.0).unwrap(), 3.5));
+        assert!(close(parse_length_inches("1050PX", 300.0).unwrap(), 3.5));
+        for bad in ["3.5", "3.5furlong", "-2in", "0cm", "in", "abc"] {
+            assert!(parse_length_inches(bad, 300.0).is_err(), "{bad}");
+        }
+    }
 }

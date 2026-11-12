@@ -17,6 +17,8 @@ svg2pdf = "0.13"
 fontdb = "0.23"
 ttf-parser = "0.25"
 png = "0.18"
+# TIFF export (already in the build through the image decoders); LZW keeps files small.
+tiff = { version = "0.11", default-features = false, features = ["lzw"] }
 
 [dev-dependencies]
 roxmltree = "0.20"

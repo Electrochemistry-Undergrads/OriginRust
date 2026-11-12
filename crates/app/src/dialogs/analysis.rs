@@ -365,6 +365,12 @@ fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, 
 }
 
 impl AnalysisDialog {
+    /// The columns the window runs on (for tests).
+    #[cfg(test)]
+    pub fn columns(&self) -> &[ColumnId] {
+        &self.columns
+    }
+
     /// A window for running `kind` on `columns`. `None` when a column no longer exists.
     pub fn new(project: &Project, kind: AnalysisKind, columns: Vec<ColumnId>) -> Option<Self> {
         let (_, sheet, _) = project.locate(*columns.first()?)?;

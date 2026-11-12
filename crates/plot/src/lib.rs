@@ -49,6 +49,12 @@ pub enum PlotError {
     /// Converting to PDF failed.
     #[error("could not make the PDF: {0}")]
     Pdf(String),
+    /// Encoding the TIFF failed.
+    #[error("could not make the TIFF: {0}")]
+    Tiff(String),
+    /// The export size is not usable (not positive, or far from the page size).
+    #[error("{0}")]
+    Size(String),
     /// Reading or writing a file failed.
     #[error("cannot write '{path}': {source}")]
     Io {
@@ -58,9 +64,46 @@ pub enum PlotError {
         #[source]
         source: std::io::Error,
     },
-    /// The file name has an extension that is not one of svg, png, pdf.
-    #[error("cannot export to '.{0}' files; use .svg, .png or .pdf")]
+    /// The file name has an extension that is not one of svg, png, tif, tiff, pdf.
+    #[error("cannot export to '.{0}' files; use .svg, .png, .tif or .pdf")]
     UnknownFormat(String),
+}
+
+/// The size of an exported figure. With neither width nor height the figure has the size of the
+/// graph's page. With one of them the whole page is scaled to it, text and lines included, as
+/// Origin's export size does with "keep aspect ratio"; with both, it is scaled to fit inside both.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub struct ExportSize {
+    /// Width in inches.
+    pub width_in: Option<f64>,
+    /// Height in inches.
+    pub height_in: Option<f64>,
+}
+
+impl ExportSize {
+    /// The factor by which a page of `page_w` x `page_h` points is scaled.
+    pub fn scale(&self, page_w: f64, page_h: f64) -> Result<f64, PlotError> {
+        let mut scale: Option<f64> = None;
+        for (want, have, what) in [(self.width_in, page_w, "width"), (self.height_in, page_h, "height")] {
+            let Some(inches) = want else { continue };
+            if !(inches.is_finite() && inches > 0.0) {
+                return Err(PlotError::Size(format!("the export {what} must be a positive length, not {inches} in")));
+            }
+            let s = inches * 72.0 / have;
+            scale = Some(scale.map_or(s, |t: f64| t.min(s)));
+        }
+        let s = scale.unwrap_or(1.0);
+        if !(0.01..=100.0).contains(&s) {
+            return Err(PlotError::Size(format!(
+                "an export size of {:.3} x {:.3} in is too far from the page size ({:.2} x {:.2} in)",
+                page_w * s / 72.0,
+                page_h * s / 72.0,
+                page_w / 72.0,
+                page_h / 72.0
+            )));
+        }
+        Ok(s)
+    }
 }
 
 /// A rectangle in page points; `(x, y)` is the top-left corner, y grows downwards.
@@ -184,15 +227,50 @@ pub fn render_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotErr
     raster::to_pdf(&svg, SystemFonts::shared())
 }
 
+/// Renders a graph as an LZW-compressed RGB TIFF at `dpi` dots per inch; the resolution is
+/// recorded in the file.
+pub fn render_tiff(project: &Project, graph: WindowId, dpi: f64) -> Result<Vec<u8>, PlotError> {
+    export_bytes(project, graph, "tif", dpi, ExportSize::default())
+}
+
 /// Writes a graph to `path`; the format follows the extension (`.svg`,
-/// `.png` or `.pdf`, any case). `dpi` applies to PNG only.
+/// `.png`, `.tif`/`.tiff` or `.pdf`, any case). `dpi` applies to PNG and TIFF only.
 pub fn export_file(project: &Project, graph: WindowId, path: &Path, dpi: f64) -> Result<(), PlotError> {
+    export_file_sized(project, graph, path, dpi, ExportSize::default())
+}
+
+/// [`export_file`] with an export size other than the page size (see [`ExportSize`]).
+pub fn export_file_sized(
+    project: &Project,
+    graph: WindowId,
+    path: &Path,
+    dpi: f64,
+    size: ExportSize,
+) -> Result<(), PlotError> {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    let bytes = match ext.as_str() {
-        "svg" => render_svg(project, graph)?.into_bytes(),
-        "png" => render_png(project, graph, dpi)?,
-        "pdf" => render_pdf(project, graph)?,
-        _ => return Err(PlotError::UnknownFormat(ext)),
-    };
+    let bytes = export_bytes(project, graph, &ext, dpi, size)?;
     std::fs::write(path, bytes).map_err(|source| PlotError::Io { path: path.to_path_buf(), source })
+}
+
+/// The bytes of an exported figure in the format named by `ext` (`svg`, `png`, `tif`, `tiff`,
+/// `pdf`).
+pub fn export_bytes(
+    project: &Project,
+    graph: WindowId,
+    ext: &str,
+    dpi: f64,
+    size: ExportSize,
+) -> Result<Vec<u8>, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let scale = size.scale(g.page.width_pt, g.page.height_pt)?;
+    let svg = render_svg(project, graph)?;
+    let svg = if scale == 1.0 { svg } else { raster::scale_svg(&svg, scale) };
+    let fonts = SystemFonts::shared();
+    match ext {
+        "svg" => Ok(svg.into_bytes()),
+        "png" => raster::encode_png(&raster::rasterise(&svg, dpi / 72.0, fonts)?, dpi),
+        "tif" | "tiff" => raster::encode_tiff(&raster::rasterise(&svg, dpi / 72.0, fonts)?, dpi),
+        "pdf" => raster::to_pdf(&svg, fonts),
+        _ => Err(PlotError::UnknownFormat(ext.to_string())),
+    }
 }

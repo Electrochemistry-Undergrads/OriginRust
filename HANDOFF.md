@@ -57,7 +57,7 @@ through (they are held for approval and expire), so the split is written here:
   Origin 2016), the CH Instruments `.bin` reader, curve math, multi-range integration, date and
   time columns, recalculating formulas, fit bands and controls, CSV/ICP-OES import extras with
   batch import, the peak analysis chain.
-- **Merged on 2026-11-12 (afternoon)**: `.opj` is the default save format with a `.opj.sheaf`
+- **Merged on 2026-11-12 (morning)**: `.opj` is the default save format with a `.opj.sheaf`
   companion (ADR 0008); the app shell has Origin's theme, child windows, Window menu and menu bars
   per window type (ADR 0007 steps 1 to 4); `docs/spec/gui-look.md` completed from a second set of
   pictures (`re-workspace/scratch/gui-study2/`, local only).

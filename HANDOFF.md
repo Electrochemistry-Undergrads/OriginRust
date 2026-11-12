@@ -46,9 +46,8 @@ merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lea
 4. App controls the graph work exposes only in the CLI: per-plot left/right axis, offsets editor.
 5. Then the parity-audit gaps in their order.
 
-Small open points from the review (not yet fixed): `--offsets` pairs values with plots, not stack
-members, so a fitted curve takes a value; deleting a column leaves a `TickLabelSource::Column` or
-plot offset pointing at it (harmless, never cleaned).
+The small points of the graph review are fixed too: `--offsets` gives its values to stack members
+(a fitted curve takes none), and deleting a column drops the tick labels and offsets that name it.
 
 ## Open questions noted by the agents (no answer needed to continue)
 

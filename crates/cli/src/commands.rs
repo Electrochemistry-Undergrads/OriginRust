@@ -525,8 +525,7 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_pane
         && let Some(layer) = g.layers.first_mut()
     {
         layer.stack = Stack::Individual;
-        let columns: Vec<ColumnId> = layer.plots.iter().map(|p| p.y).collect();
-        for (column, y) in columns.into_iter().zip(&s.offsets) {
+        for (column, y) in stack_members(layer).into_iter().zip(&s.offsets) {
             layer.plot_offset_mut(column).y = *y;
         }
     }
@@ -619,6 +618,19 @@ fn parse_stack(text: &str) -> Result<Stack> {
     bail!("--stack must be none, auto, auto:GAP or step:STEP (got '{text}')")
 }
 
+/// The Y columns that have a place of their own in a layer's stack, in plot order: every plotted
+/// column once, except curves that follow another one (a fitted curve drawn over its data).
+/// `--offsets` gives its values to these, so a fit curve does not take one.
+fn stack_members(layer: &sheaf_core::graph::Layer) -> Vec<ColumnId> {
+    let mut out: Vec<ColumnId> = Vec::new();
+    for p in &layer.plots {
+        if layer.follows(p.y).is_none() && !out.contains(&p.y) {
+            out.push(p.y);
+        }
+    }
+    out
+}
+
 /// Refuses stack options that do not fit the graph: `--offsets` or `--waterfall` on a graph of
 /// several panels (`panels` is the number of panels the options act on), more `--offsets` than
 /// the first layer has curves, and a waterfall in a graph with a right Y axis (a waterfall is drawn
@@ -627,7 +639,7 @@ fn check_stack_fits(g: &Graph, s: &StyleArgs, panels: usize) -> Result<()> {
     if panels > 1 && (!s.offsets.is_empty() || !s.waterfall.is_empty()) {
         bail!("--offsets and --waterfall work on a graph of one panel; this graph has {panels} panels");
     }
-    let plots = g.layers.first().map_or(0, |l| l.plots.len());
+    let plots = g.layers.first().map_or(0, |l| stack_members(l).len());
     if s.offsets.len() > plots {
         bail!("--offsets gives {} values but the graph has {} curve(s)", s.offsets.len(), plots);
     }

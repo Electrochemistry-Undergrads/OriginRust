@@ -20,6 +20,7 @@ use crate::toolbar::{self, Bar, Toolbars};
 use crate::workspace::{WindowInfo, Workspace};
 use eframe::egui::{self, RichText};
 use sheaf_core::clipboard::CopyOptions;
+use sheaf_core::graph::TickLabelSource;
 use sheaf_core::project::{Folder, Window};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
@@ -1618,6 +1619,20 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                         }
                         if p.y_error.is_some_and(|e| columns.contains(&e)) {
                             p.y_error = None;
+                        }
+                    }
+                    // Stack settings and tick labels that name a deleted column are dropped too.
+                    l.plot_offsets.retain(|o| !columns.contains(&o.column));
+                    for o in &mut l.plot_offsets {
+                        if o.follows.is_some_and(|f| columns.contains(&f)) {
+                            o.follows = None;
+                        }
+                    }
+                    for axis in [&mut l.x_axis, &mut l.y_axis] {
+                        if let TickLabelSource::Column { column } = axis.tick_label_source
+                            && columns.contains(&column)
+                        {
+                            axis.tick_label_source = TickLabelSource::Auto;
                         }
                     }
                 }

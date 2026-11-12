@@ -31,15 +31,21 @@ merge to `main` and edit this file, docs/ROADMAP.md and docs/LESSONS.md (the lea
   - The "popup that swallows the next click" bug was not reproduced; a UI test now guards it.
   - Window places saved in the project (ADR 0007 step 10, `fb9471c`), the axis dialog and Plot
     Details in Origin's layout with OK/Cancel/Apply (step 9, by a subagent), and the Integrate
-    gadget (Gadgets > Integrate). 889 tests pass on `main`.
+    gadget (Gadgets > Integrate). Then Copy Page (Ctrl+J), the Data Reader tool and the Rescale and
+    Column toolbar buttons. All checks pass on `main` (`ba9f527`).
 - **Running when this was written**: a subagent on branch `worktree-agent-a175d68f1d5696c0d` (worktree
   `.claude/worktrees/agent-a175d68f1d5696c0d`) writes column formulas and nested folders into `.opj` and reads them back,
   checked in Origin through COM. If this session ended before merging it, look for that branch
   (`git log main..worktree-agent-a175d68f1d5696c0d`), read its commit messages, run the checks and merge.
 
+Also running: a subagent on branch `worktree-agent-a23ee953326faea53` reworks the nonlinear fit
+dialog and the import dialog into Origin's layout (only `crates/app`). If this session ended, check
+that branch the same way.
+
 ## Exact next step
 
-1. Merge the `.opj` formulas-and-folders branch when it is done (full checks after the merge).
+1. Merge the `.opj` formulas-and-folders branch and the fit/import dialogs branch when they are done
+   (full checks after each merge).
 2. The other dialogs in Origin's layout (import wizard, NLFit, analysis tools, column
    properties; `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's
    long name is on Plot Details' Page tab; a plot's legend text is on its Group tab.

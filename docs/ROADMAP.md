@@ -150,6 +150,8 @@ the default project format.
         Tukey, Bonferroni, Sidak, Fisher LSD and Scheffe, frequency counts with a histogram graph,
         five normality tests, checked against Origin (the automatic bin size matches Origin in
         about 57 % of cases)
+  - [x] Copy Page (Ctrl+J, a 300 dpi picture on the clipboard) and the Data Reader tool (snaps to
+        data points, pins one, arrow keys step through rows)
   - [x] The Integrate gadget on graphs (Gadgets > Integrate): drag a range, see the shaded area
         and its value live, write it to a sheet; same rows and rule as Analysis > Integrate
   - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,

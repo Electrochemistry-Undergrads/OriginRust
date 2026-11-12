@@ -1,6 +1,11 @@
 //! Interpolation and extrapolation (Origin `interp1`, `interp1xy`): linear, cubic spline
-//! (natural or not-a-knot ends) and Akima. The cubic B-spline method (a smoothing spline with an
-//! automatic smoothing factor) is not implemented.
+//! (natural or not-a-knot ends), Akima and the cubic B-spline.
+//!
+//! The cubic B-spline of Origin is a smoothing spline (Dierckx fit) whose smoothing factor `sf`
+//! is the allowed sum of squared residuals; `sf = 0` means an automatic factor that we could not
+//! reproduce. Here the B-spline method is the interpolating cubic (not-a-knot) spline with
+//! Origin's straight-line continuation outside the data; a smoothing factor above zero is not
+//! implemented and gives NaN (callers reject it first). See `docs/spec/analysis-tools.md`.
 
 /// Interpolation method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -9,6 +14,8 @@ pub enum InterpMethod {
     Linear,
     CubicSpline,
     Akima,
+    /// Cubic B-spline of Origin (see the module comment for what is and is not implemented).
+    BSpline,
 }
 
 /// End condition of the cubic spline (Origin default: not-a-knot).
@@ -37,6 +44,9 @@ pub struct InterpOptions {
     pub method: InterpMethod,
     pub boundary: SplineBoundary,
     pub extrapolation: Extrapolation,
+    /// Smoothing factor of the B-spline method (`sf`): 0 interpolates; values above 0 are not
+    /// implemented. Ignored by the other methods.
+    pub smoothing: f64,
 }
 
 /// Slopes at the knots of a cubic Hermite representation.
@@ -128,7 +138,9 @@ fn akima_slopes(x: &[f64], y: &[f64]) -> Vec<f64> {
 pub fn interp1(x: &[f64], y: &[f64], at: &[f64], opts: &InterpOptions) -> Vec<f64> {
     let mut pts: Vec<(f64, f64)> =
         x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).map(|(&a, &b)| (a, b)).collect();
-    if pts.len() < 2 {
+    let bspline = opts.method == InterpMethod::BSpline;
+    // Origin needs four points for the B-spline; the smoothing fit is not implemented.
+    if pts.len() < if bspline { 4 } else { 2 } || (bspline && opts.smoothing > 0.0) {
         return vec![f64::NAN; at.len()];
     }
     if pts.windows(2).any(|w| w[1].0 < w[0].0) {
@@ -140,6 +152,7 @@ pub fn interp1(x: &[f64], y: &[f64], at: &[f64], opts: &InterpOptions) -> Vec<f6
     let slopes = match opts.method {
         InterpMethod::Linear => None,
         InterpMethod::CubicSpline => Some(spline_slopes(&xs, &ys, opts.boundary)),
+        InterpMethod::BSpline => Some(spline_slopes(&xs, &ys, SplineBoundary::NotAKnot)),
         InterpMethod::Akima => Some(akima_slopes(&xs, &ys)),
     };
     at.iter()
@@ -151,7 +164,13 @@ pub fn interp1(x: &[f64], y: &[f64], at: &[f64], opts: &InterpOptions) -> Vec<f6
                 match opts.extrapolation {
                     Extrapolation::Missing => return f64::NAN,
                     Extrapolation::Repeat => return if t < xs[0] { ys[0] } else { ys[n - 1] },
-                    Extrapolation::Extrapolate => {}
+                    Extrapolation::Extrapolate => {
+                        if bspline {
+                            // straight line through the two nearest data points
+                            let (a, b) = if t < xs[0] { (0, 1) } else { (n - 2, n - 1) };
+                            return ys[a] + (ys[b] - ys[a]) / (xs[b] - xs[a]) * (t - xs[a]);
+                        }
+                    }
                 }
             }
             // segment k with xs[k] <= t <= xs[k+1] (end segments for outside points)

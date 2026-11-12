@@ -1,0 +1,15 @@
+newbook;
+col(A) = data(0, 10, 1);
+col(B) = (abs(col(A)-5)<0.5);
+col(C) = data(-1, 11, 0.25);
+interp1 ix:=col(C) iy:=(col(A),col(B)) method:=bspline option:=extrap ox:=col(D);
+interp1 ix:=col(C) iy:=(col(A),col(B)) method:=bspline sf:=0.5 option:=extrap ox:=col(E);
+interp1 ix:=col(C) iy:=(col(A),col(B)) method:=bspline sf:=2 option:=extrap ox:=col(F);
+col(G) = (abs(col(A)-0)<0.5);
+interp1 ix:=col(C) iy:=(col(A),col(G)) method:=bspline option:=extrap ox:=col(H);
+col(I) = (abs(col(A)-1)<0.5);
+interp1 ix:=col(C) iy:=(col(A),col(I)) method:=bspline option:=extrap ox:=col(J);
+col(K) = col(A)^2;
+interp1 ix:=col(C) iy:=(col(A),col(K)) method:=bspline option:=extrap ox:=col(L);
+col(M) = 3 + 2*col(A);
+interp1 ix:=col(C) iy:=(col(A),col(M)) method:=bspline option:=extrap ox:=col(N);

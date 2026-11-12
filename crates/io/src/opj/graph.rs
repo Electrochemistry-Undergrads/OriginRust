@@ -236,7 +236,8 @@ fn build_layer(
                         continue;
                     }
                 };
-                axis.title = Some(clean_markup(&text));
+                // "%(?X)" and "%(?Y)" ask for the title built from the plotted column.
+                axis.title = if text.trim_start().starts_with("%(?") { None } else { Some(clean_markup(&text)) };
                 axis.show_title = true;
                 axis.title_font.size_pt = size_pt;
             }

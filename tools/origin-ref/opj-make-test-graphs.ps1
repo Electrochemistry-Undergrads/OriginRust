@@ -40,14 +40,13 @@ try {
 
   # One source workbook with five columns of closed-form data (21 rows).
   Lt 'newbook name:=GSrc sheet:=1 option:=lsname;'
-  Lt '[GSrc]1!wks.ncols = 5;'
-  Lt '[GSrc]1!col(A) = data(0, 10, 0.5);'
-  Lt '[GSrc]1!col(B) = col(A) * col(A);'
-  Lt '[GSrc]1!col(C) = 100 - col(A) * 5;'
-  Lt '[GSrc]1!col(D) = 10 ^ (col(A) / 5);'
-  Lt '[GSrc]1!col(E) = sin(col(A)) * 5;'
+  Lt 'win -a GSrc; wks.ncols = 5; wks.nrows = 21;'
+  # Cells are set one at a time; column formulas left most cells empty in a hidden instance.
+  Lt 'loop(r, 1, 21) { x = (r - 1) * 0.5; cell(r, 1) = x; cell(r, 2) = x * x; cell(r, 3) = 100 - x * 5; cell(r, 4) = 10 ^ (x / 5); cell(r, 5) = sin(x) * 5; }'
   Lt '[GSrc]1!wks.col2.lname$ = Squares; [GSrc]1!wks.col3.lname$ = Line;'
 
+  # Origin's LabTalk numbers colours from 1 (1 black, 2 red, ...) and scale types from 1 (1 linear,
+  # 2 log10); the file stores both from 0. Line width is in 1/500 point (1000 = 2 pt).
   # name, plot type, columns, then LabTalk that formats it. Plot types: 200 line, 201 scatter,
   # 202 line+symbol, 203 column.
   $graphs = @(
@@ -55,11 +54,11 @@ try {
        fmt = 'layer.x.from = 0; layer.x.to = 10; layer.x.inc = 2; layer.y.from = 0; layer.y.to = 100; layer.y.inc = 20; label -xb Time (s); label -yl Current (mA);'
        plotfmt = @('set %C -c 2 -w 1000;', 'set %C -c 4 -w 1500;') },
     @{ name = 'GScat'; plot = 201; cols = '(1,4)'
-       fmt = 'layer.x.type = 1; layer.x.from = 1; layer.x.to = 10; layer.y.type = 1; layer.y.from = 1; layer.y.to = 100;'
-       plotfmt = @('set %C -c 3 -k 2 -z 12;') },
+       fmt = 'layer.x.type = 2; layer.x.from = 1; layer.x.to = 10; layer.y.type = 2; layer.y.from = 1; layer.y.to = 100;'
+       plotfmt = @('set %C -c 4 -z 12;') },
     @{ name = 'GLS'; plot = 202; cols = '(1,5)'
        fmt = 'layer.x.from = 2; layer.x.to = 8; layer.x.inc = 2; layer.y.from = -6; layer.y.to = 6; layer.y.inc = 3; layer.left = 20; layer.top = 15; layer.width = 60; layer.height = 55;'
-       plotfmt = @('set %C -c 6 -l 3 -w 2000 -k 3 -z 9;') },
+       plotfmt = @('set %C -c 6 -w 2000 -z 9;') },
     @{ name = 'GCol'; plot = 203; cols = '(1,2)'
        fmt = 'layer.y.from = 0; layer.y.to = 120; layer.y.inc = 30;'
        plotfmt = @('set %C -c 5;') }
@@ -70,7 +69,12 @@ try {
     Lt ("win -a " + $g.name + ";")
     Lt $g.fmt
     $k = 1
-    foreach ($pf in $g.plotfmt) { Lt ("layer.plot = $k;"); Lt $pf; $k++ }
+    foreach ($pf in $g.plotfmt) {
+      Lt ("layer.plot = $k;")
+      # Several options in one set command are ignored by Origin; each option goes in its own call.
+      foreach ($m in [regex]::Matches($pf, '-\w+ \d+')) { Lt ("set %C " + $m.Value + ";") }
+      $k++
+    }
     Lt 'layer -a;'
     # what Origin says about the graph
     Lt 'double xf = layer.x.from; double xt = layer.x.to; double xi = layer.x.inc; double xs = layer.x.type;'
@@ -78,8 +82,9 @@ try {
     Lt 'double ll = layer.left; double lt = layer.top; double lw = layer.width; double lh = layer.height; double np = layer.nplots;'
     $rep.WriteLine("GRAPH " + $g.name)
     foreach ($v in 'xf', 'xt', 'xi', 'xs', 'yf', 'yt', 'yi', 'ys', 'll', 'lt', 'lw', 'lh', 'np') { $rep.WriteLine("$v=" + (Var $v)) }
-    $png = Join-Path $PngDir ($g.name + '.png')
-    Lt ("expGraph type:=png filename:=`"$png`" overwrite:=1 tr1.unit:=2 tr1.width:=800;")
+    # The folder and the file name must be given apart; a full path in filename makes the
+    # export fail (and has left a hidden Origin waiting for an answer to a dialog).
+    Lt ("expGraph type:=png path:=`"$PngDir`" filename:=" + $g.name + " overwrite:=1 tr1.unit:=2 tr1.width:=800;")
   }
   if (-not $o.Save($Out)) { throw "Origin could not save $Out" }
   "saved $Out"

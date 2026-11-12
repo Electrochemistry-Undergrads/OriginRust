@@ -1,7 +1,8 @@
 # Origin project file format (`.opj`)
 
 Status: written while building `crates/io/src/opj/`. Covers what the reader needs: workbooks,
-sheets, columns and their values. Graphs, matrices and notes are only sketched.
+sheets, columns and their values (checked cell by cell against Origin, section 12) and basic graphs
+(section 10). Matrices and notes are only sketched.
 
 Provenance tags used on statements:
 
@@ -331,14 +332,139 @@ Everything else described here held across all of these versions.
 6. If the window list cannot be read, group the data sets by name into workbooks and sheets (sheet number
    from the `@n` suffix), the first column as X, the others as Y.
 
-## 10. Graphs [pub, not implemented]
+## 10. Graphs [obs unless marked]
 
-Public documentation describes: window header rectangles; graph layer headers with X/Y/Z axis
-ranges, tick settings and scale type; a curve record per plotted column (Y data set at `0x04`, X
-data set at `0x23`, line connect and style, symbol shape and size at `0x17`..`0x19`, fill, curve type at
-`0x4C`); six parameter blocks per axis (minor grid, major grid, tick, format, tick, format) and three
-axes per layer. In the files, the three axis groups of section 4 each contained six 515-byte
-parameter blocks followed by an empty block for graph layers. Nothing more was checked.
+Graph windows are windows whose layers have axis blocks (six 515-byte blocks in each of the three
+axis groups of section 4). `crates/io/src/opj/graph.rs` turns them into `sheaf_core::graph::Graph`.
+Offsets below were found by building graphs in Origin 2016 with known settings
+(`tools/origin-ref/opj-make-test-graphs.ps1`, and one-property-at-a-time variations whose records
+were compared byte by byte), by comparing with the graph in the owner's figure project, and with the
+public description of the format [pub]. All numbers are little-endian.
+
+### 10.1 Window header (graphs)
+
+| offset | size | meaning |
+|---|---|---|
+| `0x23` | u16 | page width in 1/600 inch (6432 for a 10.72 inch wide page) |
+| `0x25` | u16 | page height in 1/600 inch |
+
+The page units were found by exporting a graph at Origin's default 300 dots per inch: a page of
+6432 units came out 3216 pixels wide.
+
+### 10.2 Layer header (361 bytes)
+
+| offset | size | meaning |
+|---|---|---|
+| `0x0F`, `0x17`, `0x1F` | 3 x f64 | X axis start, end and major step |
+| `0x37` | u8 | X minor ticks (1 on a linear axis, 8 on a logarithmic one) |
+| `0x38` | u8 | X scale type: 0 linear, 1 base-10 logarithm (others [pub]: 2 probability, 3 probit, 4 reciprocal, 5 offset reciprocal, 6 logit, 7 natural log, 8 base-2 log) |
+| `0x3A`, `0x42`, `0x4A` | 3 x f64 | Y axis start, end and major step |
+| `0x62`, `0x63` | u8, u8 | Y minor ticks, Y scale type |
+| `0x71` | 4 x u16 | layer frame: left, top, right, bottom, in the page units of 10.1 |
+
+LabTalk numbers scale types from 1 (`layer.x.type`: 1 linear, 2 log10), the file from 0. The ranges
+and steps equal what `layer.x.from`, `.to` and `.inc` report (checked on four known graphs and the
+owner's graph). The frame equals `layer.left`, `layer.top`, `layer.width` and `layer.height`
+(percent of the page) to the rounding of those numbers.
+
+### 10.3 Axis blocks
+
+Group 0 is X, group 1 is Y, group 2 is Z. In each group the blocks are, by position:
+0 minor grid, 1 major grid, 2 tick labels, 3 axis line and ticks, 4 title (not used), 5 the
+opposite axis.
+
+- Block 2, byte `0x15`: tick label font size in points. Byte `0x26`: bit `0x40` set means the
+  labels are shown (cleared by `layer.x.showLabels = 0`).
+- Block 3, u16 at `0x15`: axis line width in 1/500 point (1500 is 3 points). Byte `0x25`: bits 4 and
+  5 give the major tick direction, bits 6 and 7 the minor one: 0 none, 1 in, 2 out, 3 both (a default
+  Origin graph has `0xA0`, both out; the owner's Y axis has `0x50`, both in, which matches his figure).
+  The meaning of 1 and 3 was inferred from these two cases, not from a rendering of each.
+- Block 5, byte `0x26`: bit `0x40` set means the opposite axis line is drawn (the closed box). Set by
+  `layer.x.showAxes = 3`.
+
+### 10.4 Annotations of a graph layer
+
+Header: the rectangle as four u16 (left, top, right, bottom, page units) at `0x03`, the object
+name at `0x46`. Block 1 of a text object has 102 bytes: u16 at `0x02` is the angle in tenths of a
+degree (900 for a rotated Y title), u16 at `0x04` the font size in points. Block 2 is the text with
+Origin's escapes. Names seen: `XB` and `YL` (bottom and left axis title; the text `%(?X)` and
+`%(?Y)` asks for the title built from the plotted column), `Legend`, `Text`, `Text1`, ... (free
+text), and internal objects whose names start with an underscore or that have another block 1 size.
+`\p89(...)` wraps text at 89 percent size; the reader drops that wrapper and keeps `\b(...)`,
+`\i(...)`, `\+(...)`, `\-(...)` and `\g(...)`. A text of several lines is separated by CR LF.
+
+### 10.5 Curve records
+
+The column records of a graph layer are its curves (515 bytes, the same size as worksheet columns).
+
+| offset | size | meaning |
+|---|---|---|
+| `0x04` | u16 | position (1-based) of the Y data set in the data-set list |
+| `0x0F` | u8 | line colour as a position in the colour list (10.6); 0 when automatic |
+| `0x11` | u8 | line connection: 0 none, 1 and above a line (values 1 to 8 all drew straight lines through 8 points; the other kinds were not told apart) |
+| `0x12` | u8 | line style: 0 solid, 1 dash, 2 dot, 3 dash dot, 4 dash dot dot, 5 short dash, 6 short dot, 7 short dash dot (the `set -d` values, modulo 8) |
+| `0x15` | u16 | line width in 1/500 point (`set -w 1000` is 2 points) |
+| `0x17` | u8 | symbol shape: 0 none, 1 square (the default); the others are guessed: 2 circle, 3 up triangle, 4 down triangle, 5 diamond |
+| `0x19` | u16 | symbol size in 1/500 point (`set -z 12` is 6000) |
+| `0x23` | u16 | position of the X data set (0 for none). For an error plot it holds the position of the Y data set of the plot the errors belong to |
+| `0x4C` | u16 | plot type: 200 line, 201 scatter, 202 line and symbol, 203 column; 487 (`0x1E7`) is a Y error plot |
+| `0xC2` | 4 bytes | fill colour of a column: red, green, blue, then 1 when the colour was chosen freely (the owner's bars are 0, 107, 172, 1) |
+| `0x132` | 4 bytes | colour: a list position then three zero bytes, or red, green, blue, 1; `F7 FF FF FF` means "automatic" |
+
+"Automatic" colours follow the list by plot position: the first plot black, the second red, and so
+on. The reader gives each automatic plot the list colour of its position in the layer. Note that
+`set -c 1 -w 1000` (several options in one call) is silently ignored by Origin 2016; each option
+needs its own `set` call.
+
+I could not make `set -k` change the drawn symbol shape in a hidden instance (the record changed, the
+picture did not), so shapes other than the default square are not confirmed against a picture.
+
+### 10.6 Colour list
+
+The stored number is the position in this list (0 first). The RGB values were read from a PNG that
+Origin exported with one thick line per colour; the printed values were within a few units of these
+(for example 132 where 128 is listed), which is taken as anti-aliasing in the export:
+0 black, 1 red (255,0,0), 2 green (0,255,0), 3 blue (0,0,255), 4 cyan, 5 magenta, 6 yellow,
+7 dark yellow (128,128,0), 8 navy (0,0,128), 9 purple (128,0,128), 10 wine (128,0,0), 11 olive
+(0,128,0), 12 dark cyan (0,128,128), 13 royal blue (about 0,0,160), 14 orange (255,128,0), 15 violet
+(128,0,255), 16 pink (255,0,128), 17 white, 18 light grey (about 192), 19 grey (128), 20 light
+yellow (255,255,128), 21 light cyan (128,255,255). The stored number is the `set -c` number minus one.
+
+### 10.7 What the reader does with it, and what it leaves out
+
+Read: page size; for each layer the frame, both axis ranges, steps, scale (linear or log10), minor
+ticks, tick direction, tick label size and visibility, axis line width, the box; the titles of the
+bottom and left axes with their font size; free text (one label per line, centred on the object's
+rectangle with an estimated text width); a legend (present or not, and its position); plots with
+their columns, type, colours, line width and style, symbol shape and size; error columns, which are
+attached to the plot they belong to. A Y error plot (487) is attached; other error kinds are not.
+
+Not read (the figure still draws, with the defaults of the template): top and right axis titles;
+the Z axis; other scale types (drawn linear, with a warning); tick label font, bold and colour;
+number formats; legend text (the legend shows the column names); the colour and style of grids and of
+the frame; text colour; line and arrow objects; plot groups.
+
+Known differences from Origin:
+
+- Plots in a *group* take their colour, width and style from the first plot of the group in
+  Origin; the file keeps the value that was set on each plot. After `set` on the second plot only, Origin
+  showed the group's value and the reader shows the stored one.
+- Column plots are drawn as bars from zero, 70 percent of the smallest X spacing wide, filled with the
+  fill colour and outlined with the line colour. Origin's handling of bar border and fill colour was not
+  decoded: a column plot whose `set -c` colour was changed is black in Origin and cyan outlined here.
+- Horizontal bars, stacked bars, area, 3D, contour, polar, pie and box plots are not read.
+- Layers that share one frame (double Y) are read layer by layer; whether the renderer draws a second
+  Y axis for the second layer was not checked.
+- Origin draws a frame around the legend and prints logarithmic tick labels as plain numbers where
+  we print powers of ten.
+
+Checks made: four graphs with known settings (line, scatter on log axes, line and symbol with a
+moved frame, column) were saved by Origin and read back; ranges, steps, scale type, frame, titles,
+line colour and width, symbol size and plot type agree with the report Origin printed, and the pictures
+drawn by `sheaf export` look like Origin's PNG of the same graph except for the differences listed above.
+The owner's figure project exports as a bar chart with error bars, a rotated axis title and the six
+station names under the axis; Origin's own PNG of it and ours were compared by eye and agree in bar
+colour, heights, error bars, axis range and tick marks inside.
 
 ## 11. Unknowns
 
@@ -356,4 +482,38 @@ parameter blocks followed by an empty block for graph layers. Nothing more was c
 - Which code page non-ASCII text uses.
 - The notes, project tree and the trailing blobs beyond what section 6 says.
 - Whether the one extra block after the column records can be non-empty (it was empty in all 55 files).
-- Origin's exact value for any individual cell; no comparison against Origin itself has been made yet.
+
+## 12. Comparison with Origin, cell by cell
+
+Method: `tools/origin-ref/opj-dump-cells.ps1` opens a copy of a project in a hidden Origin (through
+COM) and writes, for every workbook, sheet and column, the short name, long name, units, comments,
+designation, number of used rows and the cells (every row of columns with at most the limit given by
+`-AllRowsLimit`, else the first three, last three and twenty spread rows).
+`cargo run -p sheaf-io --example opj_dump -- FILE --cells [--all-rows LIMIT]` writes the same listing
+from our reader, and `tools/origin-ref/opj-compare-cells.py` compares them (numbers bit for bit, text
+exactly).
+
+The COM collections (`WorksheetPages`, `Pages`) stay empty in a hidden instance, and `GetWorksheet`
+answered for only one sheet of a test project (it returned an error number for the others). The script
+therefore reads everything with LabTalk through `Execute` (`doc -e W`, `wks.colN.name$`, `cell(r,c)`,
+`cell(r,c)$`). Details that cost time: Origin shows its missing value as `--` in `cell(r,c)$`;
+`cell(r,c)$` past the end of a column's data makes the whole script fail (so used rows are found with
+a number scan, then a bisection for the text length); LabTalk has no `while` loop that this Origin
+accepts (use `for`); a variable named `a` clashes with column A; `wks.maxRows` is not valid
+(`wks.nrows` is).
+
+LabTalk designation codes: 1 Y, 2 disregard, 3 Y error, 4 X, 5 label, 6 Z, 7 X error.
+
+| project | workbooks | sheets | columns | cells compared | result |
+|---|---|---|---|---|---|
+| synthetic project from `opj-make-test-project.ps1` (numbers, text, mixed text and numbers, missing values, 13 display formats, three sheets, empty and hidden books) | 5 | 7 | 35 | 423 | no difference (eight numbers in a mixed column come back as text with the same digits) |
+| Final Project Figures | 1 | 1 | 3 | 18 | no difference |
+| NiLMO Separation | 3 | 3 | 6 | 98 | no difference |
+| XRD of all dopants for Pittcon | 10 | 10 | 84 | 175068 (every row) | no difference |
+| CV Specific Capacity | 27 | 102 | 485 | 7144 (every row) | no difference |
+| Integration of Delithiation SF data (243 MB) | 34 | 34 | 118 | 2820 (columns over 3000 rows sampled) | no difference |
+
+"No difference" means window names, long names, short names, units, comments, designations, used
+row counts and every listed cell agree, numbers to the last bit. Not compared: the cells that were
+not sampled in the large project, hidden columns, column widths and number formats, matrices
+(`doc -e M` was not run), and the "set column values" formulas.

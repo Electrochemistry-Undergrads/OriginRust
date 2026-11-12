@@ -1,7 +1,7 @@
 //! Prints the structure of an Origin project file: workbooks, sheets and columns with
 //! short name, long name, units, comments, role, type, row count and the first values.
 //!
-//! Usage: `cargo run -p sheaf-io --example opj_dump -- <file.opj> [--values N] [--summary] [--cells] [--all-rows LIMIT]`
+//! Usage: `cargo run -p sheaf-io --example opj_dump -- <file.opj> [--values N] [--summary] [--cells] [--all-rows LIMIT] [--graphs]`
 //!
 //! With `--cells` it prints instead a tab-separated listing in the same format that
 //! `tools/origin-ref/opj-dump-cells.ps1` writes for Origin itself, so the two can be compared
@@ -31,12 +31,14 @@ fn main() {
     let mut summary = false;
     let mut cells = false;
     let mut all_rows = 0usize;
+    let mut graphs = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--values" => values = args.next().and_then(|n| n.parse().ok()).unwrap_or(3),
             "--summary" => summary = true,
             "--cells" => cells = true,
+            "--graphs" => graphs = true,
             "--all-rows" => all_rows = args.next().and_then(|n| n.parse().ok()).unwrap_or(0),
             _ => path = Some(a),
         }
@@ -55,6 +57,10 @@ fn main() {
     };
     if cells {
         print_cells(&imp, all_rows);
+        return;
+    }
+    if graphs {
+        print_graphs(&imp);
         return;
     }
     println!("{path}");
@@ -158,5 +164,51 @@ fn print_cells(imp: &sheaf_io::opj::OpjImport, all_rows: usize) {
                 }
             }
         }
+    }
+}
+
+/// One line per graph, layer and plot, for checking the graph reader against Origin.
+fn print_graphs(imp: &sheaf_io::opj::OpjImport) {
+    for g in &imp.graphs {
+        println!("GRAPH {} page {:.1} x {:.1} pt", g.name, g.page.width_pt, g.page.height_pt);
+        for (i, l) in g.layers.iter().enumerate() {
+            let f = l.frame;
+            println!(
+                "  layer {i} frame left {:.4} top {:.4} width {:.4} height {:.4}",
+                f.left, f.top, f.width, f.height
+            );
+            for (name, a) in [("x", &l.x_axis), ("y", &l.y_axis)] {
+                println!(
+                    "    {name} axis {:?} from {:?} to {:?} step {:?} minor {} title {:?} labels {} ticks {:?}/{:?} opposite {}",
+                    a.scale,
+                    a.min,
+                    a.max,
+                    a.major_step,
+                    a.minor_ticks,
+                    a.title,
+                    a.show_tick_labels,
+                    a.major_tick,
+                    a.minor_tick,
+                    a.show_opposite
+                );
+            }
+            for p in &l.plots {
+                println!(
+                    "    plot {:?} line {:?} {:.2} pt {:?} symbol {:?} {:.1} pt color {:?} err {}",
+                    p.kind,
+                    p.line.color.hex_rgb(),
+                    p.line.width_pt,
+                    p.line.dash,
+                    p.symbol.shape,
+                    p.symbol.size_pt,
+                    p.symbol.color.hex_rgb(),
+                    p.y_error.is_some()
+                );
+            }
+            println!("    legend {}  labels {}", l.legend.visible, l.labels.len());
+        }
+    }
+    for w in &imp.warnings {
+        println!("warning: {w}");
     }
 }

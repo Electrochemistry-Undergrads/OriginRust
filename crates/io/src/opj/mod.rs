@@ -1,8 +1,8 @@
 //! Reader for Origin project files (`.opj`, written by Origin 7.5 to 2016).
 //!
 //! It reads workbooks, their sheets and columns (names, long names, units, comments,
-//! designations) and the column values. Graphs, matrices, notes, fits and everything
-//! else are skipped and reported in [`OpjImport::warnings`]. The format is described in
+//! designations), the column values and basic graphs (axes, titles, plots; see `graph.rs`).
+//! Matrices, notes, fits and everything else are skipped and reported in [`OpjImport::warnings`]. The format is described in
 //! `docs/spec/opj-format.md`.
 //!
 //! The file is read through a buffered reader: the data blocks are stepped over on the

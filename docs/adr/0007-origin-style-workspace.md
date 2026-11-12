@@ -72,7 +72,7 @@ app must stay testable with `egui_kittest` and `--screenshot`.
    and checked by reading the result back with our reader and by opening it in Origin 2016 through
    COM and comparing cells. The owner decided (2026-11-11) that `.opj` is the default format of
    File > Save Project, Save Project As and the command line's `--save`. While the writer cannot
-   store everything a project holds (graphs at first), saving also writes a `.sheaf` copy next to
+   store everything a project holds (formulas, folders, some graph details), saving also writes a `.sheaf` copy next to
    the `.opj` and says what only the copy holds; the copy is dropped once nothing would be lost.
    `.sheaf` stays available as a lossless format.
 

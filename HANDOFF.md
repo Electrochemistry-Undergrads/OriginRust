@@ -10,7 +10,7 @@ one session should work on the repository at a time.
    double-click actions and shortcuts. Icons, artwork and help text stay our own (clean-room rule).
 2. Sheaf should have **all of Origin's features**, and this must be checked, not assumed.
 3. **`.opj` is to be the default project format** (Save, Save As, `--save`, export). Agreed
-   safeguard: while the writer cannot store everything (graphs at first), saving also writes a
+   safeguard: while the writer cannot store everything (formulas, folders, some graph details), saving also writes a
    `.sheaf` copy next to the `.opj` and says what only the copy holds.
 
 These come before milestone 6 (see docs/ROADMAP.md, "Owner's requests of 2026-11-11").

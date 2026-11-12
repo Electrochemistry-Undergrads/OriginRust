@@ -41,8 +41,9 @@ publication figures), P1 is common Origin use, P2 is later.
       `912ba75`, follow-up `b336226`)
 - [ ] A person clicks through the desktop app once (the four desktop-app items above were checked
       with screenshots of every window, not with mouse and keyboard)
-- [ ] Check the CH Instruments importer against real export files from the owner (the owner's two
-      real text exports are being checked on branch `chi-text-real` by the second session)
+- [x] Check the CH Instruments importer against real export files from the owner: cyclic
+      voltammetry and chronopotentiometry text files checked (second session, `89e617a`); i-t text
+      files are still unchecked
 - [x] Read CH Instruments binary `.bin` files (CV, i-t, chronopotentiometry), detected by content;
       checked against two runs that have a text export; the owner's six `.bin` files import and plot
       correctly by eye (`2ca7d26`, `docs/spec/chi-binary-format.md`)
@@ -120,9 +121,11 @@ the default project format.
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin 2016 and comparing every cell (`sheaf export ... -o
       x.opj`; seven test projects up to 100000 rows opened in Origin with no difference)
-- [ ] Write `.opj`: graphs
+- [x] Write `.opj`: graphs (page, layers, axes, line, scatter, line+symbol and column plots, error
+      bars, text, legend; Origin 2016 opened 18 written graphs and their exported pictures match
+      Sheaf's by eye; tick number formats, plot groups and some details are not written yet)
 - [x] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
-      everything a project holds (graphs at first), saving also writes a `<name>.opj.sheaf`
+      everything a project holds (formulas, folders, some graph details), saving also writes a `<name>.opj.sheaf`
       companion and says what only it holds; opening the `.opj` uses the companion when it is at
       least as new; saving over an Origin-made `.opj` keeps a `.opj.bak` first (ADR 0008)
 - [ ] Close the gaps from the parity audit in its order of work. Done so far (each built by an
@@ -138,6 +141,10 @@ the default project format.
         with numbers from Origin), maximum iterations and tolerance, 27 more starting values
   - [x] Import: thousands separators, parameter rows, data blocks as sheets, import modes (new
         book, sheet, columns, rows), batch import of folders and patterns (`sheaf import`)
+  - [x] Basic statistics: one-, two-sample (pooled, Welch) and paired t-tests, one-way ANOVA with
+        Tukey, Bonferroni, Sidak, Fisher LSD and Scheffe, frequency counts with a histogram graph,
+        five normality tests, checked against Origin (the automatic bin size matches Origin in
+        about 57 % of cases)
   - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,
         multi-peak Gauss or Lorentz fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
         limit rules and the multi-peak fit are not yet compared with Origin's Peak Analyzer

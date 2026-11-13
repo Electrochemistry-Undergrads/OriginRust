@@ -172,4 +172,24 @@ mod tests {
         let r: Shape = serde_json::from_str(minimal).unwrap();
         assert_eq!((r.fill, r.dash, r.head_pt, r.head_at_start), (None, Dash::Solid, 9.0, false));
     }
+
+    #[test]
+    fn a_layer_without_drawn_objects_saves_no_key_and_old_files_load_unchanged() {
+        use crate::template::Template;
+        let mut project = crate::Project::default();
+        let id = project.add_graph(Template::Line);
+        let layer = &project.graph(id).unwrap().layers[0];
+        let mut value = serde_json::to_value(layer).unwrap();
+        assert!(value.get("shapes").is_none(), "an empty list is not written");
+        // A file written before drawn objects existed has no "shapes" key.
+        let old: crate::graph::Layer = serde_json::from_value(value.clone()).unwrap();
+        assert!(old.shapes.is_empty());
+        assert_eq!(serde_json::to_value(&old).unwrap(), value);
+        // With objects the key appears and round trips.
+        let mut with = old.clone();
+        with.shapes.push(Shape::new(ShapeKind::Line, (0.0, 0.0), (1.0, 1.0)));
+        value = serde_json::to_value(&with).unwrap();
+        assert_eq!(value["shapes"].as_array().map(Vec::len), Some(1));
+        assert_eq!(serde_json::from_value::<crate::graph::Layer>(value).unwrap().shapes, with.shapes);
+    }
 }

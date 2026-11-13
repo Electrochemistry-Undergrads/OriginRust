@@ -993,7 +993,11 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         let names: Vec<String> = sheaf_core::shape::ShapeKind::ALL
             .iter()
             .filter(|k| count(**k) > 0)
-            .map(|k| format!("{} {}", count(*k), k.name().to_lowercase()))
+            .map(|k| {
+                let noun =
+                    if *k == sheaf_core::shape::ShapeKind::Ellipse { "ellipse" } else { &k.name().to_lowercase() };
+                format!("{} {noun}", count(*k))
+            })
             .collect();
         notes.push(format!(
             "layer {} has drawn objects ({}) that an Origin project file written here cannot hold; they were not written (the .opj.sheaf companion keeps them)",

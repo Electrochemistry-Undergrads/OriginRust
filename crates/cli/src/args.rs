@@ -735,6 +735,25 @@ pub enum BoundaryKind {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ReduceKind {
+    Interpolate,
+    Average,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AxisKind {
+    X,
+    Y,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum MedianEdgeKind {
+    Shrink,
+    Repeat,
+    Reflect,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum NormalizeKind {
     /// Divide by the largest value.
     Max,
@@ -974,6 +993,72 @@ pub enum AnalyzeTool {
         /// 0 interpolates the points; Origin's automatic factor for 0 is not reproduced.
         #[arg(long, default_value_t = 0.0)]
         smoothing: f64,
+    },
+    /// Subtract the straight line through two points from each curve. The points are X values;
+    /// their Y values are read from the curve (straight lines between data points) unless
+    /// --y1 / --y2 give them.
+    SubtractLine {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, allow_hyphen_values = true)]
+        x1: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        x2: f64,
+        /// Y of the first point (default: the curve's value at --x1).
+        #[arg(long, allow_hyphen_values = true)]
+        y1: Option<f64>,
+        /// Y of the second point (default: the curve's value at --x2).
+        #[arg(long, allow_hyphen_values = true)]
+        y2: Option<f64>,
+    },
+    /// Reduce each curve to evenly spaced X (--step or --points); the result goes to a new sheet.
+    ReduceX {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Spacing of the new X values.
+        #[arg(long, group = "grid")]
+        step: Option<f64>,
+        /// Number of new X values (default 100 when --step is not given).
+        #[arg(long, group = "grid")]
+        points: Option<usize>,
+        /// interpolate (default) reads the curve between its points; average takes the mean of the
+        /// points in the bin around each new X.
+        #[arg(long, value_enum, default_value_t = ReduceKind::Interpolate)]
+        method: ReduceKind,
+        /// First X of the result (default: the smallest X of the data).
+        #[arg(long, allow_hyphen_values = true)]
+        x_min: Option<f64>,
+        /// Last X of the result (default: the largest X of the data).
+        #[arg(long, allow_hyphen_values = true)]
+        x_max: Option<f64>,
+    },
+    /// Translate each curve in X (a new sheet) or in Y (a new column): by --by, or so that the
+    /// point at X = --at lands on --to.
+    Translate {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = AxisKind::X)]
+        axis: AxisKind,
+        /// Shift by this amount.
+        #[arg(long, allow_hyphen_values = true, group = "shift")]
+        by: Option<f64>,
+        /// X of the point to move (with --to).
+        #[arg(long, allow_hyphen_values = true, requires = "to")]
+        at: Option<f64>,
+        /// Where the point lands: its new X (axis x) or its new Y value (axis y).
+        #[arg(long, allow_hyphen_values = true, group = "shift", requires = "at")]
+        to: Option<f64>,
+    },
+    /// Running median of each curve (an odd window).
+    MedianFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Points of the window, odd.
+        #[arg(long, default_value_t = 5)]
+        points: usize,
+        /// shrink (default): the window shrinks symmetrically at the ends; repeat or reflect fill it.
+        #[arg(long, value_enum, default_value_t = MedianEdgeKind::Shrink)]
+        edge: MedianEdgeKind,
     },
     /// Find the peaks of each curve; positions and heights go to a new sheet.
     Peaks {

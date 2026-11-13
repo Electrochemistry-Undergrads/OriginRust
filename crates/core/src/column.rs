@@ -322,8 +322,8 @@ impl Column {
                     ColumnData::Text(v) => {
                         for (r, t) in v.iter().enumerate() {
                             match t.trim().parse::<f64>() {
-                                Ok(x) => numbers.push(x),
-                                Err(_) => {
+                                Ok(x) if x.is_finite() => numbers.push(x),
+                                _ => {
                                     numbers.push(f64::NAN);
                                     if !t.is_empty() {
                                         texts.insert(r, t.clone());
@@ -594,6 +594,21 @@ pub fn default_short_name(index: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn text_to_numeric_keeps_words_like_inf_and_nan_as_text() {
+        let mut c = Column::new(
+            ColumnId(1),
+            "A",
+            Designation::Y,
+            ColumnData::text(vec!["1.5".into(), "inf".into(), "NaN".into(), "1e999".into()]),
+        );
+        c.convert_storage(Storage::Mixed);
+        assert_eq!(c.numeric().unwrap()[0], 1.5);
+        assert_eq!(c.data.text_cell(1), Some("inf"));
+        assert_eq!(c.data.text_cell(2), Some("NaN"));
+        assert_eq!(c.data.text_cell(3), Some("1e999"));
+    }
+
     #[test]
     fn storage_conversions_keep_what_can_be_kept() {
         let mut c = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![1.5, f64::NAN, 3.0]));

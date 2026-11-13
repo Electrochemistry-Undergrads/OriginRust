@@ -346,6 +346,9 @@ fn format_rows(ui: &mut egui::Ui, storage: &mut Storage, format: &mut NumberForm
                 NumberFormat::DateTime(d, t) => (d, t),
                 _ => unreachable!(),
             };
+            if kind == 7 && time.is_elapsed() {
+                time = TimePattern::Hms;
+            }
             let (show_date, show_time) = (kind != 3, kind != 4);
             ui.horizontal(|ui| {
                 if show_date {
@@ -358,6 +361,9 @@ fn format_rows(ui: &mut egui::Ui, storage: &mut Storage, format: &mut NumberForm
                 if show_time {
                     egui::ComboBox::from_id_salt("column_time_pattern").selected_text(time.label()).show_ui(ui, |ui| {
                         for p in TimePattern::ALL {
+                            if kind == 7 && p.is_elapsed() {
+                                continue;
+                            }
                             ui.selectable_value(&mut time, p, p.label());
                         }
                     });

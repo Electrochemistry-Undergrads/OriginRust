@@ -386,7 +386,15 @@ fn elapsed_days(v: f64) -> i64 {
 }
 
 /// Writes date and time of day separated by a space.
+///
+/// Elapsed patterns (`DDD:HH`) mean nothing next to a calendar date (the day count would be the
+/// serial number), so they fall back to the time of day without the day count.
 pub fn format_date_time(v: f64, date: DatePattern, time: TimePattern) -> String {
+    let time = match time {
+        TimePattern::ElapsedDh => TimePattern::H,
+        TimePattern::ElapsedDhm => TimePattern::Hm,
+        t => t,
+    };
     format!("{} {}", format_date(v, date), format_time(v, time))
 }
 

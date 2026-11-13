@@ -443,5 +443,8 @@ mod tests {
         assert_eq!(NumberFormat::Time(TimePattern::Hm12).format(0.0), "12:00 AM");
         assert_eq!(NumberFormat::Time(TimePattern::H12).format(0.5), "12 PM");
         assert_eq!(NumberFormat::Time(TimePattern::ElapsedDh).format(2.5), "002:12");
+        // A calendar date never shows the serial number as an elapsed day count.
+        let s = NumberFormat::DateTime(DatePattern::Iso, TimePattern::ElapsedDh).format(2461355.5);
+        assert!(s.ends_with(" 12"), "{s}");
     }
 }

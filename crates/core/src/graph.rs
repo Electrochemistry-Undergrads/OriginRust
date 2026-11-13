@@ -573,6 +573,19 @@ pub struct Axis {
     /// the labels of the next panel (graphing spec section 15).
     #[serde(default, skip_serializing_if = "is_false")]
     pub hide_end_label: bool,
+    /// Draw the axis the other way round: larger values towards the origin of the page's axes (Origin's
+    /// Reverse check box). It adds to a lower limit that is above the upper one.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reverse: bool,
+    /// A tick sits at this value and at whole steps from it (Origin's First Tick, "anchor"); `None` means
+    /// the ticks are at multiples of the step. Linear axes only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_tick: Option<f64>,
+    /// Text put before and after every tick label.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tick_prefix: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tick_suffix: String,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]

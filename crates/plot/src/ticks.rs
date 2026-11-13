@@ -165,16 +165,24 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
             let mut swapped = axis.clone();
             swapped.min = Some(b);
             swapped.max = Some(a);
+            swapped.reverse = false;
             let mut r = resolve_axis_edges(&swapped, data_min_max, free);
-            r.reversed = true;
+            r.reversed = !axis.reverse;
             return r;
         }
     }
-    match axis.scale {
+    let mut r = match axis.scale {
         ScaleKind::Linear => resolve_linear(axis, data_min_max, free),
         ScaleKind::Log10 => resolve_log(axis, data_min_max),
         _ => crate::ticks_scales::resolve_other(axis, data_min_max),
+    };
+    r.reversed ^= axis.reverse;
+    if !axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty() {
+        for label in r.labels.iter_mut().filter(|l| !l.is_empty()) {
+            *label = format!("{}{label}{}", axis.tick_prefix, axis.tick_suffix);
+        }
     }
+    r
 }
 
 /// The most ticks a category axis gets with one tick per row; beyond that its step follows the
@@ -295,8 +303,16 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>, free: (bool, bool)) -> 
         step = fixed_step.unwrap_or_else(|| auto_step(max - min));
     }
 
-    let (major, step) = linear_major(min, max, step, date);
-    let minor = linear_minor(min, max, step, axis.minor_ticks);
+    let (mut major, step) = linear_major(min, max, step, date);
+    let mut minor = linear_minor(min, max, step, axis.minor_ticks);
+    if let Some(anchor) = axis.first_tick.filter(|a| a.is_finite() && !date) {
+        // Ticks at the anchor and whole steps from it: the multiples of the step, shifted.
+        let shifted = |v: &mut Vec<f64>| v.iter_mut().for_each(|x| *x = clean(*x + anchor));
+        (major, _) = linear_major(min - anchor, max - anchor, step, false);
+        shifted(&mut major);
+        minor = linear_minor(min - anchor, max - anchor, step, axis.minor_ticks);
+        shifted(&mut minor);
+    }
     let labels = linear_labels(axis, &major, step);
     ResolvedAxis { min, max, step, scale: ScaleKind::Linear, major, minor, labels, reversed: false }
 }
@@ -587,6 +603,10 @@ mod tests {
             tick_label_source: Default::default(),
             tick_label_angle_deg: 0.0,
             hide_end_label: false,
+            reverse: false,
+            first_tick: None,
+            tick_prefix: String::new(),
+            tick_suffix: String::new(),
         }
     }
 
@@ -632,6 +652,32 @@ mod tests {
         }
         assert_eq!(nice_step(0.0), 1.0);
         assert_eq!(nice_step(f64::NAN), 1.0);
+    }
+
+    #[test]
+    fn first_tick_prefix_suffix_and_reverse() {
+        let mut a = axis();
+        a.min = Some(0.0);
+        a.max = Some(10.0);
+        a.major_step = Some(4.0);
+        a.first_tick = Some(1.0);
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.major, vec![1.0, 5.0, 9.0]);
+        a.first_tick = None;
+        a.tick_suffix = " V".into();
+        a.tick_prefix = "~".into();
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.labels, vec!["~0 V", "~4 V", "~8 V"]);
+        assert!(!r.reversed);
+        a.reverse = true;
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert!(r.reversed && (r.to_unit(0.0) - 1.0).abs() < 1e-12);
+        a.min = Some(10.0);
+        a.max = Some(0.0);
+        assert!(
+            !resolve_axis(&a, Some((0.0, 10.0))).reversed,
+            "a limit pair that is already reversed and the check box cancel"
+        );
     }
 
     #[test]

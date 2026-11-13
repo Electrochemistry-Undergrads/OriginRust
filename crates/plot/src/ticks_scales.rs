@@ -32,7 +32,7 @@ pub(crate) fn resolve_other(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAx
     if let Some(b) = axis.max.filter(|v| kind.accepts(*v)) {
         max = b;
     }
-    if !(max > min) {
+    if max.is_nan() || min.is_nan() || max <= min {
         (min, max) = (fallback.0, fallback.1);
     }
     let range = auto.unwrap_or(ScaleRange { from: min, to: max, inc: 1.0 });

@@ -980,6 +980,15 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.hide_end_label {
             notes.push("a hidden tick label at the end of an axis was not written".into());
         }
+        if axis.reverse {
+            notes.push("a reversed axis was written in the normal direction".into());
+        }
+        if axis.first_tick.is_some() {
+            notes.push("the first tick (anchor) of an axis was not written".into());
+        }
+        if !axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty() {
+            notes.push("the prefix and suffix of tick labels were not written".into());
+        }
         if axis.title_color_follows_plot {
             notes.push("axis title colours that follow the first plot's colour were not written".into());
         }

@@ -113,7 +113,7 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
         );
         ui.end_row();
         ui.label("Reverse");
-        ui.add_enabled(false, egui::Checkbox::new(&mut false, ""));
+        ui.checkbox(&mut axis.reverse, "");
         ui.end_row();
     });
     group_box(ui, "Major Ticks", |ui| {
@@ -125,7 +125,14 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
             optional_number(ui, &mut axis.major_step, resolved.map(|r| r.step), speed);
             ui.end_row();
             ui.label("First Tick");
-            ui.add_enabled(false, DragValue::new(&mut 0.0));
+            ui.add_enabled_ui(axis.scale == ScaleKind::Linear, |ui| {
+                optional_number(
+                    ui,
+                    &mut axis.first_tick,
+                    resolved.map(|r| r.major.first().copied().unwrap_or(r.min)),
+                    speed,
+                );
+            });
             ui.end_row();
         });
     });
@@ -233,8 +240,11 @@ fn tick_labels_tab(ui: &mut egui::Ui, axis: &mut Axis, vertical: bool, columns: 
                 ui.checkbox(&mut axis.hide_end_label, "")
                     .on_hover_text("Leaves out the label at the far end, for panels that touch");
                 ui.end_row();
-                ui.label("Prefix / Suffix");
-                ui.add_enabled(false, egui::TextEdit::singleline(&mut String::new()).desired_width(120.0));
+                ui.label("Prefix");
+                ui.add(egui::TextEdit::singleline(&mut axis.tick_prefix).desired_width(120.0));
+                ui.end_row();
+                ui.label("Suffix");
+                ui.add(egui::TextEdit::singleline(&mut axis.tick_suffix).desired_width(120.0));
                 ui.end_row();
             });
         });

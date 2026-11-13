@@ -411,6 +411,34 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Rowstats { target, add, no_mean_sd } => {
+            let mut spec = analysis::RowStatsSpec { mean: !no_mean_sd, sd: !no_mean_sd, ..Default::default() };
+            for name in &add {
+                match name.trim().to_ascii_lowercase().as_str() {
+                    "sem" => spec.sem = true,
+                    "min" => spec.min = true,
+                    "max" => spec.max = true,
+                    "n" => spec.n = true,
+                    "sum" => spec.sum = true,
+                    other => bail!("unknown quantity {other:?}; use sem, min, max, n or sum"),
+                }
+            }
+            (target, Job::Tool(Tool::RowStatistics(spec)))
+        }
+        AnalyzeTool::Grubbs { target, alpha } => (target, Job::Tool(Tool::Grubbs(analysis::OutlierSpec { alpha }))),
+        AnalyzeTool::Dixon { target, alpha } => (target, Job::Tool(Tool::Dixon(analysis::OutlierSpec { alpha }))),
+        AnalyzeTool::Sign { target, tail, alpha } => {
+            (target, Job::Tool(Tool::SignTest(analysis::SignTestSpec { tail: tail_of(tail), alpha })))
+        }
+        AnalyzeTool::Ks2 { target, tail, alpha } => {
+            (target, Job::Tool(Tool::KsTwoSample(analysis::KsTwoSampleSpec { tail: tail_of(tail), alpha })))
+        }
+        AnalyzeTool::Mediantest { target, alpha } => {
+            (target, Job::Tool(Tool::MedianTest(analysis::MedianTestSpec { alpha })))
+        }
+        AnalyzeTool::Friedman { target, alpha } => {
+            (target, Job::Tool(Tool::Friedman(analysis::FriedmanSpec { alpha })))
+        }
         AnalyzeTool::Kruskal { target, alpha } => {
             (target, Job::Tool(Tool::KruskalWallis(analysis::KruskalWallisSpec { alpha })))
         }

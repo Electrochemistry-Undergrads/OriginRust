@@ -1076,6 +1076,71 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },
+    /// Statistics on Rows: per worksheet row the mean and standard deviation (and optionally the standard
+    /// error, minimum, maximum, count and sum) across the chosen columns, as new columns behind the last one.
+    Rowstats {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Add these quantities (comma separated): sem, min, max, n, sum.
+        #[arg(long, value_delimiter = ',')]
+        add: Vec<String>,
+        /// Leave out the mean and the standard deviation.
+        #[arg(long)]
+        no_mean_sd: bool,
+    },
+    /// Grubbs test for one outlier in each chosen column (the value farthest from the mean).
+    Grubbs {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level (two-sided).
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Dixon's Q test for one outlier in each chosen column of 3 to 10 numbers; the level is 0.1, 0.05 or 0.01.
+    Dixon {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level: 0.1, 0.05 or 0.01.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Paired sign test of two columns. The alternative is about the first column.
+    Sign {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Two-sample Kolmogorov-Smirnov test of two columns. The alternative is about the first column
+    /// ("upper": its distribution function lies above the second one's).
+    Ks2 {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Median test (Mood's): every chosen column is a group.
+    Mediantest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Friedman ANOVA: every chosen column is a treatment, every row a block (no missing numbers).
+    Friedman {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
     /// Kruskal-Wallis test: every chosen column is a group.
     Kruskal {
         #[command(flatten)]

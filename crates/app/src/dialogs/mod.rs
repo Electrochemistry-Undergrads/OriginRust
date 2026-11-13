@@ -10,6 +10,7 @@ pub mod fit_more;
 pub mod frame;
 pub mod go_to;
 pub mod graph_axis;
+pub mod manip_options;
 pub mod graph_details;
 pub mod graph_props;
 pub mod import;

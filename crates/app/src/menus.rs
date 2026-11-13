@@ -912,7 +912,7 @@ fn analysis_menu() -> Vec<Entry> {
                 grey("Average Multiple Curves..."),
                 grey("Polygon Area..."),
                 grey("XYZ Surface Area..."),
-                grey("Median Filter..."),
+                item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
                 grey("Inverse..."),
             ],
@@ -921,9 +921,11 @@ fn analysis_menu() -> Vec<Entry> {
             "&Data Manipulation",
             vec![
                 item("Subtract Reference Data...", Cmd::Analyze(AnalysisKind::SubtractRef)),
-                grey("Subtract Straight Line..."),
-                grey("Reduce to Evenly Spaced X..."),
-                grey("Curve Translate X..."),
+                item("Subtract Straight Line...", Cmd::Analyze(AnalysisKind::SubtractLine)),
+                item("Reduce to Evenly Spaced X...", Cmd::Analyze(AnalysisKind::ReduceX)),
+                item("Curve Translate X...", Cmd::Analyze(AnalysisKind::TranslateX)),
+                // Sheaf's own: the same window along Y.
+                item("Curve Translate Y...", Cmd::Analyze(AnalysisKind::TranslateY)),
             ],
         ),
         sub(

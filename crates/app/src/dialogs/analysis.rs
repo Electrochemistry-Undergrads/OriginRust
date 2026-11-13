@@ -68,6 +68,12 @@ pub enum AnalysisKind {
     KsTwoSample,
     MedianTest,
     Friedman,
+    /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
+    SubtractLine,
+    ReduceX,
+    TranslateX,
+    TranslateY,
+    MedianFilter,
 }
 
 impl AnalysisKind {
@@ -118,6 +124,11 @@ impl AnalysisKind {
             AnalysisKind::KsTwoSample => "Two Sample Kolmogorov-Smirnov Test...",
             AnalysisKind::MedianTest => "Mood's Median Test...",
             AnalysisKind::Friedman => "Friedman ANOVA...",
+            AnalysisKind::SubtractLine => "Subtract Straight Line...",
+            AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
+            AnalysisKind::TranslateX => "Curve Translate X...",
+            AnalysisKind::TranslateY => "Curve Translate Y...",
+            AnalysisKind::MedianFilter => "Median Filter...",
         }
     }
 
@@ -157,6 +168,11 @@ impl AnalysisKind {
             "ks2" => AnalysisKind::KsTwoSample,
             "mediantest" => AnalysisKind::MedianTest,
             "friedman" => AnalysisKind::Friedman,
+            "subtract-line" => AnalysisKind::SubtractLine,
+            "reduce-x" => AnalysisKind::ReduceX,
+            "translate-x" => AnalysisKind::TranslateX,
+            "translate-y" => AnalysisKind::TranslateY,
+            "median-filter" => AnalysisKind::MedianFilter,
             _ => return None,
         })
     }
@@ -393,6 +409,8 @@ pub struct AnalysisDialog {
     reference: usize,
     common_only: bool,
     stats: StatsOptions,
+    /// Options of the Data Manipulation windows and the median filter.
+    manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
     /// (the factor columns may hold text).
     sheet_columns: Vec<(ColumnId, String)>,
@@ -538,6 +556,7 @@ impl AnalysisDialog {
             chain_fit: None,
             chain_fit_linear: true,
             stats,
+            manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
             picker: None,
@@ -580,6 +599,11 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
                 method: match self.smooth_kind {
@@ -799,6 +823,11 @@ impl AnalysisDialog {
                     "Subtract the line through the first and last point of each range",
                 );
             }
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => self.manip.options(ui, self.kind),
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
@@ -1429,6 +1458,12 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "kstest2",
             AnalysisKind::MedianTest => "mediantest",
             AnalysisKind::Friedman => "friedman",
+            // Origin's X-Function names for these were not looked up; the title shows the tool alone.
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => "",
         }
     }
 
@@ -1472,6 +1507,11 @@ impl AnalysisDialog {
             AnalysisKind::MedianTest => "Compare the medians of several samples (Mood's median test)",
             AnalysisKind::Friedman => "Compare treatments in repeated blocks by ranks within each row",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
+            AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
+            AnalysisKind::ReduceX => "Reduce the input curves to evenly spaced X values",
+            AnalysisKind::TranslateX => "Shift the input curves horizontally",
+            AnalysisKind::TranslateY => "Shift the input curves vertically",
+            AnalysisKind::MedianFilter => "Replace each point by the median of the points around it",
         }
     }
 
@@ -1519,6 +1559,10 @@ impl AnalysisDialog {
             }
             AnalysisKind::Friedman => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
+            AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
+                "New columns beside the input"
+            }
+            AnalysisKind::ReduceX | AnalysisKind::TranslateX => "The curves in a new sheet with their own X column",
         }
     }
 
@@ -1535,7 +1579,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Interpolate
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
-        )
+        ) || super::manip_options::handles(self.kind)
     }
 
     /// Chooses other input columns of the sheet.
@@ -1575,6 +1619,9 @@ impl AnalysisDialog {
                 | AnalysisKind::Smooth
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::SubtractLine
+                | AnalysisKind::TranslateY
+                | AnalysisKind::MedianFilter
         )
     }
 

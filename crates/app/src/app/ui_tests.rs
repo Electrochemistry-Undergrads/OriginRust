@@ -5456,3 +5456,38 @@ fn plot_specialized_ternary_and_its_button_make_a_ternary_graph_of_the_selected_
     assert_eq!(graphs.len(), before + 2);
     assert!(graphs[before + 1].layers[0].coords.ternary().is_some());
 }
+
+#[test]
+fn data_manipulation_items_and_median_filter_open_and_run() {
+    let mut h = start(vec![data_file("manip")]);
+    show_window(&mut h, "Book1 - sample");
+    // Both columns are straight lines, so the line through the first and last point removes them.
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let added: Vec<Vec<f64>> = project(&h)
+        .workbooks()
+        .flat_map(|b| b.sheet().columns.iter())
+        .filter(|c| c.long_name.ends_with("minus line"))
+        .map(|c| c.numeric().unwrap().to_vec())
+        .collect();
+    assert_eq!(added.len(), 2);
+    for v in &added {
+        assert!(v.iter().all(|x| x.abs() < 1e-9), "{v:?}");
+    }
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract straight line"));
+
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Median Filter..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Median filter"));
+
+    // Translate X writes a new sheet.
+    show_window(&mut h, "Book1 - sample");
+    let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Curve Translate X..."]);
+    click(&mut h, "OK");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), sheets_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Translate X"));
+}

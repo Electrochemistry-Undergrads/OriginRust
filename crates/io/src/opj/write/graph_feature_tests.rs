@@ -3,7 +3,9 @@
 //! colours. Origin 2016 showed each of them the way the model draws them (spec 13.12).
 
 use super::*;
-use crate::opj::{OpjImport, read_opj_from};
+use crate::opj::frame::Frames;
+use crate::opj::{OpjImport, dataset, read_opj_from, window};
+use sheaf_core::color::Color;
 use sheaf_core::graph::*;
 use sheaf_core::ids::{ColumnId, WindowId};
 use sheaf_core::stack::places;
@@ -295,4 +297,73 @@ fn a_number_format_on_a_column_plot_comes_back() {
     let (imp, out) = round_trip(&p);
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     assert_eq!(imp.graphs[0].layers[0].y_axis.tick_format, TickFormat::Decimal(2));
+}
+
+/// The plot records of every graph in a written project, in file order.
+fn curve_records(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let mut f = Frames::new(Cursor::new(bytes.to_vec())).unwrap();
+    f.line(200).unwrap();
+    f.block().unwrap();
+    f.block().unwrap();
+    let _ = dataset::scan(&mut f);
+    let (windows, _) = window::scan(&mut f);
+    windows
+        .iter()
+        .flat_map(|w| w.layers.iter().flat_map(|l| l.columns.iter().map(|c| c.record.clone())))
+        .filter(|r| r.len() == 515 && (200..=204).contains(&u16::from_le_bytes([r[0x4c], r[0x4d]])))
+        .collect()
+}
+
+fn columns_graph(ys: &[usize], f: impl FnOnce(&mut Layer)) -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.add_graph(Template::Column);
+    for y in ys {
+        p.add_plot_xy(id, 0, None, c[*y], None).unwrap();
+    }
+    f(&mut p.graph_mut(id).unwrap().layers[0]);
+    p
+}
+
+#[test]
+fn column_plots_of_a_layer_are_written_as_a_plot_group() {
+    // the group byte: 0x29 for the first member, 0x19 for the others, 0x09 for a plot outside any group
+    let flags = |p: &Project| -> Vec<u8> {
+        curve_records(&write_named(p, "g", TIME).unwrap().bytes).iter().map(|r| r[0x06]).collect()
+    };
+    assert_eq!(flags(&columns_graph(&[5, 6], |_| {})), [0x29, 0x19]);
+    assert_eq!(flags(&columns_graph(&[5, 6, 5], |_| {})), [0x29, 0x19, 0x19]);
+    assert_eq!(flags(&columns_graph(&[5], |_| {})), [0x09], "one column plot is not a group");
+    // a line next to two column plots stays outside the group
+    let mut p = columns_graph(&[5, 6], |_| {});
+    let c = ids(&p);
+    let id = p.graphs().next().unwrap().id;
+    p.add_plot_xy(id, 0, None, c[1], None).unwrap();
+    p.graph_mut(id).unwrap().layers[0].plots[2].kind = PlotKind::Line;
+    assert_eq!(flags(&p), [0x29, 0x19, 0x09]);
+}
+
+#[test]
+fn colours_that_a_plot_group_would_replace_are_named() {
+    let (_, out) = round_trip(&columns_graph(&[5, 6], |_| {}));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let (imp, out) = round_trip(&columns_graph(&[5, 6], |l| {
+        l.plots[1].symbol.color = Color::rgb(12, 34, 56);
+        l.plots[1].auto_color = false;
+    }));
+    assert!(out.warnings.iter().any(|w| w.contains("colours of column plots")), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].plots.len(), 2);
+}
+
+#[test]
+fn error_bars_on_grouped_columns_are_named_and_still_read_back() {
+    let mut p = columns_graph(&[5, 6], |_| {});
+    let c = ids(&p);
+    let id = p.graphs().next().unwrap().id;
+    p.graph_mut(id).unwrap().layers[0].plots[0].y_error = Some(c[3]);
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("error bars on column plots")), "{:?}", out.warnings);
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!(l.plots.len(), 2);
+    assert!(l.plots[0].y_error.is_some() && l.plots[1].y_error.is_none());
 }

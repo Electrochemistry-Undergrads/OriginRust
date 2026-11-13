@@ -3,7 +3,7 @@
 //! a warning.
 
 use super::glayout::{
-    AnnKind, AnnSpec, AxisBlocks, AxisScale, Code, CurveKind, CurveSpec, LayerSpec, LinkSpec, UNITS_PER_INCH,
+    AnnKind, AnnSpec, AxisBlocks, AxisScale, Code, CurveKind, CurveSpec, Group, LayerSpec, LinkSpec, UNITS_PER_INCH,
     WindowSpec, annotation, axis_blocks, curve_record, layer_header, link_annotation, window_header,
 };
 use super::layout::framed;
@@ -515,6 +515,30 @@ impl Writer {
 
         // curves
         let mut first = true;
+        let mut columns_seen = 0;
+        let mut later_errors = Vec::new();
+        let n_columns = plots.iter().filter(|r| r.plot.kind == PlotKind::Column).count();
+        if n_columns >= 2 {
+            // Column plots that stand side by side are a plot group, and Origin colours the members of
+            // a group from its own colour list (the first is black, the second red, ...). Colours that
+            // come from the layer's palette were not chosen by hand and are not named.
+            let columns = plots.iter().filter(|r| r.plot.kind == PlotKind::Column);
+            let replaced = columns.enumerate().any(|(k, r)| {
+                !r.plot.auto_color && palette_position(r.plot.symbol.color) != Some((k % PALETTE.len()) as u8)
+            });
+            if plots.iter().any(|r| r.plot.kind == PlotKind::Column && r.err.is_some()) {
+                notes.push(
+                    "error bars on column plots that stand side by side were written, but Origin did not place them on their bars"
+                        .into(),
+                );
+            }
+            if replaced {
+                notes.push(
+                    "the colours of column plots that stand side by side were not written; Origin colours the plots of a group from its own colour list"
+                        .into(),
+                );
+            }
+        }
         for r in plots {
             let p = r.plot;
             let kind = match p.kind {
@@ -548,33 +572,28 @@ impl Writer {
                 fill: code_of(p.symbol.color),
                 bar_width_pct: 100.0 - layer.bars.gap_pct,
                 offset: (r.place.ox, r.place.oy),
+                group: match (kind, columns_seen) {
+                    _ if n_columns < 2 => Group::None,
+                    (CurveKind::Column, 0) => Group::First,
+                    (CurveKind::Column, _) => Group::Member,
+                    _ => Group::None,
+                },
                 serial: self.next_serial(),
             };
             first = false;
+            columns_seen += usize::from(kind == CurveKind::Column);
             out.extend(framed(&curve_record(&spec)));
             out.extend(framed(&[]));
+            if n_columns >= 2 {
+                // the members of a plot group follow one another; the error plots come after them
+                later_errors.push(r);
+            } else if let Some(err) = r.err {
+                out.extend(self.error_record(r, err));
+            }
+        }
+        for r in later_errors {
             if let Some(err) = r.err {
-                let spec = CurveSpec {
-                    kind: CurveKind::Error,
-                    y_set: err.position,
-                    used: (err.first, err.last),
-                    x_set: r.y.position,
-                    first: false,
-                    line: Code::index(0),
-                    width: 0,
-                    dash: 0,
-                    connect: 0,
-                    shape: 0,
-                    size: 0,
-                    open_symbol: false,
-                    symbol: Code::AUTO,
-                    fill: Code::AUTO,
-                    bar_width_pct: 0.0,
-                    offset: (0.0, 0.0),
-                    serial: self.next_serial(),
-                };
-                out.extend(framed(&curve_record(&spec)));
-                out.extend(framed(&[]));
+                out.extend(self.error_record(r, err));
             }
         }
         // the end of the curves and the extra block
@@ -610,6 +629,33 @@ impl Writer {
         for b in axis_blocks(2, &axis_spec(&layer.x_axis, &mut Vec::new())) {
             out.extend(framed(&b));
         }
+        out.extend(framed(&[]));
+        out
+    }
+
+    /// The record and the empty block of the Y error plot `err` that belongs to the curve of `r`.
+    fn error_record(&mut self, r: &Resolved, err: SetInfo) -> Vec<u8> {
+        let spec = CurveSpec {
+            kind: CurveKind::Error,
+            y_set: err.position,
+            used: (err.first, err.last),
+            x_set: r.y.position,
+            first: false,
+            line: Code::index(0),
+            width: 0,
+            dash: 0,
+            connect: 0,
+            shape: 0,
+            size: 0,
+            open_symbol: false,
+            symbol: Code::AUTO,
+            fill: Code::AUTO,
+            bar_width_pct: 0.0,
+            offset: (0.0, 0.0),
+            group: Group::None,
+            serial: self.next_serial(),
+        };
+        let mut out = framed(&curve_record(&spec));
         out.extend(framed(&[]));
         out
     }

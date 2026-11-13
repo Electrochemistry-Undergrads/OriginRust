@@ -338,7 +338,16 @@ pub(super) struct CurveSpec {
     pub bar_width_pct: f64,
     /// How far the curve is drawn from its data in a stacked layer, in axis units: X and Y.
     pub offset: (f64, f64),
+    /// Place of the curve in a plot group (column plots drawn side by side).
+    pub group: Group,
     pub serial: u32,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(super) enum Group {
+    None,
+    First,
+    Member,
 }
 
 /// Where a curve record keeps its X and Y offset (spec section 13.10).
@@ -359,8 +368,12 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     put(&mut r, 0x04, &c.y_set.to_le_bytes());
     put(&mut r, 0x07, &c.used.0.to_le_bytes());
     put(&mut r, 0x0b, &c.used.1.to_le_bytes());
-    // not in a plot group: every curve keeps its own colour
-    r[0x06] = 0x09;
+    // not in a plot group unless asked: every curve keeps its own colour
+    r[0x06] = match c.group {
+        Group::None => 0x09,
+        Group::First => 0x29,
+        Group::Member => 0x19,
+    };
     put(&mut r, 0x23, &c.x_set.to_le_bytes());
     put(&mut r, 0x4c, &ptype.to_le_bytes());
     put(&mut r, 0x1e2, &c.serial.to_le_bytes());

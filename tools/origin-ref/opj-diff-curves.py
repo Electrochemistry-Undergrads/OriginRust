@@ -3,7 +3,7 @@
 how each differs from the same record of a reference window (our own tool, builds on opj-dump-blocks.py).
 
 Usage: opj-diff-curves.py FILE.opj REFERENCE_WINDOW [OTHER_FILE.opj]
-  Every window of FILE (or of OTHER_FILE when given) is compared with the first curve record and the
+  Every window of FILE (or of OTHER_FILE when given; the workbook windows have no layers of curves and are skipped) is compared with the first curve record and the
   layer header of REFERENCE_WINDOW in FILE.
 """
 import importlib.util
@@ -50,25 +50,27 @@ def windows(path):
                 else:
                     r.block()
             curves = []
+            notes = []
             while True:
                 rec = r.block()
                 if not rec:
                     break
-                r.block()
+                notes.append(r.block())
                 curves.append(rec)
             r.block()
             for g in range(3):
                 while r.block():
                     pass
-            layers.append((lh, curves, wh))
+            layers.append((lh, curves, wh, notes))
         out[name] = layers
     return out
 
 
-def diff(a, b):
+def diff(a, b, limit=60):
     n = max(len(a), len(b))
     a = a.ljust(n, b"\0"); b = b.ljust(n, b"\0")
-    return " ".join(f"{i:#x}:{a[i]:02x}>{b[i]:02x}" for i in range(n) if a[i] != b[i])
+    d = [f"{i:#x}:{a[i]:02x}>{b[i]:02x}" for i in range(n) if a[i] != b[i]]
+    return " ".join(d[:limit]) + (f" ... ({len(d)} bytes differ)" if len(d) > limit else "")
 
 
 def main():
@@ -76,13 +78,17 @@ def main():
     other = sys.argv[3] if len(sys.argv) > 3 else path
     base = windows(path)[ref][0]
     for name, layers in windows(other).items():
-        for li, (lh, curves, wh) in enumerate(layers):
+        for li, (lh, curves, wh, notes) in enumerate(layers):
             if name == ref and other == path and li == 0:
+                continue
+            if not curves:
                 continue
             print(f"{name} layer {li}: header diff vs ref: {diff(base[0], lh)}")
             for ci, c in enumerate(curves):
                 bc = base[1][min(ci, len(base[1]) - 1)]
                 print(f"  curve {ci} diff vs ref curve: {diff(bc, c)}")
+                bn = base[3][min(ci, len(base[3]) - 1)]
+                print(f"  curve {ci} note: {len(notes[ci])} bytes, diff vs ref note: {diff(bn, notes[ci])}")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@
 //! Usage: `cargo run -p sheaf-io --example opj_write_graph_features2 -- <output folder>`
 //!
 //! - `gw-area.opj`: area plots, one and two curves, with chosen colours.
+//! - `gw-groups.opj`: two and three column plots in one layer (side by side), with an error bar, and a lone column plot.
 //! - `gw-fmt.opj`: tick label number formats (decimal places, scientific).
 
 use sheaf_core::Project;
@@ -86,6 +87,26 @@ fn fmt() -> Project {
     p
 }
 
+fn groups() -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    for (n, ys) in [("Gr2", vec![6, 7]), ("Gr3", vec![6, 7, 6]), ("Gr1", vec![6])] {
+        let id = p.add_graph(Template::Column);
+        for (k, y) in ys.iter().enumerate() {
+            p.add_plot_xy(id, 0, None, c[*y], None).unwrap();
+            let pl = &mut p.graph_mut(id).unwrap().layers[0].plots[k];
+            pl.symbol.color = [Color::rgb(200, 30, 30), Color::rgb(30, 90, 200), Color::rgb(30, 160, 60)][k];
+        }
+        name(&mut p, id, n);
+    }
+    // two column plots, the first with an error bar
+    let id = p.add_graph(Template::Column);
+    p.add_plot_xy(id, 0, None, c[6], Some(c[7])).unwrap();
+    p.add_plot_xy(id, 0, None, c[7], None).unwrap();
+    name(&mut p, id, "GrErr");
+    p
+}
+
 fn main() {
     let Some(dir) = std::env::args().nth(1) else {
         eprintln!("usage: opj_write_graph_features2 <output folder>");
@@ -93,7 +114,7 @@ fn main() {
     };
     let dir = Path::new(&dir);
     std::fs::create_dir_all(dir).expect("the output folder can be made");
-    for (name, project) in [("gw-area", area()), ("gw-fmt", fmt())] {
+    for (name, project) in [("gw-area", area()), ("gw-fmt", fmt()), ("gw-groups", groups())] {
         let path = dir.join(format!("{name}.opj"));
         match sheaf_io::opj::write_file(&project, &path) {
             Ok(warnings) => {

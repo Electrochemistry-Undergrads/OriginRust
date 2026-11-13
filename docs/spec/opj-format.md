@@ -1171,3 +1171,26 @@ The "shown" bit of `0x26` (`0x40`) and the flag byte of a text X column (`0x25` 
 `100.000`, `1.0x10^1` and plain labels respectively. The model's Decimal(n) and Scientific(n) are written and read back
 (n up to 15); engineering and thousands formats are read as decimal or automatic. Date and time formats are still named in a
 warning.
+
+**Plot groups (column plots side by side).** What Origin writes for two column plots made with one plot command (a plot group):
+byte `0x06` of the curve records is `0x29` for the first and `0x19` for the others (`0x09` for a plot outside any group, also for
+a lone column plot). Nothing else differs from the same plots made one by one: the layer header and the per-curve blocks are
+equal. The writer now sets those two values on the column plots of a layer when it has at least two of them
+(`Group` in `glayout.rs`); other plots of the layer stay `0x09`. Origin then draws the bars next to each other. Things seen
+with `gw-groups.opj` and patched copies of it (`re-workspace/scratch/opj-gw2/patch.py` sets single bytes of a written file):
+- A group colours its members from Origin's colour list in order (black, red, green, ...) whatever the records say: the
+  colours written in the records, `set -c` on the plots in Origin (it changed `0x0F`, `0x1E`, `0x132` and `0x16A` of the
+  records and not the picture), and bits `0x40` and `0x80` of byte `0x06` made no difference. Only bits `0x10` (member) and `0x20`
+  (first) of that byte matter. A way to keep other colours in a group (Origin's "independent" mode) was not found: `set` options
+  `-xy` for 106 letter pairs with value 50 changed no byte that could hold it. The writer therefore names, in a warning,
+  column plots whose colour was chosen by hand and differs from Origin's list at their place in the group; colours that come from
+  the layer's palette are not named (Origin colours them itself).
+- A group whose members are not next to each other in the file draws the bars on top of each other: an error plot record between
+  two column curves ended the group. The writer puts the error plot records of a grouped layer after all curves. Origin then drew
+  the bars side by side, but the error bars did not sit on their bars; this case is named in a warning (the picture was only
+  looked at, the cause was not found).
+- The overlap of bars: with the group in place `set` options `-xy` (x in v, o, g, b; y in a..z) with value 50 changed no byte of
+  the records, headers or per-curve blocks except the known gap (`-vg`, `0x19` and `0x11A`). The overlap stays in a warning.
+- Reading: `read_curve` reads group records as before (colours from the file, or from the list when the record holds none).
+Verified: Origin 2016 loaded `gw-groups.opj` (two columns, three columns, one column, two columns with an error bar) and drew
+side by side bars for the first two (colours black, red, green as the list gives), a single bar set for the lone column plot.

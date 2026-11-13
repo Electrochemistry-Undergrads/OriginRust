@@ -1,5 +1,5 @@
 //! The "Set Values" window (Origin's Set Column Values): fill a column from a formula over the
-//! other columns of its sheet. Layout as Origin 2016: a text menu line, the row range, the
+//! other columns of its sheet. Layout as Origin: a text menu line, the row range, the
 //! `Col(X)=` label with column navigation, the formula box, Recalculate with OK / Cancel / Apply,
 //! and a collapsible "Before Formula Scripts" box.
 

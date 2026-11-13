@@ -1,10 +1,15 @@
 //! The Fit window (Analysis > Fit): fit a straight line, a polynomial, a built-in function, a
 //! typed formula or an Origin `.FDF` function to one column.
 //!
-//! The window shows the column, the model with its formula, one row per parameter (starting
-//! value, fixed value, bounds), the weighting and the rows. OK runs the fit as one undoable step;
-//! the results go where `docs/adr/0006-fit-results.md` says, and if no graph shows the column yet
-//! a new graph with the data and the fitted curve is made.
+//! The window follows Origin 2016's NLFit (`docs/spec/gui-look.md`, `docs/spec/fitting.md`
+//! section 9): tabs Settings / Code / Parameters / Bounds, with the pages Function Selection, Data
+//! Selection, Fitted Curves, Find X/Y, Advanced and Output at the left of Settings, and a lower
+//! panel (Fit Curve, Residual, Formula, Messages) that can be folded away. 1 Iteration and Fit
+//! until converged work on the table of the Parameters tab and keep the window open; Fit runs
+//! what is left and writes the results, Done writes them at the values of the table without
+//! iterating, Cancel writes nothing. Writing is one undoable step; the results go where
+//! `docs/adr/0006-fit-results.md` says, and if no graph shows the column yet a new graph with the
+//! data and the fitted curve is made.
 
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::RowRange;
@@ -142,10 +147,29 @@ pub struct FitDialog {
     x_from: f64,
     x_to: f64,
     problem: Option<String>,
-    /// The page of the left list that is shown.
+    /// The tab along the top and the page of the Settings list that are shown.
+    tab: FitTab,
     page: FitPage,
-    /// How the last trial fit (the Fit button) went.
+    /// Whether the lower panel is shown, and its tab.
+    lower_open: bool,
+    lower: LowerTab,
+    /// Number of points of the fitted curve, and its X range ("Use Input Data Range" or custom).
+    curve_points: usize,
+    curve_custom: bool,
+    curve_from: f64,
+    curve_to: f64,
+    /// Fitted Curves page: add the curve to the source graph, and rebuild its legend.
+    plot_on_graph: bool,
+    update_legend: bool,
+    /// How the last trial fit (Fit until converged, 1 Iteration) went.
     message: Option<String>,
+    /// Every message of the session, oldest first (the Messages tab).
+    log: Vec<String>,
+    /// The table at the moment a trial converged; while the table still equals it, the fit is
+    /// converged and Done reports it as such.
+    converged_at: Option<Vec<ParamRow>>,
+    /// What the lower panel draws, with the request it was made for.
+    preview: Option<(FitRequest, Preview)>,
     /// Iterations made by the Fit and 1 Iteration buttons since the function was chosen.
     iterations: usize,
     /// The parameter table and iteration count before each Fit / 1 Iteration press, newest
@@ -209,8 +233,21 @@ impl FitDialog {
             x_from: 0.0,
             x_to: 1.0,
             problem: None,
+            tab: FitTab::Settings,
             page: FitPage::FunctionSelection,
+            lower_open: true,
+            lower: LowerTab::FitCurve,
+            curve_points: 1000,
+            curve_custom: false,
+            curve_from: 0.0,
+            curve_to: 1.0,
+            plot_on_graph: true,
+            update_legend: false,
             message: None,
+            log: Vec::new(),
+            converged_at: None,
+            preview: None,
+
             iterations: 0,
             history: Vec::new(),
         };
@@ -239,6 +276,9 @@ impl FitDialog {
         };
         if lo <= hi {
             (self.x_from, self.x_to) = (lo, hi);
+            if !self.curve_custom {
+                (self.curve_from, self.curve_to) = (lo, hi);
+            }
         }
     }
 
@@ -295,6 +335,11 @@ impl FitDialog {
     /// Runs the fit on a copy of the project, from the values now in the Parameters table, for
     /// at most `max_iterations` iterations (the dialog's own limit when `None`), and puts the
     /// resulting values back into the table. Revert goes back to the table as it was.
+    fn say(&mut self, text: String) {
+        self.log.push(text.clone());
+        self.message = Some(text);
+    }
+
     fn trial(&mut self, project: &Project, max_iterations: Option<usize>) {
         let Some(mut request) = self.request() else { return };
         let one = max_iterations.is_some();
@@ -313,7 +358,7 @@ impl FitDialog {
         };
         let report = &outcome.report;
         if !self.iterative() {
-            self.message = Some(outcome.message);
+            self.say(outcome.message);
             return;
         }
         self.history.push((self.params.clone(), self.iterations));
@@ -330,19 +375,25 @@ impl FitDialog {
         self.iterations += made;
         let chi = sheaf_core::format::format_general(report.stats.reduced_chi_sqr, 6);
         let converged = report.status == sheaf_core::fitting::FitStatus::Converged;
-        self.message = Some(match (converged, one) {
+        let text = match (converged, one) {
             (true, _) => format!(
                 "The fit converged: {} iteration(s) in all, reduced chi-square {chi}. The Parameters page shows the values.",
                 self.iterations
             ),
             (false, true) => format!(
-                "Iteration {}: reduced chi-square {chi}; not converged yet. Press 1 Iteration or Fit to go on.",
+                "Iteration {}: reduced chi-square {chi}; not converged yet. Press 1 Iteration or Fit until converged to go on.",
                 self.iterations
             ),
             (false, false) => format!(
-                "The fit did not converge: it stopped after {made} iteration(s), the limit set on the Advanced page; reduced chi-square {chi}. Fit goes on from these values."
+                "The fit did not converge: it stopped after {made} iteration(s), the limit set on the Advanced page; reduced chi-square {chi}. Fit until converged goes on from these values."
             ),
-        });
+        };
+        self.say(text);
+        self.converged_at = converged.then(|| self.params.clone());
+    }
+
+    fn converged(&self) -> bool {
+        self.converged_at.as_ref() == Some(&self.params)
     }
 
     /// Test hooks: the built-in function in use, the table, the status line.
@@ -368,7 +419,7 @@ impl FitDialog {
             self.params = rows;
             self.iterations = iterations;
             self.problem = None;
-            self.message = Some("The parameter values are back to what they were before the last iteration.".into());
+            self.say("The parameter values are back to what they were before the last iteration.".into());
         }
     }
 
@@ -395,6 +446,10 @@ impl FitDialog {
         r.bands = self.bands;
         r.band_level = self.band_level / 100.0;
         r.max_iterations = self.max_iterations;
+        r.curve_points = self.curve_points;
+        r.curve_range = self.curve_custom.then_some((self.curve_from, self.curve_to));
+        r.add_to_graphs = self.plot_on_graph;
+        r.update_legend = self.update_legend;
         r.tolerance = 10f64.powi(-(self.tolerance_digits as i32));
         r.rows = match self.row_mode {
             RowMode::All => RowRange::All,
@@ -525,13 +580,12 @@ impl FitDialog {
                 }
             }
         });
-        ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace().small()).wrap());
         changed
     }
 
     /// Function Selection: what belongs to the chosen function (order, file) and its description.
     fn function_selection_ui(&mut self, ui: &mut egui::Ui) -> bool {
-        let mut changed = false;
+        let mut changed = self.top_ui(ui);
         match self.kind {
             FitKind::Polynomial => {
                 ui.horizontal(|ui| {
@@ -674,7 +728,44 @@ impl FitDialog {
                 ui.add(DragValue::new(&mut self.band_level).range(50.0..=99.99).speed(0.1).suffix(" %"));
             });
         });
-        ui.weak("Fitted values and residuals go next to the column; the curve is added to a graph that shows it.");
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label("Number of Points");
+            ui.add(DragValue::new(&mut self.curve_points).range(2..=100_000).speed(10.0));
+        });
+        ui.horizontal(|ui| {
+            ui.label("X Data Type");
+            if ui.radio(!self.curve_custom, "Use Input Data Range").clicked() {
+                self.curve_custom = false;
+            }
+            if ui.radio(self.curve_custom, "Custom").clicked() {
+                self.curve_custom = true;
+            }
+        });
+        ui.add_enabled_ui(self.curve_custom, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Min");
+                ui.add(DragValue::new(&mut self.curve_from).speed(0.01));
+                ui.label("Max");
+                ui.add(DragValue::new(&mut self.curve_to).speed(0.01));
+            });
+        });
+        ui.checkbox(&mut self.plot_on_graph, "Plot on Source Graph");
+        ui.checkbox(&mut self.update_legend, "Update Legend on Source Graph");
+        ui.weak(
+            "Fitted values and residuals go next to the column; the curve is added to a graph that shows it.              Origin's other options here (plot type, stacking with the residual plot, preview on the graph) are not offered.",
+        );
+    }
+
+    fn find_xy_ui(&mut self, ui: &mut egui::Ui) {
+        ui.weak("Find X from Y and Find Y from X are not offered yet.");
+    }
+
+    fn output_ui(&mut self, ui: &mut egui::Ui) {
+        ui.strong("Output");
+        ui.label("The parameters, the statistics and the fitted curve go to new sheets of the workbook that holds the data; the fitted values and residuals go next to the fitted column.");
+        ui.label("The whole result is one undoable step.");
+        ui.weak("Origin's choices of names, tables and the results sheet arrangement are not offered.");
     }
 
     fn advanced_ui(&mut self, ui: &mut egui::Ui) {
@@ -775,14 +866,136 @@ impl FitDialog {
         });
     }
 
-    /// Draws the window. Fit tries the fit on a copy of the project and says how it went; Done
-    /// runs the fit for good and closes the window.
+    /// Makes the lower panel's drawing for the table as it is now, unless it is up to date: the
+    /// fit run with no iterations on a copy of the project, so the curve is the model at the
+    /// values of the Parameters table.
+    fn refresh_preview(&mut self, project: &Project) {
+        let key = self.request();
+        if self.preview.as_ref().map(|(k, _)| k) == key.as_ref() {
+            return;
+        }
+        let Some(key) = key else {
+            self.preview = None;
+            return;
+        };
+        let mut r = key.clone();
+        r.max_iterations = 0;
+        r.curve_points = r.curve_points.min(400);
+        r.bands = BandChoice::None;
+        r.add_to_graphs = false;
+        let mut copy = project.clone();
+        let mut preview = Preview::default();
+        match copy.fit(&r) {
+            Err(e) => preview.error = Some(e.to_string()),
+            Ok(o) => {
+                if let Some((_, sheet, col)) = copy.locate(self.y) {
+                    let index = sheet.column_index(self.y).expect("located");
+                    let ys = col.numeric().unwrap_or(&[]);
+                    let xs: Vec<f64> = match sheet.x_for(index).and_then(|c| c.numeric()) {
+                        Some(x) => (0..ys.len()).map(|i| x.get(i).copied().unwrap_or(f64::NAN)).collect(),
+                        None => (1..=ys.len()).map(|i| i as f64).collect(),
+                    };
+                    let finite = |p: &(f64, f64)| p.0.is_finite() && p.1.is_finite();
+                    preview.data = xs.iter().copied().zip(ys.iter().copied()).filter(finite).collect();
+                    if let Some(res) = copy.numeric(o.residual_column) {
+                        preview.residual = xs.iter().copied().zip(res.iter().copied()).filter(finite).collect();
+                    }
+                }
+                if let (Some(cx), Some(cy)) = (copy.numeric(o.curve_x), copy.numeric(o.curve_y)) {
+                    preview.curve = cx
+                        .iter()
+                        .copied()
+                        .zip(cy.iter().copied())
+                        .filter(|p| p.0.is_finite() && p.1.is_finite())
+                        .collect();
+                }
+            }
+        }
+        self.preview = Some((key, preview));
+    }
+
+    /// The lower panel: Fit Curve, Residual, Formula and Messages.
+    fn lower_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            for t in LowerTab::ALL {
+                ui.selectable_value(&mut self.lower, t, t.label());
+            }
+        });
+        let size = egui::vec2(ui.available_width(), 150.0);
+        let blue = egui::Color32::from_rgb(30, 60, 160);
+        let red = egui::Color32::from_rgb(190, 30, 30);
+        match self.lower {
+            LowerTab::FitCurve | LowerTab::Residual => {
+                let residual = self.lower == LowerTab::Residual;
+                match self.preview.as_ref().map(|(_, p)| p) {
+                    None => {
+                        ui.weak("No Preview");
+                    }
+                    Some(p) if p.error.is_some() => {
+                        ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p.error.clone().unwrap_or_default());
+                    }
+                    Some(p) if residual => {
+                        draw_xy(ui, size, &[(&p.residual, Series::Dots, blue)], true);
+                        ui.weak(format!(
+                            "Residuals at the values of the Parameters table: {} points",
+                            p.residual.len()
+                        ));
+                    }
+                    Some(p) => {
+                        draw_xy(ui, size, &[(&p.data, Series::Dots, blue), (&p.curve, Series::Line, red)], false);
+                        ui.weak(format!("Data: {} points; fit curve: {} points", p.data.len(), p.curve.len()));
+                    }
+                }
+            }
+            LowerTab::Formula => {
+                ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace()).wrap());
+                let names: Vec<&str> = self.params.iter().map(|p| p.name.as_str()).collect();
+                if !names.is_empty() {
+                    ui.label(format!("Parameters: {}", names.join(", ")));
+                }
+            }
+            LowerTab::Messages => {
+                egui::ScrollArea::vertical()
+                    .id_salt("fit_messages")
+                    .max_height(size.y)
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        if self.log.is_empty() {
+                            ui.weak("Nothing yet: 1 Iteration and Fit until converged report here.");
+                        }
+                        for m in &self.log {
+                            ui.label(m);
+                        }
+                    });
+            }
+        }
+    }
+
+    /// Test hook: what the Fit Curve tab draws (points of the data, points of the curve).
+    #[cfg(test)]
+    pub(crate) fn preview_for_test(&self) -> Option<(usize, usize, Option<String>)> {
+        self.preview.as_ref().map(|(_, p)| (p.data.len(), p.curve.len(), p.error.clone()))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn log_for_test(&self) -> Vec<String> {
+        self.log.clone()
+    }
+
+    /// Draws the window. Fit until converged and 1 Iteration try the fit on a copy of the project
+    /// and keep the window open; Fit finishes the iterations and writes the results; Done writes
+    /// them at the values of the table; Cancel writes nothing.
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> FitDialogOutcome {
         if doc.project().column(self.y).is_none() || doc.project().workbook(self.book).is_none() {
             return FitDialogOutcome::Closed;
         }
+        if self.lower_open {
+            self.refresh_preview(doc.project());
+        }
         let mut open = true;
-        let mut run = false;
+        let mut fit_and_write = false;
+        let mut done = false;
         let mut trial = false;
         let mut one_iteration = false;
         let mut revert = false;
@@ -796,43 +1009,46 @@ impl FitDialog {
             .resizable(false)
             .default_width(760.0)
             .show(ctx, |ui| {
-                let mut model_changed = self.top_ui(ui);
+                ui.horizontal(|ui| {
+                    for t in FitTab::ALL {
+                        ui.selectable_value(&mut self.tab, t, t.label());
+                    }
+                });
                 ui.separator();
+                let mut model_changed = false;
                 ui.allocate_ui_with_layout(
-                    egui::vec2(740.0, 270.0),
+                    egui::vec2(740.0, 250.0),
                     egui::Layout::left_to_right(egui::Align::Min),
                     |ui| {
-                        ui.vertical(|ui| {
-                            ui.set_width(150.0);
-                            ui.label(RichText::new("Settings").strong());
-                            for page in FitPage::ALL {
-                                if page == FitPage::Code {
-                                    ui.add_space(4.0);
-                                }
-                                let indent = if page.in_settings() { 14.0 } else { 0.0 };
-                                ui.horizontal(|ui| {
-                                    ui.add_space(indent);
+                        if self.tab == FitTab::Settings {
+                            ui.vertical(|ui| {
+                                ui.set_width(150.0);
+                                for page in FitPage::ALL {
                                     if ui.selectable_label(self.page == page, page.label()).clicked() {
                                         self.page = page;
                                     }
-                                });
-                            }
-                        });
-                        ui.separator();
+                                }
+                            });
+                            ui.separator();
+                        }
                         ui.vertical(|ui| {
-                            ui.set_width(560.0);
+                            ui.set_width(if self.tab == FitTab::Settings { 560.0 } else { 730.0 });
                             egui::ScrollArea::vertical()
                                 .id_salt("fit_page")
-                                .max_height(266.0)
+                                .max_height(246.0)
                                 .auto_shrink([false, false])
-                                .show(ui, |ui| match self.page {
-                                    FitPage::FunctionSelection => model_changed |= self.function_selection_ui(ui),
-                                    FitPage::DataSelection => column_changed |= self.data_selection_ui(ui),
-                                    FitPage::FittedCurves => self.fitted_curves_ui(ui),
-                                    FitPage::Advanced => self.advanced_ui(ui),
-                                    FitPage::Code => model_changed |= self.code_ui(ui),
-                                    FitPage::Parameters => self.parameters_ui(ui),
-                                    FitPage::Bounds => self.bounds_ui(ui),
+                                .show(ui, |ui| match self.tab {
+                                    FitTab::Settings => match self.page {
+                                        FitPage::FunctionSelection => model_changed |= self.function_selection_ui(ui),
+                                        FitPage::DataSelection => column_changed |= self.data_selection_ui(ui),
+                                        FitPage::FittedCurves => self.fitted_curves_ui(ui),
+                                        FitPage::FindXY => self.find_xy_ui(ui),
+                                        FitPage::Advanced => self.advanced_ui(ui),
+                                        FitPage::Output => self.output_ui(ui),
+                                    },
+                                    FitTab::Code => model_changed |= self.code_ui(ui),
+                                    FitTab::Parameters => self.parameters_ui(ui),
+                                    FitTab::Bounds => self.bounds_ui(ui),
                                 });
                         });
                     },
@@ -842,6 +1058,7 @@ impl FitDialog {
                     self.message = None;
                     self.history.clear();
                     self.iterations = 0;
+                    self.converged_at = None;
                 }
                 ui.separator();
                 if let Some(p) = self.model_problem.as_ref().or(self.problem.as_ref()) {
@@ -849,17 +1066,31 @@ impl FitDialog {
                 } else if let Some(m) = &self.message {
                     ui.colored_label(egui::Color32::from_rgb(20, 70, 170), m);
                 } else {
-                    ui.weak("Fit and 1 Iteration try the fit and show the result here; Done keeps it.");
+                    ui.weak(
+                        "1 Iteration and Fit until converged try the fit and keep this window; Fit and Done write the results.",
+                    );
                 }
                 ui.add_space(4.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    cancel = ui.button("Cancel").clicked();
-                    run = ui.add_enabled(self.model_problem.is_none(), egui::Button::new("Done")).clicked();
-                    trial = ui.add_enabled(self.model_problem.is_none(), egui::Button::new("Fit")).clicked();
-                    let can_step = self.model_problem.is_none() && self.iterative();
+                ui.horizontal(|ui| {
+                    let ok = self.model_problem.is_none();
+                    let can_step = ok && self.iterative();
                     one_iteration = ui.add_enabled(can_step, egui::Button::new("1 Iteration")).clicked();
+                    trial = ui.add_enabled(ok, egui::Button::new("Fit until converged")).clicked();
                     revert = ui.add_enabled(!self.history.is_empty(), egui::Button::new("Revert")).clicked();
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        cancel = ui.button("Cancel").clicked();
+                        done = ui.add_enabled(ok, egui::Button::new("Done")).clicked();
+                        fit_and_write = ui.add_enabled(ok, egui::Button::new("Fit")).clicked();
+                        let label = if self.lower_open { "Hide lower panel" } else { "Show lower panel" };
+                        if ui.small_button(label).clicked() {
+                            self.lower_open = !self.lower_open;
+                        }
+                    });
                 });
+                if self.lower_open {
+                    ui.separator();
+                    self.lower_ui(ui);
+                }
             });
         if column_changed {
             self.column_changed(doc.project());
@@ -873,7 +1104,14 @@ impl FitDialog {
         } else if trial {
             self.trial(doc.project(), None);
         }
-        if run && let Some(request) = self.request() {
+        if (fit_and_write || done)
+            && let Some(mut request) = self.request()
+        {
+            // Done makes no iterations of its own: it reports the values of the table. Once the
+            // table holds a converged fit, one more pass changes nothing and gives the status.
+            if done && self.iterative() && !self.converged() {
+                request.max_iterations = 0;
+            }
             let y = self.y;
             let result = doc.edit("Fit", |p| -> Result<(FitOutcome, Option<WindowId>), FitRequestError> {
                 let outcome = p.fit(&request)?;
@@ -893,32 +1131,118 @@ impl FitDialog {
     }
 }
 
+/// What the lower panel draws.
+#[derive(Debug, Clone, Default)]
+struct Preview {
+    data: Vec<(f64, f64)>,
+    curve: Vec<(f64, f64)>,
+    residual: Vec<(f64, f64)>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Series {
+    Dots,
+    Line,
+}
+
+/// A small plot drawn with the painter: the series scaled to a frame with the end values of both
+/// axes written at the edges, and a line at zero if asked.
+fn draw_xy(ui: &mut egui::Ui, size: egui::Vec2, series: &[(&[(f64, f64)], Series, egui::Color32)], zero_line: bool) {
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+    painter.rect_stroke(rect, 0.0, ui.visuals().widgets.noninteractive.bg_stroke, egui::StrokeKind::Inside);
+    let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for (x, y) in series.iter().flat_map(|(p, _, _)| p.iter()) {
+        (x0, x1, y0, y1) = (x0.min(*x), x1.max(*x), y0.min(*y), y1.max(*y));
+    }
+    if zero_line {
+        (y0, y1) = (y0.min(0.0), y1.max(0.0));
+    }
+    if !(x0.is_finite() && y0.is_finite()) {
+        return;
+    }
+    let (dx, dy) = ((x1 - x0).max(f64::MIN_POSITIVE), (y1 - y0).max(f64::MIN_POSITIVE));
+    let inner = rect.shrink2(egui::vec2(46.0, 14.0));
+    let map = |(x, y): (f64, f64)| {
+        egui::pos2(
+            inner.left() + ((x - x0) / dx) as f32 * inner.width(),
+            inner.bottom() - ((y - y0) / dy) as f32 * inner.height(),
+        )
+    };
+    let text = ui.visuals().text_color();
+    let font = egui::FontId::proportional(10.0);
+    let g = |v: f64| sheaf_core::format::format_general(v, 4);
+    painter.text(inner.left_bottom() + egui::vec2(0.0, 2.0), egui::Align2::LEFT_TOP, g(x0), font.clone(), text);
+    painter.text(inner.right_bottom() + egui::vec2(0.0, 2.0), egui::Align2::RIGHT_TOP, g(x1), font.clone(), text);
+    painter.text(inner.left_bottom() + egui::vec2(-3.0, 0.0), egui::Align2::RIGHT_BOTTOM, g(y0), font.clone(), text);
+    painter.text(inner.left_top() + egui::vec2(-3.0, 0.0), egui::Align2::RIGHT_TOP, g(y1), font, text);
+    if zero_line {
+        painter
+            .line_segment([map((x0, 0.0)), map((x1, 0.0))], egui::Stroke::new(1.0_f32, ui.visuals().weak_text_color()));
+    }
+    for (points, kind, color) in series {
+        match kind {
+            Series::Dots => {
+                for p in points.iter() {
+                    painter.circle_filled(map(*p), 2.0, *color);
+                }
+            }
+            Series::Line => {
+                let line: Vec<egui::Pos2> = points.iter().map(|p| map(*p)).collect();
+                painter.add(egui::Shape::line(line, egui::Stroke::new(1.5_f32, *color)));
+            }
+        }
+    }
+}
+
 const CAT_LINEAR: &str = "Linear Fit";
 const CAT_POLY: &str = "Polynomial Fit";
 const CAT_FORMULA: &str = "User Defined";
 const CAT_FDF: &str = "Origin .FDF File";
 
-/// The pages of the left list: the four under Settings, then Code, Parameters and Bounds.
+/// The tabs along the top of the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FitPage {
-    FunctionSelection,
-    DataSelection,
-    FittedCurves,
-    Advanced,
+enum FitTab {
+    Settings,
     Code,
     Parameters,
     Bounds,
 }
 
+impl FitTab {
+    const ALL: [FitTab; 4] = [FitTab::Settings, FitTab::Code, FitTab::Parameters, FitTab::Bounds];
+
+    fn label(self) -> &'static str {
+        match self {
+            FitTab::Settings => "Settings",
+            FitTab::Code => "Code",
+            FitTab::Parameters => "Parameters",
+            FitTab::Bounds => "Bounds",
+        }
+    }
+}
+
+/// The pages of the list at the left of the Settings tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FitPage {
+    FunctionSelection,
+    DataSelection,
+    FittedCurves,
+    FindXY,
+    Advanced,
+    Output,
+}
+
 impl FitPage {
-    const ALL: [FitPage; 7] = [
+    const ALL: [FitPage; 6] = [
         FitPage::FunctionSelection,
         FitPage::DataSelection,
         FitPage::FittedCurves,
+        FitPage::FindXY,
         FitPage::Advanced,
-        FitPage::Code,
-        FitPage::Parameters,
-        FitPage::Bounds,
+        FitPage::Output,
     ];
 
     fn label(self) -> &'static str {
@@ -926,15 +1250,32 @@ impl FitPage {
             FitPage::FunctionSelection => "Function Selection",
             FitPage::DataSelection => "Data Selection",
             FitPage::FittedCurves => "Fitted Curves",
+            FitPage::FindXY => "Find X/Y",
             FitPage::Advanced => "Advanced",
-            FitPage::Code => "Code",
-            FitPage::Parameters => "Parameters",
-            FitPage::Bounds => "Bounds",
+            FitPage::Output => "Output",
         }
     }
+}
 
-    fn in_settings(self) -> bool {
-        matches!(self, FitPage::FunctionSelection | FitPage::DataSelection | FitPage::FittedCurves | FitPage::Advanced)
+/// The tabs of the lower panel (Origin also has Sample Curve, Function File and Hints).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LowerTab {
+    FitCurve,
+    Residual,
+    Formula,
+    Messages,
+}
+
+impl LowerTab {
+    const ALL: [LowerTab; 4] = [LowerTab::FitCurve, LowerTab::Residual, LowerTab::Formula, LowerTab::Messages];
+
+    fn label(self) -> &'static str {
+        match self {
+            LowerTab::FitCurve => "Fit Curve",
+            LowerTab::Residual => "Residual",
+            LowerTab::Formula => "Formula",
+            LowerTab::Messages => "Messages",
+        }
     }
 }
 
@@ -1034,5 +1375,24 @@ mod tests {
         let r = d.request().unwrap();
         assert_eq!(r.params.len(), 1);
         assert_eq!((r.params[0].initial, r.params[0].fixed, r.params[0].lower), (Some(2.0), true, None));
+    }
+
+    #[test]
+    fn the_fitted_curves_page_reaches_the_request() {
+        let (p, book, y) = project();
+        let mut d = FitDialog::new(&p, book, Some(y), FitKind::Linear).unwrap();
+        let r = d.request().unwrap();
+        assert_eq!((r.curve_points, r.curve_range, r.add_to_graphs, r.update_legend), (1000, None, true, false));
+        d.curve_points = 50;
+        d.curve_custom = true;
+        d.curve_from = -2.0;
+        d.curve_to = 30.0;
+        d.plot_on_graph = false;
+        d.update_legend = true;
+        let r = d.request().unwrap();
+        assert_eq!(
+            (r.curve_points, r.curve_range, r.add_to_graphs, r.update_legend),
+            (50, Some((-2.0, 30.0)), false, true)
+        );
     }
 }

@@ -605,7 +605,24 @@ impl SheafApp {
         };
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
+        let shapes = self.shape_dialog_shapes();
         self.doc.apply(label, |p| graph_view::apply_op(p, graph, op, resolved.as_deref()));
+        self.close_shape_dialog_if_changed(shapes);
+    }
+
+    /// The drawn objects of the layer the drawn-object window edits, if it is open.
+    fn shape_dialog_shapes(&self) -> Option<Vec<sheaf_core::shape::Shape>> {
+        self.shape_dialog.as_ref().and_then(|d| d.layer_shapes(&self.doc)).map(<[_]>::to_vec)
+    }
+
+    /// Closes the drawn-object window when Delete, Undo or Redo changed the objects of its layer:
+    /// its index may now name another object, and Apply would edit that one.
+    fn close_shape_dialog_if_changed(&mut self, before: Option<Vec<sheaf_core::shape::Shape>>) {
+        if let Some(d) = &self.shape_dialog
+            && d.layer_shapes(&self.doc) != before.as_deref()
+        {
+            self.shape_dialog = None;
+        }
     }
 
     fn focus(&mut self, id: WindowId) {
@@ -676,14 +693,18 @@ impl SheafApp {
                 }
             }
             Action::Undo => {
+                let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.undo() {
                     self.say(format!("Undone: {label}"));
                 }
+                self.close_shape_dialog_if_changed(shapes);
             }
             Action::Redo => {
+                let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.redo() {
                     self.say(format!("Redone: {label}"));
                 }
+                self.close_shape_dialog_if_changed(shapes);
             }
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {

@@ -45,9 +45,16 @@ impl ShapeDialog {
         doc.project().graph(self.graph)?.layers.get(self.layer)?.shapes.get(self.shape)
     }
 
-    /// Draws the window. Returns `false` when it was closed.
+    /// The drawn objects of the layer the window edits (to tell when Delete, Undo or Redo moved
+    /// them under it).
+    pub fn layer_shapes<'a>(&self, doc: &'a Document) -> Option<&'a [Shape]> {
+        Some(&doc.project().graph(self.graph)?.layers.get(self.layer)?.shapes)
+    }
+
+    /// Draws the window. Returns `false` when it was closed, or when the object it was opened on
+    /// is gone or another kind of object took its index.
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> bool {
-        if self.current(doc).is_none() {
+        if self.current(doc).is_none_or(|s| s.kind != self.kind) {
             return false;
         }
         let mut open = true;

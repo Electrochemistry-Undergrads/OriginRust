@@ -49,7 +49,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | Brief | Area | Size | Status |
 |---|---|---|---|
 | [T01](T01-greyed-menus-with-code.md) | Enable greyed menu items whose feature already exists | M | done (`a2fb77b`); Stack dialog, custom sort left |
-| [T02](T02-menu-shortcut-differences.md) | Menu labels, shortcuts and context menus that differ from Origin | M | open |
+| [T02](T02-menu-shortcut-differences.md) | Menu labels, shortcuts and context menus that differ from Origin | M | done on branch `menu-diffs`, not merged |
 | [T03](T03-analysis-dialog-frame.md) | Analysis dialogs: Recalculate, Output, smoothing methods, pkFind options | M | open, check `export-margin` first |
 | [T04](T04-peak-analyzer-wizard.md) | Peak Analyzer as Origin's multi-page wizard | L | open, needs Origin pages measured |
 | [T05](T05-export-graphs-dialog.md) | Export Graphs dialog, raster formats, units, Ctrl+G, Copy Page | M | open, after `export-margin` merges |

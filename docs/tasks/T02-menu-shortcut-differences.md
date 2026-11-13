@@ -1,6 +1,6 @@
 # T02: Menu labels, shortcuts and context menus that differ from Origin
 
-**Status:** open. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
+**Status:** done on branch menu-diffs, not merged (items 1-7, 9, 10 done; 8 kept; see Result). **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
 **Detail:** audit section A, bullet "Different" (`docs/audit/origin-differences-2026-11-12.md`).
 **Spec:** `docs/spec/gui-look.md` sections 1 and 3, `docs/spec/ui-command-map.md`.
 
@@ -44,3 +44,33 @@ unless gui-look says otherwise. Delete in the Explorer asks no confirmation beca
 ## Done when
 
 Each item fixed or listed as "kept, because ..." here; a UI test per new key binding; checks pass.
+
+## Result (branch `menu-diffs`)
+
+1. Done: `Action::ImportPick`; Single ASCII (Ctrl+K) picks one file, Multiple ASCII several, Comma
+   Delimited several with the comma preset (`ImportDialog::preset_comma`). Toolbar Multiple ASCII
+   button now sends the Multiple command.
+2. Done: Edit > Go to... (Ctrl+G) opens `dialogs/go_to.rs` (row, column number or name); in a graph
+   Ctrl+G exports (graph File menu has "Export Graphs..." with the key in place of the Export submenu,
+   as Origin's). The shortcut loop skips a shared key whose command cannot run in that window.
+3. Done: Recent Graphs only in the graph File menu, Re-Import items only outside graphs, "Open Sample
+   Projects".
+4. Done: Ctrl+Shift+C = Copy including label rows.
+5. Done: Find in Project (F3), Find in Sheets (Ctrl+F), Replace (Ctrl+H) greyed with key text; Go to live.
+6. Done: F2 / Delete / Ctrl+A in the Explorer while it has the keyboard (last click inside it); Ctrl+A
+   highlights every window of the folder, Delete deletes the highlighted ones (one undo step each).
+   Folder menu Rename and Delete Folder live (not for the root); Delete Folder removes its windows as
+   one undo step.
+7. Done: legend menu has Bring to front of data / Push to back of data (greyed, no stacking model);
+   page menu shows Ctrl+Shift+J; layer-icon plots read `g1 [Book]Sheet! "X"(X), "Y"(Y) [1*:N*]` and the
+   hint line "Double click to open Plot Setup" was added. Move to Left/Right Y Axis kept.
+   Unverified against Origin: the "g1" group number (always 1 here) and whether the column names in
+   the plot line are long names or short names (Sheaf uses the long name when set).
+8. Kept: the header menu reads "Statistics on Columns..." as the Statistics menu does; the spec's
+   "Statistics on Column" comes from a decoded resource string, not a screenshot. Recalculate and Add New
+   Columns stay (Origin's Column menu has them). Not measured in Origin.
+9. Done: title `Sheaf - <path or UNTITLED> *`, plus ` - [Window *]` while a child is maximised.
+10. Done: status reference `1: [Book]Sheet!A:B[r1:r2]` (graph `1: [Graph]1!`). The meaning of the leading
+    "1:" is assumed.
+
+Go to window layout (Row / Column fields) is not measured in Origin.

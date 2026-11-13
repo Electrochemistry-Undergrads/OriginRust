@@ -2491,3 +2491,16 @@ fn golden_xy_error_bars() {
     let (p, g) = error_project(sheaf_core::graph::ErrorDirection::Both, 8.0);
     compare_golden("xy-error", &svg_of(&p, g));
 }
+
+#[test]
+fn a_masked_point_is_drawn_red_with_its_two_line_segments() {
+    let x: Vec<f64> = (1..=5).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| v * v).collect();
+    let (mut p, g) = project(Template::LineSymbol, x, vec![y]);
+    let svg = svg_of(&p, g);
+    assert!(!svg.contains("#FF0000"), "nothing is red before masking");
+    let id = p.graph(g).unwrap().layers[0].plots[0].y;
+    p.column_mut(id).unwrap().mask.insert(2);
+    let svg = svg_of(&p, g);
+    assert_eq!(svg.matches("#FF0000").count(), 2, "one red line path and one red symbol path");
+}

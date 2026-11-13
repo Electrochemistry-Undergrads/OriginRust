@@ -46,6 +46,46 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if plot.kind.has_symbols() {
         draw_symbols(out, pd, geom);
     }
+    if pd.mask.is_some() && !plot.kind.is_bar() {
+        draw_masked(out, pd, geom);
+    }
+}
+
+/// Origin draws a masked point red: its symbol, and the two line segments that meet at it
+/// (measured with a line + symbol plot of five points, one masked). Drawn on top of the plot.
+fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    use sheaf_core::Color;
+    let Some(mask) = pd.mask else { return };
+    let page = |i: usize| -> Option<(f64, f64)> {
+        if i < pd.start || i >= pd.end {
+            return None;
+        }
+        geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))
+    };
+    let mut lines = String::new();
+    let mut symbols = String::new();
+    for &i in mask.range(pd.start..pd.end) {
+        let Some(p) = page(i) else { continue };
+        if pd.plot.kind.has_line() && pd.plot.line.width_pt > 0.0 {
+            for j in [i.checked_sub(1), Some(i + 1)].into_iter().flatten() {
+                if let Some(q) = page(j) {
+                    move_to(&mut lines, q.0, q.1);
+                    line_to(&mut lines, p.0, p.1);
+                }
+            }
+        }
+        if pd.plot.kind.has_symbols() {
+            symbol_path(&mut symbols, pd.plot.symbol.shape, p.0, p.1, pd.plot.symbol.size_pt);
+        }
+    }
+    if !lines.is_empty() {
+        let line = crate::plots::line_stroke(&pd.plot.line);
+        out.push(Item::Path { d: lines, fill: None, stroke: Some(Stroke { color: Color::RED, ..line }) });
+    }
+    if !symbols.is_empty() {
+        let red = SymbolStyle { color: Color::RED, ..pd.plot.symbol.clone() };
+        out.push(symbol_item(symbols, &red));
+    }
 }
 
 /// Consecutive points that fall into the same narrow vertical strip of the

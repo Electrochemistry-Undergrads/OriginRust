@@ -129,8 +129,15 @@ pub fn dialog_body(
             ui.horizontal(|ui| {
                 ui.label("Plot Type");
                 if let Node::Plot(l, p) = *node {
+                    let polar = graph.layers[l].coords.polar().is_some();
                     let plot = &mut graph.layers[l].plots[p];
-                    egui::ComboBox::from_id_salt("plot_type").selected_text(kind_name(plot.kind)).show_ui(ui, |ui| {
+                    // A plot of a polar layer is an ordinary line or symbol plot on a circle.
+                    let shown = if polar {
+                        format!("Polar {}", kind_name(plot.kind))
+                    } else {
+                        kind_name(plot.kind).to_string()
+                    };
+                    egui::ComboBox::from_id_salt("plot_type").selected_text(shown).show_ui(ui, |ui| {
                         for k in [
                             PlotKind::Line,
                             PlotKind::Scatter,

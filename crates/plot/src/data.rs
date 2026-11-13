@@ -299,11 +299,30 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             }
             _ => {}
         }
+        if let Some(polar) = layer.coords.polar() {
+            polar_columns(&mut pd, polar.radius);
+        }
         plots.push(pd);
     }
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     LayerData { plots, members }
+}
+
+/// Reads the two columns of a plot of a polar layer as `(angle, radius)`: `x` becomes the angle
+/// and `y` the radius, whichever column the layer takes the radius from (a missing X column is
+/// the row number). Error bars are not drawn in polar layers.
+fn polar_columns(pd: &mut PlotData, radius: sheaf_core::graph::RadiusColumn) {
+    pd.err = None;
+    pd.xerr = None;
+    pd.x_format = None;
+    if radius == sheaf_core::graph::RadiusColumn::X {
+        let angle = std::mem::replace(&mut pd.y, Cow::Owned(Vec::new()));
+        let r = pd.x.take().unwrap_or_else(|| Cow::Owned((1..=angle.len()).map(|i| i as f64).collect()));
+        pd.end = pd.end.min(r.len());
+        pd.x = Some(angle);
+        pd.y = r;
+    }
 }
 
 /// A percentage of the model clamped to `lo..=hi`; a value that is not finite takes `default`.

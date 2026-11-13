@@ -64,10 +64,14 @@ pub enum Template {
     BubbleColorMapped,
     /// Pie chart (Origin's pie): the Y column's rows as slices, in a layer without axes.
     Pie,
+    /// Polar plot, angle in degrees from the X column and radius from Y (Origin's "Polar theta(X) r(Y)").
+    Polar,
+    /// Polar plot with the radius from the X column and the angle from Y ("Polar r(X) theta(Y)").
+    PolarRTheta,
 }
 
 impl Template {
-    pub const ALL: [Template; 22] = [
+    pub const ALL: [Template; 24] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -86,6 +90,8 @@ impl Template {
         Template::ColorMapped,
         Template::BubbleColorMapped,
         Template::Pie,
+        Template::Polar,
+        Template::PolarRTheta,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -117,6 +123,8 @@ impl Template {
             Template::ColorMapped => "color-mapped",
             Template::BubbleColorMapped => "bubble-color-mapped",
             Template::Pie => "pie",
+            Template::Polar => "polar",
+            Template::PolarRTheta => "polar-r-theta",
         }
     }
 
@@ -144,6 +152,8 @@ impl Template {
             Template::ColorMapped => "Color Mapped",
             Template::BubbleColorMapped => "Bubble + Color Mapped",
             Template::Pie => "Pie",
+            Template::Polar => "Polar theta(X) r(Y)",
+            Template::PolarRTheta => "Polar r(X) theta(Y)",
         }
     }
 
@@ -177,6 +187,8 @@ impl Template {
             Template::ColorMapped => bubble(id, name, true, false),
             Template::BubbleColorMapped => bubble(id, name, true, true),
             Template::Pie => pie(id, name),
+            Template::Polar => polar(id, name, RadiusColumn::Y),
+            Template::PolarRTheta => polar(id, name, RadiusColumn::X),
         }
     }
 }
@@ -369,6 +381,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             stack: Stack::None,
             plot_offsets: Vec::new(),
             bars: BarSpacing::default(),
+            coords: Coords::Cartesian,
         }],
     }
 }
@@ -394,6 +407,27 @@ fn pie(id: WindowId, name: &str) -> Graph {
     l.x_axis.side = AxisSide::Hidden;
     l.y_axis.side = AxisSide::Hidden;
     l.legend.visible = false;
+    g
+}
+
+/// The polar template: the line template in a layer of polar coordinates. The frame is a square
+/// on the page (the circle is as wide as the frame is high), the grid rings and spokes are grey
+/// and solid (Sheaf's usual grid style, as in Origin's polar template), and the axis titles are
+/// not drawn.
+fn polar(id: WindowId, name: &str, radius: RadiusColumn) -> Graph {
+    let mut g = general(id, name, PlotKind::Line);
+    g.page = Page::inches(6.0, 6.0);
+    let l = &mut g.layers[0];
+    l.frame = Frame { left: 0.2, top: 0.2, width: 0.6, height: 0.6 };
+    l.coords = Coords::Polar(PolarCoords { radius, ..PolarCoords::default() });
+    let grid = LineStyle::solid(Color::rgb(204, 204, 204), 0.5);
+    for a in [&mut l.x_axis, &mut l.y_axis] {
+        a.major_grid = Some(grid.clone());
+        a.show_title = false;
+        a.major_tick = TickDirection::Out;
+        a.major_tick_len_pt = 6.0;
+        a.minor_ticks = 0;
+    }
     g
 }
 
@@ -605,7 +639,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 22);
+        assert_eq!(Template::ALL.len(), 24);
     }
 
     #[test]

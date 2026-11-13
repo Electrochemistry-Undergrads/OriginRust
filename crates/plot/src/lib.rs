@@ -20,6 +20,7 @@ mod legend;
 mod margin;
 pub mod markup;
 mod plots;
+mod polar;
 mod raster;
 pub mod scene;
 mod stack;
@@ -216,18 +217,28 @@ pub struct LayerGeometry {
     pub x: ticks::ResolvedAxis,
     /// The resolved Y axis.
     pub y: ticks::ResolvedAxis,
+    /// The circle of a polar layer. Then `x` is the angle axis (degrees) and `y` the radius axis,
+    /// and the data are placed on the circle (graphing spec section 14.18).
+    pub polar: Option<polar::PolarMap>,
 }
 
 impl LayerGeometry {
     /// Page position (points) of a data point. Values that cannot be placed
     /// (non-positive on a log axis) give NaN.
     pub fn data_to_page(&self, x: f64, y: f64) -> (f64, f64) {
+        if let Some(map) = &self.polar {
+            return map.point(x, self.y.to_unit(y));
+        }
         let f = self.frame;
         (f.x + self.x.to_unit(x) * f.w, f.y + (1.0 - self.y.to_unit(y)) * f.h)
     }
 
     /// Data value under a page position (points). Inverse of [`LayerGeometry::data_to_page`].
     pub fn page_to_data(&self, px: f64, py: f64) -> (f64, f64) {
+        if let Some(map) = &self.polar {
+            let (theta, u) = map.angle_and_unit(px, py);
+            return (theta, self.y.from_unit(u));
+        }
         let f = self.frame;
         (self.x.from_unit((px - f.x) / f.w), self.y.from_unit(1.0 - (py - f.y) / f.h))
     }
@@ -236,6 +247,13 @@ impl LayerGeometry {
     /// finite or cannot be placed. Used to break lines at gaps.
     pub(crate) fn checked_data_to_page(&self, x: f64, y: f64) -> Option<(f64, f64)> {
         let p = self.data_to_page(x, y);
+        if self.polar.is_some() {
+            // A radius outside the axis range is not drawn (it would leave the circle or cross the centre).
+            let u = self.y.to_unit(y);
+            if !(-1e-9..=1.0 + 1e-9).contains(&u) {
+                return None;
+            }
+        }
         (x.is_finite() && y.is_finite() && p.0.is_finite() && p.1.is_finite()).then_some(p)
     }
 }

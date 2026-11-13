@@ -10,6 +10,8 @@ pub fn local_utc_offset_seconds() -> i64 {
 mod imp {
     use windows_sys::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
 
+    // `tm_gmtoff` is an i64 on 64-bit systems and an i32 on 32-bit ones.
+    #[allow(clippy::useless_conversion)]
     pub fn offset() -> i64 {
         // SAFETY: the structure is plain data and the call only fills it in.
         let (info, id) = unsafe {
@@ -30,6 +32,8 @@ mod imp {
 
 #[cfg(unix)]
 mod imp {
+    // `tm_gmtoff` is an i64 on 64-bit systems and an i32 on 32-bit ones.
+    #[allow(clippy::useless_conversion)]
     pub fn offset() -> i64 {
         // SAFETY: `localtime_r` writes only into the structure given to it.
         unsafe {
@@ -42,6 +46,8 @@ mod imp {
 
 #[cfg(not(any(windows, unix)))]
 mod imp {
+    // `tm_gmtoff` is an i64 on 64-bit systems and an i32 on 32-bit ones.
+    #[allow(clippy::useless_conversion)]
     pub fn offset() -> i64 {
         0
     }

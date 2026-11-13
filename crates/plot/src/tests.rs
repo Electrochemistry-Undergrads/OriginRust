@@ -2805,3 +2805,123 @@ fn golden_pie_template() {
     let (p, g) = pie_probe();
     compare_golden("pie", &svg_of(&p, g));
 }
+
+// ----- polar plots (graphing spec 14.18) ----------------------------------------------------------
+
+/// Angles 0 to 360 degrees in steps of 15 and the radius 1.5 + 0.5 cos(2 theta).
+fn polar_probe(template: Template) -> (Project, WindowId) {
+    let theta: Vec<f64> = (0..=24).map(|i| f64::from(i) * 15.0).collect();
+    let r: Vec<f64> = theta.iter().map(|t| 1.5 + 0.5 * (2.0 * t.to_radians()).cos()).collect();
+    if template == Template::PolarRTheta {
+        project(template, r, vec![theta])
+    } else {
+        project(template, theta, vec![r])
+    }
+}
+
+#[test]
+fn golden_polar_template() {
+    let (p, g) = polar_probe(Template::Polar);
+    compare_golden("polar", &svg_of(&p, g));
+}
+
+#[test]
+fn a_polar_layer_labels_the_angles_every_30_degrees_and_the_radius_twice() {
+    let (p, g) = polar_probe(Template::Polar);
+    let t = texts(&doc(&svg_of(&p, g)));
+    for a in (0..360).step_by(30) {
+        assert!(t.iter().any(|x| *x == a.to_string()), "angle {a} in {t:?}");
+    }
+    assert!(!t.iter().any(|x| x == "360"), "360 coincides with 0: {t:?}");
+    // The radius labels run up and down the vertical diameter: each one twice.
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    for v in geom.y.major.iter().zip(&geom.y.labels).filter(|(v, _)| geom.y.to_unit(**v) > 1e-9).map(|(_, l)| l) {
+        assert!(t.iter().filter(|x| *x == v).count() >= 2, "{v} twice in {t:?}");
+    }
+    assert!(!t.iter().any(|x| x == "Row" || x.contains("Current")), "no axis titles: {t:?}");
+}
+
+#[test]
+fn polar_geometry_puts_angle_zero_on_the_right_and_counts_counter_clockwise() {
+    let (p, g) = polar_probe(Template::Polar);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.expect("a polar layer");
+    assert!((map.radius - geom.frame.w.min(geom.frame.h) / 2.0).abs() < 1e-9);
+    let rmax = geom.y.max;
+    let (x0, y0) = geom.data_to_page(0.0, rmax);
+    assert!((x0 - (map.cx + map.radius)).abs() < 1e-6 && (y0 - map.cy).abs() < 1e-6, "0 degrees at 3 o'clock");
+    let (x1, y1) = geom.data_to_page(90.0, rmax);
+    assert!((x1 - map.cx).abs() < 1e-6 && (y1 - (map.cy - map.radius)).abs() < 1e-6, "90 degrees at 12 o'clock");
+    let (x2, y2) = geom.data_to_page(180.0, geom.y.min);
+    assert!((x2 - map.cx).abs() < 1e-6 && (y2 - map.cy).abs() < 1e-6, "the lowest radius is the centre");
+}
+
+#[test]
+fn polar_data_to_page_and_page_to_data_invert_each_other() {
+    for template in [Template::Polar, Template::PolarRTheta] {
+        let (p, g) = polar_probe(template);
+        let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+        for theta in [0.0, 10.0, 90.0, 179.0, 270.5, 359.0] {
+            for r in [geom.y.min + 0.1, 1.0, 1.7, geom.y.max] {
+                let (px, py) = geom.data_to_page(theta, r);
+                let (t, rr) = geom.page_to_data(px, py);
+                assert!((t - theta).abs() < 1e-6 && (rr - r).abs() < 1e-9, "{theta},{r} -> {t},{rr}");
+            }
+        }
+    }
+    // The same with the rotation and sense of the layer changed.
+    let (mut p, g) = polar_probe(Template::Polar);
+    if let Some(sheaf_core::graph::Coords::Polar(c)) = p.graph_mut(g).map(|g| &mut g.layers[0].coords) {
+        c.zero_deg = 90.0;
+        c.clockwise = true;
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(0.0, geom.y.max);
+    assert!((x - map.cx).abs() < 1e-6 && y < map.cy, "0 degrees straight up");
+    let (x, y) = geom.data_to_page(90.0, geom.y.max);
+    assert!(x > map.cx, "clockwise from the top goes right");
+    let (t, _) = geom.page_to_data(x, y);
+    assert!((t - 90.0).abs() < 1e-6);
+}
+
+#[test]
+fn the_radius_axis_of_a_polar_layer_follows_the_radius_values() {
+    let (p, g) = polar_probe(Template::Polar);
+    let small = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+    assert!(small.max >= 2.0 && small.max < 3.0, "radii up to 2: {small:?}");
+    let (p, g) = project(Template::Polar, vec![0.0, 90.0, 180.0, 270.0], vec![vec![10.0, 40.0, 25.0, 30.0]]);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert!(geom.y.max >= 40.0 && geom.y.max < 60.0, "radii up to 40: {:?}", geom.y);
+    // The angle axis ignores the data.
+    assert_eq!((geom.x.min, geom.x.max), (0.0, 360.0));
+    assert_eq!(geom.x.major.len(), 12);
+}
+
+#[test]
+fn polar_r_theta_reads_the_radius_from_the_x_column() {
+    let (p1, g1) = polar_probe(Template::Polar);
+    let (p2, g2) = polar_probe(Template::PolarRTheta);
+    let plots = |p: &Project, g| {
+        let svg = svg_of(p, g);
+        let d = doc(&svg);
+        with_class(&d, "plots")
+            .iter()
+            .flat_map(|n| paths_in(*n))
+            .filter_map(|n| n.attribute("d").map(String::from))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(plots(&p1, g1), plots(&p2, g2), "the same curve from swapped columns");
+}
+
+#[test]
+fn a_radius_outside_the_axis_range_is_not_drawn() {
+    let (mut p, g) = polar_probe(Template::Polar);
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(0.0);
+    axis.max = Some(1.2);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert!(geom.checked_data_to_page(0.0, 1.0).is_some());
+    assert!(geom.checked_data_to_page(0.0, 2.0).is_none());
+    assert!(geom.checked_data_to_page(0.0, -0.5).is_none());
+}

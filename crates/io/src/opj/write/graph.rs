@@ -991,6 +991,10 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    if layer.coords.polar().is_some() {
+        notes
+            .push("the polar layer was not written; its plots went out as plain line plots on rectangular axes".into());
+    }
     if layer.bars.overlap_pct != 0.0 {
         notes.push("the overlap of column bars was not written; bars stand side by side".into());
     }

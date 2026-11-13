@@ -409,6 +409,20 @@ pub struct StyleArgs {
     pub label: Vec<String>,
 }
 
+/// Which part of the page a figure shows (Origin's export margin settings).
+#[derive(Args, Debug)]
+pub struct MarginArgs {
+    /// Margin of the exported figure: border (everything drawn plus a border; Origin's default
+    /// "auto"), tight (everything drawn), page (the whole page) or tight-in-page (the objects that
+    /// are over half inside the page). --image-width and --image-height then size that area.
+    #[arg(long, value_name = "MODE", default_value = "auto")]
+    pub margin: String,
+    /// Border width in pixels with --margin border (pixels at --dpi for PNG and TIFF, points for
+    /// the vector formats; default 5 pt).
+    #[arg(long, value_name = "PIXELS")]
+    pub border_width: Option<f64>,
+}
+
 #[derive(Args, Debug)]
 pub struct PlotArgs {
     /// A data file, a .sheaf project or an Origin .opj project. Several data files are overlaid in one figure.
@@ -420,8 +434,8 @@ pub struct PlotArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Width of the exported picture, with a unit: in, cm, mm, pt or px (for example 3.5in or
-    /// 8.5cm; px counts at --dpi). The whole page is scaled to it, text and lines included, as
+    /// Width of the exported picture, with a unit: in, cm, mm, pt, px or % (for example 3.5in or
+    /// 8.5cm; px counts at --dpi; 50% is half the size of the exported area). The whole page is scaled to it, text and lines included, as
     /// Origin's export image size does; --width instead changes the page and keeps the text size.
     #[arg(long, value_name = "LENGTH")]
     pub image_width: Option<String>,
@@ -429,6 +443,8 @@ pub struct PlotArgs {
     /// scaled to fit inside both.
     #[arg(long, value_name = "LENGTH")]
     pub image_height: Option<String>,
+    #[command(flatten)]
+    pub margin: MarginArgs,
     /// Figure template: line, scatter, line-symbol, column, cv, double-y, stacked or waterfall
     /// (default: what the importer suggests). column draws one group of bars per row, the Y columns
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
@@ -530,8 +546,8 @@ pub struct ExportArgs {
     /// Resolution of PNG output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
-    /// Width of the exported picture, with a unit: in, cm, mm, pt or px (for example 3.5in or
-    /// 8.5cm; px counts at --dpi). The whole page is scaled to it, text and lines included, as
+    /// Width of the exported picture, with a unit: in, cm, mm, pt, px or % (for example 3.5in or
+    /// 8.5cm; px counts at --dpi; 50% is half the size of the exported area). The whole page is scaled to it, text and lines included, as
     /// Origin's export image size does; --width instead changes the page and keeps the text size.
     #[arg(long, value_name = "LENGTH")]
     pub image_width: Option<String>,
@@ -539,6 +555,8 @@ pub struct ExportArgs {
     /// scaled to fit inside both.
     #[arg(long, value_name = "LENGTH")]
     pub image_height: Option<String>,
+    #[command(flatten)]
+    pub margin: MarginArgs,
     #[command(flatten)]
     pub style: StyleArgs,
     #[command(flatten)]

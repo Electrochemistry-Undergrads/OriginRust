@@ -28,6 +28,7 @@ mod panels;
 mod reader;
 mod theme;
 mod toolbar;
+mod winclip;
 mod workspace;
 
 use std::path::PathBuf;

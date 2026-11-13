@@ -20,12 +20,29 @@ SVG structure.
   TIFF figures mishandle one), stored as 8-bit RGB with LZW compression and the DPI in the
   `XResolution`/`YResolution` tags (unit inch).
 - **Export size.** By default a figure has the size of the page. An export width and/or height
-  (`ExportSize`; CLI `--image-width`, `--image-height` with a unit in, cm, mm, pt or px; the app's
-  export window "Scale to" a width in in or cm) scales the whole page, text and lines included, as
-  Origin's export image size does with its aspect ratio kept. With both, the page is scaled to fit
-  inside both. Only the root `width`/`height` of the SVG change; the `viewBox` keeps the drawing in
+  (`ExportSize`; CLI `--image-width`, `--image-height` with a unit in, cm, mm, pt, px or %; the
+  app's export window "Scale to" a width in in, cm, px or % of page) scales the whole figure, text
+  and lines included, as Origin's export image size does with its aspect ratio kept. With both
+  width and height, the figure is scaled to fit inside both. Pixels are inches x DPI (raster only);
+  a page ratio is a plain scale factor of the exported area (`ExportSize::ratio`, 100 % = 1). The
+  root `width`/`height` of the SVG are the area times the scale; the `viewBox` keeps the drawing in
   page points, so SVG, PDF, PNG and TIFF all follow. A scale below 0.01 or above 100 is refused.
   (The CLI's `--width` and `--height` are different: they change the page itself and keep text sizes.)
+- **Margin** (`margin.rs`, `ExportLayout`, spec graphing.md 9.2). The exported area is a rectangle
+  of the page in points, given by the margin mode: `Page` the whole page (the default of the library
+  functions, so existing callers are unchanged); `Tight` the box round everything drawn, also what
+  hangs over the page edge; `Border` that box grown by the border width on every side; `TightInPage`
+  the box round the items that are at least half inside the page, cut at the page edge; `Auto`
+  (Origin's -2) is `Border` with the default border (see graphing.md 9.2 for the reasoning). The
+  box is measured from the scene: strokes widened by half their width, text by the layout's
+  measured width and the font's ascent and descent, circles and curves by points along them, data
+  cut at its layer's frame, the page background ignored. A figure with nothing drawn, or an
+  empty box, falls back to the page. The export size sizes the exported area, not the page, so
+  `--margin tight --image-width 3in` is 3 in wide whatever the page. The SVG root takes the area as
+  `viewBox` and a background rectangle covering it; EPS moves the drawing with `translate` and
+  sets `%%BoundingBox` to the area; EMF sets the window origin (`EMR_SETWINDOWORGEX`) and the
+  header bounds to the area. The border width counts in pixels of the export: at the export DPI
+  for PNG and TIFF, one point each for the vector formats.
 - The layer frame is the rectangle `left, top, width, height` (fractions of the page) converted to
   points. Data is clipped to the frame.
 
@@ -264,6 +281,8 @@ transparency: a colour with alpha is blended onto the page background.
   that the text keeps the layout's widths whatever font the viewer substitutes. Clipping per
   layer is `EMR_SAVEDC`, `EMR_INTERSECTCLIPRECT`, `EMR_RESTOREDC`. A file made this way was
   loaded and drawn by GDI+ (title, rotated text, clipping and dashes as in the PNG).
+  With a margin other than the page, the first records after the map mode set the window origin
+  to the area's corner (`EMR_SETWINDOWORGEX`).
 
 ## 7. Fonts
 

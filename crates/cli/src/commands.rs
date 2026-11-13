@@ -760,7 +760,8 @@ fn plot(a: PlotArgs) -> Result<()> {
     apply_style(&mut project, graph, &a.style, a.panels.is_some())?;
 
     let size = export_size(a.image_width.as_deref(), a.image_height.as_deref(), a.dpi)?;
-    sheaf_plot::export_file_sized(&project, graph, &a.output, a.dpi, size)
+    let layout = export_layout(&a.margin)?;
+    sheaf_plot::export_file_with(&project, graph, &a.output, a.dpi, size, layout)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());
     if let Some(path) = &a.save {
@@ -1110,7 +1111,8 @@ fn export(a: ExportArgs) -> Result<()> {
     let graph = pick_graph(&project, a.graph.as_deref())?;
     apply_style(&mut project, graph, &a.style, false)?;
     let size = export_size(a.image_width.as_deref(), a.image_height.as_deref(), a.dpi)?;
-    sheaf_plot::export_file_sized(&project, graph, &a.output, a.dpi, size)
+    let layout = export_layout(&a.margin)?;
+    sheaf_plot::export_file_with(&project, graph, &a.output, a.dpi, size, layout)
         .with_context(|| format!("could not write '{}'", a.output.display()))?;
     println!("wrote {}", a.output.display());
     Ok(())
@@ -1142,12 +1144,44 @@ pub(crate) fn write_sheet(ws: &sheaf_core::Worksheet, path: &Path) -> Result<()>
     Ok(())
 }
 
-/// The export size from `--image-width` and `--image-height`.
+/// The export size from `--image-width` and `--image-height`; a value in `%` is a page ratio.
 fn export_size(width: Option<&str>, height: Option<&str>, dpi: f64) -> Result<sheaf_plot::ExportSize> {
+    let percent = |text: Option<&str>, what: &str| -> Result<Option<f64>> {
+        let Some(t) = text.map(str::trim).filter(|t| t.ends_with('%')) else { return Ok(None) };
+        let v: f64 = t
+            .trim_end_matches('%')
+            .trim()
+            .parse()
+            .map_err(|_| anyhow::anyhow!("--image-{what} '{t}' is not a percentage such as 50%"))?;
+        if !(v.is_finite() && v > 0.0) {
+            bail!("--image-{what} '{t}': a percentage must be positive");
+        }
+        Ok(Some(v))
+    };
+    let (pw, ph) = (percent(width, "width")?, percent(height, "height")?);
+    if pw.is_some() || ph.is_some() {
+        if width.is_some_and(|t| !t.trim().ends_with('%')) || height.is_some_and(|t| !t.trim().ends_with('%')) {
+            bail!("--image-width and --image-height must both be percentages or both be lengths");
+        }
+        return Ok(sheaf_plot::ExportSize::from_unit(pw, ph, sheaf_plot::SizeUnit::PageRatio, dpi));
+    }
     let inches = |text: Option<&str>, what: &str| -> Result<Option<f64>> {
         text.map(|t| parse_length_inches(t, dpi).with_context(|| format!("--image-{what} '{t}'"))).transpose()
     };
-    Ok(sheaf_plot::ExportSize { width_in: inches(width, "width")?, height_in: inches(height, "height")? })
+    Ok(sheaf_plot::ExportSize { width_in: inches(width, "width")?, height_in: inches(height, "height")?, ratio: None })
+}
+
+/// The margin mode and border width from `--margin` and `--border-width`.
+fn export_layout(a: &crate::args::MarginArgs) -> Result<sheaf_plot::ExportLayout> {
+    let margin = sheaf_plot::Margin::parse(&a.margin).ok_or_else(|| {
+        anyhow::anyhow!("--margin '{}' is not a mode; use auto, border, tight, page or tight-in-page", a.margin)
+    })?;
+    if let Some(w) = a.border_width
+        && !(w.is_finite() && w >= 0.0)
+    {
+        bail!("--border-width must be a number of pixels, 0 or more (got {w})");
+    }
+    Ok(sheaf_plot::ExportLayout { margin, border_px: a.border_width })
 }
 
 /// A length with its unit (`in`, `cm`, `mm`, `pt` or `px`, the last at `dpi`) in inches.

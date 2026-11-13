@@ -76,7 +76,7 @@ fn of_points(points: impl IntoIterator<Item = (f64, f64)>) -> Option<Rect> {
 }
 
 /// The bounding box of one item in page points.
-fn item_bounds(item: &Item, m: &dyn TextMeasurer) -> Option<Rect> {
+pub(crate) fn item_bounds(item: &Item, m: &dyn TextMeasurer) -> Option<Rect> {
     match item {
         Item::Rect { rect, .. } => Some(*rect),
         Item::Path { d, .. } => of_points(subpaths(d).into_iter().flatten()),

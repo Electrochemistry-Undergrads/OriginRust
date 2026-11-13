@@ -22,6 +22,10 @@ use crate::toolbar::{self, Bar, Toolbars};
 use crate::workspace::{WindowInfo, Workspace};
 use eframe::egui::{self, RichText};
 use sheaf_core::clipboard::CopyOptions;
+
+/// Copy Page's size factor: the picture is this fraction of the page size. Origin's option is
+/// 40 % up to 2021a and 100 % from 2021b, so 40 % is the 2016 default (graphing.md 9.6).
+const COPY_PAGE_SIZE_FACTOR: f64 = 0.4;
 use sheaf_core::graph::TickLabelSource;
 use sheaf_core::project::{Folder, Window};
 use sheaf_core::template::Template;
@@ -439,17 +443,39 @@ impl SheafApp {
         }
     }
 
-    /// Copy Page (Ctrl+J): the graph as a picture on the clipboard, at 300 dpi, to paste into a
-    /// document or a presentation (Origin also offers a vector copy; Sheaf's vector forms are the
-    /// SVG and PDF exports).
+    /// Copy Page (Ctrl+J): the graph as a picture on the clipboard, to paste into a document or a
+    /// presentation. As in Origin 2016 the picture is 40 % of the page size (the "size factor"
+    /// before 2021b) and its margin follows the Copy Page margin setting, whose default `Auto` is
+    /// the box round everything drawn plus a border (see `docs/spec/graphing.md` 9.6). It is a
+    /// 300 dpi bitmap; on Windows an enhanced metafile of the same picture goes with it
+    /// (`AddEMFInCopyPage=1`), so a vector editor pastes lines and text, not pixels.
     fn copy_page(&mut self, graph: WindowId, ctx: &egui::Context) {
         const DPI: f64 = 300.0;
-        match sheaf_plot::render_raster(self.doc.project(), graph, DPI / 72.0) {
+        let size = sheaf_plot::ExportSize { ratio: Some(COPY_PAGE_SIZE_FACTOR), ..sheaf_plot::ExportSize::default() };
+        let layout = sheaf_plot::ExportLayout { margin: sheaf_plot::Margin::Auto, border_px: None };
+        match sheaf_plot::export_raster(self.doc.project(), graph, DPI, size, layout) {
             Ok(r) => {
-                let size = [r.width as usize, r.height as usize];
-                ctx.copy_image(egui::ColorImage::from_rgba_unmultiplied(size, &r.rgba));
-                self.copied_page = Some(size);
-                self.say(format!("Copied the page as a picture of {} x {} pixels (300 dpi)", size[0], size[1]));
+                let px = [r.width as usize, r.height as usize];
+                let metafile = sheaf_plot::export_bytes_with(self.doc.project(), graph, "emf", DPI, size, layout);
+                // Under test the real clipboard is left alone.
+                let both = match &metafile {
+                    Ok(emf) if cfg!(windows) && !cfg!(test) => crate::winclip::put_bitmap_and_emf(
+                        &crate::winclip::dib_from_rgba(r.width, r.height, &r.rgba),
+                        emf,
+                    ),
+                    Ok(_) => Err("not on Windows".to_string()),
+                    Err(e) => Err(e.to_string()),
+                };
+                let with_emf = both.is_ok();
+                if !with_emf {
+                    ctx.copy_image(egui::ColorImage::from_rgba_unmultiplied(px, &r.rgba));
+                }
+                self.copied_page = Some(px);
+                let form = if with_emf { " and a metafile" } else { "" };
+                self.say(format!(
+                    "Copied the page as a picture{form} of {} x {} pixels (300 dpi, 40 % size)",
+                    px[0], px[1]
+                ));
             }
             Err(e) => self.warn(format!("Could not copy the page: {e}")),
         }

@@ -26,6 +26,7 @@ const EMR_EOF: u32 = 14;
 const EMR_SETBKMODE: u32 = 18;
 const EMR_SETPOLYFILLMODE: u32 = 19;
 const EMR_SETMAPMODE: u32 = 17;
+const EMR_SETWINDOWORGEX: u32 = 10;
 const EMR_SETTEXTALIGN: u32 = 22;
 const EMR_SETTEXTCOLOR: u32 = 24;
 const EMR_MOVETOEX: u32 = 27;
@@ -84,6 +85,11 @@ struct Emf<'a> {
 /// Writes `scene`, scaled by `scale` (1 is the page size), measuring text with `measurer` for
 /// the character spacing that is stored with each string.
 pub fn write_emf(scene: &Scene, scale: f64, measurer: &dyn TextMeasurer) -> Vec<u8> {
+    write_emf_view(scene, scale, measurer, crate::Rect { x: 0.0, y: 0.0, w: scene.width, h: scene.height })
+}
+
+/// [`write_emf`] for the part `view` of the page (page points) only.
+pub fn write_emf_view(scene: &Scene, scale: f64, measurer: &dyn TextMeasurer, view: crate::Rect) -> Vec<u8> {
     let mut e = Emf {
         buf: Vec::with_capacity(32 * 1024),
         records: 0,
@@ -95,15 +101,18 @@ pub fn write_emf(scene: &Scene, scale: f64, measurer: &dyn TextMeasurer) -> Vec<
         scale,
         measurer,
     };
-    let (w, h) = (e.u(scene.width), e.u(scene.height));
+    let (w, h) = (e.u(view.w), e.u(view.h));
     e.header(w, h);
     e.rec(EMR_SETMAPMODE, &le(&[1])); // MM_TEXT: one logical unit is one device unit
+    if view.x != 0.0 || view.y != 0.0 {
+        // The view's corner is the top-left of the picture.
+        e.rec(EMR_SETWINDOWORGEX, &le_i(&[e.u(view.x), e.u(view.y)]));
+    }
     e.rec(EMR_SETBKMODE, &le(&[1])); // TRANSPARENT
     e.rec(EMR_SETPOLYFILLMODE, &le(&[2])); // WINDING, as SVG fills
     e.rec(EMR_SETMITERLIMIT, &le(&[4]));
     if scene.background.a > 0 {
-        let rect = crate::Rect { x: 0.0, y: 0.0, w: scene.width, h: scene.height };
-        e.item(&Item::Rect { rect, fill: Some(scene.background), stroke: None });
+        e.item(&Item::Rect { rect: view, fill: Some(scene.background), stroke: None });
     }
     for layer in &scene.layers {
         layer.grid.iter().for_each(|it| e.item(it));

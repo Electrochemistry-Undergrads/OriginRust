@@ -7,24 +7,28 @@ use std::fmt::Write;
 
 /// Writes the scene as an SVG document.
 pub fn write_svg(scene: &Scene) -> String {
+    write_svg_view(scene, crate::Rect { x: 0.0, y: 0.0, w: scene.width, h: scene.height }, 1.0)
+}
+
+/// Writes the part `view` of the page (page points) as an SVG document drawn `scale` times as
+/// large: the size on the root element is `view` x `scale`, the drawing keeps its units through
+/// the `viewBox`, and the background fills the whole view even where it is off the page.
+pub fn write_svg_view(scene: &Scene, view: crate::Rect, scale: f64) -> String {
     let mut s = String::with_capacity(16 * 1024);
     s.push_str("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"");
-    push_num(&mut s, scene.width);
+    push_num(&mut s, view.w * scale);
     s.push_str("pt\" height=\"");
-    push_num(&mut s, scene.height);
-    s.push_str("pt\" viewBox=\"0 0 ");
-    push_num(&mut s, scene.width);
+    push_num(&mut s, view.h * scale);
+    s.push_str("pt\" viewBox=\"");
+    push_num(&mut s, view.x);
     s.push(' ');
-    push_num(&mut s, scene.height);
+    push_num(&mut s, view.y);
+    s.push(' ');
+    push_num(&mut s, view.w);
+    s.push(' ');
+    push_num(&mut s, view.h);
     s.push_str("\">\n");
-    write_item(
-        &mut s,
-        &Item::Rect {
-            rect: crate::Rect { x: 0.0, y: 0.0, w: scene.width, h: scene.height },
-            fill: Some(scene.background),
-            stroke: None,
-        },
-    );
+    write_item(&mut s, &Item::Rect { rect: view, fill: Some(scene.background), stroke: None });
     for (i, layer) in scene.layers.iter().enumerate() {
         write_layer(&mut s, i, layer);
     }

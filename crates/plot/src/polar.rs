@@ -26,6 +26,9 @@ pub struct PolarMap {
     /// Where angle 0 is, in degrees counter-clockwise from the right.
     pub zero_deg: f64,
     pub clockwise: bool,
+    /// A radar chart: the first spoke points up, the spokes follow clockwise, and the rings and
+    /// the outline are polygons (graphing spec section 14.19).
+    pub radar: bool,
 }
 
 impl PolarMap {
@@ -35,8 +38,15 @@ impl PolarMap {
             cx: frame.x + frame.w / 2.0,
             cy: frame.y + frame.h / 2.0,
             radius: frame.w.min(frame.h) / 2.0,
-            zero_deg: if p.zero_deg.is_finite() { p.zero_deg } else { 0.0 },
-            clockwise: p.clockwise,
+            zero_deg: if p.radar {
+                90.0
+            } else if p.zero_deg.is_finite() {
+                p.zero_deg
+            } else {
+                0.0
+            },
+            clockwise: p.clockwise || p.radar,
+            radar: p.radar,
         }
     }
 
@@ -92,6 +102,39 @@ pub(crate) fn angle_axis(axis: &Axis) -> ResolvedAxis {
     r
 }
 
+/// The angle axis of a radar layer: one major tick per spoke, at `360 i / n` degrees, labelled with
+/// the spoke's name.
+pub(crate) fn radar_axis(names: &[String]) -> ResolvedAxis {
+    let n = names.len().max(1) as f64;
+    ResolvedAxis {
+        min: 0.0,
+        max: 360.0,
+        step: 360.0 / n,
+        scale: ScaleKind::Linear,
+        major: (0..names.len()).map(|i| 360.0 * i as f64 / n).collect(),
+        minor: Vec::new(),
+        labels: names.to_vec(),
+        reversed: false,
+        gap: None,
+        minor_labels: Vec::new(),
+    }
+}
+
+/// A closed polygon through the points at `u` times the radius on every spoke.
+fn polygon(d: &mut String, map: &PolarMap, spokes: &[f64], u: f64) {
+    for (i, &a) in spokes.iter().enumerate() {
+        let p = map.point(a, u);
+        if i == 0 {
+            move_to(d, p.0, p.1);
+        } else {
+            line_to(d, p.0, p.1);
+        }
+    }
+    if !spokes.is_empty() {
+        d.push('Z');
+    }
+}
+
 fn circle(d: &mut String, cx: f64, cy: f64, r: f64) {
     move_to(d, cx, cy - r);
     for (x, y) in [(cx, cy + r), (cx, cy - r)] {
@@ -121,7 +164,11 @@ pub(crate) fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry
         for &v in ticks {
             let u = geom.y.to_unit(v);
             if u.is_finite() && u > 1e-9 && u < 1.0 - 1e-9 {
-                circle(&mut d, map.cx, map.cy, u * map.radius);
+                if map.radar {
+                    polygon(&mut d, &map, &geom.x.major, u);
+                } else {
+                    circle(&mut d, map.cx, map.cy, u * map.radius);
+                }
             }
         }
         if !d.is_empty() {
@@ -176,7 +223,11 @@ pub(crate) fn draw_angle_axis(
         return edges;
     }
     let mut d = String::new();
-    circle(&mut d, map.cx, map.cy, map.radius);
+    if map.radar {
+        polygon(&mut d, &map, &geom.x.major, 1.0);
+    } else {
+        circle(&mut d, map.cx, map.cy, map.radius);
+    }
     out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(paint.line, axis.line_width_pt)) });
     // Ticks across the circle.
     if let Some((a, b)) = tick_span(axis.major_tick, axis.major_tick_len_pt) {
@@ -231,15 +282,20 @@ pub(crate) fn draw_radius_axis(
         return;
     }
     let mut d = String::new();
+    // A radar chart has the axis on its first spoke only: from the centre up.
     move_to(&mut d, map.cx, map.cy - map.radius);
-    line_to(&mut d, map.cx, map.cy + map.radius);
+    line_to(&mut d, map.cx, if map.radar { map.cy } else { map.cy + map.radius });
     out.push(Item::Path {
         d,
         fill: None,
         stroke: Some(Stroke { cap: Cap::Square, ..Stroke::solid(paint.line, axis.line_width_pt) }),
     });
     // The ticks point left (out) or right (in) of the axis line.
-    let rows = |u: f64| if u < 1e-9 { vec![map.cy] } else { vec![map.cy - u * map.radius, map.cy + u * map.radius] };
+    let rows = |u: f64| match (u < 1e-9, map.radar) {
+        (true, _) => vec![map.cy],
+        (false, true) => vec![map.cy - u * map.radius],
+        (false, false) => vec![map.cy - u * map.radius, map.cy + u * map.radius],
+    };
     let mut d = String::new();
     for (values, dir, len) in [
         (&geom.y.major, axis.major_tick, axis.major_tick_len_pt),

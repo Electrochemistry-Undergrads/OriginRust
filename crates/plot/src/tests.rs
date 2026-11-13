@@ -3002,3 +3002,108 @@ fn a_radius_outside_the_axis_range_is_not_drawn() {
     assert!(geom.checked_data_to_page(0.0, 2.0).is_none());
     assert!(geom.checked_data_to_page(0.0, -0.5).is_none());
 }
+
+// ----- radar charts (graphing spec 14.19) ---------------------------------------------------------
+
+/// Six spokes named by a text X column and two Y columns.
+fn radar_probe() -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let names = ["Speed", "Power", "Range", "Comfort", "Safety", "Price"].map(String::from).to_vec();
+    p.add_column(book, 0, Designation::X, ColumnData::text(names)).unwrap();
+    let g = p.add_graph(Template::Radar);
+    for (i, y) in [vec![4.0, 3.0, 5.0, 2.0, 4.5, 3.5], vec![2.0, 4.5, 3.0, 4.0, 2.5, 5.0]].into_iter().enumerate() {
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        p.column_mut(yc).unwrap().long_name = format!("Model {}", i + 1);
+        p.add_plot(g, 0, yc).unwrap();
+    }
+    (p, g)
+}
+
+#[test]
+fn golden_radar_template() {
+    let (p, g) = radar_probe();
+    compare_golden("radar", &svg_of(&p, g));
+}
+
+#[test]
+fn radar_spokes_are_evenly_spaced_from_twelve_oclock_clockwise_and_named_by_the_x_column() {
+    let (p, g) = radar_probe();
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.expect("a radar layer is a polar layer");
+    assert_eq!(geom.x.major, [0.0, 60.0, 120.0, 180.0, 240.0, 300.0]);
+    assert_eq!(geom.x.labels, ["Speed", "Power", "Range", "Comfort", "Safety", "Price"]);
+    let top = geom.y.max;
+    let (x0, y0) = geom.data_to_page(0.0, top);
+    assert!((x0 - map.cx).abs() < 1e-6 && (y0 - (map.cy - map.radius)).abs() < 1e-6, "first spoke up");
+    let (x1, y1) = geom.data_to_page(60.0, top);
+    assert!(x1 > map.cx && y1 < map.cy, "the second spoke is up and to the right (clockwise)");
+    let (x3, y3) = geom.data_to_page(180.0, top);
+    assert!((x3 - map.cx).abs() < 1e-6 && y3 > map.cy, "the fourth of six points down");
+    // The radial scale starts at 0 in the centre although the values start at 2.
+    assert_eq!(geom.y.min, 0.0);
+    let (cx, cy) = geom.data_to_page(0.0, 0.0);
+    assert!((cx - map.cx).abs() < 1e-6 && (cy - map.cy).abs() < 1e-6);
+    let t = texts(&doc(&svg_of(&p, g)));
+    for name in ["Speed", "Power", "Range", "Comfort", "Safety", "Price"] {
+        assert!(t.iter().any(|x| x == name), "{name} in {t:?}");
+    }
+    // The radius labels stand on the first spoke only: each once.
+    for v in geom.y.labels.iter().skip(1) {
+        assert_eq!(t.iter().filter(|x| *x == v).count(), 1, "{v} once in {t:?}");
+    }
+}
+
+#[test]
+fn a_radar_polygon_runs_through_the_values_and_closes_on_the_first_spoke() {
+    let (p, g) = radar_probe();
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let paths: Vec<String> = with_class(&d, "plots")
+        .iter()
+        .flat_map(|n| paths_in(*n))
+        .filter_map(|n| n.attribute("d").map(String::from))
+        .collect();
+    let numbers = |s: &str| -> Vec<f64> {
+        s.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-')).filter_map(|t| t.parse().ok()).collect()
+    };
+    let first = paths
+        .iter()
+        .map(|s| numbers(s))
+        .find(|n| n.len() == 14)
+        .unwrap_or_else(|| panic!("a line of 7 points (6 spokes and the closing one) in {paths:?}"));
+    let (sx, sy) = geom.data_to_page(0.0, 4.0);
+    assert!((first[0] - sx).abs() < 0.05 && (first[1] - sy).abs() < 0.05, "starts at the value on spoke 1");
+    assert!((first[12] - first[0]).abs() < 1e-6 && (first[13] - first[1]).abs() < 1e-6, "ends where it started");
+    let (px, py) = geom.data_to_page(60.0, 3.0);
+    assert!((first[2] - px).abs() < 0.05 && (first[3] - py).abs() < 0.05, "second point on spoke 2");
+}
+
+#[test]
+fn a_radar_chart_without_an_x_column_numbers_its_spokes() {
+    let (p, g) = project(Template::Radar, vec![], vec![vec![1.0, 2.0, 3.0, 4.0]]);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert_eq!(geom.x.labels, ["1", "2", "3", "4"]);
+    assert_eq!(geom.x.major, [0.0, 90.0, 180.0, 270.0]);
+}
+
+#[test]
+fn a_radar_polygon_draws_one_symbol_per_row_and_keeps_masked_rows() {
+    let (mut p, g) = radar_probe();
+    let plain = svg_of(&p, g);
+    let symbols = |svg: &str| {
+        let d = doc(svg);
+        with_class(&d, "plots")
+            .iter()
+            .flat_map(|n| paths_in(*n))
+            .filter_map(|n| n.attribute("d").map(|s| s.matches('M').count()))
+            .collect::<Vec<_>>()
+    };
+    // The closing point of a polygon of 6 rows carries no symbol: no path has 7 subpaths.
+    assert!(symbols(&plain).iter().all(|&n| n != 7), "{:?}", symbols(&plain));
+    let y = p.graph(g).unwrap().layers[0].plots[0].y;
+    p.column_mut(y).unwrap().mask.insert(2);
+    let masked = svg_of(&p, g);
+    assert!(masked.contains("#FF0000"), "masked row is red");
+}

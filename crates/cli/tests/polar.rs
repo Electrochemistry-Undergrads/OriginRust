@@ -51,3 +51,35 @@ fn polar_r_theta_takes_the_radius_from_x() {
     let layer = &project.graphs().next().unwrap().layers[0];
     assert!(matches!(layer.coords, Coords::Polar(c) if c.radius == RadiusColumn::X));
 }
+
+#[test]
+fn radar_names_the_spokes_by_the_first_column_and_closes_each_polygon() {
+    let dir = scratch("radar");
+    let csv = dir.join("radar.csv");
+    std::fs::write(&csv, "Skill,A,B\nSpeed,4,2\nPower,3,4.5\nRange,5,3\nComfort,2,4\nSafety,4.5,2.5\nPrice,3.5,5\n")
+        .unwrap();
+    let (svg, saved) = (dir.join("o.svg"), dir.join("p.sheaf"));
+    let out = Command::new(env!("CARGO_BIN_EXE_sheaf"))
+        .args([
+            "plot",
+            csv.to_str().unwrap(),
+            "-t",
+            "radar",
+            "-o",
+            svg.to_str().unwrap(),
+            "--save",
+            saved.to_str().unwrap(),
+        ])
+        .output()
+        .expect("the program starts");
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let svg = std::fs::read_to_string(&svg).unwrap();
+    for name in ["Speed", "Power", "Range", "Comfort", "Safety", "Price"] {
+        assert!(svg.contains(&format!(">{name}<")), "{name} missing");
+    }
+    assert!(svg.contains("Z"), "the grid polygons are closed paths");
+    let project = sheaf_io::project_file::load(&saved).unwrap();
+    let layer = &project.graphs().next().unwrap().layers[0];
+    assert!(layer.coords.polar().is_some_and(|p| p.radar));
+    assert_eq!(layer.plots.len(), 2);
+}

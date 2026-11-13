@@ -247,11 +247,16 @@ pub struct PolarCoords {
     /// True when the angle grows clockwise. Origin's default is counter-clockwise.
     #[serde(default)]
     pub clockwise: bool,
+    /// True for a radar chart (graphing spec section 14.19): the rows are the spokes, evenly spaced
+    /// from 12 o'clock clockwise, whatever `zero_deg` and `clockwise` say, and the grid is made of
+    /// polygons.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub radar: bool,
 }
 
 impl Default for PolarCoords {
     fn default() -> Self {
-        PolarCoords { radius: RadiusColumn::Y, zero_deg: 0.0, clockwise: false }
+        PolarCoords { radius: RadiusColumn::Y, zero_deg: 0.0, clockwise: false, radar: false }
     }
 }
 
@@ -1520,6 +1525,18 @@ mod polar_tests {
         assert_eq!(back, polar);
         let c = back.coords.polar().unwrap();
         assert_eq!((c.radius, c.zero_deg, c.clockwise), (RadiusColumn::X, 90.0, true));
+    }
+
+    #[test]
+    fn the_radar_template_is_a_polar_layer_with_the_radar_flag_and_round_trips() {
+        assert_eq!(Template::from_name("radar"), Some(Template::Radar));
+        let l = Template::Radar.new_graph(WindowId(1), "R").layers.remove(0);
+        assert!(l.coords.polar().is_some_and(|c| c.radar));
+        assert_eq!(l.default_kind, crate::graph::PlotKind::LineSymbol);
+        let back: Layer = serde_json::from_str(&serde_json::to_string(&l).unwrap()).unwrap();
+        assert_eq!(back, l);
+        let plain = serde_json::to_string(&Template::Polar.new_graph(WindowId(1), "P").layers[0]).unwrap();
+        assert!(!plain.contains("radar"), "polar layers are written as before");
     }
 
     #[test]

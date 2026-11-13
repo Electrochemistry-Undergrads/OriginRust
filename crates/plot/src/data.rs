@@ -62,6 +62,11 @@ pub(crate) struct PlotData<'a> {
     pub size_z: Option<&'a [f64]>,
     /// The values that set the colour of each symbol of a colour mapped plot.
     pub color_z: Option<&'a [f64]>,
+    /// The spoke names of a plot of a radar layer (graphing spec 14.19); `None` elsewhere.
+    pub spokes: Option<Vec<String>>,
+    /// The last row is the first point repeated to close a radar polygon: the line runs to it, but
+    /// no symbol or mask belongs to it.
+    pub closing: bool,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -245,6 +250,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             pie: None,
             size_z: plot.size_from.and_then(|id| project.numeric(id)),
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
+            spokes: None,
+            closing: false,
         };
         match plot.kind {
             PlotKind::Histogram => {
@@ -304,6 +311,9 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         }
         plots.push(pd);
     }
+    if layer.coords.polar().is_some_and(|p| p.radar) {
+        radar_columns(project, &mut plots);
+    }
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     LayerData { plots, members }
@@ -322,6 +332,47 @@ fn polar_columns(pd: &mut PlotData, radius: sheaf_core::graph::RadiusColumn) {
         pd.end = pd.end.min(r.len());
         pd.x = Some(angle);
         pd.y = r;
+    }
+}
+
+/// Reads the plots of a radar layer (graphing spec 14.19) as `(angle, value)` pairs: row `i` of `n`
+/// is the spoke at `360 i / n` degrees, `n` the number of rows of the longest plot, and every plot
+/// ends with its first point again at 360 degrees, which closes the polygon. The spokes are named
+/// by the cells of the first plot's X column, or by the row numbers.
+fn radar_columns(project: &Project, plots: &mut [PlotData]) {
+    let n = plots.iter().map(|pd| pd.end.saturating_sub(pd.start)).max().unwrap_or(0);
+    if n == 0 {
+        return;
+    }
+    let first = &plots[0];
+    let labels = first.plot.x.and_then(|id| project.column(id));
+    let names: Vec<String> = (0..n)
+        .map(|i| {
+            let row = first.start + i;
+            // An empty cell of the X column leaves the spoke with its row number.
+            labels.map(|c| c.cell_text(row)).filter(|t| !t.is_empty()).unwrap_or_else(|| (row + 1).to_string())
+        })
+        .collect();
+    let angle = |i: usize| 360.0 * i as f64 / n as f64;
+    for pd in plots.iter_mut() {
+        // Rows keep their place (the mask counts rows of the column); the first drawn row is
+        // repeated once after the last, at 360 degrees, to close the polygon.
+        let (start, end) = (pd.start, pd.end.min(pd.y.len()));
+        if start >= end {
+            continue;
+        }
+        let mut ys: Vec<f64> = pd.y[..end].to_vec();
+        let mut xs: Vec<f64> = (0..end).map(|r| angle(r.saturating_sub(start))).collect();
+        ys.push(ys[start]);
+        xs.push(360.0);
+        pd.end = ys.len();
+        pd.x = Some(Cow::Owned(xs));
+        pd.y = Cow::Owned(ys);
+        pd.closing = true;
+        pd.err = None;
+        pd.xerr = None;
+        pd.x_format = None;
+        pd.spokes = Some(names.clone());
     }
 }
 

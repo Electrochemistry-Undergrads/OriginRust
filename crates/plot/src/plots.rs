@@ -75,10 +75,12 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let mut lines = String::new();
     let mut symbols = String::new();
-    for &i in mask.range(pd.start..pd.end) {
+    for &i in mask.range(pd.start..pd.end - usize::from(pd.closing)) {
         let Some(p) = page(i) else { continue };
+        // The first point of a radar polygon is also the end of the closing segment.
+        let wrap = (pd.closing && i == pd.start).then_some(pd.end - 1);
         if pd.plot.kind.has_line() && pd.plot.line.width_pt > 0.0 {
-            for j in [i.checked_sub(1), Some(i + 1)].into_iter().flatten() {
+            for j in [i.checked_sub(1), Some(i + 1)].into_iter().flatten().chain(wrap) {
                 if let Some(q) = page(j) {
                     move_to(&mut lines, q.0, q.1);
                     line_to(&mut lines, p.0, p.1);
@@ -767,9 +769,10 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let mut d = String::new();
     // With very many points, symbols that would sit on top of an already drawn
     // one (same small cell of the page) are left out; the picture is the same.
-    let thin = (pd.end - pd.start) / every > SYMBOL_THIN_ABOVE;
+    let end = pd.end - usize::from(pd.closing);
+    let thin = (end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
-    for i in (pd.start..pd.end).step_by(every) {
+    for i in (pd.start..end).step_by(every) {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
             continue;

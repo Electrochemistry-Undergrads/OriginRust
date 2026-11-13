@@ -74,10 +74,12 @@ pub enum Template {
     Polar,
     /// Polar plot with the radius from the X column and the angle from Y ("Polar r(X) theta(Y)").
     PolarRTheta,
+    /// Radar chart: every Y column a closed polygon over spokes named by the X column (Origin's "Radar").
+    Radar,
 }
 
 impl Template {
-    pub const ALL: [Template; 27] = [
+    pub const ALL: [Template; 28] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -101,6 +103,7 @@ impl Template {
         Template::Pie,
         Template::Polar,
         Template::PolarRTheta,
+        Template::Radar,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -137,6 +140,7 @@ impl Template {
             Template::Pie => "pie",
             Template::Polar => "polar",
             Template::PolarRTheta => "polar-r-theta",
+            Template::Radar => "radar",
         }
     }
 
@@ -169,6 +173,7 @@ impl Template {
             Template::Pie => "Pie",
             Template::Polar => "Polar theta(X) r(Y)",
             Template::PolarRTheta => "Polar r(X) theta(Y)",
+            Template::Radar => "Radar",
         }
     }
 
@@ -207,6 +212,7 @@ impl Template {
             Template::Pie => pie(id, name),
             Template::Polar => polar(id, name, RadiusColumn::Y),
             Template::PolarRTheta => polar(id, name, RadiusColumn::X),
+            Template::Radar => radar(id, name),
         }
     }
 }
@@ -433,7 +439,11 @@ fn pie(id: WindowId, name: &str) -> Graph {
 /// and solid (Sheaf's usual grid style, as in Origin's polar template), and the axis titles are
 /// not drawn.
 fn polar(id: WindowId, name: &str, radius: RadiusColumn) -> Graph {
-    let mut g = general(id, name, PlotKind::Line);
+    polar_of(id, name, radius, PlotKind::Line)
+}
+
+fn polar_of(id: WindowId, name: &str, radius: RadiusColumn, kind: PlotKind) -> Graph {
+    let mut g = general(id, name, kind);
     g.page = Page::inches(6.0, 6.0);
     let l = &mut g.layers[0];
     l.frame = Frame { left: 0.2, top: 0.2, width: 0.6, height: 0.6 };
@@ -449,6 +459,23 @@ fn polar(id: WindowId, name: &str, radius: RadiusColumn) -> Graph {
     // The measured probe (spec 14.17) ran the radius axis from the data's smallest to its largest
     // radius: the centre is the smallest value and the circle's edge the largest, no margin.
     l.y_axis.rescale_margin_pct = 0.0;
+    g
+}
+
+/// The radar template: the line + symbol template in a layer of polar coordinates whose spokes are
+/// the rows (graphing spec section 14.19). The grid is made of polygons at the radius ticks and
+/// straight spokes; the spoke names stand outside, the outer polygon has no ticks.
+fn radar(id: WindowId, name: &str) -> Graph {
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
+    let l = &mut g.layers[0];
+    l.coords = Coords::Polar(PolarCoords { zero_deg: 90.0, clockwise: true, radar: true, ..PolarCoords::default() });
+    // Wider than the polar page: the legend stands to the right of the circle and the spoke names.
+    g.page = Page::inches(8.0, 6.0);
+    let l = &mut g.layers[0];
+    l.frame = Frame { left: 0.1, top: 0.2, width: 0.45, height: 0.6 };
+    l.legend.position = LegendPosition::Manual { x: 1.65, y: 0.12 };
+    l.x_axis.major_tick = TickDirection::None;
+    l.y_axis.major_tick_len_pt = 5.0;
     g
 }
 
@@ -660,7 +687,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 27);
+        assert_eq!(Template::ALL.len(), 28);
     }
 
     #[test]

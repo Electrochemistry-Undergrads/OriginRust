@@ -345,7 +345,7 @@ fn build(bar: Bar) -> Vec<Item> {
             g(PlotBubble, "Bubble"),
             b(PlotPolar, "Polar theta(X) r(Y)", Cmd::Plot(Template::Polar), "Polar theta(X) r(Y)"),
             g(PlotTernary, "Ternary"),
-            g(PlotRadar, "Radar"),
+            b(PlotRadar, "Radar", Cmd::Plot(Template::Radar), "Radar"),
         ],
         Bar::Tools => vec![
             tool(Pointer, "Pointer", Cmd::Pointer),

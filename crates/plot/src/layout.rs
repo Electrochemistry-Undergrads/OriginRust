@@ -10,10 +10,11 @@
 //! on a smaller front frame and draws each later curve moved right and up.
 
 use crate::data::{self, Dim, LayerData, PlotData};
+use crate::fill;
 use crate::fonts::TextMeasurer;
 use crate::hit;
 use crate::legend;
-use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
+use crate::plots::{draw_plot, line_stroke, plot_line_stroke, symbol_item, symbol_path};
 use crate::polar;
 use crate::scene::{
     Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
@@ -44,6 +45,7 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
     // layer) is drawn after all layers, so that no layer's curves cover it.
     for (i, layer) in g.layers.iter().enumerate() {
         if layer.legend.scope == LegendScope::Graph
+            && layer.display.show_layer
             && let Some(last) = layers.last_mut()
         {
             let entries: Vec<&PlotData> = g.same_frame(i).into_iter().flat_map(|j| pds[j].plots.iter()).collect();
@@ -61,6 +63,12 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
             );
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
+    }
+    // The page's border line, over everything, inside the page edge.
+    if let (Some(border), Some(last)) = (g.page.style.border.as_ref().filter(|b| b.width_pt > 0.0), layers.last_mut()) {
+        let inset = border.width_pt / 2.0;
+        let rect = Rect { x: inset, y: inset, w: g.page.width_pt - 2.0 * inset, h: g.page.height_pt - 2.0 * inset };
+        last.overlay.push(Item::Rect { rect, fill: None, stroke: Some(fill::border_stroke(border)) });
     }
     Ok(Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers })
 }
@@ -529,6 +537,10 @@ fn layer_scene(
     let layer = &g.layers[index];
     let mut scene =
         LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
+    if !layer.display.show_layer {
+        return scene;
+    }
+    fill::draw_background(&mut scene.grid, &layer.background, geom.frame);
     let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
     let waterfall = stack::waterfall(g, index);
     // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
@@ -548,9 +560,10 @@ fn layer_scene(
         }
         (&layer.x_axis, &layer.y_axis)
     };
+    let shown: &[PlotData] = if layer.display.show_plots { pds } else { &[] };
     match waterfall {
         None => {
-            for pd in pds {
+            for pd in shown {
                 let start = scene.plots.len();
                 draw_plot(&mut scene.plots, pd, geom);
                 let kind = ObjectKind::Plot(plot_index(pd));
@@ -559,7 +572,7 @@ fn layer_scene(
         }
         Some((sx, sy)) => {
             // Back to front, so that the first curve is on top; member k moves by k shifts.
-            for pd in pds.iter().rev() {
+            for pd in shown.iter().rev() {
                 let k = pd.member.unwrap_or(0) as f64;
                 let mut moved = geom.clone();
                 moved.frame.x += k * sx * geom.frame.w;
@@ -574,25 +587,35 @@ fn layer_scene(
     let objects = &mut scene.objects;
     let out = &mut scene.overlay;
     let f = geom.frame;
+    fill::draw_border(out, &layer.background, geom.frame);
     let first_color = plot_color(pds);
     let (xp, yp) = (AxisPaint::new(xa, first_color), AxisPaint::new(ya, first_color));
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
+    let axes_shown = layer.display.show_axes;
     if geom.ternary.is_some() {
-        let start = out.len();
-        ternary::draw_axes(out, project, layer, pds, geom, m);
-        rec(objects, out, start, ObjectKind::XAxis, &[]);
+        if axes_shown {
+            let start = out.len();
+            ternary::draw_axes(out, project, layer, pds, geom, m);
+            rec(objects, out, start, ObjectKind::XAxis, &[]);
+        }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
     if geom.polar.is_some() {
-        let start = out.len();
-        polar::draw_angle_axis(out, xa, &xp, geom, m);
-        rec(objects, out, start, ObjectKind::XAxis, &[]);
-        let start = out.len();
-        polar::draw_radius_axis(out, ya, &yp, geom, m);
-        rec(objects, out, start, ObjectKind::YAxis, &[]);
+        if axes_shown {
+            let start = out.len();
+            polar::draw_angle_axis(out, xa, &xp, geom, m);
+            rec(objects, out, start, ObjectKind::XAxis, &[]);
+            let start = out.len();
+            polar::draw_radius_axis(out, ya, &yp, geom, m);
+            rec(objects, out, start, ObjectKind::YAxis, &[]);
+        }
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
+    if !axes_shown {
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
@@ -664,6 +687,9 @@ fn draw_legend_and_labels(
         let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
         draw_legend(out, project, &layer.legend, f, &entries, &ids, &edge_ticks(g, index), m);
         rec(objects, out, start, ObjectKind::Legend, &[]);
+    }
+    if !layer.display.show_labels {
+        return;
     }
     for (k, label) in layer.labels.iter().enumerate() {
         let start = out.len();
@@ -1283,7 +1309,7 @@ fn draw_legend(
                         let mut d = String::new();
                         move_to(&mut d, sx0, cy);
                         line_to(&mut d, sx1, cy);
-                        out.push(Item::Path { d, fill: None, stroke: Some(line_stroke(&plot.line)) });
+                        out.push(Item::Path { d, fill: None, stroke: Some(plot_line_stroke(plot)) });
                     }
                     if plot.kind.has_symbols() {
                         let mut d = String::new();
@@ -1300,12 +1326,13 @@ fn draw_legend(
                     } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
-                        out.push(Item::Rect {
-                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
-                            fill: Some(plot.symbol.color),
-                            stroke: (plot.line.width_pt > 0.0)
-                                .then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
-                        });
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            plot.symbol.color,
+                            &plot.details.fill,
+                            (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
+                        );
                     }
                     x = sx1;
                     after_symbol = true;

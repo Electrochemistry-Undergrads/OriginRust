@@ -597,6 +597,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 hist: Default::default(),
                 size_from: None,
                 color_from: None,
+                details: Default::default(),
             });
         }
         layer.recolor_automatic();

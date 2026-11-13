@@ -419,6 +419,7 @@ impl Project {
             hist: Default::default(),
             size_from: None,
             color_from: None,
+            details: Default::default(),
         });
         l.recolor_automatic();
         Ok(())
@@ -435,6 +436,38 @@ impl Project {
             Some(c) => c.display_name().to_string(),
             None => "(missing column)".to_string(),
         }
+    }
+
+    /// The text Plot Details writes for a plot in its tree: the data it draws, in the notation
+    /// `[Book1]Sheet1! "Conc"(X), "Signal"(Y) [1*:10*]`: the book and sheet, the column names (long
+    /// name, else short name) with their role, and the rows. A star after a row number says that the end
+    /// follows the data; a row range chosen for the plot is written without stars. The Y error
+    /// column is added as `"Err"(yEr)`, the X error as `"Err"(xEr)`. A plot whose column is gone
+    /// reads `(missing column)`.
+    pub fn plot_tree_text(&self, plot: &Plot) -> String {
+        let Some((book, sheet, y)) = self.locate(plot.y) else { return "(missing column)".to_string() };
+        let name = |c: &Column| format!("\"{}\"", c.display_name());
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(x) = plot.x.and_then(|id| self.column(id)) {
+            parts.push(format!("{}(X)", name(x)));
+        }
+        parts.push(format!("{}(Y)", name(y)));
+        if let Some(e) = plot.y_error.and_then(|id| self.column(id)) {
+            parts.push(format!("{}(yEr)", name(e)));
+        }
+        if let Some(e) = plot.x_error.and_then(|id| self.column(id)) {
+            parts.push(format!("{}(xEr)", name(e)));
+        }
+        let rows = match plot.rows {
+            Some((a, b)) => format!("[{}:{}]", a + 1, b),
+            None => format!("[1*:{}*]", y.len()),
+        };
+        format!("[{}]{}! {} {}", book.name, sheet.name, parts.join(", "), rows)
+    }
+
+    /// The workbook that holds the Y column of a plot (what Plot Details' Workbook button shows).
+    pub fn plot_book(&self, plot: &Plot) -> Option<WindowId> {
+        self.locate(plot.y).map(|(b, _, _)| b.id)
     }
 
     /// The Y columns a new graph of `template` should show for a sheet.
@@ -761,6 +794,23 @@ mod tests {
         let x = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
         let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 4.0, 9.0])).unwrap();
         (p, book, x, y)
+    }
+
+    #[test]
+    fn the_plot_tree_text_names_book_sheet_columns_and_rows() {
+        let (mut p, book, x, y) = sample();
+        let g = p.add_graph(Template::Line);
+        p.add_plot_xy(g, 0, Some(x), y, None).unwrap();
+        p.column_mut(y).unwrap().long_name = "Signal".into();
+        let plot = p.graph(g).unwrap().layers[0].plots[0].clone();
+        let sheet = p.workbook(book).unwrap().sheets[0].name.clone();
+        assert_eq!(p.plot_tree_text(&plot), format!("[Book1]{sheet}! \"A\"(X), \"Signal\"(Y) [1*:3*]"));
+        let ranged = Plot { rows: Some((1, 3)), ..plot.clone() };
+        assert!(p.plot_tree_text(&ranged).ends_with("[2:3]"));
+        assert_eq!(p.plot_book(&plot), Some(book));
+        let gone = Plot { y: ColumnId(999), ..plot };
+        assert_eq!(p.plot_tree_text(&gone), "(missing column)");
+        assert_eq!(p.plot_book(&gone), None);
     }
 
     #[test]

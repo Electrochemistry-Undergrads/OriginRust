@@ -102,7 +102,7 @@ fn bars() -> Project {
             p.add_plot_xy(id, 0, None, c[y], None).unwrap();
         }
         name(&mut p, id, n);
-        p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: gap, overlap_pct: overlap };
+        p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: gap, overlap_pct: overlap, width_pct: None };
     }
     p
 }

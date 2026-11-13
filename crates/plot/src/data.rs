@@ -4,7 +4,8 @@ use crate::{Rect, stack};
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
 use sheaf_core::graph::{
-    Axis, BarSpacing, ErrorDirection, Frame, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat, TickLabelSource,
+    Axis, BarSpacing, ErrorDirection, Frame, LabelForm, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat,
+    TickLabelSource,
 };
 use sheaf_core::{Column, Project};
 use std::borrow::Cow;
@@ -67,6 +68,8 @@ pub(crate) struct PlotData<'a> {
     /// The last row is the first point repeated to close a radar polygon: the line runs to it, but
     /// no symbol or mask belongs to it.
     pub closing: bool,
+    /// The cells of the label column of a plot whose data labels come from a column, one per row.
+    pub label_texts: Option<Vec<String>>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -252,6 +255,10 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
             spokes: None,
             closing: false,
+            label_texts: match plot.details.labels.form {
+                LabelForm::Column { column } if plot.details.labels.enabled => project.column(column).map(cell_texts),
+                _ => None,
+            },
         };
         match plot.kind {
             PlotKind::Histogram => {
@@ -394,6 +401,8 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
     // Histogram bars touch.
     let gap = if plots[first].plot.kind == PlotKind::Histogram {
         0.0
+    } else if let Some(w) = bars.width_pct {
+        1.0 - percent(w, 0.0, 100.0, 100.0 - sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
     } else {
         percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
     };

@@ -166,6 +166,7 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
             width_pt: pw / PAGE_UNITS_PER_INCH * 72.0,
             height_pt: ph / PAGE_UNITS_PER_INCH * 72.0,
             background: Color::WHITE,
+            style: Default::default(),
         };
     } else {
         notes.push("the page size could not be read; a default size was used".into());
@@ -860,6 +861,7 @@ fn read_curve(
         hist: Default::default(),
         size_from: None,
         color_from: None,
+        details: Default::default(),
     };
     // A plot group colours its members from a colour list by their place in the group. The list
     // is not always Origin's base palette (the owner's XRD figure draws black, red, blue, dark

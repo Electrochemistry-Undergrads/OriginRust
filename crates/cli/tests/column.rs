@@ -112,7 +112,7 @@ fn label_angle_bar_gap_and_overlap_are_set_and_checked() {
     );
     let l = layer(&p);
     assert_eq!(l.x_axis.tick_label_angle_deg, 45.0);
-    assert_eq!(l.bars, BarSpacing { gap_pct: 0.0, overlap_pct: -20.0 });
+    assert_eq!(l.bars, BarSpacing { gap_pct: 0.0, overlap_pct: -20.0, width_pct: None });
     assert_eq!(l.plots.len(), 2);
     assert_eq!(svg.matches("transform=\"rotate(-45 ").count(), 5, "the five sample names are turned");
 

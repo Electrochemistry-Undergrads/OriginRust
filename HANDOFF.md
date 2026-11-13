@@ -35,6 +35,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `plot-radar`, `plot-ternary`, `plot-pie-origin` | "mac" (macOS, no Origin) | T12: radar and ternary on `Layer::coords`; 3D Color Pie and 2D B&W Pie replace "2D Color Pie" | started 2026-11-13 |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

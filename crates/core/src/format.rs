@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn full_precision_matches_origin_export() {
-        // Values and texts measured with expASC in Origin 2016.
+        // Values and texts measured with expASC in Origin.
         let cases: [(f64, &str); 20] = [
             (123456.789, "123456.789"),
             (0.123456789012345, "0.123456789012345"),

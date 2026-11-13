@@ -32,6 +32,14 @@ re-workspace/
 
 # Secrets, logs, machine-specific files
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
 *.log
 .claude/settings.local.json
 register-rea-desktop.mjs

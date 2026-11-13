@@ -1,11 +1,11 @@
 //! Confidence and prediction bands (`docs/spec/fitting-bands.md`).
 //!
-//! The straight-line numbers below were produced by Origin 2016 with
+//! The straight-line numbers below were produced by Origin with
 //! `tools/origin-ref/bands-linear.lines.txt` on data we generated: x = 1..12 and
 //! y = 2 + 0.5 x + 0.3 sin(3 x). Origin supplied the regression (intercept, slope), the residual
 //! sum of squares and degrees of freedom, the mean and spread of x and the Student t quantiles;
 //! the band half widths are Origin's closed form for a line evaluated from those numbers (the form
-//! is written in the Origin C source shipped with Origin 2016). The bands themselves cannot be read
+//! is written in the Origin C source shipped with Origin). The bands themselves cannot be read
 //! from a script without changing the owner's dialog settings.
 
 use sheaf_fit::library;
@@ -14,7 +14,7 @@ use sheaf_fit::nlsf::{FitOptions, fit};
 use sheaf_fit::report::Weighting;
 use sheaf_fit::{bands, dist};
 
-// Origin 2016 output (see the script).
+// Origin output (see the script).
 const A: f64 = 2.031_994_928_083_539;
 const B: f64 = 0.493_324_262_056_351_5;
 const N: f64 = 12.0;

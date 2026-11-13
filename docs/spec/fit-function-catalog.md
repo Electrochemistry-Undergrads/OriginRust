@@ -1,4 +1,4 @@
-# Fit function catalog (Origin 2016 built-in library)
+# Fit function catalog (Origin built-in library)
 
 Summary. This catalog covers 237 fit-function definitions, grouped by primary category. Formulas use plain mathematics; `x` is the independent variable, with `y` also used by surface functions. The machine-readable catalog is `data/fit-functions.json`. Priority: P0 = everyday fitting needs (peaks, exponentials, lines and sigmoids), P1 = common, P2 = later. Entries marked [inferred] still need verification.
 

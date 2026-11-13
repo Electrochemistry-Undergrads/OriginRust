@@ -1,25 +1,32 @@
 <p align="center">
-  <img src="docs/brand/sheaf.png" width="160" height="160" alt="Sheaf bronze S logo">
+  <img src="docs/brand/sheaf.png" width="128" height="128" alt="Sheaf bronze S logo">
 </p>
 
+<h1 align="center">Sheaf</h1>
+
 <p align="center">
-  <b>Lab data. Clear figures.</b><br>
-  A native Rust app for workbooks, scientific plots, and data analysis.
+  <b>Scientific data analysis and graphing, Sheaf: an independent, open-source implementation of Origin and OriginPro workflows, built in Rust.</b><br>
+  Workbooks, scientific plots, curve fitting, and data analysis,<br>
+  in a native app written in Rust. Open source and offline.
 </p>
 
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/built_with-Rust-b7410e?style=flat-square&amp;logo=rust">
-  <a href="#license"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-6b5b4b?style=flat-square"></a>
-  <img alt="Early development" src="https://img.shields.io/badge/status-early_development-a66b3f?style=flat-square">
+  <img alt="macOS · Windows" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows-native-2f7bf5?style=flat-square">
+  <a href="#license-and-credits"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-3a3a3a?style=flat-square"></a>
+  <img alt="Early development" src="https://img.shields.io/badge/status-early_development-d69e2e?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#features">Features</a> ·
-  <a href="#get-started">Get started</a> ·
   <a href="#command-line">Command line</a> ·
+  <a href="#under-the-hood">Under the hood</a> ·
+  <a href="#get-started">Get started</a> ·
   <a href="#documentation">Documentation</a> ·
-  <a href="#license">License</a>
+  <a href="#license-and-credits">License and credits</a>
 </p>
+
+<br>
 
 ## Features
 
@@ -27,17 +34,17 @@
   <tr>
     <td width="50%" valign="top">
       <h3>Bring your data</h3>
-      Import CH Instruments files and CSV into workbooks.
+      Import CH Instruments text and binary files, CSV, and other delimited text into workbooks.
     </td>
     <td width="50%" valign="top">
       <h3>Make your figures</h3>
-      Overlay curves, adjust axes and legends, and export PNG, SVG, or PDF.
+      Overlay curves, adjust axes and legends, and export PNG, SVG, PDF, EPS, EMF, or TIFF.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <h3>Find the signal</h3>
-      Integrate, smooth, find peaks, run statistics, and fit curves.
+      Integrate, smooth, find peaks, run statistics, and fit linear, polynomial, or nonlinear models.
     </td>
     <td width="50%" valign="top">
       <h3>Keep your workflow</h3>
@@ -47,8 +54,38 @@
 </table>
 
 > [!NOTE]
-> Early development. Expect rough edges; Origin `.opj` support is partial.
+> Early development. Origin/OriginPro feature coverage and Origin `.opj` support are partial.
+> Expect rough edges; Sheaf is not yet a complete replacement for Origin or OriginPro.
 > See the [roadmap](docs/ROADMAP.md) for current progress.
+
+## Command line
+
+```sh
+# Import data into a project
+cargo run --release -p sheaf-cli -- import run1.txt -o experiment.sheaf --plot
+
+# Export a figure
+cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
+
+# Analyze and fit
+cargo run --release -p sheaf-cli -- analyze integrate run1.txt
+cargo run --release -p sheaf-cli -- fit run1.txt --model linear
+
+# Explore the available commands
+cargo run --release -p sheaf-cli -- --help
+```
+
+Projects save as `.sheaf` or Origin `.opj`; see the
+[project format documentation](docs/spec/project-file-format.md).
+
+## Under the hood
+
+- Eight Rust crates separate the workbook model, expression language, analysis, fitting,
+  file formats, figure rendering, CLI, and desktop UI.
+- The desktop interface uses egui/eframe with an OpenGL renderer.
+- The desktop app and CLI share the same data, analysis, and rendering crates.
+- Origin compatibility is implemented from observed behavior and documented formats;
+  current gaps are tracked in the [feature parity table](docs/spec/feature-parity.md).
 
 ## Get started
 
@@ -57,22 +94,14 @@ Requires [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
 ```sh
 git clone https://github.com/Electrochemistry-Undergrads/OriginRust.git
 cd OriginRust
-cargo run --release -p sheaf-app
+cargo run --release -p sheaf-app   # the desktop app
+cargo test --workspace --locked   # the test suite
 ```
 
-Drop a data file onto the window, or open one directly:
+Drop a data file onto the window, or open one with
+`cargo run --release -p sheaf-app -- run1.txt`.
 
-```sh
-cargo run --release -p sheaf-app -- run1.txt
-```
-
-## Command line
-
-```sh
-cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
-cargo run --release -p sheaf-cli -- analyze integrate run1.txt
-cargo run --release -p sheaf-cli -- --help
-```
+New contributors: start with [`HANDOFF.md`](HANDOFF.md), then [`docs/`](docs/).
 
 ## Documentation
 
@@ -80,14 +109,13 @@ cargo run --release -p sheaf-cli -- --help
 [Specifications](docs/spec/) ·
 [Design decisions](docs/adr/)
 
-Contributors: start with [HANDOFF.md](HANDOFF.md).
-Run checks with `cargo test --workspace`.
+## License and credits
 
-## License
+Sheaf is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Copyright (c) 2026 Sheaf contributors. Project notices are in [NOTICE](NOTICE).
 
-Sheaf is dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE),
-at your option. Third-party dependencies retain their own licenses.
+Third-party dependencies and their bundled fonts retain their own licenses and notices; see
+[ATTRIBUTION.md](ATTRIBUTION.md). The Sheaf logo was created by the project owner.
 
----
-
-Sheaf is an independent project and is not affiliated with OriginLab.
+<sub>Origin and OriginPro are products of OriginLab; these names describe compatible workflows and file formats.
+Sheaf is an independent project and is not affiliated with, sponsored by, or endorsed by OriginLab.</sub>

@@ -411,7 +411,7 @@ fn the_fixture_is_what_the_writer_makes_and_reads_back() {
 
 #[test]
 fn label_columns_without_a_y_column_are_written_as_unused() {
-    // Origin 2016 opens such a label column as unused (checked in Origin), so the writer says so
+    // Origin opens such a label column as unused (checked in Origin), so the writer says so
     let only_labels = sheet("S", vec![column("A", Designation::Label, texts(&["a", "b"]))]);
     let x_label = sheet(
         "T",

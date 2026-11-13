@@ -639,7 +639,7 @@ fn day(v: f64) -> f64 {
     civil_of(v).map_or(NA, |c| c.2 as f64)
 }
 
-/// Day of the week, 0 = Sunday (measured in Origin 2016).
+/// Day of the week, 0 = Sunday (measured in Origin).
 fn weekday(v: f64) -> f64 {
     if civil_of(v).is_none() {
         return NA;

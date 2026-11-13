@@ -1,4 +1,4 @@
-# Feature parity: Sheaf against Origin 2016 (9.3)
+# Feature parity: Sheaf against Origin (9.3)
 
 A snapshot. Update a row when its feature lands; re-run the audit after each milestone.
 
@@ -32,7 +32,7 @@ Cross-cutting findings:
 - Column formulas recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
 - Analysis and fit results are static sheets, not linked to their source data.
 - The core model holds several layers per graph (linked layers carry double-Y and panels) and the graph window edits any layer; a per-plot choice of left or right Y axis is only on the command line.
-- `crates/io/src/opj/write` writes workbooks, graphs, column formulas and nested folders as Origin 2016 projects. The app saves .opj by default and writes a companion `.opj.sheaf` file for what the writer cannot hold (linked layers, stack offsets, bar gap, area fill, some tick settings, window places); matrices, notes and fit results are not written.
+- `crates/io/src/opj/write` writes workbooks, graphs, column formulas and nested folders as Origin projects. The app saves .opj by default and writes a companion `.opj.sheaf` file for what the writer cannot hold (linked layers, stack offsets, bar gap, area fill, some tick settings, window places); matrices, notes and fit results are not written.
 - Many menu entries and toolbar buttons exist only as grey placeholders with Origin's names; they are counted as missing, not as done.
 
 ## 1 Project, windows and menus
@@ -40,7 +40,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Project save and open, own format | File > Save/Open, Ctrl+S/O | File > Save Project and Save Project As write `.opj` by default (ADR 0008) and a `<name>.opj.sheaf` companion when something cannot be stored; `.sheaf` zip also works; New, Open (a companion opens with its `.opj`), prompt on quit; CLI | ✓ | Save As offers the Origin project type first | P0 |
-| Save project as .opj (owner's request) | File > Save Project As | File > Save Project and Save Project As in the app, CLI `export -o x.opj` and `plot --save`; writer in `io/src/opj/write` stores workbooks, graphs, column formulas with their recalculate mode and nested folders | ◐ | opens in Origin 2016 (spec 13.9, 13.10); not re-run in Origin on 2026-11-12. The writer names what it leaves out and the companion keeps it: the link of double-Y and panel layers, stack offsets, bar gap, area fill (written as a line), tick label source, rotated tick labels, tick number formats, window places; matrices, notes and fit results are not written | P0 |
+| Save project as .opj (owner's request) | File > Save Project As | File > Save Project and Save Project As in the app, CLI `export -o x.opj` and `plot --save`; writer in `io/src/opj/write` stores workbooks, graphs, column formulas with their recalculate mode and nested folders | ◐ | opens in Origin (spec 13.9, 13.10); not re-run in Origin on 2026-11-12. The writer names what it leaves out and the companion keeps it: the link of double-Y and panel layers, stack offsets, bar gap, area fill (written as a line), tick label source, rotated tick labels, tick number formats, window places; matrices, notes and fit results are not written | P0 |
 | Open .opj workbooks and basic graphs | File > Open | `io/src/opj`; app (File > Open, drag and drop), CLI; reads workbooks, graphs, column formulas with their recalculate mode, nested folders, stacked-curve offsets and the second layer of a double-Y graph | ◐ | skips matrices, notes, layouts, fit results, masks, plot groups, legend frames, panel links and sparkline previews (the previews are not graph windows, opj-format.md 10.0); dates read as day numbers; .opju not read; pre-9 graphs unverified | P0 |
 | Undo and redo | Edit > Undo, Ctrl+Z | full history, labelled, Ctrl+Z/Y | ✓ | superset of Origin's one level; Alt+Backspace unbound | P0 |
 | Project Explorer | View > Project Explorer, Alt+1 | auto-hide panel on the left edge (slides out on hover, pin to dock, X and Alt+1 hide it): folder tree over a window list (Name, Long Name, Short Name, Type, sortable), active window in bold, double click shows, right-click Show/Hide/Rename/Delete/Export/Properties, drag a window onto a folder, New Folder | ◐ | no Duplicate, search or filters; folders cannot be renamed or deleted; Properties only edits the long name; no multi-select, F2 or Del keys | P0 |
@@ -86,7 +86,7 @@ Cross-cutting findings:
 | Batch import of many files | multiple files | dialog, drops, CLI `sheaf import <folder or pattern> --mode books/sheets/columns/rows`; CHI files go through the CHI importers | ✓ | | P0 |
 | Partial import | row, column ranges, read/skip patterns | skip rows, max rows | ◐ | no column range or patterns; max rows has no dialog control | P1 |
 | Fixed width, multi-character delimiter | ASCII options | none | ✗ | | P1 |
-| Encoding | none in Origin 2016 | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
+| Encoding | none in Origin | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
 | Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
 | Excel import | File > Import > Excel | none | ✗ | no spreadsheet crate | P1 |
@@ -352,7 +352,7 @@ Progress on 2026-11-12, from reading code: in stage 1, steps 2 to 5, 7 and 8 and
 8. Column formulas that recalculate, and copy, cut and paste of cell ranges.
 
 **Stage 2. The look and feel and .opj saving the owner asked for.**
-1. Write .opj files. This needs a format study of the writer side, checked by opening the result in Origin 2016 through `tools/origin-ref/`. liborigin may be read for understanding, not copied. Start with workbooks, then graphs, so saved work reopens in Origin.
+1. Write .opj files. This needs a format study of the writer side, checked by opening the result in Origin through `tools/origin-ref/`. liborigin may be read for understanding, not copied. Start with workbooks, then graphs, so saved work reopens in Origin.
 2. Origin-style chrome: MDI-style child windows, toolbars (standard, edit, graph, column, worksheet data, 2D graphs), Origin's menu names and order (View, Column, Statistics, Gadgets, Tools, Format) and menus that change with the active window.
 3. Origin's shortcuts (Ctrl+K, Ctrl+Q, Ctrl+D, Ctrl+R, F2, F4, F12 and others), a Project Explorer with folders, Plot Details as a tree, the generic analysis dialog with Preview and Auto Apply.
 4. Layers: a real multi-layer graph UI.

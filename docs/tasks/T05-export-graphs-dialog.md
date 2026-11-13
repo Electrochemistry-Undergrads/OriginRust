@@ -13,7 +13,7 @@ and "Close"; title `Export {name}`. PNG and TIFF are rasterised from the SVG
 (`crates/plot/src/raster.rs`). CLI already takes in, cm, mm, pt, px (`crates/cli/src/args.rs`).
 Copy Page (Ctrl+J) is a fixed 300 dpi bitmap (`app.rs`, search "Copy Page").
 
-## Goal (Origin 2016)
+## Goal (Origin)
 
 1. Dialog title "Export Graphs" with groups: Select Graph(s), File Name(s) with substitution
    (`<long name>` style), Path, Overwrite, Graph Theme; Export Settings / Image Size / Image Settings

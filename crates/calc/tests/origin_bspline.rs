@@ -1,4 +1,4 @@
-//! Cubic B-spline interpolation against numbers from Origin 2016 (`interp1 method:=bspline`).
+//! Cubic B-spline interpolation against numbers from Origin (`interp1 method:=bspline`).
 //!
 //! Reference script: `tools/origin-ref/interp-bspline.labtalk.txt` (run with
 //! `run-labtalk-data.ps1`); data x = 0..10 step 1, evaluated at -1..11 step 0.25.

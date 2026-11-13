@@ -148,7 +148,7 @@ fn smooth_valid(y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
     out
 }
 
-/// FFT filter of Origin 2016 (`smooth method:=fft`, default script options), for points with
+/// FFT filter of Origin (`smooth method:=fft`, default script options), for points with
 /// ascending X. Rules (all observed, see `docs/spec/analysis-tools.md`):
 ///
 /// 1. A straight baseline is subtracted: the line from the mean of the first `w` points (at the

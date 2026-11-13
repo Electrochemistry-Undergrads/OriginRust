@@ -5,7 +5,7 @@
 //! 1970-01-01 (so the value is the number of days since that date plus 2440587,
 //! which is the astronomical day number minus one, counted from midnight). A
 //! column that holds only times of day stores the fraction alone. The numbers
-//! were checked against Origin 2016 (see `docs/spec/workbook-model.md`).
+//! were checked against Origin (see `docs/spec/workbook-model.md`).
 //!
 //! This module turns such numbers into text ([`format_date`], [`format_time`],
 //! [`format_date_time`]) and reads the common text patterns back ([`parse`]).
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn epoch_matches_origin_numbers() {
-        // Numbers produced by Origin 2016's date() and time() (see docs/spec/workbook-model.md).
+        // Numbers produced by Origin's date() and time() (see docs/spec/workbook-model.md).
         assert_eq!(date_value(2026, 11, 11), Some(2_461_355.0));
         assert_eq!(date_value(1970, 1, 1), Some(2_440_587.0));
         assert_eq!(date_value(1900, 1, 1), Some(2_415_020.0));

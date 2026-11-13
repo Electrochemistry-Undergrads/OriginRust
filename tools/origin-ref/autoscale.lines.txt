@@ -1,4 +1,4 @@
-// Origin 2016 autoscale probe: Y linear from lo to hi over 101 rows; X 0..100 then a second X range.
+// Origin autoscale probe: Y linear from lo to hi over 101 rows; X 0..100 then a second X range.
 newbook; col(A)=data(0,100,1); col(B)=-0.2+(1-(-0.2))*col(A)/100; col(C)=-0.2+(1-(-0.2))*col(A)/100;
 plotxy iy:=(3,2) plot:=200;
 double yf1=layer.y.from; double yt1=layer.y.to; double yi1=layer.y.inc; double xf1=layer.x.from; double xt1=layer.x.to; double xi1=layer.x.inc; double ym1=layer.y.minorticks;

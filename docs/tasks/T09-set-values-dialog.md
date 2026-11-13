@@ -9,7 +9,7 @@
 Title "Set column values: B"; Recalculate as a None/Manual/Auto radio row; rows All/From radios;
 buttons OK, Apply, Cancel; Apply always enabled; resizable.
 
-## Origin 2016
+## Origin
 
 - Title `Set Values - [Book1]Sheet1!Col("Signal")`; about 425x335, not resizable.
 - Menu line: Formula, wcol, Col(A), Function, Variables, Options. Function menu inserts a function;

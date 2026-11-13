@@ -1,4 +1,4 @@
-# Origin 2016 (9.3, 64-bit) user interface command map
+# Origin (9.3, 64-bit) user interface command map
 
 Menu, command, dialog and shortcut reference for interface compatibility.
 

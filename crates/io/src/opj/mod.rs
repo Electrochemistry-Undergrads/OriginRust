@@ -1,5 +1,5 @@
 //! Reader and writer for Origin project files (`.opj`, written by Origin 7.5 to 2016). The writer
-//! (`write/`) saves workbooks in the format of Origin 2016.
+//! (`write/`) saves workbooks in the format of Origin.
 //!
 //! It reads workbooks, their sheets and columns (names, long names, units, comments,
 //! designations), the column values and basic graphs (axes, titles, plots; see `graph.rs`).

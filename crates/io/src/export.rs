@@ -1,4 +1,4 @@
-//! Writing a worksheet as delimited text, as Origin 2016's `expASC` does (measured, see
+//! Writing a worksheet as delimited text, as Origin's `expASC` does (measured, see
 //! `docs/spec/import-ascii.md` section 13).
 
 use crate::error::IoError;
@@ -192,7 +192,7 @@ mod tests {
         Column::new(ColumnId(id), name, d, data).with_labels(long, unit, comment)
     }
 
-    /// The sheet that was exported from Origin 2016 for the first probe (`re-workspace/scratch/
+    /// The sheet that was exported from Origin for the first probe (`re-workspace/scratch/
     /// sheet-export/out/d_*.csv`): General columns, a missing value, a text with a comma.
     fn origin_sheet() -> Worksheet {
         let mut s = Worksheet::new("S");

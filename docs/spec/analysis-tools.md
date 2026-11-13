@@ -1,6 +1,6 @@
-# Analysis tools (Origin 2016 behaviour)
+# Analysis tools (Origin behaviour)
 
-Summary: this file records how the numerical analysis tools of Origin 2016 behave, as measured by
+Summary: this file records how the numerical analysis tools of Origin behave, as measured by
 running Origin on inputs we generated (LabTalk scripts in `tools/origin-ref/`, run through COM) and,
 for option lists and defaults, from the plain-text X-Function definitions. The Rust implementation
 is `crates/calc` (package `sheaf-calc`); its tests in `crates/calc/tests/` hold the Origin numbers
@@ -257,7 +257,7 @@ the data curve `iy1` (X and Y), `operator` (add, sub, div, mul, pow; default add
 range only", off by default) and `rescale` (rescales the source graph; a graph action, not
 implemented). The output `oy` is an X and a Y column.
 
-Observed (Origin 2016, scripts `curvemath-suite1..3.lines.txt`; the Rust test is
+Observed (Origin, scripts `curvemath-suite1..3.lines.txt`; the Rust test is
 `crates/calc/tests/origin_curvemath.rs`, relative tolerance 1e-10):
 
 - Operations are `y op operand` with the data on the left: `y + r`, `y - r`, `y * r`, `y / r`,

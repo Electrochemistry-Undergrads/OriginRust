@@ -1,4 +1,4 @@
-//! Peak chain against Origin 2016 `integ1` (reference script `tools/origin-ref/peaks-integ.lines.txt`).
+//! Peak chain against Origin `integ1` (reference script `tools/origin-ref/peaks-integ.lines.txt`).
 //!
 //! The data are generated: a sloped baseline `0.05 + 0.01 x`, one separate peak and two
 //! overlapping peaks, and a small deterministic ripple. Sheaf finds the peaks and their limits

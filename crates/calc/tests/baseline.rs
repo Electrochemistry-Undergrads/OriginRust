@@ -1,5 +1,5 @@
 //! Baseline subtraction. Constants and straight lines are closed form; the curves through anchor
-//! points reuse the interpolation numbers from Origin 2016 (`tools/origin-ref/interp-suite1.labtalk.txt`,
+//! points reuse the interpolation numbers from Origin (`tools/origin-ref/interp-suite1.labtalk.txt`,
 //! columns `lin_extrap`, `spl_notaknot_extrap`, `aki_extrap`), because the baseline is the interpolated
 //! curve through the anchors. Tolerance: relative 1e-10.
 

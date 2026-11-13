@@ -7,7 +7,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## Standing rules from the owner
 
-- **When unsure, copy Origin 2016:** measure it through `tools/origin-ref/` (or read its docs for
+- **When unsure, copy Origin:** measure it through `tools/origin-ref/` (or read its docs for
   behaviour) and copy it; record the measurement in the spec. Don't ask the owner what Origin can
   answer. Clean-room: copy behaviour and layout, never code, icons, help text or files.
 - **Subagents:** Sonnet for building, research, reviews; Haiku for running tests and checking outputs.
@@ -15,7 +15,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   commits or PRs; say so in every subagent prompt. (History was rewritten on 2026-11-12 to remove
   them; branches older than that must be rebased onto `main`, matching commits by tree.)
 - **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing on the
-  owner's personal account (UlanS1).
+  owner's personal account.
 - **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
   (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
   `git fetch`. See LESSONS "Two sessions on one repository need a written split".

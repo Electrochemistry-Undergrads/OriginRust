@@ -964,7 +964,7 @@ mod tests {
     #[test]
     fn the_first_column_plot_gives_the_gap_between_bars() {
         let mut w = window();
-        // Bar widths as Origin 2016 saved them for gaps of 40 and 55 percent.
+        // Bar widths as Origin saved them for gaps of 40 and 55 percent.
         let mut bars = curve(2, 1, 203, [0, 0, 0, 0]);
         put_u16(&mut bars.record, CURVE_SIZE_AT, 3000);
         let mut second = curve(3, 1, 203, [0, 0, 0, 0]);

@@ -1,6 +1,6 @@
 //! Two-way analysis of variance, with or without interaction, for balanced and unbalanced designs.
 //!
-//! What Origin 2016 reports for "Two-Way ANOVA" (see `docs/spec/statistics.md`): the sum of squares of a
+//! What Origin reports for "Two-Way ANOVA" (see `docs/spec/statistics.md`): the sum of squares of a
 //! term is the increase of the residual sum of squares when the term is left out of the full model, each
 //! factor coded by sum-to-zero (effect) columns. For a balanced design that is the textbook table; for
 //! unequal cell sizes it is the "type III" sum of squares (every term adjusted for all the others), and

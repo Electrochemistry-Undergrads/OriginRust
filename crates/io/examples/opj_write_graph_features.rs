@@ -1,6 +1,6 @@
 //! Writes sample projects for the graph features that are stored in the .opj file itself (stacked
 //! curve offsets, the right Y axis of a double-Y graph, bar spacing, axis sides and axis colours),
-//! for checking them in Origin 2016 with `tools/origin-ref/opj-verify-graph-features.ps1` and for
+//! for checking them in Origin with `tools/origin-ref/opj-verify-graph-features.ps1` and for
 //! comparing the pictures with `sheaf export`.
 //!
 //! Usage: `cargo run -p sheaf-io --example opj_write_graph_features -- <output folder>`

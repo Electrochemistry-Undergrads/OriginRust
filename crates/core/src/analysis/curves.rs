@@ -182,6 +182,7 @@ fn polygon_area(inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis_link::LinkTool;
     use crate::column::{FormulaState, RecalcMode};
 
     fn req(columns: &[ColumnId], tool: Tool) -> Request {
@@ -345,7 +346,7 @@ mod tests {
 
     #[test]
     fn the_new_links_survive_a_save_as_json() {
-        let (mut p, _, a, b) = pair();
+        let (mut p, book, a, b) = pair();
         p.analyze_linked(
             &req(&[a, b], Tool::Intersect(IntersectSpec { include_touching: true })),
             &OutputTarget::NewSheet,
@@ -358,11 +359,57 @@ mod tests {
             RecalcMode::Auto,
         )
         .unwrap();
-        p.analyze_linked(&req(&[a], Tool::PolygonArea), &OutputTarget::NewSheet, RecalcMode::Auto).ok();
+        // A closed curve (the 2 x 3 rectangle) so the Polygon Area link really exists.
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 2.0, 2.0, 0.0])).unwrap();
+        let loop_y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.0, 3.0, 3.0])).unwrap();
+        p.analyze_linked(&req(&[loop_y], Tool::PolygonArea), &OutputTarget::NewSheet, RecalcMode::Auto).unwrap();
+        assert_eq!(p.analysis_links.len(), 3);
+        assert!(p.analysis_links.iter().any(|l| l.tool == LinkTool::PolygonArea));
         let text = serde_json::to_string(&p).unwrap();
         let back: Project = serde_json::from_str(&text).unwrap();
         assert_eq!(back.analysis_links, p.analysis_links);
-        assert!(back.analysis_links.len() >= 2);
+    }
+
+    #[test]
+    fn changing_the_column_count_of_a_linked_result_leaves_no_stale_sheet() {
+        let (mut p, book, ys) = scans();
+        let full = req(&ys, Tool::AverageCurves(AverageSpec::default()));
+        let (r, outputs) = p.analyze_linked_into(None, &full, &OutputTarget::NewSheet, RecalcMode::Auto).unwrap();
+        assert_eq!(outputs.len(), 4);
+        let sheets = p.workbook(book).unwrap().sheets.len();
+        // Untick SD and Count: two columns instead of four.
+        let slim = req(&ys, Tool::AverageCurves(AverageSpec { sd: false, count: false, ..AverageSpec::default() }));
+        let (r2, now) =
+            p.analyze_linked_into(Some(&outputs), &slim, &OutputTarget::NewSheet, RecalcMode::Auto).unwrap();
+        assert_eq!(now.len(), 2);
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), sheets, "the old result sheet is gone");
+        for old in &outputs {
+            assert!(!now.contains(old) && p.column(*old).is_none(), "old column removed");
+        }
+        assert_eq!(p.workbook(book).unwrap().sheets[r2.new_sheet.unwrap()].columns.len(), 2);
+        assert_eq!(r.new_sheet.is_some(), r2.new_sheet.is_some());
+        // Every marked column belongs to the one link that names it.
+        assert_eq!(p.analysis_links.len(), 1);
+        assert_eq!(p.analysis_links[0].outputs, now);
+        let marked =
+            p.workbook(book).unwrap().sheets.iter().flat_map(|s| &s.columns).filter(|c| c.analysis.is_some()).count();
+        assert_eq!(marked, 2);
+        // Recalculate still works on the new result.
+        p.recalculate_analysis(0).unwrap();
+    }
+
+    #[test]
+    fn polygon_area_refuses_the_whole_run_naming_the_short_column() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 2.0, 2.0, 0.0])).unwrap();
+        let good = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.0, 3.0, 3.0])).unwrap();
+        let short =
+            p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, f64::NAN, f64::NAN])).unwrap();
+        let e = p.analyze(&req(&[good, short], Tool::PolygonArea)).unwrap_err();
+        assert!(e.to_string().contains("fewer than three"), "{e}");
+        assert!(e.to_string().contains(&p.column(short).unwrap().short_name), "{e}");
+        assert!(p.analyze(&req(&[good], Tool::PolygonArea)).is_ok(), "the good column alone works");
     }
 
     #[test]

@@ -1625,6 +1625,7 @@ impl SheafApp {
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
+            layer_curves: graph.map(|g| self.graph_layer_curves(g)).unwrap_or_default(),
         }
     }
 
@@ -1645,6 +1646,35 @@ impl SheafApp {
         })?;
         let (book, _, _) = project.locate(y)?;
         Some((book.id, y))
+    }
+
+    /// The Y columns of the visible plots of numbers in the active layer of graph `g` that sit in the
+    /// same worksheet as the plot the Analysis menu works on (see `MenuContext::layer_curves`); that
+    /// plot comes first.
+    fn graph_layer_curves(&self, g: WindowId) -> Vec<ColumnId> {
+        let project = self.doc.project();
+        let (Some(graph), Some((_, first))) = (project.graph(g), self.graph_curve(g)) else {
+            return Vec::new();
+        };
+        let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+        let sheet_of = |y: ColumnId| {
+            project.locate(y).and_then(|(b, s, _)| b.sheets.iter().position(|w| std::ptr::eq(w, s)).map(|i| (b.id, i)))
+        };
+        let here = sheet_of(first);
+        let mut out = vec![first];
+        if let Some(l) = graph.layers.get(layer) {
+            for p in &l.plots {
+                if p.visible
+                    && p.y != first
+                    && project.numeric(p.y).is_some()
+                    && sheet_of(p.y) == here
+                    && !out.contains(&p.y)
+                {
+                    out.push(p.y);
+                }
+            }
+        }
+        out
     }
 
     /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands

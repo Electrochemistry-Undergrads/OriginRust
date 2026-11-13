@@ -4132,7 +4132,7 @@ fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
 }
 
 /// Analysis > Mathematics > Polygon Area...: up and down are two open polylines; each is closed by its last
-/// point back to its first. up runs along a line, so its polygon has no area; the table has one row per column.
+/// point back to its first. up and down both run along a line, so their polygons have no area (the loop test below checks real numbers); the table has one row per column.
 #[test]
 fn the_mathematics_menu_gives_the_polygon_area_of_each_column() {
     let mut h = start(vec![data_file("polyarea")]);
@@ -4146,6 +4146,48 @@ fn the_mathematics_menu_gives_the_polygon_area_of_each_column() {
     assert_eq!(area.len(), 2, "one row per column");
     assert!(area.iter().all(|a| a.abs() < 1e-9), "straight lines enclose nothing: {area:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Polygon area"));
+}
+
+/// A closed loop in a data file: the window passes the right X and Y, so the area is the 2 x 3 rectangle's.
+#[test]
+fn the_polygon_area_window_measures_a_closed_loop() {
+    let loop_csv = csv_file("polyloop", "loop", "x,y\n0,0\n2,0\n2,3\n0,3\n");
+    let mut h = start(vec![loop_csv]);
+    show_window(&mut h, "Book1 - loop");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
+    click(&mut h, "OK");
+    let (_, area) = result_column(&h, "Area");
+    assert_eq!(area, vec![6.0]);
+    assert_eq!(result_column(&h, "Signed area").1, vec![6.0], "counterclockwise");
+    assert_eq!(result_column(&h, "Centroid X").1, vec![1.0]);
+    assert_eq!(result_column(&h, "Centroid Y").1, vec![1.5]);
+    assert_eq!(result_column(&h, "Perimeter").1, vec![10.0]);
+}
+
+/// From a graph, Average Multiple Curves and Intersect start with the curves of the layer, so OK
+/// runs without picking the columns again.
+#[test]
+fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-curves")]);
+    assert!(h.state().menu_context().layer_curves.len() >= 2, "the graph plots up and down");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
+    assert!(h.state().analysis.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
+}
+
+#[test]
+fn from_a_graph_average_multiple_curves_starts_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-average")]);
+    menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, mean) = result_column(&h, "Mean");
+    assert!(sheet.starts_with("Average"), "{sheet}");
+    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5]);
 }
 
 /// The new tools can follow their input: Intersect with Auto moves its point when a cell changes, in the same

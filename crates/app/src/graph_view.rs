@@ -510,6 +510,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         layer,
         tool,
         curve: None,
+        layer_curves: Vec::new(),
     }
 }
 

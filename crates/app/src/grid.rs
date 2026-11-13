@@ -100,6 +100,15 @@ pub struct BookUi {
     head_drag: Option<HeadDrag>,
     /// True while a drag that started on a row number is going on.
     row_drag: bool,
+    /// The active cell inside a block of several cells (where typing starts and Enter and Tab
+    /// move within the block); `None` means the cell where the block started.
+    active: Option<(usize, usize)>,
+    /// While a drag is going on: the pointer position pulled into the cell area, so that
+    /// dragging past the edge keeps extending the selection into the cells at the edge.
+    drag_pointer: Option<Pos2>,
+    /// Vertical scroll position of the table, from the last frame, and a position to set.
+    v_offset: f32,
+    v_set: Option<f32>,
     /// Frames left in which the moving corner of the selection is scrolled into view.
     reveal: u8,
     /// Where the moving corner of the selection was drawn in the last frame.
@@ -129,6 +138,7 @@ impl BookUi {
         self.dragging = false;
         self.head_drag = None;
         self.row_drag = false;
+        self.active = None;
         self.editing = None;
         self.editing_label = None;
     }
@@ -173,6 +183,7 @@ impl BookUi {
     /// Selects a block of cells and records which columns it touches.
     pub fn select_cells(&mut self, sheet: &Worksheet, anchor: (usize, usize), end: (usize, usize)) {
         self.sel = Sel::Cells { anchor, end };
+        self.active = None;
         let (lo, hi) = (anchor.0.min(end.0), anchor.0.max(end.0));
         self.selected = sheet.columns.iter().skip(lo).take(hi + 1 - lo).map(|c| c.id).collect();
     }
@@ -183,6 +194,35 @@ impl BookUi {
             Sel::Cells { end, .. } => Some(*end),
             _ => None,
         }
+    }
+
+    /// The cell that typing edits: inside a block the active cell, else the cell where the
+    /// selection started.
+    pub fn active_cell(&self) -> Option<(usize, usize)> {
+        match &self.sel {
+            Sel::Cells { anchor, end } => {
+                let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
+                let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
+                match self.active {
+                    Some((c, r)) if (c0..=c1).contains(&c) && (r0..=r1).contains(&r) => Some((c, r)),
+                    _ => Some(*anchor),
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The cell the view follows after keys: the active cell of a block, else the moving corner.
+    fn reveal_target(&self) -> Option<(usize, usize)> {
+        match &self.sel {
+            Sel::Cells { anchor, end } if anchor != end && self.active.is_some() => self.active_cell(),
+            _ => self.active_corner(),
+        }
+    }
+
+    /// The pointer position used by drags: pulled into the cell area while a drag is going on.
+    fn pointer(&self, ui: &egui::Ui) -> Option<Pos2> {
+        self.drag_pointer.or_else(|| ui.input(|i| i.pointer.hover_pos()))
     }
 
     fn select_rows(&mut self, anchor: usize, end: usize) {
@@ -349,6 +389,14 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         state.head_drag = None;
         state.row_drag = false;
     }
+    // While dragging, the pointer counts as being in the cell area even when it is outside.
+    let cells_area = Rect::from_min_max(
+        Pos2::new(body.left() + 1.0, body.top() + header_height + 1.0),
+        Pos2::new(body.right() - 1.0, body.bottom() - 1.0),
+    );
+    let drag_on = state.dragging || state.head_drag.is_some() || state.row_drag;
+    state.drag_pointer =
+        if drag_on { ui.input(|i| i.pointer.latest_pos()).map(|p| clamp_to(p, cells_area)) } else { None };
     state.page_rows = (((body.height() - header_height) / ROW_HEIGHT).floor() as usize).max(1);
     // The keyboard belongs to the grid once something in it was clicked: Tab and the arrow keys
     // stay with it instead of moving the focus to other widgets.
@@ -392,9 +440,12 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     // One empty column at the end as a target for "add column".
                     table = table.column(TableColumn::remainder().at_least(40.0));
                     if state.reveal > 0
-                        && let Some(row) = state.active_corner().map(|c| c.1)
+                        && let Some(row) = state.reveal_target().map(|c| c.1)
                     {
                         table = table.scroll_to_row(row, None);
+                    }
+                    if let Some(y) = state.v_set.take() {
+                        table = table.vertical_scroll_offset(y);
                     }
 
                     table
@@ -433,11 +484,27 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                 }
                                 row.col(|_ui| {});
                             });
-                        });
+                        })
                 })
         })
         .inner;
     state.h_offset = output.state.offset.x;
+    state.v_offset = output.inner.state.offset.y;
+    // Dragging a selection past the edge of the view scrolls the view that way.
+    if drag_on && let Some(p) = ui.input(|i| i.pointer.latest_pos()) {
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        let (dx, dy) = edge_scroll(p, cells_area, dt);
+        if dx != 0.0 && !state.row_drag {
+            let max = (output.content_size.x - output.inner_rect.width()).max(0.0);
+            state.h_offset = (state.h_offset + dx).clamp(0.0, max);
+        }
+        if dy != 0.0 && state.head_drag.is_none() {
+            state.v_set = Some((state.v_offset + dy).max(0.0));
+        }
+        if dx != 0.0 || dy != 0.0 {
+            ui.ctx().request_repaint();
+        }
+    }
     if state.reveal > 0 {
         state.reveal -= 1;
         if let Some(cell) = state.reveal_rect {
@@ -456,6 +523,84 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     }
     state.h_content = output.content_size.x;
     state.h_view = output.inner_rect.width();
+}
+
+/// The pointer pulled into a rectangle.
+fn clamp_to(p: Pos2, area: Rect) -> Pos2 {
+    Pos2::new(p.x.clamp(area.left(), area.right()), p.y.clamp(area.top(), area.bottom()))
+}
+
+/// How far the view scrolls (in points, horizontally and vertically) in a frame of `dt` seconds
+/// while a selection is dragged with the pointer at `p`; non-zero only past the edge of `area`,
+/// faster the further out.
+fn edge_scroll(p: Pos2, area: Rect, dt: f32) -> (f32, f32) {
+    let speed = |outside: f32| outside.signum() * (60.0 + outside.abs() * 10.0).min(1500.0) * dt;
+    let axis = |v: f32, lo: f32, hi: f32| {
+        if v < lo {
+            speed(v - lo)
+        } else if v > hi {
+            speed(v - hi)
+        } else {
+            0.0
+        }
+    };
+    (axis(p.x, area.left(), area.right()), axis(p.y, area.top(), area.bottom()))
+}
+
+/// The next cell inside a block when Enter (`dy` = 1), Tab (`dx` = 1) or their Shift versions
+/// (-1) are pressed: down the column and on at the top of the next column of the block (wrapping
+/// from the last column to the first), or along the row and on at the start of the next row.
+fn block_next(cols: (usize, usize), rows: (usize, usize), cur: (usize, usize), dx: isize, dy: isize) -> (usize, usize) {
+    let (mut c, mut r) = cur;
+    let (c0, c1, r0, r1) = (cols.0, cols.1, rows.0, rows.1);
+    if dy > 0 {
+        if r < r1 {
+            r += 1;
+        } else {
+            r = r0;
+            c = if c < c1 { c + 1 } else { c0 };
+        }
+    } else if dy < 0 {
+        if r > r0 {
+            r -= 1;
+        } else {
+            r = r1;
+            c = if c > c0 { c - 1 } else { c1 };
+        }
+    } else if dx > 0 {
+        if c < c1 {
+            c += 1;
+        } else {
+            c = c0;
+            r = if r < r1 { r + 1 } else { r0 };
+        }
+    } else if dx < 0 {
+        if c > c0 {
+            c -= 1;
+        } else {
+            c = c1;
+            r = if r > r0 { r - 1 } else { r1 };
+        }
+    }
+    (c, r)
+}
+
+impl BookUi {
+    /// With a block of several cells selected and `from` inside it: moves the active cell as
+    /// Enter and Tab do in Origin, keeping the block selected. Returns false when the selection
+    /// is not such a block.
+    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize) -> bool {
+        let Sel::Cells { anchor, end } = self.sel else { return false };
+        let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
+        let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
+        if anchor == end || !(c0..=c1).contains(&from.0) || !(r0..=r1).contains(&from.1) {
+            return false;
+        }
+        self.active = Some(block_next((c0, c1), (r0, r1), from, dx, dy));
+        self.reveal = 4;
+        self.focus_grid = true;
+        true
+    }
 }
 
 // ----- sheet tabs and the horizontal scroll bar --------------------------------------------
@@ -880,7 +1025,7 @@ fn head_drag(
         state.focus_grid = true;
     }
     let Some(drag) = state.head_drag.clone() else { return };
-    let over = ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| p.x >= head.left() && p.x < head.right());
+    let over = state.pointer(ui).is_some_and(|p| p.x >= head.left() && p.x < head.right());
     if !over || drag.last == position {
         return;
     }
@@ -927,7 +1072,7 @@ fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut B
             _ => state.select_rows(r, r),
         }
     } else if state.row_drag
-        && ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| p.y >= rect.top() && p.y < rect.bottom())
+        && state.pointer(ui).is_some_and(|p| p.y >= rect.top() && p.y < rect.bottom())
         && let Sel::Rows { anchor, end } = state.sel
         && end != r
     {
@@ -978,7 +1123,7 @@ fn cell_look(state: &BookUi, sheet: &Worksheet, position: usize, column: &Column
             let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
             let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
             if (c0..=c1).contains(&position) && (r0..=r1).contains(&row) {
-                if (position, row) == *anchor { Look::Anchor } else { Look::Dark }
+                if Some((position, row)) == state.active_cell() { Look::Anchor } else { Look::Dark }
             } else {
                 Look::Plain
             }
@@ -1031,9 +1176,10 @@ fn body_cell(
     let response = ui.interact(rect, ui.id().with(("cell", column.id.0, r)), Sense::CLICK | Sense::DRAG);
 
     // Pressing selects the cell (Shift extends the block); dragging over other cells extends it.
-    let (pressed, pointer) = ui.input(|i| (i.pointer.primary_pressed(), i.pointer.hover_pos()));
+    let pressed = ui.input(|i| i.pointer.primary_pressed());
+    let pointer = state.pointer(ui);
     let shift = click_modifiers(ui).shift;
-    if state.active_corner() == Some((position, r)) {
+    if state.reveal_target() == Some((position, r)) {
         state.reveal_rect = Some(rect);
     }
     if pressed && response.hovered() {
@@ -1149,7 +1295,11 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, actions: 
             actions.push(Action::SetCell { column, row, text: text.clone() });
         }
         state.editing = None;
-        if let (Some((dx, dy)), Some(position)) = (step, sheet.column_index(column)) {
+        let in_block = match (step, sheet.column_index(column)) {
+            (Some((dx, dy)), Some(position)) => state.step_in_block((position, row), dx, dy),
+            _ => false,
+        };
+        if let (false, Some((dx, dy)), Some(position)) = (in_block, step, sheet.column_index(column)) {
             let last_col = sheet.columns.len().saturating_sub(1);
             let to = (
                 position.saturating_add_signed(dx).min(last_col),
@@ -1258,6 +1408,18 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
                 }
                 let ctrl = modifiers.command;
                 let shift = modifiers.shift;
+                // In a block of several cells Enter and Tab move the active cell inside it.
+                if !ctrl && matches!(key, egui::Key::Tab | egui::Key::Enter) {
+                    let step = if shift { -1 } else { 1 };
+                    let (dx, dy) = if *key == egui::Key::Tab { (step, 0) } else { (0, step) };
+                    if let Some(from) = state.active_cell()
+                        && state.step_in_block(from, dx, dy)
+                    {
+                        consumed.push(*key);
+                        taken = true;
+                        continue;
+                    }
+                }
                 // The cell the move starts from: the moving corner when extending, the active
                 // cell otherwise.
                 let origin = |extend: bool| -> Option<(usize, usize)> {
@@ -1329,14 +1491,14 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
         }
     }
     let typed: String = typed.chars().filter(|c| !c.is_control()).collect();
-    // Typing into a single active cell replaces what it holds; F2 keeps it.
-    if let Sel::Cells { anchor, end } = state.sel
-        && anchor == end
+    // Typing into the active cell (of a block, the cell where it started) replaces what it holds;
+    // F2 keeps it.
+    if let Some(active) = state.active_cell()
         && (edit_start || !typed.is_empty())
-        && let Some(column) = sheet.columns.get(anchor.0)
+        && let Some(column) = sheet.columns.get(active.0)
     {
         if !column.is_locked() {
-            start_editing(state, column, anchor.1);
+            start_editing(state, column, active.1);
             if !edit_start && let Some(editing) = &mut state.editing {
                 editing.2 = typed.clone();
             }
@@ -1477,5 +1639,44 @@ mod tests {
         assert_eq!(t(NavKey::End, true, (0, 0)), (2, 1));
         assert_eq!(t(NavKey::PageDown, false, (1, 5)), (1, 15));
         assert_eq!(t(NavKey::PageUp, false, (1, 5)), (1, 0));
+    }
+
+    #[test]
+    fn enter_and_tab_walk_a_block_and_wrap_to_the_next_column_or_row() {
+        let (cols, rows) = ((1, 2), (0, 1));
+        assert_eq!(block_next(cols, rows, (1, 0), 0, 1), (1, 1));
+        assert_eq!(block_next(cols, rows, (1, 1), 0, 1), (2, 0), "the top of the next column");
+        assert_eq!(block_next(cols, rows, (2, 1), 0, 1), (1, 0), "from the end back to the start");
+        assert_eq!(block_next(cols, rows, (2, 0), 0, -1), (1, 1));
+        assert_eq!(block_next(cols, rows, (1, 0), 1, 0), (2, 0));
+        assert_eq!(block_next(cols, rows, (2, 0), 1, 0), (1, 1), "the start of the next row");
+        assert_eq!(block_next(cols, rows, (2, 1), 1, 0), (1, 0));
+        assert_eq!(block_next(cols, rows, (1, 1), -1, 0), (2, 0));
+    }
+
+    #[test]
+    fn dragging_past_an_edge_scrolls_that_way_and_faster_the_further_out() {
+        let area = Rect::from_min_max(Pos2::new(100.0, 50.0), Pos2::new(500.0, 350.0));
+        assert_eq!(edge_scroll(Pos2::new(300.0, 200.0), area, 0.016), (0.0, 0.0));
+        let (dx, dy) = edge_scroll(Pos2::new(520.0, 200.0), area, 0.016);
+        assert!(dx > 0.0 && dy == 0.0);
+        let (far, _) = edge_scroll(Pos2::new(700.0, 200.0), area, 0.016);
+        assert!(far > dx);
+        let (_, up) = edge_scroll(Pos2::new(300.0, 10.0), area, 0.016);
+        assert!(up < 0.0);
+        let (left, down) = edge_scroll(Pos2::new(60.0, 400.0), area, 0.016);
+        assert!(left < 0.0 && down > 0.0);
+        assert_eq!(clamp_to(Pos2::new(900.0, -5.0), area), Pos2::new(500.0, 50.0));
+    }
+
+    #[test]
+    fn stepping_in_a_block_moves_the_active_cell_and_keeps_the_block() {
+        let mut state = BookUi { sel: Sel::Cells { anchor: (0, 0), end: (1, 1) }, ..Default::default() };
+        assert!(state.step_in_block((0, 0), 0, 1));
+        assert_eq!(state.active_cell(), Some((0, 1)));
+        assert_eq!(state.sel, Sel::Cells { anchor: (0, 0), end: (1, 1) });
+        // A single cell is not stepped.
+        state.sel = Sel::Cells { anchor: (0, 0), end: (0, 0) };
+        assert!(!state.step_in_block((0, 0), 0, 1));
     }
 }

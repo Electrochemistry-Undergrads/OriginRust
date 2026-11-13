@@ -1,7 +1,7 @@
 //! The result of a fit, shared by linear, polynomial and nonlinear fitting.
 //!
 //! The fields mirror the tables of Origin's fit reports: "Parameters", "Statistics" and "ANOVA".
-//! A value Origin leaves blank (for example the standard error of a fixed parameter) is NaN here.
+//! A value Origin leaves blank (for example the t-value of a fixed parameter) is NaN here.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +11,7 @@ pub struct Parameter {
     /// Name as in the model, for example `Intercept`, `Slope`, `B2`, `xc`, `w`.
     pub name: String,
     pub value: f64,
-    /// Standard error. NaN for a fixed parameter.
+    /// Standard error. 0 for a fixed parameter (as in Origin's report sheet).
     pub std_error: f64,
     /// True if the parameter was held at its value and not fitted.
     pub fixed: bool,
@@ -24,7 +24,7 @@ pub struct Parameter {
     pub lcl: f64,
     pub ucl: f64,
     /// Origin's "Dependency" column: `1 - 1 / (C_ii * (C^-1)_ii)` over the free parameters, where
-    /// `C` is the covariance matrix. NaN where not computed (linear fits, fixed parameters).
+    /// `C` is the covariance matrix. NaN where not computed (linear fits); 0 for a fixed parameter of a nonlinear fit.
     pub dependency: f64,
 }
 

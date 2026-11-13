@@ -471,7 +471,7 @@ fn build_report(
                 Parameter {
                     name: names[k].clone(),
                     value,
-                    std_error: f64::NAN,
+                    std_error: 0.0,
                     fixed: true,
                     t_value: f64::NAN,
                     prob_t: f64::NAN,

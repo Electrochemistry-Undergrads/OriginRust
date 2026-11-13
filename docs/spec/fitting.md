@@ -44,7 +44,7 @@ Stepping. `Fitter::new` prepares the fit, `step` makes one iteration of the abov
 - Dependency: `1 - 1/(C_ii (C^-1)_ii)` over the free parameters.
 - Reduced chi-square `rss/dof`; R-square `1 - rss/tss`; adjusted R-square `1 - (rss/dof)/(tss/(n-1))`, with `tss = sum w (y - ybar_w)^2` and the weighted mean.
 - ANOVA: model df = free parameters, model SS = uncorrected total minus error SS, error row = residual, corrected total df `n-1`, uncorrected total `sum w y^2`; `F` = model MS / error MS; `Prob>F`.
-- Fixed parameters have blank (NaN) error, t, probability, limits and dependency here. Origin's report sheet stores 0 for the error and the dependency of a fixed parameter and leaves t and Prob>|t| empty; the application should show a fixed parameter's error as blank.
+- Fixed parameters: the error is 0 (and the dependency 0 in nonlinear fits), as in Origin's report sheet, which stores 0 for both; t, Prob>|t| and the limits are blank (NaN).
 - Warnings: a parameter at a bound, iteration limit reached, singular covariance matrix, dependency above 0.9999, points dropped.
 
 ## 5. Library, starting values, FDF import, user functions

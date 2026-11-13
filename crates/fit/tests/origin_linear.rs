@@ -119,7 +119,7 @@ fn line_through_the_origin_uses_the_uncorrected_total() {
     let opts = LinearOptions { fix_intercept: Some(0.0), ..Default::default() };
     let rep = fit_linear(&BOOK2_X, &BOOK2_Y, &opts).unwrap();
     assert!(rep.params[0].fixed);
-    assert!(rep.params[0].std_error.is_nan());
+    assert_eq!(rep.params[0].std_error, 0.0, "Origin stores 0 for the error of a fixed parameter");
     assert_eq!(rep.params[0].value, 0.0);
     close(rep.params[1].value, C2_B, EXACT, "slope (fitlr)");
     close(rep.params[1].std_error, C2_BERR, EXACT, "slope error (fitlr)");

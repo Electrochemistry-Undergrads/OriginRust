@@ -598,13 +598,13 @@ impl<'a> Fitter<'a> {
             params.push(Parameter {
                 name: s.name.clone(),
                 value,
-                std_error: if fixed { f64::NAN } else { se },
+                std_error: if fixed { 0.0 } else { se },
                 fixed,
                 t_value: t,
                 prob_t: prob,
                 lcl,
                 ucl,
-                dependency: if fixed { f64::NAN } else { dep },
+                dependency: if fixed { 0.0 } else { dep },
             });
         }
         if status == FitStatus::MaxIterations {
@@ -775,7 +775,7 @@ mod tests {
         let f = FitFunction::from_formula("User", "y0 + A*exp(-x/t)", &["y0", "A", "t"]).unwrap().with_fixed("y0", 1.5);
         let r = fit(&f, &x, &y, &FitOptions::default()).unwrap();
         let p = r.param("y0").unwrap();
-        assert!(p.fixed && p.value == 1.5 && p.std_error.is_nan());
+        assert!(p.fixed && p.value == 1.5 && p.std_error == 0.0 && p.dependency == 0.0);
         assert_eq!(r.stats.dof, 28);
     }
 

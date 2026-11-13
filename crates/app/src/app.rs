@@ -758,6 +758,8 @@ impl SheafApp {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::PlotYError { book, columns } => self.plot_y_error(book, columns),
+            Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
             Action::Fit { book, column, kind } => {
                 let column = column.filter(|c| self.doc.project().column(*c).is_some_and(|c| c.data.is_numeric()));
@@ -769,8 +771,6 @@ impl SheafApp {
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
             Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
             Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
-            Action::PlotYError { book, columns } => self.plot_y_error(book, columns),
-            Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::AddErrorBars { graph, layer } => self.add_error_bars(graph, layer),
             Action::Refresh(active) => self.refresh(active),
             Action::FilterRows(book) => {

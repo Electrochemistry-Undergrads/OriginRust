@@ -4204,3 +4204,40 @@ fn the_layer_icon_menu_describes_plots_as_origin_does_and_has_the_hint_line() {
         .collect();
     assert!(labels.iter().any(|l| l == "Double click to open Plot Setup"));
 }
+
+#[test]
+fn typing_with_a_block_selected_edits_its_active_cell_and_enter_and_tab_move_inside_the_block() {
+    let mut h = start(vec![data_file("blocktype")]);
+    show_window(&mut h, "Book1 - sample");
+    grid_text(&h, "4.5").click();
+    settle(&mut h);
+    // The block of the columns "up" and "down" over the first two rows.
+    let ws = sheet(&h).clone();
+    h.state_mut().books.values_mut().next().unwrap().select_cells(&ws, (1, 0), (2, 1));
+    settle(&mut h);
+    h.event(egui::Event::Text("9".to_string()));
+    settle(&mut h);
+    let editing = book_ui(&h).editing.clone().expect("typing starts editing");
+    assert_eq!((editing.0, editing.1, editing.2.as_str()), (ws.columns[1].id, 0, "9"));
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) }, "the block stays selected");
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [9.0, 4.5, 6.5, 8.5]);
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)));
+    h.event(egui::Event::Text("8".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [9.0, 8.0, 6.5, 8.5]);
+    // Past the bottom of the block: the top of the next column of the block.
+    assert_eq!(book_ui(&h).active_cell(), Some((2, 0)));
+    h.event(egui::Event::Text("7".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Tab);
+    settle(&mut h);
+    assert_eq!(column(&h, "C")[0], 7.0);
+    // Tab moved right inside the block: past the last column, to the start of the next row.
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)));
+}

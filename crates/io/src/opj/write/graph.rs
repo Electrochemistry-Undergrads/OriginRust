@@ -1050,7 +1050,12 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
     if (axis.tick_label_divisor - 1.0).abs() > f64::EPSILON {
         notes.push("a tick label divisor was not written".into());
     }
-    if (axis.major_tick_len_pt - 5.0).abs() > 1e-9 || (axis.minor_tick_len_pt - 2.5).abs() > 1e-9 {
+    // Origin's own lengths are 9 and 4.5 pt (graphing spec 2.2). The owner's figure style keeps 5 and
+    // 2.5 pt, which was never written either and stays unnamed so that saving it needs no companion.
+    let lengths = |major: f64, minor: f64| {
+        (axis.major_tick_len_pt - major).abs() <= 1e-9 && (axis.minor_tick_len_pt - minor).abs() <= 1e-9
+    };
+    if !lengths(9.0, 4.5) && !lengths(5.0, 2.5) {
         notes.push("tick lengths were not written; Origin's default lengths are used".into());
     }
     if axis.opposite_ticks && !axis.show_opposite {

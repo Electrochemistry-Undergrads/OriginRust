@@ -91,7 +91,7 @@ fn a_stack_puts_each_y_column_in_its_own_panel_with_the_first_at_the_bottom() {
     }
     // Only the bottom panel shows the X title.
     assert_eq!(svg.matches(">E (V)</text>").count(), 1);
-    assert!(svg.contains("width=\"345.6pt\""), "the line template's page turned upright");
+    assert!(svg.contains("width=\"590.76pt\""), "the line template's page turned upright");
 
     let (p, svg) = plot_and_load(&dir, &[&data], &["--panels", "stack", "-t", "cv", "-y", "B,C", "--margin", "page"]);
     assert_eq!(graph(&p).layers.len(), 2);
@@ -144,7 +144,7 @@ fn grids_and_the_layout_options() {
     let g = graph(&p);
     assert_eq!(g.layers.len(), 3, "three curves fill three of the four cells");
     assert!(g.layers.iter().all(|l| l.link.is_none()));
-    assert!(svg.contains("width=\"921.6pt\" height=\"691.2pt\""), "{}", &svg[..200]);
+    assert!(svg.contains("width=\"1543.68pt\" height=\"1181.52pt\""), "{}", &svg[..200]);
     // Top left, top right, bottom left.
     let f: Vec<_> = (0..3).map(|i| g.page_frame(i)).collect();
     assert!(f[0].top == f[1].top && f[1].left > f[0].left && f[2].top > f[0].top && f[2].left == f[0].left);

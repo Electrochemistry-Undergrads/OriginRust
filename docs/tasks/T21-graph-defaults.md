@@ -1,6 +1,6 @@
 # T21: Graph defaults as Origin (colours, fonts, line widths, ticks, symbols, dashes)
 
-**Status:** open (was branch `graph-defaults` of another session, never committed). **Size:** M.
+**Status:** done on branch `graph-defaults2`, not merged. Left: the 0.5 pt dash lengths are not linear in the width; legend default position (Origin overlaps the top frame edge) not copied; Column and Waterfall/Stacked/DoubleY follow the new defaults; writer does not store tick lengths. **Size:** M.
 **Branch:** `graph-defaults2`. **Model:** Sonnet.
 **Detail:** audit C "Different, checked in Origin" and "Different, not verified"; open question U1 (colour
 order). **Spec:** `docs/spec/graphing.md` sections 1.5 (colour list), 2.1 (dash patterns), 3 (axis).

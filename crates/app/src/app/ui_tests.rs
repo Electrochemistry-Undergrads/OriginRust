@@ -2609,6 +2609,13 @@ fn the_object_manager_lists_the_plots_and_a_tick_box_hides_one_from_the_graph() 
     settle(&mut h);
     assert_eq!(h.state().panels.flyout(), Some(PanelId::Objects));
     assert!(h.query_by_label("Show layer: Layer1").is_some());
+    // Origin's lines are 0.5 pt thin; thicken them so that the pixel count is steady.
+    h.state_mut().doc.apply("Line width", |p| {
+        for plot in &mut p.graph_mut(graph).unwrap().layers[0].plots {
+            plot.line.width_pt = 3.0;
+        }
+    });
+    settle(&mut h);
     let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
     assert_eq!(plots.len(), 2);
     let second = plots[1].line.color;

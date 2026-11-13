@@ -68,7 +68,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T18](T18-backlog.md) | Large items not yet briefed (scripting, 3D, Options, importers, templates) | - | backlog |
 | [T19](T19-import-and-column-dialogs.md) | ASCII import options, Import Wizard pages, Column Properties formats | M | open, wizard needs Origin pages |
 | [T20](T20-automatic-axis-range.md) | Automatic axis range as Origin (8 % margin, step rule, log padding), Rescale Margin | M | done on branch `axis-range2`, not merged |
-| [T21](T21-graph-defaults.md) | Graph defaults as Origin: colour order, fonts, line widths, ticks, symbols, dashes | M | open |
+| [T21](T21-graph-defaults.md) | Graph defaults as Origin: colour order, fonts, line widths, ticks, symbols, dashes | M | done on branch `graph-defaults2`, not merged |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

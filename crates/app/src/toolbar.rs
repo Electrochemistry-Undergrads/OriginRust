@@ -344,7 +344,7 @@ fn build(bar: Bar) -> Vec<Item> {
             g(PlotHistogram, "Histogram"),
             g(PlotBubble, "Bubble"),
             b(PlotPolar, "Polar theta(X) r(Y)", Cmd::Plot(Template::Polar), "Polar theta(X) r(Y)"),
-            g(PlotTernary, "Ternary"),
+            b(PlotTernary, "Ternary", Cmd::Plot(Template::Ternary), "Ternary"),
             g(PlotRadar, "Radar"),
         ],
         Bar::Tools => vec![

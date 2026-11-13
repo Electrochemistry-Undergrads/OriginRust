@@ -208,6 +208,9 @@ pub enum Coords {
     /// A circle: the angle runs round it, the radius from its centre to its edge. The plots are
     /// ordinary line and symbol plots whose two columns are read as angle and radius.
     Polar(PolarCoords),
+    /// An equilateral triangle: three fractions that sum to 1 give the position of a point
+    /// (graphing spec section 14.20). Plots take their X, Y and Z columns as the three parts.
+    Ternary(TernaryCoords),
 }
 
 impl Coords {
@@ -219,9 +222,38 @@ impl Coords {
     pub fn polar(&self) -> Option<&PolarCoords> {
         match self {
             Coords::Polar(p) => Some(p),
-            Coords::Cartesian => None,
+            _ => None,
         }
     }
+
+    /// The ternary settings, `None` for any other layer.
+    pub fn ternary(&self) -> Option<&TernaryCoords> {
+        match self {
+            Coords::Ternary(t) => Some(t),
+            _ => None,
+        }
+    }
+}
+
+/// How the ticks of a ternary layer count: fractions (0 to 1) or percent (0 to 100).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TernaryScale {
+    /// Percent when a row of the data sums to more than 1.5, else fractions.
+    #[default]
+    Auto,
+    /// Ticks 0, 0.2, ... 1.
+    Fraction,
+    /// Ticks 0, 20, ... 100.
+    Percent,
+}
+
+/// Settings of a ternary layer (graphing spec section 14.20). A plot of such a layer names its Z
+/// column in `Plot::size_from` (no bubble sizes are drawn there).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TernaryCoords {
+    #[serde(default)]
+    pub scale: TernaryScale,
 }
 
 /// Which column of a plot holds the radius in a polar layer.
@@ -1529,5 +1561,22 @@ mod polar_tests {
         let l = &Template::Polar.new_graph(WindowId(1), "P").layers[0];
         assert_eq!(l.coords.polar().map(|c| c.radius), Some(RadiusColumn::Y));
         assert!(l.x_axis.major_grid.is_some() && l.y_axis.major_grid.is_some(), "rings and spokes");
+    }
+}
+
+#[cfg(test)]
+mod ternary_tests {
+    use super::*;
+    use crate::template::Template;
+
+    #[test]
+    fn ternary_settings_round_trip_and_old_layers_are_unchanged() {
+        let g = Template::Ternary.new_graph(WindowId(1), "T");
+        let layer = &g.layers[0];
+        assert_eq!(layer.coords.ternary().map(|t| t.scale), Some(TernaryScale::Auto));
+        let back: Layer = serde_json::from_str(&serde_json::to_string(layer).unwrap()).unwrap();
+        assert_eq!(&back, layer);
+        assert!(back.coords.polar().is_none());
+        assert_eq!(Template::from_name("ternary"), Some(Template::Ternary));
     }
 }

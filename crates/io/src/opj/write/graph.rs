@@ -667,7 +667,10 @@ impl Writer {
         if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || k == PlotKind::Pie) {
             notes.push("histogram, box and pie plots were written as plain columns of their data".into());
         }
-        if plots.iter().any(|r| r.plot.size_from.is_some() || r.plot.color_from.is_some()) {
+        if plots
+            .iter()
+            .any(|r| (r.plot.size_from.is_some() && layer.coords.ternary().is_none()) || r.plot.color_from.is_some())
+        {
             notes.push("bubble sizes and colour mapped symbol colours were not written".into());
         }
         if has(&|k| k.is_stacked_column()) {
@@ -997,6 +1000,13 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if layer.coords.polar().is_some() {
         notes
             .push("the polar layer was not written; its plots went out as plain line plots on rectangular axes".into());
+    }
+    if layer.coords.ternary().is_some() {
+        notes.push(
+            "the ternary layer was not written; its plots went out as plain scatter plots on rectangular axes \
+             (the Z column is not kept)"
+                .into(),
+        );
     }
     if layer.bars.overlap_pct != 0.0 {
         notes.push("the overlap of column bars was not written; bars stand side by side".into());

@@ -607,3 +607,11 @@ fn a_polar_layer_is_written_as_a_line_plot_and_named() {
     assert_eq!(imp.graphs[0].layers[0].plots[0].kind, PlotKind::Line);
     assert!(imp.graphs[0].layers[0].coords.is_cartesian());
 }
+
+#[test]
+fn a_ternary_layer_is_written_as_a_scatter_plot_and_named() {
+    let p = one_layer(|l| l.coords = Coords::Ternary(TernaryCoords::default()));
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("ternary")), "{:?}", out.warnings);
+    assert!(imp.graphs[0].layers[0].coords.is_cartesian());
+}

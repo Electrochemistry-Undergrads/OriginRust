@@ -133,9 +133,12 @@ pub fn dialog_body(
                 ui.label("Plot Type");
                 if let Node::Plot(l, p) = *node {
                     let polar = graph.layers[l].coords.polar().is_some();
+                    let ternary = graph.layers[l].coords.ternary().is_some();
                     let plot = &mut graph.layers[l].plots[p];
                     // A plot of a polar layer is an ordinary line or symbol plot on a circle.
-                    let shown = if polar {
+                    let shown = if ternary {
+                        format!("Ternary {}", kind_name(plot.kind))
+                    } else if polar {
                         format!("Polar {}", kind_name(plot.kind))
                     } else {
                         kind_name(plot.kind).to_string()

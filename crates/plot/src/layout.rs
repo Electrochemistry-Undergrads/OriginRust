@@ -19,6 +19,7 @@ use crate::scene::{
     Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
 };
 use crate::stack;
+use crate::ternary;
 use crate::text::{self, ASCENT, DESCENT};
 use crate::ticks::{ResolvedAxis, resolve_axis_edges};
 use crate::{LayerGeometry, PlotError, Rect};
@@ -204,8 +205,17 @@ fn group_geometry(
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
         resolve_dim(project, axis, dim, &sources)
     };
+    // The scale of the three axes of a ternary layer.
+    let ternary_scale = |i: usize| {
+        g.layers[i].coords.ternary().map(|t| {
+            let percent = ternary::is_percent(project, &g.layers[i], t);
+            (ternary::scale_axis(&g.layers[i].x_axis, percent), ternary::scale_axis(&g.layers[i].y_axis, percent))
+        })
+    };
     let (root_x, root_y) = if rl.coords.polar().is_some() {
         (polar::angle_axis(&rl.x_axis), shared(Dim::Y, &rl.y_axis))
+    } else if let Some((x, y)) = ternary_scale(root) {
+        (x, y)
     } else {
         (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
     };
@@ -213,6 +223,9 @@ fn group_geometry(
         .iter()
         .map(|&i| {
             let l = &g.layers[i];
+            if let Some(xy) = ternary_scale(i) {
+                return xy;
+            }
             let x = if l.coords.polar().is_some() {
                 polar::angle_axis(&l.x_axis)
             } else if shares(i, Dim::X) {
@@ -236,6 +249,24 @@ fn group_geometry(
     for (&i, (x, y)) in members.iter().zip(&axes) {
         let f = frame_of(nominal, i);
         bounds = cover(bounds, f);
+        if let Some(t) = g.layers[i].coords.ternary() {
+            // The triangle, its tick labels and titles.
+            let percent = ternary::is_percent(project, &g.layers[i], t);
+            let geom = LayerGeometry {
+                frame: f,
+                clip: f,
+                x: x.clone(),
+                y: y.clone(),
+                polar: None,
+                ternary: Some(ternary::TernaryMap::new(f, percent)),
+            };
+            let (l, t, r, b) = ternary::draw_axes(&mut Vec::new(), project, &g.layers[i], &pds[i].plots, &geom, m);
+            edges.left = edges.left.min(l);
+            edges.top = edges.top.min(t);
+            edges.right = edges.right.max(r);
+            edges.bottom = edges.bottom.max(b);
+            continue;
+        }
         label_edges(&mut edges, &g.layers[i], f, x, y, m);
     }
     let fitted = fit_on_page(bounds, &edges, &g.page);
@@ -250,7 +281,18 @@ fn group_geometry(
                 None => clip,
             };
             let polar = g.layers[i].coords.polar().map(|p| polar::PolarMap::new(frame, p));
-            (i, LayerGeometry { frame, clip, x, y, polar })
+            let ternary = g.layers[i]
+                .coords
+                .ternary()
+                .map(|t| ternary::TernaryMap::new(frame, ternary::is_percent(project, &g.layers[i], t)));
+            // Symbols on the sides of the triangle are not cut off at the frame.
+            let clip = if ternary.is_some() {
+                let e = PAGE_MARGIN * 3.0;
+                Rect { x: clip.x - e, y: clip.y - e, w: clip.w + 2.0 * e, h: clip.h + 2.0 * e }
+            } else {
+                clip
+            };
+            (i, LayerGeometry { frame, clip, x, y, polar, ternary })
         })
         .collect()
 }
@@ -275,8 +317,14 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
     if let Some(p) = layer.coords.polar() {
         // The circle and the angle labels round it.
-        let geom =
-            LayerGeometry { frame: f, clip: f, x: x.clone(), y: y.clone(), polar: Some(polar::PolarMap::new(f, p)) };
+        let geom = LayerGeometry {
+            frame: f,
+            clip: f,
+            x: x.clone(),
+            y: y.clone(),
+            polar: Some(polar::PolarMap::new(f, p)),
+            ternary: None,
+        };
         let paint = AxisPaint::new(xa, None);
         let (l, t, r, b) = polar::draw_angle_axis(&mut scratch, xa, &paint, &geom, m);
         e.left = e.left.min(l);
@@ -466,6 +514,8 @@ fn layer_scene(
     } else {
         if geom.polar.is_some() {
             polar::draw_grid(&mut scene.grid, layer, geom);
+        } else if geom.ternary.is_some() {
+            ternary::draw_grid(&mut scene.grid, layer, geom);
         } else {
             draw_grid(&mut scene.grid, layer, geom);
         }
@@ -502,6 +552,13 @@ fn layer_scene(
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
+    if geom.ternary.is_some() {
+        let start = out.len();
+        ternary::draw_axes(out, project, layer, pds, geom, m);
+        rec(objects, out, start, ObjectKind::XAxis, &[]);
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
     if geom.polar.is_some() {
         let start = out.len();
         polar::draw_angle_axis(out, xa, &xp, geom, m);

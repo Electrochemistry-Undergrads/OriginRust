@@ -489,7 +489,7 @@ fn custom_legend_text(text: &str) -> Option<String> {
     let normal = text.replace("\r\n", "\n").replace('\r', "\n");
     let normal = normal.trim_end_matches('\n');
     let automatic = |line: &str| {
-        let Some(rest) = line.strip_prefix("\\l(") else { return false };
+        let Some(rest) = line.strip_prefix("\\l(").or_else(|| line.strip_prefix("\\L(")) else { return false };
         let Some((id, name)) = rest.split_once(") ") else { return false };
         name == format!("%({id})")
     };

@@ -122,7 +122,14 @@ opposite lines or ticks (graphing.md section 13.6).
    column's long name (short name if empty), followed by ` (unit)` when the unit is not empty; an
    X column of text counts too. When the plot has no X column the X title is that of the column
    that labels the ticks, if any, else `Row`.
-8. Legend, when visible and the layer has at least one visible plot. One row per visible plot: a
+8. Legend, when visible and the layer has at least one visible plot. The legend text (`Legend::text`,
+   or the automatic text with one `\l(n) %(n)` line per visible plot) gives the rows: a line is a
+   row, `\l(n)` or `\L(n)` puts the sample of plot n in the row, `%(n)` the plot's label, any other
+   text is drawn as it is with the label markup; `n` counts the plots the legend lists, or is
+   `l.p` (layer, plot) when it lists several layers; a space right after a sample is replaced by
+   the gap, and an unknown plot number draws nothing. With `columns` > 1 the rows are filled
+   column by column (rows per column = rows / columns, rounded up), each column as wide as its
+   widest row, columns 1 × font size apart. One row, per visible plot: a
    sample (a horizontal line of length 2.2 × font size in the plot's line style, with one symbol
    centred on it for kinds that have symbols; symbol only for scatter; for a column plot a bar as
    long as the line sample and one font size high, filled and outlined like the bars), a gap of
@@ -229,6 +236,34 @@ uses `font-family` (the model's family first, then the fallbacks `Liberation San
 `DejaVu Sans`, `sans-serif`), `font-size`, optional `font-weight="bold"` / `font-style="italic"`,
 `text-anchor`, and a `transform="rotate(...)"` for rotated text. Text is XML-escaped. The output is
 deterministic: the same graph and data always give byte-identical SVG.
+
+### Other vector formats
+
+EPS and EMF are written from the scene, not from the SVG (`eps.rs`, `emf.rs`; the path data is
+read back by `vector.rs`, which turns arcs into cubic curves). Both are vector and neither has
+transparency: a colour with alpha is blended onto the page background.
+
+- **EPS** is level 2. `%%BoundingBox` is the page size in points rounded up and
+  `%%HiResBoundingBox` the exact size; an export size is a `scale` operator. Layers are clipped
+  with `rectclip`. Text is set in Helvetica, Times or Courier (serif families go to Times,
+  monospaced ones to Courier, the rest to Helvetica) with the bold and oblique variants, which
+  every PostScript device has, so nothing is embedded. The fonts are re-encoded to ISO Latin-1
+  (`ISOLatin1Encoding`, with the apostrophe, the grave accent and the hyphen put back to their
+  ASCII meaning); Greek letters and a few signs (minus, infinity, comparison signs, arrows) are
+  set in `Symbol`; a few typographic characters are replaced by a look-alike and any other
+  character by `?`, and `write_eps` returns a warning for each kind. Centred and right-aligned
+  text is placed with `stringwidth`, so its position follows the printer's font.
+- **EMF** follows the public format description. One logical unit is 0.01 mm (the reference
+  device is 10000 x 10000 units of 0.01 mm in 100 x 100 mm), the header's `rclFrame` is the page
+  size in 0.01 mm and `rclBounds` the same in device units. Shapes are `EMR_BEGINPATH` ...
+  `EMR_STROKEPATH` / `EMR_FILLPATH` / `EMR_STROKEANDFILLPATH` with `EMR_POLYLINETO` and
+  `EMR_POLYBEZIERTO`, rectangles `EMR_RECTANGLE`; pens are geometric (`EMR_EXTCREATEPEN`) with
+  the cap, join and user dashes, brushes solid; text is `EMR_EXTTEXTOUTW` in the graph's own
+  family (`EMR_EXTCREATEFONTINDIRECTW`, negative height, escapement in tenths of a degree)
+  with a baseline alignment and the advance of every character from the layout's measurer, so
+  that the text keeps the layout's widths whatever font the viewer substitutes. Clipping per
+  layer is `EMR_SAVEDC`, `EMR_INTERSECTCLIPRECT`, `EMR_RESTOREDC`. A file made this way was
+  loaded and drawn by GDI+ (title, rotated text, clipping and dashes as in the PNG).
 
 ## 7. Fonts
 

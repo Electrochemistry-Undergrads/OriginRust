@@ -100,6 +100,8 @@ pub enum Cmd {
     GraphEdit(GraphOp),
     /// Rescale to Show All on the active layer (Ctrl+R).
     Rescale,
+    /// Graph > Legend > Reconstruct Legend on the active layer (Ctrl+L).
+    ReconstructLegend,
     /// Makes a plot the active one (the plot list of the layer icon's menu).
     SelectPlot {
         layer: usize,
@@ -949,7 +951,7 @@ fn graph_menu() -> Vec<Entry> {
             vec![
                 // Origin opens the legend's settings by double click; Sheaf also offers them here.
                 item("Legend Properties...", Cmd::GraphProps(PropsTab::Legend)),
-                grey_keyed("Reconstruct Legend", ctrl(Key::L)),
+                keyed("Reconstruct Legend", ctrl(Key::L), Cmd::ReconstructLegend),
                 grey("Update Legend"),
                 grey("Add Legend Title"),
             ],
@@ -1368,7 +1370,14 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
 pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     vec![
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
-        grey_sub("Legend", &["Reconstruct Legend", "Update Legend", "Add Legend Title"]),
+        sub(
+            "Legend",
+            vec![
+                item("Reconstruct Legend", Cmd::GraphEdit(GraphOp::ReconstructLegend { layer })),
+                grey("Update Legend"),
+                grey("Add Legend Title"),
+            ],
+        ),
         grey("Add Color Scale"),
         grey("Add Bubble Scale"),
         sep(),
@@ -1689,6 +1698,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GraphEdit(op) => Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Rescale => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
+        }
+        Cmd::ReconstructLegend => {
+            Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ReconstructLegend { layer: c.layer } }
         }
         Cmd::SelectPlot { layer, plot } => {
             Action::SelectPlot { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, plot: *plot }

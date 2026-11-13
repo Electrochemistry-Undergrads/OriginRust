@@ -6,7 +6,7 @@
 use super::*;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{By, NodeT, Queryable};
-use sheaf_core::graph::{PlotKind, ScaleKind};
+use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind};
 use sheaf_plot::scene::ObjectKind;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -2777,6 +2777,67 @@ fn delete_removes_the_selected_legend() {
     settle(&mut h);
     assert!(!graph(&h).layers[0].legend.visible);
     assert_eq!(h.state().doc.undo_label(), Some("Delete legend"));
+}
+
+#[test]
+fn the_legend_is_dragged_to_a_manual_position_in_one_undo_step() {
+    let mut h = start(vec![data_file("dragleg")]);
+    let before = graph(&h).layers[0].legend.position;
+    assert!(!matches!(before, LegendPosition::Manual { .. }), "a corner to begin with");
+    let at = on(&h, 0, ObjectKind::Legend);
+    click_at(&mut h, at);
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Legend)));
+    drag(&mut h, at, at + egui::vec2(-80.0, 60.0));
+    let LegendPosition::Manual { x, y } = graph(&h).layers[0].legend.position else {
+        panic!("the legend is placed by hand now: {:?}", graph(&h).layers[0].legend.position);
+    };
+    // The centre was in the upper right of the frame and moved left and down.
+    assert!(x < 0.95 && y > 0.05 && x > 0.3 && y < 0.6, "{x} {y}");
+    assert_eq!(h.state().doc.undo_label(), Some("Move legend"));
+    assert!(h.state().graph_props.is_none(), "a drag is not a double click");
+    menu(&mut h, "Edit", "Undo Move legend");
+    assert_eq!(graph(&h).layers[0].legend.position, before);
+}
+
+#[test]
+fn reconstruct_legend_goes_back_to_the_automatic_text() {
+    let mut h = start(vec![data_file("reconleg")]);
+    h.state_mut().doc.apply("Legend text", |p| {
+        let g = p.graphs().next().unwrap().id;
+        p.graph_mut(g).unwrap().layers[0].legend.text = Some("\\l(1) first".into());
+    });
+    settle(&mut h);
+    // From the legend's right-click menu ...
+    let at = on(&h, 0, ObjectKind::Legend);
+    right_click_at(&mut h, at);
+    menu_path(&mut h, &["Legend", "Reconstruct Legend"]);
+    assert_eq!(graph(&h).layers[0].legend.text, None);
+    assert_eq!(h.state().doc.undo_label(), Some("Reconstruct legend"));
+    // ... and from the Graph menu.
+    h.state_mut().doc.apply("Legend text", |p| {
+        let g = p.graphs().next().unwrap().id;
+        p.graph_mut(g).unwrap().layers[0].legend.text = Some("custom".into());
+    });
+    settle(&mut h);
+    menu(&mut h, "Graph", "Legend");
+    menu_path(&mut h, &["Reconstruct Legend"]);
+    assert_eq!(graph(&h).layers[0].legend.text, None);
+}
+
+#[test]
+fn the_legend_tab_edits_text_and_columns_and_reconstructs() {
+    let mut h = start(vec![data_file("legtab")]);
+    h.state_mut().doc.apply("Legend", |p| {
+        let g = p.graphs().next().unwrap().id;
+        let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+        legend.text = Some("\\l(2) only the second".into());
+        legend.columns = 2;
+    });
+    open_props(&mut h, 0, PropsTab::Legend, None);
+    assert!(h.query_by_label("Columns").is_some() && h.query_by_label("Text").is_some());
+    click(&mut h, "Reconstruct");
+    assert_eq!(graph(&h).layers[0].legend.text, None);
+    assert_eq!(graph(&h).layers[0].legend.columns, 2);
 }
 
 #[test]

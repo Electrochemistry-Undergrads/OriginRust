@@ -155,7 +155,7 @@ impl Emf<'_> {
     }
 
     fn rec(&mut self, ty: u32, payload: &[u8]) {
-        debug_assert!(payload.len() % 4 == 0, "records are multiples of 4 bytes");
+        debug_assert!(payload.len().is_multiple_of(4), "records are multiples of 4 bytes");
         self.buf.extend_from_slice(&ty.to_le_bytes());
         self.buf.extend_from_slice(&((payload.len() + 8) as u32).to_le_bytes());
         self.buf.extend_from_slice(payload);
@@ -177,7 +177,7 @@ impl Emf<'_> {
         p.extend(le(&[0, 0, 0])); // cbPixelFormat, offPixelFormat, bOpenGL
         p.extend(le(&[100_000, 100_000])); // szlMicrometers
         p.extend(desc.iter().flat_map(|c| c.to_le_bytes()));
-        while p.len() % 4 != 0 {
+        while !p.len().is_multiple_of(4) {
             p.push(0);
         }
         self.rec(EMR_HEADER, &p);

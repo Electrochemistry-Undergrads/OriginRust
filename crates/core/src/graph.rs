@@ -94,6 +94,22 @@ impl Graph {
         self.group(index).into_iter().filter(|&i| self.place(i) == place).collect()
     }
 
+    /// The ids of the plots that the legend of layer `index` lists, in order, given how many
+    /// plots each layer shows (`plots_in`). They are `1`, `2`, ... for the layer's own plots, and
+    /// `l.p` (layer and plot, both from 1) when the legend lists the plots of several layers; they
+    /// are what `\l(n)` and `%(n)` in the legend text refer to ([`Legend::text`]).
+    pub fn legend_ids(&self, index: usize, plots_in: &dyn Fn(usize) -> usize) -> Vec<String> {
+        let Some(layer) = self.layers.get(index) else { return Vec::new() };
+        if layer.legend.scope == LegendScope::Graph {
+            let layers = self.same_frame(index);
+            if layers.len() > 1 {
+                return layers.iter().flat_map(|&l| (1..=plots_in(l)).map(move |k| format!("{}.{k}", l + 1))).collect();
+            }
+            return layers.first().map_or_else(Vec::new, |&l| (1..=plots_in(l)).map(|k| k.to_string()).collect());
+        }
+        (1..=plots_in(index)).map(|k| k.to_string()).collect()
+    }
+
     /// The panels of the graph, in layer order: every layer except those drawn in the frame of an
     /// earlier layer of their group (a right Y layer is part of the panel it lies over). A graph
     /// with one layer, or a double-Y graph, has one panel.

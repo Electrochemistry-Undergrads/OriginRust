@@ -441,6 +441,8 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
 
 fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sources: &[Source], add_from: &mut usize) {
     let link = graph.layers[l].link.map(|k| k.parent);
+    // The ids that `\l(n)` and `%(n)` in the legend text refer to.
+    let legend_ids = graph.legend_ids(l, &|j| graph.layers[j].plots.iter().filter(|p| p.visible).count());
     let layer = &mut graph.layers[l];
     match tab {
         DetailTab::Size => {
@@ -465,7 +467,7 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
             });
         }
         DetailTab::Stack => stack_tab(ui, layer),
-        DetailTab::Legend => legend_ui(ui, &mut layer.legend),
+        DetailTab::Legend => legend_ui(ui, &mut layer.legend, &legend_ids),
         _ => {
             ui.label(format!(
                 "{} plot(s) in this layer. Select one in the tree to change its look.",
@@ -601,7 +603,7 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
     }
 }
 
-fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend) {
+fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
     grid(ui, "legend_props", |ui| {
         ui.label("Show legend");
         ui.checkbox(&mut legend.visible, "");
@@ -643,6 +645,26 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend) {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut legend.scope, LegendScope::Layer, "This layer");
             ui.selectable_value(&mut legend.scope, LegendScope::Graph, "Layers in this frame");
+        });
+        ui.end_row();
+        ui.label("Columns");
+        ui.add(DragValue::new(&mut legend.columns).range(1..=12).speed(0.1))
+            .on_hover_text("The entries stand in this many columns, filled top to bottom");
+        ui.end_row();
+        ui.label("Text");
+        ui.vertical(|ui| {
+            let automatic = Legend::automatic_text(ids);
+            let mut text = legend.text.clone().unwrap_or_else(|| automatic.clone());
+            let shown = ui.add(egui::TextEdit::multiline(&mut text).desired_rows(3).desired_width(260.0));
+            if shown.changed() {
+                legend.text = (text != automatic).then_some(text);
+            }
+            ui.horizontal(|ui| {
+                if ui.add_enabled(legend.text.is_some(), egui::Button::new("Reconstruct")).clicked() {
+                    legend.text = None;
+                }
+                ui.weak("\\l(n) draws the symbol of plot n, %(n) its name");
+            });
         });
         ui.end_row();
         ui.label("Font");

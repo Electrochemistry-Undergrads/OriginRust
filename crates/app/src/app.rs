@@ -536,6 +536,7 @@ impl SheafApp {
             GraphOp::AxisZoom { zoom_in: true, .. } => "Axis zoom in",
             GraphOp::AxisZoom { .. } => "Axis zoom out",
             GraphOp::HideLegend { .. } => "Delete legend",
+            GraphOp::ReconstructLegend { .. } => "Reconstruct legend",
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::HideLayer { .. } => "Hide layer",
@@ -787,6 +788,13 @@ impl SheafApp {
                     {
                         l.x = x;
                         l.y = y;
+                    }
+                });
+            }
+            Action::MoveLegend { graph, layer, x, y } => {
+                self.doc.apply("Move legend", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        l.legend.position = sheaf_core::graph::LegendPosition::Manual { x, y };
                     }
                 });
             }

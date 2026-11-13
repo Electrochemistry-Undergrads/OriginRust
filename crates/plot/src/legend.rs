@@ -1,7 +1,7 @@
 //! The text of a legend: Origin's notation with `\l(n)` for the symbol of plot n and `%(n)` for
 //! its name, and the ids those numbers refer to.
 
-use sheaf_core::graph::{Graph, LegendScope};
+use sheaf_core::graph::Graph;
 
 /// One piece of a legend line.
 #[derive(Clone, Debug, PartialEq)]
@@ -23,7 +23,7 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
     let bytes = line.as_bytes();
     while i < bytes.len() {
         let rest = &line[i..];
-        let (kind, skip) = if rest.starts_with("\\l(") {
+        let (kind, skip) = if rest.starts_with("\\l(") || rest.starts_with("\\L(") {
             (0, 3)
         } else if rest.starts_with("%(") {
             (1, 2)
@@ -64,19 +64,10 @@ pub(crate) fn lines(text: &str) -> Vec<String> {
     out
 }
 
-/// The ids of the plots the legend of layer `index` lists, in order, given the number of
-/// drawable plots of each layer. They are `1`, `2`, ... for the layer's own plots, and `l.p`
-/// (layer and plot, both from 1) when the legend lists the plots of several layers.
+/// The ids of the plots the legend of layer `index` lists, given the number of drawable plots of
+/// each layer (see [`Graph::legend_ids`]).
 pub(crate) fn ids(g: &Graph, index: usize, plots_in: &dyn Fn(usize) -> usize) -> Vec<String> {
-    let Some(layer) = g.layers.get(index) else { return Vec::new() };
-    if layer.legend.scope == LegendScope::Graph {
-        let layers = g.same_frame(index);
-        if layers.len() > 1 {
-            return layers.iter().flat_map(|&l| (1..=plots_in(l)).map(move |k| format!("{}.{k}", l + 1))).collect();
-        }
-        return layers.first().map_or_else(Vec::new, |&l| (1..=plots_in(l)).map(|k| k.to_string()).collect());
-    }
-    (1..=plots_in(index)).map(|k| k.to_string()).collect()
+    g.legend_ids(index, plots_in)
 }
 
 /// The entry that `id` names among `ids`: an exact match, or else a plain number counts the
@@ -106,6 +97,7 @@ mod tests {
             vec![Part::Symbol("1"), Part::Text(" "), Part::Name("1"), Part::Text(" at 5\\+(2) K")]
         );
         assert_eq!(parse_line("%(2.1,@LG)"), vec![Part::Name("2.1")]);
+        assert_eq!(parse_line("\\L(2.1)"), vec![Part::Symbol("2.1")], "the capital form is the same");
         // Not plot ids, or not closed: literal.
         assert_eq!(parse_line("%(x) \\l(1"), vec![Part::Text("%(x) \\l(1")]);
         assert_eq!(parse_line("\u{b0}C \u{3b1}%(1)"), vec![Part::Text("\u{b0}C \u{3b1}"), Part::Name("1")]);

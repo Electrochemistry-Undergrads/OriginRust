@@ -298,6 +298,9 @@ Documented default: the Y column's comments row supplies the text, switchable by
 ### 6.3 Update modes [F:legendupdate.OXF]
 Scope: whole page, active layer, specific page, specific layer. Mode: reconstruct (rebuild from scratch) or update (keep manual text edits). Legend: one per layer or one for whole page. Entry order ascending/descending; plot order within layer ascending/descending. Hide entries for hidden plots (default on); hide entries for fit curves (default off). Which listed item is the default of mode and order: U10. A renamed legend becomes static.
 
+### 6.3a What Sheaf does (2026-11-12)
+`Legend::text` holds the text as above (`None` is the automatic `\l(n) %(n)` per plot). Supported: `\l(n)` / `\L(n)` and `%(n)`, `n` a plot number or `l.p`, any literal text with the markup of section 7, one entry per line, `Legend::columns`. `%(n,@...)` options are accepted and ignored. Reconstruct Legend sets the text back to automatic. The text is written to .opj as it is and a text that is not the automatic one is read back; the number of columns has no place in the file and is named in the save notes.
+
 ### 6.4 Frame, position
 Frame tab (none, line, shadow...), position by anchor corner, size, arrange vertical or horizontal, multi-column, line spacing %, `\sep:nn` gaps. Default frame and position of the stock template: UNKNOWN U11 ([REC] frame none, top-right inside layer).
 

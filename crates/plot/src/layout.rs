@@ -106,7 +106,14 @@ pub(crate) fn graph_geometry(
 fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
-    let mut resolved = if dim == Dim::X && data::is_category(project, axis, first) {
+    let boxes: Vec<&data::BoxStats> = sources.iter().filter_map(|pd| pd.boxed.as_ref()).collect();
+    let mut resolved = if dim == Dim::X && !boxes.is_empty() {
+        // Box charts: one category per box, named by its column.
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
+        let names: Vec<String> = boxes.iter().map(|b| b.label.clone()).collect();
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && data::is_category(project, axis, first) {
         crate::ticks::resolve_category(axis, range)
     } else {
         let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
@@ -146,6 +153,25 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
         {
             let base = drawn.as_ref().unwrap_or(axis);
             drawn = Some(Axis { major_step: Some(crate::ticks::nice_step((hi - lo) / 5.0)), ..base.clone() });
+        }
+        if dim == Dim::X && linear && drawn.is_none() && sources.first().is_some_and(|pd| pd.plot.kind.is_area()) {
+            // Area plots reach the frame at both ends: Origin gives them no margin in X (measured).
+            drawn = Some(Axis { auto_range: sheaf_core::graph::AutoRange::Tight, ..axis.clone() });
+        }
+        if dim == Dim::Y
+            && linear
+            && let Some((lo, hi)) = range
+            && lo > 0.0
+            && sources.iter().any(|pd| pd.plot.kind.is_area() && pd.plot.y_base.is_none())
+        {
+            // The fill stands on Y = 0: the axis starts there exactly (measured).
+            range = Some((0.0, hi));
+            free.0 = false;
+        }
+        if dim == Dim::Y && linear && sources.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Area) {
+            // Piles of 100: the axis ends exactly at 0 and 100.
+            range = Some((0.0, 100.0));
+            free = (false, false);
         }
         resolve_axis_edges(drawn.as_ref().unwrap_or(axis), range, free)
     };
@@ -518,7 +544,9 @@ fn layer_scene(
 /// for scatter and column plots, which have no line of their own to show.
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
     pds.first().map(|pd| match pd.plot.kind {
-        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area => pd.plot.line.color,
+        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => {
+            pd.plot.line.color
+        }
         _ => pd.plot.symbol.color,
     })
 }
@@ -860,6 +888,17 @@ fn draw_y_labels(
 /// else `Row`.
 fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
+    if pd.plot.kind == PlotKind::Histogram {
+        // The counts up the page, the binned column along it.
+        return if y_axis {
+            "Count".to_string()
+        } else {
+            project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default()
+        };
+    }
+    if pd.boxed.is_some() && !y_axis {
+        return String::new();
+    }
     // Horizontal bars show their values on the X axis and their positions on the Y axis.
     if y_axis != pd.transposed() {
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
@@ -1002,7 +1041,7 @@ fn draw_legend(
     let col_gap = fs;
 
     // Piled and lying bars list the last plot first, as they appear on the page.
-    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked() || pd.plot.kind.is_horizontal());
+    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked_column() || pd.plot.kind.is_horizontal());
     let text = lg.text.clone().unwrap_or_else(|| {
         if reversed {
             let rev: Vec<String> = ids.iter().rev().cloned().collect();
@@ -1110,7 +1149,14 @@ fn draw_legend(
                         symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
                         out.push(symbol_item(d, &plot.symbol));
                     }
-                    if plot.kind.is_bar() || plot.kind == PlotKind::Area {
+                    if matches!(plot.kind, PlotKind::Histogram | PlotKind::Box) {
+                        // An outlined box in the plot's colour, without a fill.
+                        out.push(Item::Rect {
+                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            fill: None,
+                            stroke: Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        });
+                    } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         out.push(Item::Rect {

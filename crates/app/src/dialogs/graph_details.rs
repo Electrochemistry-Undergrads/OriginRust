@@ -89,6 +89,11 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Stacked100Column => "100% Stacked Column",
         PlotKind::Bar => "Bar",
         PlotKind::FloatingColumn => "Floating Column",
+        PlotKind::StackedArea => "Stacked Area",
+        PlotKind::Stacked100Area => "100% Stacked Area",
+        PlotKind::Histogram => "Histogram",
+        PlotKind::Box => "Box Chart",
+        PlotKind::Pie => "Pie",
     }
 }
 
@@ -136,6 +141,11 @@ pub fn dialog_body(
                             PlotKind::Bar,
                             PlotKind::FloatingColumn,
                             PlotKind::Area,
+                            PlotKind::StackedArea,
+                            PlotKind::Stacked100Area,
+                            PlotKind::Histogram,
+                            PlotKind::Box,
+                            PlotKind::Pie,
                         ] {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }
@@ -554,6 +564,9 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 x_error: None,
                 y_base: None,
                 error: ErrorStyle::default(),
+                hist: Default::default(),
+                size_from: None,
+                color_from: None,
             });
         }
         layer.recolor_automatic();

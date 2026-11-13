@@ -46,10 +46,28 @@ pub enum Template {
     Bar,
     /// Floating column (Origin's "Floating Column"): each bar runs from one Y column to the next.
     FloatingColumn,
+    /// Stacked area (Origin's "Stacked Area"): the area template with the areas piled up.
+    StackedArea,
+    /// 100 % stacked area: every pile scaled to 100, Y axis from 0 to 100.
+    Stacked100Area,
+    /// Fill area (Origin's "Fill Area"): the area between two curves, a pair of Y columns each.
+    FillArea,
+    /// Histogram (Origin's "Histogram"): the bin counts of each Y column as touching bars.
+    Histogram,
+    /// Box chart (Origin's "Box Chart"): one box per Y column.
+    BoxChart,
+    /// Bubble plot (Origin's "Bubble"): open circles whose size follows the Z column.
+    Bubble,
+    /// Colour mapped scatter plot: the colour of each symbol follows the Z column.
+    ColorMapped,
+    /// Both: bubbles whose size and colour follow the Z column.
+    BubbleColorMapped,
+    /// Pie chart (Origin's pie): the Y column's rows as slices, in a layer without axes.
+    Pie,
 }
 
 impl Template {
-    pub const ALL: [Template; 13] = [
+    pub const ALL: [Template; 22] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -59,6 +77,15 @@ impl Template {
         Template::Bar,
         Template::FloatingColumn,
         Template::Area,
+        Template::StackedArea,
+        Template::Stacked100Area,
+        Template::FillArea,
+        Template::Histogram,
+        Template::BoxChart,
+        Template::Bubble,
+        Template::ColorMapped,
+        Template::BubbleColorMapped,
+        Template::Pie,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -81,6 +108,15 @@ impl Template {
             Template::Stacked100Column => "stacked-column-100",
             Template::Bar => "bar",
             Template::FloatingColumn => "floating-column",
+            Template::StackedArea => "stacked-area",
+            Template::Stacked100Area => "stacked-area-100",
+            Template::FillArea => "fill-area",
+            Template::Histogram => "histogram",
+            Template::BoxChart => "box",
+            Template::Bubble => "bubble",
+            Template::ColorMapped => "color-mapped",
+            Template::BubbleColorMapped => "bubble-color-mapped",
+            Template::Pie => "pie",
         }
     }
 
@@ -99,6 +135,15 @@ impl Template {
             Template::Stacked100Column => "100% Stacked Column",
             Template::Bar => "Bar",
             Template::FloatingColumn => "Floating Column",
+            Template::StackedArea => "Stacked Area",
+            Template::Stacked100Area => "100% Stacked Area",
+            Template::FillArea => "Fill Area",
+            Template::Histogram => "Histogram",
+            Template::BoxChart => "Box Chart",
+            Template::Bubble => "Bubble",
+            Template::ColorMapped => "Color Mapped",
+            Template::BubbleColorMapped => "Bubble + Color Mapped",
+            Template::Pie => "Pie",
         }
     }
 
@@ -117,12 +162,21 @@ impl Template {
             Template::DoubleY => double_y(id, name),
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
-            Template::Column => column(id, name, PlotKind::Column),
-            Template::StackedColumn => column(id, name, PlotKind::StackedColumn),
-            Template::Stacked100Column => column(id, name, PlotKind::Stacked100Column),
+            Template::Column => from_red(column(id, name, PlotKind::Column)),
+            Template::StackedColumn => themed(column(id, name, PlotKind::StackedColumn)),
+            Template::Stacked100Column => themed(column(id, name, PlotKind::Stacked100Column)),
             Template::Bar => column(id, name, PlotKind::Bar),
             Template::FloatingColumn => column(id, name, PlotKind::FloatingColumn),
-            Template::Area => general(id, name, PlotKind::Area),
+            Template::Area => themed(general(id, name, PlotKind::Area)),
+            Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
+            Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
+            Template::FillArea => themed(general(id, name, PlotKind::Area)),
+            Template::Histogram => from_red(general(id, name, PlotKind::Histogram)),
+            Template::BoxChart => from_red(general(id, name, PlotKind::Box)),
+            Template::Bubble => bubble(id, name, false, true),
+            Template::ColorMapped => bubble(id, name, true, false),
+            Template::BubbleColorMapped => bubble(id, name, true, true),
+            Template::Pie => pie(id, name),
         }
     }
 }
@@ -161,6 +215,57 @@ pub const ORIGIN_COLOR_LIST: [(u8, u8, u8); 24] = [
     (255, 128, 255),
     (64, 64, 64),
 ];
+
+/// The colour list of the owner's graph theme, which Origin's area, stacked area and stacked column
+/// templates use (black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, then
+/// custom colours; graphing spec section 1.5), measured on the legends of plots made from those
+/// templates.
+pub const THEME_COLOR_LIST: [(u8, u8, u8); 23] = [
+    (0, 0, 0),
+    (255, 0, 0),
+    (0, 0, 255),
+    (255, 0, 255),
+    (0, 128, 0),
+    (0, 0, 128),
+    (128, 0, 255),
+    (128, 0, 128),
+    (128, 0, 0),
+    (128, 128, 0),
+    (43, 99, 162),
+    (30, 150, 150),
+    (155, 100, 26),
+    (16, 199, 62),
+    (185, 36, 122),
+    (45, 197, 204),
+    (63, 65, 152),
+    (147, 172, 43),
+    (128, 128, 128),
+    (150, 100, 100),
+    (100, 150, 100),
+    (43, 163, 202),
+    (50, 100, 150),
+];
+
+/// The graph with its colour list replaced by the theme list ([`THEME_COLOR_LIST`]).
+fn themed(mut g: Graph) -> Graph {
+    for l in &mut g.layers {
+        l.palette.colors = THEME_COLOR_LIST.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).collect();
+    }
+    g
+}
+
+/// The graph with its colour list started at the second entry of the base palette (red, green, blue,
+/// cyan, ...), as Origin's Column and Box templates do (measured: the first column of a plain
+/// Column graph is red, not black).
+fn from_red(mut g: Graph) -> Graph {
+    for l in &mut g.layers {
+        l.palette.colors = (1..=ORIGIN_COLOR_LIST.len())
+            .map(|i| ORIGIN_COLOR_LIST[i % ORIGIN_COLOR_LIST.len()])
+            .map(|(r, g, b)| Color::rgb(r, g, b))
+            .collect();
+    }
+    g
+}
 
 /// Origin's default page, in inches (6432 by 4923 units of 1/600 inch). Its font sizes (18 pt tick
 /// labels, 22 pt titles) are meant for this size.
@@ -255,6 +360,30 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             bars: BarSpacing::default(),
         }],
     }
+}
+
+/// The scatter template for bubble and colour mapped plots. Bubbles are open circles in the first
+/// colour of the list (measured: black rings), colour mapped symbols the usual filled squares, and
+/// bubbles that are also colour mapped are filled circles.
+fn bubble(id: WindowId, name: &str, mapped: bool, sized: bool) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    let s = &mut g.layers[0].default_symbol;
+    if sized {
+        s.shape = SymbolShape::Circle;
+        s.filled = mapped;
+    }
+    g
+}
+
+/// The pie template: no axes (the plot draws its own frame, slices, labels and legend), the colour
+/// list of the line template (measured: black, red, green, blue, cyan, ...).
+fn pie(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Pie);
+    let l = &mut g.layers[0];
+    l.x_axis.side = AxisSide::Hidden;
+    l.y_axis.side = AxisSide::Hidden;
+    l.legend.visible = false;
+    g
 }
 
 fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
@@ -465,7 +594,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 13);
+        assert_eq!(Template::ALL.len(), 22);
     }
 
     #[test]
@@ -487,11 +616,12 @@ mod tests {
         assert_eq!((l.x_axis.major_tick, l.x_axis.minor_tick), (TickDirection::None, TickDirection::None));
         assert_eq!((l.x_axis.minor_ticks, l.y_axis.minor_ticks), (0, 1));
         assert_eq!(l.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
-        // Page, fonts, legend and colors are those of the line template.
+        // Page, fonts and legend are those of the line template; the colours start at red (measured).
         let line = Template::Line.new_graph(WindowId(1), "Graph1");
         assert_eq!(g.page, line.page);
         assert_eq!(l.legend, line.layers[0].legend);
-        assert_eq!(l.palette, line.layers[0].palette);
+        assert_eq!(l.palette.colors[0], Color::rgb(255, 0, 0));
+        assert_eq!(l.palette.colors.len(), line.layers[0].palette.colors.len());
         assert_eq!(l.x_axis.tick_font, line.layers[0].x_axis.tick_font);
         // No template writes the new keys, so their files look as before.
         for t in Template::ALL {

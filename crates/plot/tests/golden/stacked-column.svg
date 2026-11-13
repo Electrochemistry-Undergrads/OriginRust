@@ -11,10 +11,10 @@
 <rect x="282.91" y="257.007" width="105.217" height="94.298" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
 <rect x="414.432" y="257.007" width="105.217" height="47.149" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
 <rect x="545.953" y="162.708" width="105.217" height="94.298" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="151.389" y="209.858" width="105.217" height="141.448" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<rect x="282.91" y="209.858" width="105.217" height="47.149" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<rect x="414.432" y="162.708" width="105.217" height="94.298" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<rect x="545.953" y="115.559" width="105.217" height="47.149" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="151.389" y="209.858" width="105.217" height="141.448" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<rect x="282.91" y="209.858" width="105.217" height="47.149" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<rect x="414.432" y="162.708" width="105.217" height="94.298" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<rect x="545.953" y="115.559" width="105.217" height="47.149" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
 </g>
 <g class="overlay">
 <path d="M138.237 68.41L664.323 68.41L664.323 492.753L138.237 492.753Z" fill="none" stroke="#000000" stroke-width="1.5"/>
@@ -31,7 +31,7 @@
 <text x="401.28" y="544.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
 <text x="104.217" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 104.217 280.581)">Current 1 (mA)</text>
 <rect x="497.123" y="86.01" width="149.6" height="103.4" fill="none" stroke="#000000" stroke-width="0.75"/>
-<rect x="505.923" y="98.11" width="48.4" height="22" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="505.923" y="98.11" width="48.4" height="22" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
 <text x="565.323" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 3</text>
 <rect x="505.923" y="126.71" width="48.4" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
 <text x="565.323" y="143.32" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 2</text>

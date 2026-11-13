@@ -1204,6 +1204,49 @@ Measured with Origin on a scatter plot of 5 points with a Y error column (`p6`, 
 - **Range.** The automatic axis range reaches the ends of the error bars (data 2..5 with ends 1.5 and 6 gave Y 1..6.5).
 - **Sheaf.** `Plot::x_error` (X error column after the Y column, found like the Y error), `Plot::error` with direction (both, positive, negative) and cap width (default 8 pt, 0 = no cap); Plot Details > Error Bar edits direction and cap width; Plot > Symbol > XY Error plots with both columns. X error bars are not drawn for bar plots. Positive and negative directions draw the bar from the point to that end only, with one cap; the range widens only on that side. Not stored in `.opj` (save warning).
 
+### 14.14 Colour lists of column and area templates; stacked area and fill area (T12)
+
+Measured with `plotxy` and `expGraph` through COM on synthetic data (scripts and PNGs in `re-workspace/scratch/T12/`, local only), legends read pixel by pixel. The same twelve Y columns plotted from each template:
+
+| Template | Colours of the plots in order |
+|---|---|
+| `<new>` (no template), Line, Scatter, Line + Symbol | the base palette: black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, ... (section 1.5) |
+| Column, Box | the base palette from its second entry: red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, dark cyan |
+| Stacked Column, Area, Stacked Area | the theme list (section 1.5, "Q02 Basic"): black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, (43,99,162), (30,150,150), ... |
+
+Sheaf copies this in `template.rs`: `from_red` for Column, `themed` for the stacked column, area and fill area templates. Plain Area draws the later plots over the earlier ones (no pile).
+
+- **Stacked Area (214) and 100 % Stacked Area.** Plot i fills from the sum of the plots before it up to the sum including itself, row by row; the legend lists the plots in plot order (stacked columns list them reversed). The Y axis starts at exactly 0; the X axis runs from the first to the last X value with no margin (the same for plain Area, measured: probe X 1 to 8 gave a 1 to 8 axis, Y 0 to 12 for a pile reaching 11).
+- **Fill Area.** One plot per pair of Y columns: the first of a pair is the lower edge, the second the upper edge and the plot's name (`Plot::y_base`, as Floating Column). Origin's template could not be told apart from two plain areas drawn over each other, so only the pair form is implemented.
+- `.opj`: stacked areas are written as plain areas from zero, fill areas as areas down to zero, and the save warns (the companion keeps them).
+
+### 14.15 Histogram and box chart (T12)
+
+Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; `plotxy iy:=[Book]Sheet1!1:3`: the range without parentheses makes each column a box, with parentheses the first column is X and the boxes are grouped by its values). PNGs in `re-workspace/scratch/T12/`.
+
+- **Histogram.** The bins are those of the Frequency Counts tool (`sheaf_calc::freq`, size by the 1.75 ln n rule, edges at multiples of the size): data 40.7 to 69 (12 values) gave bins of 7 from 35 to 70, data 13.9 to 73.2 (100 values) bins of 10 from 10 to 80, data 38.7 to 63.7 (7 values) bins of 9 from 36 to 72, each time with the X axis exactly from the first to the last edge and the Y axis from 0 (to 4.5 for a highest bin of 4, to 50 for 43). The bars touch. The Y title is "Count", the X title the column's. The first colour is red; Origin hatches the bars and outlines them in that colour. Sheaf outlines the bars in the colour and leaves them unfilled, as it has no pattern fills. `Plot::hist` (bin size, first edge, end) overrides the automatic bins.
+- **Box chart.** One box per Y column, at 1, 2, 3, ... with the column names as tick labels and no X title; colours red, green, blue (the Box template, 14.14). Box from the 25th to the 75th percentile by the Hazen rule of the statistics tools (`quantile_origin`), median line across the full box, whiskers to the furthest values within 1.5 times the box height (caps 0.1 of the box spacing wide), a cross at each whisker end, the other values as crosses (outliers), the mean as a small open square; box width 0.8 of the spacing; 0.5 pt lines. Checked: 2..13 gave a box from 4.5 to 10.5, median 7.5, whiskers 2 and 13; a column with 30 among values 4 to 8 gave the outlier 30 and whiskers 4 and 8.
+- **Not done:** grouped box charts and the data points beside the box need the Group and Subject designations and categorical columns of T10 (`worksheet-ops`); a worksheet with a grouping column is plotted today as one box per Y column only. The Y axis of the box chart follows the automatic rule of T20 (Origin: -5 to 40 for data 1 to 30; Sheaf -2 to 32); the Y limit of a histogram from 4 is 4.5 as in Origin.
+- `.opj`: both are written as plain columns of their data and the save warns.
+
+### 14.16 Bubble and colour mapped symbols (T12)
+
+Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new template:=BUBBLE>]` with the third column set as Z (`wks.col3.type=5`; X is 4 and Y 1) draws the bubbles (the plot type numbers 245 to 247 gave nothing). Probe: X 1..8, Y 2 4 3 6 5 7 6 8, Z 1 4 2 9 3 6 8 5.
+
+- Bubbles are open circles in the first colour (black rings). Their width is linear in Z from the smallest to the largest value: measured on the 800 px export 2.5, 5, 7, 9, 12, 14, 19 and 22 px (about 2.4 to 21 pt) for Z = 1, 2, 3, 4, 5, 6, 8, 9. Sheaf uses 2 pt to 20 pt (the outline adds the rest).
+- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Not drawn by Sheaf.
+- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. No colour scale is drawn.
+- Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
+
+### 14.17 Pie; what was seen of polar (T12)
+
+Measured through COM: `plotxy iy:=[Book]Sheet1!1 plot:=225 ogl:=[<new template:=PIE>]` with the column set as Y (a column left as X puts its values into the legend instead). PNGs in `re-workspace/scratch/T12/`.
+
+- The pie template is a 3D pie viewed from above at a slant (an ellipse about half as high as wide, with a side band); the 2D template (`PIEBW`) is a flat black and white pie with hatch patterns. Both: the first slice starts at 12 o'clock and the slices follow clockwise, each outlined in black; every slice is labelled outside with its share to two decimals (`33.33%`); the legend lists one square per slice at the top right, named by the X column's cells or by the row numbers 1, 2, 3, ...; the slices take the base palette in order (black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple); the layer has no axes and a black frame around the whole layer; the legend font is the legend font of the layer, the percentages the tick label font.
+- Sheaf draws the flat pie in colour (`PlotKind::Pie`, `Template::Pie`, menu "2D Color Pie" which Origin does not have; "3D Color Pie" and "2D B&W Pie" stay greyed): a pie whose radius is 35 % of the frame height, centre at 42 % of the width, drawn by `draw_pie`. Rows that are not positive numbers are left out. Not done: the 3D slant, hatch patterns, exploded slices, label positions inside, other label contents.
+- `.opj`: written as plain columns, the save warns.
+- **Polar** (`POLAR` template, `plotxy iy:=[Book]Sheet1!(1,2) plot:=200`): theta from 0 to 360 degrees in steps of 30 with labels outside the circle (0 on the right, counter-clockwise), grey ring and spoke grid lines, the radius axis drawn twice along the vertical diameter (labels 1.0 to 2.0 up and down, mirrored) and a line curve. Needs a layer with polar axes (angle and radius scales, labels on a circle): not started.
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.

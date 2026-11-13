@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 114 | 73 | 230 |
+| All rows | 43 | 116 | 71 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 45 | 73 | 129 |
+| P1 and P2 together | 11 | 47 | 71 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -265,10 +265,10 @@ Cross-cutting findings:
 | Layer Contents, add and remove data | F12 | F12 or Graph > Layer Contents opens Plot Details on the layer: plots can be added from any sheet, removed and reordered; Plot Setup opens the same page | ◐ | no separate X/Y/error assignment, no row range | P0 |
 | Spline and step connect | Line > Connect | Catmull-Rom spline, steps | ◐ | no B-spline, Bezier, segments; spline skipped above 2000 points | P1 |
 | Multi-panel and stack | 4 Panel, 9 Panel | CLI `plot --panels stack` or RxC (Stack, Vertical 2 Panel, Horizontal 2 Panel, 4 Panel) with `--panel-y`, `--per-panel`, gaps and margins; panels are linked layers that share X, and the graph window edits each layer | ◐ | Plot > Multi-Panel has Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel (one panel per selected Y column), no Stack... dialog; panel links are not written to .opj | P1 |
-| Area and fill | Plot > Area | Plot > Area > Area, CLI `plot -t area`, Change Plot to Area: the line is filled down to Y = 0 with the symbol colour | ◐ | no stacked area, no fill to another baseline, no transparency; written to .opj as a line (the companion keeps the fill) | P1 |
-| Drop lines, bubble, colour mapped | Plot > Symbol | none | ✗ | | P1 |
-| Histogram, box chart, statistics plots | Plot > Statistics | histogram tool makes a column plot of the bin counts | ◐ | bars have gaps, no distribution curve, no box chart or other statistics plots | P1 |
-| Pie | Plot > Pie | none | ✗ | | P2 |
+| Area and fill | Plot > Area | Plot > Area > Area, Stacked Area, 100% Stacked Area, Fill Area (between a pair of columns); CLI `plot -t area`, `stacked-area`, `stacked-area-100`, `fill-area`; Change Plot to Area: the line is filled down to Y = 0 (or to the lower edge) with the symbol colour | ◐ | no transparency, no fill to the next plot; stacked and fill areas written to .opj as plain areas (the companion keeps them) | P1 |
+| Drop lines, bubble, colour mapped | Plot > Symbol | Plot > Symbol > Bubble, Color Mapped, Bubble + Color Mapped (Z column after the Y column) | ◐ | no drop lines, no size legend or colour scale, colour map is a stand-in, not written to .opj | P1 |
+| Histogram, box chart, statistics plots | Plot > Statistics | Plot > Statistics > Histogram and Box Chart, CLI `plot -t histogram`, `box`: binned like Frequency Counts, touching bars; boxes with median, mean, whiskers, outliers | ◐ | no distribution curve, no hatch fill, no grouped box charts (need T10's group columns), other statistics plots missing; written to .opj as plain columns | P1 |
+| Pie | Plot > Pie | Plot > Column/Bar/Pie > 2D Color Pie, CLI `plot -t pie`: flat colour pie, shares to two decimals, legend | ◐ | no 3D slant, no B&W hatch pie, no exploded slices; written to .opj as plain columns | P2 |
 | Polar, ternary, radar, Smith, wind rose | Specialized | none | ✗ | | P2 |
 | Stock | Plot > Stock | none | ✗ | | P2 |
 | Vector | Plot > Vector | none | ✗ | | P2 |

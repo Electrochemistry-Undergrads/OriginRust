@@ -782,11 +782,30 @@ pub enum PlotKind {
     /// A column from the plot's base column (`Plot::y_base`) up to its Y column (Origin's
     /// plot type 207).
     FloatingColumn,
+    /// Areas piled on each other (Origin's plot type 214): each plot's area runs from the curve of
+    /// the plots before it (in plot order) up to the sum of their values and its own.
+    StackedArea,
+    /// Like [`PlotKind::StackedArea`] with every pile scaled to 100; the Y axis runs from 0 to 100.
+    Stacked100Area,
+    /// A histogram of the plot's Y column (Origin's plot type 219): the values are counted into bins
+    /// (`Plot::hist`) and drawn as touching bars; the bars stand at the bin centres.
+    Histogram,
+    /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
+    /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
+    Box,
+    /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
+    /// from 12 o'clock, each labelled with its share. The layer draws no axes.
+    Pie,
 }
 
 impl PlotKind {
     pub fn has_line(&self) -> bool {
-        matches!(self, PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area)
+        matches!(self, PlotKind::Line | PlotKind::LineSymbol) || self.is_area()
+    }
+
+    /// True for the kinds drawn as a filled area under a curve.
+    pub fn is_area(&self) -> bool {
+        matches!(self, PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area)
     }
 
     /// True for every kind drawn as rectangles standing on a base: the column kinds and bars.
@@ -798,12 +817,28 @@ impl PlotKind {
                 | PlotKind::Stacked100Column
                 | PlotKind::Bar
                 | PlotKind::FloatingColumn
+                | PlotKind::Histogram
         )
     }
 
     /// True for the kinds that pile on each other instead of standing side by side.
     pub fn is_stacked(&self) -> bool {
+        self.is_stacked_column() || self.is_stacked_area()
+    }
+
+    /// True for the piled column kinds.
+    pub fn is_stacked_column(&self) -> bool {
         matches!(self, PlotKind::StackedColumn | PlotKind::Stacked100Column)
+    }
+
+    /// True for the piled area kinds.
+    pub fn is_stacked_area(&self) -> bool {
+        matches!(self, PlotKind::StackedArea | PlotKind::Stacked100Area)
+    }
+
+    /// True when every pile is scaled to a total of 100.
+    pub fn is_percent_stacked(&self) -> bool {
+        matches!(self, PlotKind::Stacked100Column | PlotKind::Stacked100Area)
     }
 
     /// True when the bars lie down: values along the horizontal axis.
@@ -813,6 +848,23 @@ impl PlotKind {
 
     pub fn has_symbols(&self) -> bool {
         matches!(self, PlotKind::Scatter | PlotKind::LineSymbol)
+    }
+}
+
+/// How the values of a [`PlotKind::Histogram`] plot are binned. `None` takes Origin's automatic
+/// choice (see `sheaf_calc::freq`).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HistogramStyle {
+    pub bin_size: Option<f64>,
+    /// First bin edge.
+    pub begin: Option<f64>,
+    /// End of the last bin.
+    pub end: Option<f64>,
+}
+
+impl HistogramStyle {
+    pub fn is_default(&self) -> bool {
+        *self == HistogramStyle::default()
     }
 }
 
@@ -850,12 +902,24 @@ pub struct Plot {
     /// Error values in X (the third column type "X error"); drawn as horizontal error bars.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub x_error: Option<ColumnId>,
-    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] plot.
+    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] plot, or
+    /// the lower edge of the fill of an [`PlotKind::Area`] plot (Origin's Fill Area between two
+    /// curves).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub y_base: Option<ColumnId>,
     /// Direction and cap width of the error bars.
     #[serde(default, skip_serializing_if = "ErrorStyle::is_default")]
     pub error: ErrorStyle,
+    /// The bins of a histogram plot.
+    #[serde(default, skip_serializing_if = "HistogramStyle::is_default")]
+    pub hist: HistogramStyle,
+    /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
+    /// Z column of a Bubble plot).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_from: Option<ColumnId>,
+    /// A colour mapped plot: the symbol of each point takes its colour from this column's value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_from: Option<ColumnId>,
 }
 
 /// Which side of the point an error bar reaches.
@@ -1262,6 +1326,9 @@ mod tests {
             x_error: None,
             y_base: None,
             error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1338,6 +1405,9 @@ mod tests {
             x_error: None,
             y_base: None,
             error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);

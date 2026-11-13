@@ -607,7 +607,12 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
-                greys(&["Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
+                greys(&["Vertical Drop Line"]),
+                vec![
+                    item("Bubble", Cmd::Plot(Template::Bubble)),
+                    item("Color Mapped", Cmd::Plot(Template::ColorMapped)),
+                    item("Bubble + Color Mapped", Cmd::Plot(Template::BubbleColorMapped)),
+                ],
             ]
             .concat(),
         ),
@@ -632,6 +637,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Floating Column", Cmd::Plot(Template::FloatingColumn)),
                 ],
                 greys(&["Floating Bar", "3D Color Pie", "2D B&&W Pie"]),
+                vec![item("2D Color Pie", Cmd::Plot(Template::Pie))],
             ]
             .concat(),
         ),
@@ -693,26 +699,36 @@ fn plot_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey_sub(
+        sub(
             "S&tatistics",
-            &[
-                "Box Chart",
-                "Grouped Box Charts",
-                "Interval Plot",
-                "Histogram",
-                "Histogram + Probabilities",
-                "Stacked Histograms",
-                "Marginal Histograms",
-                "Marginal Box Charts",
-                "2D Kernel Density",
-                "QC (X bar R) Chart",
-                "Pareto",
-                "Scatter Matrix",
-                "Probability Plot",
-                "Q-Q Plot",
+            [
+                vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
+                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Histogram", Cmd::Plot(Template::Histogram))],
+                greys(&[
+                    "Histogram + Probabilities",
+                    "Stacked Histograms",
+                    "Marginal Histograms",
+                    "Marginal Box Charts",
+                    "2D Kernel Density",
+                    "QC (X bar R) Chart",
+                    "Pareto",
+                    "Scatter Matrix",
+                    "Probability Plot",
+                    "Q-Q Plot",
+                ]),
+            ]
+            .concat(),
+        ),
+        sub(
+            "&Area",
+            vec![
+                item("&Area", Cmd::Plot(Template::Area)),
+                item("Stacked Area", Cmd::Plot(Template::StackedArea)),
+                item("100% Stacked Area", Cmd::Plot(Template::Stacked100Area)),
+                item("Fill Area", Cmd::Plot(Template::FillArea)),
             ],
         ),
-        sub("&Area", vec![item("&Area", Cmd::Plot(Template::Area)), grey("Stacked Area"), grey("Fill Area")]),
         grey_sub(
             "Contour/&Heat Map",
             &[
@@ -1428,6 +1444,7 @@ pub fn graph_plot_menu(
                 change("Line + Symbol", PlotKind::LineSymbol),
                 change("Column", PlotKind::Column),
                 change("Area", PlotKind::Area),
+                change("Stacked Area", PlotKind::StackedArea),
             ],
         ),
         grey("Change X"),

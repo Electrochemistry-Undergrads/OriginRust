@@ -29,6 +29,7 @@ use crate::worksheet::Worksheet;
 use serde::{Deserialize, Serialize};
 use sheaf_calc as calc;
 use sheaf_expr::Expr;
+use std::cmp::Ordering;
 
 pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection, PeakFilter,
@@ -1927,47 +1928,48 @@ impl Project {
     }
 }
 
-/// The row order that sorts `n` rows by one column: missing keys last, equal keys in their order,
-/// text without regard to case.
-fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..n).collect();
+/// How two rows compare by one key column: a missing value counts as smaller than every value, as
+/// in Origin (measured with `wsort`), so it comes first in an ascending sort and last in a
+/// descending one; text compares without regard to case and the empty text is the smallest.
+pub(crate) fn row_comparator(
+    key: &ColumnData,
+    n: usize,
+    descending: bool,
+) -> Box<dyn Fn(usize, usize) -> Ordering + '_> {
+    let direct = move |o: Ordering| if descending { o.reverse() } else { o };
     match key {
         ColumnData::Numeric(v) | ColumnData::Mixed { numbers: v, .. } => {
-            let value = |i: usize| v.get(i).copied().unwrap_or(f64::NAN);
-            order.sort_by(|a, b| {
-                let (x, y) = (value(*a), value(*b));
-                match (x.is_nan(), y.is_nan()) {
-                    (true, true) => std::cmp::Ordering::Equal,
-                    (true, false) => std::cmp::Ordering::Greater,
-                    (false, true) => std::cmp::Ordering::Less,
-                    (false, false) => {
-                        let o = x.partial_cmp(&y).expect("neither is NaN");
-                        if descending { o.reverse() } else { o }
-                    }
-                }
-            });
+            let value = move |i: usize| v.get(i).copied().unwrap_or(f64::NAN);
+            Box::new(move |a, b| {
+                let (x, y) = (value(a), value(b));
+                direct(match (x.is_nan(), y.is_nan()) {
+                    (true, true) => Ordering::Equal,
+                    (true, false) => Ordering::Less,
+                    (false, true) => Ordering::Greater,
+                    (false, false) => x.partial_cmp(&y).expect("neither is NaN"),
+                })
+            })
         }
         ColumnData::Text(v) => {
-            let value = |i: usize| v.get(i).map(|s| s.to_lowercase()).unwrap_or_default();
-            let keys: Vec<String> = (0..n).map(value).collect();
-            order.sort_by(|a, b| match (keys[*a].is_empty(), keys[*b].is_empty()) {
-                (true, true) => std::cmp::Ordering::Equal,
-                (true, false) => std::cmp::Ordering::Greater,
-                (false, true) => std::cmp::Ordering::Less,
-                (false, false) => {
-                    let o = keys[*a].cmp(&keys[*b]);
-                    if descending { o.reverse() } else { o }
-                }
-            });
+            let keys: Vec<String> = (0..n).map(|i| v.get(i).map(|s| s.to_lowercase()).unwrap_or_default()).collect();
+            Box::new(move |a, b| direct(keys[a].cmp(&keys[b])))
         }
     }
+}
+
+/// The row order that sorts `n` rows by one column. Equal keys keep their order (Origin's own
+/// order of equal keys is not stable, so it cannot be copied).
+pub(crate) fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..n).collect();
+    let cmp = row_comparator(key, n, descending);
+    order.sort_by(|a, b| cmp(*a, *b));
     order
 }
 
 /// The rows `order` of a column, in that order. A column shorter than the
 /// sheet (`rows` long) counts as padded with missing values; missing values
 /// at the end of the result are dropped again so that short columns stay short.
-fn take_rows(data: &ColumnData, order: &[usize], rows: usize) -> ColumnData {
+pub(crate) fn take_rows(data: &ColumnData, order: &[usize], rows: usize) -> ColumnData {
     debug_assert!(order.iter().all(|i| *i < rows));
     match data {
         ColumnData::Numeric(v) => {
@@ -2344,7 +2346,7 @@ mod tests {
     }
 
     #[test]
-    fn sort_keeps_rows_together_and_puts_missing_keys_last() {
+    fn sort_keeps_rows_together_and_treats_a_missing_key_as_the_smallest_value() {
         let mut p = Project::new();
         let book = p.add_workbook("");
         let key =
@@ -2359,17 +2361,22 @@ mod tests {
             .unwrap();
         let short = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![30.0, 0.0, 10.0])).unwrap();
         p.sort_sheet(book, 0, key, false).unwrap();
-        assert_eq!(p.column(tag).unwrap().text().unwrap(), ["a1", "a2", "b", "c", "n"]);
+        // Origin (wsort): a missing key is the smallest value, so it comes first when ascending.
+        assert_eq!(p.column(tag).unwrap().text().unwrap(), ["n", "a1", "a2", "b", "c"]);
         let k = p.numeric(key).unwrap();
-        assert_eq!(k[..4], [1.0, 1.0, 2.0, 3.0]);
-        assert!(k[4].is_nan());
+        assert!(k[0].is_nan());
+        assert_eq!(k[1..], [1.0, 1.0, 2.0, 3.0]);
         // The short column was padded with missing values for the sort; row "c" keeps its 30.
         let s = p.numeric(short).unwrap();
-        assert_eq!((s[0], s[3], s[4]), (10.0, 30.0, 0.0));
-        assert!(s[1].is_nan() && s[2].is_nan());
+        assert_eq!((s[0], s[1], s[4]), (0.0, 10.0, 30.0));
+        assert!(s[2].is_nan() && s[3].is_nan());
         p.sort_sheet(book, 0, key, true).unwrap();
-        assert_eq!(p.column(tag).unwrap().text().unwrap(), ["c", "b", "a1", "a2", "n"]);
-        // Sorting by a text column ignores case and puts empty cells last.
+        assert_eq!(
+            p.column(tag).unwrap().text().unwrap(),
+            ["c", "b", "a1", "a2", "n"],
+            "missing is last when descending"
+        );
+        // Sorting by a text column ignores case; an empty cell is the smallest.
         p.sort_sheet(book, 0, tag, false).unwrap();
         assert_eq!(p.column(tag).unwrap().text().unwrap(), ["a1", "a2", "b", "c", "n"]);
         assert_eq!(p.sort_sheet(book, 3, key, false), Err(AnalysisError::NoSuchSheet));

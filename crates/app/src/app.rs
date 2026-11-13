@@ -13,6 +13,7 @@ use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::set_values::SetValuesDialog;
+use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
@@ -102,6 +103,7 @@ pub struct SheafApp {
     export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
+    sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
@@ -157,6 +159,7 @@ impl SheafApp {
             export_sheet: None,
             rename: None,
             go_to: None,
+            sort: None,
             sheet_name: None,
             copied: String::new(),
             copied_page: None,
@@ -267,6 +270,7 @@ impl SheafApp {
         self.export_sheet = None;
         self.rename = None;
         self.go_to = None;
+        self.sort = None;
         self.sheet_name = None;
         self.import = None;
         self.import_wizard = None;
@@ -821,6 +825,17 @@ impl SheafApp {
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
             Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
             Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
+            Action::SortCustom { book, columns } => {
+                self.sort = SortDialog::nested(self.doc.project(), book, columns);
+            }
+            Action::SortByLabel(book) => self.sort = Some(SortDialog::by_label(book)),
+            Action::ReverseColumns(columns) => {
+                let mut locked = 0;
+                self.doc.apply("Reverse order", |p| locked = p.reverse_columns(&columns));
+                if locked > 0 {
+                    self.warn(format!("{locked} column(s) calculated from a formula were left alone"));
+                }
+            }
             Action::AddErrorBars { graph, layer } => self.add_error_bars(graph, layer),
             Action::Refresh(active) => self.refresh(active),
             Action::FilterRows(book) => {
@@ -1618,6 +1633,7 @@ impl SheafApp {
             || self.export_sheet.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
+            || self.sort.is_some()
             || self.sheet_name.is_some()
             || self.about
             || self.message.is_some()
@@ -1890,6 +1906,35 @@ impl SheafApp {
                         state.go_to(sheet, column, row);
                     }
                     self.go_to = None;
+                }
+            }
+        }
+        if let Some(d) = &mut self.sort {
+            match d.show(ctx, self.doc.project()) {
+                SortOutcome::Open => {}
+                SortOutcome::Closed => self.sort = None,
+                SortOutcome::Nested { book, columns, keys } => {
+                    let sheet =
+                        self.doc.project().workbook(book).map(|b| b.active_sheet.min(b.sheets.len().saturating_sub(1)));
+                    if let Some(sheet) = sheet {
+                        match self.doc.edit("Sort (nested)", |p| p.sort_nested(book, sheet, &keys, &columns)) {
+                            Ok(()) => self.say(format!("Sorted by {} column(s)", keys.len())),
+                            Err(e) => self.message = Some(("Could not sort".to_string(), e.to_string())),
+                        }
+                    }
+                    self.sort = None;
+                }
+                SortOutcome::ByLabel { book, label, descending } => {
+                    let mut moved = false;
+                    self.doc.apply("Sort columns by label", |p| {
+                        if let Some(b) = p.workbook_mut(book) {
+                            moved = b.sheet_mut().sort_columns_by_label(label, descending);
+                        }
+                    });
+                    if !moved {
+                        self.say("The columns are already in that order");
+                    }
+                    self.sort = None;
                 }
             }
         }

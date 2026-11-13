@@ -122,6 +122,13 @@ pub enum Cmd {
     SortColumns {
         descending: bool,
     },
+    /// Worksheet > Sort Worksheet > Custom... and Sort Range > Custom...
+    SortCustom {
+        range: bool,
+    },
+    SortByLabel,
+    /// Column > Reverse Order.
+    ReverseOrder,
     FilterRows,
     Analyze(AnalysisKind),
     Fit(FitKind),
@@ -785,7 +792,7 @@ fn worksheet_menu() -> Vec<Entry> {
             vec![
                 item("Ascending", Cmd::SortRange { descending: false }),
                 item("Descending", Cmd::SortRange { descending: true }),
-                grey("Custom..."),
+                item("Custom...", Cmd::SortCustom { range: true }),
             ],
         ),
         sub(
@@ -798,9 +805,13 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         sub(
             "&Sort Worksheet",
-            vec![item("&Ascending", Cmd::SortAscending), item("&Descending", Cmd::SortDescending), grey("&Custom...")],
+            vec![
+                item("&Ascending", Cmd::SortAscending),
+                item("&Descending", Cmd::SortDescending),
+                item("&Custom...", Cmd::SortCustom { range: false }),
+            ],
         ),
-        grey("Sort Columns by Label..."),
+        item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
         grey("Clear Worksheet..."),
         grey("Split Columns..."),
@@ -1251,12 +1262,25 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey_sub("Mask", &["Apply", "Remove", "Swap", "Change Color", "Disable Masking"]));
     v.push(grey("Mask Cells by Condition..."));
     v.push(sep());
-    v.push(grey_sub("Sort Column", &order));
+    v.push(sub(
+        "Sort Column",
+        vec![
+            item(order[0], Cmd::SortColumns { descending: false }),
+            item(order[1], Cmd::SortColumns { descending: true }),
+            grey(order[2]),
+        ],
+    ));
     v.push(sub(
         "Sort Worksheet",
-        vec![item("Ascending", Cmd::SortAscending), item("Descending", Cmd::SortDescending), grey("Custom...")],
+        vec![
+            item("Ascending", Cmd::SortAscending),
+            item("Descending", Cmd::SortDescending),
+            item("Custom...", Cmd::SortCustom { range: false }),
+        ],
     ));
-    v.extend(greys(&["Sort Columns by Label...", "Reverse Order", "-"]));
+    v.push(item("Sort Columns by Label...", Cmd::SortByLabel));
+    v.push(item("Reverse Order", Cmd::ReverseOrder));
+    v.push(sep());
     v.push(item("Normalize...", Cmd::Analyze(AnalysisKind::Normalize)));
     v.push(grey("Frequency Count..."));
     v.push(item("Statistics on Columns...", Cmd::Analyze(AnalysisKind::Statistics)));
@@ -1765,6 +1789,16 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SortColumns { descending } => {
             book?;
             Action::SortColumns { columns: some()?, descending: *descending }
+        }
+        Cmd::SortCustom { range } => {
+            let book = book?;
+            let columns = if *range { some()? } else { Vec::new() };
+            Action::SortCustom { book, columns }
+        }
+        Cmd::SortByLabel => Action::SortByLabel(book?),
+        Cmd::ReverseOrder => {
+            book?;
+            Action::ReverseColumns(some()?)
         }
         Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: false },
         Cmd::PlotXYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: true },

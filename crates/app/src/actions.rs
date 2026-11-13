@@ -216,6 +216,16 @@ pub enum Action {
         columns: Vec<ColumnId>,
         descending: bool,
     },
+    /// Worksheet > Sort Worksheet > Custom... (no columns) or Sort Range > Custom...: open the
+    /// nested sort window.
+    SortCustom {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Worksheet > Sort Columns by Label...
+    SortByLabel(WindowId),
+    /// Column > Reverse Order: turn the values of each selected column round.
+    ReverseColumns(Vec<ColumnId>),
     /// Open the window that keeps only the rows matching a condition.
     FilterRows(WindowId),
     PlotColumns {

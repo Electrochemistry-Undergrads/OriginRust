@@ -4739,3 +4739,38 @@ fn columns_move_hide_and_unhide_and_each_step_undoes() {
     h.state_mut().apply(Action::Undo, &ctx);
     assert!(project(&h).column(ids[1]).unwrap().hidden, "undo brings the hiding back");
 }
+
+#[test]
+fn reverse_order_and_the_custom_sort_windows_work_and_undo() {
+    let mut h = start(vec![data_file("customsort")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
+    h.state_mut().apply(Action::ReverseColumns(vec![c]), &ctx);
+    assert_eq!(column(&h, "C"), [0.5, 10.5, 20.5, 30.5]);
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "the other columns stay");
+    assert_eq!(h.state().doc.undo_label(), Some("Reverse order"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+
+    // Sort Worksheet > Custom...: the window opens with the first column as the key; OK sorts.
+    h.state_mut().apply(Action::SortCustom { book, columns: Vec::new() }, &ctx);
+    settle(&mut h);
+    assert!(h.state().sort.is_some());
+    click(&mut h, "Descending");
+    click(&mut h, "OK");
+    assert!(h.state().sort.is_none());
+    assert_eq!(column(&h, "A"), [4.0, 3.0, 2.0, 1.0]);
+    assert_eq!(column(&h, "C"), [0.5, 10.5, 20.5, 30.5], "rows stay together");
+    assert_eq!(h.state().doc.undo_label(), Some("Sort (nested)"));
+
+    // Sort Columns by Label (the long names are t, alpha, down).
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
+    h.state_mut().doc.apply("Name", |p| p.column_mut(b).unwrap().long_name = "alpha".into());
+    h.state_mut().apply(Action::SortByLabel(book), &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    let names: String =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
+    assert_eq!(names, "BCA", "long names alpha, down, t");
+}

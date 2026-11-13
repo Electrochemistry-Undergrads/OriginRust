@@ -276,6 +276,23 @@ Masking marks cells as excluded from plots and analysis without deleting them. M
 - Filter: a column-based data filter hides rows that fail a condition; types: numeric, text, date/time. Conditions are stored as small formula lists in `numFilterCondition.txt` (above average, below average, within 3-sigma band, within 95 percent interval) and `dateFilterCondition.txt` (this week, last month, quarter, specific month, weekday, hour range). Filters are re-run on demand (`wks.runfilter`). Hidden rows are still in the data; plots ignore them. [F][W]
 - Sheet/column properties that matter for round-tripping: column width, hidden columns, frozen header, `Spreadsheet cell notation` flag (auto short names), `Data protection` on import (read-only, sort-only). [W]
 
+### 13.1 Measured with Origin (`wsort`, task T10)
+
+Run through `tools/origin-ref/run-labtalk-lines.ps1` on a book with a numeric column of 3, --, 1, 2, 2, 1 (rows 1-7, a gap at row 2, row 6 and 7 as listed in the script) and a text column.
+`wsort bycol:=1 c1:=<column> descending:=0|1` sorts every column of the sheet by that column.
+
+- A missing value (and the empty text) counts as the **smallest** value: first when ascending, last when descending.
+- Text compares without regard to case ("b" and "B" are equal keys).
+- The order of equal keys is **not stable** in Origin (ascending: keys 1 at rows 3, 5, 7 came out as rows 7, 3, 5; keys 2 kept their order); it cannot be copied, so Sheaf keeps equal keys in their order.
+- `Project::sort_sheet`, `sort_range`, `sort_columns` and the nested sort (`Project::sort_nested`) follow this.
+
+### 13.2 Worksheet operations in Sheaf (T10)
+
+- Edit > Insert and Delete (also the cell and row-number menus): with whole columns selected, Insert adds one new Y column before each selected column's block (as many as are selected) and Delete removes the columns; with rows or a block of cells selected, Insert adds blank cells above the selection and Delete removes the selected cells, moving the cells below, in the columns the selection covers (all columns for whole rows). Columns that recalculate from a formula are left alone. This follows how Origin documents the commands; the GUI result was not measured.
+- Column > Move Columns (To First, Left, Right, To Last) keeps the selected columns in their order; Hide Selected / Unhide All set `Column::hidden`; the grid skips hidden columns and the cursor keys jump over them. Column Width (Column Properties, characters, default 8) is `Column::width`.
+- Column > Reverse Order reverses each selected column on its own (`colreverse`). Worksheet > Sort Columns by Label orders the columns by Long Name, Units, Comments or Short Name.
+- The `.opj` writer does not store hidden columns or column widths: `Writer::finish` names them in the save warnings, so the `.sheaf` companion keeps them.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

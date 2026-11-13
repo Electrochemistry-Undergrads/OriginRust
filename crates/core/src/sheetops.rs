@@ -1,6 +1,7 @@
 //! Worksheet operations that change the shape of a sheet: inserting and deleting rows and
 //! columns, moving and hiding columns.
 
+use crate::analysis::{AnalysisError, row_comparator, take_rows};
 use crate::column::{Column, ColumnData, Designation};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::{Project, ProjectError};
@@ -146,7 +147,96 @@ impl Worksheet {
     }
 }
 
+/// One level of a nested sort: a column and its order.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SortKey {
+    pub column: ColumnId,
+    pub descending: bool,
+}
+
+/// The label row that Worksheet > Sort Columns by Label orders the columns by.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ColumnLabel {
+    LongName,
+    Units,
+    Comments,
+    ShortName,
+}
+
+impl Worksheet {
+    /// Puts the columns in the order of one of their labels (case ignored, an empty label first;
+    /// columns with equal labels keep their order). Returns false when nothing moved.
+    pub fn sort_columns_by_label(&mut self, label: ColumnLabel, descending: bool) -> bool {
+        let before: Vec<ColumnId> = self.columns.iter().map(|c| c.id).collect();
+        let text = |c: &Column| {
+            match label {
+                ColumnLabel::LongName => &c.long_name,
+                ColumnLabel::Units => &c.units,
+                ColumnLabel::Comments => &c.comments,
+                ColumnLabel::ShortName => &c.short_name,
+            }
+            .to_lowercase()
+        };
+        self.columns.sort_by(|a, b| {
+            let o = text(a).cmp(&text(b));
+            if descending { o.reverse() } else { o }
+        });
+        before != self.columns.iter().map(|c| c.id).collect::<Vec<_>>()
+    }
+}
+
 impl Project {
+    /// Nested sort: the rows of these columns (all columns of the sheet when `columns` is empty)
+    /// are put in the order of the first key, ties by the second key, and so on. The other
+    /// columns of the sheet keep their rows.
+    pub fn sort_nested(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        keys: &[SortKey],
+        columns: &[ColumnId],
+    ) -> Result<(), AnalysisError> {
+        let ws = self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or(AnalysisError::NoSuchSheet)?;
+        let mut levels = Vec::new();
+        for k in keys {
+            levels.push((ws.column(k.column).ok_or(AnalysisError::NoSuchColumn(k.column))?, k.descending));
+        }
+        for c in columns {
+            ws.column(*c).ok_or(AnalysisError::NoSuchColumn(*c))?;
+        }
+        let n = ws.row_count();
+        let comparators: Vec<_> = levels.iter().map(|(c, d)| row_comparator(&c.data, n, *d)).collect();
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|a, b| {
+            comparators.iter().map(|cmp| cmp(*a, *b)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        drop(comparators);
+        let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
+        for c in &mut ws.columns {
+            if columns.is_empty() || columns.contains(&c.id) {
+                c.data = take_rows(&c.data, &order, n);
+            }
+        }
+        Ok(())
+    }
+
+    /// Reverses the order of the values of each of these columns on its own (Column > Reverse
+    /// Order). Columns kept up to date by a formula are left alone; returns how many.
+    pub fn reverse_columns(&mut self, ids: &[ColumnId]) -> usize {
+        let mut locked = 0;
+        for id in ids {
+            let Some(c) = self.column_mut(*id) else { continue };
+            if c.is_locked() {
+                locked += 1;
+                continue;
+            }
+            let n = c.len();
+            let order: Vec<usize> = (0..n).rev().collect();
+            c.data = take_rows(&c.data, &order, n);
+        }
+        locked
+    }
+
     /// Inserts `count` new empty columns before position `at` of a sheet (Origin puts new
     /// columns to the left of the selected one). Returns their ids.
     pub fn insert_columns(
@@ -253,5 +343,44 @@ mod tests {
         assert!(ws.move_columns(&[ColumnId(2)], MoveTo::Last));
         assert_eq!(order(&ws), "CAB");
         assert!(!ws.move_columns(&[ColumnId(2)], MoveTo::Right));
+    }
+
+    #[test]
+    fn nested_sort_breaks_ties_with_the_next_key_and_keeps_other_columns_in_place() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![2.0, 1.0, 2.0, 1.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 9.0, 3.0, 5.0])).unwrap();
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![10.0, 20.0, 30.0, 40.0])).unwrap();
+        let keys = [SortKey { column: a, descending: false }, SortKey { column: b, descending: true }];
+        p.sort_nested(book, 0, &keys, &[]).unwrap();
+        assert_eq!(p.numeric(a).unwrap(), [1.0, 1.0, 2.0, 2.0]);
+        assert_eq!(p.numeric(b).unwrap(), [9.0, 5.0, 3.0, 1.0]);
+        assert_eq!(p.numeric(c).unwrap(), [20.0, 40.0, 30.0, 10.0]);
+        // As a range of two columns, column C stays.
+        p.sort_nested(book, 0, &[SortKey { column: b, descending: false }], &[a, b]).unwrap();
+        assert_eq!(p.numeric(b).unwrap(), [1.0, 3.0, 5.0, 9.0]);
+        assert_eq!(p.numeric(c).unwrap(), [20.0, 40.0, 30.0, 10.0]);
+    }
+
+    #[test]
+    fn reversing_a_column_turns_it_round_and_columns_sort_by_a_label() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, f64::NAN, 4.0])).unwrap();
+        assert_eq!(p.reverse_columns(&[a]), 0);
+        let v = p.numeric(a).unwrap();
+        assert_eq!((v[0], v[2], v[3]), (4.0, 2.0, 1.0));
+        assert!(v[1].is_nan());
+
+        let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+        ws.columns
+            .push(Column::new(ColumnId(900), "B", Designation::Y, ColumnData::default()).with_labels("alpha", "V", ""));
+        ws.columns[0].long_name = "Zeta".into();
+        assert!(ws.sort_columns_by_label(ColumnLabel::LongName, false));
+        assert_eq!(order(ws), "BA");
+        assert!(!ws.sort_columns_by_label(ColumnLabel::LongName, false));
+        assert!(ws.sort_columns_by_label(ColumnLabel::LongName, true));
+        assert_eq!(order(ws), "AB");
     }
 }

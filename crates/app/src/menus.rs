@@ -15,7 +15,7 @@
 //! underlined, and Alt plus the letter of a top-level menu opens that menu. Letters inside the
 //! open menus are not handled (egui has no way to pick an item by letter).
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, SheetOp};
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
@@ -61,8 +61,13 @@ pub enum Cmd {
     OpenProject,
     SaveProject,
     SaveProjectAs,
+    /// File > Import > Single ASCII (Ctrl+K).
     Import,
+    ImportMultiple,
+    ImportCsv,
     ImportWizard,
+    /// Edit > Go to... (Ctrl+G, in a workbook; in a graph the same keys export).
+    GoToCell,
     ExportGraph,
     ExportWorksheet,
     Exit,
@@ -359,7 +364,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         ),
         keyed("&Open...", ctrl(Key::O), Cmd::OpenProject),
         grey_keyed("Open &Excel...", ctrl(Key::E)),
-        grey("Open Sample OPJ"),
+        grey("Open Sample Projects"),
         grey("Appen&d..."),
         grey("&Close"),
         sep(),
@@ -398,29 +403,41 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                 vec![
                     keyed("Import Wi&zard...", ctrl(Key::Num3), Cmd::ImportWizard),
                     keyed("Single &ASCII...", ctrl(Key::K), Cmd::Import),
-                    item("&Multiple ASCII...", Cmd::Import),
-                    item("Comma &Delimited (CSV)...", Cmd::Import),
+                    item("&Multiple ASCII...", Cmd::ImportMultiple),
+                    item("Comma &Delimited (CSV)...", Cmd::ImportCsv),
                 ],
-                greys(&["Excel (XLS, XLSX, XLSM)...", "Image...", "Binary 2D Array...", "-"]),
-                vec![grey_keyed("Re-Import Directly", ctrl(Key::Num4)), grey("Re-Import..."), grey("Recent Imports")],
+                greys(&["Excel (XLS, XLSX, XLSM)...", "Image...", "Binary 2D Array..."]),
+                // Origin's graph File menu has no Re-Import items.
+                if kind == WindowKind::Graph {
+                    Vec::new()
+                } else {
+                    vec![sep(), grey_keyed("Re-Import Directly", ctrl(Key::Num4)), grey("Re-Import...")]
+                },
+                vec![grey("Recent Imports")],
             ]
             .concat(),
         ),
-        sub(
+    ]);
+    if kind == WindowKind::Graph {
+        // Origin's graph menu has Export Graphs... where the workbook has the Export submenu.
+        v.push(keyed("E&xport Graphs...", ctrl(Key::G), Cmd::ExportGraph));
+        v.push(grey("Recent Exports"));
+    } else {
+        v.push(sub(
             "E&xport",
             [
                 vec![item("&Graphs...", Cmd::ExportGraph), item("&Worksheet as ASCII...", Cmd::ExportWorksheet)],
                 greys(&["Graph as Image...", "Worksheet as Image...", "Multi-Page PDF...", "Recent Exports"]),
             ]
             .concat(),
-        ),
-        sep(),
-        grey("Recent Books"),
-        grey("Recent Graphs"),
-        grey("Recent Projects"),
-        sep(),
-        item("Exi&t", Cmd::Exit),
-    ]);
+        ));
+    }
+    v.push(sep());
+    v.push(grey("Recent Books"));
+    if kind == WindowKind::Graph {
+        v.push(grey("Recent Graphs"));
+    }
+    v.extend([grey("Recent Projects"), sep(), item("Exi&t", Cmd::Exit)]);
     v
 }
 
@@ -438,7 +455,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
             vec![
                 keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain)),
                 keyed("Copy full precision", ctrl_alt(Key::C), Cmd::Copy(CopyKind::FullPrecision)),
-                item("Copy including label rows", Cmd::Copy(CopyKind::WithLabels)),
+                keyed("Copy including label rows", ctrl_shift(Key::C), Cmd::Copy(CopyKind::WithLabels)),
                 grey("Copy formula"),
                 grey("Copy label rows"),
                 grey("Copy formula and label rows"),
@@ -450,20 +467,12 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
         v.push(grey("Insert"));
         v.push(item("&Delete", Cmd::DeleteColumns));
-        v.extend(greys(&[
-            "Remove Links",
-            "-",
-            "Set As Begin",
-            "Set As End",
-            "Reset to Full Range",
-            "-",
-            "Find in Project...",
-            "Find in Sheets...",
-            "Replace...",
-            "Go to...",
-            "-",
-            "Button Edit Mode",
-        ]));
+        v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
+        v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
+        v.push(grey_keyed("Find in Sheets...", ctrl(Key::F)));
+        v.push(grey_keyed("Replace...", ctrl(Key::H)));
+        v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
+        v.extend(greys(&["-", "Button Edit Mode"]));
     } else {
         v.push(grey("Cu&t"));
         v.push(grey("Copy"));
@@ -493,7 +502,8 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
                 "Text",
             ],
         ));
-        v.extend(greys(&["Paste Format...", "-", "Find in Project"]));
+        v.extend(greys(&["Paste Format...", "-"]));
+        v.push(grey_keyed("Find in Project", plain_key(Key::F3)));
     }
     v
 }
@@ -1416,6 +1426,8 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
         sep(),
         grey("Bring to the front"),
         grey("Push to the back"),
+        grey("Bring to front of data"),
+        grey("Push to back of data"),
         sep(),
         grey("Programming Control..."),
         item("Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Legend, plot: None }),
@@ -1434,7 +1446,7 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
         grey("Add Shortcut to Favorites"),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
-        grey("View Full Screen"),
+        grey_keyed("View Full Screen", ctrl_shift(Key::J)),
         sep(),
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
         item("Page Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Page, plot: None }),
@@ -1461,6 +1473,7 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         sep(),
         keyed("Layer Contents...", plain_key(Key::F12), contents.clone()),
         item("Plot Setup...", contents),
+        grey("Double click to open Plot Setup"),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
         grey("Layer Properties..."),
@@ -1644,8 +1657,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::OpenProject => Action::OpenProject,
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
-        Cmd::Import => Action::Import(None),
+        Cmd::Import => Action::ImportPick(ImportPick::Single),
+        Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
+        Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
         Cmd::ImportWizard => Action::ImportWizard,
+        Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::Exit => Action::Quit,
@@ -1803,6 +1819,8 @@ pub fn works_while_typing(cmd: &Cmd) -> bool {
             | Cmd::SaveProject
             | Cmd::SaveProjectAs
             | Cmd::Import
+            | Cmd::ImportMultiple
+            | Cmd::ImportCsv
             | Cmd::ImportWizard
             | Cmd::Exit
     )
@@ -2065,7 +2083,9 @@ mod tests {
         let keys = shortcuts();
         for (k, cmd) in &keys {
             for (k2, cmd2) in &keys {
-                assert!(k != k2 || cmd == cmd2, "{k:?} runs both {cmd:?} and {cmd2:?}");
+                let shared =
+                    matches!((cmd, cmd2), (Cmd::GoToCell, Cmd::ExportGraph) | (Cmd::ExportGraph, Cmd::GoToCell));
+                assert!(k != k2 || cmd == cmd2 || shared, "{k:?} runs both {cmd:?} and {cmd2:?}");
             }
         }
         let find = |ks: KeyboardShortcut| keys.iter().find(|(k, _)| *k == ks).map(|(_, c)| c.clone());
@@ -2114,7 +2134,7 @@ mod tests {
         ));
         assert!(matches!(resolve(&Cmd::ExportGraph, &c), Ok(Action::ExportGraph(WindowId(2)))));
         assert_eq!(resolve(&Cmd::Undo, &c).unwrap_err(), NO_UNDO);
-        assert!(matches!(resolve(&Cmd::Import, &c), Ok(Action::Import(None))));
+        assert!(matches!(resolve(&Cmd::Import, &c), Ok(Action::ImportPick(ImportPick::Single))));
         let id = ColumnId(7);
         let sel = [id];
         let c = MenuContext { kind: WindowKind::Workbook, book: Some(WindowId(1)), graph: None, selected: &sel, ..c };

@@ -108,6 +108,17 @@ pub enum GraphTool {
     Text,
 }
 
+/// Which File > Import item opened the file chooser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportPick {
+    /// One file (Ctrl+K).
+    Single,
+    /// Several files.
+    Multiple,
+    /// Several files, with the comma preset as the delimiter.
+    Csv,
+}
+
 #[derive(Debug, Clone)]
 pub enum Action {
     NewProject,
@@ -116,8 +127,12 @@ pub enum Action {
     SaveProjectAs,
     /// Ask for files and open the import dialog; with a path, skip the file chooser.
     Import(Option<PathBuf>),
+    /// File > Import > Single ASCII, Multiple ASCII or Comma Delimited: the file chooser for that item.
+    ImportPick(ImportPick),
     /// File > Import > Import Wizard (Ctrl+3).
     ImportWizard,
+    /// Edit > Go to... (Ctrl+G) in a workbook.
+    GoToCell(WindowId),
     Undo,
     Redo,
     NewWorkbook,
@@ -292,6 +307,10 @@ pub enum Action {
     },
     /// A new empty folder inside the folder at this path.
     NewFolder(Vec<usize>),
+    /// Rename the folder at this path (the folder menu and F2 on a folder).
+    RenameFolder(Vec<usize>),
+    /// Delete the folder at this path with the windows in it (undoable as one step).
+    DeleteFolder(Vec<usize>),
     /// Show or hide one plot of a graph (the tick boxes of the Object Manager).
     SetPlotVisible {
         graph: WindowId,

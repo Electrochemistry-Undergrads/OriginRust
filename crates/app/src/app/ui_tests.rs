@@ -802,7 +802,7 @@ fn ctrl_z_and_ctrl_shift_z_undo_and_redo() {
 fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
     let mut h = start(vec![data_file("export")]);
     show_window(&mut h, "Graph1 - sample");
-    menu_path(&mut h, &["File", "Export", "Graphs..."]);
+    menu_path(&mut h, &["File", "Export Graphs..."]);
     assert!(h.state().export.is_some(), "the export window is open");
     assert!(h.query_by_label("Save as...").is_some());
     click(&mut h, "Close");
@@ -1455,7 +1455,7 @@ fn every_command_of_a_graph_is_reachable_from_its_origin_menu() {
     let mut h = start(vec![data_file("reach-graph")]);
     assert_eq!(bar_names(&h), GRAPH_BAR);
     let paths: &[&[&str]] = &[
-        &["File", "Export", "Graphs..."],
+        &["File", "Export Graphs..."],
         &["File", "Import", "Single ASCII..."],
         &["Edit", "Undo"],
         &["Graph", "Legend", "Legend Properties..."],
@@ -2561,7 +2561,7 @@ fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixe
     show_window(&mut h, "Book1 - sample");
     assert!(label_text(&h, "AU : ON") && label_text(&h, "Radian"), "Origin always shows these two");
     let sheet_name = project(&h).workbooks().next().unwrap().sheet().name.clone();
-    assert!(label_text(&h, &format!("[Book1]{sheet_name}!")), "the active sheet");
+    assert!(label_text(&h, &format!("1: [Book1]{sheet_name}!")), "the active sheet");
     assert!(!label_containing(&h, "Average="), "nothing selected, no statistics");
     // Column B holds 2.5, 4.5, 6.5, 8.5.
     click_text(&mut h, "B(Y1)");
@@ -3992,4 +3992,148 @@ fn sort_range_moves_the_selected_columns_together_and_sort_columns_sorts_each_al
     assert_eq!(h.state().doc.undo_label(), Some("Sort columns"));
     menu_path(&mut h, &["Worksheet", "Sort Columns", "Descending"]);
     assert_eq!(project(&h).numeric(c).unwrap(), [30.5, 20.5, 10.5, 0.5]);
+}
+
+// ----- T02: menu labels, keys and context menus as in Origin -----
+
+#[test]
+fn ctrl_g_is_go_to_in_a_workbook_and_export_graphs_in_a_graph() {
+    let mut h = start(vec![data_file("ctrl-g")]);
+    show_window(&mut h, "Book1 - sample");
+    ctrl(&mut h, egui::Key::G);
+    assert!(h.state().go_to.is_some(), "Go To opened in the workbook");
+    assert!(h.state().export.is_none());
+    let book = project(&h).workbooks().next().unwrap().id;
+    // The dialog's own parsing is tested in dialogs/go_to.rs; here the outcome moves the cursor.
+    h.state_mut().go_to = None;
+    let sheet = project(&h).workbook(book).unwrap().sheets[0].clone();
+    h.state_mut().books.get_mut(&book).unwrap().go_to(&sheet, 1, 2);
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 2) });
+    show_window(&mut h, "Graph1 - sample");
+    ctrl(&mut h, egui::Key::G);
+    assert!(h.state().export.is_some(), "Export Graphs opened in the graph");
+    assert!(h.state().go_to.is_none());
+}
+
+#[test]
+fn go_to_window_moves_the_cursor_to_the_typed_cell() {
+    let mut h = start(vec![data_file("go-to")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Edit", "Go to..."]);
+    assert!(h.state().go_to.is_some());
+    h.event(egui::Event::Text("3".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert!(h.state().go_to.is_none(), "Enter closed the window");
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (0, 2), end: (0, 2) });
+}
+
+#[test]
+fn ctrl_shift_c_copies_with_the_label_rows() {
+    let mut h = start(vec![data_file("copy-labels")]);
+    show_window(&mut h, "Book1 - sample");
+    select_block(&mut h, "2.5", "20.5");
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::C);
+    settle(&mut h);
+    assert!(h.state().copied.starts_with("up\tdown\n"), "{:?}", h.state().copied);
+}
+
+#[test]
+fn the_file_menu_has_recent_graphs_and_no_reimport_only_in_a_graph() {
+    let mut h = start(vec![data_file("file-menus")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["File"]);
+    assert!(h.query_by_label_contains("Recent Books").is_some());
+    assert!(h.query_by_label_contains("Recent Graphs").is_none());
+    assert!(h.query_by_label_contains("Open Sample Projects").is_some());
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File"]);
+    assert!(h.query_by_label_contains("Recent Graphs").is_some());
+    assert!(h.query_by_label_contains("Export Graphs...").is_some());
+}
+
+#[test]
+fn the_import_items_differ_in_what_the_chooser_takes_and_csv_presets_the_comma() {
+    use crate::actions::ImportPick;
+    let mut h = start(vec![data_file("import-picks")]);
+    let file = data_file("import-picks-file");
+    let ctx = h.ctx.clone();
+    h.state_mut().start_import(Some(vec![file.clone()]), ImportPick::Csv);
+    assert_eq!(h.state().import.as_ref().unwrap().delimiter(), sheaf_io::ascii::Delimiter::Comma);
+    h.state_mut().import = None;
+    h.state_mut().start_import(Some(vec![file]), ImportPick::Multiple);
+    assert_ne!(h.state().import.as_ref().unwrap().delimiter(), sheaf_io::ascii::Delimiter::Comma);
+    let _ = ctx;
+}
+
+#[test]
+fn the_explorer_keys_f2_delete_and_ctrl_a_work_on_the_highlighted_window() {
+    let mut h = start(vec![data_file("explorer-keys")]);
+    h.get_by_label("Book1 - sample").click();
+    settle(&mut h);
+    assert!(h.state().panels.explorer.focus, "a click in the explorer gives it the keys");
+    h.key_press(egui::Key::F2);
+    settle(&mut h);
+    assert!(h.state().rename.is_some(), "F2 renames the window");
+    h.state_mut().rename = None;
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    settle(&mut h);
+    assert!(h.state().panels.explorer.all, "Ctrl+A highlights every window");
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), 0, "Delete removed them all");
+    h.state_mut().doc.undo();
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).windows.len(), 2, "each deletion can be undone");
+}
+
+#[test]
+fn a_folder_can_be_renamed_and_deleted_with_its_windows() {
+    let mut h = start(vec![data_file("folders")]);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::NewFolder(Vec::new()), &ctx);
+    h.state_mut().apply(Action::RenameFolder(vec![0]), &ctx);
+    h.state_mut().rename.as_mut().unwrap().long_name = "Samples".to_string();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(project(&h).root.folders[0].name, "Samples");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().apply(Action::MoveWindow { window: book, folder: vec![0] }, &ctx);
+    h.state_mut().apply(Action::DeleteFolder(vec![0]), &ctx);
+    assert!(project(&h).root.folders.is_empty());
+    assert!(project(&h).workbook(book).is_none(), "the window in the folder went with it");
+    menu(&mut h, "Edit", "Undo Delete folder");
+    assert_eq!(project(&h).root.folders.len(), 1);
+}
+
+#[test]
+fn the_main_title_and_the_status_reference_follow_origins_pattern() {
+    use std::path::Path;
+    assert_eq!(main_title(None, false, None), "Sheaf - UNTITLED");
+    assert_eq!(main_title(Some(Path::new("C:/a/p.opj")), true, None), "Sheaf - C:/a/p.opj *");
+    assert_eq!(main_title(Some(Path::new("p.opj")), true, Some("Book1".into())), "Sheaf - p.opj * - [Book1 *]");
+    let mut h = start(vec![data_file("status-ref")]);
+    show_window(&mut h, "Book1 - sample");
+    assert_eq!(h.state().active_reference(), "1: [Book1]sample!");
+    select_block(&mut h, "2.5", "20.5");
+    assert_eq!(h.state().active_reference(), "1: [Book1]sample!B:C[1:2]");
+}
+
+#[test]
+fn the_layer_icon_menu_describes_plots_as_origin_does_and_has_the_hint_line() {
+    let h = start(vec![data_file("layer-menu")]);
+    let graph = project(&h).graphs().next().unwrap();
+    let plot = graph.layers[0].plots[0].clone();
+    let line = crate::graph_view::plot_source_line(project(&h), &plot);
+    assert!(line.starts_with("g1 [Book1]sample! "), "{line}");
+    assert!(line.contains("(X), ") && line.contains("(Y) [1*:4*]"), "{line}");
+    let entries = menus::layer_icon_menu(0, 1, &[line], None);
+    let labels: Vec<String> = entries
+        .iter()
+        .filter_map(|e| if let menus::Entry::Item(i) = e { Some(i.label.clone()) } else { None })
+        .collect();
+    assert!(labels.iter().any(|l| l == "Double click to open Plot Setup"));
 }

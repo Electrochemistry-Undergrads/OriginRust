@@ -7,8 +7,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "digits")]
 pub enum NumberFormat {
-    /// Up to 9 significant digits, switching to scientific notation for very
-    /// large or very small magnitudes. Trailing zeros are dropped.
+    /// Origin's General format. `NumberFormat::format` gives up to 9 significant digits,
+    /// switching to scientific notation for very large or very small magnitudes, trailing zeros
+    /// dropped; that is the text of cell editing and of results. What the worksheet grid and Copy
+    /// show for this format is `Column::shown_text` (5 decimals as Origin's Options default), and
+    /// what Export and Copy with full precision write is `format_full_precision` (15 digits).
     #[default]
     General,
     /// A fixed number of digits after the decimal point.
@@ -77,6 +80,36 @@ pub fn format_general(v: f64, sig: usize) -> String {
     }
 }
 
+/// The text Origin writes for a number when it exports with full precision (measured with `expASC`,
+/// `docs/spec/import-ascii.md` section 13): 15 significant digits, trailing zeros dropped, plain
+/// notation from 1E-3 up to 1E15 (inclusive), scientific notation such as `1.5E-4` or `1.5E16`
+/// (capital E, no plus sign, no leading zeros in the exponent) outside that range.
+pub fn format_full_precision(v: f64) -> String {
+    if v == 0.0 {
+        return "0".to_string();
+    }
+    if !v.is_finite() {
+        return if v.is_nan() {
+            String::new()
+        } else if v > 0.0 {
+            "inf".into()
+        } else {
+            "-inf".into()
+        };
+    }
+    let sci = format!("{v:.14e}");
+    let (mantissa, exp) = sci.split_once('e').expect("exponent form");
+    let exp: i32 = exp.parse().expect("integer exponent");
+    let mantissa = trim_zeros(mantissa);
+    let digits_is_one = mantissa.trim_start_matches('-') == "1";
+    if !(-3..=15).contains(&exp) || (exp == 15 && !digits_is_one) {
+        format!("{mantissa}E{exp}")
+    } else {
+        let decimals = (14 - exp).max(0) as usize;
+        trim_zeros(&format!("{v:.decimals$}")).to_string()
+    }
+}
+
 /// Scientific notation with `digits` decimals, written like `1.50E-5`.
 pub fn format_scientific(v: f64, digits: usize) -> String {
     let s = format!("{v:.digits$e}");
@@ -118,6 +151,36 @@ mod tests {
         assert_eq!(format_general(123456789.0, 9), "123456789");
         assert_eq!(format_general(9.9999999999, 3), "10");
         assert_eq!(format_general(0.0001, 9), "0.0001");
+    }
+
+    #[test]
+    fn full_precision_matches_origin_export() {
+        // Values and texts measured with expASC in Origin 2016.
+        let cases: [(f64, &str); 20] = [
+            (123456.789, "123456.789"),
+            (0.123456789012345, "0.123456789012345"),
+            (1e-7, "1E-7"),
+            (-1.23456e-4, "-1.23456E-4"),
+            (1e15, "1000000000000000"),
+            (1e16, "1E16"),
+            (123456789012345678.0, "1.23456789012346E17"),
+            (1.0 / 3.0, "0.333333333333333"),
+            (0.001, "0.001"),
+            (0.00012, "1.2E-4"),
+            (123456789012345.0, "123456789012345"),
+            (1234567890123456.0, "1.23456789012346E15"),
+            (1.5e15, "1.5E15"),
+            (12345678.9, "12345678.9"),
+            (-1e-10, "-1E-10"),
+            (123456.7891234567, "123456.789123457"),
+            (2e15, "2E15"),
+            (1e300, "1E300"),
+            (100.0, "100"),
+            (-0.0, "0"),
+        ];
+        for (v, want) in cases {
+            assert_eq!(format_full_precision(v), want, "{v:e}");
+        }
     }
 
     #[test]

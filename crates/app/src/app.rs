@@ -6,6 +6,7 @@ use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, LabelRow, She
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
+use crate::dialogs::export_sheet::SheetExportDialog;
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
@@ -91,6 +92,7 @@ pub struct SheafApp {
     fit: Option<FitDialog>,
     filter: Option<FilterDialog>,
     export: Option<ExportDialog>,
+    export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
@@ -144,6 +146,7 @@ impl SheafApp {
             fit: None,
             filter: None,
             export: None,
+            export_sheet: None,
             rename: None,
             sheet_name: None,
             copied: String::new(),
@@ -252,6 +255,7 @@ impl SheafApp {
         self.column_props = None;
         self.set_values = None;
         self.export = None;
+        self.export_sheet = None;
         self.rename = None;
         self.sheet_name = None;
         self.import = None;
@@ -1161,36 +1165,8 @@ impl SheafApp {
     }
 
     fn export_data(&mut self, book: WindowId) {
-        let Some(b) = self.doc.project().workbook(book) else {
-            return;
-        };
-        let sheet = b.sheet();
-        let mut chooser = rfd::FileDialog::new()
-            .set_title("Export worksheet")
-            .add_filter("Comma-separated", &["csv"])
-            .add_filter("Tab-separated", &["tsv", "txt"])
-            .set_file_name(format!("{}.csv", if b.long_name.is_empty() { &b.name } else { &b.long_name }));
-        if let Some(dir) = self.folder() {
-            chooser = chooser.set_directory(dir);
-        }
-        let Some(path) = chooser.save_file() else {
-            return;
-        };
-        let tabs = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| e.eq_ignore_ascii_case("tsv") || e.eq_ignore_ascii_case("txt"));
-        let opts = sheaf_io::export::AsciiExportOptions {
-            delimiter: if tabs { '\t' } else { ',' },
-            ..sheaf_io::export::AsciiExportOptions::default()
-        };
-        let result = std::fs::File::create(&path).map_err(|e| e.to_string()).and_then(|file| {
-            let mut out = std::io::BufWriter::new(file);
-            sheaf_io::export::write_delimited(sheet, &mut out, &opts).map_err(|e| e.to_string())
-        });
-        match result {
-            Ok(()) => self.say(format!("Wrote {}", path.display())),
-            Err(e) => self.message = Some(("Could not export the worksheet".to_string(), e)),
+        if self.doc.project().workbook(book).is_some() {
+            self.export_sheet = Some(SheetExportDialog::new(book, self.folder()));
         }
     }
 
@@ -1316,6 +1292,7 @@ impl SheafApp {
             || self.fit.is_some()
             || self.filter.is_some()
             || self.export.is_some()
+            || self.export_sheet.is_some()
             || self.rename.is_some()
             || self.sheet_name.is_some()
             || self.about
@@ -1513,6 +1490,17 @@ impl SheafApp {
                     self.export = None;
                 }
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the graph".to_string(), e)),
+            }
+        }
+        if let Some(d) = &mut self.export_sheet {
+            match d.show(ctx, &self.doc) {
+                ExportOutcome::Open => {}
+                ExportOutcome::Closed => self.export_sheet = None,
+                ExportOutcome::Saved(path) => {
+                    self.say(format!("Wrote {}", path.display()));
+                    self.export_sheet = None;
+                }
+                ExportOutcome::Failed(e) => self.message = Some(("Could not export the worksheet".to_string(), e)),
             }
         }
         if let Some(d) = &mut self.rename {

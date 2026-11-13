@@ -1130,9 +1130,10 @@ pub(crate) fn write_sheet(ws: &sheaf_core::Worksheet, path: &Path) -> Result<()>
         .extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| e.eq_ignore_ascii_case("tsv") || e.eq_ignore_ascii_case("txt"));
-    let opts = sheaf_io::export::AsciiExportOptions {
-        delimiter: if tabs { '\t' } else { ',' },
-        ..sheaf_io::export::AsciiExportOptions::default()
+    let opts = if tabs {
+        sheaf_io::export::AsciiExportOptions::default()
+    } else {
+        sheaf_io::export::AsciiExportOptions::csv()
     };
     let file = std::fs::File::create(path).with_context(|| format!("could not create '{}'", path.display()))?;
     let mut out = std::io::BufWriter::new(file);

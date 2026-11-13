@@ -54,7 +54,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T04](T04-peak-analyzer-wizard.md) | Peak Analyzer as Origin's multi-page wizard | L | open, needs Origin pages measured |
 | [T05](T05-export-graphs-dialog.md) | Export Graphs dialog, raster formats, units, Ctrl+G, Copy Page | M | open, after `export-margin` merges |
 | [T06](T06-opj-remaining-graph-features.md) | `.opj` writer: X offsets, bar overlap, waterfall, date ticks, window places | L | open, needs Origin probes |
-| [T07](T07-worksheet-export-and-copy.md) | Worksheet export and clipboard as Origin (missing `--`, formats, label rows) | S | open |
+| [T07](T07-worksheet-export-and-copy.md) | Worksheet export and clipboard as Origin (missing `--`, formats, label rows) | S | done on `sheet-export`, not merged |
 | [T08](T08-formula-functions.md) | Missing Set Column Values functions in `sheaf-expr` | M | open |
 | [T09](T09-set-values-dialog.md) | Set Column Values dialog in Origin's layout | M | open |
 | [T10](T10-worksheet-operations.md) | Insert/delete rows, move/hide columns, mask, sort column, transpose | L | open, split into commits |

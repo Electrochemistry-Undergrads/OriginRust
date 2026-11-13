@@ -4,6 +4,7 @@
 pub mod analysis;
 pub mod column_props;
 pub mod export;
+pub mod export_sheet;
 pub mod fit;
 pub mod frame;
 pub mod graph_axis;

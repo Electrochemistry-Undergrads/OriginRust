@@ -144,6 +144,8 @@ pub enum Action {
     ImportWizard,
     /// Edit > Go to... (Ctrl+G) in a workbook.
     GoToCell(WindowId),
+    /// Statistics > Power and Sample Size > a test.
+    Power(sheaf_core::analysis::PowerKind),
     Undo,
     Redo,
     NewWorkbook,

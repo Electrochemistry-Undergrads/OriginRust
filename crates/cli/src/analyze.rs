@@ -375,6 +375,7 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Anova { target, comparison, alpha } => {
             (target, Job::Tool(Tool::Anova(analysis::AnovaSpec { alpha, comparison: comparison_of(comparison) })))
         }
+        AnalyzeTool::Power { .. } => unreachable!("handled before the data file is read"),
         AnalyzeTool::Anova2 { target, raw, levels_a, levels_b, no_interaction, comparison, alpha } => {
             let layout = if raw {
                 if levels_a.len() != target.y.len() || levels_b.len() != target.y.len() {
@@ -559,7 +560,55 @@ fn math_tool(
     Ok(Tool::CurveMath(analysis::CurveMathSpec { op, operand: operand_value, common_only: operand.common }))
 }
 
+/// `analyze power`: no data file, the table goes to the terminal (and `--export`).
+fn power(a: AnalyzeTool) -> Result<()> {
+    let AnalyzeTool::Power { test, sizes, powers, mean1, mean2, sd, levels, css, alpha, one_sided, export } = a else {
+        unreachable!("called for the power tool only");
+    };
+    if sizes.is_empty() == powers.is_empty() {
+        bail!("give either --sizes (to find powers) or --powers (to find sample sizes)");
+    }
+    let spec = analysis::PowerSpec {
+        kind: match test {
+            PowerTestArg::OneSample => analysis::PowerKind::OneSampleT,
+            PowerTestArg::TwoSample => analysis::PowerKind::TwoSampleT,
+            PowerTestArg::Paired => analysis::PowerKind::PairedT,
+            PowerTestArg::Anova => analysis::PowerKind::Anova,
+        },
+        goal: if sizes.is_empty() {
+            analysis::PowerGoal::SampleSize(powers)
+        } else {
+            analysis::PowerGoal::Power(sizes)
+        },
+        alpha,
+        two_sided: !one_sided,
+        mean1,
+        mean2,
+        sd,
+        levels,
+        css,
+    };
+    let mut project = Project::new();
+    let report = project.power_analysis(&spec)?;
+    let ws = &project.workbook(report.book).expect("just added").sheets[0];
+    println!("{:>12}  {:>12}", "Sample Size", "Power");
+    let (size, power) = (ws.columns[0].numeric().unwrap_or(&[]), ws.columns[1].numeric().unwrap_or(&[]));
+    for (n, p) in size.iter().zip(power) {
+        println!("{:>12}  {:>12}", short_number(*n), short_number(*p));
+    }
+    for note in &report.notes {
+        println!("{note}");
+    }
+    if let Some(path) = export {
+        write_sheet(ws, &path)?;
+    }
+    Ok(())
+}
+
 pub fn analyze(a: AnalyzeArgs) -> Result<()> {
+    if matches!(a.tool, AnalyzeTool::Power { .. }) {
+        return power(a.tool);
+    }
     let (target, job) = job_from(a.tool)?;
     let mut project = if is_project(&target.input) {
         load_project(&target.input)?

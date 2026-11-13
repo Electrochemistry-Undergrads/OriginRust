@@ -1093,7 +1093,9 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod power;
 mod statistics;
+pub use power::{PowerGoal, PowerKind, PowerOutput, PowerSpec, power_analysis};
 
 impl Project {
     /// A new graph with a column plot of each (bin centre, count) pair of columns.

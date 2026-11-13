@@ -693,3 +693,42 @@ fn rank_tests_and_correlation_run_from_the_command_line() {
     let (ok, _, err) = sheaf(&["analyze", "corr", file, "--y", "a,b", "--no-pearson"]);
     assert!(!ok && err.contains("at least one of Pearson"), "{err}");
 }
+
+#[test]
+fn power_needs_no_file_and_prints_origins_numbers() {
+    // Two samples, means 5 and 6, sd 1.5, n = 10 per group: Origin gives 0.2921101.
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "power",
+        "--test",
+        "two-sample",
+        "--mean1",
+        "5",
+        "--mean2",
+        "6",
+        "--sd",
+        "1.5",
+        "--sizes",
+        "10,30",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("0.29211") && out.contains("0.71873"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "power",
+        "--test",
+        "two-sample",
+        "--mean1",
+        "5",
+        "--mean2",
+        "6",
+        "--sd",
+        "1.5",
+        "--powers",
+        "0.8,0.9",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("37") && out.contains("49"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "power", "--test", "anova"]);
+    assert!(!ok && err.contains("either --sizes"), "{err}");
+}

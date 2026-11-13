@@ -364,7 +364,7 @@ enum OutputChoice {
 }
 
 /// Undo steps made by one window share a token, so one Undo reverts all its Apply runs.
-fn next_undo_token() -> u64 {
+pub(crate) fn next_undo_token() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)

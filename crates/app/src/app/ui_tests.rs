@@ -4540,6 +4540,21 @@ fn go_to_window_moves_the_cursor_to_the_typed_cell() {
 }
 
 #[test]
+fn power_and_sample_size_menu_opens_a_dialog_that_makes_a_workbook() {
+    let mut h = start(vec![data_file("power")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Power and Sample Size", "Two-Sample t-Test..."]);
+    let d = h.state().power.as_ref().expect("the dialog opened");
+    assert_eq!(d.kind(), sheaf_core::analysis::PowerKind::TwoSampleT);
+    let spec = d.spec().unwrap();
+    // The defaults: means 0 and 1, sd 1, sizes 50 100 200.
+    let books = project(&h).workbooks().count();
+    let r = h.state_mut().doc.apply("test", |p| p.power_analysis(&spec)).unwrap();
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    assert_eq!(r.new_sheet, Some(0));
+}
+
+#[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
     show_window(&mut h, "Book1 - sample");

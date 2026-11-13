@@ -12,6 +12,7 @@ use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
+use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
@@ -107,6 +108,7 @@ pub struct SheafApp {
     export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
+    power: Option<PowerDialog>,
     sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
@@ -165,6 +167,7 @@ impl SheafApp {
             export_sheet: None,
             rename: None,
             go_to: None,
+            power: None,
             sort: None,
             sheet_name: None,
             copied: String::new(),
@@ -659,6 +662,7 @@ impl SheafApp {
             }
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
+            Action::Power(kind) => self.power = Some(PowerDialog::new(kind)),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -1693,6 +1697,7 @@ impl SheafApp {
             || self.export_sheet.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
+            || self.power.is_some()
             || self.sort.is_some()
             || self.sheet_name.is_some()
             || self.about
@@ -1962,6 +1967,21 @@ impl SheafApp {
                 }
                 ExportOutcome::Applied(_) => {}
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the worksheet".to_string(), e)),
+            }
+        }
+        if let Some(d) = &mut self.power {
+            match d.show(ctx, &mut self.doc) {
+                PowerOutcome::Open => {}
+                PowerOutcome::Closed => self.power = None,
+                PowerOutcome::Done(report) => {
+                    self.power = None;
+                    if let Some(sheet) = report.new_sheet {
+                        self.show_sheet(report.book, sheet);
+                    }
+                    self.logs.result(report.message.clone(), report.notes.clone());
+                    self.panels.reveal(PanelId::Results);
+                    self.say(report.message);
+                }
             }
         }
         if let Some(d) = &mut self.go_to {

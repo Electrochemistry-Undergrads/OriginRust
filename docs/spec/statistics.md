@@ -374,6 +374,49 @@ tables, 386 pairs.
   limits for any input, in the one-way and the two-way library functions, and the library has no way to name the
   control group. The installed Origin gave nothing to copy, so Dunnett is not built.
 
+## 12 Power and sample size
+
+Origin's Statistics > Power and Sample Size tools (`PSS_tTest1`, `PSS_tTest2`, `PSS_tTestPair`, `PSS_ANOVA1`; also
+proportion and variance tests, not built). The X-Functions themselves refused every call from a script (all
+returned an error for any argument form we tried), so their report layout was not read; the numbers come from the
+statistics library functions they call (public functions `ocmath_tTest_powers1`, `ocmath_tTest_samplesize`,
+`ocmath_two_sample_tTest_powers1` and `_samplesize`, the `_pair` versions, `ocmath_anova_powers1` and
+`ocmath_anova_samplesize`), run from `tools/origin-ref/stats4/` (helper `stats4-pss.c`, generator `g2.py`, raw output
+`pss4.out.txt`, fixture `crates/calc/tests/fixtures/stats4_power_origin.rs` by `make-fixture2.py`, test
+`crates/calc/tests/origin_stats4_power.rs`). 91 runs of ours: 383 powers and 227 sample sizes compared, all four tests,
+both tails, significance levels from 1e-8 to 0.5, effects from 0.007 to 4 standard deviations.
+
+- **Power** is the textbook value: one-sample and paired `df = n - 1`, noncentrality `delta / sd sqrt(n)`; two samples
+  of `n` each `df = 2n - 2`, noncentrality `delta / sd sqrt(n / 2)`; the rejection region is `|t| > t(1 - alpha/2)`
+  (two-sided) or `t > t(1 - alpha)` (one-sided), power `P(T' in the region)` with `T'` noncentral t. The direction
+  of the difference does not matter (also one-sided: the power of the upper test for `|delta|`). ANOVA with `k` groups
+  of `n`: `F' ` noncentral F with `k - 1`, `k (n - 1)` degrees of freedom and noncentrality `n css / sd^2`, where `css`
+  is the sum of squared deviations of the group means from their mean and `sd` the root of the error mean square.
+  Sheaf computes the noncentral t with Lenth's algorithm AS 243 and the noncentral F as a Poisson mixture of incomplete
+  beta functions.
+- Origin's own powers are not exact: they differ from the exact value by up to 2.5e-5 (one sample, n = 5: 0.2113505, the
+  exact value is 0.2113345; equal means give 0.0500001). The test accepts 3e-5.
+- Equal means give a power just above alpha, not an error. The ANOVA with one observation per group has power 1.
+- **Sample size**: the smallest whole number of observations (per group) whose power reaches the wanted power, from
+  2 up. All 227 sizes agree; at 353 200 (effect 0.007 sd) Origin is 16 above the exact smallest size (353 184), so
+  sizes above 10 000 are compared to 1e-4. The result list also gives the **lowest power**, the power of 2
+  observations (not for the ANOVA, where Origin gives -1).
+- Errors (return codes): `-151` invalid input: a standard deviation not above 0, a significance level outside (0, 1),
+  a t-test sample size that is not a whole number (12.5) or any size in a list that is, fewer than 2 groups, a number of
+  groups that is not whole, `css` = 0; a sample size below 2 for a t test is not an error but leaves its cell
+  empty (return 0); `-187` the means are equal (no sample size exists); `-204` a wanted power of 0 or 1 or outside; `-186` a wanted power
+  that 2 observations already reach: the table is still filled for the other powers, the cell of that one holds 2 for the
+  two-sample test and is empty for the one-sample, paired and ANOVA tests. Sheaf reports the same cases in words
+  (`PowerError`, notes).
+- One unexplained case is not copied: a two-sample test with a difference of 45 standard deviations returned lowest power 1
+  and sample size 3 with return code 0 (all wanted powers), while 15 standard deviations gives -186 and size 2 as above;
+  Origin's noncentral t seems to fail there. Sheaf gives -186-style size 2.
+- Sheaf: `sheaf_calc::{t_power, t_powers, t_sample_sizes, anova_power, anova_powers, anova_sample_sizes, pnt, pnf}`;
+  `Project::power_analysis` (new workbook `Book<n>` with the columns Sample Size and Power) and
+  `analysis::power_analysis`; `sheaf analyze power --test one-sample|two-sample|paired|anova --sizes ... | --powers ...`
+  (no data file); Statistics > Power and Sample Size > the four tests (a small window; the report layout of Origin's tool
+  is not copied).
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
@@ -411,9 +454,9 @@ Not verified or not done:
 - The automatic bin size is a rule fitted to 600 measured cases (593 agree).
 - Origin's own sheet layout and graph (report sheets with several tables, histogram without gaps,
   distribution curve on the histogram, normal probability plot) are not copied.
-- No test of equal variance (Levene, F test) next to the two-sample t-test, no sample size or power
-  analysis, no t-test from summary data, no row-wise t-tests.
-- Three-way and repeated measures ANOVA, Dunnett comparisons, power analysis and means plots of the
+- No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
+- Power and sample size: only the t tests and the one-way ANOVA (section 12); no tests of proportions or variances, no power curve.
+- Three-way and repeated measures ANOVA, Dunnett comparisons and means plots of the
   ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).

@@ -491,8 +491,12 @@ tools in `crates/core/src/analysis/manip.rs`.
 
 Measured earlier and reused:
 
-- The straight-line subtraction arithmetic (`calc::subtract_line`) and linear interpolation with
-  straight end-segment continuation (`calc::interp1`), section 9.
+- Linear interpolation between data points and missing values outside the data (`calc::interp1`
+  with the `miss` option), observed in section 5. These tools return missing values outside the
+  data; they do not use the end-segment continuation that section 5 also observed.
+- Subtracting a reference curve (`subtract_ref`, section 9) was measured. The two-point line
+  subtraction of Subtract Straight Line (`calc::subtract_line`, section 6) is Sheaf's own and was
+  not compared with Origin; only its interpolation arithmetic is covered by section 5.
 - The percentile filter's boundary rule (section 3): with boundary `none` the window shrinks
   symmetrically and the first and last point keep their value; `repeat` and `reflect` fill the
   window. Missing values are taken out, the rest is smoothed as one series and the missing rows are

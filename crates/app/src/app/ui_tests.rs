@@ -953,11 +953,11 @@ fn export_graphs_file_name_substitution_and_apply_enabling() {
     // The default name is the long name of the graph.
     let name = h.state().export.as_ref().unwrap().name_for(&h.state().doc, graph_id);
     assert_eq!(name, "sample");
-    assert!(h.query_by_label(&format!("File will be saved as {name}")).is_some());
+    assert!(h.query_by_label(&format!("File will be saved as {name}.png")).is_some());
     assert!(!h.get_by_label("Apply").accesskit_node().is_disabled());
     h.state_mut().export.as_mut().unwrap().set_file_name("fig_<short name>");
     settle(&mut h);
-    assert!(h.query_by_label("File will be saved as fig_Graph1").is_some());
+    assert!(h.query_by_label("File will be saved as fig_Graph1.png").is_some());
     h.state_mut().export.as_mut().unwrap().set_file_name("");
     settle(&mut h);
     assert!(h.get_by_label("Apply").accesskit_node().is_disabled(), "no file name, no Apply");

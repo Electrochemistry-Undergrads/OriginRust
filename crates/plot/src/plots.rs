@@ -4,7 +4,7 @@ use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
 use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
-use sheaf_core::graph::{Connect, ErrorDirection, LineStyle, ScaleKind, SymbolShape, SymbolStyle};
+use sheaf_core::graph::{Connect, ErrorDirection, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
@@ -37,7 +37,9 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
     }
-    if plot.kind.is_bar() {
+    if plot.kind == PlotKind::Box {
+        draw_box(out, pd, geom);
+    } else if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }
     if pd.err.is_some() || pd.xerr.is_some() {
@@ -317,7 +319,13 @@ fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         ScaleKind::Linear => pd.oy,
         _ => value_axis.min,
     };
-    let stroke = (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt));
+    let histogram = plot.kind == PlotKind::Histogram;
+    // A histogram's bars are outlined in the plot's colour and not filled (Origin hatches them).
+    let stroke = if histogram {
+        Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5)))
+    } else {
+        (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt))
+    };
     let place = |cat: f64, val: f64| {
         if transposed { geom.checked_data_to_page(val, cat) } else { geom.checked_data_to_page(cat, val) }
     };
@@ -332,9 +340,63 @@ fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
         out.push(Item::Rect {
             rect: Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 },
-            fill: Some(plot.symbol.color),
+            fill: (!histogram).then_some(plot.symbol.color),
             stroke: stroke.clone(),
         });
+    }
+}
+
+/// Width of a box's whisker caps, in X axis units (measured: a tenth of the box spacing).
+const BOX_CAP: f64 = 0.1;
+/// Size of the cross at the whisker ends and of the outliers, and of the square at the mean, in pt.
+const BOX_CROSS_PT: f64 = 7.0;
+const BOX_MEAN_PT: f64 = 5.0;
+
+/// One box of a box chart: the box from the 25th to the 75th percentile with the median across it,
+/// whiskers with caps and a cross at their ends, the mean as a small open square and the outliers
+/// as crosses, all in the plot's colour (measured in Origin).
+fn draw_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let Some(b) = &pd.boxed else { return };
+    let color = pd.plot.symbol.color;
+    let width = pd.plot.line.width_pt.max(0.5);
+    let at = |x: f64, y: f64| geom.checked_data_to_page(x, y);
+    let (l, r) = (b.pos - crate::data::BOX_WIDTH / 2.0, b.pos + crate::data::BOX_WIDTH / 2.0);
+    if let (Some(a), Some(c)) = (at(l, b.q1), at(r, b.q3)) {
+        out.push(Item::Rect {
+            rect: Rect { x: a.0.min(c.0), y: a.1.min(c.1), w: (c.0 - a.0).abs(), h: (c.1 - a.1).abs() },
+            fill: None,
+            stroke: Some(Stroke::solid(color, width)),
+        });
+    }
+    let mut d = String::new();
+    let seg = |d: &mut String, p: Option<(f64, f64)>, q: Option<(f64, f64)>| {
+        if let (Some(p), Some(q)) = (p, q) {
+            move_to(d, p.0, p.1);
+            line_to(d, q.0, q.1);
+        }
+    };
+    seg(&mut d, at(l, b.median), at(r, b.median));
+    seg(&mut d, at(b.pos, b.q3), at(b.pos, b.whisker_high));
+    seg(&mut d, at(b.pos, b.q1), at(b.pos, b.whisker_low));
+    for end in [b.whisker_low, b.whisker_high] {
+        seg(&mut d, at(b.pos - BOX_CAP / 2.0, end), at(b.pos + BOX_CAP / 2.0, end));
+    }
+    out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, width)) });
+    let mut crosses = String::new();
+    for v in [b.whisker_low, b.whisker_high].iter().chain(b.outliers.iter()) {
+        if let Some(p) = at(b.pos, *v) {
+            symbol_path(&mut crosses, SymbolShape::Cross, p.0, p.1, BOX_CROSS_PT);
+        }
+    }
+    let style =
+        |shape, size| SymbolStyle { shape, size_pt: size, color, filled: false, edge_width_pt: width, every: 1 };
+    if !crosses.is_empty() {
+        out.push(symbol_item(crosses, &style(SymbolShape::Cross, BOX_CROSS_PT)));
+    }
+    if let Some(p) = at(b.pos, b.mean) {
+        let mut d = String::new();
+        symbol_path(&mut d, SymbolShape::Square, p.0, p.1, BOX_MEAN_PT);
+        out.push(symbol_item(d, &style(SymbolShape::Square, BOX_MEAN_PT)));
     }
 }
 

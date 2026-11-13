@@ -2589,3 +2589,74 @@ fn golden_fill_area_template() {
     layer.plots[0].y_base = Some(low);
     compare_golden("fill-area", &svg_of(&p, g));
 }
+
+// ----- histogram and box chart (graphing spec 14.15) ----------------------------------------------
+
+/// The probe values of Origin's histogram run: 12 values, auto bins of 7 from 35 to 70.
+const HIST_PROBE: [f64; 12] = [40.7, 47.4, 47.4, 49.6, 49.7, 52.0, 55.3, 58.0, 60.2, 63.1, 66.0, 69.0];
+
+fn single_column_project(template: Template, values: Vec<f64>) -> (Project, WindowId) {
+    project(template, (1..=values.len()).map(|i| i as f64).collect(), vec![values])
+}
+
+#[test]
+fn a_histogram_counts_into_origins_automatic_bins() {
+    // Origin: 12 values between 40.7 and 69: bins of 7 from 35 to 70, the X axis exactly 35 to 70.
+    let (p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    let l = layer_data(&p, g);
+    let pd = &l.plots[0];
+    let counts: Vec<f64> = (0..pd.end).map(|i| pd.y[i]).collect();
+    assert_eq!(counts, vec![1.0, 2.0, 4.0, 2.0, 3.0]);
+    assert_eq!(counts.iter().sum::<f64>(), 12.0);
+    assert_eq!(pd.x.as_ref().unwrap()[0], 38.5, "bars stand at the bin centres");
+    let bar = pd.bar.unwrap();
+    assert!((bar.width - 7.0).abs() < 1e-9, "no gap between the bars");
+    let geom = &fixed_geometry(&p, g)[0];
+    assert_eq!((geom.x.min, geom.x.max), (35.0, 70.0));
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|s| s == "Count"));
+}
+
+#[test]
+fn histogram_bins_can_be_chosen() {
+    let (mut p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    p.graph_mut(g).unwrap().layers[0].plots[0].hist =
+        sheaf_core::graph::HistogramStyle { bin_size: Some(10.0), begin: Some(40.0), end: Some(70.0) };
+    let l = layer_data(&p, g);
+    let pd = &l.plots[0];
+    assert_eq!((0..pd.end).map(|i| pd.y[i]).collect::<Vec<_>>(), vec![5.0, 3.0, 4.0]);
+}
+
+#[test]
+fn a_box_chart_uses_origins_quartiles_and_whiskers() {
+    // Origin probe: 2..13 (box 4.5 to 10.5, median 7.5, whiskers 2 and 13) and a column with one outlier.
+    let b1: Vec<f64> = (2..=13).map(f64::from).collect();
+    let b2 = vec![4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 30.0];
+    let (p, g) = project(Template::BoxChart, (1..=12).map(f64::from).collect(), vec![b1, b2]);
+    let l = layer_data(&p, g);
+    let a = l.plots[0].boxed.as_ref().unwrap();
+    assert_eq!((a.q1, a.median, a.q3, a.whisker_low, a.whisker_high), (4.5, 7.5, 10.5, 2.0, 13.0));
+    assert!(a.outliers.is_empty());
+    let b = l.plots[1].boxed.as_ref().unwrap();
+    assert_eq!((b.q1, b.median, b.whisker_low, b.whisker_high), (5.0, 6.0, 4.0, 8.0));
+    assert_eq!(b.outliers, vec![30.0]);
+    assert_eq!((a.pos, b.pos), (1.0, 2.0));
+    let range = data::axis_range(l.plots.iter(), data::Dim::Y, ScaleKind::Linear).unwrap();
+    assert_eq!(range, (2.0, 30.0), "the outlier counts");
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|s| s == "Scan 1") && t.iter().any(|s| s == "Scan 2"), "one tick label per box: {t:?}");
+}
+
+#[test]
+fn golden_histogram_template() {
+    let (p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    compare_golden("histogram", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_box_template() {
+    let b1: Vec<f64> = (2..=13).map(f64::from).collect();
+    let b2 = vec![4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 30.0];
+    let (p, g) = project(Template::BoxChart, (1..=12).map(f64::from).collect(), vec![b1, b2]);
+    compare_golden("box", &svg_of(&p, g));
+}

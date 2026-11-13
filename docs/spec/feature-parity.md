@@ -267,7 +267,7 @@ Cross-cutting findings:
 | Multi-panel and stack | 4 Panel, 9 Panel | CLI `plot --panels stack` or RxC (Stack, Vertical 2 Panel, Horizontal 2 Panel, 4 Panel) with `--panel-y`, `--per-panel`, gaps and margins; panels are linked layers that share X, and the graph window edits each layer | ◐ | Plot > Multi-Panel has Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel (one panel per selected Y column), no Stack... dialog; panel links are not written to .opj | P1 |
 | Area and fill | Plot > Area | Plot > Area > Area, Stacked Area, 100% Stacked Area, Fill Area (between a pair of columns); CLI `plot -t area`, `stacked-area`, `stacked-area-100`, `fill-area`; Change Plot to Area: the line is filled down to Y = 0 (or to the lower edge) with the symbol colour | ◐ | no transparency, no fill to the next plot; stacked and fill areas written to .opj as plain areas (the companion keeps them) | P1 |
 | Drop lines, bubble, colour mapped | Plot > Symbol | none | ✗ | | P1 |
-| Histogram, box chart, statistics plots | Plot > Statistics | histogram tool makes a column plot of the bin counts | ◐ | bars have gaps, no distribution curve, no box chart or other statistics plots | P1 |
+| Histogram, box chart, statistics plots | Plot > Statistics | Plot > Statistics > Histogram and Box Chart, CLI `plot -t histogram`, `box`: binned like Frequency Counts, touching bars; boxes with median, mean, whiskers, outliers | ◐ | no distribution curve, no hatch fill, no grouped box charts (need T10's group columns), other statistics plots missing; written to .opj as plain columns | P1 |
 | Pie | Plot > Pie | none | ✗ | | P2 |
 | Polar, ternary, radar, Smith, wind rose | Specialized | none | ✗ | | P2 |
 | Stock | Plot > Stock | none | ✗ | | P2 |

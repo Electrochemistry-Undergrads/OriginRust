@@ -391,6 +391,7 @@ impl Project {
             x_error: None,
             y_base: None,
             error: ErrorStyle::default(),
+            hist: Default::default(),
         });
         l.recolor_automatic();
         Ok(())

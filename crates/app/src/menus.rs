@@ -684,24 +684,26 @@ fn plot_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey_sub(
+        sub(
             "S&tatistics",
-            &[
-                "Box Chart",
-                "Grouped Box Charts",
-                "Interval Plot",
-                "Histogram",
-                "Histogram + Probabilities",
-                "Stacked Histograms",
-                "Marginal Histograms",
-                "Marginal Box Charts",
-                "2D Kernel Density",
-                "QC (X bar R) Chart",
-                "Pareto",
-                "Scatter Matrix",
-                "Probability Plot",
-                "Q-Q Plot",
-            ],
+            [
+                vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
+                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Histogram", Cmd::Plot(Template::Histogram))],
+                greys(&[
+                    "Histogram + Probabilities",
+                    "Stacked Histograms",
+                    "Marginal Histograms",
+                    "Marginal Box Charts",
+                    "2D Kernel Density",
+                    "QC (X bar R) Chart",
+                    "Pareto",
+                    "Scatter Matrix",
+                    "Probability Plot",
+                    "Q-Q Plot",
+                ]),
+            ]
+            .concat(),
         ),
         sub(
             "&Area",

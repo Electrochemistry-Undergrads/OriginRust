@@ -106,7 +106,14 @@ pub(crate) fn graph_geometry(
 fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
-    let mut resolved = if dim == Dim::X && data::is_category(project, axis, first) {
+    let boxes: Vec<&data::BoxStats> = sources.iter().filter_map(|pd| pd.boxed.as_ref()).collect();
+    let mut resolved = if dim == Dim::X && !boxes.is_empty() {
+        // Box charts: one category per box, named by its column.
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
+        let names: Vec<String> = boxes.iter().map(|b| b.label.clone()).collect();
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && data::is_category(project, axis, first) {
         crate::ticks::resolve_category(axis, range)
     } else {
         let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
@@ -881,6 +888,17 @@ fn draw_y_labels(
 /// else `Row`.
 fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
+    if pd.plot.kind == PlotKind::Histogram {
+        // The counts up the page, the binned column along it.
+        return if y_axis {
+            "Count".to_string()
+        } else {
+            project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default()
+        };
+    }
+    if pd.boxed.is_some() && !y_axis {
+        return String::new();
+    }
     // Horizontal bars show their values on the X axis and their positions on the Y axis.
     if y_axis != pd.transposed() {
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
@@ -1131,7 +1149,14 @@ fn draw_legend(
                         symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
                         out.push(symbol_item(d, &plot.symbol));
                     }
-                    if plot.kind.is_bar() || plot.kind.is_area() {
+                    if matches!(plot.kind, PlotKind::Histogram | PlotKind::Box) {
+                        // An outlined box in the plot's colour, without a fill.
+                        out.push(Item::Rect {
+                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            fill: None,
+                            stroke: Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        });
+                    } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         out.push(Item::Rect {

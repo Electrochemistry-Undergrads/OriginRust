@@ -787,6 +787,12 @@ pub enum PlotKind {
     StackedArea,
     /// Like [`PlotKind::StackedArea`] with every pile scaled to 100; the Y axis runs from 0 to 100.
     Stacked100Area,
+    /// A histogram of the plot's Y column (Origin's plot type 219): the values are counted into bins
+    /// (`Plot::hist`) and drawn as touching bars; the bars stand at the bin centres.
+    Histogram,
+    /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
+    /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
+    Box,
 }
 
 impl PlotKind {
@@ -808,6 +814,7 @@ impl PlotKind {
                 | PlotKind::Stacked100Column
                 | PlotKind::Bar
                 | PlotKind::FloatingColumn
+                | PlotKind::Histogram
         )
     }
 
@@ -838,6 +845,23 @@ impl PlotKind {
 
     pub fn has_symbols(&self) -> bool {
         matches!(self, PlotKind::Scatter | PlotKind::LineSymbol)
+    }
+}
+
+/// How the values of a [`PlotKind::Histogram`] plot are binned. `None` takes Origin's automatic
+/// choice (see `sheaf_calc::freq`).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HistogramStyle {
+    pub bin_size: Option<f64>,
+    /// First bin edge.
+    pub begin: Option<f64>,
+    /// End of the last bin.
+    pub end: Option<f64>,
+}
+
+impl HistogramStyle {
+    pub fn is_default(&self) -> bool {
+        *self == HistogramStyle::default()
     }
 }
 
@@ -883,6 +907,9 @@ pub struct Plot {
     /// Direction and cap width of the error bars.
     #[serde(default, skip_serializing_if = "ErrorStyle::is_default")]
     pub error: ErrorStyle,
+    /// The bins of a histogram plot.
+    #[serde(default, skip_serializing_if = "HistogramStyle::is_default")]
+    pub hist: HistogramStyle,
 }
 
 /// Which side of the point an error bar reaches.
@@ -1289,6 +1316,7 @@ mod tests {
             x_error: None,
             y_base: None,
             error: ErrorStyle::default(),
+            hist: Default::default(),
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1365,6 +1393,7 @@ mod tests {
             x_error: None,
             y_base: None,
             error: ErrorStyle::default(),
+            hist: Default::default(),
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);

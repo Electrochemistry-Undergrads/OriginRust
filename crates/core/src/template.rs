@@ -52,10 +52,14 @@ pub enum Template {
     Stacked100Area,
     /// Fill area (Origin's "Fill Area"): the area between two curves, a pair of Y columns each.
     FillArea,
+    /// Histogram (Origin's "Histogram"): the bin counts of each Y column as touching bars.
+    Histogram,
+    /// Box chart (Origin's "Box Chart"): one box per Y column.
+    BoxChart,
 }
 
 impl Template {
-    pub const ALL: [Template; 16] = [
+    pub const ALL: [Template; 18] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -68,6 +72,8 @@ impl Template {
         Template::StackedArea,
         Template::Stacked100Area,
         Template::FillArea,
+        Template::Histogram,
+        Template::BoxChart,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -93,6 +99,8 @@ impl Template {
             Template::StackedArea => "stacked-area",
             Template::Stacked100Area => "stacked-area-100",
             Template::FillArea => "fill-area",
+            Template::Histogram => "histogram",
+            Template::BoxChart => "box",
         }
     }
 
@@ -114,6 +122,8 @@ impl Template {
             Template::StackedArea => "Stacked Area",
             Template::Stacked100Area => "100% Stacked Area",
             Template::FillArea => "Fill Area",
+            Template::Histogram => "Histogram",
+            Template::BoxChart => "Box Chart",
         }
     }
 
@@ -141,6 +151,8 @@ impl Template {
             Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
             Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
             Template::FillArea => themed(general(id, name, PlotKind::Area)),
+            Template::Histogram => from_red(general(id, name, PlotKind::Histogram)),
+            Template::BoxChart => from_red(general(id, name, PlotKind::Box)),
         }
     }
 }
@@ -534,7 +546,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 16);
+        assert_eq!(Template::ALL.len(), 18);
     }
 
     #[test]

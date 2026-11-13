@@ -1220,6 +1220,15 @@ Sheaf copies this in `template.rs`: `from_red` for Column, `themed` for the stac
 - **Fill Area.** One plot per pair of Y columns: the first of a pair is the lower edge, the second the upper edge and the plot's name (`Plot::y_base`, as Floating Column). Origin's template could not be told apart from two plain areas drawn over each other, so only the pair form is implemented.
 - `.opj`: stacked areas are written as plain areas from zero, fill areas as areas down to zero, and the save warns (the companion keeps them).
 
+### 14.15 Histogram and box chart (T12)
+
+Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; `plotxy iy:=[Book]Sheet1!1:3`: the range without parentheses makes each column a box, with parentheses the first column is X and the boxes are grouped by its values). PNGs in `re-workspace/scratch/T12/`.
+
+- **Histogram.** The bins are those of the Frequency Counts tool (`sheaf_calc::freq`, size by the 1.75 ln n rule, edges at multiples of the size): data 40.7 to 69 (12 values) gave bins of 7 from 35 to 70, data 13.9 to 73.2 (100 values) bins of 10 from 10 to 80, data 38.7 to 63.7 (7 values) bins of 9 from 36 to 72, each time with the X axis exactly from the first to the last edge and the Y axis from 0 (to 4.5 for a highest bin of 4, to 50 for 43). The bars touch. The Y title is "Count", the X title the column's. The first colour is red; Origin hatches the bars and outlines them in that colour. Sheaf outlines the bars in the colour and leaves them unfilled, as it has no pattern fills. `Plot::hist` (bin size, first edge, end) overrides the automatic bins.
+- **Box chart.** One box per Y column, at 1, 2, 3, ... with the column names as tick labels and no X title; colours red, green, blue (the Box template, 14.14). Box from the 25th to the 75th percentile by the Hazen rule of the statistics tools (`quantile_origin`), median line across the full box, whiskers to the furthest values within 1.5 times the box height (caps 0.1 of the box spacing wide), a cross at each whisker end, the other values as crosses (outliers), the mean as a small open square; box width 0.8 of the spacing; 0.5 pt lines. Checked: 2..13 gave a box from 4.5 to 10.5, median 7.5, whiskers 2 and 13; a column with 30 among values 4 to 8 gave the outlier 30 and whiskers 4 and 8.
+- **Not done:** grouped box charts and the data points beside the box need the Group and Subject designations and categorical columns of T10 (`worksheet-ops`); a worksheet with a grouping column is plotted today as one box per Y column only. The Y axis of the box chart follows the automatic rule of T20 (Origin: -5 to 40 for data 1 to 30; Sheaf -2 to 32); the Y limit of a histogram from 4 is 4.5 as in Origin.
+- `.opj`: both are written as plain columns of their data and the save warns.
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.

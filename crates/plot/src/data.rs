@@ -4,9 +4,10 @@ use crate::{Rect, stack};
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
 use sheaf_core::graph::{
-    Axis, BarSpacing, ErrorDirection, Frame, Layer, Page, Plot, ScaleKind, TickFormat, TickLabelSource,
+    Axis, BarSpacing, ErrorDirection, Frame, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat, TickLabelSource,
 };
 use sheaf_core::{Column, Project};
+use std::borrow::Cow;
 
 /// Where the bars of one column plot stand at each X position (graphing spec 14.4), in X axis units.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -30,10 +31,10 @@ impl BarSlot {
 pub(crate) struct PlotData<'a> {
     pub plot: &'a Plot,
     /// X values; `None` plots against the row number (1, 2, 3, ...).
-    pub x: Option<&'a [f64]>,
+    pub x: Option<Cow<'a, [f64]>>,
     /// How the X column shows its values (a date format makes a date axis).
     pub x_format: Option<NumberFormat>,
-    pub y: &'a [f64],
+    pub y: Cow<'a, [f64]>,
     /// Rows of the Y column that are masked: drawn red, as Origin does.
     pub mask: Option<&'a std::collections::BTreeSet<usize>>,
     pub err: Option<&'a [f64]>,
@@ -53,6 +54,62 @@ pub(crate) struct PlotData<'a> {
     pub member: Option<usize>,
     /// Where the bars of a column plot stand; `None` for other kinds.
     pub bar: Option<BarSlot>,
+    /// The statistics a box chart plot draws; `None` for other kinds.
+    pub boxed: Option<BoxStats>,
+}
+
+/// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
+/// 75th percentile, the whiskers to the furthest values within 1.5 times the box height, the other
+/// values are outliers).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BoxStats {
+    /// Where the box stands on the X axis (1, 2, 3, ...).
+    pub pos: f64,
+    /// The tick label under the box.
+    pub label: String,
+    pub q1: f64,
+    pub median: f64,
+    pub q3: f64,
+    pub mean: f64,
+    pub whisker_low: f64,
+    pub whisker_high: f64,
+    pub outliers: Vec<f64>,
+}
+
+/// Width of a box, in X axis units (measured: 0.8 of the spacing of the boxes).
+pub(crate) const BOX_WIDTH: f64 = 0.8;
+
+/// The statistics of one box from the finite values of a column, `None` without any.
+fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxStats> {
+    let mut v: Vec<f64> = values.iter().copied().filter(|x| x.is_finite()).collect();
+    if v.is_empty() {
+        return None;
+    }
+    v.sort_by(|a, b| a.total_cmp(b));
+    let q = |p: f64| sheaf_calc::stats::quantile_origin(&v, p);
+    let (q1, median, q3) = (q(0.25), q(0.5), q(0.75));
+    let fence = 1.5 * (q3 - q1);
+    let (lo_fence, hi_fence) = (q1 - fence, q3 + fence);
+    let inside = v.iter().copied().filter(|x| *x >= lo_fence && *x <= hi_fence);
+    let (whisker_low, whisker_high) = inside.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
+    let outliers = v.iter().copied().filter(|x| *x < lo_fence || *x > hi_fence).collect();
+    let mean = v.iter().sum::<f64>() / v.len() as f64;
+    Some(BoxStats { pos, label, q1, median, q3, mean, whisker_low, whisker_high, outliers })
+}
+
+/// The bins of a histogram plot as the points of a column plot: bin centres and counts. `None`
+/// without numbers or with a bin size that cannot be used.
+fn histogram_points(values: &[f64], style: &sheaf_core::graph::HistogramStyle) -> Option<(Vec<f64>, Vec<f64>)> {
+    use sheaf_calc::freq::{BinSize, FreqOptions, freq_counts};
+    let opts = FreqOptions {
+        min: style.begin,
+        max: style.end,
+        size: style.bin_size.map_or(BinSize::Auto, BinSize::Width),
+        below: false,
+        above: false,
+    };
+    let f = freq_counts(values, &opts)?;
+    Some((f.rows.iter().map(|r| r.center).collect(), f.rows.iter().map(|r| r.count as f64).collect()))
 }
 
 impl PlotData<'_> {
@@ -76,7 +133,7 @@ impl PlotData<'_> {
 
     /// The position of row `i` along the X column (the row number without one), with its offset.
     pub fn cat_at(&self, i: usize) -> f64 {
-        let x = match self.x {
+        let x = match &self.x {
             None => (i + 1) as f64,
             Some(x) => x.get(i).copied().unwrap_or(f64::NAN),
         };
@@ -140,6 +197,7 @@ pub(crate) use sheaf_core::stack::row_range;
 pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'a> {
     let (places, members) = stack::places(project, layer);
     let mut plots = Vec::new();
+    let mut boxes = 0usize;
     for (plot, place) in layer.plots.iter().zip(places).filter(|(p, _)| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
@@ -148,11 +206,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));
         let (start, end) = row_range(plot, y.len());
-        plots.push(PlotData {
+        let mut pd = PlotData {
             plot,
-            x,
+            x: x.map(Cow::Borrowed),
             x_format,
-            y,
+            y: Cow::Borrowed(y),
             mask: project.column(plot.y).map(|c| &c.mask).filter(|m| !m.is_empty()),
             err,
             xerr,
@@ -164,7 +222,41 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             oy: place.oy,
             member: place.member,
             bar: None,
-        });
+            boxed: None,
+        };
+        match plot.kind {
+            PlotKind::Histogram => {
+                // The plot shows the counts of the bins of its Y values: one point per bin.
+                let Some((centres, counts)) = histogram_points(&y[start..end], &plot.hist) else { continue };
+                pd.start = 0;
+                pd.end = counts.len();
+                pd.x = Some(Cow::Owned(centres));
+                pd.y = Cow::Owned(counts);
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Box => {
+                boxes += 1;
+                let label = project.plot_label(plot);
+                let Some(stats) = box_stats(&y[start..end], boxes as f64, label) else {
+                    continue;
+                };
+                // The plot is the one point at the middle of its box.
+                pd.x = Some(Cow::Owned(vec![stats.pos]));
+                pd.y = Cow::Owned(vec![stats.median]);
+                pd.start = 0;
+                pd.end = 1;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+                pd.boxed = Some(stats);
+            }
+            _ => {}
+        }
+        plots.push(pd);
     }
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
@@ -183,7 +275,12 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
     let columns: Vec<usize> = (0..plots.len()).filter(|&i| plots[i].plot.kind.is_bar()).collect();
     let Some(&first) = columns.first() else { return };
     let s = bar_spacing(&plots[first]);
-    let gap = percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0;
+    // Histogram bars touch.
+    let gap = if plots[first].plot.kind == PlotKind::Histogram {
+        0.0
+    } else {
+        percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
+    };
     let overlap = percent(bars.overlap_pct, -100.0, 100.0, 0.0) / 100.0;
     // Stacked plots share one slot, which stands where the first of them stands.
     let mut slot_of = vec![0usize; plots.len()];
@@ -334,6 +431,19 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(b) = &pd.boxed {
+            if dim == Dim::X {
+                add(b.pos - BOX_WIDTH / 2.0);
+                add(b.pos + BOX_WIDTH / 2.0);
+            } else {
+                add(b.whisker_low);
+                add(b.whisker_high);
+                b.outliers.iter().for_each(|v| add(*v));
+                add(b.q1);
+                add(b.q3);
+            }
+            continue;
+        }
         let dir = pd.plot.error.direction;
         let transposed = pd.transposed();
         let value_dim = if transposed { Dim::X } else { Dim::Y };

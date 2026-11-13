@@ -11,7 +11,7 @@ use crate::scene::{Item, Scene};
 /// Origin's `Margin` setting of the export settings.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Margin {
-    /// -2: the global Copy Page settings. Origin 2016 resolves it to [`Margin::Border`] with the
+    /// -2: the global Copy Page settings. Origin resolves it to [`Margin::Border`] with the
     /// default border width (see [`Margin::resolved`]).
     Auto,
     /// 0: the bounding box of everything drawn, plus a border.

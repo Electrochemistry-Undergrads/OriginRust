@@ -454,7 +454,7 @@ impl SheafApp {
     }
 
     /// Copy Page (Ctrl+J): the graph as a picture on the clipboard, to paste into a document or a
-    /// presentation. As in Origin 2016 the picture is 40 % of the page size (the "size factor"
+    /// presentation. As in Origin the picture is 40 % of the page size (the "size factor"
     /// before 2021b) and its margin follows the Copy Page margin setting, whose default `Auto` is
     /// the box round everything drawn plus a border (see `docs/spec/graphing.md` 9.6). It is a
     /// 300 dpi bitmap; on Windows an enhanced metafile of the same picture goes with it

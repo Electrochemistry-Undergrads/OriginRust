@@ -1,6 +1,6 @@
 # Specification: 2D graphs, graph object model and graph export
 
-Status: research draft, clean-room, written in our own words for a programmer who has never used Origin.
+Status: draft graphing and project-compatibility specification.
 
 ## Summary
 
@@ -14,7 +14,7 @@ Status: research draft, clean-room, written in our own words for a programmer wh
 - Public docs and installed text files do NOT state most numeric defaults (font size, line widths, tick lengths, page size). They are UNKNOWNS in section 11, to be measured in running Origin. Values tagged [REC] are unverified recollection.
 
 Priority tags: **P0** owner's daily workflow (CH Instruments CV/chronoamperometry overlays, integration figures, publication export), **P1** common, **P2** later.
-Source tags: **[F:path]** installed file read (paths under `C:\Program Files\OriginLab\Origin2016` unless "User:" = `OriginRust\OriginLab\2016\User Files`); **[W:page]** public page at docs.originlab.com/origin-help (or labtalk, quick-help, x-function); **[INF]** inference; **[REC]** recollection.
+Reference tags: **[F:path]** file reference; **[W:page]** public OriginLab documentation (origin-help, labtalk, quick-help or x-function); **[INF]** inference; **[REC]** recollection.
 
 ---
 

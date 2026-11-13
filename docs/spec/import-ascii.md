@@ -1,4 +1,4 @@
-# Text / CSV data import (clean-room spec)
+# Text / CSV data import
 
 Status: research draft. Source tags: **[F]** installed file (path given), **[W]** public OriginLab documentation (docs.originlab.com, paraphrased), **[I]** inference by the author, **[?]** unknown, needs a check against running Origin.
 

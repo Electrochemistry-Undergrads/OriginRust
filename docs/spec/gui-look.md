@@ -1,12 +1,7 @@
 # How Origin 2016 looks and behaves: the interface, described for Sheaf
 
-Status: written from pictures of the installed Origin 2016 (OriginPro 2016 64-bit, version 9.3)
-taken on 2026-11-11 and 2026-11-12 (first study) and on 2026-11-12 (second study, which closed
-the gaps of the first), plus the existing specs. The pictures show OriginLab's interface, so they
-live only in the git-ignored folders `re-workspace/scratch/gui-study/` (first study) and
-`re-workspace/scratch/gui-study2/` (second study); file names are quoted below so a later reader
-can find them. This text is our own description; no OriginLab help text, icons or pictures are
-copied. Menu and dialog names are quoted because they are names, not help text.
+Interface compatibility reference for workbook and graph windows, menus, dialogs and controls.
+Reference images are local development artifacts; filenames below identify the relevant views.
 
 Tags: **[seen]** means seen directly in one of those pictures (first study) and **[seen 2]**
 means seen in a picture of the second study (look in `gui-study2/`). **[spec]** means taken from
@@ -16,19 +11,8 @@ verified. Sizes are in screen pixels of the main window on a Windows 11 screen a
 (the window placed at the top-left corner, 1600 x 1000, on a 1920 x 1080 screen); they are good
 to a few pixels.
 
-How the pictures were made: `tools/origin-ref/origin-screenshot.ps1` started a temporary visible
-Origin, ran our own LabTalk setup, sent keys or mouse clicks and saved the screen. The first
-study used `gui-setup2.labtalk.txt` (one workbook with four number columns and a text column, a
-line graph and a column graph made from it). The second study used `gui-setup4.labtalk.txt`
-(a workbook "Book1" with four number columns A to D plus a column named "Label", a line graph
-"Graph1" with two plots and a column graph "Graph2" with two plots). The second study drove
-Origin with a step file (`-StepsFile`) that holds one step per line; mouse clicks, key presses
-and small LabTalk lines (to pick a window) can be mixed in a step. The first study's step list
-was cut after its first step when passed with commas through `powershell -File`; that is fixed
-in the script by `-StepsFile`. Nothing was saved in Origin and the instance was closed
-afterwards. A check run showed that the Options dialog still opens on its Numeric Format tab
-after an earlier run had paged to another tab, so no Origin setting of the owner was changed
-by looking at dialogs [seen 2, `opts-check.png`].
+The reference views cover workbooks with numeric and label columns, line graphs, column
+graphs and their settings dialogs. Screenshot and setup utilities are in `tools/origin-ref/`.
 
 Known weaknesses of the pictures: the Windows desktop behind and beside the window (other
 programs) appears in some pictures because the capture copies screen pixels; ignore those

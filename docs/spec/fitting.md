@@ -96,3 +96,27 @@ Findings that shaped the engine:
 - Origin's own starting values for the compared functions (for example Gauss `y0 = 1.205, xc = 5, w = 0.898, A = 3.708` on our test data) are stored in the fixture as `origin_initial`; our starting-value routines were not made to reproduce them.
 
 Not verified: functions other than the six above (the other library functions are checked only against their own noisy data), instrumental weights with a dropped point, direct weighting, confidence limits (computed from the t distribution; they were not read from Origin's report), fits with more than 100 points, behaviour when the model is undefined at the starting point, global or multi-dataset fits (not implemented).
+
+## 9. The NLFit window: buttons and layout
+
+Source: OriginLab's online help on the NLFit dialog and its buttons (read 2026-11-12; the wording here is ours). Not tested in Origin 2016 itself: the dialog cannot be opened headless, and `nlbegin`/`nlfit`/`nlend` have no button equivalents beyond what section 6 already compared (an iteration-limited `nlfit` followed by `nlend output:=1` writes a report whose status is Failed(-200); that is what Fit and Done write when the limit is hit).
+
+What the buttons do in Origin:
+
+- **1 Iteration**: one Levenberg-Marquardt step from the values now in the Parameters tab; the new values go back into the tab, the message goes to the Messages tab; the dialog stays open.
+- **Fit until converged** (an icon button): iterates until the tolerance or the iteration limit (Advanced page, Fit Control) is reached; the dialog stays open and the button turns into OK.
+- **Fit** (text button): runs whatever iterations are still needed, writes the report and the output sheets, and closes the dialog.
+- **Done**: takes the values as they are, with no further iteration, converged or not, writes the results and closes.
+- **Cancel**: closes the dialog; nothing is written. The help does not say whether the iterated parameter values survive anywhere; since the results sheets are only made by Fit and Done, Sheaf keeps nothing.
+- When the iteration limit is hit, Fit ends there and the report carries the status "not converged"; the help suggests raising the limit and fitting again from the dialog.
+- Layout: tabs Settings / Code / Parameters / Bounds (upper panel), a button row, and a lower panel with the tabs Fit Curve, Formula, Sample Curve, Message, Function File, Residual and Hints; two arrow buttons show or hide each panel.
+
+Sheaf's window (`crates/app/src/dialogs/fit.rs`):
+
+- Same tabs; Settings has the list Function Selection, Data Selection, Fitted Curves, Find X/Y, Advanced, Output. Category and Function drop-downs live on Function Selection, the weights, column and rows on Data Selection.
+- Buttons: 1 Iteration, Fit until converged and Revert (Revert is ours) keep the window open and work on the Parameters table on a copy of the project; Fit and Done write the results through one `Document::edit` ("Fit", one undo step) and close; Cancel closes without writing.
+- Fit writes with the table values as starting values and the dialog's iteration limit. Done writes with `max_iterations = 0` (the engine makes no step and reports the starting values) unless the table equals the values at which the last trial converged, in which case it runs normally and one pass confirms the convergence. A line or polynomial has no iterations; Fit and Done are the same.
+- Fitted Curves: Number of Points (default 1000), X range (the input data range, or a custom Min/Max), Plot on Source Graph, Update Legend on Source Graph (drops hand-written legend text of the layers that receive the curve so the legend lists it), and the bands. Not offered: plot type, stacking with the residual-vs-independents plot, preview on the source graph, plotting in the report table.
+- Find X/Y: a page with a note only. Output: a page describing where results go; Origin's choices of sheet names, tables and arrangement are not offered.
+- Lower panel (fold with the "Hide lower panel" button): Fit Curve (data as dots and the curve at the table values, drawn with the egui painter, made by a fit with no iterations on a copy), Residual, Formula, Messages. Not offered: Sample Curve, Function File, Hints.
+- Not offered: Dialog Theme row, the icon buttons for Simplex, Initialize Parameters, Calculate Chi-Square, 100 iterations.

@@ -35,6 +35,14 @@ pub enum CellOp {
     PasteText(String),
     /// Empty the cells (the Delete key).
     Clear,
+    /// Column > Mask > Apply, Remove or Swap on the selected cells.
+    Mask(sheaf_core::sheetops::MaskOp),
+    /// Edit > Insert: blank rows above the selected rows (only in the selected columns for a
+    /// block of cells), or new columns left of the selected columns.
+    Insert,
+    /// Edit > Delete: the selected rows (only in the selected columns for a block of cells) or
+    /// the selected columns.
+    Delete,
 }
 
 /// One of the label rows above the data of a column.
@@ -141,6 +149,15 @@ pub enum Action {
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
+    /// Column > Move Columns: these columns go to the first or last position or one step left or right.
+    MoveColumns {
+        columns: Vec<ColumnId>,
+        to: sheaf_core::sheetops::MoveTo,
+    },
+    /// Column > Hide/Unhide Columns > Hide Selected.
+    HideColumns(Vec<ColumnId>),
+    /// Column > Hide/Unhide Columns > Unhide All, on the active sheet of the workbook.
+    UnhideColumns(WindowId),
     SetDesignation {
         columns: Vec<ColumnId>,
         designation: Designation,
@@ -204,6 +221,16 @@ pub enum Action {
         columns: Vec<ColumnId>,
         descending: bool,
     },
+    /// Worksheet > Sort Worksheet > Custom... (no columns) or Sort Range > Custom...: open the
+    /// nested sort window.
+    SortCustom {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Worksheet > Sort Columns by Label...
+    SortByLabel(WindowId),
+    /// Column > Reverse Order: turn the values of each selected column round.
+    ReverseColumns(Vec<ColumnId>),
     /// Open the window that keeps only the rows matching a condition.
     FilterRows(WindowId),
     PlotColumns {

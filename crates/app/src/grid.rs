@@ -295,6 +295,11 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
 /// Origin's default row height and column width (about 16 px and 67 px in the pictures).
 const ROW_HEIGHT: f32 = 16.0;
 const COLUMN_WIDTH: f32 = 67.0;
+
+/// The width in pixels of a column that is `chars` characters wide (8 characters are 67 px).
+fn column_pixels(chars: u16) -> f32 {
+    (f32::from(chars) * COLUMN_WIDTH / f32::from(sheaf_core::column::DEFAULT_WIDTH)).max(8.0)
+}
 /// Width of the row header together with the titles of the label rows.
 const ROW_HEADER_WIDTH: f32 = 84.0;
 /// Empty rows shown below the data so that new values can be typed in.
@@ -309,6 +314,9 @@ const HEADER_DARK: Color32 = Color32::from_rgb(60, 60, 72);
 const LINE_HEADER: Color32 = Color32::from_rgb(120, 120, 120);
 const LINE_BODY: Color32 = Color32::from_rgb(200, 200, 200);
 const TEXT: Color32 = Color32::BLACK;
+/// A masked cell: light red fill and red text (Origin draws masked points red).
+const MASK_FILL: Color32 = Color32::from_rgb(255, 224, 224);
+const MASK_TEXT: Color32 = Color32::from_rgb(190, 0, 0);
 
 /// The label rows of a sheet in order: the four fixed ones, then one per user parameter.
 fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
@@ -434,8 +442,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         .cell_layout(Layout::left_to_right(Align::Center))
                         .column(TableColumn::exact(ROW_HEADER_WIDTH))
                         .min_scrolled_height(0.0);
-                    for _ in &sheet.columns {
-                        table = table.column(TableColumn::initial(COLUMN_WIDTH).at_least(30.0).clip(true));
+                    for column in sheet.columns.iter().filter(|c| !c.hidden) {
+                        table = match column.width {
+                            Some(chars) => table.column(TableColumn::exact(column_pixels(chars)).clip(true)),
+                            None => table.column(TableColumn::initial(COLUMN_WIDTH).at_least(30.0).clip(true)),
+                        };
                     }
                     // One empty column at the end as a target for "add column".
                     table = table.column(TableColumn::remainder().at_least(40.0));
@@ -451,7 +462,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     table
                         .header(header_height, |mut header| {
                             header.col(|ui| corner_and_titles(ui, sheet, &label_rows, book_id, state, actions));
-                            for (position, column) in sheet.columns.iter().enumerate() {
+                            for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                                 header.col(|ui| {
                                     column_head(ui, sheet, position, column, &label_rows, book_id, state, actions);
                                 });
@@ -479,7 +490,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             body.rows(ROW_HEIGHT, rows, |mut row| {
                                 let r = row.index();
                                 row.col(|ui| row_header_cell(ui, r, book_id, state, actions));
-                                for (position, column) in sheet.columns.iter().enumerate() {
+                                for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                                     row.col(|ui| body_cell(ui, sheet, position, column, r, book_id, state, actions));
                                 }
                                 row.col(|_ui| {});
@@ -1167,6 +1178,9 @@ fn body_cell(
         Look::Anchor if !single => {
             ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
         }
+        _ if column.mask.contains(&r) => {
+            ui.painter().rect_filled(rect, 0.0, MASK_FILL);
+        }
         _ => {}
     }
     let (right, bottom) = (rect.right() - 0.5, rect.bottom() - 0.5);
@@ -1219,6 +1233,7 @@ fn body_cell(
 
     let color = match look {
         Look::Dark => Color32::WHITE,
+        _ if column.mask.contains(&r) => MASK_TEXT,
         _ => TEXT,
     };
     let layout = if numeric && !is_text_cell {
@@ -1396,6 +1411,21 @@ pub fn nav_target(
     (col.min(last_col), row.min(max_row))
 }
 
+/// The column position the cursor ends on when a key aimed at `to` and the column there is
+/// hidden: the next visible column in the direction of travel, else the one before it, else the
+/// column it started in.
+pub fn skip_hidden(sheet: &Worksheet, from: usize, to: usize) -> usize {
+    let visible = |i: usize| sheet.columns.get(i).is_some_and(|c| !c.hidden);
+    if visible(to) {
+        return to;
+    }
+    let forward = to >= from;
+    let first = |forward: bool| -> Option<usize> {
+        if forward { (to..sheet.columns.len()).find(|i| visible(*i)) } else { (0..=to).rev().find(|i| visible(*i)) }
+    };
+    first(forward).or_else(|| first(!forward)).unwrap_or(from)
+}
+
 /// Handles the keys of the active worksheet when no text field has the keyboard: the arrows, Tab,
 /// Enter, Home, End and the page keys move the active cell (with Shift they extend the block),
 /// F2 and typing start editing. Returns true when keys were taken.
@@ -1464,7 +1494,8 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
                         // Nothing selected yet: the first key press selects the first cell.
                         None => (Some((0, 0)), false),
                         Some(from) => {
-                            (Some(nav_target(nav, ctrl, from, &lens, max_row, state.page_rows.max(1))), shift)
+                            let to = nav_target(nav, ctrl, from, &lens, max_row, state.page_rows.max(1));
+                            (Some((skip_hidden(sheet, from.0, to.0), to.1)), shift)
                         }
                     }
                 } else if ctrl {
@@ -1474,7 +1505,8 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
                         egui::Key::Tab => {
                             let nav = if shift { NavKey::Left } else { NavKey::Right };
                             let from = origin(false).unwrap_or((0, 0));
-                            (Some(nav_target(nav, false, from, &lens, max_row, 1)), false)
+                            let to = nav_target(nav, false, from, &lens, max_row, 1);
+                            (Some((skip_hidden(sheet, from.0, to.0), to.1)), false)
                         }
                         egui::Key::Enter => {
                             let nav = if shift { NavKey::Up } else { NavKey::Down };
@@ -1557,6 +1589,19 @@ mod tests {
             p.add_column(b, 0, d, ColumnData::numeric(v)).unwrap();
         }
         p.workbook(b).unwrap().sheet().clone()
+    }
+
+    #[test]
+    fn the_cursor_steps_over_hidden_columns_in_the_direction_it_travels() {
+        let mut ws = sheet();
+        ws.columns[1].hidden = true;
+        ws.columns[2].hidden = true;
+        assert_eq!(skip_hidden(&ws, 0, 1), 3, "right: the next visible column");
+        assert_eq!(skip_hidden(&ws, 3, 2), 0, "left: back to the visible column before");
+        assert_eq!(skip_hidden(&ws, 0, 0), 0);
+        ws.columns[3].hidden = true;
+        ws.columns[4].hidden = true;
+        assert_eq!(skip_hidden(&ws, 0, 1), 0, "nothing visible further right: stay");
     }
 
     #[test]

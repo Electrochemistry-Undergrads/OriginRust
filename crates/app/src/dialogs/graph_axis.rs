@@ -105,7 +105,11 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
             });
         ui.end_row();
         ui.label("Rescale Margin(%)");
-        ui.add_enabled(false, DragValue::new(&mut 0.0));
+        // Used by "Round out to ticks" (Origin's Normal rescale); the other two modes ignore it.
+        ui.add_enabled(
+            axis.auto_range == AutoRange::Nice,
+            DragValue::new(&mut axis.rescale_margin_pct).range(0.0..=100.0).speed(0.5).max_decimals(2),
+        );
         ui.end_row();
         ui.label("Reverse");
         ui.add_enabled(false, egui::Checkbox::new(&mut false, ""));

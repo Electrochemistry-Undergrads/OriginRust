@@ -113,6 +113,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         min: None,
         max: None,
         auto_range: AutoRange::Nice,
+        rescale_margin_pct: crate::autorange::DEFAULT_RESCALE_MARGIN_PCT,
         major_step: None,
         minor_ticks: 1,
         title: None,

@@ -1686,7 +1686,7 @@ fn one_column_plot_draws_bars_from_zero_over_80_percent_of_the_spacing() {
     assert_eq!(bars.len(), 5);
     let (l, r, b, t) = bar_in_data(geom, bars[0].0);
     assert!(close9(l, 0.6) && close9(r, 1.4) && close9(b, 0.0) && close9(t, 1.2), "{l} {r} {b} {t}");
-    assert!(bars.iter().all(|(_, fill, _)| *fill == Some(Color::BLACK)));
+    assert!(bars.iter().all(|(_, fill, _)| *fill == Some(Color::rgb(255, 0, 0)))); // Origin's Column template starts at red
     assert_eq!((geom.y.min, geom.y.max), (0.0, 3.5), "the Y axis reaches down to 0");
     let svg = svg_of(&p, g);
     let d = doc(&svg);
@@ -2503,4 +2503,89 @@ fn a_masked_point_is_drawn_red_with_its_two_line_segments() {
     p.column_mut(id).unwrap().mask.insert(2);
     let svg = svg_of(&p, g);
     assert_eq!(svg.matches("#FF0000").count(), 2, "one red line path and one red symbol path");
+}
+
+// ----- stacked area and fill area (graphing spec 14.13) ------------------------------------------
+
+/// The data of the Origin probe of the stacked area: X 1..8 and three Y columns.
+fn area_probe(template: Template) -> (Project, WindowId) {
+    project(
+        template,
+        (1..=8).map(f64::from).collect(),
+        vec![
+            vec![2.0, 3.0, 5.0, 4.0, 6.0, 5.0, 7.0, 6.0],
+            vec![1.0, 1.0, 2.0, 2.0, 3.0, 2.0, 3.0, 3.0],
+            vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0],
+        ],
+    )
+}
+
+#[test]
+fn stacked_areas_pile_up_row_by_row() {
+    let (p, g) = area_probe(Template::StackedArea);
+    let l = layer_data(&p, g);
+    let top = |k: usize| (0..8).map(|i| l.plots[k].val_at(i)).collect::<Vec<f64>>();
+    assert_eq!(top(0), vec![2.0, 3.0, 5.0, 4.0, 6.0, 5.0, 7.0, 6.0]);
+    assert_eq!(top(1)[2], 7.0);
+    assert_eq!(top(2)[6], 11.0);
+    assert_eq!(l.plots[2].base_at(6), Some(10.0), "an area starts where the one below ends");
+    assert!(l.plots.iter().all(|pd| pd.bar.is_none()), "areas have no bar slot");
+}
+
+#[test]
+fn stacked_area_probe_matches_origin_axis_and_colours() {
+    // Origin: X 1 to 8 (no margin), Y 0 to 12; colours black, red, blue (the theme list).
+    let (p, g) = area_probe(Template::StackedArea);
+    let svg = svg_of(&p, g);
+    let t = texts(&doc(&svg));
+    assert!(t.iter().any(|s| s == "12") && !t.iter().any(|s| s == "14"), "Y axis ends at 12: {t:?}");
+    let colours: Vec<_> = p.graph(g).unwrap().layers[0].plots.iter().map(|pl| pl.symbol.color).collect();
+    assert_eq!(colours, vec![Color::rgb(0, 0, 0), Color::rgb(255, 0, 0), Color::rgb(0, 0, 255)]);
+}
+
+#[test]
+fn hundred_percent_stacked_areas_end_at_100() {
+    let (p, g) = area_probe(Template::Stacked100Area);
+    let l = layer_data(&p, g);
+    for i in 0..8 {
+        assert!((l.plots[2].val_at(i) - 100.0).abs() < 1e-9);
+    }
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|s| s == "100") && !t.iter().any(|s| s == "120"));
+}
+
+#[test]
+fn a_fill_area_runs_between_two_columns() {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    let lo = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 1.0, 2.0])).unwrap();
+    let hi = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 4.0, 5.0])).unwrap();
+    let g = p.plot_columns(Template::FillArea, &[lo, hi]).unwrap();
+    let plots = &p.graph(g).unwrap().layers[0].plots;
+    assert_eq!((plots.len(), plots[0].y, plots[0].y_base), (1, hi, Some(lo)));
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let fill = paths_in(with_class(&d, "plots")[0])
+        .into_iter()
+        .find(|n| n.attribute("d").is_some_and(|d| d.ends_with('Z')) && n.attribute("fill") != Some("none"))
+        .expect("the filled shape");
+    // From the first lower point: 3 upper points, then 3 lower points back: M + 6 L + Z.
+    assert_eq!(fill.attribute("d").unwrap().matches('L').count(), 6);
+}
+
+#[test]
+fn golden_stacked_area_template() {
+    let (p, g) = area_probe(Template::StackedArea);
+    compare_golden("stacked-area", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_fill_area_template() {
+    let (mut p, g) = area_probe(Template::FillArea);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.truncate(1);
+    layer.plots[0].y_base = Some(low);
+    compare_golden("fill-area", &svg_of(&p, g));
 }

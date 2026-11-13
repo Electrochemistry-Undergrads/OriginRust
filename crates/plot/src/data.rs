@@ -4,7 +4,7 @@ use crate::{Rect, stack};
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
 use sheaf_core::graph::{
-    Axis, BarSpacing, ErrorDirection, Frame, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat, TickLabelSource,
+    Axis, BarSpacing, ErrorDirection, Frame, Layer, Page, Plot, ScaleKind, TickFormat, TickLabelSource,
 };
 use sheaf_core::{Column, Project};
 
@@ -190,7 +190,7 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
     let mut slots = 0usize;
     let mut stacked_slot = None;
     for &i in &columns {
-        if plots[i].plot.kind.is_stacked() {
+        if plots[i].plot.kind.is_stacked_column() {
             slot_of[i] = *stacked_slot.get_or_insert_with(|| {
                 slots += 1;
                 slots - 1
@@ -209,20 +209,31 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
     }
 }
 
-/// Piles the stacked column plots of a layer: the bar of each plot starts where the bars of the
-/// plots before it end, row by row (a missing value counts as 0). With a 100 % plot among them
-/// every pile is scaled to a total of 100.
+/// Piles the stacked plots of a layer: the bar or area of each plot starts where those of the
+/// plots before it (of the same family, columns or areas) end, row by row (a missing value counts
+/// as 0). With a 100 % plot among them every pile is scaled to a total of 100.
 fn stack_bars(plots: &mut [PlotData]) {
-    let idx: Vec<usize> = (0..plots.len()).filter(|&i| plots[i].plot.kind.is_stacked()).collect();
+    for areas in [false, true] {
+        let idx: Vec<usize> = (0..plots.len())
+            .filter(|&i| {
+                let k = plots[i].plot.kind;
+                if areas { k.is_stacked_area() } else { k.is_stacked_column() }
+            })
+            .collect();
+        pile(plots, &idx);
+    }
+}
+
+fn pile(plots: &mut [PlotData], idx: &[usize]) {
     if idx.is_empty() {
         return;
     }
     let rows = idx.iter().map(|&i| plots[i].y.len()).max().unwrap_or(0);
-    let percent = idx.iter().any(|&i| plots[i].plot.kind == PlotKind::Stacked100Column);
+    let percent = idx.iter().any(|&i| plots[i].plot.kind.is_percent_stacked());
     let value = |pd: &PlotData, r: usize| pd.y.get(r).copied().filter(|v| v.is_finite()).unwrap_or(0.0);
     let totals: Vec<f64> = (0..rows).map(|r| idx.iter().map(|&i| value(&plots[i], r)).sum()).collect();
     let mut run = vec![0.0; rows];
-    for &i in &idx {
+    for &i in idx {
         let (mut lo, mut hi) = (vec![f64::NAN; rows], vec![f64::NAN; rows]);
         for r in 0..rows {
             let scale = if !percent {

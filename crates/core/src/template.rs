@@ -46,10 +46,16 @@ pub enum Template {
     Bar,
     /// Floating column (Origin's "Floating Column"): each bar runs from one Y column to the next.
     FloatingColumn,
+    /// Stacked area (Origin's "Stacked Area"): the area template with the areas piled up.
+    StackedArea,
+    /// 100 % stacked area: every pile scaled to 100, Y axis from 0 to 100.
+    Stacked100Area,
+    /// Fill area (Origin's "Fill Area"): the area between two curves, a pair of Y columns each.
+    FillArea,
 }
 
 impl Template {
-    pub const ALL: [Template; 13] = [
+    pub const ALL: [Template; 16] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -59,6 +65,9 @@ impl Template {
         Template::Bar,
         Template::FloatingColumn,
         Template::Area,
+        Template::StackedArea,
+        Template::Stacked100Area,
+        Template::FillArea,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -81,6 +90,9 @@ impl Template {
             Template::Stacked100Column => "stacked-column-100",
             Template::Bar => "bar",
             Template::FloatingColumn => "floating-column",
+            Template::StackedArea => "stacked-area",
+            Template::Stacked100Area => "stacked-area-100",
+            Template::FillArea => "fill-area",
         }
     }
 
@@ -99,6 +111,9 @@ impl Template {
             Template::Stacked100Column => "100% Stacked Column",
             Template::Bar => "Bar",
             Template::FloatingColumn => "Floating Column",
+            Template::StackedArea => "Stacked Area",
+            Template::Stacked100Area => "100% Stacked Area",
+            Template::FillArea => "Fill Area",
         }
     }
 
@@ -117,12 +132,15 @@ impl Template {
             Template::DoubleY => double_y(id, name),
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
-            Template::Column => column(id, name, PlotKind::Column),
-            Template::StackedColumn => column(id, name, PlotKind::StackedColumn),
-            Template::Stacked100Column => column(id, name, PlotKind::Stacked100Column),
+            Template::Column => from_red(column(id, name, PlotKind::Column)),
+            Template::StackedColumn => themed(column(id, name, PlotKind::StackedColumn)),
+            Template::Stacked100Column => themed(column(id, name, PlotKind::Stacked100Column)),
             Template::Bar => column(id, name, PlotKind::Bar),
             Template::FloatingColumn => column(id, name, PlotKind::FloatingColumn),
-            Template::Area => general(id, name, PlotKind::Area),
+            Template::Area => themed(general(id, name, PlotKind::Area)),
+            Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
+            Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
+            Template::FillArea => themed(general(id, name, PlotKind::Area)),
         }
     }
 }
@@ -161,6 +179,57 @@ pub const ORIGIN_COLOR_LIST: [(u8, u8, u8); 24] = [
     (255, 128, 255),
     (64, 64, 64),
 ];
+
+/// The colour list of the owner's graph theme, which Origin's area, stacked area and stacked column
+/// templates use (black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, then
+/// custom colours; graphing spec section 1.5), measured on the legends of plots made from those
+/// templates.
+pub const THEME_COLOR_LIST: [(u8, u8, u8); 23] = [
+    (0, 0, 0),
+    (255, 0, 0),
+    (0, 0, 255),
+    (255, 0, 255),
+    (0, 128, 0),
+    (0, 0, 128),
+    (128, 0, 255),
+    (128, 0, 128),
+    (128, 0, 0),
+    (128, 128, 0),
+    (43, 99, 162),
+    (30, 150, 150),
+    (155, 100, 26),
+    (16, 199, 62),
+    (185, 36, 122),
+    (45, 197, 204),
+    (63, 65, 152),
+    (147, 172, 43),
+    (128, 128, 128),
+    (150, 100, 100),
+    (100, 150, 100),
+    (43, 163, 202),
+    (50, 100, 150),
+];
+
+/// The graph with its colour list replaced by the theme list ([`THEME_COLOR_LIST`]).
+fn themed(mut g: Graph) -> Graph {
+    for l in &mut g.layers {
+        l.palette.colors = THEME_COLOR_LIST.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).collect();
+    }
+    g
+}
+
+/// The graph with its colour list started at the second entry of the base palette (red, green, blue,
+/// cyan, ...), as Origin's Column and Box templates do (measured: the first column of a plain
+/// Column graph is red, not black).
+fn from_red(mut g: Graph) -> Graph {
+    for l in &mut g.layers {
+        l.palette.colors = (1..=ORIGIN_COLOR_LIST.len())
+            .map(|i| ORIGIN_COLOR_LIST[i % ORIGIN_COLOR_LIST.len()])
+            .map(|(r, g, b)| Color::rgb(r, g, b))
+            .collect();
+    }
+    g
+}
 
 /// Origin's default page, in inches (6432 by 4923 units of 1/600 inch). Its font sizes (18 pt tick
 /// labels, 22 pt titles) are meant for this size.
@@ -465,7 +534,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 13);
+        assert_eq!(Template::ALL.len(), 16);
     }
 
     #[test]
@@ -487,11 +556,12 @@ mod tests {
         assert_eq!((l.x_axis.major_tick, l.x_axis.minor_tick), (TickDirection::None, TickDirection::None));
         assert_eq!((l.x_axis.minor_ticks, l.y_axis.minor_ticks), (0, 1));
         assert_eq!(l.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
-        // Page, fonts, legend and colors are those of the line template.
+        // Page, fonts and legend are those of the line template; the colours start at red (measured).
         let line = Template::Line.new_graph(WindowId(1), "Graph1");
         assert_eq!(g.page, line.page);
         assert_eq!(l.legend, line.layers[0].legend);
-        assert_eq!(l.palette, line.layers[0].palette);
+        assert_eq!(l.palette.colors[0], Color::rgb(255, 0, 0));
+        assert_eq!(l.palette.colors.len(), line.layers[0].palette.colors.len());
         assert_eq!(l.x_axis.tick_font, line.layers[0].x_axis.tick_font);
         // No template writes the new keys, so their files look as before.
         for t in Template::ALL {

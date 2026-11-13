@@ -703,7 +703,15 @@ fn plot_menu() -> Vec<Entry> {
                 "Q-Q Plot",
             ],
         ),
-        sub("&Area", vec![item("&Area", Cmd::Plot(Template::Area)), grey("Stacked Area"), grey("Fill Area")]),
+        sub(
+            "&Area",
+            vec![
+                item("&Area", Cmd::Plot(Template::Area)),
+                item("Stacked Area", Cmd::Plot(Template::StackedArea)),
+                item("100% Stacked Area", Cmd::Plot(Template::Stacked100Area)),
+                item("Fill Area", Cmd::Plot(Template::FillArea)),
+            ],
+        ),
         grey_sub(
             "Contour/&Heat Map",
             &[
@@ -1401,6 +1409,7 @@ pub fn graph_plot_menu(
                 change("Line + Symbol", PlotKind::LineSymbol),
                 change("Column", PlotKind::Column),
                 change("Area", PlotKind::Area),
+                change("Stacked Area", PlotKind::StackedArea),
             ],
         ),
         grey("Change X"),

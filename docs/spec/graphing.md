@@ -1204,6 +1204,22 @@ Measured with Origin on a scatter plot of 5 points with a Y error column (`p6`, 
 - **Range.** The automatic axis range reaches the ends of the error bars (data 2..5 with ends 1.5 and 6 gave Y 1..6.5).
 - **Sheaf.** `Plot::x_error` (X error column after the Y column, found like the Y error), `Plot::error` with direction (both, positive, negative) and cap width (default 8 pt, 0 = no cap); Plot Details > Error Bar edits direction and cap width; Plot > Symbol > XY Error plots with both columns. X error bars are not drawn for bar plots. Positive and negative directions draw the bar from the point to that end only, with one cap; the range widens only on that side. Not stored in `.opj` (save warning).
 
+### 14.14 Colour lists of column and area templates; stacked area and fill area (T12)
+
+Measured with `plotxy` and `expGraph` through COM on synthetic data (scripts and PNGs in `re-workspace/scratch/T12/`, local only), legends read pixel by pixel. The same twelve Y columns plotted from each template:
+
+| Template | Colours of the plots in order |
+|---|---|
+| `<new>` (no template), Line, Scatter, Line + Symbol | the base palette: black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, ... (section 1.5) |
+| Column, Box | the base palette from its second entry: red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, dark cyan |
+| Stacked Column, Area, Stacked Area | the theme list (section 1.5, "Q02 Basic"): black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, (43,99,162), (30,150,150), ... |
+
+Sheaf copies this in `template.rs`: `from_red` for Column, `themed` for the stacked column, area and fill area templates. Plain Area draws the later plots over the earlier ones (no pile).
+
+- **Stacked Area (214) and 100 % Stacked Area.** Plot i fills from the sum of the plots before it up to the sum including itself, row by row; the legend lists the plots in plot order (stacked columns list them reversed). The Y axis starts at exactly 0; the X axis runs from the first to the last X value with no margin (the same for plain Area, measured: probe X 1 to 8 gave a 1 to 8 axis, Y 0 to 12 for a pile reaching 11).
+- **Fill Area.** One plot per pair of Y columns: the first of a pair is the lower edge, the second the upper edge and the plot's name (`Plot::y_base`, as Floating Column). Origin's template could not be told apart from two plain areas drawn over each other, so only the pair form is implemented.
+- `.opj`: stacked areas are written as plain areas from zero, fill areas as areas down to zero, and the save warns (the companion keeps them).
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.

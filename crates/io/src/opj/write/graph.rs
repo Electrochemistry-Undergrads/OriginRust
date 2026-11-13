@@ -659,8 +659,14 @@ impl Writer {
         }
         // Plot types the writer cannot store go out as plain columns; the companion file keeps them.
         let has = |f: &dyn Fn(PlotKind) -> bool| plots.iter().any(|r| f(r.plot.kind));
-        if has(&|k| k.is_stacked()) {
+        if has(&|k| k.is_stacked_column()) {
             notes.push("stacked columns were written as columns side by side".into());
+        }
+        if has(&|k| k.is_stacked_area()) {
+            notes.push("stacked areas were written as areas from zero".into());
+        }
+        if plots.iter().any(|r| r.plot.kind == PlotKind::Area && r.plot.y_base.is_some()) {
+            notes.push("fill areas between two curves were written as areas down to zero".into());
         }
         if has(&|k| k == PlotKind::Bar) {
             notes.push("horizontal bars were written as vertical columns".into());
@@ -682,7 +688,7 @@ impl Writer {
                 | PlotKind::Stacked100Column
                 | PlotKind::Bar
                 | PlotKind::FloatingColumn => CurveKind::Column,
-                PlotKind::Area => CurveKind::Area,
+                PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => CurveKind::Area,
             };
             let connect = match p.line.connect {
                 Connect::Straight => 1,

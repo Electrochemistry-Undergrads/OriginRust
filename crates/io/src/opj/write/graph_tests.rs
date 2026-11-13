@@ -232,7 +232,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
             | PlotKind::Stacked100Column
             | PlotKind::Bar
             | PlotKind::FloatingColumn => assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of a bar"),
-            PlotKind::Area => {
+            _ => {
                 assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of an area");
                 assert_eq!(got.line.color, Color::rgb(200, 10, 10), "its border");
             }

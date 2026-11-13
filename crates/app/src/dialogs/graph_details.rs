@@ -89,6 +89,8 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Stacked100Column => "100% Stacked Column",
         PlotKind::Bar => "Bar",
         PlotKind::FloatingColumn => "Floating Column",
+        PlotKind::StackedArea => "Stacked Area",
+        PlotKind::Stacked100Area => "100% Stacked Area",
     }
 }
 
@@ -136,6 +138,8 @@ pub fn dialog_body(
                             PlotKind::Bar,
                             PlotKind::FloatingColumn,
                             PlotKind::Area,
+                            PlotKind::StackedArea,
+                            PlotKind::Stacked100Area,
                         ] {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }

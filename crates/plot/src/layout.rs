@@ -147,6 +147,25 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
             let base = drawn.as_ref().unwrap_or(axis);
             drawn = Some(Axis { major_step: Some(crate::ticks::nice_step((hi - lo) / 5.0)), ..base.clone() });
         }
+        if dim == Dim::X && linear && drawn.is_none() && sources.first().is_some_and(|pd| pd.plot.kind.is_area()) {
+            // Area plots reach the frame at both ends: Origin gives them no margin in X (measured).
+            drawn = Some(Axis { auto_range: sheaf_core::graph::AutoRange::Tight, ..axis.clone() });
+        }
+        if dim == Dim::Y
+            && linear
+            && let Some((lo, hi)) = range
+            && lo > 0.0
+            && sources.iter().any(|pd| pd.plot.kind.is_area() && pd.plot.y_base.is_none())
+        {
+            // The fill stands on Y = 0: the axis starts there exactly (measured).
+            range = Some((0.0, hi));
+            free.0 = false;
+        }
+        if dim == Dim::Y && linear && sources.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Area) {
+            // Piles of 100: the axis ends exactly at 0 and 100.
+            range = Some((0.0, 100.0));
+            free = (false, false);
+        }
         resolve_axis_edges(drawn.as_ref().unwrap_or(axis), range, free)
     };
     if let Some(column) = data::label_column(project, axis, dim, first) {
@@ -518,7 +537,9 @@ fn layer_scene(
 /// for scatter and column plots, which have no line of their own to show.
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
     pds.first().map(|pd| match pd.plot.kind {
-        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area => pd.plot.line.color,
+        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => {
+            pd.plot.line.color
+        }
         _ => pd.plot.symbol.color,
     })
 }
@@ -1002,7 +1023,7 @@ fn draw_legend(
     let col_gap = fs;
 
     // Piled and lying bars list the last plot first, as they appear on the page.
-    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked() || pd.plot.kind.is_horizontal());
+    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked_column() || pd.plot.kind.is_horizontal());
     let text = lg.text.clone().unwrap_or_else(|| {
         if reversed {
             let rev: Vec<String> = ids.iter().rev().cloned().collect();
@@ -1110,7 +1131,7 @@ fn draw_legend(
                         symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
                         out.push(symbol_item(d, &plot.symbol));
                     }
-                    if plot.kind.is_bar() || plot.kind == PlotKind::Area {
+                    if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         out.push(Item::Rect {

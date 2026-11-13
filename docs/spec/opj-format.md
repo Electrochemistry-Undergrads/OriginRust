@@ -654,6 +654,9 @@ has).
   longest text plus 3 (the two header bytes and one terminator) and at least 10, so a text column of
   short words has 10-byte cells like a number column. An empty text is written as a missing number.
   The size is a single byte, so a text is at most 252 bytes.
+- A column with text and numbers (Text & Numeric, import-ascii.md section 15) uses the same cell
+  size for both kinds: numbers are `00 00`, the double and NUL padding up to `size`. The writer and
+  the reader keep both kinds (a column of only text cells reads as a text column).
 - Header fields written for a data set: `0x16` type word (13.3), `0x18` 3 for a column with at least one value
   and 1 for an empty one, `0x19` rows, `0x1D` position of the first cell that holds a value (0-based),
   `0x21` position after the last one (both 0 for an empty column), `0x25` and `0x2D` the double 1.0,

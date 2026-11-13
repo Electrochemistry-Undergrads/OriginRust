@@ -488,7 +488,10 @@ fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, Analy
 fn level_text(col: &Column, row: usize) -> Option<String> {
     match &col.data {
         ColumnData::Text(v) => v.get(row).map(|s| s.trim()).filter(|s| !s.is_empty()).map(str::to_string),
-        ColumnData::Numeric(v) => v
+        ColumnData::Mixed { .. } if col.data.text_cell(row).is_some() => {
+            col.data.text_cell(row).map(|s| s.trim().to_string())
+        }
+        ColumnData::Numeric(v) | ColumnData::Mixed { numbers: v, .. } => v
             .get(row)
             .copied()
             .filter(|x| !x.is_nan())

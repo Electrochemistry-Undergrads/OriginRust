@@ -1809,8 +1809,12 @@ fn paste_that_is_larger_than_the_sheet_adds_rows_and_columns_with_numbers_and_te
     paste(&mut h, "alpha,1.5\nbeta,2\ngamma,x\n");
     let s = project(&h).workbook(book).unwrap().sheet();
     assert_eq!(s.columns.len(), 2);
-    assert_eq!(s.columns[0].text().unwrap(), ["alpha", "beta", "gamma"]);
-    assert_eq!(s.columns[1].text().unwrap(), ["1.5", "2", "x"], "a column with a word in it stays text");
+    // New columns are Text & Numeric (Origin's default), so the words stay as text cells next to numbers.
+    let shown = |c: usize| (0..3).map(|r| s.columns[c].cell_text(r)).collect::<Vec<_>>();
+    assert_eq!(shown(0), ["alpha", "beta", "gamma"]);
+    assert_eq!(shown(1), ["1.5", "2", "x"], "the word stays in a column of numbers");
+    assert_eq!(s.columns[1].numeric().unwrap()[..2], [1.5, 2.0]);
+    assert!(s.columns[1].numeric().unwrap()[2].is_nan(), "numeric views see the text as missing");
 }
 
 #[test]

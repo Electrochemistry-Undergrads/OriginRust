@@ -75,6 +75,19 @@ fn cell(col: &Column, row: usize, delimiter: char) -> String {
             .map_or_else(String::new, |x| quote_if_needed(&col.format.format(*x), delimiter)),
         ColumnData::Numeric(v) => v.get(row).map_or_else(String::new, |x| format_number(*x)),
         ColumnData::Text(v) => v.get(row).map_or_else(String::new, |s| quote_if_needed(s, delimiter)),
+        // A Text & Numeric column: the text cells are written as text, the numbers as numbers.
+        ColumnData::Mixed { numbers, .. } => match (col.data.text_cell(row), numbers.get(row)) {
+            (Some(t), _) => quote_if_needed(t, delimiter),
+            (None, Some(x)) if col.format.is_date_time() => {
+                if x.is_finite() {
+                    quote_if_needed(&col.format.format(*x), delimiter)
+                } else {
+                    String::new()
+                }
+            }
+            (None, Some(x)) => format_number(*x),
+            (None, None) => String::new(),
+        },
     }
 }
 
@@ -186,9 +199,31 @@ mod tests {
                     }
                 }
                 (ColumnData::Text(x), ColumnData::Text(y)) => assert_eq!(x, y),
+                // Imported numbers are Text & Numeric columns (Origin's format 7).
+                (ColumnData::Numeric(x), ColumnData::Mixed { numbers: y, .. }) => {
+                    assert_eq!(x.len(), y.len());
+                    for (p, q) in x.iter().zip(y.iter()) {
+                        assert!((p.is_nan() && q.is_nan()) || p == q, "{p} vs {q}");
+                    }
+                }
                 _ => panic!("column kinds differ"),
             }
         }
+    }
+
+    #[test]
+    fn text_cells_of_a_text_and_numeric_column_are_written_and_read_back() {
+        let mut s = Worksheet::new("S");
+        let texts = [(1, "<LOD".to_string()), (3, "a,b".to_string())].into_iter().collect();
+        let c =
+            Column::new(ColumnId(1), "A", Designation::Y, ColumnData::mixed(vec![1.5, f64::NAN, 3.0, f64::NAN], texts));
+        s.columns.push(c);
+        let text = export(&s, &AsciiExportOptions { long_names: false, units: false, ..Default::default() });
+        assert_eq!(text, "1.5\n<LOD\n3\n\"a,b\"\n");
+        let back = parse_ascii(&text, "S", &AsciiOptions::default()).unwrap().workbook;
+        let t = &back.sheets[0].columns[0];
+        assert_eq!(t.numeric().unwrap()[0], 1.5);
+        assert_eq!((t.cell_text(1), t.cell_text(3)), ("<LOD".to_string(), "a,b".to_string()));
     }
 
     #[test]

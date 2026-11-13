@@ -72,6 +72,10 @@ fn cell(c: &Column, i: usize) -> Option<String> {
     match &c.data {
         ColumnData::Numeric(v) => v.get(i).filter(|x| !x.is_nan()).map(|x| format!("{x:?}")),
         ColumnData::Text(v) => v.get(i).filter(|t| !t.is_empty()).cloned(),
+        ColumnData::Mixed { numbers, .. } => match c.data.text_cell(i) {
+            Some(t) => Some(t.to_string()),
+            None => numbers.get(i).filter(|x| !x.is_nan()).map(|x| format!("{x:?}")),
+        },
     }
 }
 
@@ -115,6 +119,28 @@ fn a_project_with_every_kind_of_column_reads_back_unchanged() {
     assert_eq!(imp.version, "9.3");
     assert_eq!(imp.signature, "CPYA 4.3168 226 W64 #");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
+    assert_same_books(&project, &imp);
+}
+
+#[test]
+fn a_text_and_numeric_column_is_written_with_both_kinds_of_cell() {
+    let texts_at = [(1, "<LOD".to_string()), (4, "caf\u{e9} 5\u{b0}C".to_string())].into_iter().collect();
+    let mixed = ColumnData::mixed(vec![1.5, f64::NAN, 2.5e-9, f64::NAN, f64::NAN, f64::NAN, 7.0], texts_at);
+    let project = project_of(vec![book(
+        "Mixed",
+        "",
+        vec![sheet("S", vec![column("A", Designation::Y, mixed), column("B", Designation::Y, nums(&[1.0]))])],
+    )]);
+    let out = written(&project);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let imp = read_back(&out.bytes);
+    assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
+    let got = &imp.workbooks[0].sheets[0].columns[0];
+    assert!(got.data.is_mixed());
+    assert_eq!(got.numeric().unwrap()[0], 1.5);
+    assert_eq!(got.numeric().unwrap()[6], 7.0);
+    assert_eq!(got.cell_text(1), "<LOD");
+    assert_eq!(got.cell_text(4), "caf\u{e9} 5\u{b0}C");
     assert_same_books(&project, &imp);
 }
 

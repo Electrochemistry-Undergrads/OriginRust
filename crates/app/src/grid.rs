@@ -1019,7 +1019,8 @@ fn body_cell(
     let text = if r < column.len() { column.shown_text(r) } else { String::new() };
     let numeric = column.data.is_numeric();
     // A missing number shows as an empty cell, as in Origin.
-    let text = if numeric && text == "--" { String::new() } else { text };
+    let is_text_cell = column.data.text_cell(r).is_some();
+    let text = if numeric && !is_text_cell && text == "--" { String::new() } else { text };
     let response = ui.interact(rect, ui.id().with(("cell", column.id.0, r)), Sense::CLICK | Sense::DRAG);
 
     // Pressing selects the cell (Shift extends the block); dragging over other cells extends it.
@@ -1053,7 +1054,11 @@ fn body_cell(
         Look::Dark => Color32::WHITE,
         _ => TEXT,
     };
-    let layout = if numeric { Layout::right_to_left(Align::Center) } else { Layout::left_to_right(Align::Center) };
+    let layout = if numeric && !is_text_cell {
+        Layout::right_to_left(Align::Center)
+    } else {
+        Layout::left_to_right(Align::Center)
+    };
     ui.with_layout(layout, |ui| {
         ui.add_space(4.0);
         ui.label(RichText::new(&text).color(color));
@@ -1075,6 +1080,11 @@ fn editor_text(column: &Column, row: usize) -> String {
             _ => String::new(),
         },
         sheaf_core::ColumnData::Text(v) => v.get(row).cloned().unwrap_or_default(),
+        sheaf_core::ColumnData::Mixed { numbers, .. } => match (column.data.text_cell(row), numbers.get(row)) {
+            (Some(t), _) => t.to_string(),
+            (None, Some(x)) if !x.is_nan() => format!("{x:?}"),
+            _ => String::new(),
+        },
     }
 }
 

@@ -50,9 +50,9 @@ fn a_pattern_into_one_book_with_a_sheet_per_file() {
         sheaf(&["import", pattern.to_str().unwrap(), "--into", out.to_str().unwrap(), "--mode", "sheets"]);
     assert!(ok, "{stderr}");
     assert!(stdout.contains("matches 3 files"), "{stdout}");
-    // The thousands separator in 1,234.5 was found, and the markers are reported.
+    // The thousands separator in 1,234.5 was found. The markers are not reported: they stay as text cells.
     assert!(stderr.contains("thousands"), "{stderr}");
-    assert!(stderr.contains("no-value marker"), "{stderr}");
+    assert!(!stderr.contains("no-value marker"), "{stderr}");
     let p = load(&out);
     let books: Vec<_> = p.workbooks().collect();
     assert_eq!(books.len(), 1);
@@ -61,6 +61,7 @@ fn a_pattern_into_one_book_with_a_sheet_per_file() {
     let fe = &books[0].sheets[0].columns[1];
     assert_eq!(fe.units, "mg/L");
     assert!(fe.numeric().unwrap()[0].is_nan());
+    assert_eq!(fe.cell_text(0), "<LOD", "the text survives the saved project");
     assert_eq!(fe.numeric().unwrap().last().copied(), Some(1234.5));
 }
 

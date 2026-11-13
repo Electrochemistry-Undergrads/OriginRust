@@ -41,6 +41,12 @@ fn text_member(id: u64) -> String {
     format!("data/{id}.txt.json")
 }
 
+/// The text cells of a Text & Numeric column (a JSON object, row -> text). The numbers of such a
+/// column are in the `.f64` member; this member marks the column as Text & Numeric.
+fn mixed_member(id: u64) -> String {
+    format!("data/{id}.mixed.json")
+}
+
 /// Saves a project. The archive is written to a temporary file next to
 /// `path` and then renamed over it, so a crash never leaves a half-written
 /// project behind.
@@ -125,6 +131,16 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, companion: bool) ->
                     }
                     put(&mut zip, &numeric_member(col.id.0), &bytes)?;
                 }
+                ColumnData::Mixed { numbers, texts } => {
+                    let mut bytes = Vec::with_capacity(numbers.len() * 8);
+                    for v in numbers.iter() {
+                        bytes.extend_from_slice(&v.to_le_bytes());
+                    }
+                    put(&mut zip, &numeric_member(col.id.0), &bytes)?;
+                    let member = mixed_member(col.id.0);
+                    let json = serde_json::to_vec(texts.as_ref()).map_err(|e| json_err(&member, e))?;
+                    put(&mut zip, &member, &json)?;
+                }
                 ColumnData::Text(values) => {
                     let member = text_member(col.id.0);
                     let bytes = serde_json::to_vec(values.as_ref()).map_err(|e| json_err(&member, e))?;
@@ -201,7 +217,18 @@ pub fn load(path: &Path) -> Result<Project, IoError> {
                     .iter()
                     .map(|c| f64::from_le_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]))
                     .collect();
-                ColumnData::numeric(values)
+                match read_member(&mut archive, path, &mixed_member(id))? {
+                    Some(json) => {
+                        let texts: std::collections::BTreeMap<usize, String> =
+                            serde_json::from_slice(&json).map_err(|source| IoError::Json {
+                                path: path.to_path_buf(),
+                                member: mixed_member(id),
+                                source,
+                            })?;
+                        ColumnData::mixed(values, texts)
+                    }
+                    None => ColumnData::numeric(values),
+                }
             } else if let Some(bytes) = read_member(&mut archive, path, &text)? {
                 let values: Vec<String> = serde_json::from_slice(&bytes).map_err(|source| IoError::Json {
                     path: path.to_path_buf(),
@@ -425,6 +452,25 @@ mod tests {
         let mut doc = Document::new(back);
         doc.edit("recalculate", |p| p.recalculate(b)).unwrap();
         assert_eq!(doc.project().numeric(b).unwrap()[0], 10.0);
+    }
+
+    #[test]
+    fn text_and_numeric_columns_keep_their_text_cells() {
+        let dir = TempDir::new("mixed");
+        let path = dir.file("mixed.sheaf");
+        let mut p = Project::new();
+        let book = p.add_workbook("m");
+        let texts = [(1, "<LOD".to_string()), (5, "four".to_string())].into_iter().collect();
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::mixed(vec![1.0, f64::NAN, 3.0], texts)).unwrap();
+        // a Text & Numeric column without text keeps its format too
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::mixed_numbers(vec![1.0, 2.0])).unwrap();
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        assert_eq!(back.column(a).unwrap().cell_text(5), "four");
+        assert!(back.column(b).unwrap().data.is_mixed());
+        assert!(!back.column(c).unwrap().data.is_mixed());
     }
 
     #[test]

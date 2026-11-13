@@ -78,7 +78,7 @@ Cross-cutting findings:
 | Delimited text engine, CSV | File > Import > ASCII, Ctrl+K | `io/src/ascii.rs`; dialog; CLI | ✓ | single-character delimiters only | P0 |
 | Data-start detection | auto header lines | `detect()` with preview | ✓ | rule differs slightly from Origin's, not compared by black-box run | P0 |
 | Header, long name, units, comments lines | File Header group | detected and overridable; header lines can become named parameter rows (`--param-lines`) | ◐ | no name+unit splitter, no leading-character rule, no count from bottom, comment lines are not joined, label detection looks at three lines at most | P0 |
-| Non-numeric text, missing markers | NonNum, LeadingZeros | marker list, 80 percent rule, warning | ◐ | no choice of treatment, no mixed text and number column | P0 |
+| Non-numeric text, missing markers | NonNum, LeadingZeros | marker list, Text & Numeric columns keep every text cell (no ratio, as measured in Origin 2016) | ◐ | no choice of treatment (NonNum) | P0 |
 | Date and time detection | DateFormat, TimeFormat | `ascii.rs`: ISO, M/d/yyyy, d/M/yyyy, dd.MM.yyyy, d-Mon-yyyy, clocks with AM or PM; order rule and warning; option to keep text | ◐ | no custom pattern list, no per-column choice, no two-digit years | P0 |
 | Import mode and naming | replace, new columns, rows, books, sheets | `io/src/batch.rs`: new book, new sheet, replace, new columns, new rows; import window; file name in sheet name or comment row | ✓ | no name trimming (FNameToShtFrom/To), no separate first-file mode | P0 |
 | Number separators | NumSep | comma, dot, space, apostrophe grouping and decimal comma; found when unambiguous; option in window and CLI | ✓ | stricter than Origin: groups must have three digits | P0 |
@@ -104,7 +104,7 @@ Cross-cutting findings:
 | Label rows: long name, units, comments | worksheet header | grid rows and properties dialog | ✓ | | P0 |
 | Parameter, user parameter, F(x) rows, show or hide label rows | label rows | F(x)= row with a lock mark and one row per user parameter, shown and edited in place | ◐ | rows cannot be hidden (corner menu items greyed); no way to add a new parameter row; no sampling-interval row | P0 |
 | Plot designations | Column > Set As | X, Y, Z, yEr, xEr, Label, Disregard | ✓ | no Group or Subject; Y-finds-X is nearest-left only | P0 |
-| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday, mixed; fewer display patterns than Origin; Column Properties dialog (Origin's layout) sets designation, format and display pattern | P0 |
+| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday; Text & Numeric is the default of new and imported columns; fewer display patterns than Origin; Column Properties dialog (Origin's layout) sets designation, format and display pattern | P0 |
 | Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
 | Missing values | shown as `--` | NaN shown as `--` | ✓ | cannot tell empty from missing | P0 |
 | Reference notation in formulas | `[Book]Sheet!Col`, cell(), `col(A)$`, `[L]` | `col`, `wcol`, index, range, `i` | ◐ | no other sheet or book, no cell(), no label access, no x/y shorthand | P0 |

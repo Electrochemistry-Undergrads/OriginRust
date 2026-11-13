@@ -130,14 +130,25 @@ fn compute_fill(
     }
     let computed = expr.eval_rows(&SheetHost { sheet }, range.end)?;
     if range.start == 0 && range.end >= target.len() {
-        return Ok(ColumnData::numeric(computed));
+        return Ok(filled(target, computed, None));
     }
     let mut values: Vec<f64> = target.numeric().map(<[f64]>::to_vec).unwrap_or_default();
     if values.len() < range.end {
         values.resize(range.end, f64::NAN);
     }
-    values[range.clone()].copy_from_slice(&computed[range]);
-    Ok(ColumnData::numeric(values))
+    values[range.clone()].copy_from_slice(&computed[range.clone()]);
+    Ok(filled(target, values, Some(range)))
+}
+
+/// The column after a fill: a Text & Numeric column stays one and keeps the text cells outside
+/// the filled rows (Origin's Set Column Values leaves the other cells alone); a Numeric column
+/// stays Numeric.
+fn filled(target: &Column, values: Vec<f64>, range: Option<Range<usize>>) -> ColumnData {
+    let ColumnData::Mixed { texts, .. } = &target.data else {
+        return ColumnData::numeric(values);
+    };
+    let kept = texts.iter().filter(|(r, _)| range.as_ref().is_some_and(|g| !g.contains(*r)));
+    ColumnData::mixed(values, kept.map(|(r, t)| (*r, t.clone())).collect())
 }
 
 /// Looks for a chain of recalculating columns that leads from the columns `deps` back to
@@ -300,7 +311,7 @@ pub(crate) fn recalc_sheet(
             // A formula over the whole column follows its sources, so when they are all empty
             // (for example after a shorter re-import) the results go too.
             if derived && !deps.is_empty() && !c.is_empty() {
-                c.data = ColumnData::numeric(Vec::new());
+                c.data = if c.data.is_mixed() { ColumnData::default() } else { ColumnData::numeric(Vec::new()) };
                 dirty.insert(node.id);
             }
             c.formula_state = FormulaState::Current;
@@ -313,8 +324,13 @@ pub(crate) fn recalc_sheet(
                 let c = &mut ws.columns[node.idx];
                 if derived && data.len() > range_end {
                     // The sources got shorter: rows past their end no longer have results.
-                    if let ColumnData::Numeric(v) = &data {
-                        data = ColumnData::numeric(v[..range_end].to_vec());
+                    match &data {
+                        ColumnData::Numeric(v) => data = ColumnData::numeric(v[..range_end].to_vec()),
+                        ColumnData::Mixed { numbers, texts } => {
+                            let texts = texts.iter().filter(|(r, _)| **r < range_end).map(|(r, t)| (*r, t.clone()));
+                            data = ColumnData::mixed(numbers[..range_end].to_vec(), texts.collect());
+                        }
+                        ColumnData::Text(_) => {}
                     }
                 }
                 if c.data != data {

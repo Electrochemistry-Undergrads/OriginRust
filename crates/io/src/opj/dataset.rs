@@ -90,7 +90,6 @@ pub(crate) fn parse_header(h: &[u8], data: Extent, mask_len: u32) -> DataSetInfo
 pub(crate) struct Decoded {
     pub data: ColumnData,
     /// The cells held both text and numbers, so everything became text.
-    pub mixed_to_text: bool,
     /// Bytes left over after the last whole cell.
     pub stray_bytes: usize,
 }
@@ -103,7 +102,7 @@ pub(crate) fn decode(info: &DataSetInfo, bytes: &[u8]) -> Result<Decoded, String
     let size = info.cell_size;
     let stray = bytes.len() % size;
     let body = &bytes[..bytes.len() - stray];
-    let numeric = |v: Vec<f64>| Decoded { data: ColumnData::numeric(v), mixed_to_text: false, stray_bytes: stray };
+    let numeric = |v: Vec<f64>| Decoded { data: ColumnData::numeric(v), stray_bytes: stray };
 
     if t & TYPE_MIXED != 0 {
         if size < 10 {
@@ -125,7 +124,7 @@ pub(crate) fn decode(info: &DataSetInfo, bytes: &[u8]) -> Result<Decoded, String
     if low & 0xF0 == 0x20 {
         // Fixed-width text, NUL padded.
         let v = body.chunks_exact(size).map(|c| field_text(c, 0, size)).collect();
-        return Ok(Decoded { data: ColumnData::text(v), mixed_to_text: false, stray_bytes: stray });
+        return Ok(Decoded { data: ColumnData::text(v), stray_bytes: stray });
     }
     if low < 0x10 {
         match size {
@@ -154,18 +153,13 @@ fn each<const N: usize>(bytes: &[u8], f: impl Fn([u8; N]) -> f64) -> Vec<f64> {
 fn decode_mixed(body: &[u8], size: usize, stray: usize) -> Decoded {
     let rows = body.len() / size;
     let mut numbers = Vec::with_capacity(rows);
-    // Text is only collected once the first text cell shows up.
-    let mut texts: Vec<Option<String>> = Vec::new();
-    let (mut any_text, mut any_number) = (false, false);
+    let mut texts: std::collections::BTreeMap<usize, String> = std::collections::BTreeMap::new();
+    let mut any_number = false;
     for (row, cell) in body.chunks_exact(size).enumerate() {
         if cell[0] == 1 {
             let s = field_text(cell, 2, size - 2);
             if !s.is_empty() {
-                if texts.is_empty() {
-                    texts.resize(rows, None);
-                }
-                texts[row] = Some(s);
-                any_text = true;
+                texts.insert(row, s);
             }
             numbers.push(f64::NAN);
         } else {
@@ -178,20 +172,16 @@ fn decode_mixed(body: &[u8], size: usize, stray: usize) -> Decoded {
             }
         }
     }
-    if !any_text {
-        return Decoded { data: ColumnData::numeric(numbers), mixed_to_text: false, stray_bytes: stray };
+    if !texts.is_empty() && !any_number {
+        // Only text: a text column.
+        let mut strings = vec![String::new(); rows];
+        for (row, s) in texts {
+            strings[row] = s;
+        }
+        return Decoded { data: ColumnData::text(strings), stray_bytes: stray };
     }
-    let mixed = any_number;
-    let strings: Vec<String> = texts
-        .into_iter()
-        .zip(numbers)
-        .map(|(t, n)| match t {
-            Some(s) => s,
-            None if n.is_nan() => String::new(),
-            None => n.to_string(),
-        })
-        .collect();
-    Decoded { data: ColumnData::text(strings), mixed_to_text: mixed, stray_bytes: stray }
+    // Origin stores every column as text-or-number cells and calls the format Text & Numeric.
+    Decoded { data: ColumnData::mixed(numbers, texts), stray_bytes: stray }
 }
 
 #[cfg(test)]
@@ -225,7 +215,7 @@ mod tests {
 
     fn numbers(d: &Decoded) -> Vec<f64> {
         match &d.data {
-            ColumnData::Numeric(v) => v.to_vec(),
+            ColumnData::Numeric(v) | ColumnData::Mixed { numbers: v, .. } => v.to_vec(),
             ColumnData::Text(_) => panic!("expected numbers"),
         }
     }
@@ -270,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn mixed_cells_that_are_all_numbers_give_a_numeric_column() {
+    fn mixed_cells_that_are_all_numbers_give_a_text_and_numeric_column() {
         let mut b = mixed_number(2.5);
         b.extend(mixed_number(MISSING));
         b.extend(mixed_number(-1.0));
@@ -279,7 +269,6 @@ mod tests {
         assert_eq!(v.len(), 3);
         assert_eq!((v[0], v[2]), (2.5, -1.0));
         assert!(v[1].is_nan());
-        assert!(!d.mixed_to_text);
     }
 
     #[test]
@@ -292,9 +281,8 @@ mod tests {
         let d = decode(&info(0x5121, 12, false), &b).unwrap();
         match d.data {
             ColumnData::Text(t) => assert_eq!(&t[..], &["ab".to_string(), String::new(), "caf".to_string()]),
-            ColumnData::Numeric(_) => panic!("expected text"),
+            _ => panic!("expected text"),
         }
-        assert!(!d.mixed_to_text);
     }
 
     #[test]
@@ -304,21 +292,25 @@ mod tests {
         let d = decode(&info(0x6121, 10, false), &c).unwrap();
         match d.data {
             ColumnData::Text(t) => assert_eq!(t[0], "5\u{b0}C"),
-            ColumnData::Numeric(_) => panic!("expected text"),
+            _ => panic!("expected text"),
         }
     }
 
     #[test]
-    fn a_column_with_text_and_numbers_becomes_text_and_says_so() {
+    fn a_column_with_text_and_numbers_keeps_both() {
         let mut b = mixed_number(3.0);
         b.extend(mixed_text("n/a", 10));
         b.extend(mixed_number(MISSING));
         b.extend(mixed_number(0.25));
         let d = decode(&info(0x6121, 10, false), &b).unwrap();
-        assert!(d.mixed_to_text);
         match d.data {
-            ColumnData::Text(t) => assert_eq!(&t[..], &["3".to_string(), "n/a".into(), String::new(), "0.25".into()]),
-            ColumnData::Numeric(_) => panic!("expected text"),
+            ColumnData::Mixed { numbers, texts } => {
+                assert_eq!((numbers[0], numbers[3]), (3.0, 0.25));
+                assert!(numbers[1].is_nan() && numbers[2].is_nan());
+                assert_eq!(texts.len(), 1);
+                assert_eq!(texts[&1], "n/a");
+            }
+            _ => panic!("expected a text and numeric column"),
         }
     }
 
@@ -343,7 +335,7 @@ mod tests {
         let d = decode(&info(0x6021, 6, false), &b).unwrap();
         match d.data {
             ColumnData::Text(t) => assert_eq!(&t[..], &["one".to_string(), String::new(), "three".into()]),
-            ColumnData::Numeric(_) => panic!("expected text"),
+            _ => panic!("expected text"),
         }
     }
 

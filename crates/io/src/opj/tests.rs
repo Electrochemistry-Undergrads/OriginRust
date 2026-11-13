@@ -141,7 +141,7 @@ fn without_a_usable_window_list_columns_are_grouped_by_name() {
 }
 
 #[test]
-fn text_and_numbers_in_one_column_become_text_with_a_warning() {
+fn text_and_numbers_in_one_column_stay_a_text_and_numeric_column() {
     let mut b = FileBuilder::default();
     let mut cells = number_cell(1.5);
     cells.extend(text_cell("x", 10));
@@ -149,10 +149,14 @@ fn text_and_numbers_in_one_column_become_text_with_a_warning() {
     b.window("Book1", "", &[("S", &[(1, 0, "A", b"")])]);
     let imp = read(b.build()).unwrap();
     match &imp.workbooks[0].sheets[0].columns[0].data {
-        ColumnData::Text(t) => assert_eq!(&t[..], &["1.5".to_string(), "x".to_string()]),
-        ColumnData::Numeric(_) => panic!("expected text"),
+        ColumnData::Mixed { numbers, texts } => {
+            assert_eq!(numbers[0], 1.5);
+            assert!(numbers[1].is_nan());
+            assert_eq!(texts[&1], "x");
+        }
+        _ => panic!("expected a text and numeric column"),
     }
-    assert!(imp.warnings.iter().any(|w| w.contains("both text and numbers")));
+    assert!(imp.warnings.iter().all(|w| !w.contains("both text and numbers")));
 }
 
 #[test]

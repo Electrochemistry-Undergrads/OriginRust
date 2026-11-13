@@ -642,14 +642,14 @@ impl SheafApp {
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
                     let book = p.add_workbook("");
-                    let _ = p.add_column(book, 0, Designation::X, ColumnData::numeric(Vec::new()));
-                    let _ = p.add_column(book, 0, Designation::Y, ColumnData::numeric(Vec::new()));
+                    let _ = p.add_column(book, 0, Designation::X, ColumnData::default());
+                    let _ = p.add_column(book, 0, Designation::Y, ColumnData::default());
                 });
             }
             Action::AddColumn(book) => {
                 self.doc.apply("Add column", |p| {
                     let sheet = p.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
-                    let _ = p.add_column(book, sheet, Designation::Y, ColumnData::numeric(Vec::new()));
+                    let _ = p.add_column(book, sheet, Designation::Y, ColumnData::default());
                 });
             }
             Action::DeleteColumns(columns) => {

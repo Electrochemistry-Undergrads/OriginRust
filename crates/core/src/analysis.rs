@@ -1448,7 +1448,7 @@ impl Project {
         let n = ws.row_count();
         let mut order: Vec<usize> = (0..n).collect();
         match &key_col.data {
-            ColumnData::Numeric(v) => {
+            ColumnData::Numeric(v) | ColumnData::Mixed { numbers: v, .. } => {
                 let value = |i: usize| v.get(i).copied().unwrap_or(f64::NAN);
                 order.sort_by(|a, b| {
                     let (x, y) = (value(*a), value(*b));
@@ -1562,6 +1562,17 @@ fn take_rows(data: &ColumnData, order: &[usize], rows: usize) -> ColumnData {
                 }
             }
             ColumnData::text(out)
+        }
+        ColumnData::Mixed { numbers, texts } => {
+            let mut out: Vec<f64> = order.iter().map(|i| numbers.get(*i).copied().unwrap_or(f64::NAN)).collect();
+            let moved: std::collections::BTreeMap<usize, String> =
+                order.iter().enumerate().filter_map(|(k, i)| texts.get(i).map(|t| (k, t.clone()))).collect();
+            if numbers.len() < rows {
+                while out.last().is_some_and(|x| x.is_nan()) && !moved.contains_key(&(out.len() - 1)) {
+                    out.pop();
+                }
+            }
+            ColumnData::mixed(out, moved)
         }
     }
 }

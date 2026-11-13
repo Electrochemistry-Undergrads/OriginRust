@@ -189,20 +189,11 @@ pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> 
     }
     let raw: Vec<Vec<(f64, f64)>> = curves.iter().map(|(x, y)| finite_points(x, y)).collect();
 
-    // Identical X values: average row by row.
-    if options.x == CommonX::Points
-        && raw[0].len() >= 2
-        && raw.iter().all(|c| c.len() == raw[0].len() && c.iter().zip(&raw[0]).all(|(a, b)| a.0 == b.0))
-    {
-        let x: Vec<f64> = raw[0].iter().map(|p| p.0).collect();
-        let (mut mean, mut sd, mut n) = (Vec::new(), Vec::new(), Vec::new());
-        for k in 0..x.len() {
-            let (m, s, c) = mean_sd(raw.iter().map(|curve| curve[k].1));
-            mean.push(m);
-            sd.push(s);
-            n.push(c);
+    // The curves share one X column: average row by row.
+    if options.x == CommonX::Points {
+        if let Some(r) = shared_x_average(curves, &raw) {
+            return Ok(r);
         }
-        return Ok(AverageResult { x, mean, sd, n });
     }
 
     let ordered: Vec<Vec<(f64, f64)>> =
@@ -283,6 +274,46 @@ pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> 
         n.push(c);
     }
     Ok(AverageResult { x: grid, mean, sd, n })
+}
+
+/// Row-by-row mean of curves that share their X values, decided from the raw X slices so a missing
+/// Y or a shorter column does not hide the shared X. Row `k` uses the finite X values of the curves
+/// that have a row `k`; they must all be equal. A curve contributes at a row only when its Y is
+/// finite, and rows with no X or no contribution are dropped. `None` when the X values differ, a
+/// curve has fewer than two points with numbers, or fewer than two rows remain.
+fn shared_x_average(curves: &[(&[f64], &[f64])], raw: &[Vec<(f64, f64)>]) -> Option<AverageResult> {
+    if raw.iter().any(|c| c.len() < 2) {
+        return None;
+    }
+    // Row count of each curve: its X and Y both exist.
+    let lens: Vec<usize> = curves.iter().map(|(x, y)| x.len().min(y.len())).collect();
+    let rows = lens.iter().copied().max()?;
+    let (mut xs, mut mean, mut sd, mut n) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for k in 0..rows {
+        let mut x_here = f64::NAN;
+        for (c, &len) in curves.iter().zip(&lens) {
+            if k < len && c.0[k].is_finite() {
+                if x_here.is_nan() {
+                    x_here = c.0[k];
+                } else if c.0[k] != x_here {
+                    return None;
+                }
+            }
+        }
+        if x_here.is_nan() {
+            continue;
+        }
+        let (m, s, count) = mean_sd(curves.iter().zip(&lens).filter(|&(_, &len)| k < len).map(|(c, _)| {
+            if c.0[k].is_finite() { c.1[k] } else { f64::NAN }
+        }));
+        if count > 0 {
+            xs.push(x_here);
+            mean.push(m);
+            sd.push(s);
+            n.push(count);
+        }
+    }
+    (xs.len() >= 2).then_some(AverageResult { x: xs, mean, sd, n })
 }
 
 /// Mean, sample standard deviation and count of the finite values.
@@ -425,6 +456,8 @@ pub fn intersections(ax: &[f64], ay: &[f64], bx: &[f64], by: &[f64], include_tou
     let e = 1e-10;
 
     let mut hits: Vec<Hit> = Vec::new();
+    // The two ends of every shared stretch of a pair of segments, to find the points inside a stretch.
+    let mut stretches: Vec<(Hit, Hit)> = Vec::new();
     for i in 0..a.len() - 1 {
         let (p, p2) = (a[i], a[i + 1]);
         let r = sub(p2, p);
@@ -462,11 +495,16 @@ pub fn intersections(ax: &[f64], ay: &[f64], bx: &[f64], by: &[f64], include_tou
                 let (lo, hi) = (t0.min(t1).max(0.0), t0.max(t1).min(1.0));
                 if lo <= hi + e {
                     let ss = s.0 * s.0 + s.1 * s.1;
-                    for t in [lo, hi.max(lo)] {
-                        let (x, y) = (p.0 + t * r.0, p.1 + t * r.1);
-                        let u = (((x - q.0) * s.0 + (y - q.1) * s.1) / ss).clamp(0.0, 1.0);
-                        hits.push(Hit { x, y, pa: i as f64 + t, pb: j as f64 + u, overlap: true });
-                    }
+                    let ends: Vec<Hit> = [lo, hi.max(lo)]
+                        .into_iter()
+                        .map(|t| {
+                            let (x, y) = (p.0 + t * r.0, p.1 + t * r.1);
+                            let u = (((x - q.0) * s.0 + (y - q.1) * s.1) / ss).clamp(0.0, 1.0);
+                            Hit { x, y, pa: i as f64 + t, pb: j as f64 + u, overlap: true }
+                        })
+                        .collect();
+                    stretches.push((ends[0], ends[1]));
+                    hits.extend(ends);
                 }
             }
         }
@@ -488,6 +526,21 @@ pub fn intersections(ax: &[f64], ay: &[f64], bx: &[f64], by: &[f64], include_tou
             None => merged.push(h),
         }
     }
+
+    // A point inside a shared stretch (one shared piece arrives at it and the next carries on the
+    // same way along both curves) is not an end of the stretch.
+    let side = |from: &Hit, h: &Hit| {
+        let d = from.pb - h.pb;
+        if d.abs() < 1e-9 { 0 } else if d > 0.0 { 1 } else { -1 }
+    };
+    let inside_stretch = |h: &Hit| {
+        let near = |u: &Hit| (u.pa - h.pa).abs() < 1e-6 && (u.pb - h.pb).abs() < 1e-6;
+        let arriving = stretches.iter().filter(|(lo, hi)| near(hi) && hi.pa - lo.pa > 1e-9).map(|(lo, _)| side(lo, h));
+        let leaving = stretches.iter().filter(|(lo, hi)| near(lo) && hi.pa - lo.pa > 1e-9).map(|(_, hi)| side(hi, h));
+        let leaving: Vec<i32> = leaving.collect();
+        arriving.into_iter().any(|s1| s1 != 0 && leaving.contains(&-s1))
+    };
+    merged.retain(|h| !(h.overlap && inside_stretch(h)));
 
     merged
         .into_iter()
@@ -924,7 +977,7 @@ mod tests {
     }
 
     #[test]
-    fn spline_method_reproduces_a_quadratic_exactly_enough() {
+    fn spline_method_reproduces_a_cubic_exactly_enough() {
         // A cubic spline (not-a-knot) is exact for a cubic: y = x^3 on two different grids.
         let xa: Vec<f64> = (0..=8).map(|k| f64::from(k) * 0.5).collect();
         let xb: Vec<f64> = (0..=6).map(|k| f64::from(k) * 0.7).collect();
@@ -936,5 +989,107 @@ mod tests {
         for (x, m) in r.x.iter().zip(&r.mean) {
             assert!((m - x * x * x).abs() < 1e-9, "{x} {m}");
         }
+    }
+
+    #[test]
+    fn akima_method_is_exact_on_a_straight_line() {
+        // Akima reproduces a line exactly: two lines on different grids, mean on a third grid.
+        let xa: Vec<f64> = (0..=8).map(|k| f64::from(k) * 0.5).collect();
+        let xb: Vec<f64> = (0..=6).map(|k| f64::from(k) * 0.7).collect();
+        let ya: Vec<f64> = xa.iter().map(|x| 2.0 * x + 1.0).collect();
+        let yb: Vec<f64> = xb.iter().map(|x| 2.0 * x + 3.0).collect();
+        let o = AverageOptions { x: CommonX::Evenly(5), method: AverageMethod::Akima, ..AverageOptions::default() };
+        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
+        assert_eq!(r.n, [2; 5]);
+        for (x, m) in r.x.iter().zip(&r.mean) {
+            assert!((m - (2.0 * x + 2.0)).abs() < 1e-9, "{x} {m}");
+        }
+        // It differs from the cubic spline on data that bends (so the method is really used).
+        let yc: Vec<f64> = xa.iter().map(|x| if *x < 2.0 { 0.0 } else { x - 2.0 }).collect();
+        let yd: Vec<f64> = xb.iter().map(|x| if *x < 2.0 { 0.0 } else { x - 2.0 }).collect();
+        let s = AverageOptions { method: AverageMethod::CubicSpline, ..o };
+        let akima = average_curves(&[(&xa, &yc), (&xb, &yd)], &o).unwrap();
+        let spline = average_curves(&[(&xa, &yc), (&xb, &yd)], &s).unwrap();
+        assert!(akima.mean.iter().zip(&spline.mean).any(|(p, q)| (p - q).abs() > 1e-6));
+        // Akima keeps the flat part flat.
+        assert!(close(akima.mean[0], 0.0) && close(akima.mean[1], 0.0));
+    }
+
+    #[test]
+    fn spline_on_the_union_range_counts_the_ends() {
+        // Cubics on [0, 4] and [1, 5]; a cubic spline (and Akima on a line) is exact inside each
+        // curve, and the ends have one curve only.
+        let xa: Vec<f64> = (0..=8).map(|k| f64::from(k) * 0.5).collect();
+        let xb: Vec<f64> = (2..=10).map(|k| f64::from(k) * 0.5).collect();
+        let ya: Vec<f64> = xa.iter().map(|x| x * x * x).collect();
+        let yb: Vec<f64> = xb.iter().map(|x| x * x * x + 10.0).collect();
+        let o = AverageOptions {
+            x: CommonX::Evenly(6),
+            range: XRange::Union,
+            method: AverageMethod::CubicSpline,
+        };
+        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
+        assert_eq!(r.x, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+        assert_eq!(r.n, [1, 2, 2, 2, 2, 1]);
+        assert!(close(r.mean[0], 0.0) && (r.mean[5] - 135.0).abs() < 1e-9);
+        assert!(r.sd[0].is_nan() && r.sd[5].is_nan());
+        for k in 1..=4 {
+            let x = r.x[k];
+            assert!((r.mean[k] - (x * x * x + 5.0)).abs() < 1e-9, "{x} {}", r.mean[k]);
+            assert!((r.sd[k] - 10.0 / 2.0_f64.sqrt()).abs() < 1e-9);
+        }
+        // Same counts for Akima.
+        let o = AverageOptions { method: AverageMethod::Akima, ..o };
+        assert_eq!(average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap().n, [1, 2, 2, 2, 2, 1]);
+    }
+
+    #[test]
+    fn shared_turning_x_survives_a_missing_y_or_a_short_column() {
+        // A cyclic sweep: X 0, 1, 2, 1, 0 shared by both curves.
+        let x = [0.0, 1.0, 2.0, 1.0, 0.0];
+        let a = [1.0, 2.0, 3.0, 2.0, 1.0];
+        let b = [3.0, 4.0, 7.0, 4.0, f64::NAN];
+        let r = average_curves(&[(&x, &a), (&x, &b)], &AverageOptions::default()).unwrap();
+        assert_eq!(r.x, x);
+        assert_eq!(r.n, [2, 2, 2, 2, 1]);
+        assert_eq!(r.mean, [2.0, 3.0, 5.0, 3.0, 1.0]);
+        assert!(r.sd[4].is_nan());
+        // The second curve is one row shorter (its X column is cut to its own length).
+        let r = average_curves(&[(&x, &a), (&x[..4], &b[..4])], &AverageOptions::default()).unwrap();
+        assert_eq!(r.x, x);
+        assert_eq!(r.n, [2, 2, 2, 2, 1]);
+        // A missing Y in the middle of the first curve.
+        let a2 = [1.0, f64::NAN, 3.0, 2.0, 1.0];
+        let r = average_curves(&[(&x, &a2), (&x, &b)], &AverageOptions::default()).unwrap();
+        assert_eq!(r.n, [2, 1, 2, 2, 1]);
+        assert_eq!(r.mean[1], 4.0);
+        // Different X values on a turning curve are still refused.
+        let x2 = [0.0, 1.0, 2.0, 1.5, 0.0];
+        assert!(matches!(
+            average_curves(&[(&x, &a), (&x2, &b)], &AverageOptions::default()),
+            Err(CurveError::NotMonotonic { .. })
+        ));
+    }
+
+    #[test]
+    fn a_stretch_over_several_segments_reports_only_its_two_ends() {
+        let a = ([0.0, 1.0, 2.0, 3.0], [0.0; 4]);
+        let b = ([0.5, 2.5], [0.0; 2]);
+        let r = intersections(&a.0, &a.1, &b.0, &b.1, true);
+        let xs: Vec<f64> = r.iter().map(|h| h.x).collect();
+        assert_eq!(xs.len(), 2, "{xs:?}");
+        assert!(close(xs[0], 0.5) && close(xs[1], 2.5));
+        // Both curves with several shared vertices, the same way and reversed.
+        let c = ([0.0, 1.0, 2.0, 3.0], [0.0; 4]);
+        let r = intersections(&a.0, &a.1, &c.0, &c.1, true);
+        assert_eq!(r.len(), 2);
+        let rev = ([3.0, 2.0, 1.0, 0.0], [0.0; 4]);
+        let r = intersections(&a.0, &a.1, &rev.0, &rev.1, true);
+        assert_eq!(r.len(), 2);
+        // A curve that turns back on the line has its turning point as an end of the stretch.
+        let out_back = ([0.0, 2.0, 0.0], [0.0; 3]);
+        let line = ([0.0, 1.0, 3.0], [0.0; 3]);
+        let r = intersections(&out_back.0, &out_back.1, &line.0, &line.1, true);
+        assert!(r.iter().any(|h| close(h.x, 2.0)), "{r:?}");
     }
 }

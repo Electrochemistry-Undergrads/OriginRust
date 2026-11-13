@@ -1,0 +1,558 @@
+#VARS g1_a0.05
+a=9.9
+b=9
+c=1.6840269358357869
+d=2.2149944427426851
+e=0.61309687931147183
+f=0
+g$=At the 0.05 level, there is no significant outlier
+#VARS g1_a0.1
+a=9.9
+b=9
+c=1.6840269358357869
+d=2.1095561118988031
+e=0.61309687931147183
+f=0
+g$=At the 0.1 level, there is no significant outlier
+#VARS g1_a0.01
+a=9.9
+b=9
+c=1.6840269358357869
+d=2.3868113333031657
+e=0.61309687931147183
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS g2_high_a0.05
+a=9.8
+b=7
+c=2.4699662904739395
+d=2.1266267760261144
+e=1.5570075927246599E-07
+f=1
+g$=At the 0.05 level, the highest value 9.8 is a significant outlier
+#VARS g2_high_a0.1
+a=9.8
+b=7
+c=2.4699662904739395
+d=2.0316411684249358
+e=1.5570075927246599E-07
+f=1
+g$=At the 0.1 level, the highest value 9.8 is a significant outlier
+#VARS g2_high_a0.01
+a=9.8
+b=7
+c=2.4699662904739395
+d=2.2743654175377994
+e=1.5570075927246599E-07
+f=1
+g$=At the 0.01 level, the highest value 9.8 is a significant outlier
+#VARS g3_low_a0.05
+a=-7.5
+b=1
+c=2.6601330099758318
+d=2.2149944427426851
+e=2.1522915962814029E-08
+f=1
+g$=At the 0.05 level, the lowest value -7.5 is a significant outlier
+#VARS g3_low_a0.1
+a=-7.5
+b=1
+c=2.6601330099758318
+d=2.1095561118988031
+e=2.1522915962814029E-08
+f=1
+g$=At the 0.1 level, the lowest value -7.5 is a significant outlier
+#VARS g3_low_a0.01
+a=-7.5
+b=1
+c=2.6601330099758318
+d=2.3868113333031657
+e=2.1522915962814029E-08
+f=1
+g$=At the 0.01 level, the lowest value -7.5 is a significant outlier
+#VARS g4_n3_a0.05
+a=9
+b=3
+c=1.1470786693528088
+d=1.1543048513440386
+e=0.21955918494963539
+f=0
+g$=At the 0.05 level, there is no significant outlier
+#VARS g4_n3_a0.1
+a=9
+b=3
+c=1.1470786693528088
+d=1.1531180614225278
+e=0.21955918494963539
+f=0
+g$=At the 0.1 level, there is no significant outlier
+#VARS g4_n3_a0.01
+a=9
+b=3
+c=1.1470786693528088
+d=1.1546847100299753
+e=0.21955918494963539
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS g5_n2_a0.05
+a=0
+b=0
+c=0
+d=0
+e=0
+f=0
+g$=
+#VARS g5_n2_a0.1
+a=0
+b=0
+c=0
+d=0
+e=0
+f=0
+g$=
+#VARS g5_n2_a0.01
+a=0
+b=0
+c=0
+d=0
+e=0
+f=0
+g$=
+#VARS g6_n30_a0.05
+a=9.98
+b=19
+c=1.3834551254212724
+d=2.9235705425642231
+e=5.0597867209663985
+f=0
+g$=At the 0.05 level, there is no significant outlier
+#VARS g6_n30_a0.1
+a=9.98
+b=19
+c=1.3834551254212724
+d=2.7595228559750793
+e=5.0597867209663985
+f=0
+g$=At the 0.1 level, there is no significant outlier
+#VARS g6_n30_a0.01
+a=9.98
+b=19
+c=1.3834551254212724
+d=3.2534058164339434
+e=5.0597867209663985
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS g7_const_a0.05
+a=-1.23456789E-300
+b=-1
+c=-1.23456789E-300
+d=1.7150373147834397
+e=-1.23456789E-300
+f=-1
+g$=At the 0.05 level, there is no significant outlier
+#VARS g7_const_a0.1
+a=-1.23456789E-300
+b=-1
+c=-1.23456789E-300
+d=1.671385684950482
+e=-1.23456789E-300
+f=-1
+g$=At the 0.1 level, there is no significant outlier
+#VARS g7_const_a0.01
+a=-1.23456789E-300
+b=-1
+c=-1.23456789E-300
+d=1.7636784798877514
+e=-1.23456789E-300
+f=-1
+g$=At the 0.01 level, there is no significant outlier
+#VARS g8_n4_a0.05
+a=3
+b=4
+c=1.4944903395088995
+d=1.4812500000000002
+e=0.014692427701210844
+f=1
+g$=At the 0.05 level, the highest value 3 is a significant outlier
+#VARS g8_n4_a0.1
+a=3
+b=4
+c=1.4944903395088995
+d=1.4625
+e=0.014692427701210844
+f=1
+g$=At the 0.1 level, the highest value 3 is a significant outlier
+#VARS g8_n4_a0.01
+a=3
+b=4
+c=1.4944903395088995
+d=1.4962499999999999
+e=0.014692427701210844
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS g9_missing_a0.05
+a=9.8
+b=7
+c=2.2633509524987407
+d=2.0199694094945837
+e=2.2726988758967962E-06
+f=1
+g$=At the 0.05 level, the highest value 9.8 is a significant outlier
+#VARS g9_missing_a0.1
+a=9.8
+b=7
+c=2.2633509524987407
+d=1.9381118659394747
+e=2.2726988758967962E-06
+f=1
+g$=At the 0.1 level, the highest value 9.8 is a significant outlier
+#VARS g9_missing_a0.01
+a=9.8
+b=7
+c=2.2633509524987407
+d=2.1391060219931148
+e=2.2726988758967962E-06
+f=1
+g$=At the 0.01 level, the highest value 9.8 is a significant outlier
+#VARS g10_ties_a0.05
+a=5
+b=5
+c=2.2677868380553634
+d=2.0199694094945837
+e=-1.23456789E-300
+f=1
+g$=At the 0.05 level, the highest value 5 is a significant outlier
+#VARS g10_ties_a0.1
+a=5
+b=5
+c=2.2677868380553634
+d=1.9381118659394747
+e=-1.23456789E-300
+f=1
+g$=At the 0.1 level, the highest value 5 is a significant outlier
+#VARS g10_ties_a0.01
+a=5
+b=5
+c=2.2677868380553634
+d=2.1391060219931148
+e=-1.23456789E-300
+f=1
+g$=At the 0.01 level, the highest value 5 is a significant outlier
+#VARS g11_n10_a0.05
+a=12.9
+b=10
+c=2.7899509870123338
+d=2.2899484755669186
+e=6.4493479384111111E-06
+f=1
+g$=At the 0.05 level, the highest value 12.9 is a significant outlier
+#VARS g11_n10_a0.1
+a=12.9
+b=10
+c=2.7899509870123338
+d=2.1760651775113184
+e=6.4493479384111111E-06
+f=1
+g$=At the 0.1 level, the highest value 12.9 is a significant outlier
+#VARS g11_n10_a0.01
+a=12.9
+b=10
+c=2.7899509870123338
+d=2.4820680566941062
+e=6.4493479384111111E-06
+f=1
+g$=At the 0.01 level, the highest value 12.9 is a significant outlier
+#VARS q1_a0.05
+a=9.9
+b=9
+c=0.30681818181818182
+d=0.493
+f=0
+g$=At the 0.05 level, there is no significant outlier
+#VARS q1_a0.1
+a=9.9
+b=9
+c=0.30681818181818182
+d=0.437
+f=0
+g$=At the 0.1 level, there is no significant outlier
+#VARS q1_a0.01
+a=9.9
+b=9
+c=0.30681818181818182
+d=0.598
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS q3_a0.05
+a=9
+b=3
+c=0.875
+d=0.97
+f=0
+g$=At the 0.05 level, there is no significant outlier
+#VARS q3_a0.1
+a=9
+b=3
+c=0.875
+d=0.941
+f=0
+g$=At the 0.1 level, there is no significant outlier
+#VARS q3_a0.01
+a=9
+b=3
+c=0.875
+d=0.994
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS q4_a0.05
+a=3
+b=4
+c=0.9
+d=0.829
+f=1
+g$=At the 0.05 level, the highest value 3 is a significant outlier
+#VARS q4_a0.1
+a=3
+b=4
+c=0.9
+d=0.765
+f=1
+g$=At the 0.1 level, the highest value 3 is a significant outlier
+#VARS q4_a0.01
+a=3
+b=4
+c=0.9
+d=0.926
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS q5_a0.05
+a=0.167
+b=2
+c=0.45454545454545386
+d=0.466
+f=0
+g$=At the 0.05 level, there is no significant outlier
+#VARS q5_a0.1
+a=0.167
+b=2
+c=0.45454545454545386
+d=0.412
+f=1
+g$=At the 0.1 level, the lowest value 0.167 is a significant outlier
+#VARS q5_a0.01
+a=0.167
+b=2
+c=0.45454545454545386
+d=0.568
+f=0
+g$=At the 0.01 level, there is no significant outlier
+#VARS q6_low_a0.05
+a=0.5
+b=1
+c=0.91999999999999993
+d=0.568
+f=1
+g$=At the 0.05 level, the lowest value 0.5 is a significant outlier
+#VARS q6_low_a0.1
+a=0.5
+b=1
+c=0.91999999999999993
+d=0.507
+f=1
+g$=At the 0.1 level, the lowest value 0.5 is a significant outlier
+#VARS q6_low_a0.01
+a=0.5
+b=1
+c=0.91999999999999993
+d=0.68
+f=1
+g$=At the 0.01 level, the lowest value 0.5 is a significant outlier
+#VARS q7_n2_a0.05
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q7_n2_a0.1
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q7_n2_a0.01
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q8_n11_a0.05
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q8_n11_a0.1
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q8_n11_a0.01
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q9_n20_a0.05
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q9_n20_a0.1
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q9_n20_a0.01
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q10_n30_a0.05
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q10_n30_a0.1
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q10_n30_a0.01
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q11_n31_a0.05
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q11_n31_a0.1
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q11_n31_a0.01
+a=0
+b=0
+c=0
+d=0
+f=0
+g$=
+#VARS q12_const_a0.05
+a=-1.23456789E-300
+b=-1
+c=-1.23456789E-300
+d=0.71
+f=-1
+g$=All valid input data are equal
+#VARS q12_const_a0.1
+a=-1.23456789E-300
+b=-1
+c=-1.23456789E-300
+d=0.642
+f=-1
+g$=All valid input data are equal
+#VARS q12_const_a0.01
+a=-1.23456789E-300
+b=-1
+c=-1.23456789E-300
+d=0.821
+f=-1
+g$=All valid input data are equal
+#VARS q13_tie_a0.05
+a=5
+b=4
+c=1
+d=0.71
+f=1
+g$=At the 0.05 level, the highest value 5 is a significant outlier
+#VARS q13_tie_a0.1
+a=5
+b=4
+c=1
+d=0.642
+f=1
+g$=At the 0.1 level, the highest value 5 is a significant outlier
+#VARS q13_tie_a0.01
+a=5
+b=4
+c=1
+d=0.821
+f=1
+g$=At the 0.01 level, the highest value 5 is a significant outlier
+#VARS q14_miss_a0.05
+a=3
+b=5
+c=0.9
+d=0.71
+f=1
+g$=At the 0.05 level, the highest value 3 is a significant outlier
+#VARS q14_miss_a0.1
+a=3
+b=5
+c=0.9
+d=0.642
+f=1
+g$=At the 0.1 level, the highest value 3 is a significant outlier
+#VARS q14_miss_a0.01
+a=3
+b=5
+c=0.9
+d=0.821
+f=1
+g$=At the 0.01 level, the highest value 3 is a significant outlier
+#VARS q15_n8_a0.05
+a=11
+b=8
+c=0.72727272727272818
+d=0.526
+f=1
+g$=At the 0.05 level, the highest value 11 is a significant outlier
+#VARS q15_n8_a0.1
+a=11
+b=8
+c=0.72727272727272818
+d=0.468
+f=1
+g$=At the 0.1 level, the highest value 11 is a significant outlier
+#VARS q15_n8_a0.01
+a=11
+b=8
+c=0.72727272727272818
+d=0.634
+f=1
+g$=At the 0.01 level, the highest value 11 is a significant outlier

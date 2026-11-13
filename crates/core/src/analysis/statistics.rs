@@ -25,6 +25,12 @@ pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
         Tool::SignedRank(spec) => signed_rank(spec, inputs),
         Tool::KruskalWallis(spec) => kruskal_wallis(spec, inputs),
         Tool::Correlation(spec) => correlation(spec, inputs),
+        Tool::SignTest(spec) => sign_test(spec, inputs),
+        Tool::KsTwoSample(spec) => ks_two_sample(spec, inputs),
+        Tool::MedianTest(spec) => median_test(spec, inputs),
+        Tool::Friedman(spec) => friedman(spec, inputs),
+        Tool::Grubbs(spec) => grubbs(spec, inputs),
+        Tool::Dixon(spec) => dixon(spec, inputs),
         _ => unreachable!("only the statistics tools come here"),
     }
 }
@@ -897,6 +903,278 @@ fn kruskal_wallis(spec: &KruskalWallisSpec, inputs: &[Input<'_>]) -> Result<Outp
     Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
 }
 
+// ----- sign test, two-sample Kolmogorov-Smirnov, median test, Friedman ----------------------------------------
+
+fn exactly_two<'a, 'b>(name: &str, inputs: &'a [Input<'b>]) -> Result<(&'a Input<'b>, &'a Input<'b>), AnalysisError> {
+    if inputs.len() == 2 {
+        Ok((&inputs[0], &inputs[1]))
+    } else {
+        Err(AnalysisError::BadOption(format!("the {name} needs exactly two columns, {} were chosen", inputs.len())))
+    }
+}
+
+/// The table of a test with a statistics block: one row per group, then a text and a number column with the
+/// statistics.
+fn group_sheet(
+    inputs: &[Input<'_>],
+    table: &ResultTable,
+    group_header: &str,
+    stat_names: &[&str],
+    values: Vec<f64>,
+) -> Vec<SheetColumn> {
+    let mut on_sheet = vec![label_column(group_header, inputs.iter().map(|i| i.label.clone()).collect())];
+    for (i, h) in table.headers.iter().enumerate() {
+        on_sheet.push(number_column(h, "", table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
+    on_sheet.push(label_column("Statistic", stat_names.iter().map(|s| s.to_string()).collect()));
+    on_sheet.push(number_column("Value", "", values));
+    on_sheet
+}
+
+fn sign_test(spec: &SignTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    check_alpha(spec.alpha)?;
+    let (a, b) = exactly_two("sign test", inputs)?;
+    let r = calc::sign_test(a.ys(), b.ys(), spec.tail).ok_or_else(|| {
+        AnalysisError::BadOption("the sign test needs at least two rows with a number in both columns".to_string())
+    })?;
+    let mut table = ResultTable::new(&[
+        "Pairs",
+        "First < second",
+        "First > second",
+        "Ties",
+        "N",
+        "Statistic",
+        "Z",
+        "Prob",
+        "Reject",
+    ]);
+    table.push_row(
+        format!("{} vs {}", a.name, b.name),
+        vec![
+            r.pairs as f64,
+            r.first_smaller as f64,
+            r.second_smaller as f64,
+            r.ties as f64,
+            r.n as f64,
+            r.statistic,
+            r.z.unwrap_or(f64::NAN),
+            r.p,
+            f64::from(u8::from(r.p < spec.alpha)),
+        ],
+        vec![String::new(); 9],
+    );
+    let claim = match spec.tail {
+        Tail::Two => format!("{} and {} differ in median", a.name, b.name),
+        Tail::Upper => format!("{} tends to be larger than {}", a.name, b.name),
+        Tail::Lower => format!("{} tends to be smaller than {}", a.name, b.name),
+    };
+    let how = if r.z.is_some() { "normal approximation" } else { "exact" };
+    let notes = vec![format!(
+        "{} vs {}: sign test, {}: {claim} ({} of {} differing pairs have the first smaller, {how} p = {}); {}",
+        a.name,
+        b.name,
+        tail_name(spec.tail),
+        r.first_smaller,
+        r.n,
+        num(r.p),
+        reject_words(r.p, spec.alpha)
+    )];
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+}
+
+fn ks_two_sample(spec: &KsTwoSampleSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    check_alpha(spec.alpha)?;
+    let (a, b) = exactly_two("Kolmogorov-Smirnov test", inputs)?;
+    let r = calc::ks_two_sample(a.ys(), b.ys(), spec.tail).ok_or_else(|| {
+        AnalysisError::BadOption("each column needs at least two numbers in the chosen rows".to_string())
+    })?;
+    let mut table = ResultTable::new(&["N1", "N2", "D", "Z", "Prob", "Reject"]);
+    table.push_row(
+        format!("{} vs {}", a.name, b.name),
+        vec![r.n1 as f64, r.n2 as f64, r.d, r.z, r.p, f64::from(u8::from(r.p < spec.alpha))],
+        vec![String::new(); 6],
+    );
+    let claim = match spec.tail {
+        Tail::Two => format!("the distributions of {} and {} differ", a.name, b.name),
+        Tail::Upper => format!("the distribution function of {} lies above that of {}", a.name, b.name),
+        Tail::Lower => format!("the distribution function of {} lies below that of {}", a.name, b.name),
+    };
+    let how = if r.exact { "exact" } else { "asymptotic" };
+    let notes = vec![format!(
+        "{} vs {}: Kolmogorov-Smirnov test, {}: {claim} (D = {}, z = {}, {how} p = {}); {}",
+        a.name,
+        b.name,
+        tail_name(spec.tail),
+        num(r.d),
+        num(r.z),
+        num(r.p),
+        reject_words(r.p, spec.alpha)
+    )];
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+}
+
+fn median_test(spec: &MedianTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    check_alpha(spec.alpha)?;
+    let groups: Vec<&[f64]> = inputs.iter().map(Input::ys).collect();
+    let r = calc::median_test(&groups).ok_or_else(|| {
+        AnalysisError::BadOption("the median test needs at least two columns that each have a number".to_string())
+    })?;
+    let mut table = ResultTable::new(&["N", "At or below median", "Above median"]);
+    for (inp, g) in inputs.iter().zip(&r.groups) {
+        table.push_row(
+            inp.label.clone(),
+            vec![g.n as f64, g.at_or_below as f64, g.above as f64],
+            vec![String::new(); 3],
+        );
+    }
+    let on_sheet = group_sheet(
+        inputs,
+        &table,
+        "Group",
+        &["Median", "Chi-square", "DF", "Prob>Chi-square"],
+        vec![r.median, r.chi_square, r.df, r.p],
+    );
+    let notes = vec![format!(
+        "Median test of {} groups (overall median {}): chi-square({}) = {}, p = {}; the medians {} at the {} level.",
+        r.groups.len(),
+        num(r.median),
+        num(r.df),
+        num(r.chi_square),
+        num(r.p),
+        if r.p < spec.alpha { "differ significantly" } else { "do not differ significantly" },
+        num(spec.alpha)
+    )];
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+}
+
+fn friedman(spec: &FriedmanSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    check_alpha(spec.alpha)?;
+    let cols: Vec<&[f64]> = inputs.iter().map(Input::ys).collect();
+    let r = calc::friedman(&cols).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let mut table = ResultTable::new(&["N", "Mean rank", "Rank sum"]);
+    for (inp, g) in inputs.iter().zip(&r.groups) {
+        table.push_row(inp.label.clone(), vec![r.n as f64, g.mean_rank, g.rank_sum], vec![String::new(); 3]);
+    }
+    let on_sheet = group_sheet(
+        inputs,
+        &table,
+        "Treatment",
+        &["Chi-square", "DF", "Prob>Chi-square"],
+        vec![r.chi_square, r.df, r.p],
+    );
+    let notes = vec![format!(
+        "Friedman ANOVA of {} treatments in {} rows: chi-square({}) = {}, p = {}; the treatments {} at the {} level.",
+        r.groups.len(),
+        r.n,
+        num(r.df),
+        num(r.chi_square),
+        num(r.p),
+        if r.p < spec.alpha { "differ significantly" } else { "do not differ significantly" },
+        num(spec.alpha)
+    )];
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+}
+
+// ----- outlier tests ----------------------------------------------------------------------------------------
+
+fn outlier_sentence(
+    label: &str,
+    test: &str,
+    alpha: f64,
+    significant: bool,
+    side: calc::OutlierSide,
+    value: f64,
+    row: usize,
+    statistic: (&str, f64),
+    critical: f64,
+) -> String {
+    if significant {
+        format!(
+            "{label}: {test}, at the {} level the {} value {} (row {row}) is a significant outlier ({} = {}, critical value {}).",
+            num(alpha),
+            side.word(),
+            num(value),
+            statistic.0,
+            num(statistic.1),
+            num(critical)
+        )
+    } else {
+        format!(
+            "{label}: {test}, at the {} level there is no significant outlier (largest {} = {} at the {} value {}, critical value {}).",
+            num(alpha),
+            statistic.0,
+            num(statistic.1),
+            side.word(),
+            num(value),
+            num(critical)
+        )
+    }
+}
+
+fn grubbs(spec: &OutlierSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    check_alpha(spec.alpha)?;
+    let mut table =
+        ResultTable::new(&["N", "Suspect value", "Row", "G", "Critical value", "Prob (approximate)", "Outlier"]);
+    let mut notes = Vec::new();
+    for inp in inputs {
+        let r =
+            calc::grubbs(inp.ys(), spec.alpha).map_err(|e| AnalysisError::BadOption(format!("{}: {e}", inp.label)))?;
+        let row = inp.first + r.index;
+        let mut units = vec![String::new(); 7];
+        units[1] = inp.units.clone();
+        table.push_row(
+            inp.label.clone(),
+            vec![r.n as f64, r.value, row as f64, r.g, r.critical, r.p, f64::from(u8::from(r.significant))],
+            units,
+        );
+        notes.push(outlier_sentence(
+            &inp.label,
+            "Grubbs test",
+            spec.alpha,
+            r.significant,
+            r.side,
+            r.value,
+            row,
+            ("G", r.g),
+            r.critical,
+        ));
+    }
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+}
+
+fn dixon(spec: &OutlierSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    let mut table = ResultTable::new(&["N", "Suspect value", "Row", "Q", "Critical Q", "Outlier"]);
+    let mut notes = Vec::new();
+    for inp in inputs {
+        let r = calc::dixon_q(inp.ys(), spec.alpha).map_err(|e| match e {
+            calc::OutlierError::BadAlpha => AnalysisError::BadOption(
+                "Dixon's Q test has critical values for the levels 0.1, 0.05 and 0.01 only".to_string(),
+            ),
+            e => AnalysisError::BadOption(format!("{}: {e}", inp.label)),
+        })?;
+        let row = inp.first + r.index;
+        let mut units = vec![String::new(); 6];
+        units[1] = inp.units.clone();
+        table.push_row(
+            inp.label.clone(),
+            vec![r.n as f64, r.value, row as f64, r.q, r.critical, f64::from(u8::from(r.significant))],
+            units,
+        );
+        notes.push(outlier_sentence(
+            &inp.label,
+            "Dixon's Q test",
+            spec.alpha,
+            r.significant,
+            r.side,
+            r.value,
+            row,
+            ("Q", r.q),
+            r.critical,
+        ));
+    }
+    Ok(Output { table: Some(table), on_sheet: Vec::new(), notes, plots: Vec::new() })
+}
+
 // ----- correlation coefficients ---------------------------------------------------------------------------
 
 fn correlation(spec: &CorrelationSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1342,6 +1620,79 @@ mod tests {
         assert_eq!(cell(&p, &r, "Rank sum"), vec![119.5, 107.5, 151.0]);
         assert!(r.notes[0].contains("do not differ"), "{:?}", r.notes);
         assert!(p.analyze(&request(&ids[..1], Tool::KruskalWallis(KruskalWallisSpec::default()))).is_err());
+    }
+
+    #[test]
+    fn sign_ks_median_and_friedman_tools_give_origins_numbers() {
+        let (mut p, ids) = tied_samples();
+        // Seven pairs by row position, one tie: the first number is smaller in the six others.
+        let r = run(&mut p, &ids[..2], Tool::SignTest(SignTestSpec::default()));
+        assert!(r.message.contains("Sign test"), "{}", r.message);
+        assert_eq!(cell(&p, &r, "Pairs"), vec![7.0]);
+        assert_eq!(cell(&p, &r, "N"), vec![6.0]);
+        assert!(cell(&p, &r, "Z")[0].is_nan());
+        let err = p.analyze(&request(&ids, Tool::SignTest(SignTestSpec::default()))).unwrap_err();
+        assert!(err.to_string().contains("exactly two columns"), "{err}");
+        // Origin kstest2: D = 20/63, Z = 0.62994, exact p = 8164/11440 (both columns have ties).
+        let k = run(&mut p, &ids[..2], Tool::KsTwoSample(KsTwoSampleSpec::default()));
+        assert!((cell(&p, &k, "D")[0] - 20.0 / 63.0).abs() < 1e-12);
+        assert!((cell(&p, &k, "Prob")[0] - 0.713_636_363_636_363_6).abs() < 1e-9);
+        assert!(k.notes[0].contains("exact p"), "{:?}", k.notes);
+        // Origin friedman needs equal columns: the three tied samples have 9, 7 and 11 numbers.
+        let err = p.analyze(&request(&ids, Tool::Friedman(FriedmanSpec::default()))).unwrap_err();
+        assert!(err.to_string().contains("every column"), "{err}");
+        let book = r.book;
+        let cols: Vec<_> = [
+            vec![1.1, 2.3, 2.3, 4.0, 5.5, 6.1, 7.2, 7.2, 9.9],
+            vec![2.2, 3.1, 4.0, 4.0, 8.8, 10.5, 11.0, 12.5, 12.9],
+            vec![3.3, 1.1, 5.0, 2.2, 8.0, 7.5, 1.0, 9.1, 4.4],
+        ]
+        .into_iter()
+        .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+        .collect();
+        // Origin mediantest of three columns: overall median 5, chi-square 1.18681, 2 df, p 0.55244.
+        let m = run(&mut p, &cols, Tool::MedianTest(MedianTestSpec::default()));
+        let value = cell(&p, &m, "Value");
+        assert_eq!(value[0], 5.0);
+        assert!((value[1] - 1.186_813_186_813_186_8).abs() < 1e-9);
+        assert_eq!(value[2], 2.0);
+        assert!((value[3] - 0.552_442_144_623_162_9).abs() < 1e-5);
+        let f = run(&mut p, &cols, Tool::Friedman(FriedmanSpec::default()));
+        assert_eq!(cell(&p, &f, "Rank sum"), vec![13.5, 24.5, 16.0]);
+        let value = cell(&p, &f, "Value");
+        assert!((value[0] - 7.388_888_888_888_889).abs() < 1e-9);
+        assert!((value[2] - 0.024_861_261_638_607).abs() < 1e-6);
+        assert!(f.notes[0].contains("differ significantly"), "{:?}", f.notes);
+    }
+
+    #[test]
+    fn grubbs_and_dixon_tools_report_the_suspect_value_and_its_row() {
+        let mut p = Project::new();
+        let book = p.add_workbook("outliers");
+        let data = vec![2.1, f64::NAN, 2.2, 2.6, 2.3, 2.5, 9.8, 2.2];
+        let col = p.add_column(book, 0, Designation::Y, ColumnData::numeric(data)).unwrap();
+        // Origin grubbs: G = 2.26335, critical value 2.01997, approximate p 2.2727e-6, the row of the 9.8 is 7.
+        let g = run(&mut p, &[col], Tool::Grubbs(OutlierSpec::default()));
+        assert!((cell(&p, &g, "G")[0] - 2.263_350_952_498_796_7).abs() < 1e-9);
+        assert!((cell(&p, &g, "Critical value")[0] - 2.019_969_409_424_984).abs() < 2e-5);
+        assert_eq!(cell(&p, &g, "Row"), vec![7.0]);
+        assert_eq!(cell(&p, &g, "Outlier"), vec![1.0]);
+        assert!(g.notes[0].contains("highest value 9.8 (row 7) is a significant outlier"), "{:?}", g.notes);
+        // Seven numbers: inside Dixon's table. Origin: Q = 0.9 against 0.568 at 0.05 for [1, 1.1, 1.2, 1.15, 1.17, 1.12, 3].
+        let q = p
+            .add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 1.1, 1.2, 1.15, 1.17, 1.12, 3.0]))
+            .unwrap();
+        let d = run(&mut p, &[q], Tool::Dixon(OutlierSpec::default()));
+        assert!((cell(&p, &d, "Q")[0] - 0.9).abs() < 1e-12);
+        assert_eq!(cell(&p, &d, "Critical Q"), vec![0.568]);
+        assert_eq!(cell(&p, &d, "Row"), vec![7.0]);
+        // Dixon refuses other levels and more than ten numbers.
+        let err = p.analyze(&request(&[col], Tool::Dixon(OutlierSpec { alpha: 0.2 }))).unwrap_err();
+        assert!(err.to_string().contains("0.1, 0.05 and 0.01"), "{err}");
+        let long =
+            p.add_column(book, 0, Designation::Y, ColumnData::numeric((0..12).map(f64::from).collect())).unwrap();
+        let err = p.analyze(&request(&[long], Tool::Dixon(OutlierSpec::default()))).unwrap_err();
+        assert!(err.to_string().contains("at most 10"), "{err}");
     }
 
     #[test]

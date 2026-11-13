@@ -465,6 +465,84 @@ fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
     assert!(info.contains("Graph1"), "{info}");
 }
 
+#[test]
+fn stats_can_add_the_other_quantities_and_the_confidence_limits() {
+    let dir = scratch("stats-all");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Median") && !out.contains("Variance") && !out.contains("CL of Mean"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--all", "--level", "0.9"]);
+    assert!(ok, "{err}");
+    for word in ["IQR", "Variance", "Skewness", "Kurtosis", "CV", "Lower 90% CL of Mean", "Upper 90% CL of Mean"] {
+        assert!(out.contains(word), "{word} missing in {out}");
+    }
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--add", "variance,limits"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Variance") && out.contains("Lower 95% CL of Mean") && !out.contains("IQR"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--add", "bogus"]);
+    assert!(!ok && err.contains("unknown quantity"), "{err}");
+}
+
+#[test]
+fn outlier_row_and_more_rank_tests_run_from_the_command_line() {
+    let dir = scratch("breadth");
+    let path = dir.join("breadth.csv");
+    // The three Origin reference samples with nine numbers each.
+    std::fs::write(
+        &path,
+        "a,b,c\n1.1,2.2,3.3\n2.3,3.1,1.1\n2.3,4.0,5.0\n4.0,4.0,2.2\n5.5,8.8,8.0\n6.1,10.5,7.5\n7.2,11.0,1.0\n7.2,12.5,9.1\n9.9,12.9,4.4\n",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+
+    // Origin sign2: eight differing pairs, all with the first smaller, exact two-sided p = 0.0078125.
+    let (ok, out, err) = sheaf(&["analyze", "sign", file, "--y", "a,b"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("a vs b") && out.contains("0.0078125") && out.contains("SignTest1"), "{out}");
+    // Two-sample KS of nine numbers against nine: D = 4/9, exact p (checked against Origin on other samples
+    // in the calc crate, not on these).
+    let (ok, out, err) = sheaf(&["analyze", "ks2", file, "--y", "a,b"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("0.444444") && out.contains("0.942809") && out.contains("exact p"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "ks2", file, "--y", "a,b", "--tail", "upper"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("upper-tailed"), "{out}");
+    // Origin mediantest: chi-square 1.18681, 2 df, p 0.552442.
+    let (ok, out, err) = sheaf(&["analyze", "mediantest", file, "--y", "a,b,c"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("chi-square(2) = 1.187") && out.contains("p = 0.5524"), "{out}");
+    // Origin friedman: chi-square 7.38889, 2 df, p 0.0248613.
+    let (ok, out, err) = sheaf(&["analyze", "friedman", file, "--y", "a,b,c"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("chi-square(2) = 7.389") && out.contains("p = 0.02486"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "sign", file, "--y", "a,b,c"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+
+    // Origin grubbs on a: G = 1.68403, critical value 2.21499, no outlier. Origin qtest: Q = 0.30682, 0.493.
+    let (ok, out, err) = sheaf(&["analyze", "grubbs", file, "--y", "a"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("1.684") && out.contains("no significant outlier"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "dixon", file, "--y", "a"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("0.3068") && out.contains("0.493") && out.contains("no significant outlier"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "dixon", file, "--y", "a", "--alpha", "0.2"]);
+    assert!(!ok && err.contains("0.1, 0.05 and 0.01"), "{err}");
+
+    // Statistics on rows: columns behind the last chosen one, saved in a project.
+    let project = dir.join("rows.sheaf");
+    let (ok, out, err) =
+        sheaf(&["analyze", "rowstats", file, "--y", "a,b,c", "--add", "n,sum", "--save", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Mean") && out.contains("Number of Points"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Standard Deviation") && info.contains("Sum"), "{info}");
+    let (ok, _, err) = sheaf(&["analyze", "rowstats", file, "--y", "a,b", "--add", "bogus"]);
+    assert!(!ok && err.contains("unknown quantity"), "{err}");
+}
+
 /// The unbalanced two-way design of the Origin reference runs (cells of 3, 2, 4, 1, 3, 2 numbers), with the
 /// level of factor A as text.
 fn design_file(dir: &Path) -> PathBuf {

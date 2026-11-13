@@ -1,6 +1,6 @@
 # T14: Statistics breadth
 
-**Status:** open. **Size:** M. **Branch:** `stats-breadth`. **Model:** Sonnet.
+**Status:** items 1 to 4 done, merged (`c44a1a6`) (measured against Origin, `statistics.md` section 10); items 5 and 6 (Holm and Dunnett, cross tabulation, 2D binning, distribution fit, power) open. **Size:** M. **Branch:** `stats-breadth`. **Model:** Sonnet.
 **Detail:** audit D "Missing", "Partial". **Spec:** `docs/spec/statistics.md`.
 
 ## Today

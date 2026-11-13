@@ -33,6 +33,19 @@ automatic axis colours (opj-format.md 13.12). Round trip checked on the owner's 
 file -> Sheaf -> `sheaf export -o x.opj` -> Origin 2016 draws the stacked six-pattern figure as the
 original. 944 tests pass on `main`.
 
+**Merged late on 2026-11-12 (session "Rust prompt handoff", at the owner's request, while
+`originrust-3a` works on matrices, contour plots and heatmaps):**
+- `.opj` graph features (`bc01323`, opj-format.md 13.13): area plots, decimal and scientific tick
+  formats, column plots as plot groups (bars side by side), panels as linked layers.
+- The worksheet works like Origin's from the keyboard and mouse (`5639a99`): arrow keys,
+  Shift+arrow blocks, Ctrl+arrow, Home/End, PageUp/PageDown, Tab and Enter move; typing starts
+  editing, F2 edits, Delete clears; dragging over column heads or row numbers selects them.
+- NLFit: 1 Iteration, Fit to convergence and Revert (`5639a99`; the fit engine has a stepping
+  `Fitter`, results unchanged).
+- EPS and EMF export (vector, from the scene) in the app and CLI; legend text with Origin's
+  `\l(n) %(n)` notation, legend columns, Graph > Legend > Reconstruct Legend (Ctrl+L), dragging
+  the legend. Not checked with ghostscript (not installed); an EMF was drawn by GDI+ by hand.
+
 ## The owner's requests of 2026-11-11 (they come before the rest of milestone 6)
 
 1. The desktop app should **look and work like Origin** (OriginPro 2016): same window arrangement,
@@ -113,16 +126,16 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    linked layers. Left for the companion: see "What is left" item 3. Finding how Origin stores bar
    overlap, X offsets and waterfall would need new probes (`tools/origin-ref/opj-make-from-lines.ps1`
    and `opj-diff-curves.py` make and compare such files).
-2. The remaining dialogs in Origin's layout (analysis tools, column properties, Import Wizard;
-   `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's long name is
-   on Plot Details' Page tab; a plot's legend text is on its Group tab.
+2. Done on 2026-11-12 by `originrust-3a` (`12d4f72`): Column Properties, the shared analysis-tool
+   frame with preview, the Import Wizard in Origin's layout. Open choices from the dialog work: the
+   graph's long name is on Plot Details' Page tab; a plot's legend text is on its Group tab.
 3. Done on 2026-11-12: the per-plot left/right axis choice in the app (`0d74eee`), and the rows of
    `docs/spec/feature-parity.md` brought up to date by reading the code (`00a84db`: 40 done, 106
    partial, 84 missing of 230; P0 31 / 68 / 2).
-4. Follow the parity table's order of work. Its stage 1 step 6 (publication figures: free text
-   labels, legend options, Origin's colour list, size and margin options, TIFF, EMF, EPS) and
-   stage 2 step 3 (the generic analysis dialog with Preview and Auto Apply) are the largest open
-   P0 parts; matrices and heatmaps are the largest missing area overall.
+4. Follow the parity table's order of work. Of its stage 1 step 6 (publication figures) free
+   text labels, legend text and columns, TIFF, EMF and EPS are done; Origin's colour list (an open
+   question below) and size and margin options are left. Stage 2 step 3 lacks Auto Apply. Matrices,
+   contour plots and heatmaps are with `originrust-3a`.
 
 The small points of the graph review are fixed too: `--offsets` gives its values to stack members
 (a fitted curve takes none), and deleting a column drops the tick labels and offsets that name it.
@@ -130,7 +143,13 @@ The small points of the graph review are fixed too: `--offsets` gives its values
 ## Open questions noted by the agents (no answer needed to continue)
 
 - NLFit: should Fit write its results and keep the dialog open, as Origin does (today Fit only
-  tries and Done writes)? Should Cancel then undo them?
+  tries and Done writes)? Should Cancel then undo them? The NLFit window has no preview curve yet;
+  each 1 Iteration press restarts the damping (lambda), not compared with Origin.
+- Default plot colours: Sheaf uses its own 9-colour list (template.rs); graphing.md 1.5 has a
+  23-entry list from the owner's theme, while opj-format.md says a group colours "black, red,
+  green, ...". Which order Origin 2016 uses for a fresh overlay is unconfirmed (U1).
+- Worksheet: dragging past the edge of the view does not scroll; typing into a selected block (not
+  a single cell) does nothing.
 
 - Fit reports show the standard error of a fixed parameter as blank (Origin's sheet stores 0).
 - Origin's bound handling can stop above the true constrained minimum; Sheaf copies it.

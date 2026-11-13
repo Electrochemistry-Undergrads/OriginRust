@@ -37,10 +37,34 @@ pub enum DatePattern {
     Iso,
     /// `05-Nov-2026`.
     DMonY,
+    /// `Wednesday, November 11, 2026`.
+    LongDate,
+    /// `Nov 11`.
+    MonthDay,
+    /// `11/11` (month and day numbers).
+    MonthDayNum,
+    /// `11` (the day of the month).
+    DayOnly,
+    /// `Wed`.
+    WeekdayShort,
+    /// `W` (first letter of the weekday).
+    WeekdayLetter,
+    /// `2026`.
+    YearOnly,
+    /// `26`.
+    Year2,
+    /// `261111` (yymmdd).
+    Yymmdd,
+    /// `Nov`.
+    MonthShort,
+    /// `N` (first letter of the month).
+    MonthLetter,
+    /// `Q4`.
+    Quarter,
 }
 
 impl DatePattern {
-    pub const ALL: [DatePattern; 7] = [
+    pub const ALL: [DatePattern; 19] = [
         DatePattern::Mdy,
         DatePattern::MdyDash,
         DatePattern::Dmy,
@@ -48,6 +72,18 @@ impl DatePattern {
         DatePattern::DmyDot,
         DatePattern::Iso,
         DatePattern::DMonY,
+        DatePattern::LongDate,
+        DatePattern::MonthDay,
+        DatePattern::MonthDayNum,
+        DatePattern::DayOnly,
+        DatePattern::WeekdayShort,
+        DatePattern::WeekdayLetter,
+        DatePattern::YearOnly,
+        DatePattern::Year2,
+        DatePattern::Yymmdd,
+        DatePattern::MonthShort,
+        DatePattern::MonthLetter,
+        DatePattern::Quarter,
     ];
 
     /// The pattern in the usual letters, for menus.
@@ -60,6 +96,18 @@ impl DatePattern {
             DatePattern::DmyDot => "dd.MM.yyyy",
             DatePattern::Iso => "yyyy-MM-dd",
             DatePattern::DMonY => "dd-MMM-yyyy",
+            DatePattern::LongDate => "dddd, MMMM d, yyyy",
+            DatePattern::MonthDay => "MMM d",
+            DatePattern::MonthDayNum => "M/d",
+            DatePattern::DayOnly => "d",
+            DatePattern::WeekdayShort => "ddd",
+            DatePattern::WeekdayLetter => "dddd (first letter)",
+            DatePattern::YearOnly => "yyyy",
+            DatePattern::Year2 => "yy",
+            DatePattern::Yymmdd => "yyMMdd",
+            DatePattern::MonthShort => "MMM",
+            DatePattern::MonthLetter => "MMMM (first letter)",
+            DatePattern::Quarter => "'Q'q",
         }
     }
 }
@@ -75,16 +123,69 @@ pub enum TimePattern {
     Hms,
     /// `13:45:10.250`.
     HmsMs,
+    /// `13`.
+    H,
+    /// `13:45:10.00`.
+    HmsCs,
+    /// `01 PM`.
+    H12,
+    /// `01:45 PM`.
+    Hm12,
+    /// `45:10` (minutes and seconds).
+    Ms,
+    /// `45:10.00`.
+    MsCs,
+    /// `1345`.
+    Hhmm,
+    /// `134510`.
+    Hhmmss,
+    /// `000` (the milliseconds).
+    Millis,
+    /// `000:13` (elapsed days and hours).
+    ElapsedDh,
+    /// `000:13:45` (elapsed days, hours and minutes).
+    ElapsedDhm,
 }
 
 impl TimePattern {
-    pub const ALL: [TimePattern; 3] = [TimePattern::Hm, TimePattern::Hms, TimePattern::HmsMs];
+    pub const ALL: [TimePattern; 14] = [
+        TimePattern::Hm,
+        TimePattern::Hms,
+        TimePattern::HmsMs,
+        TimePattern::H,
+        TimePattern::HmsCs,
+        TimePattern::H12,
+        TimePattern::Hm12,
+        TimePattern::Ms,
+        TimePattern::MsCs,
+        TimePattern::Hhmm,
+        TimePattern::Hhmmss,
+        TimePattern::Millis,
+        TimePattern::ElapsedDh,
+        TimePattern::ElapsedDhm,
+    ];
+
+    /// True for the patterns that count whole days (they need the full number, not the fraction).
+    pub fn is_elapsed(&self) -> bool {
+        matches!(self, TimePattern::ElapsedDh | TimePattern::ElapsedDhm)
+    }
 
     pub fn label(&self) -> &'static str {
         match self {
             TimePattern::Hm => "HH:mm",
             TimePattern::Hms => "HH:mm:ss",
             TimePattern::HmsMs => "HH:mm:ss.fff",
+            TimePattern::H => "HH",
+            TimePattern::HmsCs => "HH:mm:ss.##",
+            TimePattern::H12 => "hh tt",
+            TimePattern::Hm12 => "hh:mm tt",
+            TimePattern::Ms => "mm:ss",
+            TimePattern::MsCs => "mm:ss.##",
+            TimePattern::Hhmm => "HHmm",
+            TimePattern::Hhmmss => "HHmmss",
+            TimePattern::Millis => "fff",
+            TimePattern::ElapsedDh => "DDD:HH",
+            TimePattern::ElapsedDhm => "DDD:HH:mm",
         }
     }
 }
@@ -200,7 +301,11 @@ pub fn weekday(v: f64) -> u32 {
     (day + 3).rem_euclid(7) as u32
 }
 
-const MONTHS: [&str; 12] = [
+/// The weekday names, Monday first (the order of [`weekday`]).
+pub const WEEKDAYS: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/// The month names, January first.
+pub const MONTHS: [&str; 12] = [
     "January",
     "February",
     "March",
@@ -229,6 +334,20 @@ pub fn format_date(v: f64, pat: DatePattern) -> String {
         DatePattern::DmyDot => format!("{d:02}.{m:02}.{y}"),
         DatePattern::Iso => format!("{y:04}-{m:02}-{d:02}"),
         DatePattern::DMonY => format!("{d:02}-{}-{y}", &MONTHS[m as usize - 1][..3]),
+        DatePattern::LongDate => {
+            format!("{}, {} {d}, {y}", WEEKDAYS[weekday(v) as usize], MONTHS[m as usize - 1])
+        }
+        DatePattern::MonthDay => format!("{} {d}", &MONTHS[m as usize - 1][..3]),
+        DatePattern::MonthDayNum => format!("{m}/{d}"),
+        DatePattern::DayOnly => format!("{d}"),
+        DatePattern::WeekdayShort => WEEKDAYS[weekday(v) as usize][..3].to_string(),
+        DatePattern::WeekdayLetter => WEEKDAYS[weekday(v) as usize][..1].to_string(),
+        DatePattern::YearOnly => format!("{y}"),
+        DatePattern::Year2 => format!("{:02}", y.rem_euclid(100)),
+        DatePattern::Yymmdd => format!("{:02}{m:02}{d:02}", y.rem_euclid(100)),
+        DatePattern::MonthShort => MONTHS[m as usize - 1][..3].to_string(),
+        DatePattern::MonthLetter => MONTHS[m as usize - 1][..1].to_string(),
+        DatePattern::Quarter => format!("Q{}", (m - 1) / 3 + 1),
     }
 }
 
@@ -239,7 +358,31 @@ pub fn format_time(v: f64, pat: TimePattern) -> String {
         TimePattern::Hm => format!("{:02}:{:02}", p.hour, p.minute),
         TimePattern::Hms => format!("{:02}:{:02}:{:02}", p.hour, p.minute, p.second),
         TimePattern::HmsMs => format!("{:02}:{:02}:{:02}.{:03}", p.hour, p.minute, p.second, p.milli),
+        TimePattern::H => format!("{:02}", p.hour),
+        TimePattern::HmsCs => format!("{:02}:{:02}:{:02}.{:02}", p.hour, p.minute, p.second, p.milli / 10),
+        TimePattern::H12 => format!("{:02} {}", hour12(p.hour), am_pm(p.hour)),
+        TimePattern::Hm12 => format!("{:02}:{:02} {}", hour12(p.hour), p.minute, am_pm(p.hour)),
+        TimePattern::Ms => format!("{:02}:{:02}", p.minute, p.second),
+        TimePattern::MsCs => format!("{:02}:{:02}.{:02}", p.minute, p.second, p.milli / 10),
+        TimePattern::Hhmm => format!("{:02}{:02}", p.hour, p.minute),
+        TimePattern::Hhmmss => format!("{:02}{:02}{:02}", p.hour, p.minute, p.second),
+        TimePattern::Millis => format!("{:03}", p.milli),
+        TimePattern::ElapsedDh => format!("{:03}:{:02}", elapsed_days(v), p.hour),
+        TimePattern::ElapsedDhm => format!("{:03}:{:02}:{:02}", elapsed_days(v), p.hour, p.minute),
     }
+}
+
+fn hour12(h: u32) -> u32 {
+    if h.is_multiple_of(12) { 12 } else { h % 12 }
+}
+
+fn am_pm(h: u32) -> &'static str {
+    if h < 12 { "AM" } else { "PM" }
+}
+
+/// Whole elapsed days of a time number (never negative).
+fn elapsed_days(v: f64) -> i64 {
+    if v.is_finite() { v.floor().max(0.0) as i64 } else { 0 }
 }
 
 /// Writes date and time of day separated by a space.

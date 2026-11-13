@@ -6,8 +6,12 @@
 use super::frame::{DialogButton, button_row};
 use super::graph_props::group_box;
 use eframe::egui::{self, DragValue};
-use sheaf_core::format::NumberFormat;
+use sheaf_core::column::Storage;
+use sheaf_core::format::{NameStyle, NumberFormat};
 use sheaf_core::{ColumnId, Designation, Document, Project};
+
+/// The longest column short name Origin accepts.
+pub const MAX_SHORT_NAME: usize = 18;
 
 pub struct ColumnPropsDialog {
     column: ColumnId,
@@ -17,6 +21,8 @@ pub struct ColumnPropsDialog {
     comments: String,
     designation: Designation,
     format: NumberFormat,
+    /// How the cells are kept (Numeric, Text, Text & Numeric); the data side of Format.
+    storage: Storage,
     /// The width in characters the worksheet shows the column at (8 is Origin's default).
     width: u32,
     apply_to_right: bool,
@@ -54,6 +60,7 @@ impl ColumnPropsDialog {
             comments: c.comments.clone(),
             designation: c.designation,
             format: c.format,
+            storage: c.storage(),
             width: u32::from(c.shown_width()),
             apply_to_right: false,
             problem: None,
@@ -85,6 +92,7 @@ impl ColumnPropsDialog {
             || self.comments != c.comments
             || self.designation != c.designation
             || self.format != c.format
+            || self.storage != c.storage()
             || self.width != u32::from(c.shown_width())
     }
 
@@ -158,7 +166,7 @@ impl ColumnPropsDialog {
                                 }
                             });
                         ui.end_row();
-                        format_rows(ui, &mut self.format);
+                        format_rows(ui, &mut self.storage, &mut self.format);
                         ui.label("Column Width");
                         ui.add(DragValue::new(&mut self.width).range(1..=255));
                         ui.end_row();
@@ -203,6 +211,11 @@ impl ColumnPropsDialog {
     /// right). Returns `false` when the short name is not usable.
     fn apply(&mut self, doc: &mut Document) -> bool {
         let name = self.short_name.trim().to_string();
+        // Origin's limit for a column short name (public documentation, not measured).
+        if name.chars().count() > MAX_SHORT_NAME {
+            self.problem = Some(format!("The short name may have at most {MAX_SHORT_NAME} characters."));
+            return false;
+        }
         if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             self.problem = Some("The short name may only have letters, digits and underscores.".to_string());
             return false;
@@ -218,6 +231,7 @@ impl ColumnPropsDialog {
         let id = self.column;
         let (long_name, units, comments) = (self.long_name.clone(), self.units.clone(), self.comments.clone());
         let (designation, format, to_right) = (self.designation, self.format, self.apply_to_right);
+        let storage = self.storage;
         let width = (self.width as u16 != sheaf_core::column::DEFAULT_WIDTH).then_some(self.width as u16);
         doc.apply("Change column properties", move |p| {
             if let Some(c) = p.column_mut(id) {
@@ -226,6 +240,7 @@ impl ColumnPropsDialog {
                 c.units = units;
                 c.comments = comments;
                 c.designation = designation;
+                c.convert_storage(storage);
                 c.format = format;
                 c.width = width;
             }
@@ -250,66 +265,147 @@ impl ColumnPropsDialog {
     }
 }
 
-/// The two rows "Format" (what kind of values the column shows) and "Display" (how). Numbers have
-/// the display choices Automatic, Decimal places, Scientific and Significant digits with a number
-/// of digits; dates and times have their patterns.
-fn format_rows(ui: &mut egui::Ui, format: &mut NumberFormat) {
+/// The kinds of the Format list, in Origin's names, with Sheaf's "Date and time" last.
+const KINDS: [&str; 8] = ["Numeric", "Text", "Text & Numeric", "Time", "Date", "Month", "Day of Week", "Date and time"];
+
+/// Which entry of [`KINDS`] a column with this storage and format shows.
+fn kind_of(storage: Storage, format: NumberFormat) -> usize {
+    match format {
+        NumberFormat::Time(_) => 3,
+        NumberFormat::Date(_) => 4,
+        NumberFormat::Month(_) => 5,
+        NumberFormat::Weekday(_) => 6,
+        NumberFormat::DateTime(..) => 7,
+        _ => match storage {
+            Storage::Numeric => 0,
+            Storage::Text => 1,
+            Storage::Mixed => 2,
+        },
+    }
+}
+
+/// Switches to kind `kind`: sets the storage and a format that suits it, keeping the numeric
+/// display format when the kind stays a plain number.
+fn choose_kind(storage: &mut Storage, format: &mut NumberFormat, kind: usize) {
     use sheaf_core::datetime::{DatePattern, TimePattern};
-    // Format: 0 numeric, 1 date, 2 time, 3 date and time.
-    let mut kind = match *format {
-        NumberFormat::Date(_) => 1,
-        NumberFormat::Time(_) => 2,
-        NumberFormat::DateTime(..) => 3,
-        _ => 0,
-    };
-    let kinds = ["Numeric", "Date", "Time", "Date and time"];
+    let plain = matches!(kind_of(*storage, *format), 0..=2) && !matches!(*storage, Storage::Text);
+    match kind {
+        0..=2 => {
+            *storage = [Storage::Numeric, Storage::Text, Storage::Mixed][kind];
+            if !plain || kind == 1 {
+                *format = NumberFormat::General;
+            }
+        }
+        _ => {
+            // Dates, times and names are numbers: a text column becomes a numeric one.
+            if *storage == Storage::Text {
+                *storage = Storage::Numeric;
+            }
+            // Moving between Time, Date and Date and time keeps the patterns already chosen.
+            let (date, time) = match *format {
+                NumberFormat::Date(d) => (d, TimePattern::Hms),
+                NumberFormat::Time(t) => (DatePattern::Mdy, t),
+                NumberFormat::DateTime(d, t) => (d, t),
+                _ => (DatePattern::Mdy, TimePattern::Hms),
+            };
+            *format = match kind {
+                3 => NumberFormat::Time(time),
+                4 => NumberFormat::Date(date),
+                5 => NumberFormat::Month(NameStyle::Short),
+                6 => NumberFormat::Weekday(NameStyle::Short),
+                _ => NumberFormat::DateTime(date, time),
+            };
+        }
+    }
+}
+
+/// The two rows "Format" (what the cells hold: Numeric, Text, Text & Numeric, Time, Date, Month,
+/// Day of Week) and "Display" (how they are shown). Numbers have the display choices Automatic,
+/// Decimal places, Scientific, Significant digits, Engineering (with or without an SI prefix) and
+/// Decimal:1000 (thousands separators); dates and times have their patterns, months and weekdays
+/// their name styles.
+fn format_rows(ui: &mut egui::Ui, storage: &mut Storage, format: &mut NumberFormat) {
+    use sheaf_core::datetime::{DatePattern, TimePattern};
+    let mut kind = kind_of(*storage, *format);
     ui.label("Format");
-    egui::ComboBox::from_id_salt("column_format").selected_text(kinds[kind]).show_ui(ui, |ui| {
-        for (i, n) in kinds.iter().enumerate() {
+    egui::ComboBox::from_id_salt("column_format").selected_text(KINDS[kind]).show_ui(ui, |ui| {
+        for (i, n) in KINDS.iter().enumerate() {
             ui.selectable_value(&mut kind, i, *n);
         }
     });
     ui.end_row();
-    ui.label("Display");
-    if kind != 0 {
-        // The patterns of the current format, or the defaults when the kind has just been chosen.
-        let (mut date, mut time) = match *format {
-            NumberFormat::Date(d) => (d, TimePattern::Hms),
-            NumberFormat::Time(t) => (DatePattern::Iso, t),
-            NumberFormat::DateTime(d, t) => (d, t),
-            _ => (DatePattern::Iso, TimePattern::Hms),
-        };
-        ui.horizontal(|ui| {
-            if kind != 2 {
-                egui::ComboBox::from_id_salt("column_date_pattern").selected_text(date.label()).show_ui(ui, |ui| {
-                    for p in DatePattern::ALL {
-                        ui.selectable_value(&mut date, p, p.label());
-                    }
-                });
-            }
-            if kind != 1 {
-                egui::ComboBox::from_id_salt("column_time_pattern").selected_text(time.label()).show_ui(ui, |ui| {
-                    for p in TimePattern::ALL {
-                        ui.selectable_value(&mut time, p, p.label());
-                    }
-                });
-            }
-        });
-        ui.end_row();
-        *format = match kind {
-            1 => NumberFormat::Date(date),
-            2 => NumberFormat::Time(time),
-            _ => NumberFormat::DateTime(date, time),
-        };
-        return;
+    if kind != kind_of(*storage, *format) {
+        choose_kind(storage, format, kind);
     }
+    ui.label("Display");
+    match *format {
+        NumberFormat::Date(_) | NumberFormat::Time(_) | NumberFormat::DateTime(..) => {
+            let (mut date, mut time) = match *format {
+                NumberFormat::Date(d) => (d, TimePattern::Hms),
+                NumberFormat::Time(t) => (DatePattern::Iso, t),
+                NumberFormat::DateTime(d, t) => (d, t),
+                _ => unreachable!(),
+            };
+            let (show_date, show_time) = (kind != 3, kind != 4);
+            ui.horizontal(|ui| {
+                if show_date {
+                    egui::ComboBox::from_id_salt("column_date_pattern").selected_text(date.label()).show_ui(ui, |ui| {
+                        for p in DatePattern::ALL {
+                            ui.selectable_value(&mut date, p, p.label());
+                        }
+                    });
+                }
+                if show_time {
+                    egui::ComboBox::from_id_salt("column_time_pattern").selected_text(time.label()).show_ui(ui, |ui| {
+                        for p in TimePattern::ALL {
+                            ui.selectable_value(&mut time, p, p.label());
+                        }
+                    });
+                }
+            });
+            *format = match kind {
+                3 => NumberFormat::Time(time),
+                4 => NumberFormat::Date(date),
+                _ => NumberFormat::DateTime(date, time),
+            };
+        }
+        NumberFormat::Month(style) | NumberFormat::Weekday(style) => {
+            let mut style = style;
+            egui::ComboBox::from_id_salt("column_name_style").selected_text(style.label()).show_ui(ui, |ui| {
+                for n in NameStyle::ALL {
+                    ui.selectable_value(&mut style, n, n.label());
+                }
+            });
+            *format = if kind == 5 { NumberFormat::Month(style) } else { NumberFormat::Weekday(style) };
+        }
+        _ if *storage == Storage::Text => {
+            ui.label("Text");
+        }
+        _ => number_display(ui, format),
+    }
+    ui.end_row();
+}
+
+/// The display choices of a number: the style, and the digits where the style has them.
+fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
     let (mut style, digits) = match *format {
         NumberFormat::Decimal(d) => (1, d),
         NumberFormat::Scientific(d) => (2, d),
         NumberFormat::Significant(d) => (3, d),
+        NumberFormat::Engineering(d) => (4, d),
+        NumberFormat::EngineeringSi(d) => (5, d),
+        NumberFormat::DecimalGrouped(d) => (6, d),
         _ => (0, 3),
     };
-    let styles = ["Automatic", "Decimal places", "Scientific", "Significant digits"];
+    let styles = [
+        "Automatic",
+        "Decimal places",
+        "Scientific",
+        "Significant digits",
+        "Engineering",
+        "Engineering (SI prefix)",
+        "Decimal:1000",
+    ];
     let mut d = digits;
     ui.horizontal(|ui| {
         egui::ComboBox::from_id_salt("column_display").selected_text(styles[style]).show_ui(ui, |ui| {
@@ -321,12 +417,13 @@ fn format_rows(ui: &mut egui::Ui, format: &mut NumberFormat) {
             ui.add(DragValue::new(&mut d).range(0..=15));
         }
     });
-    ui.end_row();
-    // Changing the kind to Numeric turns a date format into Automatic.
     *format = match style {
         1 => NumberFormat::Decimal(d),
         2 => NumberFormat::Scientific(d),
         3 => NumberFormat::Significant(d.max(1)),
+        4 => NumberFormat::Engineering(d),
+        5 => NumberFormat::EngineeringSi(d),
+        6 => NumberFormat::DecimalGrouped(d),
         _ => NumberFormat::General,
     };
 }

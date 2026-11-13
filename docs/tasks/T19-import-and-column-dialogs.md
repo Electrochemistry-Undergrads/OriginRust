@@ -1,6 +1,6 @@
 # T19: Import dialogs and Column Properties as Origin
 
-**Status:** open; the Import Wizard part needs Origin's pages 2-6 seen first (owner screenshots or a
+**Status:** item 3 (Column Properties) done on branch `column-formats`: Format list Numeric/Text/Text & Numeric/Time/Date/Month/Day of Week, Engineering, Engineering SI and Decimal:1000 displays, 19 date and 14 time patterns, 18-character short-name limit; left: Column Width stays one-width-per-sheet, label-row options, 13-character book limit, Err designation; open (other items); the Import Wizard part needs Origin's pages 2-6 seen first (owner screenshots or a
 scripted run). Text & Numeric columns exist since `text-numeric` (merged 2026-11-13;
 `ColumnData::Mixed`). **Size:** M. **Branch:** `import-dialogs`. **Model:** Sonnet.
 **Detail:** audit B "Column Properties", "Import Wizard", "ASCII import"; E "Partial" (import).

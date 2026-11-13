@@ -94,6 +94,22 @@ impl Graph {
         self.group(index).into_iter().filter(|&i| self.place(i) == place).collect()
     }
 
+    /// The ids of the plots that the legend of layer `index` lists, in order, given how many
+    /// plots each layer shows (`plots_in`). They are `1`, `2`, ... for the layer's own plots, and
+    /// `l.p` (layer and plot, both from 1) when the legend lists the plots of several layers; they
+    /// are what `\l(n)` and `%(n)` in the legend text refer to ([`Legend::text`]).
+    pub fn legend_ids(&self, index: usize, plots_in: &dyn Fn(usize) -> usize) -> Vec<String> {
+        let Some(layer) = self.layers.get(index) else { return Vec::new() };
+        if layer.legend.scope == LegendScope::Graph {
+            let layers = self.same_frame(index);
+            if layers.len() > 1 {
+                return layers.iter().flat_map(|&l| (1..=plots_in(l)).map(move |k| format!("{}.{k}", l + 1))).collect();
+            }
+            return layers.first().map_or_else(Vec::new, |&l| (1..=plots_in(l)).map(|k| k.to_string()).collect());
+        }
+        (1..=plots_in(index)).map(|k| k.to_string()).collect()
+    }
+
     /// The panels of the graph, in layer order: every layer except those drawn in the frame of an
     /// earlier layer of their group (a right Y layer is part of the panel it lies over). A graph
     /// with one layer, or a double-Y graph, has one panel.
@@ -725,6 +741,33 @@ pub struct Legend {
     pub background: Option<Color>,
     #[serde(default, skip_serializing_if = "LegendScope::is_layer")]
     pub scope: LegendScope,
+    /// The number of columns the entries are arranged in, filled column by column; 1 is a single
+    /// list.
+    #[serde(default = "one_column", skip_serializing_if = "is_one_column")]
+    pub columns: u32,
+    /// The legend text in Origin's notation, one entry per line: `\l(n)` draws the symbol of
+    /// plot n, `%(n)` is its name, any other text is shown as it is (with the label markup). `n`
+    /// counts the plots the legend lists (`l.p`, layer and plot, when it lists several layers).
+    /// `None` is the automatic text, `\l(1) %(1)` and so on for every plot, which follows the
+    /// plots as they come and go.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+fn one_column() -> u32 {
+    1
+}
+
+fn is_one_column(c: &u32) -> bool {
+    *c == 1
+}
+
+impl Legend {
+    /// The automatic legend text for plots with these ids (see [`Legend::text`]): a symbol and a
+    /// name per line.
+    pub fn automatic_text<S: AsRef<str>>(ids: &[S]) -> String {
+        ids.iter().map(|id| format!("\\l({0}) %({0})", id.as_ref())).collect::<Vec<_>>().join("\n")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -866,10 +909,11 @@ mod tests {
             assert!(!axis.color_follows_plot && !axis.title_color_follows_plot);
         }
         assert_eq!(layer.legend.scope, LegendScope::Layer);
+        assert_eq!((layer.legend.columns, layer.legend.text.as_deref()), (1, None));
         assert_eq!(layer.x_axis.max, Some(2.0));
         // Saving it again writes none of the new keys, so the file looks as before.
         let json = serde_json::to_string(&layer).unwrap();
-        for key in ["\"link\"", "\"side\"", "color_follows_plot", "\"scope\""] {
+        for key in ["\"link\"", "\"side\"", "color_follows_plot", "\"scope\"", "\"columns\"", "\"text\""] {
             assert!(!json.contains(key), "{key} in {json}");
         }
         let back: Layer = serde_json::from_str(&json).unwrap();
@@ -885,6 +929,8 @@ mod tests {
         layer.y_axis.color_follows_plot = true;
         layer.y_axis.title_color_follows_plot = true;
         layer.legend.scope = LegendScope::Graph;
+        layer.legend.columns = 2;
+        layer.legend.text = Some("\\l(1) a\n%(2)".into());
         let json = serde_json::to_string(&layer).unwrap();
         assert!(json.contains(r#""link":{"parent":0,"x":"straight","y":"none"}"#), "{json}");
         assert!(json.contains(r#""side":"opposite""#) && json.contains(r#""side":"hidden""#), "{json}");

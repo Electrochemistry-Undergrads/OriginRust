@@ -12,6 +12,7 @@
 use crate::data::{self, Dim, LayerData, PlotData};
 use crate::fonts::TextMeasurer;
 use crate::hit;
+use crate::legend;
 use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
 use crate::scene::{
     Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
@@ -45,7 +46,17 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
         {
             let entries: Vec<&PlotData> = g.same_frame(i).into_iter().flat_map(|j| pds[j].plots.iter()).collect();
             let start = last.overlay.len();
-            draw_legend(&mut last.overlay, project, &layer.legend, geoms[i].frame, &entries, &edge_ticks(g, i), m);
+            let ids = legend::ids(g, i, &|j| pds[j].plots.len());
+            draw_legend(
+                &mut last.overlay,
+                project,
+                &layer.legend,
+                geoms[i].frame,
+                &entries,
+                &ids,
+                &edge_ticks(g, i),
+                m,
+            );
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
     }
@@ -462,7 +473,8 @@ fn layer_scene(
     if layer.legend.scope == LegendScope::Layer {
         let entries: Vec<&PlotData> = pds.iter().collect();
         let start = out.len();
-        draw_legend(out, project, &layer.legend, f, &entries, &edge_ticks(g, index), m);
+        let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
+        draw_legend(out, project, &layer.legend, f, &entries, &ids, &edge_ticks(g, index), m);
         rec(objects, out, start, ObjectKind::Legend, &[]);
     }
     for (k, label) in layer.labels.iter().enumerate() {
@@ -894,13 +906,25 @@ fn edge_ticks(g: &Graph, index: usize) -> EdgeTicks {
     e
 }
 
-/// Draws legend `lg` with one row per entry inside frame `f`.
+/// One piece of a legend row, resolved against the plots.
+enum Cell {
+    /// The line and symbol sample of entry `n`.
+    Sample(usize),
+    /// Text with the label markup, and its width in points.
+    Text(String, f64),
+}
+
+/// Draws legend `lg` inside frame `f`: one row per line of its text (the automatic text has one
+/// line per plot), in `lg.columns` columns filled top to bottom. `ids` name the entries as
+/// `\l(n)` and `%(n)` refer to them.
+#[allow(clippy::too_many_arguments)]
 fn draw_legend(
     out: &mut Vec<Item>,
     project: &Project,
     lg: &Legend,
     f: Rect,
     entries: &[&PlotData],
+    ids: &[String],
     ticks: &EdgeTicks,
     m: &dyn TextMeasurer,
 ) {
@@ -908,14 +932,72 @@ fn draw_legend(
         return;
     }
     let fs = lg.font.size_pt;
-    let labels: Vec<String> = entries.iter().map(|pd| project.plot_label(pd.plot)).collect();
     let sample = 2.2 * fs;
     let gap = 0.5 * fs;
     let pad = 0.4 * fs;
     let row_h = 1.3 * fs;
-    let text_w = labels.iter().map(|l| text::width(m, l, &lg.font, fs)).fold(0.0, f64::max);
-    let w = 2.0 * pad + sample + gap + text_w;
-    let h = 2.0 * pad + row_h * entries.len() as f64;
+    let col_gap = fs;
+
+    let text = lg.text.clone().unwrap_or_else(|| Legend::automatic_text(ids));
+    let mut rows: Vec<(Vec<Cell>, f64)> = Vec::new();
+    for line in legend::lines(&text) {
+        let mut cells: Vec<Cell> = Vec::new();
+        let mut pending = String::new();
+        let mut after_symbol = false;
+        let flush = |pending: &mut String, cells: &mut Vec<Cell>, after_symbol: &mut bool| {
+            let t = if *after_symbol { pending.trim_start() } else { pending.as_str() };
+            if !t.is_empty() {
+                let w = text::width(m, t, &lg.font, fs);
+                cells.push(Cell::Text(t.to_string(), w));
+            }
+            pending.clear();
+            *after_symbol = false;
+        };
+        for part in legend::parse_line(&line) {
+            match part {
+                legend::Part::Text(t) => pending.push_str(t),
+                legend::Part::Name(id) => {
+                    if let Some(k) = legend::resolve(ids, id) {
+                        pending.push_str(&project.plot_label(entries[k].plot));
+                    }
+                }
+                legend::Part::Symbol(id) => {
+                    flush(&mut pending, &mut cells, &mut after_symbol);
+                    if let Some(k) = legend::resolve(ids, id) {
+                        cells.push(Cell::Sample(k));
+                    }
+                    // The space after an escape is dropped even when the escape drew nothing.
+                    after_symbol = true;
+                }
+            }
+        }
+        flush(&mut pending, &mut cells, &mut after_symbol);
+        if let Some(Cell::Text(t, w)) = cells.last_mut() {
+            let trimmed = t.trim_end();
+            if trimmed.len() != t.len() {
+                *t = trimmed.to_string();
+                *w = text::width(m, t, &lg.font, fs);
+            }
+        }
+        let mut width = 0.0;
+        for (i, c) in cells.iter().enumerate() {
+            width += match c {
+                Cell::Sample(_) => sample,
+                Cell::Text(_, w) => *w + if i > 0 && matches!(cells[i - 1], Cell::Sample(_)) { gap } else { 0.0 },
+            };
+        }
+        rows.push((cells, width));
+    }
+    if rows.is_empty() {
+        return;
+    }
+    let per_col = rows.len().div_ceil((lg.columns.max(1) as usize).min(rows.len()));
+    let n_cols = rows.len().div_ceil(per_col);
+    let col_w: Vec<f64> = (0..n_cols)
+        .map(|c| rows[c * per_col..((c + 1) * per_col).min(rows.len())].iter().map(|r| r.1).fold(0.0, f64::max))
+        .collect();
+    let w = 2.0 * pad + col_w.iter().sum::<f64>() + col_gap * (n_cols - 1) as f64;
+    let h = 2.0 * pad + row_h * per_col as f64;
 
     // Margin from the nearest frame edges; ticks pointing in push the legend further.
     let m_left = 0.8 * fs + ticks.left.unwrap_or(0.0);
@@ -933,32 +1015,51 @@ fn draw_legend(
         let stroke = lg.frame.then(|| Stroke::solid(lg.font.color, 0.75));
         out.push(Item::Rect { rect: Rect { x: x0, y: y0, w, h }, fill: lg.background, stroke });
     }
-    for (i, (pd, label)) in entries.iter().zip(&labels).enumerate() {
-        let cy = y0 + pad + row_h * (i as f64 + 0.5);
-        let sx0 = x0 + pad;
-        let sx1 = sx0 + sample;
-        let plot = pd.plot;
-        if plot.kind.has_line() && plot.line.width_pt > 0.0 {
-            let mut d = String::new();
-            move_to(&mut d, sx0, cy);
-            line_to(&mut d, sx1, cy);
-            out.push(Item::Path { d, fill: None, stroke: Some(line_stroke(&plot.line)) });
-        }
-        if plot.kind.has_symbols() {
-            let mut d = String::new();
-            symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
-            out.push(symbol_item(d, &plot.symbol));
-        }
-        if matches!(plot.kind, PlotKind::Column | PlotKind::Area) {
-            // A small bar: as long as a line sample, one font size high, filled and outlined
-            // like the bars (an area plot is shown the same way).
-            out.push(Item::Rect {
-                rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
-                fill: Some(plot.symbol.color),
-                stroke: (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
-            });
-        }
+    for (r, (cells, _)) in rows.iter().enumerate() {
+        let (col, row) = (r / per_col, r % per_col);
+        let col_x = x0 + pad + col_w[..col].iter().sum::<f64>() + col_gap * col as f64;
+        let cy = y0 + pad + row_h * (row as f64 + 0.5);
         let baseline = cy + (ASCENT - DESCENT) / 2.0 * fs;
-        text::place(out, m, label, &lg.font, fs, (sx1 + gap, baseline), Anchor::Start, 0.0);
+        let mut x = col_x;
+        let mut after_symbol = false;
+        for cell in cells {
+            match cell {
+                Cell::Sample(k) => {
+                    let (sx0, sx1) = (x, x + sample);
+                    let plot = entries[*k].plot;
+                    if plot.kind.has_line() && plot.line.width_pt > 0.0 {
+                        let mut d = String::new();
+                        move_to(&mut d, sx0, cy);
+                        line_to(&mut d, sx1, cy);
+                        out.push(Item::Path { d, fill: None, stroke: Some(line_stroke(&plot.line)) });
+                    }
+                    if plot.kind.has_symbols() {
+                        let mut d = String::new();
+                        symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
+                        out.push(symbol_item(d, &plot.symbol));
+                    }
+                    if matches!(plot.kind, PlotKind::Column | PlotKind::Area) {
+                        // A small bar: as long as a line sample, one font size high, filled and
+                        // outlined like the bars (an area plot is shown the same way).
+                        out.push(Item::Rect {
+                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            fill: Some(plot.symbol.color),
+                            stroke: (plot.line.width_pt > 0.0)
+                                .then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
+                        });
+                    }
+                    x = sx1;
+                    after_symbol = true;
+                }
+                Cell::Text(t, w) => {
+                    if after_symbol {
+                        x += gap;
+                    }
+                    text::place(out, m, t, &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
+                    x += w;
+                    after_symbol = false;
+                }
+            }
+        }
     }
 }

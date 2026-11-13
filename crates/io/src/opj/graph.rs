@@ -289,6 +289,7 @@ fn build_layer(
             n if n.eq_ignore_ascii_case("legend") => {
                 out.legend.visible = true;
                 out.legend.font.size_pt = size_pt;
+                out.legend.text = custom_legend_text(&text);
                 let (cx, cy) = annotation_center(a, page_units);
                 if frame_size.0 > 0.0 && frame_size.1 > 0.0 {
                     let x = (cx / PAGE_UNITS_PER_INCH * 72.0 - frame_pt.0) / frame_size.0;
@@ -480,6 +481,19 @@ fn annotation_name(a: &WinAnnotation) -> String {
 /// The text of a text object: the bytes of block 2 up to the first NUL.
 fn annotation_text(a: &WinAnnotation) -> String {
     decode_cp1252(c_bytes(&a.block2))
+}
+
+/// The legend text of a file as the model keeps it: `None` when it is the automatic text (a
+/// symbol and a name per plot, `\l(n) %(n)`), otherwise the text with LF line ends.
+fn custom_legend_text(text: &str) -> Option<String> {
+    let normal = text.replace("\r\n", "\n").replace('\r', "\n");
+    let normal = normal.trim_end_matches('\n');
+    let automatic = |line: &str| {
+        let Some(rest) = line.strip_prefix("\\l(").or_else(|| line.strip_prefix("\\L(")) else { return false };
+        let Some((id, name)) = rest.split_once(") ") else { return false };
+        name == format!("%({id})")
+    };
+    if normal.is_empty() || normal.split('\n').all(automatic) { None } else { Some(normal.to_string()) }
 }
 
 /// Centre of the annotation rectangle in page units.
@@ -915,6 +929,20 @@ mod tests {
         assert_eq!(l.labels.len(), 2);
         assert_eq!(l.labels[0].text, "Peak");
         assert!(l.labels[1].y > l.labels[0].y);
+    }
+
+    #[test]
+    fn legend_text_is_kept_only_when_it_is_not_the_automatic_text() {
+        let legend_text = |text: &str| {
+            let mut w = window();
+            w.layers[0].annotations[2] = text_annotation("Legend", text, 18, [3000, 400, 4000, 700]);
+            build(&w, &ids(), &mut Vec::new()).layers[0].legend.text.clone()
+        };
+        assert_eq!(legend_text("\\l(1) %(1)"), None);
+        assert_eq!(legend_text("\\l(1.1) %(1.1)\r\n\\l(2.1) %(2.1)\r\n"), None);
+        assert_eq!(legend_text("\\l(1) Fe\r\n\\l(2) %(2)").as_deref(), Some("\\l(1) Fe\n\\l(2) %(2)"));
+        assert_eq!(legend_text("\\l(1) %(2)").as_deref(), Some("\\l(1) %(2)"));
+        assert_eq!(legend_text("T = 5 K").as_deref(), Some("T = 5 K"));
     }
 
     #[test]

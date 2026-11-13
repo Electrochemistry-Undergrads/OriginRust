@@ -16,9 +16,9 @@ pub enum Command {
     Info(InfoArgs),
     /// Import data files into a project file.
     Import(ImportArgs),
-    /// Make a figure from a data file or a project and write it as PNG, SVG or PDF.
+    /// Make a figure from a data file or a project and write it as PNG, SVG, PDF, EPS, EMF or TIFF.
     Plot(Box<PlotArgs>),
-    /// Write a graph of a project as PNG, SVG or PDF.
+    /// Write a graph of a project as PNG, SVG, PDF, EPS, EMF or TIFF.
     Export(ExportArgs),
     /// Write a worksheet of a project as delimited text.
     ExportData(ExportDataArgs),
@@ -123,7 +123,7 @@ pub struct FitArgs {
     /// negative limits as --x-range=-0.5:0.1).
     #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
     pub x_range: Option<String>,
-    /// Draw the data with the fitted curve and write the figure (.png, .svg or .pdf). With
+    /// Draw the data with the fitted curve and write the figure (.png, .svg, .pdf, .eps, .emf or .tif). With
     /// several columns, only the first one is drawn.
     #[arg(long, value_name = "FIGURE")]
     pub plot: Option<PathBuf>,
@@ -414,7 +414,7 @@ pub struct PlotArgs {
     /// A data file, a .sheaf project or an Origin .opj project. Several data files are overlaid in one figure.
     #[arg(required = true)]
     pub inputs: Vec<PathBuf>,
-    /// The figure to write: .png, .svg or .pdf.
+    /// The figure to write: .png, .svg, .pdf, .eps, .emf or .tif.
     #[arg(short, long)]
     pub output: PathBuf,
     /// Resolution of PNG output in dots per inch.
@@ -523,7 +523,7 @@ pub struct ExportArgs {
     /// Name of the graph (default: the only graph of the project). Not used for .opj output.
     #[arg(long)]
     pub graph: Option<String>,
-    /// What to write: a figure (.png, .svg or .pdf) or, with .opj, the whole project as an Origin
+    /// What to write: a figure (.png, .svg, .pdf, .eps, .emf or .tif) or, with .opj, the whole project as an Origin
     /// 2016 project file (workbooks and graphs; what the file cannot hold is listed as warnings).
     #[arg(short, long)]
     pub output: PathBuf,

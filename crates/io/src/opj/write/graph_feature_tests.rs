@@ -436,3 +436,21 @@ fn a_panel_header_names_its_parent_and_the_unit_percent_of_the_linked_layer() {
     let h = headers(&double_y());
     assert_eq!([h[1][0xAB], h[1][0x67]], [1, 0]);
 }
+
+#[test]
+fn the_legend_text_and_its_columns_are_handled() {
+    let mut p = double_y();
+    let id = p.graphs().next().unwrap().id;
+    p.graph_mut(id).unwrap().layers[0].legend.text = Some("\\l(1.1) T = 5 K\n\\l(2.1) %(2.1)".into());
+    let (imp, out) = round_trip(&p);
+    let has = |needle: &[u8]| out.bytes.windows(needle.len()).any(|w| w == needle);
+    assert!(has(b"\\l(1.1) T = 5 K\r\n\\l(2.1) %(2.1)"), "the custom text is written as it is");
+    assert!(!has(b"\\l(1.2)"), "and not the automatic one");
+    assert_eq!(imp.graphs[0].layers[0].legend.text.as_deref(), Some("\\l(1.1) T = 5 K\n\\l(2.1) %(2.1)"));
+    assert!(!out.warnings.iter().any(|w| w.contains("legend")), "{:?}", out.warnings);
+
+    // The number of columns has no place in the file: it is named, so the companion keeps it.
+    p.graph_mut(id).unwrap().layers[0].legend.columns = 2;
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("columns of the legend")), "{:?}", out.warnings);
+}

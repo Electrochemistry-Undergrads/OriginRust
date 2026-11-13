@@ -65,6 +65,17 @@ pub struct GraphUi {
     pub text_tool: bool,
     /// A label being dragged.
     label_drag: Option<LabelDrag>,
+    /// A legend being dragged.
+    legend_drag: Option<LegendDrag>,
+}
+
+/// A legend being moved with the mouse: its centre when the drag began (fractions of the layer
+/// frame) and how far the pointer has moved since (page points).
+#[derive(Clone, Copy)]
+struct LegendDrag {
+    layer: usize,
+    from: (f64, f64),
+    delta: (f64, f64),
 }
 
 /// A label being moved with the mouse: its anchor when the drag began (fractions of the layer
@@ -215,7 +226,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     // The selection, drawn over the picture.
     if let Some((layer, kind)) = state.selected {
         let moved = state.label_drag.filter(|d| kind == ObjectKind::Label(d.label) && layer == d.layer);
-        let shift = moved.map_or((0.0, 0.0), |d| d.delta);
+        let moved_legend = state.legend_drag.filter(|d| kind == ObjectKind::Legend && layer == d.layer);
+        let shift = moved.map(|d| d.delta).or(moved_legend.map(|d| d.delta)).unwrap_or((0.0, 0.0));
         draw_selection(&painter, &t.scene, layer, kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
     }
 
@@ -300,6 +312,45 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                     graph: graph_id,
                     layer: d.layer,
                     label: d.label,
+                    x: d.from.0 + d.delta.0 / f.w,
+                    y: d.from.1 + d.delta.1 / f.h,
+                });
+            }
+        }
+    }
+
+    // Dragging the legend moves it too, and makes its position manual.
+    if response.drag_started()
+        && !state.reader
+        && !state.text_tool
+        && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        && let Hit::Object { layer, kind: ObjectKind::Legend } = pick(pos)
+        && let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
+        && let Some(o) = t
+            .scene
+            .layers
+            .iter()
+            .flat_map(|l| l.objects.iter())
+            .find(|o| o.layer == layer && o.kind == ObjectKind::Legend)
+    {
+        let centre = (o.bounds.x + o.bounds.w / 2.0, o.bounds.y + o.bounds.h / 2.0);
+        state.selected = Some((layer, ObjectKind::Legend));
+        state.legend_drag =
+            Some(LegendDrag { layer, from: ((centre.0 - f.x) / f.w, (centre.1 - f.y) / f.h), delta: (0.0, 0.0) });
+        actions.push(Action::ActivateLayer { graph: graph_id, layer });
+    }
+    if let Some(mut d) = state.legend_drag {
+        let page = response.drag_delta() / fit;
+        d.delta = (d.delta.0 + f64::from(page.x), d.delta.1 + f64::from(page.y));
+        state.legend_drag = Some(d);
+        if response.drag_stopped() {
+            state.legend_drag = None;
+            if let Some(f) = t.geometry.get(d.layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
+                && (d.delta.0 != 0.0 || d.delta.1 != 0.0)
+            {
+                actions.push(Action::MoveLegend {
+                    graph: graph_id,
+                    layer: d.layer,
                     x: d.from.0 + d.delta.0 / f.w,
                     y: d.from.1 + d.delta.1 / f.h,
                 });
@@ -586,6 +637,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::Rescale { layer }
         | GraphOp::AxisZoom { layer, .. }
         | GraphOp::HideLegend { layer }
+        | GraphOp::ReconstructLegend { layer }
         | GraphOp::HideTitle { layer, .. }
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::HideLayer { layer }
@@ -651,6 +703,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::HideLegend { .. } => l.legend.visible = false,
+        GraphOp::ReconstructLegend { .. } => l.legend.text = None,
         GraphOp::HideTitle { y, .. } => {
             let a = if y { &mut l.y_axis } else { &mut l.x_axis };
             a.show_title = false;

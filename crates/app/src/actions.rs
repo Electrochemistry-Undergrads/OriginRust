@@ -82,6 +82,8 @@ pub enum GraphOp {
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
     /// Delete on the legend: it is hidden.
     HideLegend { layer: usize },
+    /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
+    ReconstructLegend { layer: usize },
     /// Delete on an axis title: it is hidden.
     HideTitle { layer: usize, y: bool },
     /// Delete on a free text label.
@@ -212,6 +214,14 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
         label: usize,
+        x: f64,
+        y: f64,
+    },
+    /// Moves the legend to a new centre (fractions of the layer frame): it becomes manually
+    /// placed; one undo step.
+    MoveLegend {
+        graph: WindowId,
+        layer: usize,
         x: f64,
         y: f64,
     },

@@ -35,8 +35,11 @@ Confidence interval: it belongs to the estimate (the mean, the difference of the
 difference), not to the test statistic. A two-tailed test gives the interval of level `1 - alpha`; a
 one-tailed test gives the interval of level `1 - 2 alpha`, so that its one finite end is the one-sided
 bound of level `1 - alpha` (for alpha 0.05 and an upper-tail test the 90 % interval is reported).
-Origin's interval for the unequal-variance test is the pooled one; ours uses the Welch standard error and
-degrees of freedom, so only the pooled intervals are compared in the tests.
+Origin's interval for the unequal-variance test is the pooled one (pooled standard error, `n1 + n2 - 2`
+degrees of freedom), while its t, DF and Prob are Welch's. Sheaf does the same (measured: on
+A = 10 + 2 sin(3i) + i/4, i = 1..8, and B = 11.5 + 2.5 cos(2i) + i/5, i = 1..10, Origin gives DF 15.634 and
+LCL -3.34117967, UCL 0.17642427, the pooled interval to 8 digits; test
+`welch_test_reports_the_pooled_interval_as_origin` in `crates/calc/src/hypothesis.rs`).
 
 Sheaf reports N, mean, SD and SEM of each sample, the estimate, its standard error, the hypothesized
 value, t, DF, Prob, the confidence level, LCL, UCL and a 0/1 Reject column, and one plain-English line

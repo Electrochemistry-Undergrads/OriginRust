@@ -84,6 +84,25 @@ fn finish(
     tail: Tail,
     alpha: f64,
 ) -> Option<TTest> {
+    finish_with_interval(samples, estimate, (se, df), (se, df), hypothesized, tail, alpha)
+}
+
+/// [`finish`] with the confidence interval taken from its own standard error and degrees of freedom
+/// (`interval`), which can differ from those of the test (`test`).
+fn finish_with_interval(
+    samples: Vec<SampleStats>,
+    estimate: f64,
+    test: (f64, f64),
+    interval: (f64, f64),
+    hypothesized: f64,
+    tail: Tail,
+    alpha: f64,
+) -> Option<TTest> {
+    let (se, df) = test;
+    let (ci_se, ci_df) = interval;
+    if !ci_df.is_finite() || ci_df <= 0.0 || !ci_se.is_finite() {
+        return None;
+    }
     if !(alpha > 0.0 && alpha < 1.0) || !df.is_finite() || df <= 0.0 || !se.is_finite() {
         return None;
     }
@@ -98,7 +117,7 @@ fn finish(
         Tail::Lower => dist.cdf(t),
     };
     let level = if tail == Tail::Two { 1.0 - alpha } else { 1.0 - 2.0 * alpha };
-    let crit = dist.inverse_cdf(1.0 - (1.0 - level) / 2.0);
+    let crit = StudentsT::new(0.0, 1.0, ci_df).ok()?.inverse_cdf(1.0 - (1.0 - level) / 2.0);
     Some(TTest {
         samples,
         estimate,
@@ -107,8 +126,8 @@ fn finish(
         t,
         df,
         p,
-        lcl: estimate - crit * se,
-        ucl: estimate + crit * se,
+        lcl: estimate - crit * ci_se,
+        ucl: estimate + crit * ci_se,
         level,
         tail,
         alpha,
@@ -126,7 +145,9 @@ pub fn ttest_one(data: &[f64], mean0: f64, tail: Tail, alpha: f64) -> Option<TTe
 
 /// Two-sample t-test of `mean(a) - mean(b)` against `mean_diff`. With `equal_var` the pooled variance is
 /// used (degrees of freedom `n1 + n2 - 2`); without it Welch's test with the Satterthwaite degrees of
-/// freedom. The confidence interval uses the same standard error and degrees of freedom as the test.
+/// freedom. The confidence interval always uses the pooled standard error and `n1 + n2 - 2` degrees of
+/// freedom, also for Welch's test: Origin's `ttest2 equal:=0` reports the Welch t and df but the pooled
+/// interval (measured, see docs/spec/statistics.md).
 pub fn ttest_two(a: &[f64], b: &[f64], mean_diff: f64, tail: Tail, alpha: f64, equal_var: bool) -> Option<TTest> {
     let (s1, s2) = (SampleStats::of(a), SampleStats::of(b));
     if s1.n < 2 || s2.n < 2 {
@@ -134,14 +155,15 @@ pub fn ttest_two(a: &[f64], b: &[f64], mean_diff: f64, tail: Tail, alpha: f64, e
     }
     let (n1, n2) = (s1.n as f64, s2.n as f64);
     let (v1, v2) = (s1.sd * s1.sd, s2.sd * s2.sd);
-    let (se, df) = if equal_var {
-        let pooled = ((n1 - 1.0) * v1 + (n2 - 1.0) * v2) / (n1 + n2 - 2.0);
-        ((pooled * (1.0 / n1 + 1.0 / n2)).sqrt(), n1 + n2 - 2.0)
+    let pooled_var = ((n1 - 1.0) * v1 + (n2 - 1.0) * v2) / (n1 + n2 - 2.0);
+    let pooled = ((pooled_var * (1.0 / n1 + 1.0 / n2)).sqrt(), n1 + n2 - 2.0);
+    let test = if equal_var {
+        pooled
     } else {
         let (q1, q2) = (v1 / n1, v2 / n2);
         ((q1 + q2).sqrt(), (q1 + q2).powi(2) / (q1 * q1 / (n1 - 1.0) + q2 * q2 / (n2 - 1.0)))
     };
-    finish(vec![s1, s2], s1.mean - s2.mean, se, df, mean_diff, tail, alpha)
+    finish_with_interval(vec![s1, s2], s1.mean - s2.mean, test, pooled, mean_diff, tail, alpha)
 }
 
 /// Paired t-test on the differences `a[i] - b[i]` of the rows where both values exist, against
@@ -170,6 +192,21 @@ pub fn ttest_paired(a: &[f64], b: &[f64], mean_diff: f64, tail: Tail, alpha: f64
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Origin's `ttest2 equal:=0` on A = 10 + 2 sin(3i) + i/4 (i = 1..8) and B = 11.5 + 2.5 cos(2i) + i/5
+    /// (i = 1..10): Welch df 15.634 for the test, but the pooled interval (lcl -3.34117967, ucl 0.17642427).
+    #[test]
+    fn welch_test_reports_the_pooled_interval_as_origin() {
+        let a: Vec<f64> = (1..=8).map(|i| 10.0 + 2.0 * (3.0 * i as f64).sin() + i as f64 / 4.0).collect();
+        let b: Vec<f64> = (1..=10).map(|i| 11.5 + 2.5 * (2.0 * i as f64).cos() + i as f64 / 5.0).collect();
+        let w = ttest_two(&a, &b, 0.0, Tail::Two, 0.05, false).unwrap();
+        assert!((w.df - 15.634).abs() < 1e-3, "{}", w.df);
+        assert!((w.lcl - -3.341_179_67).abs() < 1e-7, "{}", w.lcl);
+        assert!((w.ucl - 0.176_424_27).abs() < 1e-7, "{}", w.ucl);
+        let pooled = ttest_two(&a, &b, 0.0, Tail::Two, 0.05, true).unwrap();
+        assert_eq!((w.lcl, w.ucl), (pooled.lcl, pooled.ucl));
+        assert!(w.t != pooled.t);
+    }
 
     #[test]
     fn one_sided_p_values_add_up_to_one() {

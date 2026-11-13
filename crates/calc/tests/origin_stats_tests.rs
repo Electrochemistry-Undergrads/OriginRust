@@ -87,8 +87,9 @@ fn one_sample_t_test_matches_ttest1() {
 #[test]
 fn two_sample_t_test_matches_ttest2() {
     let (a, b) = (sample_a(), sample_b());
-    // (equal variance, tail, mean difference, alpha, t, df, p, lcl, ucl); Origin's interval for the unequal
-    // variance test is the pooled one, so only the pooled intervals are compared.
+    // (tail, mean difference, alpha, t, df, p, lcl, ucl). Origin's interval for the unequal variance test
+    // is the pooled one, so the Welch rows below take the pooled intervals of the same tail (measured for the
+    // two-sided test; the upper tail is assumed to follow the same rule).
     let pooled = [
         (Tail::Two, 0.0, 0.05, -1.9072589691306436, 16.0, 0.07460412595719583, -3.3411796677281207, 0.1764242747222089),
         (
@@ -122,14 +123,16 @@ fn two_sample_t_test_matches_ttest2() {
         close(&format!("{tag} ucl"), r.ucl, ucl, CI_TOL);
     }
     let welch = [
-        (Tail::Two, -1.9937117971415532, 15.634490446322753, 0.063929845467027319),
-        (Tail::Upper, -1.9937117971415532, 15.634490446322753, 0.9680350772664863),
+        (Tail::Two, -1.9937117971415532, 15.634490446322753, 0.063929845467027319, pooled[0]),
+        (Tail::Upper, -1.9937117971415532, 15.634490446322753, 0.9680350772664863, pooled[2]),
     ];
-    for (tail, t, df, p) in welch {
+    for (tail, t, df, p, same_interval) in welch {
         let r = ttest_two(&a, &b, 0.0, tail, 0.05, false).unwrap();
         close("welch t", r.t, t, 1e-10);
         close("welch df", r.df, df, 1e-10);
         close("welch p", r.p, p, P_TOL);
+        close("welch lcl", r.lcl, same_interval.6, CI_TOL);
+        close("welch ucl", r.ucl, same_interval.7, CI_TOL);
     }
 }
 

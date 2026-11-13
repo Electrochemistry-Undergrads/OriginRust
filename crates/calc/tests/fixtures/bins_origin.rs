@@ -1,4 +1,4 @@
-//! Origin 2016 `RoundBinningRange` (n, min, max) -> (first edge, last edge, size) on 600 generated cases.
+//! Origin `RoundBinningRange` (n, min, max) -> (first edge, last edge, size) on 600 generated cases.
 //! Source: `tools/origin-ref/stats-bins2.lines.txt` (run 2026-11-13, output re-workspace/scratch/small-diffs/bins2.out.txt).
 
 /// (n, min, max, first edge, last edge, bin size)

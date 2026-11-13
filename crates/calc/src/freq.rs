@@ -28,7 +28,7 @@ pub struct FreqOptions {
     pub size: BinSize,
     /// Add a row for the values below the first edge.
     pub below: bool,
-    /// Add a row for the values at or above the last edge. (Origin 2016 shows these two rows with one
+    /// Add a row for the values at or above the last edge. (Origin shows these two rows with one
     /// oddity that is not copied: the largest value of the data goes into the row below when it lies
     /// beyond the range and both rows are on.)
     pub above: bool,

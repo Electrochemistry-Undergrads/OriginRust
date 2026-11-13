@@ -2,7 +2,7 @@
 //! D'Agostino's K squared (skewness, kurtosis and the omnibus test).
 //!
 //! Each test returns a statistic and a p-value, the probability under the null hypothesis (the data
-//! come from a normal distribution) of a statistic as extreme as the observed one. Where Origin 2016
+//! come from a normal distribution) of a statistic as extreme as the observed one. Where Origin
 //! reports a different number the differences are listed in `docs/spec/statistics.md`.
 //! NaN entries are ignored.
 

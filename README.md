@@ -5,7 +5,7 @@
 <h1 align="center">Sheaf</h1>
 
 <p align="center">
-  <b>Scientific data analysis and graphing, Sheaf: an open-source, clean-room reimplementation of Origin and OriginPro workflows, rebuilt in Rust.</b><br>
+  <b>Scientific data analysis and graphing, Sheaf: an independent, open-source implementation of Origin and OriginPro workflows, built in Rust.</b><br>
   Workbooks, scientific plots, curve fitting, and data analysis,<br>
   in a native app written in Rust. Open source and offline.
 </p>
@@ -114,8 +114,8 @@ New contributors: start with [`HANDOFF.md`](HANDOFF.md), then [`docs/`](docs/).
 Sheaf is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
 Copyright (c) 2026 Sheaf contributors. Project notices are in [NOTICE](NOTICE).
 
-Third-party dependencies and their bundled fonts retain their own licenses and notices.
-The Sheaf logo is in [`docs/brand/sheaf.png`](docs/brand/sheaf.png).
+Third-party dependencies and their bundled fonts retain their own licenses and notices; see
+[ATTRIBUTION.md](ATTRIBUTION.md). The Sheaf logo was created by the project owner.
 
 <sub>Origin and OriginPro are products of OriginLab; these names describe compatible workflows and file formats.
 Sheaf is an independent project and is not affiliated with, sponsored by, or endorsed by OriginLab.</sub>

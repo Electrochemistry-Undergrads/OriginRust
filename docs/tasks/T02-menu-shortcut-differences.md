@@ -6,7 +6,7 @@
 
 ## Goal
 
-Make existing menus, shortcuts and right-click menus match Origin 2016 where they only differ in
+Make existing menus, shortcuts and right-click menus match Origin where they only differ in
 label, place or key. No new features.
 
 ## Items (from the audit; verify each in code first)

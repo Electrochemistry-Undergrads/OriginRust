@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Opens project files in a hidden Origin 2016, lists the graph windows, writes what Origin reports
+  Opens project files in a hidden Origin, lists the graph windows, writes what Origin reports
   about every layer and exports every graph as a PNG.
 
 .DESCRIPTION

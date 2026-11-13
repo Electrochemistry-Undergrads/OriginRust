@@ -1,7 +1,7 @@
-//! FFT filter smoothing against numbers from Origin 2016 (`smooth method:=fft`).
+//! FFT filter smoothing against numbers from Origin (`smooth method:=fft`).
 //!
 //! The inputs are our own (pseudo-random y from a fixed generator, or sin(12345.678 x) + 2 x + 0.5);
-//! the outputs were produced by Origin 2016 with the reference scripts in
+//! the outputs were produced by Origin with the reference scripts in
 //! `tools/origin-ref/smooth-fft-*.labtalk.txt` (run with `run-labtalk-data.ps1`) and are copied
 //! below at full precision. Tolerance: 1e-12 absolute (the values are of order 1; the largest
 //! difference seen when the rule was found was 4e-15, from rounding in the two FFT

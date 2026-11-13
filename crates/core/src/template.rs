@@ -248,7 +248,7 @@ fn double_y(id: WindowId, name: &str) -> Graph {
     g
 }
 
-/// Offsets that stack the curves with a gap of 10 % of the tallest curve, as Origin 2016's
+/// Offsets that stack the curves with a gap of 10 % of the tallest curve, as Origin's
 /// "Stacked Lines by Y Offsets" does.
 pub const STACK_AUTO_DEFAULT: Stack = Stack::Auto { gap_percent: 10.0 };
 

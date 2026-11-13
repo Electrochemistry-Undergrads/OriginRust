@@ -1,4 +1,4 @@
-//! Nonlinear fits compared with the numbers Origin 2016 produced for the same data.
+//! Nonlinear fits compared with the numbers Origin produced for the same data.
 //!
 //! `data/origin_nlsf.json` was made with `tools/origin-ref/` style runs of Origin (nlbegin, nlfit,
 //! nlend with a report sheet) on data we generated ourselves: a smooth curve plus a noise term that

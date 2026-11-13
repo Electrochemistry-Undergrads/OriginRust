@@ -1150,7 +1150,7 @@ mod tests {
 
     #[test]
     fn dot_thousands_with_decimal_comma_match_the_origin_run() {
-        // Reference: Origin 2016 `impasc` with the "1.000,00" separator setting read a file of these
+        // Reference: Origin `impasc` with the "1.000,00" separator setting read a file of these
         // four cells (made by us) as 1234.5, 2345.25, 12000 and 7.
         let text = "x;y\n1;1.234,5\n2;2.345,25\n3;12.000\n4;7\n";
         let imp = parse(text);
@@ -1525,7 +1525,7 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert_eq!(t.format, NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hms));
         let v = t.numeric().unwrap();
         assert_eq!(v.len(), 4);
-        // Same number Origin 2016 computes for 2026-11-11 13:45:10.
+        // Same number Origin computes for 2026-11-11 13:45:10.
         assert!((v[0] - 2_461_355.573_032_407_6).abs() < 1e-9);
         assert!((v[1] - v[0] - 152.0 / 86_400.0).abs() < 1e-9);
         assert_eq!(t.cell_text(2), "2026-11-11 13:50:15");
@@ -1557,7 +1557,7 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
 
     #[test]
     fn the_origin_sample_strings_import_as_origin_numbers() {
-        // The same strings were imported by Origin 2016 and read back (see docs/spec/import-ascii.md).
+        // The same strings were imported by Origin and read back (see docs/spec/import-ascii.md).
         let us = parse("when,v\n11/11/2026 1:45:10 PM,1\n11/12/2026 1:05:00 AM,2\n11/13/2026 1:05:00 AM,3\n");
         let v = col(&us, 0).numeric().unwrap();
         assert!((v[0] - 2_461_355.573_032_407_6).abs() < 1e-9);

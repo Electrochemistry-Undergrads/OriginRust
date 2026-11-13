@@ -68,7 +68,7 @@ app must stay testable with `egui_kittest` and `--screenshot`.
    right and, for the large ones, a "?" button.
 9. **Saving as .opj.** The owner also wants exported projects to be `.opj`. That is not a look
    change and is separate: a writer in `crates/io/src/opj/` built from `docs/spec/opj-format.md`
-   and checked by reading the result back with our reader and by opening it in Origin 2016 through
+   and checked by reading the result back with our reader and by opening it in Origin through
    COM and comparing cells. The owner decided (2026-11-11) that `.opj` is the default format of
    File > Save Project, Save Project As and the command line's `--save`. While the writer cannot
    store everything a project holds (formulas, folders, some graph details), saving also writes a `.sheaf` copy next to

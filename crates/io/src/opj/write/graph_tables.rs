@@ -1,6 +1,6 @@
 //! Constant bytes of the blocks of a written graph window (spec section 13.9).
 //!
-//! Generated from graphs that Origin 2016 saved (see `tools/origin-ref/opj-make-from-labtalk.ps1`):
+//! Generated from graphs that Origin saved (see `tools/origin-ref/opj-make-from-labtalk.ps1`):
 //! every table lists the non-zero bytes of one block as they were seen, with the fields that the
 //! writer sets from the graph model cleared first. Offsets are into the block body.
 

@@ -1,4 +1,4 @@
-//! Curve arithmetic against numbers from Origin 2016 (`subtract_ref` and `mathtool`).
+//! Curve arithmetic against numbers from Origin (`subtract_ref` and `mathtool`).
 //!
 //! Reference scripts: `tools/origin-ref/curvemath-suite1.lines.txt` and `curvemath-suite3.lines.txt`
 //! (run with `run-labtalk-lines.ps1`). Suite 1: data x = 0..10 step 0.5, y = 2 x + 1; reference

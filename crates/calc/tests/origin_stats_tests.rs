@@ -1,4 +1,4 @@
-//! Hypothesis tests, ANOVA, frequency counts and normality tests against numbers from Origin 2016.
+//! Hypothesis tests, ANOVA, frequency counts and normality tests against numbers from Origin.
 //!
 //! Reference scripts in `tools/origin-ref/`: `stats-ttest.lines.txt` (X-Functions `ttest1`, `ttest2`,
 //! `ttestpair`), `stats-anova.lines.txt` and `stats-norm.lines.txt` (Origin's statistics library through

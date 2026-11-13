@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Opens project files written by Sheaf in a hidden Origin 2016 and compares every workbook, sheet,
+  Opens project files written by Sheaf in a hidden Origin and compares every workbook, sheet,
   column label and cell that Origin reports with what our own reader reports for the same file.
 
 .DESCRIPTION

@@ -14,7 +14,7 @@ a brief names the exact spec section and audit letter to open only when you need
    `df -h /c` first (the disk has filled twice; LESSONS "Parallel build folders fill the disk").
 3. **Find code by name, not line number.** Line numbers in the briefs and the audit drift. Use
    Grep for the function, enum or menu label given.
-4. **Origin is the reference.** When unsure how something looks or behaves, measure Origin 2016
+4. **Origin is the reference.** When unsure how something looks or behaves, measure Origin
    with `tools/origin-ref/` (see its README; scripts take the global lock
    `Global\SheafOriginReference`, one Origin at a time) and copy it. Record each measurement in the
    named spec section. Clean-room rule: copy behaviour and layout, never Origin's code, icons, help

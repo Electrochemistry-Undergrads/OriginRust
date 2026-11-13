@@ -1,4 +1,4 @@
-//! Two-way ANOVA, rank tests and correlation coefficients against numbers from Origin 2016.
+//! Two-way ANOVA, rank tests and correlation coefficients against numbers from Origin.
 //!
 //! Reference scripts in `tools/origin-ref/`: `stats2-anova2.lines.txt` (Origin's two-way ANOVA library
 //! functions through `stats2-ref.c`) and `stats2-np.lines.txt`, `stats2-np2.lines.txt` (the X-Functions

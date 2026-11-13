@@ -4,7 +4,7 @@
 //!
 //! Every fit returns the same [`FitReport`]: parameter values with standard errors, t-values and
 //! confidence limits, goodness-of-fit statistics, an analysis-of-variance table where Origin shows
-//! one, and the fitted curve with its residuals. The numbers follow what Origin 2016 reports for
+//! one, and the fitted curve with its residuals. The numbers follow what Origin reports for
 //! the same input; the rules are in `docs/spec/fitting.md` and `docs/spec/fitting-linear.md`, and
 //! the tests compare against numbers produced by the installed Origin (see `tools/origin-ref/`).
 //!

@@ -90,10 +90,10 @@ publication figures), P1 is common Origin use, P2 is later.
 ## Milestone 5: Origin project import
 
 - [x] Specification of the `.opj` container from public sources and inspection of sample files
-- [x] Read workbooks and column data from Origin 2016-era `.opj` (the owner's five projects match
+- [x] Read workbooks and column data from Origin `.opj` (the owner's five projects match
       Origin cell by cell; `tools/origin-ref/opj-compare-cells.py`)
 - [x] Read basic graphs: page, layers, axes, titles and text, line, scatter and column plots with
-      error bars (checked on graphs built in Origin 2016 and the owner's projects; graphs of files
+      error bars (checked on graphs built in Origin and the owner's projects; graphs of files
       older than Origin 9 are read but not verified)
 - [x] The graphs Origin lists that the reader does not read, explained: in the owner's projects
       only sparkline previews, which are not graph windows (opj-format.md 10.0, checked with
@@ -108,8 +108,7 @@ The owner asked for three things: the desktop app should look and work like Orig
 carry over; Sheaf should have all of Origin's features (checked, not assumed); and `.opj` should be
 the default project format.
 
-- [x] Feature parity audit: every feature, menu item, toolbar button, dialog and shortcut of Origin
-      2016 compared with Sheaf's code; result in `docs/spec/feature-parity.md` with the order of
+- [x] Feature parity audit: every feature, menu item, toolbar button, dialog and shortcut of Origin compared with Sheaf's code; result in `docs/spec/feature-parity.md` with the order of
       work (231 rows: 34 done, 91 partial, 106 missing; of the 103 P0 rows 28 done, 61 partial,
       14 missing; judged from code, nothing was run)
 - [x] Study of Origin's interface (local screenshots only) written up in `docs/spec/gui-look.md`;
@@ -126,13 +125,13 @@ the default project format.
       OK, Cancel, Apply. To do: the other dialogs (import, fit, analysis tools, column properties)
       in Origin's layout, and a person clicking through the app once
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
-      verified by opening the files in Origin 2016 and comparing every cell (`sheaf export ... -o
+      verified by opening the files in Origin and comparing every cell (`sheaf export ... -o
       x.opj`; seven test projects up to 100000 rows opened in Origin with no difference)
 - [x] Write `.opj`: graphs (page, layers, axes, line, scatter, line+symbol and column plots, error
-      bars, text, legend; Origin 2016 opened 18 written graphs and their exported pictures match
+      bars, text, legend; Origin opened 18 written graphs and their exported pictures match
       Sheaf's by eye; tick number formats, plot groups and some details are not written yet)
 - [x] Write `.opj`: column formulas with None/Auto/Manual recalculation and nested folders,
-      read back by Sheaf and checked in Origin 2016 (formulas recalculate there; `6bf5148`)
+      read back by Sheaf and checked in Origin (formulas recalculate there; `6bf5148`)
 - [x] `.opj` is the default format of Save, Save As and `--save`. While the writer cannot store
       everything a project holds (some graph details), saving also writes a `<name>.opj.sheaf`
       companion and says what only it holds; opening the `.opj` uses the companion when it is at

@@ -81,7 +81,7 @@ Step 5, tick label text. The shown number is `value / tick_label_divisor`.
   real multiplication sign and a superscript exponent, mantissa trimmed of trailing zeros.
 - `Decimal(d)`: fixed d decimals. `Scientific(d)`: `m×10^e` with d mantissa decimals.
 - Negative numbers use the real minus sign U+2212. Negative zero prints as `0`.
-- Log axes label their powers of ten as Origin 2016 does (checked on two graphs exported from
+- Log axes label their powers of ten as Origin does (checked on two graphs exported from
   Origin): with the `Auto` format as plain numbers from `0.001` to `1000000`, and as `1E7`,
   `1E−4` beyond; with `Scientific(d)` as `10` with a superscript exponent.
 - An axis with a label column (sample names) shows the cell of row k at a major tick at the whole

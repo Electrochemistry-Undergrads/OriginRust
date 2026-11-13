@@ -226,7 +226,9 @@ fn local_projects_parse() {
     let mut files = Vec::new();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     collect(&root, false, &mut files);
-    collect(Path::new(r"C:\Program Files\OriginLab\Origin2016\Samples"), true, &mut files);
+    if let Some(home) = std::env::var_os("ORIGIN_HOME") {
+        collect(&Path::new(&home).join("Samples"), true, &mut files);
+    }
     if files.is_empty() {
         eprintln!("opj: no local .opj files found; skipping");
         return;
@@ -317,7 +319,7 @@ fn local_figure_project_gives_a_column_graph() {
     assert!(plot.y_error.is_some() && project.numeric(plot.y).is_some());
     assert_eq!((layer.y_axis.min, layer.y_axis.max), (Some(0.0), Some(3.25)));
     assert!(layer.labels.len() >= 6);
-    // Origin 2016 reports a gap of 40 percent between the bars of this graph.
+    // Origin reports a gap of 40 percent between the bars of this graph.
     assert_eq!(layer.bars.gap_pct, 40.0);
 }
 
@@ -375,7 +377,11 @@ fn a_9x_graph_is_read_without_the_version_warning() {
 /// Origin itself reports one graph for it. Skipped when the sample is not installed.
 #[test]
 fn local_pre_9_sample_has_one_graph() {
-    let path = Path::new(r"C:\Program Files\OriginLab\Origin2016\Samples\COM Server and Client\Simple XY.opj");
+    let Some(home) = std::env::var_os("ORIGIN_HOME") else {
+        eprintln!("opj: ORIGIN_HOME not set; skipping installed sample");
+        return;
+    };
+    let path = Path::new(&home).join("Samples/COM Server and Client/Simple XY.opj");
     let Ok(bytes) = std::fs::read(path) else {
         eprintln!("opj: sample Simple XY.opj not found; skipping");
         return;

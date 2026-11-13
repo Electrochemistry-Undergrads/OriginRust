@@ -1,4 +1,4 @@
-//! Differentiation against numbers from Origin 2016 (`differentiate`).
+//! Differentiation against numbers from Origin (`differentiate`).
 //!
 //! Reference script: `tools/origin-ref/diff-suite1.labtalk.txt` (run with `run-labtalk-data.ps1`).
 //! Inputs are the closed-form columns of the script. Tolerance: relative 1e-10 (the smoothing

@@ -78,7 +78,7 @@ pub enum PanelError {
 }
 
 impl PanelLayout {
-    /// Origin 2016's Stack command for `n` panels: one column, no gap, margins of 15 (left), 10
+    /// Origin's Stack command for `n` panels: one column, no gap, margins of 15 (left), 10
     /// (right, top and bottom) percent, the first panel at the bottom, X linked, an upright page.
     pub fn stack(n: usize) -> PanelLayout {
         PanelLayout {
@@ -126,7 +126,7 @@ impl PanelLayout {
         }
     }
 
-    /// Origin 2016's Arrange Layers defaults for `rows` x `cols` cells: gaps of 5 and margins of
+    /// Origin's Arrange Layers defaults for `rows` x `cols` cells: gaps of 5 and margins of
     /// 15 percent on every side, row by row from the top left, no links, the page kept.
     pub fn arrange(rows: usize, cols: usize) -> PanelLayout {
         PanelLayout {
@@ -392,7 +392,7 @@ mod tests {
         assert_frame(&frames[0], 0.15, 0.10 + 2.0 * h, 0.75, h);
         assert_frame(&frames[1], 0.15, 0.10 + h, 0.75, h);
         assert_frame(&frames[2], 0.15, 0.10, 0.75, h);
-        // Origin 2016's Stack gave (14.99, 63.33 / 36.67 / 9.99, 75, 26.68) percent.
+        // Origin's Stack gave (14.99, 63.33 / 36.67 / 9.99, 75, 26.68) percent.
         for (f, top) in frames.iter().zip([0.6333, 0.3667, 0.0999]) {
             assert!(close(f.top, top, 0.0002) && close(f.left, 0.1499, 0.0002) && close(f.height, 0.2668, 0.0002));
         }
@@ -537,7 +537,7 @@ mod tests {
         let hidden: Vec<bool> = g.layers.iter().map(|l| l.y_axis.hide_end_label).collect();
         assert_eq!(hidden, vec![true, true, false], "the top panel keeps its top label");
         assert!(g.layers.iter().all(|l| !l.x_axis.hide_end_label && l.y_axis.show_tick_labels));
-        // With a gap, every panel shows everything, as Origin 2016 does from a gap of 1.
+        // With a gap, every panel shows everything, as Origin does from a gap of 1.
         let mut g = graph_with(1);
         panel_layers(&mut g, &base, 3, &PanelLayout { v_gap: 1.0, ..PanelLayout::stack(3) }).unwrap();
         assert!(g.layers.iter().all(|l| l.x_axis.show_tick_labels && l.x_axis.show_title && !l.y_axis.hide_end_label));

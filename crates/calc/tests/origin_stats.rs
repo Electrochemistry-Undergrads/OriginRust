@@ -1,4 +1,4 @@
-//! Descriptive statistics against numbers from Origin 2016 (`colstats`, `stats`).
+//! Descriptive statistics against numbers from Origin (`colstats`, `stats`).
 //!
 //! Reference scripts: `tools/origin-ref/colstats-suite1.labtalk.txt` .. `colstats-suite3.labtalk.txt`
 //! (run with `run-labtalk-data.ps1`). Inputs are closed-form columns of different lengths.

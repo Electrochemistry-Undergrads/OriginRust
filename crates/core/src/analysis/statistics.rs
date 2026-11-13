@@ -1,6 +1,6 @@
 //! The statistics tools of `Project::analyze`: t-tests, one-way and two-way ANOVA, nonparametric tests,
 //! correlation coefficients, normality tests and the histogram (frequency counts). The numerics are in `sheaf_calc`; this module arranges the chosen columns, writes the
-//! result tables and the plain-English lines about them. What each tool reports follows Origin 2016, see
+//! result tables and the plain-English lines about them. What each tool reports follows Origin, see
 //! `docs/spec/statistics.md`.
 
 use super::*;

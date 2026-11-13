@@ -1,6 +1,6 @@
-# Feature inventory (Origin 2016 / 9.3)
+# Feature inventory (Origin / 9.3)
 
-This is the single list of Origin 2016 features that the Rust application tracks. Each row has a stable ID, a name, a one-line description, a priority, the spec file and section that describe it, and an empty Status column for the engineers (planned or done). Priorities: P0 is the owner's daily workflow (CH Instruments cyclic voltammetry and chronoamperometry text files, CSV, overlay line plots, integration of peaks and charge, publication figures). P1 is common Origin use. P2 is later or probably never. Details are not repeated here; follow the spec reference. The list ends with the spec gaps.
+This is the single list of Origin features that the Rust application tracks. Each row has a stable ID, a name, a one-line description, a priority, the spec file and section that describe it, and an empty Status column for the engineers (planned or done). Priorities: P0 is the owner's daily workflow (CH Instruments cyclic voltammetry and chronoamperometry text files, CSV, overlay line plots, integration of peaks and charge, publication figures). P1 is common Origin use. P2 is later or probably never. Details are not repeated here; follow the spec reference. The list ends with the spec gaps.
 
 Spec file short names used in the "Spec" column:
 
@@ -141,8 +141,8 @@ Note: the analysis agent's own feature-level spec (analysis-features.md) does no
 | GP-LSYM-01 | Line plus symbol | Combined | P0 | GR 5 | |
 | GP-OVER-01 | Overlay of many curves on shared axes | Several Y columns or several books in one layer, with plot grouping | P0 | GR 1.5; XF plotxy | |
 | GP-ERR-01 | Error bars (Y, X, XY) | Error bars from error columns | P0 | GR 5.5 | |
-| GP-DY-01 | Double-Y and multiple Y axes | Two or more Y axes over one X axis (Origin 2016: further layers linked to the first) | P0 | GR 8, GR 12; UI A2 | double Y and right Y axis done (model, renderer, `sheaf plot --y2`, `-t double-y`); 3 and 4 Y axes, app controls and the .opj reader's link not yet |
-| GP-OFF-01 | Stacked lines by Y offsets and waterfall | Shifted curves | P0 | GR 8, GR 13; UI A2 | stacked lines done (model, renderer, Auto as in Origin 2016, Constant, Individual, `-t stacked`, `--stack`, `--offsets`); a simple 2D waterfall (`-t waterfall`, `--waterfall`); app controls, Cumulative mode and reading offsets from .opj not yet |
+| GP-DY-01 | Double-Y and multiple Y axes | Two or more Y axes over one X axis (Origin: further layers linked to the first) | P0 | GR 8, GR 12; UI A2 | double Y and right Y axis done (model, renderer, `sheaf plot --y2`, `-t double-y`); 3 and 4 Y axes, app controls and the .opj reader's link not yet |
+| GP-OFF-01 | Stacked lines by Y offsets and waterfall | Shifted curves | P0 | GR 8, GR 13; UI A2 | stacked lines done (model, renderer, Auto as in Origin, Constant, Individual, `-t stacked`, `--stack`, `--offsets`); a simple 2D waterfall (`-t waterfall`, `--waterfall`); app controls, Cumulative mode and reading offsets from .opj not yet |
 | GP-COL-01 | Column and bar charts | Grouped, stacked, floating, 100 percent | P1 | GR 8, GR 14; UI A2 | column charts done (bars side by side per layer, gap and overlap, bars from zero, `-t column`, `--bar-gap`, `--bar-overlap`, the gap read from .opj); horizontal bars, stacked, floating and 100 percent, plot groups and app controls not yet |
 | GP-SPL-01 | Spline and step connection | Smooth and stair-step lines | P1 | GR 5.2 | |
 | GP-PAN-01 | Multi-panel and stack graphs | Several layers per page | P1 | GR 8, GR 15; XF plotstack, layarrange | done in the model, renderer and command line (`sheaf plot --panels stack` with a shared X axis and the inner X labels hidden, `--panels RxC` grids, `--panel-y`, `--per-panel`, `--panel-gap`, `--panel-margins`, `--panel-order`, `--panel-link`; Arrange Layers as `Graph::arrange`); app menus, panel labels (a), (b) and reading layer links from .opj not yet |
@@ -354,11 +354,11 @@ These features are in the inventory but no spec covers them well enough to imple
 4. Peak Analyzer (PK-PA-01, PK-RESULT-01): page flow and results layout are inferred in UI D9 and not specified.
 5. Charge integration of CV peaks (PK-INT-02, AM-INT-02): the sign convention for the reverse sweep, the baseline choice and the units of charge are not written down together with the CHI import. Needs one worked example.
 6. Batch workflow (BT-BATCH-02, BT-REPLAY-01, BT-BATCH-01): no spec at all.
-7. Concrete numeric graph defaults (GS-FONT-01, GS-AXIS-02, GS-SYM-01, GS-LINE-01, GS-AXIS-08): GR section 11 lists them as unknown; they must be measured in running Origin 2016 or chosen by us.
+7. Concrete numeric graph defaults (GS-FONT-01, GS-AXIS-02, GS-SYM-01, GS-LINE-01, GS-AXIS-08): GR section 11 lists them as unknown; they must be measured in running Origin or chosen by us.
 8. Export details (GE-EMF-01, GE-TIF-01, GE-EPS-01, GE-SVG-01): per-format settings and the default type are not fixed; SVG is not a listed Origin type.
 9. Excel read and write (IMP-XLS-01, IO-XLSX-01, IO-XLSX-02): no spec, though the lab workflow uses xlsx.
 10. CSV details (IMP-CSV-01): quote handling, which strings become missing, and ISO dates are unknown (IMP unknowns).
-11. Encoding (IMP-ASCII-08): no option in Origin 2016; our behavior must be decided.
+11. Encoding (IMP-ASCII-08): no option in Origin; our behavior must be decided.
 12. CHI format (IMP-CHI-*): chi-text-format.md states that no real CHI file has been checked yet.
 13. Column display formats (WB-FMT-02), view options (WB-VIEW-01), cell editing and clipboard (WB-CELL-01, IMP-CLIP-01): not specified.
 14. Undo and redo (PRJ-11), drag and drop (IMP-DRAG-01), preferences (PRJ-12): not specified.

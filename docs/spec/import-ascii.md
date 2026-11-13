@@ -168,7 +168,7 @@ Origin keeps a menu of ready patterns (also stored in Origin.ini `[Column Custom
 
 Behavior [W wkscol-datetime]: unless a date format is given or recognised, date/time strings arrive as text (left-aligned) and the user converts the column by setting its format. Internal date value = a double, days (fraction = time of day) in a Julian-day-based system. Whether the automatic pass recognises ISO-like "2020-01-31 12:00:00" without a user pattern is **[?]**; plan to recognise ISO 8601 and the pattern list above.
 
-### Observed in Origin 2016 (black-box runs of `impasc`, 2026-11-12) [F]
+### Observed in Origin (black-box runs of `impasc`, 2026-11-12) [F]
 
 Files were small CSVs we wrote (US regional settings on the test machine). Origin's own automatic pass only turns some strings into dates; everything else arrives as text (column format 7) and stays left-aligned:
 
@@ -290,7 +290,7 @@ Source: `X-Functions/Import and Export/expASC.OXF` [F]. Writes the worksheet to 
 | missing | Write missing values as "--" | 0/1 | 1 |
 | suffix | Text appended to numbers in text cells | string | empty |
 
-### 13.1 Measured in Origin 2016 (2026-11-12)
+### 13.1 Measured in Origin (2026-11-12)
 
 Run through `tools/origin-ref/run-labtalk-lines.ps1`; inputs and Origin's raw output files are in
 `re-workspace/scratch/sheet-export/` (`probe1.lines.txt` .. `probe6.lines.txt`, the files in `out/` .. `out5/`,
@@ -359,7 +359,7 @@ Sheaf's own guard on clock times: minutes (and seconds, when present) must have 
 
 ## 15. Number separators, import modes, header rows, data blocks and batch import (P0)
 
-### Observed in Origin 2016 (black-box runs of `impasc`, 2026-11-12) [F]
+### Observed in Origin (black-box runs of `impasc`, 2026-11-12) [F]
 
 The scripts are `tools/origin-ref/import-*.lines.txt`, the input files `tools/origin-ref/import-inputs/` (written by us). The option names that the 2016 `impasc` accepts on the command line are short ones, not the ones in the documentation: `options.FileStruct.NumericSeparator`, `options.impmode`, `options.Hdr.UParamsFrom` / `UParamsTo`, `Units`, `CommsFrom` / `CommsTo`, `AutoSubHdr`, `SubHdrLns`, `MainHdrLns`. The documented names (`NumSep`, `Mode`, `Headers.*`) were refused.
 

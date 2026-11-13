@@ -13,7 +13,7 @@ merges at the time). **Model:** Haiku or Sonnet. Docs only; no code.
    Parameters label rows are still missing. Rewrite the "Sheaf today" part.
 3. `crates/core/src/graph.rs` `AutoRange` doc says "with a small margin"; the code has none. Wait for
    `axis-range` to merge (it adds the margin), then make the doc state the rule it implements.
-4. `docs/spec/import-ascii.md` section 15: record the Origin 2016 measurement that mixed text/number
+4. `docs/spec/import-ascii.md` section 15: record the Origin measurement that mixed text/number
    columns stay numeric with format 7 (Text & Numeric), text cells kept (95 % and 55 % numeric
    columns both; `cell(11,2)$ = four`; files `re-workspace/scratch/audit-2/mix2.*`). Coordinate with
    branch `text-numeric`, which may already do it.

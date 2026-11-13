@@ -12,15 +12,13 @@
 
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/built_with-Rust-b7410e?style=flat-square&amp;logo=rust">
-  <a href="#macos"><img alt="macOS: Apple Silicon verified" src="https://img.shields.io/badge/macOS-Apple_Silicon_verified-2f7bf5?style=flat-square"></a>
-  <a href="#windows"><img alt="Windows: supported" src="https://img.shields.io/badge/Windows-supported-2f7bf5?style=flat-square"></a>
+  <img alt="macOS · Windows" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows-native-2f7bf5?style=flat-square">
   <a href="#license-and-credits"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-6b5b4b?style=flat-square"></a>
   <img alt="Early development" src="https://img.shields.io/badge/status-early_development-a66b3f?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#features">Features</a> ·
-  <a href="#platform-support">Platform support</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#command-line">Command line</a> ·
   <a href="#under-the-hood">Under the hood</a> ·
@@ -29,12 +27,6 @@
 </p>
 
 <br>
-
-<p align="center">
-  <img src="docs/images/macos-desktop.png" width="1100" alt="Sheaf running on macOS with an imported workbook and a scientific plot">
-  <br>
-  <sub>The real desktop app on Apple Silicon macOS, displaying synthetic CSV data.</sub>
-</p>
 
 ## Features
 
@@ -65,30 +57,6 @@
 > Early development. Origin/OriginPro feature coverage and Origin `.opj` support are partial.
 > Expect rough edges; Sheaf is not yet a complete replacement for Origin or OriginPro.
 > See the [roadmap](docs/ROADMAP.md) for current progress.
-
-## Platform support
-
-### Windows
-
-Windows support is confirmed by the project owner. Use the Cargo commands below to build
-and run the desktop app and CLI. The Windows desktop binary is `target/release/sheaf-app.exe`;
-the CLI binary is `target/release/sheaf.exe`.
-
-### macOS
-
-**Verified locally on Apple Silicon (arm64), macOS 27.0.1, with Rust 1.99.1 on November 12, 2026.**
-All 1,081 workspace tests pass, formatting and Clippy checks pass, the desktop app opens and
-renders imported data, and the CLI imports,
-analyzes, fits, saves, and exports a synthetic CSV dataset. This is a source-build check;
-it does not establish a minimum macOS version or verify every interactive workflow.
-
-The [platform check](https://github.com/Electrochemistry-Undergrads/OriginRust/actions/runs/43369106301)
-also passed its build, core/CLI tests, and desktop/CLI smoke checks on Apple Silicon and Intel
-macOS runners. Its overall run is marked failed because of the Linux reporting step.
-
-Build from source using the commands below. No macOS installer, signing, or notarization is
-provided by this repository. Plot text uses installed system fonts, so figures may differ
-slightly between machines.
 
 ## Get started
 

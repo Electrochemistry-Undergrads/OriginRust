@@ -16,11 +16,13 @@ pub mod curvemath;
 pub mod curves;
 pub mod dierckx;
 pub mod differentiate;
+pub mod distfit;
 pub mod freq;
 pub mod hypothesis;
 pub mod integrate;
 pub mod interp;
 pub mod manip;
+pub mod noncentral;
 pub mod nonparam;
 pub mod normality;
 pub mod normalize;
@@ -28,6 +30,7 @@ pub mod nptests;
 pub mod outlier;
 pub mod peakchain;
 pub mod peaks;
+pub mod power;
 pub mod smooth;
 pub mod stats;
 mod util;
@@ -44,6 +47,10 @@ pub use curves::{
     average_curves, intersections, polygon_area,
 };
 pub use differentiate::{DiffOptions, differentiate};
+pub use distfit::{
+    DistFit, Family, FitError, ProbPlot, cdf as dist_cdf, estimate as dist_estimate, fit as dist_fit,
+    log_likelihood as dist_log_likelihood, plotting_positions, probplot, standard_quantile,
+};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
@@ -52,6 +59,7 @@ pub use manip::{
     EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions, even_grid, median_filter, reduce_evenly,
     shift_to_land, subtract_line_through, translate, value_at,
 };
+pub use noncentral::{NCT_SERIES_LIMIT, ncf_cdf, ncf_sf, nct_cdf, nct_sf};
 pub use nonparam::{
     KruskalWallis, MannWhitney, RankGroup, RankTestError, SIGNED_RANK_EXACT_MAX_N, SignedRank, kruskal_wallis,
     mann_whitney, midranks, signed_rank, signed_rank_one, signed_rank_paired,
@@ -71,5 +79,9 @@ pub use peakchain::{
     auto_minima_anchors, find_peak_indices, integrate_peaks,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
+pub use power::{
+    AnovaPower, MAX_SAMPLE_SIZE, PowerError, TPower, TTestDesign, anova_effect_size, anova_power, anova_sample_size,
+    t_power, t_sample_size,
+};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

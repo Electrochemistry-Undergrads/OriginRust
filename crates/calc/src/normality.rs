@@ -257,6 +257,21 @@ pub fn lilliefors(data: &[f64]) -> Option<TestResult> {
 
 // ----- Anderson-Darling ----------------------------------------------------------------------------
 
+/// Approximate p-value of the Anderson-Darling statistic `a = A2 (1 + 0.75/n + 2.25/n^2)` of a normal distribution
+/// whose mean and standard deviation were estimated (the formula of D'Agostino and Stephens).
+pub(crate) fn ad_normal_p(a: f64) -> f64 {
+    let p = if a >= 0.6 {
+        (1.2937 - 5.709 * a + 0.0186 * a * a).exp()
+    } else if a >= 0.34 {
+        (0.9177 - 4.279 * a - 1.38 * a * a).exp()
+    } else if a >= 0.2 {
+        1.0 - (-8.318 + 42.796 * a - 59.938 * a * a).exp()
+    } else {
+        1.0 - (-13.436 + 101.14 * a - 223.73 * a * a).exp()
+    };
+    p.clamp(0.0, 1.0)
+}
+
 /// Anderson-Darling test with mean and standard deviation estimated from the data. The statistic is
 /// A squared; the p-value comes from the adjusted statistic A*^2 = A^2 (1 + 0.75/n + 2.25/n^2) by the
 /// formulas of D'Agostino and Stephens.
@@ -276,15 +291,7 @@ pub fn anderson_darling(data: &[f64]) -> Option<TestResult> {
     let s: f64 = (0..n).map(|i| (2.0 * i as f64 + 1.0) * (cdf[i].ln() + (1.0 - cdf[n - 1 - i]).ln())).sum();
     let a2 = -nf - s / nf;
     let a = a2 * (1.0 + 0.75 / nf + 2.25 / (nf * nf));
-    let p = if a >= 0.6 {
-        (1.2937 - 5.709 * a + 0.0186 * a * a).exp()
-    } else if a >= 0.34 {
-        (0.9177 - 4.279 * a - 1.38 * a * a).exp()
-    } else if a >= 0.2 {
-        1.0 - (-8.318 + 42.796 * a - 59.938 * a * a).exp()
-    } else {
-        1.0 - (-13.436 + 101.14 * a - 223.73 * a * a).exp()
-    };
+    let p = ad_normal_p(a);
     Some(TestResult { statistic: a2, p: p.clamp(0.0, 1.0) })
 }
 

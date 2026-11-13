@@ -194,7 +194,7 @@ Cross-cutting findings:
 | CV charge with sloped baseline | integ1 with baseline | end-point baseline over typed range | ◐ | no foot picking, no anodic and cathodic split, no scan-rate division | P0 |
 | Peak Analyzer wizard | goal, baseline, peaks, results | one dialog runs baseline, search, integration and fit (spec section 11) | ◐ | no wizard pages or preview, baseline anchors not picked on a graph | P0 |
 | Multiple peak fit | Peaks and Baseline | sum of Gauss or Lorentz peaks on a constant or sloped baseline, started from found peaks, per-peak report (`fit/multipeak.rs`) | ◐ | one shape for all peaks, no constraints, not compared with Origin's own multi-peak fit | P0 |
-| Peak results layout | Origin result sheets | Integrate and Find Peaks sheets | ◐ | no area percent, FWHM, separate baseline sheet | P0 |
+| Peak results layout | Origin result sheets | Integrate and Find Peaks sheets | ◐ | area, area percent and FWHM per peak exist (peak chain table); no separate baseline sheet, layout not compared with Origin's sheets | P0 |
 | Multi-curve peak analysis | paMultiY | tools accept several Y columns | ◐ | not one run with one result set | P1 |
 
 ## 8 Gadgets and graph analysis

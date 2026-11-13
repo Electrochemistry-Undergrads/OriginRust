@@ -50,7 +50,18 @@ pub(crate) fn resolve_other(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAx
             fixed_step.map(|s| s.round().max(1.0)).unwrap_or_else(|| list_step(kind, min, max, &range)),
         ),
     };
-    ResolvedAxis { min, max, step, scale: kind, major, minor, labels, reversed: false }
+    ResolvedAxis {
+        min,
+        max,
+        step,
+        scale: kind,
+        major,
+        minor,
+        labels,
+        reversed: false,
+        gap: None,
+        minor_labels: Vec::new(),
+    }
 }
 
 type Ticks = (Vec<f64>, Vec<f64>, Vec<String>, f64);

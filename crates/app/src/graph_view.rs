@@ -661,6 +661,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HideAxis { layer, .. }
         | GraphOp::ToggleGrids { layer, .. }
         | GraphOp::Rescale { layer }
+        | GraphOp::ExchangeAxes { layer }
         | GraphOp::AxisZoom { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::ReconstructLegend { layer }
@@ -715,6 +716,18 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             for a in [&mut l.x_axis, &mut l.y_axis] {
                 a.min = None;
                 a.max = None;
+            }
+        }
+        GraphOp::ExchangeAxes { .. } => {
+            if l.plots.iter().all(|p| p.x.is_some()) {
+                std::mem::swap(&mut l.x_axis, &mut l.y_axis);
+                for p in &mut l.plots {
+                    if let Some(x) = p.x {
+                        p.x = Some(p.y);
+                        p.y = x;
+                    }
+                    std::mem::swap(&mut p.y_error, &mut p.x_error);
+                }
             }
         }
         GraphOp::AxisZoom { y, zoom_in, .. } => {

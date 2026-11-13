@@ -581,11 +581,60 @@ pub struct Axis {
     /// the ticks are at multiples of the step. Linear axes only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_tick: Option<f64>,
+    /// One break in the axis: a region of values that is left out, with a gap in the axis line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axis_break: Option<AxisBreak>,
+    /// Extra ticks at chosen values, each with its own label (the Special Ticks tab of Origin).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub special_ticks: Vec<SpecialTick>,
+    /// An expression of `x` (the tick value) whose result is written as the tick label, for example
+    /// `x*100` or `1/x`; empty means the value itself.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tick_label_formula: String,
+    /// Write labels at the minor ticks too.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub minor_tick_labels: bool,
+    /// Colour of the ticks; `None` means the colour of the axis line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tick_color: Option<Color>,
+    /// Thickness of the ticks in points; `None` means the thickness of the axis line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tick_width_pt: Option<f64>,
     /// Text put before and after every tick label.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tick_prefix: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tick_suffix: String,
+}
+
+/// An extra tick of an axis.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SpecialTick {
+    pub value: f64,
+    /// The label; empty means the value written as the axis writes its numbers.
+    #[serde(default)]
+    pub label: String,
+}
+
+/// A break in an axis (graphing spec 3.6): the values from `from` to `to` are cut out; the axis
+/// shows a gap there, and the part after it can have its own tick step.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AxisBreak {
+    pub from: f64,
+    pub to: f64,
+    /// Where the gap starts to open, in percent of the axis length from its low end.
+    pub position_pct: f64,
+    /// Width of the gap in percent of the axis length.
+    pub gap_pct: f64,
+    /// Major tick step after the break; `None` keeps the step of the axis.
+    pub step_after: Option<f64>,
+}
+
+impl AxisBreak {
+    /// A break of the values `from..to` in the middle of the axis.
+    pub fn new(from: f64, to: f64) -> AxisBreak {
+        AxisBreak { from, to, position_pct: 50.0, gap_pct: 2.0, step_after: None }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]

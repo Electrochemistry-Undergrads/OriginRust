@@ -199,6 +199,10 @@ Per direction: major and minor grid each with show, color, style, thickness; plu
 ### 3.6 Breaks [W:axesref-breaks] (P1)
 Enable; half-length (auto = one major tick distance); 1 to 7 breaks; per break from, to, position % of axis length (automatic position even or proportional); per-break "scale after break" and "tick labels after break" (both default to follow main axis).
 
+Sheaf (not measured in Origin, built from the dialog fields above): one break per axis (`Axis::axis_break`): values from..to are
+cut out, the gap opens at `position_pct` of the axis with width `gap_pct` (both percent of the axis length; Origin states a
+half-length in points), ticks inside the break go, the ticks after it can use their own step; values inside cannot be placed.
+
 ### 3.7 Special ticks and reference lines (P1/P2)
 Custom tick positions and labels per tick. Reference lines are not documented for 2016; emulate with `addline` objects.
 

@@ -268,3 +268,23 @@ fn a_polar_layer_is_kept_by_the_companion_and_the_opj_warns() {
     let polar = layer.coords.polar().expect("the polar layer comes back from the companion");
     assert_eq!(polar.radius, sheaf_core::graph::RadiusColumn::X);
 }
+
+#[test]
+fn a_ternary_layer_is_kept_by_the_companion_and_the_opj_warns() {
+    let dir = scratch("ternary");
+    let opj = dir.join("soil.opj");
+    let mut p = workbook_project();
+    let book = p.workbooks().next().unwrap().id;
+    let y = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+    p.add_column(book, 0, Designation::Z, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    p.plot_columns(Template::Ternary, &[y]).unwrap();
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("ternary")), "{:?}", out.warnings);
+    assert!(!out.warnings.iter().any(|w| w.contains("bubble")), "{:?}", out.warnings);
+    assert!(out.companion.is_some());
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.companion_used);
+    let layer = &opened.project.graphs().next().unwrap().layers[0];
+    assert!(layer.coords.ternary().is_some(), "the ternary layer comes back from the companion");
+    assert!(layer.plots[0].size_from.is_some(), "with its Z column");
+}

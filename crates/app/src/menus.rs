@@ -755,8 +755,10 @@ fn plot_menu() -> Vec<Entry> {
                         item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
                         item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
                     ],
-                    &["Wind Rose", "Ternary", "Piper", "Smith Chart"],
+                    &["Wind Rose"],
                 ),
+                vec![item("Ternary", Cmd::Plot(Template::Ternary))],
+                greys(&["Piper", "Smith Chart"]),
                 vec![item("Radar", Cmd::Plot(Template::Radar))],
                 greys(&["High-Low-Close", "Vector XYAM", "Vector XYXY", "Zoom"]),
             ]

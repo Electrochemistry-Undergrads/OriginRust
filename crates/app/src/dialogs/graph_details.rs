@@ -134,10 +134,13 @@ pub fn dialog_body(
                 if let Node::Plot(l, p) = *node {
                     let polar = graph.layers[l].coords.polar().is_some();
                     let radar = graph.layers[l].coords.polar().is_some_and(|p| p.radar);
+                    let ternary = graph.layers[l].coords.ternary().is_some();
                     let plot = &mut graph.layers[l].plots[p];
-                    // A plot of a polar layer is an ordinary line or symbol plot on a circle.
+                    // A plot of a polar or ternary layer is an ordinary line or symbol plot.
                     let shown = if radar {
                         format!("Radar {}", kind_name(plot.kind))
+                    } else if ternary {
+                        format!("Ternary {}", kind_name(plot.kind))
                     } else if polar {
                         format!("Polar {}", kind_name(plot.kind))
                     } else {

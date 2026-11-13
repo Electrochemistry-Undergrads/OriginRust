@@ -3107,3 +3107,124 @@ fn a_radar_polygon_draws_one_symbol_per_row_and_keeps_masked_rows() {
     let masked = svg_of(&p, g);
     assert!(masked.contains("#FF0000"), "masked row is red");
 }
+
+// ----- ternary plots (graphing spec 14.20) ---------------------------------------------------------
+
+/// Sand, silt and clay of ten samples; the last two rows sum to 0.9 and 1.2 and are normalised.
+fn ternary_rows() -> [[f64; 3]; 10] {
+    [
+        [0.80, 0.10, 0.10],
+        [0.60, 0.30, 0.10],
+        [0.40, 0.40, 0.20],
+        [0.20, 0.30, 0.50],
+        [0.10, 0.60, 0.30],
+        [0.30, 0.10, 0.60],
+        [0.50, 0.25, 0.25],
+        [0.05, 0.05, 0.90],
+        [0.54, 0.27, 0.09],
+        [0.30, 0.30, 0.60],
+    ]
+}
+
+fn ternary_project(rows: &[[f64; 3]]) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("soil");
+    let mut ids = Vec::new();
+    let columns = [("Sand", Designation::X), ("Silt", Designation::Y), ("Clay", Designation::Z)];
+    for (i, (name, des)) in columns.iter().enumerate() {
+        let col: Vec<f64> = rows.iter().map(|r| r[i]).collect();
+        let id = p.add_column(book, 0, *des, ColumnData::numeric(col)).unwrap();
+        p.column_mut(id).unwrap().long_name = (*name).into();
+        ids.push(id);
+    }
+    let g = p.plot_columns(Template::Ternary, &[ids[1]]).unwrap();
+    (p, g)
+}
+
+/// The path data of the plots group of the picture of `rows`.
+fn ternary_marks(rows: &[[f64; 3]]) -> Vec<String> {
+    let (p, g) = ternary_project(rows);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    with_class(&d, "plots")
+        .iter()
+        .flat_map(|n| paths_in(*n))
+        .filter_map(|n| n.attribute("d").map(String::from))
+        .collect()
+}
+
+#[test]
+fn golden_ternary_template() {
+    let (p, g) = ternary_project(&ternary_rows());
+    compare_golden("ternary", &svg_of(&p, g));
+}
+
+#[test]
+fn the_corners_of_a_ternary_layer_are_x_bottom_right_y_top_and_z_bottom_left() {
+    let (p, g) = ternary_project(&ternary_rows());
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.ternary.expect("a ternary layer");
+    let near = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+    assert!(near(geom.data_to_page(1.0, 0.0), map.right), "X = 1");
+    assert!(near(geom.data_to_page(0.0, 1.0), map.top), "Y = 1");
+    assert!(near(geom.data_to_page(0.0, 0.0), map.left), "Z = 1");
+    // An equilateral triangle, as large as the frame lets it be, centred in it.
+    let side = map.right.0 - map.left.0;
+    let h = map.left.1 - map.top.1;
+    assert!((h - side * 3f64.sqrt() / 2.0).abs() < 1e-9);
+    assert!(side <= geom.frame.w + 1e-9 && h <= geom.frame.h + 1e-9);
+    assert!(side >= geom.frame.w - 1e-9 || h >= geom.frame.h - 1e-9, "one side of the frame is used up");
+    let mid = geom.data_to_page(1.0 / 3.0, 1.0 / 3.0);
+    assert!((mid.0 - (geom.frame.x + geom.frame.w / 2.0)).abs() < 1e-9);
+    // X runs left to right along the bottom, Y bottom to top along the right side.
+    assert!(geom.data_to_page(0.75, 0.0).0 > geom.data_to_page(0.25, 0.0).0);
+    assert!(geom.data_to_page(0.0, 0.75).1 < geom.data_to_page(0.0, 0.25).1);
+}
+
+#[test]
+fn ternary_data_to_page_and_page_to_data_invert_each_other() {
+    let (p, g) = ternary_project(&ternary_rows());
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    for (x, y) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (0.2, 0.5), (0.6, 0.1), (0.33, 0.33)] {
+        let (px, py) = geom.data_to_page(x, y);
+        let (a, b) = geom.page_to_data(px, py);
+        assert!((a - x).abs() < 1e-9 && (b - y).abs() < 1e-9, "{x},{y} -> {a},{b}");
+    }
+}
+
+#[test]
+fn rows_that_do_not_sum_to_one_are_normalised_and_unusable_rows_are_skipped() {
+    use crate::ternary::normalise;
+    assert_eq!(normalise(0.5, 0.25, 0.25), Some((0.5, 0.25)));
+    let (a, b) = normalise(0.54, 0.27, 0.09).unwrap();
+    assert!((a - 0.6).abs() < 1e-12 && (b - 0.3).abs() < 1e-12);
+    let (a, b) = normalise(60.0, 30.0, 10.0).unwrap();
+    assert!((a - 0.6).abs() < 1e-12 && (b - 0.3).abs() < 1e-12);
+    assert_eq!(normalise(0.0, 0.0, 0.0), None);
+    assert_eq!(normalise(-0.1, 0.6, 0.5), None);
+    assert_eq!(normalise(f64::NAN, 0.5, 0.5), None);
+    // A row that needs normalising lands where the same row, already normalised, does.
+    assert_eq!(ternary_marks(&[[0.54, 0.27, 0.09]]), ternary_marks(&[[0.6, 0.3, 0.1]]));
+    // A bad row draws nothing: the picture is that of the good rows alone.
+    let good = [[0.6, 0.3, 0.1], [0.2, 0.2, 0.6]];
+    let with_bad = [good[0], [0.0, 0.0, 0.0], [-0.2, 0.7, 0.5], good[1]];
+    assert_eq!(ternary_marks(&good), ternary_marks(&with_bad));
+}
+
+#[test]
+fn a_ternary_layer_labels_three_axes_with_the_column_names_and_steps_of_a_fifth() {
+    let (p, g) = ternary_project(&ternary_rows());
+    let t = texts(&doc(&svg_of(&p, g)));
+    for name in ["Sand", "Silt", "Clay"] {
+        assert!(t.iter().any(|x| x == name), "{name} in {t:?}");
+    }
+    for v in ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"] {
+        assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
+    }
+    // Percentages: the ticks count to 100.
+    let (p, g) = ternary_project(&[[60.0, 30.0, 10.0], [20.0, 20.0, 60.0]]);
+    let t = texts(&doc(&svg_of(&p, g)));
+    for v in ["0", "20", "40", "60", "80", "100"] {
+        assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
+    }
+}

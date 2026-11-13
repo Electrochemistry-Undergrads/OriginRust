@@ -379,6 +379,17 @@ impl Project {
             .map(|c| c.id)
     }
 
+    /// The column that holds the third part of a ternary plot of the Y column `y`: its Z column,
+    /// or, when the sheet has none, the numeric column right after it (a sheet of three plain
+    /// columns X, Y, Y).
+    pub fn ternary_z_for(&self, y: ColumnId) -> Option<ColumnId> {
+        self.z_column_for(y).or_else(|| {
+            let (_, sheet, _) = self.locate(y)?;
+            let next = sheet.columns.get(sheet.column_index(y)? + 1)?;
+            (next.data.is_numeric() && next.designation != Designation::X).then_some(next.id)
+        })
+    }
+
     /// Adds a plot with explicitly chosen X and error columns.
     pub fn add_plot_xy(
         &mut self,
@@ -446,6 +457,15 @@ impl Project {
         if template == Template::DoubleY {
             return ys.iter().map(|c| c.id).collect();
         }
+        if template == Template::Ternary {
+            // The plots that have a third column; without a Z column the first Y column and the
+            // column after it.
+            let with_z: Vec<ColumnId> = ys.iter().map(|c| c.id).filter(|&y| self.z_column_for(y).is_some()).collect();
+            if !with_z.is_empty() {
+                return with_z;
+            }
+            return ys.iter().map(|c| c.id).find(|&y| self.ternary_z_for(y).is_some()).into_iter().collect();
+        }
         let Some(first) = ys.first() else {
             return Vec::new();
         };
@@ -504,6 +524,7 @@ impl Project {
                 self.add_plot(graph, 0, *y)?;
                 // Bubble and colour mapped plots take their third variable from the Z column.
                 let z = self.z_column_for(*y);
+                let ternary_z = if template == Template::Ternary { self.ternary_z_for(*y) } else { None };
                 let (size, color) = match template {
                     Template::Bubble => (true, false),
                     Template::ColorMapped => (false, true),
@@ -513,6 +534,10 @@ impl Project {
                 if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
                     p.size_from = z.filter(|_| size);
                     p.color_from = z.filter(|_| color);
+                    if template == Template::Ternary {
+                        // The Z column of a ternary plot, the third part of each row.
+                        p.size_from = ternary_z;
+                    }
                 }
             }
         }

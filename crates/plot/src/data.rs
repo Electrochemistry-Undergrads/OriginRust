@@ -309,6 +309,9 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         if let Some(polar) = layer.coords.polar() {
             polar_columns(&mut pd, polar.radius);
         }
+        if layer.coords.ternary().is_some() {
+            crate::ternary::columns(&mut pd, plot.size_from.and_then(|id| project.numeric(id)));
+        }
         plots.push(pd);
     }
     if layer.coords.polar().is_some_and(|p| p.radar) {

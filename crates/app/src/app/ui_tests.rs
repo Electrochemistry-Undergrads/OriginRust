@@ -5287,7 +5287,6 @@ fn plot_specialized_polar_makes_a_polar_graph_of_the_selected_columns() {
 fn the_polar_button_of_the_2d_graphs_bar_makes_a_polar_graph() {
     let mut h = start(vec![data_file("polar-button")]);
     show_window(&mut h, "Book1 - sample");
-    assert!(bar_button!(h, "2D Graphs", "Ternary").accesskit_node().is_disabled(), "ternary stays greyed");
     click_text(&mut h, "C(Y1)");
     let before = project(&h).graphs().count();
     bar_button!(h, "2D Graphs", "Polar theta(X) r(Y)").click();
@@ -5426,4 +5425,32 @@ fn plot_specialized_radar_and_its_toolbar_button_make_a_radar_graph() {
     let graphs: Vec<_> = project(&h).graphs().collect();
     assert_eq!(graphs.len(), before + 2);
     assert!(graphs[before + 1].layers[0].coords.polar().is_some_and(|p| p.radar));
+}
+
+#[test]
+fn plot_specialized_ternary_and_its_button_make_a_ternary_graph_of_the_selected_columns() {
+    let mut h = start(vec![data_file("ternary-menu")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "B(Y1)");
+    let column = |h: &Harness<'static, SheafApp>, name: &str| {
+        project(h).workbooks().next().unwrap().sheet().column_by_name(name).unwrap().id
+    };
+    let (b, c) = (column(&h, "B"), column(&h, "C"));
+    let before = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Specialized", "Ternary"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let layer = &graphs[before].layers[0];
+    assert!(layer.coords.ternary().is_some());
+    assert_eq!(layer.plots.len(), 1);
+    assert_eq!((layer.plots[0].y, layer.plots[0].size_from), (b, Some(c)), "Y, and the next column as Z");
+
+    // The 2D Graphs button does the same.
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "B(Y1)");
+    bar_button!(h, "2D Graphs", "Ternary").click();
+    settle(&mut h);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 2);
+    assert!(graphs[before + 1].layers[0].coords.ternary().is_some());
 }

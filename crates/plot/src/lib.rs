@@ -25,6 +25,7 @@ mod raster;
 pub mod scene;
 mod stack;
 mod svg;
+mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
@@ -220,6 +221,9 @@ pub struct LayerGeometry {
     /// The circle of a polar layer. Then `x` is the angle axis (degrees) and `y` the radius axis,
     /// and the data are placed on the circle (graphing spec section 14.18).
     pub polar: Option<polar::PolarMap>,
+    /// The triangle of a ternary layer. Then the data are the normalised X and Y fractions of the
+    /// rows (graphing spec section 14.20).
+    pub ternary: Option<ternary::TernaryMap>,
 }
 
 impl LayerGeometry {
@@ -228,6 +232,9 @@ impl LayerGeometry {
     pub fn data_to_page(&self, x: f64, y: f64) -> (f64, f64) {
         if let Some(map) = &self.polar {
             return map.point(x, self.y.to_unit(y));
+        }
+        if let Some(map) = &self.ternary {
+            return map.point(x, y);
         }
         let f = self.frame;
         (f.x + self.x.to_unit(x) * f.w, f.y + (1.0 - self.y.to_unit(y)) * f.h)
@@ -238,6 +245,9 @@ impl LayerGeometry {
         if let Some(map) = &self.polar {
             let (theta, u) = map.angle_and_unit(px, py);
             return (theta, self.y.from_unit(u));
+        }
+        if let Some(map) = &self.ternary {
+            return map.fractions(px, py);
         }
         let f = self.frame;
         (self.x.from_unit((px - f.x) / f.w), self.y.from_unit(1.0 - (py - f.y) / f.h))

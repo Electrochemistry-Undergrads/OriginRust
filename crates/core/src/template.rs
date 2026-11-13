@@ -76,10 +76,12 @@ pub enum Template {
     PolarRTheta,
     /// Radar chart: every Y column a closed polygon over spokes named by the X column (Origin's "Radar").
     Radar,
+    /// Ternary plot of the X, Y and Z columns (Origin's "Ternary").
+    Ternary,
 }
 
 impl Template {
-    pub const ALL: [Template; 28] = [
+    pub const ALL: [Template; 29] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -104,6 +106,7 @@ impl Template {
         Template::Polar,
         Template::PolarRTheta,
         Template::Radar,
+        Template::Ternary,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -141,6 +144,7 @@ impl Template {
             Template::Polar => "polar",
             Template::PolarRTheta => "polar-r-theta",
             Template::Radar => "radar",
+            Template::Ternary => "ternary",
         }
     }
 
@@ -174,6 +178,7 @@ impl Template {
             Template::Polar => "Polar theta(X) r(Y)",
             Template::PolarRTheta => "Polar r(X) theta(Y)",
             Template::Radar => "Radar",
+            Template::Ternary => "Ternary",
         }
     }
 
@@ -213,6 +218,7 @@ impl Template {
             Template::Polar => polar(id, name, RadiusColumn::Y),
             Template::PolarRTheta => polar(id, name, RadiusColumn::X),
             Template::Radar => radar(id, name),
+            Template::Ternary => ternary(id, name),
         }
     }
 }
@@ -479,6 +485,27 @@ fn radar(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// The ternary template: a scatter plot in a layer of triangle coordinates. The frame is a square
+/// on the page (the triangle is as wide as it fits), the grid lines parallel to the sides are on
+/// at the major ticks, minor ticks are off. The three axis titles are the column names.
+fn ternary(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    g.page = Page::inches(6.0, 6.0);
+    let l = &mut g.layers[0];
+    l.frame = Frame { left: 0.2, top: 0.2, width: 0.6, height: 0.6 };
+    l.coords = Coords::Ternary(TernaryCoords::default());
+    // The one plot would be named after its Y column only, which says nothing about the rest.
+    l.legend.visible = false;
+    let grid = LineStyle::solid(Color::rgb(204, 204, 204), 0.5);
+    for a in [&mut l.x_axis, &mut l.y_axis] {
+        a.major_grid = Some(grid.clone());
+        a.major_tick = TickDirection::Out;
+        a.major_tick_len_pt = 6.0;
+        a.minor_ticks = 0;
+    }
+    g
+}
+
 fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
     let mut x = base_axis(12.0, 10.0);
     // The owner's figure style keeps its own line and tick sizes.
@@ -687,7 +714,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 28);
+        assert_eq!(Template::ALL.len(), 29);
     }
 
     #[test]

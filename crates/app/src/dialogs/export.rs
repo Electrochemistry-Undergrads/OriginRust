@@ -15,6 +15,7 @@ pub enum ExportFormat {
     Jpeg,
     Bmp,
     Gif,
+    Tga,
     Svg,
     Pdf,
     Eps,
@@ -22,12 +23,13 @@ pub enum ExportFormat {
 }
 
 impl ExportFormat {
-    const ALL: [ExportFormat; 9] = [
+    const ALL: [ExportFormat; 10] = [
         ExportFormat::Png,
         ExportFormat::Tiff,
         ExportFormat::Jpeg,
         ExportFormat::Bmp,
         ExportFormat::Gif,
+        ExportFormat::Tga,
         ExportFormat::Svg,
         ExportFormat::Pdf,
         ExportFormat::Eps,
@@ -41,6 +43,7 @@ impl ExportFormat {
             ExportFormat::Jpeg => "jpg",
             ExportFormat::Bmp => "bmp",
             ExportFormat::Gif => "gif",
+            ExportFormat::Tga => "tga",
             ExportFormat::Svg => "svg",
             ExportFormat::Pdf => "pdf",
             ExportFormat::Eps => "eps",
@@ -55,6 +58,7 @@ impl ExportFormat {
             ExportFormat::Jpeg => "JPEG",
             ExportFormat::Bmp => "Windows Bitmap",
             ExportFormat::Gif => "Graphics Interchange Format",
+            ExportFormat::Tga => "Truevision Targa",
             ExportFormat::Svg => "Scalable Vector Graphics",
             ExportFormat::Pdf => "Portable Document Format",
             ExportFormat::Eps => "Encapsulated PostScript",
@@ -66,14 +70,21 @@ impl ExportFormat {
     fn is_raster(self) -> bool {
         matches!(
             self,
-            ExportFormat::Png | ExportFormat::Tiff | ExportFormat::Jpeg | ExportFormat::Bmp | ExportFormat::Gif
+            ExportFormat::Png
+                | ExportFormat::Tiff
+                | ExportFormat::Jpeg
+                | ExportFormat::Bmp
+                | ExportFormat::Gif
+                | ExportFormat::Tga
         )
     }
 
     /// The colour depths the format can store.
     fn depths(self) -> &'static [ColorDepth] {
         match self {
-            ExportFormat::Png | ExportFormat::Bmp => &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Png | ExportFormat::Bmp | ExportFormat::Tga => {
+                &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8]
+            }
             ExportFormat::Tiff | ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
             ExportFormat::Gif => &[ColorDepth::Colors256],
             _ => &[],

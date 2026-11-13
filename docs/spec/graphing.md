@@ -1604,7 +1604,7 @@ Unmeasured, so chosen by Sheaf: the default line width and colour, the arrow hea
 - The points are fractions of the layer's frame, as for a text label (section 16.2): `(0, 0)` is the top left corner, `(1, 1)` the bottom right, outside 0 to 1 is allowed. The objects are attached to the layer frame and do not follow the axis scales; a "layer and scales" or "page" attachment does not exist yet.
 - A line or arrow runs from the first to the second point. An arrow has a filled triangular head at the second point (`head_at_start` adds one at the first); the head is `head_pt` long (default 9 pt) and 0.7 of that wide, and is shortened so that it never takes more than the line. A rectangle has the two points as opposite corners; an ellipse is inscribed in that rectangle. `fill` (rectangle and ellipse) is a solid colour; no fill is the default, so the data shows through.
 - Drawing: the objects are drawn after the legend and the labels, in list order, so they are above the data and above the text. Every renderer (SVG, PNG, PDF, EPS, EMF, TIFF and the window) takes them from the same scene.
-- Picking: a line or arrow is hit near its line, an unfilled shape on its outline, a filled one inside it as well (a point in the empty corner of an ellipse's box is not a hit).
+- Picking: a line or arrow is hit near its line, an unfilled shape on its outline, a filled one inside it as well (a point in the empty corner of an ellipse's box is not a hit). The tolerance adds half the stroke width, and the bounds of an object include it. Where objects overlap the one drawn last (on top) is picked: a shape over a label, or a later shape over an earlier one.
 - Shift constrains in page points, not in fractions: a line or arrow snaps to the nearest of 0, 45, 90 degrees and so on with its length kept; a rectangle or ellipse takes the longer side on both axes.
 
 ### 17.3 Commands
@@ -1612,6 +1612,7 @@ Unmeasured, so chosen by Sheaf: the default line width and colour, the arrow hea
 **Desktop app.**
 - Tools > Line, Arrow, Rectangle, Circle: the tool is on (pressed) until one object is drawn, a click on Pointer, or Esc. A drag draws it in the layer under the pointer's start (the active layer if that is outside every frame), with a blue outline while dragging. A drag shorter than 3 page points draws nothing and leaves the tool on. The new object is selected and the tool is the Pointer again.
 - A click selects an object, dragging it moves it (it moves when the button is let go), Delete removes it, a double click or right-click Properties... opens the window with the line colour, width and style, the fill of a rectangle or ellipse, and the head length and a second head of an arrow. OK and Apply are one undo step each.
+- The window closes when Delete, Undo or Redo changes the objects of its layer, or when its object is gone or another kind of object has its place, so it never edits another object.
 - Add, Move, Edit and Delete of a drawn object are one undo step each ("Add drawn object", "Move drawn object", "Edit drawn object", "Delete drawn object").
 - The right-click menu of an object has Delete and Properties...; Cut, Copy, "Bring to the front" and "Push to the back" are shown greyed.
 - `sheaf-app --show shape:N` opens the window of the N-th object of the first graph (for pictures).

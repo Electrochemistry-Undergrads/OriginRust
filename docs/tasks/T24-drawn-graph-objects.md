@@ -33,8 +33,8 @@ documentation, paraphrased, not measured; measure on the Windows machine with `t
   (`serde(default, skip_serializing_if = "Vec::is_empty")`).
 - `crates/plot/src/shapes.rs` (new): drawing into the layer overlay after the labels;
   `ObjectKind::Shape(usize)` in `scene.rs`; picking in `hit.rs`.
-- `crates/app/src/shape_tool.rs` and `crates/app/src/dialogs/shape_object.rs` (new); small additions in
-  `graph_view.rs`, `toolbar.rs`, `actions.rs`, `app.rs`, `menus.rs`.
+- `crates/app/src/dialogs/shape_object.rs` (new); the drawing tools live in `graph_view.rs`, with small
+  additions in `toolbar.rs`, `actions.rs`, `app.rs`, `menus.rs`.
 - `crates/io/src/opj/write`: save warning for objects the file cannot hold.
 
 ## Steps
@@ -48,7 +48,7 @@ documentation, paraphrased, not measured; measure on the Windows machine with `t
 
 ## Done when
 
-All five kinds can be drawn, moved, edited and deleted in the app with undo; the figure exports show
+All four kinds can be drawn, moved, edited and deleted in the app with undo; the figure exports show
 them; the spec section lists what is measured and what is from documentation; checks pass.
 
 ## Don't

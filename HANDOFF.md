@@ -90,7 +90,7 @@ about 88 % full, check `df -h /c` before parallel builds.
 5. May the remote branch `chi-text-real` be deleted? It holds a few numbers from your
    charge-discharge file in a spec paragraph (the copy on `main` does not).
 6. If scripting cannot open them: screenshots of Origin's Peak Analyzer pages 2+, Import Wizard
-   pages 2-6 and NLFit's Code and Parameters pages (briefs T04, T19; NLFit: branch `nlfit-origin`).
+   pages 2-6 (briefs T04, T19). These two wizards are the open briefs that wait on them.
 
 ## Local-only resources
 

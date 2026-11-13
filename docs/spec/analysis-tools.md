@@ -141,6 +141,29 @@ acts like the next odd number (observed for 6 with averaging and Savitzky-Golay)
   6. (inferred) The explanation why bins differ in sine and cosine is unknown; the rule above is an
      exact description of the matrix of the filter for every input we tried, not a derivation.
 
+* Lowess, Loess and binomial (`method:=lw`, `le`, `bm`; run 2026-11-13, 30 columns, scripts
+  `smooth-local-suite1/2.labtalk.txt`, fixtures `origin_smooth_local.rs`, all to 1e-12). The script options of
+  `smooth` are `iy method interval order hint weight prop span npts boundary polyorder percent cutoff pad filter
+  baseline oy`.
+  1. (observed) Lowess is a local straight-line fit, Loess a local parabola, both evaluated at the point, with
+     tricube weights `(1 - u^3)^3`, `u = |x - x_i| / h`, `h` the largest distance among the `q` points nearest in X
+     (the point itself included). There are no robustness iterations. `polyorder`, `weight` and `boundary` have no
+     effect on either; for uneven X the fit uses the X values.
+  2. (observed) `span` (default 0.1) is a proportion: `q = ceil(span n)` with `n` the number of valid points (10.1 gives
+     11, 20.0 gives 20, 25.5 gives 26, 5.0 gives 5; span 1 uses all points; a span so small that `q` is not larger than
+     the polynomial degree leaves the data unchanged). With `prop:=0` the window is `npts` points instead and `span`
+     is ignored (`npts` 7 and 20 checked). `prop` defaults to 1 (a hidden option; the dialog shows Span). `interval`
+     and `order` do not change Lowess.
+  3. (observed) A missing Y or X is removed first, so `n` and the window count only valid points; the row comes back as
+     missing.
+  4. (observed) Binomial: the filter `1 2 1 / 4` applied `order` times (script option `order`, default 1; `npts` has no
+     effect). With `boundary:=none` the first and last point stay as they are in every pass and the window of the
+     other points is always three points. `repeat`, `periodic` and `extrap` pad as for the other methods; `reflect` here
+     mirrors around the end point, `y[-1] = y[1]` (unlike adjacent averaging and Savitzky-Golay, where `y[-1] = y[0]`).
+     Orders 1 to 50 and every boundary were checked.
+  Sheaf: `SmoothMethod::Lowess/Loess { span: LocalSpan }`, `Binomial { order }`; dialog fields Span (Lowess, Loess) and
+  Order (Binomial); `sheaf analyze smooth --method lowess|loess|binomial --span S --order N`.
+
 ## 4. Normalize (`normalize`)
 
 Methods (all observed; statistics over valid points; missing stays missing): `specify` divide by a

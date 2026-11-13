@@ -17,8 +17,8 @@ use sheaf_core::analysis::{
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
-    IntegrateSpec, InterpMethod, InterpSpec, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions, Report, Request,
-    RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
+    IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions,
+    Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
 use sheaf_core::analysis::{
     ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec, PeakFitSpec, PeakShape,
@@ -176,6 +176,9 @@ enum SmoothKind {
     Weighted,
     Percentile,
     Fft,
+    Lowess,
+    Loess,
+    Binomial,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -338,6 +341,10 @@ pub struct AnalysisDialog {
     smooth_points: usize,
     smooth_poly: usize,
     smooth_percent: f64,
+    /// Lowess and Loess: share of the points in each local fit.
+    smooth_span: f64,
+    /// Binomial filter: passes of the 1 2 1 / 4 filter.
+    smooth_order: usize,
     boundary: Boundary,
     normalize: usize,
     divisor: f64,
@@ -478,6 +485,8 @@ impl AnalysisDialog {
             smooth_points: 5,
             smooth_poly: 2,
             smooth_percent: 50.0,
+            smooth_span: 0.1,
+            smooth_order: 1,
             boundary: Boundary::None,
             normalize: 0,
             divisor: 1.0,
@@ -539,6 +548,9 @@ impl AnalysisDialog {
                     SmoothKind::Weighted => SmoothMethod::AdjacentAveraging { weighted: true },
                     SmoothKind::Percentile => SmoothMethod::Percentile { percent: self.smooth_percent },
                     SmoothKind::Fft => SmoothMethod::FftFilter,
+                    SmoothKind::Lowess => SmoothMethod::Lowess { span: LocalSpan::Proportion(self.smooth_span) },
+                    SmoothKind::Loess => SmoothMethod::Loess { span: LocalSpan::Proportion(self.smooth_span) },
+                    SmoothKind::Binomial => SmoothMethod::Binomial { order: self.smooth_order },
                 },
                 npts: self.smooth_points,
                 boundary: self.boundary,
@@ -812,6 +824,9 @@ impl AnalysisDialog {
                             SmoothKind::Weighted => "Weighted adjacent averaging",
                             SmoothKind::Percentile => "Percentile filter",
                             SmoothKind::Fft => "FFT filter",
+                            SmoothKind::Lowess => "Lowess",
+                            SmoothKind::Loess => "Loess",
+                            SmoothKind::Binomial => "Binomial",
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::SavitzkyGolay, "Savitzky-Golay");
@@ -823,11 +838,23 @@ impl AnalysisDialog {
                             );
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::Percentile, "Percentile filter");
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::Fft, "FFT filter");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Lowess, "Lowess");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Loess, "Loess");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Binomial, "Binomial");
                         });
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Points of window");
-                    ui.add(DragValue::new(&mut self.smooth_points).range(1..=100_001));
+                    let local = matches!(self.smooth_kind, SmoothKind::Lowess | SmoothKind::Loess);
+                    if local {
+                        ui.label("Span");
+                        ui.add(DragValue::new(&mut self.smooth_span).speed(0.01).range(0.0..=1.0));
+                    } else if self.smooth_kind == SmoothKind::Binomial {
+                        ui.label("Order");
+                        ui.add(DragValue::new(&mut self.smooth_order).range(1..=1000));
+                    } else {
+                        ui.label("Points of window");
+                        ui.add(DragValue::new(&mut self.smooth_points).range(1..=100_001));
+                    }
                     match self.smooth_kind {
                         SmoothKind::SavitzkyGolay => {
                             ui.label("Polynomial order");
@@ -843,7 +870,11 @@ impl AnalysisDialog {
                 if self.smooth_kind == SmoothKind::Fft {
                     ui.weak("The FFT filter keeps frequencies below 1 / (2 dx points); larger values smooth more.");
                 }
-                ui.add_enabled_ui(self.smooth_kind != SmoothKind::Fft, |ui| {
+                if matches!(self.smooth_kind, SmoothKind::Lowess | SmoothKind::Loess) {
+                    ui.weak("The span is the share of the points in each local fit (0 to 1); Lowess fits lines, Loess parabolas.");
+                }
+                let ends = !matches!(self.smooth_kind, SmoothKind::Fft | SmoothKind::Lowess | SmoothKind::Loess);
+                ui.add_enabled_ui(ends, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("At the ends");
                         egui::ComboBox::from_id_salt("smooth_boundary")

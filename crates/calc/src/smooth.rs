@@ -1,5 +1,6 @@
 //! Smoothing (Origin `smooth`): adjacent averaging (plain or weighted), Savitzky-Golay, the
-//! percentile filter (with Origin's boundary conditions) and the FFT filter.
+//! percentile filter (with Origin's boundary conditions), the FFT filter, Lowess, Loess and the
+//! binomial filter.
 //!
 //! Window: `npts` points means `2 * (npts / 2) + 1` points centred on the point, so an even
 //! `npts` behaves like the next odd number. Missing values are removed before smoothing and put
@@ -38,6 +39,25 @@ pub enum SmoothMethod {
     /// `boundary` does not apply. Origin's script-only options (padding, old filter, baseline
     /// choice) are not offered; the defaults are used.
     FftFilter,
+    /// Local linear regression with tricube weights (Origin `lw`); needs the X values. The window
+    /// is the `ceil(span * n)` nearest points in X, or `npts` points when `span` is not a
+    /// proportion. No robustness iterations; `boundary` does not apply.
+    Lowess { span: LocalSpan },
+    /// Like [`SmoothMethod::Lowess`] with a local quadratic (Origin `le`).
+    Loess { span: LocalSpan },
+    /// The three-point filter `1 2 1 / 4` applied `order` times (Origin `bm`, its `order`);
+    /// `npts` does not apply. Points near an end use a shorter window when `boundary` is
+    /// [`Boundary::None`]; reflection mirrors around the end point (y[-1] = y[1]).
+    Binomial { order: usize },
+}
+
+/// How Lowess and Loess choose the points of each local fit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LocalSpan {
+    /// A fraction of the points (Origin `span`, 0 to 1, default 0.1).
+    Proportion(f64),
+    /// A fixed number of points, `SmoothOptions::npts`.
+    Points,
 }
 
 /// Options of [`smooth`].
@@ -142,10 +162,120 @@ fn smooth_valid(y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
                     polyfit_centered(&xs, &ys, 0.0, poly_order).map_or(y[i], |(c, _)| c[0])
                 }
             }
-            SmoothMethod::FftFilter => unreachable!("handled before the loop"),
+            SmoothMethod::FftFilter
+            | SmoothMethod::Lowess { .. }
+            | SmoothMethod::Loess { .. }
+            | SmoothMethod::Binomial { .. } => unreachable!("handled before the loop"),
         };
     }
     out
+}
+
+/// One pass of the binomial filter `1 2 1 / 4`.
+fn binomial_pass(s: &[f64], b: Boundary) -> Vec<f64> {
+    let n = s.len();
+    if n < 2 {
+        return s.to_vec();
+    }
+    let at = |idx: isize| -> f64 {
+        if (0..n as isize).contains(&idx) {
+            return s[idx as usize];
+        }
+        match b {
+            // Mirror around the end point: y[-1] = y[1].
+            Boundary::Reflect => {
+                let period = 2 * (n as isize - 1);
+                let r = idx.rem_euclid(period);
+                s[if r < n as isize { r } else { period - r } as usize]
+            }
+            Boundary::Periodic => s[idx.rem_euclid(n as isize) as usize],
+            Boundary::Repeat => s[idx.clamp(0, n as isize - 1) as usize],
+            Boundary::Extrapolate => {
+                if idx < 0 {
+                    s[0] + idx as f64 * (s[1] - s[0])
+                } else {
+                    s[n - 1] + (idx - (n as isize - 1)) as f64 * (s[n - 1] - s[n - 2])
+                }
+            }
+            Boundary::None => unreachable!(),
+        }
+    };
+    (0..n)
+        .map(|i| {
+            if b == Boundary::None && (i == 0 || i == n - 1) {
+                s[i]
+            } else {
+                (at(i as isize - 1) + 2.0 * s[i] + at(i as isize + 1)) / 4.0
+            }
+        })
+        .collect()
+}
+
+/// Local regression at every point: the `q` points nearest in X, tricube weights on the distance
+/// scaled by the largest of those distances, a polynomial of degree `deg` evaluated at the point.
+fn local_regression(x: &[f64], y: &[f64], q: usize, deg: usize) -> Vec<f64> {
+    let n = y.len();
+    let q = q.clamp(1, n);
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        if q <= deg {
+            out.push(y[i]);
+            continue;
+        }
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| (x[a] - x[i]).abs().total_cmp(&(x[b] - x[i]).abs()));
+        order.truncate(q);
+        let h = order.iter().map(|&j| (x[j] - x[i]).abs()).fold(0.0, f64::max);
+        let (mut xs, mut ys, mut ws) = (Vec::new(), Vec::new(), Vec::new());
+        for &j in &order {
+            let u = if h > 0.0 { (x[j] - x[i]).abs() / h } else { 0.0 };
+            let w = (1.0 - u.powi(3)).powi(3);
+            if w > 0.0 {
+                xs.push(x[j] - x[i]);
+                ys.push(y[j]);
+                ws.push(w);
+            }
+        }
+        out.push(weighted_poly_at_zero(&xs, &ys, &ws, deg).unwrap_or(y[i]));
+    }
+    out
+}
+
+/// Value at 0 of the weighted least-squares polynomial of degree `deg` (normal equations).
+fn weighted_poly_at_zero(xs: &[f64], ys: &[f64], ws: &[f64], deg: usize) -> Option<f64> {
+    let m = deg + 1;
+    if xs.len() < m {
+        return None;
+    }
+    // Scale x so the normal equations stay well conditioned.
+    let scale = xs.iter().fold(0.0_f64, |a, v| a.max(v.abs()));
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let mut a = vec![vec![0.0; m + 1]; m];
+    for ((&x, &y), &w) in xs.iter().zip(ys).zip(ws) {
+        let t = x / scale;
+        for r in 0..m {
+            for c in 0..m {
+                a[r][c] += w * t.powi((r + c) as i32);
+            }
+            a[r][m] += w * y * t.powi(r as i32);
+        }
+    }
+    for col in 0..m {
+        let piv = (col..m).max_by(|&p, &q| a[p][col].abs().total_cmp(&a[q][col].abs()))?;
+        if a[piv][col].abs() < 1e-14 * a[0][0].abs().max(1e-300) {
+            return None;
+        }
+        a.swap(col, piv);
+        for r in 0..m {
+            if r != col {
+                let f = a[r][col] / a[col][col];
+                for c in col..=m {
+                    a[r][c] -= f * a[col][c];
+                }
+            }
+        }
+    }
+    Some(a[0][m] / a[0][0])
 }
 
 /// FFT filter of Origin (`smooth method:=fft`, default script options), for points with
@@ -213,7 +343,9 @@ pub fn smooth(y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
 /// the same) and returns the values in the original row order; the other methods work in row order.
 pub fn smooth_xy(x: &[f64], y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
     let fft = opts.method == SmoothMethod::FftFilter;
-    let idx = valid_indices(y.len(), |i| y[i].is_finite() && (!fft || x.get(i).is_some_and(|v| v.is_finite())));
+    let local = matches!(opts.method, SmoothMethod::Lowess { .. } | SmoothMethod::Loess { .. });
+    let idx =
+        valid_indices(y.len(), |i| y[i].is_finite() && (!(fft || local) || x.get(i).is_some_and(|v| v.is_finite())));
     let mut out = vec![f64::NAN; y.len()];
     if fft {
         let mut order = idx;
@@ -226,7 +358,25 @@ pub fn smooth_xy(x: &[f64], y: &[f64], opts: &SmoothOptions) -> Vec<f64> {
         return out;
     }
     let yv: Vec<f64> = idx.iter().map(|&i| y[i]).collect();
-    let sm = smooth_valid(&yv, opts);
+    let sm = match opts.method {
+        SmoothMethod::Lowess { span } | SmoothMethod::Loess { span } => {
+            let deg = if matches!(opts.method, SmoothMethod::Lowess { .. }) { 1 } else { 2 };
+            let q = match span {
+                LocalSpan::Proportion(p) => (p.clamp(0.0, 1.0) * yv.len() as f64).ceil() as usize,
+                LocalSpan::Points => opts.npts,
+            };
+            let xv: Vec<f64> = idx.iter().map(|&i| x[i]).collect();
+            local_regression(&xv, &yv, q, deg)
+        }
+        SmoothMethod::Binomial { order } => {
+            let mut s = yv.clone();
+            for _ in 0..order {
+                s = binomial_pass(&s, opts.boundary);
+            }
+            s
+        }
+        _ => smooth_valid(&yv, opts),
+    };
     for (&i, v) in idx.iter().zip(sm) {
         out[i] = v;
     }

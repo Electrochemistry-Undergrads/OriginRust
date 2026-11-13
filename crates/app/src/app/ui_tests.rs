@@ -3607,6 +3607,26 @@ fn the_analysis_window_has_origins_frame_and_apply_runs_without_closing() {
 }
 
 #[test]
+fn smoothing_offers_lowess_loess_and_binomial_with_their_own_fields() {
+    let mut h = start(vec![data_file("smooth-methods")]);
+    open_analysis(&mut h, AnalysisKind::Smooth);
+    assert!(has_label(&h, "Points of window"));
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Savitzky-Golay")).click();
+    settle(&mut h);
+    click(&mut h, "Lowess");
+    assert!(has_label(&h, "Span") && !has_label(&h, "Points of window"), "Lowess is set by its span");
+    assert!(is_disabled(&h, "At the ends"), "the ends do not apply to a local fit");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Lowess")).click();
+    settle(&mut h);
+    click(&mut h, "Binomial");
+    assert!(has_label(&h, "Order") && !has_label(&h, "Span"));
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let new = b.sheets[0].columns.iter().find(|c| c.long_name.starts_with("Smoothed")).expect("the smoothed column");
+    assert!(new.comments.contains("binomial, order 1"), "{}", new.comments);
+}
+
+#[test]
 fn the_analysis_window_cancel_changes_nothing() {
     let mut h = start(vec![data_file("frame-cancel")]);
     open_analysis(&mut h, AnalysisKind::Smooth);

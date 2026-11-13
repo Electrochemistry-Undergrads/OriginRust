@@ -61,5 +61,5 @@ pub use peakchain::{
     auto_minima_anchors, find_peak_indices, integrate_peaks,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
-pub use smooth::{Boundary, SmoothMethod, SmoothOptions, smooth, smooth_xy};
+pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

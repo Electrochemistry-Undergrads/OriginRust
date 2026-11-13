@@ -30,8 +30,8 @@ use sheaf_calc as calc;
 use sheaf_expr::Expr;
 
 pub use sheaf_calc::{
-    AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions,
-    SmoothMethod, SmoothOptions, SplineBoundary,
+    AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection, PeakFilter,
+    PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
 pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
@@ -685,6 +685,13 @@ pub enum AnalysisError {
     NoSuchSheet,
     #[error("{0}")]
     Condition(String),
+}
+
+fn local_span_text(span: calc::LocalSpan, npts: usize) -> String {
+    match span {
+        calc::LocalSpan::Proportion(p) => format!("span {p}"),
+        calc::LocalSpan::Points => format!("{npts} points"),
+    }
 }
 
 /// A column to add next to its source column.
@@ -1427,8 +1434,17 @@ impl Project {
                     SmoothMethod::SavitzkyGolay { poly_order } => format!("Savitzky-Golay, order {poly_order}"),
                     SmoothMethod::Percentile { percent } => format!("percentile filter, {percent} %"),
                     SmoothMethod::FftFilter => "FFT filter".to_string(),
-                    #[allow(unreachable_patterns)]
-                    _ => "smoothing".to_string(),
+                    SmoothMethod::Lowess { span } => format!("Lowess, {}", local_span_text(span, options.npts)),
+                    SmoothMethod::Loess { span } => format!("Loess, {}", local_span_text(span, options.npts)),
+                    SmoothMethod::Binomial { order } => format!("binomial, order {order}"),
+                };
+                let window = if matches!(
+                    options.method,
+                    SmoothMethod::Lowess { .. } | SmoothMethod::Loess { .. } | SmoothMethod::Binomial { .. }
+                ) {
+                    String::new()
+                } else {
+                    format!(", {} points", options.npts)
                 };
                 for inp in &inputs {
                     let s = calc::smooth_xy(inp.xs(), inp.ys(), options);
@@ -1436,7 +1452,7 @@ impl Project {
                         after: inp.id,
                         long_name: format!("Smoothed {}", inp.name),
                         units: inp.units.clone(),
-                        comments: format!("{} smoothed: {how}, {} points{}", inp.short, options.npts, inp.range_note()),
+                        comments: format!("{} smoothed: {how}{window}{}", inp.short, inp.range_note()),
                         data: inp.aligned(&s),
                     });
                 }

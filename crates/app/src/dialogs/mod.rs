@@ -13,6 +13,8 @@ pub mod graph_details;
 pub mod graph_props;
 pub mod import;
 pub mod import_wizard;
+pub mod reshape;
+pub mod row_filter;
 pub mod set_values;
 pub mod sort;
 pub mod text_object;

@@ -505,8 +505,13 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     b.sheets[0].columns[1].hidden = true;
     b.sheets[0].columns[2].width = Some(14);
     b.sheets[0].columns[0].mask.insert(0);
+    b.sheets[0].columns[3].designation = sheaf_core::Designation::Group;
+    b.sheets[0].filter =
+        Some(sheaf_core::rowfilter::RowFilter { condition: "col(A) > 0".into(), enabled: true, keep: vec![true] });
     let all = written(&p).warnings.join(" | ");
     assert!(all.contains("1 hidden column(s)"), "{all}");
     assert!(all.contains("1 column(s) have their own width"), "{all}");
     assert!(all.contains("1 column(s) have masked cells"), "{all}");
+    assert!(all.contains("1 Group or Subject column(s)"), "{all}");
+    assert!(all.contains("1 sheet(s) have a worksheet filter"), "{all}");
 }

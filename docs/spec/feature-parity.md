@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 110 | 77 | 230 |
+| All rows | 43 | 114 | 73 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 41 | 77 | 129 |
+| P1 and P2 together | 11 | 45 | 73 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -117,16 +117,16 @@ Cross-cutting findings:
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
 | Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
 | Simple math on curves | Analysis > Mathematics > Simple Math | Simple Math window, `analyze math`, `Tool::CurveMath` | ✓ | add, subtract, multiply, divide, power with a constant or a reference; checked against Origin (spec section 9); no graph rescale | P0 |
-| Row filter | Column > Filter | Filter Rows, in place or new sheet | ◐ | removes or copies, not a live hidden filter | P1 |
+| Row filter | Column > Filter | live sheet filter: a condition in the formula language with presets (above/below average, within 3 sigma, not missing); Enable/Disable, Reapply, Remove; the grid shows passing rows only and analysis and fits skip the others; sorts and row edits reapply it; Filter Rows (in place or new sheet) remains | ◐ | one filter per sheet, not per column; no date or text filters; plots still draw filtered rows | P1 |
 | Masking | Column > Mask | Apply, Remove, Swap on selected cells; masks follow rows through sorts, inserts and deletes; statistics, analysis tools and fits leave masked cells out; masked points draw red with their adjacent line segments (measured in Origin) | ◐ | no Change Color, Disable Masking, mask by condition or from the graph; two-way ANOVA ignores masks; the .opj reader skips masks and the writer leaves them to the companion | P1 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |
-| Categorical columns | Set as Categorical | none | ✗ | | P1 |
+| Categorical columns | Set as Categorical | Set as Categorical toggle (column and Column menus); Unstack Columns offers categorical columns first; Group and Subject designations in Set As and Column Properties | ◐ | no analysis tool reads Group or Subject yet; the .opj file codes of Group and Subject are unknown (companion keeps them) | P1 |
 | Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | fixed layout | ✗ | | P1 |
 | Before-formula script, multi-column set | Set Column Values | none | ✗ | one column only | P1 |
 | Fill Column With | row numbers, random, patterns | only formula `i` | ◐ | no random, series or dates | P1 |
 | Date and time arithmetic | date columns | columns are plain numbers in formulas (days) | ◐ | no `date()`, `time()` or date functions | P1 |
 | String functions and text in formulas | text functions | text reads as missing | ✗ | | P1 |
-| Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | none | ✗ | | P1 |
+| Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | Transpose (measured in Origin), Stack Columns, Unstack Columns, Split Columns, Reduce Rows, each writing a new sheet with one undo step | ◐ | Origin's Transpose replaces the sheet in place by default; option layouts of stack, unstack, split and reduce not compared with Origin; no join, pivot or duplicates | P1 |
 | External links, Paste Link | Edit menu | none | ✗ | | P2 |
 | Complex numbers | complex type | none | ✗ | | P2 |
 | Worksheet script, query, clear | Worksheet menu | none | ✗ | | P2 |

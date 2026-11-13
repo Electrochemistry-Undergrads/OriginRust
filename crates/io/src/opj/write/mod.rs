@@ -146,6 +146,10 @@ struct Notes {
     widths_dropped: usize,
     /// Columns with masked cells: the file written here holds no mask.
     masks_dropped: usize,
+    /// Group and Subject columns, written as unused.
+    group_roles_dropped: usize,
+    /// Sheets with a worksheet filter: the file written here holds no filter.
+    filters_dropped: usize,
     /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
     analysis_links_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
@@ -292,11 +296,16 @@ impl Writer {
                 if c.designation == Designation::Label && !has_y {
                     self.notes.demoted_labels += 1;
                     Designation::Disregard
+                } else if matches!(c.designation, Designation::Group | Designation::Subject) {
+                    // The project file written here has no Group or Subject role.
+                    self.notes.group_roles_dropped += 1;
+                    Designation::Disregard
                 } else {
                     c.designation
                 }
             })
             .collect();
+        self.notes.filters_dropped += usize::from(sheet.filter.is_some());
         for (i, column) in sheet.columns.iter().enumerate() {
             let dataset_name = format!("{}_{}{}", book.name, column.short_name, suffix);
             self.check_name("column name", &column.short_name, MAX_DATASET_NAME)?;
@@ -693,6 +702,18 @@ impl Writer {
                 n.hidden_dropped
             ));
         }
+        if n.filters_dropped > 0 {
+            warnings.push(format!(
+                "{} sheet(s) have a worksheet filter; the project file written here does not hold it, so Origin shows all rows.",
+                n.filters_dropped
+            ));
+        }
+        if n.group_roles_dropped > 0 {
+            warnings.push(format!(
+                "{} Group or Subject column(s) were written as unused: the project file written here has no such role.",
+                n.group_roles_dropped
+            ));
+        }
         if n.masks_dropped > 0 {
             warnings.push(format!(
                 "{} column(s) have masked cells; the project file written here does not hold the mask, so Origin uses those cells.",
@@ -724,7 +745,7 @@ fn designation_code(d: Designation) -> u8 {
         Designation::YError => 2,
         Designation::XError => 6,
         Designation::Label => 4,
-        Designation::Disregard => 1,
+        Designation::Disregard | Designation::Group | Designation::Subject => 1,
     }
 }
 
@@ -736,7 +757,7 @@ fn type_code(d: Designation) -> u16 {
         Designation::Y => 0x6121,
         Designation::Z | Designation::Label => 0x6120,
         Designation::YError | Designation::XError => 0x6130,
-        Designation::Disregard => 0x4121,
+        Designation::Disregard | Designation::Group | Designation::Subject => 0x4121,
     }
 }
 
@@ -746,7 +767,7 @@ fn type_code(d: Designation) -> u16 {
 fn parent_of(roles: &[Designation], i: usize, first: usize) -> u16 {
     let wanted: &[Designation] = match roles[i] {
         Designation::X => return 0,
-        Designation::Y | Designation::Disregard => &[Designation::X],
+        Designation::Y | Designation::Disregard | Designation::Group | Designation::Subject => &[Designation::X],
         Designation::YError | Designation::XError | Designation::Z | Designation::Label => &[Designation::Y],
     };
     roles[..i].iter().rposition(|c| wanted.contains(c)).map_or(0, |p| (first + p + 1) as u16)

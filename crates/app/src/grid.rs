@@ -389,6 +389,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     });
 
     let rows = sheet.row_count() + SPARE_ROWS;
+    // With an active filter the grid shows only the rows that pass, with their own numbers.
+    let shown: Option<Vec<usize>> = sheet.shown_rows(rows);
+    let rows_drawn = shown.as_ref().map_or(rows, Vec::len);
     let label_rows = label_rows(sheet);
     let header_height = ROW_HEIGHT * (1 + label_rows.len()) as f32;
     // The primary button was released: a drag over cells is over.
@@ -453,7 +456,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     if state.reveal > 0
                         && let Some(row) = state.reveal_target().map(|c| c.1)
                     {
-                        table = table.scroll_to_row(row, None);
+                        let at = shown.as_ref().map_or(Some(row), |s| s.iter().position(|r| *r == row));
+                        if let Some(at) = at {
+                            table = table.scroll_to_row(at, None);
+                        }
                     }
                     if let Some(y) = state.v_set.take() {
                         table = table.vertical_scroll_offset(y);
@@ -487,8 +493,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             });
                         })
                         .body(|body| {
-                            body.rows(ROW_HEIGHT, rows, |mut row| {
-                                let r = row.index();
+                            body.rows(ROW_HEIGHT, rows_drawn, |mut row| {
+                                let r = shown.as_ref().map_or(row.index(), |s| s[row.index()]);
                                 row.col(|ui| row_header_cell(ui, r, book_id, state, actions));
                                 for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                                     row.col(|ui| body_cell(ui, sheet, position, column, r, book_id, state, actions));
@@ -600,14 +606,22 @@ impl BookUi {
     /// With a block of several cells selected and `from` inside it: moves the active cell as
     /// Enter and Tab do in Origin, keeping the block selected. Returns false when the selection
     /// is not such a block.
-    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize) -> bool {
+    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize, visible: &dyn Fn(usize) -> bool) -> bool {
         let Sel::Cells { anchor, end } = self.sel else { return false };
         let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
         let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
         if anchor == end || !(c0..=c1).contains(&from.0) || !(r0..=r1).contains(&from.1) {
             return false;
         }
-        self.active = Some(block_next((c0, c1), (r0, r1), from, dx, dy));
+        // A hidden column is stepped over.
+        let mut next = block_next((c0, c1), (r0, r1), from, dx, dy);
+        for _ in 0..(c1 - c0 + 1) {
+            if visible(next.0) {
+                break;
+            }
+            next = block_next((c0, c1), (r0, r1), next, dx, dy);
+        }
+        self.active = Some(next);
         self.reveal = 4;
         self.focus_grid = true;
         true
@@ -1325,7 +1339,9 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, actions: 
         }
         state.editing = None;
         let in_block = match (step, sheet.column_index(column)) {
-            (Some((dx, dy)), Some(position)) => state.step_in_block((position, row), dx, dy),
+            (Some((dx, dy)), Some(position)) => {
+                state.step_in_block((position, row), dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
+            }
             _ => false,
         };
         if let (false, Some((dx, dy)), Some(position)) = (in_block, step, sheet.column_index(column)) {
@@ -1457,7 +1473,7 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
                     let step = if shift { -1 } else { 1 };
                     let (dx, dy) = if *key == egui::Key::Tab { (step, 0) } else { (0, step) };
                     if let Some(from) = state.active_cell()
-                        && state.step_in_block(from, dx, dy)
+                        && state.step_in_block(from, dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
                     {
                         consumed.push(*key);
                         taken = true;
@@ -1731,11 +1747,16 @@ mod tests {
     #[test]
     fn stepping_in_a_block_moves_the_active_cell_and_keeps_the_block() {
         let mut state = BookUi { sel: Sel::Cells { anchor: (0, 0), end: (1, 1) }, ..Default::default() };
-        assert!(state.step_in_block((0, 0), 0, 1));
+        let all = |_: usize| true;
+        assert!(state.step_in_block((0, 0), 0, 1, &all));
         assert_eq!(state.active_cell(), Some((0, 1)));
         assert_eq!(state.sel, Sel::Cells { anchor: (0, 0), end: (1, 1) });
         // A single cell is not stepped.
         state.sel = Sel::Cells { anchor: (0, 0), end: (0, 0) };
-        assert!(!state.step_in_block((0, 0), 0, 1));
+        assert!(!state.step_in_block((0, 0), 0, 1, &all));
+        // Tab over a hidden column: from column 0 the next column 1 is hidden, so the walk goes on.
+        state.sel = Sel::Cells { anchor: (0, 0), end: (2, 0) };
+        assert!(state.step_in_block((0, 0), 1, 0, &|c| c != 1));
+        assert_eq!(state.active_cell(), Some((2, 0)));
     }
 }

@@ -9,11 +9,14 @@ use serde::{Deserialize, Serialize};
 pub struct Worksheet {
     pub name: String,
     pub columns: Vec<Column>,
+    /// Column > Filter: hides the rows that fail a condition (see [`crate::rowfilter`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<crate::rowfilter::RowFilter>,
 }
 
 impl Worksheet {
     pub fn new(name: impl Into<String>) -> Self {
-        Worksheet { name: name.into(), columns: Vec::new() }
+        Worksheet { name: name.into(), columns: Vec::new(), filter: None }
     }
 
     /// Number of rows: the length of the longest column.

@@ -417,7 +417,7 @@ impl Project {
         let book_id = book.id;
         let sheet_index = book.sheets.iter().position(|s| s.column(id).is_some()).expect("located here");
         let index = sheet.column_index(id).expect("located here");
-        let y_all = column.numeric_unmasked().ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?;
+        let y_all = sheet.values_of(column).ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?;
         if y_all.is_empty() {
             return Err(AnalysisError::Empty(column.short_name.clone()).into());
         }

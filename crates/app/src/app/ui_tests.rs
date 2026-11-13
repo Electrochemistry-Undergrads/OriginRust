@@ -2192,11 +2192,22 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
         ],
     );
     // What Sheaf has is enabled, the rest is greyed.
-    for have in ["Plot", "Cut", "Copy", "Paste", "Insert", "Delete", "Clear", "Set As", "Properties...", "Normalize..."]
-    {
+    for have in [
+        "Plot",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Insert",
+        "Delete",
+        "Clear",
+        "Set As Categorical",
+        "Set As",
+        "Properties...",
+        "Normalize...",
+    ] {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    for lack in ["Copy Columns to...", "Set As Categorical", "Frequency Count..."] {
+    for lack in ["Copy Columns to...", "Frequency Count..."] {
         assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
     }
     // Clear empties the column and one undo brings it back.
@@ -4844,4 +4855,76 @@ fn masking_cells_marks_them_for_analysis_and_undoes() {
     assert!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.is_empty());
     h.state_mut().apply(Action::Undo, &ctx);
     assert_eq!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.len(), 2);
+}
+
+#[test]
+fn the_worksheet_filter_hides_rows_without_deleting_them_and_undoes() {
+    let mut h = start(vec![data_file("rowfilter")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RowFilterDialog { book, column: None }, &ctx);
+    settle(&mut h);
+    assert!(h.state().row_filter.is_some());
+    h.event(egui::Event::Text("col(A) >= 3".to_string()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().row_filter.is_none());
+    let sheet = project(&h).workbooks().next().unwrap().sheet();
+    assert_eq!(sheet.shown_rows(4), Some(vec![2, 3]));
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "nothing was deleted");
+    settle(&mut h);
+    assert_eq!(h.query_all_by_label("1").count(), 0, "row 1 is not shown");
+    assert_eq!(h.query_all_by_label("3").count(), 2, "row 3 is: its number and its value");
+    // Disable shows everything again; undo goes back step by step.
+    h.state_mut().apply(Action::ToggleRowFilter(book), &ctx);
+    assert!(project(&h).workbooks().next().unwrap().sheet().shown_rows(4).is_none());
+    h.state_mut().apply(Action::Undo, &ctx);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(project(&h).workbooks().next().unwrap().sheet().filter.is_none());
+}
+
+#[test]
+fn transpose_and_reduce_rows_write_a_new_sheet_and_undo() {
+    use crate::dialogs::reshape::ReshapeKind;
+    let mut h = start(vec![data_file("reshape")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Reshape { book, columns: Vec::new(), kind: ReshapeKind::Transpose }, &ctx);
+    settle(&mut h);
+    assert!(h.state().reshape.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().reshape.is_none());
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert_eq!(b.active_sheet, 1, "the new sheet is shown");
+    // Three columns of four rows give four columns of three rows; the first is the first data row.
+    assert_eq!(b.sheets[1].columns.len(), 4);
+    assert_eq!(b.sheets[1].columns[0].numeric().unwrap(), [1.0, 2.5, 30.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Transpose"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+
+    h.state_mut().apply(Action::SelectSheet { book, sheet: 0 }, &ctx);
+    h.state_mut().apply(Action::Reshape { book, columns: Vec::new(), kind: ReshapeKind::Reduce }, &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets[1].columns[0].numeric().unwrap(), [1.5, 3.5], "two rows to one, averaged");
+}
+
+#[test]
+fn set_as_categorical_toggles_and_group_and_subject_are_designations() {
+    use sheaf_core::Designation;
+    let mut h = start(vec![data_file("categorical")]);
+    let ctx = h.ctx.clone();
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
+    h.state_mut().apply(Action::SetCategorical(vec![b]), &ctx);
+    assert!(project(&h).column(b).unwrap().categorical);
+    assert_eq!(h.state().doc.undo_label(), Some("Set as categorical"));
+    h.state_mut().apply(Action::SetCategorical(vec![b]), &ctx);
+    assert!(!project(&h).column(b).unwrap().categorical, "a second use takes the mark off");
+    h.state_mut().apply(Action::SetDesignation { columns: vec![b], designation: Designation::Group }, &ctx);
+    assert_eq!(project(&h).column(b).unwrap().designation, Designation::Group);
+    assert_eq!(Designation::Group.tag(), "G");
+    assert_eq!(Designation::Subject.tag(), "S");
 }

@@ -174,7 +174,7 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     let line = f.line(200).map_err(|_| bad("it does not start with the Origin signature 'CPYA'".into()))?;
     let signature = strings::decode_cp1252(&line).trim().to_string();
     if signature.starts_with("CPYUA") {
-        return Err(bad("it is in the newer Unicode project format (.opju), which is not supported".into()));
+        return Err(bad("it is in the newer Unicode project format (.opju); open it by its .opju name".into()));
     }
     if !signature.starts_with("CPYA") {
         return Err(bad("it does not start with the Origin signature 'CPYA'".into()));

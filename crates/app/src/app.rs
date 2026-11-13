@@ -1096,9 +1096,10 @@ impl SheafApp {
             Pending::Open => {
                 let mut chooser = rfd::FileDialog::new()
                     .set_title("Open project")
-                    .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj"])
+                    .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj", "opju"])
                     .add_filter("Sheaf project", &[project_file::EXTENSION])
-                    .add_filter("Origin project", &["opj"]);
+                    .add_filter("Origin project", &["opj"])
+                    .add_filter("Origin Unicode project (workbooks only)", &["opju"]);
                 if let Some(dir) = self.folder() {
                     chooser = chooser.set_directory(dir);
                 }

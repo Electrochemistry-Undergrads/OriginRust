@@ -11,6 +11,7 @@ pub mod chi_bin;
 mod error;
 pub mod export;
 pub mod opj;
+pub mod opju;
 pub mod project_file;
 pub mod save;
 mod text;
@@ -40,10 +41,12 @@ pub struct OpenedProject {
     pub warnings: Vec<String>,
 }
 
-/// True for file names that [`open_project`] reads: `.sheaf` and `.opj`.
+/// True for file names that [`open_project`] reads: `.sheaf`, `.opj` and `.opju`.
 pub fn is_project_file(path: &Path) -> bool {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    ext.eq_ignore_ascii_case(project_file::EXTENSION) || ext.eq_ignore_ascii_case("opj")
+    ext.eq_ignore_ascii_case(project_file::EXTENSION)
+        || ext.eq_ignore_ascii_case("opj")
+        || ext.eq_ignore_ascii_case("opju")
 }
 
 fn modified(path: &Path) -> Option<std::time::SystemTime> {
@@ -56,6 +59,24 @@ fn modified(path: &Path) -> Option<std::time::SystemTime> {
 /// project) is opened when it is at least as new as the `.opj`; when the `.opj` is newer, it was
 /// changed in Origin, so the `.opj` is read and a warning says the companion was not used.
 pub fn open_project(path: &Path) -> Result<OpenedProject, IoError> {
+    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opju")) {
+        let mut import = opju::read_opju(path)?;
+        let mut warnings = std::mem::take(&mut import.warnings);
+        warnings.insert(
+            0,
+            format!(
+                "Imported from an Origin Unicode project ({}). Workbooks are read; graphs are not yet.",
+                import.version
+            ),
+        );
+        return Ok(OpenedProject {
+            project: import.into_project(),
+            foreign: true,
+            save_path: None,
+            companion_used: false,
+            warnings,
+        });
+    }
     let is_opj = path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("opj"));
     if is_opj {
         let companion = save::companion_path(path);

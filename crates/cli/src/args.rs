@@ -56,7 +56,7 @@ pub enum BandKind {
 
 #[derive(Args, Debug)]
 pub struct FitArgs {
-    /// A data file, a .sheaf project or an Origin .opj project. Not needed with --list.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project. Not needed with --list.
     #[arg(required_unless_present = "list")]
     pub input: Option<PathBuf>,
     /// List the built-in fit functions and exit.
@@ -263,7 +263,7 @@ pub struct ReadOptions {
 
 #[derive(Args, Debug)]
 pub struct InfoArgs {
-    /// A data file, a .sheaf project or an Origin .opj project.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project.
     pub path: PathBuf,
     #[command(flatten)]
     pub read: ReadOptions,
@@ -273,7 +273,7 @@ pub struct InfoArgs {
 pub struct ImportArgs {
     /// Data files, folders or patterns to import. A folder gives its data files (.txt, .csv, .tsv,
     /// .dat, .asc, .prn, .tab, .bin); a name with * or ? in it (for example "exports/icp_*.csv")
-    /// gives the matching files, in natural order (icp_2 before icp_10). An Origin .opj project adds
+    /// gives the matching files, in natural order (icp_2 before icp_10). An Origin .opj or .opju project adds
     /// all its workbooks.
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
@@ -471,7 +471,7 @@ pub struct MarginArgs {
 
 #[derive(Args, Debug)]
 pub struct PlotArgs {
-    /// A data file, a .sheaf project or an Origin .opj project. Several data files are overlaid in one figure.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project. Several data files are overlaid in one figure.
     #[arg(required = true)]
     pub inputs: Vec<PathBuf>,
     /// The figure to write: .png, .svg, .pdf, .eps, .emf or .tif.
@@ -579,7 +579,7 @@ pub enum PanelLinkArg {
 
 #[derive(Args, Debug)]
 pub struct ExportArgs {
-    /// A .sheaf project or an Origin .opj project (its graphs are read). For an output ending in
+    /// A .sheaf project or an Origin .opj project (its graphs are read) or .opju project (only its workbooks are read). For an output ending in
     /// .opj a data file (CH Instruments text, CSV or other delimited text) is also accepted.
     pub project: PathBuf,
     /// Name of the graph (default: the only graph of the project). Not used for .opj output.
@@ -633,7 +633,7 @@ pub struct AnalyzeArgs {
 /// Which data an analysis tool works on and where the results go.
 #[derive(Args, Debug, Clone)]
 pub struct TargetArgs {
-    /// A data file, a .sheaf project or an Origin .opj project.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project.
     pub input: PathBuf,
     /// Y columns to work on, comma-separated short or long names (default: the columns a plot of
     /// the sheet would show).

@@ -489,6 +489,14 @@ pub enum Tool {
     Integrate(IntegrateSpec),
     IntegrateRanges(IntegrateRangesSpec),
     CurveMath(CurveMathSpec),
+    /// Data Manipulation: subtract the straight line through two points.
+    SubtractLine(SubtractLineSpec),
+    /// Data Manipulation: reduce to evenly spaced X.
+    ReduceX(ReduceOptions),
+    /// Data Manipulation: curve translate X or Y.
+    Translate(TranslateSpec),
+    /// Mathematics: running median.
+    MedianFilter(MedianFilterSpec),
     Differentiate(DiffOptions),
     Smooth(SmoothOptions),
     Normalize(NormalizeMethod),
@@ -525,6 +533,13 @@ impl Tool {
                 (CurveOperand::Reference(_), CurveOp::Subtract) => "Subtract reference",
                 _ => "Curve math",
             },
+            Tool::SubtractLine(_) => "Subtract straight line",
+            Tool::ReduceX(_) => "Reduce to evenly spaced X",
+            Tool::Translate(spec) => match spec.axis {
+                TranslateAxis::X => "Translate X",
+                TranslateAxis::Y => "Translate Y",
+            },
+            Tool::MedianFilter(_) => "Median filter",
             Tool::Differentiate(_) => "Differentiate",
             Tool::Smooth(_) => "Smooth",
             Tool::Normalize(_) => "Normalize",
@@ -563,6 +578,8 @@ impl Tool {
         match self {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
             Tool::CurveMath(_) => "Math",
+            Tool::ReduceX(_) => "Reduced",
+            Tool::Translate(_) => "Translate",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Peaks",
             Tool::PeakChain(_) => "PeakAnalysis",
@@ -1093,7 +1110,10 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod manip;
 mod statistics;
+pub use manip::{MedianFilterSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec};
+pub use sheaf_calc::{EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions};
 
 impl Project {
     /// A new graph with a column plot of each (bin centre, count) pair of columns.
@@ -1209,6 +1229,9 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+            }
+            Tool::SubtractLine(_) | Tool::ReduceX(_) | Tool::Translate(_) | Tool::MedianFilter(_) => {
+                manip::run(&request.tool, &inputs, &mut beside, &mut on_sheet)?;
             }
             Tool::PeakChain(spec) => {
                 table = Some(run_peak_chain(spec, &inputs, &mut beside, &mut notes)?);

@@ -6,6 +6,9 @@
 //! tool will work on, the tool's own options, and the row range. OK runs the
 //! tool as one undoable step.
 
+use super::frame::{
+    DialogButton, description_row, dialog_theme_row, ok_cancel_apply, preview_area, read_only_box, tree_node,
+};
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, FreqOptions, HistogramSpec, KruskalWallisSpec, MannWhitneySpec,
@@ -282,8 +285,10 @@ const COMPARISONS: [(&str, Option<MeansComparison>); 6] = [
 pub enum AnalysisOutcome {
     Open,
     Closed,
-    /// The tool ran; the window closes.
+    /// OK: the tool ran; the window closes.
     Done(Box<Report>),
+    /// Apply: the tool ran and the window stays open.
+    Applied(Box<Report>),
 }
 
 pub struct AnalysisDialog {
@@ -338,6 +343,14 @@ pub struct AnalysisDialog {
     /// (the factor columns may hold text).
     sheet_columns: Vec<(ColumnId, String)>,
     problem: Option<String>,
+    /// The "Select Input Columns" window: one tick per column of the sheet while it is open.
+    picker: Option<Vec<bool>>,
+    /// The preview pane is shown (the "<<" button hides it).
+    show_preview: bool,
+    auto_preview: bool,
+    preview: Option<Result<PreviewData, String>>,
+    /// The request the preview shows, so that Auto Preview computes again only after a change.
+    preview_request: Option<Request>,
 }
 
 const CURVE_OPS: [(&str, CurveOp); 5] = [
@@ -457,6 +470,11 @@ impl AnalysisDialog {
             stats,
             sheet_columns,
             problem: None,
+            picker: None,
+            show_preview: true,
+            auto_preview: false,
+            preview: None,
+            preview_request: None,
         })
     }
 
@@ -689,7 +707,6 @@ impl AnalysisDialog {
                     &mut self.integrate.end_point_baseline,
                     "Subtract the line through the first and last point of each range",
                 );
-                ui.weak("One row per range and column (area, absolute area, peak, width) goes to a new sheet.");
             }
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
@@ -726,7 +743,6 @@ impl AnalysisDialog {
                 )
                 .on_hover_text("For the area of a peak above a sloping background: choose the rows around the peak.");
                 ui.checkbox(&mut self.integrate.cumulative, "Add a column with the running integral");
-                ui.weak("Area, peak position, height and width go to a new sheet.");
             }
             AnalysisKind::Differentiate => {
                 ui.horizontal(|ui| {
@@ -890,7 +906,6 @@ impl AnalysisDialog {
                     });
                     self.interp.range = Some((lo, hi));
                 });
-                ui.weak("The interpolated curves go to a new sheet.");
             }
             AnalysisKind::Peaks | AnalysisKind::PeakChain => {
                 let chain = self.kind == AnalysisKind::PeakChain;
@@ -956,13 +971,10 @@ impl AnalysisDialog {
                         self.chain_fit.is_some(),
                         egui::Checkbox::new(&mut self.chain_fit_linear, "Sloped baseline in the fit"),
                     );
-                    ui.weak("Peaks, areas and fit results go to a new sheet; the baseline goes beside the data.");
-                } else {
-                    ui.weak("Peak positions and heights go to a new sheet.");
                 }
             }
             AnalysisKind::Statistics => {
-                ui.weak("Count, mean, standard deviation, sum, minimum, quartiles and maximum go to a new sheet.");
+                ui.weak("This tool has no options: every statistic is computed.");
             }
             AnalysisKind::TTest => {
                 let st = &mut self.stats;
@@ -998,7 +1010,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak("The statistic, p-value and confidence interval go to a new sheet.");
             }
             AnalysisKind::Anova => {
                 let st = &mut self.stats;
@@ -1017,7 +1028,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak("Group statistics, the ANOVA table and the comparisons go to a new sheet.");
             }
             AnalysisKind::Anova2 => {
                 let st = &mut self.stats;
@@ -1075,10 +1085,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak(
-                    "The tables (statistics, ANOVA, comparisons) go to a new sheet. Sums of squares are adjusted for the \
-                     other terms, as in Origin.",
-                );
             }
             AnalysisKind::MannWhitney => {
                 let st = &mut self.stats;
@@ -1094,7 +1100,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak("Ranks, U, Z and the p-values go to a new sheet.");
             }
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => {
                 let st = &mut self.stats;
@@ -1123,7 +1128,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak("Both p-values go to a new sheet.");
             }
             AnalysisKind::KruskalWallis => {
                 let st = &mut self.stats;
@@ -1132,7 +1136,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak("Mean ranks, the chi-square statistic and its p-value go to a new sheet.");
             }
             AnalysisKind::Correlation => {
                 let st = &mut self.stats;
@@ -1151,7 +1154,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak("The matrices of coefficients and p-values go to a new sheet.");
             }
             AnalysisKind::Histogram => {
                 let st = &mut self.stats;
@@ -1173,7 +1175,6 @@ impl AnalysisDialog {
                     });
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
-                ui.weak("Bin centres, counts, cumulative counts and percentages go to a new sheet.");
             }
             AnalysisKind::Normality => {
                 let st = &mut self.stats;
@@ -1181,72 +1182,484 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-                ui.weak("Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson.");
             }
         }
     }
 
-    /// Draws the window and runs the tool when OK is pressed.
+    /// Ticks "Auto Preview" (for `--show analysis-preview:NAME`).
+    pub fn tick_auto_preview(&mut self) {
+        self.auto_preview = true;
+    }
+
+    /// How many points the preview holds, or the reason there is none (for tests).
+    #[cfg(test)]
+    pub fn preview_state(&self) -> Option<Result<usize, String>> {
+        self.preview.as_ref().map(|p| p.as_ref().map(|d| d.ry.len()).map_err(Clone::clone))
+    }
+
+    /// The X-Function name that Origin shows after the title ("Smooth: smooth"); empty for the tools whose
+    /// window is titled with the tool's name alone.
+    fn xf_name(&self) -> &'static str {
+        match self.kind {
+            AnalysisKind::Integrate | AnalysisKind::IntegrateRanges => "integ1",
+            AnalysisKind::Differentiate => "differentiate",
+            AnalysisKind::Smooth => "smooth",
+            AnalysisKind::Normalize => "normalize",
+            AnalysisKind::Baseline => "baseline",
+            AnalysisKind::SubtractRef | AnalysisKind::CurveMath => "curvemath",
+            AnalysisKind::Interpolate => "interp1",
+            AnalysisKind::Peaks => "pkFind",
+            AnalysisKind::PeakChain => "",
+            AnalysisKind::Statistics => "DescStats",
+            AnalysisKind::TTest => "ttest",
+            AnalysisKind::Anova => "anova1",
+            AnalysisKind::Histogram => "freqcounts",
+            AnalysisKind::Normality => "normtest",
+            AnalysisKind::Anova2 => "anova2",
+            AnalysisKind::MannWhitney => "mannwhitney",
+            AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "signrank",
+            AnalysisKind::KruskalWallis => "kwanova",
+            AnalysisKind::Correlation => "corrcoef",
+        }
+    }
+
+    /// The window title.
+    fn window_title(&self) -> String {
+        match self.xf_name() {
+            "" => self.kind.title().to_string(),
+            name => format!("{}: {name}", self.kind.title()),
+        }
+    }
+
+    /// One line for the Description row of the window.
+    fn description(&self) -> &'static str {
+        match self.kind {
+            AnalysisKind::Integrate => "Integrate the input curves by the trapezoidal rule",
+            AnalysisKind::IntegrateRanges => "Integrate the input curves over several X ranges",
+            AnalysisKind::Differentiate => "Differentiate the input curves",
+            AnalysisKind::Smooth => "Smooth the input curves",
+            AnalysisKind::Normalize => "Normalize the input columns",
+            AnalysisKind::Baseline => "Subtract a baseline from the input curves",
+            AnalysisKind::SubtractRef => "Subtract a reference curve from the input curves",
+            AnalysisKind::CurveMath => "Add, subtract, multiply, divide or raise to a power with a constant or a curve",
+            AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
+            AnalysisKind::Peaks => "Find the peaks of the input curves",
+            AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
+            AnalysisKind::Statistics => "Descriptive statistics of the input columns",
+            AnalysisKind::TTest => "Test the means of one or two samples",
+            AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
+            AnalysisKind::Histogram => "Count the values of the input columns in bins",
+            AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
+            AnalysisKind::Anova2 => "Two-way analysis of variance",
+            AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
+            AnalysisKind::SignedRank => "Test the median of one sample by signed ranks",
+            AnalysisKind::SignedRankPaired => "Test the difference of two paired samples by signed ranks",
+            AnalysisKind::KruskalWallis => "Compare several samples by their ranks",
+            AnalysisKind::Correlation => "Correlation coefficients of the input columns",
+        }
+    }
+
+    /// Where the results go, for the Output group.
+    fn output_text(&self) -> &'static str {
+        match self.kind {
+            AnalysisKind::Integrate => "Area, peak position, height and width in a new sheet",
+            AnalysisKind::IntegrateRanges => {
+                "One row per range and column (area, absolute area, peak, width) in a new sheet"
+            }
+            AnalysisKind::Differentiate
+            | AnalysisKind::Normalize
+            | AnalysisKind::Baseline
+            | AnalysisKind::Smooth
+            | AnalysisKind::SubtractRef
+            | AnalysisKind::CurveMath => "New columns beside the input",
+            AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
+            AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
+            AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
+            AnalysisKind::Statistics => {
+                "Count, mean, standard deviation, sum, minimum, quartiles and maximum in a new sheet"
+            }
+            AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
+            AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
+            AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
+            AnalysisKind::Normality => {
+                "Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson in a new sheet"
+            }
+            AnalysisKind::Anova2 => {
+                "The tables (statistics, ANOVA, comparisons) in a new sheet; sums of squares are adjusted for the \
+                 other terms, as in Origin"
+            }
+            AnalysisKind::MannWhitney => "Ranks, U, Z and the p-values in a new sheet",
+            AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "Both p-values in a new sheet",
+            AnalysisKind::KruskalWallis => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
+            AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
+        }
+    }
+
+    /// Whether a preview of the result can be computed cheaply: the tools that write columns of
+    /// the same length as the input, or a resampled curve.
+    fn has_preview(&self) -> bool {
+        matches!(
+            self.kind,
+            AnalysisKind::Integrate
+                | AnalysisKind::Differentiate
+                | AnalysisKind::Smooth
+                | AnalysisKind::Normalize
+                | AnalysisKind::Baseline
+                | AnalysisKind::Interpolate
+                | AnalysisKind::SubtractRef
+                | AnalysisKind::CurveMath
+        )
+    }
+
+    /// Chooses other input columns of the sheet.
+    fn set_columns(&mut self, project: &Project, columns: Vec<ColumnId>) {
+        let Some((_, sheet, _)) = columns.first().and_then(|c| project.locate(*c)) else {
+            return;
+        };
+        let names: Vec<&str> =
+            columns.iter().filter_map(|id| sheet.column(*id)).map(|c| c.short_name.as_str()).collect();
+        if names.len() != columns.len() {
+            return;
+        }
+        self.column_names = names.join(", ");
+        self.reference_choices = reference_choices(project, &columns);
+        self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
+        if self.kind == AnalysisKind::CurveMath {
+            self.use_reference = self.use_reference && !self.reference_choices.is_empty();
+        }
+        if self.kind == AnalysisKind::Anova2 {
+            self.stats.two_way_levels.resize(columns.len(), (String::new(), String::new()));
+        }
+        self.columns = columns;
+        self.preview_request = None;
+    }
+
+    /// The range of the input in Origin's text form: `[Book1]Sheet1!(A"t",B"up")`.
+    fn range_text(&self, project: &Project) -> String {
+        let Some((book, sheet, first)) = self.columns.first().and_then(|c| project.locate(*c)) else {
+            return String::new();
+        };
+        let part = |c: &sheaf_core::Column| {
+            if c.long_name.is_empty() { c.short_name.clone() } else { format!("{}\"{}\"", c.short_name, c.long_name) }
+        };
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(x) = sheet.column_index(first.id).and_then(|i| sheet.x_for(i))
+            && !self.columns.contains(&x.id)
+        {
+            parts.push(part(x));
+        }
+        parts.extend(self.columns.iter().filter_map(|id| sheet.column(*id)).map(part));
+        format!("[{}]{}!({})", book.name, sheet.name, parts.join(","))
+    }
+
+    /// Runs the tool on a copy of the project and keeps the first input column and the first result
+    /// column for the preview pane.
+    fn compute_preview(&self, project: &Project) -> Result<PreviewData, String> {
+        if !self.has_preview() {
+            return Err("No preview for this tool".to_string());
+        }
+        let cells: usize = project.workbooks().flat_map(|b| &b.sheets).flat_map(|s| &s.columns).map(|c| c.len()).sum();
+        if cells > PREVIEW_MAX_CELLS {
+            return Err("The project is too large for a preview".to_string());
+        }
+        let request = self.request()?;
+        let first = *request.columns.first().ok_or("no input column")?;
+        let mut copy = project.clone();
+        let report = copy.analyze(&request).map_err(|e| e.to_string())?;
+        let (_, sheet, input) = copy.locate(first).ok_or("the input column is gone")?;
+        let index = sheet.column_index(first).ok_or("the input column is gone")?;
+        let y = input.numeric().ok_or("the input holds text")?;
+        let x: Vec<f64> = match sheet.x_for(index).filter(|x| x.id != first).and_then(|c| c.numeric()) {
+            Some(v) => (0..y.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
+            None => (1..=y.len()).map(|i| i as f64).collect(),
+        };
+        let (rx, ry) = if let Some(id) = report.new_columns.first() {
+            let c = copy.column(*id).and_then(|c| c.numeric()).ok_or("the result has no numbers")?;
+            ((0..c.len()).map(|i| x.get(i).copied().unwrap_or(f64::NAN)).collect(), c.to_vec())
+        } else if let Some(s) = report.new_sheet.and_then(|s| copy.workbook(report.book)?.sheets.get(s)) {
+            let col = |i: usize| s.columns.get(i).and_then(|c| c.numeric()).map(<[f64]>::to_vec);
+            (col(0).ok_or("no result")?, col(1).ok_or("no result")?)
+        } else {
+            return Err("No preview for these options".to_string());
+        };
+        Ok(PreviewData { label: input.short_name.clone(), x, y: y.to_vec(), rx, ry })
+    }
+
+    /// Draws the Input node: the range with its picker, and the rows.
+    fn input_node(&mut self, ui: &mut egui::Ui, project: &Project) {
+        let text = self.range_text(project);
+        ui.horizontal(|ui| {
+            let width = (ui.available_width() - 34.0).max(120.0);
+            read_only_box(ui, &text, width);
+            if ui.button("...").on_hover_text("Choose the columns of the sheet").clicked() {
+                self.picker = Some(self.sheet_columns_selected());
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Rows");
+            ui.radio_value(&mut self.row_mode, RowMode::All, "All");
+            ui.radio_value(&mut self.row_mode, RowMode::Rows, "From row");
+            ui.add_enabled_ui(self.row_mode == RowMode::Rows, |ui| {
+                ui.add(DragValue::new(&mut self.from).range(1..=self.rows_in_sheet));
+                ui.label("to");
+                ui.add(DragValue::new(&mut self.to).range(1..=self.rows_in_sheet));
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.label("    ");
+            ui.radio_value(&mut self.row_mode, RowMode::XRange, "X from")
+                .on_hover_text("The first unbroken run of rows whose X value lies in the interval.");
+            ui.add_enabled_ui(self.row_mode == RowMode::XRange, |ui| {
+                ui.add(DragValue::new(&mut self.x_from).speed(0.01));
+                ui.label("to");
+                ui.add(DragValue::new(&mut self.x_to).speed(0.01));
+            });
+        });
+    }
+
+    /// One tick per column of the sheet, set for the columns that are inputs now.
+    fn sheet_columns_selected(&self) -> Vec<bool> {
+        self.sheet_columns.iter().map(|(id, _)| self.columns.contains(id)).collect()
+    }
+
+    /// The small "Select Input Columns" window opened by the "..." button of the Input row.
+    fn picker_window(&mut self, ctx: &egui::Context, project: &Project) {
+        let Some(mut ticks) = self.picker.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut done: Option<bool> = None;
+        egui::Window::new("Select Input Columns")
+            .id(egui::Id::new("analysis_input_picker"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                    for ((_, text), on) in self.sheet_columns.iter().zip(ticks.iter_mut()) {
+                        ui.checkbox(on, text);
+                    }
+                });
+                ui.add_space(6.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Cancel").clicked() {
+                        done = Some(false);
+                    }
+                    if ui.add_enabled(ticks.iter().any(|t| *t), egui::Button::new("OK")).clicked() {
+                        done = Some(true);
+                    }
+                });
+            });
+        match done {
+            Some(true) => {
+                let ids: Vec<ColumnId> =
+                    self.sheet_columns.iter().zip(&ticks).filter(|(_, on)| **on).map(|((id, _), _)| *id).collect();
+                self.set_columns(project, ids);
+            }
+            Some(false) => {}
+            None if open => self.picker = Some(ticks),
+            None => {}
+        }
+    }
+
+    /// Draws the window. OK runs the tool and closes it; Apply runs it and keeps the window.
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> AnalysisOutcome {
         if self.columns.iter().any(|c| doc.project().column(*c).is_none()) {
             return AnalysisOutcome::Closed;
         }
         let mut open = true;
-        let mut run = false;
-        let mut cancel = false;
-        egui::Window::new(self.kind.title())
+        let mut pressed: Option<DialogButton> = None;
+        let mut preview_now = false;
+        let with_pane = self.show_preview && self.has_preview();
+        let avail = ctx.available_rect();
+        let width = if with_pane { 800.0 } else { 520.0 };
+        let pos = (avail.center() - egui::vec2(width, 520.0) / 2.0).max(avail.min);
+        let title = self.window_title();
+        egui::Window::new(title)
             .id(egui::Id::new("analysis"))
             .open(&mut open)
+            .default_pos(pos)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                let count = self.columns.len();
-                let what = if count == 1 { "Column".to_string() } else { format!("{count} columns:") };
-                ui.label(format!("{what} {}", self.column_names));
-                ui.separator();
-                self.options(ui);
-                ui.separator();
+                ui.set_width(width - 14.0);
+                dialog_theme_row(ui);
+                description_row(ui, self.description());
                 ui.horizontal(|ui| {
-                    ui.label("Rows");
-                    ui.radio_value(&mut self.row_mode, RowMode::All, "All");
-                    ui.radio_value(&mut self.row_mode, RowMode::Rows, "From row");
-                    ui.add_enabled_ui(self.row_mode == RowMode::Rows, |ui| {
-                        ui.add(DragValue::new(&mut self.from).range(1..=self.rows_in_sheet));
-                        ui.label("to");
-                        ui.add(DragValue::new(&mut self.to).range(1..=self.rows_in_sheet));
+                    ui.label("Recalculate");
+                    egui::ComboBox::from_id_salt("analysis_recalculate").selected_text("None").show_ui(ui, |ui| {
+                        let _ = ui.selectable_label(true, "None");
+                        ui.add_enabled(false, egui::Button::selectable(false, "Manual"));
+                        ui.add_enabled(false, egui::Button::selectable(false, "Auto"));
                     });
                 });
-                ui.horizontal(|ui| {
-                    ui.label("    ");
-                    ui.radio_value(&mut self.row_mode, RowMode::XRange, "X from")
-                        .on_hover_text("The first unbroken run of rows whose X value lies in the interval.");
-                    ui.add_enabled_ui(self.row_mode == RowMode::XRange, |ui| {
-                        ui.add(DragValue::new(&mut self.x_from).speed(0.01));
-                        ui.label("to");
-                        ui.add(DragValue::new(&mut self.x_to).speed(0.01));
+                ui.add_space(2.0);
+                ui.horizontal_top(|ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(if with_pane { 480.0 } else { 500.0 });
+                        egui::ScrollArea::vertical()
+                            .id_salt("analysis_tree")
+                            .max_height(380.0)
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
+                                let title = self.kind.title();
+                                tree_node(ui, "analysis_options", title, |ui| self.options(ui));
+                                tree_node(ui, "analysis_output", "Output", |ui| {
+                                    ui.add_enabled_ui(false, |ui| {
+                                        ui.label(self.output_text());
+                                    });
+                                });
+                            });
                     });
+                    if with_pane {
+                        self.preview_pane(ui);
+                    }
                 });
                 if let Some(p) = &self.problem {
                     ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
                 }
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    run = ui.button("OK").clicked();
-                    cancel = ui.button("Cancel").clicked();
+                ui.separator();
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Right to left: the arrow that hides the preview is the rightmost control.
+                    let arrow = egui::Button::new(if self.show_preview { "<<" } else { ">>" });
+                    if ui.add_enabled(self.has_preview(), arrow).on_hover_text("Hide or show the preview").clicked() {
+                        self.show_preview = !self.show_preview;
+                    }
+                    pressed = ok_cancel_apply(ui, true);
+                    if ui.add_enabled(self.has_preview(), egui::Button::new("Preview")).clicked() {
+                        preview_now = true;
+                    }
+                    ui.add_enabled(self.has_preview(), egui::Checkbox::new(&mut self.auto_preview, "Auto Preview"));
                 });
             });
+        self.picker_window(ctx, doc.project());
 
-        if run {
+        // The preview follows the options while Auto Preview is ticked, or when Preview is pressed.
+        if self.has_preview() && self.show_preview {
+            let current = self.request().ok();
+            if preview_now || (self.auto_preview && current != self.preview_request) {
+                self.preview = Some(self.compute_preview(doc.project()));
+                self.preview_request = current;
+            }
+        }
+
+        if matches!(pressed, Some(DialogButton::Ok | DialogButton::Apply)) {
             match self.request() {
                 Ok(request) => match doc.edit(request.tool.name(), |p| p.analyze(&request)) {
-                    Ok(report) => return AnalysisOutcome::Done(Box::new(report)),
+                    Ok(report) => {
+                        self.problem = None;
+                        if pressed == Some(DialogButton::Apply) {
+                            self.preview_request = None;
+                            return AnalysisOutcome::Applied(Box::new(report));
+                        }
+                        return AnalysisOutcome::Done(Box::new(report));
+                    }
                     Err(e) => self.problem = Some(e.to_string()),
                 },
                 Err(e) => self.problem = Some(e),
             }
         }
-        if open && !cancel { AnalysisOutcome::Open } else { AnalysisOutcome::Closed }
+        if open && pressed != Some(DialogButton::Cancel) { AnalysisOutcome::Open } else { AnalysisOutcome::Closed }
     }
+
+    /// The preview at the right: the first input column in grey, the result in red.
+    fn preview_pane(&mut self, ui: &mut egui::Ui) {
+        ui.vertical(|ui| {
+            ui.set_width(270.0);
+            let rect = preview_area(ui, egui::vec2(270.0, 250.0));
+            let grey = egui::Color32::from_rgb(120, 120, 120);
+            match &self.preview {
+                Some(Ok(data)) => draw_preview(ui, rect, data),
+                Some(Err(text)) => {
+                    let font = egui::FontId::proportional(12.0);
+                    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, text, font, grey);
+                }
+                None => {
+                    let big = egui::FontId::proportional(20.0);
+                    ui.painter().text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "No Preview",
+                        big,
+                        egui::Color32::BLACK,
+                    );
+                    let small = egui::FontId::proportional(11.0);
+                    let at = rect.center() + egui::vec2(0.0, 24.0);
+                    ui.painter().text(
+                        at,
+                        egui::Align2::CENTER_CENTER,
+                        "Tick Auto Preview or press Preview",
+                        small,
+                        grey,
+                    );
+                }
+            }
+        });
+    }
+}
+
+/// The curves of the preview pane.
+struct PreviewData {
+    label: String,
+    x: Vec<f64>,
+    y: Vec<f64>,
+    rx: Vec<f64>,
+    ry: Vec<f64>,
+}
+
+/// Most cells the project may hold for a preview to copy it.
+const PREVIEW_MAX_CELLS: usize = 400_000;
+
+/// Draws both curves of the preview, scaled to their common range.
+fn draw_preview(ui: &egui::Ui, rect: egui::Rect, data: &PreviewData) {
+    let finite = |v: &[f64]| v.iter().copied().filter(|v| v.is_finite()).collect::<Vec<_>>();
+    let xs: Vec<f64> = finite(&data.x).into_iter().chain(finite(&data.rx)).collect();
+    let ys: Vec<f64> = finite(&data.y).into_iter().chain(finite(&data.ry)).collect();
+    if xs.is_empty() || ys.is_empty() {
+        return;
+    }
+    let range = |v: &[f64]| {
+        (v.iter().copied().fold(f64::INFINITY, f64::min), v.iter().copied().fold(f64::NEG_INFINITY, f64::max))
+    };
+    let ((x0, x1), (y0, y1)) = (range(&xs), range(&ys));
+    let (dx, dy) = ((x1 - x0).max(1e-300), (y1 - y0).max(1e-300));
+    let inner = rect.shrink2(egui::vec2(8.0, 14.0));
+    let at = |x: f64, y: f64| {
+        egui::pos2(
+            inner.left() + ((x - x0) / dx) as f32 * inner.width(),
+            inner.bottom() - ((y - y0) / dy) as f32 * inner.height(),
+        )
+    };
+    let painter = ui.painter_at(rect);
+    let line = |x: &[f64], y: &[f64], color: egui::Color32| {
+        let n = x.len().min(y.len());
+        let step = (n / 1500).max(1);
+        let stroke = egui::Stroke::new(1.2_f32, color);
+        let mut points = Vec::new();
+        for i in (0..n).step_by(step) {
+            if x[i].is_finite() && y[i].is_finite() {
+                points.push(at(x[i], y[i]));
+            } else {
+                if points.len() > 1 {
+                    painter.add(egui::Shape::line(std::mem::take(&mut points), stroke));
+                }
+                points.clear();
+            }
+        }
+        if points.len() > 1 {
+            painter.add(egui::Shape::line(points, stroke));
+        }
+    };
+    line(&data.x, &data.y, egui::Color32::from_rgb(130, 130, 130));
+    line(&data.rx, &data.ry, egui::Color32::from_rgb(220, 0, 0));
+    let small = egui::FontId::proportional(9.0);
+    let ink = egui::Color32::from_rgb(70, 70, 70);
+    let (lb, rb, lt) = (rect.left_bottom(), rect.right_bottom(), rect.left_top());
+    painter.text(lb + egui::vec2(4.0, -1.0), egui::Align2::LEFT_BOTTOM, format!("{x0:.4}"), small.clone(), ink);
+    painter.text(rb + egui::vec2(-4.0, -1.0), egui::Align2::RIGHT_BOTTOM, format!("{x1:.4}"), small.clone(), ink);
+    let head = format!("{} grey, result red   y {y0:.4} .. {y1:.4}", data.label);
+    painter.text(lt + egui::vec2(4.0, 1.0), egui::Align2::LEFT_TOP, head, small, ink);
 }
 
 fn boundary_label(b: Boundary) -> &'static str {

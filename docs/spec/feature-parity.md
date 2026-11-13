@@ -20,13 +20,13 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 41 | 108 | 81 | 230 |
-| P0 | 31 | 69 | 1 | 101 |
+| All rows | 41 | 109 | 80 | 230 |
+| P0 | 31 | 70 | 0 | 101 |
 | P1 and P2 together | 10 | 39 | 80 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
-Reading the counts: the P0 rows are mostly present but often only partly (68 of 101 are partial). Only 2 P0 rows are missing altogether: the Analysis menu on a graph window (its tools run on worksheet columns only) and the shared analysis dialog frame with Preview and Auto Apply. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
+Reading the counts: the P0 rows are mostly present but often only partly (70 of 101 are partial). No P0 row is missing altogether any more: the analysis dialogs now share one frame with Preview and Auto Preview, and the Analysis menu works on a graph's data plot. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
 
 Cross-cutting findings:
 - Column formulas recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
@@ -88,7 +88,7 @@ Cross-cutting findings:
 | Fixed width, multi-character delimiter | ASCII options | none | ✗ | | P1 |
 | Encoding | none in Origin 2016 | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
-| Import wizard, re-import | Ctrl+3, Ctrl+4 | one dialog in Origin's layout: a list of option pages (Import Options, Import Mode, Header Lines, Column Designation, Partial Import, Miscellaneous, File Info) with a preview; source path recorded | ◐ | no Import Wizard (Ctrl+3), no re-import command (Ctrl+4), no remembered settings | P1 |
+| Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
 | Excel import | File > Import > Excel | none | ✗ | no spreadsheet crate | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | none | ✗ | | P2 |
@@ -104,7 +104,7 @@ Cross-cutting findings:
 | Label rows: long name, units, comments | worksheet header | grid rows and properties dialog | ✓ | | P0 |
 | Parameter, user parameter, F(x) rows, show or hide label rows | label rows | F(x)= row with a lock mark and one row per user parameter, shown and edited in place | ◐ | rows cannot be hidden (corner menu items greyed); no way to add a new parameter row; no sampling-interval row | P0 |
 | Plot designations | Column > Set As | X, Y, Z, yEr, xEr, Label, Disregard | ✓ | no Group or Subject; Y-finds-X is nearest-left only | P0 |
-| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday, mixed; fewer display patterns than Origin; Column Properties dialog sets the display pattern only | P0 |
+| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday, mixed; fewer display patterns than Origin; Column Properties dialog (Origin's layout) sets designation, format and display pattern | P0 |
 | Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
 | Missing values | shown as `--` | NaN shown as `--` | ✓ | cannot tell empty from missing | P0 |
 | Reference notation in formulas | `[Book]Sheet!Col`, cell(), `col(A)$`, `[L]` | `col`, `wcol`, index, range, `i` | ◐ | no other sheet or book, no cell(), no label access, no x/y shorthand | P0 |
@@ -177,7 +177,7 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Smooth: Savitzky-Golay, adjacent average, weighted, percentile, FFT filter | Signal Processing > Smooth | `calc/smooth.rs`, checked against Origin; boundary options | ✓ | no Preview, auto-apply or recalculate | P0 |
+| Smooth: Savitzky-Golay, adjacent average, weighted, percentile, FFT filter | Signal Processing > Smooth | `calc/smooth.rs`, checked against Origin; boundary options; Preview pane with Auto Preview in the shared analysis frame | ✓ | no auto-apply or recalculate | P0 |
 | Smooth: LOWESS, LOESS, binomial | Smooth dialog | none | ✗ | | P1 |
 | FFT and inverse FFT | fft1, ifft1 | only inside smoothing | ✗ | | P1 |
 | FFT filters | low, high, band pass, block, notch | low-pass inside Smooth only | ✗ | | P1 |
@@ -188,7 +188,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Peak finding | Peak Analyzer, local maximum | `calc/peaks.rs`, checked; `calc/peakchain.rs` adds window search, derivative methods, smoothing, width filter (own rules, spec section 11); Find Peaks and Analyze Peaks windows | ◐ | only the local maximum method is checked against Origin | P0 |
-| Baseline modes | constant, points, dataset, end points, ALS | Minimum, Constant, End points, Line | ◐ | no anchors (library function not reachable), dataset baseline, ALS, auto detect, preview | P0 |
+| Baseline modes | constant, points, dataset, end points, ALS | Minimum, Constant, End points, Line | ◐ | no anchors (library function not reachable), dataset baseline, ALS, auto detect | P0 |
 | Baseline subtraction | pa_basesubtr | new Y column beside source | ✓ | limited by modes | P0 |
 | Per-peak integration | area, centre, height, FWHM per peak | `analyze peaks --integrate`, Analysis > Analyze Peaks (automatic limits at the baseline or valley, result table); Integrate Ranges for typed ranges | ◐ | areas, heights and widths checked against `integ1` over the same rows; the choice of limits is Sheaf's own; no picking on a graph | P0 |
 | CV charge with sloped baseline | integ1 with baseline | end-point baseline over typed range | ◐ | no foot picking, no anodic and cathodic split, no scan-rate division | P0 |
@@ -330,8 +330,8 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | each tool writes a new result sheet | ✗ | | P0 |
-| Column Properties dialog | Format dialog | name, long name, units, comments, plot as, number format incl. date, time, date and time | ◐ | no text type, width, Prev and Next | P0 |
+| Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None only), a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, no Auto Apply, Recalculate cannot be Manual or Auto, the output cannot be placed in a chosen range, the preview is a small own drawing, not drawn on the source graph | P0 |
+| Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name, Long Name, Units, Comments, Options (Plot Designation, Format, Display, Column Width greyed, Apply to all columns to the right), OK, Cancel, Apply | ◐ | no text type; Column Width is greyed (the grid has one width); no Origin-style numeric display names such as Decimal:1000 | P0 |
 | Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
 | Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |
 
@@ -339,7 +339,7 @@ Cross-cutting findings:
 
 Each stage assumes the earlier ones. (Stages, not the numbered milestones of `docs/ROADMAP.md`.) Effort is not estimated here.
 
-Progress on 2026-11-12, from reading code: in stage 1, steps 2 to 5, 7 and 8 and most of step 3 are in place (date and time columns, batch import, Double-Y, offsets and waterfall, creatable column plots, the Peak Analyzer chain, reference subtraction and curve math, fit bands and controls, recalculating formulas, cell copy and paste); step 1 still waits for the owner's text exports, and step 6 (free text labels, legend options, Origin's colour list, size and margin options, TIFF, EMF, EPS) is mostly open. In stage 2, .opj writing, child windows, toolbars, Origin's menus and shortcuts, the Project Explorer, Plot Details as a tree and the axis dialog are in place; the generic analysis dialog with Preview and Auto Apply and the dialogs for column properties and the analysis tools are not. In stage 3, t-tests and frequency counts are done; the rest of the stage is open.
+Progress on 2026-11-12, from reading code: in stage 1, steps 2 to 5, 7 and 8 and most of step 3 are in place (date and time columns, batch import, Double-Y, offsets and waterfall, creatable column plots, the Peak Analyzer chain, reference subtraction and curve math, fit bands and controls, recalculating formulas, cell copy and paste); step 1 still waits for the owner's text exports, and step 6 (free text labels, legend options, Origin's colour list, size and margin options, TIFF, EMF, EPS) is mostly open. In stage 2, .opj writing, child windows, toolbars, Origin's menus and shortcuts, the Project Explorer, Plot Details as a tree and the axis dialog are in place; the shared analysis dialog frame (Preview and Auto Preview, no Auto Apply), the Column Properties dialog and the Import Wizard are in Origin's layout since 2026-11-12. In stage 3, t-tests and frequency counts are done; the rest of the stage is open.
 
 **Stage 1. Daily electrochemistry and ICP-OES work (P0 gaps).**
 1. CH Instruments: confirm against real CV and i-t files, since the spec says none was checked.

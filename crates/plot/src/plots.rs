@@ -4,7 +4,7 @@ use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
 use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
-use sheaf_core::graph::{Connect, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
+use sheaf_core::graph::{Connect, ErrorDirection, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
@@ -37,10 +37,10 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
     }
-    if plot.kind == PlotKind::Column {
+    if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }
-    if pd.err.is_some() {
+    if pd.err.is_some() || pd.xerr.is_some() {
         draw_error_bars(out, pd, geom);
     }
     if plot.kind.has_symbols() {
@@ -253,22 +253,28 @@ fn near_frame(geom: &LayerGeometry, p: (f64, f64), margin: f64) -> bool {
 }
 
 /// One bar per row from the base to the value, in the plot's slot of the layer's group of bars
-/// (graphing spec 14.4). The base is 0 on a linear Y axis (the plot's offset in a stacked layer)
-/// and the lower axis limit on a log axis. A bar with a corner that cannot be placed is skipped.
+/// (graphing spec 14.4). The base is 0 on a linear value axis (the plot's offset in a stacked
+/// layer, the end of the bar below in a stacked column plot, the base column of a floating
+/// column) and the lower axis limit on a log axis. Horizontal bars lie down: values along X,
+/// positions along Y. A bar with a corner that cannot be placed is skipped.
 fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
     let slot = pd.bar.unwrap_or(crate::data::BarSlot { left: -0.4, width: 0.8, spacing: 1.0 });
-    let base = match geom.y.scale {
+    let transposed = pd.transposed();
+    let value_axis = if transposed { &geom.x } else { &geom.y };
+    let default_base = match value_axis.scale {
         ScaleKind::Linear => pd.oy,
-        ScaleKind::Log10 => geom.y.min,
+        ScaleKind::Log10 => value_axis.min,
     };
     let stroke = (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt));
+    let place = |cat: f64, val: f64| {
+        if transposed { geom.checked_data_to_page(val, cat) } else { geom.checked_data_to_page(cat, val) }
+    };
     for i in pd.start..pd.end {
-        let (x, y) = (pd.x_at(i), pd.y_at(i));
-        let left = x + slot.left;
-        let (Some(a), Some(b)) =
-            (geom.checked_data_to_page(left, base), geom.checked_data_to_page(left + slot.width, y))
-        else {
+        let (cat, top) = (pd.cat_at(i), pd.val_at(i));
+        let base = pd.base_at(i).unwrap_or(default_base);
+        let left = cat + slot.left;
+        let (Some(a), Some(b)) = (place(left, base), place(left + slot.width, top)) else {
             continue;
         };
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
@@ -281,34 +287,61 @@ fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     }
 }
 
+/// Error bars: along the Y values (along X for horizontal bars) from the Y error column, and along
+/// X from the X error column of a plot that is not a bar plot. Each bar reaches to the side or sides
+/// of the plot's direction and ends in a cap of the plot's cap width. A bar plot's error bars stand
+/// in the middle of its own bars, at the top of a stacked bar.
 fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
-    let column = plot.kind == PlotKind::Column;
-    let color = if plot.kind.has_line() || column { plot.line.color } else { plot.symbol.color };
-    let half_cap = 0.6 * plot.symbol.size_pt;
-    let width = if column { plot.line.width_pt.max(0.5) } else { (plot.line.width_pt / 2.0).max(0.5) };
-    // A column plot's error bars stand in the middle of its own bars.
+    let bar = plot.kind.is_bar();
+    let color = if plot.kind.has_line() || bar { plot.line.color } else { plot.symbol.color };
+    let half_cap = plot.error.cap_width_pt.max(0.0) / 2.0;
+    let width = if bar { plot.line.width_pt.max(0.5) } else { (plot.line.width_pt / 2.0).max(0.5) };
+    let dir = plot.error.direction;
     let shift = pd.bar.map_or(0.0, |b| b.centre());
+    let transposed = pd.transposed();
     let mut d = String::new();
+    // One bar from page point `a` to `b`; the caps lie across it, horizontally when `vertical`.
+    let mut segment = |a: (f64, f64), b: (f64, f64), vertical: bool, cap_a: bool, cap_b: bool| {
+        if !(near_frame(geom, a, half_cap + width) || near_frame(geom, b, half_cap + width)) {
+            return;
+        }
+        move_to(&mut d, a.0, a.1);
+        line_to(&mut d, b.0, b.1);
+        for (p, on) in [(a, cap_a), (b, cap_b)] {
+            if !on || half_cap <= 0.0 {
+                continue;
+            }
+            if vertical {
+                move_to(&mut d, p.0 - half_cap, p.1);
+                line_to(&mut d, p.0 + half_cap, p.1);
+            } else {
+                move_to(&mut d, p.0, p.1 - half_cap);
+                line_to(&mut d, p.0, p.1 + half_cap);
+            }
+        }
+    };
+    let cap_low = dir != ErrorDirection::Plus;
+    let cap_high = dir != ErrorDirection::Minus;
     for i in pd.start..pd.end {
-        let x = if shift == 0.0 { pd.x_at(i) } else { pd.x_at(i) + shift };
-        let (y, e) = (pd.y_at(i), pd.err_at(i));
-        if !e.is_finite() {
-            continue;
+        if let Some((below, above)) = pd.reach(pd.err_at(i), dir) {
+            let (cat, val) = (pd.cat_at(i) + shift, pd.val_at(i));
+            let place = |v: f64| {
+                if transposed { geom.checked_data_to_page(v, cat) } else { geom.checked_data_to_page(cat, v) }
+            };
+            if let (Some(lo), Some(hi)) = (place(val - below), place(val + above)) {
+                // The bar is vertical on the page unless the bars lie down.
+                segment(hi, lo, !transposed, cap_high, cap_low);
+            }
         }
-        let (Some(top), Some(bottom)) = (geom.checked_data_to_page(x, y + e), geom.checked_data_to_page(x, y - e))
-        else {
-            continue;
-        };
-        if !(near_frame(geom, top, half_cap + width) || near_frame(geom, bottom, half_cap + width)) {
-            continue;
+        if !bar && let Some((below, above)) = pd.reach(pd.xerr_at(i), dir) {
+            let (x, y) = (pd.x_at(i), pd.y_at(i));
+            if let (Some(lo), Some(hi)) =
+                (geom.checked_data_to_page(x - below, y), geom.checked_data_to_page(x + above, y))
+            {
+                segment(hi, lo, false, cap_high, cap_low);
+            }
         }
-        move_to(&mut d, top.0, top.1);
-        line_to(&mut d, bottom.0, bottom.1);
-        move_to(&mut d, top.0 - half_cap, top.1);
-        line_to(&mut d, top.0 + half_cap, top.1);
-        move_to(&mut d, bottom.0 - half_cap, bottom.1);
-        line_to(&mut d, bottom.0 + half_cap, bottom.1);
     }
     if !d.is_empty() {
         out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, width)) });

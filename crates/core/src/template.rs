@@ -38,14 +38,26 @@ pub enum Template {
     Column,
     /// Area plot (Origin's "Area"): the line template with each curve filled down to Y = 0.
     Area,
+    /// Stacked column (Origin's "Stacked Column"): the column template with the plots piled up.
+    StackedColumn,
+    /// 100 % stacked column: every pile scaled to 100, Y axis from 0 to 100.
+    Stacked100Column,
+    /// Horizontal bars (Origin's "Bar").
+    Bar,
+    /// Floating column (Origin's "Floating Column"): each bar runs from one Y column to the next.
+    FloatingColumn,
 }
 
 impl Template {
-    pub const ALL: [Template; 9] = [
+    pub const ALL: [Template; 13] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
         Template::Column,
+        Template::StackedColumn,
+        Template::Stacked100Column,
+        Template::Bar,
+        Template::FloatingColumn,
         Template::Area,
         Template::CyclicVoltammetry,
         Template::DoubleY,
@@ -65,6 +77,10 @@ impl Template {
             Template::Waterfall => "waterfall",
             Template::Column => "column",
             Template::Area => "area",
+            Template::StackedColumn => "stacked-column",
+            Template::Stacked100Column => "stacked-column-100",
+            Template::Bar => "bar",
+            Template::FloatingColumn => "floating-column",
         }
     }
 
@@ -79,6 +95,10 @@ impl Template {
             Template::Waterfall => "Waterfall",
             Template::Column => "Column",
             Template::Area => "Area",
+            Template::StackedColumn => "Stacked Column",
+            Template::Stacked100Column => "100% Stacked Column",
+            Template::Bar => "Bar",
+            Template::FloatingColumn => "Floating Column",
         }
     }
 
@@ -97,7 +117,11 @@ impl Template {
             Template::DoubleY => double_y(id, name),
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
-            Template::Column => column(id, name),
+            Template::Column => column(id, name, PlotKind::Column),
+            Template::StackedColumn => column(id, name, PlotKind::StackedColumn),
+            Template::Stacked100Column => column(id, name, PlotKind::Stacked100Column),
+            Template::Bar => column(id, name, PlotKind::Bar),
+            Template::FloatingColumn => column(id, name, PlotKind::FloatingColumn),
             Template::Area => general(id, name, PlotKind::Area),
         }
     }
@@ -320,8 +344,8 @@ fn waterfall(id: WindowId, name: &str) -> Graph {
 /// black 0.5 pt (Origin's default outline) and the owner's house style for the axes: Y ticks
 /// pointing in and a closed box. The X axis has no ticks, as in the owner's column figures: a tick
 /// pointing in would cross the middle bar of each group.
-fn column(id: WindowId, name: &str) -> Graph {
-    let mut g = general(id, name, PlotKind::Column);
+fn column(id: WindowId, name: &str, kind: PlotKind) -> Graph {
+    let mut g = general(id, name, kind);
     let layer = &mut g.layers[0];
     layer.default_line = LineStyle::solid(Color::BLACK, 0.5);
     layer.default_symbol.color = Color::BLACK;
@@ -338,6 +362,12 @@ fn column(id: WindowId, name: &str) -> Graph {
     y.major_tick = TickDirection::In;
     y.minor_tick = TickDirection::In;
     y.minor_ticks = 1;
+    if kind.is_horizontal() {
+        // Lying bars: the value axis is the horizontal one.
+        std::mem::swap(&mut layer.x_axis.major_tick, &mut layer.y_axis.major_tick);
+        std::mem::swap(&mut layer.x_axis.minor_tick, &mut layer.y_axis.minor_tick);
+        std::mem::swap(&mut layer.x_axis.minor_ticks, &mut layer.y_axis.minor_ticks);
+    }
     g
 }
 
@@ -422,7 +452,10 @@ mod tests {
         assert_eq!(Template::from_name("column"), Some(Template::Column));
         assert_eq!(Template::from_name("nope"), None);
         assert_eq!(Template::from_name("area"), Some(Template::Area));
-        assert_eq!(Template::ALL.len(), 9);
+        assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
+        assert_eq!(Template::from_name("bar"), Some(Template::Bar));
+        assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
+        assert_eq!(Template::ALL.len(), 13);
     }
 
     #[test]

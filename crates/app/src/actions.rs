@@ -209,10 +209,11 @@ pub enum Action {
         template: Template,
     },
     /// Plot > Symbol > Y Error: a scatter plot of the Y columns that shows the error bars of
-    /// their Y error columns.
+    /// their Y error columns; with `x` (XY Error) also those of their X error columns.
     PlotYError {
         book: WindowId,
         columns: Vec<ColumnId>,
+        x: bool,
     },
     /// Plot > Multi-Panel: one panel per selected Y column on a rows x columns grid.
     PlotPanels {

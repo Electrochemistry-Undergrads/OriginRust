@@ -2275,3 +2275,198 @@ fn sized_exports_and_tiff() {
     assert_eq!(&pixels[..3], &[255, 255, 255], "the corner of the page is white");
     assert!(matches!(export_bytes(&p, g, "pcx", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
 }
+
+// ----- stacked, horizontal and floating bars, error bars (graphing spec 14.12, 5.5) ---------------
+
+/// The data of the Origin probe: X 1..4 and three Y columns.
+fn bar_probe(template: Template) -> (Project, WindowId) {
+    project(
+        template,
+        vec![1.0, 2.0, 3.0, 4.0],
+        vec![vec![2.0, 3.0, 4.0, 5.0], vec![1.0, 2.0, 1.0, 2.0], vec![3.0, 1.0, 2.0, 1.0]],
+    )
+}
+
+fn layer_data(p: &Project, g: WindowId) -> data::LayerData<'_> {
+    data::collect(p, &p.graph(g).unwrap().layers[0])
+}
+
+#[test]
+fn stacked_columns_pile_up_in_one_slot() {
+    let (p, g) = bar_probe(Template::StackedColumn);
+    let l = layer_data(&p, g);
+    let tops: Vec<Vec<f64>> = l.plots.iter().map(|pd| (0..4).map(|i| pd.val_at(i)).collect()).collect();
+    assert_eq!(tops[0], vec![2.0, 3.0, 4.0, 5.0]);
+    assert_eq!(tops[1], vec![3.0, 5.0, 5.0, 7.0]);
+    assert_eq!(tops[2], vec![6.0, 6.0, 7.0, 8.0]);
+    assert_eq!(l.plots[1].base_at(2), Some(4.0), "a bar starts where the one below ends");
+    assert_eq!(l.plots[0].base_at(0), Some(0.0));
+    // One slot of 0.8 spacings for the whole pile (gap 20 %), as for a single column plot.
+    for pd in &l.plots {
+        let b = pd.bar.unwrap();
+        assert!((b.left + 0.4).abs() < 1e-12 && (b.width - 0.8).abs() < 1e-12);
+    }
+    let range = data::axis_range(l.plots.iter(), data::Dim::Y, ScaleKind::Linear).unwrap();
+    assert_eq!(range, (0.0, 8.0));
+}
+
+#[test]
+fn hundred_percent_stacks_end_at_100_and_the_axis_is_0_to_100() {
+    let (p, g) = bar_probe(Template::Stacked100Column);
+    let l = layer_data(&p, g);
+    for i in 0..4 {
+        assert!((l.plots[2].val_at(i) - 100.0).abs() < 1e-9);
+    }
+    assert!((l.plots[0].val_at(0) - 100.0 / 3.0).abs() < 1e-9, "2 of 6");
+    assert!((l.plots[1].val_at(0) - 50.0).abs() < 1e-9, "3 of 6");
+    let svg = svg_of(&p, g);
+    let t = texts(&doc(&svg));
+    assert!(t.iter().any(|t| t == "100"), "the Y axis shows 100");
+    assert!(!t.iter().any(|t| t == "120"), "and ends there");
+}
+
+#[test]
+fn horizontal_bars_swap_the_axes() {
+    let (p, g) = bar_probe(Template::Bar);
+    let l = layer_data(&p, g);
+    let pd = &l.plots[0];
+    assert!(pd.transposed());
+    assert_eq!((pd.x_at(2), pd.y_at(2)), (4.0, 3.0), "X carries the value, Y the position");
+    let xs = data::axis_range(l.plots.iter(), data::Dim::X, ScaleKind::Linear).unwrap();
+    assert_eq!(xs, (1.0, 5.0));
+    let ys = data::axis_range(l.plots.iter(), data::Dim::Y, ScaleKind::Linear).unwrap();
+    assert_eq!(ys, (1.0, 4.0));
+    // The bottom title is the Y column's, the left title the X column's.
+    let svg = svg_of(&p, g);
+    let t = texts(&doc(&svg));
+    assert!(t.iter().any(|s| s.starts_with("Current 1")) && t.iter().any(|s| s.starts_with("Potential")));
+    // Three plots side by side along the vertical axis, the first one lowest on the page.
+    let (a, c) = (l.plots[0].bar.unwrap(), l.plots[2].bar.unwrap());
+    assert!(a.left < c.left);
+}
+
+#[test]
+fn floating_columns_run_from_the_base_column_to_the_y_column() {
+    let (mut p, g) = project(
+        Template::FloatingColumn,
+        vec![1.0, 2.0, 3.0, 4.0],
+        vec![vec![2.0, 3.0, 4.0, 5.0], vec![1.0, 2.0, 1.0, 2.0]],
+    );
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.remove(1);
+    layer.plots[0].y_base = Some(low);
+    let l = layer_data(&p, g);
+    assert_eq!((l.plots[0].base_at(2), l.plots[0].val_at(2)), (Some(1.0), 4.0));
+    let svg = svg_of(&p, g);
+    usvg::Tree::from_str(&svg, &usvg::Options::default()).unwrap();
+}
+
+#[test]
+fn plot_columns_pairs_the_columns_of_a_floating_column() {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let lo = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let hi = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0])).unwrap();
+    let g = p.plot_columns(Template::FloatingColumn, &[lo, hi]).unwrap();
+    let plots = &p.graph(g).unwrap().layers[0].plots;
+    assert_eq!(plots.len(), 1);
+    assert_eq!((plots[0].y, plots[0].y_base), (hi, Some(lo)));
+}
+
+/// A scatter plot of three points with error 1 in Y and 0.5 in X.
+fn error_project(direction: sheaf_core::graph::ErrorDirection, cap: f64) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])).unwrap();
+    p.add_column(book, 0, Designation::YError, ColumnData::numeric(vec![1.0, 1.0, 1.0])).unwrap();
+    p.add_column(book, 0, Designation::XError, ColumnData::numeric(vec![0.5, 0.5, 0.5])).unwrap();
+    let g = p.add_graph(Template::Scatter);
+    p.add_plot(g, 0, y).unwrap();
+    let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+    assert!(plot.y_error.is_some() && plot.x_error.is_some(), "both error columns are found");
+    plot.error.direction = direction;
+    plot.error.cap_width_pt = cap;
+    (p, g)
+}
+
+/// The path data of the error bars of an error project.
+fn error_path(p: &Project, g: WindowId) -> String {
+    let svg = svg_of(p, g);
+    let d = doc(&svg);
+    let plots = with_class(&d, "plots");
+    paths_in(plots[0])
+        .iter()
+        .filter(|n| n.attribute("fill") == Some("none"))
+        .map(|n| n.attribute("d").unwrap().to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn error_bars_follow_direction_and_cap_width() {
+    use sheaf_core::graph::ErrorDirection::{Both, Minus, Plus};
+    // 3 points, two axes; per point and axis: Both = bar + 2 caps, Plus and Minus = bar + 1 cap.
+    let moves = |d: &str| d.matches('M').count();
+    let (p, g) = error_project(Both, 8.0);
+    assert_eq!(moves(&error_path(&p, g)), 3 * 2 * 3);
+    let (p, g) = error_project(Plus, 8.0);
+    assert_eq!(moves(&error_path(&p, g)), 3 * 2 * 2);
+    let (p, g) = error_project(Minus, 8.0);
+    assert_eq!(moves(&error_path(&p, g)), 3 * 2 * 2);
+    let (p, g) = error_project(Both, 0.0);
+    assert_eq!(moves(&error_path(&p, g)), 3 * 2, "no caps");
+    // The caps are 8 pt wide in total whatever the symbol size.
+    let (mut p, g) = error_project(Plus, 8.0);
+    let small = error_path(&p, g);
+    p.graph_mut(g).unwrap().layers[0].plots[0].symbol.size_pt = 30.0;
+    assert_eq!(small, error_path(&p, g));
+}
+
+#[test]
+fn error_bars_widen_the_automatic_range_on_their_side() {
+    use sheaf_core::graph::ErrorDirection::{Both, Plus};
+    let (p, g) = error_project(Both, 8.0);
+    let l = layer_data(&p, g);
+    assert_eq!(data::axis_range(l.plots.iter(), data::Dim::Y, ScaleKind::Linear), Some((3.0, 7.0)));
+    assert_eq!(data::axis_range(l.plots.iter(), data::Dim::X, ScaleKind::Linear), Some((0.5, 3.5)));
+    let (p, g) = error_project(Plus, 8.0);
+    let l = layer_data(&p, g);
+    assert_eq!(data::axis_range(l.plots.iter(), data::Dim::Y, ScaleKind::Linear), Some((4.0, 7.0)));
+}
+
+#[test]
+fn golden_stacked_column_template() {
+    let (p, g) = bar_probe(Template::StackedColumn);
+    compare_golden("stacked-column", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_stacked_column_100_template() {
+    let (p, g) = bar_probe(Template::Stacked100Column);
+    compare_golden("stacked-column-100", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_bar_template() {
+    let (p, g) = bar_probe(Template::Bar);
+    compare_golden("bar", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_floating_column_template() {
+    let (mut p, g) = bar_probe(Template::FloatingColumn);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.truncate(1);
+    layer.plots[0].y_base = Some(low);
+    compare_golden("floating-column", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_xy_error_bars() {
+    let (p, g) = error_project(sheaf_core::graph::ErrorDirection::Both, 8.0);
+    compare_golden("xy-error", &svg_of(&p, g));
+}

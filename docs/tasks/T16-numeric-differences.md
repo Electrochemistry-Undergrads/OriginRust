@@ -13,7 +13,7 @@ or behaviourally different".
    (`crates/plot/src/plots.rs`). Spec graphing.md 5.2: Origin uses a cubic spline, max 900 points.
    Measure what Origin draws above 900 points before copying.
 3. **Error bar cap:** fixed at 1.2 x symbol size (`half_cap = 0.6*size` in plots.rs); Origin has a
-   cap width setting (default to measure). Pairs with T12 item 2: do it there if T12 is running.
+   cap width setting (default to measure). Pairs with T12 item 2: do it there if T12 is running. Done on branch `plot-types` (T12 item 2): default 8 pt, setting in Plot Details > Error Bar.
 4. **Kendall p with missing data** differs up to 17 %; **Lilliefors p above 0.1** about 6 %; **KS p**
    wrong for 5 or 40 numbers. Scripts and outputs in `re-workspace/scratch/audit-3/` (`kend.py`,
    `ks.py`, `ref.py`, `*.out.txt`). Fix only where Origin's rule is found; else record in

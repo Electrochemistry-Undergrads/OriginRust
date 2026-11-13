@@ -389,7 +389,7 @@ impl Layer {
         let n = self.plots.len();
         for (i, p) in self.plots.iter_mut().enumerate().filter(|(_, p)| p.auto_color) {
             let c = self.palette.color(i, n);
-            if p.kind != PlotKind::Column {
+            if !p.kind.is_bar() {
                 p.line.color = c;
             }
             p.symbol.color = c;
@@ -690,11 +690,47 @@ pub enum PlotKind {
     /// A line with the area between it and Y = 0 filled with the symbol color (Origin's Area
     /// plot). Where 0 is outside the Y axis the fill reaches the edge of the frame.
     Area,
+    /// Columns piled on each other: every plot of this kind in a layer shares one bar slot per
+    /// X position, and each bar starts where the one before it (in plot order) ends (Origin's
+    /// plot type 213).
+    StackedColumn,
+    /// Like [`PlotKind::StackedColumn`], with every pile scaled to 100 (Origin's "100 % Stacked
+    /// Column"). The Y axis runs from 0 to 100.
+    Stacked100Column,
+    /// Horizontal bars (Origin's plot type 215): the same bars as [`PlotKind::Column`] with the
+    /// roles of the axes exchanged: the horizontal axis (the layer's X axis here) carries the values and
+    /// the vertical axis (the Y axis) the bar positions. Origin names them the other way round.
+    Bar,
+    /// A column from the plot's base column (`Plot::y_base`) up to its Y column (Origin's
+    /// plot type 207).
+    FloatingColumn,
 }
 
 impl PlotKind {
     pub fn has_line(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area)
+    }
+
+    /// True for every kind drawn as rectangles standing on a base: the column kinds and bars.
+    pub fn is_bar(&self) -> bool {
+        matches!(
+            self,
+            PlotKind::Column
+                | PlotKind::StackedColumn
+                | PlotKind::Stacked100Column
+                | PlotKind::Bar
+                | PlotKind::FloatingColumn
+        )
+    }
+
+    /// True for the kinds that pile on each other instead of standing side by side.
+    pub fn is_stacked(&self) -> bool {
+        matches!(self, PlotKind::StackedColumn | PlotKind::Stacked100Column)
+    }
+
+    /// True when the bars lie down: values along the horizontal axis.
+    pub fn is_horizontal(&self) -> bool {
+        matches!(self, PlotKind::Bar)
     }
 
     pub fn has_symbols(&self) -> bool {
@@ -733,6 +769,50 @@ pub struct Plot {
     /// ([`Layer::bars`]), and are written to `.opj` as one group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<u32>,
+    /// Error values in X (the third column type "X error"); drawn as horizontal error bars.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_error: Option<ColumnId>,
+    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] plot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y_base: Option<ColumnId>,
+    /// Direction and cap width of the error bars.
+    #[serde(default, skip_serializing_if = "ErrorStyle::is_default")]
+    pub error: ErrorStyle,
+}
+
+/// Which side of the point an error bar reaches.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorDirection {
+    #[default]
+    Both,
+    Plus,
+    Minus,
+}
+
+/// Origin's default cap width of an error bar, in points, whatever the symbol size (measured:
+/// 8.5 pt over all, 9 pt symbols or 18 pt or 3 pt).
+pub const DEFAULT_ERROR_CAP_PT: f64 = 8.0;
+
+/// How the error bars of a plot are drawn.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ErrorStyle {
+    #[serde(default)]
+    pub direction: ErrorDirection,
+    /// Total width of the cap in points; 0 draws no cap.
+    pub cap_width_pt: f64,
+}
+
+impl Default for ErrorStyle {
+    fn default() -> Self {
+        ErrorStyle { direction: ErrorDirection::Both, cap_width_pt: DEFAULT_ERROR_CAP_PT }
+    }
+}
+
+impl ErrorStyle {
+    pub fn is_default(&self) -> bool {
+        *self == ErrorStyle::default()
+    }
 }
 
 fn yes() -> bool {
@@ -1101,6 +1181,9 @@ mod tests {
             visible: true,
             auto_color: true,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1174,6 +1257,9 @@ mod tests {
             visible: true,
             auto_color: true,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);

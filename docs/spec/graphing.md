@@ -68,7 +68,7 @@ Helper defaults seen in X-Functions: `layarrange` gaps 5 / margins 15 (percent o
 Four slots per 2D layer: bottom X, top X, left Y, right Y. Bottom and left are normally visible; top and right can be shown, and may share settings with the opposite axis. Each axis owns scale, ticks, tick labels, title, grid, breaks, special ticks, line (section 3). A box (frame) is made by showing line and ticks on opposite axes without labels; theme "Opposite Lines" turns that on for all axes [F:Themes\Graph\Opposite Lines.OTH]. Whether 2016 shows opposite axes by default: UNKNOWN U15.
 
 ### 1.5 Data plots and plot groups (P0)
-A data plot references X column (or row index), Y column, optional error column, and a row range (default all rows). Plot-type IDs: 200 line, 201 scatter, 202 line+symbol, 203 column, 204 area, 205 high-low-close, 206 box, 207 floating bar, 215 bar, 219 histogram, 220 image, 225 pie, 230 "use template", 231 Y error bar, 233 X error bar [W:labtalk plot-type-ids]. `plotxy`: input range list (X, Y, optional error as third column), plot type, symbol size in points, rescale (default 1), legend (default 1), target layer (default new graph) [F:X-Functions\Plotting\plotxy.OXF].
+A data plot references X column (or row index), Y column, optional error column, and a row range (default all rows). Plot-type IDs: 200 line, 201 scatter, 202 line+symbol, 203 column, 204 area, 205 high-low-close, 206 box, 207 floating bar (and floating column), 213 stacked column, 214 stacked area, 215 bar, 216 stacked bar, 219 histogram, 220 image, 225 pie, 230 "use template", 231 Y error bar, 233 X error bar [W:labtalk plot-type-ids]. `plotxy`: input range list (X, Y, optional error as third column), plot type, symbol size in points, rescale (default 1), legend (default 1), target layer (default new graph) [F:X-Functions\Plotting\plotxy.OXF].
 
 **Grouping.** Edit mode "dependent" applies increment rules; "independent" stops incrementing but keeps styles. Increment: None (all use the first list entry), By One (cycle, wrap), Stretch (spread list over members), Binned, or by metadata (workbook, sheet, long name, units, comments, sampling interval). Subgroups by fixed size, column label, or axis [W:pd-dialog-group-tab].
 
@@ -277,7 +277,7 @@ Interiors: 0 solid, 1 open, 2 dot centre, 3 hollow, 4 + centre, 5 x centre, 6 - 
 Other: size (pt, default 9, shape square, solid), edge thickness (2), colour automatic = line colour, fill colour (global default), size from column with scaling factor and formula (`s`, `s1` min, `s2` max), user bitmap/SVG symbols (P2).
 
 ### 5.5 Error bars (P0)
-Error column attached as third plot column; types 231 (Y) and 233 (X). Template ERRBAR exists. Options: direction plus/minus/both, cap width, line width/colour/style. Numeric defaults UNKNOWN U9.
+Error column attached as third plot column; types 231 (Y) and 233 (X). Template ERRBAR exists. Options: direction plus/minus/both, cap width, line width/colour/style. Measured defaults and the model are in section 14.13 (cap width 8 pt whatever the symbol size, Y error from the third plot column, the automatic range reaches the ends of the bars).
 
 ### 5.6 Gaps and skipping
 Missing values break the connecting line [INF]. Skip-points option exists in plot details [REC]. Speed mode only decimates drawing.
@@ -1155,13 +1155,34 @@ Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t colu
 - The `column` template closes the box, draws Y ticks pointing in and no X ticks (the owner's style); Origin's template has ticks out and open axes.
 - The title moves below turned labels instead of being overlapped by them.
 
+### 14.12 Stacked, 100 % stacked, horizontal and floating columns (plot types 213, 215, 207)
+
+Measured with Origin through COM on X = 1..4 and Y = (2,3,4,5), (1,2,1,2), (3,1,2,1) (`re-workspace/scratch/plot-types/p5.lines.txt`, pictures `sc213.png`, `scp213.png`, `sb216.png`, `fb207.png`, `bar.png`, `floatcol.png`). `plotxy` only stacks with the plot type of the stacked kind (`plot:=213` with template `StackColumn`, `plot:=213` with `StackColP`, `plot:=216` with `StackBar`); `plot:=203` with the stacked template draws plain side by side columns.
+
+- **Stacked column.** All plots of the layer stand in one slot per X position, width (1 - g) x s as for one column plot (0.8 s at gap 20; measured 110 of 137 px). Plot order from the bottom: the first plot (black) at the bottom, then red, then blue. Each bar starts where the one below ends; the automatic Y range was 0..9 for pile heights up to 8 (the automatic range rule applies). The legend lists the plots in reverse order (last plot first), so it matches the pile.
+- **100 % stacked column.** Every pile is scaled to 100; the Y axis runs exactly from 0 to 100 with no margin. The template adds data labels (the percentage on each bar) and thin lines joining the tops of neighbouring bars; Sheaf draws neither.
+- **Horizontal bar (215).** Same geometry as columns with the axes exchanged. In the picture the layer's X axis is the vertical one on the left (the title of the X column is there) and the Y axis is at the bottom; `layer.x.from/to` was 0.5..4.5 and `layer.y.to` 5.6 for values up to 5. The first plot of a group is the lowest bar of each position and the legend is listed in reverse. The BAR template colours the group red, green, blue (the column template: black, red, blue); the template has dotted lines and ticks between the positions. Sheaf draws plain ticks and its own palette.
+- **Floating column (207).** Two Y columns B (first) and C (second) gave bars from C to B at each X; the legend names the second column; Y range 0..6 for ends 1..5 (0 is included as for columns). The default fill was blue, outline black.
+- **Sheaf.** `PlotKind::{StackedColumn, Stacked100Column, Bar, FloatingColumn}` and templates `stacked-column`, `stacked-column-100`, `bar`, `floating-column` (CLI `-t`). A horizontal-bar layer shows the values on its X axis (bottom) and the positions on its Y axis (left); Origin names the axes the other way round. Stacked plots share the slot of the first of them; negative values are added like the others. A floating column plot takes the lower end from `Plot::y_base`; `plot_columns` pairs the selected columns (first of a pair = lower end). Not done: stacked and 100 % stacked bars, floating bars, bar labels and join lines, category (text) axes for horizontal bars.
+- **`.opj`.** The writer stores these plots as plain columns (type 203) and names the loss in the save warnings; the companion keeps the real type.
+
+### 14.13 Error bars
+
+Measured with Origin on a scatter plot of 5 points with a Y error column (`p6`, `p7`, `p8` in the same folder, pictures `y_hi.png`, `y18.png`, `y3.png` at 3200 px, 4.11 px per pt).
+
+- **Cap width.** The cap is 34-36 px wide over all (8.3-8.8 pt including the line) for 9 pt, 18 pt and 3 pt symbols: a fixed width of 8 pt, independent of the symbol size. Sheaf had 1.2 x the symbol size (10.8 pt).
+- **Line width.** The bar and the cap are 3 px thick in the 3200 px picture (about 0.5-0.75 pt); Sheaf keeps 0.5 pt.
+- **Columns.** A third plot column `(x, y, err)` in `plotxy iy:=(1,2,3)` is always read as the Y error; X error needs a column designated X error, which `plotxy` could not be made to read in 2016 (no X error measurement; the same cap is assumed).
+- **Range.** The automatic axis range reaches the ends of the error bars (data 2..5 with ends 1.5 and 6 gave Y 1..6.5).
+- **Sheaf.** `Plot::x_error` (X error column after the Y column, found like the Y error), `Plot::error` with direction (both, positive, negative) and cap width (default 8 pt, 0 = no cap); Plot Details > Error Bar edits direction and cap width; Plot > Symbol > XY Error plots with both columns. X error bars are not drawn for bar plots. Positive and negative directions draw the bar from the point to that end only, with one cap; the range widens only on that side. Not stored in `.opj` (save warning).
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.
 - Whether Origin's tick label dialog offers the automatic 45/90-degree rotation of the current help; the hidden COM exports did not rotate.
 - The exact row count where a 2016 text axis stops putting one tick per row (between 121 and 450).
 - Whether Origin reads escape sequences (`\+()`, `\g()`, ...) in text-from-dataset cells; Sheaf uses its markup for them like for every other label.
-- The error bar cap width on columns, and whether error bar ends widen the automatic Y range.
+- The error bar cap width on columns (section 14.13 measured scatter plots only).
 - Where an `.opj` stores the tick label type and dataset and the overlap.
 - Owner preferences for the `column` template: ticks, box, minor ticks, legend frame, colours.
 

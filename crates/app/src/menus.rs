@@ -85,6 +85,8 @@ pub enum Cmd {
     Plot(Template),
     /// Plot > Symbol > Y Error.
     PlotYError,
+    /// Plot > Symbol > XY Error: a scatter plot with the X and Y error columns of each Y column.
+    PlotXYError,
     /// Plot > Multi-Panel > a fixed grid of panels (Vertical 2 Panel is 2 x 1, 4 Panel 2 x 2).
     PlotPanels {
         rows: usize,
@@ -573,8 +575,8 @@ fn plot_menu() -> Vec<Entry> {
             "&Symbol",
             [
                 vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
-                vec![item("Y Error", Cmd::PlotYError)],
-                greys(&["XY Error", "Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
+                vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
+                greys(&["Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
             ]
             .concat(),
         ),
@@ -587,22 +589,20 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sub(
             "Column/Bar/&Pie",
-            with(
+            [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
-                &[
-                    "Column + Label",
-                    "Grouped Columns (indexed data)",
-                    "Bar",
-                    "Stacked Column",
-                    "Stacked Bar",
-                    "100% Stacked Column",
-                    "100% Stacked Bar",
-                    "Floating Column",
-                    "Floating Bar",
-                    "3D Color Pie",
-                    "2D B&&W Pie",
+                greys(&["Column + Label", "Grouped Columns (indexed data)"]),
+                vec![
+                    item("Bar", Cmd::Plot(Template::Bar)),
+                    item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
+                    grey("Stacked Bar"),
+                    item("100% Stacked Column", Cmd::Plot(Template::Stacked100Column)),
+                    grey("100% Stacked Bar"),
+                    item("Floating Column", Cmd::Plot(Template::FloatingColumn)),
                 ],
-            ),
+                greys(&["Floating Bar", "3D Color Pie", "2D B&&W Pie"]),
+            ]
+            .concat(),
         ),
         sep(),
         sub(
@@ -1727,7 +1727,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::SortColumns { columns: some()?, descending: *descending }
         }
-        Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec() },
+        Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: false },
+        Cmd::PlotXYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: true },
         Cmd::PlotPanels { rows, cols } => {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }

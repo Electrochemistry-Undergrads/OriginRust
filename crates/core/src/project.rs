@@ -2,7 +2,7 @@
 //! organizes them.
 
 use crate::column::{Column, ColumnData, Designation};
-use crate::graph::{Graph, LegendScope, Plot};
+use crate::graph::{ErrorStyle, Graph, LegendScope, Plot};
 use crate::ids::{ColumnId, WindowId};
 use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
 use crate::template::{Template, right_y_layer};
@@ -353,7 +353,12 @@ impl Project {
         let index = sheet.column_index(y).expect("column is in this sheet");
         let x = sheet.x_for(index).map(|c| c.id);
         let y_error = sheet.y_error_for(index).map(|c| c.id);
-        self.add_plot_xy(graph, layer, x, y, y_error)
+        let x_error = sheet.x_error_for(index).map(|c| c.id);
+        self.add_plot_xy(graph, layer, x, y, y_error)?;
+        if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.plots.last_mut()) {
+            p.x_error = x_error;
+        }
+        Ok(())
     }
 
     /// Adds a plot with explicitly chosen X and error columns.
@@ -379,6 +384,9 @@ impl Project {
             visible: true,
             auto_color: true,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
         });
         l.recolor_automatic();
         Ok(())
@@ -460,8 +468,19 @@ impl Project {
         }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
-        for y in ys {
-            self.add_plot(graph, 0, *y)?;
+        if template == Template::FloatingColumn {
+            // Columns go in pairs: the first of a pair is the lower end of the bars, the second
+            // the upper end (and names the plot, as in Origin). A last odd column is left out.
+            for pair in ys.as_chunks::<2>().0 {
+                self.add_plot(graph, 0, pair[1])?;
+                if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
+                    p.y_base = Some(pair[0]);
+                }
+            }
+        } else {
+            for y in ys {
+                self.add_plot(graph, 0, *y)?;
+            }
         }
         if let Some(g) = self.graph_mut(graph) {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.

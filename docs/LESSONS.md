@@ -168,3 +168,10 @@ inside quotes and the command fails over to defaults) writes into
 `Documents/OriginLab/2016/User Files`, the owner's folder. Always pass an explicit folder without a
 trailing backslash, as `tools/origin-ref/opj-verify-graphs.ps1` does, and check the folder after a
 failed export. On 2026-11-12 two probe PNGs landed there and were moved back out at once.
+
+## Exact fits can reach a residual of exactly 0 on another machine
+
+The model comparison test fitted ExpDec1 to a noise-free exponential. On Windows the residual sum
+of squares stayed a tiny positive number; on macOS (arm64) it was exactly 0, AICc became
+undefined and the test failed. Test data for fit statistics that take a logarithm of the residual
+(AICc, BIC, F-test) carries a little fixed noise, such as `0.01 * sin(3x)`.

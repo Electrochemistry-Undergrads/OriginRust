@@ -77,7 +77,7 @@ const X_LINK: Option<LayerLink> = Some(LayerLink { parent: 0, x: ScaleLink::Stra
 fn a_stack_puts_each_y_column_in_its_own_panel_with_the_first_at_the_bottom() {
     let dir = scratch("stack");
     let data = three_ys(&dir, "data.csv", 1.0);
-    let (p, svg) = plot_and_load(&dir, &[&data], &["--panels", "stack"]);
+    let (p, svg) = plot_and_load(&dir, &[&data], &["--panels", "stack", "--margin", "page"]);
     let g = graph(&p);
     assert_eq!(g.layers.len(), 3);
     for (layer, name) in ["B", "C", "D"].iter().enumerate() {
@@ -93,7 +93,7 @@ fn a_stack_puts_each_y_column_in_its_own_panel_with_the_first_at_the_bottom() {
     assert_eq!(svg.matches(">E (V)</text>").count(), 1);
     assert!(svg.contains("width=\"345.6pt\""), "the line template's page turned upright");
 
-    let (p, svg) = plot_and_load(&dir, &[&data], &["--panels", "stack", "-t", "cv", "-y", "B,C"]);
+    let (p, svg) = plot_and_load(&dir, &[&data], &["--panels", "stack", "-t", "cv", "-y", "B,C", "--margin", "page"]);
     assert_eq!(graph(&p).layers.len(), 2);
     assert!(svg.contains("width=\"259.2pt\" height=\"360pt\""), "{}", &svg[..200]);
 }
@@ -140,7 +140,7 @@ fn panel_y_and_per_panel_choose_the_curves_of_each_panel() {
 fn grids_and_the_layout_options() {
     let dir = scratch("grid");
     let data = three_ys(&dir, "data.csv", 1.0);
-    let (p, svg) = plot_and_load(&dir, &[&data], &["--panels", "2x2"]);
+    let (p, svg) = plot_and_load(&dir, &[&data], &["--panels", "2x2", "--margin", "page"]);
     let g = graph(&p);
     assert_eq!(g.layers.len(), 3, "three curves fill three of the four cells");
     assert!(g.layers.iter().all(|l| l.link.is_none()));

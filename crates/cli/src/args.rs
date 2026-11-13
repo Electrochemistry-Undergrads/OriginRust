@@ -453,6 +453,11 @@ pub struct StyleArgs {
     /// Repeat the option for more labels.
     #[arg(long, value_name = "TEXT@X,Y")]
     pub label: Vec<String>,
+    /// Draw an object on the first layer: "KIND@X1,Y1,X2,Y2" with KIND line, arrow, rectangle or
+    /// ellipse and the points as fractions of the layer frame (0,0 is its top left corner), for
+    /// example --draw "arrow@0.2,0.2,0.5,0.4". Repeat the option for more objects.
+    #[arg(long, value_name = "KIND@X1,Y1,X2,Y2")]
+    pub draw: Vec<String>,
 }
 
 /// Which part of the page a figure shows (Origin's export margin settings).

@@ -18,4 +18,5 @@ pub mod reshape;
 pub mod row_filter;
 pub mod set_values;
 pub mod sort;
+pub mod shape_object;
 pub mod text_object;

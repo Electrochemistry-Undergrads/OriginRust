@@ -17,6 +17,7 @@ use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
+use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
@@ -98,6 +99,7 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
+    shape_dialog: Option<ShapeDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -157,6 +159,7 @@ impl SheafApp {
             graph_props: None,
             column_props: None,
             text_dialog: None,
+            shape_dialog: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -593,6 +596,7 @@ impl SheafApp {
             GraphOp::UpdateLegend { .. } => "Update legend",
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
+            GraphOp::DeleteShape { .. } => "Delete drawn object",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
@@ -925,12 +929,19 @@ impl SheafApp {
                 let state = self.graphs.entry(graph).or_default();
                 state.reader = tool == GraphTool::Reader;
                 state.text_tool = tool == GraphTool::Text;
+                state.shape_tool = match tool {
+                    GraphTool::Draw(kind) => Some(kind),
+                    _ => None,
+                };
                 state.reader_point = None;
                 match tool {
                     GraphTool::Reader => {
                         self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends")
                     }
                     GraphTool::Text => self.say("Text: click where the text goes; Esc ends"),
+                    GraphTool::Draw(kind) => {
+                        self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
+                    }
                     GraphTool::Pointer => {}
                 }
             }
@@ -942,6 +953,25 @@ impl SheafApp {
             }
             Action::EditText { graph, layer, label } => {
                 self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label);
+            }
+            Action::AddShape { graph, layer, shape } => {
+                self.doc.apply("Add drawn object", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        l.shapes.push(shape);
+                    }
+                });
+            }
+            Action::MoveShape { graph, layer, shape, dx, dy } => {
+                self.doc.apply("Move drawn object", |p| {
+                    if let Some(s) =
+                        p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.shapes.get_mut(shape))
+                    {
+                        s.translate(dx, dy);
+                    }
+                });
+            }
+            Action::EditShape { graph, layer, shape } => {
+                self.shape_dialog = ShapeDialog::edit(&self.doc, graph, layer, shape);
             }
             Action::MoveLabel { graph, layer, label, x, y } => {
                 self.doc.apply("Move text", |p| {
@@ -1726,6 +1756,7 @@ impl SheafApp {
             || self.graph_props.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
+            || self.shape_dialog.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -1903,6 +1934,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.text_dialog = None;
+        }
+        if let Some(d) = &mut self.shape_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.shape_dialog = None;
         }
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)

@@ -178,6 +178,13 @@ pub enum Cmd {
     DataReader,
     /// The Text tool of the Tools toolbar.
     TextTool,
+    /// A drawing tool of the Tools toolbar.
+    ShapeTool(sheaf_core::shape::ShapeKind),
+    /// Properties of a drawn object.
+    EditShape {
+        layer: usize,
+        shape: usize,
+    },
     /// Add Text...: a new text label in the active layer.
     AddText,
     /// Properties of a text label (its text window).
@@ -1525,6 +1532,20 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
     ]
 }
 
+/// The menu of a drawn line, arrow, rectangle or ellipse.
+pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
+    vec![
+        grey_keyed("Cut", ctrl(Key::X)),
+        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
+        sep(),
+        grey("Bring to the front"),
+        grey("Push to the back"),
+        sep(),
+        item("Properties...", Cmd::EditShape { layer, shape }),
+    ]
+}
+
 /// The menu of the legend.
 pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     vec![
@@ -1934,6 +1955,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
+        Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
+        Cmd::EditShape { layer, shape } => {
+            Action::EditShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
+        }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }

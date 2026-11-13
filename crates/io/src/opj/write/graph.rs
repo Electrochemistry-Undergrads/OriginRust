@@ -988,6 +988,19 @@ fn within(parent: sheaf_core::graph::Frame, f: sheaf_core::graph::Frame) -> shea
 /// whole project.
 fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: &mut Vec<String>) {
     let layer = &graph.layers[index];
+    if !layer.shapes.is_empty() {
+        let count = |k| layer.shapes.iter().filter(|s| s.kind == k).count();
+        let names: Vec<String> = sheaf_core::shape::ShapeKind::ALL
+            .iter()
+            .filter(|k| count(**k) > 0)
+            .map(|k| format!("{} {}", count(*k), k.name().to_lowercase()))
+            .collect();
+        notes.push(format!(
+            "layer {} has drawn objects ({}) that an Origin project file written here cannot hold; they were not written (the .opj.sheaf companion keeps them)",
+            index + 1,
+            names.join(", ")
+        ));
+    }
     if matches!(roles[index], Role::RightY { x_straight: false, .. }) {
         notes.push(
             "the X scale of a right Y layer that is not linked to its parent's was written with the link only".into(),

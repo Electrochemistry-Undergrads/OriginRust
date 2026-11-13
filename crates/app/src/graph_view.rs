@@ -20,6 +20,7 @@ use crate::gadget::Integrator;
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::reader;
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
+use sheaf_core::shape::{self, Shape, ShapeKind};
 use sheaf_core::{Document, Project, WindowId};
 use sheaf_plot::LayerGeometry;
 use sheaf_plot::hit::{Hit, hit_test};
@@ -30,6 +31,41 @@ const GROUND: Color32 = Color32::from_gray(192);
 /// How far from a line, in screen points, a click still picks it.
 const PICK_TOLERANCE: f32 = 3.0;
 const ICON: f32 = 15.0;
+
+/// The layer a hit is in.
+fn layer_of_hit(hit: Hit) -> Option<usize> {
+    match hit {
+        Hit::Object { layer, .. } | Hit::Layer(layer) => Some(layer),
+        Hit::Page => None,
+    }
+}
+
+/// A drag shorter than this (page points) draws nothing.
+const MIN_DRAWN_PT: f64 = 3.0;
+
+/// The outline of an object being drawn, in screen points; `to_screen` takes frame fractions.
+fn draw_preview(painter: &egui::Painter, s: &Shape, to_screen: &dyn Fn((f64, f64)) -> Pos2) {
+    let stroke = Stroke::new(1.0_f32, Color32::from_rgb(0, 90, 200));
+    let (a, b) = (to_screen((s.x1, s.y1)), to_screen((s.x2, s.y2)));
+    match s.kind {
+        ShapeKind::Line | ShapeKind::Arrow => {
+            painter.line_segment([a, b], stroke);
+        }
+        ShapeKind::Rectangle => {
+            painter.rect_stroke(Rect::from_two_pos(a, b), 0.0, stroke, egui::StrokeKind::Middle);
+        }
+        ShapeKind::Ellipse => {
+            let (c, r) = (Rect::from_two_pos(a, b).center(), Rect::from_two_pos(a, b).size() / 2.0);
+            let pts = (0..48)
+                .map(|k| {
+                    let t = std::f32::consts::TAU * k as f32 / 48.0;
+                    c + egui::vec2(r.x * t.cos(), r.y * t.sin())
+                })
+                .collect();
+            painter.add(egui::Shape::closed_line(pts, stroke));
+        }
+    }
+}
 
 /// The cached image of one graph.
 pub struct GraphTexture {
@@ -63,10 +99,33 @@ pub struct GraphUi {
     pub reader_point: Option<reader::Point>,
     /// The Text tool is on: the next click on the page places a label.
     pub text_tool: bool,
+    /// The drawing tool in use (Line, Arrow, Rectangle, Circle): a drag on the page draws one.
+    pub shape_tool: Option<ShapeKind>,
+    /// An object being drawn.
+    drawing: Option<Drawing>,
+    /// A drawn object being moved.
+    shape_drag: Option<ShapeDrag>,
     /// A label being dragged.
     label_drag: Option<LabelDrag>,
     /// A legend being dragged.
     legend_drag: Option<LegendDrag>,
+}
+
+/// An object being drawn: its first point as fractions of the frame of `layer`, and the pointer
+/// now (page points).
+#[derive(Clone, Copy)]
+struct Drawing {
+    layer: usize,
+    kind: ShapeKind,
+    from: (f64, f64),
+}
+
+/// A drawn object being moved: how far the pointer has moved since the drag began (page points).
+#[derive(Clone, Copy)]
+struct ShapeDrag {
+    layer: usize,
+    shape: usize,
+    delta: (f64, f64),
 }
 
 /// A legend being moved with the mouse: its centre when the drag began (fractions of the layer
@@ -95,6 +154,8 @@ impl GraphUi {
             GraphTool::Reader
         } else if self.text_tool {
             GraphTool::Text
+        } else if let Some(kind) = self.shape_tool {
+            GraphTool::Draw(kind)
         } else {
             GraphTool::Pointer
         }
@@ -109,6 +170,7 @@ impl GraphUi {
             ObjectKind::XTitle => GraphOp::HideTitle { layer, y: false },
             ObjectKind::YTitle => GraphOp::HideTitle { layer, y: true },
             ObjectKind::Label(label) => GraphOp::DeleteLabel { layer, label },
+            ObjectKind::Shape(shape) => GraphOp::DeleteShape { layer, shape },
             _ => return None,
         };
         self.selected = None;
@@ -227,7 +289,12 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     if let Some((layer, kind)) = state.selected {
         let moved = state.label_drag.filter(|d| kind == ObjectKind::Label(d.label) && layer == d.layer);
         let moved_legend = state.legend_drag.filter(|d| kind == ObjectKind::Legend && layer == d.layer);
-        let shift = moved.map(|d| d.delta).or(moved_legend.map(|d| d.delta)).unwrap_or((0.0, 0.0));
+        let moved_shape = state.shape_drag.filter(|d| kind == ObjectKind::Shape(d.shape) && layer == d.layer);
+        let shift = moved
+            .map(|d| d.delta)
+            .or(moved_legend.map(|d| d.delta))
+            .or(moved_shape.map(|d| d.delta))
+            .unwrap_or((0.0, 0.0));
         draw_selection(&painter, &t.scene, layer, kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
     }
 
@@ -291,6 +358,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     if response.drag_started()
         && !state.reader
         && !state.text_tool
+        && state.shape_tool.is_none()
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Label(label) } = pick(pos)
         && let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label))
@@ -319,10 +387,85 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // The drawing tools: a drag draws one object, then the tool is the Pointer again.
+    if let Some(kind) = state.shape_tool {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.shape_tool = None;
+            state.drawing = None;
+        }
+        if response.drag_started()
+            && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        {
+            let layer = layer_of_hit(pick(pos)).unwrap_or(state.active_layer);
+            if let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0) {
+                let (px, py) = to_page(pos);
+                state.drawing = Some(Drawing { layer, kind, from: ((px - f.x) / f.w, (py - f.y) / f.h) });
+                actions.push(Action::ActivateLayer { graph: graph_id, layer });
+            }
+        }
+        if let Some(d) = state.drawing
+            && let Some(f) = t.geometry.get(d.layer).map(|g| g.frame)
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let (px, py) = to_page(pos);
+            let mut to = ((px - f.x) / f.w, (py - f.y) / f.h);
+            if ui.input(|i| i.modifiers.shift) {
+                to = shape::constrain(d.kind, d.from, to, (f.w, f.h));
+            }
+            let mut preview = Shape::new(d.kind, d.from, to);
+            preview.color = sheaf_core::Color::BLACK;
+            draw_preview(&painter, &preview, &|(x, y)| to_screen((f.x + x * f.w, f.y + y * f.h)));
+            if response.drag_stopped() {
+                state.drawing = None;
+                // A click without a drag draws nothing and leaves the tool on.
+                if ((to.0 - d.from.0) * f.w).hypot((to.1 - d.from.1) * f.h) >= MIN_DRAWN_PT {
+                    let index = graph.layers.get(d.layer).map_or(0, |l| l.shapes.len());
+                    state.shape_tool = None;
+                    state.selected = Some((d.layer, ObjectKind::Shape(index)));
+                    actions.push(Action::AddShape { graph: graph_id, layer: d.layer, shape: preview });
+                }
+            }
+        }
+    }
+
+    // Dragging a drawn object moves it; the change is made when the button is let go.
+    if response.drag_started()
+        && !state.reader
+        && !state.text_tool
+        && state.shape_tool.is_none()
+        && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        && let Hit::Object { layer, kind: ObjectKind::Shape(shape) } = pick(pos)
+    {
+        state.selected = Some((layer, ObjectKind::Shape(shape)));
+        state.shape_drag = Some(ShapeDrag { layer, shape, delta: (0.0, 0.0) });
+        actions.push(Action::ActivateLayer { graph: graph_id, layer });
+    }
+    if let Some(mut d) = state.shape_drag {
+        let page = response.drag_delta() / fit;
+        d.delta = (d.delta.0 + f64::from(page.x), d.delta.1 + f64::from(page.y));
+        state.shape_drag = Some(d);
+        if response.drag_stopped() {
+            state.shape_drag = None;
+            if let Some(f) = t.geometry.get(d.layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
+                && (d.delta.0 != 0.0 || d.delta.1 != 0.0)
+            {
+                actions.push(Action::MoveShape {
+                    graph: graph_id,
+                    layer: d.layer,
+                    shape: d.shape,
+                    dx: d.delta.0 / f.w,
+                    dy: d.delta.1 / f.h,
+                });
+            }
+        }
+    }
+
     // Dragging the legend moves it too, and makes its position manual.
     if response.drag_started()
         && !state.reader
         && !state.text_tool
+        && state.shape_tool.is_none()
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Legend } = pick(pos)
         && let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
@@ -359,10 +502,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
 
     // Clicks on the page.
-    let layer_of = |hit: Hit| match hit {
-        Hit::Object { layer, .. } | Hit::Layer(layer) => Some(layer),
-        Hit::Page => None,
-    };
+    let layer_of = layer_of_hit;
     if response.clicked()
         && state.text_tool
         && let Some(pos) = response.interact_pointer_pos()
@@ -404,6 +544,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 ObjectKind::Legend => Some(open(layer, PropsTab::Legend, None)),
                 ObjectKind::Plot(p) => Some(open(layer, PropsTab::Plots, Some(p))),
                 ObjectKind::Label(label) => Some(Action::EditText { graph: graph_id, layer, label }),
+                ObjectKind::Shape(shape) => Some(Action::EditShape { graph: graph_id, layer, shape }),
             },
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
@@ -573,6 +714,7 @@ fn menu_for(
             ObjectKind::YTitle => menus::graph_title_menu(layer, true),
             ObjectKind::Legend => menus::graph_legend_menu(layer),
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
+            ObjectKind::Shape(k) => menus::graph_shape_menu(layer, k),
         },
         MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
         MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
@@ -668,6 +810,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::UpdateLegend { layer }
         | GraphOp::HideTitle { layer, .. }
         | GraphOp::DeleteLabel { layer, .. }
+        | GraphOp::DeleteShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer } => layer,
     };
@@ -751,6 +894,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::DeleteLabel { label, .. } => {
             if label < l.labels.len() {
                 l.labels.remove(label);
+            }
+        }
+        GraphOp::DeleteShape { shape, .. } => {
+            if shape < l.shapes.len() {
+                l.shapes.remove(shape);
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),

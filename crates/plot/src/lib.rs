@@ -17,6 +17,7 @@ mod fonts;
 pub mod hit;
 mod layout;
 mod legend;
+mod margin;
 pub mod markup;
 mod plots;
 mod raster;
@@ -32,10 +33,13 @@ mod export_tests;
 #[cfg(test)]
 mod legend_tests;
 #[cfg(test)]
+mod margin_tests;
+#[cfg(test)]
 mod tests;
 
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
+pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 
 use sheaf_core::{Project, WindowId};
 use std::path::{Path, PathBuf};
@@ -78,22 +82,92 @@ pub enum PlotError {
     UnknownFormat(String),
 }
 
-/// The size of an exported figure. With neither width nor height the figure has the size of the
-/// graph's page. With one of them the whole page is scaled to it, text and lines included, as
-/// Origin's export size does with "keep aspect ratio"; with both, it is scaled to fit inside both.
+/// The unit of an export size in Origin's export settings (spec graphing.md 9.3).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum SizeUnit {
+    #[default]
+    Inch,
+    Cm,
+    /// Pixels of the raster export: inches x DPI.
+    Pixel,
+    /// Percent of the page size (100 is the size the page has).
+    PageRatio,
+}
+
+impl SizeUnit {
+    /// A length of `v` in this unit as inches. `dpi` is the pixel resolution; `area_in` is the
+    /// width (or height) of the exported area in inches that 100 % stands for.
+    pub fn to_inches(self, v: f64, dpi: f64, area_in: f64) -> f64 {
+        match self {
+            SizeUnit::Inch => v,
+            SizeUnit::Cm => v / 2.54,
+            SizeUnit::Pixel => v / dpi,
+            SizeUnit::PageRatio => v / 100.0 * area_in,
+        }
+    }
+
+    /// The inverse of [`SizeUnit::to_inches`].
+    pub fn from_inches(self, inches: f64, dpi: f64, area_in: f64) -> f64 {
+        match self {
+            SizeUnit::Inch => inches,
+            SizeUnit::Cm => inches * 2.54,
+            SizeUnit::Pixel => inches * dpi,
+            SizeUnit::PageRatio => inches / area_in * 100.0,
+        }
+    }
+
+    /// Parses `in`, `cm`, `px` or `%` (also the words inch, pixel, percent, ratio).
+    pub fn parse(s: &str) -> Option<SizeUnit> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "in" | "inch" | "inches" => Some(SizeUnit::Inch),
+            "cm" => Some(SizeUnit::Cm),
+            "px" | "pixel" | "pixels" => Some(SizeUnit::Pixel),
+            "%" | "percent" | "ratio" | "page-ratio" => Some(SizeUnit::PageRatio),
+            _ => None,
+        }
+    }
+}
+
+/// The size of an exported figure, that of the exported area (the page, or less with a margin
+/// mode other than page). With neither width nor height the figure has the size of that area.
+/// With one of them the whole figure is scaled to it, text and lines included, as Origin's export
+/// size does with "keep aspect ratio"; with both, it is scaled to fit inside both.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct ExportSize {
     /// Width in inches.
     pub width_in: Option<f64>,
     /// Height in inches.
     pub height_in: Option<f64>,
+    /// Scale factor against the area at its own size (1.0 is 100 %); wins over width and height.
+    pub ratio: Option<f64>,
 }
 
 impl ExportSize {
-    /// The factor by which a page of `page_w` x `page_h` points is scaled.
+    /// A size given in `unit`. `dpi` turns pixels into inches. A page ratio is a percentage and
+    /// rescales by width or by height alike, the aspect ratio being kept; width wins.
+    pub fn from_unit(width: Option<f64>, height: Option<f64>, unit: SizeUnit, dpi: f64) -> ExportSize {
+        let conv = |v: f64| match unit {
+            SizeUnit::Inch => v,
+            SizeUnit::Cm => v / 2.54,
+            SizeUnit::Pixel => v / dpi,
+            SizeUnit::PageRatio => v,
+        };
+        if unit == SizeUnit::PageRatio {
+            return ExportSize { ratio: width.or(height).map(|p| p / 100.0), ..ExportSize::default() };
+        }
+        ExportSize { width_in: width.map(conv), height_in: height.map(conv), ratio: None }
+    }
+
+    /// The factor by which an area of `page_w` x `page_h` points is scaled.
     pub fn scale(&self, page_w: f64, page_h: f64) -> Result<f64, PlotError> {
-        let mut scale: Option<f64> = None;
-        for (want, have, what) in [(self.width_in, page_w, "width"), (self.height_in, page_h, "height")] {
+        let mut scale: Option<f64> = self.ratio;
+        if let Some(r) = self.ratio
+            && !(r.is_finite() && r > 0.0)
+        {
+            return Err(PlotError::Size(format!("the page ratio must be a positive percentage, not {} %", r * 100.0)));
+        }
+        let (width, height) = if self.ratio.is_some() { (None, None) } else { (self.width_in, self.height_in) };
+        for (want, have, what) in [(width, page_w, "width"), (height, page_h, "height")] {
             let Some(inches) = want else { continue };
             if !(inches.is_finite() && inches > 0.0) {
                 return Err(PlotError::Size(format!("the export {what} must be a positive length, not {inches} in")));
@@ -296,8 +370,20 @@ pub fn export_file_sized(
     dpi: f64,
     size: ExportSize,
 ) -> Result<(), PlotError> {
+    export_file_with(project, graph, path, dpi, size, ExportLayout::default())
+}
+
+/// [`export_file_sized`] with a margin mode (see [`ExportLayout`]).
+pub fn export_file_with(
+    project: &Project,
+    graph: WindowId,
+    path: &Path,
+    dpi: f64,
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<(), PlotError> {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    let bytes = export_bytes(project, graph, &ext, dpi, size)?;
+    let bytes = export_bytes_with(project, graph, &ext, dpi, size, layout)?;
     std::fs::write(path, bytes).map_err(|source| PlotError::Io { path: path.to_path_buf(), source })
 }
 
@@ -310,20 +396,61 @@ pub fn export_bytes(
     dpi: f64,
     size: ExportSize,
 ) -> Result<Vec<u8>, PlotError> {
-    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let scale = size.scale(g.page.width_pt, g.page.height_pt)?;
+    export_bytes_with(project, graph, ext, dpi, size, ExportLayout::default())
+}
+
+/// The picture an export to a raster format would have, as straight RGBA pixels (what the
+/// clipboard copy of a page needs).
+pub fn export_raster(
+    project: &Project,
+    graph: WindowId,
+    dpi: f64,
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<Raster, PlotError> {
+    let fonts = SystemFonts::shared();
+    let scene = layout::build_scene(project, graph, fonts)?;
+    let view = layout.view(&scene, fonts, Some(dpi));
+    let scale = size.scale(view.w, view.h)?;
+    raster::rasterise(&svg::write_svg_view(&scene, view, scale), dpi / 72.0, fonts)
+}
+
+/// The area of the page an export with `layout` shows, in page points (the page itself with
+/// margin mode page). `raster_dpi` is the resolution of a raster export; it gives the border
+/// width its unit.
+pub fn export_area(
+    project: &Project,
+    graph: WindowId,
+    layout: ExportLayout,
+    raster_dpi: Option<f64>,
+) -> Result<Rect, PlotError> {
+    let scene = layout::build_scene(project, graph, SystemFonts::shared())?;
+    Ok(layout.view(&scene, SystemFonts::shared(), raster_dpi))
+}
+
+/// [`export_bytes`] with a margin mode: the figure shows the area chosen by `layout` and `size`
+/// is the size of that area.
+pub fn export_bytes_with(
+    project: &Project,
+    graph: WindowId,
+    ext: &str,
+    dpi: f64,
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<Vec<u8>, PlotError> {
+    let fonts = SystemFonts::shared();
+    let scene = layout::build_scene(project, graph, fonts)?;
+    let raster_dpi = matches!(ext, "png" | "tif" | "tiff").then_some(dpi);
+    let view = layout.view(&scene, fonts, raster_dpi);
+    let scale = size.scale(view.w, view.h)?;
     if matches!(ext, "eps" | "emf") {
-        let fonts = SystemFonts::shared();
-        let scene = layout::build_scene(project, graph, fonts)?;
         return Ok(if ext == "eps" {
-            eps::write_eps(&scene, scale).bytes
+            eps::write_eps_view(&scene, scale, view).bytes
         } else {
-            emf::write_emf(&scene, scale, fonts)
+            emf::write_emf_view(&scene, scale, fonts, view)
         });
     }
-    let svg = render_svg(project, graph)?;
-    let svg = if scale == 1.0 { svg } else { raster::scale_svg(&svg, scale) };
-    let fonts = SystemFonts::shared();
+    let svg = svg::write_svg_view(&scene, view, scale);
     match ext {
         "svg" => Ok(svg.into_bytes()),
         "png" => raster::encode_png(&raster::rasterise(&svg, dpi / 72.0, fonts)?, dpi),

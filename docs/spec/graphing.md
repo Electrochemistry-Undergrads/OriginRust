@@ -385,6 +385,12 @@ Image types in the file: ai, bmp, cgm, dxf, emf, eps, gif, jpg, pcx, pdf, png, p
 | Advanced.DPI | resolution of rasterised parts of vector output | 300 |
 Margin meaning: border = bounding box of everything plus border; tight = bounding box including off-page objects; page = full page rectangle; tight in page = bounding box of objects over 50 % inside the page. Margin offsets: whole-pixel offsets relative to the active mode, set interactively; no default [W:export-margin_offsets].
 
+**Sheaf's reading (implemented in `crates/plot/src/margin.rs`, CLI `--margin auto|border|tight|page|tight-in-page` and `--border-width`, the export window's Margin list).**
+- *Auto (-2)* uses the global Copy Page settings plus offsets. Origin 2016's own Copy Page margin option is not in any file we may read (`Origin.ini` only has `AddEMFInCopyPage=1` and `AddWMFInCopyPage=1`; no margin key), and the program was not started for this. Choice [INF]: Auto means Border with the default border width, because a copy of a page that pastes with a little white round the axes is what the Copy Page default looks like and because a Border box always contains the labels. Origin's `BorderWid` default -1 stands for "default"; its value is not documented, Sheaf uses 5 pt (about 1.8 mm). Re-measure both when Origin can be run: export a PNG with Margin = -2 and compare its size with the page.
+- *Border width* is in pixels of the picture (Origin: whole-pixel offsets): at the export DPI for PNG and TIFF, 1 px = 1 pt for the vector formats. A negative or missing value is the default.
+- *Border* and *Tight* measure the bounding box from the drawn items: strokes by half their width, text by its measured box, data cut at the layer frame, the page background not counted. *Tight in page* keeps an item when at least half of its box area is inside the page (zero-area items: when their centre is), and the resulting box is cut at the page edge. An empty figure falls back to the page.
+- *Size* (9.3) sizes the exported area. A page ratio of 100 % is the area at its own size, 50 % half of it. The library functions and the plain `export_file` keep margin Page, so their outputs did not change; the CLI and the app default to Auto.
+
 ### 9.3 Size `tr1`
 Unit 0 inch (default), 1 cm, 2 pixel, 3 page ratio %. Rescaling 0 by width (default) or 1 by height; aspect always kept; width/height value 0 = original page size. Pixel size = inches x DPI (raster only). Publisher recipe: Margin = page, size = page ratio 100 %, DPI as requested [W:quick-help/set-expgraph-size-resolution].
 
@@ -406,6 +412,8 @@ Trap: PNG and TIF default to 256 colours; use 24-bit for colour figures. [W:deta
 
 ### 9.6 Copy page / clipboard (P1)
 Ctrl+J copies page (OLE), Ctrl+Alt+J copy as image, Ctrl+C copies as image by default. Size factor % of original: 100 from 2021b, 40 before, so 2016 default likely 40 [W:quick-help/export-graph-size-small]. Margin control as 9.2. 2016 ini: `AddEMFInCopyPage=1`, `AddWMFInCopyPage=1` (enhanced and Windows metafile put on clipboard) [F:Origin.ini]. View > Show Copy Page/Export Area (Ctrl+4) outlines the region.
+
+Sheaf (Edit > Copy Page, Ctrl+J, `copy_page` in `crates/app/src/app.rs`): size factor 40 % (`COPY_PAGE_SIZE_FACTOR`), margin Auto (= Border, see 9.2), 300 dpi bitmap. On Windows the bitmap (`CF_DIB`) and an enhanced metafile of the same picture (`CF_ENHMETAFILE`, from the EMF writer, same size factor and margin) go on the clipboard in one session (`crates/app/src/winclip.rs`, through the `clipboard-win` crate that eframe's clipboard already brings, plus two Win32 calls). Not done: the WMF (`AddWMFInCopyPage`), the OLE object of Ctrl+J, and "copy as image" variants. Where the metafile cannot be put (not Windows, clipboard busy) the picture goes alone through egui's image copy.
 
 ---
 

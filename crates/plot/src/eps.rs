@@ -35,6 +35,11 @@ struct Writer {
 
 /// Writes `scene`, scaled by `scale` (1 is the page size).
 pub fn write_eps(scene: &Scene, scale: f64) -> EpsOutput {
+    write_eps_view(scene, scale, crate::Rect { x: 0.0, y: 0.0, w: scene.width, h: scene.height })
+}
+
+/// [`write_eps`] for the part `view` of the page (page points) only.
+pub fn write_eps_view(scene: &Scene, scale: f64, view: crate::Rect) -> EpsOutput {
     let mut w = Writer {
         body: String::new(),
         fonts: BTreeSet::new(),
@@ -44,8 +49,7 @@ pub fn write_eps(scene: &Scene, scale: f64) -> EpsOutput {
         dropped: BTreeSet::new(),
     };
     if scene.background.a > 0 {
-        let rect = crate::Rect { x: 0.0, y: 0.0, w: scene.width, h: scene.height };
-        w.item(&Item::Rect { rect, fill: Some(scene.background), stroke: None });
+        w.item(&Item::Rect { rect: view, fill: Some(scene.background), stroke: None });
     }
     for layer in &scene.layers {
         layer.grid.iter().for_each(|it| w.item(it));
@@ -58,7 +62,7 @@ pub fn write_eps(scene: &Scene, scale: f64) -> EpsOutput {
         layer.overlay.iter().for_each(|it| w.item(it));
     }
 
-    let (pw, ph) = (scene.width * scale, scene.height * scale);
+    let (pw, ph) = (view.w * scale, view.h * scale);
     let mut s = String::with_capacity(w.body.len() + 2048);
     s.push_str("%!PS-Adobe-3.0 EPSF-3.0\n%%Creator: Sheaf\n%%Title: Sheaf figure\n");
     let _ = writeln!(s, "%%BoundingBox: 0 0 {} {}", pw.ceil() as i64, ph.ceil() as i64);
@@ -78,6 +82,13 @@ pub fn write_eps(scene: &Scene, scale: f64) -> EpsOutput {
         s.push(' ');
         push_num(&mut s, scale);
         s.push_str(" scale\n");
+    }
+    if view.x != 0.0 || view.y != 0.0 || view.h != scene.height {
+        // The body is in page points with y up from the page bottom; move the view's corner to the origin.
+        push_num(&mut s, -view.x);
+        s.push(' ');
+        push_num(&mut s, -(scene.height - view.y - view.h));
+        s.push_str(" translate\n");
     }
     s.push_str("0 setlinewidth newpath\n");
     s.push_str(&w.body);

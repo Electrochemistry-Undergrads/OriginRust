@@ -2209,26 +2209,34 @@ fn export_size_scales_the_whole_page() {
     let none = ExportSize::default();
     assert_eq!(none.scale(720.0, 540.0).unwrap(), 1.0);
     // 5 in wide on a 10 in page: half size.
-    let w = ExportSize { width_in: Some(5.0), height_in: None };
+    let w = ExportSize { width_in: Some(5.0), height_in: None, ratio: None };
     assert!((w.scale(720.0, 540.0).unwrap() - 0.5).abs() < 1e-12);
     // Both given: the page fits inside both.
-    let both = ExportSize { width_in: Some(5.0), height_in: Some(2.0) };
+    let both = ExportSize { width_in: Some(5.0), height_in: Some(2.0), ratio: None };
     assert!((both.scale(720.0, 540.0).unwrap() - 2.0 * 72.0 / 540.0).abs() < 1e-12);
     for bad in [0.0, -1.0, f64::NAN, 1e9] {
-        assert!(ExportSize { width_in: Some(bad), height_in: None }.scale(720.0, 540.0).is_err(), "{bad}");
+        assert!(ExportSize { width_in: Some(bad), height_in: None, ratio: None }.scale(720.0, 540.0).is_err(), "{bad}");
     }
     // Only the root size of the SVG changes; the drawing keeps its units through the viewBox.
-    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"720pt\" height=\"540pt\" viewBox=\"0 0 720 540\">\n<rect width=\"10\"/></svg>";
-    let half = raster::scale_svg(svg, 0.5);
-    assert!(half.contains("width=\"360pt\" height=\"270pt\" viewBox=\"0 0 720 540\""), "{half}");
-    assert!(half.contains("<rect width=\"10\"/>"));
+    let (p, g) = project(Template::Line, vec![0.0, 1.0, 2.0], vec![vec![0.0, 1.0, 4.0]]);
+    let scene = crate::layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let page = crate::Rect { x: 0.0, y: 0.0, w: scene.width, h: scene.height };
+    let half = crate::svg::write_svg_view(&scene, page, 0.5);
+    let (w, h) = (scene.width, scene.height);
+    let (mut a, mut b, mut c, mut d) = (String::new(), String::new(), String::new(), String::new());
+    crate::scene::push_num(&mut a, w / 2.0);
+    crate::scene::push_num(&mut b, h / 2.0);
+    crate::scene::push_num(&mut c, w);
+    crate::scene::push_num(&mut d, h);
+    let want = format!("width=\"{a}pt\" height=\"{b}pt\" viewBox=\"0 0 {c} {d}\"");
+    assert!(half.contains(&want), "{half}");
 }
 
 #[test]
 fn sized_exports_and_tiff() {
     let (p, g) = project(Template::Line, vec![0.0, 1.0, 2.0], vec![vec![0.0, 1.0, 4.0]]);
     let page = p.graph(g).unwrap().page.clone();
-    let half = ExportSize { width_in: Some(page.width_pt / 72.0 / 2.0), height_in: None };
+    let half = ExportSize { width_in: Some(page.width_pt / 72.0 / 2.0), height_in: None, ratio: None };
     // PNG: the pixel width follows the export width at the chosen resolution.
     let png = export_bytes(&p, g, "png", 100.0, half).unwrap();
     let width = u32::from_be_bytes([png[16], png[17], png[18], png[19]]);

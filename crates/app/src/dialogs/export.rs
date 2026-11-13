@@ -1,8 +1,10 @@
-//! The export window of a graph: PNG or TIFF at a chosen resolution, SVG, PDF, EPS or EMF, at the page size
-//! or scaled to a chosen width.
+//! The export window of a graph: PNG or TIFF at a chosen resolution, SVG, PDF, EPS or EMF, of the whole
+//! page or of the box round what is drawn, at the page size or scaled to a chosen width, in inches,
+//! centimetres, pixels or percent of the page (Origin's "size and margin options").
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::{Document, WindowId};
+use sheaf_plot::{ExportLayout, ExportSize, Margin, SizeUnit};
 use std::path::PathBuf;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -26,20 +28,28 @@ impl ExportFormat {
             ExportFormat::Emf => "emf",
         }
     }
+
+    fn is_raster(self) -> bool {
+        matches!(self, ExportFormat::Png | ExportFormat::Tiff)
+    }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum WidthUnit {
-    Inch,
-    Cm,
+fn unit_label(u: SizeUnit) -> &'static str {
+    match u {
+        SizeUnit::Inch => "in",
+        SizeUnit::Cm => "cm",
+        SizeUnit::Pixel => "px",
+        SizeUnit::PageRatio => "% of page",
+    }
 }
 
-impl WidthUnit {
-    fn per_inch(self) -> f64 {
-        match self {
-            WidthUnit::Inch => 1.0,
-            WidthUnit::Cm => 2.54,
-        }
+fn margin_label(m: Margin) -> &'static str {
+    match m {
+        Margin::Auto => "Auto (Copy Page setting)",
+        Margin::Border => "Border",
+        Margin::Tight => "Tight",
+        Margin::Page => "Page",
+        Margin::TightInPage => "Tight in page",
     }
 }
 
@@ -48,9 +58,13 @@ pub struct ExportDialog {
     format: ExportFormat,
     dpi: f64,
     /// When set, the picture is scaled to this width (in `width_unit`), text and lines included;
-    /// the height follows the page's proportions.
+    /// the height follows the proportions of the exported area.
     width: Option<f64>,
-    width_unit: WidthUnit,
+    width_unit: SizeUnit,
+    /// Which part of the page is exported. Origin's default `Auto` is `Border`.
+    margin: Margin,
+    /// The border width of `Margin::Border` in pixels; `None` is the default.
+    border_px: Option<f64>,
     /// Folder the file chooser starts in.
     folder: Option<PathBuf>,
 }
@@ -66,7 +80,20 @@ pub enum ExportOutcome {
 
 impl ExportDialog {
     pub fn new(graph: WindowId, folder: Option<PathBuf>) -> Self {
-        ExportDialog { graph, format: ExportFormat::Png, dpi: 300.0, width: None, width_unit: WidthUnit::Inch, folder }
+        ExportDialog {
+            graph,
+            format: ExportFormat::Png,
+            dpi: 300.0,
+            width: None,
+            width_unit: SizeUnit::Inch,
+            margin: Margin::Auto,
+            border_px: None,
+            folder,
+        }
+    }
+
+    fn layout(&self) -> ExportLayout {
+        ExportLayout { margin: self.margin, border_px: self.border_px }
     }
 
     pub fn show(&mut self, ctx: &egui::Context, doc: &Document) -> ExportOutcome {
@@ -81,7 +108,15 @@ impl ExportDialog {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                let (w_in, h_in) = (graph.page.width_pt / 72.0, graph.page.height_pt / 72.0);
+                // Pixels only exist for raster formats.
+                if !self.format.is_raster() && self.width_unit == SizeUnit::Pixel {
+                    self.width_unit = SizeUnit::Inch;
+                    self.width = None;
+                }
+                let raster_dpi = self.format.is_raster().then_some(self.dpi);
+                let area = sheaf_plot::export_area(doc.project(), self.graph, self.layout(), raster_dpi).ok();
+                let (page_w, page_h) = (graph.page.width_pt / 72.0, graph.page.height_pt / 72.0);
+                let (w_in, h_in) = area.map_or((page_w, page_h), |a| (a.w / 72.0, a.h / 72.0));
                 egui::Grid::new("export_grid").num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
                     ui.label("Format");
                     ui.horizontal(|ui| {
@@ -94,7 +129,37 @@ impl ExportDialog {
                     });
                     ui.end_row();
                     ui.label("Page size");
-                    ui.label(format!("{w_in:.2} x {h_in:.2} in"));
+                    ui.label(format!("{page_w:.2} x {page_h:.2} in"));
+                    ui.end_row();
+                    ui.label("Margin");
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("export_margin")
+                            .selected_text(margin_label(self.margin))
+                            .show_ui(ui, |ui| {
+                                for m in
+                                    [Margin::Auto, Margin::Border, Margin::Tight, Margin::Page, Margin::TightInPage]
+                                {
+                                    ui.selectable_value(&mut self.margin, m, margin_label(m));
+                                }
+                            })
+                            .response
+                            .on_hover_text(
+                                "Border: everything drawn plus a border. Tight: everything drawn. Page: the whole \
+                                 page. Tight in page: the objects that are over half inside the page.",
+                            );
+                        if self.margin.resolved() == Margin::Border {
+                            let mut px = self.border_px.unwrap_or(sheaf_plot::DEFAULT_BORDER_PT);
+                            if ui
+                                .add(
+                                    DragValue::new(&mut px).range(0.0..=500.0).speed(0.5).max_decimals(1).suffix(" px"),
+                                )
+                                .on_hover_text("Border width (pixels of the picture; points for vector formats)")
+                                .changed()
+                            {
+                                self.border_px = Some(px);
+                            }
+                        }
+                    });
                     ui.end_row();
                     ui.label("Width");
                     ui.horizontal(|ui| {
@@ -104,32 +169,37 @@ impl ExportDialog {
                             .on_hover_text("Scale the whole picture, text and lines included, to this width")
                             .changed()
                         {
-                            self.width = set.then_some(w_in * self.width_unit.per_inch());
+                            self.width = set.then_some(self.width_unit.from_inches(w_in, self.dpi, w_in));
                         }
                         if let Some(w) = &mut self.width {
                             let before = self.width_unit;
-                            ui.add(DragValue::new(w).range(0.1..=200.0).speed(0.05).max_decimals(2));
+                            ui.add(DragValue::new(w).range(0.1..=20000.0).speed(0.05).max_decimals(2));
                             egui::ComboBox::from_id_salt("export_width_unit")
-                                .selected_text(if self.width_unit == WidthUnit::Inch { "in" } else { "cm" })
-                                .width(48.0)
+                                .selected_text(unit_label(self.width_unit))
+                                .width(80.0)
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut self.width_unit, WidthUnit::Inch, "in");
-                                    ui.selectable_value(&mut self.width_unit, WidthUnit::Cm, "cm");
+                                    ui.selectable_value(&mut self.width_unit, SizeUnit::Inch, "in");
+                                    ui.selectable_value(&mut self.width_unit, SizeUnit::Cm, "cm");
+                                    if self.format.is_raster() {
+                                        ui.selectable_value(&mut self.width_unit, SizeUnit::Pixel, "px");
+                                    }
+                                    ui.selectable_value(&mut self.width_unit, SizeUnit::PageRatio, "% of page");
                                 });
                             if self.width_unit != before {
-                                *w *= self.width_unit.per_inch() / before.per_inch();
+                                let inches = before.to_inches(*w, self.dpi, w_in);
+                                *w = self.width_unit.from_inches(inches, self.dpi, w_in);
                             }
                         }
                     });
                     ui.end_row();
-                    let scale = self.width.map_or(1.0, |w| w / self.width_unit.per_inch() / w_in);
+                    let scale = self.width.map_or(1.0, |w| self.width_unit.to_inches(w, self.dpi, w_in) / w_in);
                     let (w_in, h_in) = (w_in * scale, h_in * scale);
-                    if self.width.is_some() {
+                    if self.width.is_some() || self.margin.resolved() != Margin::Page {
                         ui.label("Picture size");
                         ui.label(format!("{w_in:.2} x {h_in:.2} in"));
                         ui.end_row();
                     }
-                    if matches!(self.format, ExportFormat::Png | ExportFormat::Tiff) {
+                    if self.format.is_raster() {
                         ui.label("Resolution");
                         ui.horizontal(|ui| {
                             ui.add(DragValue::new(&mut self.dpi).range(36.0..=2400.0).speed(5.0).suffix(" dpi"));
@@ -166,15 +236,20 @@ impl ExportDialog {
                             if path.extension().is_none() {
                                 path.set_extension(ext);
                             }
-                            let size = sheaf_plot::ExportSize {
-                                width_in: self.width.map(|w| w / self.width_unit.per_inch()),
-                                height_in: None,
+                            let size = self.width.map_or_else(ExportSize::default, |w| {
+                                ExportSize::from_unit(Some(w), None, self.width_unit, self.dpi)
+                            });
+                            outcome = match sheaf_plot::export_file_with(
+                                doc.project(),
+                                self.graph,
+                                &path,
+                                self.dpi,
+                                size,
+                                self.layout(),
+                            ) {
+                                Ok(()) => ExportOutcome::Saved(path),
+                                Err(e) => ExportOutcome::Failed(e.to_string()),
                             };
-                            outcome =
-                                match sheaf_plot::export_file_sized(doc.project(), self.graph, &path, self.dpi, size) {
-                                    Ok(()) => ExportOutcome::Saved(path),
-                                    Err(e) => ExportOutcome::Failed(e.to_string()),
-                                };
                         }
                     }
                     if ui.button("Close").clicked() {
@@ -183,7 +258,7 @@ impl ExportDialog {
                 });
             });
         if !open {
-            outcome = ExportOutcome::Closed;
+            return ExportOutcome::Closed;
         }
         outcome
     }

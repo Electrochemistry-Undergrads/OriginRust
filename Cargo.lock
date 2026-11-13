@@ -3104,6 +3104,7 @@ dependencies = [
 name = "sheaf-app"
 version = "0.1.0"
 dependencies = [
+ "clipboard-win",
  "eframe",
  "egui_extras",
  "egui_kittest",

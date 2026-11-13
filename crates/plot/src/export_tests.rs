@@ -77,7 +77,7 @@ fn eps_has_a_bounding_box_that_matches_the_page() {
 fn eps_scales_with_the_export_size() {
     let (p, g) = project();
     let page = &p.graph(g).unwrap().page;
-    let size = ExportSize { width_in: Some(page.width_pt / 72.0 / 2.0), height_in: None };
+    let size = ExportSize { width_in: Some(page.width_pt / 72.0 / 2.0), height_in: None, ratio: None };
     let eps = String::from_utf8(export_bytes(&p, g, "eps", 300.0, size).unwrap()).unwrap();
     assert!(eps.contains(&format!(
         "%%BoundingBox: 0 0 {} {}",

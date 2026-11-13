@@ -21,6 +21,10 @@ egui_extras = "0.33"
 rfd = "0.15"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+[target.'cfg(windows)'.dependencies]
+# Already in the lock file through eframe's clipboard; Copy Page puts a metafile next to the bitmap.
+clipboard-win = "5.4"
+
 [lints]
 workspace = true
 

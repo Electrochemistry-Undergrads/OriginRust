@@ -155,8 +155,8 @@ mod tests {
         assert!((x - 0.5).abs() < 1e-12);
         assert!(((y - 0.1) * 200.0 - 160.0).abs() < 1e-9);
         let (x, y) = constrain(ShapeKind::Ellipse, (0.5, 0.5), (0.4, 0.9), (400.0, 200.0));
-        assert!(((x - 0.5) * 400.0).abs() - ((y - 0.5) * 200.0).abs() < 1e-9);
-        assert!(x < 0.5 && y > 0.5);
+        // dx = -40 pt, dy = 80 pt: the longer side wins, so the point is (0.3, 0.9).
+        assert!((x - 0.3).abs() < 1e-12 && (y - 0.9).abs() < 1e-12, "{x} {y}");
     }
 
     #[test]

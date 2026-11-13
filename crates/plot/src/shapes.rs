@@ -111,7 +111,17 @@ pub(crate) fn draw_shapes(
     for (k, shape) in layer.shapes.iter().enumerate() {
         let start = out.len();
         out.extend(shape_items(shape, f));
-        hit::record(objects, out, start, ObjectKind::Shape(k), index, ItemList::Overlay, &[], m);
+        // The recorded bounds include the stroke, so a thick line is picked on its visible width
+        // and the selection box surrounds it.
+        let half = shape.width_pt.max(0.0) / 2.0;
+        let padded: Vec<Rect> = out[start..]
+            .iter()
+            .filter_map(|item| hit::item_bounds(item, m))
+            .reduce(hit::union)
+            .map(|b| Rect { x: b.x - half, y: b.y - half, w: b.w + 2.0 * half, h: b.h + 2.0 * half })
+            .into_iter()
+            .collect();
+        hit::record(objects, out, start, ObjectKind::Shape(k), index, ItemList::Overlay, &padded, m);
     }
 }
 

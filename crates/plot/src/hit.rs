@@ -55,7 +55,7 @@ pub(crate) fn record(
     }
 }
 
-fn union(a: Rect, b: Rect) -> Rect {
+pub(crate) fn union(a: Rect, b: Rect) -> Rect {
     let (x0, y0) = (a.x.min(b.x), a.y.min(b.y));
     let (x1, y1) = ((a.x + a.w).max(b.x + b.w), (a.y + a.h).max(b.y + b.h));
     Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
@@ -237,7 +237,15 @@ fn list(layer: &LayerScene, which: ItemList) -> &[Item] {
 /// The object of `scene` under page point `p` (points, y down). `tol` is how far from a line, in
 /// points, a click still counts as on it (about 3 screen pixels is a good choice).
 pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
-    let all = || scene.layers.iter().rev().flat_map(|l| l.objects.iter().map(move |o| (l, o)));
+    // Objects of a layer are recorded in paint order, so within the rank of labels and drawn
+    // objects the last recorded is on top and is tried first: a click picks what the eye sees.
+    let all = |topmost_first: bool| {
+        scene.layers.iter().rev().flat_map(move |l| {
+            let objects: Box<dyn Iterator<Item = &SceneObject> + '_> =
+                if topmost_first { Box::new(l.objects.iter().rev()) } else { Box::new(l.objects.iter()) };
+            objects.map(move |o| (l, o))
+        })
+    };
     let rank = |k: ObjectKind| match k {
         ObjectKind::Label(_) | ObjectKind::Shape(_) => 0,
         ObjectKind::Legend => 1,
@@ -246,7 +254,7 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
         ObjectKind::Plot(_) => 4,
     };
     for wanted in 0..=4 {
-        for (layer, o) in all() {
+        for (layer, o) in all(wanted == 0) {
             if rank(o.kind) != wanted || !contains(o.bounds, p, tol) {
                 continue;
             }

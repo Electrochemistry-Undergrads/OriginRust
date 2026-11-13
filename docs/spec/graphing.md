@@ -1273,6 +1273,33 @@ Origin's Plot > Specialized > "Polar theta(X) r(Y)" and "Polar r(X) theta(Y)", a
 - Golden image: `crates/plot/tests/golden/polar.svg` (angles 0 to 360 in steps of 15, r = 1.5 + 0.5 cos 2 theta).
 - Not done: the angle in radians or gradians, the axis dialog for the zero direction and sense of rotation, a polar axis dialog (radius labels along other angles, labels at the circle edge only), polar contour and wind rose, zooming the circle, the Plot Details tab of the polar axes. Plot Details shows the plot type of a plot in a polar layer as "Polar Line" and so on.
 
+### 14.19 Radar charts (T12)
+
+Menu Plot > Specialized > Radar, the 2D Graphs button PlotRadar, `sheaf plot -t radar`. Everything
+here is from Origin's public documentation, not measured; measure on the Windows machine with
+tools/origin-ref.
+
+- The worksheet rows are the spokes, evenly spaced: spoke `i` of `n` is at `360 i / n` degrees. The
+  first spoke points up (12 o'clock), the others follow clockwise (from Origin's public
+  documentation, not measured; measure on the Windows machine with tools/origin-ref).
+- Each Y column is one plot, a closed polygon (line + symbol by default, colours from the line +
+  symbol list) joining its values on the spokes. Sheaf closes it by repeating the first point at 360
+  degrees.
+- The X column's cells, text or numbers, name the spokes, drawn outside the outer polygon; with no X
+  column (or an empty cell) the row number is the name (from Origin's public documentation, not
+  measured; measure on the Windows machine with tools/origin-ref).
+- One radial scale for all spokes, its tick labels on the first spoke from the centre up. Choice:
+  Sheaf starts the scale at 0 in the centre when the values are all positive and the layer's
+  radius minimum is automatic (the end follows the automatic axis rule); Origin's default start is
+  not measured. A radius outside the range is not drawn.
+- The grid is concentric polygons at the radius major ticks plus straight spokes (the polar grid
+  style); the outline is a polygon, with no ticks.
+- Implementation: a polar layer with `PolarCoords::radar = true`. `PolarMap` forces zero at 90
+  degrees and clockwise, so `data_to_page`, `page_to_data`, symbols and hit testing are those of the
+  polar layer. `data::radar_columns` turns the rows into `(angle, value)`; `polar::radar_axis` gives
+  the spoke ticks and names. The radar page is 8 by 6 inches with the legend right of the circle.
+- The .opj writer stores plain line + symbol plots and warns; the companion keeps the layer.
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.

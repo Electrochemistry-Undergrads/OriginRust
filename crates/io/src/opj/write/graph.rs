@@ -994,7 +994,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
-    if layer.coords.polar().is_some() {
+    if layer.coords.polar().is_some_and(|p| p.radar) {
+        notes.push(
+            "the radar layer was not written; its plots went out as plain line + symbol plots on rectangular axes"
+                .into(),
+        );
+    } else if layer.coords.polar().is_some() {
         notes
             .push("the polar layer was not written; its plots went out as plain line plots on rectangular axes".into());
     }

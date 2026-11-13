@@ -5288,7 +5288,6 @@ fn the_polar_button_of_the_2d_graphs_bar_makes_a_polar_graph() {
     let mut h = start(vec![data_file("polar-button")]);
     show_window(&mut h, "Book1 - sample");
     assert!(bar_button!(h, "2D Graphs", "Ternary").accesskit_node().is_disabled(), "ternary stays greyed");
-    assert!(bar_button!(h, "2D Graphs", "Radar").accesskit_node().is_disabled(), "radar stays greyed");
     click_text(&mut h, "C(Y1)");
     let before = project(&h).graphs().count();
     bar_button!(h, "2D Graphs", "Polar theta(X) r(Y)").click();
@@ -5404,4 +5403,27 @@ fn column_properties_refuses_a_short_name_longer_than_origins_limit() {
     type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQR");
     click(&mut h, "OK");
     assert_eq!(project(&h).column(b).unwrap().short_name, "ABCDEFGHIJKLMNOPQR");
+}
+
+#[test]
+fn plot_specialized_radar_and_its_toolbar_button_make_a_radar_graph() {
+    let mut h = start(vec![data_file("radar-menu")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    let before = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Specialized", "Radar"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let layer = &graphs[before].layers[0];
+    assert!(layer.coords.polar().is_some_and(|p| p.radar));
+    assert_eq!(layer.plots.len(), 1);
+    assert_eq!(layer.plots[0].kind, sheaf_core::graph::PlotKind::LineSymbol);
+
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    bar_button!(h, "2D Graphs", "Radar").click();
+    settle(&mut h);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 2);
+    assert!(graphs[before + 1].layers[0].coords.polar().is_some_and(|p| p.radar));
 }

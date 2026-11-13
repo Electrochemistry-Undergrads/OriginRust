@@ -749,23 +749,18 @@ fn plot_menu() -> Vec<Entry> {
         grey_sub("Pro&file", &["Contour Profiles", "Image Profiles"]),
         sub(
             "Specialize&d",
-            with(
-                vec![
-                    item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
-                    item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
-                ],
-                &[
-                    "Wind Rose",
-                    "Ternary",
-                    "Piper",
-                    "Smith Chart",
-                    "Radar",
-                    "High-Low-Close",
-                    "Vector XYAM",
-                    "Vector XYXY",
-                    "Zoom",
-                ],
-            ),
+            [
+                with(
+                    vec![
+                        item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
+                        item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
+                    ],
+                    &["Wind Rose", "Ternary", "Piper", "Smith Chart"],
+                ),
+                vec![item("Radar", Cmd::Plot(Template::Radar))],
+                greys(&["High-Low-Close", "Vector XYAM", "Vector XYXY", "Zoom"]),
+            ]
+            .concat(),
         ),
         grey_sub("Stoc&k", &["High-Low-Close", "Japanese Candlestick", "OHLC Bar Chart", "OHLC-Volume", "Line"]),
         sep(),

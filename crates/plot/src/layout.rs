@@ -169,6 +169,17 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
             range = Some((0.0, hi));
             free.0 = false;
         }
+        if dim == Dim::Y
+            && linear
+            && let Some((lo, hi)) = range
+            && lo > 0.0
+            && axis.min.is_none()
+            && sources.iter().any(|pd| pd.spokes.is_some())
+        {
+            // A radar chart starts at the centre with 0 (graphing spec 14.19).
+            range = Some((0.0, hi));
+            free.0 = false;
+        }
         if dim == Dim::Y && linear && sources.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Area) {
             // Piles of 100: the axis ends exactly at 0 and 100.
             range = Some((0.0, 100.0));
@@ -204,8 +215,14 @@ fn group_geometry(
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
         resolve_dim(project, axis, dim, &sources)
     };
+    let spoke_axis = |i: usize, axis: &Axis| match g.layers[i].coords.polar() {
+        Some(p) if p.radar => {
+            polar::radar_axis(pds[i].plots.first().and_then(|pd| pd.spokes.as_deref()).unwrap_or(&[]))
+        }
+        _ => polar::angle_axis(axis),
+    };
     let (root_x, root_y) = if rl.coords.polar().is_some() {
-        (polar::angle_axis(&rl.x_axis), shared(Dim::Y, &rl.y_axis))
+        (spoke_axis(root, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
     } else {
         (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
     };
@@ -214,7 +231,7 @@ fn group_geometry(
         .map(|&i| {
             let l = &g.layers[i];
             let x = if l.coords.polar().is_some() {
-                polar::angle_axis(&l.x_axis)
+                spoke_axis(i, &l.x_axis)
             } else if shares(i, Dim::X) {
                 root_x.clone()
             } else {

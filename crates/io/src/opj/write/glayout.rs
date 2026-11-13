@@ -103,6 +103,8 @@ pub(super) struct LinkSpec {
     pub parent: u8,
     /// 0-based position of the layer in the window.
     pub index: u8,
+    /// The place of the layer is given in percent of the parent layer (Origin's "% of linked layer").
+    pub percent_of_parent: bool,
 }
 
 pub(super) struct LayerSpec {
@@ -125,6 +127,9 @@ const LINK_UNIT_AT: usize = 0x2E;
 const LINK_FLAGS_AT: usize = 0xFC;
 const LINK_UNIT: u8 = 9;
 const LINK_FLAG: u8 = 0x80;
+/// Origin's property `layer.unit` reports 7 (percent of the linked layer) when this byte is 6.
+const LINK_UNIT_CODE_AT: usize = 0x67;
+const LINK_UNIT_CODE: u8 = 6;
 /// Layer header byte that makes Origin move the curves by the offsets stored in their records.
 const OFFSETS_AT: usize = 0xFD;
 const OFFSETS_ON: u8 = 0x50;
@@ -165,6 +170,9 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
         h[LINK_INDEX_AT] = link.index;
         h[LINK_UNIT_AT] = LINK_UNIT;
         h[LINK_FLAGS_AT] |= LINK_FLAG;
+        if link.percent_of_parent {
+            h[LINK_UNIT_CODE_AT] = LINK_UNIT_CODE;
+        }
     }
     if l.offsets {
         h[OFFSETS_AT] = OFFSETS_ON;

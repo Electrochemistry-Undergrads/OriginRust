@@ -81,6 +81,8 @@ const NO_VALUE: f64 = -1.23456789e-300;
 // Annotation: header holds the rectangle and the name, block 1 the text style, block 2 the text.
 const ANN_RECT_AT: usize = 0x03;
 const ANN_NAME_AT: usize = 0x46;
+/// The layer header byte that holds the 1-based number of the layer this one is linked to.
+const LAYER_LINK_AT: usize = 0xAB;
 const ANN_FONT_AT: usize = 0x04;
 const ANN_ANGLE_AT: usize = 0x02;
 
@@ -165,6 +167,7 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
         graph.layers.push(build_layer(layer, k == 0, &template, &graph.page, column_of_set, &mut notes));
     }
     link_right_y_layers(&mut graph, w);
+    link_panels(&mut graph, w);
     if graph.layers.is_empty() {
         graph.layers.push(template);
         notes.push("it has no layers".into());
@@ -339,6 +342,38 @@ fn axis_side(blocks: &[Vec<u8>], first: bool) -> AxisSide {
         AxisSide::Opposite
     } else {
         AxisSide::Normal
+    }
+}
+
+/// Reads the link of every other layer that names an earlier layer in its header (a panel of a stack,
+/// or a layer of one of Origin's panel templates): the layer is linked to it, its frame becomes
+/// fractions of the parent's frame, and an object named `X1` or `Y1` in the layer says that the X or
+/// Y scale follows the parent's (spec section 13.13). A parent that is itself linked is not followed:
+/// the model links to the first layer of a group only.
+fn link_panels(graph: &mut Graph, w: &Window) {
+    for k in 1..graph.layers.len().min(w.layers.len()) {
+        if graph.layers[k].link.is_some() {
+            continue;
+        }
+        let number = usize::from(u8_at(&w.layers[k].header, LAYER_LINK_AT));
+        if number == 0 || number > k {
+            continue;
+        }
+        let parent = number - 1;
+        let pf = graph.layers[parent].frame;
+        if graph.layers[parent].link.is_some() || pf.width <= 0.0 || pf.height <= 0.0 {
+            continue;
+        }
+        let names: Vec<String> = w.layers[k].annotations.iter().map(annotation_name).collect();
+        let follows = |n: &str| if names.iter().any(|a| a == n) { ScaleLink::Straight } else { ScaleLink::None };
+        let layer = &mut graph.layers[k];
+        layer.link = Some(LayerLink { parent, x: follows("X1"), y: follows("Y1") });
+        layer.frame = Frame {
+            left: (layer.frame.left - pf.left) / pf.width,
+            top: (layer.frame.top - pf.top) / pf.height,
+            width: layer.frame.width / pf.width,
+            height: layer.frame.height / pf.height,
+        };
     }
 }
 

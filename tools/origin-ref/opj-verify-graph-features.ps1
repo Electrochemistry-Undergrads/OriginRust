@@ -25,7 +25,9 @@
 param(
   [Parameter(Mandatory = $true)][string[]]$Files,
   [Parameter(Mandatory = $true)][string]$OutDir,
-  [int]$TimeoutSec = 300
+  [int]$TimeoutSec = 300,
+  # Do not run `layer -a` before the export (it rescales the axes; linked layers then take the scale of the last layer).
+  [switch]$NoRescale
 )
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -90,7 +92,7 @@ try {
               $w.WriteLine("plot$p=" + [string]$origin.LTStr('pn$'))
             }
           }
-          [void](Lt 'layer -a;')
+          if (-not $NoRescale) { [void](Lt 'layer -a;') }
           # The folder and the file name go in apart (a full path in filename makes the export fail).
           $png = "$base.$g"
           $okx = Lt ("expGraph type:=png path:=`"$OutDir`" filename:=`"$png`" overwrite:=1 tr1.unit:=2 tr1.width:=800;")

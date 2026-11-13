@@ -6,11 +6,13 @@
 //!
 //! - `gw-area.opj`: area plots, one and two curves, with chosen colours.
 //! - `gw-groups.opj`: two and three column plots in one layer (side by side), with an error bar, and a lone column plot.
+//! - `gw-panels.opj`: a stack of three panels (X linked), the same with a gap, a grid, a graph with Y linked and one with both.
 //! - `gw-fmt.opj`: tick label number formats (decimal places, scientific).
 
 use sheaf_core::Project;
 use sheaf_core::color::Color;
 use sheaf_core::graph::TickFormat;
+use sheaf_core::panels::PanelLayout;
 use sheaf_core::column::{Column, ColumnData, Designation};
 use sheaf_core::ids::{ColumnId, WindowId};
 use sheaf_core::template::Template;
@@ -107,6 +109,31 @@ fn groups() -> Project {
     p
 }
 
+fn panels() -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    let groups = vec![vec![c[1]], vec![c[2]], vec![c[4]]];
+    let mut add = |p: &mut Project, n: &str, layout: PanelLayout| {
+        let id = p.plot_panels(Template::Line, &groups, &layout).unwrap();
+        name(p, id, n);
+        id
+    };
+    add(&mut p, "PStack", PanelLayout::stack(3));
+    let mut gap = PanelLayout::stack(3);
+    gap.v_gap = 5.0;
+    add(&mut p, "PGap", gap);
+    add(&mut p, "PArr", PanelLayout::arrange(3, 1));
+    let mut y = PanelLayout::arrange(1, 3);
+    y.link_y = true;
+    y.link_x = false;
+    add(&mut p, "PY", y);
+    let mut xy = PanelLayout::arrange(2, 2);
+    xy.link_x = true;
+    xy.link_y = true;
+    add(&mut p, "PXY", xy);
+    p
+}
+
 fn main() {
     let Some(dir) = std::env::args().nth(1) else {
         eprintln!("usage: opj_write_graph_features2 <output folder>");
@@ -114,7 +141,7 @@ fn main() {
     };
     let dir = Path::new(&dir);
     std::fs::create_dir_all(dir).expect("the output folder can be made");
-    for (name, project) in [("gw-area", area()), ("gw-fmt", fmt()), ("gw-groups", groups())] {
+    for (name, project) in [("gw-area", area()), ("gw-fmt", fmt()), ("gw-groups", groups()), ("gw-panels", panels())] {
         let path = dir.join(format!("{name}.opj"));
         match sheaf_io::opj::write_file(&project, &path) {
             Ok(warnings) => {

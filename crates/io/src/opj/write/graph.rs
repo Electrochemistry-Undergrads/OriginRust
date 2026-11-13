@@ -124,6 +124,26 @@ enum Role {
     Plain { has_right: bool },
     /// The right Y axis of a double-Y graph: linked to `parent`, drawn over its frame.
     RightY { parent: usize, x_straight: bool },
+    /// A panel (or any other linked layer): linked to `parent`, with a frame of its own, and the X
+    /// and Y scales that follow the parent's when `x` and `y` are set.
+    Panel { parent: usize, x: bool, y: bool },
+}
+
+impl Role {
+    /// The layer whose X scale this layer has, when it is linked straight.
+    fn x_parent(&self) -> Option<usize> {
+        match *self {
+            Role::RightY { parent, x_straight: true } | Role::Panel { parent, x: true, .. } => Some(parent),
+            _ => None,
+        }
+    }
+
+    fn y_parent(&self) -> Option<usize> {
+        match *self {
+            Role::Panel { parent, y: true, .. } => Some(parent),
+            _ => None,
+        }
+    }
 }
 
 /// The parent of layer `index` when it is the second layer of a double-Y graph, and whether its X
@@ -141,6 +161,14 @@ fn right_parent(graph: &Graph, index: usize) -> Option<(usize, bool)> {
 fn role_of(graph: &Graph, index: usize) -> Role {
     match right_parent(graph, index) {
         Some((parent, x_straight)) => Role::RightY { parent, x_straight },
+        None if graph.link_parent(index).is_some() => {
+            let link = graph.layers[index].link.expect("a valid link exists");
+            Role::Panel {
+                parent: link.parent,
+                x: link.x == ScaleLink::Straight,
+                y: link.y == ScaleLink::Straight,
+            }
+        }
         None => Role::Plain {
             has_right: (0..graph.layers.len()).any(|j| right_parent(graph, j).is_some_and(|(p, _)| p == index)),
         },
@@ -159,28 +187,47 @@ impl<'a> LayerCtx<'a> {
     /// The X axis whose scale this layer has and the range of data it has to cover. Layers whose X
     /// scales are linked straight share the parent's axis and the data of all of them.
     fn shared_x(&self, layer: &'a Layer, own: Option<(f64, f64)>) -> (&'a Axis, Option<(f64, f64)>) {
-        let root = match self.roles[self.index] {
-            Role::RightY { parent, x_straight: true } => parent,
-            _ => self.index,
-        };
+        let root = self.roles[self.index].x_parent().unwrap_or(self.index);
+        let (range, shared) = self.shared_range(root, Role::x_parent, |p| p.ranges.0);
+        if root == self.index && !shared {
+            return (&layer.x_axis, own);
+        }
+        (&self.graph.layers[root].x_axis, range)
+    }
+
+    /// The Y axis whose scale this layer has and the range of data it has to cover.
+    fn shared_y(&self, layer: &'a Layer, own: Option<(f64, f64)>) -> (&'a Axis, Option<(f64, f64)>) {
+        let root = self.roles[self.index].y_parent().unwrap_or(self.index);
+        let (range, shared) = self.shared_range(root, Role::y_parent, |p| p.ranges.1);
+        if root == self.index && !shared {
+            return (&layer.y_axis, own);
+        }
+        (&self.graph.layers[root].y_axis, range)
+    }
+
+    /// The range that covers the data of layer `root` and of every layer whose scale follows it, and
+    /// whether there is any such layer.
+    fn shared_range(
+        &self,
+        root: usize,
+        follows: fn(&Role) -> Option<usize>,
+        range_of: fn(&Plan) -> Option<(f64, f64)>,
+    ) -> (Option<(f64, f64)>, bool) {
         let mut range = None::<(f64, f64)>;
         let mut grow = |r: Option<(f64, f64)>| {
             if let Some((lo, hi)) = r {
                 range = Some(range.map_or((lo, hi), |(a, b)| (a.min(lo), b.max(hi))));
             }
         };
-        grow(self.plans[root].ranges.0);
+        grow(range_of(&self.plans[root]));
+        let mut shared = false;
         for (j, role) in self.roles.iter().enumerate() {
-            if matches!(role, Role::RightY { parent, x_straight: true } if *parent == root) {
-                grow(self.plans[j].ranges.0);
+            if follows(role) == Some(root) {
+                shared = true;
+                grow(range_of(&self.plans[j]));
             }
         }
-        if root == self.index
-            && !self.roles.iter().any(|r| matches!(r, Role::RightY { parent, x_straight: true } if *parent == root))
-        {
-            return (&layer.x_axis, own);
-        }
-        (&self.graph.layers[root].x_axis, range)
+        (range, shared)
     }
 }
 
@@ -326,9 +373,9 @@ impl Writer {
         let plots = &plan.plots;
         let ranges = plan.ranges;
         let role = ctx.roles[ctx.index];
-        let text_x = match role {
-            Role::RightY { parent, x_straight: true } => ctx.plans[parent].text_x,
-            _ => plan.text_x,
+        let text_x = match role.x_parent() {
+            Some(parent) => ctx.plans[parent].text_x,
+            None => plan.text_x,
         };
         let graph = ctx.graph;
 
@@ -346,12 +393,20 @@ impl Writer {
             x_scale.to = n as f64 + 0.5;
             x_scale.step = 1.0;
         }
-        let y_scale = axis_scale(&layer.y_axis, ranges.1, notes);
+        let (y_axis, y_data) = ctx.shared_y(layer, ranges.1);
+        let y_scale = axis_scale(y_axis, y_data, notes);
         let link = match role {
-            Role::RightY { parent, .. } => {
-                Some(LinkSpec { parent: (parent + 1).min(255) as u8, index: ctx.index.min(255) as u8 })
-            }
-            _ => None,
+            Role::RightY { parent, .. } => Some(LinkSpec {
+                parent: (parent + 1).min(255) as u8,
+                index: ctx.index.min(255) as u8,
+                percent_of_parent: false,
+            }),
+            Role::Panel { parent, .. } => Some(LinkSpec {
+                parent: (parent + 1).min(255) as u8,
+                index: ctx.index.min(255) as u8,
+                percent_of_parent: true,
+            }),
+            Role::Plain { .. } => None,
         };
         let offsets = plots.iter().any(|r| r.place.oy != 0.0);
         let mut out = framed(&layer_header(&LayerSpec {
@@ -510,6 +565,15 @@ impl Writer {
             // the X scale follows the parent's
             out.extend(link_annotation("X2"));
             out.extend(link_annotation("X1"));
+        }
+        if let Role::Panel { x, y, .. } = role {
+            // scales that follow the parent's: an object named Y1 and one named X1
+            if y {
+                out.extend(link_annotation("Y1"));
+            }
+            if x {
+                out.extend(link_annotation("X1"));
+            }
         }
         out.extend(framed(&[]));
 
@@ -827,12 +891,6 @@ fn within(parent: sheaf_core::graph::Frame, f: sheaf_core::graph::Frame) -> shea
 /// whole project.
 fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: &mut Vec<String>) {
     let layer = &graph.layers[index];
-    if graph.link_parent(index).is_some() && !matches!(roles[index], Role::RightY { .. }) {
-        notes.push(
-            "a layer linked to another one in a way other than as the right Y axis of a double-Y graph (a panel of a stack, or a linked Y scale) was written as an independent layer at the same place; the link and the shared axis are not kept"
-                .into(),
-        );
-    }
     if matches!(roles[index], Role::RightY { x_straight: false, .. }) {
         notes.push(
             "the X scale of a right Y layer that is not linked to its parent's was written with the link only".into(),

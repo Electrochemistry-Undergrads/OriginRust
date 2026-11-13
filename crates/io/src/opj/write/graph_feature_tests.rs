@@ -165,19 +165,6 @@ fn a_right_layer_with_its_own_x_scale_and_other_links_are_handled_apart() {
     let (imp, out) = round_trip(&p);
     assert!(out.warnings.iter().any(|w| w.contains("not linked to its parent")), "{:?}", out.warnings);
     assert_eq!(imp.graphs[0].layers.len(), 2);
-
-    // a panel of a stack (its own place in the parent's frame) is still an independent layer
-    let mut p = source();
-    let c = ids(&p);
-    let id = p.add_graph(Template::Line);
-    p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
-    let mut panel = p.graph(id).unwrap().layers[0].clone();
-    panel.frame = Frame { left: 0.0, top: 0.5, width: 1.0, height: 0.5 };
-    panel.link = Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None });
-    p.graph_mut(id).unwrap().layers.push(panel);
-    let (imp, out) = round_trip(&p);
-    assert!(out.warnings.iter().any(|w| w.contains("panel of a stack")), "{:?}", out.warnings);
-    assert_eq!(imp.graphs[0].layers[1].link, None);
 }
 
 #[test]
@@ -366,4 +353,86 @@ fn error_bars_on_grouped_columns_are_named_and_still_read_back() {
     let l = &imp.graphs[0].layers[0];
     assert_eq!(l.plots.len(), 2);
     assert!(l.plots[0].y_error.is_some() && l.plots[1].y_error.is_none());
+}
+
+/// A graph of `n` panels (layer 0 and layers linked to it), each with a plot, in the frames of a
+/// vertical stack: fractions of the first panel's frame, the panels above going up by one height.
+fn panels(n: usize, x: ScaleLink, y: ScaleLink) -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.add_graph(Template::Line);
+    p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
+    p.graph_mut(id).unwrap().layers[0].frame = Frame { left: 0.15, top: 0.65, width: 0.75, height: 0.25 };
+    for k in 1..n {
+        let mut panel = p.graph(id).unwrap().layers[0].clone();
+        panel.plots.clear();
+        panel.frame = Frame { left: 0.0, top: -1.2 * k as f64, width: 1.0, height: 1.0 };
+        panel.link = Some(LayerLink { parent: 0, x, y });
+        p.graph_mut(id).unwrap().layers.push(panel);
+        p.add_plot_xy(id, k, Some(c[0]), c[1 + k], None).unwrap();
+    }
+    p
+}
+
+#[test]
+fn panels_keep_their_link_their_frames_and_their_linked_scales() {
+    for (x, y) in [
+        (ScaleLink::Straight, ScaleLink::None),
+        (ScaleLink::None, ScaleLink::Straight),
+        (ScaleLink::Straight, ScaleLink::Straight),
+        (ScaleLink::None, ScaleLink::None),
+    ] {
+        let p = panels(3, x, y);
+        let (imp, out) = round_trip(&p);
+        assert!(out.warnings.is_empty(), "{x:?} {y:?}: {:?}", out.warnings);
+        let want = &p.graphs().next().unwrap().layers;
+        let got = &imp.graphs[0].layers;
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].link, None);
+        for k in 1..3 {
+            assert_eq!(got[k].link, Some(LayerLink { parent: 0, x, y }), "{x:?} {y:?} layer {k}");
+            let (g, w) = (got[k].frame, want[k].frame);
+            assert!(
+                (g.left - w.left).abs() < 0.01
+                    && (g.top - w.top).abs() < 0.01
+                    && (g.width - w.width).abs() < 0.01
+                    && (g.height - w.height).abs() < 0.01,
+                "{g:?} against {w:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn linked_scales_cover_the_data_of_every_panel() {
+    let (imp, _) = round_trip(&panels(3, ScaleLink::Straight, ScaleLink::Straight));
+    let l = &imp.graphs[0].layers;
+    // B is 0 to 100, C is 100 to 0 and D is about -0.05 to 0.05: the Y scale of the stack holds all of them
+    for layer in l {
+        assert_eq!((layer.y_axis.min, layer.y_axis.max), (l[0].y_axis.min, l[0].y_axis.max));
+    }
+    assert!(l[0].y_axis.min.unwrap() <= 0.0 && l[0].y_axis.max.unwrap() >= 100.0);
+    for layer in l {
+        assert_eq!((layer.x_axis.min, layer.x_axis.max), (l[0].x_axis.min, l[0].x_axis.max));
+    }
+}
+
+#[test]
+fn a_panel_header_names_its_parent_and_the_unit_percent_of_the_linked_layer() {
+    let headers = |p: &Project| -> Vec<Vec<u8>> {
+        let mut f = Frames::new(Cursor::new(write_named(p, "g", TIME).unwrap().bytes)).unwrap();
+        f.line(200).unwrap();
+        f.block().unwrap();
+        f.block().unwrap();
+        let _ = dataset::scan(&mut f);
+        let (windows, _) = window::scan(&mut f);
+        windows.iter().filter(|w| w.name != "Src").flat_map(|w| w.layers.iter().map(|l| l.header.clone())).collect()
+    };
+    let h = headers(&panels(3, ScaleLink::Straight, ScaleLink::None));
+    assert_eq!(h.len(), 3);
+    assert_eq!([h[0][0xAB], h[1][0xAB], h[2][0xAB]], [0, 1, 1]);
+    assert_eq!([h[0][0x67], h[1][0x67], h[2][0x67]], [0, 6, 6]);
+    // the right Y layer of a double-Y graph keeps its page-percent unit
+    let h = headers(&double_y());
+    assert_eq!([h[1][0xAB], h[1][0x67]], [1, 0]);
 }

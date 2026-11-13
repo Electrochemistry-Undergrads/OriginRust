@@ -1135,8 +1135,8 @@ The reader reads the same fields: nothing shown is a hidden axis; labels or a li
 axis on the second edge (`graph.rs`, `axis_side`; the owner's five projects have no hidden or opposite axes, so their
 import did not change). The title of a top axis is `XT`.
 
-**Still in warnings** after this section: X offsets and the waterfall; a linked layer that is not the right Y axis of a
-double-Y graph (panels, a linked Y scale); a right layer whose X scale is not linked; the overlap of bars; the line on the near
+**Still in warnings** after this section (section 13.13 takes some of them off again: panels and linked Y scales, area plots, number
+formats, plot groups): X offsets and the waterfall; a right layer whose X scale is not linked; the overlap of bars; the line on the near
 side of an axis that is drawn on the opposite side; rotated tick labels, tick label sources and the colour of axis titles
 that follow the plot.
 
@@ -1194,3 +1194,38 @@ with `gw-groups.opj` and patched copies of it (`re-workspace/scratch/opj-gw2/pat
 - Reading: `read_curve` reads group records as before (colours from the file, or from the list when the record holds none).
 Verified: Origin 2016 loaded `gw-groups.opj` (two columns, three columns, one column, two columns with an error bar) and drew
 side by side bars for the first two (colours black, red, green as the list gives), a single bar set for the lone column plot.
+
+**Panels (layers linked to the first layer).** Origin 2016 graphs made from its panel template (Vertical 2 Panel) and with
+`layer.x.link = 1` / `layer.y.link = 1` set on the second layer, compared byte by byte (`re-workspace/scratch/opj-gw2/pan1.opj`,
+`pan2.opj`):
+- A layer is linked to an earlier one by the layer header byte `0xAB` (1-based number of the parent), as for the right layer of a
+  double-Y graph; `0xFC` bit `0x80` and `0x12D` (position among the layers) are set as there. The frame stays in page units at
+  `0x71`.
+- "% of linked layer" (`layer.unit` = 7, and `layer.left`, `top`, `width`, `height` in percent of the parent's frame) is selected
+  by the header byte `0x67` = 6 (0 gives `layer.unit` = 1, page percent). With the byte set, Origin works the place out from the
+  page-unit frame: a panel of the same size right above its parent reports top -100, left 0, width and height 100; the template's
+  second panel reported top -128.9. (Byte `0x2E` that 13.12 sets for the right Y layer plays no part: patching it to 0 changed
+  nothing.) The pictures with and without the byte are identical. The writer sets `0x67` for panels and leaves it alone for the
+  right Y layer of a double-Y graph, which stays in page percent as in 13.12.
+- Whether a scale follows the parent's is not a header field: it is an object in the linked layer, like the X link of 13.12: an
+  object named `X1` (X scale straight) and/or `Y1` (Y scale straight) with a 20-byte style block that holds `*`. Origin reports
+  `layer.x.link` and `layer.y.link` 1 for them, 0 without. With both, Origin's file lists `Y1` before `X1`; the writer does the
+  same, after the other objects of the layer (like the `X2`, `X1` pair of the right Y layer).
+- A straight link means the same scale in every layer of the group, so the writer gives all of them the range that covers the data
+  of all of them (X as before, Y new). Rescaling in Origin (`layer -a`, which `opj-verify-graph-features.ps1` runs before exporting
+  unless `-NoRescale` is given) gives linked layers the scale of the last layer's data instead; the pictures of linked panels
+  were therefore taken with `-NoRescale`.
+- The model: `Layer::link` with its frame as fractions of the parent's, `x` and `y` `Straight` or `None`. A panel is written for
+  every valid link that is not the right Y layer of a double-Y graph (a layer linked on a frame of its own, or whose Y axis is not
+  on the right). The reader (`graph.rs`, `link_panels`) reads byte `0xAB` of every layer that `link_right_y_layers` did not link,
+  makes the frame relative to the parent's (Origin's own Vertical 2 Panel reads as top -1.289 of its parent's height) and takes
+  `X1` and `Y1` for the scale links. A parent that is itself linked is not followed.
+- Verified: `gw-panels.opj` (`cargo run -p sheaf-io --example opj_write_graph_features2`): a stack of three panels with X linked, the
+  same with a gap of 5 percent, a 3 x 1 arrangement without links, a 1 x 3 row with Y linked and a 2 x 2 with both linked.
+  Origin 2016 reported `layer.link` 1 for every panel but the first, `layer.x.link` and `layer.y.link` as written, `layer.unit` 7,
+  tops of -100 and -200 percent (-121.4 and -242.9 with the gap) and the frames 15, 63.33, 36.67 and 10 percent that Origin's Stack
+  command gives (spec graphing.md 15.1), and the pictures show the panels in place with the shared scales.
+- Still named in a warning: the hidden end tick label of a joined stack (`Axis::hide_end_label`).
+
+**Not done: X stack offsets and waterfall.** 13.12 found no field that Origin honours for an X offset of a curve; nothing new
+was tried, so these stay in warnings.

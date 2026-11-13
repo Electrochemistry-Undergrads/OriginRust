@@ -49,6 +49,8 @@ const AXIS_SHOWN_BIT: u8 = 0x40;
 const AXIS_FONT_AT: usize = 0x15;
 const AXIS_FLAGS_AT: usize = 0x26;
 const AXIS_FORMAT_AT: usize = 0x25;
+/// Label type "date" in the low nibble of the format byte.
+const AXIS_DATE_LABELS: u8 = 3;
 const AXIS_FIXED_DECIMALS_BIT: u8 = 0x80;
 const AXIS_LINE_WIDTH_AT: usize = 0x15;
 const AXIS_TICKS_AT: usize = 0x25;
@@ -78,7 +80,7 @@ const CURVE_PLOT_LINE_COLOR_AT: usize = 0x16A;
 const CURVE_FILL_USED_AT: usize = 0x1E;
 const CURVE_FILL_USED_BIT: u8 = 0x10;
 /// Offsets of a curve in a stacked layer, in axis units (graphing spec 13.10).
-const CURVE_X_OFFSET_AT: usize = 0x1B2;
+const CURVE_X_OFFSET_AT: usize = 0x1AA;
 const CURVE_Y_OFFSET_AT: usize = 0x1CA;
 /// Origin's "no value" double.
 const NO_VALUE: f64 = -1.23456789e-300;
@@ -473,6 +475,10 @@ fn tick_format(b: &[u8]) -> TickFormat {
     let kind = u8_at(b, AXIS_FORMAT_AT);
     let fixed = kind & AXIS_FIXED_DECIMALS_BIT != 0;
     let decimals = u8_at(b, AXIS_FLAGS_AT) & 0x0F;
+    if kind & 0x0F == AXIS_DATE_LABELS {
+        // dates in one of Origin's formats; the model has the patterns of `datetime`
+        return TickFormat::DateTime(sheaf_core::datetime::DatePattern::Mdy);
+    }
     match (kind >> 4) & 3 {
         1 => TickFormat::Scientific(if fixed { decimals } else { 0 }),
         _ if fixed => TickFormat::Decimal(decimals),

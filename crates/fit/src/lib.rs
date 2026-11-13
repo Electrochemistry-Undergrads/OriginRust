@@ -13,6 +13,7 @@
 pub mod bands;
 pub mod dist;
 pub mod fdf;
+pub mod global;
 pub mod library;
 pub mod linear;
 pub mod multipeak;

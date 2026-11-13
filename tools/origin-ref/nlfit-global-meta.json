@@ -1,0 +1,95 @@
+[
+ {
+  "name": "gauss_share_xc",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "nsets": 2,
+  "share": [
+   "xc"
+  ],
+  "kind": "gauss"
+ },
+ {
+  "name": "gauss_no_share",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "nsets": 2,
+  "share": [],
+  "kind": "gauss"
+ },
+ {
+  "name": "gauss_share_xc_w",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "nsets": 2,
+  "share": [
+   "xc",
+   "w"
+  ],
+  "kind": "gauss"
+ },
+ {
+  "name": "expdec1_share_t1",
+  "func": "ExpDec1",
+  "params": [
+   "y0",
+   "A1",
+   "t1"
+  ],
+  "nsets": 3,
+  "share": [
+   "t1"
+  ],
+  "kind": "exp"
+ },
+ {
+  "name": "gauss_share_xc_instr",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "nsets": 2,
+  "share": [
+   "xc"
+  ],
+  "kind": "gauss",
+  "weight": "ins"
+ },
+ {
+  "name": "gauss_share_xc_fixed_y0",
+  "func": "Gauss",
+  "params": [
+   "y0",
+   "xc",
+   "w",
+   "A"
+  ],
+  "nsets": 2,
+  "share": [
+   "xc"
+  ],
+  "kind": "gauss",
+  "fixed": {
+   "y0": 0.9,
+   "y0_2": 0.4
+  }
+ }
+]

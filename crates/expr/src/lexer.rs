@@ -27,6 +27,7 @@ pub(crate) enum Tok {
     EqEq,
     Ne,
     Not,
+    Dollar,
     AndAnd,
     OrOr,
     End,
@@ -58,6 +59,7 @@ impl Tok {
             Tok::Ge => "'>='".into(),
             Tok::EqEq => "'=='".into(),
             Tok::Ne => "'!='".into(),
+            Tok::Dollar => "'$'".into(),
             Tok::Not => "'!'".into(),
             Tok::AndAnd => "'&&'".into(),
             Tok::OrOr => "'||'".into(),
@@ -194,6 +196,7 @@ fn single(c: char, pos: usize) -> Result<Tok, ExprError> {
         '<' => Tok::Lt,
         '>' => Tok::Gt,
         '!' => Tok::Not,
+        '$' => Tok::Dollar,
         '=' => {
             return Err(ExprError::at(pos, "a single '=' is not an operator here; use '==' to compare"));
         }

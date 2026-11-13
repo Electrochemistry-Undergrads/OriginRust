@@ -8,8 +8,8 @@ use crate::column::{Column, ColumnData, FormulaState, RecalcMode};
 use crate::ids::ColumnId;
 use crate::project::Project;
 use crate::worksheet::Worksheet;
-use sheaf_expr::{ColumnRef, Expr, ExprError, Host};
-use std::collections::{HashMap, HashSet, VecDeque};
+use sheaf_expr::{CellReads, ColumnRef, Expr, ExprError, Host, Value};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::ops::Range;
 
 /// The most rows a formula may fill; a larger end row is refused instead of allocating that much.
@@ -88,6 +88,28 @@ impl Host for SheetHost<'_> {
     fn column_len(&self, col: &ColumnRef) -> usize {
         self.find(col).map_or(0, Column::len)
     }
+
+    fn text_cell(&self, col: &ColumnRef, row: usize) -> Option<String> {
+        let c = self.find(col)?;
+        match &c.data {
+            ColumnData::Text(v) => v.get(row).cloned(),
+            data => data.text_cell(row).map(str::to_string),
+        }
+    }
+
+    fn column_has_text(&self, col: &ColumnRef) -> bool {
+        self.find(col).is_some_and(|c| match &c.data {
+            ColumnData::Text(_) => true,
+            ColumnData::Mixed { texts, .. } => !texts.is_empty(),
+            ColumnData::Numeric(_) => false,
+        })
+    }
+
+    /// `now()` and `today()` are in local time, as in Origin.
+    fn now(&self) -> f64 {
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64());
+        (secs + crate::localtime::local_utc_offset_seconds() as f64) / 86_400.0 + crate::datetime::UNIX_EPOCH_VALUE
+    }
 }
 
 /// Evaluates an expression for the first `rows` rows of a sheet.
@@ -95,14 +117,35 @@ pub(crate) fn eval_on_sheet(expr: &Expr, sheet: &Worksheet, rows: usize) -> Resu
     expr.eval_rows(&SheetHost { sheet }, rows)
 }
 
-/// The columns of the sheet that a formula reads, or the first reference that matches no column.
-fn resolve_deps(expr: &Expr, sheet: &Worksheet) -> Result<Vec<ColumnId>, ColumnRef> {
+/// The columns of the sheet that the formula of column `me` reads, or the first reference that
+/// matches no column. `cell(r, c)` reads the column at position `c`: a constant `c` names that
+/// column; any other `c` may be any column, so every other column of the sheet is a source.
+fn resolve_deps(expr: &Expr, sheet: &Worksheet, me: ColumnId) -> Result<Vec<ColumnId>, ColumnRef> {
     let host = SheetHost { sheet };
     let mut out = Vec::new();
     for r in expr.columns() {
         let id = host.find(&r).ok_or(r)?.id;
         if !out.contains(&id) {
             out.push(id);
+        }
+    }
+    match expr.cell_reads() {
+        CellReads::None => {}
+        CellReads::Columns(positions) => {
+            for p in positions {
+                if let Some(c) = sheet.columns.get(p - 1)
+                    && !out.contains(&c.id)
+                {
+                    out.push(c.id);
+                }
+            }
+        }
+        CellReads::Any => {
+            for c in sheet.columns.iter().filter(|c| c.id != me) {
+                if !out.contains(&c.id) {
+                    out.push(c.id);
+                }
+            }
         }
     }
     Ok(out)
@@ -122,13 +165,23 @@ fn compute_fill(
     if range.end > MAX_FORMULA_ROWS {
         return Err(FormulaError::TooManyRows(range.end));
     }
+    let host = SheetHost { sheet };
+    let computed = if expr.involves_text(&host) {
+        // A formula with text may give text: such a result is a Text & Numeric column.
+        let values = expr.eval_values(&host, range.end)?;
+        if values[range.clone()].iter().any(|v| matches!(v, Value::Text(t) if !t.is_empty())) {
+            return Ok(fill_with_text(target, &values, range));
+        }
+        values.iter().map(Value::number).collect()
+    } else {
+        expr.eval_rows(&host, range.end)?
+    };
     if let Some(text) = target.text() {
         let outside = text.iter().enumerate().any(|(i, t)| !range.contains(&i) && !t.trim().is_empty());
         if outside {
             return Err(FormulaError::TextOutsideRange(target.short_name.clone()));
         }
     }
-    let computed = expr.eval_rows(&SheetHost { sheet }, range.end)?;
     if range.start == 0 && range.end >= target.len() {
         return Ok(filled(target, computed, None));
     }
@@ -138,6 +191,33 @@ fn compute_fill(
     }
     values[range.clone()].copy_from_slice(&computed[range.clone()]);
     Ok(filled(target, values, Some(range)))
+}
+
+/// The column after a formula gave text in some rows: numbers and texts side by side (Origin's
+/// Text & Numeric format). Rows outside `range` keep their numbers and texts.
+fn fill_with_text(target: &Column, values: &[Value], range: Range<usize>) -> ColumnData {
+    let mut numbers: Vec<f64> = target.numeric().map(<[f64]>::to_vec).unwrap_or_default();
+    if numbers.len() < range.end {
+        numbers.resize(range.end, f64::NAN);
+    }
+    let mut texts: BTreeMap<usize, String> = match &target.data {
+        ColumnData::Mixed { texts, .. } => texts.iter().map(|(r, t)| (*r, t.clone())).collect(),
+        ColumnData::Text(v) => {
+            v.iter().enumerate().filter(|(_, t)| !t.is_empty()).map(|(r, t)| (r, t.clone())).collect()
+        }
+        ColumnData::Numeric(_) => BTreeMap::new(),
+    };
+    for r in range.clone() {
+        texts.remove(&r);
+        match &values[r] {
+            Value::Num(x) => numbers[r] = *x,
+            Value::Text(t) => {
+                numbers[r] = f64::NAN;
+                texts.insert(r, t.clone());
+            }
+        }
+    }
+    ColumnData::mixed(numbers, texts)
 }
 
 /// The column after a fill: a Text & Numeric column stays one and keeps the text cells outside
@@ -171,7 +251,7 @@ fn find_cycle(sheet: &Worksheet, target: ColumnId, deps: &[ColumnId]) -> Option<
         let Some(expr) = c.formula.as_deref().and_then(|f| Expr::parse(f).ok()) else {
             continue;
         };
-        let Ok(next) = resolve_deps(&expr, sheet) else {
+        let Ok(next) = resolve_deps(&expr, sheet, id) else {
             continue;
         };
         for n in next {
@@ -238,7 +318,8 @@ pub(crate) fn recalc_sheet(
                     FormulaNode { idx, id: c.id, deps: Err(format!("the formula is not valid: {e}")), expr: None }
                 }
                 Ok(expr) => {
-                    let deps = resolve_deps(&expr, ws).map_err(|r| format!("it reads {r}, which is not in the sheet"));
+                    let deps =
+                        resolve_deps(&expr, ws, c.id).map_err(|r| format!("it reads {r}, which is not in the sheet"));
                     FormulaNode { idx, id: c.id, deps, expr: Some(expr) }
                 }
             }
@@ -395,7 +476,7 @@ impl Project {
         let range = rows.clone().unwrap_or(0..sheet.row_count());
         let mut mode = mode;
         if mode != RecalcMode::None
-            && let Ok(deps) = resolve_deps(&expr, sheet)
+            && let Ok(deps) = resolve_deps(&expr, sheet, column)
         {
             if deps.contains(&column) {
                 // Origin documents this case: a formula that reads its own column runs once.
@@ -580,6 +661,20 @@ mod tests {
         assert_eq!(&v[..2], &[1.0, 0.5]);
         assert!(v[2].is_nan(), "a missing input gives a missing result");
         assert!(v[3].is_nan(), "a row past the end of the input is missing");
+    }
+
+    #[test]
+    fn now_and_today_are_in_local_time() {
+        let (mut p, _, _, c) = sample();
+        let utc = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+        let want = (utc + crate::localtime::local_utc_offset_seconds() as f64) / 86_400.0 + 2_440_587.0;
+        p.set_column_values(c, "now()", None).unwrap();
+        let got = p.numeric(c).unwrap()[0];
+        assert!((got - want).abs() < 60.0 / 86_400.0, "{got} vs {want}");
+        p.set_column_values(c, "today()", None).unwrap();
+        let today = p.numeric(c).unwrap()[0];
+        assert_eq!(today.fract(), 0.0);
+        assert!([-60.0, 0.0, 60.0].iter().any(|d| (want + d / 86_400.0).floor() == today), "{today}");
     }
 
     #[test]

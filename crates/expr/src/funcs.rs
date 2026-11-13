@@ -3,6 +3,7 @@
 //! Everything here works on single numbers; the vector evaluator maps these over columns and the
 //! compiled evaluator calls them directly, so both modes give identical results.
 
+use crate::text::StrFn;
 use std::f64::consts::PI;
 
 /// The missing value.
@@ -19,7 +20,9 @@ pub(crate) enum Agg {
     Median,
     Sd,
     Var,
-    Count,
+    /// Origin's `count`: the number of rows in the range, missing cells included; the column ends
+    /// at its last value.
+    Rows,
     Min,
     Max,
     First,
@@ -67,6 +70,8 @@ pub(crate) enum Func {
     Lookup,
     /// `cell(row, col)`.
     Cell,
+    /// A string function (`left`, `mid`, `text`, ...).
+    Str(StrFn),
 }
 
 pub(crate) enum Resolved {
@@ -117,6 +122,7 @@ fn arity(f: Func) -> (usize, usize) {
         Func::N(_, k) => (k, k),
         Func::Lookup => (3, 3),
         Func::Cell => (2, 2),
+        Func::Str(f) => f.arity(),
     }
 }
 
@@ -166,15 +172,30 @@ static TABLE: &[(&str, Func)] = &[
     ("isna", Func::U(isna)),
     ("na", Func::Na),
     ("ifelse", Func::IfElse),
+    ("left", Func::Str(StrFn::Left)),
+    ("right", Func::Str(StrFn::Right)),
+    ("mid", Func::Str(StrFn::Mid)),
+    ("len", Func::Str(StrFn::Len)),
+    ("upper", Func::Str(StrFn::Upper)),
+    ("lower", Func::Str(StrFn::Lower)),
+    ("trim", Func::Str(StrFn::Trim)),
+    ("find", Func::Str(StrFn::Find)),
+    ("search", Func::Str(StrFn::Search)),
+    ("replace", Func::Str(StrFn::Replace)),
+    ("compare", Func::Str(StrFn::Compare)),
+    ("exact", Func::Str(StrFn::Exact)),
+    ("text", Func::Str(StrFn::Text)),
+    ("value", Func::Str(StrFn::Value)),
     ("if", Func::IfElse),
-    ("sum", Func::Agg(Agg::Sum)),
+    // Origin's `sum(col)` in a column formula is the running sum (measured), `total` the total.
+    ("sum", Func::Vec(VecFn::Cumsum)),
     ("total", Func::Agg(Agg::Sum)),
     ("mean", Func::Agg(Agg::Mean)),
     ("median", Func::Agg(Agg::Median)),
     ("sd", Func::Agg(Agg::Sd)),
     ("stddev", Func::Agg(Agg::Sd)),
     ("var", Func::Agg(Agg::Var)),
-    ("count", Func::Agg(Agg::Count)),
+    ("count", Func::Agg(Agg::Rows)),
     ("first", Func::Agg(Agg::First)),
     ("last", Func::Agg(Agg::Last)),
     ("stddevp", Func::Agg(Agg::Sdp)),
@@ -786,7 +807,7 @@ fn sum_count(data: &[f64]) -> (f64, usize) {
 pub(crate) fn aggregate(kind: Agg, data: &[f64]) -> f64 {
     match kind {
         Agg::Sum => sum_count(data).0,
-        Agg::Count => sum_count(data).1 as f64,
+        Agg::Rows => data.len() as f64,
         Agg::Mean => {
             let (s, n) = sum_count(data);
             if n == 0 { NA } else { s / n as f64 }

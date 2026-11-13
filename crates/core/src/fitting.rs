@@ -27,7 +27,8 @@ use crate::graph::{Dash, LineStyle, Plot, PlotKind};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
-use sheaf_fit::{Bands, FitError, FitReport, FitStatus};
+pub use sheaf_fit::FitStatus;
+use sheaf_fit::{Bands, FitError, FitReport};
 
 /// Which kind of model is fitted. It decides the name of the report sheet
 /// and which engine of `sheaf-fit` runs.

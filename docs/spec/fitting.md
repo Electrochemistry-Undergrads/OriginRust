@@ -35,6 +35,8 @@ Iteration, as reconstructed from Origin's iterates (section 6). With `J` the wei
 
 The fit has converged after an accepted step when `old - new <= tolerance * (old + new)` for the sums of squares (the first iteration that meets this ends the fit and its step is kept), or when no step lowers the sum of squares any more (`lambda` above 1e14). If the iteration limit is reached the status is `MaxIterations` (Origin: `Failed(-200)`) and a warning is added. The iteration count equals Origin's in all compared fits (counting the iteration that detects convergence), when started from the same values.
 
+Stepping. `Fitter::new` prepares the fit, `step` makes one iteration of the above and returns a `StepOutcome` (iteration number, sum of squares, reduced chi-square, `lambda`, converged, parameters), `finish` builds the report. `fit` is a loop of at most `max_iterations` steps, so n steps equal a fit limited to n iterations, bit for bit. The NLFit-style dialog runs a fit limited to one iteration from the values in its Parameters table, so `lambda` restarts at 1e-3 at every press of 1 Iteration or Fit (not compared with Origin).
+
 ## 4. The report
 
 - Degrees of freedom: points minus free parameters (a parameter on a bound still counts as free; a fixed one does not).

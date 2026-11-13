@@ -146,6 +146,11 @@ pub struct FitDialog {
     page: FitPage,
     /// How the last trial fit (the Fit button) went.
     message: Option<String>,
+    /// Iterations made by the Fit and 1 Iteration buttons since the function was chosen.
+    iterations: usize,
+    /// The parameter table and iteration count before each Fit / 1 Iteration press, newest
+    /// last, for Revert.
+    history: Vec<(Vec<ParamRow>, usize)>,
 }
 
 impl FitDialog {
@@ -206,6 +211,8 @@ impl FitDialog {
             problem: None,
             page: FitPage::FunctionSelection,
             message: None,
+            iterations: 0,
+            history: Vec::new(),
         };
         d.column_changed(project);
         d.refresh_params();
@@ -278,6 +285,91 @@ impl FitDialog {
             .iter()
             .map(|n| old.iter().find(|p| &p.name == n).cloned().unwrap_or_else(|| ParamRow::new(n)))
             .collect();
+    }
+
+    /// Whether the model is fitted by iterating (everything but a line and a polynomial).
+    fn iterative(&self) -> bool {
+        !matches!(self.kind, FitKind::Linear | FitKind::Polynomial)
+    }
+
+    /// Runs the fit on a copy of the project, from the values now in the Parameters table, for
+    /// at most `max_iterations` iterations (the dialog's own limit when `None`), and puts the
+    /// resulting values back into the table. Revert goes back to the table as it was.
+    fn trial(&mut self, project: &Project, max_iterations: Option<usize>) {
+        let Some(mut request) = self.request() else { return };
+        let one = max_iterations.is_some();
+        if let Some(n) = max_iterations {
+            request.max_iterations = n;
+        }
+        self.problem = None;
+        self.message = None;
+        let mut copy = project.clone();
+        let outcome = match copy.fit(&request) {
+            Ok(o) => o,
+            Err(e) => {
+                self.problem = Some(e.to_string());
+                return;
+            }
+        };
+        let report = &outcome.report;
+        if !self.iterative() {
+            self.message = Some(outcome.message);
+            return;
+        }
+        self.history.push((self.params.clone(), self.iterations));
+        for q in &report.params {
+            if let Some(row) = self.params.iter_mut().find(|r| r.name == q.name)
+                && !row.fixed
+                && q.value.is_finite()
+            {
+                row.set_initial = true;
+                row.initial = q.value;
+            }
+        }
+        let made = report.stats.iterations.unwrap_or(0);
+        self.iterations += made;
+        let chi = sheaf_core::format::format_general(report.stats.reduced_chi_sqr, 6);
+        let converged = report.status == sheaf_core::fitting::FitStatus::Converged;
+        self.message = Some(match (converged, one) {
+            (true, _) => format!(
+                "The fit converged: {} iteration(s) in all, reduced chi-square {chi}. The Parameters page shows the values.",
+                self.iterations
+            ),
+            (false, true) => format!(
+                "Iteration {}: reduced chi-square {chi}; not converged yet. Press 1 Iteration or Fit to go on.",
+                self.iterations
+            ),
+            (false, false) => format!(
+                "The fit did not converge: it stopped after {made} iteration(s), the limit set on the Advanced page; reduced chi-square {chi}. Fit goes on from these values."
+            ),
+        });
+    }
+
+    /// Test hooks: the built-in function in use, the table, the status line.
+    #[cfg(test)]
+    pub(crate) fn choose_for_test(&mut self, name: &str) {
+        self.function = name.to_string();
+        self.refresh_params();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn rows_for_test(&self) -> Vec<(String, bool, f64)> {
+        self.params.iter().map(|p| (p.name.clone(), p.set_initial, p.initial)).collect()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn message_for_test(&self) -> String {
+        self.message.clone().unwrap_or_default()
+    }
+
+    /// Puts the Parameters table back as it was before the last Fit or 1 Iteration.
+    fn revert(&mut self) {
+        if let Some((rows, iterations)) = self.history.pop() {
+            self.params = rows;
+            self.iterations = iterations;
+            self.problem = None;
+            self.message = Some("The parameter values are back to what they were before the last iteration.".into());
+        }
     }
 
     fn request(&self) -> Option<FitRequest> {
@@ -692,6 +784,8 @@ impl FitDialog {
         let mut open = true;
         let mut run = false;
         let mut trial = false;
+        let mut one_iteration = false;
+        let mut revert = false;
         let mut cancel = false;
         let mut column_changed = false;
         let title = format!("NLFit ({})", self.function_label());
@@ -746,6 +840,8 @@ impl FitDialog {
                 if model_changed {
                     self.refresh_params();
                     self.message = None;
+                    self.history.clear();
+                    self.iterations = 0;
                 }
                 ui.separator();
                 if let Some(p) = self.model_problem.as_ref().or(self.problem.as_ref()) {
@@ -753,27 +849,29 @@ impl FitDialog {
                 } else if let Some(m) = &self.message {
                     ui.colored_label(egui::Color32::from_rgb(20, 70, 170), m);
                 } else {
-                    ui.weak("Fit tries the fit and shows the result here; Done keeps it.");
+                    ui.weak("Fit and 1 Iteration try the fit and show the result here; Done keeps it.");
                 }
                 ui.add_space(4.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     cancel = ui.button("Cancel").clicked();
                     run = ui.add_enabled(self.model_problem.is_none(), egui::Button::new("Done")).clicked();
                     trial = ui.add_enabled(self.model_problem.is_none(), egui::Button::new("Fit")).clicked();
+                    let can_step = self.model_problem.is_none() && self.iterative();
+                    one_iteration = ui.add_enabled(can_step, egui::Button::new("1 Iteration")).clicked();
+                    revert = ui.add_enabled(!self.history.is_empty(), egui::Button::new("Revert")).clicked();
                 });
             });
         if column_changed {
             self.column_changed(doc.project());
         }
 
-        if trial && let Some(request) = self.request() {
-            self.problem = None;
-            self.message = None;
-            let mut copy = doc.project().clone();
-            match copy.fit(&request) {
-                Ok(outcome) => self.message = Some(outcome.message),
-                Err(e) => self.problem = Some(e.to_string()),
-            }
+        if revert {
+            self.revert();
+        }
+        if one_iteration {
+            self.trial(doc.project(), Some(1));
+        } else if trial {
+            self.trial(doc.project(), None);
         }
         if run && let Some(request) = self.request() {
             let y = self.y;

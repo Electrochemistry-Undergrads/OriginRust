@@ -88,6 +88,14 @@ impl Host for SheetHost<'_> {
     fn column_len(&self, col: &ColumnRef) -> usize {
         self.find(col).map_or(0, Column::len)
     }
+
+    /// `now()` and `today()` are in local time, as in Origin.
+    fn now(&self) -> f64 {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0.0, |d| d.as_secs_f64());
+        (secs + crate::localtime::local_utc_offset_seconds() as f64) / 86_400.0 + crate::datetime::UNIX_EPOCH_VALUE
+    }
 }
 
 /// Evaluates an expression for the first `rows` rows of a sheet.
@@ -580,6 +588,20 @@ mod tests {
         assert_eq!(&v[..2], &[1.0, 0.5]);
         assert!(v[2].is_nan(), "a missing input gives a missing result");
         assert!(v[3].is_nan(), "a row past the end of the input is missing");
+    }
+
+    #[test]
+    fn now_and_today_are_in_local_time() {
+        let (mut p, _, _, c) = sample();
+        let utc = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+        let want = (utc + crate::localtime::local_utc_offset_seconds() as f64) / 86_400.0 + 2_440_587.0;
+        p.set_column_values(c, "now()", None).unwrap();
+        let got = p.numeric(c).unwrap()[0];
+        assert!((got - want).abs() < 60.0 / 86_400.0, "{got} vs {want}");
+        p.set_column_values(c, "today()", None).unwrap();
+        let today = p.numeric(c).unwrap()[0];
+        assert_eq!(today.fract(), 0.0);
+        assert!([-60.0, 0.0, 60.0].iter().any(|d| (want + d / 86_400.0).floor() == today), "{today}");
     }
 
     #[test]

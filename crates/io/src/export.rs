@@ -346,7 +346,13 @@ mod tests {
         s.columns.push(c);
         let text = export(&s, &AsciiExportOptions::csv());
         assert_eq!(text, "1.5\r\n<LOD\r\n3\r\n\"a,b\"\r\n--\r\n4\r\n");
-        let book = crate::ascii::parse_ascii(&text, "S", &crate::ascii::AsciiOptions::default()).unwrap().workbook;
+        let book = crate::ascii::parse_ascii(
+            &text,
+            "S",
+            &crate::ascii::AsciiOptions { header_lines: Some(0), ..Default::default() },
+        )
+        .unwrap()
+        .workbook;
         let back = &book.sheets[0].columns[0];
         assert_eq!(back.numeric().unwrap()[0], 1.5);
         assert_eq!((back.cell_text(1), back.cell_text(3)), ("<LOD".to_string(), "a,b".to_string()));

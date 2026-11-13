@@ -18,7 +18,7 @@ the audit section named and the parity table row.
 | Mathematics: cumulative sum tool, level crossing, curve intersect, average curves, polygon area | D | |
 | Multivariate: PCA, k-means, ROC, Kaplan-Meier | D | |
 | Toolbars as separate bars, View > Toolbars customisation | A | |
-| Drawing tools: lines, arrows, rectangles, pictures, inset | C | only TextLabel today |
+| Drawing tools: lines, arrows, rectangles, pictures, inset | C | lines, arrows, rectangles, ellipses: brief T24 (`draw-objects`); pictures and inset still open |
 | Autosave and recovery; Append Project | E | |
 | Print, Print Preview, Page Setup | A | |
 | 3D graphs | C | last (owner's request) |

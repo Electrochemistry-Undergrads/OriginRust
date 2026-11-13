@@ -1,0 +1,57 @@
+# T24: Drawn objects on graphs: Line, Arrow, Rectangle, Ellipse
+
+**Status:** in progress (branch `draw-objects`).
+**Size:** M. **Branch:** `draw-objects`. **Model:** Sonnet.
+**Detail:** audit C "Drawing tools"; T18 backlog row "Drawing tools" (this brief covers lines, arrows,
+rectangles and ellipses; pictures and the inset graph stay in the backlog).
+**Spec:** `docs/spec/graphing.md`, the section "Drawn objects" (new, after "Free text labels").
+
+## Goal
+
+The Tools bar buttons Line, Arrow, Rectangle and Circle draw objects on a graph as in Origin: drag on
+the graph, the tool ends, the object can be selected, moved, deleted and edited, and every renderer
+draws it.
+
+## Origin facts
+
+Nothing here was measured (this brief was written on a machine without Origin). From Origin's public
+documentation, paraphrased, not measured; measure on the Windows machine with `tools/origin-ref`:
+
+- The Tools toolbar has Line, Arrow, Rectangle and Circle (the last draws an ellipse unless Shift is
+  held). One drag makes one object; the tool returns to the Pointer.
+- Shift while dragging: a line or arrow snaps to horizontal, vertical or 45 degrees; a rectangle
+  becomes a square; an ellipse a circle.
+- An object is attached to the page, the layer frame, or the layer and its scales; the default for
+  objects drawn inside a layer is the layer (the text object spec in section 16 chose layer frame).
+- Double click opens a dialog with tabs for the line (style, width, colour), the arrow (shape, length,
+  width, at the begin and/or end) and the fill (pattern, colour; rectangles and ellipses only).
+- Delete removes the selected object; it is moved by dragging.
+
+## Where
+
+- `crates/core/src/shape.rs` (new): `Shape`, `ShapeKind`; `Layer::shapes` in `graph.rs`
+  (`serde(default, skip_serializing_if = "Vec::is_empty")`).
+- `crates/plot/src/shapes.rs` (new): drawing into the layer overlay after the labels;
+  `ObjectKind::Shape(usize)` in `scene.rs`; picking in `hit.rs`.
+- `crates/app/src/shape_tool.rs` and `crates/app/src/dialogs/shape_object.rs` (new); small additions in
+  `graph_view.rs`, `toolbar.rs`, `actions.rs`, `app.rs`, `menus.rs`.
+- `crates/io/src/opj/write`: save warning for objects the file cannot hold.
+
+## Steps
+
+1. Model and serde (old files load unchanged).
+2. Renderer: line, arrow (head at end, or both ends), rectangle, ellipse; dash, width, colour, fill.
+3. Picking: a line by distance, a filled shape by its area, an unfilled one by its outline.
+4. App: tools, drag to draw with Shift, select, move, Delete, double click dialog, undo for each step.
+5. `.opj` warning; CLI `--arrow` if cheap.
+6. Tests: round trip, golden `shapes.svg`, hit test, UI tests.
+
+## Done when
+
+All five kinds can be drawn, moved, edited and deleted in the app with undo; the figure exports show
+them; the spec section lists what is measured and what is from documentation; checks pass.
+
+## Don't
+
+Do not attach objects to axis scales yet (section 16 anchors to the layer frame); do not copy Origin's
+icons or text.

@@ -190,10 +190,10 @@ pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> 
     let raw: Vec<Vec<(f64, f64)>> = curves.iter().map(|(x, y)| finite_points(x, y)).collect();
 
     // The curves share one X column: average row by row.
-    if options.x == CommonX::Points {
-        if let Some(r) = shared_x_average(curves, &raw) {
-            return Ok(r);
-        }
+    if options.x == CommonX::Points
+        && let Some(r) = shared_x_average(curves, &raw)
+    {
+        return Ok(r);
     }
 
     let ordered: Vec<Vec<(f64, f64)>> =
@@ -303,9 +303,13 @@ fn shared_x_average(curves: &[(&[f64], &[f64])], raw: &[Vec<(f64, f64)>]) -> Opt
         if x_here.is_nan() {
             continue;
         }
-        let (m, s, count) = mean_sd(curves.iter().zip(&lens).filter(|&(_, &len)| k < len).map(|(c, _)| {
-            if c.0[k].is_finite() { c.1[k] } else { f64::NAN }
-        }));
+        let (m, s, count) = mean_sd(
+            curves
+                .iter()
+                .zip(&lens)
+                .filter(|&(_, &len)| k < len)
+                .map(|(c, _)| if c.0[k].is_finite() { c.1[k] } else { f64::NAN }),
+        );
         if count > 0 {
             xs.push(x_here);
             mean.push(m);
@@ -531,7 +535,13 @@ pub fn intersections(ax: &[f64], ay: &[f64], bx: &[f64], by: &[f64], include_tou
     // same way along both curves) is not an end of the stretch.
     let side = |from: &Hit, h: &Hit| {
         let d = from.pb - h.pb;
-        if d.abs() < 1e-9 { 0 } else if d > 0.0 { 1 } else { -1 }
+        if d.abs() < 1e-9 {
+            0
+        } else if d > 0.0 {
+            1
+        } else {
+            -1
+        }
     };
     let inside_stretch = |h: &Hit| {
         let near = |u: &Hit| (u.pa - h.pa).abs() < 1e-6 && (u.pb - h.pb).abs() < 1e-6;
@@ -1023,11 +1033,7 @@ mod tests {
         let xb: Vec<f64> = (2..=10).map(|k| f64::from(k) * 0.5).collect();
         let ya: Vec<f64> = xa.iter().map(|x| x * x * x).collect();
         let yb: Vec<f64> = xb.iter().map(|x| x * x * x + 10.0).collect();
-        let o = AverageOptions {
-            x: CommonX::Evenly(6),
-            range: XRange::Union,
-            method: AverageMethod::CubicSpline,
-        };
+        let o = AverageOptions { x: CommonX::Evenly(6), range: XRange::Union, method: AverageMethod::CubicSpline };
         let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
         assert_eq!(r.x, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(r.n, [1, 2, 2, 2, 2, 1]);

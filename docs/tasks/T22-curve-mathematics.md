@@ -43,7 +43,7 @@ Nothing measured. From Origin's public documentation (paraphrased, to be measure
 1. Numerics in sheaf-calc with doc comments and tests (square, triangle, circle, figure eight; crossing,
    touching, overlapping, parallel, disjoint; averages with equal and unequal X, ranges, descending X).
 2. Core tools and recalculation links; UI tests in core.
-3. Dialogs, menu, CLI; screenshot of each dialog and a figure of the average with SD error bars.
+3. Dialogs, menu, CLI (From a graph, Average Multiple Curves and Intersect start with the plots of the active layer); screenshot of each dialog and a figure of the average with SD error bars.
 4. Spec file with the decisions and the list of what an Origin run has to confirm.
 
 ## Done when

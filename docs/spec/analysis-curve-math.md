@@ -37,9 +37,12 @@ Choices (defaults in bold):
 - Standard deviation: the sample standard deviation (divisor n - 1), missing where fewer than two curves
   contribute. Mean and SD ignore curves that have no value at that X.
 
-Special case, the usual one for repeated scans: if every curve has exactly the same X values, they are
-averaged row by row in their original order with no interpolation, and the X values may then turn back (a
-whole cyclic sweep in one column works).
+Special case, the usual one for repeated scans: if the curves share their X column, they are averaged row by
+row in their original order with no interpolation, and the X values may then turn back (a whole cyclic sweep
+in one column works). Whether X is shared is decided from the X values as they are in the sheet, row by row: at
+each row the curves that have that row must agree on X. A curve with a missing Y at a row, or a column that
+ends early, does not hide the shared X; it just has no value at that row, so the count there is lower. Rows
+where no curve has an X or a Y are left out.
 
 Otherwise each curve's X must be monotonic: increasing, or decreasing (reversed internally). Neighbouring equal
 X values become their mean. A curve whose X goes up and then down is refused with a message that names the
@@ -60,7 +63,8 @@ bounding-box rejection first).
 
 - Crossing: the first curve passes from one side of the second to the other. Listed always.
 - Touching: the curves meet but the first does not pass to the other side, including the two ends of a stretch
-  where they coincide (a coincident stretch is reported by its two ends, whatever happens after it). Listed only
+  where they coincide (a coincident stretch is reported by its two ends only, however many vertices lie inside it, and whatever
+  happens after it). Listed only
   when "also list the points where the curves touch without crossing" is on; a third column "Type" then says
   Crossing or Touching.
 - A meeting point that is a vertex of either curve is reported once.
@@ -69,7 +73,8 @@ bounding-box rejection first).
 ## 3. Polygon Area (`polyarea`)
 
 Input: one or more curves; each is taken as a closed polygon, the last point joined to the first (a last point
-equal to the first is not counted twice). Fewer than three different points is refused for that column.
+equal to the first is not counted twice). Fewer than three different points in a column refuses the whole run, with a message that names that column (no
+partial table).
 
 Output: a table with one row per input column: `Area` (absolute value), `Signed area` (positive when the curve
 runs counterclockwise with Y up), `Centroid X`, `Centroid Y`, `Perimeter` (length of the closed boundary),

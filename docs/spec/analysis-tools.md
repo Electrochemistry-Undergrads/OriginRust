@@ -141,6 +141,29 @@ acts like the next odd number (observed for 6 with averaging and Savitzky-Golay)
   6. (inferred) The explanation why bins differ in sine and cosine is unknown; the rule above is an
      exact description of the matrix of the filter for every input we tried, not a derivation.
 
+* Lowess, Loess and binomial (`method:=lw`, `le`, `bm`; run 2026-11-13, 30 columns, scripts
+  `smooth-local-suite1/2.labtalk.txt`, fixtures `origin_smooth_local.rs`, all to 1e-12). The script options of
+  `smooth` are `iy method interval order hint weight prop span npts boundary polyorder percent cutoff pad filter
+  baseline oy`.
+  1. (observed) Lowess is a local straight-line fit, Loess a local parabola, both evaluated at the point, with
+     tricube weights `(1 - u^3)^3`, `u = |x - x_i| / h`, `h` the largest distance among the `q` points nearest in X
+     (the point itself included). There are no robustness iterations. `polyorder`, `weight` and `boundary` have no
+     effect on either; for uneven X the fit uses the X values.
+  2. (observed) `span` (default 0.1) is a proportion: `q = ceil(span n)` with `n` the number of valid points (10.1 gives
+     11, 20.0 gives 20, 25.5 gives 26, 5.0 gives 5; span 1 uses all points; a span so small that `q` is not larger than
+     the polynomial degree leaves the data unchanged). With `prop:=0` the window is `npts` points instead and `span`
+     is ignored (`npts` 7 and 20 checked). `prop` defaults to 1 (a hidden option; the dialog shows Span). `interval`
+     and `order` do not change Lowess.
+  3. (observed) A missing Y or X is removed first, so `n` and the window count only valid points; the row comes back as
+     missing.
+  4. (observed) Binomial: the filter `1 2 1 / 4` applied `order` times (script option `order`, default 1; `npts` has no
+     effect). With `boundary:=none` the first and last point stay as they are in every pass and the window of the
+     other points is always three points. `repeat`, `periodic` and `extrap` pad as for the other methods; `reflect` here
+     mirrors around the end point, `y[-1] = y[1]` (unlike adjacent averaging and Savitzky-Golay, where `y[-1] = y[0]`).
+     Orders 1 to 50 and every boundary were checked.
+  Sheaf: `SmoothMethod::Lowess/Loess { span: LocalSpan }`, `Binomial { order }`; dialog fields Span (Lowess, Loess) and
+  Order (Binomial); `sheaf analyze smooth --method lowess|loess|binomial --span S --order N`.
+
 ## 4. Normalize (`normalize`)
 
 Methods (all observed; statistics over valid points; missing stays missing): `specify` divide by a
@@ -229,6 +252,39 @@ sets; whether the maximum is of `|y|` or of `y` was not separated). Number filte
 largest `|y|`, reported in row order. If no peak exists Origin stops the script with an error; our
 function returns an empty result. The other search methods and smoothing before the search are
 part of the peak chain (section 11); only the local maximum method is checked against `pkfind`.
+
+Options of `pkfind` (`iy smooth dir method npts option height width filter value hwidth fheight ocenter oleft
+oright` and the `_x`, `_y` outputs of each). Runs of 2026-11-13 (scripts `pkfind-feet-suite1/2.lines.txt`, fixtures
+`origin_peaks_options.rs`, 45 calls, rows compared exactly):
+
+* (observed) `smooth:=m` smooths the data first with a Savitzky-Golay filter of order 2, window `2*(m/2)+1` points and
+  the end points extrapolated by the straight line through the two end points (the other four boundary choices were
+  tried and fail for m = 7 to 25); `m` 0 and 1 mean none, 2 and 3 leave the data as they are (a parabola through
+  three points). The search and the feet use the smoothed curve; the height filter and `ocenter_y` use the data.
+* (observed) Feet (`oleft`, `oright`, 1-based rows): the foot of a peak on one side is the point of smallest `|y|`
+  between the peak and its neighbouring peak in the output list (or the data end), peak included; the point nearer
+  the peak wins ties. So between two positive peaks it is the valley (a small dip on the way is passed over: the
+  lowest point counts, not the first), between a positive and a negative peak it is the zero crossing (the point
+  with the smaller `|y|` of the two sides), and the outer feet of the first and last peak lie at the lowest point
+  towards the data end. The neighbour is taken after the height and number filters and after the direction choice, so
+  with `dir:=p` the zero crossing of a negative lobe between two positive peaks is passed and the foot lies at its
+  nearer crossing.
+* (observed) `fheight` (default 0, off): the walk away from the peak stops at the first point with `|y|` below it;
+  that point is the foot (the walk is still limited by the neighbouring peak and by `hwidth`).
+* (observed) `hwidth`: not given means no limit. Given, the search from a peak covers the points up to the first one
+  whose X distance from the peak reaches `hwidth` (that point included: `hwidth` 0.25 on a 0.1 grid searches three
+  points on each side, 0.35 four, 1.0 ten), but always at least two points on each side (0, 0.05, 0.1, 0.15 all give
+  two; `npts` plays no part). Explicit `hwidth:=0` therefore differs from leaving it out. At a distance that is an exact
+  grid multiple (0.2) Origin's rounding decides per peak between two and three points (not reproduced).
+* (observed) `filter:=h value:=0` keeps every peak, while leaving `value` out gives the 20 % rule used so far.
+* `method` `win` (with `option`, `height`, `width`), `first`, `second` and `residue` ("residual after 1st derivative")
+  were run on the same curves and give peak lists unlike the local maximum method (on the ripple curve `first` finds 30,
+  `second` 40 and `residue` exactly the four gaussians; on the clean curve `first` finds 15 including shoulders, `win`
+  7); their rules were not worked out, Sheaf's Peak Analyzer methods (section 11) are not calibrated against them.
+  An explicit `option:=r height:=10 width:=5` call returned an error for both curves.
+Sheaf: `PeakOptions { smooth_points, foot_height, max_half_width }`, `PeakResult { left, right }`; the Find Peaks
+window has Smoothing points, Foot height and a limit for the distance of the feet; the result sheet has Left foot and
+Right foot columns (X values). `sheaf analyze peaks` keeps its own smoothing of the peak chain.
 
 ## 8. Descriptive statistics (`stats`, `colstats`)
 

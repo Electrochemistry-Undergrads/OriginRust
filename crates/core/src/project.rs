@@ -63,6 +63,9 @@ pub struct Project {
     /// it on opening; it is view state, not data, so editing it is never an undo step.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub window_places: Vec<WindowPlace>,
+    /// Analysis runs whose results follow their input (Recalculate Auto or Manual).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub analysis_links: Vec<crate::analysis_link::AnalysisLink>,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
 }
@@ -127,6 +130,7 @@ impl Project {
             windows: Vec::new(),
             root: Folder { name: "Project".into(), ..Folder::default() },
             window_places: Vec::new(),
+            analysis_links: Vec::new(),
             next_id: 1,
         }
     }

@@ -166,13 +166,16 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Differentiate { target, order, smooth, poly, points } => {
             (target, Job::Tool(Tool::Differentiate(analysis::DiffOptions { order, smooth, poly, npts: points })))
         }
-        AnalyzeTool::Smooth { target, method, points, poly, percent, boundary } => {
+        AnalyzeTool::Smooth { target, method, points, poly, percent, span, order, boundary } => {
             let method = match method {
                 SmoothKind::SavitzkyGolay => analysis::SmoothMethod::SavitzkyGolay { poly_order: poly },
                 SmoothKind::Average => analysis::SmoothMethod::AdjacentAveraging { weighted: false },
                 SmoothKind::WeightedAverage => analysis::SmoothMethod::AdjacentAveraging { weighted: true },
                 SmoothKind::Percentile => analysis::SmoothMethod::Percentile { percent },
                 SmoothKind::Fft => analysis::SmoothMethod::FftFilter,
+                SmoothKind::Lowess => analysis::SmoothMethod::Lowess { span: local_span(span) },
+                SmoothKind::Loess => analysis::SmoothMethod::Loess { span: local_span(span) },
+                SmoothKind::Binomial => analysis::SmoothMethod::Binomial { order },
             };
             let boundary = match boundary {
                 BoundaryKind::None => analysis::Boundary::None,
@@ -274,7 +277,15 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 || anchors.is_some()
                 || limits.is_some();
             if !chain {
-                (target, Job::Tool(Tool::FindPeaks(analysis::PeakOptions { npts: points, direction, filter })))
+                (
+                    target,
+                    Job::Tool(Tool::FindPeaks(analysis::PeakOptions {
+                        npts: points,
+                        direction,
+                        filter,
+                        ..Default::default()
+                    })),
+                )
             } else {
                 let baseline = match (baseline, &anchors) {
                     (Some(PeakBaselineKind::Anchors), None) => bail!("--baseline anchors needs --anchors X1:Y1,X2:Y2"),
@@ -617,6 +628,10 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         save_project(&project, path)?;
     }
     Ok(())
+}
+
+fn local_span(span: f64) -> analysis::LocalSpan {
+    if span > 0.0 { analysis::LocalSpan::Proportion(span) } else { analysis::LocalSpan::Points }
 }
 
 #[cfg(test)]

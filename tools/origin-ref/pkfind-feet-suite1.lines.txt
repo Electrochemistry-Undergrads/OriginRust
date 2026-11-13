@@ -1,0 +1,16 @@
+newbook;
+col(A) = data(0, 20, 0.1);
+col(B) = exp(-(col(A)-4)^2) + 0.7*exp(-(col(A)-9)^2/2) - 0.6*exp(-(col(A)-13)^2/0.5) + 0.8*exp(-(col(A)-17)^2) + 0.2;
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 ocenter:=col(C) oleft:=col(D) oright:=col(E);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 hwidth:=1 ocenter:=col(F) oleft:=col(G) oright:=col(H);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 ocenter:=col(I) oleft:=col(J) oright:=col(K);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 hwidth:=0 ocenter:=col(L) oleft:=col(M) oright:=col(N);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 hwidth:=5 ocenter:=col(O) oleft:=col(P) oright:=col(Q);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 hwidth:=0 ocenter:=col(R) oleft:=col(S) oright:=col(T);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 fheight:=0.1 ocenter:=col(U) oleft:=col(V) oright:=col(W);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 fheight:=0.1 hwidth:=5 ocenter:=col(X) oleft:=col(Y) oright:=col(Z);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 fheight:=0.0 ocenter:=col(AA) oleft:=col(AB) oright:=col(AC);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 fheight:=0.5 hwidth:=5 ocenter:=col(AD) oleft:=col(AE) oright:=col(AF);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 fheight:=0.05 hwidth:=5 ocenter:=col(AG) oleft:=col(AH) oright:=col(AI);
+pkfind iy:=(col(A),col(B)) method:=max npts:=2 dir:=b filter:=none value:=0 option:=r height:=20 width:=50 fheight:=0.5 hwidth:=0 ocenter:=col(AJ) oleft:=col(AK) oright:=col(AL);
+#[Book1]Sheet1

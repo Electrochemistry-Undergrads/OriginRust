@@ -860,9 +860,21 @@ fn label_cell(
     let response = ui.interact(cell, ui.id().with(("label", column.id.0, row_title(row))), Sense::CLICK);
     // The formula row starts with the lock mark of a column that recalculates.
     let mut left = 3.0;
-    if *row == LabelRow::Formula && column.is_locked() {
+    // An analysis result that recalculates shows the same lock.
+    let lock = if column.is_locked() {
+        Some((
+            column.formula_state,
+            column.recalc,
+            format!("col({}) = {}", column.short_name, column.formula.as_deref().unwrap_or_default()),
+        ))
+    } else {
+        column.analysis.map(|m| (m.state, m.mode, "Result of an analysis".to_string()))
+    };
+    if *row == LabelRow::Formula
+        && let Some((state, mode, what)) = lock
+    {
         let mark = Rect::from_center_size(Pos2::new(cell.left() + 9.0, cell.center().y), vec2(10.0, 12.0));
-        lock_mark(ui, mark, column);
+        lock_mark(ui, mark, column, state, mode, &what);
         left = 17.0;
     }
     let inner = Rect::from_min_max(Pos2::new(cell.left() + left, cell.top()), cell.right_bottom());
@@ -905,8 +917,8 @@ fn label_text_full(column: &Column, row: &LabelRow) -> String {
 /// recalculates by hand). Green when the values are current, yellow when an input changed and
 /// the user has to recalculate, red when the formula cannot run (Origin shows its lock in these
 /// three colours).
-fn lock_mark(ui: &mut egui::Ui, rect: Rect, column: &Column) {
-    let (color, hint) = match (column.formula_state, column.recalc) {
+fn lock_mark(ui: &mut egui::Ui, rect: Rect, column: &Column, state: FormulaState, mode: RecalcMode, what: &str) {
+    let (color, hint) = match (state, mode) {
         (FormulaState::Broken, _) => (
             Color32::from_rgb(200, 40, 40),
             "The formula cannot run: a column it reads is missing or renamed, or it is circular",
@@ -918,12 +930,12 @@ fn lock_mark(ui: &mut egui::Ui, rect: Rect, column: &Column) {
         (_, RecalcMode::Auto) => (Color32::from_rgb(40, 150, 60), "Recalculates when its inputs change"),
         _ => (Color32::from_rgb(40, 150, 60), "Up to date; recalculate by hand after an input changes"),
     };
-    let state_word = match column.formula_state {
+    let state_word = match state {
         FormulaState::Broken => "broken",
         FormulaState::Pending => "pending",
         FormulaState::Current => "current",
     };
-    let mode_word = if column.recalc == RecalcMode::Auto { "auto" } else { "manual" };
+    let mode_word = if mode == RecalcMode::Auto { "auto" } else { "manual" };
     let painter = ui.painter();
     let body = Rect::from_min_max(
         Pos2::new(rect.left() + 1.0, rect.center().y),
@@ -939,13 +951,12 @@ fn lock_mark(ui: &mut egui::Ui, rect: Rect, column: &Column) {
     painter.line_segment([Pos2::new(l, top + 2.0), Pos2::new(l + 1.5, top)], stroke);
     painter.line_segment([Pos2::new(l + 1.5, top), Pos2::new(r - 1.5, top)], stroke);
     painter.line_segment([Pos2::new(r - 1.5, top), Pos2::new(r, top + 2.0)], stroke);
-    if column.recalc == RecalcMode::Auto {
+    if mode == RecalcMode::Auto {
         painter.line_segment([Pos2::new(r, top + 2.0), Pos2::new(r, shoulder)], stroke);
     } else {
         // The right leg stops short of the body: the lock is open.
         painter.line_segment([Pos2::new(r, top + 2.0), Pos2::new(r, top + 3.5)], stroke);
     }
-    let formula = column.formula.as_deref().unwrap_or_default();
     let response = ui.interact(rect, ui.id().with(("lock", column.id.0)), Sense::hover());
     response.widget_info(|| {
         egui::WidgetInfo::labeled(
@@ -954,7 +965,10 @@ fn lock_mark(ui: &mut egui::Ui, rect: Rect, column: &Column) {
             format!("Lock of column {}: {mode_word}, {state_word}", column.short_name),
         )
     });
-    response.on_hover_text(format!("col({}) = {formula}\n{hint}", column.short_name));
+    response.on_hover_text(format!(
+        "{what}
+{hint}"
+    ));
 }
 
 // ----- selecting ---------------------------------------------------------------------------------

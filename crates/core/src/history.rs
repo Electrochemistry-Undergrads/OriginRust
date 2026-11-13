@@ -79,6 +79,7 @@ impl Document {
                 // Recalculating columns follow their inputs inside the same undo step, so Undo
                 // restores the source and everything computed from it together.
                 self.project.recalculate_since(&before);
+                self.project.update_analysis_links(&before);
                 if self.project != before {
                     let merge = token != 0 && self.undo.last().is_some_and(|s| s.merge_token == token);
                     if !merge {

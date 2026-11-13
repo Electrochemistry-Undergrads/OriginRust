@@ -671,6 +671,12 @@ pub enum SmoothKind {
     /// FFT low-pass filter; `--points` sets the cutoff frequency 1 / (2 dx points), larger values
     /// smooth more (it is not a window length).
     Fft,
+    /// Lowess: local straight-line fits weighted by distance; `--span` or `--points` sets the window.
+    Lowess,
+    /// Loess: like Lowess with local parabolas.
+    Loess,
+    /// Binomial filter (1 2 1 / 4) applied `--order` times.
+    Binomial,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -868,6 +874,13 @@ pub enum AnalyzeTool {
         /// Percentile filter: the percentile, 0 to 100.
         #[arg(long, default_value_t = 50.0)]
         percent: f64,
+        /// Lowess and Loess: the share of the points in each local fit, 0 to 1 (default 0.1);
+        /// with `--span 0` the window is `--points` points.
+        #[arg(long, default_value_t = 0.1)]
+        span: f64,
+        /// Binomial filter: how many times the 1 2 1 / 4 filter is applied.
+        #[arg(long, default_value_t = 1)]
+        order: usize,
         /// How the window is filled where it sticks out of the data.
         #[arg(long, value_enum, default_value_t = BoundaryKind::None)]
         boundary: BoundaryKind,

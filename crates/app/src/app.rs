@@ -692,13 +692,22 @@ impl SheafApp {
             Action::Recalculate(columns) => {
                 let columns: Vec<ColumnId> = columns
                     .into_iter()
-                    .filter(|c| self.doc.project().column(*c).is_some_and(|c| c.is_locked()))
+                    .filter(|c| self.doc.project().column(*c).is_some_and(|c| c.is_locked() || c.analysis.is_some()))
                     .collect();
                 let result = self.doc.edit("Recalculate", |p| {
+                    let mut done: Vec<usize> = Vec::new();
                     for c in &columns {
-                        p.recalculate(*c)?;
+                        // The result columns of an analysis run again as a whole, once.
+                        if let Some(link) = p.analysis_link_of(*c) {
+                            if !done.contains(&link) {
+                                p.recalculate_analysis(link).map_err(|e| e.to_string())?;
+                                done.push(link);
+                            }
+                        } else {
+                            p.recalculate(*c).map_err(|e| e.to_string())?;
+                        }
                     }
-                    Ok::<(), sheaf_core::formula::FormulaError>(())
+                    Ok::<(), String>(())
                 });
                 match result {
                     Ok(()) if columns.is_empty() => self.warn("No selected column recalculates"),
@@ -1279,19 +1288,25 @@ impl SheafApp {
         };
         let sheets = self.doc.project().workbook(book).map(|b| b.sheets.len()).unwrap_or(0);
         let pending = self.doc.project().workbook(book).is_some_and(|b| {
-            b.sheets
-                .iter()
-                .any(|s| s.columns.iter().any(|c| c.formula_state == sheaf_core::column::FormulaState::Pending))
+            b.sheets.iter().any(|s| {
+                s.columns.iter().any(|c| {
+                    c.formula_state == sheaf_core::column::FormulaState::Pending
+                        || c.analysis.is_some_and(|m| m.state != sheaf_core::column::FormulaState::Current)
+                })
+            })
         });
         if !pending {
             self.say("Refreshed");
             return;
         }
-        let problems =
-            self.doc.apply("Refresh", |p| (0..sheets).flat_map(|s| p.recalculate_pending(book, s)).collect::<Vec<_>>());
-        match problems.first() {
-            Some(first) => self.warn(format!("Refreshed; a column could not be recalculated: {}", first.message)),
-            None => self.say("Refreshed and recalculated"),
+        let (problems, analysis_problems) = self.doc.apply("Refresh", |p| {
+            let formulas = (0..sheets).flat_map(|s| p.recalculate_pending(book, s)).collect::<Vec<_>>();
+            (formulas, p.recalculate_pending_analyses(book))
+        });
+        match (problems.first(), analysis_problems.first()) {
+            (Some(first), _) => self.warn(format!("Refreshed; a column could not be recalculated: {}", first.message)),
+            (None, Some(first)) => self.warn(format!("Refreshed; an analysis could not be recalculated: {first}")),
+            (None, None) => self.say("Refreshed and recalculated"),
         }
     }
 
@@ -1691,6 +1706,13 @@ impl SheafApp {
                 AnalysisOutcome::Closed => (None, true),
                 AnalysisOutcome::Done(report) => (Some(report), true),
                 AnalysisOutcome::Applied(report) => (Some(report), false),
+                AnalysisOutcome::AutoApplied(report) => {
+                    // The tool ran again after an option changed: the status line says so, the
+                    // sheet and the results panel stay as they are.
+                    let message = report.message.clone();
+                    self.say(message);
+                    (None, false)
+                }
             };
             if close {
                 self.analysis = None;

@@ -455,6 +455,24 @@ mod tests {
     }
 
     #[test]
+    fn an_analysis_that_recalculates_survives_saving_and_loading() {
+        use sheaf_core::analysis::{OutputTarget, Request, RowRange, Tool};
+        use sheaf_core::column::RecalcMode;
+        let dir = TempDir::new("analysis-link");
+        let path = dir.file("link.sheaf");
+        let mut p = sample();
+        let y = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+        let request = Request { columns: vec![y], rows: RowRange::All, tool: Tool::Smooth(Default::default()) };
+        let report = p.analyze_linked(&request, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        assert_eq!(back.analysis_links, p.analysis_links);
+        let out = report.new_columns[0];
+        assert_eq!(back.column(out).unwrap().analysis, p.column(out).unwrap().analysis);
+        assert!(back.column(out).unwrap().analysis.is_some());
+    }
+
+    #[test]
     fn text_and_numeric_columns_keep_their_text_cells() {
         let dir = TempDir::new("mixed");
         let path = dir.file("mixed.sheaf");

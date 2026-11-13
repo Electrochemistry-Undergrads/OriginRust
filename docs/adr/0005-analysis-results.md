@@ -52,4 +52,30 @@ true, either in a new sheet or in place.
 
 - Choosing the range by dragging on a graph (Origin's integration gadget) is not built yet; it is
   listed in the roadmap proposals.
-- Recalculating results when the source data change is not built (see roadmap proposals).
+- Recalculating results when the source data change: decided in the addendum below.
+
+## Addendum 2026-11-13: Recalculate and Output
+
+**Recalculate.** The analysis windows have Origin's Recalculate choice (None, Manual, Auto; Origin's default
+is Manual). A run with Manual or Auto is stored in the project as an `AnalysisLink`
+(`crates/core/src/analysis_link.rs`, saved in `project.json` as `analysis_links`): input columns, rows, the tool
+with its options, the output target and the columns that hold the results; each result column also carries an
+`AnalysisMark` (mode and state, drawn as the lock of formula columns). Only Smooth, Integrate and Find Peaks can be
+linked (their options derive `Serialize`); the other tools show None and grey the other two choices. When a column
+the run reads (the Y columns and their X columns) changes, `Document::edit` calls `update_analysis_links` inside
+the undo step of the edit: Auto links run again at once, Manual links turn Pending (yellow lock). Column menu >
+Recalculate and Window > Refresh run pending links. A rerun replaces the old result columns in place (the new
+columns are copied into the old ones and removed), so graphs and formulas that use them keep working; a table
+result stays in its sheet. If the old columns are gone the new ones are kept and the link follows them. Links
+whose input is deleted turn Broken (red lock).
+
+**Output.** `Project::analyze_to(request, &OutputTarget)`: `NextToInput` (the rule above, the default),
+`NewSheet` (an X and a Y column per input in a new sheet) and `Existing(columns)` (values and labels of the chosen
+columns are replaced; one per result column). The window offers the choice for the tools that write columns beside
+the input (Smooth, Differentiate, Normalize, Subtract Baseline, reference subtraction, simple math); tools that
+write a table always use a new sheet.
+
+**Apply and Auto Apply.** A window that runs the tool again (Apply twice, or Auto Apply after an option changed)
+replaces the columns of its own earlier run (`analyze_linked_into`); all runs of one window are one undo step
+(`Document::apply_merging` with a token per window). Auto Apply runs the tool whenever the request, the output
+or the Recalculate choice differs from the last run; OK after an unchanged Auto Apply run just closes.

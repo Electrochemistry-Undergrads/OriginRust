@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 109 | 78 | 230 |
+| All rows | 43 | 110 | 77 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 40 | 78 | 129 |
+| P1 and P2 together | 11 | 41 | 77 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -108,8 +108,8 @@ Cross-cutting findings:
 | Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
 | Missing values | shown as `--` | NaN shown as `--` | ✓ | cannot tell empty from missing | P0 |
 | Reference notation in formulas | `[Book]Sheet!Col`, cell(), `col(A)$`, `[L]` | `col`, `wcol`, index, range, `i` | ◐ | no other sheet or book, no cell(), no label access, no x/y shorthand | P0 |
-| Sorting | nested, range, columns | one key for the whole sheet; Sort Range (selected whole columns by the leftmost) and Sort Columns (each column alone) | ◐ | no nested keys, no Custom dialog, no cell-range subset | P0 |
-| Add, delete, move columns | Ctrl+D | add one, delete | ◐ | no insert at position, count dialog, move, swap, hide, no row insert or delete | P0 |
+| Sorting | nested, range, columns | whole sheet, range and column sorts, ascending or descending; Custom (nested keys) for the sheet and a range; Sort Columns by Label; Reverse Order; missing values sort first ascending and last descending, text ignores case (measured in Origin, workbook-model 13.1) | ◐ | Custom on Sort Columns and on the column menu's Sort Column is greyed; no cell-range subset sort | P0 |
+| Add, delete, move columns | Ctrl+D | add; insert and delete columns, rows or cell blocks (cells below shift up or down within the selected columns); move columns To First, Left, Right, To Last; hide and unhide; column width (characters) | ◐ | no count dialog or swap; GUI Insert/Delete on blocks follows Origin's documentation, not measured | P0 |
 | Sampling interval, Show X Column | Column menu | none | ◐ | no Set Sampling Interval, no Show X Column | P0 |
 | Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click edit with undo; select column, row, block or all; Ctrl+C, X, V and Delete as one undo step each | ◐ | no fill, Paste Transpose, Paste Special, insert or delete of cells (columns and rows only move by Delete of whole columns); no Select... dialog; no keyboard cursor | P0 |
 | Multiple sheets per book | tabs menu | sheet tabs; right-click a tab: Insert, Delete, Add, Duplicate, Name and Comments; analysis adds result sheets | ◐ | a sheet cannot be moved; no Add Graph as Sheet, Duplicate Without Data or Navigate | P0 |
@@ -118,7 +118,7 @@ Cross-cutting findings:
 | Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
 | Simple math on curves | Analysis > Mathematics > Simple Math | Simple Math window, `analyze math`, `Tool::CurveMath` | ✓ | add, subtract, multiply, divide, power with a constant or a reference; checked against Origin (spec section 9); no graph rescale | P0 |
 | Row filter | Column > Filter | Filter Rows, in place or new sheet | ◐ | removes or copies, not a live hidden filter | P1 |
-| Masking | Column > Mask | none | ✗ | model has no mask; .opj reader skips it | P1 |
+| Masking | Column > Mask | Apply, Remove, Swap on selected cells; masks follow rows through sorts, inserts and deletes; statistics, analysis tools and fits leave masked cells out; masked points draw red with their adjacent line segments (measured in Origin) | ◐ | no Change Color, Disable Masking, mask by condition or from the graph; two-way ANOVA ignores masks; the .opj reader skips masks and the writer leaves them to the companion | P1 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |
 | Categorical columns | Set as Categorical | none | ✗ | | P1 |
 | Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | fixed layout | ✗ | | P1 |

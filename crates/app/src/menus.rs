@@ -62,6 +62,7 @@ pub enum Cmd {
     SaveProject,
     SaveProjectAs,
     Import,
+    ImportWizard,
     ExportGraph,
     ExportWorksheet,
     Exit,
@@ -372,7 +373,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
             "&Import",
             [
                 vec![
-                    grey_keyed("Import Wi&zard...", ctrl(Key::Num3)),
+                    keyed("Import Wi&zard...", ctrl(Key::Num3), Cmd::ImportWizard),
                     keyed("Single &ASCII...", ctrl(Key::K), Cmd::Import),
                     item("&Multiple ASCII...", Cmd::Import),
                     item("Comma &Delimited (CSV)...", Cmd::Import),
@@ -1606,6 +1607,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveProject => Action::SaveProject,
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::Import => Action::Import(None),
+        Cmd::ImportWizard => Action::ImportWizard,
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::Exit => Action::Quit,
@@ -1736,7 +1738,16 @@ pub fn shortcuts() -> Vec<(KeyboardShortcut, Cmd)> {
 /// Commands that stay available while a text field has the keyboard: the ones that do not
 /// work on what the user is typing.
 pub fn works_while_typing(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::NewProject | Cmd::OpenProject | Cmd::SaveProject | Cmd::SaveProjectAs | Cmd::Import | Cmd::Exit)
+    matches!(
+        cmd,
+        Cmd::NewProject
+            | Cmd::OpenProject
+            | Cmd::SaveProject
+            | Cmd::SaveProjectAs
+            | Cmd::Import
+            | Cmd::ImportWizard
+            | Cmd::Exit
+    )
 }
 
 // ----- drawing -------------------------------------------------------------------------------

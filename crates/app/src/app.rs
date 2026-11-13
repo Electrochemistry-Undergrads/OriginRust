@@ -9,6 +9,7 @@ use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
+use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
@@ -81,6 +82,7 @@ pub struct SheafApp {
     books: HashMap<WindowId, BookUi>,
     graphs: HashMap<WindowId, GraphUi>,
     import: Option<ImportDialog>,
+    import_wizard: Option<ImportWizard>,
     graph_props: Option<GraphPropsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
@@ -133,6 +135,7 @@ impl SheafApp {
             books: HashMap::new(),
             graphs: HashMap::new(),
             import: None,
+            import_wizard: None,
             graph_props: None,
             column_props: None,
             text_dialog: None,
@@ -252,6 +255,7 @@ impl SheafApp {
         self.rename = None;
         self.sheet_name = None;
         self.import = None;
+        self.import_wizard = None;
     }
 
     /// Saves to the current file, asking for a name when there is none or
@@ -614,6 +618,14 @@ impl SheafApp {
                 };
                 if let Some(files) = files {
                     self.import = Some(ImportDialog::new(files));
+                }
+            }
+            Action::ImportWizard => {
+                // An open wizard keeps its settings: the command only brings it to the front.
+                if self.import_wizard.is_some() {
+                    ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, egui::Id::new("import_wizard")));
+                } else {
+                    self.import_wizard = Some(ImportWizard::new(Vec::new()));
                 }
             }
             Action::Undo => {
@@ -1370,6 +1382,16 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.import_wizard {
+            match d.show(ctx, import_target.as_ref().map(|t| t.1.as_str())) {
+                ImportOutcome::Open => {}
+                ImportOutcome::Cancelled => self.import_wizard = None,
+                ImportOutcome::Done { items, errors, plot, template, mode } => {
+                    self.import_wizard = None;
+                    self.finish_import(items, errors, plot, template, mode);
+                }
+            }
+        }
         if let Some(d) = &mut self.graph_props
             && !d.show(ctx, &mut self.doc)
         {
@@ -1391,21 +1413,26 @@ impl SheafApp {
             self.set_values = None;
         }
         if let Some(d) = &mut self.analysis {
-            match d.show(ctx, &mut self.doc) {
-                AnalysisOutcome::Open => {}
-                AnalysisOutcome::Closed => self.analysis = None,
-                AnalysisOutcome::Done(report) => {
-                    self.analysis = None;
-                    if let Some(sheet) = report.new_sheet {
-                        self.show_sheet(report.book, sheet);
-                    }
-                    if let Some(graph) = report.new_graph {
-                        self.focus(graph);
-                    }
-                    self.logs.result(report.message.clone(), report.notes.clone());
-                    self.panels.reveal(PanelId::Results);
-                    self.say(report.message);
+            // OK closes the window; Apply leaves it open for the next run.
+            let (report, close) = match d.show(ctx, &mut self.doc) {
+                AnalysisOutcome::Open => (None, false),
+                AnalysisOutcome::Closed => (None, true),
+                AnalysisOutcome::Done(report) => (Some(report), true),
+                AnalysisOutcome::Applied(report) => (Some(report), false),
+            };
+            if close {
+                self.analysis = None;
+            }
+            if let Some(report) = report {
+                if let Some(sheet) = report.new_sheet {
+                    self.show_sheet(report.book, sheet);
                 }
+                if let Some(graph) = report.new_graph {
+                    self.focus(graph);
+                }
+                self.logs.result(report.message.clone(), report.notes.clone());
+                self.panels.reveal(PanelId::Results);
+                self.say(report.message);
             }
         }
         if let Some(d) = &mut self.fit {
@@ -1683,6 +1710,17 @@ impl SheafApp {
                         self.focus(book);
                     }
                 }
+                // The same window with Auto Preview ticked (for pictures of the preview pane).
+                "analysis-preview" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let (Some(book), Some(kind)) = (book, AnalysisKind::from_name(arg)) {
+                        self.open_analysis(book, Vec::new(), kind);
+                        if let Some(d) = &mut self.analysis {
+                            d.tick_auto_preview();
+                        }
+                        self.focus(book);
+                    }
+                }
                 "fit" => {
                     let book = project.workbooks().next().map(|b| b.id);
                     if let (Some(book), Some(kind)) = (book, FitKind::from_name(arg)) {
@@ -1700,6 +1738,24 @@ impl SheafApp {
                 "export" => {
                     if let Some(id) = first_graph {
                         self.export = Some(ExportDialog::new(id, None));
+                    }
+                }
+                "import-wizard" => {
+                    let files = if arg.is_empty() { Vec::new() } else { vec![PathBuf::from(arg)] };
+                    self.import_wizard = Some(ImportWizard::new(files));
+                }
+                // import-wizard-page:header, names, file, data or save (after import-wizard).
+                "import-wizard-page" => {
+                    let page = match arg {
+                        "header" => WizardPage::HeaderLines,
+                        "names" => WizardPage::ColumnNames,
+                        "file" => WizardPage::FileNameOptions,
+                        "data" => WizardPage::DataColumns,
+                        "save" => WizardPage::SaveFilters,
+                        _ => WizardPage::Source,
+                    };
+                    if let Some(w) = &mut self.import_wizard {
+                        w.show_page(page);
                     }
                 }
                 "import" => {

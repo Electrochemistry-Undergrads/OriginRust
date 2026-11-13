@@ -79,12 +79,15 @@ about 88 % full, check `df -h /c` before parallel builds.
 
 ## Needs from the owner
 
-0. For the `.bin` reader: export `GCD(0.5C).bin`, the CV and one i-t file as text from the CH
-   Instruments program, saved next to each `.bin` with the same name (or allow an agent to run the
-   CH Instruments program when no experiment is running).
+0. Done 2026-11-13: text exports of the owner's six runs were made with the CHI627E program (opened only to
+   convert, instrument off) and compared with the `.bin` reader; three reader bugs were fixed (alternating
+   channels, CV axis from Init E, time from 0; `docs/spec/chi-binary-format.md`). The owner confirmed the
+   i-t runs were made on the CHI1040C. The local test `local_binary_files_with_a_text_export_give_the_same_workbook`
+   compares every `.bin` with a `.txt` beside it.
 1. **Try the app** (`cargo run --release -p sheaf-app`): import a real CH Instruments file, plot,
    right-click and double-click the graph, try Analysis > Integrate and Fit; report what is wrong.
-   (Also checks the i-t text importer against a real export.)
+   (An agent ran the CLI and the app's screenshots on the six real files on 2026-11-13: imports, plots,
+   integrate, fit and .opj/.sheaf round trips agreed with independent checks; a person's click-through is still open.)
 2. Example figures you make most often, to match their style.
 3. How you choose integration limits in Origin (rows, potential, or dragging on the graph).
 4. Charge/discharge curves: against time or capacity, and per gram (needs the mass)?

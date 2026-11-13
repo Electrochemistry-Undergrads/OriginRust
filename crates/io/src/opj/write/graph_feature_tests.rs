@@ -87,16 +87,43 @@ fn stacked_curves_keep_the_offsets_they_are_drawn_with_in_every_mode() {
 }
 
 #[test]
-fn x_offsets_and_waterfalls_are_still_named_and_a_plain_layer_has_no_offsets() {
+fn x_offsets_of_stacked_curves_are_written_and_read_back() {
     let mut p = stacked(Stack::Individual);
     let c = ids(&p);
     let id = p.graphs().next().unwrap().id;
-    p.graph_mut(id).unwrap().layers[0].plot_offset_mut(c[2]).x = 1.5;
-    let (_, out) = round_trip(&p);
-    assert!(out.warnings.iter().any(|w| w.contains("X offset")), "{:?}", out.warnings);
+    {
+        let l = &mut p.graph_mut(id).unwrap().layers[0];
+        l.plot_offset_mut(c[2]).x = 1.5;
+        l.plot_offset_mut(c[3]).x = -0.5;
+    }
+    let (imp, out) = round_trip(&p);
+    assert!(!out.warnings.iter().any(|w| w.contains("X offset")), "{:?}", out.warnings);
+    let read = &imp.graphs[0].layers[0];
+    let got: Vec<(f64, f64)> =
+        read.plots.iter().map(|pl| read.plot_offset(pl.y).map_or((f64::NAN, f64::NAN), |o| (o.x, o.y))).collect();
+    assert_eq!(got.iter().map(|o| o.0).collect::<Vec<_>>(), vec![0.0, 1.5, -0.5, 0.0]);
+    assert_eq!(got.iter().map(|o| o.1).collect::<Vec<_>>(), vec![0.5, 30.5, 60.5, 90.5]);
+}
 
-    let (_, out) = round_trip(&stacked(Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 }));
+#[test]
+fn a_waterfall_is_written_as_offsets_that_put_the_curves_where_sheaf_draws_them() {
+    let (imp, out) = round_trip(&stacked(Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 }));
     assert!(out.warnings.iter().any(|w| w.contains("waterfall")), "{:?}", out.warnings);
+    let read = &imp.graphs[0].layers[0];
+    assert_eq!(read.stack, Stack::Individual);
+    let at = |f: fn(&PlotOffset) -> f64| -> Vec<f64> {
+        read.plots.iter().map(|pl| read.plot_offset(pl.y).map_or(f64::NAN, f)).collect()
+    };
+    let (xs, ys) = (at(|o| o.x), at(|o| o.y));
+    assert_eq!(xs.len(), 4);
+    assert_eq!(xs[0], 0.0);
+    assert_eq!(ys[0], 0.0);
+    // member k is moved by k times a fixed step, and the axes reach the last curve
+    for k in 1..4 {
+        assert!((xs[k] - k as f64 * xs[1]).abs() < 1e-9 && xs[1] > 0.0, "{xs:?}");
+        assert!((ys[k] - k as f64 * ys[1]).abs() < 1e-9 && ys[1] > 0.0, "{ys:?}");
+    }
+    assert!(read.y_axis.max.unwrap() >= ys[3]);
 
     let (imp, out) = round_trip(&stacked(Stack::None));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
@@ -512,4 +539,62 @@ fn the_legend_text_and_its_columns_are_handled() {
     p.graph_mut(id).unwrap().layers[0].legend.columns = 2;
     let (_, out) = round_trip(&p);
     assert!(out.warnings.iter().any(|w| w.contains("columns of the legend")), "{:?}", out.warnings);
+}
+
+fn line_graph(p: &mut Project, f: impl FnOnce(&mut Layer)) {
+    let c = ids(p);
+    let id = p.add_graph(Template::Line);
+    p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
+    f(&mut p.graph_mut(id).unwrap().layers[0]);
+}
+
+#[test]
+fn date_tick_labels_are_written_as_origins_date_type() {
+    use sheaf_core::datetime::DatePattern;
+    let mut p = source();
+    line_graph(&mut p, |l| l.x_axis.tick_format = TickFormat::DateTime(DatePattern::Mdy));
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!(l.x_axis.tick_format, TickFormat::DateTime(DatePattern::Mdy));
+    assert_eq!(l.y_axis.tick_format, TickFormat::Auto);
+
+    // a pattern that Origin's list lacks is written as month/day/year and named
+    let mut p = source();
+    line_graph(&mut p, |l| l.y_axis.tick_format = TickFormat::DateTime(DatePattern::Iso));
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("yyyy-MM-dd")), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].y_axis.tick_format, TickFormat::DateTime(DatePattern::Mdy));
+}
+
+/// The window headers of a written project, in file order.
+fn window_headers(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let mut f = Frames::new(Cursor::new(bytes.to_vec())).unwrap();
+    f.line(200).unwrap();
+    f.block().unwrap();
+    f.block().unwrap();
+    let _ = dataset::scan(&mut f);
+    window::scan(&mut f).0.into_iter().map(|w| w.header).collect()
+}
+
+#[test]
+fn window_places_are_written_as_the_window_rectangle() {
+    use sheaf_core::project::{WindowPlace, WindowState};
+    let mut p = stacked(Stack::None);
+    let ids: Vec<WindowId> = p.windows.iter().map(|w| w.id()).collect();
+    assert_eq!(ids.len(), 2);
+    let rect =
+        |h: &[u8]| -> Vec<i16> { (0..4).map(|i| i16::from_le_bytes([h[0x1B + 2 * i], h[0x1C + 2 * i]])).collect() };
+    // unknown places: the cascade
+    let before = window_headers(&write_named(&p, "g", TIME).unwrap().bytes);
+    assert_eq!(rect(&before[1]), vec![72, 72, 579, 421]);
+    p.window_places = vec![
+        WindowPlace { window: ids[0], x: 30.4, y: 40.0, width: 600.0, height: 300.0, state: WindowState::Normal },
+        WindowPlace { window: ids[1], x: 100.0, y: 120.0, width: 500.0, height: 400.0, state: WindowState::Maximised },
+    ];
+    let after = window_headers(&write_named(&p, "g", TIME).unwrap().bytes);
+    assert_eq!(rect(&after[0]), vec![30, 40, 630, 340]);
+    assert_eq!(rect(&after[1]), vec![100, 120, 600, 520]);
+    assert_eq!(after[0][0x32] & 3, 0);
+    assert_eq!(after[1][0x32] & 3, 2);
 }

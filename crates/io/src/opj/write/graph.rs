@@ -280,6 +280,7 @@ impl Writer {
             page,
             time: self.time,
             serial: 3u8.wrapping_add(self.graphs as u8),
+            place: self.place,
         };
         self.graphs += 1;
         self.windows.extend(framed(&window_header(&spec)));
@@ -321,7 +322,10 @@ impl Writer {
 
     /// The plots of a layer that can be written, with where each is drawn, and the data ranges.
     fn plan<'a>(&self, project: &Project, layer: &'a Layer, sets: &Sets, notes: &mut Vec<String>) -> Plan<'a> {
-        let (places, _) = places(project, layer);
+        let (mut places, _) = places(project, layer);
+        if let Stack::Waterfall { dx_percent, dy_percent } = layer.stack {
+            waterfall_places(project, layer, dx_percent, dy_percent, &mut places, notes);
+        }
         let mut plots: Vec<Resolved> = Vec::new();
         for (plot_index, p) in layer.plots.iter().enumerate() {
             if !p.visible {
@@ -357,11 +361,7 @@ impl Writer {
             if p.symbol.every != 1 && p.kind.has_symbols() {
                 notes.push("symbols on every n-th point only were not written; every point has a symbol".into());
             }
-            let mut place = places[plot_index];
-            if place.ox != 0.0 {
-                notes.push("the X offset of a stacked curve was not written (Origin keeps only Y offsets)".into());
-                place.ox = 0.0;
-            }
+            let place = places[plot_index];
             plots.push(Resolved { plot: p, y, x, err, place });
         }
         let plain: Vec<(&Plot, Place)> = plots.iter().map(|r| (r.plot, r.place)).collect();
@@ -422,7 +422,8 @@ impl Writer {
             }),
             Role::Plain { .. } => None,
         };
-        let offsets = plots.iter().any(|r| r.place.oy != 0.0);
+        let offsets = plots.iter().any(|r| r.place.oy != 0.0 || r.place.ox != 0.0);
+        let x_offsets = plots.iter().any(|r| r.place.ox != 0.0);
         let mut out = framed(&layer_header(&LayerSpec {
             frame: [left, top, right, bottom],
             page,
@@ -430,6 +431,7 @@ impl Writer {
             y: y_scale,
             link,
             offsets,
+            x_offsets,
         }));
 
         // annotations: titles, free text, legend
@@ -962,7 +964,10 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         );
     }
     if matches!(layer.stack, Stack::Waterfall { .. }) {
-        notes.push("the offsets of a waterfall were not written; the curves are drawn where their data lies".into());
+        notes.push(
+            "a waterfall was written as curves moved by X and Y offsets on axes that cover them (Origin's own waterfall plot, with its Z axis, was not written)"
+                .into(),
+        );
     }
     if layer.bars.overlap_pct != 0.0 {
         notes.push("the overlap of column bars was not written; bars stand side by side".into());
@@ -993,6 +998,39 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             notes.push("axis title colours that follow the first plot's colour were not written".into());
         }
     }
+}
+
+/// A waterfall as offsets: Sheaf draws member k moved right and up by k times the given percentages
+/// of the front frame, which spans the axes of the unmoved data. Origin has no such shift, so the
+/// same positions are written as per-curve offsets in axis units (graphing spec 13.6); the axis
+/// range written then covers the moved curves.
+fn waterfall_places(
+    project: &Project,
+    layer: &Layer,
+    dx_percent: f64,
+    dy_percent: f64,
+    places: &mut [Place],
+    notes: &mut Vec<String>,
+) {
+    if layer.x_axis.scale != ScaleKind::Linear || layer.y_axis.scale != ScaleKind::Linear {
+        notes.push("the shifts of a waterfall on a logarithmic axis were not written".into());
+        return;
+    }
+    let plain: Vec<(&Plot, Place)> = layer.plots.iter().map(|p| (p, Place::default())).collect();
+    let (x, y) = data_ranges(project, layer, &plain);
+    let span = |axis: &Axis, data: Option<(f64, f64)>| {
+        let s = axis_scale(axis, data, &mut Vec::new());
+        s.to - s.from
+    };
+    let (sx, sy) = (dx_percent / 100.0 * span(&layer.x_axis, x), dy_percent / 100.0 * span(&layer.y_axis, y));
+    if !(sx.is_finite() && sy.is_finite()) {
+        return;
+    }
+    let shifted: Vec<Place> = places
+        .iter()
+        .map(|pl| pl.member.map_or(*pl, |k| Place { ox: k as f64 * sx, oy: k as f64 * sy, ..*pl }))
+        .collect();
+    places.copy_from_slice(&shifted);
 }
 
 fn sane_frame(f: sheaf_core::graph::Frame, notes: &mut Vec<String>) -> sheaf_core::graph::Frame {
@@ -1080,15 +1118,22 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
     if axis.side == AxisSide::Opposite && axis.show_opposite {
         notes.push("the line on the near side of an axis that is drawn on the opposite side was not written".into());
     }
-    let (scientific, decimals) = match axis.tick_format {
-        TickFormat::Auto => (false, None),
-        TickFormat::Decimal(d) => (false, Some(d.min(15))),
-        TickFormat::Scientific(d) => (true, Some(d.min(15))),
-        TickFormat::DateTime(_) => {
-            notes.push("a date and time tick label format was not written; Origin's automatic format is used".into());
-            (false, None)
+    let (mut scientific, mut decimals, mut date_format) = (false, None, None);
+    match axis.tick_format {
+        TickFormat::Auto => {}
+        TickFormat::Decimal(d) => decimals = Some(d.min(15)),
+        TickFormat::Scientific(d) => (scientific, decimals) = (true, Some(d.min(15))),
+        TickFormat::DateTime(pattern) => {
+            // Origin offers a fixed list of date formats; only month/day/year is in it
+            date_format = Some(0);
+            if pattern != sheaf_core::datetime::DatePattern::Mdy {
+                notes.push(format!(
+                    "the date format {} of tick labels has no counterpart in Origin's list; month/day/year was written",
+                    pattern.label()
+                ));
+            }
         }
-    };
+    }
     if (axis.tick_label_divisor - 1.0).abs() > f64::EPSILON {
         notes.push("a tick label divisor was not written".into());
     }
@@ -1129,5 +1174,6 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
         text_labels: false,
         scientific,
         decimals,
+        date_format,
     }
 }

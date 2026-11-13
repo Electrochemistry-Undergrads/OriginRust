@@ -1350,9 +1350,9 @@ fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_sep
     assert!(h.query_by_label_contains("found: comma").is_some());
     // Put the data into the active sheet as new columns (the Import Mode node of the tree).
     click(&mut h, "Import Mode");
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New book")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New Books")).click();
     settle(&mut h);
-    click(&mut h, "New columns");
+    click(&mut h, "New Columns");
     click(&mut h, "OK");
     assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1, "no new book was made");
@@ -4297,9 +4297,9 @@ fn the_wizard_source_page_chooses_the_filter_and_the_import_mode() {
     std::fs::write(&more, "w\tz\n1\t1\n2\t2\n3\t3\n4\t4\n").unwrap();
     h.state_mut().import_wizard = Some(ImportWizard::new(vec![more]));
     settle(&mut h);
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New book")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New Books")).click();
     settle(&mut h);
-    click(&mut h, "New columns");
+    click(&mut h, "New Columns");
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("<None>")).click();
     settle(&mut h);
     click(&mut h, "Delimited Text");
@@ -5253,4 +5253,58 @@ fn clear_worksheet_empties_every_column_in_one_undo_step() {
     assert_eq!(h.state().doc.undo_label(), Some("Clear worksheet"));
     menu(&mut h, "Edit", "Undo Clear worksheet");
     assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0]);
+}
+
+#[test]
+fn the_import_window_reads_fixed_width_columns_and_apply_keeps_the_window_open() {
+    use crate::actions::ImportPick;
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fixed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("aligned.txt");
+    let mut text = format!("{:>10}{:>10}\n", "t", "i");
+    for k in 1..=5 {
+        text.push_str(&format!("{:>10}{:>10}\n", k, k * 3));
+    }
+    std::fs::write(&file, text).unwrap();
+    let mut h = start_auto_hide(vec![]);
+    h.state_mut().start_import(Some(vec![file]), ImportPick::Multiple);
+    settle(&mut h);
+    // Delimiter: Fixed Width, with the default width of 10 characters.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Detect")).click();
+    settle(&mut h);
+    click(&mut h, "Fixed Width");
+    h.get_by_label("Widths");
+    // Apply imports and leaves the window; OK imports and closes it. Buttons run OK, Cancel, Apply.
+    assert!(button_x(&h, "OK") < button_x(&h, "Cancel") && button_x(&h, "Cancel") < button_x(&h, "Apply"));
+    click(&mut h, "Apply");
+    assert!(h.state().import.is_some(), "Apply keeps the window");
+    assert_eq!(project(&h).workbooks().count(), 1);
+    let book = project(&h).workbooks().next().unwrap();
+    assert_eq!(book.sheet().columns.len(), 2, "the widths cut the lines into two columns");
+    assert_eq!(column(&h, "B"), [3.0, 6.0, 9.0, 12.0, 15.0]);
+    click(&mut h, "OK");
+    assert!(h.state().import.is_none());
+    assert_eq!(project(&h).workbooks().count(), 2, "OK imported the file once more");
+}
+
+#[test]
+fn the_data_import_options_page_controls_the_names() {
+    use crate::actions::ImportPick;
+    let mut h = start_auto_hide(vec![]);
+    h.state_mut().start_import(Some(vec![data_file("data-import-options")]), ImportPick::Multiple);
+    settle(&mut h);
+    click(&mut h, "Data Import Options");
+    h.get_by_label("Line with the short names");
+    h.get_by_label("Rename the columns from the header lines");
+    h.get_by_label("Rename the book from the file name");
+    // Apply the new range to plots belongs to Replace Existing Data and is grey otherwise.
+    assert!(is_disabled(&h, "Apply the new range to plots"));
+    click(&mut h, "Rename the sheet from the file name");
+    click(&mut h, "Rename the columns from the header lines");
+    click(&mut h, "OK");
+    let book = project(&h).workbooks().next().expect("imported");
+    assert_eq!(book.sheet().name, "Sheet1");
+    assert_eq!(book.sheet().columns[1].long_name, "", "the header line was skipped, not used as a label");
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
 }

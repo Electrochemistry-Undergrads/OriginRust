@@ -11,7 +11,7 @@ use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::fit_more::{FitMoreDialog, FitMoreKind, FitMoreOutcome};
 use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
-use crate::dialogs::import::{ImportDialog, ImportOutcome};
+use crate::dialogs::import::{ImportDialog, ImportOutcome, ImportRequest};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
@@ -36,7 +36,7 @@ use sheaf_core::graph::TickLabelSource;
 use sheaf_core::project::{Folder, Window};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
-use sheaf_io::batch::{ImportMode, Target, place_workbook};
+use sheaf_io::batch::{ImportMode, PlaceOptions, Target, place_workbook_with};
 use sheaf_io::project_file;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -226,7 +226,14 @@ impl SheafApp {
                 Err(e) => errors.push(e.to_string()),
             }
         }
-        self.finish_import(items, errors, true, None, ImportMode::NewBook);
+        self.finish_import(ImportRequest {
+            items,
+            errors,
+            plot: true,
+            template: None,
+            mode: ImportMode::NewBook,
+            place: PlaceOptions::default(),
+        });
     }
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
@@ -395,14 +402,8 @@ impl SheafApp {
             .and_then(|s| Path::new(&s.path).parent().map(Path::to_path_buf))
     }
 
-    fn finish_import(
-        &mut self,
-        items: Vec<sheaf_io::Imported>,
-        errors: Vec<String>,
-        plot: bool,
-        template: Option<Template>,
-        mode: ImportMode,
-    ) {
+    fn finish_import(&mut self, request: ImportRequest) {
+        let ImportRequest { items, errors, plot, template, mode, place } = request;
         let count = items.len();
         let mut notes: Vec<String> = errors;
         for i in &items {
@@ -419,7 +420,7 @@ impl SheafApp {
                 for (n, imported) in items.into_iter().enumerate() {
                     let t = template.unwrap_or(imported.suggested_template);
                     let this_mode = if n > 0 && mode == ImportMode::ReplaceSheet { ImportMode::NewSheet } else { mode };
-                    let placed = place_workbook(p, imported.workbook, this_mode, target);
+                    let placed = place_workbook_with(p, imported.workbook, this_mode, target, place);
                     placement_notes.extend(placed.warnings);
                     let book = placed.book;
                     if plot {
@@ -1871,19 +1872,20 @@ impl SheafApp {
             match d.show(ctx, import_target.as_ref().map(|t| t.1.as_str())) {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import = None,
-                ImportOutcome::Done { items, errors, plot, template, mode } => {
+                ImportOutcome::Done(request) => {
                     self.import = None;
-                    self.finish_import(items, errors, plot, template, mode);
+                    self.finish_import(request);
                 }
+                ImportOutcome::Apply(request) => self.finish_import(request),
             }
         }
         if let Some(d) = &mut self.import_wizard {
             match d.show(ctx, import_target.as_ref().map(|t| t.1.as_str())) {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import_wizard = None,
-                ImportOutcome::Done { items, errors, plot, template, mode } => {
+                ImportOutcome::Done(request) | ImportOutcome::Apply(request) => {
                     self.import_wizard = None;
-                    self.finish_import(items, errors, plot, template, mode);
+                    self.finish_import(request);
                 }
             }
         }
@@ -2405,9 +2407,13 @@ impl SheafApp {
                         w.show_page(page);
                     }
                 }
-                "import" => {
+                "import" | "import-data-options" => {
                     if !arg.is_empty() {
-                        self.import = Some(ImportDialog::new(vec![PathBuf::from(arg)]));
+                        let mut d = ImportDialog::new(vec![PathBuf::from(arg)]);
+                        if name == "import-data-options" {
+                            d.show_data_import_options();
+                        }
+                        self.import = Some(d);
                     }
                 }
                 _ => eprintln!("unknown --show item '{what}'"),

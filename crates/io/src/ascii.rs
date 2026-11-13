@@ -18,9 +18,11 @@ const DELIMITER_SAMPLE_LINES: usize = 200;
 const DATA_RUN: usize = 3;
 /// Longest worksheet name.
 const SHEET_NAME_MAX: usize = 31;
+/// Longest short name taken from a header cell.
+const SHORT_NAME_MAX: usize = 18;
 
 /// How the fields of a line are separated.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Delimiter {
     /// Guess from the file.
     Auto,
@@ -31,6 +33,37 @@ pub enum Delimiter {
     Whitespace,
     /// Any other single character.
     Other(char),
+    /// A string of two or more characters that separates the fields as a whole (`||`, `::`,
+    /// `;;`). Origin's "Other" field accepts such a string (its option `MultipleDelimiters`).
+    Multi(String),
+    /// Fixed-width columns: the width of each column in characters, applied in order. The last
+    /// width repeats for the columns after the list, so a single width applies to all columns
+    /// (Origin's Fixed Width option). Quotes mean nothing here and fields are trimmed.
+    Fixed(Vec<usize>),
+}
+
+impl Delimiter {
+    /// Reads a delimiter typed in the "Other" field: one character is [`Delimiter::Other`], two or
+    /// more are [`Delimiter::Multi`]; `None` for an empty string.
+    pub fn from_text(text: &str) -> Option<Delimiter> {
+        let mut chars = text.chars();
+        match (chars.next(), chars.next()) {
+            (None, _) => None,
+            (Some(c), None) => Some(Delimiter::Other(c)),
+            _ => Some(Delimiter::Multi(text.to_string())),
+        }
+    }
+}
+
+/// Reads a list of column widths such as `8, 12 10` (commas and spaces both separate). `None`
+/// when the text has no number, or a number that is not a positive whole number.
+pub fn parse_widths(text: &str) -> Option<Vec<usize>> {
+    let widths: Option<Vec<usize>> = text
+        .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.parse::<usize>().ok().filter(|w| *w > 0))
+        .collect();
+    widths.filter(|w| !w.is_empty())
 }
 
 /// What to do with columns of dates and times of day.
@@ -86,6 +119,18 @@ pub struct AsciiOptions {
     pub units_line: Option<usize>,
     /// 1-based line number holding the comments.
     pub comments_line: Option<usize>,
+    /// Header lines fill the long name, units and comments of the columns (Origin's "rename
+    /// columns" in Data Import Options). When false the columns keep empty labels; the header
+    /// lines are still skipped.
+    pub rename_columns: bool,
+    /// 1-based line whose cells become the short names of the columns (letters, digits and
+    /// underscores only; a cell that is empty, repeated or unusable keeps the automatic name).
+    /// 0 keeps `A`, `B`, ... as short names.
+    pub short_name_line: usize,
+    /// Name the sheet after the file (without its extension). When false it is `Sheet1`.
+    pub rename_sheet: bool,
+    /// Give the book the file name as long name. When false the long name is empty.
+    pub rename_book: bool,
     /// Numbers use `,` as decimal separator; `,` then cannot be the delimiter.
     pub decimal_comma: bool,
     /// The digit-grouping character. It is removed from numbers (`1,234.5` is 1234.5); dot and
@@ -121,6 +166,10 @@ impl Default for AsciiOptions {
             long_name_line: None,
             units_line: None,
             comments_line: None,
+            rename_columns: true,
+            short_name_line: 0,
+            rename_sheet: true,
+            rename_book: true,
             decimal_comma: false,
             thousands: Thousands::Auto,
             param_lines: Vec::new(),
@@ -169,49 +218,81 @@ pub struct AsciiImport {
 /// (quoted ones keep their inner spaces). With `Whitespace`, runs of
 /// separators are one separator and the line has no empty fields; with any
 /// other delimiter, consecutive delimiters give empty fields.
-fn split_fields(line: &str, delim: Delimiter) -> Vec<String> {
+fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
+    if let Delimiter::Fixed(widths) = delim {
+        return split_fixed(line, widths);
+    }
     let whitespace = matches!(delim, Delimiter::Whitespace);
-    let sep = match delim {
-        Delimiter::Comma => ',',
-        Delimiter::Semicolon => ';',
-        Delimiter::Other(c) => c,
-        Delimiter::Tab | Delimiter::Auto | Delimiter::Whitespace => '\t',
+    let sep: Vec<char> = match delim {
+        Delimiter::Comma => vec![','],
+        Delimiter::Semicolon => vec![';'],
+        Delimiter::Other(c) => vec![*c],
+        Delimiter::Multi(s) if !s.is_empty() => s.chars().collect(),
+        _ => vec!['\t'],
     };
-    let is_sep = |c: char| if whitespace { c == ' ' || c == '\t' } else { c == sep };
+    let chars: Vec<char> = line.chars().collect();
+    // The length of the separator that starts at `i`, if one does.
+    let sep_at = |i: usize| -> Option<usize> {
+        if whitespace {
+            (chars[i] == ' ' || chars[i] == '\t').then_some(1)
+        } else {
+            chars[i..].starts_with(&sep).then_some(sep.len())
+        }
+    };
     let mut fields = Vec::new();
     let mut cur = String::new();
     let mut in_quotes = false;
     let mut quoted = false;
-    let mut chars = line.chars().peekable();
-    while let Some(c) = chars.next() {
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
         if in_quotes {
             if c == '"' {
-                if chars.peek() == Some(&'"') {
+                if chars.get(i + 1) == Some(&'"') {
                     cur.push('"');
-                    chars.next();
+                    i += 1;
                 } else {
                     in_quotes = false;
                 }
             } else {
                 cur.push(c);
             }
-        } else if c == '"' && !quoted && cur.is_empty() && sep != '"' {
+        } else if c == '"' && !quoted && cur.is_empty() && !sep.contains(&'"') {
             in_quotes = true;
             quoted = true;
-        } else if is_sep(c) {
+        } else if let Some(len) = sep_at(i) {
             if !whitespace || quoted || !cur.is_empty() {
                 fields.push(finish_field(&cur, quoted));
             }
             cur.clear();
             quoted = false;
+            i += len - 1;
         } else if c.is_whitespace() && (cur.is_empty() || quoted) {
             // leading space, or space after a closing quote: ignored
         } else {
             cur.push(c);
         }
+        i += 1;
     }
     if !whitespace || quoted || !cur.is_empty() {
         fields.push(finish_field(&cur, quoted));
+    }
+    fields
+}
+
+/// Cuts a line into fields of the given widths in characters; the last width repeats until the
+/// line is used up. Fields are trimmed. A line shorter than the first width is one field.
+fn split_fixed(line: &str, widths: &[usize]) -> Vec<String> {
+    let chars: Vec<char> = line.trim_end_matches(['\r', '\n']).chars().collect();
+    let mut fields = Vec::new();
+    let mut at = 0;
+    let mut k = 0;
+    while at < chars.len() {
+        let w = widths.get(k).or(widths.last()).copied().unwrap_or(1).max(1);
+        let end = (at + w).min(chars.len());
+        fields.push(chars[at..end].iter().collect::<String>().trim().to_string());
+        at = end;
+        k += 1;
     }
     fields
 }
@@ -314,7 +395,7 @@ fn grouped_shape(t: &str, sep: char) -> Option<(usize, Option<char>)> {
 /// where a field holding it was quoted and so cannot be a decimal comma. Evidence for two different
 /// separators cancels out. Returns the decimal-comma flag, the separator, and whether it was found
 /// by detection.
-fn resolve_style(opts: &AsciiOptions, rows: &[(usize, Vec<String>)], delimiter: Delimiter) -> (bool, Thousands, bool) {
+fn resolve_style(opts: &AsciiOptions, rows: &[(usize, Vec<String>)], delimiter: &Delimiter) -> (bool, Thousands, bool) {
     if opts.thousands != Thousands::Auto {
         let comma = opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space);
         return (comma, opts.thousands, false);
@@ -322,7 +403,7 @@ fn resolve_style(opts: &AsciiOptions, rows: &[(usize, Vec<String>)], delimiter: 
     let (mut comma, mut dot, mut space, mut apos, mut comma_decimal) = (false, false, false, false, false);
     for t in rows.iter().take(5000).flat_map(|(_, f)| f.iter()).map(|c| c.trim()).filter(|t| t.len() >= 5) {
         if let Some((g, dec)) = grouped_shape(t, ',')
-            && (g >= 2 || dec == Some('.') || delimiter == Delimiter::Comma)
+            && (g >= 2 || dec == Some('.') || *delimiter == Delimiter::Comma)
         {
             comma = true;
         }
@@ -500,11 +581,11 @@ fn auto_delimiter(lines: &[&str], skip_comma: bool) -> Delimiter {
         }
         let mut counts: HashMap<usize, usize> = HashMap::new();
         for l in &sample {
-            *counts.entry(split_fields(l, cand).len()).or_default() += 1;
+            *counts.entry(split_fields(l, &cand).len()).or_default() += 1;
         }
         let top = counts.iter().filter(|(n, _)| **n > 1).map(|(n, freq)| (*freq, *n)).max();
         if let Some((freq, _)) = top
-            && best.is_none_or(|(b, _)| freq > b)
+            && best.as_ref().is_none_or(|(b, _)| freq > *b)
         {
             best = Some((freq, cand));
         }
@@ -629,7 +710,7 @@ fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usiz
 
 fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
     let lines: Vec<&str> = split_records(text);
-    let delimiter = match opts.delimiter {
+    let delimiter = match opts.delimiter.clone() {
         Delimiter::Auto => {
             auto_delimiter(&lines, opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space))
         }
@@ -639,9 +720,9 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
         .iter()
         .enumerate()
         .filter(|(_, l)| !l.trim().is_empty())
-        .map(|(i, l)| (i, split_fields(l, delimiter)))
+        .map(|(i, l)| (i, split_fields(l, &delimiter)))
         .collect();
-    let (decimal_comma, thousands, thousands_found) = resolve_style(opts, &all, delimiter);
+    let (decimal_comma, thousands, thousands_found) = resolve_style(opts, &all, &delimiter);
     let ns = NumStyle::new(decimal_comma, thousands);
 
     let (header_lines, start) = match opts.header_lines {
@@ -722,6 +803,17 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
             "the decimal separator and the thousands separator cannot both be a comma".to_string(),
         ));
     }
+    match &opts.delimiter {
+        Delimiter::Multi(m) if m.is_empty() => {
+            return Err(IoError::InvalidOption("the delimiter string is empty".to_string()));
+        }
+        Delimiter::Fixed(w) if w.is_empty() || w.contains(&0) => {
+            return Err(IoError::InvalidOption(
+                "fixed width needs at least one column width, and every width must be above 0".to_string(),
+            ));
+        }
+        _ => {}
+    }
     if opts.blocks == Blocks::Sheets {
         return parse_blocks(text, file_stem, opts);
     }
@@ -733,7 +825,7 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
 fn split_blocks(text: &str, opts: &AsciiOptions) -> Vec<String> {
     let whole = analyze(text, opts);
     let ns = whole.ns;
-    let delimiter = whole.detected.delimiter;
+    let delimiter = whole.detected.delimiter.clone();
     let mut blocks: Vec<Vec<&str>> = vec![Vec::new()];
     for rec in split_records(text) {
         if rec.trim().is_empty() {
@@ -747,7 +839,7 @@ fn split_blocks(text: &str, opts: &AsciiOptions) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut pending: Vec<&str> = Vec::new();
     for b in blocks.into_iter().filter(|b| !b.is_empty()) {
-        let numeric = b.iter().any(|l| is_numeric_row(&split_fields(l, delimiter), ns));
+        let numeric = b.iter().any(|l| is_numeric_row(&split_fields(l, &delimiter), ns));
         pending.extend(b);
         if numeric {
             out.push(pending.join("\n"));
@@ -771,7 +863,11 @@ fn parse_blocks(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Asci
     let mut warnings = Vec::new();
     for (i, chunk) in chunks.iter().enumerate() {
         let mut part = parse_block(chunk, file_stem, &fixed)?;
-        let name = if i == 0 { sheet_name(file_stem) } else { sheet_name(&format!("{file_stem}_{}", i + 1)) };
+        let name = match (opts.rename_sheet, i) {
+            (false, _) => format!("Sheet{}", i + 1),
+            (true, 0) => sheet_name(file_stem),
+            (true, _) => sheet_name(&format!("{file_stem}_{}", i + 1)),
+        };
         for w in part.warnings.drain(..) {
             warnings.push(format!("block {}: {w}", i + 1));
         }
@@ -802,13 +898,15 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     // Labels.
     let label_row = |n: usize| -> Vec<String> {
         let mut f =
-            n.checked_sub(1).and_then(|i| a.lines.get(i)).map_or_else(Vec::new, |l| split_fields(l, d.delimiter));
+            n.checked_sub(1).and_then(|i| a.lines.get(i)).map_or_else(Vec::new, |l| split_fields(l, &d.delimiter));
         f.resize(ncols, String::new());
         f
     };
-    let mut long_names = label_row(d.long_name_line);
-    let mut units = label_row(d.units_line);
-    let comments = label_row(d.comments_line);
+    let label_line = |n: usize| if opts.rename_columns { n } else { 0 };
+    let mut long_names = label_row(label_line(d.long_name_line));
+    let mut units = label_row(label_line(d.units_line));
+    let comments = label_row(label_line(d.comments_line));
+    let short_names = short_names_from(&label_row(opts.short_name_line), ncols);
     if d.long_name_line > 0 && d.units_line == 0 {
         for (name, unit) in long_names.iter_mut().zip(units.iter_mut()) {
             if let Some((n, u)) = split_name_unit(name) {
@@ -847,6 +945,7 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     let used: Vec<usize> = [d.long_name_line, d.units_line, d.comments_line]
         .into_iter()
         .chain(opts.param_lines.iter().copied())
+        .chain([opts.short_name_line])
         .filter(|n| *n > 0)
         .collect();
     let dropped = a
@@ -861,7 +960,7 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     }
 
     // Columns.
-    let mut sheet = Worksheet::new(sheet_name(file_stem));
+    let mut sheet = Worksheet::new(if opts.rename_sheet { sheet_name(file_stem) } else { "Sheet1".to_string() });
     for j in 0..ncols {
         let cells: Vec<&str> = a.rows.iter().map(|r| r.get(j).map_or("", String::as_str)).collect();
         if opts.dates == DateImport::Detect
@@ -870,13 +969,17 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
             if dc.ambiguous {
                 warnings.push(format!(
                     "column {}: the dates can be read day first or month first; read {}",
-                    default_short_name(j),
+                    short_names[j],
                     if dc.order == DateOrder::Mdy { "month first (M/d/yyyy)" } else { "day first (dd/MM/yyyy)" }
                 ));
             }
             let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Y };
-            let mut col =
-                Column::new(ColumnId(j as u64 + 1), default_short_name(j), designation, ColumnData::numeric(dc.values));
+            let mut col = Column::new(
+                ColumnId(j as u64 + 1),
+                short_names[j].clone(),
+                designation,
+                ColumnData::numeric(dc.values),
+            );
             col.format = dc.format;
             col.long_name = long_names[j].clone();
             col.units = units[j].clone();
@@ -887,7 +990,7 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
         let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, a.ns)).collect();
         let parsed = numbers.iter().filter(|n| n.is_some()).count();
         let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count();
-        let short = default_short_name(j);
+        let short = short_names[j].clone();
         // Origin keeps every imported column in its Text & Numeric format: a cell that is not a
         // number (a word, `<LOD`, `n.d.`) stays a text cell and the numbers see it as missing. There
         // is no ratio of numbers to text. A column with no number at all is a text column.
@@ -925,7 +1028,9 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     }
 
     let mut workbook = Workbook::new(WindowId(0), "Book1");
-    workbook.long_name = file_stem.to_string();
+    if opts.rename_book {
+        workbook.long_name = file_stem.to_string();
+    }
     workbook.sheets = vec![sheet];
     Ok(AsciiImport { workbook, detected: d, warnings })
 }
@@ -986,6 +1091,32 @@ fn detect_date_column(cells: &[&str], prefer: DateOrder) -> Option<DateColumn> {
         .collect();
     let ambiguous = both && parsed.iter().any(|p| p.ambiguous);
     Some(DateColumn { values, format, ambiguous, order })
+}
+
+/// The short name of every column: the cell of the short-name line made safe, or the automatic
+/// name when there is no such cell, it has no usable character, or another column has it already.
+fn short_names_from(cells: &[String], ncols: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for j in 0..ncols {
+        let wanted: String = cells
+            .get(j)
+            .map(|c| c.chars().filter(|ch| ch.is_alphanumeric() || *ch == '_').take(SHORT_NAME_MAX).collect())
+            .unwrap_or_default();
+        let usable = !wanted.is_empty()
+            && !wanted.starts_with(|c: char| c.is_ascii_digit())
+            && !out.iter().any(|o| o.eq_ignore_ascii_case(&wanted));
+        out.push(if usable { wanted } else { default_short_name(j) });
+    }
+    // An automatic name can clash with a header cell that an earlier column took (`B` in the
+    // header of column A); the later column then gets a numbered name.
+    for j in 0..out.len() {
+        if out[..j].iter().any(|o| o.eq_ignore_ascii_case(&out[j])) {
+            let base = out[j].clone();
+            let free = (2..).map(|k| format!("{base}_{k}")).find(|n| !out.iter().any(|o| o.eq_ignore_ascii_case(n)));
+            out[j] = free.expect("the sequence is unbounded");
+        }
+    }
+    out
 }
 
 fn sheet_name(stem: &str) -> String {
@@ -1334,8 +1465,8 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
 
     #[test]
     fn quoted_fields() {
-        assert_eq!(split_fields(r#"a,"b,c","say ""hi""", d "#, Delimiter::Comma), ["a", "b,c", "say \"hi\"", "d"]);
-        assert_eq!(split_fields(r#""two words" x  "y z""#, Delimiter::Whitespace), ["two words", "x", "y z"]);
+        assert_eq!(split_fields(r#"a,"b,c","say ""hi""", d "#, &Delimiter::Comma), ["a", "b,c", "say \"hi\"", "d"]);
+        assert_eq!(split_fields(r#""two words" x  "y z""#, &Delimiter::Whitespace), ["two words", "x", "y z"]);
         let imp = parse("name,value\n\"Smith, J\",1\n\"Doe, A\",2\n\"Roe, B\",3\n");
         assert_eq!(col(&imp, 0).text().unwrap(), ["Smith, J", "Doe, A", "Roe, B"]);
         assert_eq!(imp.detected.delimiter, Delimiter::Comma);
@@ -1629,5 +1760,81 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         let imp = parse_ascii("1\n", &"x".repeat(50), &AsciiOptions::default()).unwrap();
         assert_eq!(imp.workbook.sheets[0].name.chars().count(), 31);
         assert_eq!(parse_ascii("1\n", "", &AsciiOptions::default()).unwrap().workbook.sheets[0].name, "Sheet1");
+    }
+
+    fn parse_with(text: &str, opts: &AsciiOptions) -> AsciiImport {
+        parse_ascii(text, "run1", opts).unwrap()
+    }
+
+    #[test]
+    fn a_multi_character_delimiter_splits_as_a_whole_string() {
+        let text = "t||i\n1||2.5\n2||3.5\n3||4.5\n4||5.5\n";
+        let opts = AsciiOptions { delimiter: Delimiter::from_text("||").unwrap(), ..AsciiOptions::default() };
+        let imp = parse_with(text, &opts);
+        let cols = &imp.workbook.sheets[0].columns;
+        assert_eq!(cols.len(), 2);
+        assert_eq!(cols[1].numeric().unwrap()[..], [2.5, 3.5, 4.5, 5.5]);
+        assert_eq!(cols[1].long_name, "i");
+        // A lone `|` inside a field is not a separator; a quoted field may hold the whole string.
+        assert_eq!(split_fields("a|b||\"c||d\"||e", &Delimiter::Multi("||".into())), ["a|b", "c||d", "e"]);
+        assert_eq!(Delimiter::from_text("|"), Some(Delimiter::Other('|')));
+        assert_eq!(Delimiter::from_text(""), None);
+        let empty = AsciiOptions { delimiter: Delimiter::Multi(String::new()), ..AsciiOptions::default() };
+        assert!(parse_ascii(text, "x", &empty).is_err());
+    }
+
+    #[test]
+    fn fixed_width_columns_are_cut_by_the_widths_and_the_last_width_repeats() {
+        let text = "  x   y   z\n 1.0 2.5 3.5\n 2.0 3.5 4.5\n 3.0 4.5 5.5\n 4.0 5.5 6.5\n";
+        let opts = AsciiOptions { delimiter: Delimiter::Fixed(vec![4]), ..AsciiOptions::default() };
+        let imp = parse_with(text, &opts);
+        let cols = &imp.workbook.sheets[0].columns;
+        assert_eq!(cols.len(), 3, "the single width applies to every column");
+        assert_eq!(cols[2].numeric().unwrap()[..], [3.5, 4.5, 5.5, 6.5]);
+        assert_eq!(cols[0].long_name, "x");
+        // Different widths, and a value that touches its neighbour (no delimiter at all).
+        let glued = "ab12.5\ncd13.5\nef14.5\ngh15.5\n";
+        let opts = AsciiOptions { delimiter: Delimiter::Fixed(vec![2, 2, 3]), ..AsciiOptions::default() };
+        let imp = parse_with(glued, &opts);
+        let cols = &imp.workbook.sheets[0].columns;
+        assert_eq!(cols.len(), 3);
+        assert_eq!(cols[1].numeric().unwrap()[..], [12.0, 13.0, 14.0, 15.0]);
+        assert_eq!(cols[2].numeric().unwrap()[..], [0.5; 4]);
+        assert_eq!(parse_widths("8, 12 10"), Some(vec![8, 12, 10]));
+        assert_eq!(parse_widths("8,x"), None);
+        assert_eq!(parse_widths("0"), None);
+        assert_eq!(parse_widths(" "), None);
+        let bad = AsciiOptions { delimiter: Delimiter::Fixed(vec![]), ..AsciiOptions::default() };
+        assert!(parse_ascii(glued, "x", &bad).is_err());
+    }
+
+    #[test]
+    fn the_short_name_line_names_the_columns_and_unusable_cells_keep_the_automatic_name() {
+        let text = "Pot (V),Cur-rent,Cur-rent,3rd\nvolt,amp,amp,x\n1,2,3,4\n2,3,4,5\n3,4,5,6\n4,5,6,7\n";
+        let opts = AsciiOptions { short_name_line: 1, long_name_line: Some(2), ..AsciiOptions::default() };
+        let imp = parse_with(text, &opts);
+        let names: Vec<_> = imp.workbook.sheets[0].columns.iter().map(|c| c.short_name.as_str()).collect();
+        // `Pot (V)` loses its spaces and brackets, a repeated name and a name that starts with a
+        // digit fall back to the automatic one.
+        assert_eq!(names, ["PotV", "Current", "C", "D"]);
+        assert_eq!(imp.workbook.sheets[0].columns[0].long_name, "volt");
+        assert!(imp.warnings.iter().all(|w| !w.contains("header")), "{:?}", imp.warnings);
+    }
+
+    #[test]
+    fn data_import_options_can_leave_the_labels_and_the_names_alone() {
+        let text = "t,i\ns,A\n1,2\n2,3\n3,4\n4,5\n";
+        let kept = parse_with(text, &AsciiOptions::default());
+        assert_eq!(kept.workbook.sheets[0].columns[1].long_name, "i");
+        assert_eq!(kept.workbook.sheets[0].name, "run1");
+        assert_eq!(kept.workbook.long_name, "run1");
+        let opts =
+            AsciiOptions { rename_columns: false, rename_sheet: false, rename_book: false, ..Default::default() };
+        let plain = parse_with(text, &opts);
+        let cols = &plain.workbook.sheets[0].columns;
+        assert_eq!((cols[1].long_name.as_str(), cols[1].units.as_str()), ("", ""));
+        assert_eq!(cols[1].numeric().unwrap().len(), 4, "the header lines are still skipped");
+        assert_eq!(plain.workbook.sheets[0].name, "Sheet1");
+        assert_eq!(plain.workbook.long_name, "");
     }
 }

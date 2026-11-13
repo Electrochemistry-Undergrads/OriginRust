@@ -30,6 +30,7 @@ mod imp {
 
 #[cfg(unix)]
 mod imp {
+    #[allow(clippy::useless_conversion)] // tm_gmtoff is i64 on macOS and i32 on Linux
     pub fn offset() -> i64 {
         // SAFETY: `localtime_r` writes only into the structure given to it.
         unsafe {

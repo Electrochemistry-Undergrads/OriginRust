@@ -8,7 +8,7 @@
 //! wildcard pattern into the list of files.
 
 use crate::{ImportKind, ascii, chi, import_file};
-use sheaf_core::{Column, ColumnData, Project, WindowId, Workbook, Worksheet};
+use sheaf_core::{Column, ColumnData, ColumnId, Project, WindowId, Workbook, Worksheet};
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
@@ -31,22 +31,40 @@ pub enum ImportMode {
 }
 
 impl ImportMode {
+    /// In the order of Origin's drop-down: replace first, then the four ways to add.
     pub const ALL: [ImportMode; 5] = [
+        ImportMode::ReplaceSheet,
         ImportMode::NewBook,
         ImportMode::NewSheet,
-        ImportMode::ReplaceSheet,
         ImportMode::NewColumns,
         ImportMode::NewRows,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
-            ImportMode::NewBook => "New book",
-            ImportMode::NewSheet => "New sheet",
-            ImportMode::ReplaceSheet => "Replace the data",
-            ImportMode::NewColumns => "New columns",
-            ImportMode::NewRows => "New rows",
+            ImportMode::NewBook => "New Books",
+            ImportMode::NewSheet => "New Sheets",
+            ImportMode::ReplaceSheet => "Replace Existing Data",
+            ImportMode::NewColumns => "New Columns",
+            ImportMode::NewRows => "New Rows",
         }
+    }
+}
+
+/// Options of [`place_workbook_with`] (Origin's "Data Import Options").
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct PlaceOptions {
+    /// The sheet takes the name that the importer gave it (the file name). When false, a replaced
+    /// sheet keeps its name and a new sheet gets the next free `Sheet<n>`.
+    pub rename_sheet: bool,
+    /// When data is replaced, graphs that plot the sheet's columns follow the new data: a plot
+    /// that was limited to a row range plots the whole new column. When false the old range stays.
+    pub apply_range_to_plots: bool,
+}
+
+impl Default for PlaceOptions {
+    fn default() -> Self {
+        PlaceOptions { rename_sheet: true, apply_range_to_plots: true }
     }
 }
 
@@ -70,6 +88,21 @@ pub struct Placed {
 /// Puts `book` (as an importer returns it) into the project. Without a valid `target`, every mode
 /// makes a new book, so the first file of a batch can use the same call as the others.
 pub fn place_workbook(project: &mut Project, book: Workbook, mode: ImportMode, target: Option<Target>) -> Placed {
+    place_workbook_with(project, book, mode, target, PlaceOptions::default())
+}
+
+/// [`place_workbook`] with the Data Import Options.
+///
+/// Replacing the data of a sheet keeps the identity of its columns by position: the first new
+/// column takes over the identifier of the first old column, and so on. A graph that plots those
+/// columns therefore keeps plotting them, now with the new data.
+pub fn place_workbook_with(
+    project: &mut Project,
+    book: Workbook,
+    mode: ImportMode,
+    target: Option<Target>,
+    options: PlaceOptions,
+) -> Placed {
     let valid = target.filter(|t| project.workbook(t.book).is_some_and(|b| t.sheet < b.sheets.len()));
     let (Some(t), false) = (valid, mode == ImportMode::NewBook) else {
         let id = project.adopt_workbook(book);
@@ -87,12 +120,18 @@ pub fn place_workbook(project: &mut Project, book: Workbook, mode: ImportMode, t
         unreachable!("the target was checked above");
     };
     let mut first = t.sheet;
+    let mut kept_ids: Vec<ColumnId> = Vec::new();
+    if !options.rename_sheet {
+        for sheet in &mut sheets {
+            sheet.name = String::new();
+        }
+    }
     match mode {
         ImportMode::NewBook => unreachable!("handled above"),
         ImportMode::NewSheet => {
             first = dest.sheets.len();
             for mut sheet in sheets {
-                sheet.name = unique_sheet_name(dest, &sheet.name);
+                sheet.name = new_sheet_name(dest, &sheet.name);
                 dest.sheets.push(sheet);
             }
             dest.active_sheet = first;
@@ -100,12 +139,21 @@ pub fn place_workbook(project: &mut Project, book: Workbook, mode: ImportMode, t
         ImportMode::ReplaceSheet => {
             let mut it = sheets.into_iter();
             if let Some(new) = it.next() {
-                let name = unique_sheet_name_except(dest, &new.name, t.sheet);
-                dest.sheets[t.sheet] = Worksheet { name, columns: new.columns, filter: None };
+                let name = if new.name.is_empty() {
+                    dest.sheets[t.sheet].name.clone()
+                } else {
+                    unique_sheet_name_except(dest, &new.name, t.sheet)
+                };
+                let mut columns = new.columns;
+                for (old, col) in dest.sheets[t.sheet].columns.iter().zip(columns.iter_mut()) {
+                    col.id = old.id;
+                    kept_ids.push(old.id);
+                }
+                dest.sheets[t.sheet] = Worksheet { name, columns, filter: None };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.
             for mut sheet in it {
-                sheet.name = unique_sheet_name(dest, &sheet.name);
+                sheet.name = new_sheet_name(dest, &sheet.name);
                 dest.sheets.push(sheet);
             }
         }
@@ -132,7 +180,34 @@ pub fn place_workbook(project: &mut Project, book: Workbook, mode: ImportMode, t
             }
         }
     }
+    if options.apply_range_to_plots && !kept_ids.is_empty() {
+        free_plot_ranges(project, &kept_ids);
+    }
     Placed { book: t.book, sheet: first, warnings }
+}
+
+/// Lets every plot of the given columns use all rows of its column: a plot keeps its row range
+/// only while the data it was set for is there.
+fn free_plot_ranges(project: &mut Project, columns: &[ColumnId]) {
+    for window in &mut project.windows {
+        if let sheaf_core::Window::Graph(g) = window {
+            for plot in g.layers.iter_mut().flat_map(|l| l.plots.iter_mut()) {
+                if plot.rows.is_some() && (columns.contains(&plot.y) || plot.x.is_some_and(|x| columns.contains(&x))) {
+                    plot.rows = None;
+                }
+            }
+        }
+    }
+}
+
+/// The name of a sheet that is added to `book`: the wanted name made unique, or, when there is
+/// none, the next free `Sheet<n>`.
+fn new_sheet_name(book: &Workbook, wanted: &str) -> String {
+    if wanted.is_empty() {
+        let taken = |n: &str| book.sheets.iter().any(|s| s.name.eq_ignore_ascii_case(n));
+        return (book.sheets.len() + 1..).map(|k| format!("Sheet{k}")).find(|n| !taken(n)).expect("unbounded");
+    }
+    unique_sheet_name(book, wanted)
 }
 
 fn unique_sheet_name(book: &Workbook, wanted: &str) -> String {
@@ -584,6 +659,48 @@ mod tests {
         assert_eq!(s.columns.len(), 1);
         assert_eq!(s.columns[0].long_name, "z");
         assert_eq!(p.workbooks().count(), 1);
+    }
+
+    #[test]
+    fn replacing_data_keeps_the_plots_and_applies_the_new_range_when_asked() {
+        use sheaf_core::template::Template;
+        for apply in [true, false] {
+            let (mut p, t) = project_with(book(
+                "old",
+                vec![num("A", "x", &[1.0, 2.0, 3.0, 4.0]), num("B", "y", &[3.0, 4.0, 5.0, 6.0])],
+            ));
+            let ids: Vec<ColumnId> = p.workbook(t.book).unwrap().sheets[0].columns.iter().map(|c| c.id).collect();
+            let g = p.plot_columns(Template::Line, &[ids[1]]).unwrap();
+            p.graph_mut(g).unwrap().layers[0].plots[0].rows = Some((0, 4));
+            let new =
+                book("new", vec![num("A", "x", &(1..=9).map(f64::from).collect::<Vec<_>>()), num("B", "y", &[1.0; 9])]);
+            let options = PlaceOptions { apply_range_to_plots: apply, ..PlaceOptions::default() };
+            place_workbook_with(&mut p, new, ImportMode::ReplaceSheet, Some(t), options);
+            let sheet = &p.workbook(t.book).unwrap().sheets[0];
+            assert_eq!(sheet.columns[1].id, ids[1], "the plot still finds its column");
+            let plot = &p.graphs().next().unwrap().layers[0].plots[0];
+            assert_eq!(plot.y, ids[1]);
+            assert_eq!(plot.rows, if apply { None } else { Some((0, 4)) }, "apply = {apply}");
+            assert_eq!(p.numeric(plot.y).unwrap().len(), 9);
+        }
+    }
+
+    #[test]
+    fn not_renaming_the_sheet_keeps_a_replaced_name_and_numbers_new_sheets() {
+        let (mut p, t) = project_with(book("old", vec![num("A", "x", &[1.0])]));
+        let keep = PlaceOptions { rename_sheet: false, ..PlaceOptions::default() };
+        place_workbook_with(&mut p, book("new", vec![num("A", "x", &[2.0])]), ImportMode::ReplaceSheet, Some(t), keep);
+        assert_eq!(p.workbook(t.book).unwrap().sheets[0].name, "old");
+        place_workbook_with(&mut p, book("new", vec![num("A", "x", &[2.0])]), ImportMode::NewSheet, Some(t), keep);
+        place_workbook_with(&mut p, book("new", vec![num("A", "x", &[2.0])]), ImportMode::NewSheet, Some(t), keep);
+        let names: Vec<_> = p.workbook(t.book).unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+        assert_eq!(names, ["old", "Sheet2", "Sheet3"]);
+    }
+
+    #[test]
+    fn the_modes_carry_origins_names_in_origins_order() {
+        let labels: Vec<_> = ImportMode::ALL.iter().map(|m| m.label()).collect();
+        assert_eq!(labels, ["Replace Existing Data", "New Books", "New Sheets", "New Columns", "New Rows"]);
     }
 
     #[test]

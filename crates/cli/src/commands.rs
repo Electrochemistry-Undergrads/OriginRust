@@ -64,15 +64,22 @@ pub(crate) fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
             "tab" | "\\t" => Delimiter::Tab,
             "semicolon" | ";" => Delimiter::Semicolon,
             "space" | "whitespace" | " " => Delimiter::Whitespace,
-            other => {
-                let mut chars = other.chars();
-                match (chars.next(), chars.next()) {
-                    (Some(c), None) => Delimiter::Other(c),
-                    _ => bail!("--delimiter must be comma, tab, semicolon, space or a single character, not '{d}'"),
-                }
-            }
+            _ => match Delimiter::from_text(d) {
+                Some(delimiter) => delimiter,
+                None => bail!("--delimiter must not be empty"),
+            },
         };
     }
+    if !r.fixed_width.is_empty() {
+        if r.fixed_width.contains(&0) {
+            bail!("--fixed-width: every width must be above 0");
+        }
+        o.delimiter = Delimiter::Fixed(r.fixed_width.clone());
+    }
+    o.short_name_line = r.short_name_line.unwrap_or(0);
+    o.rename_columns = !r.no_rename_columns;
+    o.rename_sheet = !r.no_rename_sheet;
+    o.rename_book = !r.no_rename_book;
     o.header_lines = r.header_lines;
     o.decimal_comma = r.decimal_comma;
     o.thousands = match r.thousands {

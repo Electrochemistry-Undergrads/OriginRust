@@ -72,3 +72,11 @@ LabTalk command that opens the dialog (`-Command 'impasc fname:="%WORK%file.txt"
 i-th combo box (and tell the dialog), `@T:i,text` set the i-th edit box, `@B:text` click a button, `@W:ms` wait, or
 SendKeys text; positions are pixels from the top-left corner of the dialog. `-After` runs LabTalk after the dialog closed
 (`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin.
+
+## Column format reference runs
+
+`colfmt-*.lines.txt` are line scripts (run with `run-labtalk-lines.ps1`, which prints strings as raw bytes in the console
+encoding, so micro signs come out wrong; run them through a copy that sets `[Console]::OutputEncoding` to UTF-8) that set a
+column's `format`, `subformat`, `digitMode` and `digits` and print `cell(r,1)$`, the text Origin shows: Month and Day of
+Week numbers (`colfmt-weekday-month`), Engineering digits and letters (`colfmt-engineering-digits`,
+`colfmt-engineering-carry`, `colfmt-significant-digits`). The findings are in `docs/spec/workbook-model.md`.

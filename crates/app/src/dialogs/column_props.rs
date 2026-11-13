@@ -321,8 +321,8 @@ fn choose_kind(storage: &mut Storage, format: &mut NumberFormat, kind: usize) {
 
 /// The two rows "Format" (what the cells hold: Numeric, Text, Text & Numeric, Time, Date, Month,
 /// Day of Week) and "Display" (how they are shown). Numbers have the display choices Automatic,
-/// Decimal places, Scientific, Significant digits, Engineering (with or without an SI prefix) and
-/// Decimal:1000 (thousands separators); dates and times have their patterns, months and weekdays
+/// Decimal places, Scientific, Significant digits, Engineering (default digits, decimal places or
+/// significant digits) and Decimal:1,000 (thousands separators); dates and times have their patterns, months and weekdays
 /// their name styles.
 fn format_rows(ui: &mut egui::Ui, storage: &mut Storage, format: &mut NumberFormat) {
     use sheaf_core::datetime::{DatePattern, TimePattern};
@@ -400,19 +400,24 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
         NumberFormat::Decimal(d) => (1, d),
         NumberFormat::Scientific(d) => (2, d),
         NumberFormat::Significant(d) => (3, d),
-        NumberFormat::Engineering(d) => (4, d),
-        NumberFormat::EngineeringSi(d) => (5, d),
-        NumberFormat::DecimalGrouped(d) => (6, d),
+        NumberFormat::EngineeringAuto => (4, 3),
+        NumberFormat::Engineering(d) | NumberFormat::EngineeringSi(d) => (5, d),
+        NumberFormat::EngineeringSig(n) => (6, n),
+        NumberFormat::DecimalGrouped(d) => (7, d),
         _ => (0, 3),
     };
+    // Origin's Display list is Decimal:1000, Scientific:1E3, Engineering:1K, Decimal:1,000 and its
+    // Digits list Default Decimal Digits, Set Decimal Places=, Significant Digits=; Sheaf folds the
+    // two lists into one.
     let styles = [
         "Automatic",
         "Decimal places",
         "Scientific",
         "Significant digits",
-        "Engineering",
-        "Engineering (SI prefix)",
-        "Decimal:1000",
+        "Engineering:1K (default digits)",
+        "Engineering:1K (decimal places)",
+        "Engineering:1K (significant digits)",
+        "Decimal:1,000",
     ];
     let mut d = digits;
     ui.horizontal(|ui| {
@@ -421,7 +426,7 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
                 ui.selectable_value(&mut style, i, *n);
             }
         });
-        if style != 0 {
+        if style != 0 && style != 4 {
             ui.add(DragValue::new(&mut d).range(0..=15));
         }
     });
@@ -429,9 +434,10 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
         1 => NumberFormat::Decimal(d),
         2 => NumberFormat::Scientific(d),
         3 => NumberFormat::Significant(d.max(1)),
-        4 => NumberFormat::Engineering(d),
+        4 => NumberFormat::EngineeringAuto,
         5 => NumberFormat::EngineeringSi(d),
-        6 => NumberFormat::DecimalGrouped(d),
+        6 => NumberFormat::EngineeringSig(d.max(1)),
+        7 => NumberFormat::DecimalGrouped(d),
         _ => NumberFormat::General,
     };
 }

@@ -58,14 +58,23 @@ pub enum NumberFormat {
     Scientific(u8),
     /// A fixed number of significant digits.
     Significant(u8),
-    /// Engineering notation: the exponent is a multiple of 3 (`15.0E3`), with this many digits
-    /// after the point.
+    /// Origin's Engineering display with this many digits after the point of the mantissa
+    /// (`15.0k`, `2.50m`, `3.3M`); same as [`NumberFormat::EngineeringSi`]. An older Sheaf build
+    /// wrote exponents such as `15.0E3` for this variant; project files that hold it now show the
+    /// SI letters.
     Engineering(u8),
-    /// Engineering notation with an SI prefix letter (`15.0k`, `2.50m`, `3.3M`), this many digits
-    /// after the point. Outside the prefixes (below 1E-24 or from 1E27) the exponent form is used.
+    /// Origin's Engineering display ("Engineering:1K") with this many digits after the point of
+    /// the mantissa (`15.0k`, `2.50m`, `3.3M`): the SI letter a (1E-18) to E (1E18), outside it
+    /// the exponent in steps of 3 in lower case (`1.5e21`, `15.0e-24`).
     EngineeringSi(u8),
+    /// Engineering display with this many significant digits in the mantissa (Origin's
+    /// "Significant Digits=" with Engineering).
+    EngineeringSig(u8),
+    /// Engineering display with Origin's default digits: up to 5 digits after the point of the
+    /// mantissa, trailing zeros dropped (`15k`, `2.5m`, `1.23457M`).
+    EngineeringAuto,
     /// Decimal notation with a comma between thousands (`1,234,567.50`), this many digits after
-    /// the point (Origin's `Decimal:1000`).
+    /// the point (Origin's `Decimal:1,000`).
     DecimalGrouped(u8),
     /// The whole part of the number is a month (1 = January, repeating every 12), shown by name;
     /// zero, negative numbers and numbers beyond a 32-bit integer show nothing.
@@ -95,8 +104,13 @@ impl NumberFormat {
             NumberFormat::Decimal(d) => format!("{:.*}", usize::from(d), v),
             NumberFormat::Scientific(d) => format_scientific(v, usize::from(d)),
             NumberFormat::Significant(d) => format_general(v, usize::from(d.max(1))),
-            NumberFormat::Engineering(d) => format_engineering(v, usize::from(d), false),
-            NumberFormat::EngineeringSi(d) => format_engineering(v, usize::from(d), true),
+            NumberFormat::Engineering(d) | NumberFormat::EngineeringSi(d) => {
+                format_engineering(v, EngineeringDigits::Decimals(usize::from(d)))
+            }
+            NumberFormat::EngineeringSig(n) => {
+                format_engineering(v, EngineeringDigits::Significant(usize::from(n.max(1))))
+            }
+            NumberFormat::EngineeringAuto => format_engineering(v, EngineeringDigits::Auto),
             NumberFormat::DecimalGrouped(d) => group_thousands(&format!("{:.*}", usize::from(d), v)),
             // Origin's measured rule: the whole part counts, 1 is January and 13 is January again;
             // zero, negative numbers and numbers beyond a 32-bit integer show nothing.
@@ -152,31 +166,113 @@ fn group_thousands(s: &str) -> String {
     out
 }
 
-/// SI prefixes from 1E-24 (yocto) to 1E24 (yotta), in steps of 3 in the exponent.
-const SI_PREFIXES: [&str; 17] =
-    ["y", "z", "a", "f", "p", "n", "\u{b5}", "m", "", "k", "M", "G", "T", "P", "E", "Z", "Y"];
+/// How many digits Engineering shows in the mantissa.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum EngineeringDigits {
+    /// This many digits after the point ("Set Decimal Places=").
+    Decimals(usize),
+    /// This many significant digits ("Significant Digits=").
+    Significant(usize),
+    /// Origin's "Default Decimal Digits": 5 after the point, trailing zeros dropped.
+    Auto,
+}
 
-/// Engineering notation: the mantissa is from 1 up to 1000 and the exponent a multiple of 3. With
-/// `si` the exponent is the SI prefix letter where one exists.
-pub fn format_engineering(v: f64, digits: usize, si: bool) -> String {
-    if v == 0.0 {
-        return format!("{:.*}{}", digits, 0.0, if si { "" } else { "E0" });
+/// The SI letters Origin's Engineering display has, from 1E-18 (`a`) to 1E18 (`E`), in steps of
+/// three in the exponent. The micro sign is U+00B5. Beyond them the exponent is written out.
+const SI_PREFIXES: [&str; 13] = ["a", "f", "p", "n", "\u{b5}", "m", "", "k", "M", "G", "T", "P", "E"];
+
+/// `x` (finite, not negative) written with `decimals` digits after the point, rounding ties up
+/// (Origin rounds 2.5 to 3 and 12.5 to 13 where C printf gives 2 and 12).
+fn fixed_half_up(x: f64, decimals: usize) -> String {
+    // Fifty digits show the exact value of every double that matters here, so a tie is a tie.
+    let exact = format!("{x:.50}");
+    let (int, frac) = exact.split_once('.').expect("a point");
+    let mut digits: Vec<u8> = int.bytes().chain(frac.bytes().take(decimals)).map(|b| b - b'0').collect();
+    if frac.as_bytes().get(decimals).is_some_and(|&b| b >= b'5') {
+        let mut i = digits.len();
+        loop {
+            if i == 0 {
+                digits.insert(0, 1);
+                break;
+            }
+            i -= 1;
+            if digits[i] == 9 {
+                digits[i] = 0;
+            } else {
+                digits[i] += 1;
+                break;
+            }
+        }
     }
-    // Round to the digits first so that 999.96 with 1 digit becomes 1.0k, not 1000.0.
-    let mut exp = (v.abs().log10().floor() as i32).div_euclid(3) * 3;
-    let mut mantissa = v / 10f64.powi(exp);
-    let scale = 10f64.powi(digits as i32);
-    if (mantissa.abs() * scale).round() / scale >= 1000.0 {
-        exp += 3;
-        mantissa = v / 10f64.powi(exp);
+    let int_len = digits.len() - decimals;
+    let mut text: String = digits[..int_len].iter().map(|d| char::from(b'0' + d)).collect();
+    if decimals > 0 {
+        text.push('.');
+        text.extend(digits[int_len..].iter().map(|d| char::from(b'0' + d)));
     }
-    let text = format!("{mantissa:.digits$}");
-    let idx = exp / 3 + 8;
-    if si && (0..SI_PREFIXES.len() as i32).contains(&idx) {
-        format!("{text}{}", SI_PREFIXES[idx as usize])
+    text
+}
+
+/// Base-10 exponent of `x` (finite, positive) after rounding it to `sig` significant digits.
+fn exponent_rounded(x: f64, sig: usize) -> i32 {
+    let sci = format!("{:.*e}", sig - 1, x);
+    sci.split_once('e').and_then(|(_, e)| e.parse().ok()).expect("exponent form")
+}
+
+/// Origin's Engineering display: the mantissa is from 1 up to 1000 and the exponent a multiple of
+/// 3, written as an SI letter from `a` to `E` (`15.0k`, `2.50m`, `150.0\u{b5}`) and as a lower
+/// case exponent beyond (`1.5e21`, `150.0e-24`). Measured in Origin 2016 (workbook-model.md):
+/// the letter is picked from the value rounded to 6 significant digits, and the mantissa is not
+/// corrected afterwards (999.96 with one digit is `1000.0`, not `1.0k`).
+pub fn format_engineering(v: f64, digits: EngineeringDigits) -> String {
+    let sign = if v.is_sign_negative() && v != 0.0 { "-" } else { "" };
+    let x = v.abs();
+    if x == 0.0 {
+        return match digits {
+            EngineeringDigits::Decimals(d) => format!("{x:.d$}"),
+            EngineeringDigits::Significant(n) => format!("{x:.*}", n - 1),
+            EngineeringDigits::Auto => "0".to_string(),
+        };
+    }
+    let exp3 = exponent_rounded(x, 6).div_euclid(3) * 3;
+    let m = x / 10f64.powi(exp3);
+    let body = match digits {
+        EngineeringDigits::Decimals(d) => fixed_half_up(m, d),
+        EngineeringDigits::Auto => trim_zeros(&fixed_half_up(m, 5)).to_string(),
+        EngineeringDigits::Significant(n) => significant_mantissa(m, n),
+    };
+    let idx = exp3 / 3 + 6;
+    if (0..SI_PREFIXES.len() as i32).contains(&idx) {
+        format!("{sign}{body}{}", SI_PREFIXES[idx as usize])
     } else {
-        format!("{text}E{exp}")
+        format!("{sign}{body}e{exp3}")
     }
+}
+
+/// A mantissa with `n` significant digits: plain with the decimals that leaves; when the integer
+/// part has more digits than `n` the form `1.2E+02`, except that a power of ten with one digit
+/// more than `n` stays plain (`100` with two digits). Origin's rule, measured.
+fn significant_mantissa(m: f64, n: usize) -> String {
+    let mut e0 = m.log10().floor() as i32;
+    // `log10` can land just below an exact power of ten.
+    if 10f64.powi(e0 + 1) <= m {
+        e0 += 1;
+    }
+    let decimals = n as i32 - 1 - e0;
+    if decimals >= 0 {
+        return fixed_half_up(m, decimals as usize);
+    }
+    if decimals == -1 && m == 10f64.powi(e0) {
+        return fixed_half_up(m, 0);
+    }
+    // Scientific: n - 1 digits after the point, the exponent with a sign and two digits at least.
+    let mut text = fixed_half_up(m / 10f64.powi(e0), n - 1);
+    let mut e = e0;
+    if text.starts_with("10") {
+        text = fixed_half_up(1.0, n - 1);
+        e += 1;
+    }
+    format!("{text}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
 }
 
 /// Formats with at most `sig` significant digits and no trailing zeros.
@@ -345,20 +441,103 @@ mod tests {
     }
 
     #[test]
-    fn engineering_formats_use_exponents_in_steps_of_three() {
-        assert_eq!(NumberFormat::Engineering(1).format(15000.0), "15.0E3");
-        assert_eq!(NumberFormat::Engineering(2).format(0.00123), "1.23E-3");
-        assert_eq!(NumberFormat::Engineering(0).format(123456.0), "123E3");
-        assert_eq!(NumberFormat::Engineering(1).format(999.96), "1.0E3");
-        assert_eq!(NumberFormat::Engineering(1).format(-4.2), "-4.2E0");
-        assert_eq!(NumberFormat::Engineering(1).format(0.0), "0.0E0");
-        assert_eq!(NumberFormat::EngineeringSi(1).format(15000.0), "15.0k");
-        assert_eq!(NumberFormat::EngineeringSi(2).format(2.5e-3), "2.50m");
-        assert_eq!(NumberFormat::EngineeringSi(1).format(3.3e6), "3.3M");
-        assert_eq!(NumberFormat::EngineeringSi(1).format(2e-9), "2.0n");
-        assert_eq!(NumberFormat::EngineeringSi(1).format(47.0), "47.0");
-        assert_eq!(NumberFormat::EngineeringSi(1).format(1e30), "1.0E30");
+    fn engineering_follows_origins_measured_digits_and_letters() {
+        // Texts measured in Origin 2016 (Numeric column, Display Engineering:1K; workbook-model.md).
+        let dec = |d: u8, v: f64| NumberFormat::EngineeringSi(d).format(v);
+        assert_eq!(dec(1, 15000.0), "15.0k");
+        assert_eq!(dec(2, 2.5e-3), "2.50m");
+        assert_eq!(dec(0, 2.5e-3), "3m");
+        assert_eq!(dec(1, 3.3e6), "3.3M");
+        assert_eq!(dec(1, 2e-9), "2.0n");
+        assert_eq!(dec(1, 47.0), "47.0");
+        assert_eq!(dec(1, -15000.0), "-15.0k");
+        assert_eq!(dec(1, 0.0), "0.0");
+        assert_eq!(dec(0, 0.0), "0");
+        assert_eq!(dec(2, 15e-5), "150.00\u{b5}");
+        // The letters run from a to E; beyond them the exponent is a multiple of 3, lower case.
+        let letters: Vec<String> =
+            [-19, -17, -16, -14, -8, -5, -2, 0, 2, 4, 6, 7, 10, 12, 14, 16, 18, 19, 22, 24, 25, 30]
+                .iter()
+                .map(|e| dec(1, 1.5 * 10f64.powi(*e)))
+                .collect();
+        let want = [
+            "150.0e-21",
+            "15.0a",
+            "150.0a",
+            "15.0f",
+            "15.0n",
+            "15.0\u{b5}",
+            "15.0m",
+            "1.5",
+            "150.0",
+            "15.0k",
+            "1.5M",
+            "15.0M",
+            "15.0G",
+            "1.5T",
+            "150.0T",
+            "15.0P",
+            "1.5E",
+            "15.0E",
+            "15.0e21",
+            "1.5e24",
+            "15.0e24",
+            "1.5e30",
+        ];
+        for (got, want) in letters.iter().zip(want) {
+            assert_eq!(got, want);
+        }
+        assert_eq!(dec(1, 1.5e-24), "1.5e-24");
+        assert_eq!(dec(1, 1.5e-25), "150.0e-27");
+        assert_eq!(dec(1, 1.5e-30), "1.5e-30");
+        // Rounding ties go up and the letter does not change after rounding.
+        assert_eq!(dec(0, 1500.0), "2k");
+        assert_eq!(dec(0, 999.96), "1000");
+        assert_eq!(dec(1, 999.96), "1000.0");
+        assert_eq!(dec(1, 999999.96), "1.0M");
+        assert_eq!(dec(1, 999999.0), "1000.0k");
+        assert_eq!(dec(1, 0.99999), "1000.0m");
+        assert_eq!(dec(1, 123456789012.0), "123.5G");
+        assert_eq!(NumberFormat::Engineering(1).format(15000.0), "15.0k");
         assert_eq!(NumberFormat::EngineeringSi(1).format(f64::NAN), "--");
+    }
+
+    #[test]
+    fn engineering_default_and_significant_digits_follow_origin() {
+        let auto = |v: f64| NumberFormat::EngineeringAuto.format(v);
+        assert_eq!(auto(15000.0), "15k");
+        assert_eq!(auto(0.0025), "2.5m");
+        assert_eq!(auto(1234567.0), "1.23457M");
+        assert_eq!(auto(12345.678), "12.34568k");
+        assert_eq!(auto(999999.5), "1M");
+        assert_eq!(auto(0.1), "100m");
+        assert_eq!(auto(0.0), "0");
+        assert_eq!(auto(-15000.0), "-15k");
+        let sig = |n: u8, v: f64| NumberFormat::EngineeringSig(n).format(v);
+        assert_eq!(sig(3, 15000.0), "15.0k");
+        assert_eq!(sig(3, 1234567.0), "1.23M");
+        assert_eq!(sig(3, 0.0025), "2.50m");
+        assert_eq!(sig(3, 1.0), "1.00");
+        assert_eq!(sig(3, 0.0), "0.00");
+        assert_eq!(sig(2, 12345.678), "12k");
+        assert_eq!(sig(1, 2.5e-3), "3m");
+        assert_eq!(sig(2, 12.5), "13");
+        assert_eq!(sig(4, 100.0), "100.0");
+        // More integer digits than significant digits give the exponent form, except a power of ten
+        // with one digit too many.
+        assert_eq!(sig(1, 15.0), "2E+01");
+        assert_eq!(sig(1, 100.0), "1E+02");
+        assert_eq!(sig(1, 10.0), "10");
+        assert_eq!(sig(2, 100.0), "100");
+        assert_eq!(sig(2, 110.0), "1.1E+02");
+        assert_eq!(sig(2, 101.0), "1.0E+02");
+        assert_eq!(sig(2, 999.9), "1.0E+03");
+        assert_eq!(sig(3, 999.9), "1000");
+        assert_eq!(sig(2, 99.99), "100");
+        assert_eq!(sig(1, 9.5), "10");
+        assert_eq!(sig(2, 123456789012.0), "1.2E+02G");
+        assert_eq!(sig(1, 1e-24), "1e-24");
+        assert_eq!(sig(2, 1e-24), "1.0e-24");
     }
 
     #[test]

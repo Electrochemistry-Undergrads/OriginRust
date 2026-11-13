@@ -10,8 +10,7 @@ use sheaf_core::column::Storage;
 use sheaf_core::format::{NameStyle, NumberFormat};
 use sheaf_core::{ColumnId, Designation, Document, Project};
 
-/// The longest column short name Origin accepts.
-pub const MAX_SHORT_NAME: usize = 18;
+pub use sheaf_core::column::MAX_SHORT_NAME;
 
 pub struct ColumnPropsDialog {
     column: ColumnId,
@@ -210,14 +209,12 @@ impl ColumnPropsDialog {
     /// Writes the fields to the column (and, when asked, the options to the columns to its
     /// right). Returns `false` when the short name is not usable.
     fn apply(&mut self, doc: &mut Document) -> bool {
-        let name = self.short_name.trim().to_string();
-        // Origin's limit for a column short name (public documentation, not measured).
-        if name.chars().count() > MAX_SHORT_NAME {
-            self.problem = Some(format!("The short name may have at most {MAX_SHORT_NAME} characters."));
-            return false;
-        }
-        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            self.problem = Some("The short name may only have letters, digits and underscores.".to_string());
+        // As in Origin, the box keeps letters, digits and dots, drops every other character and cuts
+        // the name to 18 characters; the cleaned name is shown again in the box.
+        let name = sheaf_core::column::clean_short_name(&self.short_name);
+        self.short_name = name.clone();
+        if name.is_empty() {
+            self.problem = Some("The short name needs at least one letter or digit.".to_string());
             return false;
         }
         let taken = doc.project().locate(self.column).is_some_and(|(_, sheet, _)| {

@@ -80,3 +80,6 @@ encoding, so micro signs come out wrong; run them through a copy that sets `[Con
 column's `format`, `subformat`, `digitMode` and `digits` and print `cell(r,1)$`, the text Origin shows: Month and Day of
 Week numbers (`colfmt-weekday-month`), Engineering digits and letters (`colfmt-engineering-digits`,
 `colfmt-engineering-carry`, `colfmt-significant-digits`). The findings are in `docs/spec/workbook-model.md`.
+
+`import-shortnames*.lines.txt` import `import-inputs/shortn2.txt` and `shortn3.txt` with the short-name line option
+(`options.Hdr.SNames`) and print the column names; the rules are in `docs/spec/import-ascii.md`, section 3.

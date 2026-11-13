@@ -5393,16 +5393,13 @@ fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() 
 }
 
 #[test]
-fn column_properties_refuses_a_short_name_longer_than_origins_limit() {
+fn column_properties_cuts_the_short_name_like_origin() {
     let mut h = start(vec![data_file("colprops-longname")]);
     let b = open_column_props(&mut h, "B");
-    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS");
+    // A longer name is cut to 18 characters and characters Origin drops are dropped, no message.
+    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS_T");
     click(&mut h, "OK");
-    assert!(h.state().column_props.is_some(), "the window stays open");
-    assert!(has_label(&h, "The short name may have at most 18 characters."));
-    assert_eq!(project(&h).column(b).unwrap().short_name, "B");
-    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQR");
-    click(&mut h, "OK");
+    assert!(h.state().column_props.is_none(), "the window closes");
     assert_eq!(project(&h).column(b).unwrap().short_name, "ABCDEFGHIJKLMNOPQR");
 }
 

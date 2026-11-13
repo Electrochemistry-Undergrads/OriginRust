@@ -461,7 +461,72 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     }
 }
 
+/// Smallest and largest symbol width of a bubble plot, in points: Origin scales the width linearly
+/// with the Z value, from the smallest to the largest (measured: 8 points with Z from 1 to 9 gave
+/// rings 2.4 and 21 pt wide, 5 pt at Z = 2, 15 pt at Z = 6).
+const BUBBLE_MIN_PT: f64 = 2.0;
+const BUBBLE_MAX_PT: f64 = 20.0;
+
+/// The colour of a colour mapped symbol at `t` in 0..1: blue, cyan, green, yellow, red (a stand-in:
+/// Origin's default colour map was not measured).
+fn map_color(t: f64) -> sheaf_core::Color {
+    const STOPS: [(f64, f64, f64); 5] =
+        [(0.0, 0.0, 255.0), (0.0, 255.0, 255.0), (0.0, 255.0, 0.0), (255.0, 255.0, 0.0), (255.0, 0.0, 0.0)];
+    let x = t.clamp(0.0, 1.0) * (STOPS.len() - 1) as f64;
+    let i = (x.floor() as usize).min(STOPS.len() - 2);
+    let f = x - i as f64;
+    let mix = |a: f64, b: f64| (a + (b - a) * f).round() as u8;
+    sheaf_core::Color::rgb(
+        mix(STOPS[i].0, STOPS[i + 1].0),
+        mix(STOPS[i].1, STOPS[i + 1].1),
+        mix(STOPS[i].2, STOPS[i + 1].2),
+    )
+}
+
+/// The position of `v` between the smallest and largest finite value of `z[from..to]`, 0..1; 0.5
+/// when all values are equal.
+fn z_fraction(z: &[f64], from: usize, to: usize, v: f64) -> f64 {
+    let (lo, hi) = z[from.min(z.len())..to.min(z.len())]
+        .iter()
+        .filter(|x| x.is_finite())
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)));
+    if hi > lo { ((v - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.5 }
+}
+
+/// A scatter plot whose symbols differ: bubbles of different sizes and/or colours, one scene item
+/// per symbol.
+fn draw_varied_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let sym = &pd.plot.symbol;
+    for i in pd.start..pd.end {
+        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
+        let mut style = sym.clone();
+        if let Some(z) = pd.size_z {
+            let v = z.get(i).copied().unwrap_or(f64::NAN);
+            if !v.is_finite() {
+                continue;
+            }
+            style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction(z, pd.start, pd.end, v);
+        }
+        if let Some(z) = pd.color_z {
+            let v = z.get(i).copied().unwrap_or(f64::NAN);
+            if !v.is_finite() {
+                continue;
+            }
+            style.color = map_color(z_fraction(z, pd.start, pd.end, v));
+        }
+        if !near_frame(geom, p, style.size_pt + style.edge_width_pt) {
+            continue;
+        }
+        let mut d = String::new();
+        symbol_path(&mut d, style.shape, p.0, p.1, style.size_pt);
+        out.push(symbol_item(d, &style));
+    }
+}
+
 fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    if pd.size_z.is_some() || pd.color_z.is_some() {
+        return draw_varied_symbols(out, pd, geom);
+    }
     let sym = &pd.plot.symbol;
     let every = sym.every.max(1) as usize;
     let mut d = String::new();

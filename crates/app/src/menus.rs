@@ -598,7 +598,12 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
-                greys(&["Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
+                greys(&["Vertical Drop Line"]),
+                vec![
+                    item("Bubble", Cmd::Plot(Template::Bubble)),
+                    item("Color Mapped", Cmd::Plot(Template::ColorMapped)),
+                    item("Bubble + Color Mapped", Cmd::Plot(Template::BubbleColorMapped)),
+                ],
             ]
             .concat(),
         ),

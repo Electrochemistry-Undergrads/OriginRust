@@ -662,6 +662,9 @@ impl Writer {
         if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box) {
             notes.push("histogram and box plots were written as plain columns of their data".into());
         }
+        if plots.iter().any(|r| r.plot.size_from.is_some() || r.plot.color_from.is_some()) {
+            notes.push("bubble sizes and colour mapped symbol colours were not written".into());
+        }
         if has(&|k| k.is_stacked_column()) {
             notes.push("stacked columns were written as columns side by side".into());
         }

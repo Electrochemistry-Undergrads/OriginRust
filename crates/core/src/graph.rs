@@ -910,6 +910,13 @@ pub struct Plot {
     /// The bins of a histogram plot.
     #[serde(default, skip_serializing_if = "HistogramStyle::is_default")]
     pub hist: HistogramStyle,
+    /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
+    /// Z column of a Bubble plot).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_from: Option<ColumnId>,
+    /// A colour mapped plot: the symbol of each point takes its colour from this column's value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_from: Option<ColumnId>,
 }
 
 /// Which side of the point an error bar reaches.
@@ -1317,6 +1324,8 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1394,6 +1403,8 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);

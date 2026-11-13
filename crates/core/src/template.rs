@@ -56,10 +56,16 @@ pub enum Template {
     Histogram,
     /// Box chart (Origin's "Box Chart"): one box per Y column.
     BoxChart,
+    /// Bubble plot (Origin's "Bubble"): open circles whose size follows the Z column.
+    Bubble,
+    /// Colour mapped scatter plot: the colour of each symbol follows the Z column.
+    ColorMapped,
+    /// Both: bubbles whose size and colour follow the Z column.
+    BubbleColorMapped,
 }
 
 impl Template {
-    pub const ALL: [Template; 18] = [
+    pub const ALL: [Template; 21] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -74,6 +80,9 @@ impl Template {
         Template::FillArea,
         Template::Histogram,
         Template::BoxChart,
+        Template::Bubble,
+        Template::ColorMapped,
+        Template::BubbleColorMapped,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -101,6 +110,9 @@ impl Template {
             Template::FillArea => "fill-area",
             Template::Histogram => "histogram",
             Template::BoxChart => "box",
+            Template::Bubble => "bubble",
+            Template::ColorMapped => "color-mapped",
+            Template::BubbleColorMapped => "bubble-color-mapped",
         }
     }
 
@@ -124,6 +136,9 @@ impl Template {
             Template::FillArea => "Fill Area",
             Template::Histogram => "Histogram",
             Template::BoxChart => "Box Chart",
+            Template::Bubble => "Bubble",
+            Template::ColorMapped => "Color Mapped",
+            Template::BubbleColorMapped => "Bubble + Color Mapped",
         }
     }
 
@@ -153,6 +168,9 @@ impl Template {
             Template::FillArea => themed(general(id, name, PlotKind::Area)),
             Template::Histogram => from_red(general(id, name, PlotKind::Histogram)),
             Template::BoxChart => from_red(general(id, name, PlotKind::Box)),
+            Template::Bubble => bubble(id, name, false, true),
+            Template::ColorMapped => bubble(id, name, true, false),
+            Template::BubbleColorMapped => bubble(id, name, true, true),
         }
     }
 }
@@ -336,6 +354,19 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             bars: BarSpacing::default(),
         }],
     }
+}
+
+/// The scatter template for bubble and colour mapped plots. Bubbles are open circles in the first
+/// colour of the list (measured: black rings), colour mapped symbols the usual filled squares, and
+/// bubbles that are also colour mapped are filled circles.
+fn bubble(id: WindowId, name: &str, mapped: bool, sized: bool) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    let s = &mut g.layers[0].default_symbol;
+    if sized {
+        s.shape = SymbolShape::Circle;
+        s.filled = mapped;
+    }
+    g
 }
 
 fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
@@ -546,7 +577,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 18);
+        assert_eq!(Template::ALL.len(), 21);
     }
 
     #[test]

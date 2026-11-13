@@ -56,6 +56,10 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
+    /// The values that set the size of each symbol of a bubble plot.
+    pub size_z: Option<&'a [f64]>,
+    /// The values that set the colour of each symbol of a colour mapped plot.
+    pub color_z: Option<&'a [f64]>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -223,6 +227,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             member: place.member,
             bar: None,
             boxed: None,
+            size_z: plot.size_from.and_then(|id| project.numeric(id)),
+            color_z: plot.color_from.and_then(|id| project.numeric(id)),
         };
         match plot.kind {
             PlotKind::Histogram => {

@@ -424,6 +424,8 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
             y_base: None,
             error: sheaf_core::graph::ErrorStyle::default(),
             hist: Default::default(),
+            size_from: None,
+            color_from: None,
         });
     }
     layer.stack = Stack::Individual;

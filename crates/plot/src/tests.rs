@@ -2660,3 +2660,65 @@ fn golden_box_template() {
     let (p, g) = project(Template::BoxChart, (1..=12).map(f64::from).collect(), vec![b1, b2]);
     compare_golden("box", &svg_of(&p, g));
 }
+
+// ----- bubble and colour mapped symbols (graphing spec 14.16) --------------------------------------
+
+/// The probe of Origin's bubble run: X 1..8, Y and Z columns.
+fn bubble_probe(template: Template) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric((1..=8).map(f64::from).collect())).unwrap();
+    let y = p
+        .add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 3.0, 6.0, 5.0, 7.0, 6.0, 8.0]))
+        .unwrap();
+    p.add_column(book, 0, Designation::Z, ColumnData::numeric(vec![1.0, 4.0, 2.0, 9.0, 3.0, 6.0, 8.0, 5.0])).unwrap();
+    let g = p.plot_columns(template, &[y]).unwrap();
+    if let Some(dir) = std::env::var_os("SHEAF_T12_OUT") {
+        let png = crate::render_png(&p, g, 300.0).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join(format!("sheaf-{}.png", template.name())), png).unwrap();
+    }
+    (p, g)
+}
+
+#[test]
+fn bubbles_are_as_wide_as_the_z_value_says() {
+    let (p, g) = bubble_probe(Template::Bubble);
+    let plot = &p.graph(g).unwrap().layers[0].plots[0];
+    assert!(plot.size_from.is_some() && plot.color_from.is_none());
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    // One filled-or-stroked path per point, drawn as two arcs; the radius is the first number after "A".
+    let radii: Vec<f64> = paths_in(with_class(&d, "plots")[0])
+        .iter()
+        .filter_map(|n| n.attribute("d"))
+        .filter(|d| d.contains('A'))
+        .map(|d| d.split('A').nth(1).unwrap().split_whitespace().next().unwrap().parse().unwrap())
+        .collect();
+    assert_eq!(radii.len(), 8);
+    // Z = 1 (smallest) is 2 pt wide, Z = 9 (largest) 20 pt, linear in between: Z = 5 is 11 pt.
+    assert!(
+        (radii[0] - 1.0).abs() < 1e-6 && (radii[3] - 10.0).abs() < 1e-6 && (radii[7] - 5.5).abs() < 1e-6,
+        "{radii:?}"
+    );
+}
+
+#[test]
+fn color_mapped_symbols_run_from_blue_to_red() {
+    let (p, g) = bubble_probe(Template::ColorMapped);
+    let plot = &p.graph(g).unwrap().layers[0].plots[0];
+    assert!(plot.size_from.is_none() && plot.color_from.is_some());
+    let svg = svg_of(&p, g);
+    assert!(svg.contains("#0000FF") && svg.contains("#FF0000"), "smallest Z blue, largest red");
+}
+
+#[test]
+fn golden_bubble_template() {
+    let (p, g) = bubble_probe(Template::Bubble);
+    compare_golden("bubble", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_bubble_color_mapped_template() {
+    let (p, g) = bubble_probe(Template::BubbleColorMapped);
+    compare_golden("bubble-color-mapped", &svg_of(&p, g));
+}

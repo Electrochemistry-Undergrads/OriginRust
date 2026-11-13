@@ -1229,6 +1229,15 @@ Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; 
 - **Not done:** grouped box charts and the data points beside the box need the Group and Subject designations and categorical columns of T10 (`worksheet-ops`); a worksheet with a grouping column is plotted today as one box per Y column only. The Y axis of the box chart follows the automatic rule of T20 (Origin: -5 to 40 for data 1 to 30; Sheaf -2 to 32); the Y limit of a histogram from 4 is 4.5 as in Origin.
 - `.opj`: both are written as plain columns of their data and the save warns.
 
+### 14.16 Bubble and colour mapped symbols (T12)
+
+Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new template:=BUBBLE>]` with the third column set as Z (`wks.col3.type=5`; X is 4 and Y 1) draws the bubbles (the plot type numbers 245 to 247 gave nothing). Probe: X 1..8, Y 2 4 3 6 5 7 6 8, Z 1 4 2 9 3 6 8 5.
+
+- Bubbles are open circles in the first colour (black rings). Their width is linear in Z from the smallest to the largest value: measured on the 800 px export 2.5, 5, 7, 9, 12, 14, 19 and 22 px (about 2.4 to 21 pt) for Z = 1, 2, 3, 4, 5, 6, 8, 9. Sheaf uses 2 pt to 20 pt (the outline adds the rest).
+- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Not drawn by Sheaf.
+- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. No colour scale is drawn.
+- Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.

@@ -289,6 +289,8 @@ fn band_plot(layer: &crate::graph::Layer, x: ColumnId, band: &BandColumn, color:
         y_base: None,
         error: ErrorStyle::default(),
         hist: Default::default(),
+        size_from: None,
+        color_from: None,
     }
 }
 
@@ -687,6 +689,8 @@ impl Project {
                         y_base: None,
                         error: ErrorStyle::default(),
                         hist: Default::default(),
+                        size_from: None,
+                        color_from: None,
                     });
                     if request.update_legend {
                         layer.legend.text = None;
@@ -780,6 +784,8 @@ impl Project {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            size_from: None,
+            color_from: None,
         });
         layer.plot_offset_mut(outcome.curve_y).follows = Some(source);
         if outcome.plot_bands {

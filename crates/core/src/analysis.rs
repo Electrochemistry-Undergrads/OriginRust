@@ -40,6 +40,9 @@ pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
+pub use curves::{AverageSpec, IntersectSpec};
+pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
 /// every peak the search found, started at the found centre, width and height.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -513,6 +516,9 @@ pub enum Tool {
     Friedman(FriedmanSpec),
     Grubbs(OutlierSpec),
     Dixon(OutlierSpec),
+    AverageCurves(AverageSpec),
+    Intersect(IntersectSpec),
+    PolygonArea,
 }
 
 impl Tool {
@@ -556,6 +562,9 @@ impl Tool {
             Tool::Friedman(_) => "Friedman ANOVA",
             Tool::Grubbs(_) => "Grubbs test",
             Tool::Dixon(_) => "Dixon's Q test",
+            Tool::AverageCurves(_) => "Average multiple curves",
+            Tool::Intersect(_) => "Intersect",
+            Tool::PolygonArea => "Polygon area",
         }
     }
 
@@ -582,6 +591,9 @@ impl Tool {
             Tool::Friedman(_) => "Friedman",
             Tool::Grubbs(_) => "Grubbs",
             Tool::Dixon(_) => "Dixon",
+            Tool::AverageCurves(_) => "Average",
+            Tool::Intersect(_) => "Intersect",
+            Tool::PolygonArea => "PolygonArea",
             _ => "Result",
         }
     }
@@ -1093,6 +1105,7 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod curves;
 mod statistics;
 
 impl Project {
@@ -1209,6 +1222,12 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+            }
+            Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
+                let out = curves::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
             }
             Tool::PeakChain(spec) => {
                 table = Some(run_peak_chain(spec, &inputs, &mut beside, &mut notes)?);

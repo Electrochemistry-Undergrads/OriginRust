@@ -5,14 +5,16 @@
 //! column the run read changes, an Auto link is run again at once (inside the same undo step as the
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
-//! Only Smooth, Integrate and Find Peaks can be linked; the other tools run once.
+//! Only Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect and Polygon Area can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 use sheaf_calc::{PeakOptions, SmoothOptions};
 
-use crate::analysis::{AnalysisError, IntegrateSpec, OutputTarget, Report, Request, RowRange, Tool};
+use crate::analysis::{
+    AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, OutputTarget, Report, Request, RowRange, Tool,
+};
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
 
@@ -22,6 +24,9 @@ pub enum LinkTool {
     Smooth(SmoothOptions),
     Integrate(IntegrateSpec),
     FindPeaks(PeakOptions),
+    AverageCurves(AverageSpec),
+    Intersect(IntersectSpec),
+    PolygonArea,
 }
 
 impl LinkTool {
@@ -30,6 +35,9 @@ impl LinkTool {
             Tool::Smooth(o) => Some(LinkTool::Smooth(*o)),
             Tool::Integrate(s) => Some(LinkTool::Integrate(*s)),
             Tool::FindPeaks(o) => Some(LinkTool::FindPeaks(*o)),
+            Tool::AverageCurves(s) => Some(LinkTool::AverageCurves(*s)),
+            Tool::Intersect(s) => Some(LinkTool::Intersect(*s)),
+            Tool::PolygonArea => Some(LinkTool::PolygonArea),
             _ => None,
         }
     }
@@ -39,6 +47,9 @@ impl LinkTool {
             LinkTool::Smooth(o) => Tool::Smooth(*o),
             LinkTool::Integrate(s) => Tool::Integrate(*s),
             LinkTool::FindPeaks(o) => Tool::FindPeaks(*o),
+            LinkTool::AverageCurves(s) => Tool::AverageCurves(*s),
+            LinkTool::Intersect(s) => Tool::Intersect(*s),
+            LinkTool::PolygonArea => Tool::PolygonArea,
         }
     }
 }

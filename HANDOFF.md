@@ -29,7 +29,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1162 passed on `main` at `b015f97` (2026-11-13). Parity table: 42 done, 108 partial, 80 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1170 passed on `main` at `c32e585` (2026-11-13). Parity table: 42 done, 108 partial, 80 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 
@@ -47,7 +47,7 @@ Welch interval, `f522bb2`), `opj-groups-frames`, `export-margin`, `sheet-menus` 
 Error duplicates of T01 dropped), `nlfit-origin`. `axis-range` and `graph-defaults` never got a commit:
 they are briefs T20 and T21 now.
 
-Merged from briefs: T21 (`b015f97`), T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
+Merged from briefs: T05 (`c32e585`), T21 (`b015f97`), T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
 (`bbdb60a`), T09 (`20c37e1`), T16 part (`b967898`). See each brief's Status for what is left.
 
 Stale worktrees of merged branches (`.claude/worktrees/agent-*`, `wf_*`, `merge-*`, `origin-diff-4`,
@@ -57,7 +57,7 @@ removed (`git worktree remove`, then `tools/clean-target.sh`); the disk is at 94
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
-analysis: T03 (in flight), T05, T12, T15, T13, T11, then the rest. All earlier "open questions" are assigned to the in-flight branches
+analysis: T03 (in flight), T12, T15, T13, T11, then the rest. All earlier "open questions" are assigned to the in-flight branches
 above or to briefs; none waits on the owner.
 
 ## Commands that verify the state

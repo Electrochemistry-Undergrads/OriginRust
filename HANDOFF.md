@@ -36,8 +36,8 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
-| `axis-range2` | "Handoff.md token optimization" | T20 automatic axis range | started 2026-11-13 |
-| `stats-breadth` | "Handoff.md token optimization" | T14 items 1-4 | started 2026-11-13 |
+| `graph-defaults2` | "Handoff.md token optimization" | T21 graph defaults (worktree `axis-range2`) | started 2026-11-13 |
+| `analysis-frame` | "Handoff.md token optimization" | T03 analysis dialogs (worktree `stats-breadth`) | started 2026-11-13 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
 branches that are now on `main`; it holds nothing `main` lacks and can be removed.
@@ -48,7 +48,7 @@ Welch interval, `f522bb2`), `opj-groups-frames`, `export-margin`, `sheet-menus` 
 Error duplicates of T01 dropped), `nlfit-origin`. `axis-range` and `graph-defaults` never got a commit:
 they are briefs T20 and T21 now.
 
-Merged earlier from briefs: T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
+Merged from briefs: T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
 (`bbdb60a`), T09 (`20c37e1`), T16 part (`b967898`). See each brief's Status for what is left.
 
 Stale worktrees of merged branches (`.claude/worktrees/agent-*`, `wf_*`, `merge-*`, `origin-diff-4`,

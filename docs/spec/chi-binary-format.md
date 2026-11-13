@@ -96,7 +96,7 @@ The data are `points x channels` 32-bit IEEE floats. With one channel they are t
 With several channels there are two layouts, told apart by the flag at 0x630:
 
 - **Flag 1.0 (the owner's files): the channels alternate point by point**, `i1[0], i2[0], i1[1],
-  i2[1], ...` [checked: all 8 channels x 71953 rows of the four i-t runs agree with their text exports;
+  i2[1], ...` [checked: every row of all eight channels of the four i-t runs agree with their text exports;
   read channel after channel they do not, and give false "pinned current" warnings]. An earlier version
   of this document and of the reader said "planar", because the only multi-channel file with a text
   export then known was the sample, below.

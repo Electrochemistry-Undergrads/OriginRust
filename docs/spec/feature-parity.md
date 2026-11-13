@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 117 | 70 | 230 |
+| All rows | 43 | 119 | 68 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 48 | 70 | 129 |
+| P1 and P2 together | 11 | 50 | 68 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -75,7 +75,7 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Delimited text engine, CSV | File > Import > ASCII, Ctrl+K | `io/src/ascii.rs`; dialog; CLI | ✓ | single-character delimiters only | P0 |
+| Delimited text engine, CSV | File > Import > ASCII, Ctrl+K | `io/src/ascii.rs`; dialog; CLI | ✓ | | P0 |
 | Data-start detection | auto header lines | `detect()` with preview | ✓ | rule differs slightly from Origin's, not compared by black-box run | P0 |
 | Header, long name, units, comments lines | File Header group | detected and overridable; header lines can become named parameter rows (`--param-lines`) | ◐ | no name+unit splitter, no leading-character rule, no count from bottom, comment lines are not joined, label detection looks at three lines at most | P0 |
 | Non-numeric text, missing markers | NonNum, LeadingZeros | marker list, Text & Numeric columns keep every text cell (no ratio, as measured in Origin) | ◐ | no choice of treatment (NonNum) | P0 |
@@ -85,7 +85,7 @@ Cross-cutting findings:
 | CH Instruments files | owner's workflow | `io/src/chi.rs`: CV, i-t, LSV, scan splitting, chronopotentiometry segments (one column group per charge or discharge segment), mA, charge, sign, clip warning, run parameters; `io/src/chi_bin.rs` reads `.bin` files directly into the same workbook | ✓ | a CV and a chronopotentiometry text export of the owner's were checked; the i-t text importer has not been checked against a real export, and the owner's `.bin` files have no text export to compare with (chi-binary-format.md) | P0 |
 | Batch import of many files | multiple files | dialog, drops, CLI `sheaf import <folder or pattern> --mode books/sheets/columns/rows`; CHI files go through the CHI importers | ✓ | | P0 |
 | Partial import | row, column ranges, read/skip patterns | skip rows, max rows | ◐ | no column range or patterns; max rows has no dialog control | P1 |
-| Fixed width, multi-character delimiter | ASCII options | none | ✗ | | P1 |
+| Fixed width, multi-character delimiter | ASCII options | `Delimiter::Multi`, `Delimiter::Fixed`; import dialog (Other, Fixed Width with widths); CLI `--delimiter`, `--fixed-width`; Data Import Options (rename columns, short-name line, rename sheet and book, apply range to plots); Apply button | ◐ | "Other" as a set of single characters, combine consecutive delimiters, column ranges and patterns; defaults not measured | P1 |
 | Encoding | none in Origin | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
 | Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
@@ -104,8 +104,8 @@ Cross-cutting findings:
 | Label rows: long name, units, comments | worksheet header | grid rows and properties dialog | ✓ | | P0 |
 | Parameter, user parameter, F(x) rows, show or hide label rows | label rows | F(x)= row with a lock mark and one row per user parameter, shown and edited in place | ◐ | rows cannot be hidden (corner menu items greyed); no way to add a new parameter row; no sampling-interval row | P0 |
 | Plot designations | Column > Set As | X, Y, Z, yEr, xEr, Label, Disregard | ✓ | no Group or Subject; Y-finds-X is nearest-left only | P0 |
-| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, date, time, date-time (Origin's numbers) | ◐ | no month, weekday; Text & Numeric is the default of new and imported columns; fewer display patterns than Origin; Column Properties dialog (Origin's layout) sets designation, format and display pattern | P0 |
-| Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
+| Column data formats | Numeric, Text, Time, Date, Month, Weekday, mixed | numeric, text, Text & Numeric, date, time, date-time, Month, Day of Week (Origin's numbers); 19 date and 14 time patterns; Column Properties dialog (Origin's layout) sets designation, format and display pattern | ◐ | day-of-week numbering and name styles not measured; label-row options | P0 |
+| Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant, Engineering, Engineering with SI prefix, Decimal:1000 | ◐ | no custom format, no column width; engineering digits not measured | P0 |
 | Missing values | shown as `--` | NaN shown as `--` | ✓ | cannot tell empty from missing | P0 |
 | Reference notation in formulas | `[Book]Sheet!Col`, cell(), `col(A)$`, `[L]` | `col`, `wcol`, index, range, `i` | ◐ | no other sheet or book, no cell(), no label access, no x/y shorthand | P0 |
 | Sorting | nested, range, columns | whole sheet, range and column sorts, ascending or descending; Custom (nested keys) for the sheet and a range; Sort Columns by Label; Reverse Order; missing values sort first ascending and last descending, text ignores case (measured in Origin, workbook-model 13.1) | ◐ | Custom on Sort Columns and on the column menu's Sort Column is greyed; no cell-range subset sort | P0 |
@@ -260,7 +260,7 @@ Cross-cutting findings:
 | Error bars | Y, X, XY | symmetric Y only; Plot > Symbol > Y Error; Graph > Add Error Bars... attaches the sheet's Y error column to plots without one | ◐ | no X, direction, cap, style options; no dialog to choose the error column | P0 |
 | Double-Y, multiple Y axes | Multi-Curve | Plot > Multi-Y > Double-Y alternates the selected columns between the left and right axis; CLI `plot -t double-y` and `--y2`; the right axis is a linked layer with its own title and range, each axis in the colour of its first curve; the .opj reader keeps the second layer | ◐ | no per-plot left or right axis choice in the app (the CLI has it); 3Ys, 4Ys and Multiple Y Axes are grey; the .opj writer does not store the link, so the companion keeps it | P0 |
 | Y offsets, waterfall | Multi-Curve | Plot > Y-offset/Waterfall > Stacked Lines by Y Offsets and Waterfall; CLI `--stack`, `--offsets`, `--waterfall`; offsets per plot in Plot Details > Stack; the .opj reader keeps stacked offsets | ◐ | simple two-dimensional waterfall only: no colour mapping, no 3D waterfall; offsets are not written to .opj (the companion keeps them); a fitted curve takes no offset | P0 |
-| Column and bar charts | Column/Bar/Pie | Plot > Column/Bar/Pie > Column and CLI `plot -t column`; several Y columns side by side; a text X column gives sample names as tick labels; gap and overlap in Plot Details (Spacing) and `--bar-gap`; Change Plot to Column | ◐ | no horizontal bar, stacked, floating or indexed-group columns, no pie; bar spacing is not written to .opj | P0 |
+| Column and bar charts | Column/Bar/Pie | Plot > Column/Bar/Pie > Column, Bar, Stacked Column/Bar, 100% Stacked Column/Bar, Floating Column/Bar, 2D Color Pie and CLI `plot -t column` etc.; several Y columns side by side; a text X column gives sample names as tick labels; gap and overlap in Plot Details (Spacing) and `--bar-gap`; Change Plot to Column | ◐ | no indexed-group columns, 3D or B&W pie, bar labels or join lines; horizontal colour lists not measured; bar spacing and the new types are not written to .opj (save warning) | P0 |
 | Plot from selection | plotxy | uses designations | ◐ | no plotxy-style dialog | P0 |
 | Layer Contents, add and remove data | F12 | F12 or Graph > Layer Contents opens Plot Details on the layer: plots can be added from any sheet, removed and reordered; Plot Setup opens the same page | ◐ | no separate X/Y/error assignment, no row range | P0 |
 | Spline and step connect | Line > Connect | Catmull-Rom spline, steps | ◐ | no B-spline, Bezier, segments; spline skipped above 2000 points | P1 |
@@ -269,7 +269,7 @@ Cross-cutting findings:
 | Drop lines, bubble, colour mapped | Plot > Symbol | Plot > Symbol > Bubble, Color Mapped, Bubble + Color Mapped (Z column after the Y column) | ◐ | no drop lines, no size legend or colour scale, colour map is a stand-in, not written to .opj | P1 |
 | Histogram, box chart, statistics plots | Plot > Statistics | Plot > Statistics > Histogram and Box Chart, CLI `plot -t histogram`, `box`: binned like Frequency Counts, touching bars; boxes with median, mean, whiskers, outliers | ◐ | no distribution curve, no hatch fill, no grouped box charts (need T10's group columns), other statistics plots missing; written to .opj as plain columns | P1 |
 | Pie | Plot > Pie | Plot > Column/Bar/Pie > 2D Color Pie, CLI `plot -t pie`: flat colour pie, shares to two decimals, legend | ◐ | no 3D slant, no B&W hatch pie, no exploded slices; written to .opj as plain columns | P2 |
-| Polar, ternary, radar, Smith, wind rose | Specialized | none | ✗ | | P2 |
+| Polar, ternary, radar, Smith, wind rose | Specialized | Polar theta(X) r(Y) and r(X) theta(Y) (`Layer::coords`, templates `polar`, `polar-r-theta`, menu, toolbar, CLI) | ◐ | ternary, radar, Smith, wind rose; no polar axis dialog; polar not written to .opj (save warning) | P2 |
 | Stock | Plot > Stock | none | ✗ | | P2 |
 | Vector | Plot > Vector | none | ✗ | | P2 |
 | 3D plots | Plot > 3D | none | ✗ | no 3D renderer | P2 |
@@ -331,7 +331,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None, Manual, Auto for Smooth, Integrate and Find Peaks), Auto Apply, a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, Recalculate links only Smooth, Integrate and Find Peaks, the output can be a new sheet or existing columns for the column-writing tools only, the preview is a small own drawing, not drawn on the source graph | P0 |
-| Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name, Long Name, Units, Comments, Options (Plot Designation, Format, Display, Column Width greyed, Apply to all columns to the right), OK, Cancel, Apply | ◐ | no text type; Column Width is greyed (the grid has one width); no Origin-style numeric display names such as Decimal:1000 | P0 |
+| Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name (18 characters), Long Name, Units, Comments, Options (Plot Designation, Format with Text, Text & Numeric, Month and Day of Week, Display, Column Width greyed, Apply to all columns to the right), OK, Cancel, Apply | ◐ | Column Width is greyed (the grid has one width) | P0 |
 | Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
 | Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |
 

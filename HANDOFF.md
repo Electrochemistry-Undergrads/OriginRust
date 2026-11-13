@@ -29,14 +29,12 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1326 passed on `main` at `e525575` (2026-11-13). Parity table: 43 done, 117 partial, 70 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1375 passed on `main` at `7c8bf12` (2026-11-13, macOS). Parity table: 43 done, 119 partial, 68 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `plot-polar`, `plot-bars` | "mac" (macOS, no Origin) | T12: polar theta(X) r(Y) and r(X) theta(Y) (new `Layer::coords`); Stacked Bar, 100 % Stacked Bar, Floating Bar; radar and ternary after polar | started 2026-11-13 16:40 |
-| `import-ascii-options`, `column-formats` | "mac" | T19 items 1 and 3: delimiters, fixed width, import options; Column Properties display types and formats | started 2026-11-13 16:45 |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
@@ -48,7 +46,7 @@ Welch interval, `f522bb2`), `opj-groups-frames`, `export-margin`, `sheet-menus` 
 Error duplicates of T01 dropped), `nlfit-origin`. `axis-range` and `graph-defaults` never got a commit:
 they are briefs T20 and T21 now.
 
-Merged from briefs: T15 items 4-6 (`e525575`: Simplex, Compare Models checked on 24 Origin pairs, Rank Models, multiple linear regression checked on 6 Origin cases, linear fit with X error by York's method, not compared with Origin), T16 item 2 (`94063b4`: Spline as Origin, natural cubic for increasing X up to 900 points, B-spline and Bezier), T08 remaining (`d8d1416`: `sum` is a running sum and `count` counts missing cells as in Origin, text values and string functions, local `now()`), T15 items 1-3 (`704a1d6`: direct weights, scale-errors switch, multi-dataset and global fits, quick fits), owner-reported `.opj` graph fix (`e908922`: text objects placed from their stored box as Origin turns them, group colours from the records, objects off the page hidden; opj-format.md 10.4, 10.9), T12 items 3-5 and a flat pie (`plot-types-more`: stacked and 100 % stacked area, fill area, histogram, box chart, bubble, colour mapped, pie; Origin's per-template colour lists), T06 (`opj-graph-rest`: X offsets, waterfall as offsets, month/day/year ticks, window places in written `.opj`), T10 (`worksheet-ops`: insert/delete rows, columns and cells, move, hide, width, Origin's sort rules, nested sort, masks, a live filter, transpose/stack/unstack/split/reduce, categorical, Group and Subject), T11 (`axis-scales`: eight more scales, Reverse, First Tick, Prefix/Suffix, an axis break, special ticks, tick label formula, minor tick labels, tick colour, Exchange X-Y, the axis dialog's Apply To and Bottom/Top/Left/Right pages), T12 items 1-2 (`d0dbb37`), T03 (`859c78e`; analysis results that recalculate are named in `.opj` save warnings), T05 (`c32e585`), T21 (`b015f97`), T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
+Merged from briefs: T12 polar and the horizontal bars (`861166a`, `6033098`: polar theta(X) r(Y) and r(X) theta(Y) through a layer-level `Layer::coords`, spec 14.18; Stacked Bar, 100 % Stacked Bar, Floating Bar), T19 items 1 and 3 (`7ab562a`, `7c8bf12`: multi-character and fixed-width delimiters, Data Import Options, Origin's mode names, Apply; Column Properties Text & Numeric, Month, Day of Week, Engineering, Decimal:1000, 19 date and 14 time patterns), T15 items 4-6 (`e525575`: Simplex, Compare Models checked on 24 Origin pairs, Rank Models, multiple linear regression checked on 6 Origin cases, linear fit with X error by York's method, not compared with Origin), T16 item 2 (`94063b4`: Spline as Origin, natural cubic for increasing X up to 900 points, B-spline and Bezier), T08 remaining (`d8d1416`: `sum` is a running sum and `count` counts missing cells as in Origin, text values and string functions, local `now()`), T15 items 1-3 (`704a1d6`: direct weights, scale-errors switch, multi-dataset and global fits, quick fits), owner-reported `.opj` graph fix (`e908922`: text objects placed from their stored box as Origin turns them, group colours from the records, objects off the page hidden; opj-format.md 10.4, 10.9), T12 items 3-5 and a flat pie (`plot-types-more`: stacked and 100 % stacked area, fill area, histogram, box chart, bubble, colour mapped, pie; Origin's per-template colour lists), T06 (`opj-graph-rest`: X offsets, waterfall as offsets, month/day/year ticks, window places in written `.opj`), T10 (`worksheet-ops`: insert/delete rows, columns and cells, move, hide, width, Origin's sort rules, nested sort, masks, a live filter, transpose/stack/unstack/split/reduce, categorical, Group and Subject), T11 (`axis-scales`: eight more scales, Reverse, First Tick, Prefix/Suffix, an axis break, special ticks, tick label formula, minor tick labels, tick colour, Exchange X-Y, the axis dialog's Apply To and Bottom/Top/Left/Right pages), T12 items 1-2 (`d0dbb37`), T03 (`859c78e`; analysis results that recalculate are named in `.opj` save warnings), T05 (`c32e585`), T21 (`b015f97`), T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
 (`bbdb60a`), T09 (`20c37e1`), T16 part (`b967898`). See each brief's Status for what is left.
 
 Worktrees left on 2026-11-13: `axis-range2` and `stats-breadth` (session "Handoff.md token
@@ -60,8 +58,8 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
-analysis: T13 and T14 items 5-6 (with "Rust prompt handoff"), T12 item 6 (polar, ternary, radar),
-merging the matrix branch (asks the owner first: it is another session's unpushed work), T19, T04, then
+analysis: T13 and T14 items 5-6 (with "Rust prompt handoff"), T12 radar and ternary (the macOS session starts them next on the polar layer's `Coords`),
+merging the matrix branch (asks the owner first: it is another session's unpushed work), T19 item 2 and T04 (wizards, need Origin pages), then
 the leftovers named in each brief's Status. All earlier "open questions" are assigned to the in-flight branches
 above or to briefs; none waits on the owner.
 
@@ -93,6 +91,13 @@ about 88 % full, check `df -h /c` before parallel builds.
    charge-discharge file in a spec paragraph (the copy on `main` does not).
 6. If scripting cannot open them: screenshots of Origin's Peak Analyzer pages 2+, Import Wizard
    pages 2-6 (briefs T04, T19). These two wizards are the open briefs that wait on them.
+7. **Origin checks for the macOS session's work** (no Origin there; each item is marked "not measured" in its
+   spec). A session on the Windows machine can answer them with `tools/origin-ref/`: polar (graphing 14.18:
+   default legend place, whether the radius limits round to a tick, angle units and zero direction); horizontal
+   stacked and floating bars (14.12: colour lists, legend order, the 100 % axis); ASCII import (import-ascii.md
+   2, 3, 10: whether impASC's dialog has Apply, Data Import Options names and defaults, the 18-character
+   short-name limit); Column Properties (workbook-model.md: day-of-week numbers from 1 = Sunday, Engineering
+   digits and SI letters, name-style wording, elapsed-time patterns for negative values).
 
 ## Local-only resources
 

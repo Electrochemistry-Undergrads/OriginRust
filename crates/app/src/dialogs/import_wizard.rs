@@ -1,0 +1,491 @@
+//! The Import Wizard (File > Import > Import Wizard, Ctrl+3): the same import options as the
+//! import window, taken one page at a time. Pages: Source, Header Lines, Column Names, File Name
+//! Options, Data Columns and Save Filters (greyed: Sheaf has no saved import filters). The
+//! buttons are Cancel at the left and "<< Back", "Next >>", "Finish" at the right, as in Origin's
+//! first page. Finish imports the file with the chosen options, exactly as OK does in the import
+//! window.
+
+use super::frame::read_only_box;
+use super::graph_props::group_box;
+use super::import::{ImportDialog, ImportOutcome, ImportPage, optional_line};
+use eframe::egui::{self, Color32, RichText};
+use sheaf_core::template::Template;
+use sheaf_io::ImportKind;
+use sheaf_io::batch::ImportMode;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+/// Lines of the file shown on the Header Lines and Column Names pages.
+const RAW_LINES: usize = 14;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WizardPage {
+    Source,
+    HeaderLines,
+    ColumnNames,
+    FileNameOptions,
+    DataColumns,
+    SaveFilters,
+}
+
+impl WizardPage {
+    const ALL: [WizardPage; 6] = [
+        WizardPage::Source,
+        WizardPage::HeaderLines,
+        WizardPage::ColumnNames,
+        WizardPage::FileNameOptions,
+        WizardPage::DataColumns,
+        WizardPage::SaveFilters,
+    ];
+
+    fn title(self) -> &'static str {
+        match self {
+            WizardPage::Source => "Source",
+            WizardPage::HeaderLines => "Header Lines",
+            WizardPage::ColumnNames => "Column Names",
+            WizardPage::FileNameOptions => "File Name Options",
+            WizardPage::DataColumns => "Data Columns",
+            WizardPage::SaveFilters => "Save Filters",
+        }
+    }
+
+    fn index(self) -> usize {
+        Self::ALL.iter().position(|p| *p == self).unwrap_or(0)
+    }
+}
+
+/// The first lines of a file as text, for the pages that choose header lines.
+struct RawLines {
+    file: PathBuf,
+    lines: Vec<String>,
+}
+
+pub struct ImportWizard {
+    dlg: ImportDialog,
+    page: WizardPage,
+    /// The text of the File box on the Source page.
+    path_text: String,
+    /// "List filters applicable to both Data Type and file name" (only the state is kept).
+    filters_both: bool,
+    /// File Name Options: the workbook's long name is the file name.
+    name_workbook: bool,
+    /// File Name Options: the sheet is named after the file.
+    name_sheet: bool,
+    raw: Option<RawLines>,
+}
+
+impl ImportWizard {
+    /// A wizard on its Source page, with the files already chosen when there are any.
+    pub fn new(files: Vec<PathBuf>) -> Self {
+        let path_text = files.first().map(|f| f.display().to_string()).unwrap_or_default();
+        ImportWizard {
+            dlg: ImportDialog::new(files),
+            page: WizardPage::Source,
+            path_text,
+            filters_both: true,
+            name_workbook: true,
+            name_sheet: false,
+            raw: None,
+        }
+    }
+
+    /// The page the wizard is on (for tests).
+    #[cfg(test)]
+    pub fn page(&self) -> WizardPage {
+        self.page
+    }
+
+    pub fn show_page(&mut self, page: WizardPage) {
+        self.page = page;
+    }
+
+    fn has_file(&self) -> bool {
+        !self.dlg.files.is_empty()
+    }
+
+    fn set_files(&mut self, files: Vec<PathBuf>) {
+        self.path_text = files.first().map(|f| f.display().to_string()).unwrap_or_default();
+        self.dlg.files = files;
+        self.dlg.current = 0;
+        self.dlg.preview = None;
+        self.raw = None;
+    }
+
+    /// The first lines of the current file, read once per file.
+    fn raw_lines(&mut self) -> &[String] {
+        let file = self.dlg.files.get(self.dlg.current).cloned();
+        let fresh = matches!((&self.raw, &file), (Some(r), Some(f)) if r.file == *f);
+        if !fresh {
+            self.raw = file.map(|f| RawLines { lines: read_lines(&f, RAW_LINES), file: f });
+        }
+        self.raw.as_ref().map(|r| r.lines.as_slice()).unwrap_or(&[])
+    }
+
+    /// Reads every file with the chosen options and applies the File Name Options.
+    fn finish(&self) -> ImportOutcome {
+        let mut items = Vec::new();
+        let mut errors = Vec::new();
+        for (i, path) in self.dlg.files.iter().enumerate() {
+            match self.dlg.read(i) {
+                Ok(mut imported) => {
+                    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                    if !self.name_workbook {
+                        imported.workbook.long_name = String::new();
+                    }
+                    if self.name_sheet
+                        && !stem.is_empty()
+                        && let Some(sheet) = imported.workbook.sheets.first_mut()
+                    {
+                        sheet.name = stem;
+                    }
+                    items.push(imported);
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+        ImportOutcome::Done { items, errors, plot: self.dlg.plot, template: self.dlg.template, mode: self.dlg.mode }
+    }
+
+    pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {
+        self.dlg.target = target.map(str::to_string);
+        if self.dlg.target.is_none() {
+            self.dlg.mode = ImportMode::NewBook;
+        }
+        if self.has_file() {
+            self.dlg.current = self.dlg.current.min(self.dlg.files.len() - 1);
+            if self.dlg.preview.is_none() {
+                self.dlg.preview = Some(self.dlg.read(self.dlg.current));
+            }
+        }
+        let before = (self.dlg.current, self.dlg.kind, self.dlg.chi.clone(), self.dlg.ascii.clone());
+
+        let avail = ctx.available_rect();
+        let size = egui::vec2(620.0, 595.0);
+        let pos = (avail.center() - size / 2.0).max(avail.min);
+        let mut open = true;
+        let mut outcome = ImportOutcome::Open;
+        egui::Window::new(format!("Import Wizard - {}", self.page.title()))
+            .id(egui::Id::new("import_wizard"))
+            .open(&mut open)
+            .default_pos(pos)
+            .fixed_size(size)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                let body = (ui.available_height() - 40.0).max(200.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("import_wizard_page")
+                    .max_height(body)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| match self.page {
+                        WizardPage::Source => self.source_page(ui),
+                        WizardPage::HeaderLines => self.header_lines_page(ui),
+                        WizardPage::ColumnNames => self.column_names_page(ui),
+                        WizardPage::FileNameOptions => self.file_name_page(ui),
+                        WizardPage::DataColumns => self.data_columns_page(ui),
+                        WizardPage::SaveFilters => self.save_filters_page(ui),
+                    });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        outcome = ImportOutcome::Cancelled;
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let i = self.page.index();
+                        let ready = self.has_file();
+                        if ui.add_enabled(ready, egui::Button::new("Finish")).clicked() {
+                            outcome = self.finish();
+                        }
+                        let can_next = ready && i + 1 < WizardPage::ALL.len();
+                        if ui.add_enabled(can_next, egui::Button::new("Next >>")).clicked() {
+                            self.page = WizardPage::ALL[i + 1];
+                        }
+                        if ui.add_enabled(ready && i > 0, egui::Button::new("<< Back")).clicked() {
+                            self.page = WizardPage::ALL[i - 1];
+                        }
+                    });
+                });
+            });
+
+        if before != (self.dlg.current, self.dlg.kind, self.dlg.chi.clone(), self.dlg.ascii.clone()) {
+            self.dlg.preview = None;
+            ctx.request_repaint();
+        }
+        if !open {
+            outcome = ImportOutcome::Cancelled;
+        }
+        outcome
+    }
+
+    // ----- pages ----------------------------------------------------------------------------
+
+    fn source_page(&mut self, ui: &mut egui::Ui) {
+        group_box(ui, "Data Type", |ui| {
+            ui.horizontal(|ui| {
+                let _ = ui.radio(true, "ASCII");
+                ui.add_enabled(false, egui::RadioButton::new(false, "Binary"));
+                ui.add_enabled(false, egui::RadioButton::new(false, "User Defined"));
+            });
+        });
+        group_box(ui, "Data Source", |ui| {
+            ui.horizontal(|ui| {
+                let _ = ui.radio(true, "File");
+                let width = (ui.available_width() - 34.0).max(120.0);
+                let response = ui.add(egui::TextEdit::singleline(&mut self.path_text).desired_width(width));
+                if response.changed() {
+                    let typed = PathBuf::from(self.path_text.trim().trim_matches('"'));
+                    if typed.is_file() && self.dlg.files.first() != Some(&typed) {
+                        let text = self.path_text.clone();
+                        self.set_files(vec![typed]);
+                        self.path_text = text;
+                    } else if self.path_text.trim().is_empty() {
+                        self.set_files(Vec::new());
+                    }
+                }
+                if ui.button("...").on_hover_text("Choose the files").clicked()
+                    && let Some(files) = rfd::FileDialog::new().set_title("Import data files").pick_files()
+                    && !files.is_empty()
+                {
+                    self.set_files(files);
+                }
+            });
+            if self.dlg.files.len() > 1 {
+                ui.weak(format!("{} files are imported with these options", self.dlg.files.len()));
+            }
+            ui.add_enabled(false, egui::RadioButton::new(false, "Clipboard"));
+        });
+        group_box(ui, "Import Filter", |ui| {
+            ui.checkbox(&mut self.filters_both, "List filters applicable to both Data Type and file name");
+            ui.horizontal(|ui| {
+                ui.label("Import Filters for current Data Type");
+                let name = |k: ImportKind| match k {
+                    ImportKind::Auto => "<None>",
+                    ImportKind::Chi => "CH Instruments",
+                    ImportKind::Ascii => "Delimited Text",
+                };
+                egui::ComboBox::from_id_salt("wizard_filter").selected_text(name(self.dlg.kind)).width(260.0).show_ui(
+                    ui,
+                    |ui| {
+                        for k in [ImportKind::Auto, ImportKind::Chi, ImportKind::Ascii] {
+                            ui.selectable_value(&mut self.dlg.kind, k, name(k));
+                        }
+                    },
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("Description");
+                let text = match self.dlg.kind {
+                    ImportKind::Auto => "The format is found from the file",
+                    ImportKind::Chi => "Text and binary files of the CH Instruments potentiostat",
+                    ImportKind::Ascii => "Text with a delimiter between the columns",
+                };
+                read_only_box(ui, text, ui.available_width());
+            });
+        });
+        group_box(ui, "Target Window", |ui| {
+            ui.horizontal(|ui| {
+                let _ = ui.radio(true, "Worksheet");
+                ui.add_enabled(false, egui::RadioButton::new(false, "Matrix"));
+                ui.add_enabled(
+                    false,
+                    egui::RadioButton::new(false, "None (User Defined filter needs to create window)"),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("Import Mode");
+                egui::ComboBox::from_id_salt("wizard_import_mode")
+                    .selected_text(self.dlg.mode.label())
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        for m in ImportMode::ALL {
+                            let usable = m == ImportMode::NewBook || self.dlg.target.is_some();
+                            ui.add_enabled_ui(usable, |ui| {
+                                ui.selectable_value(&mut self.dlg.mode, m, m.label());
+                            });
+                        }
+                    });
+            });
+            match (&self.dlg.target, self.dlg.mode) {
+                (Some(t), m) if m != ImportMode::NewBook => {
+                    ui.weak(format!("Active sheet: {t}"));
+                }
+                (None, _) => {
+                    ui.weak("Open or select a workbook to add to its sheets.");
+                }
+                _ => {}
+            }
+        });
+        group_box(ui, "Graph", |ui| {
+            ui.checkbox(&mut self.dlg.plot, "Make a graph of each file");
+            ui.add_enabled_ui(self.dlg.plot, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Template");
+                    let suggested = match &self.dlg.preview {
+                        Some(Ok(p)) => format!("Suggested ({})", p.suggested_template.label()),
+                        _ => "Suggested".to_string(),
+                    };
+                    let text = self.dlg.template.map(|t| t.label().to_string()).unwrap_or_else(|| suggested.clone());
+                    egui::ComboBox::from_id_salt("wizard_template").selected_text(text).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.dlg.template, None, suggested);
+                        for t in Template::ALL {
+                            ui.selectable_value(&mut self.dlg.template, Some(t), t.label());
+                        }
+                    });
+                });
+            });
+        });
+        if !self.has_file() {
+            super::frame::hint(ui, "Choose a file to continue.");
+        }
+    }
+
+    /// The lines of the file with numbers; those before the data are shaded.
+    fn raw_view(&mut self, ui: &mut egui::Ui, header_lines: Option<usize>) {
+        let lines: Vec<String> = self.raw_lines().to_vec();
+        ui.label(RichText::new("File").strong());
+        egui::Frame::new().fill(Color32::WHITE).stroke(egui::Stroke::new(1.0_f32, crate::theme::BORDER)).show(
+            ui,
+            |ui| {
+                ui.set_width(ui.available_width());
+                for (i, line) in lines.iter().enumerate() {
+                    let n = i + 1;
+                    let shade = header_lines.is_some_and(|h| n <= h);
+                    let text = RichText::new(format!("{n:>3}  {line}")).monospace();
+                    let text = if shade { text.background_color(Color32::from_rgb(255, 250, 205)) } else { text };
+                    ui.add(egui::Label::new(text).truncate());
+                }
+                if lines.is_empty() {
+                    ui.weak("Nothing to show.");
+                }
+            },
+        );
+    }
+
+    /// Delimited-text pages need a text file; a CH Instruments file has its own header.
+    fn needs_ascii(&mut self, ui: &mut egui::Ui) -> bool {
+        if self.dlg.shown_format() == "ascii" {
+            return true;
+        }
+        ui.add_enabled_ui(false, |ui| ui.label("These options apply to delimited text files."));
+        false
+    }
+
+    fn header_lines_page(&mut self, ui: &mut egui::Ui) {
+        if self.needs_ascii(ui) {
+            let detected = self.dlg.detected();
+            let found = detected.as_ref().map(|d| d.header_lines);
+            group_box(ui, "Header Lines", |ui| {
+                egui::Grid::new("wizard_header_lines").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
+                    ui.label("Lines before the data");
+                    optional_line(ui, &mut self.dlg.ascii.header_lines, found, "none");
+                    ui.end_row();
+                });
+            });
+            let shown = self.dlg.ascii.header_lines.or(found);
+            self.raw_view(ui, shown);
+        } else {
+            self.raw_view(ui, None);
+        }
+    }
+
+    fn column_names_page(&mut self, ui: &mut egui::Ui) {
+        if self.needs_ascii(ui) {
+            let detected = self.dlg.detected();
+            group_box(ui, "Column Names", |ui| {
+                let o = &mut self.dlg.ascii;
+                egui::Grid::new("wizard_column_names").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
+                    ui.label("Line with the names");
+                    optional_line(ui, &mut o.long_name_line, detected.as_ref().map(|d| d.long_name_line), "none");
+                    ui.end_row();
+                    ui.label("Line with the units");
+                    optional_line(ui, &mut o.units_line, detected.as_ref().map(|d| d.units_line), "none");
+                    ui.end_row();
+                    ui.label("Line with comments");
+                    optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
+                    ui.end_row();
+                });
+            });
+        }
+        let shown = self.dlg.ascii.header_lines.or_else(|| self.dlg.detected().map(|d| d.header_lines));
+        self.raw_view(ui, shown);
+    }
+
+    fn file_name_page(&mut self, ui: &mut egui::Ui) {
+        group_box(ui, "File Name Options", |ui| {
+            ui.checkbox(&mut self.name_workbook, "Use the file name as the long name of the workbook");
+            ui.checkbox(&mut self.name_sheet, "Use the file name as the name of the sheet");
+        });
+        if let Some(file) = self.dlg.files.get(self.dlg.current) {
+            let stem = file.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = file.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            ui.add_space(6.0);
+            ui.label(format!("File: {name}"));
+            ui.label(format!("Workbook long name: {}", if self.name_workbook { stem.as_str() } else { "(empty)" }));
+            if self.name_sheet {
+                ui.label(format!("Sheet name: {stem}"));
+            }
+        }
+    }
+
+    fn data_columns_page(&mut self, ui: &mut egui::Ui) {
+        if self.dlg.shown_format() == "chi" {
+            group_box(ui, "CH Instruments", |ui| {
+                let o = &mut self.dlg.chi;
+                ui.checkbox(&mut o.split_scans, "Split cyclic voltammetry into scans");
+                ui.checkbox(
+                    &mut o.split_segments,
+                    "Add a sheet with each charge and discharge segment (chronopotentiometry)",
+                );
+                ui.checkbox(&mut o.add_milliamp, "Add the current in mA");
+                ui.checkbox(&mut o.add_charge, "Add the charge to current-vs-time files");
+                ui.checkbox(&mut o.invert_current, "Invert the sign of the current");
+                ui.checkbox(&mut o.exact_time, "Recompute rounded times from the sampling interval");
+            });
+        } else {
+            for (title, page) in [
+                ("Delimiter", ImportPage::Options),
+                ("Column Designation", ImportPage::ColumnDesignation),
+                ("Partial Import", ImportPage::PartialImport),
+                ("Numbers and Dates", ImportPage::Miscellaneous),
+            ] {
+                group_box(ui, title, |ui| {
+                    self.dlg.page = page;
+                    self.dlg.ascii_page(ui);
+                });
+            }
+        }
+        ui.add_space(4.0);
+        ui.allocate_ui(egui::vec2(ui.available_width(), 170.0), |ui| self.dlg.preview_ui(ui));
+    }
+
+    fn save_filters_page(&mut self, ui: &mut egui::Ui) {
+        group_box(ui, "Save Filters", |ui| {
+            ui.add_enabled_ui(false, |ui| {
+                let mut save = false;
+                ui.checkbox(&mut save, "Save the settings as an import filter");
+                ui.horizontal(|ui| {
+                    ui.label("Filter file name");
+                    let mut name = String::new();
+                    ui.add(egui::TextEdit::singleline(&mut name).desired_width(240.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Description");
+                    let mut text = String::new();
+                    ui.add(egui::TextEdit::singleline(&mut text).desired_width(240.0));
+                });
+            });
+        });
+        ui.weak("Saved import filters are not available in this version. Press Finish to import.");
+    }
+}
+
+/// The first `count` lines of a text file (the first 64 KB are read at most).
+fn read_lines(path: &Path, count: usize) -> Vec<String> {
+    let mut bytes = Vec::new();
+    if std::fs::File::open(path).and_then(|f| f.take(64 * 1024).read_to_end(&mut bytes)).is_err() {
+        return Vec::new();
+    }
+    match sheaf_io::decode_text(&bytes, path) {
+        Ok(text) => text.lines().take(count).map(str::to_string).collect(),
+        Err(_) => Vec::new(),
+    }
+}

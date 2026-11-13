@@ -3158,3 +3158,361 @@ fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
         h.state().analysis.as_ref().expect("the Integrate window is open, not a message to activate a workbook");
     assert_eq!(dialog.columns(), &[ys[1]]);
 }
+
+// ----- the dialogs in Origin's layout: Column Properties, the analysis frame, the Import Wizard ----
+
+/// Types into the n-th text box of the window that is open (in the order they are drawn), replacing
+/// what it holds.
+fn type_into_box(h: &mut Harness<'static, SheafApp>, n: usize, text: &str) {
+    h.query_all_by_role(egui::accesskit::Role::TextInput).nth(n).expect("the text box exists").focus();
+    settle(h);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text(text.to_string()));
+    settle(h);
+}
+
+/// Whether at least one widget carries this label (a label can appear in several places).
+fn has_label(h: &Harness<'static, SheafApp>, label: &str) -> bool {
+    h.query_all_by_label(label).next().is_some()
+}
+
+fn is_disabled(h: &Harness<'static, SheafApp>, label: &str) -> bool {
+    h.get_by_label(label).accesskit_node().is_disabled()
+}
+
+/// The x position of a button, to check the order in which buttons are drawn.
+fn button_x(h: &Harness<'static, SheafApp>, label: &str) -> f32 {
+    h.get_by_label(label).rect().center().x
+}
+
+fn open_column_props(h: &mut Harness<'static, SheafApp>, short: &str) -> ColumnId {
+    let id = column_id(h, short);
+    let dialog = ColumnPropsDialog::new(project(h), id);
+    h.state_mut().column_props = dialog;
+    settle(h);
+    id
+}
+
+fn open_analysis(h: &mut Harness<'static, SheafApp>, kind: AnalysisKind) {
+    let book = project(h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Analyze { book, columns: Vec::new(), kind }, &ctx);
+    settle(h);
+}
+
+#[test]
+fn column_properties_has_origins_fields_and_buttons_in_windows_order() {
+    let mut h = start(vec![data_file("colprops-layout")]);
+    open_column_props(&mut h, "B");
+    for label in [
+        "<< Prev",
+        "Next >>",
+        "Short Name",
+        "Long Name",
+        "Units",
+        "Comments",
+        "Options",
+        "Plot Designation",
+        "Format",
+        "Display",
+        "Column Width",
+        "Apply to all columns to the right",
+    ] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    assert!(button_x(&h, "OK") < button_x(&h, "Cancel") && button_x(&h, "Cancel") < button_x(&h, "Apply"));
+    assert!(is_disabled(&h, "Apply"), "Apply is grey until something changes");
+}
+
+#[test]
+fn column_properties_fields_change_the_model_and_apply_keeps_the_window_open() {
+    let mut h = start(vec![data_file("colprops-apply")]);
+    let b = open_column_props(&mut h, "B");
+    // Long name and units.
+    type_into_box(&mut h, 1, "Signal");
+    type_into_box(&mut h, 2, "mA");
+    assert!(!is_disabled(&h, "Apply"), "a change turns Apply on");
+    assert_eq!(project(&h).column(b).unwrap().long_name, "up", "nothing reaches the project before Apply");
+    click(&mut h, "Apply");
+    assert!(h.state().column_props.is_some(), "Apply does not close the window");
+    let c = project(&h).column(b).unwrap();
+    assert_eq!((c.long_name.as_str(), c.units.as_str()), ("Signal", "mA"));
+    assert!(is_disabled(&h, "Apply"), "Apply is grey again once it was applied");
+    // The designation, through its drop-down, then OK.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Y")).click();
+    settle(&mut h);
+    click(&mut h, "Y error");
+    click(&mut h, "OK");
+    assert!(h.state().column_props.is_none(), "OK closes the window");
+    assert_eq!(project(&h).column(b).unwrap().designation, Designation::YError);
+}
+
+#[test]
+fn column_properties_cancel_changes_nothing() {
+    let mut h = start(vec![data_file("colprops-cancel")]);
+    let b = open_column_props(&mut h, "B");
+    let before = project(&h).column(b).unwrap().clone();
+    let undo = h.state().doc.undo_label().map(str::to_string);
+    type_into_box(&mut h, 2, "mA");
+    type_into_box(&mut h, 1, "Signal");
+    click(&mut h, "Cancel");
+    assert!(h.state().column_props.is_none());
+    let c = project(&h).column(b).unwrap();
+    assert_eq!((c.long_name.as_str(), c.units.as_str(), c.designation), ("up", "", before.designation));
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), undo, "no undo step was made");
+}
+
+#[test]
+fn column_properties_next_and_prev_move_along_the_sheet_and_keep_the_changes() {
+    let mut h = start(vec![data_file("colprops-steps")]);
+    let a = open_column_props(&mut h, "A");
+    assert!(is_disabled(&h, "<< Prev"), "the first column has no previous one");
+    type_into_box(&mut h, 1, "Time");
+    click(&mut h, "Next >>");
+    let b = column_id(&h, "B");
+    assert_eq!(h.state().column_props.as_ref().unwrap().column(), b);
+    assert_eq!(project(&h).column(a).unwrap().long_name, "Time", "Next applies the changes of the column left");
+    click(&mut h, "<< Prev");
+    assert_eq!(h.state().column_props.as_ref().unwrap().column(), a);
+}
+
+#[test]
+fn column_properties_apply_to_all_columns_to_the_right_copies_designation_and_format() {
+    use sheaf_core::format::NumberFormat;
+    let mut h = start(vec![data_file("colprops-right")]);
+    let b = open_column_props(&mut h, "B");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Automatic")).click();
+    settle(&mut h);
+    click(&mut h, "Scientific");
+    click(&mut h, "Apply to all columns to the right");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Y")).click();
+    settle(&mut h);
+    click(&mut h, "Z");
+    click(&mut h, "OK");
+    let c = column_id(&h, "C");
+    for id in [b, c] {
+        let col = project(&h).column(id).unwrap();
+        assert_eq!(col.designation, Designation::Z);
+        assert!(matches!(col.format, NumberFormat::Scientific(_)), "{:?}", col.format);
+    }
+    let a = project(&h).column(column_id(&h, "A")).unwrap();
+    assert_eq!(a.designation, Designation::X, "the column to the left is not touched");
+}
+
+#[test]
+fn the_analysis_window_has_origins_frame_and_apply_runs_without_closing() {
+    let mut h = start(vec![data_file("frame-apply")]);
+    open_analysis(&mut h, AnalysisKind::Integrate);
+    for label in ["Dialog Theme", "Description", "Recalculate", "Input", "Output", "Auto Preview", "Preview"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    h.get_by_label("Integrate: integ1");
+    assert!(button_x(&h, "OK") < button_x(&h, "Cancel") && button_x(&h, "Cancel") < button_x(&h, "Apply"));
+    click(&mut h, "Apply");
+    assert!(h.state().analysis.is_some(), "Apply leaves the window open");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2, "the tool ran");
+    assert_eq!(b.sheets[1].columns[1].numeric().unwrap(), [16.5, 46.5]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+}
+
+#[test]
+fn the_analysis_window_cancel_changes_nothing() {
+    let mut h = start(vec![data_file("frame-cancel")]);
+    open_analysis(&mut h, AnalysisKind::Smooth);
+    let undo = h.state().doc.undo_label().map(str::to_string);
+    click(&mut h, "Cancel");
+    assert!(h.state().analysis.is_none());
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 3));
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), undo);
+}
+
+#[test]
+fn the_analysis_window_options_change_the_result() {
+    let mut h = start(vec![data_file("frame-options")]);
+    open_analysis(&mut h, AnalysisKind::Normalize);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Divide by the maximum")).click();
+    settle(&mut h);
+    click(&mut h, "To the range 0 to 1");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added: Vec<&sheaf_core::Column> =
+        b.sheet().columns.iter().filter(|c| !["A", "B", "C"].contains(&c.short_name.as_str())).collect();
+    assert_eq!(added.len(), 2, "one normalized column for each Y column");
+    let v = added[0].numeric().unwrap();
+    assert!(v.iter().copied().fold(f64::INFINITY, f64::min).abs() < 1e-12, "{v:?}");
+    assert!((v.iter().copied().fold(f64::NEG_INFINITY, f64::max) - 1.0).abs() < 1e-12);
+}
+
+#[test]
+fn a_preview_is_computed_on_request_and_writes_nothing() {
+    let mut h = start(vec![data_file("frame-preview")]);
+    open_analysis(&mut h, AnalysisKind::Smooth);
+    assert!(h.state().analysis.as_ref().unwrap().preview_state().is_none(), "no preview before it is asked for");
+    click(&mut h, "Preview");
+    assert_eq!(h.state().analysis.as_ref().unwrap().preview_state(), Some(Ok(4)));
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 3), "a preview writes nothing");
+    assert_eq!(h.state().doc.undo_label(), Some("Import data"));
+    // The arrow hides and shows the pane.
+    click(&mut h, "<<");
+    click(&mut h, ">>");
+    h.get_by_label("Auto Preview");
+}
+
+#[test]
+fn auto_preview_follows_a_changed_option() {
+    let mut h = start(vec![data_file("frame-auto")]);
+    open_analysis(&mut h, AnalysisKind::Normalize);
+    click(&mut h, "Auto Preview");
+    assert_eq!(h.state().analysis.as_ref().unwrap().preview_state(), Some(Ok(4)), "ticking computes it");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Divide by the maximum")).click();
+    settle(&mut h);
+    click(&mut h, "To the range 0 to 1");
+    assert_eq!(h.state().analysis.as_ref().unwrap().preview_state(), Some(Ok(4)));
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().columns.len(), 3, "still nothing written");
+}
+
+#[test]
+fn a_tool_without_a_preview_greys_the_preview_controls() {
+    let mut h = start(vec![data_file("frame-nopreview")]);
+    open_analysis(&mut h, AnalysisKind::Peaks);
+    assert!(is_disabled(&h, "Preview"));
+    assert!(is_disabled(&h, "Auto Preview"));
+}
+
+#[test]
+fn the_range_picker_of_the_analysis_window_chooses_the_input_columns() {
+    let mut h = start(vec![data_file("frame-picker")]);
+    open_analysis(&mut h, AnalysisKind::Integrate);
+    assert_eq!(h.state().analysis.as_ref().unwrap().columns().len(), 2);
+    click(&mut h, "...");
+    h.get_by_label("Select Input Columns");
+    // Leave only the column "up" (B).
+    click(&mut h, "C  down");
+    // Two windows have an OK button now: the small picker was opened last, so it is drawn last.
+    h.query_all_by_label("OK").last().expect("the picker's OK").click();
+    settle(&mut h);
+    assert_eq!(h.state().analysis.as_ref().unwrap().columns().len(), 1);
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets[1].columns[1].numeric().unwrap(), [16.5], "only the chosen column was integrated");
+}
+
+#[test]
+fn the_statistics_windows_share_the_frame() {
+    let mut h = start(vec![data_file("frame-stats")]);
+    open_analysis(&mut h, AnalysisKind::TTest);
+    for label in ["Dialog Theme", "Recalculate", "Input", "Output", "Apply"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    assert!(is_disabled(&h, "Preview"), "a test has no preview");
+    click(&mut h, "Cancel");
+    assert!(h.state().analysis.is_none());
+}
+
+#[test]
+fn the_file_menu_and_ctrl_3_open_the_import_wizard_on_its_source_page() {
+    let mut h = start(Vec::new());
+    menu_path(&mut h, &["File", "Import", "Import Wizard..."]);
+    assert_eq!(h.state().import_wizard.as_ref().map(|w| w.page()), Some(WizardPage::Source));
+    for label in ["Data Type", "Data Source", "Import Filter", "Target Window", "ASCII", "Cancel"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    // No file chosen yet: Back, Next and Finish are grey.
+    for label in ["<< Back", "Next >>", "Finish"] {
+        assert!(is_disabled(&h, label), "{label} is grey without a file");
+    }
+    assert!(is_disabled(&h, "Binary") && is_disabled(&h, "User Defined") && is_disabled(&h, "Clipboard"));
+    click(&mut h, "Cancel");
+    assert!(h.state().import_wizard.is_none());
+    assert_eq!(project(&h).workbooks().count(), 0, "Cancel imports nothing");
+    ctrl(&mut h, egui::Key::Num3);
+    assert!(h.state().import_wizard.is_some(), "Ctrl+3 opens the wizard");
+}
+
+#[test]
+fn typing_a_path_enables_the_wizard_buttons_and_the_pages_follow_next_and_back() {
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::ImportWizard, &ctx);
+    settle(&mut h);
+    let file = data_file("wizard-path");
+    type_into_box(&mut h, 0, &file.display().to_string());
+    assert!(!is_disabled(&h, "Next >>"), "a file that exists enables Next");
+    assert!(!is_disabled(&h, "Finish"));
+    for page in [
+        WizardPage::HeaderLines,
+        WizardPage::ColumnNames,
+        WizardPage::FileNameOptions,
+        WizardPage::DataColumns,
+        WizardPage::SaveFilters,
+    ] {
+        click(&mut h, "Next >>");
+        assert_eq!(h.state().import_wizard.as_ref().unwrap().page(), page);
+    }
+    assert!(is_disabled(&h, "Next >>"), "the last page has no next one");
+    click(&mut h, "<< Back");
+    assert_eq!(h.state().import_wizard.as_ref().unwrap().page(), WizardPage::DataColumns);
+    // Cancel at the left; Back, Next and Finish at the right.
+    assert!(button_x(&h, "Cancel") < button_x(&h, "<< Back"));
+    assert!(button_x(&h, "<< Back") < button_x(&h, "Next >>") && button_x(&h, "Next >>") < button_x(&h, "Finish"));
+}
+
+#[test]
+fn the_wizard_pages_drive_the_import_options_and_finish_imports() {
+    let mut h = start(Vec::new());
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-wizard-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("scan.csv");
+    std::fs::write(&file, "t,i\ns,mA\n1,2.5\n2,4.5\n3,6.5\n").unwrap();
+    h.state_mut().import_wizard = Some(ImportWizard::new(vec![file]));
+    settle(&mut h);
+    // Header Lines and Column Names pages: the option boxes, and the lines of the file.
+    click(&mut h, "Next >>");
+    h.get_by_label("Lines before the data");
+    click(&mut h, "Next >>");
+    h.get_by_label("Line with the names");
+    h.get_by_label("Line with the units");
+    h.get_by_label("Line with comments");
+    // File Name Options: the file name becomes the sheet name.
+    click(&mut h, "Next >>");
+    click(&mut h, "Use the file name as the name of the sheet");
+    // Data Columns: the first column is not X.
+    click(&mut h, "Next >>");
+    assert!(has_label(&h, "Delimiter"));
+    click(&mut h, "The first column is X");
+    // Save Filters: shown grey.
+    click(&mut h, "Next >>");
+    assert!(is_disabled(&h, "Save the settings as an import filter"));
+    click(&mut h, "Finish");
+    assert!(h.state().import_wizard.is_none(), "Finish closes the wizard");
+    let book = project(&h).workbooks().next().expect("the file was imported");
+    assert_eq!(book.sheet().name, "scan", "the File Name Options page named the sheet");
+    assert_ne!(book.sheet().columns[0].designation, Designation::X, "the Data Columns option reached the importer");
+    assert_eq!(book.sheet().columns[1].units, "mA", "the units line was found");
+}
+
+#[test]
+fn the_wizard_source_page_chooses_the_filter_and_the_import_mode() {
+    let mut h = start(vec![data_file("wizard-mode")]);
+    show_window(&mut h, "Book1 - sample");
+    let more = data_file("wizard-mode").with_file_name("more.txt");
+    std::fs::write(&more, "w\tz\n1\t1\n2\t2\n3\t3\n4\t4\n").unwrap();
+    h.state_mut().import_wizard = Some(ImportWizard::new(vec![more]));
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New book")).click();
+    settle(&mut h);
+    click(&mut h, "New columns");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("<None>")).click();
+    settle(&mut h);
+    click(&mut h, "Delimited Text");
+    click(&mut h, "Make a graph of each file");
+    click(&mut h, "Finish");
+    assert_eq!(project(&h).workbooks().count(), 1, "the data went into the active sheet");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().columns.len(), 5);
+    assert_eq!(project(&h).graphs().count(), 1, "no graph was made for the new columns");
+}

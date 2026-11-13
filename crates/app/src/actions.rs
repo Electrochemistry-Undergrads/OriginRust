@@ -111,6 +111,8 @@ pub enum Action {
     SaveProjectAs,
     /// Ask for files and open the import dialog; with a path, skip the file chooser.
     Import(Option<PathBuf>),
+    /// File > Import > Import Wizard (Ctrl+3).
+    ImportWizard,
     Undo,
     Redo,
     NewWorkbook,

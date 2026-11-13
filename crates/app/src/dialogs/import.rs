@@ -18,34 +18,34 @@ const DETECT_BYTES: u64 = 256 * 1024;
 const PREVIEW_ROWS: usize = 40;
 
 pub struct ImportDialog {
-    files: Vec<PathBuf>,
+    pub(super) files: Vec<PathBuf>,
     /// The file shown in the preview.
-    current: usize,
-    kind: ImportKind,
-    chi: ChiOptions,
-    ascii: AsciiOptions,
-    other_delimiter: String,
+    pub(super) current: usize,
+    pub(super) kind: ImportKind,
+    pub(super) chi: ChiOptions,
+    pub(super) ascii: AsciiOptions,
+    pub(super) other_delimiter: String,
     /// Make a graph of every imported file.
-    plot: bool,
+    pub(super) plot: bool,
     /// The graph template; `None` uses what the importer suggests for each file.
-    template: Option<Template>,
+    pub(super) template: Option<Template>,
     /// Where the data goes: a new book, or into the sheet that is active in the project.
-    mode: ImportMode,
+    pub(super) mode: ImportMode,
     /// Name of the active sheet (book and sheet), when there is one to put data into.
-    target: Option<String>,
-    preview: Option<Result<Imported, String>>,
+    pub(super) target: Option<String>,
+    pub(super) preview: Option<Result<Imported, String>>,
     /// What detection found for the file and options it was computed for, so that it is not
     /// repeated every frame.
     detection: Option<DetectionCache>,
     /// How many times detection has run (for tests).
     detect_runs: usize,
     /// The node of the tree at the left that is shown.
-    page: ImportPage,
+    pub(super) page: ImportPage,
 }
 
 /// The nodes of the tree at the left: "Import Options" and its groups.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ImportPage {
+pub(super) enum ImportPage {
     Options,
     ImportMode,
     HeaderLines,
@@ -140,7 +140,7 @@ impl ImportDialog {
         }
     }
 
-    fn read(&self, index: usize) -> Result<Imported, String> {
+    pub(super) fn read(&self, index: usize) -> Result<Imported, String> {
         sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii).map_err(|e| e.to_string())
     }
 
@@ -219,7 +219,7 @@ impl ImportDialog {
         outcome
     }
 
-    fn run(&self) -> ImportOutcome {
+    pub(super) fn run(&self) -> ImportOutcome {
         let mut items = Vec::new();
         let mut errors = Vec::new();
         for i in 0..self.files.len() {
@@ -262,7 +262,7 @@ impl ImportDialog {
 
     /// The detected settings of the current file, recomputed only when the file or the options
     /// have changed since the last call.
-    fn detected(&mut self) -> Option<sheaf_io::ascii::Detected> {
+    pub(super) fn detected(&mut self) -> Option<sheaf_io::ascii::Detected> {
         let file = self.files.get(self.current)?;
         let fresh = matches!(&self.detection, Some(c) if c.file == *file && c.options == self.ascii);
         if !fresh {
@@ -277,7 +277,7 @@ impl ImportDialog {
     }
 
     /// What the format drop-down and the detection say about the files: "chi", "ascii" or "".
-    fn shown_format(&self) -> &'static str {
+    pub(super) fn shown_format(&self) -> &'static str {
         match (&self.preview, self.kind) {
             (_, ImportKind::Chi) => "chi",
             (_, ImportKind::Ascii) => "ascii",
@@ -394,7 +394,7 @@ impl ImportDialog {
     }
 
     /// The CH Instruments options (Miscellaneous), when the files are read as CH Instruments.
-    fn chi_group(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn chi_group(&mut self, ui: &mut egui::Ui) {
         ui.add_space(6.0);
         ui.strong("CH Instruments");
         if self.shown_format() != "chi" {
@@ -417,7 +417,7 @@ impl ImportDialog {
 
     /// The groups of delimited-text options: the separator (Import Options), Header Lines,
     /// Column Designation, Partial Import and the number and date options (Miscellaneous).
-    fn ascii_page(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn ascii_page(&mut self, ui: &mut egui::Ui) {
         let page = self.page;
         if self.shown_format() != "ascii" {
             if page != ImportPage::Miscellaneous {
@@ -541,7 +541,7 @@ impl ImportDialog {
         });
     }
 
-    fn preview_ui(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn preview_ui(&mut self, ui: &mut egui::Ui) {
         let imported = match &self.preview {
             Some(Ok(p)) => p,
             Some(Err(e)) => {
@@ -606,7 +606,7 @@ impl ImportDialog {
 }
 
 /// A line number that is either detected or typed; 0 means "there is none".
-fn optional_line(ui: &mut egui::Ui, value: &mut Option<usize>, detected: Option<usize>, zero_text: &str) {
+pub(super) fn optional_line(ui: &mut egui::Ui, value: &mut Option<usize>, detected: Option<usize>, zero_text: &str) {
     ui.horizontal(|ui| {
         let mut auto = value.is_none();
         if ui.checkbox(&mut auto, "Detect").changed() {

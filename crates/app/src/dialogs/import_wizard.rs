@@ -65,6 +65,8 @@ pub struct ImportWizard {
     page: WizardPage,
     /// The text of the File box on the Source page.
     path_text: String,
+    /// The text of the File box is not an existing file (the files chosen before are kept).
+    path_error: bool,
     /// "List filters applicable to both Data Type and file name" (only the state is kept).
     filters_both: bool,
     /// File Name Options: the workbook's long name is the file name.
@@ -82,6 +84,7 @@ impl ImportWizard {
             dlg: ImportDialog::new(files),
             page: WizardPage::Source,
             path_text,
+            path_error: false,
             filters_both: true,
             name_workbook: true,
             name_sheet: false,
@@ -99,12 +102,14 @@ impl ImportWizard {
         self.page = page;
     }
 
+    /// A file is chosen and the File box does not show a path that is not a file.
     fn has_file(&self) -> bool {
-        !self.dlg.files.is_empty()
+        !self.dlg.files.is_empty() && !self.path_error
     }
 
     fn set_files(&mut self, files: Vec<PathBuf>) {
         self.path_text = files.first().map(|f| f.display().to_string()).unwrap_or_default();
+        self.path_error = false;
         self.dlg.files = files;
         self.dlg.current = 0;
         self.dlg.preview = None;
@@ -233,12 +238,17 @@ impl ImportWizard {
                 let response = ui.add(egui::TextEdit::singleline(&mut self.path_text).desired_width(width));
                 if response.changed() {
                     let typed = PathBuf::from(self.path_text.trim().trim_matches('"'));
-                    if typed.is_file() && self.dlg.files.first() != Some(&typed) {
-                        let text = self.path_text.clone();
-                        self.set_files(vec![typed]);
-                        self.path_text = text;
+                    if typed.is_file() {
+                        if self.dlg.files.first() != Some(&typed) {
+                            let text = self.path_text.clone();
+                            self.set_files(vec![typed]);
+                            self.path_text = text;
+                        }
+                        self.path_error = false;
                     } else if self.path_text.trim().is_empty() {
                         self.set_files(Vec::new());
+                    } else {
+                        self.path_error = true;
                     }
                 }
                 if ui.button("...").on_hover_text("Choose the files").clicked()
@@ -333,8 +343,67 @@ impl ImportWizard {
                 });
             });
         });
-        if !self.has_file() {
+        self.file_list(ui);
+        if self.path_error {
+            super::frame::hint(ui, "This path is not a file.");
+        } else if self.dlg.files.is_empty() {
             super::frame::hint(ui, "Choose a file to continue.");
+        }
+    }
+
+    /// The files that are imported with these options: click one to preview it, right-click to
+    /// remove it, "Add files..." to add more.
+    fn file_list(&mut self, ui: &mut egui::Ui) {
+        if self.dlg.files.is_empty() {
+            return;
+        }
+        group_box(ui, "Files", |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let mut remove = None;
+                for (i, f) in self.dlg.files.iter().enumerate() {
+                    let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    let response =
+                        ui.selectable_label(i == self.dlg.current, name).on_hover_text(f.display().to_string());
+                    if response.clicked() {
+                        self.dlg.current = i;
+                    }
+                    response.context_menu(|ui| {
+                        if ui.button("Remove from the list").clicked() {
+                            remove = Some(i);
+                            ui.close();
+                        }
+                    });
+                }
+                if let Some(i) = remove {
+                    let mut files = self.dlg.files.clone();
+                    files.remove(i);
+                    let keep = self.dlg.current.min(files.len().saturating_sub(1));
+                    self.set_files(files);
+                    self.dlg.current = keep;
+                }
+                if ui.small_button("Add files...").clicked()
+                    && let Some(more) = rfd::FileDialog::new().set_title("Add data files").pick_files()
+                {
+                    self.dlg.files.extend(more);
+                }
+            });
+        });
+    }
+
+    /// The header entries the importer found in the file shown in the preview.
+    fn file_info(&mut self, ui: &mut egui::Ui) {
+        if let Some(Ok(p)) = &self.dlg.preview
+            && !p.meta.is_empty()
+        {
+            group_box(ui, "File Info and Parameters", |ui| {
+                ui.weak(format!("{} entries in the header of the file shown in the preview", p.meta.len()));
+                for (k, v) in &p.meta {
+                    ui.horizontal(|ui| {
+                        ui.weak(k);
+                        ui.label(v);
+                    });
+                }
+            });
         }
     }
 
@@ -370,6 +439,11 @@ impl ImportWizard {
     }
 
     fn header_lines_page(&mut self, ui: &mut egui::Ui) {
+        self.header_lines_body(ui);
+        self.file_info(ui);
+    }
+
+    fn header_lines_body(&mut self, ui: &mut egui::Ui) {
         if self.needs_ascii(ui) {
             let detected = self.dlg.detected();
             let found = detected.as_ref().map(|d| d.header_lines);

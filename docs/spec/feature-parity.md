@@ -88,7 +88,7 @@ Cross-cutting findings:
 | Fixed width, multi-character delimiter | ASCII options | none | ✗ | | P1 |
 | Encoding | none in Origin 2016 | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | none | ✗ | | P1 |
-| Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
+| Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
 | Excel import | File > Import > Excel | none | ✗ | no spreadsheet crate | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | none | ✗ | | P2 |

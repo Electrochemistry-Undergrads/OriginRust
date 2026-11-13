@@ -3516,3 +3516,54 @@ fn the_wizard_source_page_chooses_the_filter_and_the_import_mode() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheet().columns.len(), 5);
     assert_eq!(project(&h).graphs().count(), 1, "no graph was made for the new columns");
 }
+
+#[test]
+fn a_path_that_is_not_a_file_disables_next_and_finish_until_it_is_valid() {
+    let mut h = start(Vec::new());
+    let file = data_file("wizard-badpath");
+    h.state_mut().import_wizard = Some(ImportWizard::new(vec![file.clone()]));
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Finish"));
+    type_into_box(&mut h, 0, "C:/no/such/file.csv");
+    assert!(has_label(&h, "This path is not a file."));
+    assert!(is_disabled(&h, "Next >>") && is_disabled(&h, "Finish"), "the old file must not be imported");
+    type_into_box(&mut h, 0, &file.display().to_string());
+    assert!(!is_disabled(&h, "Next >>") && !is_disabled(&h, "Finish"));
+    assert!(!has_label(&h, "This path is not a file."));
+}
+
+#[test]
+fn the_wizard_lists_the_files_previews_the_chosen_one_and_removes_one() {
+    let mut h = start(Vec::new());
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-wizard-files-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (a, b) = (dir.join("a.csv"), dir.join("b.csv"));
+    std::fs::write(&a, "p,q\n1,2\n3,4\n").unwrap();
+    std::fs::write(&b, "r,s\n5,6\n7,8\n").unwrap();
+    h.state_mut().import_wizard = Some(ImportWizard::new(vec![a, b]));
+    settle(&mut h);
+    assert!(has_label(&h, "a.csv") && has_label(&h, "b.csv") && has_label(&h, "Add files..."));
+    click(&mut h, "b.csv");
+    click(&mut h, "Next >>");
+    assert!(h.query_by_label_contains("r,s").is_some(), "the lines of the chosen file are shown");
+    assert!(h.query_by_label_contains("p,q").is_none());
+    click(&mut h, "<< Back");
+    right_click(&mut h, "b.csv");
+    click(&mut h, "Remove from the list");
+    assert!(!has_label(&h, "b.csv"));
+    click(&mut h, "Finish");
+    assert_eq!(project(&h).workbooks().count(), 1, "only the file left in the list was imported");
+}
+
+#[test]
+fn ctrl_3_with_the_wizard_open_keeps_it_and_its_file() {
+    let mut h = start(Vec::new());
+    let file = data_file("wizard-ctrl3");
+    h.state_mut().import_wizard = Some(ImportWizard::new(vec![file]));
+    settle(&mut h);
+    click(&mut h, "Next >>");
+    ctrl(&mut h, egui::Key::Num3);
+    assert_eq!(h.state().import_wizard.as_ref().map(|w| w.page()), Some(WizardPage::HeaderLines));
+    assert!(!is_disabled(&h, "Finish"), "the file is still chosen");
+}

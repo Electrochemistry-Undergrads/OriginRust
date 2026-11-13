@@ -621,7 +621,12 @@ impl SheafApp {
                 }
             }
             Action::ImportWizard => {
-                self.import_wizard = Some(ImportWizard::new(Vec::new()));
+                // An open wizard keeps its settings: the command only brings it to the front.
+                if self.import_wizard.is_some() {
+                    ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, egui::Id::new("import_wizard")));
+                } else {
+                    self.import_wizard = Some(ImportWizard::new(Vec::new()));
+                }
             }
             Action::Undo => {
                 if let Some(label) = self.doc.undo() {

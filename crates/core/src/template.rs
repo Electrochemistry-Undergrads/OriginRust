@@ -46,6 +46,12 @@ pub enum Template {
     Bar,
     /// Floating column (Origin's "Floating Column"): each bar runs from one Y column to the next.
     FloatingColumn,
+    /// Stacked bar: the horizontal form of the stacked column.
+    StackedBar,
+    /// 100 % stacked bar: every pile scaled to 100, value axis from 0 to 100.
+    Stacked100Bar,
+    /// Floating bar: the horizontal form of the floating column.
+    FloatingBar,
     /// Stacked area (Origin's "Stacked Area"): the area template with the areas piled up.
     StackedArea,
     /// 100 % stacked area: every pile scaled to 100, Y axis from 0 to 100.
@@ -67,7 +73,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 22] = [
+    pub const ALL: [Template; 25] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -76,6 +82,9 @@ impl Template {
         Template::Stacked100Column,
         Template::Bar,
         Template::FloatingColumn,
+        Template::StackedBar,
+        Template::Stacked100Bar,
+        Template::FloatingBar,
         Template::Area,
         Template::StackedArea,
         Template::Stacked100Area,
@@ -108,6 +117,9 @@ impl Template {
             Template::Stacked100Column => "stacked-column-100",
             Template::Bar => "bar",
             Template::FloatingColumn => "floating-column",
+            Template::StackedBar => "stacked-bar",
+            Template::Stacked100Bar => "stacked-bar-100",
+            Template::FloatingBar => "floating-bar",
             Template::StackedArea => "stacked-area",
             Template::Stacked100Area => "stacked-area-100",
             Template::FillArea => "fill-area",
@@ -135,6 +147,9 @@ impl Template {
             Template::Stacked100Column => "100% Stacked Column",
             Template::Bar => "Bar",
             Template::FloatingColumn => "Floating Column",
+            Template::StackedBar => "Stacked Bar",
+            Template::Stacked100Bar => "100% Stacked Bar",
+            Template::FloatingBar => "Floating Bar",
             Template::StackedArea => "Stacked Area",
             Template::Stacked100Area => "100% Stacked Area",
             Template::FillArea => "Fill Area",
@@ -167,6 +182,9 @@ impl Template {
             Template::Stacked100Column => themed(column(id, name, PlotKind::Stacked100Column)),
             Template::Bar => column(id, name, PlotKind::Bar),
             Template::FloatingColumn => from_blue(column(id, name, PlotKind::FloatingColumn)),
+            Template::StackedBar => themed(column(id, name, PlotKind::StackedBar)),
+            Template::Stacked100Bar => themed(column(id, name, PlotKind::Stacked100Bar)),
+            Template::FloatingBar => from_blue(column(id, name, PlotKind::FloatingBar)),
             Template::Area => themed(general(id, name, PlotKind::Area)),
             Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
             Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
@@ -605,7 +623,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 22);
+        assert_eq!(Template::ALL.len(), 25);
     }
 
     #[test]

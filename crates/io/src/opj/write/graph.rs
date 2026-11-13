@@ -671,7 +671,7 @@ impl Writer {
             notes.push("bubble sizes and colour mapped symbol colours were not written".into());
         }
         if has(&|k| k.is_stacked_column()) {
-            notes.push("stacked columns were written as columns side by side".into());
+            notes.push("stacked columns and bars were written as columns side by side".into());
         }
         if has(&|k| k.is_stacked_area()) {
             notes.push("stacked areas were written as areas from zero".into());
@@ -679,10 +679,10 @@ impl Writer {
         if plots.iter().any(|r| r.plot.kind == PlotKind::Area && r.plot.y_base.is_some()) {
             notes.push("fill areas between two curves were written as areas down to zero".into());
         }
-        if has(&|k| k == PlotKind::Bar) {
+        if has(&|k| k.is_horizontal()) {
             notes.push("horizontal bars were written as vertical columns".into());
         }
-        if has(&|k| k == PlotKind::FloatingColumn) {
+        if has(&|k| matches!(k, PlotKind::FloatingColumn | PlotKind::FloatingBar)) {
             notes.push("floating columns were written as columns from zero".into());
         }
         if plots.iter().any(|r| r.plot.x_error.is_some() || !r.plot.error.is_default()) {
@@ -699,6 +699,9 @@ impl Writer {
                 | PlotKind::Stacked100Column
                 | PlotKind::Bar
                 | PlotKind::FloatingColumn
+                | PlotKind::StackedBar
+                | PlotKind::Stacked100Bar
+                | PlotKind::FloatingBar
                 | PlotKind::Histogram
                 | PlotKind::Box
                 | PlotKind::Pie => CurveKind::Column,

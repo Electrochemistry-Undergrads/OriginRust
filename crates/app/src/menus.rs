@@ -635,12 +635,13 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
-                    grey("Stacked Bar"),
+                    item("Stacked Bar", Cmd::Plot(Template::StackedBar)),
                     item("100% Stacked Column", Cmd::Plot(Template::Stacked100Column)),
-                    grey("100% Stacked Bar"),
+                    item("100% Stacked Bar", Cmd::Plot(Template::Stacked100Bar)),
                     item("Floating Column", Cmd::Plot(Template::FloatingColumn)),
+                    item("Floating Bar", Cmd::Plot(Template::FloatingBar)),
                 ],
-                greys(&["Floating Bar", "3D Color Pie", "2D B&&W Pie"]),
+                greys(&["3D Color Pie", "2D B&&W Pie"]),
                 vec![item("2D Color Pie", Cmd::Plot(Template::Pie))],
             ]
             .concat(),
@@ -2224,6 +2225,31 @@ mod tests {
         }
         for d in Designation::ALL {
             assert!(cmds.contains(&Cmd::SetAs(d)), "{d:?} is not in Column > Set As");
+        }
+    }
+
+    #[test]
+    fn the_horizontal_bar_items_of_the_plot_menu_are_live_and_make_the_right_graph() {
+        use sheaf_core::graph::PlotKind;
+        let mut items: Vec<(String, Cmd)> = Vec::new();
+        for m in bar(WindowKind::Workbook) {
+            walk(&m.entries, &mut |i| {
+                if let Some(c) = &i.cmd {
+                    items.push((i.label.clone(), c.clone()));
+                }
+            });
+        }
+        for (label, t, kind) in [
+            ("Stacked Bar", Template::StackedBar, PlotKind::StackedBar),
+            ("100% Stacked Bar", Template::Stacked100Bar, PlotKind::Stacked100Bar),
+            ("Floating Bar", Template::FloatingBar, PlotKind::FloatingBar),
+        ] {
+            assert!(
+                items.iter().any(|(l, c)| l.replace('&', "") == label && *c == Cmd::Plot(t)),
+                "{label} is a live item"
+            );
+            let g = t.new_graph(sheaf_core::WindowId(0), "");
+            assert_eq!(g.layers[0].default_kind, kind);
         }
     }
 

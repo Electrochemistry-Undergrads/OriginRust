@@ -2524,6 +2524,82 @@ fn golden_floating_column_template() {
 }
 
 #[test]
+fn stacked_bars_pile_from_left_to_right() {
+    let (p, g) = bar_probe(Template::StackedBar);
+    let l = layer_data(&p, g);
+    let pd = &l.plots[1];
+    assert!(pd.transposed());
+    assert_eq!((pd.base_at(2), pd.x_at(2), pd.y_at(2)), (Some(4.0), 5.0, 3.0), "values on X, positions on Y");
+    let xs = data::axis_range(l.plots.iter(), data::Dim::X, ScaleKind::Linear).unwrap();
+    assert_eq!(xs, (0.0, 8.0));
+    // One slot for the whole pile, as for stacked columns.
+    for pd in &l.plots {
+        let b = pd.bar.unwrap();
+        assert!((b.left + 0.4).abs() < 1e-12 && (b.width - 0.8).abs() < 1e-12);
+    }
+}
+
+#[test]
+fn hundred_percent_stacked_bars_end_at_100_on_the_x_axis() {
+    let (p, g) = bar_probe(Template::Stacked100Bar);
+    let l = layer_data(&p, g);
+    for i in 0..4 {
+        assert!((l.plots[2].x_at(i) - 100.0).abs() < 1e-9);
+    }
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|t| t == "100"), "the value axis shows 100");
+    assert!(!t.iter().any(|t| t == "120"), "and ends there");
+}
+
+#[test]
+fn floating_bars_run_along_x_from_the_base_column() {
+    let (mut p, g) = bar_probe(Template::FloatingBar);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.truncate(1);
+    layer.plots[0].y_base = Some(low);
+    let l = layer_data(&p, g);
+    assert!(l.plots[0].transposed());
+    assert_eq!((l.plots[0].base_at(2), l.plots[0].x_at(2), l.plots[0].y_at(2)), (Some(1.0), 4.0, 3.0));
+    let xs = data::axis_range(l.plots.iter(), data::Dim::X, ScaleKind::Linear).unwrap();
+    assert_eq!(xs, (1.0, 5.0));
+}
+
+#[test]
+fn plot_columns_pairs_the_columns_of_a_floating_bar() {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let lo = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let hi = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0])).unwrap();
+    let g = p.plot_columns(Template::FloatingBar, &[lo, hi]).unwrap();
+    let plots = &p.graph(g).unwrap().layers[0].plots;
+    assert_eq!((plots.len(), plots[0].y, plots[0].y_base), (1, hi, Some(lo)));
+}
+
+#[test]
+fn golden_stacked_bar_template() {
+    let (p, g) = bar_probe(Template::StackedBar);
+    compare_golden("stacked-bar", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_stacked_bar_100_template() {
+    let (p, g) = bar_probe(Template::Stacked100Bar);
+    compare_golden("stacked-bar-100", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_floating_bar_template() {
+    let (mut p, g) = bar_probe(Template::FloatingBar);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.truncate(1);
+    layer.plots[0].y_base = Some(low);
+    compare_golden("floating-bar", &svg_of(&p, g));
+}
+
+#[test]
 fn golden_xy_error_bars() {
     let (p, g) = error_project(sheaf_core::graph::ErrorDirection::Both, 8.0);
     compare_golden("xy-error", &svg_of(&p, g));

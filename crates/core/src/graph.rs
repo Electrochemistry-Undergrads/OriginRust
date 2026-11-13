@@ -787,6 +787,14 @@ pub enum PlotKind {
     /// A column from the plot's base column (`Plot::y_base`) up to its Y column (Origin's
     /// plot type 207).
     FloatingColumn,
+    /// Bars piled on each other, lying down: the horizontal form of [`PlotKind::StackedColumn`]
+    /// (Origin's plot type 216 with the stacked bar template). The piles grow from left to right.
+    StackedBar,
+    /// Like [`PlotKind::StackedBar`], with every pile scaled to 100; the value axis runs from 0 to 100.
+    Stacked100Bar,
+    /// The horizontal form of [`PlotKind::FloatingColumn`]: a bar from the plot's base column
+    /// (`Plot::y_base`) to its Y column along the horizontal axis.
+    FloatingBar,
     /// Areas piled on each other (Origin's plot type 214): each plot's area runs from the curve of
     /// the plots before it (in plot order) up to the sum of their values and its own.
     StackedArea,
@@ -822,6 +830,9 @@ impl PlotKind {
                 | PlotKind::Stacked100Column
                 | PlotKind::Bar
                 | PlotKind::FloatingColumn
+                | PlotKind::StackedBar
+                | PlotKind::Stacked100Bar
+                | PlotKind::FloatingBar
                 | PlotKind::Histogram
         )
     }
@@ -831,9 +842,12 @@ impl PlotKind {
         self.is_stacked_column() || self.is_stacked_area()
     }
 
-    /// True for the piled column kinds.
+    /// True for the piled column and piled bar kinds.
     pub fn is_stacked_column(&self) -> bool {
-        matches!(self, PlotKind::StackedColumn | PlotKind::Stacked100Column)
+        matches!(
+            self,
+            PlotKind::StackedColumn | PlotKind::Stacked100Column | PlotKind::StackedBar | PlotKind::Stacked100Bar
+        )
     }
 
     /// True for the piled area kinds.
@@ -843,12 +857,12 @@ impl PlotKind {
 
     /// True when every pile is scaled to a total of 100.
     pub fn is_percent_stacked(&self) -> bool {
-        matches!(self, PlotKind::Stacked100Column | PlotKind::Stacked100Area)
+        matches!(self, PlotKind::Stacked100Column | PlotKind::Stacked100Bar | PlotKind::Stacked100Area)
     }
 
     /// True when the bars lie down: values along the horizontal axis.
     pub fn is_horizontal(&self) -> bool {
-        matches!(self, PlotKind::Bar)
+        matches!(self, PlotKind::Bar | PlotKind::StackedBar | PlotKind::Stacked100Bar | PlotKind::FloatingBar)
     }
 
     pub fn has_symbols(&self) -> bool {
@@ -907,7 +921,7 @@ pub struct Plot {
     /// Error values in X (the third column type "X error"); drawn as horizontal error bars.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub x_error: Option<ColumnId>,
-    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] plot, or
+    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] or [`PlotKind::FloatingBar`] plot, or
     /// the lower edge of the fill of an [`PlotKind::Area`] plot (Origin's Fill Area between two
     /// curves).
     #[serde(default, skip_serializing_if = "Option::is_none")]

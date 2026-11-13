@@ -1,0 +1,702 @@
+newbook;
+col(1) = data(1,5,1); col(1) = 1.0*sin(0.9650000000000001*col(1)) + 1.3*cos(0.21*col(1)^1.3) + 0.0*col(1);
+wks.addcol();
+col(2) = data(1,5,1); col(2) = 1.7*sin(1.335*col(2)) + 1.8*cos(0.38*col(2)^1.3) + 0.05*col(2);
+wks.addcol();
+col(3) = data(1,5,1); col(3) = 2.4*sin(1.705*col(3)) + 2.3*cos(0.55*col(3)^1.3) + 0.1*col(3);
+wks.addcol();
+col(4) = data(1,5,1); col(4) = 3.0999999999999996*sin(2.0749999999999997*col(4)) + 1.3*cos(0.72*col(4)^1.3) + 0.15000000000000002*col(4);
+wks.addcol();
+col(5) = data(1,5,1); col(5) = 3.8*sin(2.445*col(5)) + 1.8*cos(0.89*col(5)^1.3) + 0.2*col(5);
+wks.addcol();
+col(6) = data(1,6,1); col(6) = 1.0*sin(0.978*col(6)) + 1.3*cos(0.21*col(6)^1.3) + 0.0*col(6);
+wks.addcol();
+col(7) = data(1,6,1); col(7) = 1.7*sin(1.348*col(7)) + 1.8*cos(0.38*col(7)^1.3) + 0.05*col(7);
+wks.addcol();
+col(8) = data(1,6,1); col(8) = 2.4*sin(1.7180000000000002*col(8)) + 2.3*cos(0.55*col(8)^1.3) + 0.1*col(8);
+wks.addcol();
+col(9) = data(1,6,1); col(9) = 3.0999999999999996*sin(2.0879999999999996*col(9)) + 1.3*cos(0.72*col(9)^1.3) + 0.15000000000000002*col(9);
+wks.addcol();
+col(10) = data(1,6,1); col(10) = 3.8*sin(2.4579999999999997*col(10)) + 1.8*cos(0.89*col(10)^1.3) + 0.2*col(10);
+wks.addcol();
+col(11) = data(1,8,1); col(11) = 1.0*sin(1.004*col(11)) + 1.3*cos(0.21*col(11)^1.3) + 0.0*col(11);
+wks.addcol();
+col(12) = data(1,8,1); col(12) = 1.7*sin(1.374*col(12)) + 1.8*cos(0.38*col(12)^1.3) + 0.05*col(12);
+wks.addcol();
+col(13) = data(1,8,1); col(13) = 2.4*sin(1.7440000000000002*col(13)) + 2.3*cos(0.55*col(13)^1.3) + 0.1*col(13);
+wks.addcol();
+col(14) = data(1,8,1); col(14) = 3.0999999999999996*sin(2.114*col(14)) + 1.3*cos(0.72*col(14)^1.3) + 0.15000000000000002*col(14);
+wks.addcol();
+col(15) = data(1,8,1); col(15) = 3.8*sin(2.484*col(15)) + 1.8*cos(0.89*col(15)^1.3) + 0.2*col(15);
+wks.addcol();
+col(16) = data(1,10,1); col(16) = 1.0*sin(1.03*col(16)) + 1.3*cos(0.21*col(16)^1.3) + 0.0*col(16);
+wks.addcol();
+col(17) = data(1,10,1); col(17) = 1.7*sin(1.4*col(17)) + 1.8*cos(0.38*col(17)^1.3) + 0.05*col(17);
+wks.addcol();
+col(18) = data(1,10,1); col(18) = 2.4*sin(1.77*col(18)) + 2.3*cos(0.55*col(18)^1.3) + 0.1*col(18);
+wks.addcol();
+col(19) = data(1,10,1); col(19) = 3.0999999999999996*sin(2.1399999999999997*col(19)) + 1.3*cos(0.72*col(19)^1.3) + 0.15000000000000002*col(19);
+wks.addcol();
+col(20) = data(1,10,1); col(20) = 3.8*sin(2.51*col(20)) + 1.8*cos(0.89*col(20)^1.3) + 0.2*col(20);
+wks.addcol();
+col(21) = data(1,12,1); col(21) = 1.0*sin(1.056*col(21)) + 1.3*cos(0.21*col(21)^1.3) + 0.0*col(21);
+wks.addcol();
+col(22) = data(1,12,1); col(22) = 1.7*sin(1.426*col(22)) + 1.8*cos(0.38*col(22)^1.3) + 0.05*col(22);
+wks.addcol();
+col(23) = data(1,12,1); col(23) = 2.4*sin(1.796*col(23)) + 2.3*cos(0.55*col(23)^1.3) + 0.1*col(23);
+wks.addcol();
+col(24) = data(1,12,1); col(24) = 3.0999999999999996*sin(2.166*col(24)) + 1.3*cos(0.72*col(24)^1.3) + 0.15000000000000002*col(24);
+wks.addcol();
+col(25) = data(1,12,1); col(25) = 3.8*sin(2.536*col(25)) + 1.8*cos(0.89*col(25)^1.3) + 0.2*col(25);
+wks.addcol();
+col(26) = data(1,15,1); col(26) = 1.0*sin(1.095*col(26)) + 1.3*cos(0.21*col(26)^1.3) + 0.0*col(26);
+wks.addcol();
+col(27) = data(1,15,1); col(27) = 1.7*sin(1.465*col(27)) + 1.8*cos(0.38*col(27)^1.3) + 0.05*col(27);
+wks.addcol();
+col(28) = data(1,15,1); col(28) = 2.4*sin(1.8350000000000002*col(28)) + 2.3*cos(0.55*col(28)^1.3) + 0.1*col(28);
+wks.addcol();
+col(29) = data(1,15,1); col(29) = 3.0999999999999996*sin(2.2049999999999996*col(29)) + 1.3*cos(0.72*col(29)^1.3) + 0.15000000000000002*col(29);
+wks.addcol();
+col(30) = data(1,15,1); col(30) = 3.8*sin(2.5749999999999997*col(30)) + 1.8*cos(0.89*col(30)^1.3) + 0.2*col(30);
+wks.addcol();
+col(31) = data(1,20,1); col(31) = 1.0*sin(1.1600000000000001*col(31)) + 1.3*cos(0.21*col(31)^1.3) + 0.0*col(31);
+wks.addcol();
+col(32) = data(1,20,1); col(32) = 1.7*sin(1.53*col(32)) + 1.8*cos(0.38*col(32)^1.3) + 0.05*col(32);
+wks.addcol();
+col(33) = data(1,20,1); col(33) = 2.4*sin(1.9000000000000001*col(33)) + 2.3*cos(0.55*col(33)^1.3) + 0.1*col(33);
+wks.addcol();
+col(34) = data(1,20,1); col(34) = 3.0999999999999996*sin(2.2699999999999996*col(34)) + 1.3*cos(0.72*col(34)^1.3) + 0.15000000000000002*col(34);
+wks.addcol();
+col(35) = data(1,20,1); col(35) = 3.8*sin(2.6399999999999997*col(35)) + 1.8*cos(0.89*col(35)^1.3) + 0.2*col(35);
+wks.addcol();
+col(36) = data(1,25,1); col(36) = 1.0*sin(1.225*col(36)) + 1.3*cos(0.21*col(36)^1.3) + 0.0*col(36);
+wks.addcol();
+col(37) = data(1,25,1); col(37) = 1.7*sin(1.595*col(37)) + 1.8*cos(0.38*col(37)^1.3) + 0.05*col(37);
+wks.addcol();
+col(38) = data(1,25,1); col(38) = 2.4*sin(1.965*col(38)) + 2.3*cos(0.55*col(38)^1.3) + 0.1*col(38);
+wks.addcol();
+col(39) = data(1,25,1); col(39) = 3.0999999999999996*sin(2.335*col(39)) + 1.3*cos(0.72*col(39)^1.3) + 0.15000000000000002*col(39);
+wks.addcol();
+col(40) = data(1,25,1); col(40) = 3.8*sin(2.705*col(40)) + 1.8*cos(0.89*col(40)^1.3) + 0.2*col(40);
+wks.addcol();
+col(41) = data(1,30,1); col(41) = 1.0*sin(1.29*col(41)) + 1.3*cos(0.21*col(41)^1.3) + 0.0*col(41);
+wks.addcol();
+col(42) = data(1,30,1); col(42) = 1.7*sin(1.66*col(42)) + 1.8*cos(0.38*col(42)^1.3) + 0.05*col(42);
+wks.addcol();
+col(43) = data(1,30,1); col(43) = 2.4*sin(2.0300000000000002*col(43)) + 2.3*cos(0.55*col(43)^1.3) + 0.1*col(43);
+wks.addcol();
+col(44) = data(1,30,1); col(44) = 3.0999999999999996*sin(2.4*col(44)) + 1.3*cos(0.72*col(44)^1.3) + 0.15000000000000002*col(44);
+wks.addcol();
+col(45) = data(1,30,1); col(45) = 3.8*sin(2.77*col(45)) + 1.8*cos(0.89*col(45)^1.3) + 0.2*col(45);
+wks.addcol();
+col(46) = data(1,40,1); col(46) = 1.0*sin(1.42*col(46)) + 1.3*cos(0.21*col(46)^1.3) + 0.0*col(46);
+wks.addcol();
+col(47) = data(1,40,1); col(47) = 1.7*sin(1.79*col(47)) + 1.8*cos(0.38*col(47)^1.3) + 0.05*col(47);
+wks.addcol();
+col(48) = data(1,40,1); col(48) = 2.4*sin(2.16*col(48)) + 2.3*cos(0.55*col(48)^1.3) + 0.1*col(48);
+wks.addcol();
+col(49) = data(1,40,1); col(49) = 3.0999999999999996*sin(2.53*col(49)) + 1.3*cos(0.72*col(49)^1.3) + 0.15000000000000002*col(49);
+wks.addcol();
+col(50) = data(1,40,1); col(50) = 3.8*sin(2.9*col(50)) + 1.8*cos(0.89*col(50)^1.3) + 0.2*col(50);
+wks.addcol();
+col(51) = data(1,50,1); col(51) = 1.0*sin(1.55*col(51)) + 1.3*cos(0.21*col(51)^1.3) + 0.0*col(51);
+wks.addcol();
+col(52) = data(1,50,1); col(52) = 1.7*sin(1.92*col(52)) + 1.8*cos(0.38*col(52)^1.3) + 0.05*col(52);
+wks.addcol();
+col(53) = data(1,50,1); col(53) = 2.4*sin(2.29*col(53)) + 2.3*cos(0.55*col(53)^1.3) + 0.1*col(53);
+wks.addcol();
+col(54) = data(1,50,1); col(54) = 3.0999999999999996*sin(2.6599999999999997*col(54)) + 1.3*cos(0.72*col(54)^1.3) + 0.15000000000000002*col(54);
+wks.addcol();
+col(55) = data(1,50,1); col(55) = 3.8*sin(3.03*col(55)) + 1.8*cos(0.89*col(55)^1.3) + 0.2*col(55);
+wks.addcol();
+col(56) = data(1,60,1); col(56) = 1.0*sin(1.68*col(56)) + 1.3*cos(0.21*col(56)^1.3) + 0.0*col(56);
+wks.addcol();
+col(57) = data(1,60,1); col(57) = 1.7*sin(2.05*col(57)) + 1.8*cos(0.38*col(57)^1.3) + 0.05*col(57);
+wks.addcol();
+col(58) = data(1,60,1); col(58) = 2.4*sin(2.42*col(58)) + 2.3*cos(0.55*col(58)^1.3) + 0.1*col(58);
+wks.addcol();
+col(59) = data(1,60,1); col(59) = 3.0999999999999996*sin(2.7899999999999996*col(59)) + 1.3*cos(0.72*col(59)^1.3) + 0.15000000000000002*col(59);
+wks.addcol();
+col(60) = data(1,60,1); col(60) = 3.8*sin(3.1599999999999997*col(60)) + 1.8*cos(0.89*col(60)^1.3) + 0.2*col(60);
+wks.addcol();
+col(61) = data(1,80,1); col(61) = 1.0*sin(1.94*col(61)) + 1.3*cos(0.21*col(61)^1.3) + 0.0*col(61);
+wks.addcol();
+col(62) = data(1,80,1); col(62) = 1.7*sin(2.31*col(62)) + 1.8*cos(0.38*col(62)^1.3) + 0.05*col(62);
+wks.addcol();
+col(63) = data(1,80,1); col(63) = 2.4*sin(2.68*col(63)) + 2.3*cos(0.55*col(63)^1.3) + 0.1*col(63);
+wks.addcol();
+col(64) = data(1,80,1); col(64) = 3.0999999999999996*sin(3.05*col(64)) + 1.3*cos(0.72*col(64)^1.3) + 0.15000000000000002*col(64);
+wks.addcol();
+col(65) = data(1,80,1); col(65) = 3.8*sin(3.42*col(65)) + 1.8*cos(0.89*col(65)^1.3) + 0.2*col(65);
+wks.addcol();
+col(66) = data(1,100,1); col(66) = 1.0*sin(2.2*col(66)) + 1.3*cos(0.21*col(66)^1.3) + 0.0*col(66);
+wks.addcol();
+col(67) = data(1,100,1); col(67) = 1.7*sin(2.5700000000000003*col(67)) + 1.8*cos(0.38*col(67)^1.3) + 0.05*col(67);
+wks.addcol();
+col(68) = data(1,100,1); col(68) = 2.4*sin(2.9400000000000004*col(68)) + 2.3*cos(0.55*col(68)^1.3) + 0.1*col(68);
+wks.addcol();
+col(69) = data(1,100,1); col(69) = 3.0999999999999996*sin(3.3099999999999996*col(69)) + 1.3*cos(0.72*col(69)^1.3) + 0.15000000000000002*col(69);
+wks.addcol();
+col(70) = data(1,100,1); col(70) = 3.8*sin(3.6799999999999997*col(70)) + 1.8*cos(0.89*col(70)^1.3) + 0.2*col(70);
+double s, d, p;
+kstest irng:=col(1) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(1) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(2) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(2) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(3) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(3) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(4) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(4) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(5) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(5) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(6) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(6) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(7) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(7) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(8) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(8) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(9) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(9) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(10) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(10) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(11) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(11) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(12) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(12) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(13) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(13) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(14) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(14) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(15) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(15) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(16) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(16) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(17) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(17) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(18) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(18) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(19) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(19) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(20) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(20) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(21) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(21) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(22) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(22) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(23) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(23) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(24) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(24) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(25) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(25) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(26) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(26) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(27) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(27) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(28) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(28) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(29) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(29) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(30) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(30) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(31) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(31) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(32) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(32) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(33) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(33) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(34) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(34) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(35) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(35) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(36) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(36) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(37) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(37) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(38) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(38) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(39) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(39) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(40) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(40) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(41) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(41) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(42) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(42) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(43) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(43) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(44) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(44) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(45) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(45) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(46) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(46) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(47) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(47) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(48) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(48) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(49) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(49) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(50) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(50) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(51) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(51) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(52) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(52) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(53) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(53) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(54) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(54) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(55) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(55) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(56) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(56) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(57) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(57) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(58) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(58) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(59) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(59) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(60) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(60) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(61) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(61) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(62) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(62) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(63) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(63) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(64) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(64) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(65) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(65) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(66) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(66) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(67) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(67) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(68) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(68) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(69) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(69) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+kstest irng:=col(70) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+lillietest irng:=col(70) stat:=s df:=d prob:=p;
+?s
+?d
+?p
+#[Book1]Sheet1

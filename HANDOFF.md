@@ -11,6 +11,10 @@
   tree) before merging.
 - **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing of
   it may live on the owner's personal account (UlanS1).
+- **When unsure, copy Origin:** if it is unclear how something should look or behave, check what
+  Origin 2016 does (measure it through `tools/origin-ref/`, or read its documentation for behaviour)
+  and copy it. Do not leave it as an open question for the owner; record what was measured in the
+  spec.
 
 **Added later on 2026-11-12:** the section "Differences from Origin" below (a five-part audit, A to
 E) lists where the current app differs from Origin 2016, re-checked by Sonnet subagents with some

@@ -1192,8 +1192,10 @@ Time/s, i1/A, i2/A
             let t = k as f64 * 0.1;
             let i1 = if k < 30 { 1.05e-2 } else { 1e-3 + k as f64 * 1e-5 };
             let i2 = if (40..70).contains(&k) { -1.05e-2 } else { 1e-3 };
-            text.push_str(&format!("{t:.3e}, {i1:.3e}, {i2:.3e}
-"));
+            text.push_str(&format!(
+                "{t:.3e}, {i1:.3e}, {i2:.3e}
+"
+            ));
         }
         let w = parse_chi(&text, "it", &ChiOptions::default()).unwrap().warnings;
         let (a, b) = (w.iter().find(|m| m.starts_with("i1:")), w.iter().find(|m| m.starts_with("i2: negative")));

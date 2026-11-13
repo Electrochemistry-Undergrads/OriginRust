@@ -162,10 +162,11 @@ Cross-cutting findings:
 | Interpolate and resample | interp1xy | linear, spline, Akima, B-spline | ◐ | extrapolation option not exposed; B-spline default does not match; new sheet only | P0 |
 | Interpolate onto given X, trace | interp1, interp1trace | library function only | ✗ | no app or CLI route | P1 |
 | Translate X or Y | cxt, vshift | none | ✗ | | P1 |
-| Level crossing and curve intersect | levelcrossing, intersect | none | ✗ | | P1 |
+| Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); level crossing none | ◐ | not measured in Origin, `analysis-curve-math.md`; no level crossing | P1 |
 | Data reduction | reducerows, reducedup | none | ✗ | | P1 |
 | Sampling interval check | vinc | internal use only | ✗ | | P1 |
-| Average multiple curves | avecurves | none | ✗ | | P1 |
+| Average multiple curves | avecurves | Average Multiple Curves window and `analyze average`: mean, SD, count; Recalculate Auto/Manual | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
+| Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Cumulative sum | Mathematics | running integral only | ✗ | | P1 |
 | Convolution, deconvolution | Signal Processing | none | ✗ | | P2 |
 | XYZ gridding, matrix conversion | Convert to Matrix | none | ✗ | no matrix window | P2 |

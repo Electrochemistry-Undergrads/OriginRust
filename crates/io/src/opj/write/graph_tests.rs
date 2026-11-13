@@ -461,3 +461,17 @@ fn rotated_tick_labels_are_named() {
     let (_, warnings) = round_trip(&p);
     assert!(warnings.iter().any(|w| w.contains("rotated tick labels")), "{warnings:?}");
 }
+
+#[test]
+fn other_scale_types_survive_a_round_trip() {
+    let mut p = source();
+    graph_with(&mut p, Template::Scatter, &[(0, 3)], |g| {
+        g.layers[0].y_axis.scale = ScaleKind::Ln;
+        g.layers[0].x_axis.scale = ScaleKind::OffsetReciprocal;
+    });
+    let (imp, _) = round_trip(&p);
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!(l.y_axis.scale, ScaleKind::Ln);
+    assert_eq!(l.x_axis.scale, ScaleKind::OffsetReciprocal);
+    assert!(l.y_axis.min.is_some_and(|m| m > 0.0));
+}

@@ -322,6 +322,27 @@ fn log_axis_places_decades_evenly() {
 }
 
 #[test]
+fn every_scale_type_draws_with_its_own_ticks() {
+    use sheaf_core::graph::ScaleKind::*;
+    for kind in [Ln, Log2, Reciprocal, OffsetReciprocal, Probability, Probit, Logit, Weibull] {
+        let (mut p, g) = project(Template::Line, vec![1.0, 2.0, 3.0, 4.0], vec![vec![5.0, 20.0, 50.0, 90.0]]);
+        p.graph_mut(g).unwrap().layers[0].y_axis.scale = kind;
+        let geom = &layout_geometry(&p, g).unwrap()[0];
+        let (_, lo) = geom.data_to_page(1.0, 5.0);
+        let (_, hi) = geom.data_to_page(4.0, 90.0);
+        assert!(lo.is_finite() && hi.is_finite() && hi < lo, "{kind:?}: larger values are higher up");
+        let t = texts(&doc(&svg_of(&p, g)));
+        assert!(t.len() > 4, "{kind:?}: {t:?}");
+    }
+    let (mut p, g) = project(Template::Line, vec![1.0, 2.0, 3.0, 4.0], vec![vec![5.0, 20.0, 50.0, 90.0]]);
+    p.graph_mut(g).unwrap().layers[0].y_axis.scale = Probit;
+    let t = texts(&doc(&svg_of(&p, g)));
+    for label in ["3", "4", "5", "6", "7"] {
+        assert!(t.contains(&label.to_string()), "{label} in {t:?}");
+    }
+}
+
+#[test]
 fn geometry_maps_between_data_and_page() {
     let (p, g) = project(Template::Line, vec![0.0, 10.0], vec![vec![0.0, 100.0]]);
     let geom = &layout_geometry(&p, g).unwrap()[0];

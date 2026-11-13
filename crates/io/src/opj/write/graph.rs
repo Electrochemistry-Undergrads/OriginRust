@@ -898,18 +898,19 @@ fn data_ranges(project: &Project, layer: &Layer, plots: &[(&Plot, Place)]) -> (O
             *r = Some(r.map_or((v, v), |(lo, hi)| (lo.min(v), hi.max(v))));
         }
     };
-    let log_x = layer.x_axis.scale == ScaleKind::Log10;
-    let log_y = layer.y_axis.scale == ScaleKind::Log10;
+    // Data that the scale cannot place (not positive on a log axis, outside 0..100 on a percent axis) are left out.
+    let (sx, sy) = (layer.x_axis.scale, layer.y_axis.scale);
+    let log_y = sy != ScaleKind::Linear;
     for (p, place) in plots {
         let (ox, oy) = (place.ox, place.oy);
         let ys = project.numeric(p.y).unwrap_or(&[]);
         let errs = p.y_error.and_then(|e| project.numeric(e));
         for (i, v) in ys.iter().enumerate() {
-            if !v.is_finite() || (log_y && *v <= 0.0) {
+            if !v.is_finite() || !sy.accepts(*v) {
                 continue;
             }
             let e = errs.and_then(|e| e.get(i)).copied().filter(|e| e.is_finite()).unwrap_or(0.0).abs();
-            if !log_y || *v + oy > 0.0 {
+            if sy.accepts(*v + oy) {
                 grow(&mut y, *v + oy);
             }
             if !log_y {
@@ -923,7 +924,7 @@ fn data_ranges(project: &Project, layer: &Layer, plots: &[(&Plot, Place)]) -> (O
         match p.x.and_then(|c| project.numeric(c)) {
             Some(xs) => {
                 for v in xs {
-                    if !log_x || *v > 0.0 {
+                    if sx.accepts(*v) {
                         grow(&mut x, *v + ox);
                     }
                 }
@@ -979,6 +980,15 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.hide_end_label {
             notes.push("a hidden tick label at the end of an axis was not written".into());
         }
+        if axis.reverse {
+            notes.push("a reversed axis was written in the normal direction".into());
+        }
+        if axis.first_tick.is_some() {
+            notes.push("the first tick (anchor) of an axis was not written".into());
+        }
+        if !axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty() {
+            notes.push("the prefix and suffix of tick labels were not written".into());
+        }
         if axis.title_color_follows_plot {
             notes.push("axis title colours that follow the first plot's colour were not written".into());
         }
@@ -1005,17 +1015,32 @@ fn sane_frame(f: sheaf_core::graph::Frame, notes: &mut Vec<String>) -> sheaf_cor
 /// the data fit in.
 fn axis_scale(axis: &Axis, data: Option<(f64, f64)>, notes: &mut Vec<String>) -> AxisScale {
     let log = axis.scale == ScaleKind::Log10;
+    let other = !matches!(axis.scale, ScaleKind::Linear | ScaleKind::Log10);
     let (dlo, dhi) = data.unwrap_or(if log { (1.0, 10.0) } else { (0.0, 1.0) });
-    let (alo, ahi, astep) = nice_range(dlo, dhi, log, axis.auto_range, axis.rescale_margin_pct);
+    let (alo, ahi, astep) = match sheaf_core::scales::auto_range(axis.scale, dlo, dhi, axis.rescale_margin_pct) {
+        Some(r) if axis.scale.accepts(dlo) && axis.scale.accepts(dhi) => (r.from, r.to, r.inc),
+        Some(_) => {
+            let (a, b) = if axis.scale.is_percent() { (10.0, 90.0) } else { (1.0, 10.0) };
+            sheaf_core::scales::auto_range(axis.scale, a, b, axis.rescale_margin_pct)
+                .map_or((a, b, 1.0), |r| (r.from, r.to, r.inc))
+        }
+        None => nice_range(dlo, dhi, log, axis.auto_range, axis.rescale_margin_pct),
+    };
     let (mut from, mut to) = (axis.min.unwrap_or(alo), axis.max.unwrap_or(ahi));
-    if log && (from <= 0.0 || to <= 0.0) {
+    if (log || other) && !(axis.scale.accepts(from) && axis.scale.accepts(to)) {
         from = alo;
         to = ahi;
     }
     if to.partial_cmp(&from) != Some(std::cmp::Ordering::Greater) {
         (from, to) = (alo, ahi);
     }
-    let step = if log { 1.0 } else { axis.major_step.filter(|s| *s > 0.0).unwrap_or(astep) };
+    let step = if log {
+        1.0
+    } else if other {
+        axis.major_step.filter(|s| *s > 0.0).unwrap_or(astep)
+    } else {
+        axis.major_step.filter(|s| *s > 0.0).unwrap_or(astep)
+    };
     if axis.auto_range != AutoRange::Nice && (axis.min.is_none() || axis.max.is_none()) {
         notes.push(
             "an axis range that follows the data in another way than Origin's own (tight or symmetric about zero) was written as the limits it gives for the current data"
@@ -1036,6 +1061,7 @@ fn axis_scale(axis: &Axis, data: Option<(f64, f64)>, notes: &mut Vec<String>) ->
         to,
         step,
         log,
+        code: axis.scale.file_code(),
         minor: if log { axis.minor_ticks.clamp(0, 9) as u8 } else { axis.minor_ticks.min(100) as u8 },
         auto: axis.min.is_none() && axis.max.is_none() && axis.auto_range == AutoRange::Nice,
     }

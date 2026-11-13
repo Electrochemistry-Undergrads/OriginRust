@@ -204,6 +204,30 @@ Custom tick positions and labels per tick. Reference lines are not documented fo
 
 ---
 
+### 3.8 Scale types other than linear and log10 (measured)
+
+Measured in Origin on a Y axis by setting `layer.y.type`, then `layer -a` (Normal rescale, margin 8 %) and reading
+`layer.y.from`, `.to`, `.inc`, with pictures of the axis exported to find the tick positions (raw outputs are local
+only). LabTalk type numbers: 1 linear, 2 log10, 3 probability, 4 probit, 5 reciprocal, 6 offset reciprocal, 7 logit, 8 ln,
+9 log2, 10 Weibull (the file byte of opj-format.md 10.2 is one less); 11 and higher do nothing. Rule common to every scale:
+the axis draws the transformed value (`forward` below) along a straight line, increasing upwards (a reciprocal axis has the
+larger values at the top). Limits are in data units. The margin is 8 % of the span of the transformed data on each side,
+then the limits are rounded outwards as below.
+
+| Scale | Transform | Valid data | Automatic limits | Ticks |
+|---|---|---|---|---|
+| ln, log2 | ln x, log2 x | x > 0 | with `b` the base: lower = `floor(x / b^k) b^k`, `k = floor(log_b x)`; upper = next tenth of `b^k`, `k = floor(log_b x) + 1` (the same rule as log10, giving its 1..9 ticks). Data 1..9 on ln gives 0.73576..12.0513; 1..1000 gives 0.36788..1788.57; on log2 1..9 gives 0.5..11.2, 1..1000 gives 0.5..1843.2 | `inc` = 1 (step counts powers). Majors at `b^e`, `e = floor(log_b from) + j inc` (so with `inc` 2 and from 0.01 on log2: odd exponents). Labels with up to 5 decimals, trailing zeros dropped (0.36788, 2.71828, 1096.63316, 2980.95799; log2: 0.03125, 0.5, 2048). Minor ticks: the skipped powers when `inc` > 1 (none seen otherwise) |
+| reciprocal | -1/x | x > 0 | margin in the transformed value; limits rounded outwards to multiples of half the step; a lower limit of 0 becomes 1. Data 1..9 gives 1..25, inc 2; 10..100 gives 1..360, inc 20; 2..3 gives 1.75..3.25, inc 0.5. The step rule is only partly understood (our rule: nearest of 1, 2, 5 x 10^k to upper/12; fits 2 of 3) | majors at multiples of `inc` in data units; one minor tick (`minorticks` = 1) in the middle of each gap in data units |
+| offset reciprocal | -1/(x + 273.14) | x > -273.14 | as reciprocal. Data 0..100 gives -25..125, inc 50; 20..300 gives 0..350, inc 100; 5..40 gives 0..45, inc 10 (step: nearest of 1, 2, 5 x 10^k to span/3, fits 3 of 3) | as reciprocal |
+| probability | norminv(p/100) | 0 < p < 100 | margin in z; then the list entry at or below (above) the limit. 1..99 gives 0.1..99.9; 5..60 gives 2..70; 10..90 gives 5..95; 0.1..99.9 gives 0.01..99.99 | list 0.01, 0.1, 0.5, 1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 98, 99, 99.5, 99.9, 99.99 in percent; every `inc`-th entry counted from the first (0.01) is major, `inc` 3 by default (majors 0.01, 1, 10, 40, 70, 95, 99.5; a lower limit of 0.1 is labelled as well); the lower limit is always labelled; entries in between are minor ticks |
+| probit | norminv(p/100) + 5 | 0 < p < 100 | margin in z, then rounded to the nearest whole sd. 1..99 gives 0.135..99.865 % (probit 2..8); 5..60 gives 2.275..50 (3..5); 10..90 gives 15.87..84.13 (4..6, inside the data) | integer probits (labels 2..8), `inc` 1 sd |
+| logit | ln(p/(100-p)) | 0 < p < 100 | as probability, within 0.1..99.9. 1..99 gives 0.1..99.9; 5..60 gives 1..75 | list 0.01, 0.1, 1, 5, 10, 25, 50, 75, 90, 95, 99, 99.9, 99.99; `inc` 1 by default; with `inc` 2 the labels are 0.1, 1, 10, 50, 90, 99 |
+| Weibull | ln(-ln(1 - p/100)) | 0 < p < 100 | as probability. 1..9 gives 0.5..50; 0.1..0.9 gives 0.01..5; 5..99 gives 1..99.9 | list 0.001, 0.01, 0.1, 0.5, 1, 5, 10, 50, 90, 99, 99.9; default `inc` 2 for limits 0.5..50, 1 for 0.01..5 and 0.001..5, 3 for 1..99.9 (ours: 1 below span 10, 2 below 60, else 3) |
+
+Implemented in `sheaf_core::scales` (transforms, limits) and `crates/plot/src/ticks_scales.rs` (ticks, labels); the
+fixtures are the tests of those two files. Not measured: minor tick counts beyond the pictures, the effect of
+`minorticks` on the list scales, negative data on the reciprocals, how date ticks work on these scales.
+
 ## 4. Automatic scale and tick algorithm
 
 **Observed:** rescale combines data min/max, the rescale margin percent, rounding to the tick increment and the minor tick count; the result is "approximately" min-margin..max+margin and lands on tick positions. With margin 0 and 0 minor ticks, Normal rescale gives exact data limits [W:axesref-scale]. The exact increment rule is not documented.

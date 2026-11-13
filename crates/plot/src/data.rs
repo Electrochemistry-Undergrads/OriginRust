@@ -315,7 +315,7 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
 ) -> Option<(f64, f64)> {
     let mut r: Option<(f64, f64)> = None;
     let mut add = |v: f64| {
-        if v.is_finite() && (scale == ScaleKind::Linear || v > 0.0) {
+        if scale.accepts(v) {
             r = Some(match r {
                 None => (v, v),
                 Some((lo, hi)) => (lo.min(v), hi.max(v)),

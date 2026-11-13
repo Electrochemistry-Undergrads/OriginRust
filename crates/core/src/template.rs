@@ -198,6 +198,10 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         tick_label_source: TickLabelSource::Auto,
         tick_label_angle_deg: 0.0,
         hide_end_label: false,
+        reverse: false,
+        first_tick: None,
+        tick_prefix: String::new(),
+        tick_suffix: String::new(),
     }
 }
 

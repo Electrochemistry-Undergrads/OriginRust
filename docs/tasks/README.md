@@ -58,7 +58,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T08](T08-formula-functions.md) | Missing Set Column Values functions in `sheaf-expr` | M | groups 1-3, 5 done (`04a8a80`); strings, cross-sheet, `sum`/`count` as Origin left |
 | [T09](T09-set-values-dialog.md) | Set Column Values dialog in Origin's layout | M | done (`20c37e1`); scripts box, Set Multiple Columns left |
 | [T10](T10-worksheet-operations.md) | Insert/delete rows, move/hide columns, mask, sort column, transpose | L | open, split into commits |
-| [T11](T11-axis-scales-and-features.md) | More axis scales and axis-dialog features | L | open |
+| [T11](T11-axis-scales-and-features.md) | More axis scales and axis-dialog features | L | items 1-2 done (scales, reverse, first tick, prefix/suffix); 3-6 open |
 | [T12](T12-plot-types.md) | Stacked/horizontal columns, histogram, box, pie, bubble, polar | L | items 1-2 done (`d0dbb37`); 3-6 open |
 | [T13](T13-plot-details-and-axis-dialog-tabs.md) | Missing Plot Details tabs and axis-dialog controls | M | open, after T11/T12 pieces |
 | [T14](T14-statistics-breadth.md) | Descriptive-statistics columns, outlier tests, more tests | M | items 1-4 done (`c44a1a6`); 5, 6 open |

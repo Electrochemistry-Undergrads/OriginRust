@@ -53,6 +53,10 @@ impl ResolvedAxis {
                     f64::NAN
                 }
             }
+            other => {
+                let (a, b) = (other.forward(self.min), other.forward(self.max));
+                (other.forward(v) - a) / (b - a)
+            }
         }
     }
 
@@ -64,6 +68,10 @@ impl ResolvedAxis {
             ScaleKind::Log10 => {
                 let (a, b) = (self.min.log10(), self.max.log10());
                 10f64.powf(a + u * (b - a))
+            }
+            other => {
+                let (a, b) = (other.forward(self.min), other.forward(self.max));
+                other.inverse(a + u * (b - a))
             }
         }
     }
@@ -120,7 +128,7 @@ fn clean_d(v: f64, date: bool) -> f64 {
 }
 
 /// Rounds to 12 significant digits to remove floating-point noise.
-fn clean(v: f64) -> f64 {
+pub(crate) fn clean(v: f64) -> f64 {
     if v == 0.0 || !v.is_finite() {
         return v;
     }
@@ -152,20 +160,29 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
     // Both limits fixed with the lower one above the upper one: a reversed axis.
     // Resolve it with the limits swapped and mark it.
     if let (Some(a), Some(b)) = (axis.min, axis.max) {
-        let valid = |v: f64| v.is_finite() && (axis.scale == ScaleKind::Linear || v > 0.0);
+        let valid = |v: f64| axis.scale.accepts(v);
         if valid(a) && valid(b) && a > b {
             let mut swapped = axis.clone();
             swapped.min = Some(b);
             swapped.max = Some(a);
+            swapped.reverse = false;
             let mut r = resolve_axis_edges(&swapped, data_min_max, free);
-            r.reversed = true;
+            r.reversed = !axis.reverse;
             return r;
         }
     }
-    match axis.scale {
+    let mut r = match axis.scale {
         ScaleKind::Linear => resolve_linear(axis, data_min_max, free),
         ScaleKind::Log10 => resolve_log(axis, data_min_max),
+        _ => crate::ticks_scales::resolve_other(axis, data_min_max),
+    };
+    r.reversed ^= axis.reverse;
+    if !axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty() {
+        for label in r.labels.iter_mut().filter(|l| !l.is_empty()) {
+            *label = format!("{}{label}{}", axis.tick_prefix, axis.tick_suffix);
+        }
     }
+    r
 }
 
 /// The most ticks a category axis gets with one tick per row; beyond that its step follows the
@@ -286,13 +303,21 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>, free: (bool, bool)) -> 
         step = fixed_step.unwrap_or_else(|| auto_step(max - min));
     }
 
-    let (major, step) = linear_major(min, max, step, date);
-    let minor = linear_minor(min, max, step, axis.minor_ticks);
+    let (mut major, step) = linear_major(min, max, step, date);
+    let mut minor = linear_minor(min, max, step, axis.minor_ticks);
+    if let Some(anchor) = axis.first_tick.filter(|a| a.is_finite() && !date) {
+        // Ticks at the anchor and whole steps from it: the multiples of the step, shifted.
+        let shifted = |v: &mut Vec<f64>| v.iter_mut().for_each(|x| *x = clean(*x + anchor));
+        (major, _) = linear_major(min - anchor, max - anchor, step, false);
+        shifted(&mut major);
+        minor = linear_minor(min - anchor, max - anchor, step, axis.minor_ticks);
+        shifted(&mut minor);
+    }
     let labels = linear_labels(axis, &major, step);
     ResolvedAxis { min, max, step, scale: ScaleKind::Linear, major, minor, labels, reversed: false }
 }
 
-fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64) {
+pub(crate) fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64) {
     let eps = 1e-9 * (max - min);
     loop {
         let k0 = ((min - eps) / step).ceil();
@@ -312,7 +337,7 @@ fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64
     }
 }
 
-fn linear_minor(min: f64, max: f64, step: f64, per_gap: u32) -> Vec<f64> {
+pub(crate) fn linear_minor(min: f64, max: f64, step: f64, per_gap: u32) -> Vec<f64> {
     if per_gap == 0 {
         return Vec::new();
     }
@@ -432,7 +457,7 @@ fn signed(e: i32) -> String {
     if e < 0 { format!("{MINUS}{}", -e) } else { e.to_string() }
 }
 
-fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
+pub(crate) fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
     let div = if axis.tick_label_divisor.is_finite() && axis.tick_label_divisor != 0.0 {
         axis.tick_label_divisor
     } else {
@@ -510,7 +535,7 @@ fn auto_decimals(step: f64) -> usize {
 }
 
 /// Fixed-decimal text with a real minus sign; negative zero prints as `0`.
-fn decimal(v: f64, d: usize) -> String {
+pub(crate) fn decimal(v: f64, d: usize) -> String {
     let s = format!("{:.*}", d, v.abs());
     let is_zero = s.bytes().all(|b| b == b'0' || b == b'.');
     if v < 0.0 && !is_zero { format!("{MINUS}{s}") } else { s }
@@ -518,7 +543,7 @@ fn decimal(v: f64, d: usize) -> String {
 
 /// `m×10^e` in markup form. `decimals` is the mantissa precision; `None`
 /// trims trailing zeros.
-fn scientific(v: f64, decimals: Option<usize>) -> String {
+pub(crate) fn scientific(v: f64, decimals: Option<usize>) -> String {
     if v == 0.0 {
         return decimal(0.0, decimals.unwrap_or(0));
     }
@@ -534,13 +559,19 @@ fn scientific(v: f64, decimals: Option<usize>) -> String {
     format!("{sign}{mant}{TIMES}10\\+({})", signed(exp))
 }
 
+/// A default axis for tests in other modules.
+#[cfg(test)]
+pub(crate) fn tests_axis() -> Axis {
+    tests::axis()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use sheaf_core::Color;
     use sheaf_core::graph::{Font, TickDirection};
 
-    fn axis() -> Axis {
+    pub(super) fn axis() -> Axis {
         Axis {
             scale: ScaleKind::Linear,
             min: None,
@@ -572,6 +603,10 @@ mod tests {
             tick_label_source: Default::default(),
             tick_label_angle_deg: 0.0,
             hide_end_label: false,
+            reverse: false,
+            first_tick: None,
+            tick_prefix: String::new(),
+            tick_suffix: String::new(),
         }
     }
 
@@ -617,6 +652,32 @@ mod tests {
         }
         assert_eq!(nice_step(0.0), 1.0);
         assert_eq!(nice_step(f64::NAN), 1.0);
+    }
+
+    #[test]
+    fn first_tick_prefix_suffix_and_reverse() {
+        let mut a = axis();
+        a.min = Some(0.0);
+        a.max = Some(10.0);
+        a.major_step = Some(4.0);
+        a.first_tick = Some(1.0);
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.major, vec![1.0, 5.0, 9.0]);
+        a.first_tick = None;
+        a.tick_suffix = " V".into();
+        a.tick_prefix = "~".into();
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.labels, vec!["~0 V", "~4 V", "~8 V"]);
+        assert!(!r.reversed);
+        a.reverse = true;
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert!(r.reversed && (r.to_unit(0.0) - 1.0).abs() < 1e-12);
+        a.min = Some(10.0);
+        a.max = Some(0.0);
+        assert!(
+            !resolve_axis(&a, Some((0.0, 10.0))).reversed,
+            "a limit pair that is already reversed and the check box cancel"
+        );
     }
 
     #[test]

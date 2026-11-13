@@ -1089,6 +1089,15 @@ impl SheafApp {
                 }
             }
             CellOp::Clear => self.clear_cells(book, sheet_index, &t, "Clear cells"),
+            CellOp::Mask(m) => {
+                let mut changed = 0;
+                self.doc.apply("Mask cells", |p| {
+                    if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                        changed = ws.mask_cells(&t.columns, t.rows.clone(), m);
+                    }
+                });
+                self.say(format!("{changed} cell(s) changed"));
+            }
             CellOp::Insert | CellOp::Delete => self.insert_or_delete(book, sheet_index, &t, op == CellOp::Insert),
             CellOp::Paste => {
                 // The system answers with the text in a later frame (an `Event::Paste`).

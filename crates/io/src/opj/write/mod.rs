@@ -144,6 +144,8 @@ struct Notes {
     /// Hidden columns and columns with their own width: the file written here holds neither.
     hidden_dropped: usize,
     widths_dropped: usize,
+    /// Columns with masked cells: the file written here holds no mask.
+    masks_dropped: usize,
     /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
     analysis_links_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
@@ -328,6 +330,7 @@ impl Writer {
             self.notes.formats_dropped += usize::from(column.format != sheaf_core::format::NumberFormat::General);
             self.notes.hidden_dropped += usize::from(column.hidden);
             self.notes.widths_dropped += usize::from(column.width.is_some());
+            self.notes.masks_dropped += usize::from(!column.mask.is_empty());
             let long = self.label_text(&column.long_name, "long name")?;
             let units = self.label_text(&column.units, "units")?;
             let comments = self.comment_text(&column.comments)?;
@@ -683,6 +686,12 @@ impl Writer {
             warnings.push(format!(
                 "{} hidden column(s): the project file written here does not hold the hidden state, so Origin shows them.",
                 n.hidden_dropped
+            ));
+        }
+        if n.masks_dropped > 0 {
+            warnings.push(format!(
+                "{} column(s) have masked cells; the project file written here does not hold the mask, so Origin uses those cells.",
+                n.masks_dropped
             ));
         }
         if n.widths_dropped > 0 {

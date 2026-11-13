@@ -27,7 +27,7 @@ use eframe::egui::{
     text::{LayoutJob, TextFormat},
 };
 use sheaf_core::graph::PlotKind;
-use sheaf_core::sheetops::MoveTo;
+use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
 use std::sync::OnceLock;
@@ -81,6 +81,8 @@ pub enum Cmd {
     HideColumns,
     /// Column > Hide/Unhide Columns > Unhide All.
     UnhideColumns,
+    /// Column > Mask > Apply, Remove, Swap.
+    Mask(MaskOp),
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -777,8 +779,19 @@ fn column_menu() -> Vec<Entry> {
         hide_menu(),
         sep(),
         grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]),
-        grey_sub("Mask", &["Apply", "Remove", "Swap", "Change Color", "Disable Masking", "Mask Cells by Condition..."]),
+        mask_menu(&["Change Color", "Disable Masking", "Mask Cells by Condition..."]),
     ]
+}
+
+/// The Mask submenu: Apply, Remove and Swap work on the selected cells; the rest is greyed.
+fn mask_menu(grey_items: &[&str]) -> Entry {
+    let mut entries = vec![
+        item("Apply", Cmd::Mask(MaskOp::Apply)),
+        item("Remove", Cmd::Mask(MaskOp::Remove)),
+        item("Swap", Cmd::Mask(MaskOp::Swap)),
+    ];
+    entries.extend(greys(grey_items));
+    sub("Mask", entries)
 }
 
 fn hide_menu() -> Entry {
@@ -1259,7 +1272,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     ));
     v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
     v.push(grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]));
-    v.push(grey_sub("Mask", &["Apply", "Remove", "Swap", "Change Color", "Disable Masking"]));
+    v.push(mask_menu(&["Change Color", "Disable Masking"]));
     v.push(grey("Mask Cells by Condition..."));
     v.push(sep());
     v.push(sub(
@@ -1323,7 +1336,7 @@ pub fn cell_menu() -> Vec<Entry> {
         "-",
         "Format Cells...",
     ]));
-    v.push(grey_sub("Mask", &["Apply", "Remove", "Swap"]));
+    v.push(mask_menu(&[]));
     v.push(grey_sub("Set Data Style", &["Default"]));
     v
 }
@@ -1747,13 +1760,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::Cells { book, op: CellOp::Copy(*kind) }
         }
-        Cmd::Cut | Cmd::Paste | Cmd::Clear | Cmd::InsertCells | Cmd::DeleteCells => {
+        Cmd::Cut | Cmd::Paste | Cmd::Clear | Cmd::InsertCells | Cmd::DeleteCells | Cmd::Mask(_) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             let op = match cmd {
                 Cmd::Cut => CellOp::Cut,
                 Cmd::Paste => CellOp::Paste,
                 Cmd::InsertCells => CellOp::Insert,
+                Cmd::Mask(m) => CellOp::Mask(*m),
                 Cmd::DeleteCells => CellOp::Delete,
                 _ => CellOp::Clear,
             };

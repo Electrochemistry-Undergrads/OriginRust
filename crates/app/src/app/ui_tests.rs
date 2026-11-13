@@ -4774,3 +4774,25 @@ fn reverse_order_and_the_custom_sort_windows_work_and_undo() {
         project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
     assert_eq!(names, "BCA", "long names alpha, down, t");
 }
+
+#[test]
+fn masking_cells_marks_them_for_analysis_and_undoes() {
+    use crate::actions::CellOp;
+    use sheaf_core::sheetops::MaskOp;
+    let mut h = start(vec![data_file("mask")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let sheet = project(&h).workbooks().next().unwrap().sheet().clone();
+    h.state_mut().books.entry(book).or_default().select_cells(&sheet, (2, 1), (2, 2));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Mask(MaskOp::Apply) }, &ctx);
+    settle(&mut h);
+    let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().clone();
+    assert_eq!(c.mask.iter().copied().collect::<Vec<_>>(), vec![1, 2]);
+    let seen = c.numeric_unmasked().unwrap();
+    assert!(seen[1].is_nan() && seen[2].is_nan() && seen[0] == 30.5 && seen[3] == 0.5);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "the values stay in the sheet");
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Mask(MaskOp::Swap) }, &ctx);
+    assert!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.is_empty());
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.len(), 2);
+}

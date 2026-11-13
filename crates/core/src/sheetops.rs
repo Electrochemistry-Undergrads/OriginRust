@@ -1,7 +1,7 @@
 //! Worksheet operations that change the shape of a sheet: inserting and deleting rows and
 //! columns, moving and hiding columns.
 
-use crate::analysis::{AnalysisError, row_comparator, take_rows};
+use crate::analysis::{AnalysisError, row_comparator};
 use crate::column::{Column, ColumnData, Designation};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::{Project, ProjectError};
@@ -67,6 +67,43 @@ impl ColumnData {
     }
 }
 
+/// What Column > Mask does to the selected cells.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum MaskOp {
+    Apply,
+    Remove,
+    /// Masked cells become unmasked and the others masked.
+    Swap,
+}
+
+impl Worksheet {
+    /// Masks, unmasks or swaps the mask of the cells of these columns (positions) and rows.
+    /// Cells below the data of a column cannot be masked. Returns the number of cells changed.
+    pub fn mask_cells(&mut self, columns: &[usize], rows: Range<usize>, op: MaskOp) -> usize {
+        let mut changed = 0;
+        for &i in columns {
+            let Some(c) = self.columns.get_mut(i) else { continue };
+            for r in rows.start..rows.end.min(c.len()) {
+                let was = c.mask.contains(&r);
+                let now = match op {
+                    MaskOp::Apply => true,
+                    MaskOp::Remove => false,
+                    MaskOp::Swap => !was,
+                };
+                if now != was {
+                    changed += 1;
+                    if now {
+                        c.mask.insert(r);
+                    } else {
+                        c.mask.remove(&r);
+                    }
+                }
+            }
+        }
+        changed
+    }
+}
+
 /// Where Column > Move Columns puts the selected columns.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MoveTo {
@@ -88,6 +125,9 @@ impl Worksheet {
                 locked += 1;
                 continue;
             }
+            if at < c.len() {
+                c.mask = c.mask.iter().map(|r| if *r >= at { r + count } else { *r }).collect();
+            }
             c.data.insert_blank_rows(at, count);
         }
         locked
@@ -103,6 +143,12 @@ impl Worksheet {
                 locked += 1;
                 continue;
             }
+            c.mask = c
+                .mask
+                .iter()
+                .filter(|r| !rows.contains(r))
+                .map(|r| if *r >= rows.end { r - rows.len() } else { *r })
+                .collect();
             c.data.remove_rows(rows.clone());
             c.trim_missing_tail();
         }
@@ -214,7 +260,7 @@ impl Project {
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
         for c in &mut ws.columns {
             if columns.is_empty() || columns.contains(&c.id) {
-                c.data = take_rows(&c.data, &order, n);
+                c.reorder_rows(&order, n);
             }
         }
         Ok(())
@@ -232,7 +278,7 @@ impl Project {
             }
             let n = c.len();
             let order: Vec<usize> = (0..n).rev().collect();
-            c.data = take_rows(&c.data, &order, n);
+            c.reorder_rows(&order, n);
         }
         locked
     }
@@ -343,6 +389,32 @@ mod tests {
         assert!(ws.move_columns(&[ColumnId(2)], MoveTo::Last));
         assert_eq!(order(&ws), "CAB");
         assert!(!ws.move_columns(&[ColumnId(2)], MoveTo::Right));
+    }
+
+    #[test]
+    fn the_mask_follows_its_rows_through_inserts_deletes_and_sorts() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let k = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![3.0, 1.0, 2.0])).unwrap();
+        {
+            let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+            assert_eq!(ws.mask_cells(&[0], 0..2, MaskOp::Apply), 2);
+            assert_eq!(ws.mask_cells(&[0], 1..9, MaskOp::Swap), 1, "only cells with data swap");
+            assert_eq!(ws.columns[0].mask.iter().copied().collect::<Vec<_>>(), vec![0, 2]);
+            ws.insert_rows(&[0], 1, 1);
+            assert_eq!(ws.columns[0].mask.iter().copied().collect::<Vec<_>>(), vec![0, 3]);
+            ws.delete_rows(&[0], 1..2);
+            assert_eq!(ws.columns[0].mask.iter().copied().collect::<Vec<_>>(), vec![0, 2]);
+        }
+        // Values 3 (masked), 1, 2 (masked): sorting ascending moves the masks with the values.
+        p.sort_sheet(book, 0, k, false).unwrap();
+        assert_eq!(p.numeric(k).unwrap(), [1.0, 2.0, 3.0]);
+        let c = p.column(k).unwrap();
+        assert_eq!(c.mask.iter().copied().collect::<Vec<_>>(), vec![1, 2]);
+        assert!(c.numeric_unmasked().unwrap()[1].is_nan() && c.numeric_unmasked().unwrap()[0] == 1.0);
+        let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+        assert_eq!(ws.mask_cells(&[0], 0..3, MaskOp::Remove), 2);
+        assert!(ws.columns[0].mask.is_empty());
     }
 
     #[test]

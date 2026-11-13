@@ -314,6 +314,9 @@ const HEADER_DARK: Color32 = Color32::from_rgb(60, 60, 72);
 const LINE_HEADER: Color32 = Color32::from_rgb(120, 120, 120);
 const LINE_BODY: Color32 = Color32::from_rgb(200, 200, 200);
 const TEXT: Color32 = Color32::BLACK;
+/// A masked cell: light red fill and red text (Origin draws masked points red).
+const MASK_FILL: Color32 = Color32::from_rgb(255, 224, 224);
+const MASK_TEXT: Color32 = Color32::from_rgb(190, 0, 0);
 
 /// The label rows of a sheet in order: the four fixed ones, then one per user parameter.
 fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
@@ -1175,6 +1178,9 @@ fn body_cell(
         Look::Anchor if !single => {
             ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
         }
+        _ if column.mask.contains(&r) => {
+            ui.painter().rect_filled(rect, 0.0, MASK_FILL);
+        }
         _ => {}
     }
     let (right, bottom) = (rect.right() - 0.5, rect.bottom() - 0.5);
@@ -1227,6 +1233,7 @@ fn body_cell(
 
     let color = match look {
         Look::Dark => Color32::WHITE,
+        _ if column.mask.contains(&r) => MASK_TEXT,
         _ => TEXT,
     };
     let layout = if numeric && !is_text_cell {

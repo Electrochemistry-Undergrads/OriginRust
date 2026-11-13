@@ -3,7 +3,8 @@
 use crate::format::NumberFormat;
 use crate::ids::ColumnId;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 /// The plotting role of a column. A Y column is plotted against the nearest
@@ -251,6 +252,10 @@ pub struct Column {
     /// 8 characters.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<u16>,
+    /// The 0-based rows whose cell is masked (Column > Mask): the point stays in the sheet and in
+    /// graphs (drawn red) but analysis, fits and statistics leave it out.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub mask: BTreeSet<usize>,
     /// The values. Not part of the JSON description: the project file stores
     /// column data separately (see the `sheaf-io` crate).
     #[serde(skip)]
@@ -262,6 +267,29 @@ pub const DEFAULT_WIDTH: u16 = 8;
 
 impl Column {
     /// The width in characters the worksheet shows the column at.
+    /// The numbers of the column with the masked cells replaced by missing values: what
+    /// analysis, fits and statistics read. Borrowed when nothing is masked.
+    pub fn numeric_unmasked(&self) -> Option<Cow<'_, [f64]>> {
+        let v = self.numeric()?;
+        if self.mask.is_empty() {
+            return Some(Cow::Borrowed(v));
+        }
+        let mut owned = v.to_vec();
+        for r in self.mask.range(..owned.len()) {
+            owned[*r] = f64::NAN;
+        }
+        Some(Cow::Owned(owned))
+    }
+
+    /// Puts the rows in the order `order` (new row i takes old row `order[i]`), data and mask
+    /// together. `rows` is the length of the sheet the order was made for.
+    pub fn reorder_rows(&mut self, order: &[usize], rows: usize) {
+        self.data = crate::analysis::take_rows(&self.data, order, rows);
+        if !self.mask.is_empty() {
+            self.mask = order.iter().enumerate().filter(|(_, src)| self.mask.contains(src)).map(|(i, _)| i).collect();
+        }
+    }
+
     pub fn shown_width(&self) -> u16 {
         self.width.unwrap_or(DEFAULT_WIDTH)
     }
@@ -290,6 +318,7 @@ impl Column {
             fit_result: false,
             hidden: false,
             width: None,
+            mask: BTreeSet::new(),
             data,
         }
     }

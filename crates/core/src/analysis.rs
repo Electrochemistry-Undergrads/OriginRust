@@ -29,6 +29,7 @@ use crate::worksheet::Worksheet;
 use serde::{Deserialize, Serialize};
 use sheaf_calc as calc;
 use sheaf_expr::Expr;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 pub use sheaf_calc::{
@@ -742,7 +743,7 @@ struct Input<'a> {
     x_units: String,
     /// X values, as long as `y` (row numbers when the sheet has no X column).
     x: Vec<f64>,
-    y: &'a [f64],
+    y: Cow<'a, [f64]>,
     /// First and last row of the range, 0-based inclusive.
     first: usize,
     last: usize,
@@ -1150,7 +1151,7 @@ impl Project {
                 }
             })?;
             let c = &sheet.columns[index];
-            let y = c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
+            let y = c.numeric_unmasked().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
             if y.is_empty() {
                 return Err(AnalysisError::Empty(c.short_name.clone()));
             }
@@ -1843,7 +1844,7 @@ impl Project {
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
         for c in &mut ws.columns {
             if columns.is_empty() || columns.contains(&c.id) {
-                c.data = take_rows(&c.data, &order, n);
+                c.reorder_rows(&order, n);
             }
         }
         Ok(())
@@ -1867,7 +1868,7 @@ impl Project {
         for c in &mut ws.columns {
             if columns.contains(&c.id) {
                 let order = sort_order(&c.data, n, descending);
-                c.data = take_rows(&c.data, &order, n);
+                c.reorder_rows(&order, n);
             }
         }
         Ok(())
@@ -1908,7 +1909,7 @@ impl Project {
             let source = self.workbook(book).expect("checked above").sheets[sheet].columns.clone();
             for mut c in source {
                 c.id = self.new_column_id();
-                c.data = take_rows(&c.data, &keep, n);
+                c.reorder_rows(&keep, n);
                 c.formula = None;
                 c.recalc = crate::column::RecalcMode::None;
                 c.formula_state = crate::column::FormulaState::Current;
@@ -1921,7 +1922,7 @@ impl Project {
         } else {
             let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
             for c in &mut ws.columns {
-                c.data = take_rows(&c.data, &keep, n);
+                c.reorder_rows(&keep, n);
             }
             Ok((kept, sheet))
         }
@@ -2267,6 +2268,24 @@ mod tests {
         assert!(r.table.unwrap().headers.iter().any(|h| h == "Lower 90% CL of Mean"));
         let bad = StatisticsSpec { confidence_limits: true, level: 1.5, ..StatisticsSpec::default() };
         assert!(p.analyze(&request(&[col], Tool::Statistics(bad))).is_err());
+    }
+
+    #[test]
+    fn masked_cells_are_left_out_of_the_statistics() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let col = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 100.0])).unwrap();
+        let mean = |p: &mut Project| {
+            let r = p.analyze(&request(&[col], Tool::Statistics(StatisticsSpec::default()))).unwrap();
+            let t = r.table.unwrap();
+            let at = t.headers.iter().position(|h| h == "Mean").unwrap();
+            (t.rows[0].1[at], t.headers.iter().position(|h| h == "N").map(|i| t.rows[0].1[i]))
+        };
+        assert_eq!(mean(&mut p).0, 26.5);
+        p.column_mut(col).unwrap().mask.insert(3);
+        let (m, n) = mean(&mut p);
+        assert_eq!(m, 2.0);
+        assert!(n.is_none_or(|n| n == 3.0));
     }
 
     #[test]

@@ -504,7 +504,9 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
     b.sheets[0].columns[1].hidden = true;
     b.sheets[0].columns[2].width = Some(14);
+    b.sheets[0].columns[0].mask.insert(0);
     let all = written(&p).warnings.join(" | ");
     assert!(all.contains("1 hidden column(s)"), "{all}");
     assert!(all.contains("1 column(s) have their own width"), "{all}");
+    assert!(all.contains("1 column(s) have masked cells"), "{all}");
 }

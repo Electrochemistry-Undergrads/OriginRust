@@ -16,6 +16,7 @@ use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
+use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
@@ -98,6 +99,7 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
+    shape_dialog: Option<ShapeDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -157,6 +159,7 @@ impl SheafApp {
             graph_props: None,
             column_props: None,
             text_dialog: None,
+            shape_dialog: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -593,6 +596,7 @@ impl SheafApp {
             GraphOp::UpdateLegend { .. } => "Update legend",
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
+            GraphOp::DeleteShape { .. } => "Delete drawn object",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
@@ -601,7 +605,24 @@ impl SheafApp {
         };
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
+        let shapes = self.shape_dialog_shapes();
         self.doc.apply(label, |p| graph_view::apply_op(p, graph, op, resolved.as_deref()));
+        self.close_shape_dialog_if_changed(shapes);
+    }
+
+    /// The drawn objects of the layer the drawn-object window edits, if it is open.
+    fn shape_dialog_shapes(&self) -> Option<Vec<sheaf_core::shape::Shape>> {
+        self.shape_dialog.as_ref().and_then(|d| d.layer_shapes(&self.doc)).map(<[_]>::to_vec)
+    }
+
+    /// Closes the drawn-object window when Delete, Undo or Redo changed the objects of its layer:
+    /// its index may now name another object, and Apply would edit that one.
+    fn close_shape_dialog_if_changed(&mut self, before: Option<Vec<sheaf_core::shape::Shape>>) {
+        if let Some(d) = &self.shape_dialog
+            && d.layer_shapes(&self.doc) != before.as_deref()
+        {
+            self.shape_dialog = None;
+        }
     }
 
     fn focus(&mut self, id: WindowId) {
@@ -672,14 +693,18 @@ impl SheafApp {
                 }
             }
             Action::Undo => {
+                let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.undo() {
                     self.say(format!("Undone: {label}"));
                 }
+                self.close_shape_dialog_if_changed(shapes);
             }
             Action::Redo => {
+                let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.redo() {
                     self.say(format!("Redone: {label}"));
                 }
+                self.close_shape_dialog_if_changed(shapes);
             }
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
@@ -925,12 +950,19 @@ impl SheafApp {
                 let state = self.graphs.entry(graph).or_default();
                 state.reader = tool == GraphTool::Reader;
                 state.text_tool = tool == GraphTool::Text;
+                state.shape_tool = match tool {
+                    GraphTool::Draw(kind) => Some(kind),
+                    _ => None,
+                };
                 state.reader_point = None;
                 match tool {
                     GraphTool::Reader => {
                         self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends")
                     }
                     GraphTool::Text => self.say("Text: click where the text goes; Esc ends"),
+                    GraphTool::Draw(kind) => {
+                        self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
+                    }
                     GraphTool::Pointer => {}
                 }
             }
@@ -942,6 +974,25 @@ impl SheafApp {
             }
             Action::EditText { graph, layer, label } => {
                 self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label);
+            }
+            Action::AddShape { graph, layer, shape } => {
+                self.doc.apply("Add drawn object", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        l.shapes.push(shape);
+                    }
+                });
+            }
+            Action::MoveShape { graph, layer, shape, dx, dy } => {
+                self.doc.apply("Move drawn object", |p| {
+                    if let Some(s) =
+                        p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.shapes.get_mut(shape))
+                    {
+                        s.translate(dx, dy);
+                    }
+                });
+            }
+            Action::EditShape { graph, layer, shape } => {
+                self.shape_dialog = ShapeDialog::edit(&self.doc, graph, layer, shape);
             }
             Action::MoveLabel { graph, layer, label, x, y } => {
                 self.doc.apply("Move text", |p| {
@@ -1625,6 +1676,7 @@ impl SheafApp {
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
+            layer_curves: graph.map(|g| self.graph_layer_curves(g)).unwrap_or_default(),
         }
     }
 
@@ -1645,6 +1697,35 @@ impl SheafApp {
         })?;
         let (book, _, _) = project.locate(y)?;
         Some((book.id, y))
+    }
+
+    /// The Y columns of the visible plots of numbers in the active layer of graph `g` that sit in the
+    /// same worksheet as the plot the Analysis menu works on (see `MenuContext::layer_curves`); that
+    /// plot comes first.
+    fn graph_layer_curves(&self, g: WindowId) -> Vec<ColumnId> {
+        let project = self.doc.project();
+        let (Some(graph), Some((_, first))) = (project.graph(g), self.graph_curve(g)) else {
+            return Vec::new();
+        };
+        let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+        let sheet_of = |y: ColumnId| {
+            project.locate(y).and_then(|(b, s, _)| b.sheets.iter().position(|w| std::ptr::eq(w, s)).map(|i| (b.id, i)))
+        };
+        let here = sheet_of(first);
+        let mut out = vec![first];
+        if let Some(l) = graph.layers.get(layer) {
+            for p in &l.plots {
+                if p.visible
+                    && p.y != first
+                    && project.numeric(p.y).is_some()
+                    && sheet_of(p.y) == here
+                    && !out.contains(&p.y)
+                {
+                    out.push(p.y);
+                }
+            }
+        }
+        out
     }
 
     /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands
@@ -1726,6 +1807,7 @@ impl SheafApp {
             || self.graph_props.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
+            || self.shape_dialog.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -1903,6 +1985,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.text_dialog = None;
+        }
+        if let Some(d) = &mut self.shape_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.shape_dialog = None;
         }
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)
@@ -2314,6 +2401,17 @@ impl SheafApp {
                         self.text_dialog = TextDialog::edit(&self.doc, id, 0, label);
                         self.graphs.entry(id).or_default().selected =
                             Some((0, sheaf_plot::scene::ObjectKind::Label(label)));
+                        self.focus(id);
+                    }
+                }
+                // shape:N opens the properties window of the N-th drawn object (from 1) of the
+                // first graph's first layer and selects it.
+                "shape" => {
+                    if let (Some(id), Ok(n)) = (first_graph, arg.parse::<usize>()) {
+                        let shape = n.saturating_sub(1);
+                        self.shape_dialog = ShapeDialog::edit(&self.doc, id, 0, shape);
+                        self.graphs.entry(id).or_default().selected =
+                            Some((0, sheaf_plot::scene::ObjectKind::Shape(shape)));
                         self.focus(id);
                     }
                 }

@@ -453,6 +453,11 @@ pub struct StyleArgs {
     /// Repeat the option for more labels.
     #[arg(long, value_name = "TEXT@X,Y")]
     pub label: Vec<String>,
+    /// Draw an object on the first layer: "KIND@X1,Y1,X2,Y2" with KIND line, arrow, rectangle or
+    /// ellipse and the points as fractions of the layer frame (0,0 is its top left corner), for
+    /// example --draw "arrow@0.2,0.2,0.5,0.4". Repeat the option for more objects.
+    #[arg(long, value_name = "KIND@X1,Y1,X2,Y2")]
+    pub draw: Vec<String>,
 }
 
 /// Which part of the page a figure shows (Origin's export margin settings).
@@ -735,6 +740,25 @@ pub enum BoundaryKind {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ReduceKind {
+    Interpolate,
+    Average,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AxisKind {
+    X,
+    Y,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum MedianEdgeKind {
+    Shrink,
+    Repeat,
+    Reflect,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum NormalizeKind {
     /// Divide by the largest value.
     Max,
@@ -802,6 +826,21 @@ pub enum InterpKind {
     /// the interpolating spline, which is not what Origin computes for its default factor 0.
     #[value(name = "bspline")]
     BSpline,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AverageRange {
+    /// Only X values covered by every curve.
+    Intersection,
+    /// From the smallest start to the largest end; curves are not extrapolated.
+    Union,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AverageInterp {
+    Linear,
+    Spline,
+    Akima,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -974,6 +1013,109 @@ pub enum AnalyzeTool {
         /// 0 interpolates the points; Origin's automatic factor for 0 is not reproduced.
         #[arg(long, default_value_t = 0.0)]
         smoothing: f64,
+    },
+    /// Average the chosen curves on a common X: mean, standard deviation and count go to a new sheet.
+    /// Curves with the same X values are averaged row by row; otherwise each curve's X must rise or
+    /// fall all the way (use --rows for one sweep of a cyclic voltammogram).
+    Average {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Evaluate at this many evenly spaced X values (default: every X value of the curves).
+        #[arg(long, conflicts_with = "reference_curve")]
+        points: Option<usize>,
+        /// Evaluate at the X values of this curve, counted from 1 among the chosen columns.
+        #[arg(long)]
+        reference_curve: Option<usize>,
+        #[arg(long, value_enum, default_value_t = AverageRange::Intersection)]
+        range: AverageRange,
+        #[arg(long, value_enum, default_value_t = AverageInterp::Linear)]
+        method: AverageInterp,
+        /// Leave out the standard deviation column.
+        #[arg(long)]
+        no_sd: bool,
+        /// Leave out the count column.
+        #[arg(long)]
+        no_count: bool,
+    },
+    /// Find where two curves meet; X and Y of each point go to a new sheet. Needs exactly two curves.
+    Intersect {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Also list the points where the curves touch without crossing.
+        #[arg(long)]
+        touching: bool,
+    },
+    /// The area enclosed by each curve taken as a closed polygon (last point joined to the first):
+    /// area, signed area, centroid, perimeter and whether it crosses itself.
+    PolygonArea {
+        #[command(flatten)]
+        target: TargetArgs,
+    },
+    /// Subtract the straight line through two points from each curve. The points are X values;
+    /// their Y values are read from the curve (straight lines between data points) unless
+    /// --y1 / --y2 give them.
+    SubtractLine {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, allow_hyphen_values = true)]
+        x1: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        x2: f64,
+        /// Y of the first point (default: the curve's value at --x1).
+        #[arg(long, allow_hyphen_values = true)]
+        y1: Option<f64>,
+        /// Y of the second point (default: the curve's value at --x2).
+        #[arg(long, allow_hyphen_values = true)]
+        y2: Option<f64>,
+    },
+    /// Reduce each curve to evenly spaced X (--step or --points); the result goes to a new sheet.
+    ReduceX {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Spacing of the new X values.
+        #[arg(long, group = "grid")]
+        step: Option<f64>,
+        /// Number of new X values (default 100 when --step is not given).
+        #[arg(long, group = "grid")]
+        points: Option<usize>,
+        /// interpolate (default) reads the curve between its points; average takes the mean of the
+        /// points in the bin around each new X.
+        #[arg(long, value_enum, default_value_t = ReduceKind::Interpolate)]
+        method: ReduceKind,
+        /// First X of the result (default: the smallest X of the data).
+        #[arg(long, allow_hyphen_values = true)]
+        x_min: Option<f64>,
+        /// Last X of the result (default: the largest X of the data).
+        #[arg(long, allow_hyphen_values = true)]
+        x_max: Option<f64>,
+    },
+    /// Translate each curve in X (a new sheet) or in Y (a new column): by --by, or so that the
+    /// point at X = --at lands on --to.
+    Translate {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = AxisKind::X)]
+        axis: AxisKind,
+        /// Shift by this amount.
+        #[arg(long, allow_hyphen_values = true, group = "shift")]
+        by: Option<f64>,
+        /// X of the point to move (with --to).
+        #[arg(long, allow_hyphen_values = true, requires = "to")]
+        at: Option<f64>,
+        /// Where the point lands: its new X (axis x) or its new Y value (axis y).
+        #[arg(long, allow_hyphen_values = true, group = "shift", requires = "at")]
+        to: Option<f64>,
+    },
+    /// Running median of each curve (an odd window).
+    MedianFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Points of the window, odd.
+        #[arg(long, default_value_t = 5)]
+        points: usize,
+        /// shrink (default): the window shrinks symmetrically at the ends; repeat or reflect fill it.
+        #[arg(long, value_enum, default_value_t = MedianEdgeKind::Shrink)]
+        edge: MedianEdgeKind,
     },
     /// Find the peaks of each curve; positions and heights go to a new sheet.
     Peaks {

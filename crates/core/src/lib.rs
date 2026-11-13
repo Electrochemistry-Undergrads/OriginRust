@@ -26,6 +26,7 @@ pub mod project;
 pub mod reshape;
 pub mod rowfilter;
 pub mod scales;
+pub mod shape;
 pub mod sheetops;
 pub mod stack;
 pub mod template;

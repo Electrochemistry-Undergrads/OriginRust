@@ -65,3 +65,29 @@ fn polygon_area_prints_the_table() {
     let cells: Vec<&str> = line.split_whitespace().collect();
     assert_eq!(cells[2], "6", "{line}");
 }
+
+#[test]
+fn average_on_a_cycle_is_refused_unless_the_curves_share_their_x() {
+    let dir = scratch("cycle");
+    // Two scans with their own, turning X: refused with a hint to choose the rows of one sweep.
+    let data = file(&dir, "x1,a,x2,b\n,,,\n0,0,0,0\n1,1,0.5,1\n0,2,1,2\n");
+    let (ok, _, stderr) = sheaf(&["analyze", "average", data.to_str().unwrap(), "-y", "a,b"]);
+    assert!(!ok && stderr.contains("turn back"), "{stderr}");
+    // The same scans on a shared X are averaged row by row, turning included.
+    let shared = file(&dir, "x,a,b\n,,\n0,0,2\n1,1,3\n0,2,4\n");
+    let (ok, stdout, stderr) = sheaf(&["analyze", "average", shared.to_str().unwrap()]);
+    assert!(ok && stdout.contains("3 X values"), "{stdout} {stderr}");
+}
+
+#[test]
+fn average_takes_evenly_spaced_points_and_refuses_a_zero_reference() {
+    let dir = scratch("even");
+    let data = file(&dir, "x,a,b\n,,\n0,0,2\n1,1,3\n2,2,4\n");
+    let export = dir.join("even.csv");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "average", data.to_str().unwrap(), "--points", "5", "--export", export.to_str().unwrap()]);
+    assert!(ok, "{stderr}");
+    assert_eq!(std::fs::read_to_string(&export).unwrap().lines().count(), 5 + 2, "5 rows under two header rows");
+    let (ok, _, stderr) = sheaf(&["analyze", "average", data.to_str().unwrap(), "--reference-curve", "0"]);
+    assert!(!ok && stderr.contains("counts from 1"), "{stderr}");
+}

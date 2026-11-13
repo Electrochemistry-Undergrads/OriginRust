@@ -1,0 +1,12 @@
+newbook mat:=1;
+$page.longname$
+$page.name$
+?page.nlayers
+$layer.name$
+mdim cols:=4 rows:=3;
+?mat.nCols
+?mat.nRows
+?mat.xFrom
+?mat.xTo
+?mat.yFrom
+?mat.yTo

@@ -70,6 +70,11 @@ fn mixed_member(id: u64) -> String {
     format!("data/{id}.mixed.json")
 }
 
+/// The member that holds the numbers of a matrix sheet: `rows * cols` doubles, row by row.
+fn matrix_member(data_id: u64) -> String {
+    format!("data/m{data_id}.f64")
+}
+
 /// Saves a project. The archive is written to a temporary file next to
 /// `path` and then renamed over it, so a crash never leaves a half-written
 /// project behind.
@@ -148,11 +153,19 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, marker: Marker<'_>)
 
     // Refuse before writing anything: two columns with one id would overwrite each other's data.
     let mut seen = HashSet::new();
+    let mut seen_matrix = HashSet::new();
     for w in &project.windows {
         if let Window::Workbook(b) = w {
             for c in b.sheets.iter().flat_map(|s| &s.columns) {
                 if !seen.insert(c.id.0) {
                     return Err(IoError::DuplicateColumnId { path: path.to_path_buf(), id: c.id.0 });
+                }
+            }
+        }
+        if let Window::Matrix(m) = w {
+            for s in &m.sheets {
+                if !seen_matrix.insert(s.data_id) {
+                    return Err(IoError::DuplicateColumnId { path: path.to_path_buf(), id: s.data_id });
                 }
             }
         }
@@ -185,6 +198,16 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, marker: Marker<'_>)
     put(&mut zip, PROJECT, &serde_json::to_vec_pretty(project).map_err(|e| json_err(PROJECT, e))?)?;
 
     for w in &project.windows {
+        if let Window::Matrix(book) = w {
+            for sheet in &book.sheets {
+                let values = sheet.values();
+                let mut bytes = Vec::with_capacity(values.len() * 8);
+                for v in values {
+                    bytes.extend_from_slice(&v.to_le_bytes());
+                }
+                put(&mut zip, &matrix_member(sheet.data_id), &bytes)?;
+            }
+        }
         let Window::Workbook(book) = w else { continue };
         for col in book.sheets.iter().flat_map(|s| &s.columns) {
             match &col.data {
@@ -286,6 +309,38 @@ fn load_any(path: &Path, want: Want) -> Result<(Project, Option<String>), IoErro
     })?;
 
     for w in &mut project.windows {
+        if let Window::Matrix(book) = w {
+            if book.sheets.is_empty() {
+                book.sheets.push(sheaf_core::MatrixSheet::new("MSheet1", 0, 1, 1));
+                book.active_sheet = 0;
+            }
+            for sheet in &mut book.sheets {
+                let member = matrix_member(sheet.data_id);
+                let Some(bytes) = read_member(&mut archive, path, &member)? else {
+                    return Err(IoError::MissingColumnData {
+                        path: path.to_path_buf(),
+                        column: format!("matrix sheet '{}' (id {})", sheet.name, sheet.data_id),
+                    });
+                };
+                let expected = sheet.rows.saturating_mul(sheet.cols);
+                if bytes.len() % 8 != 0 || bytes.len() / 8 != expected {
+                    return Err(IoError::Corrupt {
+                        path: path.to_path_buf(),
+                        member,
+                        detail: format!(
+                            "has {} bytes, but a matrix of {} x {} needs {}",
+                            bytes.len(),
+                            sheet.rows,
+                            sheet.cols,
+                            expected * 8
+                        ),
+                    });
+                }
+                let values = bytes.as_chunks::<8>().0.iter().map(|c| f64::from_le_bytes(*c)).collect();
+                sheet.data = ColumnData::numeric(values);
+            }
+            continue;
+        }
         let Window::Workbook(book) = w else { continue };
         // A damaged or hand-edited file may list no sheets; the rest of the program assumes at
         // least one, so an empty first sheet is added.
@@ -432,6 +487,58 @@ mod tests {
         assert_eq!(names.len(), 1, "{names:?}");
         // Saving again over an existing file works.
         save(&p, &path).unwrap();
+    }
+
+    #[test]
+    fn round_trip_keeps_matrix_books_and_their_labels() {
+        let dir = TempDir::new("matrix");
+        let path = dir.file("m.sheaf");
+        let mut p = sample();
+        let m = p.add_matrix_book("field");
+        {
+            let s = &mut p.matrix_book_mut(m).unwrap().sheets[0];
+            s.set_dimensions(3, 4, Some((10.0, 40.0, 1.0, 3.0))).unwrap();
+            s.set_values("i*10+j").unwrap();
+            s.set_value(1, 1, f64::NAN).unwrap();
+            s.x.long_name = "Potential".into();
+            s.x.units = "V".into();
+            s.z.comments = "current density".into();
+        }
+        let second = {
+            let mut sh = sheaf_core::MatrixSheet::new("MSheet2", 0, 2, 2);
+            sh.set_values("x+y").unwrap();
+            sh
+        };
+        let m2 = p.adopt_matrix_book("second", vec![second]);
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        let s = &back.matrix_book(m).unwrap().sheets[0];
+        assert_eq!((s.rows, s.cols), (3, 4));
+        assert!(s.value(1, 1).is_nan());
+        assert_eq!(s.value(2, 3), 34.0);
+        assert_eq!(s.x.units, "V");
+        assert_eq!(back.matrix_book(m2).unwrap().sheets[0].value(1, 1), 20.0);
+    }
+
+    #[test]
+    fn a_project_file_without_matrices_still_loads() {
+        // Files written before matrix windows existed have no matrix members and no matrix windows.
+        let dir = TempDir::new("nomatrix");
+        let path = dir.file("old.sheaf");
+        save(&sample(), &path).unwrap();
+        assert!(load(&path).unwrap().matrix_books().next().is_none());
+    }
+
+    #[test]
+    fn a_matrix_member_of_the_wrong_size_is_refused() {
+        let dir = TempDir::new("badmatrix");
+        let path = dir.file("bad.sheaf");
+        let mut p = Project::new();
+        let m = p.add_matrix_book("");
+        p.matrix_book_mut(m).unwrap().sheets[0].rows = 40; // data (32 x 32) no longer fits
+        save(&p, &path).unwrap();
+        assert!(matches!(load(&path), Err(IoError::Corrupt { .. })));
     }
 
     #[test]

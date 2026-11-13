@@ -60,12 +60,13 @@ impl WindowFileKind {
         [WindowFileKind::Book, WindowFileKind::Graph].into_iter().find(|k| ext.eq_ignore_ascii_case(k.extension()))
     }
 
-    /// The kind of a window; `None` for a Notes window, which has no window file yet (T154).
+    /// The kind of a window; `None` for a Notes window (T154) or a matrix book, which have no window
+    /// file yet.
     pub fn of_window(window: &Window) -> Option<Self> {
         match window {
             Window::Workbook(_) => Some(WindowFileKind::Book),
             Window::Graph(_) => Some(WindowFileKind::Graph),
-            Window::Notes(_) => None,
+            Window::Notes(_) | Window::Matrix(_) => None,
         }
     }
 }

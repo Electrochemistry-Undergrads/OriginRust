@@ -165,6 +165,15 @@ fn describe(project: &Project) {
             );
         }
     }
+    for m in &summary.matrices {
+        println!("matrix book {}", m.title);
+        for s in &m.sheets {
+            println!(
+                "  sheet {} ({} columns x {} rows, x {} to {}, y {} to {})",
+                s.name, s.cols, s.rows, s.x_from, s.x_to, s.y_from, s.y_to
+            );
+        }
+    }
 }
 
 fn info(a: InfoArgs) -> Result<()> {

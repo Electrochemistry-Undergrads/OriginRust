@@ -195,7 +195,7 @@ fn formula_text_that_the_file_cannot_hold_is_reported() {
     p.adopt_named_workbook(abcd("Book1"));
     let b = match &mut p.windows[0] {
         Window::Workbook(b) => b,
-        Window::Graph(_) | Window::Notes(_) => unreachable!(),
+        Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => unreachable!(),
     };
     b.sheets[0].columns[1].formula = Some("col(A)\0".into());
     b.sheets[0].columns[2].formula = Some("col(A);\r\n#col(B)=1".into());
@@ -212,7 +212,7 @@ fn a_formula_with_a_script_in_front_reads_back_whole_and_is_reported() {
     p.adopt_named_workbook(abcd("Book1"));
     let b = match &mut p.windows[0] {
         Window::Workbook(b) => b,
-        Window::Graph(_) | Window::Notes(_) => unreachable!(),
+        Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => unreachable!(),
     };
     b.sheets[0].columns[1].formula = Some("col(A)*2".into());
     let mut bytes = written(&p).bytes;

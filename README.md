@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/brand/sheaf.png" width="160" height="160" alt="Sheaf bronze S logo">
+  <img src="docs/brand/sheaf.png" width="128" height="128" alt="Sheaf bronze S logo">
 </p>
 
 <h1 align="center">Sheaf</h1>
@@ -7,21 +7,21 @@
 <p align="center">
   <b>Scientific data analysis and graphing; an open-source, clean-room reimplementation of Origin and OriginPro workflows, rebuilt in Rust.</b><br>
   Workbooks, scientific plots, curve fitting, and data analysis,<br>
-  in a native app written in Rust. Runs locally on macOS and Windows.
+  in a native app written in Rust. Open source and offline.
 </p>
 
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/built_with-Rust-b7410e?style=flat-square&amp;logo=rust">
   <img alt="macOS · Windows" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows-native-2f7bf5?style=flat-square">
-  <a href="#license-and-credits"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-6b5b4b?style=flat-square"></a>
-  <img alt="Early development" src="https://img.shields.io/badge/status-early_development-a66b3f?style=flat-square">
+  <a href="#license-and-credits"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-3a3a3a?style=flat-square"></a>
+  <img alt="Early development" src="https://img.shields.io/badge/status-early_development-d69e2e?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#features">Features</a> ·
-  <a href="#get-started">Get started</a> ·
   <a href="#command-line">Command line</a> ·
   <a href="#under-the-hood">Under the hood</a> ·
+  <a href="#get-started">Get started</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="#license-and-credits">License and credits</a>
 </p>
@@ -58,42 +58,25 @@
 > Expect rough edges; Sheaf is not yet a complete replacement for Origin or OriginPro.
 > See the [roadmap](docs/ROADMAP.md) for current progress.
 
-## Get started
-
-Requires [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
-On macOS, install Apple's Command Line Tools if needed (`xcode-select --install`), then
-install Rust through [rustup](https://rustup.rs/). The first build downloads dependencies
-and can take several minutes.
-
-```sh
-git clone https://github.com/Electrochemistry-Undergrads/OriginRust.git
-cd OriginRust
-cargo run --release -p sheaf-app
-```
-
-Drop a data file onto the window, or open one directly:
-
-```sh
-cargo run --release -p sheaf-app -- run1.txt
-```
-
-`OriginRust` is the repository name; **Sheaf** is the application name. The desktop binary
-is `target/release/sheaf-app`; the CLI binary is `target/release/sheaf` (both have a `.exe`
-extension on Windows).
-
 ## Command line
 
 ```sh
+# Import data into a project
 cargo run --release -p sheaf-cli -- import run1.txt -o experiment.sheaf --plot
+
+# Export a figure
 cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
+
+# Analyze and fit
 cargo run --release -p sheaf-cli -- analyze integrate run1.txt
 cargo run --release -p sheaf-cli -- fit run1.txt --model linear
+
+# Explore the available commands
 cargo run --release -p sheaf-cli -- --help
 ```
 
-Saving to `.opj` is supported, with a `.opj.sheaf` companion when the Origin file cannot hold
-everything. Keep that companion beside the project. The native `.sheaf` format preserves
-the full project model.
+Projects save as `.sheaf` or Origin `.opj`; see the
+[project format documentation](docs/spec/project-file-format.md).
 
 ## Under the hood
 
@@ -104,20 +87,27 @@ the full project model.
 - Origin compatibility is implemented from observed behavior and documented formats;
   current gaps are tracked in the [feature parity table](docs/spec/feature-parity.md).
 
+## Get started
+
+Requires [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
+
+```sh
+git clone https://github.com/Electrochemistry-Undergrads/OriginRust.git
+cd OriginRust
+cargo run --release -p sheaf-app   # the desktop app
+cargo test --workspace --locked   # the test suite
+```
+
+Drop a data file onto the window, or open one with
+`cargo run --release -p sheaf-app -- run1.txt`.
+
+New contributors: start with [`HANDOFF.md`](HANDOFF.md), then [`docs/`](docs/).
+
 ## Documentation
 
 [Roadmap](docs/ROADMAP.md) ·
 [Specifications](docs/spec/) ·
 [Design decisions](docs/adr/)
-
-Contributors: start with [HANDOFF.md](HANDOFF.md).
-Run checks with:
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --locked
-```
 
 ## License and credits
 

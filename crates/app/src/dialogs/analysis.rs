@@ -1422,6 +1422,18 @@ impl AnalysisDialog {
         self.auto_preview = true;
     }
 
+    /// The result curve of the preview, X then Y (for tests).
+    #[cfg(test)]
+    pub fn preview_result(&self) -> Option<(Vec<f64>, Vec<f64>)> {
+        self.preview.as_ref()?.as_ref().ok().map(|d| (d.rx.clone(), d.ry.clone()))
+    }
+
+    /// Sets the Curve Translate shift as the dialog's field would (for tests).
+    #[cfg(test)]
+    pub fn set_translate_by(&mut self, by: f64) {
+        self.manip.set_by(by);
+    }
+
     /// How many points the preview holds, or the reason there is none (for tests).
     #[cfg(test)]
     pub fn preview_state(&self) -> Option<Result<usize, String>> {
@@ -1770,10 +1782,18 @@ impl AnalysisDialog {
             Some(v) => (0..y.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
             None => (1..=y.len()).map(|i| i as f64).collect(),
         };
-        let (rx, ry) = if let Some(id) = report.new_columns.first() {
+        // A tool that writes a new sheet puts its X column first; the preview of those is the sheet's X
+        // and Y pair, not the X column plotted against the input's X.
+        let result_sheet = report.new_sheet.and_then(|s| copy.workbook(report.book)?.sheets.get(s));
+        let on_result_sheet = |id: &ColumnId| result_sheet.is_some_and(|s| s.column(*id).is_some());
+        let (rx, ry) = if let Some(s) = result_sheet.filter(|_| report.new_columns.first().is_some_and(on_result_sheet))
+        {
+            let col = |i: usize| s.columns.get(i).and_then(|c| c.numeric()).map(<[f64]>::to_vec);
+            (col(0).ok_or("no result")?, col(1).ok_or("no result")?)
+        } else if let Some(id) = report.new_columns.first() {
             let c = copy.column(*id).and_then(|c| c.numeric()).ok_or("the result has no numbers")?;
             ((0..c.len()).map(|i| x.get(i).copied().unwrap_or(f64::NAN)).collect(), c.to_vec())
-        } else if let Some(s) = report.new_sheet.and_then(|s| copy.workbook(report.book)?.sheets.get(s)) {
+        } else if let Some(s) = result_sheet {
             let col = |i: usize| s.columns.get(i).and_then(|c| c.numeric()).map(<[f64]>::to_vec);
             (col(0).ok_or("no result")?, col(1).ok_or("no result")?)
         } else {

@@ -43,10 +43,13 @@ pub struct LinePoint {
 }
 
 /// Subtracts the straight line through two points from the curve `(x, y)`. A point without a Y is
-/// taken from the curve at its X. `None` when the two X values are equal, or when a point without a
-/// Y lies outside the X range of the curve.
+/// taken from the curve at its X. `None` when the two X values are equal, when the curve has fewer
+/// than two valid points, or when a point without a Y lies outside the X range of the curve.
 pub fn subtract_line_through(x: &[f64], y: &[f64], p1: LinePoint, p2: LinePoint) -> Option<Vec<f64>> {
     if !(p1.x.is_finite() && p2.x.is_finite()) || p1.x == p2.x {
+        return None;
+    }
+    if x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).count() < 2 {
         return None;
     }
     let resolve = |p: LinePoint| -> Option<(f64, f64)> {
@@ -122,7 +125,16 @@ pub fn even_grid(grid: EvenGrid, lo: f64, hi: f64) -> Option<(Vec<f64>, f64)> {
             (n, (hi - lo) / (n - 1) as f64)
         }
     };
-    Some(((0..n).map(|i| lo + step * i as f64).collect(), step))
+    // Rounding must not carry the last value past `hi` (the interpolation would then call it
+    // outside the data), so values are capped at `hi` and a count grid ends exactly on it.
+    let mut g: Vec<f64> = match grid {
+        EvenGrid::Step(_) => (0..n).map(|i| (lo + step * i as f64).min(hi)).collect(),
+        EvenGrid::Count(_) => (0..n).map(|i| (lo + (hi - lo) * i as f64 / (n - 1) as f64).min(hi)).collect(),
+    };
+    if let (EvenGrid::Count(_), Some(last)) = (grid, g.last_mut()) {
+        *last = hi;
+    }
+    Some((g, step))
 }
 
 /// Reduces a curve to evenly spaced X values: returns the new X values and Y values.
@@ -167,8 +179,12 @@ pub fn translate(v: &[f64], by: f64) -> Vec<f64> {
 }
 
 /// The shift that carries the curve's value at `at` to `to`: `to - y(at)`. `None` when `at` is
-/// outside the X range of the curve. (For a translation in X the shift is simply `to - at`.)
+/// outside the X range of the curve or when `to` is not a number. (For a translation in X the
+/// shift is simply `to - at`.)
 pub fn shift_to_land(x: &[f64], y: &[f64], at: f64, to: f64) -> Option<f64> {
+    if !to.is_finite() {
+        return None;
+    }
     Some(to - value_at(x, y, at)?)
 }
 
@@ -282,6 +298,41 @@ mod tests {
         assert!(subtract_line_through(&x, &y, p(1.0), p(1.0)).is_none());
         assert!(subtract_line_through(&x, &y, p(0.0), p(3.0)).is_none());
         assert!(subtract_line_through(&x, &y, p(0.0), LinePoint { x: 3.0, y: Some(3.0) }).is_some());
+        // Fewer than two valid points: refused even when both Y values are given.
+        let both = (LinePoint { x: 0.0, y: Some(0.0) }, LinePoint { x: 1.0, y: Some(1.0) });
+        assert!(subtract_line_through(&x, &y, both.0, both.1).is_some());
+        assert!(subtract_line_through(&[0.0], &[1.0], both.0, both.1).is_none());
+        assert!(subtract_line_through(&[0.0, 1.0], &[1.0, f64::NAN], both.0, both.1).is_none());
+        assert!(subtract_line_through(&[], &[], both.0, both.1).is_none());
+    }
+
+    #[test]
+    fn the_last_grid_point_never_passes_the_data_maximum() {
+        // 0.1 * 3 and 10 / 147 * 147 are one ulp above the end in f64.
+        let x: Vec<f64> = vec![0.0, 0.1, 0.2, 0.3];
+        let y = vec![1.0, 2.0, 3.0, 4.0];
+        let opts = ReduceOptions { grid: EvenGrid::Step(0.1), ..ReduceOptions::default() };
+        let (gx, gy) = reduce_evenly(&x, &y, &opts).unwrap();
+        assert_eq!(gx.len(), 4);
+        assert_eq!(gx[3], 0.3);
+        assert!(gy.iter().all(|v| v.is_finite()), "{gy:?}");
+        close(&gy, &[1.0, 2.0, 3.0, 4.0]);
+        let x = [0.0, 10.0];
+        let y = [0.0, 20.0];
+        let opts = ReduceOptions { grid: EvenGrid::Count(148), ..ReduceOptions::default() };
+        let (gx, gy) = reduce_evenly(&x, &y, &opts).unwrap();
+        assert_eq!((gx.len(), gx[147]), (148, 10.0));
+        assert!(gy.iter().all(|v| v.is_finite()), "{gy:?}");
+        assert_eq!(gy[147], 20.0);
+        for n in [12, 23, 40, 45, 79, 84] {
+            let (g, _) = even_grid(EvenGrid::Count(n), 0.0, 100.0).unwrap();
+            assert_eq!(*g.last().unwrap(), 100.0);
+            assert!(g.windows(2).all(|w| w[0] < w[1]));
+        }
+        for (hi, s) in [(0.7, 0.1), (0.6, 0.2), (0.3, 0.1)] {
+            let (g, _) = even_grid(EvenGrid::Step(s), 0.0, hi).unwrap();
+            assert_eq!(*g.last().unwrap(), hi);
+        }
     }
 
     #[test]

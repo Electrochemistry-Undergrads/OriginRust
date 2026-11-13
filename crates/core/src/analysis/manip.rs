@@ -64,6 +64,9 @@ pub(super) fn run(
                 return Err(AnalysisError::BadOption("the two points need different X values".into()));
             }
             for inp in inputs {
+                if inp.xs().iter().zip(inp.ys()).filter(|(a, b)| a.is_finite() && b.is_finite()).count() < 2 {
+                    return Err(AnalysisError::TooFewPoints(inp.short.clone()));
+                }
                 let v = calc::subtract_line_through(inp.xs(), inp.ys(), spec.p1, spec.p2).ok_or_else(|| {
                     AnalysisError::BadOption(format!(
                         "the two points must lie inside the X range of column {} (or be given a Y value)",
@@ -124,7 +127,8 @@ pub(super) fn run(
                     (Shift::PointTo { at, to }, TranslateAxis::Y) => calc::shift_to_land(inp.xs(), inp.ys(), at, to)
                         .ok_or_else(|| {
                             AnalysisError::BadOption(format!(
-                                "X = {at} is outside the X range of column {}, so its value there is unknown",
+                                "X = {at} is outside the X range of column {}, so its value there is unknown, \
+                                 or the new Y value is not a number",
                                 inp.short
                             ))
                         }),
@@ -219,6 +223,10 @@ mod tests {
         assert!(p.analyze(&req(y, Tool::SubtractLine(same_x))).is_err());
         let outside = SubtractLineSpec { p1: LinePoint { x: 0.0, y: None }, p2: LinePoint { x: 9.0, y: None } };
         assert!(p.analyze(&req(y, Tool::SubtractLine(outside))).is_err());
+        // One valid point is not a curve, even with both Y values given.
+        let given = SubtractLineSpec { p1: LinePoint { x: 0.0, y: Some(0.0) }, p2: LinePoint { x: 1.0, y: Some(1.0) } };
+        let one = p.analyze(&Request { columns: vec![y], rows: RowRange::Rows(1, 1), tool: Tool::SubtractLine(given) });
+        assert!(one.is_err(), "{one:?}");
     }
 
     #[test]
@@ -245,6 +253,10 @@ mod tests {
         assert_eq!(sheet.columns[1].numeric().unwrap(), [1.0, 3.0, 8.0, 7.0, 9.0]);
         let outside = TranslateSpec { axis: TranslateAxis::Y, shift: Shift::PointTo { at: 10.0, to: 0.0 } };
         assert!(p.analyze(&req(y, Tool::Translate(outside))).is_err());
+        for to in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let spec = TranslateSpec { axis: TranslateAxis::Y, shift: Shift::PointTo { at: 1.0, to } };
+            assert!(p.analyze(&req(y, Tool::Translate(spec))).is_err(), "to = {to}");
+        }
     }
 
     #[test]

@@ -5496,7 +5496,7 @@ fn data_manipulation_items_and_median_filter_open_and_run() {
 fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_after_x() {
     let mut h = start(vec![data_file("manip2")]);
     show_window(&mut h, "Book1 - sample");
-    // The six Data Manipulation and Median Filter items are no longer greyed.
+    // Two of the Data Manipulation items open their windows (they are no longer greyed) and Cancel changes nothing.
     let undo_before = h.state().doc.undo_label().map(str::to_string);
     for path in [
         ["Analysis", "Data Manipulation", "Reduce to Evenly Spaced X..."],
@@ -5536,10 +5536,11 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
     assert_eq!(cols[0].numeric().unwrap()[0], 1.0);
     assert_eq!(cols[0].numeric().unwrap()[99], 4.0);
 
-    // The reduced sheet is now the active one. Translate Y with the default shift of 0 writes an unchanged
-    // copy of its Y column beside it, and Undo removes it.
+    // The reduced sheet is now the active one. Translate Y with the shift set to 1.5 writes the Y column
+    // plus 1.5 beside it, and Undo removes it.
     let reduced = cols[1].numeric().unwrap().to_vec();
     open_analysis_on(&mut h, AnalysisKind::TranslateY, &["B"]);
+    h.state_mut().analysis.as_mut().unwrap().set_translate_by(1.5);
     click(&mut h, "OK");
     assert_eq!(h.state().doc.undo_label(), Some("Translate Y"));
     let shifted = project(&h)
@@ -5552,11 +5553,32 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
         .find(|c| c.long_name == "up shifted")
         .map(|c| c.numeric().unwrap().to_vec())
         .expect("the shifted column");
-    assert_eq!(shifted, reduced);
+    let expected: Vec<f64> = reduced.iter().map(|v| v + 1.5).collect();
+    assert_eq!(shifted, expected);
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::Undo, &ctx);
     settle(&mut h);
     assert!(project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "up shifted"));
+}
+
+#[test]
+fn the_preview_of_a_tool_that_writes_a_new_sheet_shows_the_new_curve() {
+    let mut h = start(vec![data_file("manip-preview")]);
+    // The input is t = 1..4, up = 2.5, 4.5, 6.5, 8.5. Translate X by 10 keeps Y and moves X.
+    open_analysis_on(&mut h, AnalysisKind::TranslateX, &["B"]);
+    h.state_mut().analysis.as_mut().unwrap().set_translate_by(10.0);
+    click(&mut h, "Preview");
+    let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
+    assert_eq!(rx, [11.0, 12.0, 13.0, 14.0]);
+    assert_eq!(ry, [2.5, 4.5, 6.5, 8.5]);
+    click(&mut h, "Cancel");
+    // Reduce to Evenly Spaced X: 100 points from X = 1 to 4, on the straight line y = 2 x + 0.5.
+    open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
+    click(&mut h, "Preview");
+    let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
+    assert_eq!((rx.len(), rx[0], rx[99]), (100, 1.0, 4.0));
+    assert!(rx.iter().zip(&ry).all(|(x, y)| (y - (2.0 * x + 0.5)).abs() < 1e-9), "{ry:?}");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1, "a preview writes nothing");
 }
 
 #[test]

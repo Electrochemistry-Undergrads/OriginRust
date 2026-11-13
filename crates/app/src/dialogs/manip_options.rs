@@ -77,6 +77,12 @@ impl ManipOptions {
         }
     }
 
+    /// Sets "Shift by" (for tests).
+    #[cfg(test)]
+    pub fn set_by(&mut self, by: f64) {
+        self.by = by;
+    }
+
     /// The tool for `kind` as set.
     pub fn tool(&self, kind: AnalysisKind) -> Tool {
         match kind {

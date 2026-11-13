@@ -27,6 +27,12 @@ Write tool into the scratch folder and run that file. It happened again with bod
 apostrophe in a comment (`layer's`) or a Rust lifetime (`&'static`), even inside `<<'EOF'`; the
 Write and Edit tools always work.
 
+Python scripts that write Rust source through a here-document also break backslashes silently:
+inside a normal Python string `'\r'` and `'\n'` become real line breaks in the Rust file, and in a
+raw Python string `"\\b(111)"` reaches Rust as `"\b(111)"`, an invalid escape. On 2026-11-13 this
+broke the build three times while writing `.opj` reader code and its tests (Origin's text escapes
+`\b(`, `\l(`, `\g(` are full of backslashes). Make such edits with the Edit tool.
+
 ## `cargo test` does not refresh the program in `target/debug`
 
 After changing the command-line program, `cargo test -p sheaf-cli` passed while

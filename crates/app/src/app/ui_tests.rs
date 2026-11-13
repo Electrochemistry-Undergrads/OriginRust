@@ -5457,6 +5457,235 @@ fn plot_specialized_ternary_and_its_button_make_a_ternary_graph_of_the_selected_
     assert!(graphs[before + 1].layers[0].coords.ternary().is_some());
 }
 
+// ----- drawn objects: Line, Arrow, Rectangle, Circle tools ------------------------------------------
+
+fn shapes(h: &Harness<'static, SheafApp>) -> Vec<sheaf_core::shape::Shape> {
+    graph(h).layers[0].shapes.clone()
+}
+
+/// A page point at the given fractions of the first layer's frame, on screen.
+fn frame_point(h: &Harness<'static, SheafApp>, fx: f64, fy: f64) -> egui::Pos2 {
+    let f = sheaf_plot::layout_geometry(project(h), graph(h).id).unwrap()[0].frame;
+    graph_ui(h).page_point(f.x + f.w * fx, f.y + f.h * fy).unwrap()
+}
+
+fn drag_frame(h: &mut Harness<'static, SheafApp>, a: (f64, f64), b: (f64, f64)) {
+    let (from, to) = (frame_point(h, a.0, a.1), frame_point(h, b.0, b.1));
+    drag(h, from, to);
+}
+
+#[test]
+fn a_drag_with_the_rectangle_tool_draws_one_object_and_the_tool_ends() {
+    let mut h = start(vec![data_file("drawrect")]);
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(&mut h);
+    assert!(graph_ui(&h).shape_tool.is_some(), "the tool is on");
+    drag_frame(&mut h, (0.2, 0.2), (0.5, 0.4));
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, sheaf_core::shape::ShapeKind::Rectangle);
+    assert!((s[0].x1 - 0.2).abs() < 0.01 && (s[0].y2 - 0.4).abs() < 0.01, "{:?}", s[0]);
+    assert!(graph_ui(&h).shape_tool.is_none(), "the tool returns to the Pointer");
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Shape(0))));
+    assert_eq!(h.state().doc.undo_label(), Some("Add drawn object"));
+    menu(&mut h, "Edit", "Undo Add drawn object");
+    assert!(shapes(&h).is_empty());
+}
+
+#[test]
+fn a_drawn_arrow_is_moved_and_deleted_with_undo() {
+    let mut h = start(vec![data_file("movearrow")]);
+    bar_button!(h, "Tools", "Arrow").click();
+    settle(&mut h);
+    drag_frame(&mut h, (0.2, 0.2), (0.6, 0.2));
+    assert_eq!(shapes(&h)[0].kind, sheaf_core::shape::ShapeKind::Arrow);
+    let before = shapes(&h)[0].clone();
+    // Pick it in the middle of the line and drag it down.
+    let at = frame_point(&h, 0.4, 0.2);
+    pause(&mut h);
+    drag(&mut h, at, at + egui::vec2(0.0, 50.0));
+    let after = shapes(&h)[0].clone();
+    assert!(after.y1 > before.y1 && (after.x1 - before.x1).abs() < 1e-9, "{before:?} -> {after:?}");
+    assert!((after.y2 - after.y1 - (before.y2 - before.y1)).abs() < 1e-9, "the length is kept");
+    assert_eq!(h.state().doc.undo_label(), Some("Move drawn object"));
+    menu(&mut h, "Edit", "Undo Move drawn object");
+    assert_eq!(shapes(&h)[0], before);
+    // Delete removes the selected object; Undo brings it back.
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert!(shapes(&h).is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Delete drawn object"));
+    menu(&mut h, "Edit", "Undo Delete drawn object");
+    assert_eq!(shapes(&h).len(), 1);
+}
+
+#[test]
+fn double_clicking_a_drawn_object_opens_its_properties() {
+    let mut h = start(vec![data_file("shapeprops")]);
+    bar_button!(h, "Tools", "Circle").click();
+    settle(&mut h);
+    drag_frame(&mut h, (0.3, 0.3), (0.7, 0.7));
+    assert_eq!(shapes(&h)[0].kind, sheaf_core::shape::ShapeKind::Ellipse);
+    // The top of the ellipse is on its outline.
+    let at = frame_point(&h, 0.5, 0.3);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the properties window opened");
+    click(&mut h, "Filled");
+    click(&mut h, "OK");
+    assert!(shapes(&h)[0].fill.is_some());
+    assert_eq!(h.state().doc.undo_label(), Some("Edit drawn object"));
+}
+
+/// An arrow (object 0) and a rectangle (object 1), drawn with the tools.
+fn draw_arrow_and_rectangle(h: &mut Harness<'static, SheafApp>) {
+    bar_button!(h, "Tools", "Arrow").click();
+    settle(h);
+    drag_frame(h, (0.2, 0.2), (0.6, 0.2));
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(h);
+    drag_frame(h, (0.2, 0.5), (0.6, 0.7));
+    assert_eq!(shapes(h).len(), 2);
+}
+
+#[test]
+fn the_drawn_object_window_closes_when_delete_removes_its_object() {
+    use sheaf_core::shape::ShapeKind;
+    let mut h = start(vec![data_file("shapestaledel")]);
+    draw_arrow_and_rectangle(&mut h);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Fill", |p| {
+        p.graph_mut(id).unwrap().layers[0].shapes[1].fill = Some(sheaf_core::Color::rgba(1, 2, 3, 255));
+    });
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the arrow's window opened");
+    // Delete removes the arrow; the rectangle now has its index, but the window must not edit it.
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert_eq!(shapes(&h).len(), 1);
+    assert!(h.state().shape_dialog.is_none(), "the window of a deleted object closes");
+    let rect = shapes(&h)[0].clone();
+    assert_eq!(rect.kind, ShapeKind::Rectangle);
+    assert!(rect.fill.is_some(), "the rectangle keeps its fill");
+}
+
+#[test]
+fn the_drawn_object_window_closes_on_undo_and_redo_of_its_layer() {
+    let mut h = start(vec![data_file("shapestaleundo")]);
+    draw_arrow_and_rectangle(&mut h);
+    // Double-click the rectangle's top edge, then undo its drawing.
+    let at = frame_point(&h, 0.4, 0.5);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the rectangle's window opened");
+    menu(&mut h, "Edit", "Undo Add drawn object");
+    assert_eq!(shapes(&h).len(), 1);
+    assert!(h.state().shape_dialog.is_none(), "undo closed the window");
+    // Redo while a window of the arrow is open closes it as well.
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the arrow's window opened");
+    menu(&mut h, "Edit", "Redo Add drawn object");
+    assert_eq!(shapes(&h).len(), 2);
+    assert!(h.state().shape_dialog.is_none(), "redo closed the window");
+}
+
+#[test]
+fn the_drawn_object_window_closes_when_another_kind_takes_its_index() {
+    let mut h = start(vec![data_file("shapestalekind")]);
+    draw_arrow_and_rectangle(&mut h);
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some());
+    // A change that does not go through the graph or undo handlers (the object list shifts).
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Remove", |p| {
+        p.graph_mut(id).unwrap().layers[0].shapes.remove(0);
+    });
+    settle(&mut h);
+    assert!(h.state().shape_dialog.is_none(), "the arrow's window closed: a rectangle is at its index");
+}
+
+#[test]
+fn a_drag_shorter_than_the_minimum_draws_nothing_and_keeps_the_tool_on() {
+    let mut h = start(vec![data_file("drawtiny")]);
+    bar_button!(h, "Tools", "Line").click();
+    settle(&mut h);
+    // A press held long enough to be a drag (egui decides by distance or time), moved about 2
+    // page points (a page point is about half a screen pixel here): under the 3 point minimum.
+    let from = frame_point(&h, 0.3, 0.3);
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.run_steps(100);
+    h.event(egui::Event::PointerMoved(from + egui::vec2(1.0, 0.0)));
+    h.step();
+    h.event(button(from + egui::vec2(1.0, 0.0), false));
+    h.step();
+    settle(&mut h);
+    assert!(shapes(&h).is_empty(), "too short to draw");
+    assert!(graph_ui(&h).shape_tool.is_some(), "the tool is still on");
+    // Escape ends the tool.
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    assert!(graph_ui(&h).shape_tool.is_none(), "Escape ends the tool");
+    assert!(shapes(&h).is_empty());
+}
+
+/// A drag from `from` to `to` with Shift held (the whole gesture).
+fn drag_shifted(h: &mut Harness<'static, SheafApp>, from: egui::Pos2, to: egui::Pos2) {
+    let shift = egui::Modifiers::SHIFT;
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: shift,
+    };
+    for event in [
+        egui::Event::PointerMoved(from),
+        button(from, true),
+        egui::Event::PointerMoved(from.lerp(to, 0.5)),
+        egui::Event::PointerMoved(to),
+        button(to, false),
+    ] {
+        h.event_modifiers(event, shift);
+        h.step();
+    }
+    settle(h);
+}
+
+#[test]
+fn shift_while_drawing_snaps_a_line_and_squares_a_rectangle() {
+    use sheaf_core::shape::ShapeKind;
+    let mut h = start(vec![data_file("drawshift")]);
+    let f = sheaf_plot::layout_geometry(project(&h), graph(&h).id).unwrap()[0].frame;
+    // A line that is about 10 degrees off horizontal becomes horizontal; the length is kept.
+    bar_button!(h, "Tools", "Line").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.2, 0.3), frame_point(&h, 0.6, 0.3) + egui::vec2(0.0, 12.0));
+    drag_shifted(&mut h, a, b);
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, ShapeKind::Line);
+    assert!((s[0].y2 - s[0].y1).abs() < 1e-9, "horizontal: {:?}", s[0]);
+    assert!(s[0].x2 > s[0].x1 + 0.1);
+    // A rectangle dragged wider than tall is a square in page points.
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.1, 0.5), frame_point(&h, 0.4, 0.6));
+    drag_shifted(&mut h, a, b);
+    let r = shapes(&h)[1].clone();
+    assert_eq!(r.kind, ShapeKind::Rectangle);
+    let (w, hgt) = ((r.x2 - r.x1).abs() * f.w, (r.y2 - r.y1).abs() * f.h);
+    assert!((w - hgt).abs() < 1e-6, "square: {w} x {hgt}");
+}
+
 #[test]
 fn data_manipulation_items_and_median_filter_open_and_run() {
     let mut h = start(vec![data_file("manip")]);

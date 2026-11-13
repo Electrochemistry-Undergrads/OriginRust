@@ -333,7 +333,24 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 )
             }
         }
-        AnalyzeTool::Stats { target } => (target, Job::Tool(Tool::Statistics)),
+        AnalyzeTool::Stats { target, all, add, level } => {
+            let mut spec = if all { analysis::StatisticsSpec::all() } else { analysis::StatisticsSpec::default() };
+            for name in &add {
+                match name.trim().to_ascii_lowercase().as_str() {
+                    "iqr" => spec.iqr = true,
+                    "variance" | "var" => spec.variance = true,
+                    "skewness" | "skew" => spec.skewness = true,
+                    "kurtosis" | "kurt" => spec.kurtosis = true,
+                    "cv" => spec.cv = true,
+                    "limits" | "cl" | "ci" => spec.confidence_limits = true,
+                    other => {
+                        bail!("unknown quantity {other:?}; use iqr, variance, skewness, kurtosis, cv or limits")
+                    }
+                }
+            }
+            spec.level = level;
+            (target, Job::Tool(Tool::Statistics(spec)))
+        }
         AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha } => {
             let kind = match test {
                 TTestKindArg::OneSample => analysis::TTestKind::OneSample { mean },
@@ -393,6 +410,34 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     alpha,
                 })),
             )
+        }
+        AnalyzeTool::Rowstats { target, add, no_mean_sd } => {
+            let mut spec = analysis::RowStatsSpec { mean: !no_mean_sd, sd: !no_mean_sd, ..Default::default() };
+            for name in &add {
+                match name.trim().to_ascii_lowercase().as_str() {
+                    "sem" => spec.sem = true,
+                    "min" => spec.min = true,
+                    "max" => spec.max = true,
+                    "n" => spec.n = true,
+                    "sum" => spec.sum = true,
+                    other => bail!("unknown quantity {other:?}; use sem, min, max, n or sum"),
+                }
+            }
+            (target, Job::Tool(Tool::RowStatistics(spec)))
+        }
+        AnalyzeTool::Grubbs { target, alpha } => (target, Job::Tool(Tool::Grubbs(analysis::OutlierSpec { alpha }))),
+        AnalyzeTool::Dixon { target, alpha } => (target, Job::Tool(Tool::Dixon(analysis::OutlierSpec { alpha }))),
+        AnalyzeTool::Sign { target, tail, alpha } => {
+            (target, Job::Tool(Tool::SignTest(analysis::SignTestSpec { tail: tail_of(tail), alpha })))
+        }
+        AnalyzeTool::Ks2 { target, tail, alpha } => {
+            (target, Job::Tool(Tool::KsTwoSample(analysis::KsTwoSampleSpec { tail: tail_of(tail), alpha })))
+        }
+        AnalyzeTool::Mediantest { target, alpha } => {
+            (target, Job::Tool(Tool::MedianTest(analysis::MedianTestSpec { alpha })))
+        }
+        AnalyzeTool::Friedman { target, alpha } => {
+            (target, Job::Tool(Tool::Friedman(analysis::FriedmanSpec { alpha })))
         }
         AnalyzeTool::Kruskal { target, alpha } => {
             (target, Job::Tool(Tool::KruskalWallis(analysis::KruskalWallisSpec { alpha })))

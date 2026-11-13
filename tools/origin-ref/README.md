@@ -50,3 +50,13 @@ folder tree with the windows of each folder and, per column, the recalculate mod
 `layer.unit`, `showAxes` and `showLabels` of both axes, the axis colours, and a PNG per graph. Pass several files in one call
 (`-Files @('a.opj','b.opj') -OutDir DIR`). `cargo run -p sheaf-io --example opj_write_graph_features -- FOLDER` writes the
 files it was used on (`gf-doubley`, `gf-stack`, `gf-bars`, `gf-axes`); the findings are in `docs/spec/opj-format.md`, section 13.12.
+
+## Statistics breadth (sign test, Kolmogorov-Smirnov, median, Friedman, Grubbs, Dixon, row statistics)
+
+`stats3/` holds the generators (`g2.py` to `g5.py` write the LabTalk scripts in the lines format, `gen.py` the dump
+helpers), `parse.py` (turns the raw output of `run-labtalk-safe.ps1` into the compact `stats3-p*.compact.txt` files
+kept here), the case lists `cases2..5.json` and `stats3-make-fixture.py`, which writes
+`crates/calc/tests/fixtures/stats3_origin.rs`. Origin shows no dialog when `sign2`, `kstest2`, `mediantest` and
+`friedman` run with `rt:=<new name:=...>`; `grubbs` and `qtest` need `alpha` and the output variables passed
+explicitly. Report sheets are read cell by cell (`wcol(c)[r]`) because `GetWorksheet` does not return them.
+What the runs showed is in `docs/spec/statistics.md`, section 10.

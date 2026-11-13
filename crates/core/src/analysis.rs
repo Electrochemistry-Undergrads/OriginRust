@@ -310,6 +310,159 @@ impl Default for KruskalWallisSpec {
     }
 }
 
+/// What [`Tool::Statistics`] (Origin's Statistics on Columns) writes: one flag per column of the result
+/// table. The default is the original eleven columns; the others are the quantities that `sheaf_calc::stats`
+/// computes as well and the confidence limits of the mean.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StatisticsSpec {
+    pub n: bool,
+    pub missing: bool,
+    pub mean: bool,
+    pub sd: bool,
+    pub sem: bool,
+    pub sum: bool,
+    pub min: bool,
+    pub q1: bool,
+    pub median: bool,
+    pub q3: bool,
+    pub max: bool,
+    pub iqr: bool,
+    pub variance: bool,
+    pub skewness: bool,
+    pub kurtosis: bool,
+    /// Coefficient of variation (standard deviation divided by the mean).
+    pub cv: bool,
+    /// Lower and upper confidence limit of the mean at `level` (the interval of the one-sample t-test).
+    pub confidence_limits: bool,
+    /// Confidence level of the limits, for example 0.95.
+    pub level: f64,
+}
+
+impl Default for StatisticsSpec {
+    fn default() -> Self {
+        StatisticsSpec {
+            n: true,
+            missing: true,
+            mean: true,
+            sd: true,
+            sem: true,
+            sum: true,
+            min: true,
+            q1: true,
+            median: true,
+            q3: true,
+            max: true,
+            iqr: false,
+            variance: false,
+            skewness: false,
+            kurtosis: false,
+            cv: false,
+            confidence_limits: false,
+            level: 0.95,
+        }
+    }
+}
+
+impl StatisticsSpec {
+    /// Every quantity on.
+    pub fn all() -> Self {
+        StatisticsSpec {
+            iqr: true,
+            variance: true,
+            skewness: true,
+            kurtosis: true,
+            cv: true,
+            confidence_limits: true,
+            ..Self::default()
+        }
+    }
+}
+
+/// What [`Tool::RowStatistics`] (Origin's Statistics on Rows, `rowstats`) adds: one new column per chosen
+/// quantity, behind the last chosen column, with one number per worksheet row computed across the chosen
+/// columns.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RowStatsSpec {
+    pub mean: bool,
+    pub sd: bool,
+    pub sem: bool,
+    pub min: bool,
+    pub max: bool,
+    pub n: bool,
+    pub sum: bool,
+}
+
+impl Default for RowStatsSpec {
+    /// Origin creates the mean and the standard deviation; the others are optional outputs of `rowstats`.
+    fn default() -> Self {
+        RowStatsSpec { mean: true, sd: true, sem: false, min: false, max: false, n: false, sum: false }
+    }
+}
+
+/// What [`Tool::SignTest`] does: the paired sign test of exactly two columns. `Upper` is Origin's
+/// "F(x) > G(y)".
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SignTestSpec {
+    pub tail: Tail,
+    pub alpha: f64,
+}
+
+impl Default for SignTestSpec {
+    fn default() -> Self {
+        SignTestSpec { tail: Tail::Two, alpha: 0.05 }
+    }
+}
+
+/// What [`Tool::KsTwoSample`] does: two columns, two independent samples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KsTwoSampleSpec {
+    pub tail: Tail,
+    pub alpha: f64,
+}
+
+impl Default for KsTwoSampleSpec {
+    fn default() -> Self {
+        KsTwoSampleSpec { tail: Tail::Two, alpha: 0.05 }
+    }
+}
+
+/// What [`Tool::MedianTest`] does: every chosen column is a group (at least two).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MedianTestSpec {
+    pub alpha: f64,
+}
+
+impl Default for MedianTestSpec {
+    fn default() -> Self {
+        MedianTestSpec { alpha: 0.05 }
+    }
+}
+
+/// What [`Tool::Friedman`] does: every chosen column is a treatment, every row a block.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FriedmanSpec {
+    pub alpha: f64,
+}
+
+impl Default for FriedmanSpec {
+    fn default() -> Self {
+        FriedmanSpec { alpha: 0.05 }
+    }
+}
+
+/// What [`Tool::Grubbs`] and [`Tool::Dixon`] do: one outlier test per chosen column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OutlierSpec {
+    /// Significance level. Dixon's table has 0.1, 0.05 and 0.01 only.
+    pub alpha: f64,
+}
+
+impl Default for OutlierSpec {
+    fn default() -> Self {
+        OutlierSpec { alpha: 0.05 }
+    }
+}
+
 /// What [`Tool::Correlation`] does: the coefficients of every pair of the chosen columns.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CorrelationSpec {
@@ -340,7 +493,7 @@ pub enum Tool {
     Interpolate(InterpSpec),
     FindPeaks(PeakOptions),
     PeakChain(PeakChainSpec),
-    Statistics,
+    Statistics(StatisticsSpec),
     TTest(TTestSpec),
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
@@ -350,6 +503,13 @@ pub enum Tool {
     SignedRank(SignedRankSpec),
     KruskalWallis(KruskalWallisSpec),
     Correlation(CorrelationSpec),
+    RowStatistics(RowStatsSpec),
+    SignTest(SignTestSpec),
+    KsTwoSample(KsTwoSampleSpec),
+    MedianTest(MedianTestSpec),
+    Friedman(FriedmanSpec),
+    Grubbs(OutlierSpec),
+    Dixon(OutlierSpec),
 }
 
 impl Tool {
@@ -369,7 +529,7 @@ impl Tool {
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Find peaks",
             Tool::PeakChain(_) => "Analyze peaks",
-            Tool::Statistics => "Statistics",
+            Tool::Statistics(_) => "Statistics",
             Tool::TTest(spec) => match spec.kind {
                 TTestKind::OneSample { .. } => "One-sample t-test",
                 TTestKind::TwoSample { .. } => "Two-sample t-test",
@@ -386,6 +546,13 @@ impl Tool {
             },
             Tool::KruskalWallis(_) => "Kruskal-Wallis test",
             Tool::Correlation(_) => "Correlation coefficients",
+            Tool::RowStatistics(_) => "Statistics on rows",
+            Tool::SignTest(_) => "Sign test",
+            Tool::KsTwoSample(_) => "Two-sample Kolmogorov-Smirnov test",
+            Tool::MedianTest(_) => "Median test",
+            Tool::Friedman(_) => "Friedman ANOVA",
+            Tool::Grubbs(_) => "Grubbs test",
+            Tool::Dixon(_) => "Dixon's Q test",
         }
     }
 
@@ -396,7 +563,7 @@ impl Tool {
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Peaks",
             Tool::PeakChain(_) => "PeakAnalysis",
-            Tool::Statistics => "Statistics",
+            Tool::Statistics(_) => "Statistics",
             Tool::TTest(_) => "TTest",
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
@@ -406,6 +573,12 @@ impl Tool {
             Tool::SignedRank(_) => "SignedRank",
             Tool::KruskalWallis(_) => "KruskalWallis",
             Tool::Correlation(_) => "Correlation",
+            Tool::SignTest(_) => "SignTest",
+            Tool::KsTwoSample(_) => "KolmogorovSmirnov",
+            Tool::MedianTest(_) => "MedianTest",
+            Tool::Friedman(_) => "Friedman",
+            Tool::Grubbs(_) => "Grubbs",
+            Tool::Dixon(_) => "Dixon",
             _ => "Result",
         }
     }
@@ -654,6 +827,118 @@ pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
         .expect("the name sequence is unbounded")
 }
 
+/// The table of Statistics on Columns: one row per input column, the columns chosen in `spec`.
+fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<ResultTable, AnalysisError> {
+    if spec.confidence_limits && !(spec.level > 0.0 && spec.level < 1.0) {
+        return Err(AnalysisError::BadOption(format!(
+            "the confidence level must be between 0 and 1, not {}",
+            spec.level
+        )));
+    }
+    let percent = format!("{}", (spec.level * 100.0 * 1e6).round() / 1e6);
+    // (header, is a count, value of one column)
+    type Pick = fn(&calc::Stats) -> f64;
+    let mut picks: Vec<(String, bool, Pick)> = Vec::new();
+    let mut add = |on: bool, header: &str, count: bool, f: Pick| {
+        if on {
+            picks.push((header.to_string(), count, f));
+        }
+    };
+    add(spec.n, "N", true, |s| s.n as f64);
+    add(spec.missing, "Missing", true, |s| s.missing as f64);
+    add(spec.mean, "Mean", false, |s| s.mean);
+    add(spec.sd, "SD", false, |s| s.sd);
+    add(spec.sem, "SEM", false, |s| s.sem);
+    add(spec.sum, "Sum", false, |s| s.sum);
+    add(spec.min, "Minimum", false, |s| s.min);
+    add(spec.q1, "Q1", false, |s| s.q1);
+    add(spec.median, "Median", false, |s| s.median);
+    add(spec.q3, "Q3", false, |s| s.q3);
+    add(spec.max, "Maximum", false, |s| s.max);
+    add(spec.iqr, "IQR", false, |s| s.iqr);
+    add(spec.variance, "Variance", false, |s| s.variance);
+    add(spec.skewness, "Skewness", true, |s| s.skewness);
+    add(spec.kurtosis, "Kurtosis", true, |s| s.kurtosis);
+    add(spec.cv, "CV", true, |s| s.cv);
+    let headers: Vec<String> = picks
+        .iter()
+        .map(|p| p.0.clone())
+        .chain(
+            spec.confidence_limits
+                .then(|| [format!("Lower {percent}% CL of Mean"), format!("Upper {percent}% CL of Mean")])
+                .into_iter()
+                .flatten(),
+        )
+        .collect();
+    let mut t = ResultTable { headers, ..Default::default() };
+    for inp in inputs {
+        let s = calc::stats(inp.ys());
+        let mut values: Vec<f64> = picks.iter().map(|p| (p.2)(&s)).collect();
+        // The unit goes with the numbers that carry the data's unit: not the counts, skewness, kurtosis
+        // and the coefficient of variation, which have none, and not the variance (unit squared).
+        let mut units: Vec<String> =
+            picks.iter().map(|p| if p.1 || p.0 == "Variance" { String::new() } else { inp.units.clone() }).collect();
+        if spec.confidence_limits {
+            let (lcl, ucl) = calc::mean_confidence_limits(&s, spec.level);
+            values.extend([lcl, ucl]);
+            units.extend([inp.units.clone(), inp.units.clone()]);
+        }
+        t.push_row(inp.label.clone(), values, units);
+    }
+    Ok(t)
+}
+
+/// Statistics on Rows: new columns behind the last input column, one number per worksheet row.
+fn row_statistics(
+    spec: &RowStatsSpec,
+    inputs: &[Input<'_>],
+    beside: &mut Vec<NewColumn>,
+    notes: &mut Vec<String>,
+) -> Result<(), AnalysisError> {
+    type Pick = fn(&calc::RowStats) -> f64;
+    let wanted: [(bool, &str, bool, Pick); 7] = [
+        (spec.mean, "Mean", false, |r| r.mean),
+        (spec.sd, "Standard Deviation", false, |r| r.sd),
+        (spec.sem, "SE of Mean", false, |r| r.sem),
+        (spec.min, "Minimum", false, |r| r.min),
+        (spec.max, "Maximum", false, |r| r.max),
+        (spec.n, "Number of Points", true, |r| r.n),
+        (spec.sum, "Sum", false, |r| r.sum),
+    ];
+    if !wanted.iter().any(|w| w.0) {
+        return Err(AnalysisError::BadOption("choose at least one quantity for Statistics on Rows".to_string()));
+    }
+    if inputs.len() < 2 {
+        notes.push("Only one column was chosen: every row has one number, so there is no spread.".to_string());
+    }
+    let rows = inputs.iter().map(|i| i.y.len()).max().unwrap_or(0);
+    let mut cells = vec![Vec::with_capacity(inputs.len()); rows];
+    for (r, row) in cells.iter_mut().enumerate() {
+        for inp in inputs {
+            let inside = r >= inp.first && r <= inp.last;
+            row.push(if inside { inp.y.get(r).copied().unwrap_or(f64::NAN) } else { f64::NAN });
+        }
+    }
+    let stats: Vec<calc::RowStats> = cells.iter().map(|row| calc::row_stats(row)).collect();
+    let units = match inputs.first() {
+        Some(f) if inputs.iter().all(|i| i.units == f.units) => f.units.clone(),
+        _ => String::new(),
+    };
+    let last = inputs.last().expect("at least one input").id;
+    for (on, name, count, pick) in wanted {
+        if on {
+            beside.push(NewColumn {
+                after: last,
+                long_name: name.to_string(),
+                units: if count { String::new() } else { units.clone() },
+                comments: format!("across {} columns", inputs.len()),
+                data: stats.iter().map(pick).collect(),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// The peak chain for every input column: one table row per peak, a baseline column beside each
 /// source and, with a fit, the fitted curve.
 fn run_peak_chain(
@@ -883,7 +1168,13 @@ impl Project {
             | Tool::MannWhitney(_)
             | Tool::SignedRank(_)
             | Tool::KruskalWallis(_)
-            | Tool::Correlation(_) => {
+            | Tool::Correlation(_)
+            | Tool::SignTest(_)
+            | Tool::KsTwoSample(_)
+            | Tool::MedianTest(_)
+            | Tool::Friedman(_)
+            | Tool::Grubbs(_)
+            | Tool::Dixon(_) => {
                 let out = statistics::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
@@ -1294,32 +1585,11 @@ impl Project {
                 }
                 table = Some(t);
             }
-            Tool::Statistics => {
-                let mut t = ResultTable::new(&[
-                    "N", "Missing", "Mean", "SD", "SEM", "Sum", "Minimum", "Q1", "Median", "Q3", "Maximum",
-                ]);
-                for inp in &inputs {
-                    let s = calc::stats(inp.ys());
-                    let units = (0..t.headers.len()).map(|i| if i < 2 { String::new() } else { inp.units.clone() });
-                    t.push_row(
-                        inp.label.clone(),
-                        vec![
-                            s.n as f64,
-                            s.missing as f64,
-                            s.mean,
-                            s.sd,
-                            s.sem,
-                            s.sum,
-                            s.min,
-                            s.q1,
-                            s.median,
-                            s.q3,
-                            s.max,
-                        ],
-                        units.collect(),
-                    );
-                }
-                table = Some(t);
+            Tool::Statistics(spec) => {
+                table = Some(statistics_table(spec, &inputs)?);
+            }
+            Tool::RowStatistics(spec) => {
+                row_statistics(spec, &inputs, &mut beside, &mut notes)?;
             }
         }
 
@@ -1673,7 +1943,7 @@ mod tests {
         assert_eq!(&names[..4], ["Data", "Area", "Area unit", "X start"]);
         assert_eq!(rs.columns[2].text().unwrap(), ["C", "mC"]);
         // Statistics too.
-        let s = p.analyze(&request(&[flat, ramp], Tool::Statistics)).unwrap();
+        let s = p.analyze(&request(&[flat, ramp], Tool::Statistics(StatisticsSpec::default()))).unwrap();
         let t = s.table.unwrap();
         assert_eq!((t.unit(0, 2), t.unit(1, 2)), ("A", "mA"));
         assert_eq!(t.units[0], "", "N has no unit");
@@ -1857,11 +2127,70 @@ mod tests {
         assert_eq!(ws.columns[2].numeric().unwrap(), [4.0], "the worksheet row of the peak");
         assert_eq!(r.table.unwrap().rows[0].1, [1.0]);
 
-        let r = p.analyze(&request(&[flat, ramp], Tool::Statistics)).unwrap();
+        let r = p.analyze(&request(&[flat, ramp], Tool::Statistics(StatisticsSpec::default()))).unwrap();
         let t = r.table.unwrap();
         assert_eq!(t.headers[2], "Mean");
         assert_eq!((t.rows[0].1[0], t.rows[0].1[2], t.rows[1].1[2], t.rows[1].1[10]), (11.0, 2.0, 5.0, 10.0));
         assert_eq!(p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()].name, "Statistics1");
+    }
+
+    #[test]
+    fn statistics_on_columns_can_add_the_other_quantities_and_confidence_limits() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let data = vec![2.0, 3.5, 1.0, 6.0, 4.5, 3.0, f64::NAN, 8.0];
+        let col = p.add_column(book, 0, Designation::Y, ColumnData::numeric(data.clone())).unwrap();
+        // Default: the original eleven columns.
+        let d = p.analyze(&request(&[col], Tool::Statistics(StatisticsSpec::default()))).unwrap();
+        assert_eq!(d.table.unwrap().headers.len(), 11);
+        let r = p.analyze(&request(&[col], Tool::Statistics(StatisticsSpec::all()))).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.headers.len(), 11 + 5 + 2);
+        let at = |name: &str| t.headers.iter().position(|h| h == name).unwrap_or_else(|| panic!("{name}"));
+        let row = &t.rows[0].1;
+        let s = calc::stats(&data);
+        assert_eq!(row[at("Variance")], s.variance);
+        assert_eq!(row[at("IQR")], s.q3 - s.q1);
+        assert_eq!((row[at("Skewness")], row[at("Kurtosis")], row[at("CV")]), (s.skewness, s.kurtosis, s.cv));
+        // The limits are the interval of the one-sample t-test.
+        let tt = calc::ttest_one(&data, 0.0, calc::Tail::Two, 0.05).unwrap();
+        assert!((row[at("Lower 95% CL of Mean")] - tt.lcl).abs() < 1e-12);
+        assert!((row[at("Upper 95% CL of Mean")] - tt.ucl).abs() < 1e-12);
+        let spec = StatisticsSpec { confidence_limits: true, level: 0.9, ..StatisticsSpec::default() };
+        let r = p.analyze(&request(&[col], Tool::Statistics(spec))).unwrap();
+        assert!(r.table.unwrap().headers.iter().any(|h| h == "Lower 90% CL of Mean"));
+        let bad = StatisticsSpec { confidence_limits: true, level: 1.5, ..StatisticsSpec::default() };
+        assert!(p.analyze(&request(&[col], Tool::Statistics(bad))).is_err());
+    }
+
+    #[test]
+    fn statistics_on_rows_add_columns_behind_the_last_chosen_column() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, f64::NAN, f64::NAN])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 6.0, 5.0, f64::NAN])).unwrap();
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![9.0; 4])).unwrap();
+        let spec = RowStatsSpec { sem: true, n: true, sum: true, min: true, max: true, ..Default::default() };
+        let r = p.analyze(&request(&[a, b], Tool::RowStatistics(spec))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        // The new columns sit between the chosen columns and the untouched one.
+        assert_eq!(names[..3], ["", "", "Mean"], "{names:?}");
+        assert_eq!(names[ws.columns.len() - 1], "", "{names:?}");
+        assert_eq!(ws.columns.len(), 3 + 7);
+        assert_eq!(r.new_columns.len(), 7);
+        let col = |name: &str| ws.columns.iter().find(|c| c.long_name == name).unwrap().numeric().unwrap().to_vec();
+        assert_eq!(col("Mean")[..3], [2.0, 4.0, 5.0]);
+        assert!(col("Mean")[3].is_nan() && col("Number of Points")[3].is_nan());
+        assert!((col("Standard Deviation")[0] - 2.0_f64.sqrt()).abs() < 1e-12);
+        assert!(col("Standard Deviation")[2].is_nan(), "one number has no spread");
+        assert_eq!(col("Sum")[..3], [4.0, 8.0, 5.0]);
+        assert_eq!(col("Number of Points")[..3], [2.0, 2.0, 1.0]);
+        assert_eq!((col("Minimum")[1], col("Maximum")[1]), (2.0, 6.0));
+        assert_eq!(ws.columns.last().unwrap().id, c);
+        // Nothing chosen is an error.
+        let none = RowStatsSpec { mean: false, sd: false, ..Default::default() };
+        assert!(p.analyze(&request(&[a, b], Tool::RowStatistics(none))).is_err());
     }
 
     #[test]

@@ -969,10 +969,20 @@ pub enum AnalyzeTool {
         #[arg(long, value_enum, default_value_t = PeakFitBaselineKind::Linear)]
         fit_baseline: PeakFitBaselineKind,
     },
-    /// Descriptive statistics of each column.
+    /// Descriptive statistics of each column. By default N, missing, mean, SD, SEM, sum, minimum, quartiles
+    /// and maximum; --all adds IQR, variance, skewness, kurtosis, CV and the confidence limits of the mean.
     Stats {
         #[command(flatten)]
         target: TargetArgs,
+        /// Also IQR, variance, skewness, kurtosis, coefficient of variation and confidence limits.
+        #[arg(long)]
+        all: bool,
+        /// Add these quantities (comma separated): iqr, variance, skewness, kurtosis, cv, limits.
+        #[arg(long, value_delimiter = ',')]
+        add: Vec<String>,
+        /// Confidence level of the limits of the mean.
+        #[arg(long, default_value_t = 0.95)]
+        level: f64,
     },
     /// t-test: each column against a hypothesized mean (one-sample), two columns against each other
     /// (two-sample, equal variances unless --unequal) or two columns as pairs. The result goes to a
@@ -1062,6 +1072,71 @@ pub enum AnalyzeTool {
         /// Decide with the asymptotic p-value even where an exact one exists (up to 80 differences).
         #[arg(long)]
         asymptotic: bool,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Statistics on Rows: per worksheet row the mean and standard deviation (and optionally the standard
+    /// error, minimum, maximum, count and sum) across the chosen columns, as new columns behind the last one.
+    Rowstats {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Add these quantities (comma separated): sem, min, max, n, sum.
+        #[arg(long, value_delimiter = ',')]
+        add: Vec<String>,
+        /// Leave out the mean and the standard deviation.
+        #[arg(long)]
+        no_mean_sd: bool,
+    },
+    /// Grubbs test for one outlier in each chosen column (the value farthest from the mean).
+    Grubbs {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level (two-sided).
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Dixon's Q test for one outlier in each chosen column of 3 to 10 numbers; the level is 0.1, 0.05 or 0.01.
+    Dixon {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level: 0.1, 0.05 or 0.01.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Paired sign test of two columns. The alternative is about the first column.
+    Sign {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Two-sample Kolmogorov-Smirnov test of two columns. The alternative is about the first column
+    /// ("upper": its distribution function lies above the second one's).
+    Ks2 {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Median test (Mood's): every chosen column is a group.
+    Mediantest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Friedman ANOVA: every chosen column is a treatment, every row a block (no missing numbers).
+    Friedman {
+        #[command(flatten)]
+        target: TargetArgs,
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,

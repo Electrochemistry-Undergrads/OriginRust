@@ -51,6 +51,64 @@ pub fn quantile_origin(sorted: &[f64], p: f64) -> f64 {
     (sorted[lo - 1] + sorted[hi - 1]) / 2.0
 }
 
+/// The confidence limits of the mean at `level` (for example 0.95): `mean -/+ t * sem` with the quantile
+/// of Student's t distribution with n - 1 degrees of freedom, the interval of the one-sample t-test.
+/// NaN for fewer than two numbers or a level outside (0, 1).
+pub fn mean_confidence_limits(s: &Stats, level: f64) -> (f64, f64) {
+    use statrs::distribution::{ContinuousCDF, StudentsT};
+    if s.n < 2 || !(level > 0.0 && level < 1.0) || !s.sem.is_finite() {
+        return (f64::NAN, f64::NAN);
+    }
+    let Ok(t) = StudentsT::new(0.0, 1.0, (s.n - 1) as f64) else {
+        return (f64::NAN, f64::NAN);
+    };
+    let crit = t.inverse_cdf(1.0 - (1.0 - level) / 2.0);
+    (s.mean - crit * s.sem, s.mean + crit * s.sem)
+}
+
+/// Statistics of one row across several columns (Origin `rowstats`). A row without a number gives NaN in
+/// every field, the count and the sum included; one number has no standard deviation or standard error.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RowStats {
+    pub n: f64,
+    pub mean: f64,
+    pub sd: f64,
+    pub sem: f64,
+    pub min: f64,
+    pub max: f64,
+    pub sum: f64,
+}
+
+/// [`RowStats`] of `values`; NaN entries are ignored.
+pub fn row_stats(values: &[f64]) -> RowStats {
+    let v: Vec<f64> = values.iter().copied().filter(|a| !a.is_nan()).collect();
+    let n = v.len();
+    if n == 0 {
+        return RowStats {
+            n: f64::NAN,
+            mean: f64::NAN,
+            sd: f64::NAN,
+            sem: f64::NAN,
+            min: f64::NAN,
+            max: f64::NAN,
+            sum: f64::NAN,
+        };
+    }
+    let nf = n as f64;
+    let sum: f64 = v.iter().sum();
+    let mean = sum / nf;
+    let sd = if n > 1 { (v.iter().map(|a| (a - mean).powi(2)).sum::<f64>() / (nf - 1.0)).sqrt() } else { f64::NAN };
+    RowStats {
+        n: nf,
+        mean,
+        sd,
+        sem: sd / nf.sqrt(),
+        min: v.iter().copied().fold(f64::INFINITY, f64::min),
+        max: v.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        sum,
+    }
+}
+
 /// Statistics of a column; NaN entries are counted as missing and ignored.
 pub fn stats(data: &[f64]) -> Stats {
     let mut v: Vec<f64> = data.iter().copied().filter(|a| !a.is_nan()).collect();

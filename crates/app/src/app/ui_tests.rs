@@ -3250,6 +3250,64 @@ fn the_nonparametric_menu_runs_a_kruskal_wallis_test() {
     assert_eq!(h.state().doc.undo_label(), Some("Kruskal-Wallis test"));
 }
 
+/// The other nonparametric tests of the Statistics menu run on the two columns of the sample file.
+#[test]
+fn the_nonparametric_menu_runs_sign_ks_median_and_friedman_tests() {
+    // up = 2.5 4.5 6.5 8.5 and down = 30.5 20.5 10.5 0.5: the first is smaller in every pair.
+    for (label, sheet_prefix, column, undo) in [
+        ("Paired Sample Sign Test...", "SignTest", "Prob", "Sign test"),
+        ("Two Sample Kolmogorov-Smirnov Test...", "KolmogorovSmirnov", "D", "Two-sample Kolmogorov-Smirnov test"),
+        ("Mood's Median Test...", "MedianTest", "Value", "Median test"),
+        ("Friedman ANOVA...", "Friedman", "Value", "Friedman ANOVA"),
+    ] {
+        let mut h = start(vec![data_file("np-more")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Statistics", "Nonparametric Tests", label]);
+        assert!(h.state().analysis.is_some(), "the window of {label} is open");
+        click(&mut h, "OK");
+        assert!(h.state().analysis.is_none(), "{label}");
+        let (sheet, values) = result_column(&h, column);
+        assert!(sheet.starts_with(sheet_prefix), "{label}: {sheet}");
+        assert!(!values.is_empty(), "{label}");
+        assert_eq!(h.state().doc.undo_label(), Some(undo));
+    }
+}
+
+/// Statistics > Descriptive Statistics > Grubbs Test... and Dixon's Q-test...: one row per chosen column.
+#[test]
+fn the_descriptive_menu_runs_the_outlier_tests() {
+    for (label, sheet_prefix, column, undo) in
+        [("Grubbs Test...", "Grubbs", "G", "Grubbs test"), ("Dixon's Q-test...", "Dixon", "Q", "Dixon's Q test")]
+    {
+        let mut h = start(vec![data_file("outlier")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Statistics", "Descriptive Statistics", label]);
+        assert!(h.state().analysis.is_some(), "the window of {label} is open");
+        click(&mut h, "OK");
+        let (sheet, values) = result_column(&h, column);
+        assert!(sheet.starts_with(sheet_prefix), "{label}: {sheet}");
+        assert_eq!(values.len(), 2, "{label}: one row per chosen column");
+        assert_eq!(h.state().doc.undo_label(), Some(undo));
+    }
+}
+
+/// Statistics > Descriptive Statistics > Statistics on Rows...: mean and SD columns appear behind the last column.
+#[test]
+fn the_descriptive_menu_adds_row_statistics_columns() {
+    let mut h = start(vec![data_file("rowstats")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Statistics on Rows..."]);
+    assert!(h.state().analysis.is_some(), "the row statistics window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Statistics on rows"));
+    let sheet = &project(&h).workbooks().next().unwrap().sheets[0];
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(&names[names.len() - 2..], ["Mean", "Standard Deviation"], "{names:?}");
+    let mean = sheet.columns[names.len() - 2].numeric().unwrap();
+    assert_eq!(mean[0], (2.5 + 30.5) / 2.0);
+}
+
 /// Statistics > Descriptive Statistics > Correlation Coefficient...: up and down are perfectly anti-correlated.
 #[test]
 fn the_statistics_menu_computes_correlation_coefficients() {

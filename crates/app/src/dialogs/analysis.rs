@@ -11,9 +11,9 @@ use super::frame::{
 };
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AnovaSpec, BinSize, CorrelationSpec, FreqOptions, HistogramSpec, KruskalWallisSpec, MannWhitneySpec,
-    MeansComparison, NormalitySpec, SignedRankKind, SignedRankSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec,
-    TwoWayLayout,
+    AnovaSpec, BinSize, CorrelationSpec, FreqOptions, FriedmanSpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec,
+    MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, RowStatsSpec, SignTestSpec,
+    SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
@@ -58,6 +58,16 @@ pub enum AnalysisKind {
     SignedRankPaired,
     KruskalWallis,
     Correlation,
+    /// Statistics > Descriptive Statistics > Statistics on Rows.
+    RowStatistics,
+    /// Statistics > Descriptive Statistics > Grubbs Test and Dixon's Q-test.
+    Grubbs,
+    Dixon,
+    /// Statistics > Nonparametric Tests: more tests.
+    SignTest,
+    KsTwoSample,
+    MedianTest,
+    Friedman,
 }
 
 impl AnalysisKind {
@@ -101,6 +111,13 @@ impl AnalysisKind {
             AnalysisKind::SignedRankPaired => "Paired Sample Wilcoxon Signed Rank Test...",
             AnalysisKind::KruskalWallis => "Kruskal-Wallis ANOVA...",
             AnalysisKind::Correlation => "Correlation Coefficient...",
+            AnalysisKind::RowStatistics => "Statistics on Rows...",
+            AnalysisKind::Grubbs => "Grubbs Test...",
+            AnalysisKind::Dixon => "Dixon's Q-test...",
+            AnalysisKind::SignTest => "Paired Sample Sign Test...",
+            AnalysisKind::KsTwoSample => "Two Sample Kolmogorov-Smirnov Test...",
+            AnalysisKind::MedianTest => "Mood's Median Test...",
+            AnalysisKind::Friedman => "Friedman ANOVA...",
         }
     }
 
@@ -133,6 +150,13 @@ impl AnalysisKind {
             "signrank-paired" => AnalysisKind::SignedRankPaired,
             "kruskal" => AnalysisKind::KruskalWallis,
             "corr" => AnalysisKind::Correlation,
+            "rowstats" => AnalysisKind::RowStatistics,
+            "grubbs" => AnalysisKind::Grubbs,
+            "dixon" => AnalysisKind::Dixon,
+            "sign" => AnalysisKind::SignTest,
+            "ks2" => AnalysisKind::KsTwoSample,
+            "mediantest" => AnalysisKind::MedianTest,
+            "friedman" => AnalysisKind::Friedman,
             _ => return None,
         })
     }
@@ -238,6 +262,10 @@ struct StatsOptions {
     spearman: bool,
     kendall: bool,
     listwise: bool,
+    /// Statistics on Columns: which quantities to write.
+    desc: StatisticsSpec,
+    /// Statistics on Rows: which quantities to add.
+    rows: RowStatsSpec,
 }
 
 impl Default for StatsOptions {
@@ -269,6 +297,8 @@ impl Default for StatsOptions {
             spearman: false,
             kendall: false,
             listwise: false,
+            desc: StatisticsSpec::default(),
+            rows: RowStatsSpec::default(),
         }
     }
 }
@@ -563,7 +593,7 @@ impl AnalysisDialog {
                     baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
                 }),
             }),
-            AnalysisKind::Statistics => Tool::Statistics,
+            AnalysisKind::Statistics => Tool::Statistics(self.stats.desc),
             AnalysisKind::TTest => Tool::TTest(TTestSpec {
                 kind: match self.stats.ttest {
                     0 => TTestKind::OneSample { mean: self.stats.mean },
@@ -629,6 +659,15 @@ impl AnalysisDialog {
                 alpha: self.stats.alpha,
             }),
             AnalysisKind::KruskalWallis => Tool::KruskalWallis(KruskalWallisSpec { alpha: self.stats.alpha }),
+            AnalysisKind::RowStatistics => Tool::RowStatistics(self.stats.rows),
+            AnalysisKind::Grubbs => Tool::Grubbs(OutlierSpec { alpha: self.stats.alpha }),
+            AnalysisKind::Dixon => Tool::Dixon(OutlierSpec { alpha: self.stats.alpha }),
+            AnalysisKind::SignTest => Tool::SignTest(SignTestSpec { tail: self.stats.tail, alpha: self.stats.alpha }),
+            AnalysisKind::KsTwoSample => {
+                Tool::KsTwoSample(KsTwoSampleSpec { tail: self.stats.tail, alpha: self.stats.alpha })
+            }
+            AnalysisKind::MedianTest => Tool::MedianTest(MedianTestSpec { alpha: self.stats.alpha }),
+            AnalysisKind::Friedman => Tool::Friedman(FriedmanSpec { alpha: self.stats.alpha }),
             AnalysisKind::Correlation => Tool::Correlation(CorrelationSpec {
                 pearson: self.stats.pearson,
                 spearman: self.stats.spearman,
@@ -974,7 +1013,34 @@ impl AnalysisDialog {
                 }
             }
             AnalysisKind::Statistics => {
-                ui.weak("This tool has no options: every statistic is computed.");
+                let d = &mut self.stats.desc;
+                ui.label("Quantities");
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut d.n, "N");
+                    ui.checkbox(&mut d.missing, "Missing");
+                    ui.checkbox(&mut d.mean, "Mean");
+                    ui.checkbox(&mut d.sd, "SD");
+                    ui.checkbox(&mut d.sem, "SEM");
+                    ui.checkbox(&mut d.sum, "Sum");
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut d.min, "Minimum");
+                    ui.checkbox(&mut d.q1, "Q1");
+                    ui.checkbox(&mut d.median, "Median");
+                    ui.checkbox(&mut d.q3, "Q3");
+                    ui.checkbox(&mut d.max, "Maximum");
+                    ui.checkbox(&mut d.iqr, "IQR");
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut d.variance, "Variance");
+                    ui.checkbox(&mut d.skewness, "Skewness");
+                    ui.checkbox(&mut d.kurtosis, "Kurtosis");
+                    ui.checkbox(&mut d.cv, "Coefficient of variation");
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut d.confidence_limits, "Confidence limits of the mean, level");
+                    ui.add_enabled(d.confidence_limits, DragValue::new(&mut d.level).speed(0.001).range(0.5..=0.9999));
+                });
             }
             AnalysisKind::TTest => {
                 let st = &mut self.stats;
@@ -1129,12 +1195,60 @@ impl AnalysisDialog {
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
             }
-            AnalysisKind::KruskalWallis => {
+            AnalysisKind::KruskalWallis | AnalysisKind::MedianTest | AnalysisKind::Friedman => {
                 let st = &mut self.stats;
-                ui.label("Every chosen column is a group.");
+                ui.label(match self.kind {
+                    AnalysisKind::Friedman => "Every chosen column is a treatment, every row a block.",
+                    _ => "Every chosen column is a group.",
+                });
                 ui.horizontal(|ui| {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+            }
+            AnalysisKind::SignTest | AnalysisKind::KsTwoSample => {
+                let st = &mut self.stats;
+                ui.label("Needs exactly two columns.");
+                ui.horizontal(|ui| {
+                    ui.label("Alternative (first column)");
+                    ui.radio_value(&mut st.tail, Tail::Two, "Two-tailed");
+                    ui.radio_value(&mut st.tail, Tail::Upper, "F(x) > G(y)");
+                    ui.radio_value(&mut st.tail, Tail::Lower, "F(x) < G(y)");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+            }
+            AnalysisKind::Grubbs | AnalysisKind::Dixon => {
+                let st = &mut self.stats;
+                ui.label("One test for each chosen column.");
+                if self.kind == AnalysisKind::Dixon {
+                    ui.horizontal(|ui| {
+                        ui.label("Significance level");
+                        ui.radio_value(&mut st.alpha, 0.1, "0.1");
+                        ui.radio_value(&mut st.alpha, 0.05, "0.05");
+                        ui.radio_value(&mut st.alpha, 0.01, "0.01");
+                    });
+                    ui.label("Dixon's table covers 3 to 10 numbers.");
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("Significance level");
+                        ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                    });
+                }
+            }
+            AnalysisKind::RowStatistics => {
+                let r = &mut self.stats.rows;
+                ui.label("Statistics of each row across the chosen columns, added as new columns.");
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut r.mean, "Mean");
+                    ui.checkbox(&mut r.sd, "Standard deviation");
+                    ui.checkbox(&mut r.sem, "SE of mean");
+                    ui.checkbox(&mut r.min, "Minimum");
+                    ui.checkbox(&mut r.max, "Maximum");
+                    ui.checkbox(&mut r.n, "Number of points");
+                    ui.checkbox(&mut r.sum, "Sum");
                 });
             }
             AnalysisKind::Correlation => {
@@ -1220,6 +1334,13 @@ impl AnalysisDialog {
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "signrank",
             AnalysisKind::KruskalWallis => "kwanova",
             AnalysisKind::Correlation => "corrcoef",
+            AnalysisKind::RowStatistics => "rowstats",
+            AnalysisKind::Grubbs => "grubbs",
+            AnalysisKind::Dixon => "qtest",
+            AnalysisKind::SignTest => "sign2",
+            AnalysisKind::KsTwoSample => "kstest2",
+            AnalysisKind::MedianTest => "mediantest",
+            AnalysisKind::Friedman => "friedman",
         }
     }
 
@@ -1255,6 +1376,13 @@ impl AnalysisDialog {
             AnalysisKind::SignedRank => "Test the median of one sample by signed ranks",
             AnalysisKind::SignedRankPaired => "Test the difference of two paired samples by signed ranks",
             AnalysisKind::KruskalWallis => "Compare several samples by their ranks",
+            AnalysisKind::RowStatistics => "Descriptive statistics of each row across the chosen columns",
+            AnalysisKind::Grubbs => "Test the value farthest from the mean for being an outlier",
+            AnalysisKind::Dixon => "Test the lowest or highest value for being an outlier (3 to 10 numbers)",
+            AnalysisKind::SignTest => "Test two paired samples by the signs of their differences",
+            AnalysisKind::KsTwoSample => "Compare two samples by their distribution functions",
+            AnalysisKind::MedianTest => "Compare the medians of several samples (Mood's median test)",
+            AnalysisKind::Friedman => "Compare treatments in repeated blocks by ranks within each row",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
         }
     }
@@ -1276,7 +1404,7 @@ impl AnalysisDialog {
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
             AnalysisKind::Statistics => {
-                "Count, mean, standard deviation, sum, minimum, quartiles and maximum in a new sheet"
+                "The chosen quantities (count, mean, SD, SEM, quartiles, variance, skewness, confidence limits, ...)                  in a new sheet"
             }
             AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
@@ -1291,6 +1419,17 @@ impl AnalysisDialog {
             AnalysisKind::MannWhitney => "Ranks, U, Z and the p-values in a new sheet",
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "Both p-values in a new sheet",
             AnalysisKind::KruskalWallis => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
+            AnalysisKind::RowStatistics => "New columns behind the last chosen column",
+            AnalysisKind::Grubbs | AnalysisKind::Dixon => {
+                "The suspect value, its row, the statistic and the verdict in a new sheet"
+            }
+            AnalysisKind::SignTest | AnalysisKind::KsTwoSample => {
+                "The counts or distance, the statistic and the p-value in a new sheet"
+            }
+            AnalysisKind::MedianTest => {
+                "Counts around the median, the chi-square statistic and its p-value in a new sheet"
+            }
+            AnalysisKind::Friedman => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
         }
     }

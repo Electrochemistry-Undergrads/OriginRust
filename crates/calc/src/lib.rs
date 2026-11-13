@@ -22,6 +22,8 @@ pub mod interp;
 pub mod nonparam;
 pub mod normality;
 pub mod normalize;
+pub mod nptests;
+pub mod outlier;
 pub mod peakchain;
 pub mod peaks;
 pub mod smooth;
@@ -49,10 +51,15 @@ pub use normality::{
     shapiro_wilk,
 };
 pub use normalize::{NormalizeMethod, normalize};
+pub use nptests::{
+    Friedman, FriedmanError, FriedmanGroup, KS2_EXACT_MAX_PAIRS, KsTwoSample, MedianGroup, MedianTest,
+    SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,
+};
+pub use outlier::{DixonQ, Grubbs, OutlierError, OutlierSide, dixon_q, grubbs};
 pub use peakchain::{
     ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo, analyze_peaks,
     auto_minima_anchors, find_peak_indices, integrate_peaks,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use smooth::{Boundary, SmoothMethod, SmoothOptions, smooth, smooth_xy};
-pub use stats::{Stats, quantile_origin, stats};
+pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

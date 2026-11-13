@@ -439,6 +439,11 @@ fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
     assert!(ok, "{err}");
     assert!(out.contains("Model") && out.contains("Tukey means comparison") && out.contains("ANOVA1"), "{out}");
 
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova", file, "--y", "untreated,treated,third", "--comparison", "holm-bonferroni"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Bonferroni-Holm means comparison") && out.contains("sorted by p-value"), "{out}");
+
     let (ok, out, err) = sheaf(&["analyze", "normality", file, "--y", "untreated,treated"]);
     assert!(ok, "{err}");
     assert!(out.contains("Shapiro-Wilk W"), "{out}");

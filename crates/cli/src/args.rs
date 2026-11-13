@@ -654,6 +654,10 @@ pub enum ComparisonArg {
     /// Fisher's least significant difference.
     Lsd,
     Scheffe,
+    /// Bonferroni-Holm step-down (one-way ANOVA only).
+    HolmBonferroni,
+    /// Sidak-Holm step-down (one-way ANOVA only).
+    HolmSidak,
     /// No means comparison.
     None,
 }

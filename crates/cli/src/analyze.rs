@@ -111,6 +111,8 @@ fn comparison_of(comparison: ComparisonArg) -> Option<analysis::MeansComparison>
         ComparisonArg::Sidak => Some(M::Sidak),
         ComparisonArg::Lsd => Some(M::FisherLsd),
         ComparisonArg::Scheffe => Some(M::Scheffe),
+        ComparisonArg::HolmBonferroni => Some(M::HolmBonferroni),
+        ComparisonArg::HolmSidak => Some(M::HolmSidak),
         ComparisonArg::None => None,
     }
 }

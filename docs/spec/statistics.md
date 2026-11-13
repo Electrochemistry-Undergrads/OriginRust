@@ -171,7 +171,7 @@ the standard error `sqrt(MSE (1/n_i + 1/n_j))` with MSE and its degrees of freed
 marginal means are not adjusted for the other factor, which only matters in unbalanced designs). The statistic of
 the t methods keeps the sign of the difference, the Tukey q and the Scheffe F do not. Origin's library numbers
 the methods 1 Tukey, 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe, which differs from the order in its header comment.
-Holm methods and Dunnett are not built. For constant data Origin's 0/0 turns into p = 0 and "significant" for
+Holm methods are in the one-way ANOVA only (section 11); Dunnett is not built. For constant data Origin's 0/0 turns into p = 0 and "significant" for
 equal means; Sheaf says p = 1.
 
 **Sheet.** `ANOVA2Way1`: one table of N, mean, SD and SEM for each level of A, each level of B, each cell (with the
@@ -341,6 +341,39 @@ Paired Sample Sign Test and Statistics > Descriptive Statistics > Statistics on 
 (labels from the X-Function descriptions). Not done: the indexed input forms, the outlier box plot (`box`),
 Origin's report layout, outlier tests that remove several points in turn.
 
+## 11 Holm comparisons of the one-way ANOVA
+
+Origin's statistics library (the function the one-way ANOVA tool calls for its means comparisons) numbers the
+methods 1 Tukey, 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe, 6 Dunnett, 7 Bonferroni-Holm, 8 Sidak-Holm.
+Run from `tools/origin-ref/stats4/` (helper `stats4-ref.c`, generator `g1.py`, raw output `holm1.out.txt`, fixture
+`crates/calc/tests/fixtures/stats4_origin.rs` by `make-fixture1.py`, test `crates/calc/tests/origin_stats4_tests.rs`):
+28 inputs of ours (2 to 8 groups, unequal sizes, a group of one number, tied means, missing values, three
+significance levels, and four found by a search for the case below), each with both Holm methods: 54 comparison
+tables, 386 pairs.
+
+- Every pair gets the plain pairwise t statistic `(mean_j - mean_i) / sqrt(MSE (1/n_i + 1/n_j))` (**with its sign**,
+  unlike the other methods in the one-way table, which show the size) and its unadjusted two-sided p-value on
+  the error degrees of freedom.
+- The table is **sorted by that p-value**, smallest first (the pair index column shows where each came from; pairs
+  are numbered (1,2), (1,3), (2,3), (1,4), ... from 0). Exactly equal p-values (symmetric data) come in an order we
+  could not predict from the data; Sheaf keeps the pair order.
+- The pair of rank `r` (from 0, `m` pairs in all) is judged at `alpha / (m - r)` (Bonferroni-Holm) or
+  `1 - (1 - alpha)^(1 / (m - r))` (Sidak-Holm); these levels are returned in an extra column. The verdict is the
+  step-down rule: significant only if this pair and every pair before it in the list have `p < level`. (The four
+  searched inputs have a second p-value below its level after a first that is not; Origin says "not significant"
+  for both.)
+- No confidence limits (Sheaf shows the level column in their place); the degrees-of-freedom column is empty (0).
+- Constant data (error mean square 0): the statistic and p-value are blank and every pair is "significant"; Sheaf
+  says p = 1 and not significant, as for the other methods.
+- Agreement: mean differences and standard errors to 1e-12 relative; the statistic to 1e-12; p-values to 9.1e-6
+  relative (Origin's t tail); levels to 1e-9; all 386 verdicts equal.
+- The two-way ANOVA library call with the Holm numbers returns the sorted unadjusted statistics and p-values but
+  no levels and no verdicts (the field is always 0), so Sheaf offers Holm in the one-way ANOVA only (menu, `sheaf
+  analyze anova --comparison holm-bonferroni | holm-sidak`) and refuses it in the two-way ANOVA.
+- **Dunnett** (method 6): the same call returns the differences and standard errors but no statistic, p-value or
+  limits for any input, in the one-way and the two-way library functions, and the library has no way to name the
+  control group. The installed Origin gave nothing to copy, so Dunnett is not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
@@ -380,7 +413,7 @@ Not verified or not done:
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no sample size or power
   analysis, no t-test from summary data, no row-wise t-tests.
-- Three-way and repeated measures ANOVA, Holm and Dunnett comparisons, power analysis and means plots of the
+- Three-way and repeated measures ANOVA, Dunnett comparisons, power analysis and means plots of the
   ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).

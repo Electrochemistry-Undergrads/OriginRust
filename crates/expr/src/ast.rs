@@ -42,11 +42,16 @@ pub(crate) enum UnOp {
 pub(crate) struct Node {
     pub kind: Kind,
     depth: u32,
+    pos: usize,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum Kind {
     Num(f64),
+    /// A text string `"abc"`.
+    Str(String),
+    /// `col(A)$` or `col(A)[i]$`: the text of a cell; the child is a `Col` or `Index` node.
+    Text(Box<Node>),
     Var {
         name: String,
         pos: usize,
@@ -77,11 +82,16 @@ pub(crate) enum Kind {
 }
 
 impl Node {
+    /// Zero-based byte offset the node was built at (for error messages).
+    pub(crate) fn pos(&self) -> usize {
+        self.pos
+    }
+
     /// Builds a node, rejecting trees that are nested too deeply.
     pub(crate) fn new(kind: Kind, pos: usize) -> Result<Node, ExprError> {
         let child_depth = match &kind {
-            Kind::Num(_) | Kind::Var { .. } | Kind::Col { .. } => 0,
-            Kind::Unary(_, a) => a.depth,
+            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } => 0,
+            Kind::Unary(_, a) | Kind::Text(a) => a.depth,
             Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => a.depth.max(b.depth),
             Kind::Cond(a, b, c) | Kind::Range { base: a, from: b, to: c, .. } => a.depth.max(b.depth).max(c.depth),
             Kind::Call { args, .. } => args.iter().map(|n| n.depth).max().unwrap_or(0),
@@ -89,15 +99,15 @@ impl Node {
         if child_depth >= MAX_NODE_DEPTH {
             return Err(ExprError::at(pos, "expression is too long or too deeply nested"));
         }
-        Ok(Node { kind, depth: child_depth + 1 })
+        Ok(Node { kind, depth: child_depth + 1, pos })
     }
 
     /// Visits this node and all descendants, parents first.
     pub(crate) fn walk(&self, f: &mut impl FnMut(&Node)) {
         f(self);
         match &self.kind {
-            Kind::Num(_) | Kind::Var { .. } | Kind::Col { .. } => {}
-            Kind::Unary(_, a) => a.walk(f),
+            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } => {}
+            Kind::Unary(_, a) | Kind::Text(a) => a.walk(f),
             Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => {
                 a.walk(f);
                 b.walk(f);
@@ -110,6 +120,17 @@ impl Node {
             Kind::Call { args, .. } => args.iter().for_each(|n| n.walk(f)),
         }
     }
+}
+
+/// Which columns a formula reads through `cell(row, column)`, whose column is a position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CellReads {
+    /// No `cell()` in the formula.
+    None,
+    /// The 1-based positions of the columns, when every `cell()` names its column with a number.
+    Columns(Vec<usize>),
+    /// A `cell()` whose column is computed: it may read any column.
+    Any,
 }
 
 /// A parsed expression. Create one with [`Expr::parse`].
@@ -155,6 +176,33 @@ impl Expr {
             }
         });
         out
+    }
+
+    /// The columns the formula reads through `cell(row, column)`, for dependency tracking. A
+    /// column given as a plain number is named; a computed one means any column.
+    pub fn cell_reads(&self) -> CellReads {
+        let mut positions: Vec<usize> = Vec::new();
+        let mut any = false;
+        let mut found = false;
+        self.root.walk(&mut |n| {
+            if let Kind::Call { func: Func::Cell, args } = &n.kind {
+                found = true;
+                match &args[1].kind {
+                    Kind::Num(v) => {
+                        let p = v.round();
+                        if (1.0..1.0e9).contains(&p) && !positions.contains(&(p as usize)) {
+                            positions.push(p as usize);
+                        }
+                    }
+                    _ => any = true,
+                }
+            }
+        });
+        match (found, any) {
+            (false, _) => CellReads::None,
+            (true, true) => CellReads::Any,
+            (true, false) => CellReads::Columns(positions),
+        }
     }
 
     /// Every column the expression reads through `col()` or `wcol()`, in order of first use,

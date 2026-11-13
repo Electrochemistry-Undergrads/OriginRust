@@ -204,8 +204,16 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
             g.layers[0].plots[0].line.dash = *d;
         });
     }
-    for (k, c) in
-        [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical].iter().enumerate()
+    for (k, c) in [
+        Connect::Straight,
+        Connect::Spline,
+        Connect::StepHorizontal,
+        Connect::StepVertical,
+        Connect::BSpline,
+        Connect::Bezier,
+    ]
+    .iter()
+    .enumerate()
     {
         graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
             g.name = format!("C{k}");
@@ -215,7 +223,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     let (imp, warnings) = round_trip(&p);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
-    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 4);
+    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 6);
     let by_name = |n: &str| imp.graphs.iter().find(|g| g.name == n).unwrap().layers[0].plots[0].clone();
     for (k, kind) in kinds.iter().enumerate() {
         let got = by_name(&format!("K{k}"));
@@ -244,8 +252,16 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     for (k, d) in Dash::ALL.iter().enumerate() {
         assert_eq!(by_name(&format!("D{k}")).line.dash, *d);
     }
-    for (k, c) in
-        [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical].iter().enumerate()
+    for (k, c) in [
+        Connect::Straight,
+        Connect::Spline,
+        Connect::StepHorizontal,
+        Connect::StepVertical,
+        Connect::BSpline,
+        Connect::Bezier,
+    ]
+    .iter()
+    .enumerate()
     {
         assert_eq!(by_name(&format!("C{k}")).line.connect, *c);
     }

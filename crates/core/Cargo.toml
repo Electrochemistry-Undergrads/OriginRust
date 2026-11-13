@@ -14,6 +14,13 @@ sheaf-expr.workspace = true
 sheaf-calc.workspace = true
 sheaf-fit.workspace = true
 
+# Only for the local time zone offset (`now()` and `today()` in formulas); both are already in the lock file.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Time"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 serde_json.workspace = true
 

@@ -5491,3 +5491,101 @@ fn data_manipulation_items_and_median_filter_open_and_run() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), sheets_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("Translate X"));
 }
+
+#[test]
+fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_after_x() {
+    let mut h = start(vec![data_file("manip2")]);
+    show_window(&mut h, "Book1 - sample");
+    // The six Data Manipulation and Median Filter items are no longer greyed.
+    let undo_before = h.state().doc.undo_label().map(str::to_string);
+    for path in [
+        ["Analysis", "Data Manipulation", "Reduce to Evenly Spaced X..."],
+        ["Analysis", "Data Manipulation", "Curve Translate Y..."],
+    ] {
+        menu_path(&mut h, &path);
+        assert!(h.state().analysis.is_some(), "{path:?} opens its window");
+        click(&mut h, "Cancel");
+        assert!(h.state().analysis.is_none());
+        assert_eq!(h.state().doc.undo_label().map(str::to_string), undo_before, "Cancel changes nothing");
+    }
+    let analysis = menus::bar(WindowKind::Workbook).iter().find(|m| m.name() == "Analysis").expect("the Analysis menu");
+    let manip = analysis
+        .entries
+        .iter()
+        .find_map(|e| match e {
+            menus::Entry::Submenu(s) if menus::plain(&s.label) == "Data Manipulation" => Some(s),
+            _ => None,
+        })
+        .expect("the Data Manipulation submenu");
+    let names: Vec<String> = manip
+        .entries
+        .iter()
+        .filter_map(|e| if let menus::Entry::Item(i) = e { Some(menus::plain(&i.label)) } else { None })
+        .collect();
+    let x = names.iter().position(|n| n == "Curve Translate X...").unwrap_or_else(|| panic!("{names:?}"));
+    assert_eq!(names[x + 1], "Curve Translate Y...");
+
+    // Reduce to 4 evenly spaced X values (the default is 100 points: the run keeps the X range).
+    open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Reduce to evenly spaced X"));
+    let sheets = &project(&h).workbooks().next().unwrap().sheets;
+    let cols = &sheets.last().unwrap().columns;
+    assert_eq!(cols.len(), 2);
+    assert_eq!(cols[0].numeric().unwrap().len(), 100);
+    assert_eq!(cols[0].numeric().unwrap()[0], 1.0);
+    assert_eq!(cols[0].numeric().unwrap()[99], 4.0);
+
+    // The reduced sheet is now the active one. Translate Y with the default shift of 0 writes an unchanged
+    // copy of its Y column beside it, and Undo removes it.
+    let reduced = cols[1].numeric().unwrap().to_vec();
+    open_analysis_on(&mut h, AnalysisKind::TranslateY, &["B"]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Translate Y"));
+    let shifted = project(&h)
+        .workbooks()
+        .next()
+        .unwrap()
+        .sheet()
+        .columns
+        .iter()
+        .find(|c| c.long_name == "up shifted")
+        .map(|c| c.numeric().unwrap().to_vec())
+        .expect("the shifted column");
+    assert_eq!(shifted, reduced);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert!(project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "up shifted"));
+}
+
+#[test]
+fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
+    let mut h = start(vec![data_file("manip-auto")]);
+    open_analysis_on(&mut h, AnalysisKind::MedianFilter, &["B"]);
+    // Manual is the default; the median filter can follow its input, so Auto is offered.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Auto"));
+    click(&mut h, "Auto");
+    click(&mut h, "OK");
+    let b = column_id(&h, "B");
+    let out = project(&h)
+        .workbooks()
+        .next()
+        .unwrap()
+        .sheet()
+        .columns
+        .iter()
+        .find(|c| c.long_name == "Median filtered up")
+        .expect("the filtered column")
+        .id;
+    // The window of 5 shrinks at the ends to as many points as fit on both sides, and a straight line
+    // is its own median.
+    assert_eq!(project(&h).numeric(out).unwrap(), [2.5, 4.5, 6.5, 8.5]);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "100".into() }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).numeric(out).unwrap(), [100.0, 6.5, 6.5, 8.5], "the same column was updated");
+    assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
+}

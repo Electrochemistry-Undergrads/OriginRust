@@ -121,14 +121,13 @@ pub(super) fn run(
                     (Shift::By(d), _) if d.is_finite() => Ok(d),
                     (Shift::By(d), _) => Err(AnalysisError::BadOption(format!("{d} is not a usable shift"))),
                     (Shift::PointTo { at, to }, TranslateAxis::X) if at.is_finite() && to.is_finite() => Ok(to - at),
-                    (Shift::PointTo { at, to }, TranslateAxis::Y) => {
-                        calc::shift_to_land(inp.xs(), inp.ys(), at, to).ok_or_else(|| {
+                    (Shift::PointTo { at, to }, TranslateAxis::Y) => calc::shift_to_land(inp.xs(), inp.ys(), at, to)
+                        .ok_or_else(|| {
                             AnalysisError::BadOption(format!(
                                 "X = {at} is outside the X range of column {}, so its value there is unknown",
                                 inp.short
                             ))
-                        })
-                    }
+                        }),
                     (Shift::PointTo { .. }, TranslateAxis::X) => {
                         Err(AnalysisError::BadOption("the point and its new X must be numbers".into()))
                     }
@@ -265,5 +264,73 @@ mod tests {
             let t = Tool::MedianFilter(MedianFilterSpec { npts: bad, edge: MedianEdge::Shrink });
             assert!(p.analyze(&req(y, t)).is_err(), "window {bad}");
         }
+    }
+
+    /// Edits the Y column and runs the Auto links; the results must follow in the same columns.
+    fn edit_y(p: &mut Project, y: ColumnId, values: Vec<f64>) {
+        let before = p.clone();
+        p.column_mut(y).unwrap().data = ColumnData::numeric(values);
+        let problems = p.update_analysis_links(&before);
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    #[test]
+    fn all_four_tools_can_be_linked_and_an_auto_result_follows_an_edit() {
+        let new_y = vec![0.0, 2.0, 4.0, 6.0, 9.0];
+        // Subtract Straight Line: beside the input; the new column is reused.
+        let (mut p, y, book) = setup();
+        let spec = SubtractLineSpec { p1: LinePoint { x: 0.0, y: None }, p2: LinePoint { x: 4.0, y: None } };
+        assert!(Project::can_link(&Tool::SubtractLine(spec)));
+        let r = p.analyze_linked(&req(y, Tool::SubtractLine(spec)), &OutputTarget::NextToInput, RecalcMode::Auto);
+        let out = r.unwrap().new_columns[0];
+        edit_y(&mut p, y, new_y.clone());
+        assert_eq!(p.numeric(out).unwrap(), [0.0, -0.25, -0.5, -0.75, 0.0]);
+        assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3);
+
+        // Translate Y by a point: the shift is worked out again from the edited curve (3 -> 0 at x = 3).
+        let (mut p, y, _) = setup();
+        let spec = TranslateSpec { axis: TranslateAxis::Y, shift: Shift::PointTo { at: 3.0, to: 0.0 } };
+        assert!(Project::can_link(&Tool::Translate(spec)));
+        let r = p.analyze_linked(&req(y, Tool::Translate(spec)), &OutputTarget::NextToInput, RecalcMode::Auto);
+        let out = r.unwrap().new_columns[0];
+        edit_y(&mut p, y, new_y.clone());
+        assert_eq!(p.numeric(out).unwrap(), [-6.0, -4.0, -2.0, 0.0, 3.0]);
+
+        // Translate X and Reduce to Evenly Spaced X write a new sheet; it is replaced, not added.
+        let (mut p, y, book) = setup();
+        let spec = TranslateSpec { axis: TranslateAxis::X, shift: Shift::By(10.0) };
+        assert!(Project::can_link(&Tool::Translate(spec)));
+        let r = p.analyze_linked(&req(y, Tool::Translate(spec)), &OutputTarget::NextToInput, RecalcMode::Auto);
+        let out = r.unwrap().new_columns[1];
+        edit_y(&mut p, y, new_y.clone());
+        assert_eq!(p.numeric(out).unwrap(), new_y.as_slice());
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
+
+        let (mut p, y, book) = setup();
+        let opts = ReduceOptions { grid: calc::EvenGrid::Count(3), ..ReduceOptions::default() };
+        assert!(Project::can_link(&Tool::ReduceX(opts)));
+        let r = p.analyze_linked(&req(y, Tool::ReduceX(opts)), &OutputTarget::NextToInput, RecalcMode::Auto);
+        let out = r.unwrap().new_columns[1];
+        edit_y(&mut p, y, new_y);
+        assert_eq!(p.numeric(out).unwrap(), [0.0, 4.0, 9.0]);
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
+    }
+
+    #[test]
+    fn a_manual_link_of_a_manipulation_tool_waits_for_recalculate_and_its_link_survives_json() {
+        let (mut p, y, _) = setup();
+        let spec = SubtractLineSpec { p1: LinePoint { x: 0.0, y: None }, p2: LinePoint { x: 4.0, y: None } };
+        let r = p.analyze_linked(&req(y, Tool::SubtractLine(spec)), &OutputTarget::NextToInput, RecalcMode::Manual);
+        let out = r.unwrap().new_columns[0];
+        let old = p.numeric(out).unwrap().to_vec();
+        edit_y(&mut p, y, vec![0.0, 2.0, 4.0, 6.0, 9.0]);
+        assert_eq!(p.numeric(out).unwrap(), old.as_slice(), "not recalculated yet");
+        let link = p.analysis_link_of(out).unwrap();
+        p.recalculate_analysis(link).unwrap();
+        assert_eq!(p.numeric(out).unwrap(), [0.0, -0.25, -0.5, -0.75, 0.0]);
+        // The link (not the cell data, which a project file stores apart) goes through JSON.
+        let text = serde_json::to_string(&p).unwrap();
+        let back: Project = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.analysis_links, p.analysis_links);
     }
 }

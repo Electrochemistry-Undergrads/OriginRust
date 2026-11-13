@@ -19,7 +19,9 @@ pub(crate) enum Agg {
     Median,
     Sd,
     Var,
-    Count,
+    /// Origin's `count`: the number of rows in the range, missing cells included; the column ends
+    /// at its last value.
+    Rows,
     Min,
     Max,
     First,
@@ -167,14 +169,15 @@ static TABLE: &[(&str, Func)] = &[
     ("na", Func::Na),
     ("ifelse", Func::IfElse),
     ("if", Func::IfElse),
-    ("sum", Func::Agg(Agg::Sum)),
+    // Origin's `sum(col)` in a column formula is the running sum (measured), `total` the total.
+    ("sum", Func::Vec(VecFn::Cumsum)),
     ("total", Func::Agg(Agg::Sum)),
     ("mean", Func::Agg(Agg::Mean)),
     ("median", Func::Agg(Agg::Median)),
     ("sd", Func::Agg(Agg::Sd)),
     ("stddev", Func::Agg(Agg::Sd)),
     ("var", Func::Agg(Agg::Var)),
-    ("count", Func::Agg(Agg::Count)),
+    ("count", Func::Agg(Agg::Rows)),
     ("first", Func::Agg(Agg::First)),
     ("last", Func::Agg(Agg::Last)),
     ("stddevp", Func::Agg(Agg::Sdp)),
@@ -786,7 +789,7 @@ fn sum_count(data: &[f64]) -> (f64, usize) {
 pub(crate) fn aggregate(kind: Agg, data: &[f64]) -> f64 {
     match kind {
         Agg::Sum => sum_count(data).0,
-        Agg::Count => sum_count(data).1 as f64,
+        Agg::Rows => data.len() as f64,
         Agg::Mean => {
             let (s, n) = sum_count(data);
             if n == 0 { NA } else { s / n as f64 }

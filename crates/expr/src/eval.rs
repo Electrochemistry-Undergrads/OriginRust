@@ -189,6 +189,16 @@ impl Col<'_> {
 }
 
 impl Col<'_> {
+    /// The length up to the last value that is not missing: Origin does not store trailing
+    /// missing cells, so they are not rows.
+    fn used_len(&self, host: &dyn Host) -> usize {
+        let mut n = self.len(host);
+        while n > 0 && self.get(host, n - 1).is_nan() {
+            n -= 1;
+        }
+        n
+    }
+
     fn len(&self, host: &dyn Host) -> usize {
         match self {
             Col::Slice(s) => s.len(),
@@ -500,7 +510,7 @@ fn ev_inner(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
             }
         }
         C::Agg { kind, col, range } => {
-            let len = col.len(host);
+            let len = if *kind == Agg::Rows { col.used_len(host) } else { col.len(host) };
             let (lo, hi) = match range {
                 None => (1, len),
                 Some((a, b)) => {

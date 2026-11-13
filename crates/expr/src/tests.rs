@@ -154,7 +154,7 @@ fn statistics_of_infinite_data_are_not_zero() {
     let e = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
     assert!(e("sd(col(A))").is_nan(), "the spread of data with infinity is undefined");
     assert!(e("var(col(A))").is_nan());
-    assert_eq!(e("sum(col(A))"), f64::INFINITY);
+    assert_eq!(e("total(col(A))"), f64::INFINITY);
     assert_eq!(e("count(col(A))"), 3.0);
 }
 
@@ -240,15 +240,16 @@ fn statistics_over_columns_and_ranges() {
     let a = [1.0, 2.0, f64::NAN, 5.0];
     let host = SimpleHost::new().short("A", &a);
     let one = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
-    assert_eq!(one("sum(col(A))"), 8.0);
+    // Origin: `sum` is the running sum (row 1 holds A[1]), `count` counts the missing cell too.
+    assert_eq!(one("sum(col(A))"), 1.0);
     assert_eq!(one("total(col(A))"), 8.0);
-    assert_eq!(one("count(col(A))"), 3.0);
+    assert_eq!(one("count(col(A))"), 4.0);
     near_eq(one("mean(col(A))"), 8.0 / 3.0);
     assert_eq!(one("min(col(A))"), 1.0);
     assert_eq!(one("max(col(A))"), 5.0);
     assert_eq!(one("median(col(A))"), 2.0);
     assert_eq!(one("mean(col(A)[1:2])"), 1.5);
-    assert_eq!(one("sum(col(A)[2:99])"), 7.0);
+    assert_eq!(one("total(col(A)[2:99])"), 7.0);
     assert!(one("mean(col(A)[3:3])").is_nan());
     near_eq(one("sd(col(A)[1:2])"), 0.5f64.sqrt());
     // The documented gap-filling formula.
@@ -293,7 +294,7 @@ fn host_without_slices() {
     assert_eq!(&v[1..], &[21.0, 32.0]);
     let m = Expr::parse("mean(col(A)[i:3])").unwrap().eval_rows(&h, 3).unwrap();
     assert_eq!(m, [2.0, 2.5, 3.0]);
-    assert_eq!(Expr::parse("sum(col(A))").unwrap().eval(&h).unwrap(), 6.0);
+    assert_eq!(Expr::parse("total(col(A))").unwrap().eval(&h).unwrap(), 6.0);
 }
 
 #[test]
@@ -489,6 +490,37 @@ fn stddevp_and_sem() {
     assert!((first("sem(col(A))") - 2.748_376_143_938_713 / 8f64.sqrt()).abs() < 1e-12);
     assert!(first("sem(col(A)[1:1])").is_nan());
     assert_eq!(first("stddevp(col(A)[1:1])"), 0.0);
+}
+
+#[test]
+fn sum_is_the_running_sum_and_count_counts_missing_cells_as_in_origin() {
+    // Origin (probes a1, a2, a3 in re-workspace/scratch/expr-funcs2/): `sum(col(A))` in a column
+    // formula is the running sum, missing where the input is missing; `total` is the total.
+    let run = [3.0, 4.0, 8.0, 9.0, 14.0, NAN, 23.0, 25.0, 31.0];
+    same(&rows("sum(col(A))"), &run);
+    // A range: the running sum inside it from row 1 (Origin: 5 . 14 for [5:7]).
+    same(&rows("sum(col(A)[5:7])")[..4], &[5.0, NAN, 14.0, NAN]);
+    // Scalars measured: total 31, mean 3.875, max 9, min 1, count 9 (the missing cell counts).
+    assert_eq!(first("total(col(A))"), 31.0);
+    assert_eq!(first("mean(col(A))"), 3.875);
+    assert_eq!(first("max(col(A))"), 9.0);
+    assert_eq!(first("min(col(A))"), 1.0);
+    assert_eq!(first("count(col(A))"), 9.0);
+    assert_eq!(first("count(col(A)[5:7])"), 3.0);
+    assert_eq!(first("count(col(A)[0:3])"), 3.0);
+    assert_eq!(first("count(col(A)[3:2])"), 0.0);
+    assert_eq!(first("total(col(A)[3:2])"), 0.0);
+}
+
+#[test]
+fn count_stops_at_the_last_value_of_the_column() {
+    // Origin: with A = . 1 4 1 5 . 9 2 . (trailing missing not stored) count(col(A)[1:20]) is 8.
+    let a = [NAN, 1.0, 4.0, 1.0, 5.0, NAN, 9.0, 2.0, NAN, NAN];
+    let host = SimpleHost::new().short("A", &a);
+    let one = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
+    assert_eq!(one("count(col(A))"), 8.0);
+    assert_eq!(one("count(col(A)[1:20])"), 8.0);
+    assert_eq!(one("count(col(A)[2:6])"), 5.0);
 }
 
 #[test]

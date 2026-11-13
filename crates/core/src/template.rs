@@ -428,6 +428,9 @@ fn polar(id: WindowId, name: &str, radius: RadiusColumn) -> Graph {
         a.major_tick_len_pt = 6.0;
         a.minor_ticks = 0;
     }
+    // The measured probe (spec 14.17) ran the radius axis from the data's smallest to its largest
+    // radius: the centre is the smallest value and the circle's edge the largest, no margin.
+    l.y_axis.rescale_margin_pct = 0.0;
     g
 }
 

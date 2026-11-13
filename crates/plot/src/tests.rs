@@ -2862,7 +2862,7 @@ fn polar_data_to_page_and_page_to_data_invert_each_other() {
         let (p, g) = polar_probe(template);
         let geom = &crate::layout_geometry(&p, g).unwrap()[0];
         for theta in [0.0, 10.0, 90.0, 179.0, 270.5, 359.0] {
-            for r in [geom.y.min + 0.1, 1.0, 1.7, geom.y.max] {
+            for r in [geom.y.min + 0.1, 1.3, 1.7, geom.y.max] {
                 let (px, py) = geom.data_to_page(theta, r);
                 let (t, rr) = geom.page_to_data(px, py);
                 assert!((t - theta).abs() < 1e-6 && (rr - r).abs() < 1e-9, "{theta},{r} -> {t},{rr}");
@@ -2889,10 +2889,11 @@ fn polar_data_to_page_and_page_to_data_invert_each_other() {
 fn the_radius_axis_of_a_polar_layer_follows_the_radius_values() {
     let (p, g) = polar_probe(Template::Polar);
     let small = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
-    assert!(small.max >= 2.0 && small.max < 3.0, "radii up to 2: {small:?}");
+    // No margin: the centre is the smallest radius and the edge the largest (spec 14.17 probe).
+    assert!((small.min - 1.0).abs() < 1e-9 && (small.max - 2.0).abs() < 1e-9, "radii 1 to 2: {small:?}");
     let (p, g) = project(Template::Polar, vec![0.0, 90.0, 180.0, 270.0], vec![vec![10.0, 40.0, 25.0, 30.0]]);
     let geom = &crate::layout_geometry(&p, g).unwrap()[0];
-    assert!(geom.y.max >= 40.0 && geom.y.max < 60.0, "radii up to 40: {:?}", geom.y);
+    assert!((geom.y.min - 10.0).abs() < 1e-9 && (geom.y.max - 40.0).abs() < 1e-9, "radii 10 to 40: {:?}", geom.y);
     // The angle axis ignores the data.
     assert_eq!((geom.x.min, geom.x.max), (0.0, 360.0));
     assert_eq!(geom.x.major.len(), 12);

@@ -2,12 +2,12 @@
 <rect x="0" y="0" width="432" height="432" fill="#FFFFFF"/>
 <g id="layer0">
 <g class="grid">
-<path d="M216 194.4A21.6 21.6 0 1 1 216 237.6A21.6 21.6 0 1 1 216 194.4M216 151.2A64.8 64.8 0 1 1 216 280.8A64.8 64.8 0 1 1 216 151.2M216 108A108 108 0 1 1 216 324A108 108 0 1 1 216 108" fill="none" stroke="#CCCCCC" stroke-width="0.5" stroke-linejoin="round"/>
+<path d="M216 151.2A64.8 64.8 0 1 1 216 280.8A64.8 64.8 0 1 1 216 151.2" fill="none" stroke="#CCCCCC" stroke-width="0.5" stroke-linejoin="round"/>
 <path d="M216 216L345.6 216M216 216L328.237 151.2M216 216L280.8 103.763M216 216L216 86.4M216 216L151.2 103.763M216 216L103.763 151.2M216 216L86.4 216M216 216L103.763 280.8M216 216L151.2 328.237M216 216L216 345.6M216 216L280.8 328.237M216 216L328.237 280.8" fill="none" stroke="#CCCCCC" stroke-width="0.5" stroke-linejoin="round"/>
 </g>
 <clipPath id="clip0"><rect x="86.4" y="86.4" width="259.2" height="259.2"/></clipPath>
 <g class="plots" clip-path="url(#clip0)">
-<path d="M324 216L314.729 189.546L290.825 172.8L261.821 170.179L237.6 178.588L223.088 189.546L216 194.4L208.912 189.546L194.4 178.588L170.179 170.179L141.175 172.8L117.271 189.546L108 216L117.271 242.454L141.175 259.2L170.179 261.821L194.4 253.412L208.912 242.454L216 237.6L223.088 242.454L237.6 253.412L261.821 261.821L290.825 259.2L314.729 242.454L324 216" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M345.6 216L332.798 184.704L300.178 167.4L261.821 170.179L232.2 187.941L218.247 207.614L216 216L213.753 207.614L199.8 187.941L170.179 170.179L131.822 167.4L99.202 184.704L86.4 216L99.202 247.296L131.822 264.6L170.179 261.821L199.8 244.059L213.753 224.386L216 216L218.247 224.386L232.2 244.059L261.821 261.821L300.178 264.6L332.798 247.296L345.6 216" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="overlay">
 <path d="M216 86.4A129.6 129.6 0 1 1 216 345.6A129.6 129.6 0 1 1 216 86.4" fill="none" stroke="#000000" stroke-width="1.5"/>
@@ -25,13 +25,12 @@
 <text x="294.375" y="350.728" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">300</text>
 <text x="351.749" y="295.725" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">330</text>
 <path d="M216 86.4L216 345.6" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
-<path d="M216 194.4L210 194.4M216 237.6L210 237.6M216 151.2L210 151.2M216 280.8L210 280.8M216 108L210 108M216 324L210 324" fill="none" stroke="#000000" stroke-width="1.5"/>
-<text x="203.7" y="198.99" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">1.0</text>
-<text x="203.7" y="242.19" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">1.0</text>
+<path d="M216 216L210 216M216 151.2L210 151.2M216 280.8L210 280.8M216 86.4L210 86.4M216 345.6L210 345.6" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="203.7" y="220.59" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">1.0</text>
 <text x="203.7" y="155.79" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">1.5</text>
 <text x="203.7" y="285.39" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">1.5</text>
-<text x="203.7" y="112.59" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2.0</text>
-<text x="203.7" y="328.59" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2.0</text>
+<text x="203.7" y="90.99" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2.0</text>
+<text x="203.7" y="350.19" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2.0</text>
 <rect x="178.4" y="104" width="149.6" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
 <path d="M187.2 127.1L235.6 127.1" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="246.6" y="132.71" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 1</text>

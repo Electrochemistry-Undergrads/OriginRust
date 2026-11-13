@@ -3823,3 +3823,69 @@ fn dragging_over_row_numbers_selects_the_rows_in_between() {
     drag(&mut h, egui::pos2(x, y1), egui::pos2(x, y3));
     assert_eq!(cells(&h), Sel::Rows { anchor: 0, end: 2 });
 }
+
+#[test]
+fn typing_with_a_block_selected_edits_its_active_cell_and_enter_and_tab_move_inside_the_block() {
+    let mut h = start(vec![data_file("blocktype")]);
+    show_window(&mut h, "Book1 - sample");
+    grid_text(&h, "4.5").click();
+    settle(&mut h);
+    // The block of the columns "up" and "down" over the first two rows.
+    let ws = sheet(&h).clone();
+    h.state_mut().books.values_mut().next().unwrap().select_cells(&ws, (1, 0), (2, 1));
+    settle(&mut h);
+    h.event(egui::Event::Text("9".to_string()));
+    settle(&mut h);
+    let editing = book_ui(&h).editing.clone().expect("typing starts editing");
+    assert_eq!((editing.0, editing.1, editing.2.as_str()), (ws.columns[1].id, 0, "9"));
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) }, "the block stays selected");
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [9.0, 4.5, 6.5, 8.5]);
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)));
+    h.event(egui::Event::Text("8".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [9.0, 8.0, 6.5, 8.5]);
+    // Past the bottom of the block: the top of the next column of the block.
+    assert_eq!(book_ui(&h).active_cell(), Some((2, 0)));
+    h.event(egui::Event::Text("7".to_string()));
+    settle(&mut h);
+    h.key_press(egui::Key::Tab);
+    settle(&mut h);
+    assert_eq!(column(&h, "C")[0], 7.0);
+    // Tab moved right inside the block: past the last column, to the start of the next row.
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)));
+}
+
+#[test]
+fn plot_multi_panel_makes_one_panel_per_y_column() {
+    let mut h = start(vec![data_file("panels")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Plot", "Multi-Panel", "Vertical 2 Panel"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    let g = graphs.last().unwrap();
+    assert_eq!(g.layers.len(), 2);
+    assert!(g.layers.iter().all(|l| l.plots.len() == 1));
+    assert_eq!(h.state().doc.undo_label(), Some("Plot panels"));
+}
+
+#[test]
+fn plot_symbol_y_error_needs_an_error_column_and_then_plots_scatter_with_bars() {
+    let mut h = start(vec![data_file("yerr")]);
+    show_window(&mut h, "Book1 - sample");
+    let before = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Symbol", "Y Error"]);
+    assert_eq!(project(&h).graphs().count(), before, "no error column: nothing is plotted");
+    // Column "down" becomes the error column of "up".
+    right_click_text(&mut h, "C(Y1)");
+    menu_path(&mut h, &["Set As", "Y Error"]);
+    menu_path(&mut h, &["Plot", "Symbol", "Y Error"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let plot = &graphs.last().unwrap().layers[0].plots[0];
+    assert!(plot.y_error.is_some(), "the plot has error bars");
+}

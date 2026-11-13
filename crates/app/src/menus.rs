@@ -78,6 +78,11 @@ pub enum Cmd {
     /// A command of a sheet tab's menu, on the active sheet.
     Sheet(SheetOp),
     Plot(Template),
+    /// Plot > Symbol > Y Error: symbols with error bars from the Y error columns.
+    PlotYError,
+    /// Plot > Multi-Panel > Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel: rows and
+    /// columns of panels, one panel per Y column.
+    Panels(usize, usize),
     SetAs(Designation),
     SetColumnValues,
     Recalculate,
@@ -540,19 +545,16 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sub(
             "&Symbol",
-            with(
-                vec![item("&Scatter", Cmd::Plot(Template::Scatter))],
-                &[
-                    "Scatter Central",
-                    "Column Scatter",
-                    "Y Error",
-                    "XY Error",
-                    "Vertical Drop Line",
-                    "Bubble",
-                    "Color Mapped",
-                    "Bubble + Color Mapped",
+            [
+                vec![
+                    item("&Scatter", Cmd::Plot(Template::Scatter)),
+                    grey("Scatter Central"),
+                    grey("Column Scatter"),
+                    item("Y Error", Cmd::PlotYError),
                 ],
-            ),
+                greys(&["XY Error", "Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
+            ]
+            .concat(),
         ),
         sub(
             "Line + S&ymbol",
@@ -598,16 +600,18 @@ fn plot_menu() -> Vec<Entry> {
                 &["Waterfall Y:Color Mapping", "Waterfall Z:Color Mapping", "3D Waterfall"],
             ),
         ),
-        grey_sub(
+        sub(
             "Multi-Pa&nel",
-            &[
-                "Vertical 2 Panel",
-                "Horizontal 2 Panel",
-                "4 Panel",
-                "9 Panel",
-                "Stack...",
-                "Multiple Panels by Label...",
-            ],
+            [
+                vec![
+                    item("Vertical 2 Panel", Cmd::Panels(2, 1)),
+                    item("Horizontal 2 Panel", Cmd::Panels(1, 2)),
+                    item("4 Panel", Cmd::Panels(2, 2)),
+                    item("9 Panel", Cmd::Panels(3, 3)),
+                ],
+                greys(&["Stack...", "Multiple Panels by Label..."]),
+            ]
+            .concat(),
         ),
         sep(),
         grey_sub("3D &XYY", &["XYY 3D Bars", "3D Ribbons", "3D Walls", "3D Waterfall"]),
@@ -1649,6 +1653,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::Sheet(op) => Action::Sheet { book: book?, op: op.clone() },
         Cmd::Plot(template) => Action::PlotColumns { book: book?, columns: c.selected.to_vec(), template: *template },
+        Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec() },
+        Cmd::Panels(rows, cols) => {
+            Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
+        }
         Cmd::SetAs(designation) => {
             book?;
             Action::SetDesignation { columns: some()?, designation: *designation }

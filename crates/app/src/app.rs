@@ -733,6 +733,8 @@ impl SheafApp {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::PlotYError { book, columns } => self.plot_y_error(book, columns),
+            Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
             Action::Fit { book, column, kind } => {
                 let column = column.filter(|c| self.doc.project().column(*c).is_some_and(|c| c.data.is_numeric()));
@@ -1086,9 +1088,11 @@ impl SheafApp {
         }
     }
 
-    fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+    /// The Y columns a plot command works on: the selected numeric ones, or the ones a plot of
+    /// the active sheet would show when nothing is selected.
+    fn y_columns_to_plot(&self, book: WindowId, columns: Vec<ColumnId>, template: Template) -> Vec<ColumnId> {
         let project = self.doc.project();
-        let ys: Vec<ColumnId> = if columns.is_empty() {
+        if columns.is_empty() {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
             project.default_plot_columns(book, sheet, template)
         } else {
@@ -1101,7 +1105,48 @@ impl SheafApp {
                     })
                 })
                 .collect()
+        }
+    }
+
+    /// Plot > Symbol > Y Error: a scatter plot whose Y columns have a column set as Y Error.
+    fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+        let mut ys = self.y_columns_to_plot(book, columns, Template::Scatter);
+        if ys.is_empty() {
+            // Only error columns were selected: plot the sheet's Y columns they belong to.
+            ys = self.y_columns_to_plot(book, Vec::new(), Template::Scatter);
+        }
+        let project = self.doc.project();
+        let has_error = |id: &ColumnId| {
+            project
+                .locate(*id)
+                .is_some_and(|(_, sheet, _)| sheet.column_index(*id).is_some_and(|i| sheet.y_error_for(i).is_some()))
         };
+        if !ys.iter().any(has_error) {
+            self.warn("Y Error needs a column set as Y Error after the Y column".to_string());
+            return;
+        }
+        self.plot_columns(book, ys, Template::Scatter);
+    }
+
+    /// Plot > Multi-Panel: one panel per Y column in a grid of the Line template's panels.
+    fn plot_panels(&mut self, book: WindowId, columns: Vec<ColumnId>, rows: usize, cols: usize) {
+        let ys = self.y_columns_to_plot(book, columns, Template::Line);
+        if ys.is_empty() {
+            self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
+            return;
+        }
+        let template = Template::Line;
+        let frame = template.new_graph(WindowId(0), "").layers[0].frame;
+        let layout = sheaf_core::panels::PanelLayout::grid(rows, cols, &frame);
+        let groups: Vec<Vec<ColumnId>> = ys.iter().map(|y| vec![*y]).collect();
+        match self.doc.edit("Plot panels", |p| p.plot_panels(template, &groups, &layout)) {
+            Ok(_) => self.say(format!("Plotted {} column(s) in {rows} x {cols} panels", ys.len())),
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        let ys = self.y_columns_to_plot(book, columns, template);
         if ys.is_empty() {
             self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
             return;

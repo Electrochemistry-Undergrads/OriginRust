@@ -179,6 +179,18 @@ pub enum Action {
         columns: Vec<ColumnId>,
         template: Template,
     },
+    /// Scatter plot of the Y columns with the error bars of the columns set as Y Error.
+    PlotYError {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// One panel per Y column in a grid of `rows` by `cols` panels (Plot > Multi-Panel).
+    PlotPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        rows: usize,
+        cols: usize,
+    },
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {
         graph: WindowId,

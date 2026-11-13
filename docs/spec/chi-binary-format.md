@@ -4,7 +4,7 @@
 text file. This document describes the layout of the binary file for three techniques: cyclic
 voltammetry (CV), amperometric i-t curve (i-t) and chronopotentiometry (CP). A file is ten
 length-prefixed strings, a fixed block of 0x650 bytes made of 4-byte words, and then one array of
-32-bit floating point numbers per channel. The potential of a CV and the time axis of an i-t or CP
+32-bit floating point numbers (the channels alternate point by point, section 2.3). The potential of a CV and the time axis of an i-t or CP
 run are **not stored**; they are rebuilt from the parameters. Every field below carries a tag:
 **[checked]** (agreed with a text export of the same run, or with the physics, or with several
 files), **[inferred]** (the best reading of the evidence, not proven), **[unknown]** (a value that
@@ -15,15 +15,19 @@ is present but whose meaning is not known). The reader is `crates/io/src/chi_bin
 Nothing here comes from CH Instruments source code, and no CH Instruments program was started. The
 evidence is:
 
-- Eight binary files. Six are the owner's research data (four two-channel i-t runs, one CV, one CP,
-  made with a CHI627E). Two more come with a text export of the same run: a CV of the owner's made
-  with a CHI1040C (tens of thousands of points, a run that was stopped early) and the sample
-  `it.bin`/`it.txt` that ships in the `Test Data` folder of the CHI1040C program (3 channels, 141
-  points). Having both forms of a run made it possible to find the data arrays and the parameters
-  by matching numbers. The six files have no text export. (The owner's files are not in the
-  repository, and this document gives no number taken from their data.)
+- Eight binary files with a text export of the same run. Six are the owner's research data: four
+  two-channel i-t runs (made with a CHI1040C, section 2.2), one CV and one CP (made with a CHI627E),
+  each with a text export that the owner made later by converting the binary file; the text exports
+  agreed with the binary files in every row of all six runs (to the rounding of the text, 4 digits).
+  Two more are an older CV of the owner's made with a CHI1040C (tens of thousands of points, a run
+  that was stopped early) and the sample `it.bin`/`it.txt` that ships in the `Test Data` folder of
+  the CHI1040C program (3 channels, 141 points). The second form of a run made it possible to find
+  the data arrays and the parameters by matching numbers. In addition the `Test Data` folder holds 20
+  more binary files of other techniques without text exports, used only to see the channel layout
+  (section 2.3). (None of these files is in the repository, and this document gives no number taken
+  from their data.)
 - Physical constraints: the size of a file equals header plus `4 x points x channels` exactly for all
-  eight files; a CV potential runs between Low E and High E; the time of an i-t run grows by the
+  files read (the owner's six, the sample and the older CV); a CV potential runs between Low E and High E; the time of an i-t run grows by the
   sample interval; the CP potential stays between its two limits; the four i-t files share all fixed
   fields and differ in date and applied potential.
 - The CHI help file (`chi627e.chm`, read as documentation only, restated here in our own words) for the
@@ -62,11 +66,12 @@ The ten strings, in order:
 
 | Offset | Type | Meaning | Tag |
 |---|---|---|---|
-| 0x21c, 0x224 | u32, u32 | number of data points per channel (the two copies are always equal) | [checked] file size equals B + 0x650 + 4 x points x channels in all eight files; the text export of the two runs that have one has that many rows |
+| 0x21c, 0x224 | u32, u32 | number of data points per channel (the two copies are always equal) | [checked] file size equals B + 0x650 + 4 x points x channels in all files read; the text export of every run that has one has that many rows |
 | 0x228 .. 0x23c | 6 x u32 | year, month, day, hour, minute, second | [checked] equals the first line of the text export of the CV run |
-| 0x248 | u32 | instrument model number: 1040 or 627 | [checked] against `Instrument Model: CHI1040C` and the CHI627E used for the other files; the letter after the number is not stored anywhere found [unknown] |
+| 0x248 | u32 | instrument model number: 1040 or 627 | [checked] 1040 in the sample and the older CV, whose text exports say `CHI1040C`, and in the owner's four i-t files, which the owner confirms were run on the CHI1040C; 627 in the owner's CV and CP, run on the CHI627E. The letter after the number is not stored anywhere found [unknown]. **Open point:** the owner's text exports of the four i-t runs say `Instrument Model: CHI627E`; a text export names the model of the program that converted it (here the CHI627E program), not the instrument that ran the run, so the word in the binary file is the better source. The reader keeps naming them CHI1040 |
 | 0x254 | u32 | number of CV segments (a copy); 1 in the i-t and CP files | [inferred] |
-| 0x2ec | u32 | number of data channels: 1 (CV, CP), 2 (the owner's i-t files), 3 (the sample i-t file) | [checked] by the file-size identity |
+| 0x2ec | u32 | number of data channels: 1 (CV, CP), 2 (the owner's i-t files), 3 (the sample i-t file), 8 in the other i-t file of the `Test Data` folder | [checked] by the file-size identity |
+| 0x630 | f32 | layout flag: 1.0 in all of the owner's files, 0.0 in every file of the `Test Data` folder (including the sample) | [inferred] from the two groups of files only; it goes with the channel layout of section 2.3 and with `A4440` and the word 1901 at 0x350 in the older group |
 | 0x3f8 | f32 | Init E in V (CV, i-t). Zero in the CP file | [checked] CV text export; sample i-t text export |
 | 0x400 | f32 | CV: High E. CP: High E limit. i-t: the potential of channel 2 (E2) | [checked] High E against the CV text export; CP limit against the data (section 4); E2 against the sample i-t text [inferred] for files with more than one channel |
 | 0x404 | f32 | CV: Low E. CP: Low E limit. Zero for i-t | [checked] as above |
@@ -87,9 +92,22 @@ Other words of the fixed block were looked at and are listed in section 5. A few
 
 ### 2.3 Data
 
-Channel 1 comes first, then channel 2, and so on: **planar, not interleaved** [checked against the
-sample i-t text export, which has three channels]. Each array has `points` values of 32-bit
-IEEE floats.
+The data are `points x channels` 32-bit IEEE floats. With one channel they are that channel's array.
+With several channels there are two layouts, told apart by the flag at 0x630:
+
+- **Flag 1.0 (the owner's files): the channels alternate point by point**, `i1[0], i2[0], i1[1],
+  i2[1], ...` [checked: all 8 channels x 71953 rows of the four i-t runs agree with their text exports;
+  read channel after channel they do not, and give false "pinned current" warnings]. An earlier version
+  of this document and of the reader said "planar", because the only multi-channel file with a text
+  export then known was the sample, below.
+- **Flag 0.0 (the `Test Data` folder): channel 1 is one array, and the other channels alternate after
+  it**, `i1[0..n], i2[0], i3[0], i2[1], i3[1], ...` [checked for channel 1 against the sample text, all
+  141 rows; inferred for the rest: channels 2 and 3 of the sample are constant, so the text cannot tell
+  the layouts apart, but read as alternating they are two constants (one value each), and read as two
+  arrays each would alternate between two values; in the 8-channel i-t file of the folder channel 1 is a
+  smooth decay and the other seven are smooth curves only when read with a stride of 7].
+
+The reader uses the flag. A file with one channel is the same in both layouts.
 
 | Technique | Channels | What the arrays are | Tag |
 |---|---|---|---|
@@ -101,11 +119,13 @@ Sign convention of the current: anodic (oxidation) current is positive. Seen in 
 sweep has negative current, the upward positive) and in the i-t files (held at 1 V the current starts
 positive, held at 0.4 V negative) [inferred].
 
-**Rebuilding the CV potential** [checked]. Point `k` (k = 1, 2, ...) is `Init E + s k dE` with
+**Rebuilding the CV potential** [checked]. Point `k` (k = 0, 1, 2, ...; **the first row is Init E**) is `Init E + s k dE` with
 `s = +1` for `P` and `-1` for `N` and `dE` the sample interval. The value is folded back and forth
 between Low E and High E like a triangle wave: with `span = High - Low`, `u = (x - Low) mod 2 span`,
-then `u = 2 span - u` if `u > span`, and the potential is `Low + u`. The first point is one step away
-from Init E. A limit is mirrored, not clamped: when the limits are not a whole number of steps
+then `u = 2 span - u` if `u > span`, and the potential is `Low + u`. The first row is Init E itself: the text exports of the owner's two CV runs (CHI627E) start at
+Init E, k = row index reproduces their potentials to 1e-15 V, and a four-segment run splits into scans of
+2000 + 2000 rows. (An earlier version counted k from 1; that fitted the older CV, see the next
+paragraph.) A limit is mirrored, not clamped: when the limits are not a whole number of steps
 apart, the extreme potential is visited twice in a row (for example with limits 82.5 steps apart,
 one limit once and the other twice). The formula was compared with every potential of the text
 export of the CV run and agreed in every row. A second, independent way of building the potential
@@ -113,8 +133,18 @@ export of the CV run and agreed in every row. A second, independent way of build
 the decimal numbers they were typed as (6 significant digits), because the instrument stores some
 limits one step off the nearest float (0.995 V can be stored as 0.99500006).
 
-**Rebuilding the time** (i-t and CP) [checked for i-t, inferred for CP]. Point `k` is at time
-`k x sample interval`, so the first row is at one interval, as in the sample i-t text export.
+**Where the axes start: the CHI1040C export is the exception** [checked]. The text exports made by the
+CHI1040C program (the sample `it.txt`, the older CV) start **one step in**: the first time is one sample
+interval and the first potential is Init E plus a step. The exports made by the CHI627E program (all
+the owner's six pairs, including the four i-t runs that were run on a CHI1040C) start at time 0 and at
+Init E. Nothing in the binary file says which program will export it: the model word does not (the four
+i-t files say 1040 but their exports start at 0) and the layout flag does not (the older CV has flag 1.0
+and a one-step-in export). The reader follows the owner's exports; a file exported by the CHI1040C
+program differs by one step on the axis, with the currents row for row the same.
+
+**Rebuilding the time** (i-t and CP) [checked]. Point `k` (k = 0, 1, ...) is at time
+`k x sample interval`, so the first row is at 0, as in the owner's text exports (previous paragraph for
+the exception).
 
 ## 3. What the importer makes of a file
 
@@ -158,10 +188,12 @@ On synthetic files made by a test-only writer of this layout (tests in `chi_bin/
 
 - CV potential equals an independent step-and-mirror simulation for four parameter sets, with limits
   a whole number of steps apart and not, in both directions, and stays between the limits.
-- First point one step from Init E; limits reached at the expected rows; the repeated extreme;
-  vertices 83 and 82 rows apart; scan sizes.
+- First row Init E; limits reached at the expected rows; the repeated extreme;
+  vertices 83 and 82 rows apart; scan sizes; a four-segment run gives 2000 + 2000 rows.
 - i-t: time spacing equals the sample interval; the running charge of a linear current equals the
-  exact integral; planar channel order; clipped current warning names the channel; early end of run.
+  exact integral; the bytes of a two-channel run alternate point by point and the old three-channel
+  layout keeps channel 1 apart; the time starts at 0 in both layouts; clipped current warning names the
+  channel; early end of run; the Header text is kept.
 - CP: the potential stays inside its limits; three turning points for four segments; the set current
   and limits come back in the header list; a potential beyond a limit warns.
 - No prefix of a valid file and no single byte flipped makes the reader panic.
@@ -170,9 +202,12 @@ On local files (the tests skip when none are present; they name no file and stat
 the data):
 
 - Every local binary file of a known technique is read without error. For CV the rebuilt sweep stays
-  between the header's limits; for i-t the time grows by the sample interval from one interval on;
+  between the header's limits; for i-t the time grows by the sample interval from 0 on;
   for CP the potential stays between its two limits.
-- Every local binary file that has its text export beside it gives the same workbook from both.
+- Every local binary file that has its text export beside it gives the same workbook from both:
+  same columns, scans, warnings, Header text, and numbers within the rounding of the text. (Exports of
+  the CHI1040C program, which start one step in, are compared on their currents only.) Run on the
+  owner's six pairs, the sample and the older CV: all pass.
 - Checked by hand on the owner's six files: a complete CV has segments x points per leg points, the
   stored sweep covers exactly Low E to High E, the current of upward legs is positive; the i-t time
   of the last point equals the run time to within 0.1 percent; the CP potential reaches each limit to
@@ -182,12 +217,15 @@ the data):
   with plateaus. This does not prove the numbers but excludes gross errors (a wrong channel or a
   wrong waveform would not look like this).
 
-Not verified: anything for the owner's six files against a CHI text export, because none exists;
-the time axis of the CP file (see below); every parameter marked [inferred] or [unknown].
+Not verified: the layout of three or more channels in files with flag 1.0 (the owner's have two); the
+layout flag as the cause of the channel layout (two groups of files only); every parameter marked
+[inferred] or [unknown].
 
 ## 5. Unknowns
 
-- Strings 3 to 9, and whether `Header:` / `Note:` text is stored. The marker word's meaning, and the
+- Strings 4 to 9, and where `Note:` text is stored. The third string holds the `Header:` text (`CV` in
+  the owner's CV and its text export [checked]); the reader keeps it as the metadata entry `Header`. The
+  fourth might be the note [unknown]; all files seen have it empty. The marker word's meaning, and the
   code string 10.
 - The CP sample interval. In the one CP file seen, the slot at 0x418 and the other interval-like
   slot at 0x408 hold different values; 0x418 gives the more plausible half-cycle length, but the
@@ -213,6 +251,10 @@ the time axis of the CP file (see below); every parameter marked [inferred] or [
 - Files with several data blocks, and runs that were continued or paused.
 
 ## 6. What a text export of the same files would settle
+
+Done since: items 1 (CP time column and interval), 2 (CV potential and header) and 3 (two-channel
+i-t) were settled by the owner's text exports of 2026-11 (sections 2.2, 2.3); item 4 (Header text) in
+part (`CV` found; the Note field is still unknown). The list below is the original one.
 
 For the owner's own runs, one text export from the CHI program per technique (File, Save As, text,
 of the same run, without changing anything) would let us check:

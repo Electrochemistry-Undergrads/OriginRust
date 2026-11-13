@@ -1,0 +1,336 @@
+newbook; col(A)=data(0,10,1); col(B)=(1)*((8.5)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((9)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((9.5)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1.3)*((12)/(1.3))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(2)*((17)/(2))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(3)*((28)/(3))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1.5)*((13)/(1.5))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(5)*((45)/(5))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(50)*((440)/(50))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((1.15)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((1.25)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((1.35)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((1.45)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(8)*((9.1)/(8))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(8)*((9.2)/(8))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((36)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((37)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((38)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((39)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((52)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((55)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((58)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((85)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(20)*((95)/(20))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(200)*((500)/(200))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(100)*((900)/(100))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1000)*((5000)/(1000))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(10000)*((50000)/(10000))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(2000)*((8000)/(2000))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(0.2)*((0.5)/(0.2))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(0.02)*((0.05)/(0.02))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(0.005)*((0.0095)/(0.005))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((120000)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((150000)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((200000)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((250000)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(2)*((300000)/(2))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(2)*((400000)/(2))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(2)*((500000)/(2))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(1)*((600000.0)/(1))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(0.5)*((200000.0)/(0.5))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=(5)*((1000000.0)/(5))^(col(A)/10);
+plotxy iy:=(1,2) plot:=200;
+layer.y.type=2;
+layer -a;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks

@@ -207,19 +207,32 @@ Custom tick positions and labels per tick. Reference lines are not documented fo
 
 **Observed:** rescale combines data min/max, the rescale margin percent, rounding to the tick increment and the minor tick count; the result is "approximately" min-margin..max+margin and lands on tick positions. With margin 0 and 0 minor ticks, Normal rescale gives exact data limits [W:axesref-scale]. The exact increment rule is not documented.
 
-**Measured in Origin (2026-11-12, `tools/origin-ref/autoscale*.lines.txt`, 56 cases).** For a new line graph (`plotxy`, the default template) whose Y data run linearly from `lo` to `hi`:
-- The minor tick count is 1 (one minor tick between majors) in every case.
-- The limits are `floor((lo - 0.08 * span) / h) * h` and `ceil((hi + 0.08 * span) / h) * h`, where `span = hi - lo` and `h` is half the major step (the minor tick spacing). This holds in all 56 cases. The margin was pinned between 7.53 % and 8.11 % of the span; 8 % is taken. So the limits need not be multiples of the major step: 0..19.2 gives -2..21 with step 2.
-- The major step is always 1, 2 or 5 times a power of ten, but it is not a simple function of the span: 0.45 and 0.89..0.905 give 0.2, 0.91..1.2 give 0.5, 3.85 gives 1, 3.9..9.05 give 2, 9.07..10 give 5, 19.2..20.5 give 2, 63.55 and 65 give 20, 92.7 gives 50, 900 gives 200, 5800 gives 2000, 25000 gives 10000. The rule that gives these was not found [U4].
-- Examples (lo..hi → from..to, step): -0.2..1.0 → -0.5..1.25, 0.5; 0..1 → -0.25..1.25, 0.5; 0..10 → -2.5..12.5, 5; -0.0047..0.0061 → -0.0075..0.0075, 0.005; 0.4..0.995 → 0.3..1.1, 0.2; 12..77 → 0..90, 20; 100..1000 → 0..1100, 200.
+**Measured in Origin (2026-11-12 and 2026-11-13).** Probes: `tools/origin-ref/autoscale*.lines.txt` (56 cases) and `autorange-*.lines.txt` (about 600 more); raw outputs are local, in `re-workspace/scratch/axis-range2/` (`lin*.out.txt`, `log*.out.txt`, `col*.out.txt`, `mar.out.txt`). The numbers are the fixture `crates/core/tests/data/origin_axis_range.json` (464 linear and 137 log cases), tested by `crates/core/tests/origin_axis_range.rs`; the rule is `crates/core/src/autorange.rs`, used by the plot crate and the `.opj` writer. For a new line graph (`plotxy`, the default template) with Y data from `lo` to `hi` (`span = hi - lo`) the Rescale Margin is 8 % (`layer.y.rescaleMargin`):
 
-Sheaf's own rule (figure-rendering.md section 2) is kept for now: it pads less (data -0.2..1.0 gives -0.5..1.0, where Origin gives -0.5..1.25), so the "wide empty band" noted in HANDOFF is smaller in Sheaf than in Origin. Copying Origin's 8 % margin and half-step rounding is an open choice for the owner, and the step rule would still differ.
+**Linear axis.**
+- The minor tick count is 1 in every case, so `h = step / 2` is the minor spacing.
+- Limits: `from = floor((lo - 0.08 span) / h) * h`, `to = ceil((hi + 0.08 span) / h) * h`. So the limits need not be multiples of the major step: 0..19.2 gives -2..21 with step 2. Ticks are at multiples of the step (0, 5, 10 for 0..10), the limits are minor ticks.
+- Major step: let `E = 1.16 * span` and bring `E` into `[1.05, 10.5)` by powers of ten (`b` the power, `x = E / b`). Then the step is `0.5 b` for `x < 2.25`, `b` for `x < 4.5`, `2 b` otherwise. In terms of the span in one decade: 0.2 up to 0.9052, then 0.5 up to 1.94, 1 up to 3.88, 2 up to 9.05, 5 up to 10.34 (all times powers of ten). **One exception, measured but not understood:** for `E` from 12 to 40 (span 10.35 to 34.48) the step is 2, in that decade only (the same scaled spans in the decades 100 and 1000 or 1 and 0.1 follow the rule). All 464 cases match, including the 56 of the first probe.
+- The step does not depend on the data offset (100..102.5 and 0..2.5 agree), only on the span; it does not follow the Rescale Margin either: data 0..10 give step 5 at margins 2, 4, 8, 12, 16 and 20 (the only deviation: 0..30 at 20 % gives 5 instead of 2). Margin 0 gives the data limits exactly (0..10, step 5), no rounding to `h`. Margins above 0 round as above (margin 4 on 0..30: -2..32).
+- A script that sets `layer.y.from`/`to` leaves the increment where it was (it stayed 5 for all 23 ranges tried); Sheaf recomputes the step for fixed limits with its older rule (`nice_step(span / 5)`), which was kept.
+- Column plots (`plot:=203`): the base end gets no margin and the span runs from the base: data 1..4 give 0..4.5 with step 1, 1..4.5 give 0..5 with step 2, 1..10 give 0..12.5 with step 5, 1..100 give 0..125 with step 50. This is the rule above with the margin on one side and `E = 1.08 * span`. Data that cross zero follow the two-sided rule (-5..3 gives -6..4, step 2). All-negative columns mirror the positive ones only roughly (-1..-4 gives -4.5..0, step 1, but -1..-4.5 gives step 1 where the mirror would be 2, and -1..-40 gives -50..10): only the positive case is implemented, the negative one uses the mirror.
+- Date axes and axes with a fixed major step keep the older rule (round times; limits rounded to the step with no margin). Axes with text tick labels from a column keep the older step so that every row has a label.
 
-**Proposed rule (INF; validate against Origin on ~10 datasets):**
+**Log axis** (`layer.y.type = 2; layer -a`; 137 cases). The margin is 8 % of the span in log10 units, taken on each side: `lo' = lo * 10^(-0.08 s)`, `hi' = hi * 10^(0.08 s)` with `s = log10(hi / lo)`. The limits are not whole decades (data 2.06..8 give 1.7778..9, 1.5..150 give 1..300). By `s`:
+- `s > 5` (5.079 and above; exactly 5.0 is in the next class): whole decades outside `lo'..hi'` (1..1e6 gives 0.1..1e7).
+- `0.92 <= s <= 5` (0.903 is in the next class, 0.929 here): the next tick of the form `k * 10^d`, `k` = 1..9, outside `lo'..hi'`: 1..1000 gives 0.5..2000, 10..1000 gives 6..2000, 1..10 gives 0.8..20, 3..30 gives 2..40. Major ticks are at the powers of ten, minor ticks at 2..9 (`minorticks = 8`).
+- `s < 0.92`: linear ticks. The limits are `floor(lo' / g) * g` and `ceil(hi' / g) * g` with `g = inc / 9` (`inc` the major step, `minorticks = 8` so `g` is the minor spacing), and `inc` is taken from `E = hi' - lo'`: the table of the linear axis (without the exception) for `E < 1.45`; 1 up to `E = 20.4`; above that `0.5 b` for `x < 4.6`, `b` for `x < 9.3`, `2 b` beyond (`b` the power of ten of `E`, `x = E / b`). Origin labels the multiples of `inc` inside the range (2..9 for data 2.06..8; 20, 30, ..., 60 for 20..60; 1, 1.2, 1.4 for 1..1.5), no minor tick labels. The table matches every narrow case of the fixture; between `E` 1.45 and 20.4 the step stays 1 where the linear table would give 2 or 5, and the boundary between 4.5 and 4.6 and between 9.0 and 9.3 are narrow intervals, not pinned.
+- Fixed limits with less than a decade (`log10(max / min) <= 1`, the `@TL` rule of section 3.3) get linear ticks in Sheaf too, with `inc` from the same table for `E = max - min`; Origin's choice there was not measured.
+
+**Still not measured:** the margin rule on log axes with a margin other than 8, all-negative columns, the step of a linear axis for margins above 16 %, `layer.y.rescaleMargin` on column plots, and the X axis of line graphs with text labels.
+
+Sheaf's own earlier rule (`span / 5`, rounded out to the step, no margin) is gone for `AutoRange::Nice`; `Tight` and `SymmetricZero` (the CV rule) are unchanged.
+
+**Previous proposal (superseded, kept for the other axis kinds; INF):**
 1. span = max - min (guard span 0).
 2. wanted about 5 to 8 major intervals; raw = span/6; step = smallest of {1, 2, 2.5, 5} x 10^k that is >= raw.
 3. from = floor((min - pad)/step) x step; to = ceil((max + pad)/step) x step; pad = margin% x span.
-4. minor count default 1 (U4).
+4. minor count default 1.
 5. log axes: ticks at decades, minors 2..9; a span under one decade uses linear ticks (@TL rule).
 Electrochemical CV axes the owner centres on zero are Fixed scale, not auto [INF].
 

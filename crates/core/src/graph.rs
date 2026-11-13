@@ -302,6 +302,14 @@ pub struct PlotOffset {
     pub follows: Option<ColumnId>,
 }
 
+fn default_rescale_margin() -> f64 {
+    crate::autorange::DEFAULT_RESCALE_MARGIN_PCT
+}
+
+fn is_default_rescale_margin(v: &f64) -> bool {
+    *v == crate::autorange::DEFAULT_RESCALE_MARGIN_PCT
+}
+
 fn is_zero(v: &f64) -> bool {
     *v == 0.0
 }
@@ -432,7 +440,10 @@ pub enum ScaleKind {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AutoRange {
-    /// Round outwards to whole tick steps, with a small margin around the data.
+    /// As Origin's Normal rescale: the data span plus the Rescale Margin
+    /// ([`Axis::rescale_margin_pct`], 8 % by default) on each side, rounded outwards to half a major
+    /// step (a minor tick) on a linear axis and to the next 1..9 tick on a log axis
+    /// (see [`crate::autorange`]). With a margin of 0 the limits are the data limits.
     #[default]
     Nice,
     /// Exactly the data range, no rounding.
@@ -492,6 +503,9 @@ pub struct Axis {
     pub max: Option<f64>,
     #[serde(default)]
     pub auto_range: AutoRange,
+    /// Rescale Margin in percent of the data span, added on each side by [`AutoRange::Nice`].
+    #[serde(default = "default_rescale_margin", skip_serializing_if = "is_default_rescale_margin")]
+    pub rescale_margin_pct: f64,
     /// Distance between major ticks; `None` means automatic.
     pub major_step: Option<f64>,
     /// Number of minor ticks between two major ticks.

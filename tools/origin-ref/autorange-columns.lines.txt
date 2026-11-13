@@ -1,0 +1,217 @@
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=2;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=3;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=3.5;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=4;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=4.5;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=5;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=6;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=7;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=8;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=9;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=10;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=12;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=15;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=20;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=40;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1;
+cell(2,2)=100;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=1.0;
+cell(2,2)=2;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=2.0;
+cell(2,2)=4;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=3.0;
+cell(2,2)=6;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=4.0;
+cell(2,2)=8;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=5.0;
+cell(2,2)=10;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=8.0;
+cell(2,2)=16;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=20.0;
+cell(2,2)=40;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=0;
+cell(2,2)=2;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=2;
+cell(2,2)=2;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=0;
+cell(2,2)=4;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=4;
+cell(2,2)=4;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=0;
+cell(2,2)=8;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=8;
+cell(2,2)=8;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=0;
+cell(2,2)=20;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+newbook; col(A)=data(1,2,1);
+cell(1,2)=20;
+cell(2,2)=20;
+plotxy iy:=(1,2) plot:=203;
+?layer.y.from
+?layer.y.to
+?layer.y.inc

@@ -1,6 +1,6 @@
 # T20: Automatic axis range as Origin (linear and log)
 
-**Status:** open (was branch `axis-range` of another session, never committed). **Size:** M.
+**Status:** done on branch `axis-range2`, not merged. Left: Rescale Margin is not stored in `.opj` (named in the save warnings); all-negative columns, other margins on log axes and the step at margins above 16 % are not measured (graphing.md section 4); the `Rescale` combo keeps Sheaf's names (Origin: Normal and others). **Size:** M.
 **Branch:** `axis-range2`. **Model:** Sonnet.
 **Detail:** audit C "Different, measured in the spec" and "Different, checked in Origin" (log axes); B
 "Axis dialog" (Rescale Margin). **Spec:** `docs/spec/graphing.md` section 4 (read it whole, it is short).

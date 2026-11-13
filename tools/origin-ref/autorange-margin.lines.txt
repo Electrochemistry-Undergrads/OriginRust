@@ -1,0 +1,308 @@
+newbook; col(A)=data(0,10,1); col(B)=col(A)*10/10;
+plotxy iy:=(1,2) plot:=200;
+layer.y.rescaleMargin=0; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=2; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=4; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=8; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=12; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=16; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=20; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=col(A)*9.1/10;
+plotxy iy:=(1,2) plot:=200;
+layer.y.rescaleMargin=0; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=2; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=4; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=8; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=12; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=16; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=20; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=col(A)*4/10;
+plotxy iy:=(1,2) plot:=200;
+layer.y.rescaleMargin=0; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=2; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=4; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=8; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=12; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=16; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=20; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=col(A)*0.91/10;
+plotxy iy:=(1,2) plot:=200;
+layer.y.rescaleMargin=0; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=2; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=4; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=8; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=12; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=16; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=20; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=col(A)*1.5/10;
+plotxy iy:=(1,2) plot:=200;
+layer.y.rescaleMargin=0; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=2; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=4; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=8; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=12; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=16; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=20; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=col(A)*30/10;
+plotxy iy:=(1,2) plot:=200;
+layer.y.rescaleMargin=0; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=2; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=4; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=8; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=12; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=16; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=20; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+newbook; col(A)=data(0,10,1); col(B)=col(A)*60/10;
+plotxy iy:=(1,2) plot:=200;
+layer.y.rescaleMargin=0; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=2; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=4; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=8; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=12; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=16; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks
+layer.y.rescaleMargin=20; layer -a;
+?layer.y.rescaleMargin
+?layer.y.from
+?layer.y.to
+?layer.y.inc
+?layer.y.minorticks

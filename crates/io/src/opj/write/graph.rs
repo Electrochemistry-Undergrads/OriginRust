@@ -12,6 +12,7 @@ use crate::error::IoError;
 use crate::opj::graph::PALETTE;
 use crate::opj::strings::encode_cp1252;
 use sheaf_core::Project;
+use sheaf_core::autorange;
 use sheaf_core::color::Color;
 use sheaf_core::graph::*;
 use sheaf_core::ids::ColumnId;
@@ -55,15 +56,32 @@ fn nearest_position(c: Color) -> u8 {
     PALETTE.iter().enumerate().min_by_key(|(_, p)| d(p)).map_or(0, |(i, _)| i as u8)
 }
 
-/// Round numbers for an axis: `(from, to, step)` around `lo..hi`.
-pub(crate) fn nice_range(lo: f64, hi: f64, log: bool, mode: AutoRange) -> (f64, f64, f64) {
+/// Round numbers for an axis: `(from, to, step)` around `lo..hi`. With [`AutoRange::Nice`] these are the
+/// limits Origin's own automatic range gives (`margin_pct` is the Rescale Margin; see `sheaf_core::autorange`).
+pub(crate) fn nice_range(lo: f64, hi: f64, log: bool, mode: AutoRange, margin_pct: f64) -> (f64, f64, f64) {
     if log {
+        if mode == AutoRange::Nice && lo > 0.0 && hi > lo {
+            let r = autorange::log_range(lo, hi, margin_pct);
+            let step = match r.ticks {
+                autorange::LogTicks::Linear(inc) => inc,
+                autorange::LogTicks::Decades => 1.0,
+            };
+            return (r.from, r.to, step);
+        }
         let from = 10f64.powf(lo.max(f64::MIN_POSITIVE).log10().floor());
         let mut to = 10f64.powf(hi.max(from).log10().ceil());
         if to <= from {
             to = from * 10.0;
         }
         return (from, to, 1.0);
+    }
+    if mode == AutoRange::Nice {
+        let (mut a, mut b) = (lo, hi);
+        if b - a <= 0.0 || (b - a).is_nan() {
+            let pad = if a == 0.0 { 1.0 } else { a.abs() * 0.1 };
+            (a, b) = (a - pad, b + pad);
+        }
+        return autorange::linear_range(a, b, margin_pct);
     }
     let (mut lo, mut hi) = (lo, hi);
     if mode == AutoRange::SymmetricZero {
@@ -972,7 +990,7 @@ fn sane_frame(f: sheaf_core::graph::Frame, notes: &mut Vec<String>) -> sheaf_cor
 fn axis_scale(axis: &Axis, data: Option<(f64, f64)>, notes: &mut Vec<String>) -> AxisScale {
     let log = axis.scale == ScaleKind::Log10;
     let (dlo, dhi) = data.unwrap_or(if log { (1.0, 10.0) } else { (0.0, 1.0) });
-    let (alo, ahi, astep) = nice_range(dlo, dhi, log, axis.auto_range);
+    let (alo, ahi, astep) = nice_range(dlo, dhi, log, axis.auto_range, axis.rescale_margin_pct);
     let (mut from, mut to) = (axis.min.unwrap_or(alo), axis.max.unwrap_or(ahi));
     if log && (from <= 0.0 || to <= 0.0) {
         from = alo;
@@ -985,6 +1003,15 @@ fn axis_scale(axis: &Axis, data: Option<(f64, f64)>, notes: &mut Vec<String>) ->
     if axis.auto_range != AutoRange::Nice && (axis.min.is_none() || axis.max.is_none()) {
         notes.push(
             "an axis range that follows the data in another way than Origin's own (tight or symmetric about zero) was written as the limits it gives for the current data"
+                .into(),
+        );
+    }
+    if axis.auto_range == AutoRange::Nice
+        && (axis.min.is_none() || axis.max.is_none())
+        && (axis.rescale_margin_pct - autorange::DEFAULT_RESCALE_MARGIN_PCT).abs() > 1e-9
+    {
+        notes.push(
+            "the Rescale Margin of an axis is not stored in the project file; the axis range was written as the limits it gives for the current data"
                 .into(),
         );
     }

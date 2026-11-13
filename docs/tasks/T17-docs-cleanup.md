@@ -2,7 +2,7 @@
 
 **Status:** items 1, 2, 5, 6 done on 2026-11-12 (gui-look 7 rewritten, parity row fixed, counts
 unchanged at 41/109/80, ROADMAP milestone 6 reworded). Item 4 done by `text-numeric` (import-ascii.md "Text & Numeric
-Columns"). Item 3 goes with T20. **Size:** S. **Branch:** `docs-fix` (or commit on `main` directly if nothing else
+Columns"). Item 3 done on branch `axis-range2` with T20 (the `AutoRange` doc states the rule). **Size:** S. **Branch:** `docs-fix` (or commit on `main` directly if nothing else
 merges at the time). **Model:** Haiku or Sonnet. Docs only; no code.
 
 1. `docs/spec/feature-parity.md` section 7 says peak results lack area percent and FWHM; both exist

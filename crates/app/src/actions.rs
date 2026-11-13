@@ -144,6 +144,15 @@ pub enum Action {
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
+    /// Column > Move Columns: these columns go to the first or last position or one step left or right.
+    MoveColumns {
+        columns: Vec<ColumnId>,
+        to: sheaf_core::sheetops::MoveTo,
+    },
+    /// Column > Hide/Unhide Columns > Hide Selected.
+    HideColumns(Vec<ColumnId>),
+    /// Column > Hide/Unhide Columns > Unhide All, on the active sheet of the workbook.
+    UnhideColumns(WindowId),
     SetDesignation {
         columns: Vec<ColumnId>,
         designation: Designation,

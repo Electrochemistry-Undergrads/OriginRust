@@ -496,3 +496,15 @@ fn a_tail_that_is_damaged_gives_a_note_and_no_folders() {
     assert_eq!(imp.workbooks.len(), 6, "the data is still read");
     assert!(imp.warnings.iter().any(|w| w.contains("folder tree could not be read")), "{:?}", imp.warnings);
 }
+
+#[test]
+fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[1].hidden = true;
+    b.sheets[0].columns[2].width = Some(14);
+    let all = written(&p).warnings.join(" | ");
+    assert!(all.contains("1 hidden column(s)"), "{all}");
+    assert!(all.contains("1 column(s) have their own width"), "{all}");
+}

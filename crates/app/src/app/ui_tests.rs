@@ -2187,7 +2187,7 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
     {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    for lack in ["Copy Columns to...", "Set As Categorical", "Frequency Count...", "Column Width..."] {
+    for lack in ["Copy Columns to...", "Set As Categorical", "Frequency Count..."] {
         assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
     }
     // Clear empties the column and one undo brings it back.
@@ -4706,4 +4706,36 @@ fn insert_and_delete_rows_and_columns_from_the_selection_and_undo() {
     let names: Vec<String> =
         project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
     assert_eq!(names, ["A", "B", "C"], "the inserted column was the selection");
+}
+
+#[test]
+fn columns_move_hide_and_unhide_and_each_step_undoes() {
+    use sheaf_core::sheetops::MoveTo;
+    let mut h = start(vec![data_file("movehide")]);
+    let ctx = h.ctx.clone();
+    let ids: Vec<ColumnId> = project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.id).collect();
+    let names = |h: &Harness<'static, SheafApp>| -> String {
+        project(h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect()
+    };
+    assert_eq!(names(&h), "ABC");
+    h.state_mut().apply(Action::MoveColumns { columns: vec![ids[2]], to: MoveTo::First }, &ctx);
+    assert_eq!(names(&h), "CAB");
+    assert_eq!(h.state().doc.undo_label(), Some("Move columns"));
+    h.state_mut().apply(Action::MoveColumns { columns: vec![ids[2]], to: MoveTo::Right }, &ctx);
+    assert_eq!(names(&h), "ACB");
+    h.state_mut().apply(Action::Undo, &ctx);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(names(&h), "ABC");
+
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().apply(Action::HideColumns(vec![ids[1]]), &ctx);
+    settle(&mut h);
+    assert!(project(&h).column(ids[1]).unwrap().hidden);
+    assert!(h.query_by_label_contains("B(").is_none() && h.query_by_label_contains("C(").is_some(), "B has no head");
+    h.state_mut().apply(Action::UnhideColumns(book), &ctx);
+    settle(&mut h);
+    assert!(!project(&h).column(ids[1]).unwrap().hidden);
+    assert!(h.query_by_label_contains("B(").is_some());
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(project(&h).column(ids[1]).unwrap().hidden, "undo brings the hiding back");
 }

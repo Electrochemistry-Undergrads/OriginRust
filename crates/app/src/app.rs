@@ -680,6 +680,47 @@ impl SheafApp {
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
+            Action::MoveColumns { columns, to } => {
+                let ids = columns;
+                let mut moved = false;
+                self.doc.apply("Move columns", |p| {
+                    let Some(first) = ids.first().copied() else { return };
+                    if let Some((book, sheet_index)) = p
+                        .locate(first)
+                        .and_then(|(b, s, _)| Some((b.id, b.sheets.iter().position(|x| std::ptr::eq(x, s))?)))
+                        && let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index))
+                    {
+                        moved = ws.move_columns(&ids, to);
+                    }
+                });
+                if !moved {
+                    self.say("The columns are already there");
+                }
+            }
+            Action::HideColumns(columns) => {
+                self.doc.apply("Hide columns", |p| {
+                    for id in &columns {
+                        if let Some(c) = p.column_mut(*id) {
+                            c.hidden = true;
+                        }
+                    }
+                });
+                // The hidden columns are no longer on screen, so nothing of them stays selected.
+                if let Some(book) = columns.first().and_then(|c| self.doc.project().locate(*c)).map(|(b, ..)| b.id)
+                    && let Some(state) = self.books.get_mut(&book)
+                {
+                    state.clear_selection();
+                }
+            }
+            Action::UnhideColumns(book) => {
+                self.doc.apply("Unhide columns", |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        for c in &mut b.sheet_mut().columns {
+                            c.hidden = false;
+                        }
+                    }
+                });
+            }
             Action::SetDesignation { columns, designation } => {
                 self.doc.apply("Set column designation", |p| {
                     for id in &columns {

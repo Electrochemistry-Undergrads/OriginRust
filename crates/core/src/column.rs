@@ -243,13 +243,29 @@ pub struct Column {
     /// source column (ADR 0006). They are left out of the default column choice for fitting.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fit_result: bool,
+    /// True for a column hidden in the worksheet (Column > Hide/Unhide Columns). It stays in the
+    /// sheet, plots and formulas still use it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
+    /// The width in characters that the worksheet shows the column at; `None` is the default of
+    /// 8 characters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u16>,
     /// The values. Not part of the JSON description: the project file stores
     /// column data separately (see the `sheaf-io` crate).
     #[serde(skip)]
     pub data: ColumnData,
 }
 
+/// Origin's default column width in characters.
+pub const DEFAULT_WIDTH: u16 = 8;
+
 impl Column {
+    /// The width in characters the worksheet shows the column at.
+    pub fn shown_width(&self) -> u16 {
+        self.width.unwrap_or(DEFAULT_WIDTH)
+    }
+
     /// True for a column whose values come from a formula that keeps running (mode Auto or
     /// Manual). Origin shows a lock on such a column and refuses hand edits of its cells.
     pub fn is_locked(&self) -> bool {
@@ -272,6 +288,8 @@ impl Column {
             analysis: None,
             params: BTreeMap::new(),
             fit_result: false,
+            hidden: false,
+            width: None,
             data,
         }
     }

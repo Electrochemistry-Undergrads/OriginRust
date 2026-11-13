@@ -141,6 +141,9 @@ struct Notes {
     params_dropped: usize,
     /// Columns with a display format other than General that is not stored.
     formats_dropped: usize,
+    /// Hidden columns and columns with their own width: the file written here holds neither.
+    hidden_dropped: usize,
+    widths_dropped: usize,
     /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
     analysis_links_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
@@ -323,6 +326,8 @@ impl Writer {
             records.extend(framed(&layout::column_record(&spec)));
             self.notes.params_dropped += usize::from(!column.params.is_empty());
             self.notes.formats_dropped += usize::from(column.format != sheaf_core::format::NumberFormat::General);
+            self.notes.hidden_dropped += usize::from(column.hidden);
+            self.notes.widths_dropped += usize::from(column.width.is_some());
             let long = self.label_text(&column.long_name, "long name")?;
             let units = self.label_text(&column.units, "units")?;
             let comments = self.comment_text(&column.comments)?;
@@ -672,6 +677,18 @@ impl Writer {
             warnings.push(format!(
                 "{} column(s) have a display format (decimals, scientific, date or time) that the project file written here does not hold; Origin shows them in its default format.",
                 n.formats_dropped
+            ));
+        }
+        if n.hidden_dropped > 0 {
+            warnings.push(format!(
+                "{} hidden column(s): the project file written here does not hold the hidden state, so Origin shows them.",
+                n.hidden_dropped
+            ));
+        }
+        if n.widths_dropped > 0 {
+            warnings.push(format!(
+                "{} column(s) have their own width, which the project file written here does not hold; Origin shows them at its default width.",
+                n.widths_dropped
             ));
         }
         if n.analysis_links_dropped > 0 {

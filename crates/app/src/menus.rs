@@ -27,6 +27,7 @@ use eframe::egui::{
     text::{LayoutJob, TextFormat},
 };
 use sheaf_core::graph::PlotKind;
+use sheaf_core::sheetops::MoveTo;
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
 use std::sync::OnceLock;
@@ -74,6 +75,12 @@ pub enum Cmd {
     Undo,
     Redo,
     DeleteColumns,
+    /// Column > Move Columns.
+    MoveColumns(MoveTo),
+    /// Column > Hide/Unhide Columns > Hide Selected.
+    HideColumns,
+    /// Column > Hide/Unhide Columns > Unhide All.
+    UnhideColumns,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -760,11 +767,15 @@ fn column_menu() -> Vec<Entry> {
         grey("Show X Column..."),
         sep(),
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
-        grey_sub("Hide/Unhide Columns", &["Hide Selected", "Unhide All"]),
+        hide_menu(),
         sep(),
         grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]),
         grey_sub("Mask", &["Apply", "Remove", "Swap", "Change Color", "Disable Masking", "Mask Cells by Condition..."]),
     ]
+}
+
+fn hide_menu() -> Entry {
+    sub("Hide/Unhide Columns", vec![item("Hide Selected", Cmd::HideColumns), item("Unhide All", Cmd::UnhideColumns)])
 }
 
 fn worksheet_menu() -> Vec<Entry> {
@@ -1250,9 +1261,19 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey("Frequency Count..."));
     v.push(item("Statistics on Columns...", Cmd::Analyze(AnalysisKind::Statistics)));
     v.push(sep());
-    v.push(grey_sub("Hide/Unhide Columns", &["Hide Selected", "Unhide All"]));
-    v.push(grey_sub("Move Columns", &["To First", "Left", "Right", "To Last"]));
-    v.extend(greys(&["Swap Columns...", "Column Width...", "-", "Slide Show of Dependent Graphs"]));
+    v.push(hide_menu());
+    v.push(sub(
+        "Move Columns",
+        vec![
+            item("To First", Cmd::MoveColumns(MoveTo::First)),
+            item("Left", Cmd::MoveColumns(MoveTo::Left)),
+            item("Right", Cmd::MoveColumns(MoveTo::Right)),
+            item("To Last", Cmd::MoveColumns(MoveTo::Last)),
+        ],
+    ));
+    v.push(grey("Swap Columns..."));
+    v.push(item("Column Width...", Cmd::ColumnProperties));
+    v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
     v.extend(greys(&["Add or Update Sparklines...", "-", "Format Cells..."]));
     v.push(item("Properties...", Cmd::ColumnProperties));
     v
@@ -1688,6 +1709,15 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::DeleteColumns(some()?)
         }
+        Cmd::MoveColumns(to) => {
+            book?;
+            Action::MoveColumns { columns: some()?, to: *to }
+        }
+        Cmd::HideColumns => {
+            book?;
+            Action::HideColumns(some()?)
+        }
+        Cmd::UnhideColumns => Action::UnhideColumns(book?),
         Cmd::Copy(kind) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;

@@ -78,6 +78,9 @@ pub enum GraphOp {
     ToggleGrids { layer: usize, y: bool },
     /// Rescale To Show All: automatic limits on both axes of the layer.
     Rescale { layer: usize },
+    /// Exchange X-Y Axes: the settings of the two axes and the X and Y columns of every plot trade places.
+    /// A layer with a plot against the row number (no X column) is left as it is.
+    ExchangeAxes { layer: usize },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
     /// Delete on the legend: it is hidden.

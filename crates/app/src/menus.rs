@@ -126,6 +126,8 @@ pub enum Cmd {
     GraphEdit(GraphOp),
     /// Rescale to Show All on the active layer (Ctrl+R).
     Rescale,
+    /// Graph > Exchange X-Y Axes on the active layer.
+    ExchangeAxes,
     /// Graph > Legend > Reconstruct Legend on the active layer (Ctrl+L).
     ReconstructLegend,
     /// Graph > Legend > Update Legend on the active layer.
@@ -1004,7 +1006,7 @@ fn graph_menu() -> Vec<Entry> {
         sep(),
         grey("Fit Layer to Graph"),
         grey("Fit Page to Layers..."),
-        grey("Exchange X-Y Axes"),
+        item("Exchange X-Y Axes", Cmd::ExchangeAxes),
         grey_sub("Offset Grouped Data in Layer", &["None", "Cumulative", "Constant", "Auto", "Individual"]),
         grey("Convert to Standard Font Size"),
     ]
@@ -1765,6 +1767,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GraphEdit(op) => Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Rescale => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
+        }
+        Cmd::ExchangeAxes => {
+            Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ExchangeAxes { layer: c.layer } }
         }
         Cmd::ReconstructLegend => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ReconstructLegend { layer: c.layer } }

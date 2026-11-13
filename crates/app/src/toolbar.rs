@@ -321,7 +321,7 @@ fn build(bar: Bar) -> Vec<Item> {
             g(ZoomOut, "Zoom Out"),
             g(WholePage, "Whole Page"),
             b(Rescale, "Rescale to Show All", Cmd::Rescale, "Rescale to Show All"),
-            g(Exchange, "Exchange X-Y Axes"),
+            b(Exchange, "Exchange X-Y Axes", Cmd::ExchangeAxes, "Exchange X-Y Axes"),
             gap(),
             g(Layer, "Add Layer (Bottom-X Left-Y)"),
             g(LayerTop, "Add Layer (Top-X Left-Y)"),

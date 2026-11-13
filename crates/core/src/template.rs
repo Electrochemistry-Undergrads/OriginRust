@@ -166,7 +166,7 @@ impl Template {
             Template::StackedColumn => themed(column(id, name, PlotKind::StackedColumn)),
             Template::Stacked100Column => themed(column(id, name, PlotKind::Stacked100Column)),
             Template::Bar => column(id, name, PlotKind::Bar),
-            Template::FloatingColumn => column(id, name, PlotKind::FloatingColumn),
+            Template::FloatingColumn => from_blue(column(id, name, PlotKind::FloatingColumn)),
             Template::Area => themed(general(id, name, PlotKind::Area)),
             Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
             Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
@@ -257,9 +257,20 @@ fn themed(mut g: Graph) -> Graph {
 /// The graph with its colour list started at the second entry of the base palette (red, green, blue,
 /// cyan, ...), as Origin's Column and Box templates do (measured: the first column of a plain
 /// Column graph is red, not black).
-fn from_red(mut g: Graph) -> Graph {
+fn from_red(g: Graph) -> Graph {
+    from_entry(g, 1)
+}
+
+/// The graph with its colour list started at blue, the fourth entry of the base palette, as Origin's
+/// Floating Column template does (measured: its first plot is filled blue, graphing.md 14.12; the
+/// colours of further plots were not measured and follow the base palette from there).
+fn from_blue(g: Graph) -> Graph {
+    from_entry(g, 3)
+}
+
+fn from_entry(mut g: Graph, first: usize) -> Graph {
     for l in &mut g.layers {
-        l.palette.colors = (1..=ORIGIN_COLOR_LIST.len())
+        l.palette.colors = (first..first + ORIGIN_COLOR_LIST.len())
             .map(|i| ORIGIN_COLOR_LIST[i % ORIGIN_COLOR_LIST.len()])
             .map(|(r, g, b)| Color::rgb(r, g, b))
             .collect();
@@ -732,5 +743,13 @@ mod tests {
         let r = right_y_layer(&stacked, 0);
         assert_eq!(r.stack, Stack::None);
         assert!(r.y_axis.show_tick_labels);
+    }
+
+    #[test]
+    fn floating_column_starts_its_colours_at_blue_as_origin() {
+        let g = Template::FloatingColumn.new_graph(WindowId(0), "");
+        assert_eq!(g.layers[0].palette.colors[0], Color::rgb(0, 0, 255));
+        let c = Template::Column.new_graph(WindowId(0), "");
+        assert_eq!(c.layers[0].palette.colors[0], Color::rgb(255, 0, 0), "plain columns still start at red");
     }
 }

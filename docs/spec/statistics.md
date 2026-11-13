@@ -192,7 +192,8 @@ two-sided twice the smaller, at most 1. The runs matched it to 1e-9, with ties a
 numbers (the largest run; Origin showed no limit; the table of subset sums Sheaf builds is limited to 4e8 cells, beyond which Sheaf
 reports the asymptotic p and says so). With the exact option Origin also prints a second number, the asymptotic
 p-value, which for the upper tail uses the plain `1 - Phi(Z)` and not the corrected one of the run without the
-option; the two-sided and lower values are the same in both runs. Sheaf always gives the corrected one. If all
+option; the two-sided and lower values are the same in both runs. Sheaf copies this: with `exact` the upper
+asymptotic p is `1 - Phi(Z)` of the printed Z (all upper-tail runs in `stats2_origin.rs` match to 1e-9). If all
 numbers are equal Origin gives Z = 0 and p = 1 (all tails); a group of one number gives no result in Origin, Sheaf
 computes the test.
 

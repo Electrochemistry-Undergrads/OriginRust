@@ -171,7 +171,7 @@ fn mann_whitney_matches_mwtest() {
             near_p(&format!("{} exact p", c.name), r.p_exact.expect("exact p"), o.p, 1e-9);
             // With the exact test Origin's second number is the asymptotic p of the plain z for the upper
             // tail; the two-sided and lower-tail ones are the same as without it.
-            if c.tail != 1 && !o.p2.is_nan() {
+            if !o.p2.is_nan() {
                 near_p(&format!("{} asymptotic p", c.name), r.p_asymptotic, o.p2, 1e-9);
             }
         } else {

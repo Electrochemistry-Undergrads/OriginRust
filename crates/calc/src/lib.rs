@@ -55,4 +55,4 @@ pub use peakchain::{
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use smooth::{Boundary, SmoothMethod, SmoothOptions, smooth, smooth_xy};
-pub use stats::{Stats, quantile_origin, stats};
+pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

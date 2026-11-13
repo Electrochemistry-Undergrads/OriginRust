@@ -12,8 +12,8 @@ use super::frame::{
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, FreqOptions, HistogramSpec, KruskalWallisSpec, MannWhitneySpec,
-    MeansComparison, NormalitySpec, SignedRankKind, SignedRankSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec,
-    TwoWayLayout,
+    MeansComparison, NormalitySpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail,
+    TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
@@ -238,6 +238,8 @@ struct StatsOptions {
     spearman: bool,
     kendall: bool,
     listwise: bool,
+    /// Statistics on Columns: which quantities to write.
+    desc: StatisticsSpec,
 }
 
 impl Default for StatsOptions {
@@ -269,6 +271,7 @@ impl Default for StatsOptions {
             spearman: false,
             kendall: false,
             listwise: false,
+            desc: StatisticsSpec::default(),
         }
     }
 }
@@ -563,7 +566,7 @@ impl AnalysisDialog {
                     baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
                 }),
             }),
-            AnalysisKind::Statistics => Tool::Statistics,
+            AnalysisKind::Statistics => Tool::Statistics(self.stats.desc),
             AnalysisKind::TTest => Tool::TTest(TTestSpec {
                 kind: match self.stats.ttest {
                     0 => TTestKind::OneSample { mean: self.stats.mean },
@@ -974,7 +977,34 @@ impl AnalysisDialog {
                 }
             }
             AnalysisKind::Statistics => {
-                ui.weak("This tool has no options: every statistic is computed.");
+                let d = &mut self.stats.desc;
+                ui.label("Quantities");
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut d.n, "N");
+                    ui.checkbox(&mut d.missing, "Missing");
+                    ui.checkbox(&mut d.mean, "Mean");
+                    ui.checkbox(&mut d.sd, "SD");
+                    ui.checkbox(&mut d.sem, "SEM");
+                    ui.checkbox(&mut d.sum, "Sum");
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut d.min, "Minimum");
+                    ui.checkbox(&mut d.q1, "Q1");
+                    ui.checkbox(&mut d.median, "Median");
+                    ui.checkbox(&mut d.q3, "Q3");
+                    ui.checkbox(&mut d.max, "Maximum");
+                    ui.checkbox(&mut d.iqr, "IQR");
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(&mut d.variance, "Variance");
+                    ui.checkbox(&mut d.skewness, "Skewness");
+                    ui.checkbox(&mut d.kurtosis, "Kurtosis");
+                    ui.checkbox(&mut d.cv, "Coefficient of variation");
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut d.confidence_limits, "Confidence limits of the mean, level");
+                    ui.add_enabled(d.confidence_limits, DragValue::new(&mut d.level).speed(0.001).range(0.5..=0.9999));
+                });
             }
             AnalysisKind::TTest => {
                 let st = &mut self.stats;
@@ -1276,7 +1306,7 @@ impl AnalysisDialog {
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
             AnalysisKind::Statistics => {
-                "Count, mean, standard deviation, sum, minimum, quartiles and maximum in a new sheet"
+                "The chosen quantities (count, mean, SD, SEM, quartiles, variance, skewness, confidence limits, ...)                  in a new sheet"
             }
             AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",

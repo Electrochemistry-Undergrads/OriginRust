@@ -333,7 +333,24 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 )
             }
         }
-        AnalyzeTool::Stats { target } => (target, Job::Tool(Tool::Statistics)),
+        AnalyzeTool::Stats { target, all, add, level } => {
+            let mut spec = if all { analysis::StatisticsSpec::all() } else { analysis::StatisticsSpec::default() };
+            for name in &add {
+                match name.trim().to_ascii_lowercase().as_str() {
+                    "iqr" => spec.iqr = true,
+                    "variance" | "var" => spec.variance = true,
+                    "skewness" | "skew" => spec.skewness = true,
+                    "kurtosis" | "kurt" => spec.kurtosis = true,
+                    "cv" => spec.cv = true,
+                    "limits" | "cl" | "ci" => spec.confidence_limits = true,
+                    other => {
+                        bail!("unknown quantity {other:?}; use iqr, variance, skewness, kurtosis, cv or limits")
+                    }
+                }
+            }
+            spec.level = level;
+            (target, Job::Tool(Tool::Statistics(spec)))
+        }
         AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha } => {
             let kind = match test {
                 TTestKindArg::OneSample => analysis::TTestKind::OneSample { mean },

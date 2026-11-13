@@ -247,6 +247,16 @@ the two neighbours) and rounded to the nearest whole position otherwise (`.25` g
 Median: the usual one. The `stats` X-function returns mean, sd, n, min, max, sum, missing for the same
 numbers (checked for two columns).
 
+Sheaf's Statistics on Columns (`Tool::Statistics(StatisticsSpec)`, window Statistics > Descriptive
+Statistics > Statistics on Columns, `sheaf analyze stats [--all] [--add iqr,variance,skewness,kurtosis,cv,limits]
+[--level 0.95]`) writes one row per column. The default is N, Missing, Mean, SD, SEM, Sum, Minimum, Q1, Median,
+Q3, Maximum; the other quantities `colstats` returns (IQR, Variance, Skewness, Kurtosis, CV) are options, as
+are the lower and upper confidence limits of the mean at a chosen level (default 95 %), which are
+`mean -/+ t(1 - (1 - level)/2, n - 1) SEM`, the interval of the one-sample t-test (`ttest1` intervals were
+checked in `statistics.md` section 1). Which quantities Origin's dialog ticks by default was not measured
+(its `DescStats` window cannot be driven from a script); the default stays the eleven columns Sheaf always
+had. Not done: mode, geometric mean, trimmed mean and the other quantities of the Origin dialog.
+
 ## 9. Curve math: subtract a reference curve and simple math (`subtract_ref`, `mathtool`)
 
 Origin has two menu items for this: Analysis > Mathematics > Subtract Reference Data (`subtract_ref`)

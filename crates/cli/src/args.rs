@@ -969,10 +969,20 @@ pub enum AnalyzeTool {
         #[arg(long, value_enum, default_value_t = PeakFitBaselineKind::Linear)]
         fit_baseline: PeakFitBaselineKind,
     },
-    /// Descriptive statistics of each column.
+    /// Descriptive statistics of each column. By default N, missing, mean, SD, SEM, sum, minimum, quartiles
+    /// and maximum; --all adds IQR, variance, skewness, kurtosis, CV and the confidence limits of the mean.
     Stats {
         #[command(flatten)]
         target: TargetArgs,
+        /// Also IQR, variance, skewness, kurtosis, coefficient of variation and confidence limits.
+        #[arg(long)]
+        all: bool,
+        /// Add these quantities (comma separated): iqr, variance, skewness, kurtosis, cv, limits.
+        #[arg(long, value_delimiter = ',')]
+        add: Vec<String>,
+        /// Confidence level of the limits of the mean.
+        #[arg(long, default_value_t = 0.95)]
+        level: f64,
     },
     /// t-test: each column against a hypothesized mean (one-sample), two columns against each other
     /// (two-sample, equal variances unless --unequal) or two columns as pairs. The result goes to a

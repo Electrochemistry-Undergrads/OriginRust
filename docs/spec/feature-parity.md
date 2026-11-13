@@ -236,7 +236,7 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Descriptive statistics on columns | Statistics on Columns | N, missing, mean, SD, SEM, sum, min, Q1, median, Q3, max | ◐ | variance, skewness, kurtosis, CV, IQR computed in `calc` but not shown; no confidence limits, mode, choice of items | P0 |
+| Descriptive statistics on columns | Statistics on Columns | N, missing, mean, SD, SEM, sum, min, Q1, median, Q3, max | ◐ | variance, skewness, kurtosis, CV, IQR and confidence limits of the mean are options (window and `analyze stats --all`); no mode, geometric mean or the other quantities; Origin's default selection not measured | P0 |
 | Aggregate functions in formulas | Set Column Values | sum, mean, median, sd, var, count | ✓ | | P0 |
 | Row statistics | Statistics on Rows | none | ✗ | | P1 |
 | Moments, quantiles | quantiles, moments | quartiles only | ◐ | no arbitrary percentile | P1 |

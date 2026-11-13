@@ -465,6 +465,26 @@ fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
     assert!(info.contains("Graph1"), "{info}");
 }
 
+#[test]
+fn stats_can_add_the_other_quantities_and_the_confidence_limits() {
+    let dir = scratch("stats-all");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Median") && !out.contains("Variance") && !out.contains("CL of Mean"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--all", "--level", "0.9"]);
+    assert!(ok, "{err}");
+    for word in ["IQR", "Variance", "Skewness", "Kurtosis", "CV", "Lower 90% CL of Mean", "Upper 90% CL of Mean"] {
+        assert!(out.contains(word), "{word} missing in {out}");
+    }
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--add", "variance,limits"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Variance") && out.contains("Lower 95% CL of Mean") && !out.contains("IQR"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--add", "bogus"]);
+    assert!(!ok && err.contains("unknown quantity"), "{err}");
+}
+
 /// The unbalanced two-way design of the Origin reference runs (cells of 3, 2, 4, 1, 3, 2 numbers), with the
 /// level of factor A as text.
 fn design_file(dir: &Path) -> PathBuf {

@@ -351,6 +351,18 @@ fn tga_is_written_with_its_header_in_each_depth() {
 }
 
 #[test]
+fn pcx_is_written_with_its_header_and_palette() {
+    let rgb = raster_bytes("pcx", &RasterOptions { depth: ColorDepth::Bit24, ..RasterOptions::default() });
+    assert_eq!(&rgb[..4], &[0x0A, 5, 1, 8], "maker, version 5, run-length, 8 bits");
+    assert_eq!(rgb[65], 3, "three colour planes");
+    let pal = raster_bytes("pcx", &RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() });
+    assert_eq!(pal[65], 1, "one plane");
+    assert_eq!(pal[pal.len() - 769], 0x0C, "256-colour palette marker before the last 768 bytes");
+    let grey = raster_bytes("pcx", &RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() });
+    assert_eq!(u16::from_le_bytes([grey[68], grey[69]]), 2, "grey palette info");
+}
+
+#[test]
 fn colour_depth_changes_png_bmp_and_tiff() {
     let colours = RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() };
     let png = raster_bytes("png", &colours);

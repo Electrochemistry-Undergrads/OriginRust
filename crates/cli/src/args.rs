@@ -16,9 +16,9 @@ pub enum Command {
     Info(InfoArgs),
     /// Import data files into a project file.
     Import(ImportArgs),
-    /// Make a figure from a data file or a project and write it as PNG, TIFF, JPEG, BMP, GIF, TGA, SVG, PDF, EPS or EMF.
+    /// Make a figure from a data file or a project and write it as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF.
     Plot(Box<PlotArgs>),
-    /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, SVG, PDF, EPS or EMF.
+    /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF.
     Export(ExportArgs),
     /// Write a worksheet of a project as delimited text.
     ExportData(ExportDataArgs),

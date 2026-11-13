@@ -16,6 +16,7 @@ pub enum ExportFormat {
     Bmp,
     Gif,
     Tga,
+    Pcx,
     Svg,
     Pdf,
     Eps,
@@ -23,13 +24,14 @@ pub enum ExportFormat {
 }
 
 impl ExportFormat {
-    const ALL: [ExportFormat; 10] = [
+    const ALL: [ExportFormat; 11] = [
         ExportFormat::Png,
         ExportFormat::Tiff,
         ExportFormat::Jpeg,
         ExportFormat::Bmp,
         ExportFormat::Gif,
         ExportFormat::Tga,
+        ExportFormat::Pcx,
         ExportFormat::Svg,
         ExportFormat::Pdf,
         ExportFormat::Eps,
@@ -44,6 +46,7 @@ impl ExportFormat {
             ExportFormat::Bmp => "bmp",
             ExportFormat::Gif => "gif",
             ExportFormat::Tga => "tga",
+            ExportFormat::Pcx => "pcx",
             ExportFormat::Svg => "svg",
             ExportFormat::Pdf => "pdf",
             ExportFormat::Eps => "eps",
@@ -59,6 +62,7 @@ impl ExportFormat {
             ExportFormat::Bmp => "Windows Bitmap",
             ExportFormat::Gif => "Graphics Interchange Format",
             ExportFormat::Tga => "Truevision Targa",
+            ExportFormat::Pcx => "ZSoft PC Paintbrush",
             ExportFormat::Svg => "Scalable Vector Graphics",
             ExportFormat::Pdf => "Portable Document Format",
             ExportFormat::Eps => "Encapsulated PostScript",
@@ -76,13 +80,14 @@ impl ExportFormat {
                 | ExportFormat::Bmp
                 | ExportFormat::Gif
                 | ExportFormat::Tga
+                | ExportFormat::Pcx
         )
     }
 
     /// The colour depths the format can store.
     fn depths(self) -> &'static [ColorDepth] {
         match self {
-            ExportFormat::Png | ExportFormat::Bmp | ExportFormat::Tga => {
+            ExportFormat::Png | ExportFormat::Bmp | ExportFormat::Tga | ExportFormat::Pcx => {
                 &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8]
             }
             ExportFormat::Tiff | ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],

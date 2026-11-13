@@ -110,7 +110,7 @@ impl Default for RasterOptions {
 
 /// The raster formats that can be written, by file extension.
 pub(crate) fn is_raster_ext(ext: &str) -> bool {
-    matches!(ext, "png" | "tif" | "tiff" | "jpg" | "jpeg" | "bmp" | "gif" | "tga")
+    matches!(ext, "png" | "tif" | "tiff" | "jpg" | "jpeg" | "bmp" | "gif" | "tga" | "pcx")
 }
 
 /// Straight RGBA laid on white, as RGB. Many programs mishandle an alpha channel in these formats.
@@ -318,6 +318,75 @@ pub(crate) fn encode_tga(r: &Raster, o: &RasterOptions) -> Result<Vec<u8>, PlotE
     Ok(out)
 }
 
+/// Encodes the picture as a run-length PCX file (version 5): 24-bit colour as three planes, or 8 bits
+/// with a 256-entry palette at the end (256 colours or grey), with the resolution recorded.
+pub(crate) fn encode_pcx(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
+    let too_big = || PlotError::Image("the picture is too large for a PCX file".to_string());
+    let (w, h) = (r.width as usize, r.height as usize);
+    let xmax = u16::try_from(w.saturating_sub(1)).map_err(|_| too_big())?;
+    let ymax = u16::try_from(h.saturating_sub(1)).map_err(|_| too_big())?;
+    let line = w + w % 2; // bytes per plane line, even
+    let line16 = u16::try_from(line).map_err(|_| too_big())?;
+    let rgb = flatten_rgb(r);
+    let indexed = match o.depth {
+        ColorDepth::Colors256 => Some(quantise(&rgb)),
+        ColorDepth::Grey8 => Some(grey_indexed(&rgb)),
+        ColorDepth::Bit24 => None,
+    };
+    let planes: u8 = if indexed.is_some() { 1 } else { 3 };
+    let dpi16 = dpi.round().clamp(1.0, f64::from(u16::MAX)) as u16;
+    let mut out = Vec::with_capacity(128 + w * h * usize::from(planes) + 769);
+    out.extend_from_slice(&[0x0A, 5, 1, 8]);
+    for v in [0, 0, xmax, ymax, dpi16, dpi16] {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out.extend_from_slice(&[0; 48]); // 16-colour palette, unused
+    out.push(0);
+    out.push(planes);
+    out.extend_from_slice(&line16.to_le_bytes());
+    let grey = matches!(o.depth, ColorDepth::Grey8);
+    out.extend_from_slice(&(if grey { 2u16 } else { 1 }).to_le_bytes());
+    out.extend_from_slice(&[0; 58]);
+    debug_assert_eq!(out.len(), 128);
+    let mut row = vec![0u8; line];
+    for y in 0..h {
+        for p in 0..usize::from(planes) {
+            for (x, b) in row.iter_mut().enumerate().take(w) {
+                *b = match &indexed {
+                    Some(ix) => ix.indices[y * w + x],
+                    None => rgb[(y * w + x) * 3 + p],
+                };
+            }
+            pcx_rle(&row, &mut out);
+        }
+    }
+    if let Some(ix) = &indexed {
+        out.push(0x0C);
+        for i in 0..256 {
+            out.extend_from_slice(&ix.palette.get(i).copied().unwrap_or([0, 0, 0]));
+        }
+    }
+    Ok(out)
+}
+
+/// PCX run-length encoding of one plane line: runs of up to 63 equal bytes are written as
+/// `0xC0 | count` and the byte; a single byte below `0xC0` is written as it is.
+fn pcx_rle(line: &[u8], out: &mut Vec<u8>) {
+    let mut i = 0;
+    while i < line.len() {
+        let b = line[i];
+        let mut n = 1;
+        while i + n < line.len() && line[i + n] == b && n < 63 {
+            n += 1;
+        }
+        if n > 1 || b >= 0xC0 {
+            out.push(0xC0 | n as u8);
+        }
+        out.push(b);
+        i += n;
+    }
+}
+
 /// Encodes the picture as a GIF (256 colours, no transparency).
 pub(crate) fn encode_gif(r: &Raster) -> Result<Vec<u8>, PlotError> {
     use image::codecs::gif::GifEncoder;
@@ -344,6 +413,7 @@ pub(crate) fn encode_raster(r: &Raster, ext: &str, dpi: f64, o: &RasterOptions) 
         "bmp" => encode_bmp(r, dpi, o),
         "gif" => encode_gif(r),
         "tga" => encode_tga(r, o),
+        "pcx" => encode_pcx(r, dpi, o),
         _ => Err(PlotError::UnknownFormat(ext.to_string())),
     }
 }

@@ -89,12 +89,14 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
    feature is missing. (A plot can now be put on the right Y axis from Plot Details > Group and
    from its right-click menu, `0d74eee`.)
 3. **`.opj` files**: saving now writes double-Y (right Y layer and its legend), stack offsets (Y
-   only), bar gaps, axis sides and automatic axis colours (spec opj-format.md 13.12); it still does
-   not write panels, X offsets, the overlap of bars, waterfall, area plots, tick number formats or
-   window places (the companion keeps them); two column plots in one layer open in Origin on top
-   of each other (no plot group is written); the reader does not
-   read plot groups, legend frames, panel links or sparklines (the small previews in a sheet's
-   sparkline row, which Origin lists as graphs); `.opju` is not supported.
+   only), bar gaps, axis sides and automatic axis colours (13.12), and area plots, decimal and
+   scientific tick formats, column plots as a plot group (bars side by side) and panels as linked
+   layers with scale links (13.13). It still does not write X offsets, the overlap of bars,
+   waterfall, date/time tick formats, group colours that differ from Origin's list, grouped
+   columns with error bars, the hidden end tick label of a stack, or window places (the companion
+   keeps them; the way Origin stores bar overlap, X offsets and waterfall was not found). The reader
+   reads panel links, but not plot groups, legend frames or sparklines (the small previews in a
+   sheet's sparkline row, which Origin lists as graphs); `.opju` is not supported.
 4. **Breadth (milestone 6)**: reciprocal and other scales, stacked/fill area, pie, box,
    histogram plot type, bubble, polar, ternary; matrices, contour plots and heatmaps (nothing yet);
    statistics beyond t-tests, one-way ANOVA, frequency counts and normality (two-way ANOVA,
@@ -106,10 +108,11 @@ updated, so the real "done" numbers are higher. Updating the rows is a task of i
 
 ## Exact next step
 
-1. Write the rest of the new graph features into `.opj` (linked layers for panels, tick label
-   sources, area plots, tick number formats, plot groups for bars side by side) so the companion is
-   rarely needed (double-Y, stack offsets, bar gaps and axis sides are written, 13.12). The formula work is the model: `tools/origin-ref/opj-verify-features.ps1`, spec
-   13.10, checked by opening the written files in Origin 2016.
+1. Done on 2026-11-12 (branch `opj-graph-write2`, spec opj-format.md 13.13, each checked in
+   Origin 2016): area plots, tick number formats, plot groups for bars side by side, panels as
+   linked layers. Left for the companion: see "What is left" item 3. Finding how Origin stores bar
+   overlap, X offsets and waterfall would need new probes (`tools/origin-ref/opj-make-from-lines.ps1`
+   and `opj-diff-curves.py` make and compare such files).
 2. The remaining dialogs in Origin's layout (analysis tools, column properties, Import Wizard;
    `docs/spec/gui-look.md` section 5). Open choices from the dialog work: the graph's long name is
    on Plot Details' Page tab; a plot's legend text is on its Group tab.

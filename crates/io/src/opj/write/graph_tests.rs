@@ -306,7 +306,9 @@ fn error_bars_text_x_and_two_layers() {
     assert_eq!(a.y_error.map(|e| name_of(&imp, e)), Some("E".to_string()));
     let b = &g.layers[1].plots[0];
     assert_eq!(name_of(&imp, b.y), "C");
-    assert!(close(g.layers[1].frame.left, 0.5) && close(g.layers[1].frame.width, 0.3));
+    // The file keeps positions in 1/600 inch, which on Origin's page is a step of 0.02 %.
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-3;
+    assert!(near(g.layers[1].frame.left, 0.5) && near(g.layers[1].frame.width, 0.3));
     // the categories of a text column run from 0.5 to n + 0.5
     assert_eq!((g.layers[0].x_axis.min, g.layers[0].x_axis.max), (Some(0.5), Some(11.5)));
 }
@@ -325,7 +327,7 @@ fn what_the_file_cannot_hold_is_named() {
         l.plots[2].y = other.id;
         l.y_axis.tick_format = TickFormat::DateTime(sheaf_core::datetime::DatePattern::default());
         l.x_axis.tick_label_divisor = 1000.0;
-        l.x_axis.major_tick_len_pt = 9.0;
+        l.x_axis.major_tick_len_pt = 12.0;
         l.y_axis.major_grid = Some(LineStyle::solid(Color::rgb(200, 200, 200), 0.5));
         l.y_axis.tick_font.family = "Times New Roman".into();
         l.legend.background = Some(Color::rgb(250, 250, 250));

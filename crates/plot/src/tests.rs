@@ -66,8 +66,8 @@ fn line_template_svg_is_well_formed_with_one_path_per_plot() {
     let d = doc(&svg);
 
     let root = d.root_element();
-    assert_eq!(root.attribute("width"), Some("460.8pt"));
-    assert_eq!(root.attribute("viewBox"), Some("0 0 460.8 345.6"));
+    assert_eq!(root.attribute("width"), Some("771.84pt"));
+    assert_eq!(root.attribute("viewBox"), Some("0 0 771.84 590.76"));
 
     let plots = with_class(&d, "plots");
     assert_eq!(plots.len(), 1);
@@ -75,11 +75,11 @@ fn line_template_svg_is_well_formed_with_one_path_per_plot() {
     // First plot: one piece. Second plot: a gap gives two pieces.
     assert_eq!(paths_in(plots[0]).len(), 1 + 2);
     assert!(paths_in(plots[0]).iter().all(|p| p.attribute("fill") == Some("none")));
-    // The clip rectangle is the frame: 0.16 * 460.8 = 73.728.
+    // The clip rectangle is the frame: 0.1791 * 771.84 = 138.237.
     let clip = d.descendants().find(|n| n.has_tag_name("clipPath")).unwrap();
     let rect = clip.first_element_child().unwrap();
-    assert_eq!(rect.attribute("x"), Some("73.728"));
-    assert_eq!(rect.attribute("width"), Some("359.424"));
+    assert_eq!(rect.attribute("x"), Some("138.237"));
+    assert_eq!(rect.attribute("width"), Some("526.086"));
 
     // Axis titles are built from long name and units.
     let t = texts(&d);
@@ -238,7 +238,7 @@ fn alpha_dash_and_width_reach_the_svg() {
     assert_eq!(path.attribute("stroke"), Some("#FF0000"));
     assert_eq!(path.attribute("stroke-opacity"), Some("0.502"));
     assert_eq!(path.attribute("stroke-width"), Some("2"));
-    assert_eq!(path.attribute("stroke-dasharray"), Some("12 6"));
+    assert_eq!(path.attribute("stroke-dasharray"), Some("10.2 9.8"));
     assert_eq!(path.attribute("stroke-linecap"), None, "dashed lines have butt caps");
 }
 
@@ -284,7 +284,7 @@ fn symbols_every_nth_and_error_bars() {
     assert_eq!(plots.len(), 2);
     let bars = plots[0].attribute("d").unwrap();
     assert_eq!(bars.matches('M').count(), 3 * 10);
-    assert_eq!(plots[0].attribute("stroke-width"), Some("0.75")); // half the 1.5 pt line width
+    assert_eq!(plots[0].attribute("stroke-width"), Some("0.5")); // half the line width, at least 0.5 pt
     let symbols = plots[1].attribute("d").unwrap();
     assert_eq!(symbols.matches('Z').count(), 4, "points 0, 3, 6, 9");
     assert_eq!(plots[1].attribute("stroke"), None);
@@ -355,7 +355,7 @@ fn custom_titles_and_markup() {
         .filter(|n| n.has_tag_name("text") && n.text() == Some("-2"))
         .map(|n| n.attribute("font-size").unwrap().to_string())
         .collect();
-    assert_eq!(sizes, vec!["9.1"]); // 14 * 0.65
+    assert_eq!(sizes, vec!["14.3"]); // 22 * 0.65
 }
 
 #[test]
@@ -449,7 +449,7 @@ fn pixel(r: &Raster, x: u32, y: u32) -> [u8; 4] {
 fn raster_has_a_red_line_on_white() {
     let (p, g) = red_line_project();
     let r = render_raster(&p, g, 2.0).unwrap();
-    assert_eq!((r.width, r.height), (922, 692)); // 460.8 x 345.6 pt at 2 px/pt
+    assert_eq!((r.width, r.height), (1544, 1182)); // 771.84 x 590.76 pt at 2 px/pt
     assert_eq!(r.rgba.len(), (r.width * r.height * 4) as usize);
     let geom = &layout_geometry(&p, g).unwrap()[0];
     let (px, py) = geom.data_to_page(5.0, 5.0);
@@ -509,8 +509,8 @@ fn export_by_extension() {
         let bytes = std::fs::read(&path).unwrap();
         assert!(bytes.starts_with(magic), "{name}");
     }
-    let err = export_file(&p, g, &dir.join("d.jpg"), 72.0).unwrap_err();
-    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "jpg"));
+    let err = export_file(&p, g, &dir.join("d.pcx"), 72.0).unwrap_err();
+    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "pcx"));
     assert!(err.to_string().contains(".svg"));
     let err = export_file(&p, g, &dir.join("no-such-folder").join("e.svg"), 72.0).unwrap_err();
     assert!(matches!(err, PlotError::Io { .. }));
@@ -837,7 +837,10 @@ fn double_y_layout_puts_the_right_axis_labels_and_title_beside_the_frame() {
     assert_eq!(geoms.len(), 2);
     for geom in &geoms {
         let f = geom.frame;
-        assert!(near(f.x, 73.728) && near(f.y, 24.192) && near(f.w, 313.344) && near(f.h, 259.2), "{f:?}");
+        assert!(
+            near(f.x, 138.236544) && near(f.y, 68.410008) && near(f.w, 526.086144) && near(f.h, 424.342908),
+            "{f:?}"
+        );
         assert_eq!((geom.x.min, geom.x.max, geom.x.step), (-2.5, 12.5, 5.0));
     }
     assert_eq!((geoms[0].y.min, geoms[0].y.max, geoms[0].y.step), (-25.0, 125.0, 50.0));
@@ -847,15 +850,15 @@ fn double_y_layout_puts_the_right_axis_labels_and_title_beside_the_frame() {
 
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let texts = texts_of(&scene.layers[1].overlay);
-    let tick_labels: Vec<_> = texts.iter().filter(|t| t.rotate_ccw == 0.0 && t.x > 387.0).collect();
+    let tick_labels: Vec<_> = texts.iter().filter(|t| t.rotate_ccw == 0.0 && t.x > 664.4).collect();
     assert_eq!(tick_labels.len(), 3);
-    assert!(tick_labels.iter().all(|t| t.anchor == scene::Anchor::Start && near(t.x, 396.272)), "{tick_labels:?}");
+    assert!(tick_labels.iter().all(|t| t.anchor == scene::Anchor::Start && near(t.x, 679.622688)), "{tick_labels:?}");
     let titles: Vec<_> = texts.iter().filter(|t| t.rotate_ccw == 90.0).collect();
     assert_eq!(titles.len(), 1);
     let t = titles[0];
     assert_eq!(t.text, "Line (mA)");
     assert_eq!(t.anchor, scene::Anchor::Middle);
-    assert!(near(t.x, 447.752) && near(t.y, 153.792), "{t:?}");
+    assert!(near(t.x, 758.162688) && near(t.y, 280.581462), "{t:?}");
     // Layer 1 draws no X axis: no X tick labels and no X title.
     assert!(!texts.iter().any(|t| t.text == "Time (s)" || (t.anchor == scene::Anchor::Middle && t.rotate_ccw == 0.0)));
 }
@@ -866,14 +869,14 @@ fn right_labels_move_the_right_side_of_the_frame_to_stay_on_the_page() {
     p.graph_mut(g).unwrap().layers[0].frame.width = 0.78;
     for geom in fixed_geometry(&p, g) {
         let f = geom.frame;
-        // 359.424 nominal width; the right title would reach 496.772, 38.972 past 457.8.
-        assert!(near(f.x, 73.728) && near(f.w, 359.424 - 38.972), "{f:?}");
-        assert!(near(f.y, 24.192) && near(f.h, 259.2), "{f:?}");
+        // 602.0352 nominal width; the right title would reach 69.891744 past the page less 3 pt.
+        assert!(near(f.x, 138.236544) && near(f.w, 602.0352 - 69.891744), "{f:?}");
+        assert!(near(f.y, 68.410008) && near(f.h, 424.342908), "{f:?}");
     }
     // The right title now ends 3 pt inside the page.
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let title = texts_of(&scene.layers[1].overlay).into_iter().find(|t| t.rotate_ccw == 90.0).unwrap();
-    assert!(near(title.x + 0.21 * title.size, 460.8 - 3.0), "{title:?}");
+    assert!(near(title.x + 0.21 * title.size, 771.84 - 3.0), "{title:?}");
 }
 
 #[test]
@@ -905,27 +908,27 @@ fn a_linked_x_axis_covers_the_data_of_both_layers_and_follows_the_parent() {
 #[test]
 fn y_axes_take_the_color_of_their_first_curve_in_the_double_y_template() {
     let (mut p, g) = squares_and_line();
-    let blue = Color::rgb(30, 80, 220);
+    let blue = Color::rgb(0, 255, 0); // the third colour of the list
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     // Right axis: line and ticks (width 1) and tick labels in the right curve's blue; title black.
     let right_strokes: Vec<Color> = scene.layers[1]
         .overlay
         .iter()
         .filter_map(|it| match it {
-            scene::Item::Path { stroke: Some(s), .. } if s.width == 1.0 => Some(s.color),
+            scene::Item::Path { stroke: Some(s), .. } if s.width == 1.5 => Some(s.color),
             _ => None,
         })
         .collect();
     assert_eq!(right_strokes.len(), 2, "the right line and its ticks");
     assert!(right_strokes.iter().all(|c| *c == blue), "{right_strokes:?}");
     let texts = texts_of(&scene.layers[1].overlay);
-    assert!(texts.iter().filter(|t| t.x > 387.0 && t.rotate_ccw == 0.0).all(|t| t.color == blue));
+    assert!(texts.iter().filter(|t| t.x > 664.4 && t.rotate_ccw == 0.0).all(|t| t.color == blue));
     assert!(texts.iter().filter(|t| t.rotate_ccw == 90.0).all(|t| t.color == Color::BLACK));
     // Left axis: its curve is black, so everything there is black.
     let left = &scene.layers[0].overlay;
     assert!(texts_of(left).iter().all(|t| t.color == Color::BLACK));
     let svg = svg_of(&p, g);
-    assert!(svg.contains("stroke=\"#1E50DC\""));
+    assert!(svg.contains("stroke=\"#00FF00\""));
 
     // A left curve colored by hand: the left axis follows it, the X axis stays black.
     {
@@ -934,10 +937,10 @@ fn y_axes_take_the_color_of_their_first_curve_in_the_double_y_template() {
         plot.auto_color = false;
     }
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
-    let lines = single_lines(&scene.layers[0].overlay, 1.0);
-    let left_line = lines.iter().find(|(d, _)| d == "M73.728 24.192L73.728 283.392").expect("left line");
+    let lines = single_lines(&scene.layers[0].overlay, 1.5);
+    let left_line = lines.iter().find(|(d, _)| d == "M138.237 68.41L138.237 492.753").expect("left line");
     assert_eq!(left_line.1, Color::RED);
-    let bottom = lines.iter().find(|(d, _)| d == "M73.728 283.392L387.072 283.392").expect("bottom line");
+    let bottom = lines.iter().find(|(d, _)| d == "M138.237 492.753L664.323 492.753").expect("bottom line");
     assert_eq!(bottom.1, Color::BLACK);
     let left_labels: Vec<_> =
         texts_of(&scene.layers[0].overlay).into_iter().filter(|t| t.anchor == scene::Anchor::End).collect();
@@ -949,7 +952,7 @@ fn y_axes_take_the_color_of_their_first_curve_in_the_double_y_template() {
     }
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     for layer in &scene.layers {
-        for (_, color) in single_lines(&layer.overlay, 1.0) {
+        for (_, color) in single_lines(&layer.overlay, 1.5) {
             assert_eq!(color, Color::BLACK);
         }
     }
@@ -964,9 +967,9 @@ fn y_axes_take_the_color_of_their_first_curve_in_the_double_y_template() {
 fn each_layer_draws_only_the_edges_of_its_own_axes() {
     let (p, g) = squares_and_line();
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
-    let (l, r, t, b) = (73.728, 387.072, 24.192, 283.392);
+    let (l, r, t, b) = (138.237, 664.323, 68.41, 492.753);
     let edges = |items: &[scene::Item]| -> Vec<&'static str> {
-        let mut out: Vec<&'static str> = single_lines(items, 1.0)
+        let mut out: Vec<&'static str> = single_lines(items, 1.5)
             .into_iter()
             .map(|(d, _)| {
                 let n: Vec<f64> = d[1..].split(['L', ' ']).map(|s| s.parse().unwrap()).collect();
@@ -987,7 +990,7 @@ fn each_layer_draws_only_the_edges_of_its_own_axes() {
     // Layer 1 has no left ticks of its own (the Origin file read today draws them on the left).
     let layer1_ticks_left = scene.layers[1].overlay.iter().any(|it| {
         matches!(it, scene::Item::Path { d, stroke: Some(s), .. }
-            if s.width == 1.0 && d.matches('M').count() > 1 && d.starts_with(&format!("M{l}")))
+            if s.width == 1.5 && d.matches('M').count() > 1 && d.starts_with(&format!("M{l}")))
     });
     assert!(!layer1_ticks_left);
 }
@@ -1037,7 +1040,7 @@ fn invalid_links_draw_independent_layers() {
         assert_eq!(geoms.len(), 2);
         // The frame {0, 0, 1, 1} is read as the whole page; only its right side moves in.
         let f = geoms[1].frame;
-        assert!(f.x == 0.0 && f.y == 0.0 && near(f.h, 345.6) && f.w < 460.8, "{f:?}");
+        assert!(f.x == 0.0 && f.y == 0.0 && near(f.h, 590.76) && f.w < 771.84, "{f:?}");
         assert_eq!((geoms[1].x.min, geoms[1].x.max), (-2.5, 12.5), "its own X range");
         svg_of(&p, g);
         layout_geometry(&p, g).unwrap();
@@ -1413,7 +1416,7 @@ fn a_waterfall_draws_later_curves_moved_and_the_first_on_top() {
     let first_color = p.graph(g).unwrap().layers[0].plots[0].line.color;
     assert_eq!(curves[2].1, first_color, "the first curve is drawn last, on top");
     // Only the bottom and left axis lines: no opposite lines, no closed box.
-    assert_eq!(single_lines(&layer.overlay, 1.0).len(), 2);
+    assert_eq!(single_lines(&layer.overlay, 1.5).len(), 2);
     assert!(!layer.overlay.iter().any(|it| matches!(it, scene::Item::Path { d, .. } if d.ends_with('Z'))));
     // No opposite ticks: every tick path starts on the bottom or the left edge.
     for it in &layer.overlay {
@@ -1836,13 +1839,13 @@ fn the_legend_shows_a_small_bar_for_each_column_plot() {
     assert_eq!(samples.len(), 2);
     let palette = &p.graph(g).unwrap().layers[0].palette.colors;
     for (k, (r, fill)) in samples.iter().enumerate() {
-        assert!(near(r.w, 2.2 * 11.0) && near(r.h, 11.0), "{r:?}");
+        assert!(near(r.w, 2.2 * 22.0) && near(r.h, 22.0), "{r:?}");
         assert_eq!(*fill, Some(palette[k]));
     }
     // Each sample is centred on its row, the label text beside it.
     let label = texts_of(&scene.layers[0].overlay).into_iter().find(|t| t.text == "Na").unwrap();
     let cy = samples[1].0.y + samples[1].0.h / 2.0;
-    assert!(near(label.y, cy + (text::ASCENT - text::DESCENT) / 2.0 * 11.0));
+    assert!(near(label.y, cy + (text::ASCENT - text::DESCENT) / 2.0 * 22.0));
 }
 
 /// The tick label `text` of the X axis, the X position of tick `v` and the top of the label block.
@@ -1861,34 +1864,34 @@ fn x_label(p: &Project, g: WindowId, text: &str, v: f64) -> (scene::TextItem, f6
 fn rotated_x_labels_hang_from_their_highest_corner_under_the_tick() {
     let (mut p, g) = names_project(Template::Column, &FIVE, vec![five_values()]);
     let set = |p: &mut Project, angle: f64| p.graph_mut(g).unwrap().layers[0].x_axis.tick_label_angle_deg = angle;
-    // "S1" at 12 pt is 13.2 pt wide with the fixed metrics; ascent 8.64, descent 2.52.
+    // "S1" at 18 pt is 19.8 pt wide with the fixed metrics; ascent 12.96, descent 3.78.
     set(&mut p, 90.0);
     let (t, tick, top) = x_label(&p, g, "S1", 1.0);
     assert_eq!((t.anchor, t.rotate_ccw), (scene::Anchor::Start, 90.0));
-    assert!(near3(t.x, tick + 3.06) && near3(t.y, top + 13.2), "{t:?} tick {tick} top {top}");
+    assert!(near3(t.x, tick + 4.59) && near3(t.y, top + 19.8), "{t:?} tick {tick} top {top}");
     // The X title moves below the turned labels.
     let title = texts_of(&layout::build_scene(&p, g, &FixedMetrics).unwrap().layers[0].overlay)
         .into_iter()
         .find(|t| t.text == "Sample")
         .unwrap()
         .clone();
-    assert!(near3(title.y, top + 13.2 + 0.6 * 14.0 + 0.72 * 14.0), "{} vs {top}", title.y);
+    assert!(near3(title.y, top + 19.8 + 0.6 * 22.0 + 0.72 * 22.0), "{} vs {top}", title.y);
     let svg = svg_of(&p, g);
     assert!(svg.contains(">S1</text>") && svg.matches("transform=\"rotate(-90 ").count() >= 6, "{svg}");
 
     set(&mut p, 45.0);
     let (t, tick, top) = x_label(&p, g, "S1", 1.0);
-    assert!(near3(t.x, tick - 3.2244) && near3(t.y, top + 15.4432), "{t:?} tick {tick} top {top}");
+    assert!(near3(t.x, tick - 4.8366) && near3(t.y, top + 23.1648), "{t:?} tick {tick} top {top}");
     let title = texts_of(&layout::build_scene(&p, g, &FixedMetrics).unwrap().layers[0].overlay)
         .into_iter()
         .find(|t| t.text == "Sample")
         .unwrap()
         .clone();
-    assert!(near3(title.y, top + 17.2251 + 0.6 * 14.0 + 0.72 * 14.0), "{} vs {top}", title.y);
+    assert!(near3(title.y, top + 25.83765 + 0.6 * 22.0 + 0.72 * 22.0), "{} vs {top}", title.y);
 
     set(&mut p, -45.0);
     let (t, tick, top) = x_label(&p, g, "S1", 1.0);
-    assert!(near3(t.x, tick - 6.1094) && near3(t.y, top + 6.1094), "{t:?} tick {tick} top {top}");
+    assert!(near3(t.x, tick - 9.1641) && near3(t.y, top + 9.1641), "{t:?} tick {tick} top {top}");
     // -45 and 315 are the same angle.
     set(&mut p, 315.0);
     let (u, _, _) = x_label(&p, g, "S1", 1.0);
@@ -1976,7 +1979,7 @@ fn the_panels_of_a_stack_share_one_x_axis_that_covers_every_panel() {
     // The Y labels and titles need at least the 15 % margin, and both panels lose the same width on
     // the left; the right side (90 %) and the top of the stack (10 %) stay.
     assert!(
-        f0.x >= 0.15 * 345.6 - 1e-9 && near(f0.x + f0.w, 0.90 * 345.6) && near(f1.y, 0.10 * 460.8),
+        f0.x >= 0.15 * 590.76 - 1e-9 && near(f0.x + f0.w, 0.90 * 590.76) && near(f1.y, 0.10 * 771.84),
         "{f0:?} {f1:?}"
     );
     // Limits set on the first panel apply to both.
@@ -2043,11 +2046,11 @@ fn the_panels_of_a_stack_move_together_to_keep_wide_labels_on_the_page() {
     let layout = PanelLayout { margin_left: 1.0, ..PanelLayout::stack(2) };
     let (p, g) = panel_graph(Template::Line, &layout, curves);
     let geoms = fixed_geometry(&p, g);
-    let nominal = 0.01 * 345.6;
+    let nominal = 0.01 * 590.76;
     let (f0, f1) = (geoms[0].frame, geoms[1].frame);
     assert!(f0.x > nominal + 20.0, "the wide labels of panel 1 move both panels: {f0:?}");
     assert!(near(f0.x, f1.x) && near(f0.w, f1.w), "{f0:?} {f1:?}");
-    assert!(near(f0.x + f0.w, nominal + 0.89 * 345.6), "the right side stays: {f0:?}");
+    assert!(near(f0.x + f0.w, nominal + 0.89 * 590.76), "the right side stays: {f0:?}");
     // The title of the wide panel now starts 3 pt inside the page.
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let title = texts_of(&scene.layers[1].overlay).into_iter().find(|t| t.rotate_ccw == 90.0).unwrap();
@@ -2065,7 +2068,7 @@ fn a_stack_without_room_below_shrinks_as_a_whole_to_keep_the_x_title_on_the_page
         let mut frames: Vec<Rect> = geoms.iter().map(|g| g.frame).collect();
         frames.sort_by(|a, b| a.y.total_cmp(&b.y));
         // Still touching, equally high, and the top stays where it was.
-        assert!(near(frames[0].y, 0.10 * 460.8), "{frames:?}");
+        assert!(near(frames[0].y, 0.10 * 771.84), "{frames:?}");
         for w in frames.windows(2) {
             assert!(near(w[0].y + w[0].h, w[1].y) && near(w[0].h, w[1].h), "{frames:?}");
         }
@@ -2074,7 +2077,7 @@ fn a_stack_without_room_below_shrinks_as_a_whole_to_keep_the_x_title_on_the_page
         let title = d.descendants().find(|n| n.has_tag_name("text") && n.text() == Some("Potential (V)")).unwrap();
         let y: f64 = title.attribute("y").unwrap().parse().unwrap();
         let size: f64 = title.attribute("font-size").unwrap().parse().unwrap();
-        assert!((y + 0.21 * size - (460.8 - 3.0)).abs() < 1e-2, "{order:?}: the title ends at {}", y + 0.21 * size);
+        assert!((y + 0.21 * size - (771.84 - 3.0)).abs() < 1e-2, "{order:?}: the title ends at {}", y + 0.21 * size);
     }
 }
 
@@ -2270,5 +2273,5 @@ fn sized_exports_and_tiff() {
     assert_eq!(res, vec![15000, 100], "150 dpi");
     let tiff::decoder::DecodingResult::U8(pixels) = dec.read_image().unwrap() else { panic!("8-bit image") };
     assert_eq!(&pixels[..3], &[255, 255, 255], "the corner of the page is white");
-    assert!(matches!(export_bytes(&p, g, "bmp", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
+    assert!(matches!(export_bytes(&p, g, "pcx", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
 }

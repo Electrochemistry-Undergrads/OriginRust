@@ -574,18 +574,19 @@ pub enum Dash {
 }
 
 impl Dash {
-    /// Dash pattern as multiples of the line width (on, off, on, off, ...).
-    /// Empty for a solid line.
+    /// Dash pattern as multiples of the line width (on, off, on, off, ...), as Origin draws the
+    /// eight line styles (graphing spec section 2.1; measured on lines 1.5 to 2 pt wide, where the
+    /// pattern grows with the width). Empty for a solid line.
     pub fn pattern(&self) -> &'static [f64] {
         match self {
             Dash::Solid => &[],
-            Dash::Dash => &[6.0, 3.0],
-            Dash::Dot => &[1.0, 3.0],
-            Dash::DashDot => &[6.0, 3.0, 1.0, 3.0],
-            Dash::DashDotDot => &[6.0, 3.0, 1.0, 3.0, 1.0, 3.0],
-            Dash::ShortDash => &[3.0, 2.0],
-            Dash::ShortDot => &[1.0, 1.5],
-            Dash::ShortDashDot => &[3.0, 2.0, 1.0, 2.0],
+            Dash::Dash => &[5.1, 4.9],
+            Dash::Dot => &[1.6, 4.3],
+            Dash::DashDot => &[6.1, 2.4, 1.6, 2.4],
+            Dash::DashDotDot => &[4.7, 2.35, 1.6, 2.4, 1.55, 2.5],
+            Dash::ShortDash => &[2.6, 1.95],
+            Dash::ShortDot => &[0.95, 1.05],
+            Dash::ShortDashDot => &[3.95, 1.5, 0.95, 1.5],
         }
     }
 

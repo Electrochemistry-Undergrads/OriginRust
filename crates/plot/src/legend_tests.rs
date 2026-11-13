@@ -60,7 +60,7 @@ fn custom_text_reorders_substitutes_and_adds_literal_text() {
     assert_eq!(names, ["T = 300 K, Series 2", "only text"]);
     assert_eq!(samples, 2, "two symbol samples: plots 2 and 1");
     // The text after a sample starts one gap after it; a line without sample starts at the left.
-    let fs = 11.0;
+    let fs = 22.0;
     assert!((texts[0].0 - texts[1].0 - (2.2 * fs + 0.5 * fs)).abs() < 1e-9, "{texts:?}");
     // Rows are one after the other.
     assert!((texts[1].1 - texts[0].1 - 1.3 * fs).abs() < 1e-9);

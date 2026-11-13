@@ -107,6 +107,41 @@ impl Template {
 /// to a metric-compatible family where it is missing.
 pub const DEFAULT_FONT: &str = "Arial";
 
+/// Origin's colour list for a new group of plots: its base palette in order (black, red, green,
+/// blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, dark cyan, royal, orange,
+/// violet, pink, white, light gray, gray, light yellow, light cyan, light magenta, dark gray), then
+/// round again (graphing spec section 1.5).
+pub const ORIGIN_COLOR_LIST: [(u8, u8, u8); 24] = [
+    (0, 0, 0),
+    (255, 0, 0),
+    (0, 255, 0),
+    (0, 0, 255),
+    (0, 255, 255),
+    (255, 0, 255),
+    (255, 255, 0),
+    (128, 128, 0),
+    (0, 0, 128),
+    (128, 0, 128),
+    (128, 0, 0),
+    (0, 128, 0),
+    (0, 128, 128),
+    (0, 0, 160),
+    (255, 128, 0),
+    (128, 0, 255),
+    (255, 0, 128),
+    (255, 255, 255),
+    (192, 192, 192),
+    (128, 128, 128),
+    (255, 255, 128),
+    (128, 255, 255),
+    (255, 128, 255),
+    (64, 64, 64),
+];
+
+/// Origin's default page, in inches (6432 by 4923 units of 1/600 inch). Its font sizes (18 pt tick
+/// labels, 22 pt titles) are meant for this size.
+pub const ORIGIN_PAGE_IN: (f64, f64) = (10.72, 8.205);
+
 fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
     Axis {
         scale: ScaleKind::Linear,
@@ -125,9 +160,9 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         tick_label_divisor: 1.0,
         major_tick: TickDirection::Out,
         minor_tick: TickDirection::Out,
-        major_tick_len_pt: 5.0,
-        minor_tick_len_pt: 2.5,
-        line_width_pt: 1.0,
+        major_tick_len_pt: 9.0,
+        minor_tick_len_pt: 4.5,
+        line_width_pt: 1.5,
         color: Color::BLACK,
         show_opposite: false,
         opposite_ticks: false,
@@ -143,36 +178,26 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
 }
 
 fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
-    let axis = base_axis(14.0, 12.0);
+    let axis = base_axis(22.0, 18.0);
     let palette = Palette {
-        colors: vec![
-            Color::rgb(0, 0, 0),
-            Color::rgb(220, 30, 30),
-            Color::rgb(30, 80, 220),
-            Color::rgb(0, 150, 70),
-            Color::rgb(190, 50, 190),
-            Color::rgb(235, 140, 0),
-            Color::rgb(0, 160, 190),
-            Color::rgb(130, 80, 40),
-            Color::rgb(110, 110, 110),
-        ],
+        colors: ORIGIN_COLOR_LIST.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).collect(),
         mode: PaletteMode::Cycle,
     };
     Graph {
         id,
         name: name.to_string(),
         long_name: String::new(),
-        page: Page::inches(6.4, 4.8),
+        page: Page::inches(ORIGIN_PAGE_IN.0, ORIGIN_PAGE_IN.1),
         layers: vec![Layer {
-            frame: Frame { left: 0.16, top: 0.07, width: 0.78, height: 0.75 },
+            frame: Frame { left: 0.1791, top: 0.1158, width: 0.6816, height: 0.7183 },
             x_axis: axis.clone(),
             y_axis: axis,
             plots: Vec::new(),
             legend: Legend {
                 visible: true,
                 position: LegendPosition::TopRight,
-                font: Font::new(DEFAULT_FONT, 11.0),
-                frame: false,
+                font: Font::new(DEFAULT_FONT, 22.0),
+                frame: true,
                 background: None,
                 scope: LegendScope::Layer,
                 columns: 1,
@@ -180,13 +205,13 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             },
             labels: Vec::new(),
             palette,
-            default_line: LineStyle::solid(Color::BLACK, 1.5),
+            default_line: LineStyle::solid(Color::BLACK, 0.5),
             default_symbol: SymbolStyle {
-                shape: SymbolShape::Circle,
-                size_pt: 5.0,
+                shape: SymbolShape::Square,
+                size_pt: 9.0,
                 color: Color::BLACK,
                 filled: true,
-                edge_width_pt: 0.75,
+                edge_width_pt: 0.5,
                 every: 1,
             },
             default_kind: kind,
@@ -200,6 +225,10 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
 
 fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
     let mut x = base_axis(12.0, 10.0);
+    // The owner's figure style keeps its own line and tick sizes.
+    x.line_width_pt = 1.0;
+    x.major_tick_len_pt = 5.0;
+    x.minor_tick_len_pt = 2.5;
     x.auto_range = AutoRange::Tight;
     x.minor_ticks = 0;
     x.major_tick = TickDirection::In;
@@ -211,6 +240,14 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     g.page = Page::inches(5.0, 3.6);
     let layer = &mut g.layers[0];
+    layer.default_symbol = SymbolStyle {
+        shape: SymbolShape::Circle,
+        size_pt: 5.0,
+        color: Color::BLACK,
+        filled: true,
+        edge_width_pt: 0.75,
+        every: 1,
+    };
     layer.frame = Frame { left: 0.17, top: 0.06, width: 0.78, height: 0.74 };
     layer.x_axis = x;
     layer.y_axis = y;
@@ -235,9 +272,8 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
 fn double_y(id: WindowId, name: &str) -> Graph {
     let mut g = general(id, name, PlotKind::Line);
     let layer = &mut g.layers[0];
-    // Narrower than the line template, so that the right tick labels and title fit as well as the
-    // left ones.
-    layer.frame = Frame { left: 0.16, top: 0.07, width: 0.68, height: 0.75 };
+    // Origin's frame is 68 % wide, which leaves room for the right tick labels and title as well
+    // as the left ones.
     // The top line closes the box; the right edge belongs to the right Y axis.
     layer.x_axis.show_opposite = true;
     layer.x_axis.opposite_ticks = true;
@@ -477,9 +513,10 @@ mod tests {
             assert!(y.color_follows_plot && !y.title_color_follows_plot);
         }
         assert!(!left.x_axis.color_follows_plot);
-        // The first right curve is blue, the first left curve black, as in Origin.
+        // The first left curve is black and the first right curve takes the third colour of the list
+        // (green), so that the two differ.
         assert_eq!(left.palette.colors[0], Color::rgb(0, 0, 0));
-        assert_eq!(right.palette.colors[0], Color::rgb(30, 80, 220));
+        assert_eq!(right.palette.colors[0], Color::rgb(0, 255, 0));
         assert_eq!(left.x_axis.major_tick, TickDirection::Out);
     }
 

@@ -954,7 +954,6 @@ mod tests {
         // The Line template's page (6.4 x 4.8 inch) turned upright.
         let line = Template::Line.new_graph(WindowId(0), "").page;
         assert_eq!((graph.page.width_pt, graph.page.height_pt), (line.height_pt, line.width_pt));
-        assert!((graph.page.width_pt - 345.6).abs() < 1e-9);
         assert_eq!(graph.layers[0].link, None);
         for k in [1, 2] {
             assert_eq!(graph.layers[k].link, Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None }));
@@ -1010,7 +1009,6 @@ mod tests {
         // Twice the Line template's page in both directions; no links.
         let line = Template::Line.new_graph(WindowId(0), "").page;
         assert_eq!((graph.page.width_pt, graph.page.height_pt), (2.0 * line.width_pt, 2.0 * line.height_pt));
-        assert!((graph.page.width_pt - 921.6).abs() < 1e-9 && (graph.page.height_pt - 691.2).abs() < 1e-9);
         assert!(graph.layers.iter().all(|l| l.link.is_none() && l.x_axis.show_tick_labels));
         // The second plot of a panel takes the palette's second color.
         let layer = &graph.layers[0];

@@ -1,6 +1,6 @@
 # T05: Export Graphs dialog, raster formats, units, Ctrl+G, Copy Page
 
-**Status:** open. Margin modes, pixel and page-ratio units, and Copy Page at 40 % with an EMF are done (`export-margin`, merged 2026-11-13); items 3 and 4 below are therefore done. **Size:** M.
+**Status:** done, merged (`c32e585`). Items 1 and 2 are in: the Export Graphs window (Select Graph(s), File Name(s) with `<long name>`, `<short name>`, `<index>` substitution, Path, Overwrite Existing, Export Settings, Image Size, Image Settings, preview with Auto Preview, OK, Cancel, Apply); JPEG, BMP and GIF; 256 colours / 24-bit / 8-bit grey; TIFF compression none, PackBits, LZW; JPEG quality. Items 3 and 4 were done earlier (`export-margin`). Left: Graph Theme (greyed), Dialog Theme row, the Graph tab of the preview, more export choices (Select Graph(s) only has Active Page and All Graphs in Project), TIFF 256-colour palette, mono and 16-colour modes, PCX, PSD, TGA. Default type is PNG at 24-bit (Origin: EPS, 256 colours) because 256 colours spoils colour figures. **Size:** M.
 **Branch:** `export-dialog`. **Model:** Sonnet.
 **Detail:** audit B "Export Graphs", C "Templates, themes, export".
 **Spec:** `docs/spec/graphing.md` section 9 (9.1 formats, 9.4 colour depth/compression, 9.6 Copy

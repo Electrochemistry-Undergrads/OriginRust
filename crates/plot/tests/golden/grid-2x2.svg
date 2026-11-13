@@ -1,107 +1,111 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="921.6pt" height="691.2pt" viewBox="0 0 921.6 691.2">
-<rect x="0" y="0" width="921.6" height="691.2" fill="#FFFFFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1543.68pt" height="1181.52pt" viewBox="0 0 1543.68 1181.52">
+<rect x="0" y="0" width="1543.68" height="1181.52" fill="#FFFFFF"/>
 <g id="layer0">
-<clipPath id="clip0"><rect x="73.728" y="24.192" width="359.424" height="259.2"/></clipPath>
+<clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip0)">
-<path d="M135.344 153.792L141.505 129.784L147.667 109.469L153.828 92.653L159.99 79.142L166.151 68.742L172.313 61.258L178.474 56.495L184.636 54.259L190.798 54.356L196.959 56.592L203.121 60.772L209.282 66.701L215.444 74.185L221.605 83.03L227.767 93.042L233.928 104.026L240.09 115.787L246.252 128.131L252.413 140.864L258.575 153.792L264.736 166.72L270.898 179.453L277.059 191.797L283.221 203.558L289.382 214.542L295.544 224.554L301.706 233.399L307.867 240.883L314.029 246.812L320.19 250.992L326.352 253.228L332.513 253.325L338.675 251.089L344.836 246.326L350.998 238.842L357.159 228.442L363.321 214.931L369.483 198.115L375.644 177.8L381.806 153.792" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M228.423 280.581L237.441 241.277L246.46 208.019L255.479 180.49L264.497 158.371L273.516 141.344L282.534 129.091L291.553 121.294L300.572 117.634L309.59 117.793L318.609 121.453L327.628 128.295L336.646 138.002L345.665 150.255L354.683 164.736L363.702 181.126L372.721 199.108L381.739 218.362L390.758 238.572L399.777 259.417L408.795 280.581L417.814 301.746L426.832 322.591L435.851 342.801L444.87 362.055L453.888 380.037L462.907 396.427L471.925 410.908L480.944 423.161L489.963 432.868L498.981 439.71L508 443.37L517.019 443.529L526.037 439.869L535.056 432.072L544.074 419.819L553.093 402.792L562.112 380.673L571.13 353.144L580.149 319.886L589.168 280.581" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="overlay">
-<path d="M73.728 283.392L433.152 283.392" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M73.728 24.192L73.728 283.392" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M73.728 283.392L73.728 288.392M176.421 283.392L176.421 288.392M279.113 283.392L279.113 288.392M381.806 283.392L381.806 288.392M125.074 283.392L125.074 285.892M227.767 283.392L227.767 285.892M330.459 283.392L330.459 285.892M433.152 283.392L433.152 285.892" fill="none" stroke="#000000" stroke-width="1"/>
-<path d="M73.728 240.192L68.728 240.192M73.728 153.792L68.728 153.792M73.728 67.392L68.728 67.392M73.728 283.392L71.228 283.392M73.728 196.992L71.228 196.992M73.728 110.592L71.228 110.592M73.728 24.192L71.228 24.192" fill="none" stroke="#000000" stroke-width="1"/>
-<text x="73.728" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">−0.5</text>
-<text x="176.421" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.0</text>
-<text x="279.113" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.5</text>
-<text x="381.806" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">1.0</text>
-<text x="64.528" y="243.252" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−50</text>
-<text x="64.528" y="156.852" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">0</text>
-<text x="64.528" y="70.452" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">50</text>
-<text x="253.44" y="322.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle">Potential (V)</text>
-<text x="33.388" y="153.792" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle" transform="rotate(-90 33.388 153.792)">A (mA)</text>
-<path d="M384.202 44.542L408.402 44.542" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="413.902" y="47.347" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="11" fill="#000000">A</text>
+<path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 68.41L138.237 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 492.753L138.237 501.753M288.547 492.753L288.547 501.753M438.857 492.753L438.857 501.753M589.168 492.753L589.168 501.753M213.392 492.753L213.392 497.253M363.702 492.753L363.702 497.253M514.012 492.753L514.012 497.253M664.323 492.753L664.323 497.253" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 422.029L129.237 422.029M138.237 280.581L129.237 280.581M138.237 139.134L129.237 139.134M138.237 492.753L133.737 492.753M138.237 351.305L133.737 351.305M138.237 209.858L133.737 209.858M138.237 68.41L133.737 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="138.237" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="288.547" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.0</text>
+<text x="438.857" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.5</text>
+<text x="589.168" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">1.0</text>
+<text x="122.937" y="426.619" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−50</text>
+<text x="122.937" y="285.171" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="122.937" y="143.724" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">50</text>
+<text x="401.28" y="553.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="75.417" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 75.417 280.581)">A (mA)</text>
+<rect x="557.623" y="86.01" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<path d="M566.423 109.11L614.823 109.11" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="625.823" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">A</text>
 </g>
 </g>
 <g id="layer1">
-<clipPath id="clip1"><rect x="534.528" y="24.192" width="359.424" height="259.2"/></clipPath>
+<clipPath id="clip1"><rect x="910.077" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip1)">
-<path d="M596.144 153.792L602.305 127.983L608.467 106.145L614.628 88.068L620.79 73.544L626.951 62.363L633.113 54.318L639.274 49.198L645.436 46.794L651.598 46.899L657.759 49.302L663.921 53.795L670.082 60.169L676.244 68.215L682.405 77.723L688.567 88.486L694.728 100.293L700.89 112.936L707.052 126.207L713.213 139.895L719.375 153.792L725.536 167.689L731.698 181.377L737.859 194.648L744.021 207.291L750.182 219.098L756.344 229.861L762.506 239.369L768.667 247.415L774.829 253.789L780.99 258.282L787.152 260.685L793.313 260.79L799.475 258.386L805.636 253.266L811.798 245.221L817.959 234.04L824.121 219.516L830.283 201.439L836.444 179.601L842.606 153.792" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1000.263 280.581L1009.281 238.329L1018.3 202.577L1027.319 172.983L1036.337 149.205L1045.356 130.901L1054.374 117.729L1063.393 109.347L1072.412 105.413L1081.43 105.584L1090.449 109.518L1099.468 116.874L1108.486 127.309L1117.505 140.481L1126.523 156.047L1135.542 173.667L1144.561 192.997L1153.579 213.696L1162.598 235.421L1171.617 257.83L1180.635 280.581L1189.654 303.333L1198.672 325.742L1207.691 347.467L1216.71 368.166L1225.728 387.496L1234.747 405.115L1243.765 420.682L1252.784 433.854L1261.803 444.289L1270.821 451.645L1279.84 455.579L1288.859 455.75L1297.877 451.816L1306.896 443.434L1315.914 430.262L1324.933 411.958L1333.952 388.18L1342.97 358.586L1351.989 322.834L1361.008 280.581" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="overlay">
-<path d="M534.528 283.392L893.952 283.392" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M534.528 24.192L534.528 283.392" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M534.528 283.392L534.528 288.392M637.221 283.392L637.221 288.392M739.913 283.392L739.913 288.392M842.606 283.392L842.606 288.392M585.874 283.392L585.874 285.892M688.567 283.392L688.567 285.892M791.259 283.392L791.259 285.892M893.952 283.392L893.952 285.892" fill="none" stroke="#000000" stroke-width="1"/>
-<path d="M534.528 257.472L529.528 257.472M534.528 205.632L529.528 205.632M534.528 153.792L529.528 153.792M534.528 101.952L529.528 101.952M534.528 50.112L529.528 50.112M534.528 283.392L532.028 283.392M534.528 231.552L532.028 231.552M534.528 179.712L532.028 179.712M534.528 127.872L532.028 127.872M534.528 76.032L532.028 76.032M534.528 24.192L532.028 24.192" fill="none" stroke="#000000" stroke-width="1"/>
-<text x="534.528" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">−0.5</text>
-<text x="637.221" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.0</text>
-<text x="739.913" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.5</text>
-<text x="842.606" y="301.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">1.0</text>
-<text x="525.328" y="260.532" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−40</text>
-<text x="525.328" y="208.692" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−20</text>
-<text x="525.328" y="156.852" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">0</text>
-<text x="525.328" y="105.012" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">20</text>
-<text x="525.328" y="53.172" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">40</text>
-<text x="714.24" y="322.232" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle">Potential (V)</text>
-<text x="494.188" y="153.792" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle" transform="rotate(-90 494.188 153.792)">B (mA)</text>
-<path d="M845.002 44.542L869.202 44.542" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="874.702" y="47.347" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="11" fill="#000000">B</text>
+<path d="M910.077 492.753L1436.163 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M910.077 68.41L910.077 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M910.077 492.753L910.077 501.753M1060.387 492.753L1060.387 501.753M1210.697 492.753L1210.697 501.753M1361.008 492.753L1361.008 501.753M985.232 492.753L985.232 497.253M1135.542 492.753L1135.542 497.253M1285.852 492.753L1285.852 497.253M1436.163 492.753L1436.163 497.253" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M910.077 450.319L901.077 450.319M910.077 365.45L901.077 365.45M910.077 280.581L901.077 280.581M910.077 195.713L901.077 195.713M910.077 110.844L901.077 110.844M910.077 492.753L905.577 492.753M910.077 407.884L905.577 407.884M910.077 323.016L905.577 323.016M910.077 238.147L905.577 238.147M910.077 153.279L905.577 153.279M910.077 68.41L905.577 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="910.077" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="1060.387" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.0</text>
+<text x="1210.697" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.5</text>
+<text x="1361.008" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">1.0</text>
+<text x="894.777" y="454.909" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−40</text>
+<text x="894.777" y="370.04" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−20</text>
+<text x="894.777" y="285.171" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="894.777" y="200.303" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">20</text>
+<text x="894.777" y="115.434" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">40</text>
+<text x="1173.12" y="553.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="847.257" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 847.257 280.581)">B (mA)</text>
+<rect x="1329.463" y="86.01" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<path d="M1338.263 109.11L1386.663 109.11" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1397.663" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">B</text>
 </g>
 </g>
 <g id="layer2">
-<clipPath id="clip2"><rect x="73.728" y="369.792" width="359.424" height="259.2"/></clipPath>
+<clipPath id="clip2"><rect x="138.237" y="659.17" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip2)">
-<path d="M135.344 499.392L141.505 474.883L147.667 454.145L153.828 436.979L159.99 423.187L166.151 412.57L172.313 404.93L178.474 400.068L184.636 397.786L190.798 397.885L196.959 400.167L203.121 404.434L209.282 410.486L215.444 418.127L221.605 427.156L227.767 437.376L233.928 448.589L240.09 460.595L246.252 473.197L252.413 486.195L258.575 499.392L264.736 512.589L270.898 525.587L277.059 538.189L283.221 550.195L289.382 561.408L295.544 571.628L301.706 580.657L307.867 588.298L314.029 594.35L320.19 598.617L326.352 600.899L332.513 600.998L338.675 598.716L344.836 593.854L350.998 586.214L357.159 575.597L363.321 561.805L369.483 544.639L375.644 523.901L381.806 499.392" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M228.423 871.341L237.441 831.218L246.46 797.267L255.479 769.164L264.497 746.585L273.516 729.203L282.534 716.695L291.553 708.735L300.572 704.999L309.59 705.161L318.609 708.898L327.628 715.883L336.646 725.792L345.665 738.3L354.683 753.082L363.702 769.814L372.721 788.17L381.739 807.826L390.758 828.456L399.777 849.736L408.795 871.341L417.814 892.946L426.832 914.227L435.851 934.857L444.87 954.513L453.888 972.869L462.907 989.601L471.925 1004.383L480.944 1016.891L489.963 1026.8L498.981 1033.785L508 1037.521L517.019 1037.684L526.037 1033.948L535.056 1025.988L544.074 1013.48L553.093 996.098L562.112 973.519L571.13 945.416L580.149 911.465L589.168 871.341" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="overlay">
-<path d="M73.728 628.992L433.152 628.992" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M73.728 369.792L73.728 628.992" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M73.728 628.992L73.728 633.992M176.421 628.992L176.421 633.992M279.113 628.992L279.113 633.992M381.806 628.992L381.806 633.992M125.074 628.992L125.074 631.492M227.767 628.992L227.767 631.492M330.459 628.992L330.459 631.492M433.152 628.992L433.152 631.492" fill="none" stroke="#000000" stroke-width="1"/>
-<path d="M73.728 585.792L68.728 585.792M73.728 499.392L68.728 499.392M73.728 412.992L68.728 412.992M73.728 628.992L71.228 628.992M73.728 542.592L71.228 542.592M73.728 456.192L71.228 456.192M73.728 369.792L71.228 369.792" fill="none" stroke="#000000" stroke-width="1"/>
-<text x="73.728" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">−0.5</text>
-<text x="176.421" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.0</text>
-<text x="279.113" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.5</text>
-<text x="381.806" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">1.0</text>
-<text x="64.528" y="588.852" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−20</text>
-<text x="64.528" y="502.452" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">0</text>
-<text x="64.528" y="416.052" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">20</text>
-<text x="253.44" y="667.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle">Potential (V)</text>
-<text x="33.388" y="499.392" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle" transform="rotate(-90 33.388 499.392)">C (mA)</text>
-<path d="M384.202 390.142L408.402 390.142" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="413.902" y="392.947" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="11" fill="#000000">C</text>
+<path d="M138.237 1083.513L664.323 1083.513" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 659.17L138.237 1083.513" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 1083.513L138.237 1092.513M288.547 1083.513L288.547 1092.513M438.857 1083.513L438.857 1092.513M589.168 1083.513L589.168 1092.513M213.392 1083.513L213.392 1088.013M363.702 1083.513L363.702 1088.013M514.012 1083.513L514.012 1088.013M664.323 1083.513L664.323 1088.013" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 1012.789L129.237 1012.789M138.237 871.341L129.237 871.341M138.237 729.894L129.237 729.894M138.237 1083.513L133.737 1083.513M138.237 942.065L133.737 942.065M138.237 800.618L133.737 800.618M138.237 659.17L133.737 659.17" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="138.237" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="288.547" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.0</text>
+<text x="438.857" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.5</text>
+<text x="589.168" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">1.0</text>
+<text x="122.937" y="1017.379" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−20</text>
+<text x="122.937" y="875.931" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="122.937" y="734.484" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">20</text>
+<text x="401.28" y="1144.593" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="75.417" y="871.341" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 75.417 871.341)">C (mA)</text>
+<rect x="557.623" y="676.77" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<path d="M566.423 699.87L614.823 699.87" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="625.823" y="705.48" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">C</text>
 </g>
 </g>
 <g id="layer3">
-<clipPath id="clip3"><rect x="534.528" y="369.792" width="359.424" height="259.2"/></clipPath>
+<clipPath id="clip3"><rect x="910.077" y="659.17" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip3)">
-<path d="M596.144 499.392L602.305 473.999L608.467 452.512L614.628 434.726L620.79 420.436L626.951 409.435L633.113 401.519L639.274 396.482L645.436 394.117L651.598 394.22L657.759 396.584L663.921 401.005L670.082 407.276L676.244 415.193L682.405 424.548L688.567 435.137L694.728 446.754L700.89 459.194L707.052 472.251L713.213 485.719L719.375 499.392L725.536 513.065L731.698 526.533L737.859 539.59L744.021 552.03L750.182 563.647L756.344 574.236L762.506 583.592L768.667 591.508L774.829 597.779L780.99 602.2L787.152 604.564L793.313 604.667L799.475 602.303L805.636 597.265L811.798 589.349L817.959 578.348L824.121 564.058L830.283 546.272L836.444 524.786L842.606 499.392" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1000.263 871.341L1009.281 829.769L1018.3 794.593L1027.319 765.475L1036.337 742.08L1045.356 724.071L1054.374 711.111L1063.393 702.864L1072.412 698.993L1081.43 699.161L1090.449 703.032L1099.468 710.27L1108.486 720.537L1117.505 733.496L1126.523 748.812L1135.542 766.148L1144.561 785.167L1153.579 805.533L1162.598 826.908L1171.617 848.956L1180.635 871.341L1189.654 893.727L1198.672 915.775L1207.691 937.15L1216.71 957.516L1225.728 976.535L1234.747 993.87L1243.765 1009.187L1252.784 1022.146L1261.803 1032.413L1270.821 1039.651L1279.84 1043.522L1288.859 1043.69L1297.877 1039.819L1306.896 1031.572L1315.914 1018.612L1324.933 1000.603L1333.952 977.208L1342.97 948.09L1351.989 912.914L1361.008 871.341" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="overlay">
-<path d="M534.528 628.992L893.952 628.992" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M534.528 369.792L534.528 628.992" fill="none" stroke="#000000" stroke-width="1" stroke-linecap="square"/>
-<path d="M534.528 628.992L534.528 633.992M637.221 628.992L637.221 633.992M739.913 628.992L739.913 633.992M842.606 628.992L842.606 633.992M585.874 628.992L585.874 631.492M688.567 628.992L688.567 631.492M791.259 628.992L791.259 631.492M893.952 628.992L893.952 631.492" fill="none" stroke="#000000" stroke-width="1"/>
-<path d="M534.528 619.023L529.528 619.023M534.528 599.084L529.528 599.084M534.528 579.146L529.528 579.146M534.528 559.207L529.528 559.207M534.528 539.269L529.528 539.269M534.528 519.33L529.528 519.33M534.528 499.392L529.528 499.392M534.528 479.454L529.528 479.454M534.528 459.515L529.528 459.515M534.528 439.577L529.528 439.577M534.528 419.638L529.528 419.638M534.528 399.7L529.528 399.7M534.528 379.761L529.528 379.761M534.528 628.992L532.028 628.992M534.528 609.054L532.028 609.054M534.528 589.115L532.028 589.115M534.528 569.177L532.028 569.177M534.528 549.238L532.028 549.238M534.528 529.3L532.028 529.3M534.528 509.361L532.028 509.361M534.528 489.423L532.028 489.423M534.528 469.484L532.028 469.484M534.528 449.546L532.028 449.546M534.528 429.607L532.028 429.607M534.528 409.669L532.028 409.669M534.528 389.73L532.028 389.73M534.528 369.792L532.028 369.792" fill="none" stroke="#000000" stroke-width="1"/>
-<text x="534.528" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">−0.5</text>
-<text x="637.221" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.0</text>
-<text x="739.913" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">0.5</text>
-<text x="842.606" y="646.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="middle">1.0</text>
-<text x="525.328" y="622.083" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−12</text>
-<text x="525.328" y="602.144" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−10</text>
-<text x="525.328" y="582.206" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−8</text>
-<text x="525.328" y="562.267" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−6</text>
-<text x="525.328" y="542.329" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−4</text>
-<text x="525.328" y="522.39" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">−2</text>
-<text x="525.328" y="502.452" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">0</text>
-<text x="525.328" y="482.514" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">2</text>
-<text x="525.328" y="462.575" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">4</text>
-<text x="525.328" y="442.637" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">6</text>
-<text x="525.328" y="422.698" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">8</text>
-<text x="525.328" y="402.76" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">10</text>
-<text x="525.328" y="382.821" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="12" fill="#000000" text-anchor="end">12</text>
-<text x="714.24" y="667.832" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle">Potential (V)</text>
-<text x="494.188" y="499.392" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="14" fill="#000000" text-anchor="middle" transform="rotate(-90 494.188 499.392)">D (mA)</text>
-<path d="M845.002 390.142L869.202 390.142" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="874.702" y="392.947" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="11" fill="#000000">D</text>
+<path d="M910.077 1083.513L1436.163 1083.513" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M910.077 659.17L910.077 1083.513" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M910.077 1083.513L910.077 1092.513M1060.387 1083.513L1060.387 1092.513M1210.697 1083.513L1210.697 1092.513M1361.008 1083.513L1361.008 1092.513M985.232 1083.513L985.232 1088.013M1135.542 1083.513L1135.542 1088.013M1285.852 1083.513L1285.852 1088.013M1436.163 1083.513L1436.163 1088.013" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M910.077 1067.192L901.077 1067.192M910.077 1034.55L901.077 1034.55M910.077 1001.909L901.077 1001.909M910.077 969.267L901.077 969.267M910.077 936.625L901.077 936.625M910.077 903.983L901.077 903.983M910.077 871.341L901.077 871.341M910.077 838.7L901.077 838.7M910.077 806.058L901.077 806.058M910.077 773.416L901.077 773.416M910.077 740.774L901.077 740.774M910.077 708.133L901.077 708.133M910.077 675.491L901.077 675.491M910.077 1083.513L905.577 1083.513M910.077 1050.871L905.577 1050.871M910.077 1018.229L905.577 1018.229M910.077 985.588L905.577 985.588M910.077 952.946L905.577 952.946M910.077 920.304L905.577 920.304M910.077 887.662L905.577 887.662M910.077 855.021L905.577 855.021M910.077 822.379L905.577 822.379M910.077 789.737L905.577 789.737M910.077 757.095L905.577 757.095M910.077 724.454L905.577 724.454M910.077 691.812L905.577 691.812M910.077 659.17L905.577 659.17" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="910.077" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="1060.387" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.0</text>
+<text x="1210.697" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.5</text>
+<text x="1361.008" y="1111.773" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">1.0</text>
+<text x="894.777" y="1071.782" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−12</text>
+<text x="894.777" y="1039.14" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−10</text>
+<text x="894.777" y="1006.499" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−8</text>
+<text x="894.777" y="973.857" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−6</text>
+<text x="894.777" y="941.215" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−4</text>
+<text x="894.777" y="908.573" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−2</text>
+<text x="894.777" y="875.931" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="894.777" y="843.29" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="894.777" y="810.648" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="894.777" y="778.006" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
+<text x="894.777" y="745.364" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">8</text>
+<text x="894.777" y="712.723" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">10</text>
+<text x="894.777" y="680.081" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">12</text>
+<text x="1173.12" y="1144.593" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="847.257" y="871.341" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 847.257 871.341)">D (mA)</text>
+<rect x="1329.463" y="676.77" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<path d="M1338.263 699.87L1386.663 699.87" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1397.663" y="705.48" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">D</text>
 </g>
 </g>
 </svg>

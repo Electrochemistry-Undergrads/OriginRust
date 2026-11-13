@@ -909,9 +909,87 @@ fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
     show_window(&mut h, "Graph1 - sample");
     menu_path(&mut h, &["File", "Export Graphs..."]);
     assert!(h.state().export.is_some(), "the export window is open");
-    assert!(h.query_by_label("Save as...").is_some());
-    click(&mut h, "Close");
+    assert!(h.query_by_label("Apply").is_some());
+    click(&mut h, "Cancel");
     assert!(h.state().export.is_none());
+}
+
+#[test]
+fn export_graphs_dialog_has_origins_groups_and_buttons() {
+    let mut h = start(vec![data_file("export-layout")]);
+    show_window(&mut h, "Graph1 - sample");
+    ctrl(&mut h, egui::Key::G);
+    assert!(h.state().export.is_some());
+    for label in [
+        "Export Graphs",
+        "Image Type",
+        "Select Graph(s)",
+        "File Name(s)",
+        "Enable Substitution",
+        "Path",
+        "Overwrite Existing",
+        "Graph Theme",
+        "Export Settings",
+        "Image Size",
+        "Image Settings",
+        "Auto Preview",
+        "Preview",
+        "OK",
+        "Cancel",
+        "Apply",
+    ] {
+        assert!(h.query_by_label(label).is_some(), "{label}");
+    }
+    click(&mut h, "Cancel");
+    assert!(h.state().export.is_none());
+}
+
+#[test]
+fn export_graphs_file_name_substitution_and_apply_enabling() {
+    let mut h = start(vec![data_file("export-apply")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    let graph_id = graph(&h).id;
+    // The default name is the long name of the graph.
+    let name = h.state().export.as_ref().unwrap().name_for(&h.state().doc, graph_id);
+    assert_eq!(name, "sample");
+    assert!(h.query_by_label(&format!("File will be saved as {name}.png")).is_some());
+    assert!(!h.get_by_label("Apply").accesskit_node().is_disabled());
+    h.state_mut().export.as_mut().unwrap().set_file_name("fig_<short name>");
+    settle(&mut h);
+    assert!(h.query_by_label("File will be saved as fig_Graph1.png").is_some());
+    h.state_mut().export.as_mut().unwrap().set_file_name("");
+    settle(&mut h);
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled(), "no file name, no Apply");
+    assert!(h.get_by_label("OK").accesskit_node().is_disabled());
+}
+
+#[test]
+fn export_graphs_apply_writes_the_file_and_asks_before_replacing_it() {
+    let mut h = start(vec![data_file("export-write")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-export-out-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    settle(&mut h);
+    click(&mut h, "Apply");
+    let file = dir.join("sample.png");
+    let bytes = std::fs::read(&file).expect("Apply wrote the picture");
+    assert_eq!(&bytes[1..4], b"PNG");
+    assert!(h.state().export.is_some(), "Apply keeps the window open");
+    std::fs::write(&file, b"old").unwrap();
+    click(&mut h, "Apply");
+    assert_eq!(std::fs::read(&file).unwrap(), b"old", "the existing file waits for an answer");
+    assert!(h.query_by_label("Replace").is_some());
+    click(&mut h, "Replace");
+    assert_eq!(&std::fs::read(&file).unwrap()[1..4], b"PNG");
+    // OK writes and closes.
+    std::fs::remove_file(&file).unwrap();
+    click(&mut h, "OK");
+    assert!(file.exists());
+    assert!(h.state().export.is_none(), "OK closes the window");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -2609,6 +2687,13 @@ fn the_object_manager_lists_the_plots_and_a_tick_box_hides_one_from_the_graph() 
     settle(&mut h);
     assert_eq!(h.state().panels.flyout(), Some(PanelId::Objects));
     assert!(h.query_by_label("Show layer: Layer1").is_some());
+    // Origin's lines are 0.5 pt thin; thicken them so that the pixel count is steady.
+    h.state_mut().doc.apply("Line width", |p| {
+        for plot in &mut p.graph_mut(graph).unwrap().layers[0].plots {
+            plot.line.width_pt = 3.0;
+        }
+    });
+    settle(&mut h);
     let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
     assert_eq!(plots.len(), 2);
     let second = plots[1].line.color;

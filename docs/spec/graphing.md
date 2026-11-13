@@ -417,7 +417,9 @@ Unit 0 inch (default), 1 cm, 2 pixel, 3 page ratio %. Rescaling 0 by width (defa
 | BMP | 300 (+96) | 256 (+16-bit) | |
 | GIF | 300 (+96) | 256 | |
 | PCX, PSD, TGA | 300 | 256 | |
-Trap: PNG and TIF default to 256 colours; use 24-bit for colour figures. [W:details-of-treenodes-in-export-graph]
+Trap: PNG and TIF default to 256 colours; use 24-bit for colour figures.
+
+Sheaf: `crates/plot/src/raster.rs` writes PNG (256 colours via a NeuQuant palette, 24-bit with alpha, 8-bit grey), TIFF (24-bit or grey; none, PackBits or LZW), JPEG (quality 1-100, 24-bit or grey), BMP (8-bit palette or 24-bit) and GIF (256 colours). The dialog defaults to 24-bit, not Origin's 256 colours. [W:details-of-treenodes-in-export-graph]
 
 ### 9.5 Vector options `tr2`
 - **EPS**: PostScript level 2 (1/3), ASCII data (binary), RGB (CMYK), bitmap handling "individual bitmaps" (ignore, source copy, combine) at 150 dpi, preview none (TIFF/WMF), Adobe font type 1 (3, 42), embed outline fonts (substitution, built-in), vector line thickness 0, semi-transparency as raster at default resolution (opaque, or chosen dpi default 300), raster compression on.

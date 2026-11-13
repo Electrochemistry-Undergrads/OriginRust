@@ -509,8 +509,8 @@ fn export_by_extension() {
         let bytes = std::fs::read(&path).unwrap();
         assert!(bytes.starts_with(magic), "{name}");
     }
-    let err = export_file(&p, g, &dir.join("d.jpg"), 72.0).unwrap_err();
-    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "jpg"));
+    let err = export_file(&p, g, &dir.join("d.pcx"), 72.0).unwrap_err();
+    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "pcx"));
     assert!(err.to_string().contains(".svg"));
     let err = export_file(&p, g, &dir.join("no-such-folder").join("e.svg"), 72.0).unwrap_err();
     assert!(matches!(err, PlotError::Io { .. }));
@@ -2273,5 +2273,5 @@ fn sized_exports_and_tiff() {
     assert_eq!(res, vec![15000, 100], "150 dpi");
     let tiff::decoder::DecodingResult::U8(pixels) = dec.read_image().unwrap() else { panic!("8-bit image") };
     assert_eq!(&pixels[..3], &[255, 255, 255], "the corner of the page is white");
-    assert!(matches!(export_bytes(&p, g, "bmp", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
+    assert!(matches!(export_bytes(&p, g, "pcx", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
 }

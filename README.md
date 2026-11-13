@@ -1,83 +1,121 @@
-# Sheaf
+<p align="center">
+  <img src="docs/brand/sheaf.png" width="128" height="128" alt="Sheaf bronze S logo">
+</p>
 
-Sheaf is a native Rust desktop application for lab data: import instrument exports, organise them
-in workbooks, make publication figures, and run analysis such as integration, smoothing, peak
-finding and curve fitting. It is being written to do the jobs its owner uses OriginLab Origin 2016
-for, with a familiar workflow, and to open existing Origin project files.
+<h1 align="center">Sheaf</h1>
 
-"Sheaf" is a working name. The project is not affiliated with OriginLab. It is an independent,
-clean-room implementation: behaviour was learned from documentation, readable configuration files
-and black-box observation, written down as specifications in `docs/spec/`, and implemented from
-those. No OriginLab code or assets are in this repository.
+<p align="center">
+  <b>Scientific data analysis and graphing, Sheaf: an independent, open-source implementation of Origin and OriginPro workflows, built in Rust.</b><br>
+  Workbooks, scientific plots, curve fitting, and data analysis,<br>
+  in a native app written in Rust. Open source and offline.
+</p>
 
-## Status
+<p align="center">
+  <img alt="Rust" src="https://img.shields.io/badge/built_with-Rust-b7410e?style=flat-square&amp;logo=rust">
+  <img alt="macOS · Windows" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows-native-2f7bf5?style=flat-square">
+  <a href="#license-and-credits"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-3a3a3a?style=flat-square"></a>
+  <img alt="Early development" src="https://img.shields.io/badge/status-early_development-d69e2e?style=flat-square">
+</p>
 
-Early development. The first slice works: import CH Instruments and delimited text files, look at
-the data in workbooks, make overlay plots, edit the figure, export PNG, SVG and PDF, save and open
-projects. See `HANDOFF.md` for the exact current state and `docs/ROADMAP.md` for the plan.
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#command-line">Command line</a> ·
+  <a href="#under-the-hood">Under the hood</a> ·
+  <a href="#get-started">Get started</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="#license-and-credits">License and credits</a>
+</p>
 
-## Using it
+<br>
 
-Desktop app:
+## Features
 
-```
-cargo run --release -p sheaf-app                 # empty project
-cargo run --release -p sheaf-app -- run1.txt     # import a data file and plot it
-cargo run --release -p sheaf-app -- lab.sheaf    # open a project
-```
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Bring your data</h3>
+      Import CH Instruments text and binary files, CSV, and other delimited text into workbooks.
+    </td>
+    <td width="50%" valign="top">
+      <h3>Make your figures</h3>
+      Overlay curves, adjust axes and legends, and export PNG, SVG, PDF, EPS, EMF, or TIFF.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Find the signal</h3>
+      Integrate, smooth, find peaks, run statistics, and fit linear, polynomial, or nonlinear models.
+    </td>
+    <td width="50%" valign="top">
+      <h3>Keep your workflow</h3>
+      Work with Origin project files and familiar workbook and graph controls.
+    </td>
+  </tr>
+</table>
 
-Files can also be dropped onto the window. Double-click a column header for its properties,
-right-click it to plot or to set values from a formula, double-click a graph to change its axes,
-plots and legend.
+> [!NOTE]
+> Early development. Origin/OriginPro feature coverage and Origin `.opj` support are partial.
+> Expect rough edges; Sheaf is not yet a complete replacement for Origin or OriginPro.
+> See the [roadmap](docs/ROADMAP.md) for current progress.
 
-Command line (no window):
+## Command line
 
-```
-sheaf info run1.txt                              # what is in the file
-sheaf plot run1.txt -o cv.png --dpi 300          # a cyclic voltammetry file becomes a CV overlay
-sheaf plot run1.txt run2.txt -o overlay.pdf      # several files in one figure
-sheaf plot data.csv -o fig.svg --template line-symbol --y B,C
-sheaf import run1.txt run2.txt -o lab.sheaf --plot
-sheaf export lab.sheaf --graph Graph1 -o fig.png
-sheaf export lab.sheaf -o lab.opj                  # the whole project as an Origin 2016 project (workbooks and graphs; what the file cannot hold is listed as warnings)
-sheaf export data.csv -o data.opj                # a data file as a one-workbook Origin project
-sheaf analyze integrate it.txt                   # charge of a current-vs-time file
-sheaf analyze integrate cv.txt --rows 700:900 --baseline   # peak area above a sloping background
-sheaf analyze smooth data.csv --y B --points 11 --export smoothed.csv
-sheaf analyze stats lab.sheaf --book Book2
-```
+```sh
+# Import data into a project
+cargo run --release -p sheaf-cli -- import run1.txt -o experiment.sheaf --plot
 
-`sheaf analyze --help` lists the tools: integrate, differentiate, smooth, normalize, baseline,
-interpolate, peaks, stats, sort, filter. In the app the same tools are in the Analysis menu; they
-work on the selected columns and each run is one undo step.
+# Export a figure
+cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
 
-`sheaf` is `cargo run --release -p sheaf-cli --`, or `target/release/sheaf.exe` after a build.
+# Analyze and fit
+cargo run --release -p sheaf-cli -- analyze integrate run1.txt
+cargo run --release -p sheaf-cli -- fit run1.txt --model linear
 
-## Layout
-
-| Path | What it is |
-|---|---|
-| `crates/core` | Document model: project, workbooks, columns, graphs, figure templates, undo |
-| `crates/expr` | Expression language for column formulas and fit functions |
-| `crates/calc` | Analysis numerics on plain number slices, checked against Origin |
-| `crates/fit` | Curve fitting (in progress) |
-| `crates/io` | Importers (CH Instruments text, delimited text), project file, exporters |
-| `crates/plot` | Figure rendering to SVG, PNG and PDF, independent of the GUI |
-| `crates/cli` | `sheaf` command-line program (no window) |
-| `crates/app` | Desktop application |
-| `docs/spec` | Specifications the code is written from |
-| `docs/adr` | Design decisions and their reasons |
-| `docs/ROADMAP.md` | Milestones and tasks |
-| `docs/LESSONS.md` | Things learned that later sessions should know |
-| `HANDOFF.md` | Where work stopped and what to do next |
-| `ORIGIN_RUST_PROMPT.md` | The brief this project is built from |
-
-## Building
-
-```
-cargo build --release
-cargo test --workspace
+# Explore the available commands
+cargo run --release -p sheaf-cli -- --help
 ```
 
-The command-line program is `target/release/sheaf` and the desktop application is
-`target/release/sheaf-app`.
+Projects save as `.sheaf` or Origin `.opj`; see the
+[project format documentation](docs/spec/project-file-format.md).
+
+## Under the hood
+
+- Eight Rust crates separate the workbook model, expression language, analysis, fitting,
+  file formats, figure rendering, CLI, and desktop UI.
+- The desktop interface uses egui/eframe with an OpenGL renderer.
+- The desktop app and CLI share the same data, analysis, and rendering crates.
+- Origin compatibility is implemented from observed behavior and documented formats;
+  current gaps are tracked in the [feature parity table](docs/spec/feature-parity.md).
+
+## Get started
+
+Requires [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
+
+```sh
+git clone https://github.com/Electrochemistry-Undergrads/OriginRust.git
+cd OriginRust
+cargo run --release -p sheaf-app   # the desktop app
+cargo test --workspace --locked   # the test suite
+```
+
+Drop a data file onto the window, or open one with
+`cargo run --release -p sheaf-app -- run1.txt`.
+
+New contributors: start with [`HANDOFF.md`](HANDOFF.md), then [`docs/`](docs/).
+
+## Documentation
+
+[Roadmap](docs/ROADMAP.md) ·
+[Specifications](docs/spec/) ·
+[Design decisions](docs/adr/)
+
+## License and credits
+
+Sheaf is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Copyright (c) 2026 Sheaf contributors. Project notices are in [NOTICE](NOTICE).
+
+Third-party dependencies and their bundled fonts retain their own licenses and notices; see
+[ATTRIBUTION.md](ATTRIBUTION.md). The Sheaf logo was created by the project owner.
+
+<sub>Origin and OriginPro are products of OriginLab; these names describe compatible workflows and file formats.
+Sheaf is an independent project and is not affiliated with, sponsored by, or endorsed by OriginLab.</sub>

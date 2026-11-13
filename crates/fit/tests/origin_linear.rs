@@ -1,4 +1,4 @@
-//! Linear and polynomial fits compared with numbers produced by Origin 2016 on data we generated
+//! Linear and polynomial fits compared with numbers produced by Origin on data we generated
 //! ourselves (`tools/origin-ref/fitlin-suite.labtalk.txt`). The numbers are stored in
 //! `fixtures/linear_origin.rs`; these tests need no Origin installation.
 //!

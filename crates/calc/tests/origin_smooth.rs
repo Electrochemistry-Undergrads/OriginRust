@@ -1,4 +1,4 @@
-//! Smoothing against numbers from Origin 2016 (`smooth`).
+//! Smoothing against numbers from Origin (`smooth`).
 //!
 //! Reference script: `tools/origin-ref/smooth-suite1.labtalk.txt` (run with `run-labtalk-data.ps1`).
 //! Input: x = 0..10 step 0.1 (101 points), y = sin(x) + 0.3 cos(7x) + 0.05 x^2 (the row-20 copy has

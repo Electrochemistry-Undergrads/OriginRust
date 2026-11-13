@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn decimal_character_codes() {
-        // An XRD title as Origin 2016 stored it: brackets written as character codes.
+        // An XRD title as Origin stored it: brackets written as character codes.
         assert_eq!(plain("2\\g(q) \\(40)degree\\(41)"), "2θ (degree)");
         assert_eq!(plain("\\(176)C"), "°C");
         assert!(parse("\\b(\\(65))").iter().all(|r| r.bold), "the character keeps the style around it");
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn a_font_switch_inside_greek_ends_the_greek_letters() {
-        // The X title of an XRD graph saved by Origin 2016.
+        // The X title of an XRD graph saved by Origin.
         assert_eq!(plain("\\b(2\\g(q \\f:Default: Arial((degree))))"), "2θ (degree)");
         assert!(parse("\\b(2\\g(q \\f:Default: Arial((degree))))").iter().all(|r| r.bold));
         assert_eq!(plain("\\f:Symbol(a)b"), "αb");

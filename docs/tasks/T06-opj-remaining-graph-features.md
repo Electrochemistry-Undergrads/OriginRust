@@ -33,7 +33,7 @@ For 1-3 the way Origin stores them **was not found**.
 3. Write the field in `crates/io/src/opj/write/graph.rs` / `graph_tables.rs` / `glayout.rs`, read it
    in `crates/io/src/opj/graph.rs`, remove the feature from the "not written" warning list in
    `crates/io/src/opj/write/mod.rs`.
-4. Verify: write with `sheaf export ... -o x.opj`, open in Origin 2016
+4. Verify: write with `sheaf export ... -o x.opj`, open in Origin
    (`opj-verify-graph-features.ps1`), compare the exported picture by eye; add a case to
    `crates/io/src/opj/write/graph_feature_tests.rs`.
 5. Record the layout in opj-format.md as a new 13.14.

@@ -1,4 +1,4 @@
-//! Normalisation against numbers from Origin 2016 (`normalize`).
+//! Normalisation against numbers from Origin (`normalize`).
 //!
 //! Reference script: `tools/origin-ref/normalize-suite1.labtalk.txt` (run with `run-labtalk-data.ps1`).
 //! Inputs: x = 0..10 step 0.1; B = sin(x) + 0.3 cos(7x) + 0.05 x^2 + 0.2; C = round(2 sin(x))

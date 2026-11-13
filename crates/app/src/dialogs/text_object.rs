@@ -122,11 +122,11 @@ impl TextDialog {
                             close = true;
                         }
                     }
-                    if ui.button("Apply").clicked() && !(self.text.trim().is_empty() && self.label.is_none()) {
-                        self.apply(doc);
-                    }
                     if ui.button("Cancel").clicked() {
                         close = true;
+                    }
+                    if ui.button("Apply").clicked() && !(self.text.trim().is_empty() && self.label.is_none()) {
+                        self.apply(doc);
                     }
                 });
             });

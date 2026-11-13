@@ -1,6 +1,6 @@
 # Specification: 2D graphs, graph object model and graph export
 
-Status: research draft, clean-room, written in our own words for a programmer who has never used Origin.
+Status: draft graphing and project-compatibility specification.
 
 ## Summary
 
@@ -14,7 +14,7 @@ Status: research draft, clean-room, written in our own words for a programmer wh
 - Public docs and installed text files do NOT state most numeric defaults (font size, line widths, tick lengths, page size). They are UNKNOWNS in section 11, to be measured in running Origin. Values tagged [REC] are unverified recollection.
 
 Priority tags: **P0** owner's daily workflow (CH Instruments CV/chronoamperometry overlays, integration figures, publication export), **P1** common, **P2** later.
-Source tags: **[F:path]** installed file read (paths under `C:\Program Files\OriginLab\Origin2016` unless "User:" = `OriginRust\OriginLab\2016\User Files`); **[W:page]** public page at docs.originlab.com/origin-help (or labtalk, quick-help, x-function); **[INF]** inference; **[REC]** recollection.
+Reference tags: **[F:path]** file reference; **[W:page]** public OriginLab documentation (origin-help, labtalk, quick-help or x-function); **[INF]** inference; **[REC]** recollection.
 
 ---
 
@@ -207,7 +207,7 @@ Custom tick positions and labels per tick. Reference lines are not documented fo
 
 **Observed:** rescale combines data min/max, the rescale margin percent, rounding to the tick increment and the minor tick count; the result is "approximately" min-margin..max+margin and lands on tick positions. With margin 0 and 0 minor ticks, Normal rescale gives exact data limits [W:axesref-scale]. The exact increment rule is not documented.
 
-**Measured in Origin 2016 (2026-11-12, `tools/origin-ref/autoscale*.lines.txt`, 56 cases).** For a new line graph (`plotxy`, the default template) whose Y data run linearly from `lo` to `hi`:
+**Measured in Origin (2026-11-12, `tools/origin-ref/autoscale*.lines.txt`, 56 cases).** For a new line graph (`plotxy`, the default template) whose Y data run linearly from `lo` to `hi`:
 - The minor tick count is 1 (one minor tick between majors) in every case.
 - The limits are `floor((lo - 0.08 * span) / h) * h` and `ceil((hi + 0.08 * span) / h) * h`, where `span = hi - lo` and `h` is half the major step (the minor tick spacing). This holds in all 56 cases. The margin was pinned between 7.53 % and 8.11 % of the span; 8 % is taken. So the limits need not be multiples of the major step: 0..19.2 gives -2..21 with step 2.
 - The major step is always 1, 2 or 5 times a power of ten, but it is not a simple function of the span: 0.45 and 0.89..0.905 give 0.2, 0.91..1.2 give 0.5, 3.85 gives 1, 3.9..9.05 give 2, 9.07..10 give 5, 19.2..20.5 give 2, 63.55 and 65 give 20, 92.7 gives 50, 900 gives 200, 5800 gives 2000, 25000 gives 10000. The rule that gives these was not found [U4].
@@ -411,7 +411,7 @@ Ctrl+J copies page (OLE), Ctrl+Alt+J copy as image, Ctrl+C copies as image by de
 
 ## 10. Themes and templates
 
-- **Graph theme `.OTH`** (XML, plain): a tree of numeric node ids with values; lists are base64 int32 arrays. A theme only changes the properties it contains; several can be applied, the topmost wins [W:themeref-themeorganizer]. Built-in: `Origin2016\Themes\Graph` (50 files, e.g. Black on paper, Color Publication, B&W Publication, FDA portrait/landscape, Physical Review Letters, Times New Roman Font, Ticks All In/Out, Line Style and Symbol variants, Fill Pattern variants, Layer No Element Scaling, Speed Mode ON/OFF, Night Sky, Opposite Lines). User themes live in the user Themes folder. Observed ids: page node 4 (6 colour, 10 with 11/12/13 incl. width and height); axes 1073741862 with X 536936487 and Y 537002023; ticks 1073741878 (57 minor, 58 major); grids 1073741887 (66 colour, 67 style, 68 width); list nodes 521 colour list, 522 line style list, 523 symbol shape list, 524 symbol interior list; 262 font for all text (opaque id; Times New Roman = 1852392883) [F:Themes\Graph\*].
+- **Graph theme `.OTH`** (XML, plain): a tree of numeric node ids with values; lists are base64 int32 arrays. A theme only changes the properties it contains; several can be applied, the topmost wins [W:themeref-themeorganizer]. Built-in: `Origin\Themes\Graph` (50 files, e.g. Black on paper, Color Publication, B&W Publication, FDA portrait/landscape, Physical Review Letters, Times New Roman Font, Ticks All In/Out, Line Style and Symbol variants, Fill Pattern variants, Layer No Element Scaling, Speed Mode ON/OFF, Night Sky, Opposite Lines). User themes live in the user Themes folder. Observed ids: page node 4 (6 colour, 10 with 11/12/13 incl. width and height); axes 1073741862 with X 536936487 and Y 537002023; ticks 1073741878 (57 minor, 58 major); grids 1073741887 (66 colour, 67 style, 68 width); list nodes 521 colour list, 522 line style list, 523 symbol shape list, 524 symbol interior list; 262 font for all text (opaque id; Times New Roman = 1852392883) [F:Themes\Graph\*].
 - **Graph template `.OTP`** (binary; not read): "Save as template" keeps layout and style (page, layers, axes, plot types and styles, group rules, text, drawn objects, legend, speed-mode settings) and not the data; a new graph is built by plotting selected columns into it. Registry of user-visible templates and their categories: `Template.ini` (section 8). Base templates: LINE, SCATTER, LINESYMB, ORIGIN, STANDARD, DOUBLEY ... [F:*.otp names; INF for contents].
 - **System theme for new graphs**: owner's `[Display] SysTheme=Dark Colors & Light Grids` and `[System Themes] GraphNewGraph=Dark Colors & Light Grids` [F:Origin.ini; User:Origin.ini]. Despite the name this theme contains only the grid line sets (3.5), the colour list (1.5) and one unexplained property (node 139 = 2); fonts/sizes/page come from the template.
 - **Colour lists** `Themes\Color`: Q01 Black and RGB, Q02 Basic, Q03 Rainbow7, Q04 Paired Color, Q05-Q08 seasons, S01-S04 sequential, D01-D05 diverging, System Color List. **Palettes** `Palettes\*.pal` (about 60) are colour maps (P2).
@@ -420,7 +420,7 @@ Our app: store themes and templates as JSON (own format), with the same partial-
 
 ---
 
-## 11. UNKNOWNS: measure in running Origin 2016
+## 11. UNKNOWNS: measure in running Origin
 
 Method: draw an overlay of four XY columns with the default template; read Plot Details; or run LabTalk queries (`page.width`, `layer.width`, `layer.unit`); export PNG variants and diff pixels.
 
@@ -447,11 +447,11 @@ Method: draw an overlay of four XY columns with the default template; read Plot 
 
 ## 12. Double-Y graphs, right Y axes and linked layers (P0, GP-DY-01)
 
-Tags as elsewhere in this document, plus **[COM]** for behaviour observed in Origin 2016 through COM/LabTalk on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). The design decision is recorded in ADR 0009.
+Tags as elsewhere in this document, plus **[COM]** for behaviour observed in Origin through COM/LabTalk on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). The design decision is recorded in ADR 0009.
 
-### 12.1 What Origin 2016 does
+### 12.1 What Origin does
 
-- **Two layers.** A double-Y graph is one page with two layers. Origin 2023 later added two Y scales inside one layer; Origin 2016 has only the two-layer form, template `DOUBLEY.OTP` (the current help calls it "2Ys Y-Y") [W:tutorials/double-y, origin-help/2ys-y-y-graph; F:DOUBLEY.OTP, no DblY.otp].
+- **Two layers.** A double-Y graph is one page with two layers. Origin 2023 later added two Y scales inside one layer; Origin has only the two-layer form, template `DOUBLEY.OTP` (the current help calls it "2Ys Y-Y") [W:tutorials/double-y, origin-help/2ys-y-y-graph; F:DOUBLEY.OTP, no DblY.otp].
 - **The link.** Layer 2 is linked to layer 1 [COM]:
   - its frame is given in "% of linked layer" as 0, 0, 100, 100, so it covers layer 1's frame exactly;
   - its X scale is linked "straight 1:1": the same limits as layer 1, and changing layer 1's X range moves layer 2's;
@@ -653,7 +653,7 @@ Examples: `sheaf plot cycles.csv -y Capacity --y2 Efficiency -o fig.png`; `sheaf
 
 ### 12.7 Origin project files (for the .opj reader and writer)
 
-Observed on one Origin 2016 project [COM; one sample each]:
+Observed on one Origin project [COM; one sample each]:
 - **Frame.** Both layer records store the same absolute frame (layer header `0x71`, page units).
 - **Linked-layer header bytes.** The linked layer differs from its parent at header `0x0AB` (= 1), `0x12D` (= 1), `0x02E` (1 becomes 9) and bit `0x80` of `0x0FC`. Turning the X link off changed none of them. Writing experiment (opj-format.md 13.12): `0x0AB` is the 1-based number of the parent layer and alone makes Origin report `layer.link`; in a three-layer graph the third layer linked to the second had `0x0AB` = 2, and `0x12D` was the layer's position (1, 2).
 - **X link.** A straight X link shows as annotations named `X1` and `X2` in the linked layer; with the X link off, `X1` was gone. Writing experiment: the pair, with a 20-byte style block starting with `*`, gives `layer.x.link` = 1 and without it the value is 0; a custom link has the text `X1` in that block.
@@ -667,9 +667,9 @@ Reader rule (implemented in `crates/io/src/opj/graph.rs`, `link_right_y_layers`)
 - automatic axis colours (block 3 `0x0F` = `F7 FF`) set `color_follows_plot` on any axis;
 - the legend object is matched without regard to case.
 
-Checked on the research project `dy3.opj` (Origin 2016; graphs G1 to G4 made by script, local only): G1 (the DoubleY command), G2 (X link turned off: still linked by this rule, since the X range stored in both layers is the same), G3 (layer 2 shows its Y axis on both sides) and G4 (layer 2's axis colour set to black) draw like Origin's own PNG of each, except: Origin draws the legend in a frame; Origin draws the top line in the plot's blue (12.8 keeps it black on purpose); and for G4 Origin's PNG still shows a blue right axis although the file stores black, which this reader follows. Whether Origin keeps the colour elsewhere or the PNG was made before the change took effect is unknown.
+Checked on the research project `dy3.opj` (Origin; graphs G1 to G4 made by script, local only): G1 (the DoubleY command), G2 (X link turned off: still linked by this rule, since the X range stored in both layers is the same), G3 (layer 2 shows its Y axis on both sides) and G4 (layer 2's axis colour set to black) draw like Origin's own PNG of each, except: Origin draws the legend in a frame; Origin draws the top line in the plot's blue (12.8 keeps it black on purpose); and for G4 Origin's PNG still shows a blue right axis although the file stores black, which this reader follows. Whether Origin keeps the colour elsewhere or the PNG was made before the change took effect is unknown.
 
-### 12.8 Deliberate differences from Origin 2016
+### 12.8 Deliberate differences from Origin
 
 - The shared X range covers the data of all linked layers, so no curve is cut off by a rescale of the other layer.
 - Colours increment within each layer.
@@ -685,7 +685,7 @@ Tick positions of the left and right axes are not aligned with each other (Origi
 
 - The meaning of `0x12D`, `0x02E` and bit `0x80` of `0x0FC` of the linked layer's header (12.7; they were not needed for Origin to link the layer), and where Origin keeps the unit "percent of the linked layer" (`layer.unit` is 1 for a written layer, 7 for Origin's own).
 - Whether Origin's blue for layer 2 is stored in the template or follows from a colour-list rule.
-- Whether Origin 2016 offers "title colour follows plot" for axis titles (it appears in current help).
+- Whether Origin offers "title colour follows plot" for axis titles (it appears in current help).
 - How Origin splits a selection with two X columns (documented, not run).
 - Origin's distance between the right tick labels and the right title, and the right title's size (not measured; Sheaf mirrors its left-side rule).
 - Why Origin's DoubleY template uses finer automatic tick steps than the Line template for the same data (X -1..11 step 2 against -2.5..12.5 step 5); related to U4.
@@ -695,9 +695,9 @@ Tick positions of the left and right axes are not aligned with each other (Origi
 
 ## 13. Stacked lines by Y offsets and waterfall (P0, GP-OFF-01)
 
-Status: researched on 2026-11-12 with Origin 2016 runs through COM on our own synthetic data (scripts and outputs in `re-workspace/scratch/graph-p0/`, git-ignored), plus a read-only look at the settings and counts of the owner's stacked XRD graphs. Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. The model decision is recorded in ADR 0010.
+Status: researched on 2026-11-12 with Origin runs through COM on our own synthetic data (scripts and outputs in `re-workspace/scratch/graph-p0/`, git-ignored), plus a read-only look at the settings and counts of the owner's stacked XRD graphs. Tags as in section 12; **[COM]** is behaviour seen in Origin. The model decision is recorded in ADR 0010.
 
-### 13.1 What Origin 2016 does
+### 13.1 What Origin does
 
 - **The idea.** "Stacked Lines by Y Offsets" (template `OffsetStackY.otp`) draws several curves in one layer, each moved up by its own amount so that they do not overlap. Only the drawing changes; the worksheet data stay as they are [W:stacklineyoffset-graph].
 - **Offset modes.** The plot group of a layer has one of these modes, chosen on the Stack tab of Plot Details or with Graph > Offset Grouped Data in Layer [W:pd-dialog-stack-tab, pd-offset-tab]:
@@ -708,12 +708,12 @@ Status: researched on 2026-11-12 with Origin 2016 runs through COM on our own sy
   - Individual: each plot has its own X and Y offset (set on the Offset tab, or by dragging a curve after clicking it twice).
 - **Only group members move.** A plot added to the layer later outside the group kept offset 0 [COM].
 - **The 2016 template uses Auto with a 10 % gap** [COM]. The current help says the template uses Individual offsets [W]; that is probably a later change.
-- **The Auto rule in Origin 2016** [COM, checked on seven data sets and on the owner's files]:
+- **The Auto rule in Origin** [COM, checked on seven data sets and on the owner's files]:
   - H is the largest height (largest minus smallest Y) of any curve of the group, and the gap is 10 % of H;
   - the first curve does not move;
   - every later curve is moved up so that its lowest point lies one gap above the highest point of the curve before it, after that curve was moved.
 
-  The current help describes a gap computed pair by pair; for the first check row of 13.11 that rule would give 141 for the fourth curve, while Origin 2016 gave 150.
+  The current help describes a gap computed pair by pair; for the first check row of 13.11 that rule would give 141 for the fourth curve, while Origin gave 150.
 - **Details of Auto** [COM]:
   - missing values are ignored;
   - a flat curve has height 0, and when every curve was flat the gap was 1;
@@ -907,7 +907,7 @@ The 361-byte layer header also differs at f64 `0x13D` (0.1 stacked, 0.08 plain) 
 
 Import rule (implemented): if any curve of a layer has a non-zero, finite offset (Origin's "no value" double counts as 0), set `stack = Individual` and add an entry with each curve's offsets for its Y column (the first curve of a column wins). This redraws the graph exactly as Origin saved it. Mapping `0x13A`/`0x148` to Auto can follow once the mode codes are confirmed. The writer (opj-format.md 13.12) does not need the mode fields: Origin moves every curve by the offset in its record when the layer header byte `0xFD` is `0x50`, whatever the mode was, and without a plot group. For the Auto mode Origin's own files use a plot group (byte `0x06` of the records: `0x29` on the first curve, `0x19` on the others), the no-value double at header `0x135` and the gap fraction at `0x13D`, and then computes the offsets again at load. The same fields with a step at `0x135` give the Constant mode (curve k moved by k times the step). The offsets Origin computed agree with 13.4. No X offset field was found (`0x1B2` is ignored); the f64 at `0x1C2` is a Y factor. Checked on the owner's XRD project: its six-pattern graph stores six increasing offsets (the first 0) and now draws each pattern in the band of its label, as in the owner's figure.
 
-### 13.11 Check values (Origin 2016, Auto, gap 10 %, X = 0, 1, ..., 20)
+### 13.11 Check values (Origin, Auto, gap 10 %, X = 0, 1, ..., 20)
 
 | Y of the curves, in plot order | offsets |
 |---|---|
@@ -922,7 +922,7 @@ Import rule (implemented): if any curve of a layer has a non-zero, finite offset
 
 With the second plot of the first row hidden, the visible curves span 0..10, 130..140 and 150..151, so the data range for the axis is still 0..151.
 
-### 13.12 Deliberate differences from Origin 2016
+### 13.12 Deliberate differences from Origin
 
 - The `stacked` template hides the Y tick labels and ticks and closes the box (the owner's style); Origin's template shows them.
 - The waterfall is a flat 2D drawing without a Z axis, planes or hiding fill, with its own default shifts, and it draws the first curve in front.
@@ -932,22 +932,22 @@ With the second plot of the first row hidden, the visible curves span 0..10, 130
 
 ### 13.13 Unknowns
 
-- Origin 2016's codes for the modes other than Auto: None, Constant, Individual and Cumulative cannot be set by script in 2016 (`set -sy` is refused and there is no layer property). Confirming them needs a click test of Graph > Offset Grouped Data in Layer and a byte comparison.
+- Origin's codes for the modes other than Auto: None, Constant, Individual and Cumulative cannot be set by script in 2016 (`set -sy` is refused and there is no layer property). Confirming them needs a click test of Graph > Offset Grouped Data in Layer and a byte comparison.
 - The storage of X offsets and multipliers (13.10) is inferred; the layer header differences are unexplained.
 - Whether the Auto gap percent can be edited in the 2016 dialog. Only 10 was seen, so the H = 10 rule for flat curves is confirmed only at 10 %.
 - Whether Origin's Auto uses a plot's display row range for the curve heights; Sheaf uses the plotted rows.
 - What Origin's Data Reader shows on a moved curve (the stored or the moved value).
 - Origin's exact waterfall geometry.
 - Owner preferences: whether the stacked template should hide the legend (he deletes it and types the curve names next to the curves); whether he wants an option that writes each curve's name at its right end (a possible follow-up); whether hidden curves should keep their place (Origin's behaviour, adopted here).
-- The current online help describes Individual offsets in the template and a pairwise Auto gap; neither matches Origin 2016, and later versions may differ.
+- The current online help describes Individual offsets in the template and a pairwise Auto gap; neither matches Origin, and later versions may differ.
 
 ---
 
 ## 14. Text tick labels and column charts (P0, GP-COL-01)
 
-Use: sample names under the X axis (ICP-OES results per sample) with one or several elements drawn as bars side by side. Status: researched on 2026-11-12 with Origin 2016 runs through COM on our own synthetic data, plus exports and byte comparisons of copies of the owner's projects (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. Bar and label positions were measured on exported PNGs. Where the current online help **[W]** and Origin 2016 disagree, Origin 2016 decides.
+Use: sample names under the X axis (ICP-OES results per sample) with one or several elements drawn as bars side by side. Status: researched on 2026-11-12 with Origin runs through COM on our own synthetic data, plus exports and byte comparisons of copies of the owner's projects (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Bar and label positions were measured on exported PNGs. Where the current online help **[W]** and Origin disagree, Origin decides.
 
-### 14.1 What Origin 2016 does
+### 14.1 What Origin does
 
 **Plotting against a text X column**
 - A Y column whose X column holds text is drawn against the row number: row 1 at x = 1, row 2 at x = 2, and so on [W:quick-help/xcol-text-plotting]. This holds for line, scatter and column plots [COM].
@@ -1120,7 +1120,7 @@ Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t colu
 - Graph settings, X axis tab: "Tick labels: Automatic / Numbers / From column" with a column list, and "Rotation".
 - Plots tab: kind Column; for a layer with column plots, "Gap between bars %" and "Overlap %".
 
-### 14.10 Deliberate differences from Origin 2016
+### 14.10 Deliberate differences from Origin
 
 - An empty cell gives no label (Origin prints `--`). Missing numbers in a numeric label column show as the worksheet shows them.
 - One tick per row up to a span of 200; Origin keeps one per row further, up to its limit of about 400.
@@ -1134,7 +1134,7 @@ Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t colu
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.
-- Whether Origin 2016's tick label dialog offers the automatic 45/90-degree rotation of the current help; the hidden COM exports did not rotate.
+- Whether Origin's tick label dialog offers the automatic 45/90-degree rotation of the current help; the hidden COM exports did not rotate.
 - The exact row count where a 2016 text axis stops putting one tick per row (between 121 and 450).
 - Whether Origin reads escape sequences (`\+()`, `\g()`, ...) in text-from-dataset cells; Sheaf uses its markup for them like for every other label.
 - The error bar cap width on columns, and whether error bar ends widen the automatic Y range.
@@ -1145,11 +1145,11 @@ Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t colu
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
-Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin 2016's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin 2016 runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin 2016. Where the current online help **[W]** and Origin 2016 disagree, Origin 2016 decides.
+Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
 
 A multi-panel graph is one page with several layers, one per panel. Each panel has its own frame, axes, plots and legend. Panels that share an axis are linked layers, the model of ADR 0009 (section 12): no second link model is needed.
 
-### 15.1 What Origin 2016 does
+### 15.1 What Origin does
 
 **Pages** [COM]: the plain Line template and the panel templates (PAN2VERT, PAN2HORZ, PAN4, PAN9) have a landscape page of 10.72 x 8.205 in. The STACK template's page is 11.413 x 7.973 in, and the Stack command turns it upright (7.973 x 11.413 in). A merged graph gets a landscape page of 11.41 x 7.973 in.
 
@@ -1320,12 +1320,12 @@ sheaf plot xrd.csv --panels 2x2 -o grid.svg
 
 The `.opj` reader reads the layers of a panel graph as independent layers with the limits stored in the file, so the owner's panel graphs already draw at Origin's ranges without links (only the second layer of a double-Y graph is linked, by the rule of section 12.7). Where Origin stores `layer.link`, `x.link` and `y.link` was not found in the layer header (section 12.7 lists bytes that differ for the linked layer of a double-Y graph); reading panel links, and writing panel graphs, needs that first.
 
-### 15.9 Deliberate differences from Origin 2016
+### 15.9 Deliberate differences from Origin
 
 - Text keeps its size. Grids get a larger page (the template's page per cell) instead of Origin's text scale factor, and their gaps are the room the template leaves around its frame, not Merge Graph's 5 percent, which is too narrow for full-size labels.
 - At a joint without a gap, the lower panel leaves out its top Y label (and a panel with a neighbour on the right its right X label); Origin lets the labels touch.
 - At such a joint, X (or Y) ticks that would point into the neighbouring panel point into their own panel instead.
-- Touching panels of one group with the same title draw it once, centred on them. Origin 2016 has no single title option.
+- Touching panels of one group with the same title draw it once, centred on them. Origin has no single title option.
 - The top panel of a stack has no tick labels on its top axis; Sheaf cannot draw top or right tick labels on a normal axis yet.
 - Empty grid cells get no layer, as in Merge Graph; Origin's panel templates keep empty layers.
 - Grids with one column fill from the bottom (as PAN2VERT), grids with several columns from the top left (as PAN4 and PAN9); the order can be changed with `--panel-order`.
@@ -1341,7 +1341,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 
 ## 16. Free text labels (P0, GP-TXT-01)
 
-### 16.1 What Origin 2016 does
+### 16.1 What Origin does
 
 - A free text object has its text (with the escapes of section 7), a font, a size, a colour, a rotation and a place. Its attachment is *page*, *layer frame* or *layer and scales* (section 1.6).
 - It is made with the Text tool of the Tools toolbar (click on the page, type in a box on the graph) and with the page's right-click command "Add Text...". A double click on it opens its text and format settings; it is moved by dragging, removed with Delete [W:attachment-scaling-object]. [INF] The tool ends after one label.

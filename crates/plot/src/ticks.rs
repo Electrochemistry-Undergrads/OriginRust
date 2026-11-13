@@ -365,7 +365,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
 }
 
 /// The label of the major tick at `10^e` on a log axis. With the automatic format it is written as
-/// Origin 2016 writes it: as a plain number from 0.001 to 1000000, and as `1E7`, `1E−4` beyond
+/// Origin writes it: as a plain number from 0.001 to 1000000, and as `1E7`, `1E−4` beyond
 /// (graphing.md section 3.3). The scientific format gives `10` with a superscript exponent.
 fn log_label(e: i32, format: TickFormat) -> String {
     match format {
@@ -761,7 +761,7 @@ mod tests {
         let r = resolve_axis(&a, Some((3.0, 7000.0)));
         assert_eq!((r.min, r.max), (1.0, 10000.0));
         assert_eq!(r.major, vec![1.0, 10.0, 100.0, 1000.0, 10000.0]);
-        assert_eq!(r.labels, vec!["1", "10", "100", "1000", "10000"], "plain numbers, as Origin 2016 writes them");
+        assert_eq!(r.labels, vec!["1", "10", "100", "1000", "10000"], "plain numbers, as Origin writes them");
         assert_eq!(r.minor.len(), 4 * 8);
         assert!(close(r.to_unit(100.0), 0.5));
         assert!(close(r.from_unit(0.25), 10.0));

@@ -1,6 +1,6 @@
 //! Round-trip tests of the graph features that the file holds since spec section 13.12: stacked
 //! curve offsets, the right Y axis of a double-Y graph, bar gaps, axis sides and automatic axis
-//! colours. Origin 2016 showed each of them the way the model draws them (spec 13.12).
+//! colours. Origin showed each of them the way the model draws them (spec 13.12).
 
 use super::*;
 use crate::opj::frame::Frames;

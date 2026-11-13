@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Opens project files in a hidden Origin 2016 (through COM) and lists the folder tree with the
+  Opens project files in a hidden Origin (through COM) and lists the folder tree with the
   windows of each folder, and for every workbook sheet the column formulas and their recalculate
   mode, as Origin itself reports them. Used to check what the .opj writer stores for folders and
   "set column values" formulas (docs/spec/opj-format.md, sections 13.10 and 13.11).

@@ -1,6 +1,6 @@
 //! t-tests: one sample, two samples (pooled or Welch) and paired samples.
 //!
-//! The rules follow what Origin 2016 reports (`ttest1`, `ttest2`, `ttestpair`; see
+//! The rules follow what Origin reports (`ttest1`, `ttest2`, `ttestpair`; see
 //! `docs/spec/statistics.md`): the t statistic is `(estimate - hypothesized value) / standard error`,
 //! the p-value follows the chosen tail, and the confidence interval belongs to the estimate itself
 //! (the mean, the difference of the means, the mean of the pair differences). A one-sided test gives

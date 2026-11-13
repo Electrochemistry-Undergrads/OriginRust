@@ -1,4 +1,4 @@
-//! Writer of Origin project files (`.opj`, the format Origin 2016 / version 9.3 saves).
+//! Writer of Origin project files (`.opj`, the format Origin / version 9.3 saves).
 //!
 //! It writes the workbooks of a project: sheets, numeric and text columns with missing values,
 //! short and long names, units, comments and column roles, and the project tree with every window
@@ -47,7 +47,7 @@ pub struct OpjWrite {
     pub warnings: Vec<String>,
 }
 
-/// Writes `project` as an Origin 2016 project, named after the project's root folder.
+/// Writes `project` as an Origin project, named after the project's root folder.
 pub fn write(project: &Project) -> Result<OpjWrite, IoError> {
     write_named(project, &project.root.name, julian_day_now())
 }
@@ -259,7 +259,7 @@ impl Writer {
         let suffix = if index == 0 { String::new() } else { format!("@{}", index + 1) };
         let mut names: HashSet<String> = HashSet::new();
         let mut records = Vec::new();
-        // Origin 2016 opens a label column as unused when the sheet has no Y column, so write it so
+        // Origin opens a label column as unused when the sheet has no Y column, so write it so
         let has_y = sheet.columns.iter().any(|c| c.designation == Designation::Y);
         let roles: Vec<Designation> = sheet
             .columns
@@ -608,7 +608,7 @@ impl Writer {
         warnings.extend(n.graph_notes.iter().cloned());
         if n.lossy_texts > 0 {
             warnings.push(format!(
-                "{} text(s) had characters outside Windows-1252, which an Origin 2016 project cannot store; they were written as '?'.",
+                "{} text(s) had characters outside Windows-1252, which an Origin project cannot store; they were written as '?'.",
                 n.lossy_texts
             ));
         }

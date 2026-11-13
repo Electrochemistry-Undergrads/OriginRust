@@ -7,7 +7,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## Standing rules from the owner
 
-- **When unsure, copy Origin 2016:** measure it through `tools/origin-ref/` (or read its docs for
+- **When unsure, copy Origin:** measure it through `tools/origin-ref/` (or read its docs for
   behaviour) and copy it; record the measurement in the spec. Don't ask the owner what Origin can
   answer. Clean-room: copy behaviour and layout, never code, icons, help text or files.
 - **Subagents:** Sonnet for building, research, reviews; Haiku for running tests and checking outputs.
@@ -15,7 +15,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   commits or PRs; say so in every subagent prompt. (History was rewritten on 2026-11-12 to remove
   them; branches older than that must be rebased onto `main`, matching commits by tree.)
 - **Repository:** https://github.com/Electrochemistry-Undergrads/OriginRust (private). Nothing on the
-  owner's personal account (UlanS1).
+  owner's personal account.
 - **Two or more sessions** often share this repo. Claim work in `re-workspace/scratch/peer-notes.md`
   (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
   `git fetch`. See LESSONS "Two sessions on one repository need a written split".
@@ -29,8 +29,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1057 passed after the last code merge (`9e7ef2b`, per peer notes; not re-run since,
-  only docs changed). Parity table: 41 done, 109 partial, 80 missing of 230 rows; P0 31 / 70 / 0
+- Tests: 1081 passed on the merged T07 branch, which held all of `main` except the licence commit
+  (`7649990`, metadata only), 2026-11-12 night. Parity table: 41 done, 109 partial, 80 missing of 230 rows; P0 31 / 70 / 0
   (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
@@ -46,6 +46,11 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `export-margin` | 05b367c2 | Auto Apply in the analysis frame; export margin options | started |
 | `text-numeric` | 05b367c2 | Mixed text/number import kept as Origin's Text & Numeric | started |
 | (several) | `originrust-3a` | Matrices, contour plots, heatmaps | running |
+| `small-diffs` | "Rust prompt handoff" | T16 items 1, 4, 5 (Mann-Whitney print, Kendall/KS/Lilliefors p, histogram bins; crates/calc) | started 23:30 |
+
+Merged by "Rust prompt handoff" on 2026-11-12 night: T01 greyed menus with code (`a2fb77b`), T08 formula
+functions (`04a8a80`), T07 worksheet export as Origin's expASC (`826f390`), T17 doc fixes (`e209068`).
+See each brief's Status for what is left.
 
 Stale worktrees of merged branches (`merge-keys-nlfit`, `merge-pub-export`, `nlfit-steps`,
 `handoff-rule`, `origin-diff-4`, `worktree-agent-*`) can be removed by whoever merges next

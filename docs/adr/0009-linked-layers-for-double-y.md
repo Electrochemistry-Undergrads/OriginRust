@@ -8,11 +8,11 @@ The owner needs figures with two Y axes over one X axis (current and charge agai
 and coulombic efficiency against cycle number). Until now a Sheaf layer had one X and one Y axis,
 and a graph with several layers drew each layer on its own.
 
-Origin 2016 makes a double-Y graph from two layers on one page: the second layer is linked to the
+Origin makes a double-Y graph from two layers on one page: the second layer is linked to the
 first, covers exactly the first layer's frame, uses the first layer's X scale and has its own Y
 scale, shown on the right. The same mechanism gives its "add right Y layer" command, graphs with
 three or four Y axes, a top X axis with another scale, stacked panels that share X, and insets.
-Origin 2023 later added two Y scales inside one layer; Origin 2016 does not have that form.
+Origin 2023 later added two Y scales inside one layer; Origin does not have that form.
 Details are in docs/spec/graphing.md section 12.
 
 Two models were considered:
@@ -25,7 +25,7 @@ Two models were considered:
 
 ## Decision
 
-Sheaf uses linked layers (option 1), as Origin 2016 does.
+Sheaf uses linked layers (option 1), as Origin does.
 
 - `Layer.link: Option<LayerLink { parent, x, y }>` with `ScaleLink::None` or `Straight`.
   A link is valid only when the parent comes earlier and is not linked itself; an invalid link is
@@ -52,13 +52,13 @@ Sheaf uses linked layers (option 1), as Origin 2016 does.
 - The same mechanism will carry 3 and 4 Y axes, a top X axis with another scale (for example
   d-spacing over 2-theta on an XRD pattern, once custom links exist), stacked panels that share X
   and insets.
-- It matches what the owner knows from Origin 2016: layer icons 1 and 2, Layer Contents per layer,
+- It matches what the owner knows from Origin: layer icons 1 and 2, Layer Contents per layer,
   the Plot Details tree by layer, and the "add Right-Y layer" button.
 - The renderer and the geometry function work per group instead of per layer, and the desktop app
   will need an "active layer" for its dialogs. Until then its graph settings dialog edits the
   first layer only.
 - A legend that lists every layer is drawn after all layers, so later layers never cover it.
-- Differences from Origin 2016 that follow from this design (shared X range from all linked data,
+- Differences from Origin that follow from this design (shared X range from all linked data,
   colours that increment within each layer, one legend for the graph) are listed in graphing.md
   section 12.8.
 - Multi-panel graphs (graphing.md section 15, added later) use the same links: the panels of a

@@ -1,0 +1,17 @@
+Sheaf
+Copyright (c) 2026 Sheaf contributors
+
+Source: https://github.com/Electrochemistry-Undergrads/OriginRust
+
+This project is dual-licensed under the MIT License or the Apache License,
+Version 2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.
+
+Third-party dependencies and their bundled assets retain their own
+copyright, license, and attribution notices.
+
+The desktop application embeds default fonts through epaint_default_fonts.
+See ATTRIBUTION.md and third-party/egui-default-fonts/ for their copyright
+notices and separate license terms. Include these files in binary packages.
+
+Sheaf is an independent project and is not affiliated with, sponsored by,
+or endorsed by OriginLab.

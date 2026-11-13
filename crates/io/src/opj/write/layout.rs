@@ -1,19 +1,19 @@
 //! The byte layout of the blocks of a written project (spec section 13).
 //!
 //! Every block starts as zero bytes. The fields that are known or were observed in projects written
-//! by Origin 2016 are then filled in, either from a value that depends on the data (a name, a count)
+//! by Origin are then filled in, either from a value that depends on the data (a name, a count)
 //! or from a short table of constants whose meaning is not known. Offsets are into the block body.
 
 use super::super::strings::encode_cp1252;
 
-/// The first line of the file: the signature of Origin 2016, build counter included.
+/// The first line of the file: the signature of Origin, build counter included.
 pub(super) const SIGNATURE: &[u8] = b"CPYA 4.3168 226 W64 #\n";
 
-/// The Origin version stored in the header block (9.3 is Origin 2016).
+/// The Origin version stored in the header block (9.3 is Origin).
 const VERSION: f64 = 9.300_226;
 
 /// A field of constant bytes: offset and value. Meanings that are known are in the comments; the
-/// others were seen with these values in every project written by Origin 2016.
+/// others were seen with these values in every project written by Origin.
 pub(super) type Fields = &'static [(usize, &'static [u8])];
 
 pub(super) fn fill(buf: &mut [u8], fields: Fields) {

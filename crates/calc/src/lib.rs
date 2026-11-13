@@ -2,7 +2,7 @@
 //! interpolation, baseline subtraction, peak finding and descriptive statistics.
 //!
 //! Every tool is a plain function over `&[f64]` slices with an options struct and a result struct.
-//! Missing values are NaN. The behaviour follows what Origin 2016 computes for the same input; the
+//! Missing values are NaN. The behaviour follows what Origin computes for the same input; the
 //! rules are written down in `docs/spec/analysis-tools.md`, and the tests compare against numbers
 //! taken from Origin (see `tools/origin-ref/`).
 //!

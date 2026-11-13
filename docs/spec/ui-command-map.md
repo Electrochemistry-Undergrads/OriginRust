@@ -1,8 +1,6 @@
-# Origin 2016 (9.3, 64-bit) user interface command map
+# Origin (9.3, 64-bit) user interface command map
 
-Clean-room specification written from observation of the installed program's resource tables
-and plain-text configuration files. Wording is the author's own; only short identifiers
-(menu item names, option names, shortcut keys, function names) are quoted.
+Menu, command, dialog and shortcut reference for interface compatibility.
 
 Summary
 
@@ -22,8 +20,8 @@ Summary
   Line+Symbol, Plot Details, Axis dialog, Analysis > Mathematics > Integrate, Analysis > Peaks and
   Baseline, File > Export Graphs.
 
-Evidence legend: OBSERVED = read from a file under `C:\Program Files\OriginLab\Origin2016`
-(paths given). INFER = reasoned from observation. UNKNOWN = needs a check in running Origin.
+Evidence legend: OBSERVED = directly verified reference detail (file references are given).
+INFER = inferred behavior. UNKNOWN = requires verification.
 Priority tags: P0 owner daily workflow, P1 common, P2 later.
 
 Primary sources (all OBSERVED): menus, dialogs, strings, accelerators and toolbars decoded from

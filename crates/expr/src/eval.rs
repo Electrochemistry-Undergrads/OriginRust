@@ -8,7 +8,8 @@
 
 use crate::ast::{ColumnRef, Expr, Kind, Node, UnOp};
 use crate::error::ExprError;
-use crate::funcs::{self, Agg, BinOp, F1, F2, Func, NA, apply_bin, max2, min2, truthy};
+use crate::funcs::{self, Agg, BinOp, F1, F2, FnN, Func, NA, VecFn, apply_bin, max2, min2, truthy};
+use std::cell::{Cell, OnceCell};
 
 /// Where an expression gets the values of variables and worksheet cells.
 ///
@@ -49,6 +50,13 @@ pub trait Host {
             n += 1;
         }
         n
+    }
+
+    /// The current date and time as a date number (days since the Julian epoch, 2440587 is
+    /// 1970-01-01), for `now()` and `today()`. The default is the system clock in UTC; a host that
+    /// knows the local time zone should override it.
+    fn now(&self) -> f64 {
+        funcs::system_now()
     }
 
     /// The 0-based row that [`Expr::eval`] evaluates. The variable `i` is this row plus one.
@@ -180,6 +188,26 @@ impl Col<'_> {
     }
 }
 
+impl Col<'_> {
+    fn len(&self, host: &dyn Host) -> usize {
+        match self {
+            Col::Slice(s) => s.len(),
+            Col::Cell(r) => host.column_len(r),
+        }
+    }
+
+    /// Rows `lo..=hi` (1-based, already clamped) as a vector.
+    fn rows(&self, host: &dyn Host, lo: usize, hi: usize) -> Vec<f64> {
+        if lo > hi {
+            return Vec::new();
+        }
+        match self {
+            Col::Slice(s) => s[lo - 1..hi].to_vec(),
+            Col::Cell(r) => (lo - 1..hi).map(|k| host.cell(r, k).unwrap_or(NA)).collect(),
+        }
+    }
+}
+
 enum C<'h> {
     Num(f64),
     Row,
@@ -191,7 +219,26 @@ enum C<'h> {
     U(F1, Box<C<'h>>),
     B(F2, Box<C<'h>>, Box<C<'h>>),
     MinMax(bool, Vec<C<'h>>),
-    Agg { kind: Agg, col: Col<'h>, range: Option<(Box<C<'h>>, Box<C<'h>>)> },
+    Agg {
+        kind: Agg,
+        col: Col<'h>,
+        range: Option<(Box<C<'h>>, Box<C<'h>>)>,
+    },
+    /// Column-in, column-out; `cache` holds the whole result when nothing depends on the row.
+    Vector {
+        kind: VecFn,
+        col: Col<'h>,
+        range: Option<(Box<C<'h>>, Box<C<'h>>)>,
+        arg: Option<Box<C<'h>>>,
+        cache: OnceCell<Vec<f64>>,
+    },
+    N(FnN, Vec<C<'h>>),
+    Rand {
+        gauss: bool,
+        state: Cell<u64>,
+    },
+    Lookup(Box<C<'h>>, Col<'h>, Col<'h>),
+    CellAt(Box<C<'h>>, Box<C<'h>>),
 }
 
 /// An expression bound to a host: variables and columns are resolved, ready to run row by row.
@@ -215,7 +262,14 @@ impl Expr {
     /// Resolves variables and columns against `host` and returns a form that is fast to
     /// evaluate repeatedly. Fails if a variable or column is unknown.
     pub fn compile<'h>(&self, host: &'h dyn Host) -> Result<Compiled<'h>, ExprError> {
-        Ok(Compiled { host, root: build(host, &self.root)? })
+        self.compile_seeded(host, funcs::system_seed())
+    }
+
+    /// Like [`compile`](Expr::compile), with the seed of the random numbers (`rnd()`, `grnd()`)
+    /// fixed, so that the same seed gives the same numbers.
+    pub fn compile_seeded<'h>(&self, host: &'h dyn Host, seed: u64) -> Result<Compiled<'h>, ExprError> {
+        let seeds = Cell::new(seed);
+        Ok(Compiled { host, root: build(host, &seeds, &self.root)? })
     }
 
     /// Evaluates the expression once, at the host's [`row`](Host::row).
@@ -231,6 +285,12 @@ impl Expr {
     /// per-row allocation.
     pub fn eval_rows(&self, host: &dyn Host, n: usize) -> Result<Vec<f64>, ExprError> {
         let c = self.compile(host)?;
+        Ok((0..n).map(|r| c.eval_row(r)).collect())
+    }
+
+    /// [`eval_rows`](Expr::eval_rows) with a fixed seed for `rnd()` and `grnd()`.
+    pub fn eval_rows_seeded(&self, host: &dyn Host, n: usize, seed: u64) -> Result<Vec<f64>, ExprError> {
+        let c = self.compile_seeded(host, seed)?;
         Ok((0..n).map(|r| c.eval_row(r)).collect())
     }
 }
@@ -257,12 +317,12 @@ pub(crate) fn grow_stack<R>(f: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(64 * 1024, 1024 * 1024, f)
 }
 
-fn build<'h>(host: &'h dyn Host, n: &Node) -> Result<C<'h>, ExprError> {
-    grow_stack(|| build_inner(host, n))
+fn build<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<'h>, ExprError> {
+    grow_stack(|| build_inner(host, seeds, n))
 }
 
-fn build_inner<'h>(host: &'h dyn Host, n: &Node) -> Result<C<'h>, ExprError> {
-    let b = |n: &Node| build(host, n).map(Box::new);
+fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<'h>, ExprError> {
+    let b = |n: &Node| build(host, seeds, n).map(Box::new);
     let c = match &n.kind {
         Kind::Num(v) => C::Num(*v),
         Kind::Var { name, pos } => match host.variable(name) {
@@ -285,7 +345,7 @@ fn build_inner<'h>(host: &'h dyn Host, n: &Node) -> Result<C<'h>, ExprError> {
             Func::U(f) => C::U(f, b(&args[0])?),
             Func::B(f) => C::B(f, b(&args[0])?, b(&args[1])?),
             Func::MinMax { max } => {
-                let list = args.iter().map(|a| build(host, a)).collect::<Result<Vec<_>, _>>()?;
+                let list = args.iter().map(|a| build(host, seeds, a)).collect::<Result<Vec<_>, _>>()?;
                 if list.len() == 1 {
                     // A single scalar argument: min(x) is just x.
                     list.into_iter().next().unwrap_or(C::Num(NA))
@@ -295,6 +355,24 @@ fn build_inner<'h>(host: &'h dyn Host, n: &Node) -> Result<C<'h>, ExprError> {
             }
             Func::IfElse => C::Cond(b(&args[0])?, b(&args[1])?, b(&args[2])?),
             Func::Na => C::Num(NA),
+            Func::N(f, _) => C::N(f, args.iter().map(|a| build(host, seeds, a)).collect::<Result<Vec<_>, _>>()?),
+            Func::Clock { date_only } => {
+                let now = host.now();
+                C::Num(if date_only { now.floor() } else { now })
+            }
+            Func::Rand { gauss } => C::Rand { gauss, state: Cell::new(funcs::next_u64(seeds)) },
+            Func::Lookup => C::Lookup(b(&args[0])?, build_col(host, &args[1])?, build_col(host, &args[2])?),
+            Func::Cell => C::CellAt(b(&args[0])?, b(&args[1])?),
+            Func::Vec(kind) => {
+                let arg = args.get(1).map(b).transpose()?;
+                let cache = OnceCell::new();
+                match &args[0].kind {
+                    Kind::Range { base, from, to, .. } => {
+                        C::Vector { kind, col: build_col(host, base)?, range: Some((b(from)?, b(to)?)), arg, cache }
+                    }
+                    _ => C::Vector { kind, col: build_col(host, &args[0])?, range: None, arg, cache },
+                }
+            }
             Func::Agg(kind) => match &args[0].kind {
                 Kind::Range { base, from, to, .. } => {
                     C::Agg { kind, col: build_col(host, base)?, range: Some((b(from)?, b(to)?)) }
@@ -313,6 +391,7 @@ fn fold<'h>(host: &'h dyn Host, c: C<'h>) -> C<'h> {
         C::Bin(_, a, b) | C::B(_, a, b) => matches!((&**a, &**b), (C::Num(_), C::Num(_))),
         C::Agg { range: None, .. } => true,
         C::Agg { range: Some((a, b)), .. } => matches!((&**a, &**b), (C::Num(_), C::Num(_))),
+        C::N(_, a) => a.iter().all(|x| matches!(x, C::Num(_))),
         _ => false,
     };
     if constant { C::Num(ev(host, &c, 0)) } else { c }
@@ -367,11 +446,61 @@ fn ev_inner(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
             let first = it.next().unwrap_or(NA);
             if *max { it.fold(first, max2) } else { it.fold(first, min2) }
         }
-        C::Agg { kind, col, range } => {
-            let len = match col {
-                Col::Slice(s) => s.len(),
-                Col::Cell(r) => host.column_len(r),
+        C::N(f, args) => {
+            let mut buf = [0.0; 4];
+            for (slot, a) in buf.iter_mut().zip(args) {
+                *slot = ev(host, a, row);
+            }
+            f(&buf[..args.len().min(4)])
+        }
+        C::Rand { gauss, state } => {
+            if *gauss {
+                funcs::normal(state)
+            } else {
+                funcs::uniform(state)
+            }
+        }
+        C::Lookup(x, vx, vy) => {
+            let x = ev(host, x, row);
+            if x.is_nan() {
+                return NA;
+            }
+            // First exact match wins; no match gives missing.
+            (0..vx.len(host)).find(|&k| vx.get(host, k) == x).map_or(NA, |k| vy.get(host, k))
+        }
+        C::CellAt(r, c) => {
+            let (r, c) = (ev(host, r, row).round(), ev(host, c, row).round());
+            if !(r.is_finite() && c.is_finite()) || r < 1.0 || c < 1.0 || r > 4.0e15 || c > 1.0e9 {
+                return NA;
+            }
+            host.cell(&ColumnRef::Index(c as usize), r as usize - 1).unwrap_or(NA)
+        }
+        C::Vector { kind, col, range, arg, cache } => {
+            let nv = arg.as_ref().map_or(0.0, |a| ev(host, a, row));
+            let fixed = range.as_ref().is_none_or(|(a, b)| matches!((&**a, &**b), (C::Num(_), C::Num(_))))
+                && arg.as_ref().is_none_or(|a| matches!(**a, C::Num(_)));
+            let compute = || {
+                let len = col.len(host);
+                let (lo, hi) = match range {
+                    None => (1, len),
+                    Some((a, b)) => {
+                        let (a, b) = (ev(host, a, row), ev(host, b, row));
+                        if a.is_nan() || b.is_nan() {
+                            return Vec::new();
+                        }
+                        (a.round().clamp(1.0, 4.0e15) as usize, b.round().clamp(0.0, len as f64) as usize)
+                    }
+                };
+                funcs::vec_fn(*kind, &col.rows(host, lo, hi), nv)
             };
+            if fixed {
+                cache.get_or_init(compute).get(row).copied().unwrap_or(NA)
+            } else {
+                compute().get(row).copied().unwrap_or(NA)
+            }
+        }
+        C::Agg { kind, col, range } => {
+            let len = col.len(host);
             let (lo, hi) = match range {
                 None => (1, len),
                 Some((a, b)) => {

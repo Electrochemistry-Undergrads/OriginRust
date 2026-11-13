@@ -163,6 +163,13 @@ impl BookUi {
         }
     }
 
+    /// Edit > Go to: selects one cell and scrolls it into view.
+    pub fn go_to(&mut self, sheet: &Worksheet, column: usize, row: usize) {
+        self.select_cells(sheet, (column, row), (column, row));
+        self.reveal = 4;
+        self.focus_grid = true;
+    }
+
     /// Selects a block of cells and records which columns it touches.
     pub fn select_cells(&mut self, sheet: &Worksheet, anchor: (usize, usize), end: (usize, usize)) {
         self.sel = Sel::Cells { anchor, end };

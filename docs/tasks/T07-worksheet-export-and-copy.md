@@ -1,6 +1,6 @@
 # T07: Worksheet export and clipboard as Origin
 
-**Status:** open. **Size:** S. **Branch:** `sheet-export`. **Model:** Sonnet.
+**Status:** done, merged (`826f390`) (export measured and matched, export window added; clipboard left as is, see below). **Size:** S. **Branch:** `sheet-export`. **Model:** Sonnet.
 **Detail:** audit E "Different" (export paragraph) and "Partial" (clipboard).
 **Spec:** `docs/spec/import-ascii.md` (export, search "expASC"), `docs/spec/workbook-model.md`.
 
@@ -36,3 +36,13 @@
 
 Export of the probe sheet equals Origin's file byte for byte (except line endings if Origin differs
 by OS); checks pass.
+
+## Result (branch `sheet-export`)
+
+Origin's `expASC` defaults are in `docs/spec/import-ascii.md` section 13.1 (raw files in
+`re-workspace/scratch/sheet-export/`). Export now writes `--` for missing values, 15-digit full precision
+(`format_full_precision` in `crates/core/src/format.rs`), CR LF lines, Origin's label-row order, quoting
+and separators; the File > Export Worksheet window (`dialogs/export_sheet.rs`) sets the options. Not done:
+Copy (clipboard) still writes the shortest round-trip text for "full precision" (kept so a paste reads back
+the same bits) and its label rows are unchanged, because Origin's own Copy was not measured; the `.csv`
+whole-book export and Origin's `select`/`addxcol` options are not implemented.

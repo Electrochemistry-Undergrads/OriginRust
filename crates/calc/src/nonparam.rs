@@ -1,7 +1,7 @@
 //! Rank-based tests: Mann-Whitney (two independent samples), Wilcoxon signed rank (one sample or pairs) and
 //! Kruskal-Wallis (several samples).
 //!
-//! The rules follow what Origin 2016 reports for `mwtest`, `signrank1`, `signrank2` and `kwanova` (see
+//! The rules follow what Origin reports for `mwtest`, `signrank1`, `signrank2` and `kwanova` (see
 //! `docs/spec/statistics.md`): ties get the mean of the ranks they span, the asymptotic p-values use the
 //! tie-corrected variance and a continuity correction of 0.5, and the exact p-values are the permutation
 //! distribution of the rank sum with those mean ranks.
@@ -51,7 +51,7 @@ fn tie_term(ties: &[usize]) -> f64 {
 /// reported alone.
 const EXACT_WORK_LIMIT: f64 = 4.0e8;
 
-/// The Origin 2016 signed rank test reports exact p-values up to this many (non-zero) differences.
+/// The Origin signed rank test reports exact p-values up to this many (non-zero) differences.
 pub const SIGNED_RANK_EXACT_MAX_N: usize = 80;
 
 /// Counts of the subsets of size `k` of the doubled ranks by their sum: `counts[s]` is the number of

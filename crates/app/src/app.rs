@@ -2,11 +2,13 @@
 //! workbook and graph child windows, dialogs, and the one place where user actions change the
 //! project.
 
-use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, LabelRow, SheetOp};
+use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp};
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
+use crate::dialogs::export_sheet::SheetExportDialog;
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
+use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
@@ -61,6 +63,8 @@ const MAX_TABS_AT_ONCE: usize = 8;
 struct RenameDialog {
     window: WindowId,
     long_name: String,
+    /// Set when a folder is renamed instead of a window: its path.
+    folder: Option<Vec<usize>>,
 }
 
 /// The window that asks for a new name of a sheet.
@@ -91,7 +95,9 @@ pub struct SheafApp {
     fit: Option<FitDialog>,
     filter: Option<FilterDialog>,
     export: Option<ExportDialog>,
+    export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
+    go_to: Option<GoToDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
@@ -144,7 +150,9 @@ impl SheafApp {
             fit: None,
             filter: None,
             export: None,
+            export_sheet: None,
             rename: None,
+            go_to: None,
             sheet_name: None,
             copied: String::new(),
             copied_page: None,
@@ -252,7 +260,9 @@ impl SheafApp {
         self.column_props = None;
         self.set_values = None;
         self.export = None;
+        self.export_sheet = None;
         self.rename = None;
+        self.go_to = None;
         self.sheet_name = None;
         self.import = None;
         self.import_wizard = None;
@@ -605,23 +615,11 @@ impl SheafApp {
                 self.save(true);
             }
             Action::Import(path) => {
-                let files = match path {
-                    Some(p) => Some(vec![p]),
-                    None => {
-                        let mut chooser = rfd::FileDialog::new()
-                            .set_title("Import data files")
-                            .add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn", "bin"])
-                            .add_filter("All files", &["*"]);
-                        if let Some(dir) = self.folder() {
-                            chooser = chooser.set_directory(dir);
-                        }
-                        chooser.pick_files()
-                    }
-                };
-                if let Some(files) = files {
-                    self.import = Some(ImportDialog::new(files));
-                }
+                let pick = if path.is_some() { ImportPick::Single } else { ImportPick::Multiple };
+                self.start_import(path.map(|p| vec![p]), pick);
             }
+            Action::ImportPick(pick) => self.start_import(None, pick),
+            Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -844,6 +842,37 @@ impl SheafApp {
                     self.panels.explorer.folder = selected;
                 }
             }
+            Action::RenameFolder(path) => {
+                if let Some(f) = explorer::folder_at(&self.doc.project().root, &path).filter(|_| !path.is_empty()) {
+                    self.rename =
+                        Some(RenameDialog { window: WindowId(0), long_name: f.name.clone(), folder: Some(path) });
+                }
+            }
+            Action::DeleteFolder(path) => {
+                if !path.is_empty()
+                    && let Some(f) = explorer::folder_at(&self.doc.project().root, &path)
+                {
+                    let windows = explorer::subtree_windows(f);
+                    let (last, parent) = path.split_last().expect("the path is not empty");
+                    let (last, parent) = (*last, parent.to_vec());
+                    self.doc.apply("Delete folder", |p| {
+                        for id in windows {
+                            let columns: Vec<ColumnId> = p
+                                .workbook(id)
+                                .map(|b| b.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect())
+                                .unwrap_or_default();
+                            delete_columns(p, &columns);
+                            p.remove_window(id);
+                        }
+                        if let Some(f) = explorer::folder_at_mut(&mut p.root, &parent)
+                            && last < f.folders.len()
+                        {
+                            f.folders.remove(last);
+                        }
+                    });
+                    self.panels.explorer.folder = parent;
+                }
+            }
             Action::SetPlotVisible { graph, layer, plot, visible } => {
                 let label = if visible { "Show plot" } else { "Hide plot" };
                 self.doc.apply(label, |p| objects::set_plot_visible(p, graph, layer, plot, visible));
@@ -881,7 +910,7 @@ impl SheafApp {
                         Window::Workbook(b) => b.long_name.clone(),
                         Window::Graph(g) => g.long_name.clone(),
                     };
-                    self.rename = Some(RenameDialog { window: id, long_name });
+                    self.rename = Some(RenameDialog { window: id, long_name, folder: None });
                 }
             }
             Action::Cascade => self.workspace.cascade(),
@@ -1299,36 +1328,8 @@ impl SheafApp {
     }
 
     fn export_data(&mut self, book: WindowId) {
-        let Some(b) = self.doc.project().workbook(book) else {
-            return;
-        };
-        let sheet = b.sheet();
-        let mut chooser = rfd::FileDialog::new()
-            .set_title("Export worksheet")
-            .add_filter("Comma-separated", &["csv"])
-            .add_filter("Tab-separated", &["tsv", "txt"])
-            .set_file_name(format!("{}.csv", if b.long_name.is_empty() { &b.name } else { &b.long_name }));
-        if let Some(dir) = self.folder() {
-            chooser = chooser.set_directory(dir);
-        }
-        let Some(path) = chooser.save_file() else {
-            return;
-        };
-        let tabs = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| e.eq_ignore_ascii_case("tsv") || e.eq_ignore_ascii_case("txt"));
-        let opts = sheaf_io::export::AsciiExportOptions {
-            delimiter: if tabs { '\t' } else { ',' },
-            ..sheaf_io::export::AsciiExportOptions::default()
-        };
-        let result = std::fs::File::create(&path).map_err(|e| e.to_string()).and_then(|file| {
-            let mut out = std::io::BufWriter::new(file);
-            sheaf_io::export::write_delimited(sheet, &mut out, &opts).map_err(|e| e.to_string())
-        });
-        match result {
-            Ok(()) => self.say(format!("Wrote {}", path.display())),
-            Err(e) => self.message = Some(("Could not export the worksheet".to_string(), e)),
+        if self.doc.project().workbook(book).is_some() {
+            self.export_sheet = Some(SheetExportDialog::new(book, self.folder()));
         }
     }
 
@@ -1401,9 +1402,14 @@ impl SheafApp {
             }
             ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
         }
+        // F2, Delete and Ctrl+A belong to the Project Explorer while it has the keyboard.
+        if !typing && !self.dialog_open() {
+            explorer::handle_keys(ctx, &mut self.panels.explorer, self.doc.project(), actions);
+        }
         // The cursor keys, Tab, Enter and typing belong to the cells of the active worksheet,
         // unless a text field, a menu or a dialog has the keyboard.
         if !typing
+            && !self.panels.explorer.focus
             && !egui::Popup::is_any_open(ctx)
             && !self.dialog_open()
             && let Some(book) = self.active.filter(|id| self.doc.project().workbook(*id).is_some())
@@ -1433,8 +1439,15 @@ impl SheafApp {
                 if typing && !menus::works_while_typing(&cmd) {
                     continue;
                 }
+                // Ctrl+G is Go to in a workbook and Export Graphs in a graph: a key goes to the
+                // command that can run now.
+                let shared = matches!(cmd, menus::Cmd::GoToCell | menus::Cmd::ExportGraph);
+                let action = menus::resolve(&cmd, &menu_ctx);
+                if shared && action.is_err() {
+                    continue;
+                }
                 if i.consume_shortcut(&keys)
-                    && let Ok(action) = menus::resolve(&cmd, &menu_ctx)
+                    && let Ok(action) = action
                 {
                     actions.push(action);
                 }
@@ -1454,7 +1467,9 @@ impl SheafApp {
             || self.fit.is_some()
             || self.filter.is_some()
             || self.export.is_some()
+            || self.export_sheet.is_some()
             || self.rename.is_some()
+            || self.go_to.is_some()
             || self.sheet_name.is_some()
             || self.about
             || self.message.is_some()
@@ -1481,9 +1496,21 @@ impl SheafApp {
         match self.active.and_then(|id| project.window(id)) {
             Some(Window::Workbook(b)) => {
                 let sheet = b.sheets.get(b.active_sheet).map(|s| s.name.as_str()).unwrap_or_default();
-                format!("[{}]{sheet}!", b.name)
+                let part = b
+                    .sheets
+                    .get(b.active_sheet)
+                    .and_then(|s| Some((s, self.books.get(&b.id)?.target(s)?)))
+                    .map(|(s, t)| {
+                        let name = |i: usize| s.columns.get(i).map(|c| c.short_name.clone()).unwrap_or_default();
+                        let (first, last) =
+                            (t.columns.first().copied().unwrap_or(0), t.columns.last().copied().unwrap_or(0));
+                        let cols = if first == last { name(first) } else { format!("{}:{}", name(first), name(last)) };
+                        if t.rows.is_empty() { cols } else { format!("{cols}[{}:{}]", t.rows.start + 1, t.rows.end) }
+                    })
+                    .unwrap_or_default();
+                format!("1: [{}]{sheet}!{part}", b.name)
             }
-            Some(Window::Graph(g)) => format!("[{}]1!", g.name),
+            Some(Window::Graph(g)) => format!("1: [{}]1!", g.name),
             None => String::new(),
         }
     }
@@ -1517,6 +1544,30 @@ impl SheafApp {
                 ui.add(egui::Label::new(hint.as_deref().unwrap_or(&self.status)).truncate());
             });
         });
+    }
+
+    /// Opens the import dialog on `files`, or on what the user picks when there are none.
+    fn start_import(&mut self, files: Option<Vec<PathBuf>>, pick: ImportPick) {
+        let files = files.or_else(|| {
+            let mut chooser = rfd::FileDialog::new()
+                .set_title("Import data files")
+                .add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn", "bin"])
+                .add_filter("All files", &["*"]);
+            if let Some(dir) = self.folder() {
+                chooser = chooser.set_directory(dir);
+            }
+            match pick {
+                ImportPick::Single => chooser.pick_file().map(|f| vec![f]),
+                ImportPick::Multiple | ImportPick::Csv => chooser.pick_files(),
+            }
+        });
+        if let Some(files) = files {
+            let mut dialog = ImportDialog::new(files);
+            if pick == ImportPick::Csv {
+                dialog.preset_comma();
+            }
+            self.import = Some(dialog);
+        }
     }
 
     fn welcome(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -1653,24 +1704,69 @@ impl SheafApp {
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the graph".to_string(), e)),
             }
         }
+        if let Some(d) = &mut self.export_sheet {
+            match d.show(ctx, &self.doc) {
+                ExportOutcome::Open => {}
+                ExportOutcome::Closed => self.export_sheet = None,
+                ExportOutcome::Saved(path) => {
+                    self.say(format!("Wrote {}", path.display()));
+                    self.export_sheet = None;
+                }
+                ExportOutcome::Failed(e) => self.message = Some(("Could not export the worksheet".to_string(), e)),
+            }
+        }
+        if let Some(d) = &mut self.go_to {
+            let book = d.book;
+            let sheet = self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet));
+            let outcome = match sheet {
+                Some(sheet) => d.show(ctx, sheet),
+                None => GoToOutcome::Closed,
+            };
+            match outcome {
+                GoToOutcome::Open => {}
+                GoToOutcome::Closed => self.go_to = None,
+                GoToOutcome::Go { column, row } => {
+                    if let (Some(sheet), Some(state)) = (
+                        self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
+                        self.books.get_mut(&book),
+                    ) {
+                        state.go_to(sheet, column, row);
+                    }
+                    self.go_to = None;
+                }
+            }
+        }
         if let Some(d) = &mut self.rename {
             let mut open = true;
             let mut done = false;
-            egui::Window::new("Rename window").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+            let (title, label) =
+                if d.folder.is_some() { ("Rename folder", "Name") } else { ("Rename window", "Title") };
+            egui::Window::new(title).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Title");
+                    ui.label(label);
                     ui.add(egui::TextEdit::singleline(&mut d.long_name).desired_width(260.0));
                 });
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
                         let (id, name) = (d.window, d.long_name.clone());
-                        self.doc.apply("Rename window", move |p| {
-                            if let Some(b) = p.workbook_mut(id) {
-                                b.long_name = name;
-                            } else if let Some(g) = p.graph_mut(id) {
-                                g.long_name = name;
+                        if let Some(path) = d.folder.clone() {
+                            let name = name.trim().to_string();
+                            if !name.is_empty() {
+                                self.doc.apply("Rename folder", move |p| {
+                                    if let Some(f) = explorer::folder_at_mut(&mut p.root, &path) {
+                                        f.name = name;
+                                    }
+                                });
                             }
-                        });
+                        } else {
+                            self.doc.apply("Rename window", move |p| {
+                                if let Some(b) = p.workbook_mut(id) {
+                                    b.long_name = name;
+                                } else if let Some(g) = p.graph_mut(id) {
+                                    g.long_name = name;
+                                }
+                            });
+                        }
                         done = true;
                     }
                     if ui.button("Cancel").clicked() {
@@ -2162,18 +2258,30 @@ impl eframe::App for SheafApp {
             Some(_) => {}
         }
 
-        let name = self
-            .path
-            .as_ref()
-            .and_then(|p| p.file_stem())
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "Untitled".to_string());
-        let title = format!("{name}{} - {APP_NAME}", if self.doc.dirty { "*" } else { "" });
+        let title = main_title(
+            self.path.as_deref(),
+            self.doc.dirty,
+            self.active
+                .filter(|id| self.workspace.mode(*id) == Some(crate::workspace::Mode::Maximised))
+                .and_then(|id| self.doc.project().window(id))
+                .map(|w| w.title()),
+        );
         if title != self.shown_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.shown_title = title;
         }
         self.screenshot_step(ctx);
+    }
+}
+
+/// The title of the main window as Origin writes it: `<App> - <path> *`, and `- [Window]` when
+/// a child window is maximised. The star marks unsaved changes.
+fn main_title(path: Option<&Path>, dirty: bool, maximised: Option<String>) -> String {
+    let star = if dirty { " *" } else { "" };
+    let path = path.map_or_else(|| "UNTITLED".to_string(), |p| p.display().to_string());
+    match maximised {
+        Some(w) => format!("{APP_NAME} - {path}{star} - [{w}{star}]"),
+        None => format!("{APP_NAME} - {path}{star}"),
     }
 }
 

@@ -5,13 +5,12 @@ window. Description of the target look: `docs/spec/gui-look.md`.
 
 ## Context
 
-The owner wants Sheaf to look and work like Origin 2016 so that their skills carry over. The
-study (pictures in the git-ignored scratch folder, text in `gui-look.md`) shows an MDI program: one
-main window with menus, toolbars, auto-hide panels and a grey workspace in which workbooks and
-graphs are floating child windows. Sheaf today uses `egui_dock` tabs, one menu bar for everything
-and a permanent project list (ADR 0003).
+Sheaf needs a familiar scientific desktop workflow: one main window with menus, toolbars,
+auto-hide panels and a grey workspace containing floating workbooks and graphs. This replaces
+`egui_dock` tabs, a single menu bar and a permanent project list (ADR 0003). Interface details
+are specified in `gui-look.md`.
 
-Constraints: clean room (no OriginLab icons, bitmaps, help text or templates); egui 0.33; the
+Constraints: egui 0.33; vector-drawn interface icons; the
 document model in `crates/core` and the logic crates must not change for look-and-feel work; the
 app must stay testable with `egui_kittest` and `--screenshot`.
 
@@ -69,7 +68,7 @@ app must stay testable with `egui_kittest` and `--screenshot`.
    right and, for the large ones, a "?" button.
 9. **Saving as .opj.** The owner also wants exported projects to be `.opj`. That is not a look
    change and is separate: a writer in `crates/io/src/opj/` built from `docs/spec/opj-format.md`
-   and checked by reading the result back with our reader and by opening it in Origin 2016 through
+   and checked by reading the result back with our reader and by opening it in Origin through
    COM and comparing cells. The owner decided (2026-11-11) that `.opj` is the default format of
    File > Save Project, Save Project As and the command line's `--save`. While the writer cannot
    store everything a project holds (formulas, folders, some graph details), saving also writes a `.sheaf` copy next to
@@ -78,10 +77,9 @@ app must stay testable with `egui_kittest` and `--screenshot`.
 
 ## What stays different, and why
 
-- **Icons and artwork** are ours. They will be recognisable by meaning and position, not equal in
-  pixels. OriginLab's icons are copyrighted and the ground rules forbid them.
-- **Text**: menu and dialog names are used (short names are allowed); help text, sample data and
-  templates are not.
+- **Icons and artwork** use simple vector shapes drawn with `egui::Painter`.
+- **Text** uses concise menu and dialog labels. Help text, sample data and templates remain
+  outside the scope of this interface change.
 - **Features Sheaf lacks** appear as greyed items so the layout matches. "All of Origin's
   features" cannot be reached in this project: Origin has hundreds (3D graphs, Origin C, LabTalk,
   Apps, matrix and image tools, database access). `feature-inventory.md` sets the real scope with
@@ -103,8 +101,8 @@ app must stay testable with `egui_kittest` and `--screenshot`.
    and menus change, so tests are updated in the same commit as each UI step.
 4. **Scope creep.** Origin's toolbars have hundreds of buttons. Only buttons for existing
    features are enabled; no feature is added just to fill a button without a spec.
-5. **Clean room.** Pictures are used for layout notes only; no pixel is traced. Icons are drawn
-   from scratch. Measured colours are approximate.
+5. **Visual consistency.** Icons use vector geometry. Colours and control measurements are
+   approximate and should be checked at the supported display scales.
 6. **.opj writing** is the largest risk: the format is only partly specified, Origin may reject
    deviating files, and a bad file can lose data. The first writer writes only what was verified by
    reading it back in Origin, warns about anything dropped and never overwrites an existing file

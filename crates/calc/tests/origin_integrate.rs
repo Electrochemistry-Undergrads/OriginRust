@@ -1,4 +1,4 @@
-//! Integration against numbers from Origin 2016 (`integ1`).
+//! Integration against numbers from Origin (`integ1`).
 //!
 //! Reference scripts: `tools/origin-ref/integ-suite1.labtalk.txt` .. `integ-suite5.labtalk.txt`
 //! (run with `run-labtalk-data.ps1`). Every input below is the closed-form column of the script.

@@ -220,7 +220,7 @@ impl Host for PointHost<'_> {
     }
 }
 
-/// Settings of a fit. The defaults are Origin 2016's: tolerance 1e-9, at most 400 iterations,
+/// Settings of a fit. The defaults are Origin's: tolerance 1e-9, at most 400 iterations,
 /// 95 % confidence limits, errors scaled by the reduced chi-square (also with instrumental weights).
 #[derive(Debug, Clone)]
 pub struct FitOptions {
@@ -849,7 +849,7 @@ mod tests {
 
     #[test]
     fn statistical_weights_on_negative_y_match_origin() {
-        // Origin 2016, nlfit ExpDec1 with statistical weights on this data (script
+        // Origin, nlfit ExpDec1 with statistical weights on this data (script
         // tools/origin-ref/nlfit-negative-stat.lines.txt): the fit of the negated data gives the
         // negated parameters of the fit of the positive data, t1 unchanged.
         let t: Vec<f64> = (1..=30).map(|i| 0.3 * i as f64).collect();

@@ -3,12 +3,12 @@
 Status: written while building `crates/io/src/opj/`. Covers what the reader needs: workbooks,
 sheets, columns and their values (checked cell by cell against Origin, section 12) and basic graphs
 (section 10). Matrices and notes are only sketched. Section 13 describes what the writer does and
-what Origin 2016 needed to open a written file.
+what Origin needed to open a written file.
 
 Provenance tags used on statements:
 
-- **[obs]** seen directly in project files (the five projects written by Origin 2016 /
-  version 9.3, and the 50 sample projects that ship with Origin 2016, which were saved by
+- **[obs]** seen directly in project files (the five projects written by Origin /
+  version 9.3, and the 50 sample projects that ship with Origin, which were saved by
   versions 7.0 to 9.3).
 - **[pub]** taken from public documentation of the format (the `liborigin` project and its
   notes), re-derived and then checked against the files where possible. Where the files
@@ -36,7 +36,7 @@ the column role (X, Y, ...) live in the windows. A column record in a layer poin
 set by position in the data-set list. A data set is named `<window>_<column>`, with `@<n>`
 appended for sheets other than the first, which gives a second way to find the link [obs].
 
-Every column of an Origin 2016 file is stored as a 10-byte-or-wider "text or number" cell,
+Every column of an Origin file is stored as a 10-byte-or-wider "text or number" cell,
 whether or not it holds text; older versions store plain 8-byte doubles [obs]. "No value" in a
 double is the number -1.23456789e-300 [obs]. Text is Windows-1252 (an ANSI code page) [inf].
 
@@ -45,7 +45,7 @@ double is the number -1.23456789e-300 [obs]. Text is Windows-1252 (an ANSI code 
 ### 2.1 Signature line [obs]
 
 `CPYA <major>.<build> <n> [W32|W64] #` followed by a newline. Examples seen: `CPYA 4.3168 226 W64 #`
-(Origin 2016), `CPYA 4.2889 890#` (version 8.1, no platform field), `CPYA 4.3165 195 W64 #`
+(Origin), `CPYA 4.2889 890#` (version 8.1, no platform field), `CPYA 4.3165 195 W64 #`
 and one file whose first number reads `4,3165` (a decimal comma written by a localised
 program). The second number is the build counter of the program that saved the file. The
 platform field is present from build 4.2979 on. The Unicode project format (`.opju`) starts
@@ -129,7 +129,7 @@ padding from data that is really missing).
 
 The type code is a 16-bit number. Reading it:
 
-- Bit `0x0100` set: **text-or-number cells** (section 3.4). Seen in every column of Origin 2016
+- Bit `0x0100` set: **text-or-number cells** (section 3.4). Seen in every column of Origin
   files and in many 8.x files. The other bits then carry display details (`0x5121`, `0x6121`,
   `0x4121`, `0x0121`, `0x6120`, `0x6130`) that did not matter for the values.
 - Else bit `0x0800` set: integer of the cell size: 1 byte (`0x6821`), 2 bytes (`0x6803`),
@@ -323,7 +323,7 @@ wrongly.
 | 8.09 - 8.1 | 75 | 140 | | text-or-number cells (10 bytes) seen from 8.09 |
 | 8.11 - 8.6 | 107 (8.11 - 8.5), 111 (8.6) | 140 | | |
 | 9.0 - 9.1 | 111 | 146 | | platform tag `W32`/`W64` appears in the signature from build 4.2979 (8.6) |
-| 9.2 - 9.3 (Origin 2016) | 111 | 147 | 515 | worksheet columns are text-or-number cells (cell size >= 10); plain doubles still occur for generated data |
+| 9.2 - 9.3 (Origin) | 111 | 147 | 515 | worksheet columns are text-or-number cells (cell size >= 10); plain doubles still occur for generated data |
 
 Everything else described here held across all of these versions.
 
@@ -346,12 +346,12 @@ Graph windows are told apart as described in 10.0. `crates/io/src/opj/graph.rs` 
 `sheaf_core::graph::Graph`.
 
 **Version coverage.** Every offset in this section was found and checked on files written by Origin
-9.x (the owner's projects and graphs built in Origin 2016). Projects saved by Origin 7.0 to 8.6 have
+9.x (the owner's projects and graphs built in Origin). Projects saved by Origin 7.0 to 8.6 have
 the same block structure, and the rule in 10.0 was checked against them, but the offsets of the page
 size, frame, axes and curve records were *not* checked on any pre-9 file. For a file older than 9.0
 the reader still imports the graphs that 10.0 identifies, and always adds a warning that graphs of
 such a file are not verified and may be missing or wrong (also when no graph was read, since a
-missed graph would otherwise go unmentioned). Offsets below were found by building graphs in Origin 2016 with known settings
+missed graph would otherwise go unmentioned). Offsets below were found by building graphs in Origin with known settings
 (`tools/origin-ref/opj-make-test-graphs.ps1`, and one-property-at-a-time variations whose records
 were compared byte by byte), by comparing with the graph in the owner's figure project, and with the
 public description of the format [pub]. All numbers are little-endian.
@@ -370,12 +370,12 @@ columns became "plots" of type 0, with a tiny frame and the default page).
 Evidence for the bit (offset `0x02` of the layer header is the low byte of a flag word; the values
 seen are `0x1F`/`0x5F` for graph layers, `0x5E`/`0x7E` for workbook sheets and `0xDE` for matrices) [obs]:
 
-- Over the 54 sample projects of Origin 2016, the five owner projects and 634 windows in all, the
+- Over the 54 sample projects of Origin, the five owner projects and 634 windows in all, the
   bit is clear in every layer of all 360 windows that are workbooks by the name rule of section 4,
   and set in every layer of every other window that has axis blocks except two; those two (one in
   `2D Bin and Fit.opj`, one in `Calling Fortran.OPJ`, both Origin 8.x) have the flag word `0xDE`, and
   Origin lists both as matrices.
-- Cross-check against Origin 2016 itself, on 33 projects (23 saved by versions 7.0 to 8.6, 10 by
+- Cross-check against Origin itself, on 33 projects (23 saved by versions 7.0 to 8.6, 10 by
   9.x including the five owner projects): `tools/origin-ref/opj-list-windows.ps1` opens a copy of each
   in a hidden Origin and lists the windows of `doc -e W` (workbooks), `doc -e P` (graphs) and
   `doc -e M` (matrices). Before the fix the reader named 37 graph windows that Origin does not list
@@ -386,7 +386,7 @@ seen are `0x1F`/`0x5F` for graph layers, `0x5E`/`0x7E` for workbook sheets and `
   blocks has the bit set (the reader's graph count for the five owner projects is the same before
   and after: 26, 1, 7, 8 and 17).
 
-What the rule does not find, and why (looked into on 2026-11-12: Origin 2016's own list of each
+What the rule does not find, and why (looked into on 2026-11-12: Origin's own list of each
 project through `tools/origin-ref/opj-list-windows.ps1`, compared with a block-by-block walk of the
 same files; 14 projects with Origin's list, the five owner projects and nine samples, 531 windows):
 
@@ -497,7 +497,7 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 
 "Automatic" colours follow the list by plot position: the first plot black, the second red, and so
 on. The reader gives each automatic plot the list colour of its position in the layer. Note that
-`set -c 1 -w 1000` (several options in one call) is silently ignored by Origin 2016; each option
+`set -c 1 -w 1000` (several options in one call) is silently ignored by Origin; each option
 needs its own `set` call.
 
 I could not make `set -k` change the drawn symbol shape in a hidden instance (the record changed, the
@@ -613,9 +613,9 @@ not sampled in the large project, hidden columns, column widths and number forma
 ## 13. Writing
 
 The writer is `crates/io/src/opj/write/` (`sheaf_io::opj::write`, `write_file`). It writes the
-workbooks and graphs of a project in the format of Origin 2016 (version 9.3). Graphs are 13.9; column formulas
-are 13.10 and the folder tree with sub-folders 13.11; what a graph holds that the file does not is named in a warning. Tags: **[orig]** checked by opening the written file in Origin 2016
-(sections 13.7 and 13.8), **[obs]** copied from what Origin writes, **[inf]** a guess that Origin
+workbooks and graphs of a project in the format of Origin (version 9.3). Graphs are 13.9; column formulas
+are 13.10 and the folder tree with sub-folders 13.11; what a graph holds that the file does not is named in a warning. Tags: **[orig]** checked by opening the written file in Origin
+(sections 13.7 and 13.8), **[obs]** observed file-format values, **[inf]** a guess that Origin
 accepted without showing a difference.
 
 ### 13.1 Order of the file [orig]
@@ -678,7 +678,7 @@ has).
 | unused | 1 | 0x4121 |
 
 A label column in a sheet with no Y column at all (text-only sheet, X plus label, labels only) is
-reported by Origin 2016 as unused (LabTalk type 2), whatever "belongs to" says [orig, checked with six
+reported by Origin as unused (LabTalk type 2), whatever "belongs to" says [orig, checked with six
 small files: it holds only when no Y column exists anywhere in the sheet; a text Y column counts, and the
 Y column may lie left or right of the label]. The writer therefore writes such a column as unused and
 lists a warning, so the file says what Origin will show.
@@ -695,14 +695,14 @@ followed by the screen size 1920 x 1080 [obs], at `0x29` the number of the activ
 text `ORIGIN` at `0x45`, two time stamps at `0x73` and `0x7B` (creation and change, Julian day
 numbers as doubles, for example 2461000.5), the label at `0xC3`. The writer puts each new window 26
 pixels right of and below the one before (as Origin does) and writes the long name as the label,
-without the storage tail Origin adds (section 4.1). The other non-zero bytes of the header are
-constants copied from Origin [obs] and were not examined.
+without the storage tail Origin adds (section 4.1). The other non-zero header bytes are fixed format values [obs]; their individual meanings
+have not yet been identified.
 
 Layer header (361 bytes) [orig]: byte `0x02` is 0x5E (bit 0 clear: a workbook sheet), the name at `0xD2`
 (31 bytes at most) after the two bytes `Pd`, at `0x17` a double with the number of columns (at most
 4), at `0x2B` and `0x151` the number of columns as a 16-bit number, at `0x101` a 16-bit counter that
 runs through the sheets of the project from 802 [obs], at `0x12D` the position of the sheet in its
-workbook [obs]. Many other constant bytes were copied from Origin [obs].
+workbook [obs]. The remaining fixed byte values have not yet been assigned individual meanings [obs].
 
 Column record (515 bytes) [orig]: `0x00` is 0x10; `0x04` the data-set number (16 bits, so a project
 holds at most 65535 columns); `0x07` and `0x0B` the same first and after-last positions as in the
@@ -744,7 +744,7 @@ block of 8 bytes     00 10 00 00 08 00 00 00        (closes the tree)
 ```
 
 The results log note before the tree is: the empty block, a block of 80 zero bytes, the block
-`ResultsLog` + NUL, a block of one NUL, an empty block. Origin 2016 writes the log window in every project; the writer
+`ResultsLog` + NUL, a block of one NUL, an empty block. Origin writes the log window in every project; the writer
 writes it empty.
 Folders with sub-folders are written by Origin with the same pieces repeated inside the root, and this
 writer writes them too (section 13.11). In a project with folders, windows are listed with the index of
@@ -763,7 +763,7 @@ files from Origin that were examined; records 0 to 3 are larger in files from lo
 
 ### 13.7 What Origin needs [orig]
 
-Tried in Origin 2016 with small files; "opens" means `Origin.Application.Load` returned true and the
+Tried in Origin with small files; "opens" means `Origin.Application.Load` returned true and the
 workbook list was complete.
 
 | file | result |
@@ -784,13 +784,13 @@ names, units, comments, roles, text, numbers bit for bit, missing values, 20000 
 several sheets. `crates/io/tests/fixtures/sheaf-written.opj` is such a file (written by this writer, never
 by Origin; a test checks that the writer still makes exactly these bytes).
 
-Origin itself: `tools/origin-ref/opj-verify-written.ps1` loads each file in a hidden Origin 2016 through
+Origin itself: `tools/origin-ref/opj-verify-written.ps1` loads each file in a hidden Origin through
 COM (with a time limit; modal dialogs would otherwise hang a hidden instance), lists the workbooks,
 sheets, short names, long names, units, comments, roles and cells, and compares with the listing of
 our reader (`opj-compare-cells.py`, numbers bit for bit). The files come from
 `cargo run -p sheaf-io --example opj_write_samples -- FOLDER`.
 
-Files opened in Origin 2016 (hidden instance, one run per file, `Load` returned true each time):
+Files opened in Origin (hidden instance, one run per file, `Load` returned true each time):
 
 | file | content | workbooks / sheets / columns | cells compared | result |
 |---|---|---|---|---|
@@ -859,7 +859,7 @@ Origin counts the objects of a project with a running number that is kept at `0x
 
 **Annotations [orig].** The text is Windows-1252 with Origin's escapes (bold, italic, super and
 subscript, `\l(n)` for a legend icon, `%(n)` for the name of curve n, `%(?X,@LG)` / `%(?Y,@LG)` for an
-axis title made from long name and units). The shorter `%(?X)` gave the long name only in Origin 2016;
+axis title made from long name and units). The shorter `%(?X)` gave the long name only in Origin;
 `@LG` gives "Name (units)" as Sheaf does [orig]. The rectangle of an object is in page
 units, the text size in points at `0x04` of the style block, the angle in tenths of a degree. Origin seems
 to place axis titles itself: two files that differed only in the written position of a Y title gave
@@ -880,14 +880,14 @@ stack offsets, the right Y layer of a double-Y graph with its legend, the gap of
 automatic axis colours; the warnings of this paragraph for those no longer apply.
 
 **Minimum records [obs, partial].** Every block above is written because Origin writes it. The constant
-bytes come from graphs that Origin 2016 saved (`opj-make-from-labtalk.ps1`; the tables in
+bytes come from graphs that Origin saved (`opj-make-from-labtalk.ps1`; the tables in
 `graph_tables.rs` are the non-zero bytes of each block with the fields we set cleared). Compared with
 Origin's own files, the writer leaves out the stored layer information, plot groups and the storage text
 of the project, and Origin still opens the files. A systematic removal of single blocks to find the
 smallest set that opens was not done for graphs; the whole set above is kept.
 
 **Frame and extreme ranges [obs].** A layer frame with no width, a negative corner or a size beyond the page
-loads in Origin 2016 but exports a blank picture, so the writer replaces it by a default frame (0.15, 0.12,
+loads in Origin but exports a blank picture, so the writer replaces it by a default frame (0.15, 0.12,
 0.78, 0.76 of the page) and warns. A log axis over data from 1e-300 to 1e300 came out in Origin with a limit
 range (about 1e269 to 1e281 drawn) that does not cover the data; the writer gives the limits it computes and
 does not warn. The cause (writer or Origin's own limit) was not traced, and such data is outside the
@@ -897,7 +897,7 @@ range any real project holds.
 reader and compares the models (all plot kinds, shapes, dashes, connections, log axes, automatic ranges,
 error bars, text X, two layers, warnings; damaged copies of written files never make the reader panic).
 The reader does not read grid lines, legend text or fonts (section 10.7), so those were checked in
-Origin only. Origin 2016 (hidden instance, `opj-verify-graphs.ps1`) returned true from `Load` for each of
+Origin only. Origin (hidden instance, `opj-verify-graphs.ps1`) returned true from `Load` for each of
 the 8 files of `cargo run -p sheaf-io --example opj_write_graphs -- FOLDER`, listed all 18 graph windows,
 and exported each as a PNG. The report Origin printed for `g-basic` (limits, steps, scale kinds, frame)
 agrees with what was written; the reports of the other files were not compared line by line. The pictures
@@ -923,7 +923,7 @@ it again; other machines or fonts.
 ### 13.10 Column formulas [orig]
 
 A column that was filled with "Set Column Values" keeps its formula. The pieces below were found by making small
-projects in Origin 2016 with known formulas (`csetvalue col(B) formula:="col(A)*2" recalculate:=1`, the same with
+projects in Origin with known formulas (`csetvalue col(B) formula:="col(A)*2" recalculate:=1`, the same with
 0 and 2, formulas of 8 to 100 characters, one with two input columns, one that fills rows 2 to 4, one with a
 "before formula" script, several in one sheet, in a second sheet and in a second workbook) and comparing their
 bytes with the same project without the formula (`tools/origin-ref/opj-make-from-labtalk.ps1`,
@@ -1004,7 +1004,7 @@ back as up to date); a mode other than None for a formula with no input columns,
 that reads a missing column (stored as None, with a warning); formulas longer than 60000 bytes, with a NUL or
 containing `@${` or `;` CR LF `#` (not stored, with a warning).
 
-**Verified.** With `tools/origin-ref/opj-verify-features.ps1` (loads the file in a hidden Origin 2016 and prints, per
+**Verified.** With `tools/origin-ref/opj-verify-features.ps1` (loads the file in a hidden Origin and prints, per
 column, `wks.colN.svrm` and `wks.colN.formula$`, and the folder tree): `cargo run -p sheaf-io --example
 opj_write_features -- FOLDER` writes `formulas.opj` (Auto, Manual, None, a formula with two inputs, one with rows 2 to
 4, one reading a formula column, a second sheet, a second workbook). Origin reported for each column the same
@@ -1036,7 +1036,7 @@ the sub-folders, one after the other, each in this same form
 
 The root folder has in front of it the 16-byte marker block (`DE 36 10 03`) and, after its last sub-folder, the empty
 block and the 8-byte closing block of section 13.5. The size block in front of the whole tree counts everything
-after itself except 4 bytes. Found in files made by Origin 2016 with `pe_mkdir folder:=F1 cd:=1` (a new window goes
+after itself except 4 bytes. Found in files made by Origin with `pe_mkdir folder:=F1 cd:=1` (a new window goes
 to the active folder): a three-level chain F1 / F1a / F1b, a sibling F2 with two windows, an empty F3, and another
 project with windows created in the root after others were made in sub-folders.
 Byte 2 of the 32-byte block is 1 for the folder that was active when the project was saved and 0 for the others (the
@@ -1060,8 +1060,7 @@ siblings whose names differ only in case, and nesting deeper than 32 levels. A n
 **Verified.** `opj_write_features` writes `folders.opj` (Book1 in the root, Book2 in F1, Book3 in F1/F1a, Book4 in
 F1/F1a/F1b, Book5 and Book6 in F2, an empty F3; the project that was also made in Origin, and the tail of
 the two files, taken block by block, is the same except for names, sizes and times) and `deep.opj` (twelve levels,
-a name of 45 characters, a folder with a name of 100 characters). `opj-verify-features.ps1` loads each in Origin
-2016 through COM and walks `RootFolder`, `Folders` and `PageBases`: the folders, their nesting, and the window in
+a name of 45 characters, a folder with a name of 100 characters). `opj-verify-features.ps1` loads each in Origin through COM and walks `RootFolder`, `Folders` and `PageBases`: the folders, their nesting, and the window in
 each folder were all as written (the deepest folder had the path of 12 names). Origin saved `folders.opj` again and the
 reader of this crate read the same tree back from Origin's file. The four private projects with folders (one
 folder with 2, 11, 27 and 53 windows) read as a root with one folder whose windows have the right names. The cargo tests
@@ -1072,7 +1071,7 @@ limit, the size block and truncations of the file.
 
 Code: `write/graph.rs` (`Role`, `LayerCtx`, `unwritten_layer_features`, `axis_spec`), `write/glayout.rs` (`LinkSpec`,
 `link_annotation`, `axis_blocks`), tests in `write/graph_feature_tests.rs`. Found on 2026-11-12 by patching single bytes
-of files the writer made and loading them in Origin 2016 (`tools/origin-ref/opj-verify-graph-features.ps1` prints, per
+of files the writer made and loading them in Origin (`tools/origin-ref/opj-verify-graph-features.ps1` prints, per
 layer, `layer.link`, `x.link`, `y.link`, `unit`, `showAxes`, `showLabels`, the axis colours, and exports a PNG;
 `cargo run -p sheaf-io --example opj_write_graph_features -- FOLDER` writes the test files). Pictures and reports are
 in the git-ignored `re-workspace/scratch/opj-write-graphs/`.
@@ -1157,7 +1156,7 @@ line colour changes the border (`0x0F`, `0x132`, `0x16A`), setting the fill colo
 line record has and an area record does not: `0x9D`, `0xDE`, `0x148`, `0x18A`, `0x174`. The four bytes at `0x17E` of an
 Origin area record hold changing junk and are not written. The model's area has its fill in the symbol colour and the
 border in the line colour; the reader (`read_curve`) turns type 204 into `PlotKind::Area` the same way, with a black
-border when the line colour is automatic. Verified: Origin 2016 loaded `gw-area.opj` (a green area with a red 2 pt border; two
+border when the line colour is automatic. Verified: Origin loaded `gw-area.opj` (a green area with a red 2 pt border; two
 curves with their own fills), and the exported pictures show the same fills and borders. The warning for areas is gone.
 
 **Tick label number formats.** In the tick label block of an axis group (block 2, block 4 for the second edge): bits 4 and 5
@@ -1166,7 +1165,7 @@ property `layer.x.label.numFormat` is this value plus one), bit 7 of the same by
 low nibble of byte `0x26` holds that number (`layer.x.label.decPlaces`, which Origin reports as -1 when the bit is not set).
 The "shown" bit of `0x26` (`0x40`) and the flag byte of a text X column (`0x25` = 1) are separate bits. Found by setting
 `numFormat` 1 to 4 and `decPlaces` 0, 1, 3, 6 on separate graphs and comparing the blocks; verified by writing
-`gw-fmt.opj` (X decimal 0 and Y decimal 3; X scientific 2 and Y decimal 1; automatic) and loading it in Origin 2016: it reported
+`gw-fmt.opj` (X decimal 0 and Y decimal 3; X scientific 2 and Y decimal 1; automatic) and loading it in Origin: it reported
 `numFormat` 1 / `decPlaces` 0 and 3, `numFormat` 2 / `decPlaces` 2 and 1, and -1 for the automatic axis, and the pictures show
 `100.000`, `1.0x10^1` and plain labels respectively. The model's Decimal(n) and Scientific(n) are written and read back
 (n up to 15); engineering and thousands formats are read as decimal or automatic. Date and time formats are still named in a
@@ -1192,10 +1191,10 @@ with `gw-groups.opj` and patched copies of it (`re-workspace/scratch/opj-gw2/pat
 - The overlap of bars: with the group in place `set` options `-xy` (x in v, o, g, b; y in a..z) with value 50 changed no byte of
   the records, headers or per-curve blocks except the known gap (`-vg`, `0x19` and `0x11A`). The overlap stays in a warning.
 - Reading: `read_curve` reads group records as before (colours from the file, or from the list when the record holds none).
-Verified: Origin 2016 loaded `gw-groups.opj` (two columns, three columns, one column, two columns with an error bar) and drew
+Verified: Origin loaded `gw-groups.opj` (two columns, three columns, one column, two columns with an error bar) and drew
 side by side bars for the first two (colours black, red, green as the list gives), a single bar set for the lone column plot.
 
-**Panels (layers linked to the first layer).** Origin 2016 graphs made from its panel template (Vertical 2 Panel) and with
+**Panels (layers linked to the first layer).** Origin graphs made from its panel template (Vertical 2 Panel) and with
 `layer.x.link = 1` / `layer.y.link = 1` set on the second layer, compared byte by byte (`re-workspace/scratch/opj-gw2/pan1.opj`,
 `pan2.opj`):
 - A layer is linked to an earlier one by the layer header byte `0xAB` (1-based number of the parent), as for the right layer of a
@@ -1222,7 +1221,7 @@ side by side bars for the first two (colours black, red, green as the list gives
   `X1` and `Y1` for the scale links. A parent that is itself linked is not followed.
 - Verified: `gw-panels.opj` (`cargo run -p sheaf-io --example opj_write_graph_features2`): a stack of three panels with X linked, the
   same with a gap of 5 percent, a 3 x 1 arrangement without links, a 1 x 3 row with Y linked and a 2 x 2 with both linked.
-  Origin 2016 reported `layer.link` 1 for every panel but the first, `layer.x.link` and `layer.y.link` as written, `layer.unit` 7,
+  Origin reported `layer.link` 1 for every panel but the first, `layer.x.link` and `layer.y.link` as written, `layer.unit` 7,
   tops of -100 and -200 percent (-121.4 and -242.9 with the gap) and the frames 15, 63.33, 36.67 and 10 percent that Origin's Stack
   command gives (spec graphing.md 15.1), and the pictures show the panels in place with the shared scales.
 - Still named in a warning: the hidden end tick label of a joined stack (`Axis::hide_end_label`).

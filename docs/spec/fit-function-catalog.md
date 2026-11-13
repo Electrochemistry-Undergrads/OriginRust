@@ -1,6 +1,6 @@
-# Fit function catalog (Origin 2016 built-in library)
+# Fit function catalog (Origin built-in library)
 
-Summary. This catalog lists the 237 fit functions defined by the `.FDF` files shipped with Origin 2016 (`FitFunc` folder; 239 files there, of which two are not function definitions), grouped by their primary category. Formulas are given in plain mathematics; `x` is the independent variable (surface functions also use `y`, outputs are `y` or `z`). Parameter labels are the short labels in the source files, lightly normalised. The machine-readable twin of this file is `data/fit-functions.json`. Priority: P0 = the owner's daily fitting needs (peaks, exponentials, lines, sigmoids), P1 = common, P2 = the rest. Observed facts come from the FDF files and `NLSF.ini`; statements marked [inferred] are the author's reading and need a check in a running Origin.
+Summary. This catalog covers 237 fit-function definitions, grouped by primary category. Formulas use plain mathematics; `x` is the independent variable, with `y` also used by surface functions. The machine-readable catalog is `data/fit-functions.json`. Priority: P0 = everyday fitting needs (peaks, exponentials, lines and sigmoids), P1 = common, P2 = later. Entries marked [inferred] still need verification.
 
 ## Counts
 

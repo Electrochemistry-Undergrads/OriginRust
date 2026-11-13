@@ -142,7 +142,7 @@ fn the_fft_filter_and_the_b_spline_can_be_chosen() {
     ]);
     assert!(ok, "stderr: {stderr}");
     let text = std::fs::read_to_string(&out).unwrap();
-    let middle: f64 = text.lines().nth(3).unwrap().split(',').nth(1).unwrap().parse().unwrap();
+    let middle: f64 = text.lines().nth(4).unwrap().split(',').nth(1).unwrap().parse().unwrap();
     assert!((middle - 2.5).abs() < 1e-9, "{text}");
     let (ok, _, stderr) = sheaf(&[
         "analyze",
@@ -284,7 +284,7 @@ fn subtract_ref_and_math_use_a_reference_from_another_file() {
     ]);
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("Subtract reference"), "{stdout}");
-    let rows: Vec<String> = std::fs::read_to_string(&export).unwrap().lines().skip(2).map(str::to_string).collect();
+    let rows: Vec<String> = std::fs::read_to_string(&export).unwrap().lines().skip(3).map(str::to_string).collect();
     // t, flat, ramp, then the new column behind its source: ramp minus the reference (x / 2)
     assert_eq!(rows[0], "0,2,0,0");
     assert_eq!(rows[10], "10,2,10,5");
@@ -308,7 +308,7 @@ fn subtract_ref_and_math_use_a_reference_from_another_file() {
     ]);
     assert!(ok, "stderr: {stderr}");
     let text = std::fs::read_to_string(&out).unwrap();
-    let body: Vec<&str> = text.lines().skip(2).collect();
+    let body: Vec<&str> = text.lines().skip(3).collect();
     assert_eq!(body.len(), 5, "{text}");
     assert!(body.iter().all(|l| l.ends_with(",2")), "{text}");
     // A constant, with a negative value.

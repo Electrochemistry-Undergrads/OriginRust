@@ -264,7 +264,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(Recalc, "Recalculate", Cmd::Recalculate, "Recalculate"),
             gap(),
             b(Import, "Import Single ASCII", Cmd::Import, "Single ASCII"),
-            b(ImportMany, "Import Multiple ASCII", Cmd::Import, "Multiple ASCII"),
+            b(ImportMany, "Import Multiple ASCII", Cmd::ImportMultiple, "Multiple ASCII"),
             gap(),
             g(Print, "Print"),
             g(Duplicate, "Duplicate"),

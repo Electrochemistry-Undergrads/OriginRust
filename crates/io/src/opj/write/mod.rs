@@ -137,6 +137,10 @@ struct Notes {
     /// Formulas whose state (out of date, broken) is not stored.
     formula_states_dropped: usize,
     demoted_labels: usize,
+    /// Columns with user parameter rows that are not stored.
+    params_dropped: usize,
+    /// Columns with a display format other than General that is not stored.
+    formats_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
     graph_notes: Vec<String>,
 }
@@ -314,6 +318,8 @@ impl Writer {
                 object_id: formulas.object_ids[i],
             };
             records.extend(framed(&layout::column_record(&spec)));
+            self.notes.params_dropped += usize::from(!column.params.is_empty());
+            self.notes.formats_dropped += usize::from(column.format != sheaf_core::format::NumberFormat::General);
             let long = self.label_text(&column.long_name, "long name")?;
             let units = self.label_text(&column.units, "units")?;
             let comments = self.comment_text(&column.comments)?;
@@ -651,6 +657,18 @@ impl Writer {
             warnings.push(format!(
                 "{} recalculating column(s) were out of date or broken; the file does not store that state, so they read as up to date.",
                 n.formula_states_dropped
+            ));
+        }
+        if n.params_dropped > 0 {
+            warnings.push(format!(
+                "{} column(s) have user parameter rows, which the project file written here does not hold.",
+                n.params_dropped
+            ));
+        }
+        if n.formats_dropped > 0 {
+            warnings.push(format!(
+                "{} column(s) have a display format (decimals, scientific, date or time) that the project file written here does not hold; Origin shows them in its default format.",
+                n.formats_dropped
             ));
         }
         OpjWrite { bytes, warnings }

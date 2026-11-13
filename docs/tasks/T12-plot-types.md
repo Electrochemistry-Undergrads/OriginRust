@@ -1,6 +1,6 @@
 # T12: More plot types
 
-**Status:** items 1-2 done on branch `plot-types`, not merged (stacked, 100 % stacked, horizontal Bar, floating column; X and XY error bars, direction, cap width). Left: stacked bar and floating bar variants, items 3-6. **Size:** L, one commit per type. **Branch:** `plot-types`. **Model:** Sonnet.
+**Status:** items 1-2 done, merged (`d0dbb37`) (stacked, 100 % stacked, horizontal Bar, floating column; X and XY error bars, direction, cap width). Left: stacked bar and floating bar variants, items 3-6; check the colour list of column plot groups (Origin's stacked columns go black, red, blue, while T21 measured black, red, green for line overlays; Sheaf uses the line list for both), floating column fill (Origin blue, Sheaf black), 100 % labels and join lines; the `xy-error` golden was not looked at. **Size:** L, one commit per type. **Branch:** `plot-types`. **Model:** Sonnet.
 **Detail:** audit C "Missing plot types". **Spec:** `docs/spec/graphing.md` (plot types, section 2
 styles), `docs/spec/feature-parity.md` (P0/P1 tags decide order).
 

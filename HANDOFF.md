@@ -29,14 +29,14 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1189 passed on `main` at `859c78e` (2026-11-13). Parity table: 42 done, 108 partial, 80 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1201 passed on `main` at `d0dbb37` (2026-11-13). Parity table: 42 done, 108 partial, 80 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
-| `plot-types` | "Handoff.md token optimization" | T12 items 1-2: column types, X/XY error bars (worktree `axis-range2`) | started 2026-11-13 |
+| `fit-breadth` | "Handoff.md token optimization" | T15 items 1-3 (worktree `stats-breadth`) | started 2026-11-13 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
 branches that are now on `main`; it holds nothing `main` lacks and can be removed.
@@ -47,7 +47,7 @@ Welch interval, `f522bb2`), `opj-groups-frames`, `export-margin`, `sheet-menus` 
 Error duplicates of T01 dropped), `nlfit-origin`. `axis-range` and `graph-defaults` never got a commit:
 they are briefs T20 and T21 now.
 
-Merged from briefs: T03 (`859c78e`; analysis results that recalculate are named in `.opj` save warnings), T05 (`c32e585`), T21 (`b015f97`), T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
+Merged from briefs: T12 items 1-2 (`d0dbb37`), T03 (`859c78e`; analysis results that recalculate are named in `.opj` save warnings), T05 (`c32e585`), T21 (`b015f97`), T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
 (`bbdb60a`), T09 (`20c37e1`), T16 part (`b967898`). See each brief's Status for what is left.
 
 Stale worktrees of merged branches (`.claude/worktrees/agent-*`, `wf_*`, `merge-*`, `origin-diff-4`,
@@ -57,7 +57,7 @@ removed (`git worktree remove`, then `tools/clean-target.sh`); the disk is at 94
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
-analysis: T12 (in flight), T15, T13, T11, then the rest. All earlier "open questions" are assigned to the in-flight branches
+analysis: T15 (in flight), T13, T11, T12 items 3-6, T06, T10, T19, then the rest. All earlier "open questions" are assigned to the in-flight branches
 above or to briefs; none waits on the owner.
 
 ## Commands that verify the state

@@ -1553,9 +1553,6 @@ impl Project {
     }
 }
 
-/// The rows `order` of a column, in that order. A column shorter than the
-/// sheet (`rows` long) counts as padded with missing values; missing values
-/// at the end of the result are dropped again so that short columns stay short.
 /// The row order that sorts `n` rows by one column: missing keys last, equal keys in their order,
 /// text without regard to case.
 fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
@@ -1593,6 +1590,9 @@ fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
     order
 }
 
+/// The rows `order` of a column, in that order. A column shorter than the
+/// sheet (`rows` long) counts as padded with missing values; missing values
+/// at the end of the result are dropped again so that short columns stay short.
 fn take_rows(data: &ColumnData, order: &[usize], rows: usize) -> ColumnData {
     debug_assert!(order.iter().all(|i| *i < rows));
     match data {

@@ -14,6 +14,7 @@ pub mod graph_details;
 pub mod graph_props;
 pub mod import;
 pub mod import_wizard;
+pub mod manip_options;
 pub mod reshape;
 pub mod row_filter;
 pub mod set_values;

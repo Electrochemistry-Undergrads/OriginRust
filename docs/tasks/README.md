@@ -63,7 +63,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T13](T13-plot-details-and-axis-dialog-tabs.md) | Missing Plot Details tabs and axis-dialog controls | M | open, after T11/T12 pieces |
 | [T14](T14-statistics-breadth.md) | Descriptive-statistics columns, outlier tests, more tests | M | items 1-4 done (`c44a1a6`); 5, 6 open |
 | [T15](T15-fitting-breadth.md) | Multi-dataset global fit, Simplex, surface fits, compare models | L | items 1-3 done (merged 2026-11-13); left: Simplex, Compare/Rank Models, multiple linear regression, surface fits |
-| [T16](T16-numeric-differences.md) | Small numeric/behaviour differences (Mann-Whitney print, spline, error caps) | S | 1, 5 done, 4 investigated (`b967898`); 3 done (`d0dbb37`) (cap width 8 pt); 2 done on branch spline-connect, not merged (natural spline, 900 limit, B-spline and Bezier added); 6 open (analysis smoothing factor, separate) |
+| [T16](T16-numeric-differences.md) | Small numeric/behaviour differences (Mann-Whitney print, spline, error caps) | S | 1, 5 done, 4 investigated (`b967898`); 3 done (`d0dbb37`) (cap width 8 pt); 2 done (`94063b4`) (natural spline, 900 limit, B-spline and Bezier added); 6 open (analysis smoothing factor, separate) |
 | [T17](T17-docs-cleanup.md) | Stale spec paragraphs and parity counts | S | done (item 3 with T20, `522c625`) |
 | [T18](T18-backlog.md) | Large items not yet briefed (scripting, 3D, Options, importers, templates) | - | backlog |
 | [T19](T19-import-and-column-dialogs.md) | ASCII import options, Import Wizard pages, Column Properties formats | M | open, wizard needs Origin pages |

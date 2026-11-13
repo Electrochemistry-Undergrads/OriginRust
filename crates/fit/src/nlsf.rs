@@ -658,8 +658,8 @@ impl<'a> Fitter<'a> {
         }
         let mut centroid = vec![0.0; n];
         for &i in &sx.order[..n] {
-            for k in 0..n {
-                centroid[k] += sx.pts[i][k] / nf;
+            for (c, p) in centroid.iter_mut().zip(&sx.pts[i]) {
+                *c += p / nf;
             }
         }
         let along = |t: f64| -> Vec<f64> {

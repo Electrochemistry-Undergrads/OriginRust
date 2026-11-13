@@ -11,6 +11,7 @@
 //! Missing values (NaN) in x, y or the weights drop that point from the fit.
 
 pub mod bands;
+pub mod compare;
 pub mod dist;
 pub mod fdf;
 pub mod global;

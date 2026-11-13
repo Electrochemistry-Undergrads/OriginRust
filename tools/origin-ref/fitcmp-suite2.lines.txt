@@ -1,0 +1,85 @@
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 0.5*col(A) + 0.1*col(A)^2 + 0.3*sin(37*col(D)) + 0.2*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Line nltree:=tt;
+nlfit;
+nlend output:=1;
+nlbegin iy:=(1,2) func:=Parabola nltree:=tt;
+nlfit;
+nlend output:=1;
+fitcmpmodel result1:=[Book1]FitNL1 result2:=[Book1]FitNL2 aic:=1 bic:=1 ftest:=1 param:=0 statics:=0 rt:=<new name:=cmpA>;
+#[Book1]Sheet1
+#[Book1]FitNL1
+#[Book1]FitNL2
+#[Book1]cmpA
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 0.5*col(A) + 0.1*col(A)^2 + 0.3*sin(37*col(D)) + 0.2*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Parabola nltree:=tt;
+nlfit;
+nlend output:=1;
+nlbegin iy:=(1,2) func:=Line nltree:=tt;
+nlfit;
+nlend output:=1;
+fitcmpmodel result1:=[Book2]FitNL1 result2:=[Book2]FitNL2 aic:=1 bic:=1 ftest:=1 param:=0 statics:=0 rt:=<new name:=cmpA>;
+#[Book2]Sheet1
+#[Book2]FitNL1
+#[Book2]FitNL2
+#[Book2]cmpA
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-col(A)/0.7) + 2*exp(-col(A)/5) + 0.03*sin(37*col(D)) + 0.02*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt;
+nlfit;
+nlend output:=1;
+nlbegin iy:=(1,2) func:=ExpDec2 nltree:=tt;
+nlfit;
+nlend output:=1;
+fitcmpmodel result1:=[Book3]FitNL1 result2:=[Book3]FitNL2 aic:=1 bic:=1 ftest:=1 param:=0 statics:=0 rt:=<new name:=cmpA>;
+#[Book3]Sheet1
+#[Book3]FitNL1
+#[Book3]FitNL2
+#[Book3]cmpA
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 3*exp(-col(A)/2) + 0.05*sin(37*col(D)) + 0.04*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=ExpDec1 nltree:=tt;
+nlfit;
+nlend output:=1;
+nlbegin iy:=(1,2) func:=ExpDec2 nltree:=tt;
+nlfit n:=1;
+nlend output:=1;
+fitcmpmodel result1:=[Book4]FitNL1 result2:=[Book4]FitNL2 aic:=1 bic:=1 ftest:=1 param:=0 statics:=0 rt:=<new name:=cmpA>;
+#[Book4]Sheet1
+#[Book4]FitNL1
+#[Book4]FitNL2
+#[Book4]cmpA
+newbook;
+col(A) = data(0.5, 10, 0.5);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = data(1, 20, 1);
+col(B) = 1 + 0.5*col(A) + 0.1*col(A)^2 + 0.3*sin(37*col(D)) + 0.2*sin(101.3*col(D));
+nlbegin iy:=(1,2) func:=Line nltree:=tt;
+nlfit;
+nlend output:=1;
+nlbegin iy:=(1,2) func:=Cubic nltree:=tt;
+nlfit;
+nlend output:=1;
+fitcmpmodel result1:=[Book5]FitNL1 result2:=[Book5]FitNL2 aic:=1 bic:=1 ftest:=1 param:=0 statics:=0 rt:=<new name:=cmpA>;
+#[Book5]Sheet1
+#[Book5]FitNL1
+#[Book5]FitNL2
+#[Book5]cmpA

@@ -257,3 +257,37 @@ fn iteration_controls_are_passed_on_and_checked() {
     let (ok, _, stderr) = sheaf(&["fit", d, "--y", "decay", "-m", "ExpDec1", "--tolerance", "0"]);
     assert!(!ok && stderr.contains("--tolerance"), "{stderr}");
 }
+
+#[test]
+fn linear_fit_with_x_error_takes_the_x_error_column() {
+    let dir = scratch("xerr");
+    let mut text = String::from("x,y,sx\n");
+    for i in 0..=10 {
+        let x = f64::from(i);
+        text.push_str(&format!("{x},{},0.1\n", 1.0 + 2.0 * x + 0.2 * (3.0 * x).sin()));
+    }
+    let path = dir.join("xe.csv");
+    std::fs::write(&path, text).unwrap();
+    let (ok, out, err) = sheaf(&["fit", path.to_str().unwrap(), "--model", "linearx", "--y", "B", "--xerr", "C"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Slope"), "{out}");
+    let (ok, _, err) = sheaf(&["fit", path.to_str().unwrap(), "--model", "linearx", "--y", "B"]);
+    assert!(!ok);
+    assert!(err.contains("X-error"), "{err}");
+}
+
+#[test]
+fn regress_compare_and_rank_print_their_tables() {
+    let dir = scratch("more");
+    let data = data_file(&dir);
+    let p = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["fit", p, "--y", "noisy", "--regress", "x,decay"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Intercept") && out.contains("Prob>F"), "{out}");
+    let (ok, out, err) = sheaf(&["fit", p, "--y", "decay", "--model", "ExpDec1", "--compare", "linear"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("AICc:   ExpDec1 is preferred"), "{out}");
+    let (ok, out, err) = sheaf(&["fit", p, "--y", "decay", "--rank", "ExpDec1,Gauss,ExpDec2"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Rank") && out.contains("ExpDec1"), "{out}");
+}

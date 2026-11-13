@@ -13,6 +13,7 @@
 
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::RowRange;
+use sheaf_core::fitting::Algorithm;
 use sheaf_core::fitting::{
     BandChoice, FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, MultiFitOutcome,
     ParamSetting, builtin_functions, model_parameters,
@@ -24,6 +25,8 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FitKind {
     Linear,
+    /// Analysis > Fitting > Linear Fit with X Error (needs an X-error column).
+    LinearXError,
     Polynomial,
     BuiltIn,
     Formula,
@@ -52,8 +55,9 @@ impl FitKind {
     }
 
     /// Menu entries of the Analysis menu that open this window.
-    pub const MENU: [(FitKind, &'static str); 3] = [
+    pub const MENU: [(FitKind, &'static str); 4] = [
         (FitKind::Linear, "Fit Linear..."),
+        (FitKind::LinearXError, "Fit Linear with X Error..."),
         (FitKind::Polynomial, "Fit Polynomial..."),
         (FitKind::BuiltIn, "Nonlinear Curve Fit..."),
     ];
@@ -61,6 +65,7 @@ impl FitKind {
     fn label(self) -> &'static str {
         match self {
             FitKind::Linear => "Straight line",
+            FitKind::LinearXError => "Straight line with X error",
             FitKind::Polynomial => "Polynomial",
             FitKind::BuiltIn => "Built-in function",
             FitKind::Formula => "My own formula",
@@ -75,6 +80,7 @@ impl FitKind {
     pub fn from_name(name: &str) -> Option<Self> {
         Some(match name {
             "linear" => FitKind::Linear,
+            "linearx" | "xerror" => FitKind::LinearXError,
             "poly" | "polynomial" => FitKind::Polynomial,
             "nonlinear" | "builtin" => FitKind::BuiltIn,
             "formula" => FitKind::Formula,
@@ -191,6 +197,7 @@ pub struct FitDialog {
     /// Confidence level of the bands, in percent.
     band_level: f64,
     max_iterations: usize,
+    algorithm: Algorithm,
     /// The tolerance is 10^-digits (Origin's default 1e-9 is 9 digits).
     tolerance_digits: u32,
     row_mode: RowMode,
@@ -312,6 +319,7 @@ impl FitDialog {
             bands: BandChoice::None,
             band_level: 95.0,
             max_iterations: 400,
+            algorithm: Algorithm::LevenbergMarquardt,
             tolerance_digits: 9,
             row_mode: RowMode::All,
             rows_in_sheet,
@@ -372,6 +380,7 @@ impl FitDialog {
     fn model(&self) -> Option<FitModel> {
         Some(match self.kind {
             FitKind::Linear => FitModel::Linear,
+            FitKind::LinearXError => FitModel::LinearXError,
             FitKind::Polynomial => FitModel::Polynomial { order: self.order },
             FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
                 FitModel::BuiltIn(self.function.clone())
@@ -418,7 +427,7 @@ impl FitDialog {
 
     /// Whether the model is fitted by iterating (everything but a line and a polynomial).
     fn iterative(&self) -> bool {
-        !matches!(self.kind, FitKind::Linear | FitKind::Polynomial)
+        !matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial)
     }
 
     /// Runs the fit on a copy of the project, from the values now in the Parameters table, for
@@ -547,6 +556,12 @@ impl FitDialog {
     }
 
     #[cfg(test)]
+    #[cfg(test)]
+    pub(crate) fn problem_for_test(&self) -> Option<String> {
+        self.problem.clone()
+    }
+
+    #[cfg(test)]
     pub(crate) fn message_for_test(&self) -> String {
         self.message.clone().unwrap_or_default()
     }
@@ -563,13 +578,13 @@ impl FitDialog {
 
     fn request(&self) -> Option<FitRequest> {
         let mut r = FitRequest::new(self.y, self.model()?);
-        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::Polynomial);
+        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial);
         r.params = self
             .params
             .iter()
             // A straight line or polynomial has only fixed values; start values and bounds typed
             // for another model with the same parameter names do not apply.
-            .filter(|p| !closed_form || p.fixed)
+            .filter(|p| (!closed_form || p.fixed) && self.kind != FitKind::LinearXError)
             .map(|p| {
                 if closed_form {
                     ParamRow { set_initial: false, has_lower: false, has_upper: false, ..p.clone() }
@@ -588,6 +603,7 @@ impl FitDialog {
         r.bands = self.bands;
         r.band_level = self.band_level / 100.0;
         r.max_iterations = self.max_iterations;
+        r.algorithm = self.algorithm;
         r.curve_points = self.curve_points;
         r.curve_range = self.curve_custom.then_some((self.curve_from, self.curve_to));
         r.add_to_graphs = self.plot_on_graph;
@@ -635,7 +651,7 @@ impl FitDialog {
     /// The categories of the Category drop-down: the two closed-form fits, Origin's function
     /// categories, then the two ways to bring in a function of one's own.
     fn categories(&self) -> Vec<String> {
-        let mut out = vec![CAT_LINEAR.to_string(), CAT_POLY.to_string()];
+        let mut out = vec![CAT_LINEAR.to_string(), CAT_LINEAR_X.to_string(), CAT_POLY.to_string()];
         for f in &self.functions {
             if !out.contains(&f.category) {
                 out.push(f.category.clone());
@@ -650,6 +666,7 @@ impl FitDialog {
     fn category(&self) -> String {
         match self.kind {
             FitKind::Linear => CAT_LINEAR.to_string(),
+            FitKind::LinearXError => CAT_LINEAR_X.to_string(),
             FitKind::Polynomial => CAT_POLY.to_string(),
             FitKind::Formula => CAT_FORMULA.to_string(),
             FitKind::Fdf => CAT_FDF.to_string(),
@@ -663,6 +680,7 @@ impl FitDialog {
     fn set_category(&mut self, category: &str) {
         match category {
             CAT_LINEAR => self.kind = FitKind::Linear,
+            CAT_LINEAR_X => self.kind = FitKind::LinearXError,
             CAT_POLY => self.kind = FitKind::Polynomial,
             CAT_FORMULA => self.kind = FitKind::Formula,
             CAT_FDF => self.kind = FitKind::Fdf,
@@ -693,6 +711,7 @@ impl FitDialog {
     fn formula_text(&self) -> String {
         match self.kind {
             FitKind::Linear => "y = Intercept + Slope*x".to_string(),
+            FitKind::LinearXError => "y = Intercept + Slope*x  (errors in x and y)".to_string(),
             FitKind::Polynomial => "y = Intercept + B1*x + B2*x^2 + ...".to_string(),
             FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
                 match self.functions.iter().find(|f| f.name == self.function) {
@@ -809,12 +828,18 @@ impl FitDialog {
             }
             _ => {}
         }
-        ui.add_enabled_ui(false, |ui| {
+        if self.iterative() {
             ui.horizontal(|ui| {
                 ui.label("Iteration Algorithm");
-                egui::ComboBox::from_id_salt("fit_algorithm").selected_text("Levenberg Marquardt").show_ui(ui, |_| {});
+                egui::ComboBox::from_id_salt("fit_algorithm").selected_text(self.algorithm.label()).show_ui(ui, |ui| {
+                    for a in Algorithm::ALL {
+                        if ui.selectable_value(&mut self.algorithm, a, a.label()).changed() {
+                            changed = true;
+                        }
+                    }
+                });
             });
-        });
+        }
         ui.horizontal_top(|ui| {
             ui.label("Description");
             ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace().small()).wrap());
@@ -1035,7 +1060,7 @@ impl FitDialog {
             return;
         }
         // A linear fit can fix the intercept and the slope; a polynomial only the intercept.
-        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::Polynomial);
+        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial);
         let global = self.global();
         egui::Grid::new("fit_params").num_columns(if global { 4 } else { 3 }).spacing([14.0, 4.0]).striped(true).show(
             ui,
@@ -1048,8 +1073,9 @@ impl FitDialog {
                 }
                 ui.end_row();
                 for p in self.params.iter_mut() {
-                    let can_fix =
-                        !closed_form || p.name == "Intercept" || (self.kind == FitKind::Linear && p.name == "Slope");
+                    let can_fix = !closed_form
+                        || (self.kind != FitKind::LinearXError
+                            && (p.name == "Intercept" || (self.kind == FitKind::Linear && p.name == "Slope")));
                     ui.label(&p.name);
                     if closed_form {
                         ui.label("");
@@ -1087,7 +1113,7 @@ impl FitDialog {
             ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
             return;
         }
-        if matches!(self.kind, FitKind::Linear | FitKind::Polynomial) {
+        if matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial) {
             ui.add_enabled_ui(false, |ui| ui.label("A straight line or polynomial is solved directly: no bounds."));
             return;
         }
@@ -1472,6 +1498,7 @@ fn draw_xy(ui: &mut egui::Ui, size: egui::Vec2, series: &[(&[(f64, f64)], Series
 }
 
 const CAT_LINEAR: &str = "Linear Fit";
+const CAT_LINEAR_X: &str = "Linear Fit with X Error";
 const CAT_POLY: &str = "Polynomial Fit";
 const CAT_FORMULA: &str = "User Defined";
 const CAT_FDF: &str = "Origin .FDF File";
@@ -1631,6 +1658,9 @@ mod tests {
         d.tolerance_digits = 12;
         let r = d.request().unwrap();
         assert_eq!((r.bands, r.band_level, r.max_iterations, r.tolerance), (BandChoice::Both, 0.9, 50, 1e-12));
+        assert_eq!(r.algorithm, Algorithm::LevenbergMarquardt);
+        d.algorithm = Algorithm::Simplex;
+        assert_eq!(d.request().unwrap().algorithm, Algorithm::Simplex);
 
         // Switching to a straight line keeps only fixed values.
         let (p, book, y) = project();

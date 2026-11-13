@@ -220,6 +220,34 @@ impl Host for PointHost<'_> {
     }
 }
 
+/// The iteration algorithm of a nonlinear fit (Origin's "Iteration Algorithm" box).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Algorithm {
+    /// Levenberg-Marquardt (Origin's default).
+    #[default]
+    LevenbergMarquardt,
+    /// The Nelder-Mead simplex method: no derivatives; a bound is kept by clamping every vertex.
+    /// One iteration is [`SIMPLEX_STEPS_PER_ITERATION`] simplex steps. See `docs/spec/fitting.md`.
+    Simplex,
+}
+
+impl Algorithm {
+    pub const ALL: [Algorithm; 2] = [Algorithm::LevenbergMarquardt, Algorithm::Simplex];
+
+    /// The name in Origin's Iteration Algorithm box.
+    pub fn label(self) -> &'static str {
+        match self {
+            Algorithm::LevenbergMarquardt => "Levenberg Marquardt",
+            Algorithm::Simplex => "Simplex",
+        }
+    }
+}
+
+/// Simplex steps (one reflection, expansion, contraction or shrink each) that one iteration of
+/// [`Algorithm::Simplex`] makes. Origin does not document its unit; with this value the default
+/// limit of 400 iterations is ample.
+pub const SIMPLEX_STEPS_PER_ITERATION: usize = 10;
+
 /// Settings of a fit. The defaults are Origin's: tolerance 1e-9, at most 400 iterations,
 /// 95 % confidence limits, errors scaled by the reduced chi-square (also with instrumental weights).
 #[derive(Debug, Clone)]
@@ -232,6 +260,7 @@ pub struct FitOptions {
     /// Scale the covariance matrix by the reduced chi-square. `None`: on, as in Origin (also for
     /// instrumental weighting).
     pub scale_errors: Option<bool>,
+    pub algorithm: Algorithm,
 }
 
 impl Default for FitOptions {
@@ -242,6 +271,7 @@ impl Default for FitOptions {
             tolerance: 1e-9,
             confidence_level: 0.95,
             scale_errors: None,
+            algorithm: Algorithm::LevenbergMarquardt,
         }
     }
 }
@@ -296,6 +326,7 @@ pub struct Fitter<'a> {
     iterations: usize,
     converged: bool,
     warnings: Vec<String>,
+    simplex: Option<Simplex>,
 }
 
 impl<'a> Fitter<'a> {
@@ -438,6 +469,7 @@ impl<'a> Fitter<'a> {
             iterations: 0,
             converged: nfree == 0,
             warnings,
+            simplex: None,
         })
     }
 
@@ -471,6 +503,9 @@ impl<'a> Fitter<'a> {
     pub fn step(&mut self) -> StepOutcome {
         if self.converged {
             return self.outcome();
+        }
+        if self.opts.algorithm == Algorithm::Simplex {
+            return self.simplex_iteration();
         }
         let func = self.func;
         let nfree = self.free.len();
@@ -524,6 +559,147 @@ impl<'a> Fitter<'a> {
             self.converged = true;
         }
         self.outcome()
+    }
+
+    /// One iteration of the simplex algorithm: [`SIMPLEX_STEPS_PER_ITERATION`] Nelder-Mead steps.
+    fn simplex_iteration(&mut self) -> StepOutcome {
+        self.iterations += 1;
+        if self.simplex.is_none() {
+            let base: Vec<f64> = self.free.iter().map(|&j| self.p[j]).collect();
+            self.simplex = Some(self.new_simplex(&base, self.cost));
+        }
+        let mut sx = self.simplex.take().expect("built above");
+        for _ in 0..SIMPLEX_STEPS_PER_ITERATION {
+            if !self.simplex_step(&mut sx) {
+                // The simplex has collapsed onto a point. Start again from the best vertex; when
+                // that no longer lowers the sum of squares the fit has converged.
+                let best = sx.f[sx.order[0]];
+                let improved = sx.last_restart.is_none_or(|prev| prev - best > SIMPLEX_RESTART_GAIN * best.abs());
+                if !improved || best == 0.0 {
+                    self.converged = true;
+                    break;
+                }
+                let base = sx.pts[sx.order[0]].clone();
+                sx = self.new_simplex(&base, best);
+                sx.last_restart = Some(best);
+            }
+        }
+        let b = sx.order[0];
+        for (k, &j) in self.free.iter().enumerate() {
+            self.p[j] = sx.pts[b][k];
+        }
+        self.cost = sx.f[b];
+        self.simplex = Some(sx);
+        self.outcome()
+    }
+
+    fn clamp_free(&self, v: &mut [f64]) {
+        for (k, &j) in self.free.iter().enumerate() {
+            if let Some(lo) = self.func.params[j].lower {
+                v[k] = v[k].max(lo);
+            }
+            if let Some(hi) = self.func.params[j].upper {
+                v[k] = v[k].min(hi);
+            }
+        }
+    }
+
+    fn cost_free(&self, v: &[f64]) -> f64 {
+        let mut p = self.p.clone();
+        for (k, &j) in self.free.iter().enumerate() {
+            p[j] = v[k];
+        }
+        let c = self.cost_of(&p);
+        if c.is_finite() { c } else { f64::INFINITY }
+    }
+
+    /// A simplex around `base` (whose cost is `base_cost`): one vertex moved by 20 % along each
+    /// axis (inwards when that axis is held on a bound).
+    fn new_simplex(&self, base: &[f64], base_cost: f64) -> Simplex {
+        let n = base.len();
+        let mut pts = vec![base.to_vec()];
+        let mut f = vec![base_cost];
+        for k in 0..n {
+            let mut v = base.to_vec();
+            let h = if base[k] != 0.0 { SIMPLEX_INIT_STEP * base[k].abs() } else { 0.00025 };
+            v[k] += h;
+            self.clamp_free(&mut v);
+            if v[k] == base[k] {
+                v[k] -= h;
+                self.clamp_free(&mut v);
+            }
+            f.push(self.cost_free(&v));
+            pts.push(v);
+        }
+        let mut sx = Simplex { pts, f, order: Vec::new(), last_restart: None };
+        sx.sort();
+        sx
+    }
+
+    /// One Nelder-Mead step with the adaptive coefficients of Gao and Han. False when the simplex
+    /// has collapsed onto a point.
+    fn simplex_step(&self, sx: &mut Simplex) -> bool {
+        let n = sx.pts[0].len();
+        if n == 0 {
+            return false;
+        }
+        let nf = n as f64;
+        let (best, worst) = (sx.order[0], sx.order[n]);
+        let second_worst = sx.order[n - 1];
+        let spread = sx.f[worst] - sx.f[best];
+        let mut size = 0.0f64;
+        for v in &sx.pts {
+            for (a, b) in v.iter().zip(&sx.pts[best]) {
+                size = size.max((a - b).abs() / b.abs().max(1e-12));
+            }
+        }
+        if sx.f[best] == 0.0 || (spread <= SIMPLEX_F_TOL * sx.f[best].abs() && size <= SIMPLEX_X_TOL) {
+            return false;
+        }
+        let mut centroid = vec![0.0; n];
+        for &i in &sx.order[..n] {
+            for (c, p) in centroid.iter_mut().zip(&sx.pts[i]) {
+                *c += p / nf;
+            }
+        }
+        let along = |t: f64| -> Vec<f64> {
+            let mut v: Vec<f64> = (0..n).map(|k| centroid[k] + t * (sx.pts[worst][k] - centroid[k])).collect();
+            self.clamp_free(&mut v);
+            v
+        };
+        let (beta, gamma, delta) = (1.0 + 2.0 / nf, 0.75 - 1.0 / (2.0 * nf), 1.0 - 1.0 / nf);
+        let xr = along(-1.0);
+        let fr = self.cost_free(&xr);
+        if fr < sx.f[best] {
+            let xe = along(-beta);
+            let fe = self.cost_free(&xe);
+            if fe < fr {
+                sx.replace(worst, xe, fe);
+            } else {
+                sx.replace(worst, xr, fr);
+            }
+        } else if fr < sx.f[second_worst] {
+            sx.replace(worst, xr, fr);
+        } else {
+            let x = if fr < sx.f[worst] { along(-gamma) } else { along(gamma) };
+            let fc = self.cost_free(&x);
+            if fc < fr.min(sx.f[worst]) {
+                sx.replace(worst, x, fc);
+            } else {
+                let b = sx.pts[best].clone();
+                for i in 0..=n {
+                    if i == best {
+                        continue;
+                    }
+                    let mut v: Vec<f64> = (0..n).map(|k| b[k] + delta * (sx.pts[i][k] - b[k])).collect();
+                    self.clamp_free(&mut v);
+                    sx.f[i] = self.cost_free(&v);
+                    sx.pts[i] = v;
+                }
+                sx.sort();
+            }
+        }
+        true
     }
 
     /// The report at the current parameters. A fit that was not stepped to convergence is
@@ -678,6 +854,36 @@ impl<'a> Fitter<'a> {
             status,
             warnings,
         }
+    }
+}
+
+/// Size of the first simplex along each axis, relative to the parameter.
+const SIMPLEX_INIT_STEP: f64 = 0.2;
+/// A simplex stops when the costs of its vertices agree to this fraction ...
+const SIMPLEX_F_TOL: f64 = 1e-13;
+/// ... and the vertices lie this close together (relative to the best vertex).
+const SIMPLEX_X_TOL: f64 = 1e-8;
+/// A restart from the best vertex must lower the cost by this fraction to go on.
+const SIMPLEX_RESTART_GAIN: f64 = 1e-12;
+
+/// The vertices of a simplex over the free parameters, their costs, and their order (best first).
+struct Simplex {
+    pts: Vec<Vec<f64>>,
+    f: Vec<f64>,
+    order: Vec<usize>,
+    last_restart: Option<f64>,
+}
+
+impl Simplex {
+    fn sort(&mut self) {
+        let mut o: Vec<usize> = (0..self.pts.len()).collect();
+        o.sort_by(|&a, &b| self.f[a].total_cmp(&self.f[b]));
+        self.order = o;
+    }
+    fn replace(&mut self, i: usize, v: Vec<f64>, f: f64) {
+        self.pts[i] = v;
+        self.f[i] = f;
+        self.sort();
     }
 }
 

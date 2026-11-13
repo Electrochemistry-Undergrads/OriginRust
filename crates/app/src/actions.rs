@@ -7,6 +7,7 @@
 
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
+use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
 use crate::panels::PanelId;
 use sheaf_core::graph::PlotKind;
@@ -209,6 +210,12 @@ pub enum Action {
         book: WindowId,
         column: Option<ColumnId>,
         kind: FitKind,
+    },
+    /// Open Multiple Linear Regression, Compare Models or Rank Models for a column.
+    FitMore {
+        book: WindowId,
+        column: Option<ColumnId>,
+        kind: FitMoreKind,
     },
     /// Sort the rows of the sheet that holds this column by the column's values.
     SortSheet {

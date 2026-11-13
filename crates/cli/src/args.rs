@@ -93,6 +93,21 @@ pub struct FitArgs {
     /// columns, or one per --y column in the same order.
     #[arg(long, value_delimiter = ',', value_name = "COLUMNS")]
     pub yerr: Vec<String>,
+    /// The X-error column for --model linearx (a straight line fitted with errors in x and y), by
+    /// short or long name; without it the sheet's own X-error column is used.
+    #[arg(long, value_name = "COLUMN")]
+    pub xerr: Option<String>,
+    /// Multiple linear regression of the first Y column on these independent variables
+    /// (comma-separated columns); --fix Intercept=VALUE holds the intercept.
+    #[arg(long, value_delimiter = ',', value_name = "COLUMNS", conflicts_with_all = ["compare", "rank", "global"])]
+    pub regress: Vec<String>,
+    /// Compare --model with this model (a model as for --model) on the first Y column: AICc,
+    /// Akaike weights, BIC and the F-test.
+    #[arg(long, value_name = "MODEL", conflicts_with_all = ["rank", "global"])]
+    pub compare: Option<String>,
+    /// Rank these built-in functions on the first Y column by AICc (comma-separated names).
+    #[arg(long, value_delimiter = ',', value_name = "FUNCTIONS", conflicts_with = "global")]
+    pub rank: Vec<String>,
     /// Do not scale the parameter errors by sqrt(reduced chi-square) (Origin's default is to scale;
     /// without weights Origin always scales, so this only matters with --weight).
     #[arg(long)]

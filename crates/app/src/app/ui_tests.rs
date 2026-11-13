@@ -770,6 +770,82 @@ fn the_fit_window_fits_several_columns_independently_or_as_a_global_fit() {
     assert!(names.contains(&"FitNL2".to_string()), "{names:?}");
 }
 
+fn sheet_names(h: &Harness<'static, SheafApp>) -> Vec<String> {
+    project(h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect()
+}
+
+#[test]
+fn linear_fit_with_x_error_asks_for_an_x_error_column_then_fits() {
+    let mut h = start(vec![decays_file("fitxerr")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::LinearXError }, &ctx);
+    settle(&mut h);
+    h.get_by_label("NLFit (Straight line with X error)");
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_some(), "without an X-error column the window stays open");
+    assert!(!h.query_all_by_label_contains("X-error").collect::<Vec<_>>().is_empty());
+    // An X-error column right after the Y column is what the fit needs.
+    h.state_mut().doc.apply("Add X error", |p| {
+        let id = p.new_column_id();
+        let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+        let at = ws.column_by_name("B").map(|c| ws.column_index(c.id).unwrap()).unwrap() + 1;
+        let name = ws.next_short_name();
+        ws.columns
+            .insert(at, sheaf_core::Column::new(id, name, Designation::XError, ColumnData::numeric(vec![0.05; 30])));
+    });
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_none(), "{:?}", h.state().fit.as_ref().map(|d| d.problem_for_test()));
+    assert!(sheet_names(&h).contains(&"FitLinear1".to_string()), "{:?}", sheet_names(&h));
+}
+
+#[test]
+fn multiple_regression_compare_models_and_rank_models_are_in_the_fitting_menu() {
+    let mut h = start(vec![decays_file("fitmore")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let sheet = &project(&h).workbooks().next().unwrap().sheets[0];
+    let (t, b, w) = (
+        sheet.column_by_name("t").unwrap().id,
+        sheet.column_by_name("b").unwrap().id,
+        sheet.column_by_name("w").unwrap().id,
+    );
+    // Multiple Linear Regression: pick the variables, OK writes FitMR1 and its statistics.
+    h.state_mut().apply(Action::FitMore { book, column: None, kind: FitMoreKind::Multiple }, &ctx);
+    settle(&mut h);
+    h.get_by_label("Multiple Linear Regression");
+    h.get_by_label("Independent variables (X)");
+    h.state_mut().fit_more.as_mut().unwrap().choose_x_for_test(&[t, b, w]);
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_none());
+    let names = sheet_names(&h);
+    assert!(names.contains(&"FitMR1".to_string()) && names.contains(&"FitMR1Stats".to_string()), "{names:?}");
+    // Compare Models.
+    h.state_mut().apply(Action::FitMore { book, column: None, kind: FitMoreKind::Compare }, &ctx);
+    settle(&mut h);
+    h.get_by_label("Model 1");
+    h.state_mut().fit_more.as_mut().unwrap().choose_models_for_test("ExpDec1", "Linear");
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_none());
+    assert!(sheet_names(&h).contains(&"FitCompare1".to_string()), "{:?}", sheet_names(&h));
+    // Rank Models; with fewer than two functions the window stays open and says why.
+    h.state_mut().apply(Action::FitMore { book, column: None, kind: FitMoreKind::Rank }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit_more.as_mut().unwrap().choose_functions_for_test(&["ExpDec1"]);
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_some());
+    assert!(h.state().fit_more.as_ref().unwrap().problem_for_test().unwrap().contains("at least two"));
+    h.state_mut().fit_more.as_mut().unwrap().choose_functions_for_test(&["ExpDec1", "ExpDec2", "Gauss"]);
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_none());
+    assert!(sheet_names(&h).contains(&"FitRank1".to_string()), "{:?}", sheet_names(&h));
+    // Each step is one undo.
+    let n = sheet_names(&h).len();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(sheet_names(&h).len(), n - 1);
+}
+
 #[test]
 fn the_quick_fits_open_nlfit_with_a_preset_function_and_a_locked_category() {
     let mut h = start(vec![decays_file("fitquick")]);
@@ -1761,6 +1837,10 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
         &["Analysis", "Data Manipulation", "Subtract Reference Data..."],
         &["Analysis", "Fitting", "Linear Fit..."],
         &["Analysis", "Fitting", "Polynomial Fit..."],
+        &["Analysis", "Fitting", "Fit Linear with X Error..."],
+        &["Analysis", "Fitting", "Multiple Linear Regression..."],
+        &["Analysis", "Fitting", "Compare Models..."],
+        &["Analysis", "Fitting", "Rank Models..."],
         &["Analysis", "Fitting", "Nonlinear Curve Fit..."],
         &["Analysis", "Signal Processing", "Smooth..."],
         &["Analysis", "Peaks and Baseline", "Find Peaks..."],

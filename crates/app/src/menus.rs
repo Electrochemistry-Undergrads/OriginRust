@@ -19,6 +19,7 @@ use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, S
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
+use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
 use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
@@ -143,6 +144,7 @@ pub enum Cmd {
     FilterRows,
     Analyze(AnalysisKind),
     Fit(FitKind),
+    FitMore(FitMoreKind),
     /// The graph settings of the active layer on a tab.
     GraphProps(PropsTab),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
@@ -925,9 +927,9 @@ fn analysis_menu() -> Vec<Entry> {
             "&Fitting",
             vec![
                 item("Linear Fit...", Cmd::Fit(FitKind::Linear)),
-                grey("Fit Linear with X Error..."),
+                item("Fit Linear with X Error...", Cmd::Fit(FitKind::LinearXError)),
                 item("Polynomial Fit...", Cmd::Fit(FitKind::Polynomial)),
-                grey("Multiple Linear Regression..."),
+                item("Multiple Linear Regression...", Cmd::FitMore(FitMoreKind::Multiple)),
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
                 grey("Nonlinear Implicit Curve Fit..."),
@@ -941,8 +943,8 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Sigmoidal Fit...", Cmd::Fit(FitKind::Sigmoidal)),
                 sep(),
                 grey("Compare Datasets..."),
-                grey("Compare Models..."),
-                grey("Rank Models..."),
+                item("Compare Models...", Cmd::FitMore(FitMoreKind::Compare)),
+                item("Rank Models...", Cmd::FitMore(FitMoreKind::Rank)),
             ],
         ),
         sub(
@@ -1893,6 +1895,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             (Some(book), _) => Action::Fit { book, column: c.selected.first().copied(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
                 Action::Fit { book, column: Some(y), kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
+        Cmd::FitMore(kind) => match (c.book, c.curve) {
+            (Some(book), _) => Action::FitMore { book, column: c.selected.first().copied(), kind: *kind },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::FitMore { book, column: Some(y), kind: *kind }
             }
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),

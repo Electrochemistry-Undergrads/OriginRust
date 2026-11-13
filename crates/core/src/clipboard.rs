@@ -57,6 +57,13 @@ fn copy_cell(column: &Column, row: usize, full_precision: bool) -> String {
             None => String::new(),
         },
         ColumnData::Text(v) => v.get(row).map(|s| clean(s)).unwrap_or_default(),
+        ColumnData::Mixed { numbers, .. } => match (column.data.text_cell(row), numbers.get(row)) {
+            (Some(t), _) => clean(t),
+            (None, Some(x)) if x.is_nan() => String::new(),
+            (None, Some(x)) if full_precision && !column.format.is_date_time() && x.is_finite() => full_text(*x),
+            (None, Some(_)) => column.shown_text(row),
+            (None, None) => String::new(),
+        },
     }
 }
 
@@ -118,6 +125,11 @@ impl Worksheet {
                 match &mut c.data {
                     ColumnData::Numeric(v) => Arc::make_mut(v)[rows.start..end].fill(f64::NAN),
                     ColumnData::Text(v) => Arc::make_mut(v)[rows.start..end].fill(String::new()),
+                    ColumnData::Mixed { numbers, texts } => {
+                        let stop = end.min(numbers.len());
+                        Arc::make_mut(numbers)[rows.start..stop].fill(f64::NAN);
+                        Arc::make_mut(texts).retain(|r, _| *r < rows.start || *r >= end);
+                    }
                 }
                 c.trim_missing_tail();
             }
@@ -133,6 +145,9 @@ impl Column {
         match &self.data {
             ColumnData::Numeric(v) => v.get(row).is_none_or(|x| x.is_nan()),
             ColumnData::Text(v) => v.get(row).is_none_or(|s| s.is_empty()),
+            ColumnData::Mixed { numbers, .. } => {
+                numbers.get(row).is_none_or(|x| x.is_nan()) && self.data.text_cell(row).is_none()
+            }
         }
     }
 
@@ -145,6 +160,10 @@ impl Column {
         match &mut self.data {
             ColumnData::Numeric(v) => Arc::make_mut(v).truncate(keep),
             ColumnData::Text(v) => Arc::make_mut(v).truncate(keep),
+            ColumnData::Mixed { numbers, texts } => {
+                Arc::make_mut(numbers).truncate(keep);
+                Arc::make_mut(texts).retain(|r, _| *r < keep);
+            }
         }
     }
 
@@ -290,7 +309,9 @@ fn paste_column(column: &mut Column, block: &Range<usize>, cells: &[&str]) -> us
     let date_like = column.format.is_date_time();
     let mut not_numbers = 0;
     // Decide the type of the column after the paste.
-    let become_text = column.data.is_numeric() && !all_numbers && !date_like && column.blank_outside(block);
+    // A Text & Numeric column keeps the text cells, so only a plain Numeric column turns to text.
+    let become_text =
+        matches!(column.data, ColumnData::Numeric(_)) && !all_numbers && !date_like && column.blank_outside(block);
     let become_numbers = !column.data.is_numeric() && all_numbers && entirely_blank;
     if become_text {
         let mut v: Vec<String> = vec![String::new(); column.len().max(block.end)];
@@ -302,7 +323,7 @@ fn paste_column(column: &mut Column, block: &Range<usize>, cells: &[&str]) -> us
         return 0;
     }
     if become_numbers {
-        column.data = ColumnData::numeric(Vec::new());
+        column.data = ColumnData::mixed_numbers(Vec::new());
     }
     match &mut column.data {
         ColumnData::Text(v) => {
@@ -314,7 +335,7 @@ fn paste_column(column: &mut Column, block: &Range<usize>, cells: &[&str]) -> us
                 v[block.start + i] = (*c).to_string();
             }
         }
-        ColumnData::Numeric(_) => {
+        ColumnData::Numeric(_) | ColumnData::Mixed { .. } => {
             for (i, c) in cells.iter().enumerate() {
                 if !column.set_cell_text(block.start + i, c) && !is_missing(c) {
                     not_numbers += 1;
@@ -416,7 +437,28 @@ mod tests {
         assert_eq!((r.rows, r.columns, r.columns_added), (2, 2, 0));
         assert_eq!(numbers(&p, b, 0), vec![1.5, 2.5]);
         let ws = &p.workbook(b).unwrap().sheets[0];
-        assert_eq!(ws.columns[1].text().unwrap(), &["alpha".to_string(), "beta".to_string()]);
+        // A new column is Text & Numeric (Origin's default), so the words stay as text cells.
+        assert_eq!((ws.columns[1].cell_text(0), ws.columns[1].cell_text(1)), ("alpha".into(), "beta".into()));
+        assert!(ws.columns[1].data.is_numeric());
+    }
+
+    #[test]
+    fn text_pasted_into_a_text_and_numeric_column_is_kept_and_copied_back() {
+        let (mut p, b) = book_with(vec![ColumnData::mixed_numbers(vec![1.0, 2.0, 3.0, 4.0])]);
+        let r = p.paste_text(b, 0, 0, 0, "10\n<LOD\n30").unwrap();
+        assert_eq!(r.not_numbers, 0);
+        let a = numbers(&p, b, 0);
+        assert_eq!(a[0], 10.0);
+        assert!(a[1].is_nan(), "numeric views see the text as missing");
+        assert_eq!(a[3], 4.0);
+        let ws = &p.workbook(b).unwrap().sheets[0];
+        assert_eq!(ws.columns[0].cell_text(1), "<LOD");
+        assert_eq!(ws.copy_text(&[0], 0..4, CopyOptions::default()), "10\n<LOD\n30\n4\n");
+        // clearing removes the text
+        let mut ws = ws.clone();
+        ws.clear_cells(&[0], 1..2);
+        assert_eq!(ws.columns[0].cell_text(1), "--");
+        assert!(ws.columns[0].is_blank_at(1));
     }
 
     #[test]
@@ -480,8 +522,8 @@ mod tests {
             CopyOptions { full_precision: true, ..Default::default() },
         );
         doc.apply("Add sheet columns", |p| {
-            p.add_column(b, 0, Designation::Y, ColumnData::default()).unwrap();
-            p.add_column(b, 0, Designation::Y, ColumnData::default()).unwrap();
+            p.add_column(b, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap();
+            p.add_column(b, 0, Designation::Y, ColumnData::text(Vec::new())).unwrap();
         });
         doc.apply("Paste", |p| p.paste_text(b, 0, 2, 0, &text).unwrap());
         let ws = &doc.project().workbook(b).unwrap().sheets[0];

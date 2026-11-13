@@ -59,6 +59,12 @@ pub enum ColumnData {
     Numeric(Arc<Vec<f64>>),
     /// Text. A missing value is stored as an empty string.
     Text(Arc<Vec<String>>),
+    /// Origin's "Text & Numeric" format: numbers and text cells in one column. `numbers` holds
+    /// the number of every row (NaN for a missing value and for a text cell); `texts` holds the
+    /// text of the rows that are text cells (keyed by 0-based row). Every numeric view (plots,
+    /// analysis, fits, formulas) reads `numbers` and so sees a text cell as missing. A text only
+    /// counts for a row whose number is NaN, so a number written over a text cell wins.
+    Mixed { numbers: Arc<Vec<f64>>, texts: Arc<BTreeMap<usize, String>> },
 }
 
 /// Two columns are equal when they share storage or hold the same bit
@@ -72,14 +78,20 @@ impl PartialEq for ColumnData {
                     || (a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.to_bits() == y.to_bits()))
             }
             (ColumnData::Text(a), ColumnData::Text(b)) => Arc::ptr_eq(a, b) || a == b,
+            (ColumnData::Mixed { numbers: a, texts: ta }, ColumnData::Mixed { numbers: b, texts: tb }) => {
+                (Arc::ptr_eq(a, b)
+                    || (a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.to_bits() == y.to_bits())))
+                    && (Arc::ptr_eq(ta, tb) || ta == tb)
+            }
             _ => false,
         }
     }
 }
 
 impl Default for ColumnData {
+    /// An empty Text & Numeric column: the format Origin gives a new column.
     fn default() -> Self {
-        ColumnData::Numeric(Arc::new(Vec::new()))
+        ColumnData::mixed_numbers(Vec::new())
     }
 }
 
@@ -92,19 +104,53 @@ impl ColumnData {
         ColumnData::Text(Arc::new(values))
     }
 
+    /// A Text & Numeric column. Texts at rows whose number is not missing are dropped.
+    pub fn mixed(numbers: Vec<f64>, mut texts: BTreeMap<usize, String>) -> Self {
+        texts.retain(|r, t| !t.is_empty() && numbers.get(*r).is_none_or(|x| x.is_nan()));
+        ColumnData::Mixed { numbers: Arc::new(numbers), texts: Arc::new(texts) }
+    }
+
+    /// A Text & Numeric column that holds only numbers so far (a new Origin column is one).
+    pub fn mixed_numbers(numbers: Vec<f64>) -> Self {
+        ColumnData::mixed(numbers, BTreeMap::new())
+    }
+
     pub fn len(&self) -> usize {
         match self {
             ColumnData::Numeric(v) => v.len(),
             ColumnData::Text(v) => v.len(),
+            ColumnData::Mixed { numbers, texts } => numbers.len().max(texts.keys().next_back().map_or(0, |r| r + 1)),
         }
+    }
+
+    /// The text of a text cell of a Text & Numeric column, or of any cell of a text column
+    /// (when not empty). `None` for a number or a missing value.
+    pub fn text_cell(&self, row: usize) -> Option<&str> {
+        match self {
+            ColumnData::Numeric(_) => None,
+            ColumnData::Text(v) => v.get(row).map(String::as_str).filter(|s| !s.is_empty()),
+            ColumnData::Mixed { numbers, texts } => {
+                if numbers.get(row).is_none_or(|x| x.is_nan()) {
+                    texts.get(&row).map(String::as_str)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// True for a Text & Numeric column.
+    pub fn is_mixed(&self) -> bool {
+        matches!(self, ColumnData::Mixed { .. })
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// True when the column has numbers (Numeric and Text & Numeric), false for a text column.
     pub fn is_numeric(&self) -> bool {
-        matches!(self, ColumnData::Numeric(_))
+        !matches!(self, ColumnData::Text(_))
     }
 }
 
@@ -239,10 +285,12 @@ impl Column {
         self.data.is_empty()
     }
 
-    /// The numbers of a numeric column, or `None` for a text column.
+    /// The numbers of a numeric column, or `None` for a text column. A Text & Numeric column
+    /// gives its numbers with every text cell as NaN (missing), as Origin does in calculations.
     pub fn numeric(&self) -> Option<&[f64]> {
         match &self.data {
             ColumnData::Numeric(v) => Some(v.as_slice()),
+            ColumnData::Mixed { numbers, .. } => Some(numbers.as_slice()),
             ColumnData::Text(_) => None,
         }
     }
@@ -252,6 +300,7 @@ impl Column {
     pub fn numeric_mut(&mut self) -> Option<&mut Vec<f64>> {
         match &mut self.data {
             ColumnData::Numeric(v) => Some(Arc::make_mut(v)),
+            ColumnData::Mixed { numbers, .. } => Some(Arc::make_mut(numbers)),
             ColumnData::Text(_) => None,
         }
     }
@@ -259,14 +308,14 @@ impl Column {
     pub fn text(&self) -> Option<&[String]> {
         match &self.data {
             ColumnData::Text(v) => Some(v.as_slice()),
-            ColumnData::Numeric(_) => None,
+            ColumnData::Numeric(_) | ColumnData::Mixed { .. } => None,
         }
     }
 
     pub fn text_mut(&mut self) -> Option<&mut Vec<String>> {
         match &mut self.data {
             ColumnData::Text(v) => Some(Arc::make_mut(v)),
-            ColumnData::Numeric(_) => None,
+            ColumnData::Numeric(_) | ColumnData::Mixed { .. } => None,
         }
     }
 
@@ -292,6 +341,11 @@ impl Column {
                 None => String::new(),
             },
             ColumnData::Text(v) => v.get(row).cloned().unwrap_or_default(),
+            ColumnData::Mixed { numbers, .. } => match (self.data.text_cell(row), numbers.get(row)) {
+                (Some(t), _) => t.to_string(),
+                (None, Some(x)) => self.format.format(*x),
+                (None, None) => String::new(),
+            },
         }
     }
 
@@ -300,8 +354,13 @@ impl Column {
     /// shown as 0.84147; very small and very large numbers use scientific notation. Other
     /// formats show what `cell_text` gives. The cell keeps every digit.
     pub fn shown_text(&self, row: usize) -> String {
-        match (&self.data, self.format) {
-            (ColumnData::Numeric(v), crate::format::NumberFormat::General) => match v.get(row) {
+        let numbers = match &self.data {
+            ColumnData::Numeric(v) => Some(v),
+            ColumnData::Mixed { numbers, .. } if self.data.text_cell(row).is_none() => Some(numbers),
+            _ => None,
+        };
+        match (numbers, self.format) {
+            (Some(v), crate::format::NumberFormat::General) => match v.get(row) {
                 Some(x) if x.is_finite() && *x != 0.0 => {
                     if x.abs() >= 1e-4 && x.abs() < 1e15 {
                         let text = format!("{x:.5}");
@@ -318,7 +377,8 @@ impl Column {
 
     /// Sets one cell from typed text. Numeric columns grow with missing
     /// values as needed; text that is not a number becomes a missing value.
-    /// Returns `false` when the text could not be read as a number.
+    /// A Text & Numeric column keeps such text as a text cell. Returns `false` when the text
+    /// could not be read as a number and was not kept (always `true` for Text & Numeric).
     pub fn set_cell_text(&mut self, row: usize, text: &str) -> bool {
         let is_date = self.format.is_date_time();
         match &mut self.data {
@@ -349,6 +409,31 @@ impl Column {
                     v.resize(row + 1, String::new());
                 }
                 v[row] = text.to_string();
+                true
+            }
+            ColumnData::Mixed { numbers, texts } => {
+                let numbers = Arc::make_mut(numbers);
+                let texts = Arc::make_mut(texts);
+                let t = text.trim();
+                let (value, kept) = if t.is_empty() || t == "--" {
+                    (f64::NAN, None)
+                } else {
+                    match t.parse::<f64>() {
+                        Ok(x) => (x, None),
+                        Err(_) => match is_date.then(|| crate::datetime::parse(t, Default::default())).flatten() {
+                            Some(p) => (p.value, None),
+                            None => (f64::NAN, Some(text.to_string())),
+                        },
+                    }
+                };
+                if row >= numbers.len() {
+                    numbers.resize(row + 1, f64::NAN);
+                }
+                numbers[row] = value;
+                match kept {
+                    Some(k) => texts.insert(row, k),
+                    None => texts.remove(&row),
+                };
                 true
             }
         }
@@ -415,6 +500,28 @@ mod tests {
         assert_eq!(c.numeric().unwrap()[3], 2.5);
         assert!(!c.set_cell_text(0, "abc"));
         assert_eq!(c.cell_text(0), "--");
+    }
+
+    #[test]
+    fn text_and_numeric_keeps_text_and_numbers_see_it_as_missing() {
+        let mut c = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::mixed_numbers(vec![1.0]));
+        assert!(c.set_cell_text(2, "four"));
+        assert!(c.set_cell_text(0, "2.5"));
+        assert_eq!(c.len(), 3);
+        assert_eq!(c.cell_text(2), "four");
+        assert_eq!(c.shown_text(2), "four");
+        assert_eq!(c.shown_text(0), "2.5");
+        let n = c.numeric().unwrap();
+        assert_eq!(n[0], 2.5);
+        assert!(n[1].is_nan() && n[2].is_nan());
+        assert_eq!(c.cell_text(1), "--");
+        // a number typed over the text replaces it; so does an empty cell
+        assert!(c.set_cell_text(2, "7"));
+        assert_eq!(c.cell_text(2), "7");
+        assert!(c.set_cell_text(0, "x"));
+        assert!(c.set_cell_text(0, ""));
+        assert_eq!(c.cell_text(0), "--");
+        assert!(c.data.is_numeric());
     }
 
     #[test]

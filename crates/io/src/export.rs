@@ -138,6 +138,11 @@ fn used_rows(col: &Column) -> usize {
     match &col.data {
         ColumnData::Numeric(v) => v.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1),
         ColumnData::Text(v) => v.iter().rposition(|s| !s.is_empty()).map_or(0, |i| i + 1),
+        ColumnData::Mixed { numbers, texts } => {
+            let last_number = numbers.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1);
+            let last_text = texts.keys().next_back().map_or(0, |r| r + 1);
+            last_number.max(last_text)
+        }
     }
 }
 
@@ -146,24 +151,33 @@ fn cell(col: &Column, row: usize, used: usize, opts: &AsciiExportOptions) -> Str
         return String::new();
     }
     let missing = || if opts.missing_dashes { "--".to_string() } else { String::new() };
-    match &col.data {
-        ColumnData::Numeric(v) => {
-            let Some(&x) = v.get(row) else { return String::new() };
-            if x.is_nan() {
-                return missing();
-            }
-            let text = if col.format.is_date_time() || !x.is_finite() {
-                col.format.format(x)
-            } else if opts.full_precision {
-                format_full_precision(x)
-            } else {
-                col.shown_text(row)
-            };
-            if opts.csv && opts.separator == Separator::Semicolon { text.replace('.', ",") } else { text }
+    let number = |x: f64| {
+        if x.is_nan() {
+            return missing();
         }
+        let text = if col.format.is_date_time() || !x.is_finite() {
+            col.format.format(x)
+        } else if opts.full_precision {
+            format_full_precision(x)
+        } else {
+            col.shown_text(row)
+        };
+        if opts.csv && opts.separator == Separator::Semicolon { text.replace('.', ",") } else { text }
+    };
+    match &col.data {
+        ColumnData::Numeric(v) => match v.get(row) {
+            Some(&x) => number(x),
+            None => String::new(),
+        },
         ColumnData::Text(v) => match v.get(row) {
             Some(s) if !s.is_empty() => quote(s, opts),
             _ => missing(),
+        },
+        // A Text & Numeric column: its text cells are written as text, its numbers as numbers.
+        ColumnData::Mixed { numbers, .. } => match (col.data.text_cell(row), numbers.get(row)) {
+            (Some(t), _) => quote(t, opts),
+            (None, Some(&x)) => number(x),
+            (None, None) => missing(),
         },
     }
 }
@@ -308,6 +322,34 @@ mod tests {
 
     #[test]
     fn date_columns_are_written_as_shown() {
+        use sheaf_core::datetime::{DatePattern, TimePattern};
+        let mut s = Worksheet::new("S");
+        let mut t =
+            column(1, "A", ColumnData::numeric(vec![2_461_355.573_032_407_6, f64::NAN, 2_461_356.0]), "", "", "");
+        t.format = NumberFormat::DateTime(DatePattern::Iso, TimePattern::Hms);
+        let y = column(2, "B", ColumnData::numeric(vec![1.0, 2.0, 3.0]), "", "", "");
+        s.columns = vec![t, y];
+        let text = export(&s, &AsciiExportOptions::csv());
+        assert_eq!(text, "2026-11-11 13:45:10,1\r\n--,2\r\n2026-11-12 00:00:00,3\r\n");
+    }
+
+    #[test]
+    fn text_cells_of_a_text_and_numeric_column_are_written_and_read_back() {
+        let mut s = Worksheet::new("S");
+        let texts = [(1, "<LOD".to_string()), (3, "a,b".to_string())].into_iter().collect();
+        let c = Column::new(
+            ColumnId(1),
+            "A",
+            Designation::Y,
+            ColumnData::mixed(vec![1.5, f64::NAN, 3.0, f64::NAN, f64::NAN, 4.0], texts),
+        );
+        s.columns.push(c);
+        let text = export(&s, &AsciiExportOptions::csv());
+        assert_eq!(text, "1.5\r\n<LOD\r\n3\r\n\"a,b\"\r\n--\r\n4\r\n");
+        let book = crate::ascii::parse_ascii(&text, "S", &crate::ascii::AsciiOptions::default()).unwrap().workbook;
+        let back = &book.sheets[0].columns[0];
+        assert_eq!(back.numeric().unwrap()[0], 1.5);
+        assert_eq!((back.cell_text(1), back.cell_text(3)), ("<LOD".to_string(), "a,b".to_string()));
         use sheaf_core::datetime::{DatePattern, TimePattern};
         let mut s = Worksheet::new("S");
         let mut t =

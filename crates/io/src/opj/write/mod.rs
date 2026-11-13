@@ -112,6 +112,13 @@ fn used_range(column: &Column) -> (u32, u32) {
     let used: Vec<usize> = match &column.data {
         ColumnData::Numeric(v) => v.iter().enumerate().filter(|(_, x)| !x.is_nan()).map(|(i, _)| i).collect(),
         ColumnData::Text(v) => v.iter().enumerate().filter(|(_, t)| !t.is_empty()).map(|(i, _)| i).collect(),
+        ColumnData::Mixed { numbers, texts } => {
+            let mut rows: Vec<usize> =
+                numbers.iter().enumerate().filter(|(_, x)| !x.is_nan()).map(|(i, _)| i).collect();
+            rows.extend(texts.keys().copied().filter(|r| numbers.get(*r).is_none_or(|x| x.is_nan())));
+            rows.sort_unstable();
+            rows
+        }
     };
     match (used.first(), used.last()) {
         (Some(f), Some(l)) => (*f as u32, *l as u32 + 1),
@@ -330,58 +337,62 @@ impl Writer {
         rows: usize,
         parent: u16,
     ) -> Result<(Vec<u8>, (u32, u32)), IoError> {
-        let (cell_size, data, used) = match &column.data {
-            ColumnData::Numeric(values) => {
-                let mut data = Vec::with_capacity(rows * 10);
-                let mut used: Option<(usize, usize)> = None;
-                for row in 0..rows {
-                    let x = values.get(row).copied().filter(|x| !x.is_nan());
+        // Every cell is a number, a text or missing. A Text & Numeric column holds all three.
+        let number_at = |row: usize| -> Option<f64> {
+            match &column.data {
+                ColumnData::Numeric(v) | ColumnData::Mixed { numbers: v, .. } => {
+                    v.get(row).copied().filter(|x| !x.is_nan())
+                }
+                ColumnData::Text(_) => None,
+            }
+        };
+        let mut encoded: Vec<Option<Vec<u8>>> = Vec::with_capacity(rows);
+        for row in 0..rows {
+            // A number written over a text wins, as in the worksheet.
+            let text = if number_at(row).is_some() { None } else { column.data.text_cell(row) };
+            let Some(text) = text else {
+                encoded.push(None);
+                continue;
+            };
+            let (bytes, lossy) = encode_cp1252(text);
+            self.notes.lossy_texts += usize::from(lossy);
+            if bytes.contains(&0) {
+                return fail(format!("a cell of column '{}' contains a NUL character", column.short_name));
+            }
+            if bytes.len() > MAX_CELL_TEXT {
+                return fail(format!(
+                    "a cell of column '{}' holds {} bytes of text; Origin cells hold at most {MAX_CELL_TEXT}",
+                    column.short_name,
+                    bytes.len()
+                ));
+            }
+            encoded.push(Some(bytes));
+        }
+        let longest = encoded.iter().flatten().map(Vec::len).max().unwrap_or(0);
+        let size = (longest + 3).max(10);
+        let mut data = Vec::with_capacity(rows * size);
+        let mut used: Option<(usize, usize)> = None;
+        for (row, bytes) in encoded.iter().enumerate() {
+            match bytes {
+                Some(bytes) => {
+                    used = Some(used.map_or((row, row + 1), |(f, _)| (f, row + 1)));
+                    data.extend_from_slice(&[1, 0]);
+                    data.extend_from_slice(bytes);
+                    data.resize(data.len() + size - 2 - bytes.len(), 0);
+                }
+                None => {
+                    // a number, or a missing number for an empty cell
+                    let x = number_at(row);
                     if x.is_some() {
                         used = Some(used.map_or((row, row + 1), |(f, _)| (f, row + 1)));
                     }
                     data.extend_from_slice(&[0, 0]);
                     data.extend_from_slice(&x.unwrap_or(MISSING).to_le_bytes());
+                    data.resize(data.len() + size - 10, 0);
                 }
-                (10u8, data, used)
             }
-            ColumnData::Text(texts) => {
-                let mut encoded = Vec::with_capacity(rows);
-                for row in 0..rows {
-                    let text = texts.get(row).map_or("", String::as_str);
-                    let (bytes, lossy) = encode_cp1252(text);
-                    self.notes.lossy_texts += usize::from(lossy);
-                    if bytes.contains(&0) {
-                        return fail(format!("a cell of column '{}' contains a NUL character", column.short_name));
-                    }
-                    if bytes.len() > MAX_CELL_TEXT {
-                        return fail(format!(
-                            "a cell of column '{}' holds {} bytes of text; Origin cells hold at most {MAX_CELL_TEXT}",
-                            column.short_name,
-                            bytes.len()
-                        ));
-                    }
-                    encoded.push(bytes);
-                }
-                let longest = encoded.iter().map(Vec::len).max().unwrap_or(0);
-                let size = (longest + 3).max(10);
-                let mut data = Vec::with_capacity(rows * size);
-                let mut used: Option<(usize, usize)> = None;
-                for (row, bytes) in encoded.iter().enumerate() {
-                    if bytes.is_empty() {
-                        // an empty cell is a missing number
-                        data.extend_from_slice(&[0, 0]);
-                        data.extend_from_slice(&MISSING.to_le_bytes());
-                        data.resize(data.len() + size - 10, 0);
-                    } else {
-                        used = Some(used.map_or((row, row + 1), |(f, _)| (f, row + 1)));
-                        data.extend_from_slice(&[1, 0]);
-                        data.extend_from_slice(bytes);
-                        data.resize(data.len() + size - 2 - bytes.len(), 0);
-                    }
-                }
-                (size as u8, data, used)
-            }
-        };
+        }
+        let cell_size = size as u8;
         let (first, last) = used.map_or((0, 0), |(f, l)| (f as u32, l as u32));
         let spec = DatasetSpec {
             name,

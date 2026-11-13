@@ -16,8 +16,6 @@ use std::collections::HashMap;
 const DELIMITER_SAMPLE_LINES: usize = 200;
 /// Consecutive numeric lines that mark the start of the data.
 const DATA_RUN: usize = 3;
-/// Share of non-empty cells that must be numbers for a numeric column.
-const NUMERIC_SHARE: f64 = 0.8;
 /// Longest worksheet name.
 const SHEET_NAME_MAX: usize = 31;
 
@@ -888,29 +886,21 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
         }
         let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, a.ns)).collect();
         let parsed = numbers.iter().filter(|n| n.is_some()).count();
-        // Missing-value markers (`n.d.`, `<LOD`, `NA`, ...) are neither numbers nor evidence of text.
-        let markers = cells.iter().zip(&numbers).filter(|(c, n)| n.is_none() && is_missing_marker(c)).count();
-        let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count() - markers;
+        let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count();
         let short = default_short_name(j);
-        // A column of markers only (names such as `NA` or `nd`) keeps its text.
-        let numeric = if non_empty == 0 { markers == 0 } else { parsed as f64 >= NUMERIC_SHARE * non_empty as f64 };
+        // Origin keeps every imported column in its Text & Numeric format: a cell that is not a
+        // number (a word, `<LOD`, `n.d.`) stays a text cell and the numbers see it as missing. There
+        // is no ratio of numbers to text. A column with no number at all is a text column.
+        let numeric = parsed > 0 || non_empty == 0;
         let (designation, data) = if numeric {
-            let bad = non_empty - parsed;
-            if bad > 0 {
-                let plural = if bad == 1 { "cell is not a number" } else { "cells are not numbers" };
-                warnings.push(format!(
-                    "column {short}: {bad} {plural} and {} read as missing",
-                    if bad == 1 { "was" } else { "were" }
-                ));
-            }
-            if markers > 0 {
-                let plural = if markers == 1 { "cell holds" } else { "cells hold" };
-                warnings.push(format!(
-                    "column {short}: {markers} {plural} a no-value marker (n.d., NA, <LOD, ...) and read as missing"
-                ));
+            let mut texts = std::collections::BTreeMap::new();
+            for (row, (c, n)) in cells.iter().zip(&numbers).enumerate() {
+                if n.is_none() && !c.trim().is_empty() {
+                    texts.insert(row, c.trim().to_string());
+                }
             }
             let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Y };
-            (designation, ColumnData::numeric(numbers.into_iter().map(|n| n.unwrap_or(f64::NAN)).collect()))
+            (designation, ColumnData::mixed(numbers.into_iter().map(|n| n.unwrap_or(f64::NAN)).collect(), texts))
         } else {
             let text = cells.iter().map(|c| c.to_string()).collect();
             // Origin designates the columns of a text file by position, so a first column of sample
@@ -1276,9 +1266,10 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert!(matches!(t.format, NumberFormat::DateTime(..)), "{:?}", t.format);
         let s = t.numeric().unwrap();
         assert!((s[1] - s[0] - 138.0 / 86400.0).abs() < 1e-9);
-        // No-value entries are reported, not hidden.
+        // No-value entries stay in the sheet as text cells (Origin's Text & Numeric), not as a warning.
         let joined = imp.warnings.join("\n");
-        assert!(joined.contains("no-value marker"), "{joined}");
+        assert!(fe.data.is_mixed());
+        assert!(!joined.contains("no-value marker"), "{joined}");
         assert!(imp.warnings.iter().all(|w| !w.contains("header line")), "{joined}");
     }
 
@@ -1367,9 +1358,16 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         let imp = parse("id,label,val\n1,alpha,1.5\n2,beta,2.5\n3,gamma,3.5\n4,delta,4.5\n5,eps,5.5\n6,zeta,oops\n");
         assert_eq!(col(&imp, 1).designation, Designation::Label);
         assert_eq!(col(&imp, 1).text().unwrap()[2], "gamma");
-        // one non-number in six is below the 20% limit: numeric with a missing value
+        // Origin has no ratio: one word among numbers stays as a text cell of a Text & Numeric column
         assert!(col(&imp, 2).numeric().unwrap()[5].is_nan());
-        assert!(imp.warnings.iter().any(|w| w.contains("column C") && w.contains("1 cell")));
+        assert_eq!(col(&imp, 2).cell_text(5), "oops");
+        assert!(col(&imp, 2).data.is_mixed());
+        assert!(imp.warnings.iter().all(|w| !w.contains("column C")));
+        // and so does a column that is mostly words
+        let imp = parse("a,b\n1,x\n2,y\n3,4\n4,z\n5,w\n");
+        assert_eq!(col(&imp, 1).designation, Designation::Y);
+        assert_eq!(col(&imp, 1).cell_text(0), "x");
+        assert_eq!(col(&imp, 1).numeric().unwrap()[2], 4.0);
     }
 
     #[test]

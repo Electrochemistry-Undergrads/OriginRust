@@ -173,6 +173,43 @@ fn append_rows(ws: &mut Worksheet, new: Worksheet, warnings: &mut Vec<String>) {
         match (&mut dest.data, col.data) {
             (ColumnData::Numeric(d), ColumnData::Numeric(s)) => std::sync::Arc::make_mut(d).extend(s.iter().copied()),
             (ColumnData::Text(d), ColumnData::Text(s)) => std::sync::Arc::make_mut(d).extend(s.iter().cloned()),
+            (ColumnData::Mixed { numbers, texts }, src) => {
+                let offset = old_rows.max(numbers.len());
+                let (nums, txt): (Vec<f64>, Vec<(usize, String)>) = match src {
+                    ColumnData::Numeric(s) => (s.to_vec(), Vec::new()),
+                    ColumnData::Text(s) => (
+                        vec![f64::NAN; s.len()],
+                        s.iter().enumerate().filter(|(_, t)| !t.is_empty()).map(|(i, t)| (i, t.clone())).collect(),
+                    ),
+                    ColumnData::Mixed { numbers: n, texts: t } => {
+                        (n.to_vec(), t.iter().map(|(i, t)| (*i, t.clone())).collect())
+                    }
+                };
+                let numbers = std::sync::Arc::make_mut(numbers);
+                numbers.resize(offset, f64::NAN);
+                numbers.extend(nums);
+                let texts = std::sync::Arc::make_mut(texts);
+                texts.extend(txt.into_iter().map(|(i, t)| (offset + i, t)));
+            }
+            (ColumnData::Numeric(d), ColumnData::Mixed { numbers: s, texts }) => {
+                if !texts.is_empty() {
+                    warnings.push(format!(
+                        "column {} holds numbers but the new rows hold text; the text was left empty",
+                        dest.short_name
+                    ));
+                }
+                std::sync::Arc::make_mut(d).extend(s.iter().copied());
+            }
+            (ColumnData::Text(d), ColumnData::Mixed { numbers: s, texts }) => {
+                if s.iter().any(|x| !x.is_nan()) {
+                    warnings.push(format!(
+                        "column {} holds text but the new rows hold numbers; they were left empty",
+                        dest.short_name
+                    ));
+                }
+                let d = std::sync::Arc::make_mut(d);
+                d.extend((0..s.len()).map(|i| texts.get(&i).cloned().unwrap_or_default()));
+            }
             (ColumnData::Numeric(d), ColumnData::Text(s)) => {
                 warnings.push(format!(
                     "column {} holds numbers but the new rows are text; they were left empty",
@@ -200,6 +237,9 @@ fn pad_to(col: &mut Column, rows: usize) {
     match &mut col.data {
         ColumnData::Numeric(v) if v.len() < rows => std::sync::Arc::make_mut(v).resize(rows, f64::NAN),
         ColumnData::Text(v) if v.len() < rows => std::sync::Arc::make_mut(v).resize(rows, String::new()),
+        ColumnData::Mixed { numbers, .. } if numbers.len() < rows => {
+            std::sync::Arc::make_mut(numbers).resize(rows, f64::NAN)
+        }
         _ => {}
     }
 }
@@ -216,6 +256,12 @@ fn pad_front(col: &mut Column, rows: usize) {
             let mut all = vec![String::new(); rows];
             all.extend(v.iter().cloned());
             *v = std::sync::Arc::new(all);
+        }
+        ColumnData::Mixed { numbers, texts } => {
+            let mut all = vec![f64::NAN; rows];
+            all.extend(numbers.iter().copied());
+            *numbers = std::sync::Arc::new(all);
+            *texts = std::sync::Arc::new(texts.iter().map(|(r, t)| (r + rows, t.clone())).collect());
         }
     }
 }
@@ -687,10 +733,11 @@ mod tests {
         assert!(b.long_name.contains("icp-sheets"), "the book is named after the folder: {}", b.long_name);
         let fe = &b.sheets[1].columns[1];
         assert_eq!((fe.long_name.as_str(), fe.units.as_str()), ("Fe 238.204", "mg/L"));
-        assert!(fe.numeric().unwrap()[0].is_nan(), "<LOD is a missing value");
+        assert!(fe.numeric().unwrap()[0].is_nan(), "<LOD is a missing value for the numbers");
+        assert_eq!(fe.cell_text(0), "<LOD", "and stays text in the cell");
         assert_eq!(fe.numeric().unwrap()[1], 2.0);
-        // Missing values are reported for each file.
-        assert!(r.items.iter().all(|i| i.warnings.iter().any(|w| w.contains("no-value marker"))));
+        // The text cells are kept, so there is nothing to report.
+        assert!(r.items.iter().all(|i| i.warnings.iter().all(|w| !w.contains("no-value marker"))));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

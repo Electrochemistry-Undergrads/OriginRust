@@ -82,6 +82,17 @@ fn main() {
                             .map(|x| if x.is_nan() { "--".to_string() } else { format!("{x}") })
                             .collect::<Vec<_>>(),
                     ),
+                    ColumnData::Mixed { numbers, texts } => (
+                        "text&number",
+                        numbers.iter().enumerate().filter(|(i, x)| x.is_nan() && !texts.contains_key(i)).count(),
+                        (0..values.min(numbers.len()))
+                            .map(|i| match texts.get(&i) {
+                                Some(t) => format!("{t:?}"),
+                                None if numbers[i].is_nan() => "--".to_string(),
+                                None => format!("{}", numbers[i]),
+                            })
+                            .collect(),
+                    ),
                     ColumnData::Text(v) => (
                         "text",
                         v.iter().filter(|x| x.is_empty()).count(),
@@ -159,6 +170,11 @@ fn print_cells(imp: &sheaf_io::opj::OpjImport, all_rows: usize) {
                 let used = match &c.data {
                     ColumnData::Numeric(v) => v.iter().rposition(|x| !x.is_nan()).map_or(0, |p| p + 1),
                     ColumnData::Text(v) => v.iter().rposition(|t| !t.is_empty()).map_or(0, |p| p + 1),
+                    ColumnData::Mixed { numbers, texts } => numbers
+                        .iter()
+                        .rposition(|x| !x.is_nan())
+                        .map_or(0, |p| p + 1)
+                        .max(texts.keys().next_back().map_or(0, |r| r + 1)),
                 };
                 println!(
                     "COL\t{i}\t{}\t{}\t{}\t{}\t{:?}\t{used}",
@@ -172,6 +188,11 @@ fn print_cells(imp: &sheaf_io::opj::OpjImport, all_rows: usize) {
                     match &c.data {
                         ColumnData::Numeric(v) if v[r].is_nan() => println!("CELL\t{i}\t{r}\tM\t"),
                         ColumnData::Numeric(v) => println!("CELL\t{i}\t{r}\tN\t{:?}", v[r]),
+                        ColumnData::Mixed { numbers, .. } => match c.data.text_cell(r) {
+                            Some(t) => println!("CELL\t{i}\t{r}\tT\t{}", escape(t)),
+                            None if numbers.get(r).is_none_or(|x| x.is_nan()) => println!("CELL\t{i}\t{r}\tM\t"),
+                            None => println!("CELL\t{i}\t{r}\tN\t{:?}", numbers[r]),
+                        },
                         ColumnData::Text(v) if v[r].is_empty() => println!("CELL\t{i}\t{r}\tM\t"),
                         ColumnData::Text(v) => println!("CELL\t{i}\t{r}\tT\t{}", escape(&v[r])),
                     }

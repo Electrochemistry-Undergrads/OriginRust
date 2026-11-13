@@ -140,6 +140,10 @@ fn trim_trailing_missing(column: &mut sheaf_core::Column) {
     let keep = match &column.data {
         sheaf_core::ColumnData::Numeric(v) => v.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1),
         sheaf_core::ColumnData::Text(v) => v.iter().rposition(|t| !t.is_empty()).map_or(0, |i| i + 1),
+        sheaf_core::ColumnData::Mixed { numbers, texts } => {
+            let last_number = numbers.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1);
+            last_number.max(texts.keys().next_back().map_or(0, |r| r + 1))
+        }
     };
     if keep == column.len() {
         return;
@@ -259,7 +263,6 @@ fn version_before_9(version: &str) -> bool {
 
 #[derive(Default)]
 struct Counts {
-    mixed_to_text: usize,
     stray: usize,
     time_columns: usize,
     unlinked: usize,
@@ -294,7 +297,6 @@ impl<R: Read + Seek> Builder<R> {
         let bytes = self.f.read_extent(info.data)?;
         match dataset::decode(&info, &bytes) {
             Ok(d) => {
-                self.counts.mixed_to_text += usize::from(d.mixed_to_text);
                 self.counts.stray += usize::from(d.stray_bytes > 0);
                 let id = self.new_id();
                 self.column_of_set.insert(set, id);
@@ -439,10 +441,6 @@ impl<R: Read + Seek> Builder<R> {
             self.warnings.push(format!("{n} column(s) were skipped because of {reason}."));
         }
         let c = &self.counts;
-        if c.mixed_to_text > 0 {
-            self.warnings
-                .push(format!("{} column(s) held both text and numbers; they were imported as text.", c.mixed_to_text));
-        }
         if c.stray > 0 {
             self.warnings.push(format!("{} column(s) had incomplete trailing data, which was ignored.", c.stray));
         }

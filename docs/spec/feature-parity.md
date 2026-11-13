@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 119 | 68 | 230 |
+| All rows | 43 | 120 | 67 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 50 | 68 | 129 |
+| P1 and P2 together | 11 | 51 | 67 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -283,7 +283,7 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Graph object model | page, layers, axes, plots, objects | `core/graph.rs`: several layers per graph, linked layers (double-Y, panels), an active layer, plot offsets, bar spacing; the graph window selects layers and objects | ◐ | no drawn objects (lines, arrows, shapes); layers have no background of their own yet; a top or right axis with its own scale exists only as a linked layer | P0 |
+| Graph object model | page, layers, axes, plots, objects | `core/graph.rs`: several layers per graph, linked layers (double-Y, panels), an active layer, plot offsets, bar spacing; the graph window selects layers and objects | ◐ | drawn objects cannot be resized, reordered, copied or attached to the page or the scales (graphing.md 17.5); layers have no background of their own yet; a top or right axis with its own scale exists only as a linked layer | P0 |
 | Units and sizing | cm, mm, pixel, scale modes | inches and percent | ◐ | | P0 |
 | Axis scale and range | many scale types, rescale modes | axis dialog, Scale tab: linear, log10, ln, log2, reciprocal, offset reciprocal, probability, probit, logit and Weibull (limits and ticks measured in Origin, graphing.md 3.8), from and to, reverse, first tick, round out to ticks, exact data range, symmetric about zero, major step, minor tick count, rescale margin; tick label prefix and suffix | ◐ | no custom formula, discrete or symmetric-log scale; one axis break only (Breaks tab); the reciprocal default step fits 2 of 3 measured ranges; reverse, first tick, prefix and suffix are kept by the .opj companion only | P0 |
 | Axis line and ticks | Line and Ticks tab | direction, length, width, colour | ◐ | no separate tick colour, offset, arrows | P0 |
@@ -300,12 +300,12 @@ Cross-cutting findings:
 | Legend | Legend object | corners or manual, font, frame; the text in Origin's notation (`\l(n)` symbol, `%(n)` name, `l.p` for a double-Y legend, any literal text and markup, one entry per line; the automatic text is `\l(1) %(1)` per plot); columns; Reconstruct Legend (Graph > Legend, Ctrl+L, the legend's right-click menu, and a button in Plot Details); the legend can be dragged (it becomes manual); the text is written to and read from .opj files | ◐ | `%(n)` options (`@LL`, `@LU`, ...) are ignored and the name is always the plot's label; no `\l(n)` symbol options; Update Legend keeps custom lines, drops those of gone plots and adds missing ones (not measured against Origin), no other update modes, no entry order, line spacing or legend title; columns are not written to .opj (named, so the companion keeps them) | P0 |
 | Text objects and escapes | text tool, escapes | `markup.rs` renders many escapes | ◐ | free text labels can be added (Text tool, Graph > Add Text..., `--label`), edited (double click) and dragged; no colour, font or attachment choice; several escapes unsupported | P0 |
 | Fonts | Format > Font | per axis and legend | ◐ | no underline, no default-font setting | P0 |
-| Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label | ◐ | only text labels and the legend can be dragged; nothing can be resized; no drawing tools | P0 |
+| Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label, drawn object or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label or a drawn object | ◐ | text labels, the legend and drawn objects can be dragged; nothing can be resized by handles | P0 |
 | Plot Details dialog | tree, Apply, OK, Cancel | Plot Details in Origin's layout: a tree at the left (graph, layers, plots), tabs for what is chosen, OK, Cancel, Apply; the axis dialog has the same buttons | ◐ | no Worksheet button; the Group tab has no increments; some tabs are grey (layer Background); the axis dialog lists Bottom, Top, Left and Right on the tabs other than Scale and Breaks, but Top and Right only hold the far-edge line and ticks; Apply To... copies the look to the other axis, all layers or both | P0 |
 | Grids | Grids tab | major and minor with style | ◐ | no opposite grid or zero line | P1 |
 | Axis breaks | Breaks tab | axis dialog, Breaks tab: one break with from, to, position and gap (percent of the axis) and its own tick step after the break; gap in the axis line with slashes | ◐ | one break, not 1 to 7; layout figures not measured in Origin; a line joining points on both sides of a break still crosses the gap; not written to .opj | P1 |
 | Reference lines, special ticks | add line | special ticks: extra ticks with own labels (Special Ticks tab) | ◐ | no reference lines | P1 |
-| Drawn lines, arrows, shapes | Tools toolbar | none | ✗ | | P1 |
+| Drawn lines, arrows, shapes | Tools toolbar | Tools bar: Line, Arrow, Rectangle and Circle (drag to draw, Shift to snap or square); move by dragging, Delete, double-click or right-click Properties (colour, width, dash, fill, arrow heads); undo for each step; drawn into the figure exports; kept in the project file (graphing.md 17) | ◐ | no resize handles, ordering, Cut, Copy and Paste, grouping, page or scale attachment, polylines, curves or pictures (graphing.md 17.5); not written to .opj (the save warns) | P1 |
 | Themes | Theme Organizer | none | ✗ | | P1 |
 | Graph templates | Save Template As | 9 built-in in the Plot menu: Line, Scatter, Line + Symbol, Column, Area, Cyclic voltammetry, Double-Y, Stacked Lines, Waterfall | ◐ | cannot save or load; .otp not read | P1 |
 | Layer arrangement, merge | Arrange Layers | layer frame editable in Plot Details (Size); panel layouts by CLI | ◐ | no Arrange Layers dialog, no Merge Graph Windows (grey) | P1 |

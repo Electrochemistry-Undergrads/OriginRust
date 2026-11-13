@@ -72,6 +72,12 @@ pub enum AnalysisKind {
     AverageCurves,
     Intersect,
     PolygonArea,
+    /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
+    SubtractLine,
+    ReduceX,
+    TranslateX,
+    TranslateY,
+    MedianFilter,
 }
 
 impl AnalysisKind {
@@ -125,6 +131,11 @@ impl AnalysisKind {
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
+            AnalysisKind::SubtractLine => "Subtract Straight Line...",
+            AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
+            AnalysisKind::TranslateX => "Curve Translate X...",
+            AnalysisKind::TranslateY => "Curve Translate Y...",
+            AnalysisKind::MedianFilter => "Median Filter...",
         }
     }
 
@@ -167,6 +178,11 @@ impl AnalysisKind {
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
+            "subtract-line" => AnalysisKind::SubtractLine,
+            "reduce-x" => AnalysisKind::ReduceX,
+            "translate-x" => AnalysisKind::TranslateX,
+            "translate-y" => AnalysisKind::TranslateY,
+            "median-filter" => AnalysisKind::MedianFilter,
             _ => return None,
         })
     }
@@ -404,6 +420,8 @@ pub struct AnalysisDialog {
     common_only: bool,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
+    /// Options of the Data Manipulation windows and the median filter.
+    manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
     /// (the factor columns may hold text).
     sheet_columns: Vec<(ColumnId, String)>,
@@ -550,6 +568,7 @@ impl AnalysisDialog {
             chain_fit_linear: true,
             stats,
             curves: Default::default(),
+            manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
             picker: None,
@@ -592,6 +611,11 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
@@ -814,6 +838,11 @@ impl AnalysisDialog {
                     "Subtract the line through the first and last point of each range",
                 );
             }
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => self.manip.options(ui, self.kind),
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
@@ -1416,6 +1445,18 @@ impl AnalysisDialog {
         self.auto_preview = true;
     }
 
+    /// The result curve of the preview, X then Y (for tests).
+    #[cfg(test)]
+    pub fn preview_result(&self) -> Option<(Vec<f64>, Vec<f64>)> {
+        self.preview.as_ref()?.as_ref().ok().map(|d| (d.rx.clone(), d.ry.clone()))
+    }
+
+    /// Sets the Curve Translate shift as the dialog's field would (for tests).
+    #[cfg(test)]
+    pub fn set_translate_by(&mut self, by: f64) {
+        self.manip.set_by(by);
+    }
+
     /// How many points the preview holds, or the reason there is none (for tests).
     #[cfg(test)]
     pub fn preview_state(&self) -> Option<Result<usize, String>> {
@@ -1455,6 +1496,12 @@ impl AnalysisDialog {
             AnalysisKind::AverageCurves => "avecurves",
             AnalysisKind::Intersect => "intersect",
             AnalysisKind::PolygonArea => "polyarea",
+            // Origin's X-Function names for these were not looked up; the title shows the tool alone.
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => "",
         }
     }
 
@@ -1501,6 +1548,11 @@ impl AnalysisDialog {
             AnalysisKind::Intersect => "Find the points where two curves meet",
             AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
+            AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
+            AnalysisKind::ReduceX => "Reduce the input curves to evenly spaced X values",
+            AnalysisKind::TranslateX => "Shift the input curves horizontally",
+            AnalysisKind::TranslateY => "Shift the input curves vertically",
+            AnalysisKind::MedianFilter => "Replace each point by the median of the points around it",
         }
     }
 
@@ -1553,6 +1605,10 @@ impl AnalysisDialog {
                 "Area, signed area, centroid, perimeter and a self-intersection flag in a new sheet"
             }
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
+            AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
+                "New columns beside the input"
+            }
+            AnalysisKind::ReduceX | AnalysisKind::TranslateX => "The curves in a new sheet with their own X column",
         }
     }
 
@@ -1569,7 +1625,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Interpolate
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
-        )
+        ) || super::manip_options::handles(self.kind)
     }
 
     /// Chooses other input columns of the sheet.
@@ -1609,6 +1665,9 @@ impl AnalysisDialog {
                 | AnalysisKind::Smooth
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::SubtractLine
+                | AnalysisKind::TranslateY
+                | AnalysisKind::MedianFilter
         )
     }
 
@@ -1757,10 +1816,18 @@ impl AnalysisDialog {
             Some(v) => (0..y.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
             None => (1..=y.len()).map(|i| i as f64).collect(),
         };
-        let (rx, ry) = if let Some(id) = report.new_columns.first() {
+        // A tool that writes a new sheet puts its X column first; the preview of those is the sheet's X
+        // and Y pair, not the X column plotted against the input's X.
+        let result_sheet = report.new_sheet.and_then(|s| copy.workbook(report.book)?.sheets.get(s));
+        let on_result_sheet = |id: &ColumnId| result_sheet.is_some_and(|s| s.column(*id).is_some());
+        let (rx, ry) = if let Some(s) = result_sheet.filter(|_| report.new_columns.first().is_some_and(on_result_sheet))
+        {
+            let col = |i: usize| s.columns.get(i).and_then(|c| c.numeric()).map(<[f64]>::to_vec);
+            (col(0).ok_or("no result")?, col(1).ok_or("no result")?)
+        } else if let Some(id) = report.new_columns.first() {
             let c = copy.column(*id).and_then(|c| c.numeric()).ok_or("the result has no numbers")?;
             ((0..c.len()).map(|i| x.get(i).copied().unwrap_or(f64::NAN)).collect(), c.to_vec())
-        } else if let Some(s) = report.new_sheet.and_then(|s| copy.workbook(report.book)?.sheets.get(s)) {
+        } else if let Some(s) = result_sheet {
             let col = |i: usize| s.columns.get(i).and_then(|c| c.numeric()).map(<[f64]>::to_vec);
             (col(0).ok_or("no result")?, col(1).ok_or("no result")?)
         } else {

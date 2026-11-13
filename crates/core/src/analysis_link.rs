@@ -5,15 +5,17 @@
 //! column the run read changes, an Auto link is run again at once (inside the same undo step as the
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
-//! Only Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect and Polygon Area can be linked; the other tools run once.
+//! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area and the data
+//! manipulation tools (T23) can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use sheaf_calc::{PeakOptions, SmoothOptions};
+use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
-    AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, OutputTarget, Report, Request, RowRange, Tool,
+    AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, Report, Request,
+    RowRange, SubtractLineSpec, Tool, TranslateSpec,
 };
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
@@ -27,6 +29,10 @@ pub enum LinkTool {
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
+    SubtractLine(SubtractLineSpec),
+    ReduceX(ReduceOptions),
+    Translate(TranslateSpec),
+    MedianFilter(MedianFilterSpec),
 }
 
 impl LinkTool {
@@ -38,6 +44,10 @@ impl LinkTool {
             Tool::AverageCurves(s) => Some(LinkTool::AverageCurves(*s)),
             Tool::Intersect(s) => Some(LinkTool::Intersect(*s)),
             Tool::PolygonArea => Some(LinkTool::PolygonArea),
+            Tool::SubtractLine(s) => Some(LinkTool::SubtractLine(*s)),
+            Tool::ReduceX(o) => Some(LinkTool::ReduceX(*o)),
+            Tool::Translate(s) => Some(LinkTool::Translate(*s)),
+            Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
             _ => None,
         }
     }
@@ -50,6 +60,10 @@ impl LinkTool {
             LinkTool::AverageCurves(s) => Tool::AverageCurves(*s),
             LinkTool::Intersect(s) => Tool::Intersect(*s),
             LinkTool::PolygonArea => Tool::PolygonArea,
+            LinkTool::SubtractLine(s) => Tool::SubtractLine(*s),
+            LinkTool::ReduceX(o) => Tool::ReduceX(*o),
+            LinkTool::Translate(s) => Tool::Translate(*s),
+            LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
         }
     }
 }

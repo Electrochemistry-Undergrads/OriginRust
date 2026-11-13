@@ -81,6 +81,9 @@ impl Graph {
                     out.push(column);
                 }
             }
+            if let Some(f) = &layer.field {
+                out.extend(f.referenced_columns());
+            }
         }
         out
     }
@@ -413,6 +416,100 @@ pub struct Layer {
     /// a break and in polar and ternary layers. `None` (off) by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xy_ratio: Option<f64>,
+    /// A heat map or contour plot of a matrix (or of XYZ columns) that fills the layer. A layer
+    /// with a field draws it instead of curves. See [`FieldPlot`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<FieldPlot>,
+}
+
+/// Where the numbers of a heat map or contour plot come from.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum FieldSource {
+    /// One sheet of a matrix book.
+    Matrix { window: WindowId, sheet: usize },
+    /// Three worksheet columns. XYZ values on a regular grid are used as the grid; scattered
+    /// points are triangulated (Delaunay) and the surface is read off a grid (a contour plot only).
+    Xyz { x: ColumnId, y: ColumnId, z: ColumnId },
+}
+
+/// How the cells of the field are drawn.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldKind {
+    /// Contours: filled bands between the level lines and/or the lines.
+    #[default]
+    Contour,
+    /// A heat map: one coloured block per matrix cell, coloured by the level its value is in.
+    Cells,
+}
+
+/// The colour ramp of the bands, from the lowest level to the highest.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldPalette {
+    /// Blue, cyan, green, yellow, red (the colour fill of Origin's contour plot).
+    #[default]
+    Rainbow,
+    /// Blue, white, red (Origin's heat map).
+    BlueWhiteRed,
+    /// Black to white.
+    Gray,
+}
+
+/// The levels of a field: the range of Z that the colour scale covers, split into `major` equal
+/// steps, each split again into `minor` bands. Level lines are drawn at the major levels.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FieldLevels {
+    /// Lowest level; `None` takes the lowest value of the data, rounded down (see the matrices spec).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f64>,
+    /// Highest level; `None` takes the highest value of the data, rounded up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f64>,
+    /// Number of major steps between the lowest and the highest level.
+    pub major: u32,
+    /// Number of bands in each major step (1 = the major levels are the only levels).
+    pub minor: u32,
+}
+
+/// The colour scale drawn at the right of a field.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ColorScale {
+    pub visible: bool,
+    /// Title above the scale; `None` takes the Z label of the matrix (long name, units).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub font: Font,
+    pub title_font: Font,
+}
+
+/// A heat map or contour plot that fills a layer.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FieldPlot {
+    pub source: FieldSource,
+    pub kind: FieldKind,
+    /// Fill the bands with the palette's colours.
+    pub fill: bool,
+    /// Draw the level lines (at the major levels, without the lowest and the highest).
+    pub lines: bool,
+    /// Write the level on the lines.
+    pub labels: bool,
+    pub palette: FieldPalette,
+    pub levels: FieldLevels,
+    pub line: LineStyle,
+    pub label_font: Font,
+    pub scale: ColorScale,
+}
+
+impl FieldPlot {
+    /// Every column this plot reads.
+    pub fn referenced_columns(&self) -> Vec<ColumnId> {
+        match &self.source {
+            FieldSource::Xyz { x, y, z } => vec![*x, *y, *z],
+            FieldSource::Matrix { .. } => Vec::new(),
+        }
+    }
 }
 
 /// The height (in the units of `width`) a frame of that width needs so that one unit of an X axis spanning

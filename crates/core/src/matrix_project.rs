@@ -1,10 +1,12 @@
 //! Matrix operations on a [`Project`]: each one changes or adds a window, so that
 //! [`crate::history::Document::edit`] makes it one undo step, as for workbooks.
 
+use crate::graph::FieldSource;
 use crate::ids::{ColumnId, WindowId};
 use crate::matrix::{FlipDirection, MatrixError, MatrixSheet, MatrixStats, Rotation};
 use crate::matrix_convert::{self, M2wMethod, W2mOptions};
 use crate::project::{Project, ProjectError, Window};
+use crate::template::FieldTemplate;
 use crate::worksheet::Workbook;
 
 /// A change of the shape or the data of a matrix sheet.
@@ -142,6 +144,51 @@ impl Project {
         (m.z.long_name, m.z.units, m.z.comments) = label(self, z);
         let long = self.locate(z).map(|(b, _, _)| b.long_name.clone()).unwrap_or_default();
         Ok(self.adopt_matrix_book(&long, vec![m]))
+    }
+
+    /// Creates a heat map or contour graph of a matrix sheet and returns its id. The graph's long
+    /// name is the matrix book's.
+    pub fn plot_matrix(
+        &mut self,
+        template: FieldTemplate,
+        book: WindowId,
+        sheet: usize,
+    ) -> Result<WindowId, ProjectError> {
+        self.matrix_sheet(book, sheet)?;
+        let long = self.matrix_book(book).map(|b| b.long_name.clone()).unwrap_or_default();
+        Ok(self.add_field_graph(template, FieldSource::Matrix { window: book, sheet }, &long))
+    }
+
+    /// Creates a contour graph of XYZ columns (a heat map needs the points on a regular grid) and
+    /// returns its id. The long name is the first column's workbook's.
+    pub fn plot_xyz(
+        &mut self,
+        template: FieldTemplate,
+        x: ColumnId,
+        y: ColumnId,
+        z: ColumnId,
+    ) -> Result<WindowId, ProjectError> {
+        for id in [x, y, z] {
+            self.numeric(id).ok_or(ProjectError::NoSuchColumn(id))?;
+        }
+        if template == FieldTemplate::HeatMap {
+            // A heat map has a block per grid cell: the points must lie on a regular grid.
+            let (xs, ys, zs) = (self.numeric(x), self.numeric(y), self.numeric(z));
+            if let (Some(xs), Some(ys), Some(zs)) = (xs, ys, zs) {
+                matrix_convert::xyz_to_matrix(xs, ys, zs, "")?;
+            }
+        }
+        let long = self.locate(z).map(|(b, _, _)| b.long_name.clone()).unwrap_or_default();
+        Ok(self.add_field_graph(template, FieldSource::Xyz { x, y, z }, &long))
+    }
+
+    fn add_field_graph(&mut self, template: FieldTemplate, source: FieldSource, long_name: &str) -> WindowId {
+        let id = self.new_window_id();
+        let name = self.unique_name("Graph");
+        let mut g = template.new_graph(id, &name, source);
+        g.long_name = long_name.to_string();
+        self.windows.push(Window::Graph(g));
+        id
     }
 
     /// Writes a matrix sheet to a new workbook and returns its id.

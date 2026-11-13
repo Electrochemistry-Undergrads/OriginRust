@@ -49,7 +49,7 @@ fn the_x_axis_runs_half_a_step_beyond_the_columns_named_by_them() {
     let layer = &p.graph(g).unwrap().layers[0];
     let l = data::collect(&p, layer);
     let sources: Vec<&data::PlotData> = l.plots.iter().collect();
-    let r = layout::resolve_dim(&p, &layer.x_axis, Dim::X, &sources, (layer, 0.0));
+    let r = layout::resolve_dim(&p, &layer.x_axis, Dim::X, &sources, (layer, 0.0), &[]);
     assert!((r.min - 0.5).abs() < 1e-9 && (r.max - 2.5).abs() < 1e-9, "{} {}", r.min, r.max);
     let svg = svg_of(&p, g);
     let t = texts(&doc(&svg));

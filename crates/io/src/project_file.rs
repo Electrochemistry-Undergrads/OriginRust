@@ -522,6 +522,29 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_keeps_heat_map_and_contour_graphs() {
+        use sheaf_core::template::FieldTemplate;
+        let dir = TempDir::new("field-graphs");
+        let path = dir.file("f.sheaf");
+        let mut p = sample();
+        let m = p.add_matrix_book("field");
+        p.matrix_book_mut(m).unwrap().sheets[0].set_values("i+j").unwrap();
+        let hm = p.plot_matrix(FieldTemplate::HeatMap, m, 0).unwrap();
+        let book = p.workbooks().next().unwrap().id;
+        let cols: Vec<_> = p.workbooks().next().unwrap().sheets[0].columns.iter().map(|c| c.id).collect();
+        let _ = book;
+        let xyz = p.plot_xyz(FieldTemplate::ContourFill, cols[0], cols[1], cols[1]).unwrap();
+        p.graph_mut(xyz).unwrap().layers[0].field.as_mut().unwrap().levels.min = Some(-2.5);
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        assert!(back.graph(hm).unwrap().layers[0].field.is_some());
+        assert_eq!(back.graph(xyz).unwrap().layers[0].field.as_ref().unwrap().levels.min, Some(-2.5));
+        // The XYZ graph's columns count as read by the graph.
+        assert_eq!(back.graph(xyz).unwrap().referenced_columns().len(), 3);
+    }
+
+    #[test]
     fn a_project_file_without_matrices_still_loads() {
         // Files written before matrix windows existed have no matrix members and no matrix windows.
         let dir = TempDir::new("nomatrix");

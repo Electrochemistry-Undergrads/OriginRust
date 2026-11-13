@@ -52,7 +52,7 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
                 g,
                 i,
                 &geoms[i],
-                &pds[i].plots,
+                &pds[i],
                 (x_titles[i], y_titles[i]),
                 first_line,
                 pds[i].bracket_step.get(),
@@ -197,9 +197,33 @@ pub(crate) fn resolve_dim(
     dim: Dim,
     sources: &[&data::PlotData],
     (layer, bracket_step): (&sheaf_core::graph::Layer, f64),
+    fields: &[&crate::field::FieldGrid],
 ) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
+    // The extent of a heat map or contour plot counts as data (T179).
+    for f in fields {
+        let (lo, hi) = f.extent(dim == Dim::X);
+        if lo.is_finite() && hi.is_finite() && (axis.scale == sheaf_core::graph::ScaleKind::Linear || lo > 0.0) {
+            range = Some(range.map_or((lo, hi), |(a, b)| (a.min(lo), b.max(hi))));
+        }
+    }
+    // An axis that shows only a heat map or contour plot takes the tick step nearest to a seventh
+    // of its range (Origin 2016 puts a tick every 1 on -3..3, every 0.5 on 0..4 and on 0..3).
+    let field_axis;
+    let axis = match range {
+        Some((lo, hi))
+            if sources.is_empty()
+                && !fields.is_empty()
+                && axis.major_step.is_none()
+                && axis.scale == sheaf_core::graph::ScaleKind::Linear
+                && hi > lo =>
+        {
+            field_axis = Axis { major_step: Some(crate::ticks::nearest_nice_step((hi - lo) / 7.0)), ..axis.clone() };
+            &field_axis
+        }
+        _ => axis,
+    };
     // Significance brackets (T64) are above the data: the Y axis grows to hold them (a log axis in log space),
     // unless its top is fixed, when they stand in a band above the frame.
     if dim == Dim::Y
@@ -353,11 +377,14 @@ fn group_geometry(
     let shared = |dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> =
             members.iter().filter(|&&i| shares(i, dim)).flat_map(|&i| pds[i].plots.iter()).collect();
-        resolve_dim(project, axis, dim, &sources, (rl, pds[root].bracket_step.get()))
+        let fields: Vec<&crate::field::FieldGrid> =
+            members.iter().filter(|&&i| shares(i, dim)).filter_map(|&i| pds[i].field.as_ref()).collect();
+        resolve_dim(project, axis, dim, &sources, (rl, pds[root].bracket_step.get()), &fields)
     };
     let own = |i: usize, dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
-        resolve_dim(project, axis, dim, &sources, (&g.layers[i], pds[i].bracket_step.get()))
+        let fields: Vec<&crate::field::FieldGrid> = pds[i].field.iter().collect();
+        resolve_dim(project, axis, dim, &sources, (&g.layers[i], pds[i].bracket_step.get()), &fields)
     };
     let spoke_axis = |i: usize, axis: &Axis| match g.layers[i].coords.polar() {
         Some(p) if p.radar => {
@@ -774,12 +801,13 @@ fn layer_scene(
     g: &Graph,
     index: usize,
     geom: &LayerGeometry,
-    pds: &[PlotData],
+    layer_data: &LayerData,
     (x_title, y_title): (TitlePlace, TitlePlace),
     first_label_line: usize,
     bracket_step: f64,
     m: &dyn TextMeasurer,
 ) -> LayerScene {
+    let pds: &[PlotData] = &layer_data.plots;
     let layer = &g.layers[index];
     let mut scene = LayerScene {
         clip: geom.clip,
@@ -824,6 +852,29 @@ fn layer_scene(
         }
         (&layer.x_axis, &layer.y_axis)
     };
+    // A field that has labels gives its axes the titles of the matrix when they have none (T179).
+    let (field_x, field_y);
+    let (xa, ya) = match &layer_data.field {
+        Some(f) => {
+            let titled = |a: &Axis, label: &str| {
+                if a.title.is_none() && !label.is_empty() {
+                    Axis { title: Some(label.to_string()), ..a.clone() }
+                } else {
+                    a.clone()
+                }
+            };
+            field_x = titled(xa, &f.x_label);
+            field_y = titled(ya, &f.y_label);
+            (&field_x, &field_y)
+        }
+        None => (xa, ya),
+    };
+    if let (Some(grid), Some(field)) = (&layer_data.field, &layer.field)
+        && layer.display.show_data
+    {
+        let env = crate::field::Env { page: &g.page, measurer: m };
+        crate::field::draw(&mut scene.plots, &mut scene.overlay, field, grid, geom, &env);
+    }
     // Display tab: Show Elements Data off draws no plot.
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
     crate::hexbin::share_max(drawn, geom);

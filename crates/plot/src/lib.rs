@@ -17,6 +17,7 @@ mod dash;
 mod data;
 mod emf;
 mod eps;
+mod field;
 mod fill;
 mod fonts;
 mod hexbin;
@@ -78,6 +79,8 @@ mod data_range_tests;
 mod detail_tests;
 #[cfg(test)]
 mod export_tests;
+#[cfg(test)]
+mod field_tests;
 #[cfg(test)]
 mod fill_inclusive_tests;
 #[cfg(test)]

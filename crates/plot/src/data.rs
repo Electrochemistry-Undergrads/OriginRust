@@ -542,6 +542,8 @@ pub(crate) struct LayerData<'a> {
     /// The least level step of the layer's significance brackets in the transformed space of its Y axis that
     /// the label height asks for at the scale last laid out (0 at first; the layout raises it until it settles).
     pub bracket_step: std::cell::Cell<f64>,
+    /// The heat map or contour plot of the layer, with its numbers (T179).
+    pub field: Option<crate::field::FieldGrid>,
 }
 
 pub(crate) use sheaf_core::stack::row_range;
@@ -950,7 +952,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     attach_waterfall_colors(project, layer, &mut plots);
-    LayerData { plots, members, bracket_step: std::cell::Cell::new(0.0) }
+    let field = layer.field.as_ref().and_then(|f| crate::field::resolve(project, f));
+    LayerData { plots, members, bracket_step: std::cell::Cell::new(0.0), field }
 }
 
 /// Reads the two columns of a plot of a polar layer as `(angle, radius)`: `x` becomes the angle

@@ -448,3 +448,205 @@ pub fn matrix_to_worksheet(
     }
     ws
 }
+
+/// The most scattered points [`scatter_to_matrix`] triangulates.
+pub const MAX_SCATTER_POINTS: usize = 20_000;
+
+/// Reads scattered XYZ points off a regular grid by linear interpolation in their Delaunay
+/// triangulation (the surface the contour plot of XYZ columns shows). The grid covers the
+/// bounding box of the points with `cols` x `rows` nodes (0 means a size chosen from the number of
+/// points); nodes outside the convex hull of the points are missing. Points with a missing X, Y or
+/// Z are ignored; of several points at one place the first is used.
+///
+/// This is Sheaf's own gridding method, not one of Origin's (Origin's other gridding methods are
+/// not implemented; see `docs/spec/matrices.md`).
+pub fn scatter_to_matrix(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    cols: usize,
+    rows: usize,
+    name: &str,
+) -> Result<MatrixSheet, MatrixError> {
+    let n = x.len().min(y.len()).min(z.len());
+    let mut pts: Vec<(f64, f64, f64)> = Vec::new();
+    for i in 0..n {
+        if x[i].is_finite() && y[i].is_finite() && z[i].is_finite() && !pts.iter().any(|p| p.0 == x[i] && p.1 == y[i]) {
+            pts.push((x[i], y[i], z[i]));
+        }
+        if pts.len() > MAX_SCATTER_POINTS {
+            return Err(MatrixError::Invalid(format!(
+                "more than {MAX_SCATTER_POINTS} scattered points cannot be triangulated"
+            )));
+        }
+    }
+    if pts.len() < 3 {
+        return Err(MatrixError::Invalid("at least three points are needed to triangulate".into()));
+    }
+    let (mut x1, mut x2, mut y1, mut y2) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for p in &pts {
+        x1 = x1.min(p.0);
+        x2 = x2.max(p.0);
+        y1 = y1.min(p.1);
+        y2 = y2.max(p.1);
+    }
+    if x1 == x2 || y1 == y2 {
+        return Err(MatrixError::Invalid("the points lie on a line, so they enclose no area".into()));
+    }
+    let auto = ((4.0 * (pts.len() as f64).sqrt()).round() as usize).clamp(50, 250);
+    let (cols, rows) = (if cols == 0 { auto } else { cols }, if rows == 0 { auto } else { rows });
+    check_cells(rows, cols)?;
+    let tris = delaunay(&pts);
+    let mut out = vec![f64::NAN; rows * cols];
+    let (dx, dy) = ((x2 - x1) / (cols - 1).max(1) as f64, (y2 - y1) / (rows - 1).max(1) as f64);
+    for t in &tris {
+        let (a, b, c) = (pts[t[0]], pts[t[1]], pts[t[2]]);
+        let (tx1, tx2) = (a.0.min(b.0).min(c.0), a.0.max(b.0).max(c.0));
+        let (ty1, ty2) = (a.1.min(b.1).min(c.1), a.1.max(b.1).max(c.1));
+        let c_lo = (((tx1 - x1) / dx).ceil().max(0.0)) as usize;
+        let c_hi = (((tx2 - x1) / dx).floor()) as i64;
+        let r_lo = (((ty1 - y1) / dy).ceil().max(0.0)) as usize;
+        let r_hi = (((ty2 - y1) / dy).floor()) as i64;
+        let det = (b.1 - c.1) * (a.0 - c.0) + (c.0 - b.0) * (a.1 - c.1);
+        if det == 0.0 {
+            continue;
+        }
+        for r in r_lo..=(r_hi.max(-1) as usize).min(rows - 1) {
+            if r_hi < 0 {
+                break;
+            }
+            for cc in c_lo..=(c_hi.max(-1) as usize).min(cols - 1) {
+                if c_hi < 0 {
+                    break;
+                }
+                let (px, py) = (x1 + cc as f64 * dx, y1 + r as f64 * dy);
+                let l1 = ((b.1 - c.1) * (px - c.0) + (c.0 - b.0) * (py - c.1)) / det;
+                let l2 = ((c.1 - a.1) * (px - c.0) + (a.0 - c.0) * (py - c.1)) / det;
+                let l3 = 1.0 - l1 - l2;
+                let eps = -1e-9;
+                if l1 >= eps && l2 >= eps && l3 >= eps {
+                    out[r * cols + cc] = l1 * a.2 + l2 * b.2 + l3 * c.2;
+                }
+            }
+        }
+    }
+    if out.iter().all(|v| v.is_nan()) {
+        return Err(MatrixError::Invalid("the points lie on a line, so they enclose no area".into()));
+    }
+    MatrixSheet::from_values(name, 0, rows, cols, out, (x1, x2), (y1, y2))
+}
+
+fn check_cells(rows: usize, cols: usize) -> Result<(), MatrixError> {
+    match rows.checked_mul(cols) {
+        Some(n) if n <= MAX_CELLS => Ok(()),
+        _ => Err(MatrixError::TooLarge { rows, cols }),
+    }
+}
+
+/// Delaunay triangulation (Bowyer-Watson); triangles are indices into `pts`.
+fn delaunay(pts: &[(f64, f64, f64)]) -> Vec<[usize; 3]> {
+    let n = pts.len();
+    let (mut lo, mut hi) = ((f64::INFINITY, f64::INFINITY), (f64::NEG_INFINITY, f64::NEG_INFINITY));
+    for p in pts {
+        lo = (lo.0.min(p.0), lo.1.min(p.1));
+        hi = (hi.0.max(p.0), hi.1.max(p.1));
+    }
+    let span = (hi.0 - lo.0).max(hi.1 - lo.1).max(1e-300);
+    let mid = ((lo.0 + hi.0) / 2.0, (lo.1 + hi.1) / 2.0);
+    // Scale the points to the unit square for the in-circle test's sake.
+    let mut v: Vec<(f64, f64)> = pts.iter().map(|p| ((p.0 - mid.0) / span, (p.1 - mid.1) / span)).collect();
+    v.push((-20.0, -20.0));
+    v.push((20.0, -20.0));
+    v.push((0.0, 20.0));
+    let mut tris: Vec<[usize; 3]> = vec![[n, n + 1, n + 2]];
+    let in_circle = |t: &[usize; 3], p: (f64, f64)| -> bool {
+        let (a, b, c) = (v[t[0]], v[t[1]], v[t[2]]);
+        let (ax, ay, bx, by, cx, cy) = (a.0 - p.0, a.1 - p.1, b.0 - p.0, b.1 - p.1, c.0 - p.0, c.1 - p.1);
+        let det = (ax * ax + ay * ay) * (bx * cy - cx * by) - (bx * bx + by * by) * (ax * cy - cx * ay)
+            + (cx * cx + cy * cy) * (ax * by - bx * ay);
+        let orient = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
+        if orient > 0.0 { det > 0.0 } else { det < 0.0 }
+    };
+    for (i, &p) in v.iter().enumerate().take(n) {
+        let (bad, keep): (Vec<[usize; 3]>, Vec<[usize; 3]>) = tris.iter().partition(|t| in_circle(t, p));
+        // The boundary of the hole: edges that belong to exactly one bad triangle.
+        let mut edges: Vec<(usize, usize)> = Vec::new();
+        for t in &bad {
+            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                if let Some(pos) = edges.iter().position(|&(c, d)| (c, d) == (b, a) || (c, d) == (a, b)) {
+                    edges.swap_remove(pos);
+                } else {
+                    edges.push((a, b));
+                }
+            }
+        }
+        tris = keep;
+        for (a, b) in edges {
+            tris.push([a, b, i]);
+        }
+    }
+    tris.retain(|t| t.iter().all(|&i| i < n));
+    tris
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A plane z = 2x - 3y + 1 is reproduced exactly by linear interpolation in any triangulation,
+    /// inside the hull of the points.
+    #[test]
+    fn scattered_points_of_a_plane_are_read_back_exactly_inside_their_hull() {
+        let pts: Vec<(f64, f64)> = (0..30)
+            .map(|i| (((i * 37) % 31) as f64 / 7.0 + (i % 4) as f64 * 0.013, ((i * 53) % 29) as f64 / 6.0))
+            .collect();
+        let (x, y): (Vec<f64>, Vec<f64>) = pts.iter().copied().unzip();
+        let z: Vec<f64> = pts.iter().map(|p| 2.0 * p.0 - 3.0 * p.1 + 1.0).collect();
+        let m = scatter_to_matrix(&x, &y, &z, 20, 15, "S").unwrap();
+        assert_eq!((m.cols, m.rows), (20, 15));
+        let mut inside = 0;
+        for r in 0..m.rows {
+            for c in 0..m.cols {
+                let v = m.value(r, c);
+                if !v.is_nan() {
+                    inside += 1;
+                    let want = 2.0 * m.x_at(c) - 3.0 * m.y_at(r) + 1.0;
+                    assert!((v - want).abs() < 1e-9, "({r},{c}): {v} vs {want}");
+                }
+            }
+        }
+        assert!(inside > 100, "most nodes are inside the hull: {inside}");
+        // The corners of the bounding box that lie outside the hull are missing, the points' own
+        // extremes are on the range.
+        assert_eq!(m.x_from, x.iter().copied().fold(f64::INFINITY, f64::min));
+        assert_eq!(m.y_to, y.iter().copied().fold(f64::NEG_INFINITY, f64::max));
+    }
+
+    #[test]
+    fn too_few_or_collinear_points_cannot_be_triangulated() {
+        assert!(scatter_to_matrix(&[0.0, 1.0], &[0.0, 1.0], &[1.0, 2.0], 0, 0, "S").is_err());
+        assert!(scatter_to_matrix(&[0.0, 1.0, 2.0], &[0.0, 1.0, 2.0], &[1.0, 2.0, 3.0], 5, 5, "S").is_err());
+        assert!(scatter_to_matrix(&[0.0, 1.0, 2.0], &[0.0, 0.0, 0.0], &[1.0, 2.0, 3.0], 5, 5, "S").is_err());
+    }
+
+    #[test]
+    fn a_text_column_cannot_be_converted_to_numbers_but_does_not_panic() {
+        let c = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::text(vec!["a".into(), "b".into()]));
+        // Text reads as missing values; with trimming nothing is left.
+        let r = worksheet_to_matrix(&[&c], &W2mOptions::default(), "M");
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn a_label_that_is_not_a_number_is_named_in_the_error() {
+        let mut a = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![1.0, 2.0]));
+        a.long_name = "abc".into();
+        let opts = W2mOptions {
+            layout: XyLayout::XAcrossColumns,
+            labels: LabelSource::Parameter(ColumnParam::LongName),
+            ..W2mOptions::default()
+        };
+        let e = worksheet_to_matrix(&[&a], &opts, "M").unwrap_err().to_string();
+        assert!(e.contains("abc") && e.contains("column A"), "{e}");
+    }
+}

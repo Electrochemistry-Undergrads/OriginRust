@@ -1727,6 +1727,7 @@ impl SheafApp {
                     self.say(format!("Wrote {}", path.display()));
                     self.export = None;
                 }
+                ExportOutcome::Applied(text) => self.say(text),
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the graph".to_string(), e)),
             }
         }
@@ -1738,6 +1739,7 @@ impl SheafApp {
                     self.say(format!("Wrote {}", path.display()));
                     self.export_sheet = None;
                 }
+                ExportOutcome::Applied(_) => {}
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export the worksheet".to_string(), e)),
             }
         }

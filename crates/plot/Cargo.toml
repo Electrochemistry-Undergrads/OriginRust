@@ -20,6 +20,9 @@ ttf-parser = "0.25"
 png = "0.18"
 # TIFF export (already in the build through the image decoders); LZW keeps files small.
 tiff = { version = "0.11", default-features = false, features = ["lzw"] }
+# JPEG and GIF export: the image crate and colour quantiser already in Cargo.lock.
+image = { version = "0.25", default-features = false, features = ["jpeg", "gif"] }
+color_quant = "1.1"
 
 [dev-dependencies]
 roxmltree = "0.20"

@@ -318,3 +318,62 @@ fn eps_and_emf_are_exported_by_extension() {
     assert!(matches!(export_bytes(&p, g, "xyz", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn raster_bytes(ext: &str, opts: &RasterOptions) -> Vec<u8> {
+    let (p, g) = project();
+    export_bytes_opts(&p, g, ext, 100.0, ExportSize::default(), ExportLayout::default(), opts).unwrap()
+}
+
+#[test]
+fn jpeg_bmp_and_gif_are_written_with_their_headers() {
+    let o = RasterOptions::default();
+    let jpg = raster_bytes("jpg", &o);
+    assert_eq!(&jpg[..3], &[0xFF, 0xD8, 0xFF], "JPEG start of image");
+    assert_eq!(&jpg[jpg.len() - 2..], &[0xFF, 0xD9], "JPEG end of image");
+    let bmp = raster_bytes("bmp", &o);
+    assert_eq!(&bmp[..2], b"BM");
+    assert_eq!(u32::from_le_bytes(bmp[2..6].try_into().unwrap()) as usize, bmp.len(), "file size field");
+    assert_eq!(u16::from_le_bytes(bmp[28..30].try_into().unwrap()), 24, "24 bits per pixel");
+    let gif = raster_bytes("gif", &o);
+    assert_eq!(&gif[..6], b"GIF89a");
+}
+
+#[test]
+fn colour_depth_changes_png_bmp_and_tiff() {
+    let colours = RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() };
+    let png = raster_bytes("png", &colours);
+    assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+    assert_eq!(png[25], 3, "PNG colour type 3 is indexed");
+    assert_eq!(raster_bytes("png", &RasterOptions::default())[25], 6, "24-bit keeps alpha (RGBA)");
+    let bmp = raster_bytes("bmp", &colours);
+    assert_eq!(u16::from_le_bytes(bmp[28..30].try_into().unwrap()), 8, "palette bitmap");
+    assert_eq!(u32::from_le_bytes(bmp[2..6].try_into().unwrap()) as usize, bmp.len());
+    let grey = RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() };
+    assert_eq!(raster_bytes("png", &grey)[25], 0, "PNG colour type 0 is grey");
+}
+
+#[test]
+fn tiff_compression_choice_is_written_in_the_file() {
+    // The compression tag (259) of the first image file directory.
+    fn compression(b: &[u8]) -> u16 {
+        assert_eq!(&b[..4], b"II*\0");
+        let ifd = u32::from_le_bytes(b[4..8].try_into().unwrap()) as usize;
+        let n = u16::from_le_bytes(b[ifd..ifd + 2].try_into().unwrap()) as usize;
+        for i in 0..n {
+            let e = &b[ifd + 2 + i * 12..ifd + 14 + i * 12];
+            if u16::from_le_bytes(e[..2].try_into().unwrap()) == 259 {
+                return u16::from_le_bytes(e[8..10].try_into().unwrap());
+            }
+        }
+        panic!("no compression tag");
+    }
+    let with =
+        |c| compression(&raster_bytes("tif", &RasterOptions { tiff_compression: c, ..RasterOptions::default() }));
+    assert_eq!(with(TiffCompression::None), 1);
+    assert_eq!(with(TiffCompression::Lzw), 5);
+    assert_eq!(with(TiffCompression::PackBits), 32773);
+    let none =
+        raster_bytes("tif", &RasterOptions { tiff_compression: TiffCompression::None, ..RasterOptions::default() });
+    let lzw = raster_bytes("tif", &RasterOptions::default());
+    assert!(lzw.len() < none.len(), "LZW is smaller than no compression");
+}

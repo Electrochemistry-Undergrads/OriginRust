@@ -40,6 +40,7 @@ mod tests;
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
+pub use raster::{ColorDepth, RasterOptions, TiffCompression};
 
 use sheaf_core::{Project, WindowId};
 use std::path::{Path, PathBuf};
@@ -65,6 +66,9 @@ pub enum PlotError {
     /// Encoding the TIFF failed.
     #[error("could not make the TIFF: {0}")]
     Tiff(String),
+    /// Encoding a JPEG, BMP or GIF failed.
+    #[error("could not make the image: {0}")]
+    Image(String),
     /// The export size is not usable (not positive, or far from the page size).
     #[error("{0}")]
     Size(String),
@@ -77,7 +81,7 @@ pub enum PlotError {
         #[source]
         source: std::io::Error,
     },
-    /// The file name has an extension that is not one of svg, png, tif, tiff, pdf, eps, emf.
+    /// The file name has an extension that is not one of svg, png, tif, tiff, jpg, jpeg, bmp, gif, pdf, eps, emf.
     #[error("cannot export to '.{0}' files; use .svg, .png, .tif, .pdf, .eps or .emf")]
     UnknownFormat(String),
 }
@@ -438,9 +442,37 @@ pub fn export_bytes_with(
     size: ExportSize,
     layout: ExportLayout,
 ) -> Result<Vec<u8>, PlotError> {
+    export_bytes_opts(project, graph, ext, dpi, size, layout, &RasterOptions::default())
+}
+
+/// [`export_file_with`] with raster options (colour depth, TIFF compression, JPEG quality).
+pub fn export_file_opts(
+    project: &Project,
+    graph: WindowId,
+    path: &Path,
+    dpi: f64,
+    size: ExportSize,
+    layout: ExportLayout,
+    opts: &RasterOptions,
+) -> Result<(), PlotError> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let bytes = export_bytes_opts(project, graph, &ext, dpi, size, layout, opts)?;
+    std::fs::write(path, bytes).map_err(|source| PlotError::Io { path: path.to_path_buf(), source })
+}
+
+/// [`export_bytes_with`] with raster options.
+pub fn export_bytes_opts(
+    project: &Project,
+    graph: WindowId,
+    ext: &str,
+    dpi: f64,
+    size: ExportSize,
+    layout: ExportLayout,
+    opts: &RasterOptions,
+) -> Result<Vec<u8>, PlotError> {
     let fonts = SystemFonts::shared();
     let scene = layout::build_scene(project, graph, fonts)?;
-    let raster_dpi = matches!(ext, "png" | "tif" | "tiff").then_some(dpi);
+    let raster_dpi = raster::is_raster_ext(ext).then_some(dpi);
     let view = layout.view(&scene, fonts, raster_dpi);
     let scale = size.scale(view.w, view.h)?;
     if matches!(ext, "eps" | "emf") {
@@ -453,8 +485,9 @@ pub fn export_bytes_with(
     let svg = svg::write_svg_view(&scene, view, scale);
     match ext {
         "svg" => Ok(svg.into_bytes()),
-        "png" => raster::encode_png(&raster::rasterise(&svg, dpi / 72.0, fonts)?, dpi),
-        "tif" | "tiff" => raster::encode_tiff(&raster::rasterise(&svg, dpi / 72.0, fonts)?, dpi),
+        e if raster::is_raster_ext(e) => {
+            raster::encode_raster(&raster::rasterise(&svg, dpi / 72.0, fonts)?, e, dpi, opts)
+        }
         "pdf" => raster::to_pdf(&svg, fonts),
         _ => Err(PlotError::UnknownFormat(ext.to_string())),
     }

@@ -5535,3 +5535,51 @@ fn double_clicking_a_drawn_object_opens_its_properties() {
     assert!(shapes(&h)[0].fill.is_some());
     assert_eq!(h.state().doc.undo_label(), Some("Edit drawn object"));
 }
+
+/// A drag from `from` to `to` with Shift held (the whole gesture).
+fn drag_shifted(h: &mut Harness<'static, SheafApp>, from: egui::Pos2, to: egui::Pos2) {
+    let shift = egui::Modifiers::SHIFT;
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: shift,
+    };
+    for event in [
+        egui::Event::PointerMoved(from),
+        button(from, true),
+        egui::Event::PointerMoved(from.lerp(to, 0.5)),
+        egui::Event::PointerMoved(to),
+        button(to, false),
+    ] {
+        h.event_modifiers(event, shift);
+        h.step();
+    }
+    settle(h);
+}
+
+#[test]
+fn shift_while_drawing_snaps_a_line_and_squares_a_rectangle() {
+    use sheaf_core::shape::ShapeKind;
+    let mut h = start(vec![data_file("drawshift")]);
+    let f = sheaf_plot::layout_geometry(project(&h), graph(&h).id).unwrap()[0].frame;
+    // A line that is about 10 degrees off horizontal becomes horizontal; the length is kept.
+    bar_button!(h, "Tools", "Line").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.2, 0.3), frame_point(&h, 0.6, 0.3) + egui::vec2(0.0, 12.0));
+    drag_shifted(&mut h, a, b);
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, ShapeKind::Line);
+    assert!((s[0].y2 - s[0].y1).abs() < 1e-9, "horizontal: {:?}", s[0]);
+    assert!(s[0].x2 > s[0].x1 + 0.1);
+    // A rectangle dragged wider than tall is a square in page points.
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.1, 0.5), frame_point(&h, 0.4, 0.6));
+    drag_shifted(&mut h, a, b);
+    let r = shapes(&h)[1].clone();
+    assert_eq!(r.kind, ShapeKind::Rectangle);
+    let (w, hgt) = ((r.x2 - r.x1).abs() * f.w, (r.y2 - r.y1).abs() * f.h);
+    assert!((w - hgt).abs() < 1e-6, "square: {w} x {hgt}");
+}

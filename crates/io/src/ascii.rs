@@ -1160,6 +1160,12 @@ mod tests {
     }
 
     #[test]
+    fn fixed_width_counts_characters_not_bytes() {
+        assert_eq!(split_fixed("é1.5 ü2.5", &[4, 5]), vec!["é1.5", "ü2.5"]);
+        assert_eq!(split_fixed("日本語abc", &[3]), vec!["日本語", "abc"]);
+    }
+
+    #[test]
     fn detects_each_delimiter() {
         let cases = [
             ("1,2,3\n4,5,6\n7,8,9\n", Delimiter::Comma),

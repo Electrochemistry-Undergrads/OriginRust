@@ -204,7 +204,7 @@ impl ImportDialog {
                     ui.add_space(6.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // Origin's order is OK, Cancel, Apply; the layout runs right to left.
-                        if ui.button("Apply").on_hover_text("Import with these settings and keep this window").clicked()
+                        if ui.button("Apply").on_hover_text("Import with these settings and keep this window open. Applying again repeats the import in the same mode (New Books makes another book).").clicked()
                             && let ImportOutcome::Done(request) = self.run()
                         {
                             outcome = ImportOutcome::Apply(request);

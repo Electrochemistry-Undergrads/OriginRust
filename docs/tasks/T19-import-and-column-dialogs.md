@@ -1,6 +1,6 @@
 # T19: Import dialogs and Column Properties as Origin
 
-**Status:** item 1 (ASCII import) done on branch `import-ascii-options`: multi-character and fixed-width delimiters, Data Import Options (rename columns, short-name line, rename sheet and book, apply the new range to plots), Origin's mode names, Apply button; column ranges and patterns left. Rest open; the Import Wizard part needs Origin's pages 2-6 seen first (owner screenshots or a
+**Status:** item 1 (ASCII import) done (merged 2026-11-13): multi-character and fixed-width delimiters, Data Import Options (rename columns, short-name line, rename sheet and book, apply the new range to plots), Origin's mode names, Apply button; left: column ranges and patterns, "Other" as a set of single characters, combine consecutive delimiters, file-name trimming. Item 3 (Column Properties) done (merged 2026-11-13): Format list Numeric/Text/Text & Numeric/Time/Date/Month/Day of Week, Engineering, Engineering SI and Decimal:1000 displays, 19 date and 14 time patterns, 18-character short-name limit; left: Column Width stays one width per sheet, label-row options, 13-character book limit, Err designation. Item 2: the Import Wizard part needs Origin's pages 2-6 seen first (owner screenshots or a
 scripted run). Text & Numeric columns exist since `text-numeric` (merged 2026-11-13;
 `ColumnData::Mixed`). **Size:** M. **Branch:** `import-dialogs`. **Model:** Sonnet.
 **Detail:** audit B "Column Properties", "Import Wizard", "ASCII import"; E "Partial" (import).

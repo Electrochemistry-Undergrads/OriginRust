@@ -5351,3 +5351,57 @@ fn the_data_import_options_page_controls_the_names() {
     assert_eq!(book.sheet().columns[1].long_name, "", "the header line was skipped, not used as a label");
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
 }
+
+#[test]
+fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() {
+    use sheaf_core::column::Storage;
+    use sheaf_core::format::{NameStyle, NumberFormat};
+    let mut h = start(vec![data_file("colprops-kinds")]);
+    let b = open_column_props(&mut h, "B");
+    let start_kind = project(&h).column(b).unwrap().storage();
+    // The Format list names Origin's kinds.
+    fn combo<'a>(h: &'a Harness<'static, SheafApp>, v: &'a str) -> egui_kittest::Node<'a> {
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value(v))
+    }
+    let kind_name = if start_kind == Storage::Mixed { "Text & Numeric" } else { "Numeric" };
+    combo(&h, kind_name).click();
+    settle(&mut h);
+    for item in ["Numeric", "Text", "Time", "Date", "Month", "Day of Week"] {
+        assert!(has_label(&h, item), "{item} missing from the Format list");
+    }
+    click(&mut h, "Month");
+    click(&mut h, "Apply");
+    let c = project(&h).column(b).unwrap();
+    assert_eq!(c.format, NumberFormat::Month(NameStyle::Short));
+    let first = c.numeric().unwrap()[0];
+    assert_eq!(c.cell_text(0), NumberFormat::Month(NameStyle::Short).format(first));
+    // The display of a month is its name style.
+    combo(&h, "Abbreviation").click();
+    settle(&mut h);
+    click(&mut h, "Full name");
+    click(&mut h, "Apply");
+    assert_eq!(project(&h).column(b).unwrap().format, NumberFormat::Month(NameStyle::Full));
+    // Text keeps what the cells showed.
+    combo(&h, "Month").click();
+    settle(&mut h);
+    click(&mut h, "Text");
+    click(&mut h, "OK");
+    let c = project(&h).column(b).unwrap();
+    assert_eq!(c.storage(), Storage::Text);
+    assert_eq!(c.format, NumberFormat::General);
+    assert_eq!(c.text().unwrap()[0], NumberFormat::Month(NameStyle::Full).format(first));
+}
+
+#[test]
+fn column_properties_refuses_a_short_name_longer_than_origins_limit() {
+    let mut h = start(vec![data_file("colprops-longname")]);
+    let b = open_column_props(&mut h, "B");
+    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS");
+    click(&mut h, "OK");
+    assert!(h.state().column_props.is_some(), "the window stays open");
+    assert!(has_label(&h, "The short name may have at most 18 characters."));
+    assert_eq!(project(&h).column(b).unwrap().short_name, "B");
+    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQR");
+    click(&mut h, "OK");
+    assert_eq!(project(&h).column(b).unwrap().short_name, "ABCDEFGHIJKLMNOPQR");
+}

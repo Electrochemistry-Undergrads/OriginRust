@@ -3,6 +3,39 @@
 use crate::datetime::{self, DatePattern, TimePattern};
 use serde::{Deserialize, Serialize};
 
+/// How a month or weekday name is written (Origin offers a short, a full and a one-letter form).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NameStyle {
+    /// `Jan`, `Wed`.
+    #[default]
+    Short,
+    /// `January`, `Wednesday`.
+    Full,
+    /// `J`, `W`.
+    Letter,
+}
+
+impl NameStyle {
+    pub const ALL: [NameStyle; 3] = [NameStyle::Short, NameStyle::Full, NameStyle::Letter];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            NameStyle::Short => "Abbreviation",
+            NameStyle::Full => "Full name",
+            NameStyle::Letter => "First letter",
+        }
+    }
+
+    fn apply(&self, name: &str) -> String {
+        match self {
+            NameStyle::Short => name[..3].to_string(),
+            NameStyle::Full => name.to_string(),
+            NameStyle::Letter => name[..1].to_string(),
+        }
+    }
+}
+
 /// How a numeric column shows its values.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "digits")]
@@ -20,6 +53,19 @@ pub enum NumberFormat {
     Scientific(u8),
     /// A fixed number of significant digits.
     Significant(u8),
+    /// Engineering notation: the exponent is a multiple of 3 (`15.0E3`), with this many digits
+    /// after the point.
+    Engineering(u8),
+    /// Engineering notation with an SI prefix letter (`15.0k`, `2.50m`, `3.3M`), this many digits
+    /// after the point. Outside the prefixes (below 1E-24 or from 1E27) the exponent form is used.
+    EngineeringSi(u8),
+    /// Decimal notation with a comma between thousands (`1,234,567.50`), this many digits after
+    /// the point (Origin's `Decimal:1000`).
+    DecimalGrouped(u8),
+    /// The number (1 to 12) is a month, shown by name. Other numbers show as plain numbers.
+    Month(NameStyle),
+    /// The number (1 = Sunday to 7 = Saturday) is a day of the week, shown by name.
+    Weekday(NameStyle),
     /// The number is a date (days, see `datetime`), shown as text such as `2026-11-11`.
     Date(DatePattern),
     /// The number is a time of day (a fraction of a day), shown as `13:45:10`.
@@ -42,6 +88,19 @@ impl NumberFormat {
             NumberFormat::Decimal(d) => format!("{:.*}", usize::from(d), v),
             NumberFormat::Scientific(d) => format_scientific(v, usize::from(d)),
             NumberFormat::Significant(d) => format_general(v, usize::from(d.max(1))),
+            NumberFormat::Engineering(d) => format_engineering(v, usize::from(d), false),
+            NumberFormat::EngineeringSi(d) => format_engineering(v, usize::from(d), true),
+            NumberFormat::DecimalGrouped(d) => group_thousands(&format!("{:.*}", usize::from(d), v)),
+            NumberFormat::Month(style) => match whole_in(v, 1, 12) {
+                Some(m) => style.apply(datetime::MONTHS[m - 1]),
+                None => format_general(v, 9),
+            },
+            NumberFormat::Weekday(style) => match whole_in(v, 1, 7) {
+                // 1 is Sunday; `WEEKDAYS` starts with Monday.
+                Some(d) => style.apply(datetime::WEEKDAYS[(d + 5) % 7]),
+                None => format_general(v, 9),
+            },
+            NumberFormat::Time(t) if t.is_elapsed() => datetime::format_time(v, t),
             NumberFormat::Date(_) | NumberFormat::DateTime(..) if !datetime::in_range(v) => format_general(v, 9),
             NumberFormat::Date(d) => datetime::format_date(v, d),
             NumberFormat::Time(t) => datetime::format_time(datetime::time_only_fraction(v), t),
@@ -52,6 +111,60 @@ impl NumberFormat {
     /// True for the date, time and date-time formats.
     pub fn is_date_time(&self) -> bool {
         matches!(self, NumberFormat::Date(_) | NumberFormat::Time(_) | NumberFormat::DateTime(..))
+    }
+}
+
+/// The integer `v` when it is a whole number between `lo` and `hi`.
+fn whole_in(v: f64, lo: usize, hi: usize) -> Option<usize> {
+    let r = v.round();
+    (r == v && r >= lo as f64 && r <= hi as f64).then_some(r as usize)
+}
+
+/// Puts a comma between groups of three digits of the integer part of a plain decimal text.
+fn group_thousands(s: &str) -> String {
+    let (sign, rest) = match s.strip_prefix('-') {
+        Some(r) => ("-", r),
+        None => ("", s),
+    };
+    let (int, frac) = rest.split_once('.').map_or((rest, None), |(a, b)| (a, Some(b)));
+    let mut out = String::from(sign);
+    for (i, c) in int.chars().enumerate() {
+        if i > 0 && (int.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if let Some(f) = frac {
+        out.push('.');
+        out.push_str(f);
+    }
+    out
+}
+
+/// SI prefixes from 1E-24 (yocto) to 1E24 (yotta), in steps of 3 in the exponent.
+const SI_PREFIXES: [&str; 17] =
+    ["y", "z", "a", "f", "p", "n", "\u{b5}", "m", "", "k", "M", "G", "T", "P", "E", "Z", "Y"];
+
+/// Engineering notation: the mantissa is from 1 up to 1000 and the exponent a multiple of 3. With
+/// `si` the exponent is the SI prefix letter where one exists.
+pub fn format_engineering(v: f64, digits: usize, si: bool) -> String {
+    if v == 0.0 {
+        return format!("{:.*}{}", digits, 0.0, if si { "" } else { "E0" });
+    }
+    // Round to the digits first so that 999.96 with 1 digit becomes 1.0k, not 1000.0.
+    let mut exp = (v.abs().log10().floor() as i32).div_euclid(3) * 3;
+    let mut mantissa = v / 10f64.powi(exp);
+    let scale = 10f64.powi(digits as i32);
+    if (mantissa.abs() * scale).round() / scale >= 1000.0 {
+        exp += 3;
+        mantissa = v / 10f64.powi(exp);
+    }
+    let text = format!("{mantissa:.digits$}");
+    let idx = exp / 3 + 8;
+    if si && (0..SI_PREFIXES.len() as i32).contains(&idx) {
+        format!("{text}{}", SI_PREFIXES[idx as usize])
+    } else {
+        format!("{text}E{exp}")
     }
 }
 
@@ -218,5 +331,120 @@ mod tests {
             let json = serde_json::to_string(&f).unwrap();
             assert_eq!(serde_json::from_str::<NumberFormat>(&json).unwrap(), f, "{json}");
         }
+    }
+
+    #[test]
+    fn engineering_formats_use_exponents_in_steps_of_three() {
+        assert_eq!(NumberFormat::Engineering(1).format(15000.0), "15.0E3");
+        assert_eq!(NumberFormat::Engineering(2).format(0.00123), "1.23E-3");
+        assert_eq!(NumberFormat::Engineering(0).format(123456.0), "123E3");
+        assert_eq!(NumberFormat::Engineering(1).format(999.96), "1.0E3");
+        assert_eq!(NumberFormat::Engineering(1).format(-4.2), "-4.2E0");
+        assert_eq!(NumberFormat::Engineering(1).format(0.0), "0.0E0");
+        assert_eq!(NumberFormat::EngineeringSi(1).format(15000.0), "15.0k");
+        assert_eq!(NumberFormat::EngineeringSi(2).format(2.5e-3), "2.50m");
+        assert_eq!(NumberFormat::EngineeringSi(1).format(3.3e6), "3.3M");
+        assert_eq!(NumberFormat::EngineeringSi(1).format(2e-9), "2.0n");
+        assert_eq!(NumberFormat::EngineeringSi(1).format(47.0), "47.0");
+        assert_eq!(NumberFormat::EngineeringSi(1).format(1e30), "1.0E30");
+        assert_eq!(NumberFormat::EngineeringSi(1).format(f64::NAN), "--");
+    }
+
+    #[test]
+    fn decimal_with_thousands_separators() {
+        let f = NumberFormat::DecimalGrouped(2);
+        assert_eq!(f.format(1234567.5), "1,234,567.50");
+        assert_eq!(f.format(-1000.0), "-1,000.00");
+        assert_eq!(f.format(999.0), "999.00");
+        assert_eq!(NumberFormat::DecimalGrouped(0).format(1000.0), "1,000");
+        assert_eq!(NumberFormat::DecimalGrouped(1).format(100000.0), "100,000.0");
+    }
+
+    #[test]
+    fn month_and_weekday_formats_show_names() {
+        assert_eq!(NumberFormat::Month(NameStyle::Short).format(1.0), "Jan");
+        assert_eq!(NumberFormat::Month(NameStyle::Full).format(11.0), "November");
+        assert_eq!(NumberFormat::Month(NameStyle::Letter).format(12.0), "D");
+        // Out of range or fractional numbers stay numbers.
+        assert_eq!(NumberFormat::Month(NameStyle::Short).format(13.0), "13");
+        assert_eq!(NumberFormat::Month(NameStyle::Short).format(2.5), "2.5");
+        // 1 is Sunday, 7 is Saturday.
+        assert_eq!(NumberFormat::Weekday(NameStyle::Full).format(1.0), "Sunday");
+        assert_eq!(NumberFormat::Weekday(NameStyle::Short).format(4.0), "Wed");
+        assert_eq!(NumberFormat::Weekday(NameStyle::Letter).format(7.0), "S");
+        assert_eq!(NumberFormat::Weekday(NameStyle::Short).format(0.0), "0");
+        assert!(!NumberFormat::Month(NameStyle::Short).is_date_time());
+        let json = serde_json::to_string(&NumberFormat::Weekday(NameStyle::Full)).unwrap();
+        assert_eq!(serde_json::from_str::<NumberFormat>(&json).unwrap(), NumberFormat::Weekday(NameStyle::Full));
+    }
+
+    #[test]
+    fn every_date_pattern_shows_origins_text_for_a_fixed_value() {
+        // 2026-11-11 13:45:10 (a Wednesday); the texts are Origin's subformats (workbook-model.md).
+        let v = 2_461_355.573_032_407_6;
+        let want = [
+            (DatePattern::Mdy, "11/11/2026"),
+            (DatePattern::MdyDash, "11-11-2026"),
+            (DatePattern::Dmy, "11/11/2026"),
+            (DatePattern::DmyDash, "11-11-2026"),
+            (DatePattern::DmyDot, "11.11.2026"),
+            (DatePattern::Iso, "2026-11-11"),
+            (DatePattern::DMonY, "11-Nov-2026"),
+            (DatePattern::LongDate, "Wednesday, November 11, 2026"),
+            (DatePattern::MonthDay, "Nov 11"),
+            (DatePattern::MonthDayNum, "11/11"),
+            (DatePattern::DayOnly, "11"),
+            (DatePattern::WeekdayShort, "Wed"),
+            (DatePattern::WeekdayLetter, "W"),
+            (DatePattern::YearOnly, "2026"),
+            (DatePattern::Year2, "26"),
+            (DatePattern::Yymmdd, "261111"),
+            (DatePattern::MonthShort, "Nov"),
+            (DatePattern::MonthLetter, "N"),
+            (DatePattern::Quarter, "Q4"),
+        ];
+        assert_eq!(want.len(), DatePattern::ALL.len());
+        for (p, text) in want {
+            assert_eq!(NumberFormat::Date(p).format(v), text, "{p:?}");
+        }
+        // Single digits and other quarters.
+        let feb5 = datetime::date_value(2026, 2, 5).unwrap();
+        assert_eq!(NumberFormat::Date(DatePattern::Mdy).format(feb5), "2/5/2026");
+        assert_eq!(NumberFormat::Date(DatePattern::MonthDayNum).format(feb5), "2/5");
+        assert_eq!(NumberFormat::Date(DatePattern::Quarter).format(feb5), "Q1");
+        assert_eq!(NumberFormat::Date(DatePattern::Year2).format(datetime::date_value(2005, 1, 1).unwrap()), "05");
+    }
+
+    #[test]
+    fn every_time_pattern_shows_origins_text_for_a_fixed_value() {
+        // 13:45:10.256 as a fraction of a day.
+        let v = (13.0 * 3600.0 + 45.0 * 60.0 + 10.256) / 86_400.0;
+        let want = [
+            (TimePattern::Hm, "13:45"),
+            (TimePattern::Hms, "13:45:10"),
+            (TimePattern::HmsMs, "13:45:10.256"),
+            (TimePattern::H, "13"),
+            (TimePattern::HmsCs, "13:45:10.25"),
+            (TimePattern::H12, "01 PM"),
+            (TimePattern::Hm12, "01:45 PM"),
+            (TimePattern::Ms, "45:10"),
+            (TimePattern::MsCs, "45:10.25"),
+            (TimePattern::Hhmm, "1345"),
+            (TimePattern::Hhmmss, "134510"),
+            (TimePattern::Millis, "256"),
+            (TimePattern::ElapsedDh, "000:13"),
+            (TimePattern::ElapsedDhm, "000:13:45"),
+        ];
+        assert_eq!(want.len(), TimePattern::ALL.len());
+        for (p, text) in want {
+            assert_eq!(NumberFormat::Time(p).format(v), text, "{p:?}");
+        }
+        // Midnight and noon on the 12-hour clock; elapsed time counts whole days.
+        assert_eq!(NumberFormat::Time(TimePattern::Hm12).format(0.0), "12:00 AM");
+        assert_eq!(NumberFormat::Time(TimePattern::H12).format(0.5), "12 PM");
+        assert_eq!(NumberFormat::Time(TimePattern::ElapsedDh).format(2.5), "002:12");
+        // A calendar date never shows the serial number as an elapsed day count.
+        let s = NumberFormat::DateTime(DatePattern::Iso, TimePattern::ElapsedDh).format(2461355.5);
+        assert!(s.ends_with(" 12"), "{s}");
     }
 }

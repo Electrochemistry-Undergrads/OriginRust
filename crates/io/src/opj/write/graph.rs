@@ -163,11 +163,7 @@ fn role_of(graph: &Graph, index: usize) -> Role {
         Some((parent, x_straight)) => Role::RightY { parent, x_straight },
         None if graph.link_parent(index).is_some() => {
             let link = graph.layers[index].link.expect("a valid link exists");
-            Role::Panel {
-                parent: link.parent,
-                x: link.x == ScaleLink::Straight,
-                y: link.y == ScaleLink::Straight,
-            }
+            Role::Panel { parent: link.parent, x: link.x == ScaleLink::Straight, y: link.y == ScaleLink::Straight }
         }
         None => Role::Plain {
             has_right: (0..graph.layers.len()).any(|j| right_parent(graph, j).is_some_and(|(p, _)| p == index)),

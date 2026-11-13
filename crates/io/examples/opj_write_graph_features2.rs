@@ -11,10 +11,10 @@
 
 use sheaf_core::Project;
 use sheaf_core::color::Color;
-use sheaf_core::graph::TickFormat;
-use sheaf_core::panels::PanelLayout;
 use sheaf_core::column::{Column, ColumnData, Designation};
+use sheaf_core::graph::TickFormat;
 use sheaf_core::ids::{ColumnId, WindowId};
+use sheaf_core::panels::PanelLayout;
 use sheaf_core::template::Template;
 use sheaf_core::worksheet::{Workbook, Worksheet};
 use std::path::Path;
@@ -113,7 +113,7 @@ fn panels() -> Project {
     let mut p = source();
     let c = ids(&p);
     let groups = vec![vec![c[1]], vec![c[2]], vec![c[4]]];
-    let mut add = |p: &mut Project, n: &str, layout: PanelLayout| {
+    let add = |p: &mut Project, n: &str, layout: PanelLayout| {
         let id = p.plot_panels(Template::Line, &groups, &layout).unwrap();
         name(p, id, n);
         id

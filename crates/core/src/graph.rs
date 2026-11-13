@@ -686,8 +686,13 @@ impl Dash {
 pub enum Connect {
     #[default]
     Straight,
-    /// A smooth curve through every point (Catmull-Rom spline).
+    /// A natural cubic spline through every point; needs increasing X and at most 900 points,
+    /// otherwise the points are joined by straight segments (as Origin does).
     Spline,
+    /// A cubic B-spline that winds around the points, starting and ending at the end points.
+    BSpline,
+    /// Cubic Bezier segments over groups of four points (consecutive groups share an end point).
+    Bezier,
     /// Horizontal first, then vertical.
     StepHorizontal,
     /// Vertical first, then horizontal.

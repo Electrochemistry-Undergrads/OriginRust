@@ -116,9 +116,9 @@ fn cv_template_has_a_closed_box_no_grid_and_a_symmetric_current_axis() {
     // Tight X axis: exactly the data range.
     assert!((geom.x.min + 0.2).abs() < 1e-12 && (geom.x.max - 0.6).abs() < 1e-12);
 
-    // Splines are written as cubic Bezier segments.
+    // Splines are written as many short chords.
     let plots = with_class(&d, "plots")[0];
-    assert!(paths_in(plots)[0].attribute("d").unwrap().contains('C'));
+    assert!(paths_in(plots)[0].attribute("d").unwrap().matches('L').count() > 100);
     // Legend in the lower right corner, inside the frame.
     let t = texts(&d);
     assert!(t.contains(&"Scan 1".to_string()) && t.contains(&"Scan 2".to_string()));
@@ -253,17 +253,54 @@ fn step_and_spline_connections() {
     set(&mut p, Connect::Spline);
     let d2 = svg_of(&p, g);
     let path = paths_in(with_class(&doc(&d2), "plots")[0])[0].attribute("d").unwrap().to_string();
-    assert_eq!(path.matches('C').count(), 2, "{path}");
+    assert!(!path.contains('C'), "a spline is drawn as short chords: {path}");
+    assert!(path.matches('L').count() > 4, "{path}");
 }
 
 #[test]
-fn spline_control_points_follow_catmull_rom() {
-    let mut d = String::new();
-    let pts = [(0.0, 0.0), (6.0, 6.0), (12.0, 0.0), (18.0, 6.0)];
-    plots::polyline_path_for_test(&mut d, &pts);
-    // First segment: P0 duplicated: c1 = P1 + (P2-P0)/6 = (6,6)? no: segment P0->P1,
-    // c1 = P0 + (P1 - P0)/6 = (1,1); c2 = P1 - (P2 - P0)/6 = (4,6).
-    assert!(d.starts_with("M0 0C1,1 4,6 6,6"), "{d}");
+fn spline_is_a_natural_cubic_spline() {
+    // y = 0, 1, 0 at x = 0, 8, 16: second derivative 0 at the ends, -3/64 in the middle.
+    let c = plots::smooth_for_test(Connect::Spline, &[(0.0, 0.0), (8.0, 1.0), (16.0, 0.0)]);
+    assert_eq!(c.first(), Some(&(0.0, 0.0)));
+    assert_eq!(c.last(), Some(&(16.0, 0.0)));
+    let mid = c.iter().find(|p| (p.0 - 4.0).abs() < 1e-9).unwrap();
+    assert!((mid.1 - 0.6875).abs() < 1e-9, "{mid:?}");
+    // Points on a line stay on it, whatever the spacing.
+    let c = plots::smooth_for_test(Connect::Spline, &[(0.0, 1.0), (3.0, 7.0), (10.0, 21.0), (11.0, 23.0)]);
+    assert!(c.iter().all(|p| (p.1 - (2.0 * p.0 + 1.0)).abs() < 1e-9));
+}
+
+#[test]
+fn b_spline_and_bezier_shapes() {
+    let pts = [(0.0, 0.0), (8.0, 8.0), (16.0, 0.0), (24.0, 8.0), (32.0, 0.0)];
+    let c = plots::smooth_for_test(Connect::BSpline, &pts);
+    assert_eq!(c.first(), Some(&pts[0]));
+    let last = c.last().unwrap();
+    assert!((last.0 - 32.0).abs() < 1e-9 && last.1.abs() < 1e-9);
+    assert!(c.iter().all(|p| p.1 < 8.0 - 1e-6), "the curve stays inside the points");
+    // Bezier: groups of four share their end point; one point left over is not drawn.
+    let pts = [(0.0, 0.0), (8.0, 8.0), (16.0, 8.0), (24.0, 0.0), (30.0, 5.0)];
+    let c = plots::smooth_for_test(Connect::Bezier, &pts);
+    assert_eq!(c.last(), Some(&(24.0, 0.0)));
+    let mid = c.iter().find(|p| (p.0 - 12.0).abs() < 1e-9).unwrap();
+    assert!((mid.1 - 6.0).abs() < 1e-9, "{mid:?}");
+}
+
+#[test]
+fn spline_needs_increasing_x_and_at_most_900_points() {
+    let svg_for = |x: Vec<f64>| {
+        let y: Vec<f64> = (0..x.len()).map(|i| (i % 3) as f64).collect();
+        let (mut p, g) = project(Template::Line, x, vec![y]);
+        p.graph_mut(g).unwrap().layers[0].plots[0].line.connect = Connect::Spline;
+        let svg = svg_of(&p, g);
+        let d = doc(&svg);
+        paths_in(with_class(&d, "plots")[0])[0].attribute("d").unwrap().matches('L').count()
+    };
+    let n = |k: usize| -> Vec<f64> { (0..k).map(|i| i as f64).collect() };
+    assert_eq!(svg_for(vec![0.0, 3.0, 2.0, 4.0]), 3, "decreasing X: straight");
+    assert_eq!(svg_for(vec![0.0, 1.0, 1.0, 4.0]), 3, "repeated X: straight");
+    assert!(svg_for(n(5)) > 4, "increasing X: chords");
+    assert_eq!(svg_for(n(901)), 900, "above 900 points: straight");
 }
 
 #[test]

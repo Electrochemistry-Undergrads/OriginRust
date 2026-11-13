@@ -707,6 +707,8 @@ impl Writer {
             let connect = match p.line.connect {
                 Connect::Straight => 1,
                 Connect::Spline => 5,
+                Connect::BSpline => 8,
+                Connect::Bezier => 15,
                 Connect::StepHorizontal => 11,
                 Connect::StepVertical => 12,
             };

@@ -697,9 +697,11 @@ fn color_code(b: &[u8], at: usize) -> Option<Color> {
     }
 }
 
-/// The line connection: 1 straight, 5 to 10 smooth curves, 11 and 12 steps (spec 10.5).
+/// The line connection: 1 straight, 5 to 10 smooth curves (8 is read as a B-spline), 15 Bezier, 11 and 12 steps (spec 10.5).
 fn connect_kind(code: u8, notes: &mut Vec<String>) -> Connect {
     match code {
+        8 => Connect::BSpline,
+        15 => Connect::Bezier,
         5..=10 => Connect::Spline,
         11 => Connect::StepHorizontal,
         12 => Connect::StepVertical,

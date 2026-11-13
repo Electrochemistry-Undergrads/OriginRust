@@ -870,6 +870,11 @@ pub enum PlotKind {
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
+    /// Origin's 3D Color Pie: the pie seen from above at a slant, an ellipse about half as high as
+    /// wide with a side band, slices in the palette colours.
+    Pie3D,
+    /// Origin's 2D B&W Pie: a flat pie of white slices with black hatch patterns that differ per slice.
+    PieBw,
 }
 
 impl PlotKind {

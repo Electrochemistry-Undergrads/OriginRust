@@ -664,7 +664,7 @@ impl Writer {
         }
         // Plot types the writer cannot store go out as plain columns; the companion file keeps them.
         let has = |f: &dyn Fn(PlotKind) -> bool| plots.iter().any(|r| f(r.plot.kind));
-        if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || k == PlotKind::Pie) {
+        if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || is_pie(k)) {
             notes.push("histogram, box and pie plots were written as plain columns of their data".into());
         }
         if plots.iter().any(|r| r.plot.size_from.is_some() || r.plot.color_from.is_some()) {
@@ -704,7 +704,9 @@ impl Writer {
                 | PlotKind::FloatingBar
                 | PlotKind::Histogram
                 | PlotKind::Box
-                | PlotKind::Pie => CurveKind::Column,
+                | PlotKind::Pie
+                | PlotKind::Pie3D
+                | PlotKind::PieBw => CurveKind::Column,
                 PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => CurveKind::Area,
             };
             let connect = match p.line.connect {
@@ -1214,4 +1216,9 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
         decimals,
         date_format,
     }
+}
+
+/// The three pie kinds (flat colour, 3D colour, black and white), which the writer cannot store.
+fn is_pie(k: PlotKind) -> bool {
+    matches!(k, PlotKind::Pie | PlotKind::Pie3D | PlotKind::PieBw)
 }

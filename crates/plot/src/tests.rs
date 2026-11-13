@@ -2882,6 +2882,78 @@ fn golden_pie_template() {
     compare_golden("pie", &svg_of(&p, g));
 }
 
+// ----- 3D and black and white pies (graphing spec 14.19) -------------------------------------------
+
+fn pie_variant(template: Template) -> (Project, WindowId) {
+    project(template, vec![1.0, 2.0, 3.0, 4.0, 5.0], vec![vec![3.0, 5.0, 2.0, 7.0, 4.0]])
+}
+
+#[test]
+fn the_3d_pie_is_an_ellipse_half_as_high_as_wide_with_a_darker_side_band() {
+    let (p, g) = pie_variant(Template::Pie3D);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let t = texts(&d);
+    for s in ["14.29%", "23.81%", "9.52%", "33.33%", "19.05%"] {
+        assert!(t.iter().any(|x| x == s), "{s} in {t:?}");
+    }
+    let plots = with_class(&d, "plots");
+    let ds: Vec<&str> = paths_in(plots[0]).iter().filter_map(|n| n.attribute("d")).collect();
+    // The arcs are elliptical: ry is half of rx.
+    let top = ds.iter().find(|d| d.contains(" 0 0 1 ") && d.starts_with('M')).unwrap();
+    let arc = top.find('A').unwrap();
+    let v: Vec<f64> = top[arc + 1..].split(' ').take(2).map(|t| t.parse().unwrap()).collect();
+    assert!((v[1] / v[0] - 0.5).abs() < 1e-3, "{v:?}");
+    assert!(svg.contains("#990000"), "a darker red band");
+}
+
+#[test]
+fn the_bw_pie_uses_white_slices_and_hatches_that_differ() {
+    let (p, g) = pie_variant(Template::PieBw);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let plots = with_class(&d, "plots");
+    let hatches: Vec<&str> = paths_in(plots[0])
+        .iter()
+        .filter(|n| n.attribute("fill").is_none_or(|f| f == "none"))
+        .filter_map(|n| n.attribute("d"))
+        .filter(|d| !d.contains('A'))
+        .collect();
+    assert_eq!(hatches.len(), 5);
+    for i in 0..5 {
+        for j in i + 1..5 {
+            assert_ne!(hatches[i], hatches[j]);
+        }
+    }
+    assert!(!svg.contains("#ff0000"), "no colour");
+}
+
+#[test]
+fn hatch_lines_stay_inside_a_concave_polygon() {
+    // An L shape: the lines must not cross the notch.
+    let poly = [(0.0, 0.0), (10.0, 0.0), (10.0, 4.0), (4.0, 4.0), (4.0, 10.0), (0.0, 10.0)];
+    let lines = crate::pie::hatch(&poly, 0.0, 1.0);
+    assert!(!lines.is_empty());
+    for (a, b) in lines {
+        assert!((a.1 - b.1).abs() < 1e-9);
+        if a.1 > 4.0 {
+            assert!(b.0 <= 4.0 + 1e-9 && a.0 >= -1e-9, "{a:?} {b:?}");
+        }
+    }
+}
+
+#[test]
+fn golden_pie_3d_template() {
+    let (p, g) = pie_variant(Template::Pie3D);
+    compare_golden("pie-3d", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_pie_bw_template() {
+    let (p, g) = pie_variant(Template::PieBw);
+    compare_golden("pie-bw", &svg_of(&p, g));
+}
+
 // ----- polar plots (graphing spec 14.18) ----------------------------------------------------------
 
 /// Angles 0 to 360 degrees in steps of 15 and the radius 1.5 + 0.5 cos(2 theta).

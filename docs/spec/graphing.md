@@ -1248,7 +1248,7 @@ Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new templa
 Measured through COM: `plotxy iy:=[Book]Sheet1!1 plot:=225 ogl:=[<new template:=PIE>]` with the column set as Y (a column left as X puts its values into the legend instead). PNGs in `re-workspace/scratch/T12/`.
 
 - The pie template is a 3D pie viewed from above at a slant (an ellipse about half as high as wide, with a side band); the 2D template (`PIEBW`) is a flat black and white pie with hatch patterns. Both: the first slice starts at 12 o'clock and the slices follow clockwise, each outlined in black; every slice is labelled outside with its share to two decimals (`33.33%`); the legend lists one square per slice at the top right, named by the X column's cells or by the row numbers 1, 2, 3, ...; the slices take the base palette in order (black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple); the layer has no axes and a black frame around the whole layer; the legend font is the legend font of the layer, the percentages the tick label font.
-- Sheaf draws the flat pie in colour (`PlotKind::Pie`, `Template::Pie`, menu "2D Color Pie" which Origin does not have; "3D Color Pie" and "2D B&W Pie" stay greyed): a pie whose radius is 35 % of the frame height, centre at 42 % of the width, drawn by `draw_pie`. Rows that are not positive numbers are left out. Not done: the 3D slant, hatch patterns, exploded slices, label positions inside, other label contents.
+- Sheaf draws the flat pie in colour (`PlotKind::Pie`, `Template::Pie`, CLI `-t pie`, no longer in the menu because Origin has no "2D Color Pie"): a pie whose radius is 35 % of the frame height, centre at 42 % of the width, drawn by `draw_pie`. The menu items "3D Color Pie" and "2D B&W Pie" draw the 3D pie and the hatched pie: see 14.19. Rows that are not positive numbers are left out. Not done: exploded slices, label positions inside, other label contents.
 - `.opj`: written as plain columns, the save warns.
 - **Polar** (`POLAR` template, `plotxy iy:=[Book]Sheet1!(1,2) plot:=200`): theta from 0 to 360 degrees in steps of 30 with labels outside the circle (0 on the right, counter-clockwise), grey ring and spoke grid lines, the radius axis drawn twice along the vertical diameter (labels 1.0 to 2.0 up and down, mirrored) and a line curve. Sheaf draws it as a polar layer: see 14.18.
 
@@ -1272,6 +1272,21 @@ Origin's Plot > Specialized > "Polar theta(X) r(Y)" and "Polar r(X) theta(Y)", a
 - `.opj`: written as a plain line plot on rectangular axes; the save warns that the polar layer was not written, and the `.opj.sheaf` companion keeps the layer (round trip tested).
 - Golden image: `crates/plot/tests/golden/polar.svg` (angles 0 to 360 in steps of 15, r = 1.5 + 0.5 cos 2 theta).
 - Not done: the angle in radians or gradians, the axis dialog for the zero direction and sense of rotation, a polar axis dialog (radius labels along other angles, labels at the circle edge only), polar contour and wind rose, zooming the circle, the Plot Details tab of the polar axes. Plot Details shows the plot type of a plot in a polar layer as "Polar Line" and so on.
+
+### 14.19 3D Color Pie and 2D B&W Pie (T12)
+
+Origin's Plot > Column/Bar/Pie menu has "3D Color Pie" (template `PIE`) and "2D B&W Pie" (template `PIEBW`); it has no "2D Color Pie". What was measured is in 14.17 (3D pie from above at a slant, ellipse about half as high as wide with a side band; flat black and white pie with hatch patterns; slices clockwise from 12 o'clock, black outlines, outside labels with two decimals, legend squares at the top right, palette in order for the 3D pie).
+
+**From Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref:** the 3D pie's view angle, thickness and rotation can be changed in the plot's details; slices can be pulled out; Origin's hatch patterns are a fixed list of pattern fills cycling over the slices; exact side band shade, band thickness and the exact patterns of the 2D template.
+
+**What Sheaf does**
+
+- Plot kinds `PlotKind::Pie3D` and `PlotKind::PieBw`, templates `pie-3d` ("3D Color Pie") and `pie-bw` ("2D B&W Pie"), both live in the menu; the item "2D Color Pie" is gone from the menu. `Template::Pie` (`-t pie`, `PlotKind::Pie`) stays as a CLI name and for existing projects: the flat colour pie of 14.17, golden `pie.svg` unchanged.
+- Drawing (`crates/plot/src/pie.rs`): same frame, labels (share to two decimals outside the slice) and legend placement as the flat pie. 3D: the ellipse is 0.5 as high as wide (`SLANT`), the width the largest that fits (at most 30 % of the frame width as radius); the side band is 0.2 of the radius thick (`BAND`), drawn only on the front half of the rim (90 to 270 degrees) in 60 % of the slice colour, then the tops on it, all outlined 0.5 pt black; labels of the front half sit below the band. B&W: white slices, each with one of eight hatch patterns (45 degrees, 135 degrees, horizontal, vertical, grid, diagonal grid, dense 45, dense 135; slices past the eighth reuse them at wider spacing), 0.5 pt black lines; legend squares carry the same pattern.
+- Pattern fills: the scene has no clip item, so `pie::hatch` cuts parallel lines against the slice polygon (the arc in steps of about 2 degrees; works for concave shapes) and the lines are drawn as one path per slice. Lines sit at multiples of the spacing from the page origin, so patterns continue across shapes. Works in every renderer since it is plain paths. It is not a general pattern fill of the model (`FillStyle` has none yet).
+- `.opj`: written as plain columns, the save warns (same note as the flat pie); the `.opj.sheaf` companion keeps the kind.
+- Goldens: `pie-3d.svg`, `pie-bw.svg` (values 3, 5, 2, 7, 4).
+- Not done: changing the 3D view (tilt, thickness, rotation), exploded slices, label positions inside, the toolbar button "Pie" (still greyed), hatch pattern choice per slice, Plot Details shows the kinds by name.
 
 ### 14.11 Unknowns
 

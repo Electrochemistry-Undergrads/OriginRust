@@ -1,6 +1,6 @@
 # T07: Worksheet export and clipboard as Origin
 
-**Status:** done on branch sheet-export, not merged (export measured and matched, export window added; clipboard left as is, see below). **Size:** S. **Branch:** `sheet-export`. **Model:** Sonnet.
+**Status:** done, merged (`826f390`) (export measured and matched, export window added; clipboard left as is, see below). **Size:** S. **Branch:** `sheet-export`. **Model:** Sonnet.
 **Detail:** audit E "Different" (export paragraph) and "Partial" (clipboard).
 **Spec:** `docs/spec/import-ascii.md` (export, search "expASC"), `docs/spec/workbook-model.md`.
 

@@ -8,6 +8,7 @@
 //! name says otherwise.
 
 pub mod analysis;
+pub mod analysis_link;
 pub mod autorange;
 pub mod clipboard;
 pub mod color;

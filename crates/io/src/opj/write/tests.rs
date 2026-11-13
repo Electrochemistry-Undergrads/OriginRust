@@ -456,3 +456,34 @@ fn label_columns_without_a_y_column_are_written_as_unused() {
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     assert_eq!(read_back(&out.bytes).workbooks[0].sheets[0].columns[0].designation, Designation::Label);
 }
+
+/// An analysis result that recalculates from its source is not stored in the file, so the writer
+/// names it (and the save keeps the `.opj.sheaf` companion, ADR 0008).
+#[test]
+fn analysis_links_are_named_in_the_warnings() {
+    use sheaf_core::Designation;
+    use sheaf_core::analysis::{OutputTarget, Request, RowRange, Tool};
+    use sheaf_core::column::RecalcMode;
+    let mut p = Project::new();
+    let book = p.add_workbook("Book1");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric((0..20).map(f64::from).collect())).unwrap();
+    let y = p
+        .add_column(book, 0, Designation::Y, ColumnData::numeric((0..20).map(|i| f64::from(i % 4)).collect()))
+        .unwrap();
+    assert!(write(&p).unwrap().warnings.iter().all(|w| !w.contains("analysis result")));
+    use sheaf_core::analysis::{Boundary, SmoothMethod, SmoothOptions};
+    let smooth = SmoothOptions {
+        method: SmoothMethod::AdjacentAveraging { weighted: false },
+        npts: 3,
+        boundary: Boundary::None,
+    };
+    let tool = Tool::Smooth(smooth);
+    p.analyze_linked(
+        &Request { columns: vec![y], rows: RowRange::All, tool },
+        &OutputTarget::NextToInput,
+        RecalcMode::Manual,
+    )
+    .unwrap();
+    let out = write(&p).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("1 analysis result")), "{:?}", out.warnings);
+}

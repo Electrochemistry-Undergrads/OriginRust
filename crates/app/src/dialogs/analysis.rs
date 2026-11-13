@@ -17,13 +17,13 @@ use sheaf_core::analysis::{
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
-    IntegrateSpec, InterpMethod, InterpSpec, NormalizeMethod, PeakDirection, PeakFilter, PeakOptions, Report, Request,
-    RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
+    IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter,
+    PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
 use sheaf_core::analysis::{
     ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec, PeakFitSpec, PeakShape,
 };
-use sheaf_core::column::Designation;
+use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,6 +176,9 @@ enum SmoothKind {
     Weighted,
     Percentile,
     Fft,
+    Lowess,
+    Loess,
+    Binomial,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -319,6 +322,23 @@ pub enum AnalysisOutcome {
     Done(Box<Report>),
     /// Apply: the tool ran and the window stays open.
     Applied(Box<Report>),
+    /// Auto Apply: an option changed and the tool ran again; the window stays open.
+    AutoApplied(Box<Report>),
+}
+
+/// Where the one-value-per-row results go (the Output node).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputChoice {
+    NextToInput,
+    NewSheet,
+    Existing,
+}
+
+/// Undo steps made by one window share a token, so one Undo reverts all its Apply runs.
+fn next_undo_token() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 pub struct AnalysisDialog {
@@ -338,6 +358,10 @@ pub struct AnalysisDialog {
     smooth_points: usize,
     smooth_poly: usize,
     smooth_percent: f64,
+    /// Lowess and Loess: share of the points in each local fit.
+    smooth_span: f64,
+    /// Binomial filter: passes of the 1 2 1 / 4 filter.
+    smooth_order: usize,
     boundary: Boundary,
     normalize: usize,
     divisor: f64,
@@ -381,6 +405,20 @@ pub struct AnalysisDialog {
     preview: Option<Result<PreviewData, String>>,
     /// The request the preview shows, so that Auto Preview computes again only after a change.
     preview_request: Option<Request>,
+    /// The Recalculate choice (None, Manual, Auto); Manual is the default of Origin.
+    recalc: RecalcMode,
+    output_choice: OutputChoice,
+    /// For [`OutputChoice::Existing`]: the target column (index into `sheet_columns`) of each input.
+    output_existing: Vec<usize>,
+    auto_apply: bool,
+    /// The columns that hold the result of this window's last run: Apply and Auto Apply replace them.
+    applied: Option<Vec<ColumnId>>,
+    /// What the last run used, so that Auto Apply runs again only after a change.
+    applied_key: Option<(Request, OutputTarget, RecalcMode)>,
+    applied_report: Option<Report>,
+    /// The options of the last Auto Apply run that failed, so that it is not retried every frame.
+    failed_key: Option<(Request, OutputTarget, RecalcMode)>,
+    undo_token: u64,
 }
 
 const CURVE_OPS: [(&str, CurveOp); 5] = [
@@ -478,6 +516,8 @@ impl AnalysisDialog {
             smooth_points: 5,
             smooth_poly: 2,
             smooth_percent: 50.0,
+            smooth_span: 0.1,
+            smooth_order: 1,
             boundary: Boundary::None,
             normalize: 0,
             divisor: 1.0,
@@ -505,6 +545,15 @@ impl AnalysisDialog {
             auto_preview: false,
             preview: None,
             preview_request: None,
+            recalc: RecalcMode::Manual,
+            output_choice: OutputChoice::NextToInput,
+            output_existing: Vec::new(),
+            auto_apply: false,
+            applied: None,
+            applied_key: None,
+            applied_report: None,
+            failed_key: None,
+            undo_token: next_undo_token(),
         })
     }
 
@@ -539,6 +588,9 @@ impl AnalysisDialog {
                     SmoothKind::Weighted => SmoothMethod::AdjacentAveraging { weighted: true },
                     SmoothKind::Percentile => SmoothMethod::Percentile { percent: self.smooth_percent },
                     SmoothKind::Fft => SmoothMethod::FftFilter,
+                    SmoothKind::Lowess => SmoothMethod::Lowess { span: LocalSpan::Proportion(self.smooth_span) },
+                    SmoothKind::Loess => SmoothMethod::Loess { span: LocalSpan::Proportion(self.smooth_span) },
+                    SmoothKind::Binomial => SmoothMethod::Binomial { order: self.smooth_order },
                 },
                 npts: self.smooth_points,
                 boundary: self.boundary,
@@ -812,6 +864,9 @@ impl AnalysisDialog {
                             SmoothKind::Weighted => "Weighted adjacent averaging",
                             SmoothKind::Percentile => "Percentile filter",
                             SmoothKind::Fft => "FFT filter",
+                            SmoothKind::Lowess => "Lowess",
+                            SmoothKind::Loess => "Loess",
+                            SmoothKind::Binomial => "Binomial",
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::SavitzkyGolay, "Savitzky-Golay");
@@ -823,11 +878,23 @@ impl AnalysisDialog {
                             );
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::Percentile, "Percentile filter");
                             ui.selectable_value(&mut self.smooth_kind, SmoothKind::Fft, "FFT filter");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Lowess, "Lowess");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Loess, "Loess");
+                            ui.selectable_value(&mut self.smooth_kind, SmoothKind::Binomial, "Binomial");
                         });
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Points of window");
-                    ui.add(DragValue::new(&mut self.smooth_points).range(1..=100_001));
+                    let local = matches!(self.smooth_kind, SmoothKind::Lowess | SmoothKind::Loess);
+                    if local {
+                        ui.label("Span");
+                        ui.add(DragValue::new(&mut self.smooth_span).speed(0.01).range(0.0..=1.0));
+                    } else if self.smooth_kind == SmoothKind::Binomial {
+                        ui.label("Order");
+                        ui.add(DragValue::new(&mut self.smooth_order).range(1..=1000));
+                    } else {
+                        ui.label("Points of window");
+                        ui.add(DragValue::new(&mut self.smooth_points).range(1..=100_001));
+                    }
                     match self.smooth_kind {
                         SmoothKind::SavitzkyGolay => {
                             ui.label("Polynomial order");
@@ -843,7 +910,11 @@ impl AnalysisDialog {
                 if self.smooth_kind == SmoothKind::Fft {
                     ui.weak("The FFT filter keeps frequencies below 1 / (2 dx points); larger values smooth more.");
                 }
-                ui.add_enabled_ui(self.smooth_kind != SmoothKind::Fft, |ui| {
+                if matches!(self.smooth_kind, SmoothKind::Lowess | SmoothKind::Loess) {
+                    ui.weak("The span is the share of the points in each local fit (0 to 1); Lowess fits lines, Loess parabolas.");
+                }
+                let ends = !matches!(self.smooth_kind, SmoothKind::Fft | SmoothKind::Lowess | SmoothKind::Loess);
+                ui.add_enabled_ui(ends, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("At the ends");
                         egui::ComboBox::from_id_salt("smooth_boundary")
@@ -997,6 +1068,23 @@ impl AnalysisDialog {
                     );
                 });
                 ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+                if !chain {
+                    ui.horizontal(|ui| {
+                        ui.label("Smoothing points before the search");
+                        ui.add(DragValue::new(&mut self.peaks.smooth_points).range(0..=1001));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Foot height");
+                        ui.add(DragValue::new(&mut self.peaks.foot_height).speed(0.01).range(0.0..=f64::MAX));
+                    });
+                    ui.horizontal(|ui| {
+                        let mut limited = self.peaks.max_half_width.is_some();
+                        ui.checkbox(&mut limited, "Limit the distance of the feet from the peak");
+                        let mut w = self.peaks.max_half_width.unwrap_or(1.0);
+                        ui.add_enabled(limited, DragValue::new(&mut w).speed(0.01).range(0.0..=f64::MAX));
+                        self.peaks.max_half_width = limited.then_some(w);
+                    });
+                }
                 if chain {
                     ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak");
                     ui.checkbox(&mut self.chain_integrate, "Integrate every peak (area, area %, FWHM, limits)");
@@ -1471,6 +1559,129 @@ impl AnalysisDialog {
         }
         self.columns = columns;
         self.preview_request = None;
+        // A new choice of input starts a new set of results.
+        self.applied = None;
+        self.applied_key = None;
+        self.output_existing.clear();
+    }
+
+    /// True for the tools whose results can go to a new sheet or to existing columns.
+    fn has_output_choice(&self) -> bool {
+        matches!(
+            self.kind,
+            AnalysisKind::Differentiate
+                | AnalysisKind::Normalize
+                | AnalysisKind::Baseline
+                | AnalysisKind::Smooth
+                | AnalysisKind::SubtractRef
+                | AnalysisKind::CurveMath
+        )
+    }
+
+    /// The target of the results as the Output node has it set.
+    fn output_target(&self) -> Result<OutputTarget, String> {
+        if !self.has_output_choice() {
+            return Ok(OutputTarget::NextToInput);
+        }
+        Ok(match self.output_choice {
+            OutputChoice::NextToInput => OutputTarget::NextToInput,
+            OutputChoice::NewSheet => OutputTarget::NewSheet,
+            OutputChoice::Existing => {
+                let mut ids = Vec::new();
+                for i in 0..self.columns.len() {
+                    let at = self.output_existing.get(i).copied().unwrap_or_else(|| self.default_existing(i));
+                    ids.push(self.sheet_columns.get(at).map(|(id, _)| *id).ok_or("choose the column for the result")?);
+                }
+                OutputTarget::Existing(ids)
+            }
+        })
+    }
+
+    /// The column after the input column, as the first suggestion for an existing target.
+    fn default_existing(&self, input: usize) -> usize {
+        let at = self.columns.get(input).and_then(|c| self.sheet_columns.iter().position(|(id, _)| id == c));
+        at.map_or(0, |a| (a + 1).min(self.sheet_columns.len().saturating_sub(1)))
+    }
+
+    /// Whether Recalculate Manual and Auto apply to the tool as it is set.
+    fn linkable(&self) -> bool {
+        self.tool().is_ok_and(|t| Project::can_link(&t))
+    }
+
+    /// The Output node of the tree.
+    fn output_node(&mut self, ui: &mut egui::Ui) {
+        if !self.has_output_choice() {
+            ui.add_enabled_ui(false, |ui| {
+                ui.label(self.output_text());
+            });
+            return;
+        }
+        let label = |c: OutputChoice| match c {
+            OutputChoice::NextToInput => "New columns beside the input",
+            OutputChoice::NewSheet => "A new sheet",
+            OutputChoice::Existing => "Existing columns",
+        };
+        ui.horizontal(|ui| {
+            ui.label("Output to");
+            egui::ComboBox::from_id_salt("analysis_output_choice").selected_text(label(self.output_choice)).show_ui(
+                ui,
+                |ui| {
+                    for c in [OutputChoice::NextToInput, OutputChoice::NewSheet, OutputChoice::Existing] {
+                        ui.selectable_value(&mut self.output_choice, c, label(c));
+                    }
+                },
+            );
+        });
+        if self.output_choice == OutputChoice::Existing {
+            if self.output_existing.len() != self.columns.len() {
+                self.output_existing = (0..self.columns.len()).map(|i| self.default_existing(i)).collect();
+            }
+            let names: Vec<String> = self.column_names.split(", ").map(str::to_string).collect();
+            for i in 0..self.columns.len() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("Result for {}", names.get(i).map_or("", String::as_str)));
+                    let at = &mut self.output_existing[i];
+                    let shown = self.sheet_columns.get(*at).map_or("", |(_, n)| n.as_str());
+                    egui::ComboBox::from_id_salt(("analysis_output_existing", i)).selected_text(shown).show_ui(
+                        ui,
+                        |ui| {
+                            for (k, (_, name)) in self.sheet_columns.iter().enumerate() {
+                                ui.selectable_value(at, k, name);
+                            }
+                        },
+                    );
+                });
+            }
+            ui.weak("The values and labels of the chosen columns are replaced.");
+        }
+    }
+
+    /// Runs the tool for OK, Apply and Auto Apply. A later run of the same window replaces the
+    /// columns of the earlier one; all runs of the window are one undo step.
+    fn run(&mut self, doc: &mut Document) -> Result<Report, String> {
+        let request = self.request()?;
+        let output = self.output_target()?;
+        let mode = if Project::can_link(&request.tool) { self.recalc } else { RecalcMode::None };
+        // A histogram makes a graph that plots the new columns, which must stay.
+        let previous = if self.kind == AnalysisKind::Histogram { None } else { self.applied.clone() };
+        let key = (request.clone(), output.clone(), mode);
+        let label = request.tool.name();
+        let result = doc.apply_merging(label, self.undo_token, |p| {
+            p.analyze_linked_into(previous.as_deref(), &request, &output, mode)
+        });
+        match result {
+            Ok((report, outputs)) => {
+                self.applied = Some(outputs);
+                self.applied_key = Some(key);
+                self.applied_report = Some(report.clone());
+                self.problem = None;
+                Ok(report)
+            }
+            Err(e) => {
+                self.failed_key = Some(key);
+                Err(e.to_string())
+            }
+        }
     }
 
     /// The range of the input in Origin's text form: `[Book1]Sheet1!(A"t",B"up")`.
@@ -1626,11 +1837,25 @@ impl AnalysisDialog {
                 description_row(ui, self.description());
                 ui.horizontal(|ui| {
                     ui.label("Recalculate");
-                    egui::ComboBox::from_id_salt("analysis_recalculate").selected_text("None").show_ui(ui, |ui| {
-                        let _ = ui.selectable_label(true, "None");
-                        ui.add_enabled(false, egui::Button::selectable(false, "Manual"));
-                        ui.add_enabled(false, egui::Button::selectable(false, "Auto"));
-                    });
+                    let linkable = self.linkable();
+                    let shown = if linkable { self.recalc.label() } else { RecalcMode::None.label() };
+                    egui::ComboBox::from_id_salt("analysis_recalculate")
+                        .selected_text(shown)
+                        .show_ui(ui, |ui| {
+                            if !linkable {
+                                let _ = ui.selectable_label(true, "None");
+                            } else {
+                                ui.selectable_value(&mut self.recalc, RecalcMode::None, "None");
+                            }
+                            ui.add_enabled_ui(linkable, |ui| {
+                                ui.selectable_value(&mut self.recalc, RecalcMode::Manual, "Manual")
+                                    .on_hover_text("Mark the results when the input changes; recalculate by hand");
+                                ui.selectable_value(&mut self.recalc, RecalcMode::Auto, "Auto")
+                                    .on_hover_text("Run the tool again whenever the input changes");
+                            });
+                        })
+                        .response
+                        .on_hover_text("Smooth, Integrate and Find Peaks can follow their input");
                 });
                 ui.add_space(2.0);
                 ui.horizontal_top(|ui| {
@@ -1644,11 +1869,7 @@ impl AnalysisDialog {
                                 tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
                                 let title = self.kind.title();
                                 tree_node(ui, "analysis_options", title, |ui| self.options(ui));
-                                tree_node(ui, "analysis_output", "Output", |ui| {
-                                    ui.add_enabled_ui(false, |ui| {
-                                        ui.label(self.output_text());
-                                    });
-                                });
+                                tree_node(ui, "analysis_output", "Output", |ui| self.output_node(ui));
                             });
                     });
                     if with_pane {
@@ -1670,6 +1891,8 @@ impl AnalysisDialog {
                         preview_now = true;
                     }
                     ui.add_enabled(self.has_preview(), egui::Checkbox::new(&mut self.auto_preview, "Auto Preview"));
+                    ui.checkbox(&mut self.auto_apply, "Auto Apply")
+                        .on_hover_text("Run the tool again at once whenever an option changes");
                 });
             });
         self.picker_window(ctx, doc.project());
@@ -1683,19 +1906,41 @@ impl AnalysisDialog {
             }
         }
 
+        let current_key = match (self.request(), self.output_target()) {
+            (Ok(r), Ok(o)) => {
+                let mode = if Project::can_link(&r.tool) { self.recalc } else { RecalcMode::None };
+                Some((r, o, mode))
+            }
+            _ => None,
+        };
         if matches!(pressed, Some(DialogButton::Ok | DialogButton::Apply)) {
-            match self.request() {
-                Ok(request) => match doc.edit(request.tool.name(), |p| p.analyze(&request)) {
-                    Ok(report) => {
-                        self.problem = None;
-                        if pressed == Some(DialogButton::Apply) {
-                            self.preview_request = None;
-                            return AnalysisOutcome::Applied(Box::new(report));
-                        }
-                        return AnalysisOutcome::Done(Box::new(report));
+            // OK right after an Auto Apply run with the same options: the results are in place.
+            if pressed == Some(DialogButton::Ok)
+                && self.auto_apply
+                && current_key.is_some()
+                && current_key == self.applied_key
+                && let Some(report) = self.applied_report.clone()
+            {
+                return AnalysisOutcome::Done(Box::new(report));
+            }
+            match self.run(doc) {
+                Ok(report) => {
+                    if pressed == Some(DialogButton::Apply) {
+                        self.preview_request = None;
+                        return AnalysisOutcome::Applied(Box::new(report));
                     }
-                    Err(e) => self.problem = Some(e.to_string()),
-                },
+                    return AnalysisOutcome::Done(Box::new(report));
+                }
+                Err(e) => self.problem = Some(e),
+            }
+        } else if self.auto_apply
+            && pressed != Some(DialogButton::Cancel)
+            && let Some(key) = current_key
+            && Some(&key) != self.applied_key.as_ref()
+            && Some(&key) != self.failed_key.as_ref()
+        {
+            match self.run(doc) {
+                Ok(report) => return AnalysisOutcome::AutoApplied(Box::new(report)),
                 Err(e) => self.problem = Some(e),
             }
         }

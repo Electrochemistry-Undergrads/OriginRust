@@ -102,7 +102,7 @@ fn ripple_plus_gaussians_matches_origin() {
         ),
     ];
     for (name, npts, direction, filter, want) in cases {
-        let r = find_peaks(&x, &y, &PeakOptions { npts, direction, filter });
+        let r = find_peaks(&x, &y, &PeakOptions { npts, direction, filter, ..PeakOptions::default() });
         assert_eq!(r.rows, want, "{name}");
         for (i, &row) in r.rows.iter().enumerate() {
             assert_eq!(r.x[i], x[row - 1]);
@@ -144,10 +144,19 @@ fn triangles_flat_bottoms_and_sign_rules_match_origin() {
     ];
     for (name, direction, filter, want) in cases {
         let series = sets.iter().find(|(k, _)| name.starts_with(k)).unwrap().1;
-        let r = find_peaks(&x, series, &PeakOptions { npts: 2, direction, filter });
+        let r = find_peaks(&x, series, &PeakOptions { npts: 2, direction, filter, ..PeakOptions::default() });
         assert_eq!(r.rows, want, "{name}");
     }
     // all-negative data have no positive peaks
-    let r = find_peaks(&x, &d, &PeakOptions { npts: 2, direction: PeakDirection::Positive, filter: PeakFilter::None });
+    let r = find_peaks(
+        &x,
+        &d,
+        &PeakOptions {
+            npts: 2,
+            direction: PeakDirection::Positive,
+            filter: PeakFilter::None,
+            ..PeakOptions::default()
+        },
+    );
     assert!(r.rows.is_empty());
 }

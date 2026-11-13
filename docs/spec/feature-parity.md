@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 42 | 108 | 80 | 230 |
+| All rows | 43 | 109 | 78 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 10 | 39 | 80 | 129 |
+| P1 and P2 together | 11 | 40 | 78 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -178,7 +178,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Smooth: Savitzky-Golay, adjacent average, weighted, percentile, FFT filter | Signal Processing > Smooth | `calc/smooth.rs`, checked against Origin; boundary options; Preview pane with Auto Preview in the shared analysis frame | ✓ | no auto-apply or recalculate | P0 |
-| Smooth: LOWESS, LOESS, binomial | Smooth dialog | none | ✗ | | P1 |
+| Smooth: LOWESS, LOESS, binomial | Smooth dialog | Lowess, Loess (span or points) and binomial (order) as measured in Origin, dialog and CLI | ✓ | | P1 |
 | FFT and inverse FFT | fft1, ifft1 | only inside smoothing | ✗ | | P1 |
 | FFT filters | low, high, band pass, block, notch | low-pass inside Smooth only | ✗ | | P1 |
 | Correlation, wavelets, decimation, Hilbert, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
@@ -330,7 +330,7 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None only), a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, no Auto Apply, Recalculate cannot be Manual or Auto, the output cannot be placed in a chosen range, the preview is a small own drawing, not drawn on the source graph | P0 |
+| Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None, Manual, Auto for Smooth, Integrate and Find Peaks), Auto Apply, a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, Recalculate links only Smooth, Integrate and Find Peaks, the output can be a new sheet or existing columns for the column-writing tools only, the preview is a small own drawing, not drawn on the source graph | P0 |
 | Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name, Long Name, Units, Comments, Options (Plot Designation, Format, Display, Column Width greyed, Apply to all columns to the right), OK, Cancel, Apply | ◐ | no text type; Column Width is greyed (the grid has one width); no Origin-style numeric display names such as Decimal:1000 | P0 |
 | Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
 | Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |

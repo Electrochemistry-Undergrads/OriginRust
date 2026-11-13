@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 rustfft = "6"
+serde.workspace = true
 statrs = { version = "0.19", default-features = false, features = ["std"] }
 
 [lints]

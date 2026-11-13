@@ -209,7 +209,12 @@ fn positive_peaks(x: &[f64], c: &[f64], opts: &FindOptions) -> Vec<usize> {
     let mut found: Vec<usize> = Vec::new();
     match opts.method {
         FindMethod::LocalMax => {
-            let o = PeakOptions { npts: k, direction: PeakDirection::Positive, filter: PeakFilter::None };
+            let o = PeakOptions {
+                npts: k,
+                direction: PeakDirection::Positive,
+                filter: PeakFilter::None,
+                ..PeakOptions::default()
+            };
             found = find_peaks(&x[..n], &ys, &o).rows.iter().map(|r| r - 1).collect();
         }
         FindMethod::Window => {

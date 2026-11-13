@@ -3567,6 +3567,15 @@ fn open_column_props(h: &mut Harness<'static, SheafApp>, short: &str) -> ColumnI
     id
 }
 
+/// Opens an analysis window on the named columns of the first workbook.
+fn open_analysis_on(h: &mut Harness<'static, SheafApp>, kind: AnalysisKind, shorts: &[&str]) {
+    let book = project(h).workbooks().next().unwrap().id;
+    let columns = shorts.iter().map(|s| column_id(h, s)).collect();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Analyze { book, columns, kind }, &ctx);
+    settle(h);
+}
+
 fn open_analysis(h: &mut Harness<'static, SheafApp>, kind: AnalysisKind) {
     let book = project(h).workbooks().next().unwrap().id;
     let ctx = h.ctx.clone();
@@ -3689,6 +3698,178 @@ fn the_analysis_window_has_origins_frame_and_apply_runs_without_closing() {
     assert_eq!(b.sheets[1].columns[1].numeric().unwrap(), [16.5, 46.5]);
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "OK closes the window");
+}
+
+#[test]
+fn smoothing_offers_lowess_loess_and_binomial_with_their_own_fields() {
+    let mut h = start(vec![data_file("smooth-methods")]);
+    open_analysis(&mut h, AnalysisKind::Smooth);
+    assert!(has_label(&h, "Points of window"));
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Savitzky-Golay")).click();
+    settle(&mut h);
+    click(&mut h, "Lowess");
+    assert!(has_label(&h, "Span") && !has_label(&h, "Points of window"), "Lowess is set by its span");
+    assert!(is_disabled(&h, "At the ends"), "the ends do not apply to a local fit");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Lowess")).click();
+    settle(&mut h);
+    click(&mut h, "Binomial");
+    assert!(has_label(&h, "Order") && !has_label(&h, "Span"));
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let new = b.sheets[0].columns.iter().find(|c| c.long_name.starts_with("Smoothed")).expect("the smoothed column");
+    assert!(new.comments.contains("binomial, order 1"), "{}", new.comments);
+}
+
+#[test]
+fn find_peaks_has_smoothing_and_foot_options_and_writes_the_feet() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-pkfeet-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("feet.csv");
+    let mut text = String::from(
+        "x,y
+",
+    );
+    for k in 0..201 {
+        let x = k as f64 * 0.1;
+        text.push_str(&format!(
+            "{x},{}
+",
+            (-(x - 4.0).powi(2)).exp() + 0.8 * (-(x - 9.0).powi(2)).exp() + 0.2
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    open_analysis(&mut h, AnalysisKind::Peaks);
+    for label in ["Smoothing points before the search", "Foot height", "Limit the distance of the feet from the peak"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let peaks = &b.sheets[1];
+    assert_eq!(peaks.column_by_name("Peak position (x)").unwrap().numeric().unwrap(), [4.0, 9.0]);
+    // Without a limit the feet are the lowest points on each side: the start, the valley, the flat tail.
+    let left = peaks.columns.iter().find(|c| c.long_name.starts_with("Left foot")).unwrap().numeric().unwrap();
+    let right = peaks.columns.iter().find(|c| c.long_name.starts_with("Right foot")).unwrap().numeric().unwrap();
+    assert!(left[0] == 0.0 && right[1] > 14.0, "{left:?} {right:?}");
+    assert!((left[1] - right[0]).abs() < 1e-9, "the valley is the shared foot: {left:?} {right:?}");
+}
+
+/// The column a Smooth run added next to B.
+fn smoothed_column(h: &Harness<'static, SheafApp>) -> ColumnId {
+    let sheet = project(h).workbooks().next().unwrap().sheet();
+    sheet.columns.iter().find(|c| c.long_name == "Smoothed up").expect("the smoothed column").id
+}
+
+#[test]
+fn recalculate_offers_manual_and_auto_for_smoothing_only_and_a_manual_result_waits() {
+    let mut h = start(vec![data_file("recalc-manual")]);
+    open_analysis_on(&mut h, AnalysisKind::Smooth, &["B"]);
+    // Manual is the default, as in Origin.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Auto"), "Smooth can follow its input");
+    click(&mut h, "Auto");
+    click(&mut h, "Cancel");
+    // A tool that cannot be linked shows None and greys the other two.
+    open_analysis_on(&mut h, AnalysisKind::Normalize, &["B"]);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("None")).click();
+    settle(&mut h);
+    assert!(is_disabled(&h, "Manual") && is_disabled(&h, "Auto"));
+    click(&mut h, "Cancel");
+    // Manual: the result is marked when the input changes and runs again on Recalculate.
+    open_analysis_on(&mut h, AnalysisKind::Smooth, &["B"]);
+    click(&mut h, "OK");
+    let b = column_id(&h, "B");
+    let out = smoothed_column(&h);
+    let before = project(&h).numeric(out).unwrap().to_vec();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "100".into() }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).numeric(out).unwrap(), before.as_slice(), "a Manual result waits");
+    assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Pending);
+    h.state_mut().apply(Action::Recalculate(vec![out]), &ctx);
+    settle(&mut h);
+    assert_ne!(project(&h).numeric(out).unwrap(), before.as_slice(), "Recalculate ran the tool again");
+    assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets[0].columns.len(), 4, "the column was reused");
+}
+
+#[test]
+fn an_auto_result_follows_its_input_in_the_same_undo_step() {
+    let mut h = start(vec![data_file("recalc-auto")]);
+    open_analysis_on(&mut h, AnalysisKind::Smooth, &["B"]);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    click(&mut h, "Auto");
+    click(&mut h, "OK");
+    let b = column_id(&h, "B");
+    let out = smoothed_column(&h);
+    let first = project(&h).numeric(out).unwrap().to_vec();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "100".into() }, &ctx);
+    settle(&mut h);
+    let up = project(&h).numeric(b).unwrap().to_vec();
+    let x = project(&h).numeric(column_id(&h, "A")).unwrap().to_vec();
+    let want = sheaf_calc::smooth_xy(&x, &up, &sheaf_calc::SmoothOptions::default());
+    assert_eq!(project(&h).numeric(out).unwrap(), want.as_slice());
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).numeric(b).unwrap()[0], 2.5, "one Undo reverts the edit");
+    assert_eq!(project(&h).numeric(out).unwrap(), first.as_slice(), "and the result with it");
+}
+
+#[test]
+fn the_output_node_can_send_results_to_a_new_sheet_or_to_existing_columns() {
+    let mut h = start(vec![data_file("output-choice")]);
+    let b_id = column_id(&h, "B");
+    open_analysis_on(&mut h, AnalysisKind::Smooth, &["B"]);
+    assert!(has_label(&h, "Output to"));
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New columns beside the input")).click();
+    settle(&mut h);
+    click(&mut h, "A new sheet");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (2, 3), "the input sheet is untouched");
+    assert_eq!(b.sheets[1].columns.len(), 2, "an X and a Y column");
+    // Existing columns: the result lands in the chosen column (by default the one after the input).
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Analyze { book, columns: vec![b_id], kind: AnalysisKind::Smooth }, &ctx);
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New columns beside the input")).click();
+    settle(&mut h);
+    click(&mut h, "Existing columns");
+    assert!(has_label(&h, "Result for B"));
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets[0].columns.len(), 3, "no column was added");
+    assert!(b.sheets[0].columns[2].long_name.starts_with("Smoothed"), "{}", b.sheets[0].columns[2].long_name);
+}
+
+#[test]
+fn auto_apply_runs_the_tool_again_after_each_change_and_replaces_its_result() {
+    let mut h = start(vec![data_file("auto-apply")]);
+    open_analysis_on(&mut h, AnalysisKind::Smooth, &["B"]);
+    assert!(has_label(&h, "Auto Apply"));
+    click(&mut h, "Auto Apply");
+    settle(&mut h);
+    let cols = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheets[0].columns.len();
+    assert_eq!(cols(&h), 4, "ticking the box ran the tool once");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Savitzky-Golay")).click();
+    settle(&mut h);
+    click(&mut h, "Adjacent averaging");
+    settle(&mut h);
+    assert_eq!(cols(&h), 4, "the new run replaced the old result");
+    let c = project(&h).workbooks().next().unwrap().sheets[0].columns[2].comments.clone();
+    assert!(c.contains("adjacent averaging"), "{c}");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    assert_eq!(cols(&h), 4);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(cols(&h), 3, "one Undo removes everything the window did");
 }
 
 #[test]

@@ -1,0 +1,23 @@
+// Reference run for smooth, methods lw (Lowess), le (Loess) and bm (Binomial). Output columns in order C.. ; see crates/calc/tests/origin_smooth_local.rs.
+newbook;
+col(A) = (data(1, 100, 1))^1.3 / 10;
+col(B) = sin(col(A)) + 0.3*cos(3*col(A)) + 0.02*col(A)^2;
+smooth iy:=col(B) method:=lw span:=0.2 oy:=col(C);
+smooth iy:=col(B) method:=le span:=0.2 oy:=col(D);
+smooth iy:=col(B) method:=lw span:=0.255 oy:=col(E);
+smooth iy:=col(B) method:=le span:=1 oy:=col(F);
+smooth iy:=col(B) method:=lw span:=0.05 oy:=col(G);
+smooth iy:=col(B) method:=lw span:=0.2 prop:=0 npts:=7 oy:=col(H);
+smooth iy:=col(B) method:=le span:=0.2 prop:=0 npts:=7 oy:=col(I);
+smooth iy:=col(B) method:=lw span:=0.2 prop:=0 npts:=20 oy:=col(J);
+smooth iy:=col(B) method:=lw span:=0.01 oy:=col(K);
+col(Z) = col(B); col(Z)[20] = 0/0;
+smooth iy:=col(Z) method:=lw span:=0.2 oy:=col(L);
+smooth iy:=col(Z) method:=bm order:=2 oy:=col(M);
+smooth iy:=col(B) method:=bm order:=2 boundary:=reflect oy:=col(N);
+smooth iy:=col(B) method:=bm order:=3 boundary:=periodic oy:=col(O);
+smooth iy:=col(B) method:=bm order:=3 boundary:=repeat oy:=col(P);
+smooth iy:=col(B) method:=bm order:=3 boundary:=extrap oy:=col(Q);
+smooth iy:=col(B) method:=bm order:=5 oy:=col(R);
+smooth iy:=col(B) method:=bm order:=50 oy:=col(S);
+smooth iy:=col(B) method:=bm order:=3 boundary:=reflect oy:=col(T);

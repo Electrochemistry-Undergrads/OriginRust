@@ -1,0 +1,12 @@
+// Reference run for smooth, methods lw (Lowess), le (Loess) and bm (Binomial). Output columns in order C.. ; see crates/calc/tests/origin_smooth_local.rs.
+newbook;
+col(A) = data(0, 10, 0.1);
+col(B) = sin(col(A)) + 0.3*cos(7*col(A)) + 0.05*col(A)^2;
+smooth iy:=col(B) method:=lw oy:=col(C);
+smooth iy:=col(B) method:=lw span:=0.2 oy:=col(D);
+smooth iy:=col(B) method:=le oy:=col(E);
+smooth iy:=col(B) method:=le span:=0.2 oy:=col(F);
+smooth iy:=col(B) method:=bm npts:=5 oy:=col(G);
+smooth iy:=col(B) method:=bm npts:=9 oy:=col(H);
+smooth iy:=col(B) method:=lw span:=0.2 poly:=1 oy:=col(I);
+smooth iy:=col(B) method:=bm npts:=5 boundary:=reflect oy:=col(J);

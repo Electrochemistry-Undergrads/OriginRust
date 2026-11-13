@@ -9,6 +9,7 @@
 
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/built_with-Rust-b7410e?style=flat-square&amp;logo=rust">
+  <a href="#license"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-6b5b4b?style=flat-square"></a>
   <img alt="Early development" src="https://img.shields.io/badge/status-early_development-a66b3f?style=flat-square">
 </p>
 
@@ -16,7 +17,8 @@
   <a href="#features">Features</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#command-line">Command line</a> ·
-  <a href="#documentation">Documentation</a>
+  <a href="#documentation">Documentation</a> ·
+  <a href="#license">License</a>
 </p>
 
 ## Features
@@ -80,6 +82,11 @@ cargo run --release -p sheaf-cli -- --help
 
 Contributors: start with [HANDOFF.md](HANDOFF.md).
 Run checks with `cargo test --workspace`.
+
+## License
+
+Sheaf is dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE),
+at your option. Third-party dependencies retain their own licenses.
 
 ---
 

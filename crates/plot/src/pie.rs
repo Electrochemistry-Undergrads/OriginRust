@@ -19,6 +19,25 @@ const BAND: f64 = 0.1;
 /// Share of each channel kept in the side band's darker shade.
 const DARKER: f64 = 0.6;
 
+/// The legend's measures: the width of the column (capped to 40% of the frame), the font size and
+/// row height (shrunk so every row fits in the frame's height) and the longest name in characters.
+struct LegendBox {
+    width: f64,
+    fs: f64,
+    row: f64,
+    chars: usize,
+}
+
+fn legend_box(pie: &PieData, f: Rect) -> LegendBox {
+    let n = pie.names.len().max(1) as f64;
+    let fs = pie.legend_font.size_pt.min((f.h - 0.5 * pie.legend_font.size_pt) / (1.3 * n)).max(3.0);
+    let longest = pie.names.iter().map(|n| n.chars().count()).max().unwrap_or(0);
+    let wanted = longest as f64 * 0.55 * fs + 2.4 * fs;
+    let width = wanted.min(0.4 * f.w);
+    let chars = (((width - 2.4 * fs) / (0.55 * fs)).floor().max(1.0)) as usize;
+    LegendBox { width, fs, row: 1.3 * fs, chars }
+}
+
 /// The angles (from, to) in radians of every slice, clockwise from 12 o'clock.
 fn spans(pie: &PieData) -> Vec<(f64, f64)> {
     let total: f64 = pie.values.iter().sum();
@@ -83,9 +102,13 @@ pub(crate) fn draw_pie_3d(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
     if pie.values.iter().sum::<f64>() <= 0.0 {
         return;
     }
-    let rx = (0.42 * f.h / (SLANT + BAND)).min(0.3 * f.w);
+    let lb = legend_box(pie, f);
+    let room = f.w - lb.width - lb.fs;
+    // Keep a margin on both sides for the labels (about four and a half characters wide).
+    let side = 0.5 * room - 4.6 * pie.label_font.size_pt;
+    let rx = (0.42 * f.h / (SLANT + BAND)).min(0.3 * room).min(side / 1.12).max(5.0);
     let (ry, t) = (SLANT * rx, BAND * 2.0 * rx);
-    let (cx, cy) = (f.x + 0.42 * f.w, f.y + 0.5 * f.h - 0.5 * t);
+    let (cx, cy) = (f.x + 0.5 * room, f.y + 0.5 * f.h - 0.5 * t);
     let point = |a: f64| (cx + rx * a.sin(), cy - ry * a.cos());
     let outline = Stroke::solid(Color::BLACK, 0.5);
     let spans = spans(pie);
@@ -108,13 +131,15 @@ pub(crate) fn draw_pie_3d(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
         let d = slice_path(cx, cy, rx, ry, from, to);
         out.push(Item::Path { d, fill: Some(pie.colors[i]), stroke: Some(outline.clone()) });
     }
+    let mut labels = Vec::new();
     for &(from, to) in &spans {
         let mid = (from + to) / 2.0;
         // Labels of the front half sit below the band's lower edge.
         let drop = if mid.cos() < 0.0 { t } else { 0.0 };
         let (x, y) = (cx + 1.12 * rx * mid.sin(), cy - 1.12 * ry * mid.cos() + drop);
-        label(out, pie, to - from, x, y, mid);
+        labels.push((to - from, x, y, mid));
     }
+    place_labels(out, pie, f, labels, (cx, cy + 0.5 * t, 1.12 * rx, 1.12 * (ry + 0.5 * t)));
     let colors = pie.colors.clone();
     legend(out, pie, f, &mut |out, rect, i| {
         out.push(Item::Rect { rect, fill: Some(colors[i]), stroke: Some(outline.clone()) });
@@ -129,14 +154,18 @@ pub(crate) fn draw_pie_bw(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
     if pie.values.iter().sum::<f64>() <= 0.0 {
         return;
     }
-    let r = 0.35 * f.h.min(f.w);
-    let (cx, cy) = (f.x + 0.42 * f.w, f.y + 0.5 * f.h);
+    let lb = legend_box(pie, f);
+    let room = f.w - lb.width - lb.fs;
+    let side = 0.5 * room - 4.6 * pie.label_font.size_pt;
+    let r = (0.35 * f.h.min(room)).min(side / 1.12).max(5.0);
+    let (cx, cy) = (f.x + 0.5 * room, f.y + 0.5 * f.h);
     let point = |a: f64, k: f64| (cx + k * r * a.sin(), cy - k * r * a.cos());
     let outline = Stroke::solid(Color::BLACK, 0.5);
     let spans = spans(pie);
+    let mut labels = Vec::new();
     for (i, &(from, to)) in spans.iter().enumerate() {
-        // The slice as a polygon (the arc in steps of about 2 degrees) for the hatch.
-        let steps = (((to - from) / 0.035).ceil() as usize).max(2);
+        // The slice as a polygon (the arc in steps of about 1 degree) for the hatch.
+        let steps = (((to - from) / 0.0175).ceil() as usize).max(2);
         let mut poly: Vec<(f64, f64)> = Vec::new();
         if to - from < TAU - 1e-9 {
             poly.push((cx, cy));
@@ -148,8 +177,9 @@ pub(crate) fn draw_pie_bw(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
         out.push(Item::Path { d, fill: None, stroke: Some(outline.clone()) });
         let mid = (from + to) / 2.0;
         let (x, y) = point(mid, 1.12);
-        label(out, pie, to - from, x, y, mid);
+        labels.push((to - from, x, y, mid));
     }
+    place_labels(out, pie, f, labels, (cx, cy, 1.12 * r, 1.12 * r));
     legend(out, pie, f, &mut |out, rect, i| {
         out.push(Item::Rect { rect, fill: Some(Color::WHITE), stroke: None });
         let (x1, y1) = (rect.x + rect.w, rect.y + rect.h);
@@ -158,45 +188,87 @@ pub(crate) fn draw_pie_bw(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
     });
 }
 
-/// The share of a slice (`span` radians of the circle), outside it next to its middle (`mid` is
-/// the angle of the middle).
-fn label(out: &mut Vec<Item>, pie: &PieData, span: f64, x: f64, y: f64, mid: f64) {
+/// Prints the shares (`span` radians, x, y, angle of the middle) outside their slices. Labels on
+/// the same side that would overprint are pushed apart vertically, then kept inside the frame.
+fn place_labels(
+    out: &mut Vec<Item>,
+    pie: &PieData,
+    f: Rect,
+    labels: Vec<(f64, f64, f64, f64)>,
+    ell: (f64, f64, f64, f64),
+) {
     let size = pie.label_font.size_pt;
-    let anchor = if mid.sin() > 0.3 {
-        Anchor::Start
-    } else if mid.sin() < -0.3 {
-        Anchor::End
-    } else {
-        Anchor::Middle
-    };
-    out.push(Item::Text(TextItem {
-        x,
-        y: y + 0.35 * size,
-        text: format!("{:.2}%", span / TAU * 100.0),
-        family: pie.label_font.family.clone(),
-        size,
-        bold: pie.label_font.bold,
-        italic: pie.label_font.italic,
-        color: pie.label_font.color,
-        anchor,
-        rotate_ccw: 0.0,
-    }));
+    let gap = 1.15 * size;
+    let mut ys: Vec<f64> = labels.iter().map(|l| l.2).collect();
+    for right in [true, false] {
+        let mut idx: Vec<usize> = (0..labels.len()).filter(|&i| (labels[i].3.sin() >= 0.0) == right).collect();
+        idx.sort_by(|&a, &b| ys[a].total_cmp(&ys[b]));
+        for w in 1..idx.len() {
+            if ys[idx[w]] - ys[idx[w - 1]] < gap {
+                ys[idx[w]] = ys[idx[w - 1]] + gap;
+            }
+        }
+        let floor = f.y + f.h - 0.5 * size;
+        for w in (0..idx.len()).rev() {
+            let limit = if w + 1 < idx.len() { ys[idx[w + 1]] - gap } else { floor };
+            if ys[idx[w]] > limit {
+                ys[idx[w]] = limit;
+            }
+        }
+    }
+    for (l, &y) in labels.iter().zip(&ys) {
+        let (span, mut x, mid) = (l.0, l.1, l.3);
+        let moved = (y - l.2).abs() > 1e-6;
+        if moved {
+            // A label pushed along the side keeps clear of the ellipse: it moves out to its rim.
+            let t = ((y - ell.1) / ell.3).clamp(-1.0, 1.0);
+            let off = ell.2 * (1.0 - t * t).sqrt() + 0.2 * size;
+            x = ell.0 + if mid.sin() >= 0.0 { off } else { -off };
+        }
+        let anchor = if moved {
+            if mid.sin() >= 0.0 { Anchor::Start } else { Anchor::End }
+        } else if mid.sin() > 0.3 {
+            Anchor::Start
+        } else if mid.sin() < -0.3 {
+            Anchor::End
+        } else {
+            Anchor::Middle
+        };
+        out.push(Item::Text(TextItem {
+            x,
+            y: y + 0.35 * size,
+            text: format!("{:.2}%", span / TAU * 100.0),
+            family: pie.label_font.family.clone(),
+            size,
+            bold: pie.label_font.bold,
+            italic: pie.label_font.italic,
+            color: pie.label_font.color,
+            anchor,
+            rotate_ccw: 0.0,
+        }));
+    }
 }
 
 /// The legend: a square and the name of each slice from the top right corner down; `square` draws
 /// the square of slice `i` in the rectangle it is given.
 fn legend(out: &mut Vec<Item>, pie: &PieData, f: Rect, square: &mut dyn FnMut(&mut Vec<Item>, Rect, usize)) {
-    let fs = pie.legend_font.size_pt;
-    let row = 1.3 * fs;
-    let width = pie.names.iter().map(|n| n.chars().count()).max().unwrap_or(0) as f64 * 0.55 * fs + 2.4 * fs;
-    let x0 = f.x + f.w - width - 0.5 * fs;
+    let lb = legend_box(pie, f);
+    let (fs, row) = (lb.fs, lb.row);
+    let x0 = (f.x + f.w - lb.width - 0.5 * fs).max(f.x + 0.5 * fs);
     for (i, name) in pie.names.iter().enumerate() {
         let y = f.y + 0.5 * fs + i as f64 * row;
         square(out, Rect { x: x0, y, w: fs, h: fs }, i);
+        // A name too long for the column is cut and ends in an ellipsis.
+        let text = if name.chars().count() > lb.chars {
+            let kept: String = name.chars().take(lb.chars.saturating_sub(1)).collect();
+            format!("{kept}\u{2026}")
+        } else {
+            name.clone()
+        };
         out.push(Item::Text(TextItem {
             x: x0 + 1.4 * fs,
             y: y + 0.8 * fs,
-            text: name.clone(),
+            text,
             family: pie.legend_font.family.clone(),
             size: fs,
             bold: pie.legend_font.bold,

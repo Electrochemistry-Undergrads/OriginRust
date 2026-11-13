@@ -4,19 +4,19 @@
 <clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip0)">
 <rect x="138.237" y="68.41" width="526.086" height="424.343" fill="none" stroke="#000000" stroke-width="1"/>
-<path d="M517.019 264.799A157.826 78.913 0 0 1 466.542 322.646L466.542 354.211A157.826 78.913 0 0 0 517.019 296.364Z" fill="#990000" stroke="#000000" stroke-width="0.5"/>
-<path d="M466.542 322.646A157.826 78.913 0 0 1 382.715 342.83L382.715 374.396A157.826 78.913 0 0 0 466.542 354.211Z" fill="#009900" stroke="#000000" stroke-width="0.5"/>
-<path d="M382.715 342.83A157.826 78.913 0 0 1 201.367 264.799L201.367 296.364A157.826 78.913 0 0 0 382.715 374.396Z" fill="#000099" stroke="#000000" stroke-width="0.5"/>
-<path d="M359.193 264.799L359.193 185.886A157.826 78.913 0 0 1 482.586 215.597Z" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<path d="M359.193 264.799L482.586 215.597A157.826 78.913 0 0 1 466.542 322.646Z" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<path d="M359.193 264.799L466.542 322.646A157.826 78.913 0 0 1 382.715 342.83Z" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<path d="M359.193 264.799L382.715 342.83A157.826 78.913 0 0 1 212.277 235.969Z" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
-<path d="M359.193 264.799L212.277 235.969A157.826 78.913 0 0 1 359.193 185.886Z" fill="#00FFFF" stroke="#000000" stroke-width="0.5"/>
-<text x="435.888" y="191.469" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">14.29%</text>
-<text x="535.463" y="309.269" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">23.81%</text>
-<text x="435.888" y="382.294" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">9.52%</text>
-<text x="220.992" y="357.77" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">33.33%</text>
-<text x="259.617" y="198.074" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">19.05%</text>
+<path d="M479.966 268.368A122.137 61.068 0 0 1 440.904 313.134L440.904 337.561A122.137 61.068 0 0 0 479.966 292.795Z" fill="#990000" stroke="#000000" stroke-width="0.5"/>
+<path d="M440.904 313.134A122.137 61.068 0 0 1 376.033 328.754L376.033 353.181A122.137 61.068 0 0 0 440.904 337.561Z" fill="#009900" stroke="#000000" stroke-width="0.5"/>
+<path d="M376.033 328.754A122.137 61.068 0 0 1 235.693 268.368L235.693 292.795A122.137 61.068 0 0 0 376.033 353.181Z" fill="#000099" stroke="#000000" stroke-width="0.5"/>
+<path d="M357.83 268.368L357.83 207.299A122.137 61.068 0 0 1 453.32 230.292Z" fill="#000000" stroke="#000000" stroke-width="0.5"/>
+<path d="M357.83 268.368L453.32 230.292A122.137 61.068 0 0 1 440.904 313.134Z" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<path d="M357.83 268.368L440.904 313.134A122.137 61.068 0 0 1 376.033 328.754Z" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<path d="M357.83 268.368L376.033 328.754A122.137 61.068 0 0 1 244.136 246.057Z" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<path d="M357.83 268.368L244.136 246.057A122.137 61.068 0 0 1 357.83 207.299Z" fill="#00FFFF" stroke="#000000" stroke-width="0.5"/>
+<text x="417.182" y="213.045" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">14.29%</text>
+<text x="494.24" y="304.206" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">23.81%</text>
+<text x="417.182" y="360.718" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">9.52%</text>
+<text x="250.88" y="341.74" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">33.33%</text>
+<text x="280.771" y="218.156" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">19.05%</text>
 <rect x="588.423" y="79.41" width="22" height="22" fill="#000000" stroke="#000000" stroke-width="0.5"/>
 <text x="619.223" y="97.01" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">1</text>
 <rect x="588.423" y="108.01" width="22" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>

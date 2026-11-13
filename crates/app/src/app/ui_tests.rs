@@ -2679,12 +2679,12 @@ fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
     let mut h = start(vec![data_file("tb-grey")]);
     show_window(&mut h, "Book1 - sample");
     let windows = project(&h).windows.len();
-    // Pie is a 2D type Sheaf lacks: greyed, a click changes nothing.
-    assert!(bar_button!(h, "2D Graphs", "Pie").accesskit_node().is_disabled());
-    bar_button!(h, "2D Graphs", "Pie").click();
+    // Stacked Area is a 2D type Sheaf lacks: greyed, a click changes nothing.
+    assert!(bar_button!(h, "2D Graphs", "Stacked Area").accesskit_node().is_disabled());
+    bar_button!(h, "2D Graphs", "Stacked Area").click();
     settle(&mut h);
     assert_eq!(project(&h).windows.len(), windows);
-    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Pie")));
+    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Stacked Area")));
     // Line needs a selected column.
     click_text(&mut h, "C(Y1)");
     assert!(!bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());

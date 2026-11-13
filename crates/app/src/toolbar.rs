@@ -336,7 +336,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(PlotLineSymbol, "Line + Symbol", Cmd::Plot(Template::LineSymbol), "Line + Symbol"),
             b(PlotColumn, "Column", Cmd::Plot(Template::Column), "Column"),
             g(PlotBar, "Bar"),
-            g(PlotPie, "Pie"),
+            b(PlotPie, "Pie (3D Color)", Cmd::Plot(Template::Pie3D), "3D Color Pie"),
             b(PlotArea, "Area", Cmd::Plot(Template::Area), "Area"),
             g(PlotStackedArea, "Stacked Area"),
             g(PlotHlc, "High-Low-Close"),

@@ -1,6 +1,6 @@
 # Confidence and prediction bands, iteration controls
 
-Written in our own words from the Origin 2016 documentation, the fit report and the Origin C
+Written in our own words from the Origin documentation, the fit report and the Origin C
 header that ships with Origin, and checked with black-box runs (see "What was verified").
 
 ## What the bands are
@@ -70,7 +70,7 @@ Gompertz from a line through `ln(-ln(y / a))`; hyperbolas from the line of `1/y`
 
 ## What was verified
 
-- `crates/fit/tests/origin_bands.rs` holds the straight-line numbers of an Origin 2016 run on data
+- `crates/fit/tests/origin_bands.rs` holds the straight-line numbers of an Origin run on data
   we generated (`tools/origin-ref/bands-linear.lines.txt`): Origin supplied the regression, RSS,
   degrees of freedom, the Student quantiles (95 % and 90 %) and the mean and spread of x, and the
   test compares the bands with the closed form evaluated from those numbers at five x values

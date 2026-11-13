@@ -7,7 +7,7 @@ Status: accepted (2026-11-12)
 The owner stacks XRD patterns with Origin's "Stacked Lines by Y Offsets" (eleven such graphs in
 one project). Origin moves each curve of a layer's plot group by an offset that only changes the
 drawing. The group has one mode at a time: None, Cumulative, Constant, Auto or Individual. In
-Origin 2016 the template uses Auto: each curve sits one gap (10 % of the tallest curve) above the
+Origin the template uses Auto: each curve sits one gap (10 % of the tallest curve) above the
 one before it, computed again from the data. In Individual mode every curve has its own X and Y
 offset. Origin's 2D waterfall moves the curves by a layer-wide shift. Details are in
 docs/spec/graphing.md section 13.

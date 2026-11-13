@@ -1,6 +1,6 @@
 //! The byte layout of the blocks of a written graph window (spec section 13.9).
 //!
-//! Like `layout.rs`, every block starts from the constant bytes that Origin 2016 wrote for a plain
+//! Like `layout.rs`, every block starts from the constant bytes that Origin wrote for a plain
 //! graph (`graph_tables.rs`), and the fields that depend on the graph are put in on top. Offsets are
 //! into the block body.
 

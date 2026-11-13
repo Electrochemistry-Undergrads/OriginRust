@@ -1,6 +1,6 @@
 # Statistics: t-tests, ANOVA, nonparametric tests, correlation, frequency counts, normality tests
 
-Written in our own words from the Origin 2016 documentation and from black-box runs of Origin's
+Written in our own words from the Origin documentation and from black-box runs of Origin's
 X-Functions (`ttest1`, `ttest2`, `ttestpair`, `freqcounts`, `mwtest`, `signrank1`, `signrank2`, `kwanova`,
 `corrcoef`) and of its public statistics library (called from small Origin C helpers of ours,
 `tools/origin-ref/stats-ref.c` and `stats2-ref.c`). The reference scripts are `tools/origin-ref/stats-*.lines.txt`
@@ -26,7 +26,7 @@ All three tests compute `t = (estimate - hypothesized value) / standard error`.
 | Two sample, unequal variance (Welch) | `mean1 - mean2` | `sqrt(s1^2/n1 + s2^2/n2)` | Satterthwaite |
 | Paired | mean of the differences of the rows where both columns have a number | `SD(d) / sqrt(n)` | `n - 1` |
 
-Options and defaults in Origin 2016: the hypothesized mean (or difference of means) is 0, the
+Options and defaults in Origin: the hypothesized mean (or difference of means) is 0, the
 significance level is 0.05, and the alternative is two-tailed. The upper tail alternative is "the
 estimate is larger than the hypothesized value" (`p = P(T > t)`), the lower tail "smaller" (`p = P(T < t)`),
 the two-sided p-value is `2 P(T > |t|)`. The null hypothesis is rejected when `p < alpha`.
@@ -94,7 +94,7 @@ give the same p-value as the pooled two-sample t-test (checked).
   round number (one significant digit) from `range / (1.75 ln n - 0.25)`; it agrees with Origin in
   about 57 % of 600 random cases and in at least half of the 24 hand-picked ones. When it matters the
   user gives the bin size or number of bins, which agree exactly (checked on the runs with given ranges
-  and on the edge cases above). Default bin count in Origin 2016 is therefore not a fixed number: for
+  and on the edge cases above). Default bin count in Origin is therefore not a fixed number: for
   40 values with a range of about 9.4 it chose 5 bins of 2; for 8 values between 9.9 and 13.4 it chose bins
   of 0.9.
 
@@ -106,7 +106,7 @@ histogram has none. Closing that gap needs a change in `crates/plot` and is not 
 
 ## 4 Normality tests
 
-Origin 2016 offers Shapiro-Wilk (`swtest`), Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and
+Origin offers Shapiro-Wilk (`swtest`), Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and
 D'Agostino-Pearson; Sheaf computes all five for each column and reports the statistic and p-value of each.
 
 | Test | Needs | Statistic | Agreement with Origin |
@@ -122,7 +122,7 @@ that are too small give no value for a test (shown as "--" and named in the sent
 
 ## 7 Two-way ANOVA
 
-Origin 2016: Statistics > ANOVA > Two-Way ANOVA. It is an operation (no X-Function can be run from LabTalk), so
+Origin: Statistics > ANOVA > Two-Way ANOVA. It is an operation (no X-Function can be run from LabTalk), so
 the reference runs call the library functions behind it, `stats_anova_two_way_compute_anova_table` and
 `stats_anova_two_way_means_comparison` (`stats2-ref.c`, `stats2-anova2.lines.txt`). The library's own help says
 the table comes from linear regressions on dummy variables, which is what lets cells have different sizes
@@ -174,7 +174,7 @@ shuffled), so they were not used as a reference; Sheaf computes them from the ce
 
 ## 8 Nonparametric tests
 
-Origin 2016: Statistics > Nonparametric Tests; X-Functions `mwtest`, `signrank1`, `signrank2`, `kwanova`. Their
+Origin: Statistics > Nonparametric Tests; X-Functions `mwtest`, `signrank1`, `signrank2`, `kwanova`. Their
 reports have a table of descriptive statistics, a table of ranks and a table of test statistics; Sheaf puts the
 numbers in one table row per test and in the result sheet. Missing values are ignored. Ranks: tied numbers get the
 mean of the ranks they span (the "tie correction" of the variance below is then needed and was confirmed).
@@ -221,7 +221,7 @@ tail; whether to decide with the exact p; alpha) and `Tool::KruskalWallis`; shee
 
 ## 9 Correlation coefficients
 
-Origin 2016: Statistics > Descriptive Statistics > Correlation Coefficient (`corrcoef`, at least two columns;
+Origin: Statistics > Descriptive Statistics > Correlation Coefficient (`corrcoef`, at least two columns;
 Pearson on by default, Spearman and Kendall optional; missing values pairwise (default) or listwise). The report
 has, for each column, N, mean, SD, sum, minimum and maximum, and for each coefficient the matrix of r with the matrix
 of p-values (significance) below it; separate worksheets (`pwks`, `swks`, `kwks`) hold the plain r matrices.
@@ -268,14 +268,14 @@ sentences and tables are the long name when set, otherwise the short name.
 
 ## 6 What was verified, and what was not
 
-Verified against Origin 2016 runs: the t statistics, degrees of freedom, standard errors and p-values for
+Verified against Origin runs: the t statistics, degrees of freedom, standard errors and p-values for
 all three tests with several tails and levels; the ANOVA table, descriptive statistics and all five means
 comparisons (p-values and interval ends); the five normality tests (see the table); frequency counts
 with given range and size, with outlier rows, edge cases, and the automatic range for the size Origin
 chose. P-values from Origin's t and F distributions are off from the exact ones by up to 2e-5 (relative)
 and its t quantile by up to 3e-6, so those comparisons use those tolerances.
 
-Verified against Origin 2016 runs in sections 7 to 9 (78 runs of the X-Functions, 23 runs of the
+Verified against Origin runs in sections 7 to 9 (78 runs of the X-Functions, 23 runs of the
 two-way library functions and one four-group one-way run, on inputs we generated, with ties, unequal group sizes, an unbalanced design,
 constant data, groups and cells of one, and missing values): the two-way tables of balanced and unbalanced designs
 with and without interaction (sums of squares, F and p), the level statistics and all five means comparisons for

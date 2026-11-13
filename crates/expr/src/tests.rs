@@ -452,9 +452,9 @@ fn eval_rows_zero_and_empty_columns() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Functions added for T08. Numbers marked "Origin 2016" were measured with
+// Functions added for T08. Numbers marked "Origin" were measured with
 // tools/origin-ref/run-labtalk-lines.ps1 (raw output in re-workspace/scratch/expr-funcs/, local
-// only: g1e, g2, g3, g4). Origin 2016 has no cumsum/shift/rank/sem formula functions (the
+// only: g1e, g2, g3, g4). Origin has no cumsum/shift/rank/sem formula functions (the
 // formula comes out empty); those follow the choices in docs/spec/expression-language.md and
 // are "not checked against Origin".
 // ---------------------------------------------------------------------------------------------
@@ -482,10 +482,10 @@ fn first(src: &str) -> f64 {
 
 #[test]
 fn stddevp_and_sem() {
-    // Origin 2016: stddevp 2.5708704751503917 and stddev 2.7483761439387129 (n = 8, one missing).
+    // Origin: stddevp 2.5708704751503917 and stddev 2.7483761439387129 (n = 8, one missing).
     assert!((first("stddevp(col(A))") - 2.570_870_475_150_391_7).abs() < 1e-12);
     assert!((first("stddev(col(A))") - 2.748_376_143_938_713).abs() < 1e-12);
-    // sem is not an Origin 2016 formula function (not checked against Origin): sd / sqrt(n).
+    // sem is not an Origin formula function (not checked against Origin): sd / sqrt(n).
     assert!((first("sem(col(A))") - 2.748_376_143_938_713 / 8f64.sqrt()).abs() < 1e-12);
     assert!(first("sem(col(A)[1:1])").is_nan());
     assert_eq!(first("stddevp(col(A)[1:1])"), 0.0);
@@ -493,17 +493,17 @@ fn stddevp_and_sem() {
 
 #[test]
 fn cumsum_matches_origin_sum_of_a_column() {
-    // Origin 2016 evaluates `sum(col(A))` in a column formula as the running sum, skipping the
+    // Origin evaluates `sum(col(A))` in a column formula as the running sum, skipping the
     // missing row and leaving it missing: 3 4 8 9 14 . 23 25 31.
     let want = [3.0, 4.0, 8.0, 9.0, 14.0, NAN, 23.0, 25.0, 31.0];
     same(&rows("cumsum(col(A))"), &want);
-    // A row range gives the running sum within the range, from row 1 (Origin 2016: 1 5 6).
+    // A row range gives the running sum within the range, from row 1 (Origin: 1 5 6).
     same(&rows("cumsum(col(A)[2:4])"), &[1.0, 5.0, 6.0, NAN, NAN, NAN, NAN, NAN, NAN]);
 }
 
 #[test]
 fn diff_is_a_forward_difference_with_the_missing_value_last() {
-    // Origin 2016: -2 3 -3 4 . . -7 4 . (row i is A[i+1] - A[i]; missing inputs spread to both rows).
+    // Origin: -2 3 -3 4 . . -7 4 . (row i is A[i+1] - A[i]; missing inputs spread to both rows).
     same(&rows("diff(col(A))"), &[-2.0, 3.0, -3.0, 4.0, NAN, NAN, -7.0, 4.0, NAN]);
 }
 
@@ -530,7 +530,7 @@ fn vector_functions_need_a_column() {
 
 #[test]
 fn fact_truncates_and_overflows_to_missing() {
-    // Origin 2016: fact(1.5)=1, fact(0.5)=1, fact(2.5)=2, fact(4.5)=24, fact(0)=1, fact(-1) missing,
+    // Origin: fact(1.5)=1, fact(0.5)=1, fact(2.5)=2, fact(4.5)=24, fact(0)=1, fact(-1) missing,
     // fact(20) = 2.43290200817664E18, fact(170) = 7.257415615308004E306, fact(171) missing.
     same(&rows("fact(col(A)/2)"), &[1.0, 1.0, 2.0, 1.0, 2.0, NAN, 24.0, 1.0, 6.0]);
     same(&[ev("fact(0)"), ev("fact(20)"), ev("fact(170)")], &[1.0, 2.432_902_008_176_64e18, 7.257_415_615_308_004e306]);
@@ -541,7 +541,7 @@ fn fact_truncates_and_overflows_to_missing() {
 
 #[test]
 fn dates_match_origin_numbers() {
-    // Origin 2016: date(2020,1,1) = 2458849, date(1900,1,1) = 2415020, time(12,30,0) = 0.52083333333333337,
+    // Origin: date(2020,1,1) = 2458849, date(1900,1,1) = 2415020, time(12,30,0) = 0.52083333333333337,
     // time(25,0,0) = 1.0416666666666667 (not wrapped), year/month/day of 2021-03-15 06:00 = 2021 3 15,
     // weekday of Sunday 2021-03-14 = 0, of Monday 2021-03-15 = 1, of Wednesday 2020-01-01 = 3.
     assert_eq!(ev("date(2020,1,1)"), 2_458_849.0);
@@ -559,7 +559,7 @@ fn dates_match_origin_numbers() {
     assert_eq!(ev("day(date(2000,2,29))"), 29.0);
     assert_eq!(ev("month(date(1900,3,1)-1)"), 2.0);
     assert_eq!(ev("day(date(1900,3,1)-1)"), 28.0);
-    // Impossible dates are missing (Origin 2016 gave missing for month 14; for 30 February it gave an
+    // Impossible dates are missing (Origin gave missing for month 14; for 30 February it gave an
     // unrelated number, which we do not copy).
     assert!(ev("date(2021,14,1)").is_nan());
     assert!(ev("date(2021,2,30)").is_nan());
@@ -601,7 +601,7 @@ fn random_numbers_are_seeded_and_distributed() {
     assert!(a.iter().all(|v| (0.0..1.0).contains(v)));
     let mean = a.iter().sum::<f64>() / a.len() as f64;
     assert!((mean - 0.5).abs() < 0.01, "{mean}");
-    // Every row gets its own draw (Origin 2016 does as well).
+    // Every row gets its own draw (Origin does as well).
     assert_ne!(a[0], a[1]);
     // Two calls in one formula are independent streams.
     let two = Expr::parse("rnd() - rnd()").unwrap().eval_rows_seeded(&h, 100, 1).unwrap();
@@ -615,7 +615,7 @@ fn random_numbers_are_seeded_and_distributed() {
 
 #[test]
 fn lookup_cell_and_distance() {
-    // Origin 2016: lookup(4,A,A) = 4, lookup(9,A,A*10) = 90 (exact match only, 2.5 and 0 give missing).
+    // Origin: lookup(4,A,A) = 4, lookup(9,A,A*10) = 90 (exact match only, 2.5 and 0 give missing).
     let b: Vec<f64> = PROBE.iter().map(|v| v * 10.0).collect();
     let host = SimpleHost::new().short("A", &PROBE).short("B", &b).column(ColumnRef::Index(1), &PROBE);
     let run = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
@@ -624,7 +624,7 @@ fn lookup_cell_and_distance() {
     assert!(run("lookup(2.5,col(A),col(B))").is_nan());
     assert!(run("lookup(0,col(A),col(B))").is_nan());
     assert!(run("lookup(na(),col(A),col(B))").is_nan());
-    // Origin 2016: cell(2,1) = 1, cell(1,1) = 3, cell(1.6,1) = 1 (rounds to row 2), cell(6,1), cell(10,1),
+    // Origin: cell(2,1) = 1, cell(1,1) = 3, cell(1.6,1) = 1 (rounds to row 2), cell(6,1), cell(10,1),
     // cell(0,1) and cell(1,0) all missing.
     assert_eq!(run("cell(2,1)"), 1.0);
     assert_eq!(run("cell(1,1)"), 3.0);
@@ -632,7 +632,7 @@ fn lookup_cell_and_distance() {
     for s in ["cell(6,1)", "cell(10,1)", "cell(0,1)", "cell(1,0)", "cell(1,2)"] {
         assert!(run(s).is_nan(), "{s}");
     }
-    // Origin 2016: distance(x1,y1,x2,y2) is the Euclidean distance; (A,1)-(A+3,5) is 5.
+    // Origin: distance(x1,y1,x2,y2) is the Euclidean distance; (A,1)-(A+3,5) is 5.
     same(&rows("distance(col(A),1,col(A)+3,5)"), &[5.0, 5.0, 5.0, 5.0, 5.0, NAN, 5.0, 5.0, 5.0]);
     assert_eq!(ev("distance(0,0,3,4)"), 5.0);
 }

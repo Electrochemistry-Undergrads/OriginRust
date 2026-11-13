@@ -1,4 +1,4 @@
-# FDF fit-function definition file format (Origin 2016)
+# FDF fit-function definition file format (Origin)
 
 Summary. FDF is an INI-like fit-function definition format with bracketed sections and key/value fields. It describes variables, parameters, bounds, initial values, formulas and peak metadata. Some definitions contain procedural logic or external routine references that require separate handling (section 9). The compatibility catalog covers 237 definitions.
 
@@ -107,7 +107,7 @@ Expression syntax that must be supported by an expression evaluator:
 |---|---|
 | Operators | `+ - * /` and `^` for power. `^` binds tighter than unary minus in all observed uses, e.g. `-ln(x/xc)^2` means `-(ln(x/xc)^2)` [inferred from intent]. Comparison `< <= == > >=` appears in conditions. |
 | Constants | `PI` / `pi` / `Pi` (case varies), `NANUM` (missing value), literal numbers possibly with a trailing dot (`1.`, `3.`). |
-| Functions | `exp ln log log10 sqrt abs fabs sin cos tan asin acos atan sinh cosh tanh erf floor gamma pow(a,b)`. `log` in a formula is taken as the natural logarithm (LogNormal2D; not checked, no library function depends on it); in a derived-parameter line it is LabTalk's base-10 log (checked: `log(100)` is 2 in Origin 2016), which the importer writes as `log10`. Function names occur in mixed case in a few files (Sqrt, Exp in non-expression text). |
+| Functions | `exp ln log log10 sqrt abs fabs sin cos tan asin acos atan sinh cosh tanh erf floor gamma pow(a,b)`. `log` in a formula is taken as the natural logarithm (LogNormal2D; not checked, no library function depends on it); in a derived-parameter line it is LabTalk's base-10 log (checked: `log(100)` is 2 in Origin), which the importer writes as `log10`. Function names occur in mixed case in a few files (Sqrt, Exp in non-expression text). |
 | Origin-specific calls | `nlf_voigt(x,y0,xc,A,wG,wL)`, `nlf_pearsoniv(x,y0,A,m,v,alpha,lam)`, `bessel_i1`, `gamcdf(x,a,b)` (gamma CDF, shape a, scale b), `normcdf(z)` (standard normal CDF), `wblcdf(x,a,b)`, `log_gamma`, `SqrWav(a,b,x0,T,x)`. |
 | Identifiers | Parameter names, the independent variable(s), `double` temporaries, `PI`. |
 
@@ -167,7 +167,7 @@ Peak flags in the JSON: `is_peak` is true when the file carries `Peak Center` OR
 
 ## 10. NLSF.ini (category lists)
 
-`NLSF.ini` (a copy under `OriginLab\2016\User Files` differs by one space) is a classic INI file. Comment lines start with `;`. It has three kinds of sections:
+`NLSF.ini` (a copy under `OriginLab\User Files` differs by one space) is a classic INI file. Comment lines start with `;`. It has three kinds of sections:
 
 * `[NLSF Control]` global fitter defaults: default function and group, number of fit points for the curve (`FITNPTS`/`initNfitPts` 60), maximum iterations (`ITERATION=100`), tolerance (`tolerance=1E-9`), derivative step (`derivStepSize=0.005`, min/max `5E-30`/`5E30`), and the same output switches as Controls. [observed; the units of `derivStepSize` are a relative step, inferred].
 * `[Category]` the ordered list of categories shown in the function dialog. Lines of the form `Name=fitfunc`, separators written `----------By Form----------=separator`. Commented entries (leading `;`) are hidden. Order: Origin Basic Functions; By Form: Implicit, Convolution, Exponential, Growth/Sigmoidal, Hyperbola, Logarithm, Peak Functions, Piecewise, Polynomial, Power, Rational, Waveform, Surface Fitting, PFW, Baseline; By Field: Chromatography, Electrophysiology, Enzyme Kinetics, Pharmacology, Rheology, Spectroscopy, Statistics, Quick Fit, Multiple Variables; User Defined. Hidden (commented): Asymptotic, Engineering, Pharmacology/Chemistry, Others, NIST.

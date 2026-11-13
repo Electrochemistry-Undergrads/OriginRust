@@ -1,4 +1,4 @@
-//! Peak finding (local maximum method) against Origin 2016 `pkfind`.
+//! Peak finding (local maximum method) against Origin `pkfind`.
 //!
 //! Reference scripts: `tools/origin-ref/pkfind-suite1.labtalk.txt` and `pkfind-suite2.labtalk.txt`
 //! (run with `run-labtalk-data.ps1`; the cases of suite 2 that found no peak make Origin stop with an

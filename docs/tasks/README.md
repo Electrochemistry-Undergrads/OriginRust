@@ -14,7 +14,7 @@ a brief names the exact spec section and audit letter to open only when you need
    `df -h /c` first (the disk has filled twice; LESSONS "Parallel build folders fill the disk").
 3. **Find code by name, not line number.** Line numbers in the briefs and the audit drift. Use
    Grep for the function, enum or menu label given.
-4. **Origin is the reference.** When unsure how something looks or behaves, measure Origin 2016
+4. **Origin is the reference.** When unsure how something looks or behaves, measure Origin
    with `tools/origin-ref/` (see its README; scripts take the global lock
    `Global\SheafOriginReference`, one Origin at a time) and copy it. Record each measurement in the
    named spec section. Clean-room rule: copy behaviour and layout, never Origin's code, icons, help
@@ -49,7 +49,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | Brief | Area | Size | Status |
 |---|---|---|---|
 | [T01](T01-greyed-menus-with-code.md) | Enable greyed menu items whose feature already exists | M | done (`a2fb77b`); Stack dialog, custom sort left |
-| [T02](T02-menu-shortcut-differences.md) | Menu labels, shortcuts and context menus that differ from Origin | M | open |
+| [T02](T02-menu-shortcut-differences.md) | Menu labels, shortcuts and context menus that differ from Origin | M | done on branch `menu-diffs`, not merged |
 | [T03](T03-analysis-dialog-frame.md) | Analysis dialogs: Recalculate, Output, smoothing methods, pkFind options | M | open, check `export-margin` first |
 | [T04](T04-peak-analyzer-wizard.md) | Peak Analyzer as Origin's multi-page wizard | L | open, needs Origin pages measured |
 | [T05](T05-export-graphs-dialog.md) | Export Graphs dialog, raster formats, units, Ctrl+G, Copy Page | M | open, after `export-margin` merges |

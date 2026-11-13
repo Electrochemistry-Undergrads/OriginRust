@@ -1,6 +1,6 @@
 //! Correlation coefficients: Pearson, Spearman and Kendall, with p-values and the matrix of a column set.
 //!
-//! The rules follow what Origin 2016 reports for `corrcoef` (see `docs/spec/statistics.md`): Pearson's r,
+//! The rules follow what Origin reports for `corrcoef` (see `docs/spec/statistics.md`): Pearson's r,
 //! Spearman's rho (Pearson's r of the mean ranks) and Kendall's tau-b (ties counted in the denominator);
 //! the p-value of the first two is the two-sided t test with `n - 2` degrees of freedom, the one of Kendall's
 //! tau the two-sided normal test of the tie-corrected score. Missing values are left out pair by pair

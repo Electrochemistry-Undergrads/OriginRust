@@ -11,7 +11,7 @@ requested and where its results appear. ADR 0005 settles this for the other anal
 its `Tool` type is a small copyable option set and a fit carries more: a function definition,
 initial values, bounds, fixed parameters and weights.
 
-Origin 2016 writes a fit as a hierarchical report sheet (`FitLinear1`, `FitNL1`), a sheet with the
+Origin writes a fit as a hierarchical report sheet (`FitLinear1`, `FitNL1`), a sheet with the
 fitted curve and the residuals, and adds the fitted curve to the graph of the data.
 
 ## Decision

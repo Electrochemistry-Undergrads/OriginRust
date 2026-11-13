@@ -513,6 +513,22 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
     }
 }
 
+/// How the layer icon's menu names a plot: `g1 [Book1]Sheet1! "Conc"(X), "Signal"(Y) [1*:10*]`.
+pub(crate) fn plot_source_line(project: &Project, plot: &sheaf_core::Plot) -> String {
+    let Some((book, sheet, y)) = project.locate(plot.y) else {
+        return project.plot_label(plot);
+    };
+    let x = match plot.x.and_then(|x| sheet.column(x)) {
+        Some(x) => format!("\"{}\"(X), ", x.display_name()),
+        None => String::new(),
+    };
+    let range = match plot.rows {
+        Some((a, b)) => format!("{}:{}", a + 1, b),
+        None => format!("1*:{}*", y.len()),
+    };
+    format!("g1 [{}]{}! {x}\"{}\"(Y) [{range}]", book.name, sheet.name, y.display_name())
+}
+
 /// The entries of the right-click menu for what was clicked.
 fn menu_for(
     project: &Project,
@@ -528,7 +544,7 @@ fn menu_for(
             let plots: Vec<String> = graph
                 .layers
                 .get(layer)
-                .map(|l| l.plots.iter().map(|p| project.plot_label(p)).collect())
+                .map(|l| l.plots.iter().map(|p| plot_source_line(project, p)).collect())
                 .unwrap_or_default();
             let active = match selected {
                 Some((l, ObjectKind::Plot(p))) if l == layer => Some(p),

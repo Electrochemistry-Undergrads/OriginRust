@@ -34,7 +34,7 @@
 
 .EXAMPLE
   .\opj-dump-cells.ps1 -Project C:\data\my.opj -Out C:\scratch\my.origin.txt
-  .\opj-dump-cells.ps1 -Project "C:\Program Files\OriginLab\Origin2016\Samples\Simple XY.opj" -Out s.txt -CopyFirst
+  .\opj-dump-cells.ps1 -Project "<local sample folder>\Simple XY.opj" -Out s.txt -CopyFirst
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Project,

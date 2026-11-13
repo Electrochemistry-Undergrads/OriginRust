@@ -678,7 +678,11 @@ Lower Bounds=--(X,Off),--(X,Off),0.0(X,ON)\r\nUpper Bounds=--,--,--\r\nInitial V
 
     #[test]
     fn installed_files_report() {
-        let dir = std::path::Path::new("C:/Program Files/OriginLab/Origin2016/FitFunc");
+        let Some(home) = std::env::var_os("ORIGIN_HOME") else {
+            eprintln!("skipped: ORIGIN_HOME not set");
+            return;
+        };
+        let dir = std::path::Path::new(&home).join("FitFunc");
         let Ok(rd) = std::fs::read_dir(dir) else {
             eprintln!("skipped: no Origin install");
             return;

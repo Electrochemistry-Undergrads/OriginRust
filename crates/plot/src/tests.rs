@@ -307,7 +307,7 @@ fn log_axis_places_decades_evenly() {
     let (b, _) = geom.data_to_page(100.0, 1.0);
     let (c, _) = geom.data_to_page(1000.0, 1.0);
     assert!(((b - a) - (c - b)).abs() < 1e-9);
-    // Labels are plain numbers, as Origin 2016 writes them on a log axis.
+    // Labels are plain numbers, as Origin writes them on a log axis.
     let svg = svg_of(&p, g);
     let d = doc(&svg);
     let t = texts(&d);
@@ -1766,7 +1766,7 @@ fn column_plots_over_numeric_x_use_the_mean_spacing_and_get_room_at_both_ends() 
     let geom = &fixed_geometry(&p, g)[0];
     assert_eq!((geom.x.min, geom.x.max), (0.5, 5.5));
 
-    // An empty row between two groups of bars does not count for the spacing (as in Origin 2016):
+    // An empty row between two groups of bars does not count for the spacing (as in Origin):
     // s = (1.4 - 1.0) / 5, and with a gap of 60 percent each bar is 0.4 * 0.08 wide.
     let x = vec![1.0, 1.05, 1.1, f64::NAN, 1.3, 1.35, 1.4];
     let y = vec![1.0, 1.0, 1.0, f64::NAN, 2.0, 2.0, 2.0];

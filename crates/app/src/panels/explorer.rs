@@ -29,6 +29,10 @@ pub struct ExplorerState {
     pub selected: Option<WindowId>,
     /// The column the list is sorted by and the direction.
     sort: (usize, bool),
+    /// True after a click in the explorer, until a click elsewhere: it has the keyboard.
+    pub focus: bool,
+    /// Every window of the folder is highlighted (Ctrl+A).
+    pub all: bool,
     /// The windows drawn in bold during the last frame (the active one), for the tests.
     #[cfg_attr(not(test), allow(dead_code))]
     pub bold: Vec<WindowId>,
@@ -36,7 +40,14 @@ pub struct ExplorerState {
 
 impl Default for ExplorerState {
     fn default() -> Self {
-        ExplorerState { folder: Vec::new(), selected: None, sort: (0, true), bold: Vec::new() }
+        ExplorerState {
+            folder: Vec::new(),
+            selected: None,
+            sort: (0, true),
+            focus: false,
+            all: false,
+            bold: Vec::new(),
+        }
     }
 }
 
@@ -79,6 +90,52 @@ pub fn home(root: &Folder, id: WindowId) -> Vec<usize> {
 /// The windows of one folder (not of its subfolders), in creation order.
 pub fn windows_in(project: &Project, path: &[usize]) -> Vec<WindowId> {
     project.windows.iter().map(Window::id).filter(|id| home(&project.root, *id) == path).collect()
+}
+
+/// Every window listed in the folder or below it.
+pub fn subtree_windows(f: &Folder) -> Vec<WindowId> {
+    let mut out = f.windows.clone();
+    for c in &f.folders {
+        out.extend(subtree_windows(c));
+    }
+    out
+}
+
+/// What the keys of the explorer ask for: F2 renames the highlighted window, Delete deletes the
+/// highlighted windows, Ctrl+A highlights every window of the folder. Only while the explorer
+/// has the keyboard focus (the last click was in it).
+pub fn handle_keys(ctx: &egui::Context, st: &mut ExplorerState, project: &Project, actions: &mut Vec<Action>) {
+    if !st.focus {
+        return;
+    }
+    let (rename, delete, all) = ctx.input_mut(|i| {
+        (
+            i.consume_key(egui::Modifiers::NONE, egui::Key::F2),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Delete),
+            i.consume_key(egui::Modifiers::COMMAND, egui::Key::A),
+        )
+    });
+    let in_folder = windows_in(project, &st.folder);
+    if all {
+        st.all = true;
+        st.selected = in_folder.first().copied();
+    }
+    if rename {
+        match st.selected {
+            Some(id) => actions.push(Action::RenameWindow(id)),
+            None if !st.folder.is_empty() => actions.push(Action::RenameFolder(st.folder.clone())),
+            None => {}
+        }
+    }
+    if delete {
+        if st.all {
+            actions.extend(in_folder.into_iter().map(Action::DeleteWindow));
+            st.all = false;
+        } else if let Some(id) = st.selected {
+            actions.push(Action::DeleteWindow(id));
+        }
+        st.selected = None;
+    }
 }
 
 /// Takes the window out of every folder (it then belongs to the root).
@@ -166,6 +223,10 @@ pub fn show(ui: &mut egui::Ui, st: &mut ExplorerState, data: &PanelData, actions
         st.folder.clear();
     }
     st.bold.clear();
+    let (pressed, at) = ui.input(|i| (i.pointer.any_pressed(), i.pointer.interact_pos()));
+    if pressed {
+        st.focus = at.is_some_and(|p| ui.max_rect().contains(p));
+    }
     egui::TopBottomPanel::top(ui.id().with("tree"))
         .resizable(true)
         .default_height(110.0)
@@ -213,6 +274,8 @@ fn tree(
         );
         if response.clicked() {
             st.folder = path.clone();
+            st.selected = None;
+            st.all = false;
         }
         if let Some(window) = response.dnd_release_payload::<WindowId>() {
             actions.push(Action::MoveWindow { window: *window, folder: path.clone() });
@@ -223,9 +286,16 @@ fn tree(
                 actions.push(Action::NewFolder(path.clone()));
                 ui.close();
             }
-            for label in ["Rename", "Delete Folder", "Properties..."] {
-                ui.add_enabled(false, egui::Button::new(label)).on_disabled_hover_text(NOT_YET);
+            let not_root = !path.is_empty();
+            if ui.add_enabled(not_root, egui::Button::new("Rename")).clicked() {
+                actions.push(Action::RenameFolder(path.clone()));
+                ui.close();
             }
+            if ui.add_enabled(not_root, egui::Button::new("Delete Folder")).clicked() {
+                actions.push(Action::DeleteFolder(path.clone()));
+                ui.close();
+            }
+            ui.add_enabled(false, egui::Button::new("Properties...")).on_disabled_hover_text(NOT_YET);
         });
     };
     if folder.folders.is_empty() {
@@ -324,7 +394,7 @@ fn row(
     let id = w.id();
     let graph = matches!(w, Window::Graph(_));
     let active = data.active == Some(id);
-    let selected = st.selected == Some(id);
+    let selected = st.selected == Some(id) || st.all;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(edges[4], ROW_H), Sense::click_and_drag());
     let title = w.title();
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &title));
@@ -368,6 +438,7 @@ fn row(
     }
     if response.clicked() || response.secondary_clicked() || response.drag_started() {
         st.selected = Some(id);
+        st.all = false;
     }
     if response.double_clicked() {
         actions.push(Action::Focus(id));

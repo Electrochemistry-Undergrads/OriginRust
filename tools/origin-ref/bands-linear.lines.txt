@@ -4,7 +4,7 @@
 // freedom, the Student t quantile, the mean and spread of x) and evaluates the closed form for a straight line,
 //   confidence half width = t * RMSE * sqrt(1/n + (x - xbar)^2 / Sxx)
 //   prediction half width = t * RMSE * sqrt(1 + 1/n + (x - xbar)^2 / Sxx)
-// which is the form written in the Origin C source that ships with Origin 2016 (FitterOperation.h).
+// which is the form written in the Origin C source that ships with Origin (FitterOperation.h).
 // x = 1..12, y = 2 + 0.5 x + 0.3 sin(3 x).
 newbook;
 col(A) = data(1,12,1); col(B) = 2 + 0.5*col(A) + 0.3*sin(3*col(A));

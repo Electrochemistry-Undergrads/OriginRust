@@ -1,7 +1,7 @@
 //! One-way analysis of variance with the usual means comparisons.
 //!
 //! The summary table, the descriptive statistics of the groups and the means comparisons (Tukey,
-//! Bonferroni, Sidak, Fisher's least significant difference, Scheffe) follow what Origin 2016
+//! Bonferroni, Sidak, Fisher's least significant difference, Scheffe) follow what Origin
 //! reports for "One-Way ANOVA" (see `docs/spec/statistics.md`).
 
 use crate::hypothesis::SampleStats;

@@ -2,7 +2,7 @@
 
 > **For the person running this (the model can skip this box).**
 >
-> - Open Claude Code in `C:\Users\RenLab\Downloads\OriginRust`, choose **Claude Fable 5.2**, and set effort to **High**. Move to xhigh only if a hard part stalls at High.
+> - Open Claude Code in `<repository checkout>`, choose **Claude Fable 5.2**, and set effort to **High**. Move to xhigh only if a hard part stalls at High.
 > - Use Auto mode, or allow `git`, `gh`, `cargo`, `node` and PowerShell commands, so the model can work long stretches without waiting on approvals.
 > - **First run:** send `Read ORIGIN_RUST_PROMPT.md and follow it.`
 > - **Resume after running out of usage:** start a new session in the same folder and send `Read ORIGIN_RUST_PROMPT.md, then HANDOFF.md, and continue.`
@@ -15,7 +15,7 @@
 
 ## What I want and why
 
-I use OriginLab Origin 2016 every day for lab data. I import instrument exports, organize them in workbooks, make publication figures, and run analysis such as curve fitting, peak analysis, integration and smoothing. My copy is an old version licensed to one Windows machine. I want an application that I own and can extend: a fast native Rust desktop app that does the jobs I use Origin for, with a familiar workflow, and that can open my existing Origin project files.
+I use OriginLab Origin every day for lab data. I import instrument exports, organize them in workbooks, make publication figures, and run analysis such as curve fitting, peak analysis, integration and smoothing. My copy is an old version licensed to one Windows machine. I want an application that I own and can extend: a fast native Rust desktop app that does the jobs I use Origin for, with a familiar workflow, and that can open my existing Origin project files.
 
 Please build that app. It is a long project that will span many sessions, on different days and maybe different computers, and my Claude usage can run out in the middle of any session. So the GitHub repository is the project's memory. Anyone, including you in a fresh session, must be able to continue exactly where work stopped by reading what is pushed.
 
@@ -25,7 +25,7 @@ This codebase is yours: what it's for and how it's built are your call, and you'
 
 ## Project settings (edit freely)
 
-- **Repo root:** `C:\Users\RenLab\Downloads\OriginRust` (this folder).
+- **Repo root:** `<repository checkout>` (this folder).
 - **GitHub:** a **private** repo named `OriginRust` on the account that `gh` is logged in to (`gh auth status` shows it). Create it on the first run if it does not exist.
 - **App name:** choose a short, neutral working name that does not use "Origin" or other OriginLab trademarks. Record it in `README.md`.
 - **Platform:** Windows 11 x64 first. Keep the crates that have no GUI portable.
@@ -37,12 +37,12 @@ This codebase is yours: what it's for and how it's built are your call, and you'
 
 ## What is on this machine
 
-- **Origin 2016 (version 9.3, 64-bit)** at `C:\Program Files\OriginLab\Origin2016`.
-  - The main executable is `Origin93_64.exe`. Most of the core logic is in `ok9_64.dll` (about 27 MB). Other important modules are `okUtil9_64.dll`, `ou9_64.dll`, `od9_64.dll`, `ogrid9_64.dll` (worksheet grid), `ocMath9_64.dll`, `ONAG9_64.dll` (NAG numerical library), `OK3DGL9_64.dll` (3D graphs) and `OCompiler9_64.dll` (Origin C compiler).
+- **Origin** in a locally configured installation folder (`ORIGIN_HOME`).
+  - The main executable is the installed Origin executable. Most of the core logic is in `ok9_64.dll` (about 27 MB). Other important modules are `okUtil9_64.dll`, `ou9_64.dll`, `od9_64.dll`, `ogrid9_64.dll` (worksheet grid), `ocMath9_64.dll`, `ONAG9_64.dll` (NAG numerical library), `OK3DGL9_64.dll` (3D graphs) and `OCompiler9_64.dll` (Origin C compiler).
   - Plain-text assets that you can read directly, without REA: `FitFunc\*.FDF` (239 fit-function definitions), `Filters\*.oif` (import filters), `X-Functions\**\*.oxf`, `*.ogs` (LabTalk scripts), and `OriginC\` (Origin C source that OriginLab ships). Graph templates (`*.otp`) and worksheet templates (`*.otw`) are binary.
   - `Samples\` holds example projects (`*.opj`) and data, grouped by topic (Curve Fitting, Graphing, Import and Export, Signal Processing, Spectroscopy, and others). `Samples\COM Server and Client` shows that Origin can be driven through COM automation and LabTalk, which is useful for generating reference outputs.
-- **My Origin user folder (a copy):** `OriginLab\2016\User Files` in the repo root. It holds settings, `Origin.ini`, custom buttons and NLSF settings. Treat it as read-only.
-- **REA 6.8.0:** cloned at `rea\`. The MCP server `rea` is registered globally in Claude Code, and the skill is installed as `reverse-engineer-anything` (`~\.claude\skills\reverse-engineer-anything`). The native-analysis provider is Ghidra 12.1.4 at `C:\Users\RenLab\tools\ghidra_12.1.4_PUBLIC`, with Java 21 (REA's MCP entry sets `JAVA_HOME`). Hopper is not available on Windows.
+- **My Origin user folder (a copy):** `OriginLab\User Files` in the repo root. It holds settings, `Origin.ini`, custom buttons and NLSF settings. Treat it as read-only.
+- **REA 6.8.0:** cloned at `rea\`. The MCP server `rea` is registered globally in Claude Code, and the skill is installed as `reverse-engineer-anything` (`~\.claude\skills\reverse-engineer-anything`). The native-analysis provider is Ghidra 12.1.4 at `<local Ghidra installation>`, with Java 21 (REA's MCP entry sets `JAVA_HOME`). Hopper is not available on Windows.
 - **Toolchain:** Rust 1.99.1 with cargo, Node 22, git 2.32, and gh 2.103 (logged in).
 
 ## Ground rules: clean-room, interoperable, mine
@@ -63,7 +63,7 @@ The goal is an independent program that does the same jobs, not a copy of Origin
 Load the `reverse-engineer-anything` skill before your first REA call and follow it. It covers connection and recovery, summary-first results, Evidence IDs, and keeping observations, inferences and unknowns apart. Some pointers for this target:
 
 - **Use the cheapest source first.** OriginLab's public online documentation and the plain-text assets above often answer "which options exist and what do they do" without any binary analysis. Paraphrase what you read; do not paste it.
-- **Map the UI from PE resources.** The menus, dialogs and string tables in `Origin93_64.exe` and the core DLLs are a fast map of every command and option. REA's target-free PE tools (resources, imports, exports) do not need Ghidra.
+- **Map the UI from PE resources.** The menus, dialogs and string tables in the installed Origin executable and the core DLLs are a fast map of every command and option. REA's target-free PE tools (resources, imports, exports) do not need Ghidra.
 - **Use Ghidra for focused questions** that cheaper sources cannot answer, for example binary details of the OPJ format or the exact default of an algorithm. Do not sweep whole DLLs. `ok9_64.dll` is large, so expect a slow cold import, and use the skill's startup-deadline recovery if it times out.
 - **Observe runtime behavior by running Origin.** REA's process capture needs Linux or macOS, so on this machine run Origin itself instead. For example, a COM or LabTalk script can import a file, run an analysis and export the results, which you then compare with your implementation.
 - **Save evidence for later sessions.** At checkpoints, and before you end a long investigation, save the evidence bundle into `re-workspace\evidence\` with `reset_investigation` and `save_path`, or with `export_evidence_bundle`. List the saved bundles in `HANDOFF.md` so that a later session can import them again.
@@ -82,7 +82,7 @@ The scope is "the jobs I use Origin for", grown in vertical slices. You own the 
    - Make all of this work without a window through a CLI as well (for example `<app> plot ...`). The CLI is also how you test rendering.
 3. **Analysis, part 1.** Column math with "set column values" style expressions, sort and filter, normalize, interpolate, differentiate, integrate (area under a curve, with a baseline), smoothing (Savitzky-Golay, adjacent averaging, FFT filter), baseline subtraction, peak finding and descriptive statistics.
 4. **Fitting.** Linear and polynomial fits. Nonlinear least squares (Levenberg-Marquardt) with a built-in function library that covers Origin's common categories, plus user-defined functions, parameter bounds and fixed parameters. A fit report with parameters, standard errors, R², reduced chi-square and residuals. The fitted curve drawn on the graph. Import of `.FDF` files.
-5. **Origin project import.** Read Origin 2016-era `.opj` files: workbooks and data first, then basic graphs. OPJU can come later if I need it.
+5. **Origin project import.** Read Origin `.opj` files: workbooks and data first, then basic graphs. OPJU can come later if I need it.
 6. **Breadth.** More 2D graph types (scatter, column and bar, area, error bars, double-Y axes, multi-panel layers, log and reciprocal scales), matrices, contour plots and heatmaps, statistics (t-tests, ANOVA), batch processing and analysis templates, scripting through an embedded language (LabTalk compatibility only where it is cheap), and 3D last.
 
 These are my architecture defaults. Change any of them through an ADR in `docs/adr/` if you find something better.

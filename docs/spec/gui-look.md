@@ -1,4 +1,4 @@
-# How Origin 2016 looks and behaves: the interface, described for Sheaf
+# How Origin looks and behaves: the interface, described for Sheaf
 
 Interface compatibility reference for workbook and graph windows, menus, dialogs and controls.
 Reference images are local development artifacts; filenames below identify the relevant views.
@@ -176,7 +176,7 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
     column designated as text label ("E(L)" style) was still [not seen].
   - Then four label rows in the order **Long Name, Units, Comments, F(x)=**, in light yellow cells,
     left of which a grey cell shows the row title right-aligned ("Long Name", "Units",
-    "Comments", "F(x)=") [seen]. Origin 2016 also has **Sparklines**, **Parameters** and user
+    "Comments", "F(x)=") [seen]. Origin also has **Sparklines**, **Parameters** and user
     defined label rows, switched on in View > Show / the right-click menu "Row Labels for
     Column Label Rows" [spec; the menu `gui-study/fresh/colhdr.png` of the first study shows exactly this list of
     options, see below]. Sparklines were not turned on in the pictures [not seen]. The column
@@ -650,7 +650,7 @@ Updated 2026-11-12 after the ADR 0007 work (the first version of this table, fro
 the old tabbed app and is in git history). Element by element gaps are listed in
 `docs/audit/origin-differences-2026-11-12.md` sections A and B; this table keeps only the big picture.
 
-| Origin 2016 | Sheaf now |
+| Origin | Sheaf now |
 |---|---|
 | Child windows floating in a grey workspace, cascade, own title bars with minimise/maximise/close | Same (Window > Cascade, Tile). A maximised child still draws its own title bar; Origin moves its buttons into the menu-bar row |
 | Project Explorer at the left edge (folder tree over window list with Name, Long Name, Short Name, Type) | Same columns and folder tree (`panels/explorer.rs`); not auto-hide; folder Rename/Delete and keys F2, Del, Ctrl+A missing |
@@ -676,7 +676,7 @@ the old tabbed app and is in git history). Element by element gaps are listed in
 4. Exact RGB values (measured by eye from pictures, not sampled).
 5. How windows behave when the main window is resized, and the exact docking behaviour of the
    Object Manager and of the Results Log.
-6. Dark mode: Origin 2016 has none; Sheaf can offer it as an extra.
+6. Dark mode: Origin has none; Sheaf can offer it as an extra.
 7. What decides which tab the Options dialog opens on (it showed Numeric Format every time).
 
 What the second study settled: the column header, cell, sheet tab, legend and layer icon menus;

@@ -140,6 +140,17 @@ impl ImportDialog {
         }
     }
 
+    /// File > Import > Comma Delimited (CSV): the delimiter starts as comma instead of detected.
+    pub fn preset_comma(&mut self) {
+        self.ascii.delimiter = Delimiter::Comma;
+    }
+
+    /// The delimiter the text import starts with.
+    #[cfg(test)]
+    pub fn delimiter(&self) -> Delimiter {
+        self.ascii.delimiter
+    }
+
     pub(super) fn read(&self, index: usize) -> Result<Imported, String> {
         sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii).map_err(|e| e.to_string())
     }

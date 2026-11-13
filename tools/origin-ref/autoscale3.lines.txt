@@ -1,4 +1,4 @@
-// Origin 2016 autoscale probe (graphing.md section 4): for each case, Y runs linearly from lo to hi over 101 rows and Origin picks the axis limits and step of a new line graph.
+// Origin autoscale probe (graphing.md section 4): for each case, Y runs linearly from lo to hi over 101 rows and Origin picks the axis limits and step of a new line graph.
 newbook; col(A)=data(0,100,1); col(B)=0+(3.85-(0))*col(A)/100;
 plotxy iy:=(1,2) plot:=200;
 double yf1=layer.y.from; double yt1=layer.y.to; double yi1=layer.y.inc;

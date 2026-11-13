@@ -1,4 +1,4 @@
-//! Interpolation against numbers from Origin 2016 (`interp1`, `interp1xy`).
+//! Interpolation against numbers from Origin (`interp1`, `interp1xy`).
 //!
 //! Reference script: `tools/origin-ref/interp-suite1.labtalk.txt` (run with `run-labtalk-data.ps1`).
 //! Data: x = 10 ((i-1)/10)^1.3 for i = 1..11 (uneven), y = sin(x) + 0.1 x; targets

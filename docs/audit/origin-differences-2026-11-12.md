@@ -1,15 +1,15 @@
-# Differences from Origin 2016 (audit of 2026-11-12)
+# Differences from Origin (audit of 2026-11-12)
 
 > Reference only: do not read this file whole. Each task brief in `docs/tasks/` already carries the
 > items it needs and names the section here (A to E) for detail. Moved unchanged from HANDOFF.md
 > (commit `6913bfe`). File:line references were taken at `dfafec8` and drift: search by the
 > function or label name instead of trusting a line number.
 
-Five Haiku subagents read the code and compared it with `docs/spec/` (Origin 2016 as measured or
+Five Haiku subagents read the code and compared it with `docs/spec/` (Origin as measured or
 read there). Five Sonnet subagents then re-checked each part against the code after the 21 commits
 of the evening of 2026-11-12 (items fixed since are marked with their commit), corrected wrong items,
-added missed ones, and ran Origin 2016 through `tools/origin-ref/` for some items, which say
-"checked in Origin 2016"; everything else is code against spec only. Nothing of Sheaf was built.
+added missed ones, and ran Origin through `tools/origin-ref/` for some items, which say
+"checked in Origin"; everything else is code against spec only. Nothing of Sheaf was built.
 File references are the subagents'; outputs of the Origin runs are in `re-workspace/scratch/audit-2/`
 (local only).
 Sections: A menus and toolbars, B dialogs, C graphing, D analysis and statistics, E data and files.
@@ -215,7 +215,7 @@ group order, Cascade/Tile.
   rule, `nice_range` in `io/src/opj/write/graph.rs:59`, needs the same change, and the `AutoRange`
   doc at `core/src/graph.rs:419` wrongly says "with a small margin". This is the open choice noted
   under "Open questions".
-- **Different, checked in Origin 2016 (re-check, `re-workspace/scratch/audit-2/gr*.lines.txt`):** log
+- **Different, checked in Origin (re-check, `re-workspace/scratch/audit-2/gr*.lines.txt`):** log
   axes. Sheaf always snaps to whole decades, at least one (`ticks.rs:317-365, 327`), and never switches
   to linear ticks (spec 3.1's `@TL` rule). After `layer -a` Origin gave 1.7778..9 for data 2.06..8
   (Sheaf 1..10) and 1..300 for 1.5..150 (Sheaf 1..1000), so Origin pads and rounds on log axes too.
@@ -256,7 +256,7 @@ group order, Cascade/Tile.
   all peaks, only as a Peak Analyzer checkbox. Interpolation fixes extrapolation to Extrapolate.
   Integrate baseline is zero or end-point only. Derivative smoothing of higher order is unchecked.
   Correlation has Pearson, Spearman, Kendall but no scatter matrix.
-- **Numerically or behaviourally different:** **Welch test interval, checked in Origin 2016:** with
+- **Numerically or behaviourally different:** **Welch test interval, checked in Origin:** with
   `ttest2 equal:=0` Origin reports the Welch t and df (15.634) but computes the confidence interval
   from the pooled SE with df = n1+n2-2 (lcl -3.34117967, ucl 0.17642427 on our n=8/n=10 data, equal to
   the pooled interval to 8 digits; the Welch interval would be -3.2681..0.1034). Sheaf uses the Welch
@@ -268,7 +268,7 @@ group order, Cascade/Tile.
   for 5 or 40 numbers; Mann-Whitney asymptotic p with "exact" selected prints the corrected value
   where Origin prints the uncorrected one, for the upper tail only (two-sided and lower match;
   statistics.md:193-196; code in `mann_whitney()`, `nonparam.rs ~150-165`; signed rank unaffected).
-  **Not differences (checked in Origin 2016):** the fit curve has 1000 points in Origin too (x step
+  **Not differences (checked in Origin):** the fit curve has 1000 points in Origin too (x step
   9.5/999 in `FitNLCurve1`; the FDF's FITNPTS 60 is not what is used; the dialog's own default was
   not seen) and the live iteration limit is 400 (`tt.maxIter`; the FDF's ITERATION=100 is only the
   NLSF.ini default). Finite-difference step
@@ -332,7 +332,7 @@ group order, Cascade/Tile.
   duplicate, search or View Windows; Results/Messages logs keep 1000 entries.
 - **Different:** an imported column is numeric if at least 80 % of its non-empty, non-marker cells
   parse (`NUMERIC_SHARE`, `ascii.rs:20, 896`), and the rest become missing with a warning; below that
-  the whole column is text and gets the Label designation. **Checked in Origin 2016:** Origin has no
+  the whole column is text and gets the Label designation. **Checked in Origin:** Origin has no
   such ratio; it keeps the column numeric with format 7 (Text & Numeric) and keeps each text cell as
   text (a 95 % numeric and a 55 % numeric column both gave format 7, `cell(11,2)$ = four`; files in
   `re-workspace/scratch/audit-2/mix2.*`). `docs/spec/import-ascii.md` section 15 should record this.
@@ -364,7 +364,7 @@ group order, Cascade/Tile.
 ## How to use this audit
 
 - It is mostly a reading audit (code against specs). Before acting on an item, check it in the code,
-  and for Origin-side numbers measure in Origin 2016 (`tools/origin-ref/`).
+  and for Origin-side numbers measure in Origin (`tools/origin-ref/`).
 - Suggested order by effect on the owner's workflow: (1) automatic axis padding, linear and log (C;
   also the greyed Rescale Margin in B), (2) the silent `.opj` writer losses of parameter rows and
   column formats, which now also delete the companion (E), (3) the Welch interval (D) and the

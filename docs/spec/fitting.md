@@ -1,6 +1,6 @@
 # Nonlinear curve fitting
 
-Summary. `sheaf-fit` fits a model `y = f(x; p)` to points by minimising the (weighted) sum of squared residuals with a Levenberg-Marquardt iteration, with optional bounds and fixed parameters, and returns the same `FitReport` as linear fitting. The built-in functions (206 of Origin's 237 that have one independent variable and a usable formula), user-defined formulas and imported `.FDF` files all become one `FitFunction`. Numbers are compared with Origin 2016 (section 6): same iteration counts, differences below 5e-10.
+Summary. `sheaf-fit` fits a model `y = f(x; p)` to points by minimising the (weighted) sum of squared residuals with a Levenberg-Marquardt iteration, with optional bounds and fixed parameters, and returns the same `FitReport` as linear fitting. The built-in functions (206 of Origin's 237 that have one independent variable and a usable formula), user-defined formulas and imported `.FDF` files all become one `FitFunction`. Numbers are compared with Origin (section 6): same iteration counts, differences below 5e-10.
 
 Sources: Origin's public documentation on nonlinear curve fit, the FDF files (parameter lists, bounds, formulas), and runs of Origin on data we generated (section 6). Everything below is written in our own words.
 
@@ -14,8 +14,8 @@ A user-defined function is created with `FitFunction::from_formula(name, "y0 + A
 
 | Setting | Value | Source |
 |---|---|---|
-| Tolerance | 1e-9 | read from a running Origin 2016 (`tolerance` of the fit tree); how it is applied: section 3 |
-| Maximum iterations | 400 | read from a running Origin 2016 (`maxIter` of the fit tree) |
+| Tolerance | 1e-9 | read from a running Origin (`tolerance` of the fit tree); how it is applied: section 3 |
+| Maximum iterations | 400 | read from a running Origin (`maxIter` of the fit tree) |
 | Confidence level | 0.95 | Origin report |
 | Scale errors by reduced chi-square | always on, also with instrumental weights | section 6 (the instrumental case differs from the fit without scaling by exactly the square root of the reduced chi-square) |
 | Derivatives | numeric, central differences, step 6e-6 times `max(|p|, 1e-3)`, taken across bounds | ours; the differences from Origin in every compared number stay below 5e-10 |
@@ -71,11 +71,11 @@ A test fits every such function (every name with a guess, 57 cases; a test also 
 
 ### FDF import
 
-`fdf::parse_fdf(text)` reads the sections of an FDF file (see `fdf-format.md`) and `to_fit_function()` builds the function. The formula body is translated: comments and `#` lines dropped, `double t = ...;` temporaries substituted as parenthesised text, `if / else if / else` turned into nested conditionals (a branch that leaves `y` unassigned makes the file untranslatable), `log` to `ln` in the formula (natural logarithm in the Origin C formula text; no function in the library uses `log` there) and to `log10` in a derived-parameter line (those are LabTalk, where `log(100)` is 2: checked in Origin 2016), `fabs` to `abs`, `PI` to `pi`, `NANUM` to `na()`. A formula that calls a routine the expression language lacks (`nlf_voigt`, `gamcdf`, ...) fails with a message when the function is built. Bounds are enforced only if the file's state flag is ON. A numeric initial value with `(F)` makes the parameter fixed. Starting-value code is not executed.
+`fdf::parse_fdf(text)` reads the sections of an FDF file (see `fdf-format.md`) and `to_fit_function()` builds the function. The formula body is translated: comments and `#` lines dropped, `double t = ...;` temporaries substituted as parenthesised text, `if / else if / else` turned into nested conditionals (a branch that leaves `y` unassigned makes the file untranslatable), `log` to `ln` in the formula (natural logarithm in the Origin C formula text; no function in the library uses `log` there) and to `log10` in a derived-parameter line (those are LabTalk, where `log(100)` is 2: checked in Origin), `fabs` to `abs`, `PI` to `pi`, `NANUM` to `na()`. A formula that calls a routine the expression language lacks (`nlf_voigt`, `gamcdf`, ...) fails with a message when the function is built. Bounds are enforced only if the file's state flag is ON. A numeric initial value with `(F)` makes the parameter fixed. Starting-value code is not executed.
 
 On this machine, of the 237 installed files all parse and 188 build into a fit function (the test prints the count and the reasons for the others: 31 have two or three independent variables, the remainder call native routines, have defective text or leave a branch unassigned).
 
-## 6. Verified against Origin 2016
+## 6. Verified against Origin
 
 Method. A LabTalk script (`tools/origin-ref/nlfit-suite.lines.txt`, run by `run-labtalk-lines.ps1`) generates data in a hidden Origin (a smooth curve plus `a*sin(37 i) + b*sin(101.3 i)` as noise, `i` the row number), runs `nlbegin ... nlfit; nlend output:=1;`, and reads the fit report sheet and the fit tree. The data as Origin held them and Origin's numbers are stored in `crates/fit/tests/data/origin_nlsf.json`; `crates/fit/tests/origin_nlsf.rs` fits the same data and compares. In the report sheet the parameter rows give value, standard error, t, probability and dependency; the statistics block gives points, degrees of freedom, reduced chi-square, residual sum of squares, R-square, adjusted R-square and the status text; the ANOVA block gives the model, error, uncorrected total and corrected total rows. Calling `nlend output:=1` from COM showed no dialog in these runs. Why an earlier attempt by a previous agent produced no output was not determined.
 

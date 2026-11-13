@@ -703,6 +703,63 @@ fn the_fit_window_pages_reach_the_function_the_parameters_and_the_bounds() {
 }
 
 #[test]
+fn the_fit_window_steps_one_iteration_runs_to_convergence_and_reverts() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fitsteps-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("decay.csv");
+    let mut csv = String::from(
+        "t,y
+",
+    );
+    for i in 0..20 {
+        let x = i as f64 * 0.5;
+        csv += &format!(
+            "{x},{}
+",
+            1.0 + 4.0 * (-x / 3.0).exp() + 0.02 * (37.0 * (i + 1) as f64).sin()
+        );
+    }
+    std::fs::write(&path, csv).unwrap();
+    let mut h = start(vec![path]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit.as_mut().unwrap().choose_for_test("ExpDec1");
+    settle(&mut h);
+    let rows = |h: &Harness<'static, SheafApp>| h.state().fit.as_ref().unwrap().rows_for_test();
+    let start_rows = rows(&h);
+    assert_eq!(start_rows.len(), 3);
+    assert!(start_rows.iter().all(|r| !r.1), "no starting value typed yet");
+    let before = project(&h).workbooks().next().unwrap().sheets.len();
+
+    // One iteration moves the parameters by one step and says so.
+    click(&mut h, "1 Iteration");
+    let one = rows(&h);
+    assert!(one.iter().all(|r| r.1), "the table now holds the values of the iteration");
+    assert_ne!(one.iter().map(|r| r.2).collect::<Vec<_>>(), start_rows.iter().map(|r| r.2).collect::<Vec<_>>());
+    let msg = h.state().fit.as_ref().unwrap().message_for_test();
+    assert!(msg.contains("Iteration 1") || msg.contains("converged"), "{msg}");
+
+    // Fit runs from there until it converges.
+    click(&mut h, "Fit");
+    let done = rows(&h);
+    let msg = h.state().fit.as_ref().unwrap().message_for_test();
+    assert!(msg.contains("converged") && !msg.contains("did not"), "{msg}");
+    let t = done.iter().find(|r| r.0 == "t1").unwrap().2;
+    assert!((t - 3.0).abs() < 0.3, "t1 = {t}");
+
+    // Revert goes back one press at a time.
+    click(&mut h, "Revert");
+    assert_eq!(rows(&h), one);
+    click(&mut h, "Revert");
+    assert_eq!(rows(&h), start_rows);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), before, "nothing was written");
+    click(&mut h, "Cancel");
+}
+
+#[test]
 fn sorting_and_filtering_a_sheet() {
     let mut h = start(vec![data_file("sort")]);
     let book = project(&h).workbooks().next().unwrap().id;

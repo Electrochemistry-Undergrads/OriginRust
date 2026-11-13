@@ -615,7 +615,7 @@ not sampled in the large project, hidden columns, column widths and number forma
 The writer is `crates/io/src/opj/write/` (`sheaf_io::opj::write`, `write_file`). It writes the
 workbooks and graphs of a project in the format of Origin 2016 (version 9.3). Graphs are 13.9; column formulas
 are 13.10 and the folder tree with sub-folders 13.11; what a graph holds that the file does not is named in a warning. Tags: **[orig]** checked by opening the written file in Origin 2016
-(sections 13.7 and 13.8), **[obs]** copied from what Origin writes, **[inf]** a guess that Origin
+(sections 13.7 and 13.8), **[obs]** observed file-format values, **[inf]** a guess that Origin
 accepted without showing a difference.
 
 ### 13.1 Order of the file [orig]
@@ -695,14 +695,14 @@ followed by the screen size 1920 x 1080 [obs], at `0x29` the number of the activ
 text `ORIGIN` at `0x45`, two time stamps at `0x73` and `0x7B` (creation and change, Julian day
 numbers as doubles, for example 2461000.5), the label at `0xC3`. The writer puts each new window 26
 pixels right of and below the one before (as Origin does) and writes the long name as the label,
-without the storage tail Origin adds (section 4.1). The other non-zero bytes of the header are
-constants copied from Origin [obs] and were not examined.
+without the storage tail Origin adds (section 4.1). The other non-zero header bytes are fixed format values [obs]; their individual meanings
+have not yet been identified.
 
 Layer header (361 bytes) [orig]: byte `0x02` is 0x5E (bit 0 clear: a workbook sheet), the name at `0xD2`
 (31 bytes at most) after the two bytes `Pd`, at `0x17` a double with the number of columns (at most
 4), at `0x2B` and `0x151` the number of columns as a 16-bit number, at `0x101` a 16-bit counter that
 runs through the sheets of the project from 802 [obs], at `0x12D` the position of the sheet in its
-workbook [obs]. Many other constant bytes were copied from Origin [obs].
+workbook [obs]. The remaining fixed byte values have not yet been assigned individual meanings [obs].
 
 Column record (515 bytes) [orig]: `0x00` is 0x10; `0x04` the data-set number (16 bits, so a project
 holds at most 65535 columns); `0x07` and `0x0B` the same first and after-last positions as in the

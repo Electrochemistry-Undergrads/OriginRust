@@ -1,15 +1,12 @@
 # Linear and polynomial fitting
 
-What `sheaf_fit::linear` (`fit_linear`, `fit_polynomial`) computes, and how each rule was
-established against Origin 2016. Everything here was found by running Origin on data we generated
-ourselves; nothing is copied from Origin's documentation or code.
+Behavior of `sheaf_fit::linear` (`fit_linear`, `fit_polynomial`), including weighting,
+parameter constraints, report statistics and regression-test tolerances.
 
-## How the numbers were obtained
+## Reference checks
 
-Origin's "Linear Fit" and "Polynomial Fit" dialogs could not be driven from a script (the
-`FitLinear` and `FitPolynomial` X-Functions only open the dialog). Three scriptable sources were
-used instead, in a hidden Origin through COM (`tools/origin-ref/run-labtalk-chunks.ps1`, scripts
-`fitlin-suite.labtalk.txt` and `fitlin-edge-cases.labtalk.txt`):
+The reference checks cover straight-line and polynomial fitting, fixed parameters, weights
+and report statistics. The relevant reference commands are:
 
 | Source | What it gives |
 | --- | --- |

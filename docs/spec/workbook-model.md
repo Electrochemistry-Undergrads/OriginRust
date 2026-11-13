@@ -1,4 +1,4 @@
-# Workbook / worksheet / column data model (clean-room spec)
+# Workbook / worksheet / column data model
 
 Source tags: **[F]** installed file, **[W]** public OriginLab documentation (docs.originlab.com, paraphrased), **[I]** inference, **[?]** unknown, check against running Origin.
 

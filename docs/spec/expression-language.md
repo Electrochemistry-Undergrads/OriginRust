@@ -52,7 +52,19 @@ Arguments are numbers. Names are case-insensitive.
 | Missing, branching | `na()` (a missing value), `isna(x)` (1 or 0), `ifelse(c,a,b)` (also `if`) |
 | Statistics of a column | `sum` (`total`), `mean`, `median`, `sd` (`stddev`; sample, n-1), `var`, `count`, `min`, `max`, `first`, `last` |
 
-Statistics take one argument that must be a column or a row range: `mean(col(A))`, `sd(col(A)[1:10])`, `max(col(B))`. `min`/`max` with exactly one column argument are statistics; with one plain number they return it. A statistic whose bounds do not depend on the row is computed once, so `col(B) - mean(col(B)[1:10])` costs one pass. Moving windows such as `mean(col(A)[i-3:i+3])` are recomputed per row (cost proportional to the window). Missing values are skipped by statistics. Vector-valued functions (running sums, differences, shifts) are not part of the language; they are worksheet operations.
+Statistics take one argument that must be a column or a row range: `mean(col(A))`, `sd(col(A)[1:10])`, `max(col(B))`. `min`/`max` with exactly one column argument are statistics; with one plain number they return it. A statistic whose bounds do not depend on the row is computed once, so `col(B) - mean(col(B)[1:10])` costs one pass. Moving windows such as `mean(col(A)[i-3:i+3])` are recomputed per row (cost proportional to the window). Missing values are skipped by statistics. `stddevp` is the population standard deviation (divisor n; Origin 2016 `stddevp` agrees to 1e-12) and `sem` is `sd/sqrt(n)` (**[choice]**: Origin 2016 has no `sem` formula function).
+
+| Group | Functions |
+|---|---|
+| Whole column in, column out | `cumsum(col(A))` running sum; `diff(col(A))` forward difference (row i holds A[i+1]-A[i], the last row is missing); `shift(col(A), n)` row i holds A[i-n], rows that fall off the ends are missing; `rank(col(A))` ascending rank, ties share the average rank, missing stays missing |
+| Date and time | `date(y,m,d)` (impossible date: missing), `time(h,m,s)` (fraction of a day, not wrapped), `now()`, `today()`, `year`, `month`, `day`, `weekday` (0 = Sunday) of a date number |
+| Random | `rnd()` uniform in [0,1), `grnd()` standard normal; a new draw in every row; `Expr::eval_rows_seeded` / `compile_seeded` fix the seed for tests |
+| Lookup | `lookup(x, xcol, ycol)` first exact match of `x` in `xcol`, the value of `ycol` in the same row, else missing; `cell(r, c)` the value at 1-based row `r` and column position `c` (both rounded; outside the sheet: missing) |
+| Other | `distance(x1,y1,x2,y2)` Euclidean; `fact(n)` factorial of the whole part (negative, missing or above 170: missing) |
+
+`cumsum`, `diff`, `shift`, `rank` take a column or a row range such as `cumsum(col(A)[2:4])` (the result starts at row 1). Each result is computed once per evaluation, not once per row. `now()` and `today()` read `Host::now()`, whose default is the system clock in UTC; the worksheet host should override it with local time (Origin uses local time).
+
+Measured in Origin 2016 (`tools/origin-ref`, probes `re-workspace/scratch/expr-funcs/g1e..g4`): `diff` is the forward difference with the missing value last; `date(2020,1,1)` is 2458849; `weekday` is 0 for Sunday; `time(25,0,0)` is 1.0417; `fact(1.5)` is 1, `fact(171)` and `fact(-1)` are missing, `fact(20)` is 2.43290200817664E18; `lookup` needs an exact match; `cell(1.6,1)` rounds to row 2; `distance` takes four arguments. Origin 2016 does not accept `cumsum`, `shift`, `rank` or `sem` as formula functions (the column stays empty), so those four are Sheaf's own and are **not checked against Origin**. Known differences not changed here: Origin evaluates `sum(col(A))` in a column formula as the running sum (Sheaf: the total, as `total`), and its `count(col(A))` counts missing cells (Sheaf: only values).
 
 `gamma`, `erf`, `erfc`, `j0`, `j1` use short in-house implementations with relative error near 1e-14 for moderate arguments (`gamma` is exact for whole numbers up to 171; gamma at 0 and negative whole numbers is missing).
 
@@ -72,7 +84,7 @@ Statistics take one argument that must be a column or a row range: `mean(col(A))
 ## 6. Differences from Origin's LabTalk
 
 - Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution, user-defined functions or string functions. Those are separate features and are not part of this crate.
-- No dataset-valued formulas (a formula returning a whole vector, `cumsum`, `diff`, `shift`) and no `cell(r,c)`, `col(A)$`, `col(A)[L]$` label access, `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
+- No string functions, no `col(A)$`, `col(A)[L]$` label access, no cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.

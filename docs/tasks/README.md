@@ -64,7 +64,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T14](T14-statistics-breadth.md) | Descriptive-statistics columns, outlier tests, more tests | M | items 1-4 done (`c44a1a6`); 5, 6 open |
 | [T15](T15-fitting-breadth.md) | Multi-dataset global fit, Simplex, surface fits, compare models | L | items 1-3 done (merged 2026-11-13); left: Simplex, Compare/Rank Models, multiple linear regression, surface fits |
 | [T16](T16-numeric-differences.md) | Small numeric/behaviour differences (Mann-Whitney print, spline, error caps) | S | 1, 5 done, 4 investigated (`b967898`); 3 done (`d0dbb37`) (cap width 8 pt); 2, 6 open |
-| [T17](T17-docs-cleanup.md) | Stale spec paragraphs and parity counts | S | done (item 3 on branch `axis-range2`, not merged) |
+| [T17](T17-docs-cleanup.md) | Stale spec paragraphs and parity counts | S | done (item 3 with T20, `522c625`) |
 | [T18](T18-backlog.md) | Large items not yet briefed (scripting, 3D, Options, importers, templates) | - | backlog |
 | [T19](T19-import-and-column-dialogs.md) | ASCII import options, Import Wizard pages, Column Properties formats | M | open, wizard needs Origin pages |
 | [T20](T20-automatic-axis-range.md) | Automatic axis range as Origin (8 % margin, step rule, log padding), Rescale Margin | M | done (`522c625`) |

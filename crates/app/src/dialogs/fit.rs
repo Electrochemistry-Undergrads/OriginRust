@@ -1,7 +1,7 @@
 //! The Fit window (Analysis > Fit): fit a straight line, a polynomial, a built-in function, a
 //! typed formula or an Origin `.FDF` function to one column.
 //!
-//! The window follows Origin 2016's NLFit (`docs/spec/gui-look.md`, `docs/spec/fitting.md`
+//! The window follows Origin's NLFit (`docs/spec/gui-look.md`, `docs/spec/fitting.md`
 //! section 9): tabs Settings / Code / Parameters / Bounds, with the pages Function Selection, Data
 //! Selection, Fitted Curves, Find X/Y, Advanced and Output at the left of Settings, and a lower
 //! panel (Fit Curve, Residual, Formula, Messages) that can be folded away. 1 Iteration and Fit

@@ -99,7 +99,7 @@ Not verified: functions other than the six above (the other library functions ar
 
 ## 9. The NLFit window: buttons and layout
 
-Source: OriginLab's online help on the NLFit dialog and its buttons (read 2026-11-12; the wording here is ours). Not tested in Origin 2016 itself: the dialog cannot be opened headless, and `nlbegin`/`nlfit`/`nlend` have no button equivalents beyond what section 6 already compared (an iteration-limited `nlfit` followed by `nlend output:=1` writes a report whose status is Failed(-200); that is what Fit and Done write when the limit is hit).
+Source: OriginLab's online help on the NLFit dialog and its buttons (read 2026-11-12; the wording here is ours). Not tested in Origin itself: the dialog cannot be opened headless, and `nlbegin`/`nlfit`/`nlend` have no button equivalents beyond what section 6 already compared (an iteration-limited `nlfit` followed by `nlend output:=1` writes a report whose status is Failed(-200); that is what Fit and Done write when the limit is hit).
 
 What the buttons do in Origin:
 

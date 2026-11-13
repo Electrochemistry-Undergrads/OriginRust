@@ -1,6 +1,6 @@
 # T01: Enable greyed menu items whose feature already exists
 
-**Status:** done on branch menus-live, not merged. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
+**Status:** done, merged to main (`a2fb77b`); see "Left" for what remains. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
 
 ## Goal
 

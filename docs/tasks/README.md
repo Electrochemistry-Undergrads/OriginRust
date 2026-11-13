@@ -48,7 +48,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 
 | Brief | Area | Size | Status |
 |---|---|---|---|
-| [T01](T01-greyed-menus-with-code.md) | Enable greyed menu items whose feature already exists | M | done on branch menus-live, not merged |
+| [T01](T01-greyed-menus-with-code.md) | Enable greyed menu items whose feature already exists | M | done (`a2fb77b`); Stack dialog, custom sort left |
 | [T02](T02-menu-shortcut-differences.md) | Menu labels, shortcuts and context menus that differ from Origin | M | open |
 | [T03](T03-analysis-dialog-frame.md) | Analysis dialogs: Recalculate, Output, smoothing methods, pkFind options | M | open, check `export-margin` first |
 | [T04](T04-peak-analyzer-wizard.md) | Peak Analyzer as Origin's multi-page wizard | L | open, needs Origin pages measured |

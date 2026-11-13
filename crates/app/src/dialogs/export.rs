@@ -425,7 +425,11 @@ impl ExportDialog {
                             );
                             ui.end_row();
                             ui.label("");
-                            ui.label(format!("File will be saved as {}", self.name_for(doc, self.graph)));
+                            ui.label(format!(
+                                "File will be saved as {}.{}",
+                                self.name_for(doc, self.graph),
+                                self.format.extension()
+                            ));
                             ui.end_row();
                             ui.label("Path");
                             ui.horizontal(|ui| {

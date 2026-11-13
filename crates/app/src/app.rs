@@ -1137,6 +1137,31 @@ impl SheafApp {
                 }
             }
             CellOp::Clear => self.clear_cells(book, sheet_index, &t, "Clear cells"),
+            CellOp::Fill(text) => {
+                let (mut locked, mut not_understood) = (0, 0);
+                self.doc.apply("Fill cells", |p| {
+                    let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) else { return };
+                    for c in &t.columns {
+                        let Some(column) = ws.columns.get_mut(*c) else { continue };
+                        if column.is_locked() {
+                            locked += 1;
+                            continue;
+                        }
+                        for row in t.rows.clone() {
+                            if !column.set_cell_text(row, &text) {
+                                not_understood += 1;
+                            }
+                        }
+                    }
+                });
+                if locked > 0 {
+                    self.warn(format!(
+                        "{locked} column(s) calculated from a formula were left alone; change the formula in Set Column Values"
+                    ));
+                } else if not_understood > 0 {
+                    self.warn(format!("'{text}' is not a number; {not_understood} cell(s) were left empty"));
+                }
+            }
             CellOp::Mask(m) => {
                 let mut changed = 0;
                 self.doc.apply("Mask cells", |p| {
@@ -1636,7 +1661,7 @@ impl SheafApp {
             && let Some(book) = self.active.filter(|id| self.doc.project().workbook(*id).is_some())
             && let Some(state) = self.books.get_mut(&book)
         {
-            grid::handle_keys(ctx, &self.doc, book, state);
+            grid::handle_keys(ctx, &self.doc, book, state, actions);
         }
         let menu_ctx = self.menu_context();
         // Ctrl+C, Ctrl+X and Ctrl+V reach the program as events of their own, not as keys. They

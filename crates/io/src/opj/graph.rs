@@ -48,6 +48,8 @@ const AXIS_AUTO_COLOR: u16 = 0xFFF7;
 const AXIS_SHOWN_BIT: u8 = 0x40;
 const AXIS_FONT_AT: usize = 0x15;
 const AXIS_FLAGS_AT: usize = 0x26;
+const AXIS_FORMAT_AT: usize = 0x25;
+const AXIS_FIXED_DECIMALS_BIT: u8 = 0x80;
 const AXIS_LINE_WIDTH_AT: usize = 0x15;
 const AXIS_TICKS_AT: usize = 0x25;
 // Curve record.
@@ -79,6 +81,8 @@ const NO_VALUE: f64 = -1.23456789e-300;
 // Annotation: header holds the rectangle and the name, block 1 the text style, block 2 the text.
 const ANN_RECT_AT: usize = 0x03;
 const ANN_NAME_AT: usize = 0x46;
+/// The layer header byte that holds the 1-based number of the layer this one is linked to.
+const LAYER_LINK_AT: usize = 0xAB;
 const ANN_FONT_AT: usize = 0x04;
 const ANN_ANGLE_AT: usize = 0x02;
 
@@ -163,6 +167,7 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
         graph.layers.push(build_layer(layer, k == 0, &template, &graph.page, column_of_set, &mut notes));
     }
     link_right_y_layers(&mut graph, w);
+    link_panels(&mut graph, w);
     if graph.layers.is_empty() {
         graph.layers.push(template);
         notes.push("it has no layers".into());
@@ -340,6 +345,38 @@ fn axis_side(blocks: &[Vec<u8>], first: bool) -> AxisSide {
     }
 }
 
+/// Reads the link of every other layer that names an earlier layer in its header (a panel of a stack,
+/// or a layer of one of Origin's panel templates): the layer is linked to it, its frame becomes
+/// fractions of the parent's frame, and an object named `X1` or `Y1` in the layer says that the X or
+/// Y scale follows the parent's (spec section 13.13). A parent that is itself linked is not followed:
+/// the model links to the first layer of a group only.
+fn link_panels(graph: &mut Graph, w: &Window) {
+    for k in 1..graph.layers.len().min(w.layers.len()) {
+        if graph.layers[k].link.is_some() {
+            continue;
+        }
+        let number = usize::from(u8_at(&w.layers[k].header, LAYER_LINK_AT));
+        if number == 0 || number > k {
+            continue;
+        }
+        let parent = number - 1;
+        let pf = graph.layers[parent].frame;
+        if graph.layers[parent].link.is_some() || pf.width <= 0.0 || pf.height <= 0.0 {
+            continue;
+        }
+        let names: Vec<String> = w.layers[k].annotations.iter().map(annotation_name).collect();
+        let follows = |n: &str| if names.iter().any(|a| a == n) { ScaleLink::Straight } else { ScaleLink::None };
+        let layer = &mut graph.layers[k];
+        layer.link = Some(LayerLink { parent, x: follows("X1"), y: follows("Y1") });
+        layer.frame = Frame {
+            left: (layer.frame.left - pf.left) / pf.width,
+            top: (layer.frame.top - pf.top) / pf.height,
+            width: layer.frame.width / pf.width,
+            height: layer.frame.height / pf.height,
+        };
+    }
+}
+
 /// Turns the second layer of a double-Y graph (and any layer like it) into a layer linked to the
 /// layer it lies on (graphing spec 12.7): a layer after the first whose rectangle is the same as an
 /// earlier unlinked layer's and whose Y axis is drawn on the right only. It shares the parent's X
@@ -392,6 +429,7 @@ fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>], side: AxisSide) {
             axis.title_font.size_pt = f64::from(size);
         }
         axis.show_tick_labels = u8_at(b, AXIS_FLAGS_AT) & AXIS_SHOWN_BIT != 0;
+        axis.tick_format = tick_format(b);
     }
     if let Some(b) = blocks.get(line) {
         axis.color_follows_plot = u16_at(b, AXIS_COLOR_AT) == AXIS_AUTO_COLOR;
@@ -407,6 +445,20 @@ fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>], side: AxisSide) {
     // is not drawn (the model has one line per axis there).
     axis.show_opposite = side != AxisSide::Opposite && shown(blocks, far_line);
     axis.opposite_ticks = false;
+}
+
+/// The number format of the tick labels: bits 4 and 5 of byte 0x25 (0 decimal, 1 scientific; the
+/// other kinds are read as decimal), bit 7 "fixed number of decimals" and that number in the low
+/// nibble of byte 0x26.
+fn tick_format(b: &[u8]) -> TickFormat {
+    let kind = u8_at(b, AXIS_FORMAT_AT);
+    let fixed = kind & AXIS_FIXED_DECIMALS_BIT != 0;
+    let decimals = u8_at(b, AXIS_FLAGS_AT) & 0x0F;
+    match (kind >> 4) & 3 {
+        1 => TickFormat::Scientific(if fixed { decimals } else { 0 }),
+        _ if fixed => TickFormat::Decimal(decimals),
+        _ => TickFormat::Auto,
+    }
 }
 
 fn tick_direction(code: u8) -> TickDirection {
@@ -626,6 +678,7 @@ fn read_curve(
         201 => PlotKind::Scatter,
         202 => PlotKind::LineSymbol,
         203 => PlotKind::Column,
+        204 => PlotKind::Area,
         _ => {
             notes.push(format!("plot type {ptype} is not supported and is drawn as a line with symbols"));
             PlotKind::LineSymbol
@@ -647,7 +700,7 @@ fn read_curve(
     let size = f64::from(u16_at(r, CURVE_SIZE_AT)) / CURVE_UNITS_PER_POINT;
     let size = if size > 0.0 && size < 60.0 { size } else { 5.0 };
     let shape = if shape_code == 0 { SymbolShape::Square } else { symbol_shape(shape_code, notes) };
-    let fill = if kind == PlotKind::Column {
+    let fill = if matches!(kind, PlotKind::Column | PlotKind::Area) {
         if u8_at(r, CURVE_FILL_USED_AT) & CURVE_FILL_USED_BIT != 0 {
             color_code(r, CURVE_FILL_AT).unwrap_or_else(|| palette_color(index))
         } else {
@@ -673,7 +726,7 @@ fn read_curve(
             shape,
             size_pt: size,
             color: fill,
-            filled: kind == PlotKind::Column || u8_at(r, CURVE_SYMBOL_FILL_AT) == 0,
+            filled: matches!(kind, PlotKind::Column | PlotKind::Area) || u8_at(r, CURVE_SYMBOL_FILL_AT) == 0,
             edge_width_pt: 0.75,
             every: 1,
         },
@@ -681,6 +734,10 @@ fn read_curve(
         visible: true,
         auto_color: false,
     };
+    if kind == PlotKind::Area && auto {
+        // an area is outlined in black unless the line colour was chosen
+        plot.line.color = Color::BLACK;
+    }
     if kind == PlotKind::Column {
         // Bars are outlined in black unless the line colour was chosen.
         plot.line.color = if auto { Color::BLACK } else { line_color };

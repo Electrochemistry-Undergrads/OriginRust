@@ -103,6 +103,8 @@ pub(super) struct LinkSpec {
     pub parent: u8,
     /// 0-based position of the layer in the window.
     pub index: u8,
+    /// The place of the layer is given in percent of the parent layer (Origin's "% of linked layer").
+    pub percent_of_parent: bool,
 }
 
 pub(super) struct LayerSpec {
@@ -125,6 +127,9 @@ const LINK_UNIT_AT: usize = 0x2E;
 const LINK_FLAGS_AT: usize = 0xFC;
 const LINK_UNIT: u8 = 9;
 const LINK_FLAG: u8 = 0x80;
+/// Origin's property `layer.unit` reports 7 (percent of the linked layer) when this byte is 6.
+const LINK_UNIT_CODE_AT: usize = 0x67;
+const LINK_UNIT_CODE: u8 = 6;
 /// Layer header byte that makes Origin move the curves by the offsets stored in their records.
 const OFFSETS_AT: usize = 0xFD;
 const OFFSETS_ON: u8 = 0x50;
@@ -165,6 +170,9 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
         h[LINK_INDEX_AT] = link.index;
         h[LINK_UNIT_AT] = LINK_UNIT;
         h[LINK_FLAGS_AT] |= LINK_FLAG;
+        if link.percent_of_parent {
+            h[LINK_UNIT_CODE_AT] = LINK_UNIT_CODE;
+        }
     }
     if l.offsets {
         h[OFFSETS_AT] = OFFSETS_ON;
@@ -203,6 +211,10 @@ pub(super) struct AxisBlocks {
     pub follows_plot: bool,
     /// The tick labels are the texts of the X column of the first plot.
     pub text_labels: bool,
+    /// Number format of the tick labels: scientific instead of decimal, and a fixed number of
+    /// decimal places (none: Origin chooses).
+    pub scientific: bool,
+    pub decimals: Option<u8>,
 }
 
 const SHOWN: u8 = 0x40;
@@ -248,6 +260,15 @@ pub(super) fn axis_blocks(group: usize, a: &AxisBlocks) -> Vec<Vec<u8>> {
         let b = &mut blocks[own_labels];
         b[0x15] = a.label_pt;
         show(b, a.labels_shown);
+        // number format: bits 4 and 5 of byte 0x25 (0 decimal, 1 scientific), bit 7 "fixed decimals"
+        // with their number in the low nibble of 0x26
+        if a.scientific {
+            b[0x25] |= 0x10;
+        }
+        if let Some(d) = a.decimals {
+            b[0x25] |= 0x80;
+            b[0x26] = b[0x26] & 0xF0 | d.min(15);
+        }
         if a.follows_plot {
             put_colour(b, Code::AUTO);
         } else if a.label_color != Code::AUTO && a.label_color != Code::index(0) {
@@ -294,6 +315,7 @@ pub(super) enum CurveKind {
     Scatter,
     LineSymbol,
     Column,
+    Area,
     /// A Y error plot attached to the curve whose Y data set is `x_set`.
     Error,
 }
@@ -324,7 +346,16 @@ pub(super) struct CurveSpec {
     pub bar_width_pct: f64,
     /// How far the curve is drawn from its data in a stacked layer, in axis units: X and Y.
     pub offset: (f64, f64),
+    /// Place of the curve in a plot group (column plots drawn side by side).
+    pub group: Group,
     pub serial: u32,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(super) enum Group {
+    None,
+    First,
+    Member,
 }
 
 /// Where a curve record keeps its X and Y offset (spec section 13.10).
@@ -338,14 +369,19 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
         CurveKind::Scatter => (CURVE_SCATTER, 201),
         CurveKind::LineSymbol => (CURVE_LINE_SYMBOL, 202),
         CurveKind::Column => (CURVE_COLUMN, 203),
+        CurveKind::Area => (CURVE_AREA, 204),
         CurveKind::Error => (CURVE_ERROR, 487),
     };
     fill(&mut r, table);
     put(&mut r, 0x04, &c.y_set.to_le_bytes());
     put(&mut r, 0x07, &c.used.0.to_le_bytes());
     put(&mut r, 0x0b, &c.used.1.to_le_bytes());
-    // not in a plot group: every curve keeps its own colour
-    r[0x06] = 0x09;
+    // not in a plot group unless asked: every curve keeps its own colour
+    r[0x06] = match c.group {
+        Group::None => 0x09,
+        Group::First => 0x29,
+        Group::Member => 0x19,
+    };
     put(&mut r, 0x23, &c.x_set.to_le_bytes());
     put(&mut r, 0x4c, &ptype.to_le_bytes());
     put(&mut r, 0x1e2, &c.serial.to_le_bytes());
@@ -360,7 +396,7 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     put(&mut r, 0x16a, &c.line.0);
     r[0x12] = c.dash;
     put(&mut r, 0x15, &c.width.to_le_bytes());
-    if matches!(c.kind, CurveKind::Line | CurveKind::LineSymbol) {
+    if matches!(c.kind, CurveKind::Line | CurveKind::LineSymbol | CurveKind::Area) {
         r[0x11] = c.connect;
     }
     if matches!(c.kind, CurveKind::Scatter | CurveKind::LineSymbol) {
@@ -368,6 +404,10 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
         put(&mut r, 0x19, &c.size.to_le_bytes());
         r[0x18] = u8::from(c.open_symbol);
         put(&mut r, 0x132, &c.symbol.0);
+    }
+    if c.kind == CurveKind::Area {
+        // the fill; the line colour above is the border
+        put(&mut r, 0xc2, &c.fill.0);
     }
     if c.kind == CurveKind::Column {
         put(&mut r, 0xc2, &c.fill.0);

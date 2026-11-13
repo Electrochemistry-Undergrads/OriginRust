@@ -3,7 +3,9 @@
 //! colours. Origin 2016 showed each of them the way the model draws them (spec 13.12).
 
 use super::*;
-use crate::opj::{OpjImport, read_opj_from};
+use crate::opj::frame::Frames;
+use crate::opj::{OpjImport, dataset, read_opj_from, window};
+use sheaf_core::color::Color;
 use sheaf_core::graph::*;
 use sheaf_core::ids::{ColumnId, WindowId};
 use sheaf_core::stack::places;
@@ -163,19 +165,6 @@ fn a_right_layer_with_its_own_x_scale_and_other_links_are_handled_apart() {
     let (imp, out) = round_trip(&p);
     assert!(out.warnings.iter().any(|w| w.contains("not linked to its parent")), "{:?}", out.warnings);
     assert_eq!(imp.graphs[0].layers.len(), 2);
-
-    // a panel of a stack (its own place in the parent's frame) is still an independent layer
-    let mut p = source();
-    let c = ids(&p);
-    let id = p.add_graph(Template::Line);
-    p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
-    let mut panel = p.graph(id).unwrap().layers[0].clone();
-    panel.frame = Frame { left: 0.0, top: 0.5, width: 1.0, height: 0.5 };
-    panel.link = Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None });
-    p.graph_mut(id).unwrap().layers.push(panel);
-    let (imp, out) = round_trip(&p);
-    assert!(out.warnings.iter().any(|w| w.contains("panel of a stack")), "{:?}", out.warnings);
-    assert_eq!(imp.graphs[0].layers[1].link, None);
 }
 
 #[test]
@@ -258,4 +247,192 @@ fn axis_colours_that_follow_the_plot_come_back_and_title_colours_are_named() {
 
     let (_, out) = round_trip(&one_layer(|l| l.y_axis.title_color_follows_plot = true));
     assert!(out.warnings.iter().any(|w| w.contains("title colours")), "{:?}", out.warnings);
+}
+
+#[test]
+fn tick_label_number_formats_are_written_and_read_back() {
+    let formats = [
+        (TickFormat::Auto, TickFormat::Auto),
+        (TickFormat::Decimal(0), TickFormat::Decimal(0)),
+        (TickFormat::Decimal(3), TickFormat::Decimal(3)),
+        (TickFormat::Scientific(2), TickFormat::Scientific(2)),
+        (TickFormat::Decimal(40), TickFormat::Decimal(15)),
+    ];
+    for (put, want) in formats {
+        let mut p = source();
+        let c = ids(&p);
+        let id = p.add_graph(Template::Line);
+        p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
+        let l = &mut p.graph_mut(id).unwrap().layers[0];
+        l.x_axis.tick_format = put;
+        l.y_axis.tick_format = TickFormat::Scientific(1);
+        let (imp, out) = round_trip(&p);
+        assert!(out.warnings.is_empty(), "{put:?}: {:?}", out.warnings);
+        let l = &imp.graphs[0].layers[0];
+        assert_eq!(l.x_axis.tick_format, want, "{put:?}");
+        assert_eq!(l.y_axis.tick_format, TickFormat::Scientific(1));
+    }
+}
+
+#[test]
+fn a_number_format_on_a_column_plot_comes_back() {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.add_graph(Template::Column);
+    p.add_plot_xy(id, 0, None, c[5], None).unwrap();
+    p.graph_mut(id).unwrap().layers[0].y_axis.tick_format = TickFormat::Decimal(2);
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].y_axis.tick_format, TickFormat::Decimal(2));
+}
+
+/// The plot records of every graph in a written project, in file order.
+fn curve_records(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let mut f = Frames::new(Cursor::new(bytes.to_vec())).unwrap();
+    f.line(200).unwrap();
+    f.block().unwrap();
+    f.block().unwrap();
+    let _ = dataset::scan(&mut f);
+    let (windows, _) = window::scan(&mut f);
+    windows
+        .iter()
+        .flat_map(|w| w.layers.iter().flat_map(|l| l.columns.iter().map(|c| c.record.clone())))
+        .filter(|r| r.len() == 515 && (200..=204).contains(&u16::from_le_bytes([r[0x4c], r[0x4d]])))
+        .collect()
+}
+
+fn columns_graph(ys: &[usize], f: impl FnOnce(&mut Layer)) -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.add_graph(Template::Column);
+    for y in ys {
+        p.add_plot_xy(id, 0, None, c[*y], None).unwrap();
+    }
+    f(&mut p.graph_mut(id).unwrap().layers[0]);
+    p
+}
+
+#[test]
+fn column_plots_of_a_layer_are_written_as_a_plot_group() {
+    // the group byte: 0x29 for the first member, 0x19 for the others, 0x09 for a plot outside any group
+    let flags = |p: &Project| -> Vec<u8> {
+        curve_records(&write_named(p, "g", TIME).unwrap().bytes).iter().map(|r| r[0x06]).collect()
+    };
+    assert_eq!(flags(&columns_graph(&[5, 6], |_| {})), [0x29, 0x19]);
+    assert_eq!(flags(&columns_graph(&[5, 6, 5], |_| {})), [0x29, 0x19, 0x19]);
+    assert_eq!(flags(&columns_graph(&[5], |_| {})), [0x09], "one column plot is not a group");
+    // a line next to two column plots stays outside the group
+    let mut p = columns_graph(&[5, 6], |_| {});
+    let c = ids(&p);
+    let id = p.graphs().next().unwrap().id;
+    p.add_plot_xy(id, 0, None, c[1], None).unwrap();
+    p.graph_mut(id).unwrap().layers[0].plots[2].kind = PlotKind::Line;
+    assert_eq!(flags(&p), [0x29, 0x19, 0x09]);
+}
+
+#[test]
+fn colours_that_a_plot_group_would_replace_are_named() {
+    let (_, out) = round_trip(&columns_graph(&[5, 6], |_| {}));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let (imp, out) = round_trip(&columns_graph(&[5, 6], |l| {
+        l.plots[1].symbol.color = Color::rgb(12, 34, 56);
+        l.plots[1].auto_color = false;
+    }));
+    assert!(out.warnings.iter().any(|w| w.contains("colours of column plots")), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].plots.len(), 2);
+}
+
+#[test]
+fn error_bars_on_grouped_columns_are_named_and_still_read_back() {
+    let mut p = columns_graph(&[5, 6], |_| {});
+    let c = ids(&p);
+    let id = p.graphs().next().unwrap().id;
+    p.graph_mut(id).unwrap().layers[0].plots[0].y_error = Some(c[3]);
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("error bars on column plots")), "{:?}", out.warnings);
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!(l.plots.len(), 2);
+    assert!(l.plots[0].y_error.is_some() && l.plots[1].y_error.is_none());
+}
+
+/// A graph of `n` panels (layer 0 and layers linked to it), each with a plot, in the frames of a
+/// vertical stack: fractions of the first panel's frame, the panels above going up by one height.
+fn panels(n: usize, x: ScaleLink, y: ScaleLink) -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.add_graph(Template::Line);
+    p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
+    p.graph_mut(id).unwrap().layers[0].frame = Frame { left: 0.15, top: 0.65, width: 0.75, height: 0.25 };
+    for k in 1..n {
+        let mut panel = p.graph(id).unwrap().layers[0].clone();
+        panel.plots.clear();
+        panel.frame = Frame { left: 0.0, top: -1.2 * k as f64, width: 1.0, height: 1.0 };
+        panel.link = Some(LayerLink { parent: 0, x, y });
+        p.graph_mut(id).unwrap().layers.push(panel);
+        p.add_plot_xy(id, k, Some(c[0]), c[1 + k], None).unwrap();
+    }
+    p
+}
+
+#[test]
+fn panels_keep_their_link_their_frames_and_their_linked_scales() {
+    for (x, y) in [
+        (ScaleLink::Straight, ScaleLink::None),
+        (ScaleLink::None, ScaleLink::Straight),
+        (ScaleLink::Straight, ScaleLink::Straight),
+        (ScaleLink::None, ScaleLink::None),
+    ] {
+        let p = panels(3, x, y);
+        let (imp, out) = round_trip(&p);
+        assert!(out.warnings.is_empty(), "{x:?} {y:?}: {:?}", out.warnings);
+        let want = &p.graphs().next().unwrap().layers;
+        let got = &imp.graphs[0].layers;
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].link, None);
+        for k in 1..3 {
+            assert_eq!(got[k].link, Some(LayerLink { parent: 0, x, y }), "{x:?} {y:?} layer {k}");
+            let (g, w) = (got[k].frame, want[k].frame);
+            assert!(
+                (g.left - w.left).abs() < 0.01
+                    && (g.top - w.top).abs() < 0.01
+                    && (g.width - w.width).abs() < 0.01
+                    && (g.height - w.height).abs() < 0.01,
+                "{g:?} against {w:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn linked_scales_cover_the_data_of_every_panel() {
+    let (imp, _) = round_trip(&panels(3, ScaleLink::Straight, ScaleLink::Straight));
+    let l = &imp.graphs[0].layers;
+    // B is 0 to 100, C is 100 to 0 and D is about -0.05 to 0.05: the Y scale of the stack holds all of them
+    for layer in l {
+        assert_eq!((layer.y_axis.min, layer.y_axis.max), (l[0].y_axis.min, l[0].y_axis.max));
+    }
+    assert!(l[0].y_axis.min.unwrap() <= 0.0 && l[0].y_axis.max.unwrap() >= 100.0);
+    for layer in l {
+        assert_eq!((layer.x_axis.min, layer.x_axis.max), (l[0].x_axis.min, l[0].x_axis.max));
+    }
+}
+
+#[test]
+fn a_panel_header_names_its_parent_and_the_unit_percent_of_the_linked_layer() {
+    let headers = |p: &Project| -> Vec<Vec<u8>> {
+        let mut f = Frames::new(Cursor::new(write_named(p, "g", TIME).unwrap().bytes)).unwrap();
+        f.line(200).unwrap();
+        f.block().unwrap();
+        f.block().unwrap();
+        let _ = dataset::scan(&mut f);
+        let (windows, _) = window::scan(&mut f);
+        windows.iter().filter(|w| w.name != "Src").flat_map(|w| w.layers.iter().map(|l| l.header.clone())).collect()
+    };
+    let h = headers(&panels(3, ScaleLink::Straight, ScaleLink::None));
+    assert_eq!(h.len(), 3);
+    assert_eq!([h[0][0xAB], h[1][0xAB], h[2][0xAB]], [0, 1, 1]);
+    assert_eq!([h[0][0x67], h[1][0x67], h[2][0x67]], [0, 6, 6]);
+    // the right Y layer of a double-Y graph keeps its page-percent unit
+    let h = headers(&double_y());
+    assert_eq!([h[1][0xAB], h[1][0x67]], [1, 0]);
 }

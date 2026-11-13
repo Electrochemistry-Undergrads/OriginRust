@@ -163,4 +163,5 @@ def main():
     print(f"end of windows at {r.p} of {len(r.d)}")
 
 
-main()
+if __name__ == "__main__":
+    main()

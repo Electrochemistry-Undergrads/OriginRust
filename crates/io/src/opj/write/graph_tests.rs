@@ -181,7 +181,7 @@ fn a_full_graph_reads_back_with_everything_the_file_holds() {
 #[test]
 fn every_plot_kind_shape_dash_and_connection_comes_back() {
     let mut p = source();
-    let kinds = [PlotKind::Line, PlotKind::Scatter, PlotKind::LineSymbol, PlotKind::Column];
+    let kinds = [PlotKind::Line, PlotKind::Scatter, PlotKind::LineSymbol, PlotKind::Column, PlotKind::Area];
     for (k, kind) in kinds.iter().enumerate() {
         graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
             g.name = format!("K{k}");
@@ -215,7 +215,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     let (imp, warnings) = round_trip(&p);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
-    assert_eq!(imp.graphs.len(), 4 + 8 + 8 + 4);
+    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 4);
     let by_name = |n: &str| imp.graphs.iter().find(|g| g.name == n).unwrap().layers[0].plots[0].clone();
     for (k, kind) in kinds.iter().enumerate() {
         let got = by_name(&format!("K{k}"));
@@ -228,7 +228,10 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
                 assert_eq!(got.symbol.color, Color::rgb(10, 10, 200));
             }
             PlotKind::Column => assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of a bar"),
-            PlotKind::Area => unreachable!("written as a line, tested below"),
+            PlotKind::Area => {
+                assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of an area");
+                assert_eq!(got.line.color, Color::rgb(200, 10, 10), "its border");
+            }
         }
     }
     for (k, s) in SymbolShape::ALL.iter().enumerate() {
@@ -319,7 +322,7 @@ fn what_the_file_cannot_hold_is_named() {
         l.plots[0].symbol.every = 3;
         l.plots[1].visible = false;
         l.plots[2].y = other.id;
-        l.x_axis.tick_format = TickFormat::Scientific(2);
+        l.y_axis.tick_format = TickFormat::DateTime(sheaf_core::datetime::DatePattern::default());
         l.x_axis.tick_label_divisor = 1000.0;
         l.x_axis.major_tick_len_pt = 9.0;
         l.y_axis.major_grid = Some(LineStyle::solid(Color::rgb(200, 200, 200), 0.5));
@@ -346,7 +349,7 @@ fn what_the_file_cannot_hold_is_named() {
         "hidden plot",
         "every n-th point",
         "not a worksheet column",
-        "number format",
+        "date and time tick label format",
         "divisor",
         "tick lengths",
         "grid lines",
@@ -436,12 +439,12 @@ fn damaged_graph_files_never_panic_the_reader() {
 }
 
 #[test]
-fn an_area_plot_is_written_as_a_line_and_named() {
+fn an_area_plot_is_written_and_read_back_without_a_warning() {
     let mut p = source();
     graph_with(&mut p, Template::Area, &[(0, 1)], |_| {});
     let (imp, warnings) = round_trip(&p);
-    assert!(warnings.iter().any(|w| w.contains("area plot")), "{warnings:?}");
-    assert_eq!(imp.graphs[0].layers[0].plots[0].kind, PlotKind::Line);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(imp.graphs[0].layers[0].plots[0].kind, PlotKind::Area);
 }
 
 #[test]

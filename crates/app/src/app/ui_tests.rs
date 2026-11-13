@@ -991,16 +991,16 @@ fn ctrl_s(h: &mut Harness<'static, SheafApp>) {
 
 /// Gives the second column of the first sheet a column formula, which the .opj writer cannot
 /// store (only the values are written), so saving needs the companion.
-/// Makes the first plot an area plot, which the .opj writer stores as a line plot (so the save
-/// needs the companion).
+/// Gives the first layer a bar overlap, which the .opj writer cannot store (so the save needs the
+/// companion).
 fn add_lossy(h: &mut Harness<'static, SheafApp>) {
-    set_first_kind(h, PlotKind::Area);
+    set_overlap(h, 40.0);
 }
 
-fn set_first_kind(h: &mut Harness<'static, SheafApp>, kind: PlotKind) {
-    h.state_mut().doc.apply("Change plot type", |p| {
+fn set_overlap(h: &mut Harness<'static, SheafApp>, pct: f64) {
+    h.state_mut().doc.apply("Change bar overlap", |p| {
         if let Some(g) = p.windows.iter_mut().find_map(|w| if let Window::Graph(g) = w { Some(g) } else { None }) {
-            g.layers[0].plots[0].kind = kind;
+            g.layers[0].bars.overlap_pct = pct;
         }
     });
     settle(h);
@@ -1021,11 +1021,11 @@ fn ctrl_s_saves_an_opj_with_a_companion_for_what_it_cannot_hold_and_reopening_us
     assert!(!h.state().doc.dirty);
     assert!(h.state().status.contains("lab.opj.sheaf"), "{}", h.state().status);
     let (title, text) = h.state().message.clone().expect("a message says what only the companion holds");
-    assert!(title.contains("companion") && text.contains("area plot"), "{title}: {text}");
+    assert!(title.contains("companion") && text.contains("overlap"), "{title}: {text}");
     assert_eq!(h.state().path.as_deref(), Some(opj.as_path()));
 
     let h2 = start(vec![opj.clone()]);
-    assert_eq!(graph(&h2).layers[0].plots[0].kind, PlotKind::Area, "the area plot is back");
+    assert_eq!(graph(&h2).layers[0].bars.overlap_pct, 40.0, "the overlap is back from the companion");
     assert_eq!(project(&h2).graphs().count(), 1, "the graph is back");
     assert_eq!(h2.state().path.as_deref(), Some(opj.as_path()), "it saves to the .opj again");
     assert!(h2.state().status.contains("companion"), "{}", h2.state().status);
@@ -1055,9 +1055,9 @@ fn a_save_that_loses_nothing_writes_no_companion_and_deletes_an_old_one() {
     h.state_mut().path = Some(opj.clone());
     ctrl_s(&mut h);
     assert!(dir.join("lab.opj.sheaf").exists());
-    // Back to a line plot: now the .opj holds everything.
+    // No overlap: now the .opj holds everything.
     h.state_mut().message = None;
-    set_first_kind(&mut h, PlotKind::Line);
+    set_overlap(&mut h, 0.0);
     ctrl_s(&mut h);
     assert!(opj.exists());
     assert!(!dir.join("lab.opj.sheaf").exists(), "the companion Sheaf wrote is deleted");

@@ -2353,6 +2353,17 @@ impl SheafApp {
                         self.focus(id);
                     }
                 }
+                // shape:N opens the properties window of the N-th drawn object (from 1) of the
+                // first graph's first layer and selects it.
+                "shape" => {
+                    if let (Some(id), Ok(n)) = (first_graph, arg.parse::<usize>()) {
+                        let shape = n.saturating_sub(1);
+                        self.shape_dialog = ShapeDialog::edit(&self.doc, id, 0, shape);
+                        self.graphs.entry(id).or_default().selected =
+                            Some((0, sheaf_plot::scene::ObjectKind::Shape(shape)));
+                        self.focus(id);
+                    }
+                }
                 "integrate" => {
                     if let Some(id) = first_graph {
                         self.start_integrate(id);

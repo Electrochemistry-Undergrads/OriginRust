@@ -36,6 +36,8 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
+| `fit-more` | "Handoff.md token optimization" | T15 items 4-6: Simplex, Compare/Rank Models, multiple linear regression, linear fit with X error (worktree `stats-breadth`) | started 2026-11-13 |
+| `expr-funcs2` | "Handoff.md token optimization" | T08 remaining: `sum`/`count` as Origin, string functions and `col(A)$`, local `now()` (worktree `axis-range2`) | started 2026-11-13 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
 branches that are now on `main`; it holds nothing `main` lacks and can be removed.

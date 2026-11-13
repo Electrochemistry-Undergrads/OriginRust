@@ -5,7 +5,7 @@
 //! horizontal scroll bar at the bottom. It also owns what is selected: columns, rows, a block of
 //! cells or everything.
 
-use crate::actions::{Action, LabelRow, SheetOp};
+use crate::actions::{Action, CellOp, LabelRow, SheetOp};
 use crate::menus::{self, MenuContext, WindowKind};
 use eframe::egui::{self, Align, Color32, Layout, Pos2, Rect, RichText, Sense, Shape, Stroke, UiBuilder, vec2};
 use egui_extras::{Column as TableColumn, TableBuilder};
@@ -1207,7 +1207,7 @@ fn body_cell(
 
     let is_editing = matches!(&state.editing, Some((c, er, _)) if *c == column.id && *er == r);
     if is_editing {
-        edit_cell(ui, state, sheet, actions);
+        edit_cell(ui, state, sheet, book_id, actions);
         return;
     }
     let text = if r < column.len() { column.shown_text(r) } else { String::new() };
@@ -1291,7 +1291,10 @@ fn start_editing(state: &mut BookUi, column: &Column, row: usize) {
     state.focus_editor = true;
 }
 
-fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, actions: &mut Vec<Action>) {
+fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, book_id: WindowId, actions: &mut Vec<Action>) {
+    // Ctrl+Enter stores the text in every cell of the selected block and keeps the block, as in
+    // a spreadsheet.
+    let fill = ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
     // Enter, Tab and Up/Down leave the cell and move on; Left/Right stay in the text. They are
     // taken before the text field sees them.
     let step = ui.input_mut(|i| {
@@ -1331,6 +1334,9 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, actions: 
     }
     let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
     if cancel {
+        state.editing = None;
+    } else if fill {
+        actions.push(Action::Cells { book: book_id, op: CellOp::Fill(text.clone()) });
         state.editing = None;
     } else if response.lost_focus() || step.is_some() {
         let (column, row) = (*column, *row);
@@ -1442,16 +1448,94 @@ pub fn skip_hidden(sheet: &Worksheet, from: usize, to: usize) -> usize {
     first(forward).or_else(|| first(!forward)).unwrap_or(from)
 }
 
+/// The keys Sheaf takes from spreadsheet programs such as Excel (none of them is bound in Origin's
+/// worksheet): Ctrl+A selects the sheet, Ctrl+Space the columns and Shift+Space the rows of the
+/// selection, Ctrl+Page Up and Ctrl+Page Down step through the sheet tabs, Ctrl+Plus inserts and
+/// Ctrl+Minus deletes at the selection, and Backspace empties the active cell and starts editing it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SheetKey {
+    SelectAll,
+    SelectColumns,
+    SelectRows,
+    PrevSheet,
+    NextSheet,
+    Insert,
+    Delete,
+    ClearAndEdit,
+}
+
+impl SheetKey {
+    fn of(key: egui::Key, m: egui::Modifiers) -> Option<SheetKey> {
+        use egui::Key;
+        let (ctrl, shift) = (m.command, m.shift);
+        Some(match key {
+            Key::A if ctrl && !shift => SheetKey::SelectAll,
+            Key::Space if ctrl && !shift => SheetKey::SelectColumns,
+            Key::Space if shift && !ctrl => SheetKey::SelectRows,
+            Key::PageUp if ctrl && !shift => SheetKey::PrevSheet,
+            Key::PageDown if ctrl && !shift => SheetKey::NextSheet,
+            // Ctrl++ is Ctrl+Shift+= on most keyboards; the number pad has a key of its own.
+            Key::Plus if ctrl => SheetKey::Insert,
+            Key::Equals if ctrl && shift => SheetKey::Insert,
+            Key::Minus if ctrl && !shift => SheetKey::Delete,
+            Key::Backspace if !ctrl && !shift => SheetKey::ClearAndEdit,
+            _ => return None,
+        })
+    }
+}
+
+/// The span of columns (positions) and rows a selection covers, for Ctrl+Space and Shift+Space.
+fn sel_span(state: &BookUi, sheet: &Worksheet) -> Option<((usize, usize), (usize, usize))> {
+    let last_col = sheet.columns.len().checked_sub(1)?;
+    let last_row = sheet.row_count().saturating_sub(1);
+    Some(match &state.sel {
+        Sel::None => return None,
+        Sel::Cells { anchor, end } => {
+            ((anchor.0.min(end.0), anchor.0.max(end.0)), (anchor.1.min(end.1), anchor.1.max(end.1)))
+        }
+        Sel::Rows { anchor, end } => ((0, last_col), (*anchor.min(end), *anchor.max(end))),
+        Sel::All => ((0, last_col), (0, last_row)),
+        Sel::Columns => {
+            let positions: Vec<usize> = state.selected.iter().filter_map(|id| sheet.column_index(*id)).collect();
+            ((*positions.iter().min()?, *positions.iter().max()?), (0, last_row))
+        }
+    })
+}
+
 /// Handles the keys of the active worksheet when no text field has the keyboard: the arrows, Tab,
 /// Enter, Home, End and the page keys move the active cell (with Shift they extend the block),
-/// F2 and typing start editing. Returns true when keys were taken.
-pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state: &mut BookUi) -> bool {
+/// F2 and typing start editing, and the spreadsheet keys of [`SheetKey`] select, switch sheets,
+/// insert, delete or empty a cell. Returns true when keys were taken.
+pub fn handle_keys(
+    ctx: &egui::Context,
+    doc: &Document,
+    book_id: WindowId,
+    state: &mut BookUi,
+    actions: &mut Vec<Action>,
+) -> bool {
     let Some(book) = doc.project().workbook(book_id) else { return false };
-    let Some(sheet) = book.sheets.get(book.active_sheet.min(book.sheets.len().saturating_sub(1))) else {
+    let sheet_index = book.active_sheet.min(book.sheets.len().saturating_sub(1));
+    let sheet_count = book.sheets.len();
+    let Some(sheet) = book.sheets.get(sheet_index) else {
         return false;
     };
-    if sheet.columns.is_empty() || state.editing.is_some() || state.editing_label.is_some() {
+    if state.editing.is_some() || state.editing_label.is_some() {
         return false;
+    }
+    // An empty sheet has no cells to move through, but Ctrl+Page Up and Down still leave it.
+    if sheet.columns.is_empty() {
+        let (prev, next) = ctx.input_mut(|i| {
+            (
+                i.consume_key(egui::Modifiers::COMMAND, egui::Key::PageUp),
+                i.consume_key(egui::Modifiers::COMMAND, egui::Key::PageDown),
+            )
+        });
+        let to =
+            if prev { sheet_index.checked_sub(1) } else { Some(sheet_index + 1).filter(|i| next && *i < sheet_count) };
+        if let Some(to) = to {
+            actions.push(Action::SelectSheet { book: book_id, sheet: to });
+        }
+        return prev || next;
     }
     let max_row = sheet.row_count() + SPARE_ROWS - 1;
     let lens: Vec<usize> = sheet.columns.iter().map(Column::len).collect();
@@ -1460,6 +1544,9 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
     let mut consumed: Vec<egui::Key> = Vec::new();
     let mut typed = String::new();
     let mut edit_start = false;
+    let mut clear_start = false;
+    // Shift+Space also arrives as a typed space, which must not start editing.
+    let mut space_taken = false;
     for event in &events {
         match event {
             egui::Event::Key { key, pressed: true, modifiers, .. } => {
@@ -1468,6 +1555,46 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
                 }
                 let ctrl = modifiers.command;
                 let shift = modifiers.shift;
+                if let Some(sheet_key) = SheetKey::of(*key, *modifiers) {
+                    match sheet_key {
+                        SheetKey::SelectAll => state.select_all(sheet),
+                        SheetKey::SelectColumns | SheetKey::SelectRows => {
+                            space_taken = true;
+                            let Some(((c0, c1), (r0, r1))) = sel_span(state, sheet) else {
+                                consumed.push(*key);
+                                taken = true;
+                                continue;
+                            };
+                            if sheet_key == SheetKey::SelectColumns {
+                                state.sel = Sel::Columns;
+                                state.selected = sheet.columns[c0..=c1].iter().map(|c| c.id).collect();
+                            } else {
+                                state.select_rows(r0, r1);
+                            }
+                            state.active = None;
+                        }
+                        SheetKey::PrevSheet | SheetKey::NextSheet => {
+                            let to = if sheet_key == SheetKey::PrevSheet {
+                                sheet_index.checked_sub(1)
+                            } else {
+                                Some(sheet_index + 1).filter(|i| *i < sheet_count)
+                            };
+                            if let Some(to) = to {
+                                actions.push(Action::SelectSheet { book: book_id, sheet: to });
+                            }
+                        }
+                        SheetKey::Insert | SheetKey::Delete => {
+                            if state.sel != Sel::None {
+                                let op = if sheet_key == SheetKey::Insert { CellOp::Insert } else { CellOp::Delete };
+                                actions.push(Action::Cells { book: book_id, op });
+                            }
+                        }
+                        SheetKey::ClearAndEdit => clear_start = true,
+                    }
+                    consumed.push(*key);
+                    taken = true;
+                    continue;
+                }
                 // In a block of several cells Enter and Tab move the active cell inside it.
                 if !ctrl && matches!(key, egui::Key::Tab | egui::Key::Enter) {
                     let step = if shift { -1 } else { 1 };
@@ -1552,11 +1679,14 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
             _ => {}
         }
     }
-    let typed: String = typed.chars().filter(|c| !c.is_control()).collect();
+    let mut typed: String = typed.chars().filter(|c| !c.is_control()).collect();
+    if space_taken {
+        typed = typed.replacen(' ', "", 1);
+    }
     // Typing into the active cell (of a block, the cell where it started) replaces what it holds;
-    // F2 keeps it.
+    // F2 keeps it; Backspace starts from an empty cell (storing it empties the cell).
     if let Some(active) = state.active_cell()
-        && (edit_start || !typed.is_empty())
+        && (edit_start || clear_start || !typed.is_empty())
         && let Some(column) = sheet.columns.get(active.0)
     {
         if !column.is_locked() {
@@ -1572,7 +1702,7 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
         ctx.input_mut(|i| {
             i.events.retain(|e| match e {
                 egui::Event::Key { key, .. } => !consumed.contains(key),
-                egui::Event::Text(_) => typed.is_empty(),
+                egui::Event::Text(_) => typed.is_empty() && !space_taken,
                 _ => true,
             })
         });

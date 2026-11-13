@@ -35,6 +35,8 @@ pub enum CellOp {
     PasteText(String),
     /// Empty the cells (the Delete key).
     Clear,
+    /// Store the same text in every selected cell (Ctrl+Enter in the cell editor).
+    Fill(String),
     /// Column > Mask > Apply, Remove or Swap on the selected cells.
     Mask(sheaf_core::sheetops::MaskOp),
     /// Edit > Insert: blank rows above the selected rows (only in the selected columns for a

@@ -1582,3 +1582,47 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 ### 16.4 Not done
 
 - Colour, font family, attachment choice, resizing and a background or frame for a label; copy and paste of labels; "Bring to the front" and "Push to the back"; editing text in place on the graph.
+
+## 17. Drawn objects (P1, T24)
+
+Lines, arrows, rectangles and ellipses drawn on a graph with the Line, Arrow, Rectangle and Circle buttons of the Tools toolbar. Pictures and the inset graph are not part of this section.
+
+### 17.1 What Origin does
+
+Nothing in this section was measured: the work was done on a machine without Origin. Every line below is from Origin's public documentation, paraphrased, and must be checked on the Windows machine (`tools/origin-ref`) before it is called Origin's behaviour. Tag: [DOC].
+
+- [DOC] The Tools toolbar has Line, Arrow, Rectangle and Circle. One drag makes one object, and the tool returns to the Pointer.
+- [DOC] Shift while dragging: a line or arrow snaps to horizontal, vertical or 45 degrees; a rectangle becomes a square; the Circle tool makes a circle instead of an ellipse.
+- [DOC] An object is attached to the page, the layer frame, or the layer and its scales.
+- [DOC] A double click opens a window with the line (style, width, colour), the arrow (shape, length, width, at the begin and/or end) and the fill (pattern, colour) of the object. Delete removes it; dragging moves it.
+
+Unmeasured, so chosen by Sheaf: the default line width and colour, the arrow head size and shape, whether the tool stays on after one object, the stacking order of objects against labels and the legend, the cursor, what a click without a drag does, and the exact snapping rule near the angle boundaries.
+
+### 17.2 Sheaf's model (Sheaf choice)
+
+- `Layer::shapes` holds `Shape { kind, x1, y1, x2, y2, color, width_pt, dash, fill, head_pt, head_at_start }`, saved only when not empty, so files written before this section load unchanged. Kinds: `line`, `arrow`, `rectangle`, `ellipse`.
+- The points are fractions of the layer's frame, as for a text label (section 16.2): `(0, 0)` is the top left corner, `(1, 1)` the bottom right, outside 0 to 1 is allowed. The objects are attached to the layer frame and do not follow the axis scales; a "layer and scales" or "page" attachment does not exist yet.
+- A line or arrow runs from the first to the second point. An arrow has a filled triangular head at the second point (`head_at_start` adds one at the first); the head is `head_pt` long (default 9 pt) and 0.7 of that wide, and is shortened so that it never takes more than the line. A rectangle has the two points as opposite corners; an ellipse is inscribed in that rectangle. `fill` (rectangle and ellipse) is a solid colour; no fill is the default, so the data shows through.
+- Drawing: the objects are drawn after the legend and the labels, in list order, so they are above the data and above the text. Every renderer (SVG, PNG, PDF, EPS, EMF, TIFF and the window) takes them from the same scene.
+- Picking: a line or arrow is hit near its line, an unfilled shape on its outline, a filled one inside it as well (a point in the empty corner of an ellipse's box is not a hit).
+- Shift constrains in page points, not in fractions: a line or arrow snaps to the nearest of 0, 45, 90 degrees and so on with its length kept; a rectangle or ellipse takes the longer side on both axes.
+
+### 17.3 Commands
+
+**Desktop app.**
+- Tools > Line, Arrow, Rectangle, Circle: the tool is on (pressed) until one object is drawn, a click on Pointer, or Esc. A drag draws it in the layer under the pointer's start (the active layer if that is outside every frame), with a blue outline while dragging. A drag shorter than 3 page points draws nothing and leaves the tool on. The new object is selected and the tool is the Pointer again.
+- A click selects an object, dragging it moves it (it moves when the button is let go), Delete removes it, a double click or right-click Properties... opens the window with the line colour, width and style, the fill of a rectangle or ellipse, and the head length and a second head of an arrow. OK and Apply are one undo step each.
+- Add, Move, Edit and Delete of a drawn object are one undo step each ("Add drawn object", "Move drawn object", "Edit drawn object", "Delete drawn object").
+- The right-click menu of an object has Delete and Properties...; Cut, Copy, "Bring to the front" and "Push to the back" are shown greyed.
+- `sheaf-app --show shape:N` opens the window of the N-th object of the first graph (for pictures).
+
+**Command line** (`sheaf plot`, `sheaf export`, style option):
+- `--draw "KIND@X1,Y1,X2,Y2"`, repeatable: KIND is `line`, `arrow`, `rectangle` (or `rect`) or `ellipse` (or `circle`); the four numbers are fractions of the first layer's frame. The object is black, 1 pt, solid, unfilled. A value without `@`, with another kind or without four finite numbers is an error that quotes the value; no file is written. The objects are saved with `--save`.
+
+### 17.4 Origin project files
+
+An `.opj` file written here does not hold drawn objects. The writer says so in a warning that counts them per layer ("layer 1 has drawn objects (2 arrow, 1 ellipse) that an Origin project file written here cannot hold") and the `.opj.sheaf` companion keeps them. Reading drawn objects from `.opj` files is not done.
+
+### 17.5 Not done
+
+Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.

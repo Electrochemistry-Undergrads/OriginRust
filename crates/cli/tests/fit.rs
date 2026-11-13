@@ -284,7 +284,17 @@ fn regress_compare_and_rank_print_their_tables() {
     let (ok, out, err) = sheaf(&["fit", p, "--y", "noisy", "--regress", "x,decay"]);
     assert!(ok, "{err}");
     assert!(out.contains("Intercept") && out.contains("Prob>F"), "{out}");
-    let (ok, out, err) = sheaf(&["fit", p, "--y", "decay", "--model", "ExpDec1", "--compare", "linear"]);
+    // An exact exponential can fit to a residual of exactly 0 (it does on macOS on arm64), which
+    // leaves AICc undefined; a little fixed noise keeps the comparison meaningful on every machine.
+    let mut text = String::from("x,decay\n");
+    for i in 0..=20 {
+        let x = f64::from(i);
+        text.push_str(&format!("{x},{}\n", 3.0 + 7.0 * (-x / 4.0).exp() + 0.01 * (3.0 * x).sin()));
+    }
+    let noisy_decay = dir.join("decay.csv");
+    std::fs::write(&noisy_decay, text).unwrap();
+    let q = noisy_decay.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["fit", q, "--y", "decay", "--model", "ExpDec1", "--compare", "linear"]);
     assert!(ok, "{err}");
     assert!(out.contains("AICc:   ExpDec1 is preferred"), "{out}");
     let (ok, out, err) = sheaf(&["fit", p, "--y", "decay", "--rank", "ExpDec1,Gauss,ExpDec2"]);

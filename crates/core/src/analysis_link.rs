@@ -5,14 +5,17 @@
 //! column the run read changes, an Auto link is run again at once (inside the same undo step as the
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
-//! Only Smooth, Integrate and Find Peaks can be linked; the other tools run once.
+//! Smooth, Integrate, Find Peaks and the data manipulation tools (T23) can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use sheaf_calc::{PeakOptions, SmoothOptions};
+use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
 
-use crate::analysis::{AnalysisError, IntegrateSpec, OutputTarget, Report, Request, RowRange, Tool};
+use crate::analysis::{
+    AnalysisError, IntegrateSpec, MedianFilterSpec, OutputTarget, Report, Request, RowRange, SubtractLineSpec, Tool,
+    TranslateSpec,
+};
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
 
@@ -22,6 +25,10 @@ pub enum LinkTool {
     Smooth(SmoothOptions),
     Integrate(IntegrateSpec),
     FindPeaks(PeakOptions),
+    SubtractLine(SubtractLineSpec),
+    ReduceX(ReduceOptions),
+    Translate(TranslateSpec),
+    MedianFilter(MedianFilterSpec),
 }
 
 impl LinkTool {
@@ -30,6 +37,10 @@ impl LinkTool {
             Tool::Smooth(o) => Some(LinkTool::Smooth(*o)),
             Tool::Integrate(s) => Some(LinkTool::Integrate(*s)),
             Tool::FindPeaks(o) => Some(LinkTool::FindPeaks(*o)),
+            Tool::SubtractLine(s) => Some(LinkTool::SubtractLine(*s)),
+            Tool::ReduceX(o) => Some(LinkTool::ReduceX(*o)),
+            Tool::Translate(s) => Some(LinkTool::Translate(*s)),
+            Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
             _ => None,
         }
     }
@@ -39,6 +50,10 @@ impl LinkTool {
             LinkTool::Smooth(o) => Tool::Smooth(*o),
             LinkTool::Integrate(s) => Tool::Integrate(*s),
             LinkTool::FindPeaks(o) => Tool::FindPeaks(*o),
+            LinkTool::SubtractLine(s) => Tool::SubtractLine(*s),
+            LinkTool::ReduceX(o) => Tool::ReduceX(*o),
+            LinkTool::Translate(s) => Tool::Translate(*s),
+            LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
         }
     }
 }

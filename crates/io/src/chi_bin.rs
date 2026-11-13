@@ -293,6 +293,10 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
     if (1..10_000).contains(&model) {
         meta.push(("Instrument Model".to_string(), format!("CHI{model}")));
     }
+    // The third string is the Header text of the run (`Header: CV` in the text export).
+    if !strings[2].trim().is_empty() {
+        meta.push(("Header".to_string(), strings[2].trim().to_string()));
+    }
     let current_cols = |names_from: usize| -> Vec<HeaderCol> {
         (names_from..channels)
             .map(|c| HeaderCol::new(&if channels == 1 { "Current".to_string() } else { format!("i{}", c + 1) }, "A"))

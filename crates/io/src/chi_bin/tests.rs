@@ -17,6 +17,7 @@ struct Builder {
     data: Vec<Vec<f32>>,
     /// The layout of the older programs (flag word 0.0).
     legacy: bool,
+    header: String,
 }
 
 impl Builder {
@@ -29,6 +30,7 @@ impl Builder {
             words: Vec::new(),
             data: Vec::new(),
             legacy: false,
+            header: String::new(),
         };
         b.f(E_INIT, 0.0).u(MODEL, 627).date([2026, 10, 28, 17, 45, 56]);
         b
@@ -66,8 +68,8 @@ impl Builder {
 
     fn build(&self) -> Vec<u8> {
         let mut out = MAGIC.to_vec();
-        let mut strings = vec![self.code.as_str(), self.name.as_str()];
-        strings.extend(["", "", "", "", "", "", ""]);
+        let mut strings = vec![self.code.as_str(), self.name.as_str(), self.header.as_str()];
+        strings.extend(["", "", "", "", "", ""]);
         strings.push("A4440");
         assert_eq!(strings.len(), STRING_COUNT);
         for s in strings {
@@ -371,6 +373,20 @@ fn the_time_of_an_i_t_run_starts_at_zero_in_either_layout() {
 }
 
 #[test]
+fn the_header_text_of_the_run_is_kept_in_the_metadata() {
+    let mut b = Builder::new("CV", "Cyclic Voltammetry");
+    b.header = "CV".to_string();
+    b.f(E_INIT, 0.4).f(E_HIGH, 1.3).f(E_LOW, -0.35).f(INTERVAL, 0.02).f(POLARITY, 1.0);
+    b.channels(vec![vec![1e-6; 300]]);
+    let imp = import(&b.build());
+    let names: Vec<&str> = imp.meta.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(names[..4], ["Technique", "Date", "Instrument Model", "Header"]);
+    assert_eq!(meta(&imp, "Header"), "CV");
+    let empty = import(&cv_file(0.4, 1.3, -0.35, 0.02, true, 300, |_| 1e-6));
+    assert!(empty.meta.iter().all(|(k, _)| k != "Header"));
+}
+
+#[test]
 fn a_current_pinned_at_the_range_limit_is_reported_with_its_channel() {
     let n = 200;
     let mut b = Builder::new("i-t", "Amperometric i-t Curve");
@@ -592,6 +608,8 @@ fn same_run(bin: &Path, txt: &Path) {
     let from_txt = crate::chi::parse_chi(&crate::read_text_file(txt).unwrap(), &stem, &ChiOptions::default()).unwrap();
     assert_eq!(from_bin.technique, from_txt.technique);
     assert_eq!(from_bin.meta[1], from_txt.meta[1], "date");
+    let header_of = |imp: &ChiImport| imp.meta.iter().find(|(k, _)| k == "Header").cloned();
+    assert_eq!(header_of(&from_bin), header_of(&from_txt), "Header text");
     // The CHI1040C program writes the axis of its exports one step in (the first potential is
     // Init E plus a step, the first time one sample interval); the CHI627E program starts at Init E and
     // at 0. The reader follows the second. Such an export is only compared on its currents.

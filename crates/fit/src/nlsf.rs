@@ -250,7 +250,7 @@ impl Default for FitOptions {
 /// iterations were made.
 pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Result<FitReport, FitError> {
     let mut f = Fitter::new(func, x, y, opts)?;
-    for _ in 0..opts.max_iterations.max(1) {
+    for _ in 0..opts.max_iterations {
         if f.step().converged {
             break;
         }
@@ -608,7 +608,9 @@ impl<'a> Fitter<'a> {
             });
         }
         if status == FitStatus::MaxIterations {
-            warnings.push("the fit stopped at the maximum number of iterations before converging".into());
+            warnings.push(
+                "the fit stopped before converging (iteration limit reached, or no iterations were asked for)".into(),
+            );
         }
         if params.iter().any(|q| q.dependency.is_finite() && q.dependency > 0.9999) {
             warnings.push("some parameters are strongly dependent on each other (dependency above 0.9999)".into());

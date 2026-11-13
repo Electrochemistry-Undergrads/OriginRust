@@ -120,8 +120,14 @@ pub struct FitRequest {
     pub confidence_level: f64,
     /// Number of points of the fitted curve (ADR 0006: 1000).
     pub curve_points: usize,
+    /// X range of the fitted curve: `None` takes the range of the points that took part in the
+    /// fit (Origin's "Use Input Data Range"), `Some((from, to))` a range of one's own.
+    pub curve_range: Option<(f64, f64)>,
     /// Add the fitted curve to the graphs that show the source column.
     pub add_to_graphs: bool,
+    /// Make the legend of the graphs that receive the curve list it, also where the legend text
+    /// was written by hand (that text is dropped, so the legend is made from the plots again).
+    pub update_legend: bool,
     /// Bands around the fitted curve, written as extra columns of the curve sheet.
     pub bands: BandChoice,
     /// Confidence level of the bands (Origin's "Confidence Level for Curves", 0.95), kept apart
@@ -129,7 +135,8 @@ pub struct FitRequest {
     pub band_level: f64,
     /// Also draw the bands as dashed lines in the graphs that receive the fitted curve.
     pub plot_bands: bool,
-    /// Most iterations of a nonlinear fit (Origin's default 400). Ignored by linear and
+    /// Most iterations of a nonlinear fit (Origin's default 400); 0 makes none and reports the
+    /// starting values (what the NLFit window's Done button does). Ignored by linear and
     /// polynomial fits, which are solved in closed form.
     pub max_iterations: usize,
     /// Convergence tolerance of a nonlinear fit (Origin's default 1e-9).
@@ -149,7 +156,9 @@ impl FitRequest {
             weighting: FitWeighting::None,
             confidence_level: 0.95,
             curve_points: 1000,
+            curve_range: None,
             add_to_graphs: true,
+            update_legend: false,
             bands: BandChoice::None,
             band_level: 0.95,
             plot_bands: true,
@@ -378,8 +387,12 @@ impl Project {
         if !(request.band_level > 0.0 && request.band_level < 1.0) {
             return Err(FitRequestError::BadConfidence(request.band_level));
         }
-        if request.max_iterations == 0 {
-            return Err(FitRequestError::BadOption("the maximum number of iterations must be at least 1".into()));
+        if let Some((a, b)) = request.curve_range
+            && !(a.is_finite() && b.is_finite() && a < b)
+        {
+            return Err(FitRequestError::BadOption(format!(
+                "the X range of the fitted curve must run from a smaller to a larger number, not {a} to {b}"
+            )));
         }
         if !(request.tolerance > 0.0 && request.tolerance.is_finite()) {
             return Err(FitRequestError::BadOption(format!(
@@ -467,6 +480,7 @@ impl Project {
         if !(lo.is_finite() && hi.is_finite()) {
             return Err(FitError::TooFewPoints { have: 0, need: report.params.len().max(1) }.into());
         }
+        let (lo, hi) = request.curve_range.unwrap_or((lo, hi));
         let curve_x = linspace(lo, hi, request.curve_points);
         let curve_y: Vec<f64> = curve_x.iter().map(|x| (fitted.curve)(*x)).collect();
         let bands = if request.bands == BandChoice::None {
@@ -664,6 +678,9 @@ impl Project {
                         visible: true,
                         auto_color: false,
                     });
+                    if request.update_legend {
+                        layer.legend.text = None;
+                    }
                     // In a stacked layer the fitted curve moves with its data.
                     layer.plot_offset_mut(curve_y_id).follows = Some(id);
                     if request.plot_bands {
@@ -1561,9 +1578,23 @@ mod tests {
             Err(_) => 1,
         };
         assert!(iterations <= 1, "{iterations}");
+        // No iterations at all reports the starting values and says the fit did not converge.
+        let mut none = req.clone();
+        none.bands = BandChoice::None;
+        none.max_iterations = 0;
+        let o = p.fit(&none).unwrap();
+        assert_eq!(o.report.status, FitStatus::MaxIterations);
+        assert_eq!(o.report.stats.iterations.unwrap_or(0), 0);
+        // A curve of one's own X range.
+        let mut ranged = req.clone();
+        ranged.bands = BandChoice::None;
+        ranged.curve_range = Some((-5.0, 40.0));
+        let o = p.fit(&ranged).unwrap();
+        let cx = p.numeric(o.curve_x).unwrap();
+        assert_eq!((cx[0], cx[cx.len() - 1]), (-5.0, 40.0));
+        ranged.curve_range = Some((3.0, 3.0));
+        assert!(p.fit(&ranged).is_err());
         let mut bad = req.clone();
-        bad.max_iterations = 0;
-        assert!(p.fit(&bad).is_err());
         bad.max_iterations = 400;
         bad.tolerance = 0.0;
         assert!(p.fit(&bad).is_err());

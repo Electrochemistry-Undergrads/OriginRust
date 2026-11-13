@@ -660,46 +660,142 @@ fn the_fit_window_offers_bands_and_iteration_controls() {
 }
 
 #[test]
-fn the_fit_window_pages_reach_the_function_the_parameters_and_the_bounds() {
+fn the_fit_window_has_origins_tabs_pages_and_lower_panel() {
     let mut h = start(vec![data_file("fitpages")]);
     let book = project(&h).workbooks().next().unwrap().id;
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
     settle(&mut h);
-    // The title names the function; the left list has Origin's pages.
+    // The title names the function; the tabs run along the top, the pages stand at the left of
+    // Settings, and the lower panel has its own tabs.
     h.get_by_label("NLFit (Gauss)");
-    for page in ["Function Selection", "Data Selection", "Fitted Curves", "Advanced", "Code", "Parameters", "Bounds"] {
+    for tab in ["Settings", "Code", "Parameters", "Bounds"] {
+        h.get_by_label(tab);
+    }
+    for page in ["Function Selection", "Data Selection", "Fitted Curves", "Find X/Y", "Advanced", "Output"] {
         h.get_by_label(page);
     }
-    // The Category drop-down offers the closed-form fits too.
+    for tab in ["Fit Curve", "Residual", "Formula", "Messages"] {
+        h.get_by_label(tab);
+    }
+    // The Function Selection page holds the Category drop-down, which offers the closed-form fits too.
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Peak Functions")).click();
     settle(&mut h);
     click(&mut h, "Polynomial Fit");
     h.get_by_label("NLFit (Polynomial)");
-    click(&mut h, "Function Selection");
     h.get_by_label("Order");
-    // The Parameters page lists the parameters of the polynomial; Bounds is greyed for it.
+    // The Parameters tab lists the parameters of the polynomial; Bounds is greyed for it.
     click(&mut h, "Parameters");
     h.get_by_label("Intercept");
     click(&mut h, "Bounds");
     assert!(h.query_by_label_contains("no bounds").is_some());
-    // A nonlinear function brings its parameters to the Bounds page.
+    // A nonlinear function brings its parameters to the Bounds tab.
+    click(&mut h, "Settings");
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Polynomial Fit")).click();
     settle(&mut h);
     click(&mut h, "Peak Functions");
+    click(&mut h, "Bounds");
     h.get_by_label("Lower Bounds");
-    // Data Selection holds the weights; Code shows the formula.
+    // Data Selection holds the weights, Fitted Curves the curve options; Code shows the formula.
+    click(&mut h, "Settings");
     click(&mut h, "Data Selection");
     h.get_by_label("Weights");
+    click(&mut h, "Fitted Curves");
+    h.get_by_label("Number of Points");
+    h.get_by_label("Use Input Data Range");
+    h.get_by_label("Update Legend on Source Graph");
+    click(&mut h, "Find X/Y");
+    click(&mut h, "Output");
     click(&mut h, "Code");
     assert!(h.query_all_by_label_contains("y = ").count() >= 1);
-    // Fit tries the fit and reports; nothing is written until Done.
+    // (The data has four points: too few for a peak function, so the rest uses the polynomial.)
+    click(&mut h, "Settings");
+    click(&mut h, "Function Selection");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Peak Functions")).click();
+    settle(&mut h);
+    click(&mut h, "Polynomial Fit");
+    // The lower panel draws the data and the curve; the Formula tab shows the formula; the arrow folds it.
+    let (data, curve, error) = h.state().fit.as_ref().unwrap().preview_for_test().expect("a preview");
+    assert!(data >= 4 && curve > 100, "{data} {curve} {error:?}");
+    click(&mut h, "Residual");
+    assert!(h.query_by_label_contains("Residuals at the values").is_some());
+    click(&mut h, "Formula");
+    assert!(h.query_by_label_contains("Parameters: ").is_some());
+    click(&mut h, "Hide lower panel");
+    assert!(h.query_by_label("Fit Curve").is_none(), "the lower panel is folded away");
+    click(&mut h, "Show lower panel");
+    h.get_by_label("Fit Curve");
+    // Fit until converged tries the fit and reports; nothing is written until Fit or Done.
     let before = project(&h).workbooks().next().unwrap().sheets.len();
-    click(&mut h, "Fit");
-    assert!(h.state().fit.is_some(), "Fit leaves the window open");
+    click(&mut h, "Fit until converged");
+    assert!(h.state().fit.is_some(), "the trial leaves the window open");
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), before, "the trial wrote nothing");
+    assert!(!h.state().fit.as_ref().unwrap().log_for_test().is_empty(), "the Messages tab has the report");
     click(&mut h, "Cancel");
     assert!(h.state().fit.is_none());
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), before, "Cancel writes nothing");
+}
+
+#[test]
+fn fit_finishes_the_iterations_and_writes_done_writes_the_table_as_it_is() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fitbuttons-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("decay.csv");
+    let mut csv = String::from(
+        "t,y
+",
+    );
+    for i in 0..20 {
+        let x = i as f64 * 0.5;
+        csv += &format!(
+            "{x},{}
+",
+            1.0 + 4.0 * (-x / 3.0).exp() + 0.02 * (37.0 * (i + 1) as f64).sin()
+        );
+    }
+    std::fs::write(&path, csv).unwrap();
+    let open = |h: &mut Harness<'static, SheafApp>| {
+        let book = project(h).workbooks().next().unwrap().id;
+        let ctx = h.ctx.clone();
+        h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+        settle(h);
+        h.state_mut().fit.as_mut().unwrap().choose_for_test("ExpDec1");
+        settle(h);
+    };
+    let sheet_count = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheets.len();
+
+    // Fit after one iteration finishes the rest, writes the results and closes, in one undo step.
+    let mut h = start(vec![path.clone()]);
+    open(&mut h);
+    let before = sheet_count(&h);
+    click(&mut h, "1 Iteration");
+    click(&mut h, "Fit");
+    assert!(h.state().fit.is_none(), "Fit closes the window");
+    assert_eq!(sheet_count(&h), before + 3, "parameters, statistics and curve sheets");
+    let b = project(&h).workbooks().next().unwrap();
+    let params = b.sheets.iter().find(|s| s.column_by_name("Value").is_some()).unwrap();
+    let t = params.column_by_name("Value").unwrap().numeric().unwrap()[2];
+    assert!((t - 3.0).abs() < 0.3, "t1 = {t}: the fit went on to convergence");
+    assert_eq!(h.state().doc.undo_label(), Some("Fit"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(sheet_count(&h), before);
+
+    // Done after one iteration writes the values of the table without iterating further.
+    let mut h = start(vec![path]);
+    open(&mut h);
+    click(&mut h, "1 Iteration");
+    let one = h.state().fit.as_ref().unwrap().rows_for_test();
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_none(), "Done closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    let params = b.sheets.iter().find(|s| s.column_by_name("Value").is_some()).unwrap();
+    let values = params.column_by_name("Value").unwrap().numeric().unwrap().to_vec();
+    for (v, r) in values.iter().zip(&one) {
+        assert!((v - r.2).abs() <= 1e-9 * r.2.abs().max(1.0), "{v} vs {}", r.2);
+    }
 }
 
 #[test]
@@ -742,8 +838,8 @@ fn the_fit_window_steps_one_iteration_runs_to_convergence_and_reverts() {
     let msg = h.state().fit.as_ref().unwrap().message_for_test();
     assert!(msg.contains("Iteration 1") || msg.contains("converged"), "{msg}");
 
-    // Fit runs from there until it converges.
-    click(&mut h, "Fit");
+    // Fit until converged runs from there until it converges, and keeps the window.
+    click(&mut h, "Fit until converged");
     let done = rows(&h);
     let msg = h.state().fit.as_ref().unwrap().message_for_test();
     assert!(msg.contains("converged") && !msg.contains("did not"), "{msg}");

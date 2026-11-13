@@ -29,7 +29,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1326 passed on `main` at `e525575` (2026-11-13). Parity table: see `python tools/parity-count.py`; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1326 passed on `main` at `e525575` (2026-11-13). Parity table: 43 done, 117 partial, 70 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 
@@ -49,14 +49,18 @@ they are briefs T20 and T21 now.
 Merged from briefs: T15 items 4-6 (`e525575`: Simplex, Compare Models checked on 24 Origin pairs, Rank Models, multiple linear regression checked on 6 Origin cases, linear fit with X error by York's method, not compared with Origin), T16 item 2 (`94063b4`: Spline as Origin, natural cubic for increasing X up to 900 points, B-spline and Bezier), T08 remaining (`d8d1416`: `sum` is a running sum and `count` counts missing cells as in Origin, text values and string functions, local `now()`), T15 items 1-3 (`704a1d6`: direct weights, scale-errors switch, multi-dataset and global fits, quick fits), owner-reported `.opj` graph fix (`e908922`: text objects placed from their stored box as Origin turns them, group colours from the records, objects off the page hidden; opj-format.md 10.4, 10.9), T12 items 3-5 and a flat pie (`plot-types-more`: stacked and 100 % stacked area, fill area, histogram, box chart, bubble, colour mapped, pie; Origin's per-template colour lists), T06 (`opj-graph-rest`: X offsets, waterfall as offsets, month/day/year ticks, window places in written `.opj`), T10 (`worksheet-ops`: insert/delete rows, columns and cells, move, hide, width, Origin's sort rules, nested sort, masks, a live filter, transpose/stack/unstack/split/reduce, categorical, Group and Subject), T11 (`axis-scales`: eight more scales, Reverse, First Tick, Prefix/Suffix, an axis break, special ticks, tick label formula, minor tick labels, tick colour, Exchange X-Y, the axis dialog's Apply To and Bottom/Top/Left/Right pages), T12 items 1-2 (`d0dbb37`), T03 (`859c78e`; analysis results that recalculate are named in `.opj` save warnings), T05 (`c32e585`), T21 (`b015f97`), T20 (`522c625`), T14 items 1-4 (`c44a1a6`), T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
 (`bbdb60a`), T09 (`20c37e1`), T16 part (`b967898`). See each brief's Status for what is left.
 
-Stale worktrees of merged branches (`.claude/worktrees/agent-*`, `wf_*`, `merge-*`, `origin-diff-4`,
-`opj-graph-write2`, `export-options`, `graph-analysis`) and their `target/wt-*` build folders can be
-removed (`git worktree remove`, then `tools/clean-target.sh`); the disk is at 94 %.
+Worktrees left on 2026-11-13: `axis-range2` and `stats-breadth` (session "Handoff.md token
+optimization", free for reuse with their build folders `target/wt-axis` and `target/wt-stats`),
+`axis-scales` and `stats-more2` (session "Rust prompt handoff"), the matrix worktree (keep), and
+`merge-05b`, an unfinished merge of branches that are all on `main` already (abort it, do not push it).
+The disk is about 96 % full; reuse a worktree and its build folder instead of making new ones.
 
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
-analysis: T15 (in flight), T13, T11, T12 items 3-6, T06, T10, T19, then the rest. All earlier "open questions" are assigned to the in-flight branches
+analysis: T13 and T14 items 5-6 (with "Rust prompt handoff"), T12 item 6 (polar, ternary, radar),
+merging the matrix branch (asks the owner first: it is another session's unpushed work), T19, T04, then
+the leftovers named in each brief's Status. All earlier "open questions" are assigned to the in-flight branches
 above or to briefs; none waits on the owner.
 
 ## Commands that verify the state

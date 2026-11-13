@@ -1,6 +1,6 @@
 # T16: Small numeric and behaviour differences
 
-**Status:** items 1 and 5 done, item 4 investigated (not fixed, findings in statistics.md); 2, 3, 6 open. **Size:** S each; independent, one commit each. **Branch:** `small-diffs`.
+**Status:** items 1 and 5 done, item 4 investigated, merged (`b967898`) (not fixed, findings in statistics.md); 2, 3, 6 open. **Size:** S each; independent, one commit each. **Branch:** `small-diffs`.
 **Model:** Sonnet (Haiku to run the suites). **Detail:** audit C "Missing objects", D "Numerically
 or behaviourally different".
 

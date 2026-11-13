@@ -1,6 +1,6 @@
 # T02: Menu labels, shortcuts and context menus that differ from Origin
 
-**Status:** done on branch menu-diffs, not merged (items 1-7, 9, 10 done; 8 kept; see Result). **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
+**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result). **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
 **Detail:** audit section A, bullet "Different" (`docs/audit/origin-differences-2026-11-12.md`).
 **Spec:** `docs/spec/gui-look.md` sections 1 and 3, `docs/spec/ui-command-map.md`.
 

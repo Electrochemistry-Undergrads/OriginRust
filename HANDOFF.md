@@ -29,8 +29,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1081 passed on the merged T07 branch, which held all of `main` except the licence commit
-  (`7649990`, metadata only), 2026-11-12 night. Parity table: 41 done, 109 partial, 80 missing of 230 rows; P0 31 / 70 / 0
+- Tests: 1097 passed on the T16 branch merged with `main` at `20c37e1` (2026-11-13); `b967898`
+  adds only a doc conflict resolution on top. Parity table: 41 done, 109 partial, 80 missing of 230 rows; P0 31 / 70 / 0
   (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
@@ -46,11 +46,11 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `export-margin` | 05b367c2 | Auto Apply in the analysis frame; export margin options | started |
 | `text-numeric` | 05b367c2 | Mixed text/number import kept as Origin's Text & Numeric | started |
 | (several) | `originrust-3a` | Matrices, contour plots, heatmaps | running |
-| `small-diffs` | "Rust prompt handoff" | T16 items 1, 4, 5 (Mann-Whitney print, Kendall/KS/Lilliefors p, histogram bins; crates/calc) | started 23:30 |
 
-Merged by "Rust prompt handoff" on 2026-11-12 night: T01 greyed menus with code (`a2fb77b`), T08 formula
-functions (`04a8a80`), T07 worksheet export as Origin's expASC (`826f390`), T17 doc fixes (`e209068`).
-See each brief's Status for what is left.
+Merged by "Rust prompt handoff" on 2026-11-12/13: T01 greyed menus with code (`a2fb77b`), T08 formula
+functions (`04a8a80`), T07 worksheet export as Origin's expASC (`826f390`), T17 doc fixes (`e209068`),
+T02 menu keys and labels (`bbdb60a`), T09 Set Values dialog (`20c37e1`), T16 Mann-Whitney print and
+histogram bin rule (`b967898`). See each brief's Status for what is left.
 
 Stale worktrees of merged branches (`merge-keys-nlfit`, `merge-pub-export`, `nlfit-steps`,
 `handoff-rule`, `origin-diff-4`, `worktree-agent-*`) can be removed by whoever merges next

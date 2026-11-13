@@ -79,6 +79,10 @@ pub enum IoError {
     #[error("'{}' is not a readable Origin project (.opj): {reason}", path.display())]
     OpjFormat { path: PathBuf, reason: String },
 
+    /// The file is not an Origin Unicode project (.opju) that can be read.
+    #[error("'{}' is not a readable Origin Unicode project (.opju): {reason}", path.display())]
+    OpjuFormat { path: PathBuf, reason: String },
+
     /// The project holds something that an Origin project cannot store, or a name Origin would refuse.
     #[error("cannot write an Origin project (.opj): {reason}")]
     OpjWrite { reason: String },

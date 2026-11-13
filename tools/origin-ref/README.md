@@ -60,3 +60,15 @@ kept here), the case lists `cases2..5.json` and `stats3-make-fixture.py`, which 
 `friedman` run with `rt:=<new name:=...>`; `grubbs` and `qtest` need `alpha` and the output variables passed
 explicitly. Report sheets are read cell by cell (`wcol(c)[r]`) because `GetWorksheet` does not return them.
 What the runs showed is in `docs/spec/statistics.md`, section 10.
+
+## Origin's own dialogs (lists of controls, defaults, combo box items)
+
+`origin-dialog.ps1` opens one of Origin's dialogs in a temporary visible Origin (same lock) and writes, per step, a picture
+of the dialog, a list of its controls (class, text, position, tick state) and the items of every combo box. Either a
+LabTalk command that opens the dialog (`-Command 'impasc fname:="%WORK%file.txt" -d;'`, which blocks, so the helper
+`origin-dialog-watch.ps1` does the looking and closes the dialog with Escape) or a double-click on the main window
+(`-DoubleClick x,y`, for example on a column header to open Column Properties). `-StepsFile` lists steps as
+`name=actions`; actions are `@L:x,y` click, `@D:x,y` double click, `@S:x,y,n` mouse wheel, `@C:i,j` pick item j of the
+i-th combo box (and tell the dialog), `@T:i,text` set the i-th edit box, `@B:text` click a button, `@W:ms` wait, or
+SendKeys text; positions are pixels from the top-left corner of the dialog. `-After` runs LabTalk after the dialog closed
+(`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin.

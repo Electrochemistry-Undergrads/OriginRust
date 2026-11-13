@@ -3111,6 +3111,7 @@ dependencies = [
  "rfd",
  "sheaf-calc",
  "sheaf-core",
+ "sheaf-expr",
  "sheaf-io",
  "sheaf-plot",
 ]

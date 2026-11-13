@@ -56,7 +56,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T06](T06-opj-remaining-graph-features.md) | `.opj` writer: X offsets, bar overlap, waterfall, date ticks, window places | L | open, needs Origin probes |
 | [T07](T07-worksheet-export-and-copy.md) | Worksheet export and clipboard as Origin (missing `--`, formats, label rows) | S | done (`826f390`); clipboard copy left |
 | [T08](T08-formula-functions.md) | Missing Set Column Values functions in `sheaf-expr` | M | groups 1-3, 5 done (`04a8a80`); strings, cross-sheet, `sum`/`count` as Origin left |
-| [T09](T09-set-values-dialog.md) | Set Column Values dialog in Origin's layout | M | open |
+| [T09](T09-set-values-dialog.md) | Set Column Values dialog in Origin's layout | M | done on `set-values-dialog`, not merged |
 | [T10](T10-worksheet-operations.md) | Insert/delete rows, move/hide columns, mask, sort column, transpose | L | open, split into commits |
 | [T11](T11-axis-scales-and-features.md) | More axis scales and axis-dialog features | L | open, after `axis-range` merges |
 | [T12](T12-plot-types.md) | Stacked/horizontal columns, histogram, box, pie, bubble, polar | L | open |

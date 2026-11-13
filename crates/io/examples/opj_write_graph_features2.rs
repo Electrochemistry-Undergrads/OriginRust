@@ -1,5 +1,5 @@
 //! Writes sample projects for the second batch of graph features that are stored in the .opj file
-//! (area plots, tick label number formats, plot groups of column plots, panels, X stack offsets),
+//! (area plots, tick label number formats, plot groups of column plots, panels),
 //! for checking them in Origin 2016 with `tools/origin-ref/opj-verify-graph-features.ps1`.
 //!
 //! Usage: `cargo run -p sheaf-io --example opj_write_graph_features2 -- <output folder>`

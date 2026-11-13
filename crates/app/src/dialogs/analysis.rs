@@ -68,6 +68,10 @@ pub enum AnalysisKind {
     KsTwoSample,
     MedianTest,
     Friedman,
+    /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
+    AverageCurves,
+    Intersect,
+    PolygonArea,
 }
 
 impl AnalysisKind {
@@ -118,6 +122,9 @@ impl AnalysisKind {
             AnalysisKind::KsTwoSample => "Two Sample Kolmogorov-Smirnov Test...",
             AnalysisKind::MedianTest => "Mood's Median Test...",
             AnalysisKind::Friedman => "Friedman ANOVA...",
+            AnalysisKind::AverageCurves => "Average Multiple Curves...",
+            AnalysisKind::Intersect => "Intersect...",
+            AnalysisKind::PolygonArea => "Polygon Area...",
         }
     }
 
@@ -157,6 +164,9 @@ impl AnalysisKind {
             "ks2" => AnalysisKind::KsTwoSample,
             "mediantest" => AnalysisKind::MedianTest,
             "friedman" => AnalysisKind::Friedman,
+            "average-curves" => AnalysisKind::AverageCurves,
+            "intersect" => AnalysisKind::Intersect,
+            "polygon-area" => AnalysisKind::PolygonArea,
             _ => return None,
         })
     }
@@ -393,6 +403,7 @@ pub struct AnalysisDialog {
     reference: usize,
     common_only: bool,
     stats: StatsOptions,
+    curves: super::math_curves::CurveOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
     /// (the factor columns may hold text).
     sheet_columns: Vec<(ColumnId, String)>,
@@ -538,6 +549,7 @@ impl AnalysisDialog {
             chain_fit: None,
             chain_fit_linear: true,
             stats,
+            curves: Default::default(),
             sheet_columns,
             problem: None,
             picker: None,
@@ -581,6 +593,9 @@ impl AnalysisDialog {
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
+            AnalysisKind::AverageCurves => self.curves.average_tool(),
+            AnalysisKind::Intersect => self.curves.intersect_tool(),
+            AnalysisKind::PolygonArea => Tool::PolygonArea,
             AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
                 method: match self.smooth_kind {
                     SmoothKind::SavitzkyGolay => SmoothMethod::SavitzkyGolay { poly_order: self.smooth_poly },
@@ -1378,6 +1393,14 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::AverageCurves => self.curves.average_ui(ui, self.columns.len()),
+            AnalysisKind::Intersect => self.curves.intersect_ui(ui),
+            AnalysisKind::PolygonArea => {
+                ui.weak(
+                    "Each input column is a closed curve: its last point is joined to its first. The area is \
+                     reported with its sign, so a curve that runs counterclockwise is positive.",
+                );
+            }
             AnalysisKind::Normality => {
                 let st = &mut self.stats;
                 ui.horizontal(|ui| {
@@ -1429,6 +1452,9 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "kstest2",
             AnalysisKind::MedianTest => "mediantest",
             AnalysisKind::Friedman => "friedman",
+            AnalysisKind::AverageCurves => "avecurves",
+            AnalysisKind::Intersect => "intersect",
+            AnalysisKind::PolygonArea => "polyarea",
         }
     }
 
@@ -1471,6 +1497,9 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "Compare two samples by their distribution functions",
             AnalysisKind::MedianTest => "Compare the medians of several samples (Mood's median test)",
             AnalysisKind::Friedman => "Compare treatments in repeated blocks by ranks within each row",
+            AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
+            AnalysisKind::Intersect => "Find the points where two curves meet",
+            AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
         }
     }
@@ -1518,6 +1547,11 @@ impl AnalysisDialog {
                 "Counts around the median, the chi-square statistic and its p-value in a new sheet"
             }
             AnalysisKind::Friedman => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
+            AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
+            AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
+            AnalysisKind::PolygonArea => {
+                "Area, signed area, centroid, perimeter and a self-intersection flag in a new sheet"
+            }
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
         }
     }

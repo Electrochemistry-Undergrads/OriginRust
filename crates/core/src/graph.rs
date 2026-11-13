@@ -192,6 +192,67 @@ pub struct Layer {
     /// layer stand side by side as one group (graphing spec section 14.4).
     #[serde(default, skip_serializing_if = "BarSpacing::is_default")]
     pub bars: BarSpacing,
+    /// The coordinate system the plots are drawn in: the usual rectangular axes, or a circle with
+    /// angle and radius (graphing spec section 14.18).
+    #[serde(default, skip_serializing_if = "Coords::is_cartesian")]
+    pub coords: Coords,
+}
+
+/// The coordinate system of a layer.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Coords {
+    /// Rectangular X and Y axes.
+    #[default]
+    Cartesian,
+    /// A circle: the angle runs round it, the radius from its centre to its edge. The plots are
+    /// ordinary line and symbol plots whose two columns are read as angle and radius.
+    Polar(PolarCoords),
+}
+
+impl Coords {
+    pub fn is_cartesian(&self) -> bool {
+        *self == Coords::Cartesian
+    }
+
+    /// The polar settings, `None` for a rectangular layer.
+    pub fn polar(&self) -> Option<&PolarCoords> {
+        match self {
+            Coords::Polar(p) => Some(p),
+            Coords::Cartesian => None,
+        }
+    }
+}
+
+/// Which column of a plot holds the radius in a polar layer.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RadiusColumn {
+    /// Origin's "theta(X) r(Y)": the angle comes from the X column, the radius from Y.
+    #[default]
+    Y,
+    /// Origin's "r(X) theta(Y)": the radius comes from the X column, the angle from Y.
+    X,
+}
+
+/// Settings of a polar layer (graphing spec section 14.18).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PolarCoords {
+    /// Which column holds the radius.
+    #[serde(default)]
+    pub radius: RadiusColumn,
+    /// Where angle 0 is, in degrees counter-clockwise from the right (3 o'clock). Origin's default 0.
+    #[serde(default)]
+    pub zero_deg: f64,
+    /// True when the angle grows clockwise. Origin's default is counter-clockwise.
+    #[serde(default)]
+    pub clockwise: bool,
+}
+
+impl Default for PolarCoords {
+    fn default() -> Self {
+        PolarCoords { radius: RadiusColumn::Y, zero_deg: 0.0, clockwise: false }
+    }
 }
 
 /// How the bars of the column plots of a layer share the room at one X position (Origin's "Gap
@@ -1435,5 +1496,38 @@ mod tests {
         let back: Plot = serde_json::from_str(&json).unwrap();
         assert_eq!(back.group, Some(2));
         layer.plots.push(back);
+    }
+}
+
+#[cfg(test)]
+mod polar_tests {
+    use super::*;
+    use crate::template::Template;
+
+    #[test]
+    fn a_layer_without_coords_is_rectangular_and_polar_settings_round_trip() {
+        let g = Template::Line.new_graph(WindowId(1), "G");
+        let json = serde_json::to_string(&g.layers[0]).unwrap();
+        assert!(!json.contains("coords"), "rectangular layers are written as before");
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.coords, Coords::Cartesian);
+        let mut polar = Template::PolarRTheta.new_graph(WindowId(1), "P").layers.remove(0);
+        if let Coords::Polar(c) = &mut polar.coords {
+            c.zero_deg = 90.0;
+            c.clockwise = true;
+        }
+        let back: Layer = serde_json::from_str(&serde_json::to_string(&polar).unwrap()).unwrap();
+        assert_eq!(back, polar);
+        let c = back.coords.polar().unwrap();
+        assert_eq!((c.radius, c.zero_deg, c.clockwise), (RadiusColumn::X, 90.0, true));
+    }
+
+    #[test]
+    fn the_polar_templates_have_names_for_the_command_line() {
+        assert_eq!(Template::from_name("polar"), Some(Template::Polar));
+        assert_eq!(Template::from_name("polar-r-theta"), Some(Template::PolarRTheta));
+        let l = &Template::Polar.new_graph(WindowId(1), "P").layers[0];
+        assert_eq!(l.coords.polar().map(|c| c.radius), Some(RadiusColumn::Y));
+        assert!(l.x_axis.major_grid.is_some() && l.y_axis.major_grid.is_some(), "rings and spokes");
     }
 }

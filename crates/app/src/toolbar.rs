@@ -343,7 +343,7 @@ fn build(bar: Bar) -> Vec<Item> {
             g(PlotBox, "Box Chart"),
             g(PlotHistogram, "Histogram"),
             g(PlotBubble, "Bubble"),
-            g(PlotPolar, "Polar theta(X) r(Y)"),
+            b(PlotPolar, "Polar theta(X) r(Y)", Cmd::Plot(Template::Polar), "Polar theta(X) r(Y)"),
             g(PlotTernary, "Ternary"),
             g(PlotRadar, "Radar"),
         ],

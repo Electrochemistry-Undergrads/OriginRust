@@ -14,6 +14,7 @@ use crate::fonts::TextMeasurer;
 use crate::hit;
 use crate::legend;
 use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
+use crate::polar;
 use crate::scene::{
     Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
 };
@@ -203,12 +204,22 @@ fn group_geometry(
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
         resolve_dim(project, axis, dim, &sources)
     };
-    let (root_x, root_y) = (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis));
+    let (root_x, root_y) = if rl.coords.polar().is_some() {
+        (polar::angle_axis(&rl.x_axis), shared(Dim::Y, &rl.y_axis))
+    } else {
+        (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
+    };
     let axes: Vec<(ResolvedAxis, ResolvedAxis)> = members
         .iter()
         .map(|&i| {
             let l = &g.layers[i];
-            let x = if shares(i, Dim::X) { root_x.clone() } else { own(i, Dim::X, &l.x_axis) };
+            let x = if l.coords.polar().is_some() {
+                polar::angle_axis(&l.x_axis)
+            } else if shares(i, Dim::X) {
+                root_x.clone()
+            } else {
+                own(i, Dim::X, &l.x_axis)
+            };
             let y = if shares(i, Dim::Y) { root_y.clone() } else { own(i, Dim::Y, &l.y_axis) };
             (x, y)
         })
@@ -238,7 +249,8 @@ fn group_geometry(
                 Some((sx, sy)) => stack::front_frame(clip, pds[i].members, sx, sy),
                 None => clip,
             };
-            (i, LayerGeometry { frame, clip, x, y })
+            let polar = g.layers[i].coords.polar().map(|p| polar::PolarMap::new(frame, p));
+            (i, LayerGeometry { frame, clip, x, y, polar })
         })
         .collect()
 }
@@ -261,6 +273,18 @@ impl LabelEdges {
 fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: &ResolvedAxis, m: &dyn TextMeasurer) {
     let mut scratch = Vec::new();
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
+    if let Some(p) = layer.coords.polar() {
+        // The circle and the angle labels round it.
+        let geom =
+            LayerGeometry { frame: f, clip: f, x: x.clone(), y: y.clone(), polar: Some(polar::PolarMap::new(f, p)) };
+        let paint = AxisPaint::new(xa, None);
+        let (l, t, r, b) = polar::draw_angle_axis(&mut scratch, xa, &paint, &geom, m);
+        e.left = e.left.min(l);
+        e.top = e.top.min(t);
+        e.right = e.right.max(r);
+        e.bottom = e.bottom.max(b);
+        return;
+    }
     let x_size = xa.title_font.size_pt;
     match xa.side {
         AxisSide::Normal => {
@@ -440,7 +464,11 @@ fn layer_scene(
         y_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.y_axis.clone() };
         (&x_axis, &y_axis)
     } else {
-        draw_grid(&mut scene.grid, layer, geom);
+        if geom.polar.is_some() {
+            polar::draw_grid(&mut scene.grid, layer, geom);
+        } else {
+            draw_grid(&mut scene.grid, layer, geom);
+        }
         (&layer.x_axis, &layer.y_axis)
     };
     match waterfall {
@@ -474,6 +502,16 @@ fn layer_scene(
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
+    if geom.polar.is_some() {
+        let start = out.len();
+        polar::draw_angle_axis(out, xa, &xp, geom, m);
+        rec(objects, out, start, ObjectKind::XAxis, &[]);
+        let start = out.len();
+        polar::draw_radius_axis(out, ya, &yp, geom, m);
+        rec(objects, out, start, ObjectKind::YAxis, &[]);
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
@@ -517,6 +555,25 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::YTitle, &[]);
+    draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+    scene
+}
+
+/// The legend of a layer (when it lists its own plots) and its free text labels.
+fn draw_legend_and_labels(
+    out: &mut Vec<Item>,
+    objects: &mut Vec<SceneObject>,
+    project: &Project,
+    g: &Graph,
+    index: usize,
+    f: Rect,
+    pds: &[PlotData],
+    m: &dyn TextMeasurer,
+) {
+    let layer = &g.layers[index];
+    let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
+        hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
+    };
     if layer.legend.scope == LegendScope::Layer {
         let entries: Vec<&PlotData> = pds.iter().collect();
         let start = out.len();
@@ -535,7 +592,6 @@ fn layer_scene(
         text::place(out, m, &label.text, &label.font, size, pos, Anchor::Start, label.rotation_deg);
         rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
-    scene
 }
 
 // ----- axis colors ---------------------------------------------------------------------------
@@ -553,17 +609,17 @@ fn plot_color(pds: &[PlotData]) -> Option<Color> {
 
 /// The colors an axis is drawn in: its own, or that of the layer's first plot when the axis
 /// follows the plot (and the layer has one).
-struct AxisPaint {
+pub(crate) struct AxisPaint {
     /// Axis line and ticks.
-    line: Color,
+    pub line: Color,
     /// The tick label font, in its final color.
-    labels: Font,
+    pub labels: Font,
     /// The title font, in its final color.
-    title: Font,
+    pub title: Font,
 }
 
 impl AxisPaint {
-    fn new(axis: &Axis, plot: Option<Color>) -> AxisPaint {
+    pub(crate) fn new(axis: &Axis, plot: Option<Color>) -> AxisPaint {
         let follow = plot.filter(|_| axis.color_follows_plot);
         let title_follow = plot.filter(|_| axis.title_color_follows_plot);
         AxisPaint {

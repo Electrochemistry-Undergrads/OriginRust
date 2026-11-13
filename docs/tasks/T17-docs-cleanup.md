@@ -1,6 +1,8 @@
 # T17: Stale spec paragraphs and parity counts
 
-**Status:** open. **Size:** S. **Branch:** `docs-fix` (or commit on `main` directly if nothing else
+**Status:** items 1, 2, 5, 6 done on 2026-11-12 (gui-look 7 rewritten, parity row fixed, counts
+unchanged at 41/109/80, ROADMAP milestone 6 reworded). Items 3 and 4 wait for `axis-range` and
+`text-numeric`. **Size:** S. **Branch:** `docs-fix` (or commit on `main` directly if nothing else
 merges at the time). **Model:** Haiku or Sonnet. Docs only; no code.
 
 1. `docs/spec/feature-parity.md` section 7 says peak results lack area percent and FWHM; both exist

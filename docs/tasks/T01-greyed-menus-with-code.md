@@ -1,6 +1,6 @@
 # T01: Enable greyed menu items whose feature already exists
 
-**Status:** open. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
+**Status:** done, merged to main (`a2fb77b`); see "Left" for what remains. **Size:** M. **Branch:** `menus-live`. **Model:** Sonnet.
 
 ## Goal
 
@@ -50,4 +50,29 @@ The wired items are live, each has a UI test, checks pass, feature-parity rows u
 
 ## Left
 
-(fill in)
+Wired (each has a UI test in `ui_tests.rs`): Plot > Multi-Panel > Vertical 2 Panel / Horizontal 2 Panel /
+4 Panel / 9 Panel (`Cmd::PlotPanels`, `PanelLayout::grid`, one panel per selected Y column), Plot > Symbol >
+Y Error (`Cmd::PlotYError`, scatter; plots anyway and says so when no Y error column follows),
+Graph > Add Error Bars... (`Cmd::AddErrorBars`, no dialog: every plot of the layer without error bars takes
+the Y error column that follows its Y column), Graph > Legend > Update Legend and the same item of the
+legend's right-click menu (`GraphOp::UpdateLegend`), Window > Refresh F5 (`Cmd::Refresh`), Worksheet > Sort
+Range and Sort Columns, Ascending/Descending (`Project::sort_range`, `Project::sort_columns` in core).
+
+Left greyed, and why:
+
+- Multi-Panel > Stack... and Multiple Panels by Label...: Stack is a dialog with the options of graphing.md
+  15.6; the label variant needs a column-label grouping. Both are new UI.
+- Sort Range / Sort Columns > Custom...: needs the nested-key dialog (also Sort Worksheet > Custom...).
+
+Differences from Origin that were not measured (use `tools/origin-ref/` before relying on them):
+
+- Add Error Bars... has no dialog; Origin asks for the column. A dialog that picks any column needs a
+  list of plot rows and the column chooser of Plot Details.
+- Update Legend: Origin's exact rule for custom text is not measured; Sheaf keeps custom lines, drops the
+  lines of plots that are gone and appends the automatic line of each plot the text does not mention.
+- Sort Range works on whole selected columns (rows ordered by the leftmost); a cell-range selection that
+  covers only some rows is not passed on (the menu context has only the selected columns).
+- Refresh recalculates the Manual columns marked pending in the active workbook; it does not reload
+  imported files.
+- The panel templates use `PanelLayout::grid` (even gaps); Origin's own PAN2VERT/PAN4/PAN9 rectangles
+  are uneven (graphing.md section 15.4 table).

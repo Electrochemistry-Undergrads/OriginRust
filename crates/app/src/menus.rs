@@ -78,6 +78,17 @@ pub enum Cmd {
     /// A command of a sheet tab's menu, on the active sheet.
     Sheet(SheetOp),
     Plot(Template),
+    /// Plot > Symbol > Y Error.
+    PlotYError,
+    /// Plot > Multi-Panel > a fixed grid of panels (Vertical 2 Panel is 2 x 1, 4 Panel 2 x 2).
+    PlotPanels {
+        rows: usize,
+        cols: usize,
+    },
+    /// Graph > Add Error Bars... on the active layer.
+    AddErrorBars,
+    /// Window > Refresh (F5).
+    Refresh,
     SetAs(Designation),
     SetColumnValues,
     Recalculate,
@@ -85,6 +96,14 @@ pub enum Cmd {
     ColumnProperties,
     SortAscending,
     SortDescending,
+    /// Worksheet > Sort Range, on the selected columns.
+    SortRange {
+        descending: bool,
+    },
+    /// Worksheet > Sort Columns: each selected column on its own.
+    SortColumns {
+        descending: bool,
+    },
     FilterRows,
     Analyze(AnalysisKind),
     Fit(FitKind),
@@ -102,6 +121,8 @@ pub enum Cmd {
     Rescale,
     /// Graph > Legend > Reconstruct Legend on the active layer (Ctrl+L).
     ReconstructLegend,
+    /// Graph > Legend > Update Legend on the active layer.
+    UpdateLegend,
     /// Makes a plot the active one (the plot list of the layer icon's menu).
     SelectPlot {
         layer: usize,
@@ -540,19 +561,12 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sub(
             "&Symbol",
-            with(
-                vec![item("&Scatter", Cmd::Plot(Template::Scatter))],
-                &[
-                    "Scatter Central",
-                    "Column Scatter",
-                    "Y Error",
-                    "XY Error",
-                    "Vertical Drop Line",
-                    "Bubble",
-                    "Color Mapped",
-                    "Bubble + Color Mapped",
-                ],
-            ),
+            [
+                vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
+                vec![item("Y Error", Cmd::PlotYError)],
+                greys(&["XY Error", "Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
+            ]
+            .concat(),
         ),
         sub(
             "Line + S&ymbol",
@@ -598,16 +612,18 @@ fn plot_menu() -> Vec<Entry> {
                 &["Waterfall Y:Color Mapping", "Waterfall Z:Color Mapping", "3D Waterfall"],
             ),
         ),
-        grey_sub(
+        sub(
             "Multi-Pa&nel",
-            &[
-                "Vertical 2 Panel",
-                "Horizontal 2 Panel",
-                "4 Panel",
-                "9 Panel",
-                "Stack...",
-                "Multiple Panels by Label...",
-            ],
+            [
+                vec![
+                    item("Vertical 2 Panel", Cmd::PlotPanels { rows: 2, cols: 1 }),
+                    item("Horizontal 2 Panel", Cmd::PlotPanels { rows: 1, cols: 2 }),
+                    item("4 Panel", Cmd::PlotPanels { rows: 2, cols: 2 }),
+                    item("9 Panel", Cmd::PlotPanels { rows: 3, cols: 3 }),
+                ],
+                greys(&["Stack...", "Multiple Panels by Label..."]),
+            ]
+            .concat(),
         ),
         sep(),
         grey_sub("3D &XYY", &["XYY 3D Bars", "3D Ribbons", "3D Walls", "3D Waterfall"]),
@@ -738,10 +754,23 @@ fn column_menu() -> Vec<Entry> {
 }
 
 fn worksheet_menu() -> Vec<Entry> {
-    let order = ["Ascending", "Descending", "Custom..."];
     vec![
-        grey_sub("Sort &Range", &order),
-        grey_sub("Sort &Columns", &order),
+        sub(
+            "Sort &Range",
+            vec![
+                item("Ascending", Cmd::SortRange { descending: false }),
+                item("Descending", Cmd::SortRange { descending: true }),
+                grey("Custom..."),
+            ],
+        ),
+        sub(
+            "Sort &Columns",
+            vec![
+                item("Ascending", Cmd::SortColumns { descending: false }),
+                item("Descending", Cmd::SortColumns { descending: true }),
+                grey("Custom..."),
+            ],
+        ),
         sub(
             "&Sort Worksheet",
             vec![item("&Ascending", Cmd::SortAscending), item("&Descending", Cmd::SortDescending), grey("&Custom...")],
@@ -938,7 +967,7 @@ fn graph_menu() -> Vec<Entry> {
         grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
         sep(),
         grey("Layer Management..."),
-        grey("Add Error Bars..."),
+        item("Add Error Bars...", Cmd::AddErrorBars),
         grey("Add Function Graph..."),
         grey("Add Straight Line..."),
         item("Add Text...", Cmd::AddText),
@@ -952,7 +981,7 @@ fn graph_menu() -> Vec<Entry> {
                 // Origin opens the legend's settings by double click; Sheaf also offers them here.
                 item("Legend Properties...", Cmd::GraphProps(PropsTab::Legend)),
                 keyed("Reconstruct Legend", ctrl(Key::L), Cmd::ReconstructLegend),
-                grey("Update Legend"),
+                item("Update Legend", Cmd::UpdateLegend),
                 grey("Add Legend Title"),
             ],
         ),
@@ -1087,7 +1116,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         item("&Tile Vertically", Cmd::TileVertically),
         grey("Arrange &Icons"),
         sep(),
-        grey_keyed("&Refresh", plain_key(Key::F5)),
+        keyed("&Refresh", plain_key(Key::F5), Cmd::Refresh),
         sep(),
         grey("&Duplicate"),
     ];
@@ -1374,7 +1403,7 @@ pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
             "Legend",
             vec![
                 item("Reconstruct Legend", Cmd::GraphEdit(GraphOp::ReconstructLegend { layer })),
-                grey("Update Legend"),
+                item("Update Legend", Cmd::GraphEdit(GraphOp::UpdateLegend { layer })),
                 grey("Add Legend Title"),
             ],
         ),
@@ -1669,6 +1698,23 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SortAscending | Cmd::SortDescending => {
             book?;
             Action::SortSheet { column: one()?, descending: *cmd == Cmd::SortDescending }
+        }
+        Cmd::SortRange { descending } => {
+            book?;
+            Action::SortRange { columns: some()?, descending: *descending }
+        }
+        Cmd::SortColumns { descending } => {
+            book?;
+            Action::SortColumns { columns: some()?, descending: *descending }
+        }
+        Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec() },
+        Cmd::PlotPanels { rows, cols } => {
+            Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
+        }
+        Cmd::AddErrorBars => Action::AddErrorBars { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::Refresh => Action::Refresh(c.active),
+        Cmd::UpdateLegend => {
+            Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::UpdateLegend { layer: c.layer } }
         }
         Cmd::FilterRows => Action::FilterRows(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the

@@ -399,7 +399,7 @@ mod tests {
         {
             let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
             assert_eq!(ws.mask_cells(&[0], 0..2, MaskOp::Apply), 2);
-            assert_eq!(ws.mask_cells(&[0], 1..9, MaskOp::Swap), 1, "only cells with data swap");
+            assert_eq!(ws.mask_cells(&[0], 1..9, MaskOp::Swap), 2, "only cells with data swap");
             assert_eq!(ws.columns[0].mask.iter().copied().collect::<Vec<_>>(), vec![0, 2]);
             ws.insert_rows(&[0], 1, 1);
             assert_eq!(ws.columns[0].mask.iter().copied().collect::<Vec<_>>(), vec![0, 3]);

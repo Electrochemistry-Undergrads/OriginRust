@@ -239,7 +239,7 @@ impl Coords {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TernaryScale {
-    /// Percent when a row of the data sums to more than 1.5, else fractions.
+    /// Percent when a row of the data sums to about 100 (99 to 101), else fractions.
     #[default]
     Auto,
     /// Ticks 0, 0.2, ... 1.

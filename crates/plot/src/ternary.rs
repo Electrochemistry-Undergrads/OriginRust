@@ -103,7 +103,7 @@ pub(crate) fn columns(pd: &mut PlotData, z: Option<&[f64]>) {
 }
 
 /// Whether the ticks of a layer count in percent: by the layer's setting, or (automatic) when a
-/// row of the raw data sums to more than 1.5.
+/// row of the raw data sums to about 100 (99 to 101).
 pub(crate) fn is_percent(project: &Project, layer: &Layer, settings: &TernaryCoords) -> bool {
     match settings.scale {
         TernaryScale::Fraction => false,
@@ -117,7 +117,7 @@ pub(crate) fn is_percent(project: &Project, layer: &Layer, settings: &TernaryCoo
             (a..b).any(|r| {
                 let sum = x.get(r).copied().unwrap_or(f64::NAN) + y[r] + z.get(r).copied().unwrap_or(f64::NAN);
                 normalise(x.get(r).copied().unwrap_or(f64::NAN), y[r], z.get(r).copied().unwrap_or(f64::NAN)).is_some()
-                    && sum > 1.5
+                    && (99.0..=101.0).contains(&sum)
             })
         }),
     }

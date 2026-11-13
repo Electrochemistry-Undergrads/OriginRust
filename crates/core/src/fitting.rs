@@ -275,6 +275,7 @@ fn band_plot(layer: &crate::graph::Layer, x: ColumnId, band: &BandColumn, color:
         label: Some(format!("{model} {}", band.what)),
         visible: true,
         auto_color: false,
+        group: None,
     }
 }
 
@@ -663,6 +664,7 @@ impl Project {
                         label: Some(label.clone()),
                         visible: true,
                         auto_color: false,
+                        group: None,
                     });
                     // In a stacked layer the fitted curve moves with its data.
                     layer.plot_offset_mut(curve_y_id).follows = Some(id);
@@ -748,6 +750,7 @@ impl Project {
             label: Some(format!("{} fit", outcome.report.model)),
             visible: true,
             auto_color: false,
+            group: None,
         });
         layer.plot_offset_mut(outcome.curve_y).follows = Some(source);
         if outcome.plot_bands {

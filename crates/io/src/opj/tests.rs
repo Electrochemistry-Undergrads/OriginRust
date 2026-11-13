@@ -409,6 +409,7 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
             label: None,
             visible: true,
             auto_color: true,
+            group: None,
         });
     }
     layer.stack = Stack::Individual;

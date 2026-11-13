@@ -378,6 +378,7 @@ impl Project {
             label: None,
             visible: true,
             auto_color: true,
+            group: None,
         });
         l.recolor_automatic();
         Ok(())

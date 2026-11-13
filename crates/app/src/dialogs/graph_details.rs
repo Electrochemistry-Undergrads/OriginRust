@@ -519,6 +519,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 label: None,
                 visible: true,
                 auto_color: true,
+                group: None,
             });
         }
         layer.recolor_automatic();

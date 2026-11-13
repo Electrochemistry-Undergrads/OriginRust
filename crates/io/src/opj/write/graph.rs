@@ -591,18 +591,42 @@ impl Writer {
 
         // curves
         let mut first = true;
-        let mut columns_seen = 0;
         let mut later_errors = Vec::new();
         let n_columns = plots.iter().filter(|r| r.plot.kind == PlotKind::Column).count();
-        if n_columns >= 2 {
-            // Column plots that stand side by side are a plot group, and Origin colours the members of
-            // a group from its own colour list (the first is black, the second red, ...). Colours that
-            // come from the layer's palette were not chosen by hand and are not named.
-            let columns = plots.iter().filter(|r| r.plot.kind == PlotKind::Column);
-            let replaced = columns.enumerate().any(|(k, r)| {
-                !r.plot.auto_color && palette_position(r.plot.symbol.color) != Some((k % PALETTE.len()) as u8)
+        // The plot groups of the layer: the plots with a group number, and all column plots that
+        // stand side by side as one group. A group is a run of neighbouring curves; a run of one
+        // is no group.
+        let ids: Vec<Option<u32>> = plots
+            .iter()
+            .map(|r| r.plot.group.or((r.plot.kind == PlotKind::Column && n_columns >= 2).then_some(u32::MAX)))
+            .collect();
+        let places: Vec<Group> = (0..ids.len())
+            .map(|i| match ids[i] {
+                Some(g) if i > 0 && ids[i - 1] == Some(g) => Group::Member,
+                Some(g) if ids.get(i + 1) == Some(&Some(g)) => Group::First,
+                _ => Group::None,
+            })
+            .collect();
+        let grouped = places.iter().any(|g| *g != Group::None);
+        if grouped {
+            // Origin colours the members of a group from its own colour list (the first is black,
+            // the second red, ...). Colours that come from the layer's palette were not chosen by
+            // hand and are not named.
+            let mut at = 0;
+            let replaced = plots.iter().zip(&places).any(|(r, g)| {
+                at = if *g == Group::First { 0 } else { at + 1 };
+                let c = if r.plot.kind == PlotKind::Column || r.plot.kind == PlotKind::Scatter {
+                    r.plot.symbol.color
+                } else {
+                    r.plot.line.color
+                };
+                *g != Group::None && !r.plot.auto_color && palette_position(c) != Some((at % PALETTE.len()) as u8)
             });
-            if plots.iter().any(|r| r.plot.kind == PlotKind::Column && r.err.is_some()) {
+            let bars_with_errors = plots
+                .iter()
+                .zip(&places)
+                .any(|(r, g)| *g != Group::None && r.plot.kind == PlotKind::Column && r.err.is_some());
+            if bars_with_errors {
                 notes.push(
                     "error bars on column plots that stand side by side were written, but Origin did not place them on their bars"
                         .into(),
@@ -610,12 +634,12 @@ impl Writer {
             }
             if replaced {
                 notes.push(
-                    "the colours of column plots that stand side by side were not written; Origin colours the plots of a group from its own colour list"
+                    "the colours of plots in a plot group were not written; Origin colours the plots of a group from its own colour list"
                         .into(),
                 );
             }
         }
-        for r in plots {
+        for (r, place) in plots.iter().zip(places.iter().copied()) {
             let p = r.plot;
             let kind = match p.kind {
                 PlotKind::Line => CurveKind::Line,
@@ -648,19 +672,13 @@ impl Writer {
                 fill: code_of(p.symbol.color),
                 bar_width_pct: 100.0 - layer.bars.gap_pct,
                 offset: (r.place.ox, r.place.oy),
-                group: match (kind, columns_seen) {
-                    _ if n_columns < 2 => Group::None,
-                    (CurveKind::Column, 0) => Group::First,
-                    (CurveKind::Column, _) => Group::Member,
-                    _ => Group::None,
-                },
+                group: place,
                 serial: self.next_serial(),
             };
             first = false;
-            columns_seen += usize::from(kind == CurveKind::Column);
             out.extend(framed(&curve_record(&spec)));
             out.extend(framed(&[]));
-            if n_columns >= 2 {
+            if grouped {
                 // the members of a plot group follow one another; the error plots come after them
                 later_errors.push(r);
             } else if let Some(err) = r.err {

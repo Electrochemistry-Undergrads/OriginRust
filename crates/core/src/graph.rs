@@ -710,6 +710,14 @@ pub struct Plot {
     /// clears it, so that adding plots later re-spreads only the automatic colors.
     #[serde(default = "yes")]
     pub auto_color: bool,
+    /// The plot group this plot belongs to (Origin's plot group made by one plot command). Plots
+    /// of a layer with the same number form one group; `None` is a plot outside any group. A group
+    /// gives its members the colours of Origin's colour list in order (colour increment "by one",
+    /// first member first), whatever colour the members were given; the importer sets those
+    /// colours. Column plots without a group number still stand side by side
+    /// ([`Layer::bars`]), and are written to `.opj` as one group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<u32>,
 }
 
 fn yes() -> bool {
@@ -1077,6 +1085,7 @@ mod tests {
             label: None,
             visible: true,
             auto_color: true,
+            group: None,
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1133,5 +1142,30 @@ mod tests {
         g.layers[2].y_axis.side = AxisSide::Opposite;
         assert_eq!(g.right_y_member(1), Some(5));
         assert_eq!(g.right_y_member(2), None, "a layer that is not linked is not a right-Y member");
+    }
+
+    #[test]
+    fn a_plot_group_is_stored_only_when_set() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        let mut plot = Plot {
+            x: None,
+            y: ColumnId(1),
+            y_error: None,
+            rows: None,
+            kind: PlotKind::Line,
+            line: LineStyle::solid(Color::BLACK, 0.5),
+            symbol: layer.default_symbol.clone(),
+            label: None,
+            visible: true,
+            auto_color: true,
+            group: None,
+        };
+        assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
+        plot.group = Some(2);
+        let json = serde_json::to_string(&plot).unwrap();
+        assert!(json.contains(r#""group":2"#), "{json}");
+        let back: Plot = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.group, Some(2));
+        layer.plots.push(back);
     }
 }

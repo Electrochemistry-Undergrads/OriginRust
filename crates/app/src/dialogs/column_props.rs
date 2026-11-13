@@ -377,9 +377,11 @@ fn format_rows(ui: &mut egui::Ui, storage: &mut Storage, format: &mut NumberForm
         }
         NumberFormat::Month(style) | NumberFormat::Weekday(style) => {
             let mut style = style;
-            egui::ComboBox::from_id_salt("column_name_style").selected_text(style.label()).show_ui(ui, |ui| {
+            // Origin's list shows samples: Jan, January, J (months) and Mon, Monday, M (weekdays).
+            let month = kind == 5;
+            egui::ComboBox::from_id_salt("column_name_style").selected_text(style.sample(month)).show_ui(ui, |ui| {
                 for n in NameStyle::ALL {
-                    ui.selectable_value(&mut style, n, n.label());
+                    ui.selectable_value(&mut style, n, n.sample(month));
                 }
             });
             *format = if kind == 5 { NumberFormat::Month(style) } else { NumberFormat::Weekday(style) };

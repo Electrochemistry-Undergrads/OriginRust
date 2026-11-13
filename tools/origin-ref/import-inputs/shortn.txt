@@ -1,0 +1,5 @@
+my_name_1	Second Col	3rd-col	abcdefghijklmnopqrstuvwxyz	9lives	my_name_1
+Wave	Abs	Sig	Long	Num	Dup
+nm	au	mV	x	y	z
+1	2	3	4	5	6
+2	3	4	5	6	7

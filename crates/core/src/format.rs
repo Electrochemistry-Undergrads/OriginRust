@@ -19,11 +19,16 @@ pub enum NameStyle {
 impl NameStyle {
     pub const ALL: [NameStyle; 3] = [NameStyle::Short, NameStyle::Full, NameStyle::Letter];
 
-    pub fn label(&self) -> &'static str {
-        match self {
-            NameStyle::Short => "Abbreviation",
-            NameStyle::Full => "Full name",
-            NameStyle::Letter => "First letter",
+    /// What Origin's Column Properties list shows for the style: a sample of the first month
+    /// (`Jan`, `January`, `J`) or of Monday (`Mon`, `Monday`, `M`).
+    pub fn sample(&self, month: bool) -> &'static str {
+        match (self, month) {
+            (NameStyle::Short, true) => "Jan",
+            (NameStyle::Full, true) => "January",
+            (NameStyle::Letter, true) => "J",
+            (NameStyle::Short, false) => "Mon",
+            (NameStyle::Full, false) => "Monday",
+            (NameStyle::Letter, false) => "M",
         }
     }
 
@@ -62,9 +67,11 @@ pub enum NumberFormat {
     /// Decimal notation with a comma between thousands (`1,234,567.50`), this many digits after
     /// the point (Origin's `Decimal:1000`).
     DecimalGrouped(u8),
-    /// The number (1 to 12) is a month, shown by name. Other numbers show as plain numbers.
+    /// The whole part of the number is a month (1 = January, repeating every 12), shown by name;
+    /// zero, negative numbers and numbers beyond a 32-bit integer show nothing.
     Month(NameStyle),
-    /// The number (1 = Sunday to 7 = Saturday) is a day of the week, shown by name.
+    /// The whole part of the number is a day of the week (0 and 7 = Sunday, 1 = Monday, 6 =
+    /// Saturday, repeating every 7), shown by name; negative numbers show nothing.
     Weekday(NameStyle),
     /// The number is a date (days, see `datetime`), shown as text such as `2026-11-11`.
     Date(DatePattern),
@@ -91,14 +98,17 @@ impl NumberFormat {
             NumberFormat::Engineering(d) => format_engineering(v, usize::from(d), false),
             NumberFormat::EngineeringSi(d) => format_engineering(v, usize::from(d), true),
             NumberFormat::DecimalGrouped(d) => group_thousands(&format!("{:.*}", usize::from(d), v)),
-            NumberFormat::Month(style) => match whole_in(v, 1, 12) {
-                Some(m) => style.apply(datetime::MONTHS[m - 1]),
-                None => format_general(v, 9),
+            // Origin's measured rule: the whole part counts, 1 is January and 13 is January again;
+            // zero, negative numbers and numbers beyond a 32-bit integer show nothing.
+            NumberFormat::Month(style) => match whole_part(v) {
+                Some(m) if m >= 1 => style.apply(datetime::MONTHS[((m - 1) % 12) as usize]),
+                _ => String::new(),
             },
-            NumberFormat::Weekday(style) => match whole_in(v, 1, 7) {
-                // 1 is Sunday; `WEEKDAYS` starts with Monday.
-                Some(d) => style.apply(datetime::WEEKDAYS[(d + 5) % 7]),
-                None => format_general(v, 9),
+            // 0 and 7 are Sunday, 1 is Monday and 6 is Saturday, repeating every 7; negative
+            // numbers show nothing (`WEEKDAYS` starts with Monday).
+            NumberFormat::Weekday(style) => match whole_part(v) {
+                Some(d) if d >= 0 => style.apply(datetime::WEEKDAYS[((d + 6) % 7) as usize]),
+                _ => String::new(),
             },
             NumberFormat::Time(t) if t.is_elapsed() => datetime::format_time(v, t),
             NumberFormat::Date(_) | NumberFormat::DateTime(..) if !datetime::in_range(v) => format_general(v, 9),
@@ -114,10 +124,11 @@ impl NumberFormat {
     }
 }
 
-/// The integer `v` when it is a whole number between `lo` and `hi`.
-fn whole_in(v: f64, lo: usize, hi: usize) -> Option<usize> {
-    let r = v.round();
-    (r == v && r >= lo as f64 && r <= hi as f64).then_some(r as usize)
+/// The whole part of `v` (cut toward zero) when it fits a 32-bit signed integer, as in Origin's
+/// Month and Day of Week columns.
+fn whole_part(v: f64) -> Option<i64> {
+    let t = v.trunc();
+    (t >= f64::from(i32::MIN) && t <= f64::from(i32::MAX)).then_some(t as i64)
 }
 
 /// Puts a comma between groups of three digits of the integer part of a plain decimal text.
@@ -365,17 +376,54 @@ mod tests {
         assert_eq!(NumberFormat::Month(NameStyle::Short).format(1.0), "Jan");
         assert_eq!(NumberFormat::Month(NameStyle::Full).format(11.0), "November");
         assert_eq!(NumberFormat::Month(NameStyle::Letter).format(12.0), "D");
-        // Out of range or fractional numbers stay numbers.
-        assert_eq!(NumberFormat::Month(NameStyle::Short).format(13.0), "13");
-        assert_eq!(NumberFormat::Month(NameStyle::Short).format(2.5), "2.5");
-        // 1 is Sunday, 7 is Saturday.
-        assert_eq!(NumberFormat::Weekday(NameStyle::Full).format(1.0), "Sunday");
-        assert_eq!(NumberFormat::Weekday(NameStyle::Short).format(4.0), "Wed");
-        assert_eq!(NumberFormat::Weekday(NameStyle::Letter).format(7.0), "S");
-        assert_eq!(NumberFormat::Weekday(NameStyle::Short).format(0.0), "0");
+        assert!(!NumberFormat::Weekday(NameStyle::Full).is_date_time());
         assert!(!NumberFormat::Month(NameStyle::Short).is_date_time());
         let json = serde_json::to_string(&NumberFormat::Weekday(NameStyle::Full)).unwrap();
         assert_eq!(serde_json::from_str::<NumberFormat>(&json).unwrap(), NumberFormat::Weekday(NameStyle::Full));
+    }
+
+    #[test]
+    fn month_and_weekday_numbers_follow_origins_measured_rules() {
+        // Measured in Origin 2016 (column format Month and Day of Week, docs/spec/workbook-model.md).
+        let month = |v: f64| NumberFormat::Month(NameStyle::Short).format(v);
+        assert_eq!(
+            [1.0, 2.0, 9.0, 12.0, 13.0, 14.0, 15.0].map(month),
+            ["Jan", "Feb", "Sep", "Dec", "Jan", "Feb", "Mar"]
+        );
+        // The whole part counts: 1.5 is January, 6.9 is June, 0.5 is nothing.
+        assert_eq!([1.5, 2.5, 6.9, 12.99].map(month), ["Jan", "Feb", "Jun", "Dec"]);
+        for v in [0.0, 0.5, -0.5, -1.0, -8.0] {
+            assert_eq!(month(v), "", "{v}");
+        }
+        // The cycle goes on to large numbers: 100 and 1E6 and 1E9 are April, 2147483647 is July.
+        assert_eq!([100.0, 1e6, 1e9, 2_147_483_647.0].map(month), ["Apr", "Apr", "Apr", "Jul"]);
+        // Past a 32-bit integer nothing is shown.
+        for v in [2_147_483_648.0, 4_294_967_295.0, 3e9, 1e10, 1e300] {
+            assert_eq!(month(v), "", "{v}");
+        }
+        assert_eq!(NumberFormat::Month(NameStyle::Full).format(8.0), "August");
+        assert_eq!(NumberFormat::Month(NameStyle::Letter).format(9.0), "S");
+
+        let day = |v: f64| NumberFormat::Weekday(NameStyle::Short).format(v);
+        // 0 and 7 are Sunday, 1 is Monday and 6 is Saturday, repeating every 7.
+        assert_eq!(
+            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0].map(day),
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        );
+        assert_eq!(
+            [8.0, 9.0, 13.0, 14.0, 15.0, 100.0, 1e6].map(day),
+            ["Mon", "Tue", "Sat", "Sun", "Mon", "Tue", "Mon"]
+        );
+        assert_eq!(
+            [0.5, 1.5, 2.5, 6.9, 7.5, -0.5, -0.9999].map(day),
+            ["Sun", "Mon", "Tue", "Sat", "Sun", "Sun", "Sun"]
+        );
+        for v in [-1.0, -1.5, -7.0, 2_147_483_648.0, 1e10, 1e19] {
+            assert_eq!(day(v), "", "{v}");
+        }
+        assert_eq!(NumberFormat::Weekday(NameStyle::Full).format(3.0), "Wednesday");
+        assert_eq!(NumberFormat::Weekday(NameStyle::Letter).format(4.0), "T");
+        assert_eq!(NumberFormat::Weekday(NameStyle::Letter).format(6.0), "S");
     }
 
     #[test]

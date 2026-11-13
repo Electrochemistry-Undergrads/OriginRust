@@ -5375,10 +5375,10 @@ fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() 
     assert_eq!(c.format, NumberFormat::Month(NameStyle::Short));
     let first = c.numeric().unwrap()[0];
     assert_eq!(c.cell_text(0), NumberFormat::Month(NameStyle::Short).format(first));
-    // The display of a month is its name style.
-    combo(&h, "Abbreviation").click();
+    // The display of a month is its name style, listed as samples like Origin's list.
+    combo(&h, "Jan").click();
     settle(&mut h);
-    click(&mut h, "Full name");
+    click(&mut h, "January");
     click(&mut h, "Apply");
     assert_eq!(project(&h).column(b).unwrap().format, NumberFormat::Month(NameStyle::Full));
     // Text keeps what the cells showed.

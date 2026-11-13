@@ -7,19 +7,20 @@
 <p align="center">
   <b>Scientific data analysis and graphing; an open-source, clean-room reimplementation of Origin and OriginPro workflows, rebuilt in Rust.</b><br>
   Workbooks, scientific plots, curve fitting, and data analysis,<br>
-  in a native app written in Rust. Runs locally on your Mac.
+  in a native app written in Rust. Runs locally on macOS and Windows.
 </p>
 
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/built_with-Rust-b7410e?style=flat-square&amp;logo=rust">
   <a href="#macos"><img alt="macOS: Apple Silicon verified" src="https://img.shields.io/badge/macOS-Apple_Silicon_verified-2f7bf5?style=flat-square"></a>
+  <a href="#windows"><img alt="Windows: supported" src="https://img.shields.io/badge/Windows-supported-2f7bf5?style=flat-square"></a>
   <a href="#license-and-credits"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-6b5b4b?style=flat-square"></a>
   <img alt="Early development" src="https://img.shields.io/badge/status-early_development-a66b3f?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#features">Features</a> ·
-  <a href="#macos">macOS</a> ·
+  <a href="#platform-support">Platform support</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#command-line">Command line</a> ·
   <a href="#under-the-hood">Under the hood</a> ·
@@ -65,7 +66,15 @@
 > Expect rough edges; Sheaf is not yet a complete replacement for Origin or OriginPro.
 > See the [roadmap](docs/ROADMAP.md) for current progress.
 
-## macOS
+## Platform support
+
+### Windows
+
+Windows support is confirmed by the project owner. Use the Cargo commands below to build
+and run the desktop app and CLI. The Windows desktop binary is `target/release/sheaf-app.exe`;
+the CLI binary is `target/release/sheaf.exe`.
+
+### macOS
 
 **Verified locally on Apple Silicon (arm64), macOS 27.0.1, with Rust 1.99.1 on November 12, 2026.**
 All 1,081 workspace tests pass, formatting and Clippy checks pass, the desktop app opens and
@@ -101,7 +110,8 @@ cargo run --release -p sheaf-app -- run1.txt
 ```
 
 `OriginRust` is the repository name; **Sheaf** is the application name. The desktop binary
-is `target/release/sheaf-app`; the CLI binary is `target/release/sheaf`.
+is `target/release/sheaf-app`; the CLI binary is `target/release/sheaf` (both have a `.exe`
+extension on Windows).
 
 ## Command line
 

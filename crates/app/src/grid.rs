@@ -389,6 +389,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     });
 
     let rows = sheet.row_count() + SPARE_ROWS;
+    // With an active filter the grid shows only the rows that pass, with their own numbers.
+    let shown: Option<Vec<usize>> = sheet.shown_rows(rows);
+    let rows_drawn = shown.as_ref().map_or(rows, Vec::len);
     let label_rows = label_rows(sheet);
     let header_height = ROW_HEIGHT * (1 + label_rows.len()) as f32;
     // The primary button was released: a drag over cells is over.
@@ -453,7 +456,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     if state.reveal > 0
                         && let Some(row) = state.reveal_target().map(|c| c.1)
                     {
-                        table = table.scroll_to_row(row, None);
+                        let at = shown.as_ref().map_or(Some(row), |s| s.iter().position(|r| *r == row));
+                        if let Some(at) = at {
+                            table = table.scroll_to_row(at, None);
+                        }
                     }
                     if let Some(y) = state.v_set.take() {
                         table = table.vertical_scroll_offset(y);
@@ -487,8 +493,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             });
                         })
                         .body(|body| {
-                            body.rows(ROW_HEIGHT, rows, |mut row| {
-                                let r = row.index();
+                            body.rows(ROW_HEIGHT, rows_drawn, |mut row| {
+                                let r = shown.as_ref().map_or(row.index(), |s| s[row.index()]);
                                 row.col(|ui| row_header_cell(ui, r, book_id, state, actions));
                                 for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                                     row.col(|ui| body_cell(ui, sheet, position, column, r, book_id, state, actions));

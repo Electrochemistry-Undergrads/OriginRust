@@ -228,6 +228,16 @@ pub enum Action {
     SortByLabel(WindowId),
     /// Column > Reverse Order: turn the values of each selected column round.
     ReverseColumns(Vec<ColumnId>),
+    /// Column > Filter > Add or Remove Filter: the window for the sheet filter, with presets for
+    /// this column.
+    RowFilterDialog {
+        book: WindowId,
+        column: Option<ColumnId>,
+    },
+    /// Column > Filter > Enable/Disable Filter.
+    ToggleRowFilter(WindowId),
+    /// Column > Filter > Reapply Filter.
+    ReapplyRowFilter(WindowId),
     /// Open the window that keeps only the rows matching a condition.
     FilterRows(WindowId),
     PlotColumns {

@@ -83,6 +83,10 @@ pub enum Cmd {
     UnhideColumns,
     /// Column > Mask > Apply, Remove, Swap.
     Mask(MaskOp),
+    /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
+    RowFilterDialog,
+    ToggleRowFilter,
+    ReapplyRowFilter,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -778,7 +782,7 @@ fn column_menu() -> Vec<Entry> {
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
         hide_menu(),
         sep(),
-        grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]),
+        filter_menu(),
         mask_menu(&["Change Color", "Disable Masking", "Mask Cells by Condition..."]),
     ]
 }
@@ -792,6 +796,17 @@ fn mask_menu(grey_items: &[&str]) -> Entry {
     ];
     entries.extend(greys(grey_items));
     sub("Mask", entries)
+}
+
+fn filter_menu() -> Entry {
+    sub(
+        "Filter",
+        vec![
+            item("Add or Remove Filter", Cmd::RowFilterDialog),
+            item("Enable/Disable Filter", Cmd::ToggleRowFilter),
+            item("Reapply Filter", Cmd::ReapplyRowFilter),
+        ],
+    )
 }
 
 fn hide_menu() -> Entry {
@@ -1271,7 +1286,7 @@ pub fn column_header_menu() -> Vec<Entry> {
         ],
     ));
     v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
-    v.push(grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]));
+    v.push(filter_menu());
     v.push(mask_menu(&["Change Color", "Disable Masking"]));
     v.push(grey("Mask Cells by Condition..."));
     v.push(sep());
@@ -1825,6 +1840,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::UpdateLegend { layer: c.layer } }
         }
         Cmd::FilterRows => Action::FilterRows(book?),
+        Cmd::RowFilterDialog => Action::RowFilterDialog { book: book?, column: c.selected.first().copied() },
+        Cmd::ToggleRowFilter => Action::ToggleRowFilter(book?),
+        Cmd::ReapplyRowFilter => Action::ReapplyRowFilter(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {

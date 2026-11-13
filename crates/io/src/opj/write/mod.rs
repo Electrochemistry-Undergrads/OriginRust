@@ -146,6 +146,8 @@ struct Notes {
     widths_dropped: usize,
     /// Columns with masked cells: the file written here holds no mask.
     masks_dropped: usize,
+    /// Sheets with a worksheet filter: the file written here holds no filter.
+    filters_dropped: usize,
     /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
     analysis_links_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
@@ -292,6 +294,7 @@ impl Writer {
                 }
             })
             .collect();
+        self.notes.filters_dropped += usize::from(sheet.filter.is_some());
         for (i, column) in sheet.columns.iter().enumerate() {
             let dataset_name = format!("{}_{}{}", book.name, column.short_name, suffix);
             self.check_name("column name", &column.short_name, MAX_DATASET_NAME)?;
@@ -686,6 +689,12 @@ impl Writer {
             warnings.push(format!(
                 "{} hidden column(s): the project file written here does not hold the hidden state, so Origin shows them.",
                 n.hidden_dropped
+            ));
+        }
+        if n.filters_dropped > 0 {
+            warnings.push(format!(
+                "{} sheet(s) have a worksheet filter; the project file written here does not hold it, so Origin shows all rows.",
+                n.filters_dropped
             ));
         }
         if n.masks_dropped > 0 {

@@ -101,7 +101,7 @@ pub fn place_workbook(project: &mut Project, book: Workbook, mode: ImportMode, t
             let mut it = sheets.into_iter();
             if let Some(new) = it.next() {
                 let name = unique_sheet_name_except(dest, &new.name, t.sheet);
-                dest.sheets[t.sheet] = Worksheet { name, columns: new.columns };
+                dest.sheets[t.sheet] = Worksheet { name, columns: new.columns, filter: None };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.
             for mut sheet in it {
@@ -542,7 +542,7 @@ mod tests {
     fn book(name: &str, cols: Vec<Column>) -> Workbook {
         let mut b = Workbook::new(WindowId(0), "Book1");
         b.long_name = name.to_string();
-        b.sheets = vec![Worksheet { name: name.to_string(), columns: cols }];
+        b.sheets = vec![Worksheet { name: name.to_string(), columns: cols, filter: None }];
         b
     }
 

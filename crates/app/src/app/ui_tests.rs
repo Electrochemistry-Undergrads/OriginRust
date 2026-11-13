@@ -4805,3 +4805,29 @@ fn masking_cells_marks_them_for_analysis_and_undoes() {
     h.state_mut().apply(Action::Undo, &ctx);
     assert_eq!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.len(), 2);
 }
+
+#[test]
+fn the_worksheet_filter_hides_rows_without_deleting_them_and_undoes() {
+    let mut h = start(vec![data_file("rowfilter")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RowFilterDialog { book, column: None }, &ctx);
+    settle(&mut h);
+    assert!(h.state().row_filter.is_some());
+    h.event(egui::Event::Text("col(A) >= 3".to_string()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().row_filter.is_none());
+    let sheet = project(&h).workbooks().next().unwrap().sheet();
+    assert_eq!(sheet.shown_rows(4), Some(vec![2, 3]));
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "nothing was deleted");
+    settle(&mut h);
+    assert_eq!(h.query_all_by_label("1").count(), 0, "row 1 is not shown");
+    assert_eq!(h.query_all_by_label("3").count(), 2, "row 3 is: its number and its value");
+    // Disable shows everything again; undo goes back step by step.
+    h.state_mut().apply(Action::ToggleRowFilter(book), &ctx);
+    assert!(project(&h).workbooks().next().unwrap().sheet().shown_rows(4).is_none());
+    h.state_mut().apply(Action::Undo, &ctx);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(project(&h).workbooks().next().unwrap().sheet().filter.is_none());
+}

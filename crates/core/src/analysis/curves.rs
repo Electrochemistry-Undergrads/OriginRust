@@ -71,7 +71,7 @@ fn average(spec: &AverageSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
     let points = r.x.len();
     let mut on_sheet = vec![
         numeric(Designation::X, &first.x_name, &first.x_units, String::new(), r.x),
-        numeric(Designation::Y, &format!("Mean of {}", first.name), &first.units, comment.clone(), r.mean),
+        numeric(Designation::Y, "Mean", &first.units, comment.clone(), r.mean),
     ];
     if spec.sd {
         on_sheet.push(numeric(Designation::YError, "SD", &first.units, comment, r.sd));
@@ -182,7 +182,7 @@ fn polygon_area(inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::column::RecalcMode;
+    use crate::column::{FormulaState, RecalcMode};
 
     fn req(columns: &[ColumnId], tool: Tool) -> Request {
         Request { columns: columns.to_vec(), rows: RowRange::All, tool }
@@ -277,5 +277,106 @@ mod tests {
         let problems = p.update_analysis_links(&before);
         assert!(problems.is_empty(), "{problems:?}");
         assert_eq!(p.numeric(mean).unwrap()[0], 2.0);
+    }
+    /// Two curves with their own X, as the Intersect and Polygon Area tests need.
+    fn pair() -> (Project, WindowId, ColumnId, ColumnId) {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 4.0])).unwrap();
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 4.0])).unwrap();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 4.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![4.0, 0.0])).unwrap();
+        (p, book, a, b)
+    }
+
+    #[test]
+    fn a_manual_intersect_link_waits_then_follows_its_input() {
+        let (mut p, _, a, b) = pair();
+        let request = req(&[a, b], Tool::Intersect(IntersectSpec::default()));
+        assert!(Project::can_link(&request.tool));
+        let r = p.analyze_linked(&request, &OutputTarget::NewSheet, RecalcMode::Manual).unwrap();
+        let (x, y) = (r.new_columns[0], r.new_columns[1]);
+        assert_eq!((p.numeric(x).unwrap(), p.numeric(y).unwrap()), ([2.0].as_slice(), [2.0].as_slice()));
+        let before = p.clone();
+        // The second curve now runs from 8 down to 0: the crossing moves to (8/3, 8/3).
+        p.column_mut(b).unwrap().data = ColumnData::numeric(vec![8.0, 0.0]);
+        p.update_analysis_links(&before);
+        assert_eq!(p.numeric(x).unwrap(), [2.0].as_slice(), "not recalculated yet");
+        assert_eq!(p.column(x).unwrap().analysis.unwrap().state, FormulaState::Pending);
+        let link = p.analysis_link_of(x).unwrap();
+        p.recalculate_analysis(link).unwrap();
+        assert!((p.numeric(x).unwrap()[0] - 8.0 / 3.0).abs() < 1e-12);
+        assert_eq!(p.column(x).unwrap().analysis.unwrap().state, FormulaState::Current);
+    }
+
+    #[test]
+    fn an_auto_polygon_area_link_replaces_its_table() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 2.0, 2.0, 0.0])).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.0, 3.0, 3.0])).unwrap();
+        let request = req(&[y], Tool::PolygonArea);
+        assert!(Project::can_link(&request.tool));
+        let r = p.analyze_linked(&request, &OutputTarget::NextToInput, RecalcMode::Auto).unwrap();
+        let area = r.new_columns[1];
+        assert_eq!(p.numeric(area).unwrap(), [6.0].as_slice());
+        let sheets = p.workbook(book).unwrap().sheets.len();
+        let before = p.clone();
+        p.column_mut(y).unwrap().data = ColumnData::numeric(vec![0.0, 0.0, 1.0, 1.0]);
+        let problems = p.update_analysis_links(&before);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(p.numeric(area).unwrap(), [2.0].as_slice());
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), sheets, "the result was replaced, not added");
+    }
+
+    #[test]
+    fn an_intersect_link_whose_curve_loses_its_numbers_gives_an_empty_result() {
+        let (mut p, _, a, b) = pair();
+        let request = req(&[a, b], Tool::Intersect(IntersectSpec::default()));
+        let r = p.analyze_linked(&request, &OutputTarget::NewSheet, RecalcMode::Auto).unwrap();
+        let x = r.new_columns[0];
+        let before = p.clone();
+        // A column with no numbers cannot be a curve any more.
+        p.column_mut(b).unwrap().data = ColumnData::numeric(vec![f64::NAN, f64::NAN]);
+        let problems = p.update_analysis_links(&before);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert!(p.numeric(x).unwrap().is_empty(), "nothing meets any more");
+    }
+
+    #[test]
+    fn the_new_links_survive_a_save_as_json() {
+        let (mut p, _, a, b) = pair();
+        p.analyze_linked(
+            &req(&[a, b], Tool::Intersect(IntersectSpec { include_touching: true })),
+            &OutputTarget::NewSheet,
+            RecalcMode::Manual,
+        )
+        .unwrap();
+        p.analyze_linked(
+            &req(&[a, b], Tool::AverageCurves(AverageSpec::default())),
+            &OutputTarget::NewSheet,
+            RecalcMode::Auto,
+        )
+        .unwrap();
+        p.analyze_linked(&req(&[a], Tool::PolygonArea), &OutputTarget::NewSheet, RecalcMode::Auto).ok();
+        let text = serde_json::to_string(&p).unwrap();
+        let back: Project = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.analysis_links, p.analysis_links);
+        assert!(back.analysis_links.len() >= 2);
+    }
+
+    #[test]
+    fn intersect_can_list_touching_points_with_their_kind() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 1.0, 0.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 1.0, 1.0])).unwrap();
+        let none = p.analyze(&req(&[a, b], Tool::Intersect(IntersectSpec::default()))).unwrap();
+        assert!(none.notes[0].contains("do not meet"), "{:?}", none.notes);
+        let r = p.analyze(&req(&[a, b], Tool::Intersect(IntersectSpec { include_touching: true }))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns[0].numeric().unwrap(), [1.0]);
+        assert_eq!(ws.columns.len(), 3, "X, Y and the kind");
     }
 }

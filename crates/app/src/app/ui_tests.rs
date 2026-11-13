@@ -4672,3 +4672,43 @@ fn typing_with_a_block_selected_edits_its_active_cell_and_enter_and_tab_move_ins
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
     assert_eq!(book_ui(&h).active_cell(), Some((1, 1)));
 }
+
+#[test]
+fn exchange_axes_swaps_the_columns_and_the_axis_settings_in_one_undo_step() {
+    let mut h = start(vec![data_file("axis-exchange")]);
+    let (_, g) = window_ids(&h);
+    h.state_mut().doc.apply("Test", |p| {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.x_axis.scale = ScaleKind::Log10;
+    });
+    let before = graph(&h).layers[0].clone();
+    let (x, y) = (before.plots[0].x.unwrap(), before.plots[0].y);
+    menu(&mut h, "Graph", "Exchange X-Y Axes");
+    let l = &graph(&h).layers[0];
+    assert_eq!((l.plots[0].x, l.plots[0].y), (Some(y), x));
+    assert_eq!(l.y_axis.scale, ScaleKind::Log10, "the axis settings went with their data");
+    assert_eq!(l.x_axis.scale, ScaleKind::Linear);
+    assert_eq!(h.state().doc.undo_label(), Some("Exchange X-Y axes"));
+    menu(&mut h, "Edit", "Undo Exchange X-Y axes");
+    assert_eq!(graph(&h).layers[0], before);
+}
+
+#[test]
+fn the_axis_dialog_lists_the_edges_and_has_working_breaks_and_special_ticks_tabs() {
+    let mut h = start(vec![data_file("axis-pages")]);
+    open_props(&mut h, 0, PropsTab::XAxis, None);
+    // Scale and Breaks name the axes Horizontal and Vertical; the other tabs name the four edges.
+    assert!(h.query_by_label("Horizontal").is_some());
+    click(&mut h, "Title");
+    for edge in ["Bottom", "Top", "Left", "Right"] {
+        assert!(h.query_by_label(edge).is_some(), "{edge}");
+    }
+    click(&mut h, "Breaks");
+    assert!(h.query_by_label("Horizontal").is_some() && h.query_by_label("Bottom").is_none());
+    h.get_by_label("Show Break").click();
+    settle(&mut h);
+    assert!(graph(&h).layers[0].x_axis.axis_break.is_some());
+    click(&mut h, "Special Ticks");
+    click(&mut h, "Add Tick");
+    assert_eq!(graph(&h).layers[0].x_axis.special_ticks.len(), 1);
+}

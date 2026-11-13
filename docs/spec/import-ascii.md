@@ -290,6 +290,52 @@ Source: `X-Functions/Import and Export/expASC.OXF` [F]. Writes the worksheet to 
 | missing | Write missing values as "--" | 0/1 | 1 |
 | suffix | Text appended to numbers in text cells | string | empty |
 
+### 13.1 Measured in Origin 2016 (2026-11-12)
+
+Run through `tools/origin-ref/run-labtalk-lines.ps1`; inputs and Origin's raw output files are in
+`re-workspace/scratch/sheet-export/` (`probe1.lines.txt` .. `probe6.lines.txt`, the files in `out/` .. `out5/`,
+local only). Call form: `expASC iw:=[Book1]1! type:=csv path:="FOLDERile.csv" ...`. The `path` is the
+file name; Origin adds the extension of the type (`.csv`, `.dat`, `.txt`) when the name has none of its own
+(`base.out` became `base.out.csv`).
+
+- **Defaults (nothing but `type` and `path` given):** one row each of long names, units and comments (a row is
+  left out when no column has text for it), no short-name row, no user-parameter rows, no row labels, numbers in
+  full precision, missing values as `--`. Lines end in CR LF, also after the last row. The sheet written is the
+  active sheet when `iw` names only the book (a book with two sheets, second active, wrote the second);
+  `[Book]1!` writes sheet 1. The 2016 defaults of the OXF table above for `comment` (1) and `userparam` (0) are
+  what happens; `suffix:=x` changed nothing.
+- **Row order** with everything on: short names, long names, units, comments, then one row per user parameter
+  (in the order the parameters were created), then data. The parameter rows carry only the values, no name,
+  unless `rowlabel:=1`.
+- **`rowlabel:=1`:** a first column; label rows begin with `Short Name`, `Long Name`, `Units`, `Comments`, or the
+  parameter's name; data rows begin with the row number 1, 2, 3...
+- **Separators:** `type:=csv` comma; `csvsep:=1` semicolon, and then every number is written with a **decimal comma**
+  (`1,5;2,5`, also `40000:12:00:00,00` for a date). `type:=dat` / `text` tab; `separator:=1` comma, `2` space,
+  `3` comma+tab (`,	`), `4` comma+space (`, `). The file extension does not choose the separator.
+- **Text cells:** a quote becomes two quotes. In the csv type a text that holds the separator (`a,b`; `a;b` when
+  the separator is a semicolon) or a quote is also wrapped in quotes and its quotes doubled again, so `q"x`
+  is written `"q""""x"` (in the dat type: `q""x`, no wrapping, `a,b` plain even with comma separator). Spaces at
+  the ends and an apostrophe are written as they are. The label rows go through the same rule.
+- **Missing values:** `--` inside a column (numbers and text), nothing past the last value of a column (the
+  field is empty). `missing:=0` writes an empty field inside a column too.
+- **Full precision (`precision:=1`, default):** 15 significant digits, trailing zeros dropped (`0.333333333333333`,
+  `1.23456789012346E17`). Plain notation from 0.001 up to 1E15 inclusive (`0.001`, `1000000000000000`, `123456789012345`),
+  otherwise scientific with capital E, no plus sign and no leading zeros in the exponent: `1E-7`, `-1.23456E-4`,
+  `1.2E-4`, `1.5E15`, `2E15`, `1E16`, `1E300`. Zero is `0`; -0 is `0`.
+- **Displayed digits (`precision:=0`):** each cell as its column shows it, e.g. General `0.12346`, `0.33333`,
+  `1.23457E17`, `1E-4`; significant digits 2 gave `3.1` and `1.2E+06`; decimal places 3 gave `3.142` and `1.235E+06`
+  for 1234567.891 (so a value of 1E6 or more is shown in scientific notation, the Options threshold power 6),
+  decimal 2 `1234.50`.
+- **LabTalk column format (for the probes):** `wks.colN.digitMode` 0 = significant digits, 1 = decimal places;
+  `wks.colN.digits` the count; do not set `wks.colN.format` to 1 (that is Text).
+- **Not measured:** how dates are written under full precision (the probe's date column came out as displayed
+  either way, `40000:12:00:00.00`), `parameter` and `sampinterv` (no visible effect on a plain sheet), `select`,
+  `overwrite` (a second call on the same path appended), `addxcol`.
+
+Sheaf (`crates/io/src/export.rs`, `write_delimited`, Export window `dialogs/export_sheet.rs`) follows these. Known
+differences: user-parameter rows are written in alphabetical order (Sheaf does not keep creation order); a text
+cell that is empty between values is written as `--`; numbers 15 digits long do not read back to the last bit.
+
 Related exports (names only): expWks (workbook/Excel), expGraph / expImage / expPDFw (graphics), expMatASC (matrix text), expNITDM, expWAV. [F]
 
 ## 14. Worked example: CH Instruments cyclic voltammetry text file (P0)

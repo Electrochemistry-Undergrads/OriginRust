@@ -1910,6 +1910,22 @@ impl SheafApp {
                     self.panels.reveal(PanelId::Results);
                     self.say(outcome.message);
                 }
+                FitDialogOutcome::DoneMulti(multi, new_graph) => {
+                    self.fit = None;
+                    let first = &multi.outcomes[0];
+                    self.show_sheet(first.book, multi.summary_sheet.unwrap_or(first.param_sheet));
+                    if let Some(g) = new_graph.or(first.graphs.first().copied()) {
+                        self.focus(g);
+                    }
+                    let mut lines = Vec::new();
+                    for o in &multi.outcomes {
+                        lines.push(o.message.clone());
+                        lines.extend(fit_lines(o));
+                    }
+                    self.logs.result(multi.message.clone(), lines);
+                    self.panels.reveal(PanelId::Results);
+                    self.say(multi.message.clone());
+                }
             }
         }
         if let Some(d) = &mut self.reshape {

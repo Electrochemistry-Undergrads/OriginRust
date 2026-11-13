@@ -47,7 +47,21 @@ const STAT_TOL: f64 = 1e-7;
 
 #[test]
 fn engine_matches_origin() {
-    run(true);
+    run("origin_nlsf.json", 21, true);
+}
+
+/// The functions behind the quick fits (Exponential: ExpGrow1 with `x0` held at 0; Sigmoidal:
+/// Logistic, Hill, DoseResp), run in Origin like the cases above
+/// (`tools/origin-ref/nlfit-quick-gen.py`); ExpDec1, Boltzmann, Gauss and Lorentz are among the
+/// 21 cases above.
+#[test]
+fn quick_fit_functions_match_origin() {
+    run("origin_quickfit.json", 4, true);
+}
+
+#[test]
+fn quick_fit_functions_from_own_starting_values() {
+    run("origin_quickfit.json", 4, false);
 }
 
 /// With our own starting-value routines the path differs, but a fit that ends at the minimum gives
@@ -55,15 +69,15 @@ fn engine_matches_origin() {
 /// short of the constrained minimum there, so the result depends on the path.
 #[test]
 fn own_starting_values_reach_origin_results() {
-    run(false);
+    run("origin_nlsf.json", 21, false);
 }
 
-fn run(origin_start: bool) {
+fn run(file: &str, count: usize, origin_start: bool) {
     FAILURES.with(|f| f.borrow_mut().clear());
     let (ptol, stol) = if origin_start { (PARAM_TOL, STAT_TOL) } else { (1e-5, 1e-4) };
-    let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/origin_nlsf.json")).unwrap();
+    let text = std::fs::read_to_string(format!("{}/tests/data/{file}", env!("CARGO_MANIFEST_DIR"))).unwrap();
     let cases: Vec<Value> = serde_json::from_str(&text).unwrap();
-    assert!(cases.len() >= 21);
+    assert!(cases.len() >= count);
     for c in &cases {
         let name = c["name"].as_str().unwrap();
         let bounded = c["upper"].is_object() || c["lower"].is_object();
@@ -205,4 +219,44 @@ fn user_defined_formula_with_fixed_and_bounded_parameters() {
     assert!(r.param("y0").unwrap().fixed);
     assert_eq!(r.stats.dof, 28);
     assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+}
+
+/// Direct weights equal to `1/err^2` reproduce Origin's instrumental fit (its weight is `1/err^2`
+/// and a direct weight is used as given), and switching the error scaling off divides the
+/// standard errors by the square root of the reduced chi-square.
+#[test]
+fn direct_weighting_and_unscaled_errors_follow_origin_instrumental_fit() {
+    let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/origin_nlsf.json")).unwrap();
+    let cases: Vec<Value> = serde_json::from_str(&text).unwrap();
+    let c = cases.iter().find(|c| c["name"] == "gauss_instr").unwrap();
+    let mut f = library::get("Gauss").unwrap();
+    for (k, v) in c["origin_initial"].as_object().unwrap() {
+        f = f.with_initial(k, num(v));
+    }
+    let (x, y) = (vec_of(&c["x"]), vec_of(&c["y"]));
+    let w: Vec<f64> = vec_of(&c["err"]).iter().map(|e| 1.0 / (e * e)).collect();
+    let r = fit(&f, &x, &y, &FitOptions { weighting: Weighting::Direct(w.clone()), ..Default::default() }).unwrap();
+    assert_eq!(r.stats.iterations.unwrap() as u64, c["origin_iterations"].as_u64().unwrap());
+    let mut bad = Vec::new();
+    for p in c["params_origin"].as_array().unwrap() {
+        let mine = r.param(p["name"].as_str().unwrap()).unwrap();
+        for (what, got, want) in [("value", mine.value, num(&p["value"])), ("SE", mine.std_error, num(&p["se"]))] {
+            if (got - want).abs() > 1e-7 * want.abs() {
+                bad.push(format!("{} {what}: {got} against {want}", mine.name));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    let off = fit(
+        &f,
+        &x,
+        &y,
+        &FitOptions { weighting: Weighting::Direct(w), scale_errors: Some(false), ..Default::default() },
+    )
+    .unwrap();
+    let s = r.stats.reduced_chi_sqr.sqrt();
+    for p in &r.params {
+        let q = off.param(&p.name).unwrap();
+        assert!((p.std_error / s - q.std_error).abs() < 1e-9 * q.std_error, "{}", p.name);
+    }
 }

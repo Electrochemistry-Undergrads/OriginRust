@@ -102,6 +102,10 @@ fn collect_points(x: &[f64], y: &[f64], weighting: &Weighting) -> Result<Points,
         if x[i].is_nan() || y[i].is_nan() || w.is_nan() {
             continue;
         }
+        // A direct weight of zero or below leaves the point out (as in the nonlinear fits).
+        if matches!(weighting, Weighting::Direct(_)) && w <= 0.0 {
+            continue;
+        }
         if x[i].is_infinite() || y[i].is_infinite() {
             return Err(FitError::Failed(
                 "x and y must be finite numbers (use a missing value to leave a point out)".to_string(),

@@ -1,6 +1,6 @@
 # T15: Fitting breadth
 
-**Status:** open. The NLFit window has Origin's tabs, lower panel and Fit/Done/Cancel since `nlfit-origin` (merged 2026-11-13; fitting.md section 9). **Size:** L. **Branch:** `fit-breadth`. **Model:** Sonnet.
+**Status:** items 1-3 done, merged 2026-11-13 (2026-11-13); items 4-7 open. The NLFit window has Origin's tabs, lower panel and Fit/Done/Cancel since `nlfit-origin` (merged 2026-11-13; fitting.md section 9). **Size:** L. **Branch:** `fit-breadth`. **Model:** Sonnet.
 **Detail:** audit D "Missing", "Partial". **Spec:** `docs/spec/fitting.md`, `fit-function-catalog.md`,
 `fdf-format.md`, `fitting-linear.md`.
 

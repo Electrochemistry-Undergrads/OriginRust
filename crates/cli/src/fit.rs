@@ -257,6 +257,7 @@ pub fn fit(a: FitArgs) -> Result<()> {
         WeightKind::None => FitWeighting::None,
         WeightKind::Instrumental => FitWeighting::Instrumental,
         WeightKind::Statistical => FitWeighting::Statistical,
+        WeightKind::Direct => FitWeighting::Direct,
     };
 
     let mut project = if is_project(input) {
@@ -274,8 +275,8 @@ pub fn fit(a: FitArgs) -> Result<()> {
     let book = pick_book(&project, a.book.as_deref())?;
     let sheet = pick_sheet(&project, book, a.sheet.as_deref())?;
     let errors = named_columns(&project, book, sheet, &a.yerr)?;
-    if !errors.is_empty() && weighting != FitWeighting::Instrumental {
-        bail!("--yerr names the error columns of instrumental weighting; add --weight instrumental");
+    if !errors.is_empty() && !matches!(weighting, FitWeighting::Instrumental | FitWeighting::Direct) {
+        bail!("--yerr names the error or weight columns of --weight instrumental or direct; add one of them");
     }
     let columns: Vec<_> = if a.y.is_empty() {
         // Error columns given with --yerr are not fitted themselves.
@@ -294,11 +295,8 @@ pub fn fit(a: FitArgs) -> Result<()> {
         );
     }
 
-    let mut first: Option<(FitOutcome, sheaf_core::ColumnId)> = None;
+    let mut requests = Vec::new();
     for (i, y) in columns.iter().enumerate() {
-        if i > 0 {
-            println!("\n----------------------------------------------------------------\n");
-        }
         let mut request = FitRequest::new(*y, model.clone());
         request.rows = rows;
         request.params = params.clone();
@@ -309,10 +307,36 @@ pub fn fit(a: FitArgs) -> Result<()> {
         request.band_level = a.level / 100.0;
         request.max_iterations = a.max_iterations;
         request.tolerance = a.tolerance;
-        let outcome = project.fit(&request)?;
+        request.scale_errors = !a.no_scale_errors;
+        requests.push(request);
+    }
+    let outcomes = if a.global {
+        let multi = project.fit_multi(&requests, Some(&a.share))?;
+        println!(
+            "{}
+",
+            multi.message
+        );
+        multi.outcomes
+    } else {
+        let mut outcomes = Vec::new();
+        for request in &requests {
+            outcomes.push(project.fit(request)?);
+        }
+        outcomes
+    };
+    let mut first: Option<(FitOutcome, sheaf_core::ColumnId)> = None;
+    for (i, outcome) in outcomes.into_iter().enumerate() {
+        if i > 0 {
+            println!(
+                "
+----------------------------------------------------------------
+"
+            );
+        }
         print_outcome(&outcome);
         if first.is_none() {
-            first = Some((outcome, *y));
+            first = Some((outcome, columns[i]));
         }
     }
     let (outcome, source) = first.expect("at least one column was fitted");

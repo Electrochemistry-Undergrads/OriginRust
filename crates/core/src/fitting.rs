@@ -80,6 +80,9 @@ pub enum FitWeighting {
     Instrumental,
     /// `w = 1 / abs(y)` ("Statistical").
     Statistical,
+    /// `w` is the value in a weight column, used as given ("Direct Weighting"); a weight of zero
+    /// or below leaves the point out.
+    Direct,
 }
 
 /// Which bands around the fitted curve are computed (Origin's "Confidence Bands" and
@@ -109,8 +112,8 @@ impl BandChoice {
 pub struct FitRequest {
     /// The column to fit. Its X column follows from the designations of the sheet.
     pub y: ColumnId,
-    /// The Y-error column for instrumental weighting; `None` uses the error column that belongs
-    /// to `y` in the sheet, if there is one.
+    /// The Y-error column for instrumental weighting, or the weight column for direct weighting;
+    /// `None` uses the error column that belongs to `y` in the sheet, if there is one.
     pub y_error: Option<ColumnId>,
     pub rows: RowRange,
     pub model: FitModel,
@@ -141,6 +144,10 @@ pub struct FitRequest {
     pub max_iterations: usize,
     /// Convergence tolerance of a nonlinear fit (Origin's default 1e-9).
     pub tolerance: f64,
+    /// Multiply the covariance by the reduced chi-square ("Scale Errors with sqrt(Reduced
+    /// Chi-Sqr)", Origin's default). Without weights Origin always scales, so the switch only
+    /// matters for weighted fits.
+    pub scale_errors: bool,
 }
 
 impl FitRequest {
@@ -164,6 +171,7 @@ impl FitRequest {
             plot_bands: true,
             max_iterations: 400,
             tolerance: 1e-9,
+            scale_errors: true,
         }
     }
 }
@@ -175,13 +183,15 @@ impl FitRequest {
 pub struct FitData {
     pub x: Vec<f64>,
     pub y: Vec<f64>,
-    /// Only present for instrumental weighting.
+    /// Present for instrumental weighting (errors) and direct weighting (weights).
     pub y_error: Option<Vec<f64>>,
     pub weighting: FitWeighting,
     pub confidence_level: f64,
     /// Iteration limit and tolerance of a nonlinear fit (see [`FitRequest`]).
     pub max_iterations: usize,
     pub tolerance: f64,
+    /// See [`FitRequest::scale_errors`].
+    pub scale_errors: bool,
 }
 
 /// Computes the bands of a fitted model at the given x values and confidence level.
@@ -234,6 +244,18 @@ pub struct FitOutcome {
     pub graphs: Vec<WindowId>,
     /// Derived quantities (see [`FittedModel::derived`]); also on the statistics sheet.
     pub derived: Vec<(String, f64)>,
+    /// One sentence for a status line.
+    pub message: String,
+}
+
+/// What [`Project::fit_multi`] did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MultiFitOutcome {
+    /// One outcome per fitted column, in request order.
+    pub outcomes: Vec<FitOutcome>,
+    /// Index of the sheet with the combined parameter table of a global fit (its statistics sheet
+    /// follows it).
+    pub summary_sheet: Option<usize>,
     /// One sentence for a status line.
     pub message: String,
 }
@@ -431,7 +453,7 @@ impl Project {
         };
         let (first, last) = resolve_rows(request.rows, &column.short_name, &x_all, y_all.len())?;
         let y_error = match request.weighting {
-            FitWeighting::Instrumental => {
+            FitWeighting::Instrumental | FitWeighting::Direct => {
                 let err_col = match request.y_error {
                     Some(e) => Some(self.column(e).ok_or(AnalysisError::NoSuchColumn(e))?),
                     None => sheet.y_error_for(index),
@@ -452,6 +474,7 @@ impl Project {
             confidence_level: request.confidence_level,
             max_iterations: request.max_iterations,
             tolerance: request.tolerance,
+            scale_errors: request.scale_errors,
         };
         let source_label = column_label(column);
         let source_name = column.display_name().to_string();
@@ -755,6 +778,197 @@ impl Project {
         self.fit_with(request, move |data| run_engine(&model, &settings, data))
     }
 
+    /// The values a fit of this request would hand to the engine: the X, Y and weight or error
+    /// values of the chosen rows (the same gathering as [`Project::fit_with`]).
+    fn collect_fit_data(&self, request: &FitRequest) -> Result<FitData, FitRequestError> {
+        let id = request.y;
+        let (_, sheet, column) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+        let index = sheet.column_index(id).expect("located here");
+        let y_all = column.numeric().ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?;
+        if y_all.is_empty() {
+            return Err(AnalysisError::Empty(column.short_name.clone()).into());
+        }
+        let x_col = sheet.x_for(index).filter(|x| x.id != id && x.data.is_numeric());
+        let x_all: Vec<f64> = match x_col.and_then(Column::numeric) {
+            Some(v) => (0..y_all.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
+            None => (1..=y_all.len()).map(|i| i as f64).collect(),
+        };
+        let (first, last) = resolve_rows(request.rows, &column.short_name, &x_all, y_all.len())?;
+        let y_error = match request.weighting {
+            FitWeighting::Instrumental | FitWeighting::Direct => {
+                let err_col = match request.y_error {
+                    Some(e) => Some(self.column(e).ok_or(AnalysisError::NoSuchColumn(e))?),
+                    None => sheet.y_error_for(index),
+                }
+                .ok_or_else(|| FitRequestError::NoErrorColumn(column.short_name.clone()))?;
+                let e = err_col
+                    .numeric()
+                    .ok_or_else(|| FitRequestError::ErrorColumnNotNumeric(err_col.short_name.clone()))?;
+                Some((first..=last).map(|i| e.get(i).copied().unwrap_or(f64::NAN)).collect())
+            }
+            _ => None,
+        };
+        Ok(FitData {
+            x: x_all[first..=last].to_vec(),
+            y: y_all[first..=last].to_vec(),
+            y_error,
+            weighting: request.weighting,
+            confidence_level: request.confidence_level,
+            max_iterations: request.max_iterations,
+            tolerance: request.tolerance,
+            scale_errors: request.scale_errors,
+        })
+    }
+
+    /// Fits several columns with one model. With `shared` of `None` the fits are independent: each
+    /// request is fitted as by [`Project::fit`] and gets its own result sheets. With the names of
+    /// the shared parameters (possibly none) it is a global fit: one fit of all the datasets
+    /// together (Origin's "Global Fit"), whose shared parameters take one value for all of them
+    /// and whose statistics are those of all the points; every dataset still gets its result
+    /// sheets, curve and fitted columns, and one more pair of sheets (`FitNLGlobal1` and its
+    /// `Stats`) holds the combined table. All requests must use the model, parameter settings,
+    /// weighting, iteration limit and tolerance of the first one.
+    pub fn fit_multi(
+        &mut self,
+        requests: &[FitRequest],
+        shared: Option<&[String]>,
+    ) -> Result<MultiFitOutcome, FitRequestError> {
+        let first = requests.first().ok_or_else(|| FitRequestError::BadOption("no column to fit".into()))?;
+        let Some(shared) = shared else {
+            let mut outcomes = Vec::new();
+            for r in requests {
+                outcomes.push(self.fit(r)?);
+            }
+            let message = format!("Fitted {} columns independently", outcomes.len());
+            return Ok(MultiFitOutcome { outcomes, summary_sheet: None, message });
+        };
+        if !matches!(first.model, FitModel::BuiltIn(_) | FitModel::Formula { .. } | FitModel::Fdf(_)) {
+            return Err(FitError::BadFunction(
+                "a global fit needs a nonlinear function (a straight line or polynomial has no shared parameters)"
+                    .into(),
+            )
+            .into());
+        }
+        let (func, library_name) = nl_function(&first.model, &first.params)?;
+        if let Some(bad) = shared.iter().find(|s| !func.params.iter().any(|p| &p.name == *s)) {
+            let known: Vec<&str> = func.params.iter().map(|p| p.name.as_str()).collect();
+            return Err(unknown_param(bad, &known).into());
+        }
+        let flags: Vec<bool> = func.params.iter().map(|p| shared.contains(&p.name)).collect();
+        let mut sets = Vec::new();
+        let mut extra = Vec::new();
+        for r in requests {
+            let d = self.collect_fit_data(r)?;
+            extra.push(d.y_error.clone().unwrap_or_default());
+            sets.push(sheaf_fit::global::GlobalDataset { x: d.x, y: d.y });
+        }
+        let mut go = sheaf_fit::global::GlobalOptions::new(flags);
+        go.weighting = match first.weighting {
+            FitWeighting::None => sheaf_fit::global::GlobalWeighting::None,
+            FitWeighting::Statistical => sheaf_fit::global::GlobalWeighting::Statistical,
+            FitWeighting::Instrumental => sheaf_fit::global::GlobalWeighting::Instrumental(extra),
+            FitWeighting::Direct => sheaf_fit::global::GlobalWeighting::Direct(extra),
+        };
+        go.max_iterations = first.max_iterations;
+        go.tolerance = first.tolerance;
+        go.confidence_level = first.confidence_level;
+        let scaled = first.scale_errors || first.weighting == FitWeighting::None;
+        go.scale_errors = Some(scaled);
+        let fit = sheaf_fit::global::fit_global(&func, &sets, &go)?;
+
+        let func = std::rc::Rc::new(func);
+        let mut outcomes = Vec::new();
+        for (request, report) in requests.iter().zip(fit.datasets.iter().cloned()) {
+            let values: Vec<f64> = report.params.iter().map(|p| p.value).collect();
+            let derived = library_name
+                .as_ref()
+                .map(|n| sheaf_fit::library::derived_values(n, &report.params))
+                .unwrap_or_default();
+            let (for_curve, for_bands, view) = (func.clone(), func.clone(), report.clone());
+            let model = FittedModel {
+                report,
+                curve: Box::new(move |x| for_curve.eval(&values, x)),
+                bands: Some(Box::new(move |xs, level| {
+                    sheaf_fit::bands::nl_bands(&for_bands, &view, xs, level, scaled)
+                })),
+                derived,
+            };
+            outcomes.push(self.fit_with(request, move |_| Ok(model))?);
+        }
+
+        // The combined table of all datasets.
+        let book_id = outcomes[0].book;
+        let sheets = &self.workbook(book_id).expect("workbook exists").sheets;
+        let taken = |name: &str| sheets.iter().any(|s| s.name.eq_ignore_ascii_case(name));
+        let name = (1..)
+            .map(|n| format!("FitNLGlobal{n}"))
+            .find(|name| !taken(name) && !taken(&format!("{name}Stats")))
+            .expect("the name sequence is unbounded");
+        let mut param_ws = Worksheet::new(name.clone());
+        let mut stats_ws = Worksheet::new(format!("{name}Stats"));
+        let c = &fit.combined;
+        let p = &c.params;
+        let numbers = |f: &dyn Fn(&sheaf_fit::Parameter) -> f64| ColumnData::numeric(p.iter().map(f).collect());
+        let level = format!("{}%", (c.confidence_level * 100.0 * 1e6).round() / 1e6);
+        let flag = |on: &dyn Fn(&sheaf_fit::Parameter) -> bool, word: &str| {
+            ColumnData::text(p.iter().map(|q| if on(q) { word.to_string() } else { String::new() }).collect())
+        };
+        let cols: Vec<(Designation, String, ColumnData)> = vec![
+            (Designation::Label, "Parameter".into(), ColumnData::text(p.iter().map(|q| q.name.clone()).collect())),
+            (Designation::Y, "Value".into(), numbers(&|q| q.value)),
+            (Designation::Y, "Standard Error".into(), numbers(&|q| q.std_error)),
+            (Designation::Y, "t-Value".into(), numbers(&|q| q.t_value)),
+            (Designation::Y, "Prob>|t|".into(), numbers(&|q| q.prob_t)),
+            (Designation::Y, format!("LCL ({level})"), numbers(&|q| q.lcl)),
+            (Designation::Y, format!("UCL ({level})"), numbers(&|q| q.ucl)),
+            (Designation::Y, "Dependency".into(), numbers(&|q| q.dependency)),
+            (Designation::Label, "Fixed".into(), flag(&|q| q.fixed, "Fixed")),
+            (Designation::Label, "Shared".into(), flag(&|q| shared.contains(&q.name), "Shared")),
+        ];
+        for (designation, title, data) in cols {
+            sheet_column(self, &mut param_ws, designation, &title, "", data);
+        }
+        let labels: Vec<String> = requests.iter().filter_map(|r| self.column(r.y).map(column_label)).collect();
+        let rows = stats_rows(c, &[], &labels.join("; "), "all rows of each column");
+        sheet_column(
+            self,
+            &mut stats_ws,
+            Designation::Label,
+            "Quantity",
+            "",
+            ColumnData::text(rows.iter().map(|r| r.0.clone()).collect()),
+        );
+        sheet_column(
+            self,
+            &mut stats_ws,
+            Designation::Y,
+            "Value",
+            "",
+            ColumnData::numeric(rows.iter().map(|r| r.1).collect()),
+        );
+        sheet_column(
+            self,
+            &mut stats_ws,
+            Designation::Label,
+            "Text",
+            "",
+            ColumnData::text(rows.iter().map(|r| r.2.clone()).collect()),
+        );
+        let b = self.workbook_mut(book_id).expect("workbook exists");
+        b.sheets.push(param_ws);
+        let summary = b.sheets.len() - 1;
+        b.sheets.push(stats_ws);
+        let message = format!(
+            "Global fit of {} to {} columns: {} points, {} free parameters, reduced chi-square {}; combined table in sheet {name}",
+            func.name,
+            requests.len(),
+            c.stats.n_points,
+            c.stats.n_points - c.stats.dof,
+            crate::format::format_general(c.stats.reduced_chi_sqr, 6),
+        );
+        Ok(MultiFitOutcome { outcomes, summary_sheet: Some(summary), message })
+    }
+
     /// Makes a graph that shows the fitted data as symbols and the fitted curve as a line
     /// (for a fit whose data is not plotted anywhere yet). Returns the new graph.
     pub fn plot_fit(
@@ -841,7 +1055,16 @@ fn weighting(d: &FitData) -> Result<sheaf_fit::Weighting, FitError> {
         FitWeighting::Instrumental => sheaf_fit::Weighting::Instrumental(
             d.y_error.clone().ok_or_else(|| FitError::BadFunction("instrumental weighting needs Y errors".into()))?,
         ),
+        FitWeighting::Direct => sheaf_fit::Weighting::Direct(
+            d.y_error.clone().ok_or_else(|| FitError::BadFunction("direct weighting needs a weight column".into()))?,
+        ),
     })
+}
+
+/// Whether the covariance is scaled by the reduced chi-square: as asked, but always without
+/// weights (Origin ignores the switch there).
+fn scale_errors(d: &FitData) -> bool {
+    d.scale_errors || d.weighting == FitWeighting::None
 }
 
 /// Fails with a message that names the unknown parameter and the ones that exist.
@@ -890,6 +1113,79 @@ fn closed_form_fixed(settings: &[ParamSetting], allowed: &[&str]) -> Result<Vec<
     Ok(fixed)
 }
 
+/// The function of a nonlinear model with the settings applied (start values, fixed values,
+/// bounds), and its name in the library if it is a built-in one.
+fn nl_function(
+    model: &FitModel,
+    settings: &[ParamSetting],
+) -> Result<(sheaf_fit::nlsf::FitFunction, Option<String>), FitError> {
+    use sheaf_fit::nlsf;
+    let (mut func, library_name) = match model {
+        FitModel::BuiltIn(name) => {
+            let f = sheaf_fit::library::get(name).ok_or_else(|| {
+                FitError::BadFunction(format!(
+                    "there is no built-in fit function named '{name}' (sheaf fit --list shows them all)"
+                ))
+            })?;
+            let n = f.name.clone();
+            (f, Some(n))
+        }
+        FitModel::Formula { formula, params } => {
+            let names: Vec<&str> = params.iter().map(String::as_str).collect();
+            (nlsf::FitFunction::from_formula("User defined", formula, &names)?, None)
+        }
+        FitModel::Fdf(text) => (sheaf_fit::fdf::parse_fdf(text)?.to_fit_function()?, None),
+        _ => unreachable!("matched above"),
+    };
+    for s in settings {
+        let Some(at) = func.params.iter().position(|p| p.name == s.name) else {
+            let known: Vec<&str> = func.params.iter().map(|p| p.name.as_str()).collect();
+            return Err(unknown_param(&s.name, &known));
+        };
+        let p = &mut func.params[at];
+        if let Some(v) = s.initial {
+            p.initial = v;
+        }
+        if s.fixed {
+            p.initial = fixed_value(s)?;
+            p.fixed = true;
+        }
+        if s.lower.is_some() {
+            p.lower = s.lower;
+        }
+        if s.upper.is_some() {
+            p.upper = s.upper;
+        }
+        if let (Some(lo), Some(hi)) = (p.lower, p.upper)
+            && lo > hi
+        {
+            return Err(FitError::BadFunction(format!(
+                "the lower bound of {} ({lo}) is above its upper bound ({hi})",
+                p.name
+            )));
+        }
+        // A value the user gave must lie within the bounds (the function's own bounds
+        // included); otherwise the fit would start, or stay, outside them.
+        if s.initial.is_some() || s.fixed {
+            let v = p.initial;
+            let what = if p.fixed { "fixed value" } else { "start value" };
+            if let Some(lo) = p.lower.filter(|lo| v < *lo) {
+                return Err(FitError::BadFunction(format!(
+                    "the {what} of {} ({v}) is below its lower bound ({lo})",
+                    p.name
+                )));
+            }
+            if let Some(hi) = p.upper.filter(|hi| v > *hi) {
+                return Err(FitError::BadFunction(format!(
+                    "the {what} of {} ({v}) is above its upper bound ({hi})",
+                    p.name
+                )));
+            }
+        }
+    }
+    Ok((func, library_name))
+}
+
 fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Result<FittedModel, FitError> {
     use sheaf_fit::{linear, nlsf};
     let w = weighting(d)?;
@@ -902,7 +1198,7 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 fix_slope: get("Slope"),
                 weighting: w,
                 confidence_level: d.confidence_level,
-                ..Default::default()
+                scale_errors_by_reduced_chi_sqr: scale_errors(d),
             };
             let (report, curve) = linear::fit_linear_with_curve(&d.x, &d.y, &opts)?;
             let curve = std::rc::Rc::new(curve);
@@ -920,7 +1216,7 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 fix_intercept: fixed.first().map(|(_, v)| *v),
                 weighting: w,
                 confidence_level: d.confidence_level,
-                ..Default::default()
+                scale_errors_by_reduced_chi_sqr: scale_errors(d),
             };
             let (report, curve) = linear::fit_polynomial_with_curve(&d.x, &d.y, *order, &opts)?;
             let curve = std::rc::Rc::new(curve);
@@ -933,75 +1229,13 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
             })
         }
         FitModel::BuiltIn(_) | FitModel::Formula { .. } | FitModel::Fdf(_) => {
-            let (mut func, library_name) = match model {
-                FitModel::BuiltIn(name) => {
-                    let f = sheaf_fit::library::get(name).ok_or_else(|| {
-                        FitError::BadFunction(format!(
-                            "there is no built-in fit function named '{name}' (sheaf fit --list shows them all)"
-                        ))
-                    })?;
-                    let n = f.name.clone();
-                    (f, Some(n))
-                }
-                FitModel::Formula { formula, params } => {
-                    let names: Vec<&str> = params.iter().map(String::as_str).collect();
-                    (nlsf::FitFunction::from_formula("User defined", formula, &names)?, None)
-                }
-                FitModel::Fdf(text) => (sheaf_fit::fdf::parse_fdf(text)?.to_fit_function()?, None),
-                _ => unreachable!("matched above"),
-            };
-            for s in settings {
-                let Some(at) = func.params.iter().position(|p| p.name == s.name) else {
-                    let known: Vec<&str> = func.params.iter().map(|p| p.name.as_str()).collect();
-                    return Err(unknown_param(&s.name, &known));
-                };
-                let p = &mut func.params[at];
-                if let Some(v) = s.initial {
-                    p.initial = v;
-                }
-                if s.fixed {
-                    p.initial = fixed_value(s)?;
-                    p.fixed = true;
-                }
-                if s.lower.is_some() {
-                    p.lower = s.lower;
-                }
-                if s.upper.is_some() {
-                    p.upper = s.upper;
-                }
-                if let (Some(lo), Some(hi)) = (p.lower, p.upper)
-                    && lo > hi
-                {
-                    return Err(FitError::BadFunction(format!(
-                        "the lower bound of {} ({lo}) is above its upper bound ({hi})",
-                        p.name
-                    )));
-                }
-                // A value the user gave must lie within the bounds (the function's own bounds
-                // included); otherwise the fit would start, or stay, outside them.
-                if s.initial.is_some() || s.fixed {
-                    let v = p.initial;
-                    let what = if p.fixed { "fixed value" } else { "start value" };
-                    if let Some(lo) = p.lower.filter(|lo| v < *lo) {
-                        return Err(FitError::BadFunction(format!(
-                            "the {what} of {} ({v}) is below its lower bound ({lo})",
-                            p.name
-                        )));
-                    }
-                    if let Some(hi) = p.upper.filter(|hi| v > *hi) {
-                        return Err(FitError::BadFunction(format!(
-                            "the {what} of {} ({v}) is above its upper bound ({hi})",
-                            p.name
-                        )));
-                    }
-                }
-            }
+            let (func, library_name) = nl_function(model, settings)?;
             let opts = nlsf::FitOptions {
                 weighting: w,
                 confidence_level: d.confidence_level,
                 max_iterations: d.max_iterations,
                 tolerance: d.tolerance,
-                ..Default::default()
+                scale_errors: Some(scale_errors(d)),
             };
             let report = nlsf::fit(&func, &d.x, &d.y, &opts)?;
             let values: Vec<f64> = report.params.iter().map(|p| p.value).collect();
@@ -1010,11 +1244,12 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
             let func = std::rc::Rc::new(func);
             let for_curve = func.clone();
             let for_bands_report = report.clone();
+            let scaled = scale_errors(d);
             Ok(FittedModel {
                 report,
                 curve: Box::new(move |x| for_curve.eval(&values, x)),
                 bands: Some(Box::new(move |xs, level| {
-                    sheaf_fit::bands::nl_bands(&func, &for_bands_report, xs, level, true)
+                    sheaf_fit::bands::nl_bands(&func, &for_bands_report, xs, level, scaled)
                 })),
                 derived,
             })
@@ -1131,6 +1366,7 @@ mod tests {
             confidence_level: 0.95,
             max_iterations: 400,
             tolerance: 1e-9,
+            scale_errors: true,
         };
         let m = run_engine(&FitModel::Polynomial { order: 5 }, &[], &d).unwrap();
         let worst = x.iter().zip(&m.report.fitted).map(|(x, f)| ((m.curve)(*x) - f).abs()).fold(0.0, f64::max);
@@ -1627,5 +1863,117 @@ mod tests {
         assert_eq!(linspace(2.0, 2.0, 1), [2.0]);
         let v = linspace(0.1, 0.7, 7);
         assert_eq!(v[6], 0.7);
+    }
+
+    fn weighted_data(weighting: FitWeighting, scale: bool) -> FitData {
+        let x: Vec<f64> = (1..=20).map(f64::from).collect();
+        let y: Vec<f64> = x.iter().map(|x| 1.0 + 0.5 * x + 0.1 * (2.3 * x).sin()).collect();
+        let e: Vec<f64> = x.iter().map(|x| 0.05 + 0.01 * x).collect();
+        let y_error = match weighting {
+            FitWeighting::Direct => Some(e.iter().map(|e| 1.0 / (e * e)).collect()),
+            FitWeighting::Instrumental => Some(e),
+            _ => None,
+        };
+        FitData {
+            x,
+            y,
+            y_error,
+            weighting,
+            confidence_level: 0.95,
+            max_iterations: 400,
+            tolerance: 1e-9,
+            scale_errors: scale,
+        }
+    }
+
+    #[test]
+    fn direct_weights_give_the_instrumental_fit_of_the_same_weights() {
+        for model in [FitModel::Linear, FitModel::BuiltIn("Line".into())] {
+            let a = run_engine(&model, &[], &weighted_data(FitWeighting::Instrumental, true)).unwrap().report;
+            let b = run_engine(&model, &[], &weighted_data(FitWeighting::Direct, true)).unwrap().report;
+            for (p, q) in a.params.iter().zip(&b.params) {
+                assert!((p.value - q.value).abs() < 1e-9 * p.value.abs().max(1.0), "{model:?}");
+                assert!((p.std_error - q.std_error).abs() < 1e-9 * p.std_error, "{model:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn unscaled_errors_are_the_scaled_ones_over_sqrt_reduced_chi_square() {
+        for model in [FitModel::Linear, FitModel::Polynomial { order: 2 }, FitModel::BuiltIn("Line".into())] {
+            let on = run_engine(&model, &[], &weighted_data(FitWeighting::Instrumental, true)).unwrap().report;
+            let off = run_engine(&model, &[], &weighted_data(FitWeighting::Instrumental, false)).unwrap().report;
+            let s = on.stats.reduced_chi_sqr.sqrt();
+            assert!((s - 1.0).abs() > 0.05, "the test data should not have a reduced chi-square near 1");
+            for (p, q) in on.params.iter().zip(&off.params) {
+                assert!((p.std_error / s - q.std_error).abs() < 1e-8 * q.std_error, "{model:?} {}", p.name);
+            }
+        }
+    }
+
+    #[test]
+    fn without_weights_the_scale_switch_is_ignored() {
+        for model in [FitModel::Linear, FitModel::BuiltIn("Line".into())] {
+            let on = run_engine(&model, &[], &weighted_data(FitWeighting::None, true)).unwrap().report;
+            let off = run_engine(&model, &[], &weighted_data(FitWeighting::None, false)).unwrap().report;
+            for (p, q) in on.params.iter().zip(&off.params) {
+                assert_eq!((p.value, p.std_error, p.lcl), (q.value, q.std_error, q.lcl), "{model:?}");
+            }
+        }
+    }
+
+    /// A workbook with X and two decaying columns that share their time constant.
+    fn two_decays() -> (Project, ColumnId, ColumnId) {
+        let mut p = Project::new();
+        let book = p.add_workbook("decays");
+        let xs: Vec<f64> = (0..30).map(|i| f64::from(i) * 0.3).collect();
+        let y1: Vec<f64> =
+            xs.iter().enumerate().map(|(i, x)| 1.0 + 4.0 * (-x / 2.0).exp() + 0.01 * (7.0 * i as f64).sin()).collect();
+        let y2: Vec<f64> =
+            xs.iter().enumerate().map(|(i, x)| 0.5 + 2.0 * (-x / 2.0).exp() + 0.01 * (5.0 * i as f64).sin()).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(xs)).unwrap();
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y1)).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y2)).unwrap();
+        (p, a, b)
+    }
+
+    #[test]
+    fn a_global_fit_shares_a_parameter_and_writes_one_table_for_all() {
+        let (mut p, a, b) = two_decays();
+        let reqs: Vec<FitRequest> =
+            [a, b].iter().map(|y| FitRequest::new(*y, FitModel::BuiltIn("ExpDec1".into()))).collect();
+        let out = p.fit_multi(&reqs, Some(&["t1".to_string()])).unwrap();
+        assert_eq!(out.outcomes.len(), 2);
+        let t = |i: usize| out.outcomes[i].report.param("t1").unwrap().clone();
+        assert_eq!(t(0).value, t(1).value, "one shared time constant");
+        assert!((t(0).value - 2.0).abs() < 0.05, "{}", t(0).value);
+        assert_eq!(t(0).std_error, t(1).std_error);
+        // 60 points, 5 free parameters: y0 and A1 of each dataset and the one t1.
+        assert_eq!(out.outcomes[0].report.stats.dof, 55);
+        let book = p.workbook(out.outcomes[0].book).unwrap();
+        let summary = &book.sheets[out.summary_sheet.unwrap()];
+        assert_eq!(summary.name, "FitNLGlobal1");
+        assert_eq!(book.sheets[out.summary_sheet.unwrap() + 1].name, "FitNLGlobal1Stats");
+        let names = summary.columns[0].text().unwrap().to_vec();
+        assert_eq!(names, ["y0", "y0_2", "A1", "A1_2", "t1"]);
+        // Each dataset has its own fitted column, residuals and curve sheet.
+        assert!(out.outcomes[0].fitted_column != out.outcomes[1].fitted_column);
+        assert!(out.message.contains("Global fit"));
+    }
+
+    #[test]
+    fn independent_fits_of_several_columns_each_get_their_sheets_and_a_global_fit_needs_a_nonlinear_model() {
+        let (mut p, a, b) = two_decays();
+        let reqs: Vec<FitRequest> =
+            [a, b].iter().map(|y| FitRequest::new(*y, FitModel::BuiltIn("ExpDec1".into()))).collect();
+        let out = p.fit_multi(&reqs, None).unwrap();
+        assert_eq!(out.outcomes.len(), 2);
+        assert!(out.summary_sheet.is_none());
+        assert_ne!(out.outcomes[0].param_sheet, out.outcomes[1].param_sheet);
+        let lines: Vec<FitRequest> = [a, b].iter().map(|y| FitRequest::new(*y, FitModel::Linear)).collect();
+        let e = p.fit_multi(&lines, Some(&[])).unwrap_err().to_string();
+        assert!(e.contains("nonlinear"), "{e}");
+        let e = p.fit_multi(&reqs, Some(&["nope".to_string()])).unwrap_err().to_string();
+        assert!(e.contains("no parameter 'nope'"), "{e}");
     }
 }

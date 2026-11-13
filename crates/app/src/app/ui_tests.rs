@@ -677,6 +677,142 @@ fn the_fit_window_offers_bands_and_iteration_controls() {
     assert_eq!(curve.columns.len(), 2 + 4, "the curve and four band columns");
 }
 
+/// A CSV with X, two decaying columns of one time constant and a weight column.
+fn decays_file(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("decays.csv");
+    let mut csv = String::from("t,a,b,w\n");
+    for i in 0..30 {
+        let x = i as f64 * 0.3;
+        csv += &format!(
+            "{x},{},{},{}\n",
+            1.0 + 4.0 * (-x / 2.0).exp() + 0.01 * (7.0 * i as f64).sin(),
+            0.5 + 2.0 * (-x / 2.0).exp() + 0.01 * (5.0 * i as f64).sin(),
+            1.0 + 0.5 * (3.0 * i as f64).sin().abs()
+        );
+    }
+    std::fs::write(&path, csv).unwrap();
+    path
+}
+
+#[test]
+fn the_fit_window_offers_direct_weighting_and_the_scale_errors_switch() {
+    let mut h = start(vec![decays_file("fitdirect")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Linear }, &ctx);
+    settle(&mut h);
+    use sheaf_core::fitting::FitWeighting;
+    let request = |h: &Harness<'static, SheafApp>| h.state().fit.as_ref().unwrap().request_for_test().unwrap();
+    assert_eq!((request(&h).weighting, request(&h).scale_errors), (FitWeighting::None, true));
+    click(&mut h, "Data Selection");
+    h.get_by_label("Direct");
+    click(&mut h, "Direct");
+    h.get_by_label("Weight column");
+    let r = request(&h);
+    assert_eq!(r.weighting, FitWeighting::Direct);
+    assert!(r.y_error.is_some(), "a weight column is preselected");
+    click(&mut h, "Advanced");
+    click(&mut h, "Scale Error with sqrt(Reduced Chi-Sqr)");
+    assert!(!request(&h).scale_errors, "the box was ticked and is now off");
+    // The weight column w is chosen and the fit runs with the weights from it.
+    let w = project(&h).workbooks().next().unwrap().sheets[0].column_by_name("w").unwrap().id;
+    h.state_mut().fit.as_mut().unwrap().weight_column_for_test(w);
+    assert_eq!(request(&h).y_error, Some(w));
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_none(), "Done closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    assert!(b.sheets.iter().any(|s| s.name == "FitLinear1"), "the fit was written");
+}
+
+#[test]
+fn the_fit_window_fits_several_columns_independently_or_as_a_global_fit() {
+    let mut h = start(vec![decays_file("fitglobal")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit.as_mut().unwrap().choose_for_test("ExpDec1");
+    let sheet = &project(&h).workbooks().next().unwrap().sheets[0];
+    let b = sheet.column_by_name("b").unwrap().id;
+    settle(&mut h);
+    click(&mut h, "Data Selection");
+    h.get_by_label("Also fit");
+    h.state_mut().fit.as_mut().unwrap().also_fit_for_test(&[b], None);
+    settle(&mut h);
+    h.get_by_label("Multiple datasets");
+    h.get_by_label("Global Fit");
+    // Global fit: the Parameters tab gets a Shared column.
+    h.state_mut().fit.as_mut().unwrap().also_fit_for_test(&[b], Some(&["t1"]));
+    settle(&mut h);
+    click(&mut h, "Parameters");
+    h.get_by_label("Shared");
+    click(&mut h, "Done");
+    // Done with no iterations of its own writes the starting values; the table is the guess.
+    assert!(h.state().fit.is_none());
+    let names: Vec<String> = project(&h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+    assert!(names.contains(&"FitNLGlobal1".to_string()), "{names:?}");
+    assert!(names.contains(&"FitNL1".to_string()) && names.contains(&"FitNL2".to_string()), "{names:?}");
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1, "one undo removes all of it");
+
+    // Independent fits: one set of result sheets per column, no combined table.
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit.as_mut().unwrap().choose_for_test("ExpDec1");
+    h.state_mut().fit.as_mut().unwrap().also_fit_for_test(&[b], None);
+    click(&mut h, "Fit");
+    let names: Vec<String> = project(&h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+    assert!(!names.iter().any(|n| n.starts_with("FitNLGlobal")), "{names:?}");
+    assert!(names.contains(&"FitNL2".to_string()), "{names:?}");
+}
+
+#[test]
+fn the_quick_fits_open_nlfit_with_a_preset_function_and_a_locked_category() {
+    let mut h = start(vec![decays_file("fitquick")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    for (kind, title, default, offered) in [
+        (
+            FitKind::Exponential,
+            "Fit Exponential (ExpDec1)",
+            "ExpDec1",
+            vec!["ExpDec1", "ExpDec2", "ExpDec3", "ExpGrow1"],
+        ),
+        (
+            FitKind::Sigmoidal,
+            "Fit Sigmoidal (Boltzmann)",
+            "Boltzmann",
+            vec!["Boltzmann", "Logistic", "Hill", "DoseResp"],
+        ),
+        (FitKind::SinglePeak, "Single Peak Fit (Gauss)", "Gauss", vec!["Gauss", "Lorentz"]),
+    ] {
+        h.state_mut().apply(Action::Fit { book, column: None, kind }, &ctx);
+        settle(&mut h);
+        h.get_by_label(title);
+        let (function, list, quick) = h.state().fit.as_ref().unwrap().function_for_test();
+        assert!(quick);
+        assert_eq!(function, default);
+        let mut list = list;
+        list.sort();
+        let mut want: Vec<String> = offered.iter().map(|s| s.to_string()).collect();
+        want.sort();
+        assert_eq!(list, want, "{title}");
+        click(&mut h, "Cancel");
+        assert!(h.state().fit.is_none());
+    }
+    // The menu items are no longer greyed.
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Sigmoidal }, &ctx);
+    settle(&mut h);
+    click(&mut h, "Done");
+    let names: Vec<String> = project(&h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+    assert!(names.contains(&"FitNL1".to_string()), "{names:?}");
+}
+
 #[test]
 fn the_fit_window_has_origins_tabs_pages_and_lower_panel() {
     let mut h = start(vec![data_file("fitpages")]);

@@ -38,6 +38,8 @@ pub enum WeightKind {
     Instrumental,
     /// 1 / abs(y); a y of exactly 0 is refused.
     Statistical,
+    /// The weights are the values of the column(s) given with --yerr, used as given.
+    Direct,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -87,10 +89,21 @@ pub struct FitArgs {
     /// --yerr, or the one that belongs to the Y column in a project.
     #[arg(long, value_enum, default_value_t = WeightKind::None)]
     pub weight: WeightKind,
-    /// The Y-error column(s) for --weight instrumental, by short or long name: one for all fitted
+    /// The Y-error column(s) for --weight instrumental (or the weight column(s) for --weight direct), by short or long name: one for all fitted
     /// columns, or one per --y column in the same order.
     #[arg(long, value_delimiter = ',', value_name = "COLUMNS")]
     pub yerr: Vec<String>,
+    /// Do not scale the parameter errors by sqrt(reduced chi-square) (Origin's default is to scale;
+    /// without weights Origin always scales, so this only matters with --weight).
+    #[arg(long)]
+    pub no_scale_errors: bool,
+    /// Fit all the --y columns together as one global fit (nonlinear models only); the
+    /// parameters named by --share take one value for all columns.
+    #[arg(long)]
+    pub global: bool,
+    /// Parameters shared between the columns of a --global fit.
+    #[arg(long, value_delimiter = ',', value_name = "PARAMS", requires = "global")]
+    pub share: Vec<String>,
     /// Confidence level of the parameter limits.
     #[arg(long, default_value_t = 0.95)]
     pub confidence: f64,

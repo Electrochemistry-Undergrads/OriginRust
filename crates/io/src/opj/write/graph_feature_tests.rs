@@ -338,8 +338,67 @@ fn colours_that_a_plot_group_would_replace_are_named() {
         l.plots[1].symbol.color = Color::rgb(12, 34, 56);
         l.plots[1].auto_color = false;
     }));
-    assert!(out.warnings.iter().any(|w| w.contains("colours of column plots")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("colours of plots in a plot group")), "{:?}", out.warnings);
     assert_eq!(imp.graphs[0].layers[0].plots.len(), 2);
+}
+
+fn lines_graph(ys: &[usize], f: impl FnOnce(&mut Layer)) -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.add_graph(Template::Line);
+    for y in ys {
+        p.add_plot_xy(id, 0, None, c[*y], None).unwrap();
+    }
+    f(&mut p.graph_mut(id).unwrap().layers[0]);
+    p
+}
+
+#[test]
+fn plots_with_a_group_number_are_written_as_a_group_and_read_back() {
+    let flags = |p: &Project| -> Vec<u8> {
+        curve_records(&write_named(p, "g", TIME).unwrap().bytes).iter().map(|r| r[0x06]).collect()
+    };
+    let grouped = |ids: [Option<u32>; 4]| {
+        lines_graph(&[5, 6, 5, 6], |l| {
+            for (p, g) in l.plots.iter_mut().zip(ids) {
+                p.group = g;
+            }
+        })
+    };
+    // two groups, side by side in the file
+    let p = grouped([Some(1), Some(1), Some(2), Some(2)]);
+    assert_eq!(flags(&p), [0x29, 0x19, 0x29, 0x19]);
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let plots = &imp.graphs[0].layers[0].plots;
+    assert_eq!(plots.iter().map(|p| p.group.is_some()).collect::<Vec<_>>(), [true; 4]);
+    assert_eq!((plots[0].group, plots[2].group), (plots[1].group, plots[3].group));
+    assert_ne!(plots[0].group, plots[2].group);
+    // members that are not next to each other, and a group of one, are no group in the file
+    assert_eq!(flags(&grouped([Some(1), None, Some(1), None])), [0x09; 4]);
+    assert_eq!(flags(&grouped([Some(1), None, None, None])), [0x09; 4]);
+    // no group, no flag
+    assert_eq!(flags(&grouped([None; 4])), [0x09; 4]);
+}
+
+#[test]
+fn a_group_of_lines_names_hand_chosen_colours() {
+    let (_, out) = round_trip(&lines_graph(&[5, 6], |l| {
+        l.plots[0].group = Some(1);
+        l.plots[1].group = Some(1);
+        l.plots[1].line.color = Color::rgb(12, 34, 56);
+        l.plots[1].auto_color = false;
+    }));
+    assert!(out.warnings.iter().any(|w| w.contains("colours of plots in a plot group")), "{:?}", out.warnings);
+}
+
+#[test]
+fn the_legend_frame_survives_a_save() {
+    for frame in [true, false] {
+        let (imp, out) = round_trip(&lines_graph(&[5], |l| l.legend.frame = frame));
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+        assert_eq!(imp.graphs[0].layers[0].legend.frame, frame);
+    }
 }
 
 #[test]

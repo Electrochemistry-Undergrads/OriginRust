@@ -54,6 +54,10 @@ const AXIS_LINE_WIDTH_AT: usize = 0x15;
 const AXIS_TICKS_AT: usize = 0x25;
 // Curve record.
 const CURVE_Y_AT: usize = 0x04;
+/// Plot group bits of curve byte `0x06`: set on the first plot of a group and on the others.
+const CURVE_GROUP_AT: usize = 0x06;
+const CURVE_GROUP_FIRST_BIT: u8 = 0x20;
+const CURVE_GROUP_MEMBER_BIT: u8 = 0x10;
 const CURVE_CONNECT_AT: usize = 0x11;
 const CURVE_DASH_AT: usize = 0x12;
 const CURVE_WIDTH_AT: usize = 0x15;
@@ -290,6 +294,7 @@ fn build_layer(
                 out.legend.visible = true;
                 out.legend.font.size_pt = size_pt;
                 out.legend.text = custom_legend_text(&text);
+                out.legend.frame = legend_has_frame(a);
                 let (cx, cy) = annotation_center(a, page_units);
                 if frame_size.0 > 0.0 && frame_size.1 > 0.0 {
                     let x = (cx / PAGE_UNITS_PER_INCH * 72.0 - frame_pt.0) / frame_size.0;
@@ -311,8 +316,16 @@ fn build_layer(
 
     // Curves.
     let mut y_sets: Vec<usize> = Vec::new();
+    let mut run = GroupRun::default();
     for (i, rec) in layer.columns.iter().enumerate() {
-        read_curve(&mut out, &mut y_sets, i, rec, column_of_set, notes);
+        read_curve(&mut out, &mut y_sets, &mut run, i, rec, column_of_set, notes);
+    }
+    // A group of one plot is no group.
+    let sizes: Vec<u32> = out.plots.iter().filter_map(|p| p.group).collect();
+    for p in &mut out.plots {
+        if p.group.is_some_and(|g| sizes.iter().filter(|&&s| s == g).count() < 2) {
+            p.group = None;
+        }
     }
     // Curves moved apart by offsets (stacked lines): Origin stores each curve's offset as it drew
     // it, so the layer is drawn with those offsets as they are (graphing spec 13.10).
@@ -401,9 +414,12 @@ fn link_right_y_layers(graph: &mut Graph, w: &Window) {
         layer.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
         layer.x_axis.side = AxisSide::Hidden;
         layer.x_axis.show_title = false;
-        let legend_here = layer.legend.visible;
+        let (legend_here, frame_here) = (layer.legend.visible, layer.legend.frame);
         layer.legend.visible = false;
         let p = &mut graph.layers[parent];
+        if legend_here && !p.legend.visible {
+            p.legend.frame = frame_here;
+        }
         if top_line {
             p.x_axis.show_opposite = true;
         }
@@ -481,6 +497,17 @@ fn annotation_name(a: &WinAnnotation) -> String {
 /// The text of a text object: the bytes of block 2 up to the first NUL.
 fn annotation_text(a: &WinAnnotation) -> String {
     decode_cp1252(c_bytes(&a.block2))
+}
+
+/// Offset in a legend's style block of the colour of its frame: `FC FF FF FF` is "none", anything
+/// else (Origin's own legends have the list position 0, black) is a drawn frame (opj-format 10.4).
+const LEGEND_FRAME_COLOR_AT: usize = 0x2A;
+const COLOR_NONE: [u8; 4] = [0xFC, 0xFF, 0xFF, 0xFF];
+
+/// True when the legend annotation has a frame. A style block too short to say counts as framed,
+/// which is what Origin's own legends are.
+fn legend_has_frame(a: &WinAnnotation) -> bool {
+    a.block1.get(LEGEND_FRAME_COLOR_AT..LEGEND_FRAME_COLOR_AT + 4).is_none_or(|c| c != COLOR_NONE)
 }
 
 /// The legend text of a file as the model keeps it: `None` when it is the automatic text (a
@@ -652,9 +679,37 @@ fn symbol_shape(code: u8, notes: &mut Vec<String>) -> SymbolShape {
     }
 }
 
+/// Where the curves of a layer are in a plot group while they are read: the group's number and
+/// how many members came before.
+#[derive(Default)]
+struct GroupRun {
+    last: u32,
+    current: Option<u32>,
+    members: usize,
+}
+
+impl GroupRun {
+    /// The group number and position in the group of the curve with this flag byte, `None` for a
+    /// curve outside a group. A curve with the first bit starts a group, one with the member bit
+    /// that follows a member joins it.
+    fn place(&mut self, flags: u8) -> Option<(u32, usize)> {
+        if flags & CURVE_GROUP_FIRST_BIT != 0 {
+            self.last += 1;
+            self.current = Some(self.last);
+            self.members = 0;
+        } else if flags & CURVE_GROUP_MEMBER_BIT != 0 && self.current.is_some() {
+            self.members += 1;
+        } else {
+            self.current = None;
+        }
+        self.current.map(|g| (g, self.members))
+    }
+}
+
 fn read_curve(
     layer: &mut Layer,
     y_sets: &mut Vec<usize>,
+    run: &mut GroupRun,
     index: usize,
     rec: &WinColumn,
     column_of_set: &HashMap<usize, ColumnId>,
@@ -747,7 +802,19 @@ fn read_curve(
         label: None,
         visible: true,
         auto_color: false,
+        group: None,
     };
+    // A plot group colours its members from Origin's colour list in order, whatever the records
+    // hold (opj-format 13.13); a lone column plot or area keeps its outline.
+    if let Some((group, pos)) = run.place(u8_at(r, CURVE_GROUP_AT)) {
+        let c = palette_color(pos);
+        plot.group = Some(group);
+        plot.symbol.color = c;
+        if !matches!(kind, PlotKind::Column | PlotKind::Area) {
+            plot.line.color = c;
+        }
+        plot.auto_color = false;
+    }
     if kind == PlotKind::Area && auto {
         // an area is outlined in black unless the line colour was chosen
         plot.line.color = Color::BLACK;
@@ -1115,5 +1182,68 @@ mod tests {
         let g = build(&w, &ids(), &mut warnings);
         assert!(g.layers[1].link.is_some());
         assert!(warnings.iter().any(|m| m.contains("both sides")), "{warnings:?}");
+    }
+
+    #[test]
+    fn the_legend_frame_is_read_from_the_frame_colour() {
+        let frame = |colour: Option<[u8; 4]>| {
+            let mut w = window();
+            if let Some(c) = colour {
+                w.layers[0].annotations[2].block1[LEGEND_FRAME_COLOR_AT..LEGEND_FRAME_COLOR_AT + 4].copy_from_slice(&c);
+            }
+            build(&w, &ids(), &mut Vec::new()).layers[0].legend.frame
+        };
+        assert!(frame(None), "a black frame colour (0) is a frame");
+        assert!(frame(Some([3, 0, 0, 0])));
+        assert!(!frame(Some([0xFC, 0xFF, 0xFF, 0xFF])), "the colour 'none' is no frame");
+    }
+
+    #[test]
+    fn plot_groups_are_read_with_the_colours_of_the_list() {
+        let mut w = window();
+        let rec = |flags: u8, y: u16| {
+            let mut c = curve(y, 1, 200, [0xF7, 0xFF, 0xFF, 0xFF]);
+            c.record[CURVE_GROUP_AT] = flags;
+            c
+        };
+        // three plots in a group, one outside, a lone first-bit plot (no group), two more in a group
+        w.layers[0].columns = vec![
+            rec(0x29, 2),
+            rec(0x19, 3),
+            rec(0x19, 4),
+            rec(0x09, 5),
+            rec(0x29, 6),
+            rec(0x09, 2),
+            rec(0x29, 3),
+            rec(0x19, 4),
+        ];
+        let g = build(&w, &ids(), &mut Vec::new());
+        let plots = &g.layers[0].plots;
+        let groups: Vec<Option<u32>> = plots.iter().map(|p| p.group).collect();
+        assert_eq!(groups, vec![Some(1), Some(1), Some(1), None, None, None, Some(3), Some(3)]);
+        let (r, gr) = (Color::rgb(255, 0, 0), Color::rgb(0, 255, 0));
+        assert_eq!((plots[0].line.color, plots[1].line.color, plots[2].line.color), (Color::BLACK, r, gr));
+        assert_eq!(
+            (plots[6].line.color, plots[7].line.color),
+            (Color::BLACK, r),
+            "a second group starts at black again"
+        );
+        assert_eq!(plots[1].symbol.color, r);
+    }
+
+    #[test]
+    fn a_grouped_column_plot_is_filled_from_the_list_and_keeps_its_outline() {
+        let mut w = window();
+        let rec = |flags: u8, y: u16| {
+            let mut c = curve(y, 1, 203, [0xF7, 0xFF, 0xFF, 0xFF]);
+            c.record[CURVE_GROUP_AT] = flags;
+            c
+        };
+        w.layers[0].columns = vec![rec(0x29, 2), rec(0x19, 3)];
+        let g = build(&w, &ids(), &mut Vec::new());
+        let plots = &g.layers[0].plots;
+        assert_eq!((plots[0].symbol.color, plots[1].symbol.color), (Color::BLACK, Color::rgb(255, 0, 0)));
+        assert_eq!(plots[1].line.color, Color::BLACK);
+        assert_eq!((plots[0].group, plots[1].group), (Some(1), Some(1)));
     }
 }

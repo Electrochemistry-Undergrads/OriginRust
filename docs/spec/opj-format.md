@@ -480,7 +480,7 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 | offset | size | meaning |
 |---|---|---|
 | `0x04` | u16 | position (1-based) of the Y data set in the data-set list |
-| `0x06` | u8 | probably plot group membership: bit `0x20` on the first plot of a group, bit `0x10` on the others (graphing.md 14.7; inferred from one test file and the owner's two grouped layers) |
+| `0x06` | u8 | plot group membership: bit `0x20` on the first plot of a group, bit `0x10` on the others; the other bits (`0x01`, `0x02`, `0x08`) vary between files and are not used (13.13; seen in Origin's own files as `0x21` then `0x11` for a group of line plots, `0x20` then `0x10` for two, and `0x0B`, `0x03`, `0x01`, `0x00` outside a group; graphing.md 14.7) |
 | `0x0F` | u8 | line colour as a position in the colour list (10.6); 0 when automatic |
 | `0x11` | u8 | line connection: 0 none, 1 and above a line (values 1 to 8 all drew straight lines through 8 points; the other kinds were not told apart) |
 | `0x12` | u8 | line style: 0 solid, 1 dash, 2 dot, 3 dash dot, 4 dash dot dot, 5 short dash, 6 short dot, 7 short dash dot (the `set -d` values, modulo 8) |
@@ -514,6 +514,34 @@ Origin exported with one thick line per colour; the printed values were within a
 (128,0,255), 16 pink (255,0,128), 17 white, 18 light grey (about 192), 19 grey (128), 20 light
 yellow (255,255,128), 21 light cyan (128,255,255). The stored number is the `set -c` number minus one.
 
+### 10.8 Legend frame [obs]
+
+The legend object (name `Legend`) has a 131-byte header and a 102-byte style block (10.4). Three colour slots of
+the style block say how it is drawn, each as 4 bytes (a list position then three zero bytes, or `FC FF FF FF` for
+"none"): at `0x1A` the background, at `0x2A` the colour of the frame, at `0x32` a third colour that is "none" in
+legends and 0 in free text. Origin's own legends in the owner's projects
+all have `0x1A` = 17 (white), `0x2A` = 0 (black), `0x32` = none, byte `0x28` of the style block `0xFA`, byte `0x29`
+of the header `0x80` and byte `0x28` of the header `0x20`: a legend with a black frame on a white background. Free text objects
+have `0x1A` and `0x2A` set to none, `0x32` = 0 and header byte `0x29` = 1: no frame and no background. The writer's
+legend without a frame (graph_tables `ANN_LEGEND_*` with the fields cleared as in `glayout.rs`) has the text object's
+colours. The reader takes `0x2A` = `FC FF FF FF` as "no frame" and anything else as a frame, which fits every case
+seen. The other frame kinds of the Frame tab (shadow, marble and so on) were not produced and their bytes are unknown,
+so they read as a plain frame and are written as one. The background colour is not read or written.
+A legend in a file with no legend object keeps Sheaf's template default (no frame, graphing.md 6.4).
+
+### 10.9 Plot groups [obs]
+
+Plots made by one plot command are a *group*: their curve records follow one another, the first with bit `0x20` in
+byte `0x06` and the others with bit `0x10` (10.5). Nothing else in the records or the layer header marks a group, so
+the group is the run that starts at a `0x20` curve and goes on while the following curves carry `0x10`; a curve with
+neither bit ends it, and a run of one curve is not a group. Origin gives the members the colours of its colour list
+(10.6) in order, black first, whatever the records hold (13.13), which is the group's colour increment "by one"; the
+model keeps the group as `Plot::group` (a number, equal for the members of one group in a layer), the reader sets
+the members' colours from the list, and the writer writes a run of neighbouring plots with the same group number as
+a group again. Increment settings other than the colour (line style, symbol shape, width), "independent" mode and
+the Group Members list live in places that were not found (13.13); the line style, width and symbol of every member
+are read as stored.
+
 ### 10.7 What the reader does with it, and what it leaves out
 
 Read: page size; for each layer the frame, both axis ranges, steps, scale (linear or log10), minor
@@ -533,14 +561,16 @@ curve, and `OpjImport::into_project` renumbers them together with the plots.
 Not read (the figure still draws, with the defaults of the template): the top axis title, and the
 right one except on a right-axis layer;
 the Z axis; other scale types (drawn linear, with a warning); tick label font, bold and colour;
-number formats; legend text (the legend shows the column names); the colour and style of grids and of
-the frame; text colour; line and arrow objects; plot groups.
+number formats; the colour and style of grids and of
+the frame; text colour; line and arrow objects; the legend's background colour and the kind of its frame
+(only whether it has one is read, 10.8); the increments of a plot group other than the colour (10.9).
 
 Known differences from Origin:
 
-- Plots in a *group* take their colour, width and style from the first plot of the group in
-  Origin; the file keeps the value that was set on each plot. After `set` on the second plot only, Origin
-  showed the group's value and the reader shows the stored one.
+- Plots in a *group* take their colour from Origin's colour list by their place in the group; the file keeps
+  the value that was set on each plot, and the reader replaces it by the list colour (10.9). Width and style
+  are read as stored: after `set` on the second plot only, Origin showed the group's value and the reader
+  shows the stored one.
 - Column plots are drawn as bars from zero, 70 percent of the smallest X spacing wide, filled with the
   fill colour and outlined with the line colour. Origin's handling of bar border and fill colour was not
   decoded: a column plot whose `set -c` colour was changed is black in Origin and cyan outlined here.
@@ -548,7 +578,8 @@ Known differences from Origin:
 - Layers that share one frame are linked only when the later one shows right-side tick labels
   (double Y). Other overlapping layers stay independent and draw over each other, as before. A
   right-axis layer that also shows its left axis has only the right side drawn (the import says so).
-- Origin draws a frame around the legend.
+- The legend frame is read (10.8) as drawn or not; Origin's other frame kinds (shadow, marble, ...) are not told
+  apart and draw as a plain line frame.
 
 Checks made: four graphs with known settings (line, scatter on log axes, line and symbol with a
 moved frame, column) were saved by Origin and read back; ranges, steps, scale type, frame, titles,
@@ -1193,7 +1224,7 @@ with `gw-groups.opj` and patched copies of it (`re-workspace/scratch/opj-gw2/pat
   looked at, the cause was not found).
 - The overlap of bars: with the group in place `set` options `-xy` (x in v, o, g, b; y in a..z) with value 50 changed no byte of
   the records, headers or per-curve blocks except the known gap (`-vg`, `0x19` and `0x11A`). The overlap stays in a warning.
-- Reading: `read_curve` reads group records as before (colours from the file, or from the list when the record holds none).
+- Reading: groups are read as in 10.9 (`Plot::group`, member colours from the list). Re-saving writes them again.
 Verified: Origin loaded `gw-groups.opj` (two columns, three columns, one column, two columns with an error bar) and drew
 side by side bars for the first two (colours black, red, green as the list gives), a single bar set for the lone column plot.
 

@@ -302,7 +302,7 @@ Scope: whole page, active layer, specific page, specific layer. Mode: reconstruc
 `Legend::text` holds the text as above (`None` is the automatic `\l(n) %(n)` per plot). Supported: `\l(n)` / `\L(n)` and `%(n)`, `n` a plot number or `l.p`, any literal text with the markup of section 7, one entry per line, `Legend::columns`. `%(n,@...)` options are accepted and ignored. Reconstruct Legend sets the text back to automatic. The text is written to .opj as it is and a text that is not the automatic one is read back; the number of columns has no place in the file and is named in the save notes.
 
 ### 6.4 Frame, position
-Frame tab (none, line, shadow...), position by anchor corner, size, arrange vertical or horizontal, multi-column, line spacing %, `\sep:nn` gaps. Default frame and position of the stock template: UNKNOWN U11 ([REC] frame none, top-right inside layer).
+Frame tab (none, line, shadow...), position by anchor corner, size, arrange vertical or horizontal, multi-column, line spacing %, `\sep:nn` gaps. Default frame and position of the stock template: UNKNOWN U11 ([REC] frame none, top-right inside layer). Sheaf's templates keep frame none. Legends that Origin 2016 saved in the owner's projects all have a black frame on a white background, so the .opj reader sets `Legend::frame` from the file (opj-format.md 10.8: the frame colour slot is `none` or not) and the legend is drawn with its frame in SVG, PNG, PDF, EPS and EMF; Plot Details > Legend has "Draw a frame". The kind of frame (shadow, marble) and the background colour are not modelled.
 
 ---
 
@@ -1093,7 +1093,7 @@ Delimited text: when "first column is X" is on (the default), the first column i
 In the 515-byte curve record (opj-format.md section 10.5) [COM, byte comparisons of one graph saved with gaps 20, 40 and 55, and the owner's files]:
 - u16 at `0x19`, the symbol size field of other plot types, holds the bar width of a column plot in percent of the spacing, times 50: 4000 is a gap of 20, 3000 of 40, 2250 of 55, 2000 of 60. A copy at `0x11A` holds the same number. The owner's projects use 2000, 2250, 3000, 3600 and 4000.
 - The reader sets the layer's `bars.gap_pct` = 100 - width / 50 from the layer's first column plot, when the width lies within 0..100 percent.
-- Byte `0x06` of the record probably marks plot groups [INF]: bit `0x20` on the first plot of a group and bit `0x10` on the others (a lone column plot had neither), in a test file and in the owner's two grouped layers. Not read yet: every layer of the owner's projects with more than one column plot is a group, which is what Sheaf draws.
+- Byte `0x06` of the record marks plot groups: bit `0x20` on the first plot of a group and bit `0x10` on the others (a lone column plot had neither). The reader makes a group of such a run, `Plot::group`, with the members coloured from Origin's colour list in order; the writer writes groups again (opj-format.md 10.9, 13.13).
 - Where Origin stores the tick label type and its dataset is not known. The overlap was looked for in 2026-11 (opj-format.md 13.12): `set` options and `layer.overlap` changed no byte, so it was not found. The writer writes the gap at `0x19` and `0x11A` of every column record; Origin drew gaps of 0, 20 and 60 percent as written.
 
 ### 14.8 Command line
@@ -1138,7 +1138,7 @@ Examples: `sheaf plot icp.csv -t column -o icp.png`; `sheaf plot icp.csv -t colu
 - The exact row count where a 2016 text axis stops putting one tick per row (between 121 and 450).
 - Whether Origin reads escape sequences (`\+()`, `\g()`, ...) in text-from-dataset cells; Sheaf uses its markup for them like for every other label.
 - The error bar cap width on columns, and whether error bar ends widen the automatic Y range.
-- Where an `.opj` stores the tick label type and dataset and the overlap; the meaning of record byte `0x06` (14.7) needs a second check.
+- Where an `.opj` stores the tick label type and dataset and the overlap.
 - Owner preferences for the `column` template: ticks, box, minor ticks, legend frame, colours.
 
 ---

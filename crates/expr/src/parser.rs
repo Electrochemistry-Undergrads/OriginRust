@@ -272,6 +272,24 @@ impl Parser {
                         format!("function '{canonical}' needs a column such as col(A) or col(A)[1:10] as its argument"),
                     ));
                 }
+                let needs_col = |what: &str| {
+                    ExprError::at(
+                        pos,
+                        format!("function '{canonical}' needs a column such as col(A) as its {what} argument"),
+                    )
+                };
+                if matches!(func, Func::Vec(_)) && !args.first().is_some_and(is_col) {
+                    return Err(needs_col("first"));
+                }
+                if matches!(func, Func::Lookup) {
+                    let plain = |n: &Node| matches!(n.kind, Kind::Col { .. });
+                    if !plain(&args[1]) {
+                        return Err(needs_col("second"));
+                    }
+                    if !plain(&args[2]) {
+                        return Err(needs_col("third"));
+                    }
+                }
                 Node::new(Kind::Call { func, args }, pos)
             }
             Resolved::Unknown => Err(ExprError::at(pos, format!("unknown function '{name}'"))),

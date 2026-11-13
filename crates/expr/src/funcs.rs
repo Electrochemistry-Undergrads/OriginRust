@@ -24,7 +24,22 @@ pub(crate) enum Agg {
     Max,
     First,
     Last,
+    /// Population standard deviation (divisor n).
+    Sdp,
+    /// Standard error of the mean, `sd / sqrt(n)`.
+    Sem,
 }
+
+/// Functions that turn a whole column into a column of the same length.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VecFn {
+    Cumsum,
+    Diff,
+    Shift,
+    Rank,
+}
+
+pub(crate) type FnN = fn(&[f64]) -> f64;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Func {
@@ -40,6 +55,18 @@ pub(crate) enum Func {
     Na,
     /// Statistic over a column or a row range of a column.
     Agg(Agg),
+    /// Column in, column out (`cumsum`, `diff`, `shift`, `rank`).
+    Vec(VecFn),
+    /// Elementwise function of a fixed number of numbers (`date`, `time`, `distance`).
+    N(FnN, usize),
+    /// `now()` and `today()`.
+    Clock { date_only: bool },
+    /// `rnd()` (uniform) and `grnd()` (normal).
+    Rand { gauss: bool },
+    /// `lookup(x, xcol, ycol)`.
+    Lookup,
+    /// `cell(row, col)`.
+    Cell,
 }
 
 pub(crate) enum Resolved {
@@ -84,7 +111,12 @@ fn arity(f: Func) -> (usize, usize) {
         Func::B(_) => (2, 2),
         Func::MinMax { .. } => (1, usize::MAX),
         Func::IfElse => (3, 3),
-        Func::Na => (0, 0),
+        Func::Na | Func::Clock { .. } | Func::Rand { .. } => (0, 0),
+        Func::Vec(VecFn::Shift) => (2, 2),
+        Func::Vec(_) => (1, 1),
+        Func::N(_, k) => (k, k),
+        Func::Lookup => (3, 3),
+        Func::Cell => (2, 2),
     }
 }
 
@@ -145,6 +177,26 @@ static TABLE: &[(&str, Func)] = &[
     ("count", Func::Agg(Agg::Count)),
     ("first", Func::Agg(Agg::First)),
     ("last", Func::Agg(Agg::Last)),
+    ("stddevp", Func::Agg(Agg::Sdp)),
+    ("sem", Func::Agg(Agg::Sem)),
+    ("cumsum", Func::Vec(VecFn::Cumsum)),
+    ("diff", Func::Vec(VecFn::Diff)),
+    ("shift", Func::Vec(VecFn::Shift)),
+    ("rank", Func::Vec(VecFn::Rank)),
+    ("fact", Func::U(fact)),
+    ("date", Func::N(date_fn, 3)),
+    ("time", Func::N(time_fn, 3)),
+    ("now", Func::Clock { date_only: false }),
+    ("today", Func::Clock { date_only: true }),
+    ("year", Func::U(year)),
+    ("month", Func::U(month)),
+    ("day", Func::U(day)),
+    ("weekday", Func::U(weekday)),
+    ("rnd", Func::Rand { gauss: false }),
+    ("grnd", Func::Rand { gauss: true }),
+    ("lookup", Func::Lookup),
+    ("cell", Func::Cell),
+    ("distance", Func::N(distance, 4)),
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -491,6 +543,215 @@ fn bessel_j1(x: f64) -> f64 {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Factorial, dates, distance
+// ---------------------------------------------------------------------------------------------
+
+/// Factorial of the whole part. Negative, missing or above 170 (overflow) gives missing.
+fn fact(x: f64) -> f64 {
+    if x.is_nan() || x < 0.0 {
+        return NA;
+    }
+    let n = x.trunc();
+    if n > 170.0 {
+        return NA;
+    }
+    let mut r = 1.0;
+    let mut k = 2.0;
+    while k <= n {
+        r *= k;
+        k += 1.0;
+    }
+    r
+}
+
+/// Date number of 1970-01-01 (the Julian day number; Origin's date numbers count days from it).
+const UNIX_EPOCH_VALUE: f64 = 2_440_587.0;
+
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+fn is_leap(y: i64) -> bool {
+    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+}
+
+fn days_in_month(y: i64, m: i64) -> i64 {
+    match m {
+        2 if is_leap(y) => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
+}
+
+/// `date(y, m, d)`: the date number at midnight; an impossible date is missing.
+fn date_fn(a: &[f64]) -> f64 {
+    if a.iter().any(|v| !v.is_finite()) || a[0].abs() > 1.0e6 {
+        return NA;
+    }
+    let (y, m, d) = (a[0].trunc() as i64, a[1].trunc() as i64, a[2].trunc() as i64);
+    if !(1..=12).contains(&m) || d < 1 || d > days_in_month(y, m) {
+        return NA;
+    }
+    days_from_civil(y, m, d) as f64 + UNIX_EPOCH_VALUE
+}
+
+/// `time(h, m, s)`: the fraction of a day. Not wrapped: `time(25,0,0)` is above 1.
+fn time_fn(a: &[f64]) -> f64 {
+    (a[0] * 3600.0 + a[1] * 60.0 + a[2]) / 86_400.0
+}
+
+fn civil_of(v: f64) -> Option<(i64, i64, i64)> {
+    if !v.is_finite() || v.abs() > 3.0e7 {
+        return None;
+    }
+    Some(civil_from_days((v - UNIX_EPOCH_VALUE).floor() as i64))
+}
+
+fn year(v: f64) -> f64 {
+    civil_of(v).map_or(NA, |c| c.0 as f64)
+}
+
+fn month(v: f64) -> f64 {
+    civil_of(v).map_or(NA, |c| c.1 as f64)
+}
+
+fn day(v: f64) -> f64 {
+    civil_of(v).map_or(NA, |c| c.2 as f64)
+}
+
+/// Day of the week, 0 = Sunday (measured in Origin 2016).
+fn weekday(v: f64) -> f64 {
+    if civil_of(v).is_none() {
+        return NA;
+    }
+    // 1970-01-01 was a Thursday (4).
+    ((v - UNIX_EPOCH_VALUE).floor() as i64 + 4).rem_euclid(7) as f64
+}
+
+/// A seed from the system clock.
+pub(crate) fn system_seed() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64)
+}
+
+/// The current date number from the system clock, in UTC.
+pub(crate) fn system_now() -> f64 {
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64());
+    secs / 86_400.0 + UNIX_EPOCH_VALUE
+}
+
+/// `distance(x1, y1, x2, y2)`: Euclidean distance.
+fn distance(a: &[f64]) -> f64 {
+    (a[2] - a[0]).hypot(a[3] - a[1])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Whole-column functions and random numbers
+// ---------------------------------------------------------------------------------------------
+
+/// Applies a column-in, column-out function. `n` is the shift for [`VecFn::Shift`].
+pub(crate) fn vec_fn(kind: VecFn, x: &[f64], n: f64) -> Vec<f64> {
+    match kind {
+        VecFn::Cumsum => {
+            // The running sum skips missing values; a missing input row stays missing.
+            let mut acc = 0.0;
+            let mut comp = 0.0;
+            x.iter()
+                .map(|&v| {
+                    if v.is_nan() {
+                        return NA;
+                    }
+                    let t = acc + v;
+                    if !t.is_finite() {
+                        comp = 0.0;
+                    } else if acc.abs() >= v.abs() {
+                        comp += (acc - t) + v;
+                    } else {
+                        comp += (v - t) + acc;
+                    }
+                    acc = t;
+                    acc + comp
+                })
+                .collect()
+        }
+        // Forward difference: row i holds x[i+1] - x[i]; the last row is missing.
+        VecFn::Diff => (0..x.len()).map(|i| x.get(i + 1).map_or(NA, |next| next - x[i])).collect(),
+        VecFn::Shift => {
+            if n.is_nan() {
+                return vec![NA; x.len()];
+            }
+            let k = n.round().clamp(-4.0e15, 4.0e15) as i64;
+            (0..x.len() as i64)
+                .map(|i| {
+                    let src = i - k;
+                    if src >= 0 && (src as usize) < x.len() { x[src as usize] } else { NA }
+                })
+                .collect()
+        }
+        VecFn::Rank => {
+            // Ascending; tied values share the average of their ranks; missing stays missing.
+            let mut idx: Vec<usize> = (0..x.len()).filter(|&i| !x[i].is_nan()).collect();
+            idx.sort_by(|&a, &b| x[a].total_cmp(&x[b]));
+            let mut out = vec![NA; x.len()];
+            let mut s = 0;
+            while s < idx.len() {
+                let mut e = s;
+                while e + 1 < idx.len() && x[idx[e + 1]] == x[idx[s]] {
+                    e += 1;
+                }
+                let r = (s + e) as f64 / 2.0 + 1.0;
+                for &i in &idx[s..=e] {
+                    out[i] = r;
+                }
+                s = e + 1;
+            }
+            out
+        }
+    }
+}
+
+/// Next value of a splitmix64 generator.
+pub(crate) fn next_u64(state: &std::cell::Cell<u64>) -> u64 {
+    let s = state.get().wrapping_add(0x9E37_79B9_7F4A_7C15);
+    state.set(s);
+    let mut z = s;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Uniform in [0, 1).
+pub(crate) fn uniform(state: &std::cell::Cell<u64>) -> f64 {
+    (next_u64(state) >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// Standard normal by the Box-Muller transform.
+pub(crate) fn normal(state: &std::cell::Cell<u64>) -> f64 {
+    let u1 = 1.0 - uniform(state);
+    let u2 = uniform(state);
+    (-2.0 * u1.ln()).sqrt() * (2.0 * PI * u2).cos()
+}
+
+// ---------------------------------------------------------------------------------------------
 // Aggregates and cumulative functions
 // ---------------------------------------------------------------------------------------------
 
@@ -530,9 +791,9 @@ pub(crate) fn aggregate(kind: Agg, data: &[f64]) -> f64 {
             let (s, n) = sum_count(data);
             if n == 0 { NA } else { s / n as f64 }
         }
-        Agg::Var | Agg::Sd => {
+        Agg::Var | Agg::Sd | Agg::Sdp | Agg::Sem => {
             let (s, n) = sum_count(data);
-            if n < 2 {
+            if n < 2 && !(kind == Agg::Sdp && n == 1) {
                 return NA;
             }
             let mean = s / n as f64;
@@ -541,8 +802,13 @@ pub(crate) fn aggregate(kind: Agg, data: &[f64]) -> f64 {
                 return NA;
             }
             let dev: Vec<f64> = data.iter().filter(|x| !x.is_nan()).map(|x| (x - mean) * (x - mean)).collect();
-            let var = sum_count(&dev).0 / (n - 1) as f64;
-            if kind == Agg::Sd { var.sqrt() } else { var }
+            let ss = sum_count(&dev).0;
+            match kind {
+                Agg::Var => ss / (n - 1) as f64,
+                Agg::Sd => (ss / (n - 1) as f64).sqrt(),
+                Agg::Sdp => (ss / n as f64).sqrt(),
+                _ => (ss / (n - 1) as f64).sqrt() / (n as f64).sqrt(),
+            }
         }
         Agg::Median => {
             let mut v: Vec<f64> = data.iter().copied().filter(|x| !x.is_nan()).collect();

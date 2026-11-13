@@ -610,13 +610,13 @@ impl Writer {
         // curves
         let mut first = true;
         let mut later_errors = Vec::new();
-        let n_columns = plots.iter().filter(|r| r.plot.kind == PlotKind::Column).count();
+        let n_columns = plots.iter().filter(|r| r.plot.kind.is_bar()).count();
         // The plot groups of the layer: the plots with a group number, and all column plots that
         // stand side by side as one group. A group is a run of neighbouring curves; a run of one
         // is no group.
         let ids: Vec<Option<u32>> = plots
             .iter()
-            .map(|r| r.plot.group.or((r.plot.kind == PlotKind::Column && n_columns >= 2).then_some(u32::MAX)))
+            .map(|r| r.plot.group.or((r.plot.kind.is_bar() && n_columns >= 2).then_some(u32::MAX)))
             .collect();
         let places: Vec<Group> = (0..ids.len())
             .map(|i| match ids[i] {
@@ -633,17 +633,15 @@ impl Writer {
             let mut at = 0;
             let replaced = plots.iter().zip(&places).any(|(r, g)| {
                 at = if *g == Group::First { 0 } else { at + 1 };
-                let c = if r.plot.kind == PlotKind::Column || r.plot.kind == PlotKind::Scatter {
+                let c = if r.plot.kind.is_bar() || r.plot.kind == PlotKind::Scatter {
                     r.plot.symbol.color
                 } else {
                     r.plot.line.color
                 };
                 *g != Group::None && !r.plot.auto_color && palette_position(c) != Some((at % PALETTE.len()) as u8)
             });
-            let bars_with_errors = plots
-                .iter()
-                .zip(&places)
-                .any(|(r, g)| *g != Group::None && r.plot.kind == PlotKind::Column && r.err.is_some());
+            let bars_with_errors =
+                plots.iter().zip(&places).any(|(r, g)| *g != Group::None && r.plot.kind.is_bar() && r.err.is_some());
             if bars_with_errors {
                 notes.push(
                     "error bars on column plots that stand side by side were written, but Origin did not place them on their bars"
@@ -657,13 +655,31 @@ impl Writer {
                 );
             }
         }
+        // Plot types the writer cannot store go out as plain columns; the companion file keeps them.
+        let has = |f: &dyn Fn(PlotKind) -> bool| plots.iter().any(|r| f(r.plot.kind));
+        if has(&|k| k.is_stacked()) {
+            notes.push("stacked columns were written as columns side by side".into());
+        }
+        if has(&|k| k == PlotKind::Bar) {
+            notes.push("horizontal bars were written as vertical columns".into());
+        }
+        if has(&|k| k == PlotKind::FloatingColumn) {
+            notes.push("floating columns were written as columns from zero".into());
+        }
+        if plots.iter().any(|r| r.plot.x_error.is_some() || !r.plot.error.is_default()) {
+            notes.push("X error bars, error bar directions and cap widths were not written".into());
+        }
         for (r, place) in plots.iter().zip(places.iter().copied()) {
             let p = r.plot;
             let kind = match p.kind {
                 PlotKind::Line => CurveKind::Line,
                 PlotKind::Scatter => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
-                PlotKind::Column => CurveKind::Column,
+                PlotKind::Column
+                | PlotKind::StackedColumn
+                | PlotKind::Stacked100Column
+                | PlotKind::Bar
+                | PlotKind::FloatingColumn => CurveKind::Column,
                 PlotKind::Area => CurveKind::Area,
             };
             let connect = match p.line.connect {
@@ -901,7 +917,7 @@ fn data_ranges(project: &Project, layer: &Layer, plots: &[(&Plot, Place)]) -> (O
                 grow(&mut y, v + oy + e);
             }
         }
-        if p.kind == PlotKind::Column {
+        if p.kind.is_bar() {
             grow(&mut y, oy);
         }
         match p.x.and_then(|c| project.numeric(c)) {

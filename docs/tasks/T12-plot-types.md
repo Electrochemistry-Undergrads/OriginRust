@@ -1,6 +1,6 @@
 # T12: More plot types
 
-**Status:** open. **Size:** L, one commit per type. **Branch:** `plot-types`. **Model:** Sonnet.
+**Status:** items 1-2 done on branch `plot-types`, not merged (stacked, 100 % stacked, horizontal Bar, floating column; X and XY error bars, direction, cap width). Left: stacked bar and floating bar variants, items 3-6. **Size:** L, one commit per type. **Branch:** `plot-types`. **Model:** Sonnet.
 **Detail:** audit C "Missing plot types". **Spec:** `docs/spec/graphing.md` (plot types, section 2
 styles), `docs/spec/feature-parity.md` (P0/P1 tags decide order).
 

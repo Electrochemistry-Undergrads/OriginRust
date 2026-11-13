@@ -114,7 +114,10 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
         let mut free = (true, true);
         let bars: Vec<&data::PlotData> = sources.iter().copied().filter(|pd| pd.bar.is_some()).collect();
         if linear && let (Some((lo, hi)), Some(pd)) = (range, bars.first()) {
-            match dim {
+            // The bar positions run along X, or along Y for horizontal bars.
+            let position_dim = if pd.transposed() { Dim::Y } else { Dim::X };
+            let dim_role = if dim == position_dim { Dim::X } else { Dim::Y };
+            match dim_role {
                 Dim::X => {
                     let half = pd.bar.map_or(0.5, |b| b.spacing / 2.0);
                     range = Some((lo - half, hi + half));
@@ -128,6 +131,11 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
                     // A base at or beyond the data limit is the axis limit itself, without a margin.
                     free = (blo > lo, bhi < hi);
                     range = Some((lo.min(blo), hi.max(bhi)));
+                    if bars.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Column) {
+                        // Piles of 100: the axis ends exactly at 0 and 100.
+                        range = Some((0.0, 100.0));
+                        free = (false, false);
+                    }
                 }
             }
         }
@@ -509,8 +517,8 @@ fn layer_scene(
 /// for scatter and column plots, which have no line of their own to show.
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
     pds.first().map(|pd| match pd.plot.kind {
-        PlotKind::Scatter | PlotKind::Column => pd.plot.symbol.color,
         PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area => pd.plot.line.color,
+        _ => pd.plot.symbol.color,
     })
 }
 
@@ -810,7 +818,8 @@ fn draw_y_labels(
 /// else `Row`.
 fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
-    if y_axis {
+    // Horizontal bars show their values on the X axis and their positions on the Y axis.
+    if y_axis != pd.transposed() {
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
     }
     let x = pd.plot.x.and_then(|id| project.column(id));
@@ -950,7 +959,16 @@ fn draw_legend(
     let row_h = 1.3 * fs;
     let col_gap = fs;
 
-    let text = lg.text.clone().unwrap_or_else(|| Legend::automatic_text(ids));
+    // Piled and lying bars list the last plot first, as they appear on the page.
+    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked() || pd.plot.kind.is_horizontal());
+    let text = lg.text.clone().unwrap_or_else(|| {
+        if reversed {
+            let rev: Vec<String> = ids.iter().rev().cloned().collect();
+            Legend::automatic_text(&rev)
+        } else {
+            Legend::automatic_text(ids)
+        }
+    });
     let mut rows: Vec<(Vec<Cell>, f64)> = Vec::new();
     for line in legend::lines(&text) {
         let mut cells: Vec<Cell> = Vec::new();
@@ -1050,7 +1068,7 @@ fn draw_legend(
                         symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
                         out.push(symbol_item(d, &plot.symbol));
                     }
-                    if matches!(plot.kind, PlotKind::Column | PlotKind::Area) {
+                    if plot.kind.is_bar() || plot.kind == PlotKind::Area {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         out.push(Item::Rect {

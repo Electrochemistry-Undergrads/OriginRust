@@ -23,7 +23,7 @@
 use crate::analysis::{AnalysisError, RowRange, column_label, free_sheet_name, resolve_rows};
 use crate::color::Color;
 use crate::column::{Column, ColumnData, Designation};
-use crate::graph::{Dash, LineStyle, Plot, PlotKind};
+use crate::graph::{Dash, ErrorStyle, LineStyle, Plot, PlotKind};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
@@ -285,6 +285,9 @@ fn band_plot(layer: &crate::graph::Layer, x: ColumnId, band: &BandColumn, color:
         visible: true,
         auto_color: false,
         group: None,
+        x_error: None,
+        y_base: None,
+        error: ErrorStyle::default(),
     }
 }
 
@@ -679,6 +682,9 @@ impl Project {
                         visible: true,
                         auto_color: false,
                         group: None,
+                        x_error: None,
+                        y_base: None,
+                        error: ErrorStyle::default(),
                     });
                     if request.update_legend {
                         layer.legend.text = None;
@@ -768,6 +774,9 @@ impl Project {
             visible: true,
             auto_color: false,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
         });
         layer.plot_offset_mut(outcome.curve_y).follows = Some(source);
         if outcome.plot_bands {

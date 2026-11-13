@@ -60,11 +60,11 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind.has_symbols() {
                 tabs.push((DetailTab::Symbol, "Symbol", true));
             }
-            if plot.kind == PlotKind::Column {
+            if plot.kind.is_bar() {
                 tabs.push((DetailTab::Pattern, "Pattern", true));
                 tabs.push((DetailTab::Spacing, "Spacing", true));
             }
-            if plot.y_error.is_some() {
+            if plot.y_error.is_some() || plot.x_error.is_some() {
                 tabs.push((DetailTab::ErrorBar, "Error Bar", true));
             }
             tabs
@@ -83,8 +83,12 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Line => "Line",
         PlotKind::Scatter => "Scatter",
         PlotKind::LineSymbol => "Line + Symbol",
-        PlotKind::Column => "Column / Bar",
+        PlotKind::Column => "Column",
         PlotKind::Area => "Area",
+        PlotKind::StackedColumn => "Stacked Column",
+        PlotKind::Stacked100Column => "100% Stacked Column",
+        PlotKind::Bar => "Bar",
+        PlotKind::FloatingColumn => "Floating Column",
     }
 }
 
@@ -122,9 +126,17 @@ pub fn dialog_body(
                 if let Node::Plot(l, p) = *node {
                     let plot = &mut graph.layers[l].plots[p];
                     egui::ComboBox::from_id_salt("plot_type").selected_text(kind_name(plot.kind)).show_ui(ui, |ui| {
-                        for k in
-                            [PlotKind::Line, PlotKind::Scatter, PlotKind::LineSymbol, PlotKind::Column, PlotKind::Area]
-                        {
+                        for k in [
+                            PlotKind::Line,
+                            PlotKind::Scatter,
+                            PlotKind::LineSymbol,
+                            PlotKind::Column,
+                            PlotKind::StackedColumn,
+                            PlotKind::Stacked100Column,
+                            PlotKind::Bar,
+                            PlotKind::FloatingColumn,
+                            PlotKind::Area,
+                        ] {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }
                     });
@@ -319,13 +331,32 @@ fn plot_tab(
                 .and_then(|e| columns.iter().find(|(c, _)| *c == e))
                 .map(|(_, n)| n.clone())
                 .unwrap_or_default();
+            let xname = plot
+                .x_error
+                .and_then(|e| columns.iter().find(|(c, _)| *c == e))
+                .map(|(_, n)| n.clone())
+                .unwrap_or_default();
             grid(ui, "plot_error", |ui| {
                 ui.label("Y error column");
                 ui.label(name);
                 ui.end_row();
+                ui.label("X error column");
+                ui.label(xname);
+                ui.end_row();
+                ui.label("Direction");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut plot.error.direction, ErrorDirection::Both, "Both");
+                    ui.selectable_value(&mut plot.error.direction, ErrorDirection::Plus, "Positive");
+                    ui.selectable_value(&mut plot.error.direction, ErrorDirection::Minus, "Negative");
+                });
+                ui.end_row();
+                ui.label("Cap width");
+                ui.add(DragValue::new(&mut plot.error.cap_width_pt).range(0.0..=100.0).speed(0.1).suffix(" pt"));
+                ui.end_row();
             });
             if ui.button("Remove error bars").clicked() {
                 plot.y_error = None;
+                plot.x_error = None;
             }
         }
         _ => group_tab(ui, graph, l, p, labels, node),
@@ -520,6 +551,9 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 visible: true,
                 auto_color: true,
                 group: None,
+                x_error: None,
+                y_base: None,
+                error: ErrorStyle::default(),
             });
         }
         layer.recolor_automatic();

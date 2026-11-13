@@ -805,6 +805,9 @@ fn read_curve(
         visible: true,
         auto_color: false,
         group: None,
+        x_error: None,
+        y_base: None,
+        error: ErrorStyle::default(),
     };
     // A plot group colours its members from Origin's colour list in order, whatever the records
     // hold (opj-format 13.13); a lone column plot or area keeps its outline.

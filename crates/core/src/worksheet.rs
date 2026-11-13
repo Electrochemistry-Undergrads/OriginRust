@@ -68,6 +68,16 @@ impl Worksheet {
             .find(|c| c.designation == Designation::YError)
     }
 
+    /// The X-error column that belongs to the Y column at `index`: an X error column directly
+    /// after it, before the next X or Y column.
+    pub fn x_error_for(&self, index: usize) -> Option<&Column> {
+        self.columns
+            .iter()
+            .skip(index + 1)
+            .take_while(|c| !matches!(c.designation, Designation::X | Designation::Y))
+            .find(|c| c.designation == Designation::XError)
+    }
+
     /// Indices of all Y columns, in sheet order.
     pub fn y_columns(&self) -> Vec<usize> {
         self.columns.iter().enumerate().filter(|(_, c)| c.designation == Designation::Y).map(|(i, _)| i).collect()

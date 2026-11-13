@@ -767,7 +767,7 @@ impl SheafApp {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
-            Action::PlotYError { book, columns } => self.plot_y_error(book, columns),
+            Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
             Action::Fit { book, column, kind } => {
@@ -1190,26 +1190,43 @@ impl SheafApp {
 
     /// Plot > Symbol > Y Error: a scatter plot; the error bars come from the Y error column that
     /// follows each Y column (Column > Set As > Y Error).
-    fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+    fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>, x: bool) {
         let ys = self.plot_y_columns(book, columns, Template::Scatter);
         if ys.is_empty() {
             self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
             return;
         }
         let project = self.doc.project();
-        let with_errors = ys
-            .iter()
-            .filter(|y| {
-                project.locate(**y).is_some_and(|(_, sheet, _)| {
-                    sheet.column_index(**y).is_some_and(|i| sheet.y_error_for(i).is_some())
+        let count = |xerr: bool| {
+            ys.iter()
+                .filter(|y| {
+                    project.locate(**y).is_some_and(|(_, sheet, _)| {
+                        sheet.column_index(**y).is_some_and(|i| {
+                            if xerr { sheet.x_error_for(i).is_some() } else { sheet.y_error_for(i).is_some() }
+                        })
+                    })
                 })
-            })
-            .count();
-        match self.doc.edit("Plot Y error", |p| p.plot_columns(Template::Scatter, &ys)) {
-            Ok(_) if with_errors == 0 => {
-                self.warn("Plotted without error bars: no Y error column follows the selected columns".to_string())
+                .count()
+        };
+        let (with_y, with_x) = (count(false), if x { count(true) } else { 0 });
+        let what = if x { "X or Y error" } else { "Y error" };
+        let made = self.doc.edit("Plot error bars", |p| {
+            let graph = p.plot_columns(Template::Scatter, &ys)?;
+            if !x {
+                // Y Error shows no X error bars even when the sheet has an X error column.
+                if let Some(g) = p.graph_mut(graph) {
+                    g.layers.iter_mut().flat_map(|l| l.plots.iter_mut()).for_each(|pl| pl.x_error = None);
+                }
             }
-            Ok(_) => self.say(format!("Plotted {} column(s), {with_errors} with error bars", ys.len())),
+            Ok::<_, sheaf_core::project::ProjectError>(graph)
+        });
+        match made {
+            Ok(_) if with_y + with_x == 0 => {
+                self.warn(format!("Plotted without error bars: no {what} column follows the selected columns"))
+            }
+            Ok(_) => {
+                self.say(format!("Plotted {} column(s), {with_y} with Y and {with_x} with X error bars", ys.len()))
+            }
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
     }

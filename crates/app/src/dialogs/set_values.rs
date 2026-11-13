@@ -135,6 +135,35 @@ pub const FUNCTIONS: &[(&str, &[FuncInfo])] = &[
         ],
     ),
     (
+        "Text",
+        &[
+            f(
+                "text",
+                "x, format",
+                "Number as text; format \"*3\" gives 3 significant digits, \".2\" 2 decimals.",
+                "text(col(A), \"*3\")",
+            ),
+            f("value", "s", "Number written in a text; missing when there is none.", "value(col(A)$)"),
+            f("len", "s", "Number of characters. col(A)$ is the text of a cell.", "len(col(A)$)"),
+            f("left", "s, n", "First n characters.", "left(col(A)$, 3)"),
+            f("right", "s, n", "Last n characters.", "right(col(A)$, 2)"),
+            f("mid", "s, start, n", "n characters from position start (the first is 1).", "mid(col(A)$, 2, 3)"),
+            f("upper", "s", "Capital letters.", "upper(col(A)$)"),
+            f("lower", "s", "Small letters.", "lower(col(A)$)"),
+            f("trim", "s", "Without spaces at the start and the end.", "trim(col(A)$)"),
+            f("find", "s, part, start", "Position of part in s, -1 if absent; case matters.", "find(col(A)$, \"1\")"),
+            f("search", "s, part, start", "Like find, ignoring case.", "search(col(A)$, \"1\")"),
+            f("replace", "s, pos, n, new", "Replaces n characters from pos by new.", "replace(col(A)$, 1, 1, \"x\")"),
+            f(
+                "compare",
+                "s, t, case",
+                "1 when the texts are equal, else 0; case 0 ignores case.",
+                "compare(col(A)$, \"1\")",
+            ),
+            f("exact", "s, t", "1 when the texts are equal with case, else 0.", "exact(col(A)$, \"1\")"),
+        ],
+    ),
+    (
         "Random",
         &[
             f("rnd", "", "Uniform random number from 0 up to 1; new in every row.", "rnd()"),

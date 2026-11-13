@@ -3,6 +3,7 @@
 //! Everything here works on single numbers; the vector evaluator maps these over columns and the
 //! compiled evaluator calls them directly, so both modes give identical results.
 
+use crate::text::StrFn;
 use std::f64::consts::PI;
 
 /// The missing value.
@@ -69,6 +70,8 @@ pub(crate) enum Func {
     Lookup,
     /// `cell(row, col)`.
     Cell,
+    /// A string function (`left`, `mid`, `text`, ...).
+    Str(StrFn),
 }
 
 pub(crate) enum Resolved {
@@ -119,6 +122,7 @@ fn arity(f: Func) -> (usize, usize) {
         Func::N(_, k) => (k, k),
         Func::Lookup => (3, 3),
         Func::Cell => (2, 2),
+        Func::Str(f) => f.arity(),
     }
 }
 
@@ -168,6 +172,20 @@ static TABLE: &[(&str, Func)] = &[
     ("isna", Func::U(isna)),
     ("na", Func::Na),
     ("ifelse", Func::IfElse),
+    ("left", Func::Str(StrFn::Left)),
+    ("right", Func::Str(StrFn::Right)),
+    ("mid", Func::Str(StrFn::Mid)),
+    ("len", Func::Str(StrFn::Len)),
+    ("upper", Func::Str(StrFn::Upper)),
+    ("lower", Func::Str(StrFn::Lower)),
+    ("trim", Func::Str(StrFn::Trim)),
+    ("find", Func::Str(StrFn::Find)),
+    ("search", Func::Str(StrFn::Search)),
+    ("replace", Func::Str(StrFn::Replace)),
+    ("compare", Func::Str(StrFn::Compare)),
+    ("exact", Func::Str(StrFn::Exact)),
+    ("text", Func::Str(StrFn::Text)),
+    ("value", Func::Str(StrFn::Value)),
     ("if", Func::IfElse),
     // Origin's `sum(col)` in a column formula is the running sum (measured), `total` the total.
     ("sum", Func::Vec(VecFn::Cumsum)),

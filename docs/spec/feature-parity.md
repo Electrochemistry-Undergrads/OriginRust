@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 116 | 71 | 230 |
+| All rows | 43 | 117 | 70 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 47 | 71 | 129 |
+| P1 and P2 together | 11 | 48 | 70 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -125,7 +125,7 @@ Cross-cutting findings:
 | Before-formula script, multi-column set | Set Column Values | none | ✗ | one column only | P1 |
 | Fill Column With | row numbers, random, patterns | only formula `i` | ◐ | no random, series or dates | P1 |
 | Date and time arithmetic | date columns | columns are plain numbers in formulas (days) | ◐ | no `date()`, `time()` or date functions | P1 |
-| String functions and text in formulas | text functions | text reads as missing | ✗ | | P1 |
+| String functions and text in formulas | text functions | `col(A)$`, strings, `+`, left/right/mid/len/upper/lower/trim/find/search/replace/compare/exact/text/value; a text result makes a Text & Numeric column (expression-language.md, section 3) | ◐ | no `substitute` (Origin's returned its text unchanged), `char`, `code`, `format`, label rows `col(A)[L]$`, `%()` | P1 |
 | Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | Transpose (measured in Origin), Stack Columns, Unstack Columns, Split Columns, Reduce Rows, each writing a new sheet with one undo step | ◐ | Origin's Transpose replaces the sheet in place by default; option layouts of stack, unstack, split and reduce not compared with Origin; no join, pivot or duplicates | P1 |
 | External links, Paste Link | Edit menu | none | ✗ | | P2 |
 | Complex numbers | complex type | none | ✗ | | P2 |

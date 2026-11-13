@@ -9,6 +9,7 @@
 use crate::ast::{ColumnRef, Expr, Kind, Node, UnOp};
 use crate::error::ExprError;
 use crate::funcs::{self, Agg, BinOp, F1, F2, FnN, Func, NA, VecFn, apply_bin, max2, min2, truthy};
+use crate::text::{self, StrFn, Value};
 use std::cell::{Cell, OnceCell};
 
 /// Where an expression gets the values of variables and worksheet cells.
@@ -57,6 +58,19 @@ pub trait Host {
     /// knows the local time zone should override it.
     fn now(&self) -> f64 {
         funcs::system_now()
+    }
+
+    /// The text of the cell if it is a text cell (a text column, or a text cell of a Text &
+    /// Numeric column); `None` for a number or a missing value. Numeric reads
+    /// ([`cell`](Host::cell)) see a text cell as missing. The default has no text.
+    fn text_cell(&self, _col: &ColumnRef, _row: usize) -> Option<String> {
+        None
+    }
+
+    /// Whether the column holds any text cell. Formulas that read such a column bare, as in
+    /// `col(A)`, are evaluated with text values (see [`Expr::eval_values`]).
+    fn column_has_text(&self, _col: &ColumnRef) -> bool {
+        false
     }
 
     /// The 0-based row that [`Expr::eval`] evaluates. The variable `i` is this row plus one.
@@ -287,6 +301,11 @@ impl Expr {
     /// Division by zero, `sqrt` of a negative number and similar give NaN, not an error. Errors
     /// are only unknown variables or columns.
     pub fn eval(&self, host: &dyn Host) -> Result<f64, ExprError> {
+        if is_dynamic(host, &self.root) {
+            let seeds = Cell::new(funcs::system_seed());
+            let v = build_v(host, &seeds, &self.root, true)?;
+            return Ok(ev_v(host, &v, host.row()).number());
+        }
         Ok(self.compile(host)?.eval_row(host.row()))
     }
 
@@ -294,14 +313,40 @@ impl Expr {
     /// values in row order. The expression is compiled once; the loop does no parsing and no
     /// per-row allocation.
     pub fn eval_rows(&self, host: &dyn Host, n: usize) -> Result<Vec<f64>, ExprError> {
-        let c = self.compile(host)?;
-        Ok((0..n).map(|r| c.eval_row(r)).collect())
+        self.eval_rows_seeded(host, n, funcs::system_seed())
     }
 
     /// [`eval_rows`](Expr::eval_rows) with a fixed seed for `rnd()` and `grnd()`.
+    ///
+    /// A formula with text in it gives its numbers, and a missing value where the result is text.
     pub fn eval_rows_seeded(&self, host: &dyn Host, n: usize, seed: u64) -> Result<Vec<f64>, ExprError> {
+        if is_dynamic(host, &self.root) {
+            let values = self.eval_values_seeded(host, n, seed)?;
+            return Ok(values.iter().map(Value::number).collect());
+        }
         let c = self.compile_seeded(host, seed)?;
         Ok((0..n).map(|r| c.eval_row(r)).collect())
+    }
+
+    /// Evaluates the expression for rows `0..n` like [`eval_rows`](Expr::eval_rows), but a row
+    /// may come out as text: a string, `col(A)$`, a string function such as `left(col(A)$, 3)`,
+    /// or a plain `col(A)` on a column with text cells. Text takes part in calculations as a
+    /// missing value; `+` joins two texts.
+    pub fn eval_values(&self, host: &dyn Host, n: usize) -> Result<Vec<Value>, ExprError> {
+        self.eval_values_seeded(host, n, funcs::system_seed())
+    }
+
+    /// [`eval_values`](Expr::eval_values) with a fixed seed for `rnd()` and `grnd()`.
+    pub fn eval_values_seeded(&self, host: &dyn Host, n: usize, seed: u64) -> Result<Vec<Value>, ExprError> {
+        let seeds = Cell::new(seed);
+        let v = build_v(host, &seeds, &self.root, true)?;
+        Ok((0..n).map(|r| ev_v(host, &v, r)).collect())
+    }
+
+    /// Whether the formula involves text (a string, `col(A)$`, a string function, or a column
+    /// with text cells), so that its result may be text.
+    pub fn involves_text(&self, host: &dyn Host) -> bool {
+        is_dynamic(host, &self.root)
     }
 }
 
@@ -335,6 +380,12 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
     let b = |n: &Node| build(host, seeds, n).map(Box::new);
     let c = match &n.kind {
         Kind::Num(v) => C::Num(*v),
+        Kind::Str(_) | Kind::Text(_) => {
+            return Err(ExprError::at(
+                n.pos(),
+                "text values are not available here (only as the result of a column formula)",
+            ));
+        }
         Kind::Var { name, pos } => match host.variable(name) {
             Some(v) => C::Num(v),
             None if name == "i" => C::Row,
@@ -373,6 +424,9 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
             Func::Rand { gauss } => C::Rand { gauss, state: Cell::new(funcs::next_u64(seeds)) },
             Func::Lookup => C::Lookup(b(&args[0])?, build_col(host, &args[1])?, build_col(host, &args[2])?),
             Func::Cell => C::CellAt(b(&args[0])?, b(&args[1])?),
+            Func::Str(_) => {
+                return Err(ExprError::at(n.pos(), "text functions are not available here (only in a column formula)"));
+            }
             Func::Vec(kind) => {
                 let arg = args.get(1).map(b).transpose()?;
                 let cache = OnceCell::new();
@@ -534,5 +588,223 @@ fn ev_inner(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Formulas with text: a second, slower evaluator that works on `Value`s
+// ---------------------------------------------------------------------------------------------
+
+/// Whether a subtree contains a text construct: a string, `col(A)$` or a string function.
+fn explicit_text(n: &Node) -> bool {
+    let mut found = false;
+    n.walk(&mut |m| {
+        found |= matches!(m.kind, Kind::Str(_) | Kind::Text(_) | Kind::Call { func: Func::Str(_), .. });
+    });
+    found
+}
+
+/// Whether the value of a node is a text by its construction (a string, `col(A)$`, a function
+/// that returns text, a join with `+`).
+fn is_str(n: &Node) -> bool {
+    match &n.kind {
+        Kind::Str(_) | Kind::Text(_) => true,
+        Kind::Call { func: Func::Str(f), .. } => f.returns_text(),
+        Kind::Binary(BinOp::Add, a, b) => is_str(a) || is_str(b),
+        Kind::Cond(_, a, b) => is_str(a) || is_str(b),
+        Kind::Call { func: Func::IfElse, args } => is_str(&args[1]) || is_str(&args[2]),
+        _ => false,
+    }
+}
+
+/// Whether the value of a node could be a bare read of a text column (the whole formula, or a
+/// branch of `?:`), which copies the text as it is.
+fn bare_text_read(host: &dyn Host, n: &Node) -> bool {
+    match &n.kind {
+        Kind::Col { r, .. } => host.column_has_text(r),
+        Kind::Index { base, .. } => bare_text_read(host, base),
+        Kind::Cond(_, a, b) => bare_text_read(host, a) || bare_text_read(host, b),
+        Kind::Call { func: Func::IfElse, args } => bare_text_read(host, &args[1]) || bare_text_read(host, &args[2]),
+        _ => false,
+    }
+}
+
+/// Whether a subtree needs the text evaluator. `free` says that a bare column read may stay a
+/// text (the whole formula, an argument of a string function, an operand next to a string).
+/// Elsewhere a bare column is a number, and text in it is missing, as in Origin.
+fn needs_v(host: &dyn Host, n: &Node, free: bool) -> bool {
+    explicit_text(n) || (free && bare_text_read(host, n))
+}
+
+/// Whether the whole formula needs the text evaluator.
+fn is_dynamic(host: &dyn Host, n: &Node) -> bool {
+    needs_v(host, n, true)
+}
+
+enum V<'h> {
+    Num(C<'h>),
+    Str(String),
+    /// A cell read bare: its text if it is a text cell, else its number.
+    Cell(ColumnRef, Option<Box<V<'h>>>),
+    /// `col(A)$`.
+    TextOf(ColumnRef, Option<Box<V<'h>>>),
+    Unary(UnOp, Box<V<'h>>),
+    Bin(BinOp, Box<V<'h>>, Box<V<'h>>),
+    Cond(Box<V<'h>>, Box<V<'h>>, Box<V<'h>>),
+    U(F1, Box<V<'h>>),
+    B(F2, Box<V<'h>>, Box<V<'h>>),
+    N(FnN, Vec<V<'h>>),
+    MinMax(bool, Vec<V<'h>>),
+    Str1(StrFn, Vec<V<'h>>),
+}
+
+fn cell_ref(host: &dyn Host, n: &Node) -> Result<(ColumnRef, Option<Node>), ExprError> {
+    let (col, idx) = match &n.kind {
+        Kind::Index { base, idx } => (&**base, Some((**idx).clone())),
+        _ => (n, None),
+    };
+    let Kind::Col { r, pos } = &col.kind else {
+        return Err(ExprError::general("internal error: expected a column reference"));
+    };
+    if !host.has_column(r) {
+        return Err(ExprError::at(*pos, format!("unknown column {r}")));
+    }
+    Ok((r.clone(), idx))
+}
+
+fn build_v<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool) -> Result<V<'h>, ExprError> {
+    grow_stack(|| build_v_inner(host, seeds, n, free))
+}
+
+fn build_v_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool) -> Result<V<'h>, ExprError> {
+    if !needs_v(host, n, free) {
+        return Ok(V::Num(build(host, seeds, n)?));
+    }
+    let b = |n: &Node, free: bool| build_v(host, seeds, n, free).map(Box::new);
+    let list = |args: &[Node]| args.iter().map(|a| build_v(host, seeds, a, false)).collect::<Result<Vec<_>, _>>();
+    Ok(match &n.kind {
+        Kind::Str(s) => V::Str(s.clone()),
+        Kind::Text(inner) => {
+            let (r, idx) = cell_ref(host, inner)?;
+            V::TextOf(r, idx.map(|i| b(&i, false)).transpose()?)
+        }
+        Kind::Col { .. } | Kind::Index { .. } => {
+            let (r, idx) = cell_ref(host, n)?;
+            V::Cell(r, idx.map(|i| b(&i, false)).transpose()?)
+        }
+        Kind::Unary(op, a) => V::Unary(*op, b(a, false)?),
+        Kind::Binary(op, x, y) => {
+            let joined = matches!(op, BinOp::Add | BinOp::Eq | BinOp::Ne) && (is_str(x) || is_str(y));
+            V::Bin(*op, b(x, joined)?, b(y, joined)?)
+        }
+        Kind::Cond(c, x, y) => V::Cond(b(c, false)?, b(x, free)?, b(y, free)?),
+        Kind::Call { func, args } => match *func {
+            Func::Str(f) => {
+                let list = args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| build_v(host, seeds, a, f.text_arg(i)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                V::Str1(f, list)
+            }
+            Func::U(f) => V::U(f, b(&args[0], false)?),
+            Func::B(f) => V::B(f, b(&args[0], false)?, b(&args[1], false)?),
+            Func::N(f, _) => V::N(f, list(args)?),
+            Func::MinMax { max } => V::MinMax(max, list(args)?),
+            Func::IfElse => V::Cond(b(&args[0], false)?, b(&args[1], free)?, b(&args[2], free)?),
+            _ => return Err(ExprError::at(n.pos(), "text cannot be used in this function")),
+        },
+        Kind::Num(_) | Kind::Var { .. } | Kind::Range { .. } => build(host, seeds, n).map(V::Num)?,
+    })
+}
+
+/// The 0-based row an optional subscript points at; `None` when it is missing or out of range.
+fn subscript(host: &dyn Host, idx: &Option<Box<V<'_>>>, row: usize) -> Option<usize> {
+    let Some(i) = idx else {
+        return Some(row);
+    };
+    let r = ev_v(host, i, row).number().round();
+    (1.0..=4.0e15).contains(&r).then(|| r as usize - 1)
+}
+
+fn ev_v(host: &dyn Host, v: &V<'_>, row: usize) -> Value {
+    grow_stack(|| ev_v_inner(host, v, row))
+}
+
+fn ev_v_inner(host: &dyn Host, v: &V<'_>, row: usize) -> Value {
+    let num = |v: &V<'_>| ev_v(host, v, row).number();
+    match v {
+        V::Num(c) => Value::Num(ev(host, c, row)),
+        V::Str(s) => Value::Text(s.clone()),
+        V::Cell(r, idx) => {
+            let Some(k) = subscript(host, idx, row) else {
+                return Value::Num(NA);
+            };
+            match host.text_cell(r, k) {
+                Some(t) => Value::Text(t),
+                None => Value::Num(host.cell(r, k).unwrap_or(NA)),
+            }
+        }
+        V::TextOf(r, idx) => {
+            let Some(k) = subscript(host, idx, row) else {
+                return Value::Text(String::new());
+            };
+            Value::Text(match host.text_cell(r, k) {
+                Some(t) => t,
+                None => host.cell(r, k).map_or_else(String::new, text::format_general),
+            })
+        }
+        V::Unary(op, a) => {
+            let x = num(a);
+            Value::Num(match op {
+                UnOp::Neg => -x,
+                UnOp::Plus => x,
+                UnOp::Not => f64::from(!truthy(x)),
+            })
+        }
+        V::Bin(op, a, b) => bin_value(*op, ev_v(host, a, row), ev_v(host, b, row)),
+        V::Cond(c, a, b) => {
+            if truthy(num(c)) {
+                ev_v(host, a, row)
+            } else {
+                ev_v(host, b, row)
+            }
+        }
+        V::U(f, a) => Value::Num(f(num(a))),
+        V::B(f, a, b) => Value::Num(f(num(a), num(b))),
+        V::N(f, args) => {
+            let mut buf = [0.0; 4];
+            for (slot, a) in buf.iter_mut().zip(args) {
+                *slot = num(a);
+            }
+            Value::Num(f(&buf[..args.len().min(4)]))
+        }
+        V::MinMax(max, args) => {
+            let mut it = args.iter().map(num);
+            let first = it.next().unwrap_or(NA);
+            Value::Num(if *max { it.fold(first, max2) } else { it.fold(first, min2) })
+        }
+        V::Str1(f, args) => text::apply(*f, args.iter().map(|a| ev_v(host, a, row)).collect()),
+    }
+}
+
+/// A binary operator on values. Text is missing in arithmetic and ordered comparisons; `==` and
+/// `!=` compare two texts; `+` joins texts, and a number added to a text adds nothing (Origin).
+fn bin_value(op: BinOp, a: Value, b: Value) -> Value {
+    match (a, b) {
+        (Value::Num(x), Value::Num(y)) => Value::Num(apply_bin(op, x, y)),
+        (a, b) => match op {
+            BinOp::Add => match (a, b) {
+                (Value::Text(x), Value::Text(y)) => Value::Text(x + &y),
+                (Value::Text(x), _) | (_, Value::Text(x)) => Value::Text(x),
+                _ => Value::Num(NA),
+            },
+            BinOp::Eq | BinOp::Ne => {
+                let same = matches!((&a, &b), (Value::Text(x), Value::Text(y)) if x == y);
+                Value::Num(f64::from(same == (op == BinOp::Eq)))
+            }
+            BinOp::And | BinOp::Or => Value::Num(apply_bin(op, a.number(), b.number())),
+            _ => Value::Num(NA),
+        },
     }
 }

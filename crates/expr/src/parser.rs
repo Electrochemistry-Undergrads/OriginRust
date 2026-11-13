@@ -9,8 +9,8 @@
 //! multiplicative := unary ( ('*'|'/'|'%') unary )*
 //! unary    := ('-'|'+'|'!') unary | power
 //! power    := postfix ( '^' unary )?          -- right associative, exponent may be signed
-//! postfix  := primary ( '[' ternary ( ':' ternary )? ']' )?   -- only after a column reference
-//! primary  := number | name | name '(' args ')' | col-reference | '(' ternary ')'
+//! postfix  := primary ( '[' ternary ( ':' ternary )? ']' )? '$'?   -- only after a column reference
+//! primary  := number | "text" | name | name '(' args ')' | col-reference | '(' ternary ')'
 //! ```
 
 use crate::ast::{ColumnRef, Kind, Node, UnOp};
@@ -192,6 +192,10 @@ impl Parser {
 
     fn postfix(&mut self) -> Result<Node, ExprError> {
         let node = self.primary()?;
+        if matches!(node.kind, Kind::Col { .. }) && matches!(self.peek_tok(), Tok::Dollar) {
+            let pos = self.advance().pos;
+            return Node::new(Kind::Text(Box::new(node)), pos);
+        }
         if !matches!(self.peek_tok(), Tok::LBracket) {
             return Ok(node);
         }
@@ -209,7 +213,12 @@ impl Parser {
             Node::new(Kind::Range { base: Box::new(node), from: Box::new(first), to: Box::new(last), pos }, pos)
         } else {
             self.expect(Tok::RBracket, "after the row index")?;
-            Node::new(Kind::Index { base: Box::new(node), idx: Box::new(first) }, pos)
+            let cell = Node::new(Kind::Index { base: Box::new(node), idx: Box::new(first) }, pos)?;
+            if matches!(self.peek_tok(), Tok::Dollar) {
+                let pos = self.advance().pos;
+                return Node::new(Kind::Text(Box::new(cell)), pos);
+            }
+            Ok(cell)
         }
     }
 
@@ -234,7 +243,7 @@ impl Parser {
                 self.expect(Tok::RParen, &format!("to close the '(' opened at offset {}", t.pos))?;
                 Ok(inner)
             }
-            Tok::Str(_) => Err(ExprError::at(t.pos, "text strings can only be used inside col(\"...\")")),
+            Tok::Str(s) => Node::new(Kind::Str(s), t.pos),
             Tok::End => Err(ExprError::at(t.pos, "unexpected end of expression; expected a value")),
             other => Err(ExprError::at(t.pos, format!("expected a value, found {}", other.describe()))),
         }

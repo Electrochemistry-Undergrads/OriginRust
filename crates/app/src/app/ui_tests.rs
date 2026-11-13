@@ -5064,3 +5064,101 @@ fn set_as_categorical_toggles_and_group_and_subject_are_designations() {
     assert_eq!(Designation::Group.tag(), "G");
     assert_eq!(Designation::Subject.tag(), "S");
 }
+
+// ----- spreadsheet keys (Excel's, unbound in Origin's worksheet) ---------------------------------
+
+#[test]
+fn ctrl_a_selects_the_sheet_and_ctrl_or_shift_space_the_columns_or_rows_of_the_block() {
+    let mut h = start(vec![data_file("excel-select")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::A);
+    assert_eq!(cells(&h), Sel::All);
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+    // Shift+Space also arrives as a typed space; it must not start editing.
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Space);
+    h.event(egui::Event::Text(" ".to_string()));
+    settle(&mut h);
+    assert_eq!(cells(&h), Sel::Rows { anchor: 1, end: 2 });
+    assert!(book_ui(&h).editing.is_none());
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Space);
+    assert_eq!(cells(&h), Sel::Columns);
+    assert_eq!(book_ui(&h).selected, vec![column_id(&h, "B"), column_id(&h, "C")]);
+}
+
+#[test]
+fn backspace_empties_the_cell_and_starts_editing_it() {
+    let mut h = start(vec![data_file("excel-backspace")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    key(&mut h, egui::Key::Backspace);
+    assert_eq!(book_ui(&h).editing.as_ref().map(|e| (e.1, e.2.clone())), Some((1, String::new())));
+    key(&mut h, egui::Key::Enter);
+    let b = column(&h, "B");
+    assert!(b[1].is_nan(), "the cell was emptied: {b:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit cell"));
+}
+
+#[test]
+fn ctrl_enter_stores_the_typed_value_in_every_cell_of_the_block_in_one_undo_step() {
+    let mut h = start(vec![data_file("excel-fill")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "2.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+    h.event(egui::Event::Text("7".to_string()));
+    settle(&mut h);
+    assert!(book_ui(&h).editing.is_some());
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Enter);
+    assert!(book_ui(&h).editing.is_none());
+    assert_eq!(column(&h, "B"), [7.0, 7.0, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [7.0, 7.0, 10.5, 0.5]);
+    assert_eq!(cells(&h), Sel::Cells { anchor: (1, 0), end: (2, 1) }, "the block stays selected");
+    assert_eq!(h.state().doc.undo_label(), Some("Fill cells"));
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+}
+
+#[test]
+fn ctrl_plus_inserts_and_ctrl_minus_deletes_at_the_selection() {
+    let mut h = start(vec![data_file("excel-insert")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Space);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Minus);
+    assert_eq!(column(&h, "B"), [2.5, 6.5, 8.5], "row 2 was deleted");
+    assert_eq!(column(&h, "A"), [1.0, 3.0, 4.0]);
+    // Ctrl++ is Ctrl+Shift+= on most keyboards.
+    key_with(&mut h, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Equals);
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().len(), 4, "a blank row was inserted");
+    assert!(column(&h, "B")[1].is_nan());
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Plus);
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().len(), 5);
+}
+
+#[test]
+fn ctrl_page_down_and_up_step_through_the_sheets() {
+    let mut h = start(vec![data_file("excel-sheets")]);
+    show_window(&mut h, "Book1 - sample");
+    let (book, _) = window_ids(&h);
+    h.state_mut()
+        .doc
+        .apply("Test", |p| p.workbook_mut(book).unwrap().sheets.push(sheaf_core::Worksheet::new("Sheet2")));
+    settle(&mut h);
+    click_text(&mut h, "4.5");
+    let active = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().active_sheet;
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageDown);
+    assert_eq!(active(&h), 1);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageDown);
+    assert_eq!(active(&h), 1, "stays on the last sheet");
+    // The second sheet is empty; the keys still leave it.
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageUp);
+    assert_eq!(active(&h), 0);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageUp);
+    assert_eq!(active(&h), 0, "stays on the first sheet");
+}

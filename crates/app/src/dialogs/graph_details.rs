@@ -227,7 +227,14 @@ fn plot_tab(
                 egui::ComboBox::from_id_salt("plot_connect").selected_text(connect_name(plot.line.connect)).show_ui(
                     ui,
                     |ui| {
-                        for c in [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical] {
+                        for c in [
+                            Connect::Straight,
+                            Connect::Spline,
+                            Connect::BSpline,
+                            Connect::Bezier,
+                            Connect::StepHorizontal,
+                            Connect::StepVertical,
+                        ] {
                             ui.selectable_value(&mut plot.line.connect, c, connect_name(c));
                         }
                     },

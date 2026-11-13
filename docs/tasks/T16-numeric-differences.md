@@ -1,6 +1,6 @@
 # T16: Small numeric and behaviour differences
 
-**Status:** items 1 and 5 done, item 4 investigated, merged (`b967898`) (not fixed, findings in statistics.md); 2, 3, 6 open. **Size:** S each; independent, one commit each. **Branch:** `small-diffs`.
+**Status:** item 2 done on branch `spline-connect`, not merged (natural spline, 900 limit, increasing X, B-spline and Bezier added; spec 5.2); items 1 and 5 done, item 4 investigated, merged (`b967898`) (not fixed, findings in statistics.md); 3 done; 6 open (a different thing: the analysis smoothing factor, not the line connection). **Size:** S each; independent, one commit each. **Branch:** `small-diffs`.
 **Model:** Sonnet (Haiku to run the suites). **Detail:** audit C "Missing objects", D "Numerically
 or behaviourally different".
 

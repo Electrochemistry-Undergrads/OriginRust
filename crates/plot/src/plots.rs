@@ -18,8 +18,13 @@ const RUN_EXACT: usize = 4;
 const SYMBOL_THIN_ABOVE: usize = 20_000;
 /// Two symbols in the same cell of this size (in pt) count as coinciding.
 const SYMBOL_CELL_PT: f64 = 0.5;
-/// Pieces with more points than this are never drawn as splines.
-const SPLINE_MAX_POINTS: usize = 2000;
+/// A plot with more points than this is drawn with straight segments instead of a spline (Origin
+/// does the same, measured: 900 points are splined, 901 are not, even when zoomed in).
+const SPLINE_MAX_POINTS: usize = 900;
+/// Smooth connections are drawn as short chords of about this length (pt).
+const SMOOTH_STEP_PT: f64 = 2.0;
+/// At most this many chords per curve segment.
+const SMOOTH_MAX_SUB: usize = 128;
 
 /// The stroke of a data line.
 pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
@@ -194,7 +199,10 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let stroke = line_stroke(&pd.plot.line);
-    let connect = pd.plot.line.connect;
+    let connect = match pd.plot.line.connect {
+        Connect::Spline if !spline_applies(pd) => Connect::Straight,
+        c => c,
+    };
     let mut piece: Vec<(f64, f64)> = Vec::new();
     let mut pending: Option<(f64, f64)> = None;
     let flush = |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, out: &mut Vec<Item>| {
@@ -272,35 +280,157 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
                 line_to(d, w[1].0, w[1].1);
             }
         }
-        Connect::Spline if pts.len() > 2 && pts.len() <= SPLINE_MAX_POINTS => {
-            let n = pts.len();
-            for i in 0..n - 1 {
-                let p0 = pts[i.saturating_sub(1)];
-                let (p1, p2) = (pts[i], pts[i + 1]);
-                let p3 = pts[(i + 2).min(n - 1)];
-                d.push('C');
-                let coords = [
-                    p1.0 + (p2.0 - p0.0) / 6.0,
-                    p1.1 + (p2.1 - p0.1) / 6.0,
-                    p2.0 - (p3.0 - p1.0) / 6.0,
-                    p2.1 - (p3.1 - p1.1) / 6.0,
-                    p2.0,
-                    p2.1,
-                ];
-                for (k, c) in coords.iter().enumerate() {
-                    if k > 0 {
-                        d.push(if k % 2 == 0 { ' ' } else { ',' });
-                    }
-                    push_num(d, *c);
+        Connect::Spline => {
+            let mono = pts.windows(2).all(|w| w[1].0 > w[0].0) || pts.windows(2).all(|w| w[1].0 < w[0].0);
+            if pts.len() < 3 || !mono {
+                for &(x, y) in &pts[1..] {
+                    line_to(d, x, y);
+                }
+            } else {
+                for (x, y) in natural_spline(pts).into_iter().skip(1) {
+                    line_to(d, x, y);
                 }
             }
         }
-        Connect::Spline => {
-            for &(x, y) in &pts[1..] {
+        Connect::BSpline => {
+            let curve = if pts.len() < 3 { pts.to_vec() } else { clamped_b_spline(pts) };
+            for &(x, y) in &curve[1..] {
+                line_to(d, x, y);
+            }
+        }
+        Connect::Bezier => {
+            let curve = if pts.len() < 4 { pts.to_vec() } else { bezier_groups(pts) };
+            for &(x, y) in &curve[1..] {
                 line_to(d, x, y);
             }
         }
     }
+}
+
+/// True when Origin draws this plot as a spline: at most 900 points and X strictly increasing
+/// (a plot that fails either test is drawn with straight segments).
+fn spline_applies(pd: &PlotData) -> bool {
+    if pd.end - pd.start > SPLINE_MAX_POINTS {
+        return false;
+    }
+    let mut last = f64::NEG_INFINITY;
+    for i in pd.start..pd.end {
+        let x = pd.x_at(i);
+        if !x.is_finite() {
+            continue;
+        }
+        if x <= last {
+            return false;
+        }
+        last = x;
+    }
+    true
+}
+
+/// Number of chords for a stretch of `len` pt.
+fn sub_count(len: f64) -> usize {
+    ((len / SMOOTH_STEP_PT).ceil() as usize).clamp(1, SMOOTH_MAX_SUB)
+}
+
+/// Natural cubic spline y(x) through the points (x strictly monotone), sampled along x.
+fn natural_spline(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let n = pts.len();
+    let h: Vec<f64> = pts.windows(2).map(|w| w[1].0 - w[0].0).collect();
+    // Second derivatives m: tridiagonal system with m[0] = m[n-1] = 0.
+    let mut m = vec![0.0; n];
+    if n > 2 {
+        let k = n - 2;
+        let mut diag = vec![0.0; k];
+        let mut rhs = vec![0.0; k];
+        for i in 0..k {
+            diag[i] = 2.0 * (h[i] + h[i + 1]);
+            rhs[i] = 6.0 * ((pts[i + 2].1 - pts[i + 1].1) / h[i + 1] - (pts[i + 1].1 - pts[i].1) / h[i]);
+        }
+        for i in 1..k {
+            let w = h[i] / diag[i - 1];
+            diag[i] -= w * h[i];
+            rhs[i] -= w * rhs[i - 1];
+        }
+        let mut sol = vec![0.0; k];
+        for i in (0..k).rev() {
+            let up = if i + 1 < k { h[i + 1] * sol[i + 1] } else { 0.0 };
+            sol[i] = (rhs[i] - up) / diag[i];
+        }
+        m[1..=k].copy_from_slice(&sol);
+    }
+    let mut out = vec![pts[0]];
+    for i in 0..n - 1 {
+        let (x0, y0) = pts[i];
+        let hi = h[i];
+        let subs = sub_count(hi.abs());
+        for s in 1..=subs {
+            if s == subs {
+                out.push(pts[i + 1]);
+                break;
+            }
+            let t = s as f64 / subs as f64;
+            let (a, b) = (1.0 - t, t);
+            let y = a * y0 + b * pts[i + 1].1 + ((a * a * a - a) * m[i] + (b * b * b - b) * m[i + 1]) * hi * hi / 6.0;
+            out.push((x0 + t * hi, y));
+        }
+    }
+    out
+}
+
+/// Uniform cubic B-spline whose first and last point are repeated three times, so the curve starts
+/// and ends at the end points (measured against Origin, 0.4 px).
+fn clamped_b_spline(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let mut q = vec![pts[0], pts[0]];
+    q.extend_from_slice(pts);
+    q.push(pts[pts.len() - 1]);
+    q.push(pts[pts.len() - 1]);
+    let mut out = vec![pts[0]];
+    for w in q.windows(4) {
+        let len = (w[1].0 - w[2].0).hypot(w[1].1 - w[2].1);
+        if len == 0.0 {
+            continue;
+        }
+        let subs = sub_count(len);
+        for s in 1..=subs {
+            let t = s as f64 / subs as f64;
+            let (t2, t3) = (t * t, t * t * t);
+            let c = [
+                (1.0 - t).powi(3) / 6.0,
+                (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0,
+                (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0,
+                t3 / 6.0,
+            ];
+            let x: f64 = w.iter().zip(c).map(|(p, c)| p.0 * c).sum();
+            let y: f64 = w.iter().zip(c).map(|(p, c)| p.1 * c).sum();
+            out.push((x, y));
+        }
+    }
+    out.push(pts[pts.len() - 1]);
+    out
+}
+
+/// Cubic Bezier segments over points 0-3, 3-6, 6-9 and so on; points after the last full group
+/// are not used (as in Origin).
+fn bezier_groups(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let mut out = vec![pts[0]];
+    let mut i = 0;
+    while i + 3 < pts.len() {
+        let p = &pts[i..i + 4];
+        let len = (p[1].0 - p[0].0).hypot(p[1].1 - p[0].1)
+            + (p[2].0 - p[1].0).hypot(p[2].1 - p[1].1)
+            + (p[3].0 - p[2].0).hypot(p[3].1 - p[2].1);
+        let subs = sub_count(len);
+        for s in 1..=subs {
+            let t = s as f64 / subs as f64;
+            let u = 1.0 - t;
+            let c = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+            let x: f64 = p.iter().zip(c).map(|(p, c)| p.0 * c).sum();
+            let y: f64 = p.iter().zip(c).map(|(p, c)| p.1 * c).sum();
+            out.push((x, y));
+        }
+        i += 3;
+    }
+    out
 }
 
 /// True when the point is within `margin` of the frame.
@@ -733,6 +863,11 @@ fn cross(d: &mut String, cx: f64, cy: f64, r: f64) {
 }
 
 #[cfg(test)]
-pub(crate) fn polyline_path_for_test(d: &mut String, pts: &[(f64, f64)]) {
-    polyline_path(d, pts, Connect::Spline);
+pub(crate) fn smooth_for_test(connect: Connect, pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    match connect {
+        Connect::Spline => natural_spline(pts),
+        Connect::BSpline => clamped_b_spline(pts),
+        Connect::Bezier => bezier_groups(pts),
+        _ => pts.to_vec(),
+    }
 }

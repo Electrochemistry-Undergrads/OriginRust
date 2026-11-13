@@ -155,8 +155,11 @@ pub fn mann_whitney(x: &[f64], y: &[f64], tail: Tail, exact: bool) -> Option<Man
             0.0
         };
         let lower = normal_cdf((u - mean_u + 0.5) / sd_u);
-        let upper = 1.0 - normal_cdf((u - mean_u - 0.5) / sd_u);
-        ((u - mean_u + toward) / sd_u, pick_tail(lower, upper, tail))
+        let z = (u - mean_u + toward) / sd_u;
+        // With the exact option Origin prints the upper-tail asymptotic p of the plain Z, not the
+        // continuity-corrected one of the run without it (measured; the other tails are unchanged).
+        let upper = if exact { 1.0 - normal_cdf(z) } else { 1.0 - normal_cdf((u - mean_u - 0.5) / sd_u) };
+        (z, pick_tail(lower, upper, tail))
     } else {
         (0.0, 1.0)
     };

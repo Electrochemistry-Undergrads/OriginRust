@@ -187,7 +187,7 @@ pub(crate) fn cv_potential(init: f64, high: f64, low: f64, step: f64, positive: 
         .collect()
 }
 
-/// Time of point `k` (counted from 1): `k` sample intervals, free of rounding noise.
+/// Time of point `k` (counted from 0): `k` sample intervals, free of rounding noise.
 fn grid(k: usize, step: f64) -> f64 {
     (k as f64 * step * 1e9).round() / 1e9
 }
@@ -269,7 +269,12 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
     if extra > 0 {
         warnings.push(format!("{extra} bytes after the data were ignored"));
     }
-    let channel_data = split_channels(&data[..n * 4 * channels], n, channels, h.f32_at(LAYOUT_FLAG) == 0.0);
+    let old_layout = h.f32_at(LAYOUT_FLAG) == 0.0;
+    let channel_data = split_channels(&data[..n * 4 * channels], n, channels, old_layout);
+    // The first row of a time-based run is at time 0, as in the text exports of the CHI627E
+    // program (the CHI1040C program writes its exports one sample interval later; the binary file
+    // does not say which program will export it).
+    let first = 0;
     let not_finite: usize = channel_data.iter().flatten().filter(|v| !v.is_finite()).count();
     if not_finite > 0 {
         warnings.push(format!("{not_finite} stored values are not finite numbers"));
@@ -348,7 +353,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             }
             let mut header = vec![HeaderCol::new("Time", "s")];
             header.extend(current_cols(0));
-            let mut data = vec![(1..=n).map(|k| grid(k, step)).collect::<Vec<_>>()];
+            let mut data = vec![(first..first + n).map(|k| grid(k, step)).collect::<Vec<_>>()];
             data.extend(channel_data);
             Block { header, data, x_step: Vec::new() }
         }
@@ -386,7 +391,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             }
             Block {
                 header: vec![HeaderCol::new("Time", "s"), HeaderCol::new("Potential", "V")],
-                data: vec![(1..=n).map(|k| grid(k, step)).collect(), potential],
+                data: vec![(first..first + n).map(|k| grid(k, step)).collect(), potential],
                 x_step: Vec::new(),
             }
         }

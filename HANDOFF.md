@@ -35,7 +35,9 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| `math-curves`, `math-manip`, `draw-objects` | "mac" (macOS, no Origin) | T22 Intersect, Average Multiple Curves, Polygon Area; T23 Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate X, Median Filter; T24 drawn lines, arrows, rectangles, ellipses | started 2026-11-13 |
+| `math-curves` | "mac" (stopped 2026-11-13) | T22: Average Multiple Curves, Intersect, Polygon Area (numerics `ead4ade`, core tools `50fe84d`, dialog/menu/CLI `52e8bf0` wip) | pushed; compiles; tests not run after the wip commit; not reviewed |
+| `math-manip` | "mac" (stopped) | T23: Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate X, Median Filter (numerics, core, CLI done; dialogs `e3ca004` wip) | pushed; compiles; tests not run; not reviewed |
+| `draw-objects` | "mac" (stopped) | T24: drawn lines, arrows, rectangles, ellipses (model and rendering `df8e579`; Tools bar, graph view, properties dialog, .opj warning, CLI `974783f` wip) | pushed; compiles; tests not run; not reviewed |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
@@ -57,6 +59,8 @@ optimization", free for reuse with their build folders `target/wt-axis` and `tar
 The disk is about 96 % full; reuse a worktree and its build folder instead of making new ones.
 
 ## Next step
+
+Finish the three stopped branches above (briefs T22, T23, T24 are on them): check out each (`git worktree add .claude/worktrees/<b> <b>`), run fmt, clippy and `cargo test --workspace`, finish what the brief lists as missing, have a fresh reviewer check it, then merge one at a time and add their unmeasured Origin facts to item 7 below. Then:
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
 analysis: T13 and T14 items 5-6 (with "Rust prompt handoff"), T16 item 6, T18 backlog items that need no Origin

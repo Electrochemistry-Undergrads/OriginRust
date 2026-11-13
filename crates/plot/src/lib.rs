@@ -11,6 +11,8 @@
 //! [`render_raster`] together with [`layout_geometry`].
 
 mod data;
+mod emf;
+mod eps;
 mod fonts;
 pub mod hit;
 mod layout;
@@ -22,10 +24,14 @@ mod stack;
 mod svg;
 mod text;
 pub mod ticks;
+mod vector;
 
+#[cfg(test)]
+mod export_tests;
 #[cfg(test)]
 mod tests;
 
+pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
 
 use sheaf_core::{Project, WindowId};
@@ -64,8 +70,8 @@ pub enum PlotError {
         #[source]
         source: std::io::Error,
     },
-    /// The file name has an extension that is not one of svg, png, tif, tiff, pdf.
-    #[error("cannot export to '.{0}' files; use .svg, .png, .tif or .pdf")]
+    /// The file name has an extension that is not one of svg, png, tif, tiff, pdf, eps, emf.
+    #[error("cannot export to '.{0}' files; use .svg, .png, .tif, .pdf, .eps or .emf")]
     UnknownFormat(String),
 }
 
@@ -227,6 +233,28 @@ pub fn render_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotErr
     raster::to_pdf(&svg, SystemFonts::shared())
 }
 
+/// Renders a graph as Encapsulated PostScript (level 2): vector paths, text in the standard
+/// Helvetica, Times or Courier fonts with ISO Latin-1 encoding, clipping per layer. PostScript
+/// has no transparency, so translucent colours are blended onto the page background.
+pub fn render_eps(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotError> {
+    Ok(render_eps_with_warnings(project, graph)?.bytes)
+}
+
+/// [`render_eps`] together with the warnings about characters that had to be replaced.
+pub fn render_eps_with_warnings(project: &Project, graph: WindowId) -> Result<EpsOutput, PlotError> {
+    let scene = layout::build_scene(project, graph, SystemFonts::shared())?;
+    Ok(eps::write_eps(&scene, 1.0))
+}
+
+/// Renders a graph as a Windows Enhanced Metafile (vector; text stays text in the graph's
+/// font). The format has no transparency, so translucent colours are blended onto the page
+/// background.
+pub fn render_emf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotError> {
+    let fonts = SystemFonts::shared();
+    let scene = layout::build_scene(project, graph, fonts)?;
+    Ok(emf::write_emf(&scene, 1.0, fonts))
+}
+
 /// Renders a graph as an LZW-compressed RGB TIFF at `dpi` dots per inch; the resolution is
 /// recorded in the file.
 pub fn render_tiff(project: &Project, graph: WindowId, dpi: f64) -> Result<Vec<u8>, PlotError> {
@@ -234,7 +262,7 @@ pub fn render_tiff(project: &Project, graph: WindowId, dpi: f64) -> Result<Vec<u
 }
 
 /// Writes a graph to `path`; the format follows the extension (`.svg`,
-/// `.png`, `.tif`/`.tiff` or `.pdf`, any case). `dpi` applies to PNG and TIFF only.
+/// `.png`, `.tif`/`.tiff`, `.pdf`, `.eps` or `.emf`, any case). `dpi` applies to PNG and TIFF only.
 pub fn export_file(project: &Project, graph: WindowId, path: &Path, dpi: f64) -> Result<(), PlotError> {
     export_file_sized(project, graph, path, dpi, ExportSize::default())
 }
@@ -253,7 +281,7 @@ pub fn export_file_sized(
 }
 
 /// The bytes of an exported figure in the format named by `ext` (`svg`, `png`, `tif`, `tiff`,
-/// `pdf`).
+/// `pdf`, `eps`, `emf`).
 pub fn export_bytes(
     project: &Project,
     graph: WindowId,
@@ -263,6 +291,15 @@ pub fn export_bytes(
 ) -> Result<Vec<u8>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let scale = size.scale(g.page.width_pt, g.page.height_pt)?;
+    if matches!(ext, "eps" | "emf") {
+        let fonts = SystemFonts::shared();
+        let scene = layout::build_scene(project, graph, fonts)?;
+        return Ok(if ext == "eps" {
+            eps::write_eps(&scene, scale).bytes
+        } else {
+            emf::write_emf(&scene, scale, fonts)
+        });
+    }
     let svg = render_svg(project, graph)?;
     let svg = if scale == 1.0 { svg } else { raster::scale_svg(&svg, scale) };
     let fonts = SystemFonts::shared();

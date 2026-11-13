@@ -1,4 +1,4 @@
-//! The export window of a graph: PNG or TIFF at a chosen resolution, SVG or PDF, at the page size
+//! The export window of a graph: PNG or TIFF at a chosen resolution, SVG, PDF, EPS or EMF, at the page size
 //! or scaled to a chosen width.
 
 use eframe::egui::{self, DragValue};
@@ -11,6 +11,8 @@ pub enum ExportFormat {
     Tiff,
     Svg,
     Pdf,
+    Eps,
+    Emf,
 }
 
 impl ExportFormat {
@@ -20,6 +22,8 @@ impl ExportFormat {
             ExportFormat::Tiff => "tif",
             ExportFormat::Svg => "svg",
             ExportFormat::Pdf => "pdf",
+            ExportFormat::Eps => "eps",
+            ExportFormat::Emf => "emf",
         }
     }
 }
@@ -85,6 +89,8 @@ impl ExportDialog {
                         ui.selectable_value(&mut self.format, ExportFormat::Tiff, "TIFF image");
                         ui.selectable_value(&mut self.format, ExportFormat::Svg, "SVG (vector)");
                         ui.selectable_value(&mut self.format, ExportFormat::Pdf, "PDF (vector)");
+                        ui.selectable_value(&mut self.format, ExportFormat::Eps, "EPS (vector)");
+                        ui.selectable_value(&mut self.format, ExportFormat::Emf, "EMF (vector)");
                     });
                     ui.end_row();
                     ui.label("Page size");

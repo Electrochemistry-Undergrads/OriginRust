@@ -55,6 +55,13 @@ fn show_window(h: &mut Harness<'static, SheafApp>, label: &str) {
     pause(h);
 }
 
+/// Chooses a scale type in the axis dialog's list (the list shows the current type, Linear here).
+fn pick_scale(h: &mut Harness<'static, SheafApp>, name: &str) {
+    h.get_by_value("Linear").click();
+    settle(h);
+    click(h, name);
+}
+
 fn click(h: &mut Harness<'static, SheafApp>, label: &str) {
     h.get_by_label(label).click();
     settle(h);
@@ -400,7 +407,7 @@ fn graph_settings_change_the_axis_live_and_undo_as_one_step() {
     assert!(h.state().graph_props.is_some());
     let scale = |h: &Harness<'static, SheafApp>| project(h).graphs().next().unwrap().layers[0].y_axis.scale;
     assert_eq!(scale(&h), ScaleKind::Linear);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(scale(&h), ScaleKind::Log10, "the change applies while the window is open");
     click(&mut h, "Line and Ticks");
     click(&mut h, "Ticks");
@@ -429,12 +436,12 @@ fn the_axis_dialog_switches_between_the_horizontal_and_the_vertical_axis() {
     }
     click(&mut h, "Vertical");
     assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::YAxis);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Log10);
     assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Linear, "only the chosen axis changes");
     click(&mut h, "Horizontal");
     assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::XAxis);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Log10);
     click(&mut h, "OK");
     assert!(h.state().graph_props.is_none());
@@ -464,7 +471,7 @@ fn cancel_takes_the_graph_back_and_leaves_no_undo_entry() {
     let mut h = start(vec![data_file("axis-cancel")]);
     let before = graph(&h).clone();
     open_props(&mut h, 0, PropsTab::YAxis, None);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Log10);
     click(&mut h, "Cancel");
     assert!(h.state().graph_props.is_none());
@@ -476,9 +483,11 @@ fn cancel_takes_the_graph_back_and_leaves_no_undo_entry() {
 fn apply_moves_the_starting_point_of_cancel() {
     let mut h = start(vec![data_file("axis-apply")]);
     open_props(&mut h, 0, PropsTab::YAxis, None);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     click(&mut h, "Apply");
     assert!(h.state().graph_props.is_some(), "Apply keeps the window open");
+    h.get_by_value("Log10").click();
+    settle(&mut h);
     click(&mut h, "Linear");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Linear);
     click(&mut h, "Cancel");

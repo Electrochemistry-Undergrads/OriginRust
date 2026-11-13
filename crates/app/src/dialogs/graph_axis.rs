@@ -86,9 +86,10 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
         optional_number(ui, &mut axis.max, resolved.map(|r| r.max), speed);
         ui.end_row();
         ui.label("Type");
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut axis.scale, ScaleKind::Linear, "Linear");
-            ui.selectable_value(&mut axis.scale, ScaleKind::Log10, "Log10");
+        egui::ComboBox::from_id_salt(format!("{id}_type")).selected_text(axis.scale.label()).show_ui(ui, |ui| {
+            for kind in ScaleKind::ALL {
+                ui.selectable_value(&mut axis.scale, kind, kind.label());
+            }
         });
         ui.end_row();
         ui.label("Rescale");

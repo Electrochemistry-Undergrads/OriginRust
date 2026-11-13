@@ -53,6 +53,10 @@ impl ResolvedAxis {
                     f64::NAN
                 }
             }
+            other => {
+                let (a, b) = (other.forward(self.min), other.forward(self.max));
+                (other.forward(v) - a) / (b - a)
+            }
         }
     }
 
@@ -64,6 +68,10 @@ impl ResolvedAxis {
             ScaleKind::Log10 => {
                 let (a, b) = (self.min.log10(), self.max.log10());
                 10f64.powf(a + u * (b - a))
+            }
+            other => {
+                let (a, b) = (other.forward(self.min), other.forward(self.max));
+                other.inverse(a + u * (b - a))
             }
         }
     }
@@ -120,7 +128,7 @@ fn clean_d(v: f64, date: bool) -> f64 {
 }
 
 /// Rounds to 12 significant digits to remove floating-point noise.
-fn clean(v: f64) -> f64 {
+pub(crate) fn clean(v: f64) -> f64 {
     if v == 0.0 || !v.is_finite() {
         return v;
     }
@@ -152,7 +160,7 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
     // Both limits fixed with the lower one above the upper one: a reversed axis.
     // Resolve it with the limits swapped and mark it.
     if let (Some(a), Some(b)) = (axis.min, axis.max) {
-        let valid = |v: f64| v.is_finite() && (axis.scale == ScaleKind::Linear || v > 0.0);
+        let valid = |v: f64| axis.scale.accepts(v);
         if valid(a) && valid(b) && a > b {
             let mut swapped = axis.clone();
             swapped.min = Some(b);
@@ -165,6 +173,7 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
     match axis.scale {
         ScaleKind::Linear => resolve_linear(axis, data_min_max, free),
         ScaleKind::Log10 => resolve_log(axis, data_min_max),
+        _ => crate::ticks_scales::resolve_other(axis, data_min_max),
     }
 }
 
@@ -292,7 +301,7 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>, free: (bool, bool)) -> 
     ResolvedAxis { min, max, step, scale: ScaleKind::Linear, major, minor, labels, reversed: false }
 }
 
-fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64) {
+pub(crate) fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64) {
     let eps = 1e-9 * (max - min);
     loop {
         let k0 = ((min - eps) / step).ceil();
@@ -312,7 +321,7 @@ fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64
     }
 }
 
-fn linear_minor(min: f64, max: f64, step: f64, per_gap: u32) -> Vec<f64> {
+pub(crate) fn linear_minor(min: f64, max: f64, step: f64, per_gap: u32) -> Vec<f64> {
     if per_gap == 0 {
         return Vec::new();
     }
@@ -432,7 +441,7 @@ fn signed(e: i32) -> String {
     if e < 0 { format!("{MINUS}{}", -e) } else { e.to_string() }
 }
 
-fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
+pub(crate) fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
     let div = if axis.tick_label_divisor.is_finite() && axis.tick_label_divisor != 0.0 {
         axis.tick_label_divisor
     } else {
@@ -510,7 +519,7 @@ fn auto_decimals(step: f64) -> usize {
 }
 
 /// Fixed-decimal text with a real minus sign; negative zero prints as `0`.
-fn decimal(v: f64, d: usize) -> String {
+pub(crate) fn decimal(v: f64, d: usize) -> String {
     let s = format!("{:.*}", d, v.abs());
     let is_zero = s.bytes().all(|b| b == b'0' || b == b'.');
     if v < 0.0 && !is_zero { format!("{MINUS}{s}") } else { s }
@@ -518,7 +527,7 @@ fn decimal(v: f64, d: usize) -> String {
 
 /// `m×10^e` in markup form. `decimals` is the mantissa precision; `None`
 /// trims trailing zeros.
-fn scientific(v: f64, decimals: Option<usize>) -> String {
+pub(crate) fn scientific(v: f64, decimals: Option<usize>) -> String {
     if v == 0.0 {
         return decimal(0.0, decimals.unwrap_or(0));
     }
@@ -534,13 +543,19 @@ fn scientific(v: f64, decimals: Option<usize>) -> String {
     format!("{sign}{mant}{TIMES}10\\+({})", signed(exp))
 }
 
+/// A default axis for tests in other modules.
+#[cfg(test)]
+pub(crate) fn tests_axis() -> Axis {
+    tests::axis()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use sheaf_core::Color;
     use sheaf_core::graph::{Font, TickDirection};
 
-    fn axis() -> Axis {
+    pub(super) fn axis() -> Axis {
         Axis {
             scale: ScaleKind::Linear,
             min: None,

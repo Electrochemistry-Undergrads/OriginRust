@@ -264,7 +264,7 @@ fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let value_axis = if transposed { &geom.x } else { &geom.y };
     let default_base = match value_axis.scale {
         ScaleKind::Linear => pd.oy,
-        ScaleKind::Log10 => value_axis.min,
+        _ => value_axis.min,
     };
     let stroke = (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt));
     let place = |cat: f64, val: f64| {

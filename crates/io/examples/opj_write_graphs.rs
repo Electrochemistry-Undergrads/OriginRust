@@ -8,6 +8,7 @@
 //! - `g-kinds.opj`: every symbol shape, line style and connection, line widths and colours.
 //! - `g-axes.opj`: tick directions, tick label sizes, the closed box, grids, hidden labels.
 //! - `g-layers.opj`: a graph with two layers.
+//! - `g-scales.opj`: one graph for each scale type beyond linear and log10, with automatic limits.
 //! - `g-cv.opj`, `g-it.opj`, `g-columns.opj`: figures in the style of the owner's usual ones (a
 //!   cyclic voltammogram overlay, a current against time curve, and a column chart with station
 //!   names, error bars and text labels), built from data made up here.
@@ -64,6 +65,17 @@ fn add(p: &mut Project, template: Template, name: &str, kind: PlotKind, ys: &[(u
         plot.kind = kind;
     }
     id
+}
+
+/// One graph per scale type other than linear and log10, with automatic limits.
+fn scales() -> Project {
+    let mut p = source();
+    for (i, kind) in ScaleKind::ALL.into_iter().enumerate().skip(2) {
+        let column = if kind.is_percent() { 2 } else { 3 };
+        let id = add(&mut p, Template::Scatter, &format!("GScale{i}"), PlotKind::Scatter, &[(column, None)]);
+        p.graph_mut(id).unwrap().layers[0].y_axis.scale = kind;
+    }
+    p
 }
 
 fn basic() -> Project {
@@ -385,6 +397,7 @@ fn main() {
         ("g-legend", legends()),
         ("g-it", it()),
         ("g-columns", columns()),
+        ("g-scales", scales()),
     ] {
         let path = dir.join(format!("{name}.opj"));
         match sheaf_io::opj::write_file(&project, &path) {

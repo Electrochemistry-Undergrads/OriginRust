@@ -434,6 +434,22 @@ pub enum ScaleKind {
     #[default]
     Linear,
     Log10,
+    /// Natural logarithm: ticks at powers of e.
+    Ln,
+    /// Base-2 logarithm: ticks at powers of 2.
+    Log2,
+    /// `1/x`, drawn with larger values at the top.
+    Reciprocal,
+    /// `1/(x + 273.14)`.
+    OffsetReciprocal,
+    /// Percent values placed by the normal quantile function, ticks from a list (0.01 .. 99.99).
+    Probability,
+    /// Percent values labelled with their probit (normal quantile plus 5).
+    Probit,
+    /// Percent values placed by `ln(p / (100 - p))`.
+    Logit,
+    /// Percent values placed by `ln(-ln(1 - p))`.
+    Weibull,
 }
 
 /// How an axis picks its limits when `min`/`max` are not fixed.

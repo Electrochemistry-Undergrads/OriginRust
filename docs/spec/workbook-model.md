@@ -278,7 +278,7 @@ Masking marks cells as excluded from plots and analysis without deleting them. M
 
 ### 13.1 Measured with Origin (`wsort`, task T10)
 
-Run through `tools/origin-ref/run-labtalk-lines.ps1` on a book with a numeric column of 3, --, 1, 2, 2, 1 (rows 1-7, a gap at row 2, row 6 and 7 as listed in the script) and a text column.
+Run through `tools/origin-ref/run-labtalk-lines.ps1` on a book whose first column holds 3, --, 1, 2, 1, 2, 1 (rows 1 to 7) next to a column of row labels, and on a text column with a, b, B, C and a gap.
 `wsort bycol:=1 c1:=<column> descending:=0|1` sorts every column of the sheet by that column.
 
 - A missing value (and the empty text) counts as the **smallest** value: first when ascending, last when descending.

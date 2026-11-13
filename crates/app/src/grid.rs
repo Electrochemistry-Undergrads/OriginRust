@@ -66,6 +66,16 @@ pub fn selection_stats(sheet: &Worksheet, t: &Target) -> Option<Stats> {
     (count > 0).then_some(Stats { sum, count })
 }
 
+/// A selection of columns by dragging over their heads: where it started, whether it adds to the
+/// columns selected before (Ctrl), those columns, and the last head the pointer was over.
+#[derive(Clone, Debug)]
+struct HeadDrag {
+    anchor: usize,
+    additive: bool,
+    base: Vec<ColumnId>,
+    last: usize,
+}
+
 /// What the user is doing in one workbook window.
 #[derive(Default)]
 pub struct BookUi {
@@ -86,6 +96,21 @@ pub struct BookUi {
     focus_label: bool,
     /// True while the mouse button is down after a press on a cell.
     dragging: bool,
+    /// A drag that started on a column head.
+    head_drag: Option<HeadDrag>,
+    /// True while a drag that started on a row number is going on.
+    row_drag: bool,
+    /// Frames left in which the moving corner of the selection is scrolled into view.
+    reveal: u8,
+    /// Where the moving corner of the selection was drawn in the last frame.
+    reveal_rect: Option<Rect>,
+    /// How many rows fit in the view (for Page Up and Page Down).
+    page_rows: usize,
+    /// The grid keeps the keyboard (after a click in it or editing a cell) unless a text field
+    /// takes it.
+    focus_grid: bool,
+    /// The focus target of the grid, from the last frame.
+    grid: Option<egui::Id>,
     /// The short name of a column whose header menu opens by itself in the next frame (for
     /// pictures made with `--show column-menu:NAME`).
     pub open_header_menu: Option<String>,
@@ -102,6 +127,8 @@ impl BookUi {
         self.selected.clear();
         self.sel = Sel::None;
         self.dragging = false;
+        self.head_drag = None;
+        self.row_drag = false;
         self.editing = None;
         self.editing_label = None;
     }
@@ -141,6 +168,14 @@ impl BookUi {
         self.sel = Sel::Cells { anchor, end };
         let (lo, hi) = (anchor.0.min(end.0), anchor.0.max(end.0));
         self.selected = sheet.columns.iter().skip(lo).take(hi + 1 - lo).map(|c| c.id).collect();
+    }
+
+    /// The corner of the selection that moves with Shift+arrow keys: (column position, row).
+    fn active_corner(&self) -> Option<(usize, usize)> {
+        match &self.sel {
+            Sel::Cells { end, .. } => Some(*end),
+            _ => None,
+        }
     }
 
     fn select_rows(&mut self, anchor: usize, end: usize) {
@@ -304,6 +339,28 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     // The primary button was released: a drag over cells is over.
     if !ui.input(|i| i.pointer.primary_down()) {
         state.dragging = false;
+        state.head_drag = None;
+        state.row_drag = false;
+    }
+    state.page_rows = (((body.height() - header_height) / ROW_HEIGHT).floor() as usize).max(1);
+    // The keyboard belongs to the grid once something in it was clicked: Tab and the arrow keys
+    // stay with it instead of moving the focus to other widgets.
+    let grid = grid_id(book_id);
+    ui.interact(body, grid, Sense::focusable_noninteractive());
+    ui.memory_mut(|m| {
+        m.set_focus_lock_filter(
+            grid,
+            egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: false },
+        )
+    });
+    state.reveal_rect = None;
+    state.grid = Some(grid);
+    if state.focus_grid && state.editing.is_none() {
+        match ui.memory(|m| m.focused()) {
+            None => ui.memory_mut(|m| m.request_focus(grid)),
+            Some(id) if id != grid => state.focus_grid = false,
+            Some(_) => {}
+        }
     }
 
     let output = ui
@@ -327,6 +384,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     }
                     // One empty column at the end as a target for "add column".
                     table = table.column(TableColumn::remainder().at_least(40.0));
+                    if state.reveal > 0
+                        && let Some(row) = state.active_corner().map(|c| c.1)
+                    {
+                        table = table.scroll_to_row(row, None);
+                    }
 
                     table
                         .header(header_height, |mut header| {
@@ -369,6 +431,22 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         })
         .inner;
     state.h_offset = output.state.offset.x;
+    if state.reveal > 0 {
+        state.reveal -= 1;
+        if let Some(cell) = state.reveal_rect {
+            // Bring the cell into the horizontal view; the table scrolls to the row itself.
+            let view = output.inner_rect;
+            if cell.left() < view.left() {
+                state.h_offset = (state.h_offset - (view.left() - cell.left())).max(0.0);
+            } else if cell.right() > view.right() {
+                state.h_offset += (cell.right() - view.right()).min(view.width());
+            }
+            if view.contains_rect(cell) {
+                state.reveal = 0;
+            }
+        }
+        ui.ctx().request_repaint();
+    }
     state.h_content = output.content_size.x;
     state.h_view = output.inner_rect.width();
 }
@@ -540,7 +618,7 @@ fn column_head(
     // The grey row with the name.
     let head = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
     ui.painter().rect_filled(head, 0.0, if selected { HEADER_DARK } else { HEADER_GREY });
-    let head_response = ui.interact(head, ui.id().with(("col_header", column.id.0)), Sense::CLICK);
+    let head_response = ui.interact(head, ui.id().with(("col_header", column.id.0)), Sense::CLICK | Sense::DRAG);
     ui.scope_builder(
         UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
         |ui| {
@@ -550,7 +628,9 @@ fn column_head(
     if head_response.clicked() {
         let modifiers = click_modifiers(ui);
         select_column(state, sheet, column.id, modifiers);
+        state.focus_grid = true;
     }
+    head_drag(ui, state, sheet, position, &head_response, head);
     if head_response.double_clicked() {
         actions.push(Action::ColumnProperties(column.id));
     }
@@ -770,6 +850,52 @@ fn select_column(state: &mut BookUi, sheet: &Worksheet, id: ColumnId, modifiers:
     }
 }
 
+/// Selecting columns by pressing on one head and dragging over others, as if Shift-clicked; with
+/// Ctrl the dragged range is added to the columns that were selected before.
+fn head_drag(
+    ui: &mut egui::Ui,
+    state: &mut BookUi,
+    sheet: &Worksheet,
+    position: usize,
+    response: &egui::Response,
+    head: Rect,
+) {
+    if response.drag_started_by(egui::PointerButton::Primary) {
+        let m = click_modifiers(ui);
+        let additive = m.command;
+        let base = if state.sel == Sel::Columns { state.selected.clone() } else { Vec::new() };
+        let anchor = match (m.shift && !additive, base.last().and_then(|id| sheet.column_index(*id))) {
+            (true, Some(last)) => last,
+            _ => position,
+        };
+        state.head_drag = Some(HeadDrag { anchor, additive, base, last: usize::MAX });
+        state.dragging = false;
+        state.focus_grid = true;
+    }
+    let Some(drag) = state.head_drag.clone() else { return };
+    let over = ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| p.x >= head.left() && p.x < head.right());
+    if !over || drag.last == position {
+        return;
+    }
+    let (lo, hi) = (drag.anchor.min(position), drag.anchor.max(position));
+    let mut selected = if drag.additive { drag.base.clone() } else { Vec::new() };
+    for id in sheet.columns[lo..=hi.min(sheet.columns.len() - 1)].iter().map(|c| c.id) {
+        if !selected.contains(&id) {
+            selected.push(id);
+        }
+    }
+    state.selected = selected;
+    state.sel = Sel::Columns;
+    if let Some(d) = &mut state.head_drag {
+        d.last = position;
+    }
+}
+
+/// The id of the focus target of a workbook's grid.
+pub fn grid_id(book: WindowId) -> egui::Id {
+    egui::Id::new(("sheet_grid", book))
+}
+
 fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut BookUi, actions: &mut Vec<Action>) {
     let rect = ui.max_rect();
     let selected = match &state.sel {
@@ -781,7 +907,25 @@ fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut B
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, line);
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
-    let response = ui.interact(rect, ui.id().with(("row_header", r)), Sense::CLICK);
+    let response = ui.interact(rect, ui.id().with(("row_header", r)), Sense::CLICK | Sense::DRAG);
+    if response.drag_started_by(egui::PointerButton::Primary) {
+        state.row_drag = true;
+        state.dragging = false;
+        state.focus_grid = true;
+        match (&state.sel, click_modifiers(ui).shift) {
+            (Sel::Rows { anchor, .. }, true) => {
+                let anchor = *anchor;
+                state.select_rows(anchor, r);
+            }
+            _ => state.select_rows(r, r),
+        }
+    } else if state.row_drag
+        && ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| p.y >= rect.top() && p.y < rect.bottom())
+        && let Sel::Rows { anchor, end } = state.sel
+        && end != r
+    {
+        state.select_rows(anchor, r);
+    }
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         ui.add_space(5.0);
         ui.label(RichText::new((r + 1).to_string()).color(TEXT));
@@ -795,6 +939,7 @@ fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut B
             }
             _ => state.select_rows(r, r),
         }
+        state.focus_grid = true;
     }
     if response.secondary_clicked() && !selected {
         state.select_rows(r, r);
@@ -880,8 +1025,12 @@ fn body_cell(
     // Pressing selects the cell (Shift extends the block); dragging over other cells extends it.
     let (pressed, pointer) = ui.input(|i| (i.pointer.primary_pressed(), i.pointer.hover_pos()));
     let shift = click_modifiers(ui).shift;
+    if state.active_corner() == Some((position, r)) {
+        state.reveal_rect = Some(rect);
+    }
     if pressed && response.hovered() {
         state.dragging = true;
+        state.focus_grid = true;
         match (&state.sel, shift) {
             (Sel::Cells { anchor, .. }, true) => {
                 let anchor = *anchor;
@@ -937,6 +1086,34 @@ fn start_editing(state: &mut BookUi, column: &Column, row: usize) {
 }
 
 fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, actions: &mut Vec<Action>) {
+    // Enter, Tab and Up/Down leave the cell and move on; Left/Right stay in the text. They are
+    // taken before the text field sees them.
+    let step = ui.input_mut(|i| {
+        let mut step = None;
+        for (key, shift, delta) in [
+            (egui::Key::Tab, true, (-1, 0)),
+            (egui::Key::Tab, false, (1, 0)),
+            (egui::Key::Enter, true, (0, -1)),
+            (egui::Key::Enter, false, (0, 1)),
+            (egui::Key::ArrowUp, false, (0, -1)),
+            (egui::Key::ArrowDown, false, (0, 1)),
+        ] {
+            let hit = i.events.iter().any(|e| {
+                matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. }
+                    if *k == key && modifiers.shift == shift && !modifiers.command && !modifiers.alt)
+            });
+            if hit {
+                step.get_or_insert(delta);
+            }
+        }
+        if step.is_some() {
+            i.events.retain(|e| {
+                !matches!(e, egui::Event::Key { key, .. }
+                    if matches!(key, egui::Key::Tab | egui::Key::Enter | egui::Key::ArrowUp | egui::Key::ArrowDown))
+            });
+        }
+        step
+    });
     let Some((column, row, text)) = &mut state.editing else {
         return;
     };
@@ -949,18 +1126,218 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, actions: 
     let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
     if cancel {
         state.editing = None;
-    } else if response.lost_focus() {
+    } else if response.lost_focus() || step.is_some() {
         let (column, row) = (*column, *row);
         if *text != state.editing_original {
             actions.push(Action::SetCell { column, row, text: text.clone() });
         }
-        // Enter moves on to the cell below, like a spreadsheet, showing what it holds.
-        let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-        match sheet.column(column) {
-            Some(c) if enter => start_editing(state, c, row + 1),
-            _ => state.editing = None,
+        state.editing = None;
+        if let (Some((dx, dy)), Some(position)) = (step, sheet.column_index(column)) {
+            let last_col = sheet.columns.len().saturating_sub(1);
+            let to = (
+                position.saturating_add_signed(dx).min(last_col),
+                row.saturating_add_signed(dy).min(sheet.row_count() + SPARE_ROWS),
+            );
+            state.select_cells(sheet, to, to);
+            state.reveal = 4;
+            state.focus_grid = true;
         }
     }
+    if state.editing.is_none() {
+        state.focus_grid = true;
+        if let Some(grid) = state.grid {
+            ui.memory_mut(|m| m.request_focus(grid));
+        }
+    }
+}
+
+// ----- the keyboard ------------------------------------------------------------------------------
+
+/// A key that moves the active cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NavKey {
+    Up,
+    Down,
+    Left,
+    Right,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+}
+
+impl NavKey {
+    fn of(key: egui::Key) -> Option<NavKey> {
+        Some(match key {
+            egui::Key::ArrowUp => NavKey::Up,
+            egui::Key::ArrowDown => NavKey::Down,
+            egui::Key::ArrowLeft => NavKey::Left,
+            egui::Key::ArrowRight => NavKey::Right,
+            egui::Key::Home => NavKey::Home,
+            egui::Key::End => NavKey::End,
+            egui::Key::PageUp => NavKey::PageUp,
+            egui::Key::PageDown => NavKey::PageDown,
+            _ => return None,
+        })
+    }
+}
+
+/// Where a navigation key takes the active cell (column position, row). `lens` has the number of
+/// values of each column, `max_row` is the last row the cursor may enter (the spare rows below
+/// the data), `page` the number of rows in the view.
+pub fn nav_target(
+    key: NavKey,
+    ctrl: bool,
+    from: (usize, usize),
+    lens: &[usize],
+    max_row: usize,
+    page: usize,
+) -> (usize, usize) {
+    let (col, row) = from;
+    let last_col = lens.len().saturating_sub(1);
+    let last_data = |c: usize| lens.get(c).copied().unwrap_or(0).saturating_sub(1);
+    let (col, row) = match (key, ctrl) {
+        (NavKey::Up, false) => (col, row.saturating_sub(1)),
+        (NavKey::Down, false) => (col, row + 1),
+        (NavKey::Left, false) => (col.saturating_sub(1), row),
+        (NavKey::Right, false) => (col + 1, row),
+        (NavKey::Up, true) => (col, 0),
+        (NavKey::Down, true) => (col, last_data(col)),
+        (NavKey::Left, true) => (0, row),
+        (NavKey::Right, true) => (last_col, row),
+        (NavKey::Home, false) => (0, row),
+        (NavKey::End, false) => (last_col, row),
+        (NavKey::Home, true) => (0, 0),
+        (NavKey::End, true) => (last_col, last_data(last_col)),
+        (NavKey::PageUp, _) => (col, row.saturating_sub(page)),
+        (NavKey::PageDown, _) => (col, row + page),
+    };
+    (col.min(last_col), row.min(max_row))
+}
+
+/// Handles the keys of the active worksheet when no text field has the keyboard: the arrows, Tab,
+/// Enter, Home, End and the page keys move the active cell (with Shift they extend the block),
+/// F2 and typing start editing. Returns true when keys were taken.
+pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state: &mut BookUi) -> bool {
+    let Some(book) = doc.project().workbook(book_id) else { return false };
+    let Some(sheet) = book.sheets.get(book.active_sheet.min(book.sheets.len().saturating_sub(1))) else {
+        return false;
+    };
+    if sheet.columns.is_empty() || state.editing.is_some() || state.editing_label.is_some() {
+        return false;
+    }
+    let max_row = sheet.row_count() + SPARE_ROWS - 1;
+    let lens: Vec<usize> = sheet.columns.iter().map(Column::len).collect();
+    let events = ctx.input(|i| i.events.clone());
+    let mut taken = false;
+    let mut consumed: Vec<egui::Key> = Vec::new();
+    let mut typed = String::new();
+    let mut edit_start = false;
+    for event in &events {
+        match event {
+            egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                if modifiers.alt {
+                    continue;
+                }
+                let ctrl = modifiers.command;
+                let shift = modifiers.shift;
+                // The cell the move starts from: the moving corner when extending, the active
+                // cell otherwise.
+                let origin = |extend: bool| -> Option<(usize, usize)> {
+                    let last_col = sheet.columns.len() - 1;
+                    Some(match &state.sel {
+                        Sel::Cells { anchor, end } => {
+                            if extend {
+                                *end
+                            } else {
+                                *anchor
+                            }
+                        }
+                        Sel::Columns => {
+                            let c = state.selected.last().and_then(|id| sheet.column_index(*id))?;
+                            (c.min(last_col), 0)
+                        }
+                        Sel::Rows { end, .. } => (0, *end),
+                        Sel::All => (0, 0),
+                        Sel::None => return None,
+                    })
+                };
+                let (target, extend): (Option<(usize, usize)>, bool) = if let Some(nav) = NavKey::of(*key) {
+                    if ctrl && matches!(nav, NavKey::PageUp | NavKey::PageDown) {
+                        continue;
+                    }
+                    let from = origin(shift);
+                    match from {
+                        // Nothing selected yet: the first key press selects the first cell.
+                        None => (Some((0, 0)), false),
+                        Some(from) => {
+                            (Some(nav_target(nav, ctrl, from, &lens, max_row, state.page_rows.max(1))), shift)
+                        }
+                    }
+                } else if ctrl {
+                    continue;
+                } else {
+                    match key {
+                        egui::Key::Tab => {
+                            let nav = if shift { NavKey::Left } else { NavKey::Right };
+                            let from = origin(false).unwrap_or((0, 0));
+                            (Some(nav_target(nav, false, from, &lens, max_row, 1)), false)
+                        }
+                        egui::Key::Enter => {
+                            let nav = if shift { NavKey::Up } else { NavKey::Down };
+                            let from = origin(false).unwrap_or((0, 0));
+                            (Some(nav_target(nav, false, from, &lens, max_row, 1)), false)
+                        }
+                        egui::Key::F2 => {
+                            edit_start = true;
+                            consumed.push(*key);
+                            taken = true;
+                            continue;
+                        }
+                        _ => continue,
+                    }
+                };
+                consumed.push(*key);
+                taken = true;
+                let Some(to) = target else { continue };
+                if extend && let Sel::Cells { anchor, .. } = state.sel {
+                    state.select_cells(sheet, anchor, to);
+                } else {
+                    state.select_cells(sheet, to, to);
+                }
+                state.reveal = 4;
+            }
+            egui::Event::Text(text) => typed.push_str(text),
+            _ => {}
+        }
+    }
+    let typed: String = typed.chars().filter(|c| !c.is_control()).collect();
+    // Typing into a single active cell replaces what it holds; F2 keeps it.
+    if let Sel::Cells { anchor, end } = state.sel
+        && anchor == end
+        && (edit_start || !typed.is_empty())
+        && let Some(column) = sheet.columns.get(anchor.0)
+    {
+        if !column.is_locked() {
+            start_editing(state, column, anchor.1);
+            if !edit_start && let Some(editing) = &mut state.editing {
+                editing.2 = typed.clone();
+            }
+            state.reveal = 4;
+        }
+        taken = true;
+    }
+    if taken {
+        ctx.input_mut(|i| {
+            i.events.retain(|e| match e {
+                egui::Event::Key { key, .. } => !consumed.contains(key),
+                egui::Event::Text(_) => typed.is_empty(),
+                _ => true,
+            })
+        });
+        ctx.request_repaint();
+    }
+    taken
 }
 
 /// A small colored square, used in menus and lists to show a plot color.
@@ -1063,5 +1440,25 @@ mod tests {
         assert_eq!(ui.selected.len(), 2);
         ui.repair(&Worksheet::new("empty"));
         assert_eq!(ui.sel, Sel::None);
+    }
+
+    #[test]
+    fn navigation_keys_clamp_jump_and_enter_the_spare_rows() {
+        let lens = [4, 4, 2];
+        let t = |k, ctrl, from| nav_target(k, ctrl, from, &lens, 33, 10);
+        assert_eq!(t(NavKey::Up, false, (0, 0)), (0, 0));
+        assert_eq!(t(NavKey::Left, false, (0, 5)), (0, 5));
+        assert_eq!(t(NavKey::Right, false, (2, 5)), (2, 5));
+        assert_eq!(t(NavKey::Down, false, (1, 3)), (1, 4));
+        assert_eq!(t(NavKey::Down, false, (1, 33)), (1, 33));
+        assert_eq!(t(NavKey::Down, true, (2, 0)), (2, 1));
+        assert_eq!(t(NavKey::Up, true, (2, 1)), (2, 0));
+        assert_eq!(t(NavKey::Right, true, (0, 2)), (2, 2));
+        assert_eq!(t(NavKey::Home, false, (2, 2)), (0, 2));
+        assert_eq!(t(NavKey::End, false, (0, 2)), (2, 2));
+        assert_eq!(t(NavKey::Home, true, (2, 2)), (0, 0));
+        assert_eq!(t(NavKey::End, true, (0, 0)), (2, 1));
+        assert_eq!(t(NavKey::PageDown, false, (1, 5)), (1, 15));
+        assert_eq!(t(NavKey::PageUp, false, (1, 5)), (1, 0));
     }
 }

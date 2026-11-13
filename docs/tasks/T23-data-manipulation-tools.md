@@ -1,9 +1,11 @@
 # T23: Data Manipulation tools and Median Filter
 
-**Status:** in progress (branch `math-manip`, built on macOS without Origin). Every Origin behaviour
-below that is not in a spec table is from Origin's public documentation, paraphrased, and is not
-measured; each is listed in the spec section "Data manipulation tools and Median Filter" as to be
-measured on the Windows machine with `tools/origin-ref`.
+**Status:** done on branch `math-manip`, built on macOS without Origin; not merged. The four menu items
+(and Curve Translate Y, Sheaf's own, next to X) open working dialogs, run as tools of the shared analysis
+frame with Recalculate Manual/Auto, and have `sheaf analyze` subcommands. Every Origin behaviour that is
+not in an earlier spec table is from Origin's public documentation, paraphrased, and is not measured; each
+is listed under "Not measured" in spec section 12 to be measured on the Windows machine with
+`tools/origin-ref`.
 **Size:** M. **Branch:** `math-manip`. **Model:** Sonnet.
 **Detail:** audit D "Partial"; backlog row "Mathematics" of T18.
 **Spec:** `docs/spec/analysis-tools.md` section 9 (Subtract Reference Data, the pattern to copy) and the
@@ -40,7 +42,7 @@ dialog frame, with a recalculation link, a CLI subcommand and tests.
 
 1. Numerics in sheaf-calc with doc comments and tests on synthetic data worked out by hand.
 2. Specs and `Tool` variants, run in `Project::analyze`, linkable.
-3. Dialog kinds and menu items (Curve Translate Y added next to Curve Translate X).
+3. Dialog kinds and menu items (Curve Translate Y added next to Curve Translate X; done).
 4. CLI subcommands with tests.
 5. Spec section; look at the dialogs with `--show analysis:NAME --screenshot`.
 

@@ -1,7 +1,7 @@
 //! Options of the Data Manipulation windows (Subtract Straight Line, Reduce to Evenly Spaced X, Curve
 //! Translate X and Y) and of Mathematics > Median Filter, for the shared analysis window in
 //! `analysis.rs`. The tools themselves are `Tool::SubtractLine`, `ReduceX`, `Translate` and
-//! `MedianFilter` of `sheaf_core::analysis` (spec: `docs/spec/analysis-tools.md` section 11).
+//! `MedianFilter` of `sheaf_core::analysis` (spec: `docs/spec/analysis-tools.md` section 12).
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::analysis::{

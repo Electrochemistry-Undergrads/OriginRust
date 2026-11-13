@@ -479,6 +479,76 @@ Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivat
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
 
+## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured)
+
+Analysis > Data Manipulation has Subtract Straight Line, Reduce to Evenly Spaced X and Curve
+Translate X; Analysis > Mathematics has Median Filter. Nothing in this section was run in Origin:
+there was no Origin on the machine where it was written. What is known comes from Origin's public
+documentation (paraphrased: what each item is for) and from two earlier measurements that the
+tools reuse. Everything else is Sheaf's choice, listed under "Not measured" so that the Windows
+machine (`tools/origin-ref`) can settle it. The numerics are in `crates/calc/src/manip.rs`, the
+tools in `crates/core/src/analysis/manip.rs`.
+
+Measured earlier and reused:
+
+- The straight-line subtraction arithmetic (`calc::subtract_line`) and linear interpolation with
+  straight end-segment continuation (`calc::interp1`), section 9.
+- The percentile filter's boundary rule (section 3): with boundary `none` the window shrinks
+  symmetrically and the first and last point keep their value; `repeat` and `reflect` fill the
+  window. Missing values are taken out, the rest is smoothed as one series and the missing rows are
+  put back. The median filter copies this on the assumption that Origin's median filter behaves like
+  the percentile filter at 50 % (see "Not measured").
+
+Rules in Sheaf (`Tool::SubtractLine`, `ReduceX`, `Translate`, `MedianFilter` of `Project::analyze`;
+each is one undo step named "Subtract straight line", "Reduce to evenly spaced X", "Translate X",
+"Translate Y" and "Median filter"; all four can be run with Recalculate Auto or Manual, section 9's
+link mechanism):
+
+- Subtract Straight Line: the line goes through two points given by X. A point's Y is the curve's
+  own value at that X (straight lines between data points) unless a Y is given. Equal X values, an X
+  outside the data without a given Y, and a curve with fewer than two valid points are refused with
+  nothing changed. The result is a new Y column behind each input named "<name> minus line".
+- Reduce to Evenly Spaced X: new X values from the lowest to the highest X of the data (or a chosen
+  range), either by number of points (first and last included, at least 2) or by step (the last value
+  is kept when the range is a whole number of steps within rounding). Y is interpolated by straight
+  lines (new X outside the data are missing) or averaged: each new X owns the bin one step wide
+  centred on it, the lower edge belongs to the bin, an empty bin is missing. The result is a new sheet
+  with an X column and a Y column per input. Points with a missing X or Y are ignored.
+- Curve Translate X: adds a constant to X, or moves the point at X = `at` to X = `to` (shift
+  `to - at`); the result is a new sheet with the shifted X and the unchanged Y. Curve Translate Y
+  (Sheaf's own item, next to X): adds a constant to Y, or shifts so that the curve's value at X = `at`
+  (between data points by straight lines) becomes `to`; the result is a new Y column behind each
+  input named "<name> shifted". A point outside the X range is refused.
+- Median Filter: the window has an odd number of points (at least 1; the default is 5), centred on
+  each point. Edge choices: shrink (default), repeat the end value, reflect including the end point.
+  Even windows are refused. The result is a new Y column behind each input named "Median filtered
+  <name>".
+
+Not measured (to be measured in Origin; nothing here may be quoted as Origin's behaviour):
+
+1. Origin's X-Function names and options for the four items (the window title shows the tool alone).
+2. Subtract Straight Line: how Origin picks the two points (on a graph, by data cursor, or by
+   typed values), whether a point's Y is the data value or the cursor's, and whether the result
+   replaces the data or goes to a new column.
+3. Reduce to Evenly Spaced X: which interpolation and averaging choices Origin offers, its bin
+   definition and edge rule for averaging, how it chooses the number of points or the step by
+   default, what a new X outside the data gets (missing or extrapolated), whether the last grid
+   point is kept when the range is not a whole number of steps, and the output layout.
+4. Curve Translate: whether Origin moves data in place or writes a copy, how its "move a point to
+   a value" mode reads a Y at an X between data points, and whether it works on the graph
+   interactively. Curve Translate Y is not an Origin item as far as we know; its numbers are Sheaf's.
+5. Median Filter: whether Origin's window must be odd, what an even window does, its boundary
+   rule at the ends (we assume the percentile filter's), the handling of missing values (we assume
+   the smoothing rule), and the default window size.
+6. The Recalculate behaviour of these items in Origin (which of None, Manual, Auto they offer),
+   the long names, units and comments of the output columns, and the row-range handling.
+
+Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--y2 V]`,
+`sheaf analyze reduce-x FILE --y B [--step S | --points N] [--method interpolate|average]
+[--x-min X] [--x-max X]`, `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
+and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
+`--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
+
 ## Files
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with

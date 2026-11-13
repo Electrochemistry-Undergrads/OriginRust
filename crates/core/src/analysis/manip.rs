@@ -1,7 +1,7 @@
 //! The data manipulation tools of `Project::analyze` (Analysis > Data Manipulation) and the median
 //! filter (Analysis > Mathematics): Subtract Straight Line, Reduce to Evenly Spaced X, Curve
 //! Translate X and Y, Median Filter. The numerics are in `sheaf_calc::manip`; what is known about
-//! Origin's behaviour is in `docs/spec/analysis-tools.md` section 11.
+//! Origin's behaviour is in `docs/spec/analysis-tools.md` section 12.
 
 use super::*;
 use sheaf_calc::{LinePoint, MedianEdge, ReduceMethod};

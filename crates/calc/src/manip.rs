@@ -4,7 +4,7 @@
 //!
 //! Origin's behaviour for these was taken from its public documentation and is not measured; the
 //! rules and the list of what an Origin run has to confirm are in `docs/spec/analysis-tools.md`
-//! section 11. Missing values are NaN.
+//! section 12. Missing values are NaN.
 
 use serde::{Deserialize, Serialize};
 

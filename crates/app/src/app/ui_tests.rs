@@ -55,6 +55,13 @@ fn show_window(h: &mut Harness<'static, SheafApp>, label: &str) {
     pause(h);
 }
 
+/// Chooses a scale type in the axis dialog's list (the list shows the current type, Linear here).
+fn pick_scale(h: &mut Harness<'static, SheafApp>, name: &str) {
+    h.get_by_value("Linear").click();
+    settle(h);
+    click(h, name);
+}
+
 fn click(h: &mut Harness<'static, SheafApp>, label: &str) {
     h.get_by_label(label).click();
     settle(h);
@@ -400,7 +407,7 @@ fn graph_settings_change_the_axis_live_and_undo_as_one_step() {
     assert!(h.state().graph_props.is_some());
     let scale = |h: &Harness<'static, SheafApp>| project(h).graphs().next().unwrap().layers[0].y_axis.scale;
     assert_eq!(scale(&h), ScaleKind::Linear);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(scale(&h), ScaleKind::Log10, "the change applies while the window is open");
     click(&mut h, "Line and Ticks");
     click(&mut h, "Ticks");
@@ -429,12 +436,12 @@ fn the_axis_dialog_switches_between_the_horizontal_and_the_vertical_axis() {
     }
     click(&mut h, "Vertical");
     assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::YAxis);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Log10);
     assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Linear, "only the chosen axis changes");
     click(&mut h, "Horizontal");
     assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::XAxis);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(graph(&h).layers[0].x_axis.scale, ScaleKind::Log10);
     click(&mut h, "OK");
     assert!(h.state().graph_props.is_none());
@@ -464,7 +471,7 @@ fn cancel_takes_the_graph_back_and_leaves_no_undo_entry() {
     let mut h = start(vec![data_file("axis-cancel")]);
     let before = graph(&h).clone();
     open_props(&mut h, 0, PropsTab::YAxis, None);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Log10);
     click(&mut h, "Cancel");
     assert!(h.state().graph_props.is_none());
@@ -476,9 +483,11 @@ fn cancel_takes_the_graph_back_and_leaves_no_undo_entry() {
 fn apply_moves_the_starting_point_of_cancel() {
     let mut h = start(vec![data_file("axis-apply")]);
     open_props(&mut h, 0, PropsTab::YAxis, None);
-    click(&mut h, "Log10");
+    pick_scale(&mut h, "Log10");
     click(&mut h, "Apply");
     assert!(h.state().graph_props.is_some(), "Apply keeps the window open");
+    h.get_by_value("Log10").click();
+    settle(&mut h);
     click(&mut h, "Linear");
     assert_eq!(graph(&h).layers[0].y_axis.scale, ScaleKind::Linear);
     click(&mut h, "Cancel");
@@ -2183,10 +2192,11 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
         ],
     );
     // What Sheaf has is enabled, the rest is greyed.
-    for have in ["Plot", "Cut", "Copy", "Paste", "Delete", "Clear", "Set As", "Properties...", "Normalize..."] {
+    for have in ["Plot", "Cut", "Copy", "Paste", "Insert", "Delete", "Clear", "Set As", "Properties...", "Normalize..."]
+    {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    for lack in ["Insert", "Copy Columns to...", "Set As Categorical", "Frequency Count...", "Column Width..."] {
+    for lack in ["Copy Columns to...", "Set As Categorical", "Frequency Count..."] {
         assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
     }
     // Clear empties the column and one undo brings it back.
@@ -4662,4 +4672,136 @@ fn typing_with_a_block_selected_edits_its_active_cell_and_enter_and_tab_move_ins
     // Tab moved right inside the block: past the last column, to the start of the next row.
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
     assert_eq!(book_ui(&h).active_cell(), Some((1, 1)));
+}
+
+#[test]
+fn insert_and_delete_rows_and_columns_from_the_selection_and_undo() {
+    use crate::actions::CellOp;
+    let mut h = start(vec![data_file("insdel")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let sheet = project(&h).workbooks().next().unwrap().sheet().clone();
+
+    // A block of cells in the second column: only that column moves.
+    h.state_mut().books.entry(book).or_default().select_cells(&sheet, (1, 1), (1, 2));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Insert }, &ctx);
+    settle(&mut h);
+    let up = column(&h, "B");
+    assert_eq!(up.len(), 6);
+    assert!(up[1].is_nan() && up[2].is_nan());
+    assert_eq!(column(&h, "A").len(), 4);
+    assert_eq!(h.state().doc.undo_label(), Some("Insert rows"));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Delete }, &ctx);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "B").len(), 6);
+
+    // Whole columns: Insert adds a column before the selection, Delete removes it.
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    h.state_mut().books.entry(book).or_default().clear_selection();
+    h.state_mut().books.entry(book).or_default().sel = crate::grid::Sel::Columns;
+    let b = project(&h).workbooks().next().unwrap().sheet().columns[1].id;
+    h.state_mut().books.entry(book).or_default().selected = vec![b];
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Insert }, &ctx);
+    settle(&mut h);
+    let names: Vec<String> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
+    assert_eq!(names, ["A", "D", "B", "C"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Insert columns"));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Delete }, &ctx);
+    settle(&mut h);
+    let names: Vec<String> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
+    assert_eq!(names, ["A", "B", "C"], "the inserted column was the selection");
+}
+
+#[test]
+fn columns_move_hide_and_unhide_and_each_step_undoes() {
+    use sheaf_core::sheetops::MoveTo;
+    let mut h = start(vec![data_file("movehide")]);
+    let ctx = h.ctx.clone();
+    let ids: Vec<ColumnId> = project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.id).collect();
+    let names = |h: &Harness<'static, SheafApp>| -> String {
+        project(h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect()
+    };
+    assert_eq!(names(&h), "ABC");
+    h.state_mut().apply(Action::MoveColumns { columns: vec![ids[2]], to: MoveTo::First }, &ctx);
+    assert_eq!(names(&h), "CAB");
+    assert_eq!(h.state().doc.undo_label(), Some("Move columns"));
+    h.state_mut().apply(Action::MoveColumns { columns: vec![ids[2]], to: MoveTo::Right }, &ctx);
+    assert_eq!(names(&h), "ACB");
+    h.state_mut().apply(Action::Undo, &ctx);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(names(&h), "ABC");
+
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().apply(Action::HideColumns(vec![ids[1]]), &ctx);
+    settle(&mut h);
+    assert!(project(&h).column(ids[1]).unwrap().hidden);
+    assert!(h.query_by_label_contains("B(").is_none() && h.query_by_label_contains("C(").is_some(), "B has no head");
+    h.state_mut().apply(Action::UnhideColumns(book), &ctx);
+    settle(&mut h);
+    assert!(!project(&h).column(ids[1]).unwrap().hidden);
+    assert!(h.query_by_label_contains("B(").is_some());
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(project(&h).column(ids[1]).unwrap().hidden, "undo brings the hiding back");
+}
+
+#[test]
+fn reverse_order_and_the_custom_sort_windows_work_and_undo() {
+    let mut h = start(vec![data_file("customsort")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
+    h.state_mut().apply(Action::ReverseColumns(vec![c]), &ctx);
+    assert_eq!(column(&h, "C"), [0.5, 10.5, 20.5, 30.5]);
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "the other columns stay");
+    assert_eq!(h.state().doc.undo_label(), Some("Reverse order"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+
+    // Sort Worksheet > Custom...: the window opens with the first column as the key; OK sorts.
+    h.state_mut().apply(Action::SortCustom { book, columns: Vec::new() }, &ctx);
+    settle(&mut h);
+    assert!(h.state().sort.is_some());
+    click(&mut h, "Descending");
+    click(&mut h, "OK");
+    assert!(h.state().sort.is_none());
+    assert_eq!(column(&h, "A"), [4.0, 3.0, 2.0, 1.0]);
+    assert_eq!(column(&h, "C"), [0.5, 10.5, 20.5, 30.5], "rows stay together");
+    assert_eq!(h.state().doc.undo_label(), Some("Sort (nested)"));
+
+    // Sort Columns by Label (the long names are t, alpha, down).
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
+    h.state_mut().doc.apply("Name", |p| p.column_mut(b).unwrap().long_name = "alpha".into());
+    h.state_mut().apply(Action::SortByLabel(book), &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    let names: String =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
+    assert_eq!(names, "BCA", "long names alpha, down, t");
+}
+
+#[test]
+fn masking_cells_marks_them_for_analysis_and_undoes() {
+    use crate::actions::CellOp;
+    use sheaf_core::sheetops::MaskOp;
+    let mut h = start(vec![data_file("mask")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let sheet = project(&h).workbooks().next().unwrap().sheet().clone();
+    h.state_mut().books.entry(book).or_default().select_cells(&sheet, (2, 1), (2, 2));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Mask(MaskOp::Apply) }, &ctx);
+    settle(&mut h);
+    let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().clone();
+    assert_eq!(c.mask.iter().copied().collect::<Vec<_>>(), vec![1, 2]);
+    let seen = c.numeric_unmasked().unwrap();
+    assert!(seen[1].is_nan() && seen[2].is_nan() && seen[0] == 30.5 && seen[3] == 0.5);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "the values stay in the sheet");
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Mask(MaskOp::Swap) }, &ctx);
+    assert!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.is_empty());
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.len(), 2);
 }

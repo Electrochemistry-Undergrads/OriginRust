@@ -14,4 +14,5 @@ pub mod graph_props;
 pub mod import;
 pub mod import_wizard;
 pub mod set_values;
+pub mod sort;
 pub mod text_object;

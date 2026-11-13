@@ -34,6 +34,8 @@ pub(crate) struct PlotData<'a> {
     /// How the X column shows its values (a date format makes a date axis).
     pub x_format: Option<NumberFormat>,
     pub y: &'a [f64],
+    /// Rows of the Y column that are masked: drawn red, as Origin does.
+    pub mask: Option<&'a std::collections::BTreeSet<usize>>,
     pub err: Option<&'a [f64]>,
     /// X error values, drawn as horizontal error bars.
     pub xerr: Option<&'a [f64]>,
@@ -151,6 +153,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             x,
             x_format,
             y,
+            mask: project.column(plot.y).map(|c| &c.mask).filter(|m| !m.is_empty()),
             err,
             xerr,
             base,
@@ -312,7 +315,7 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
 ) -> Option<(f64, f64)> {
     let mut r: Option<(f64, f64)> = None;
     let mut add = |v: f64| {
-        if v.is_finite() && (scale == ScaleKind::Linear || v > 0.0) {
+        if scale.accepts(v) {
             r = Some(match r {
                 None => (v, v),
                 Some((lo, hi)) => (lo.min(v), hi.max(v)),

@@ -26,6 +26,7 @@ mod stack;
 mod svg;
 mod text;
 pub mod ticks;
+mod ticks_scales;
 mod vector;
 
 #[cfg(test)]

@@ -231,20 +231,30 @@ fn build_layer(
             axis.min = Some(lo);
             axis.max = Some(hi);
         }
-        match u8_at(h, scale_at) {
-            0 => {
+        let code = u8_at(h, scale_at);
+        match ScaleKind::from_file_code(code) {
+            Some(ScaleKind::Linear) => {
                 if step.is_finite() && step > 0.0 {
                     axis.major_step = Some(step);
                 }
                 axis.minor_ticks = u32::from(u8_at(h, minor_at)).min(10);
             }
-            1 => {
+            Some(ScaleKind::Log10) => {
                 axis.scale = ScaleKind::Log10;
                 axis.minor_ticks = 8;
             }
-            n => notes.push(format!("scale type {n} is not supported and is drawn as linear")),
+            Some(kind) => {
+                axis.scale = kind;
+                axis.minor_ticks = u32::from(u8_at(h, minor_at)).min(10);
+                if step.is_finite() && step > 0.0 {
+                    axis.major_step = Some(step);
+                }
+            }
+            None => notes.push(format!("scale type {code} is not supported and is drawn as linear")),
         }
-        if axis.scale == ScaleKind::Log10 && !axis.min.is_some_and(|m| m > 0.0) {
+        if axis.scale != ScaleKind::Linear
+            && !(axis.min.is_some_and(|m| axis.scale.accepts(m)) && axis.max.is_some_and(|m| axis.scale.accepts(m)))
+        {
             axis.min = None;
             axis.max = None;
         }

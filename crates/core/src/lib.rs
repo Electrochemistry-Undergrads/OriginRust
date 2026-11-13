@@ -22,6 +22,8 @@ pub mod history;
 pub mod ids;
 pub mod panels;
 pub mod project;
+pub mod scales;
+pub mod sheetops;
 pub mod stack;
 pub mod template;
 pub mod worksheet;

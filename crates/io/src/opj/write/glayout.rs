@@ -80,6 +80,8 @@ pub(super) struct AxisScale {
     pub to: f64,
     pub step: f64,
     pub log: bool,
+    /// The scale type byte of the header (`ScaleKind::file_code`).
+    pub code: u8,
     pub minor: u8,
     /// The limits follow the data (Origin rescales them when the data change).
     pub auto: bool,
@@ -157,7 +159,7 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
         h[count_at + 3] = u8::from(axis.auto);
         put(&mut h, count_at + 4, &(sign * axis.scale(extent)).to_le_bytes());
         h[minor_at] = axis.minor;
-        h[minor_at + 1] = u8::from(axis.log);
+        h[minor_at + 1] = axis.code;
     }
     for (i, v) in l.frame.iter().enumerate() {
         put(&mut h, 0x71 + 2 * i, &v.to_le_bytes());

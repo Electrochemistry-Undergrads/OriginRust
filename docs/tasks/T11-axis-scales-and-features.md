@@ -1,6 +1,6 @@
 # T11: More axis scales and axis features
 
-**Status:** open; do T20 (automatic axis range) first, both touch `crates/plot/src/ticks.rs` and `dialogs/graph_axis.rs`. **Size:** L, one
+**Status:** items 1 (all eight scales, measured, spec 3.8) and 2 (Reverse, First Tick, Prefix/Suffix) done on branch `axis-scales`; 3-6 open (axis breaks, special ticks and tick label formula, Exchange X-Y, dialog Apply To/tab names). Not yet done for item 1: Origin picture comparison of our render, minor ticks of the list scales, the reciprocal step rule. **Size:** L, one
 commit per feature. **Branch:** `axis-more`. **Model:** Sonnet.
 **Detail:** audit C "Missing scales", "Missing axis features"; B "Axis dialog".
 **Spec:** `docs/spec/graphing.md` sections 3-4 (axes, ticks), 12 (linked layers).

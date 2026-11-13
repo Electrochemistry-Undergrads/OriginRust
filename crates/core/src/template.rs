@@ -672,7 +672,9 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 27);
+        assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
+        assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
+        assert_eq!(Template::ALL.len(), 29);
     }
 
     #[test]

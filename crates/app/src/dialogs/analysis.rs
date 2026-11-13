@@ -68,6 +68,10 @@ pub enum AnalysisKind {
     KsTwoSample,
     MedianTest,
     Friedman,
+    /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
+    AverageCurves,
+    Intersect,
+    PolygonArea,
     /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
     SubtractLine,
     ReduceX,
@@ -124,6 +128,9 @@ impl AnalysisKind {
             AnalysisKind::KsTwoSample => "Two Sample Kolmogorov-Smirnov Test...",
             AnalysisKind::MedianTest => "Mood's Median Test...",
             AnalysisKind::Friedman => "Friedman ANOVA...",
+            AnalysisKind::AverageCurves => "Average Multiple Curves...",
+            AnalysisKind::Intersect => "Intersect...",
+            AnalysisKind::PolygonArea => "Polygon Area...",
             AnalysisKind::SubtractLine => "Subtract Straight Line...",
             AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
             AnalysisKind::TranslateX => "Curve Translate X...",
@@ -168,6 +175,9 @@ impl AnalysisKind {
             "ks2" => AnalysisKind::KsTwoSample,
             "mediantest" => AnalysisKind::MedianTest,
             "friedman" => AnalysisKind::Friedman,
+            "average-curves" => AnalysisKind::AverageCurves,
+            "intersect" => AnalysisKind::Intersect,
+            "polygon-area" => AnalysisKind::PolygonArea,
             "subtract-line" => AnalysisKind::SubtractLine,
             "reduce-x" => AnalysisKind::ReduceX,
             "translate-x" => AnalysisKind::TranslateX,
@@ -409,6 +419,7 @@ pub struct AnalysisDialog {
     reference: usize,
     common_only: bool,
     stats: StatsOptions,
+    curves: super::math_curves::CurveOptions,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
@@ -556,6 +567,7 @@ impl AnalysisDialog {
             chain_fit: None,
             chain_fit_linear: true,
             stats,
+            curves: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
@@ -605,6 +617,9 @@ impl AnalysisDialog {
             | AnalysisKind::TranslateY
             | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
+            AnalysisKind::AverageCurves => self.curves.average_tool(),
+            AnalysisKind::Intersect => self.curves.intersect_tool(),
+            AnalysisKind::PolygonArea => Tool::PolygonArea,
             AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
                 method: match self.smooth_kind {
                     SmoothKind::SavitzkyGolay => SmoothMethod::SavitzkyGolay { poly_order: self.smooth_poly },
@@ -1407,6 +1422,14 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::AverageCurves => self.curves.average_ui(ui, self.columns.len()),
+            AnalysisKind::Intersect => self.curves.intersect_ui(ui),
+            AnalysisKind::PolygonArea => {
+                ui.weak(
+                    "Each input column is a closed curve: its last point is joined to its first. The area is \
+                     reported with its sign, so a curve that runs counterclockwise is positive.",
+                );
+            }
             AnalysisKind::Normality => {
                 let st = &mut self.stats;
                 ui.horizontal(|ui| {
@@ -1470,6 +1493,9 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "kstest2",
             AnalysisKind::MedianTest => "mediantest",
             AnalysisKind::Friedman => "friedman",
+            AnalysisKind::AverageCurves => "avecurves",
+            AnalysisKind::Intersect => "intersect",
+            AnalysisKind::PolygonArea => "polyarea",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
             AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
@@ -1518,6 +1544,9 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "Compare two samples by their distribution functions",
             AnalysisKind::MedianTest => "Compare the medians of several samples (Mood's median test)",
             AnalysisKind::Friedman => "Compare treatments in repeated blocks by ranks within each row",
+            AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
+            AnalysisKind::Intersect => "Find the points where two curves meet",
+            AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
             AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
             AnalysisKind::ReduceX => "Reduce the input curves to evenly spaced X values",
@@ -1570,6 +1599,11 @@ impl AnalysisDialog {
                 "Counts around the median, the chi-square statistic and its p-value in a new sheet"
             }
             AnalysisKind::Friedman => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
+            AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
+            AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
+            AnalysisKind::PolygonArea => {
+                "Area, signed area, centroid, perimeter and a self-intersection flag in a new sheet"
+            }
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
             AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
                 "New columns beside the input"

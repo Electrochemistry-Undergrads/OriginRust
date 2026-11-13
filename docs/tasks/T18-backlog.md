@@ -15,7 +15,7 @@ the audit section named and the parity table row.
 | `.opju` reading | E | refused in `crates/io/src/opj/mod.rs` |
 | `.opj` read of matrices, notes, layouts, fits, masks, number formats, hidden columns, widths | E | plot groups and legend frames: branch `opj-groups-frames` |
 | Signal processing: FFT/IFFT tool, FFT filters beyond low-pass, Hilbert, convolution, deconvolution, STFT, wavelets, IIR | D | |
-| Mathematics: cumulative sum tool, level crossing, curve intersect, average curves, polygon area | D | Median Filter, Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate: brief T23 |
+| Mathematics: cumulative sum tool, level crossing, curve intersect, average curves, polygon area | D | curve intersect, average curves and polygon area: brief T22; Median Filter, Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate: brief T23 (both done); cumulative sum and level crossing remain |
 | Multivariate: PCA, k-means, ROC, Kaplan-Meier | D | |
 | Toolbars as separate bars, View > Toolbars customisation | A | |
 | Drawing tools: lines, arrows, rectangles, pictures, inset | C | lines, arrows, rectangles, ellipses: brief T24 (`draw-objects`); pictures and inset still open |

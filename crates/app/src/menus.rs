@@ -273,6 +273,10 @@ pub struct MenuContext<'a> {
     /// plot: the workbook and Y column of the selected plot, or else of the active layer's first
     /// visible plot of numbers. `None` when the graph has no such plot.
     pub curve: Option<(WindowId, ColumnId)>,
+    /// On a graph: the Y columns of the active layer's visible plots of numbers that sit in the same
+    /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
+    /// compare curves (Average Multiple Curves, Intersect) start from these.
+    pub layer_curves: Vec<ColumnId>,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -914,10 +918,10 @@ fn analysis_menu() -> Vec<Entry> {
                 grey("Spline Interpolation..."),
                 grey("B-Spline Interpolation..."),
                 sep(),
-                grey("Intersect..."),
+                item("Intersect...", Cmd::Analyze(AnalysisKind::Intersect)),
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
-                grey("Average Multiple Curves..."),
-                grey("Polygon Area..."),
+                item("Average Multiple Curves...", Cmd::Analyze(AnalysisKind::AverageCurves)),
+                item("Polygon Area...", Cmd::Analyze(AnalysisKind::PolygonArea)),
                 grey("XYZ Surface Area..."),
                 item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
@@ -1913,7 +1917,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Analyze(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
-                Action::Analyze { book, columns: vec![y], kind: *kind }
+                let columns = match kind {
+                    AnalysisKind::AverageCurves if c.layer_curves.len() >= 2 => c.layer_curves.clone(),
+                    AnalysisKind::Intersect if c.layer_curves.len() >= 2 => c.layer_curves[..2].to_vec(),
+                    _ => vec![y],
+                };
+                Action::Analyze { book, columns, kind: *kind }
             }
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),
@@ -2337,6 +2346,7 @@ mod tests {
             layer: 0,
             tool: Default::default(),
             curve: None,
+            layer_curves: Vec::new(),
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

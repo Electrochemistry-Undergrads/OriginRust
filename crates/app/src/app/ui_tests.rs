@@ -1834,6 +1834,9 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
         &["Analysis", "Mathematics", "Integrate Ranges..."],
         &["Analysis", "Mathematics", "Interpolate/Extrapolate..."],
         &["Analysis", "Mathematics", "Normalize Columns..."],
+        &["Analysis", "Mathematics", "Average Multiple Curves..."],
+        &["Analysis", "Mathematics", "Intersect..."],
+        &["Analysis", "Mathematics", "Polygon Area..."],
         &["Analysis", "Data Manipulation", "Subtract Reference Data..."],
         &["Analysis", "Fitting", "Linear Fit..."],
         &["Analysis", "Fitting", "Polynomial Fit..."],
@@ -4060,6 +4063,155 @@ fn an_auto_result_follows_its_input_in_the_same_undo_step() {
     settle(&mut h);
     assert_eq!(project(&h).numeric(b).unwrap()[0], 2.5, "one Undo reverts the edit");
     assert_eq!(project(&h).numeric(out).unwrap(), first.as_slice(), "and the result with it");
+}
+
+/// Analysis > Mathematics > Average Multiple Curves...: the mean of up and down on their shared X, with the SD
+/// as the error column and the count; one Undo removes the result.
+#[test]
+fn the_mathematics_menu_averages_curves() {
+    let mut h = start(vec![data_file("avecurves")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    for label in ["All X values of the curves", "Evenly spaced", "Those of one curve", "Linear", "Akima spline"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, mean) = result_column(&h, "Mean");
+    assert!(sheet.starts_with("Average"), "{sheet}");
+    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5], "(2.5 + 30.5) / 2 and so on");
+    let (_, sd) = result_column(&h, "SD");
+    // The sample SD of two values is their distance over the square root of two.
+    for (s, gap) in sd.iter().zip([28.0, 16.0, 4.0, 8.0]) {
+        assert!((s - gap / 2.0_f64.sqrt()).abs() < 1e-9, "{sd:?}");
+    }
+    let (_, n) = result_column(&h, "N");
+    assert_eq!(n, vec![2.0; 4]);
+    assert_eq!(h.state().doc.undo_label(), Some("Average multiple curves"));
+}
+
+/// The evenly spaced choice shows its point count and gives that many rows.
+#[test]
+fn average_curves_can_use_evenly_spaced_x() {
+    let mut h = start(vec![data_file("avecurves-even")]);
+    open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B", "C"]);
+    click(&mut h, "Evenly spaced");
+    assert!(has_label(&h, "Number of points"));
+    click(&mut h, "OK");
+    let (_, x) = result_column(&h, "t");
+    assert_eq!(x.len(), 100, "the default is 100 points");
+    assert_eq!((x[0], x[99]), (1.0, 4.0));
+}
+
+/// One column is not enough to average: the window stays open and says why.
+#[test]
+fn average_curves_with_one_column_is_refused_in_the_window() {
+    let mut h = start(vec![data_file("avecurves-one")]);
+    open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B"]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_some(), "the window stays open");
+    assert!(h.state().doc.undo_label().is_none_or(|l| l != "Average multiple curves"));
+}
+
+/// Analysis > Mathematics > Intersect...: up and down cross between t = 3 and t = 4, at t = 10 / 3.
+#[test]
+fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
+    let mut h = start(vec![data_file("intersect")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(x.len(), 1);
+    assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Intersect"));
+}
+
+/// Analysis > Mathematics > Polygon Area...: up and down are two open polylines; each is closed by its last
+/// point back to its first. up and down both run along a line, so their polygons have no area (the loop test below checks real numbers); the table has one row per column.
+#[test]
+fn the_mathematics_menu_gives_the_polygon_area_of_each_column() {
+    let mut h = start(vec![data_file("polyarea")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("PolygonArea"), "{sheet}");
+    assert_eq!(area.len(), 2, "one row per column");
+    assert!(area.iter().all(|a| a.abs() < 1e-9), "straight lines enclose nothing: {area:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Polygon area"));
+}
+
+/// A closed loop in a data file: the window passes the right X and Y, so the area is the 2 x 3 rectangle's.
+#[test]
+fn the_polygon_area_window_measures_a_closed_loop() {
+    let loop_csv = csv_file("polyloop", "loop", "x,y\n0,0\n2,0\n2,3\n0,3\n");
+    let mut h = start(vec![loop_csv]);
+    show_window(&mut h, "Book1 - loop");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
+    click(&mut h, "OK");
+    let (_, area) = result_column(&h, "Area");
+    assert_eq!(area, vec![6.0]);
+    assert_eq!(result_column(&h, "Signed area").1, vec![6.0], "counterclockwise");
+    assert_eq!(result_column(&h, "Centroid X").1, vec![1.0]);
+    assert_eq!(result_column(&h, "Centroid Y").1, vec![1.5]);
+    assert_eq!(result_column(&h, "Perimeter").1, vec![10.0]);
+}
+
+/// From a graph, Average Multiple Curves and Intersect start with the curves of the layer, so OK
+/// runs without picking the columns again.
+#[test]
+fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-curves")]);
+    assert!(h.state().menu_context().layer_curves.len() >= 2, "the graph plots up and down");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
+    assert!(h.state().analysis.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
+}
+
+#[test]
+fn from_a_graph_average_multiple_curves_starts_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-average")]);
+    menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, mean) = result_column(&h, "Mean");
+    assert!(sheet.starts_with("Average"), "{sheet}");
+    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5]);
+}
+
+/// The new tools can follow their input: Intersect with Auto moves its point when a cell changes, in the same
+/// undo step as the edit.
+#[test]
+fn an_auto_intersect_follows_an_edit_of_its_input() {
+    let mut h = start(vec![data_file("intersect-auto")]);
+    open_analysis_on(&mut h, AnalysisKind::Intersect, &["B", "C"]);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Auto"), "Intersect can follow its input");
+    click(&mut h, "Auto");
+    let c = column_id(&h, "C");
+    click(&mut h, "OK");
+    let (_, first) = result_column(&h, "Intersection X (t)");
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: c, row: 3, text: "20".into() }, &ctx);
+    settle(&mut h);
+    let (_, second) = result_column(&h, "Intersection X (t)");
+    assert_ne!(first, second, "the crossing moved");
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    let (_, back) = result_column(&h, "Intersection X (t)");
+    assert_eq!(first, back, "one Undo takes the edit and the result back");
 }
 
 #[test]

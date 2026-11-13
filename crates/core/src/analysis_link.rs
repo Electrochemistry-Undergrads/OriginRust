@@ -5,7 +5,8 @@
 //! column the run read changes, an Auto link is run again at once (inside the same undo step as the
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
-//! Smooth, Integrate, Find Peaks and the data manipulation tools (T23) can be linked; the other tools run once.
+//! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area and the data
+//! manipulation tools (T23) can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
@@ -13,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
-    AnalysisError, IntegrateSpec, MedianFilterSpec, OutputTarget, Report, Request, RowRange, SubtractLineSpec, Tool,
-    TranslateSpec,
+    AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, Report, Request,
+    RowRange, SubtractLineSpec, Tool, TranslateSpec,
 };
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
@@ -25,6 +26,9 @@ pub enum LinkTool {
     Smooth(SmoothOptions),
     Integrate(IntegrateSpec),
     FindPeaks(PeakOptions),
+    AverageCurves(AverageSpec),
+    Intersect(IntersectSpec),
+    PolygonArea,
     SubtractLine(SubtractLineSpec),
     ReduceX(ReduceOptions),
     Translate(TranslateSpec),
@@ -37,6 +41,9 @@ impl LinkTool {
             Tool::Smooth(o) => Some(LinkTool::Smooth(*o)),
             Tool::Integrate(s) => Some(LinkTool::Integrate(*s)),
             Tool::FindPeaks(o) => Some(LinkTool::FindPeaks(*o)),
+            Tool::AverageCurves(s) => Some(LinkTool::AverageCurves(*s)),
+            Tool::Intersect(s) => Some(LinkTool::Intersect(*s)),
+            Tool::PolygonArea => Some(LinkTool::PolygonArea),
             Tool::SubtractLine(s) => Some(LinkTool::SubtractLine(*s)),
             Tool::ReduceX(o) => Some(LinkTool::ReduceX(*o)),
             Tool::Translate(s) => Some(LinkTool::Translate(*s)),
@@ -50,6 +57,9 @@ impl LinkTool {
             LinkTool::Smooth(o) => Tool::Smooth(*o),
             LinkTool::Integrate(s) => Tool::Integrate(*s),
             LinkTool::FindPeaks(o) => Tool::FindPeaks(*o),
+            LinkTool::AverageCurves(s) => Tool::AverageCurves(*s),
+            LinkTool::Intersect(s) => Tool::Intersect(*s),
+            LinkTool::PolygonArea => Tool::PolygonArea,
             LinkTool::SubtractLine(s) => Tool::SubtractLine(*s),
             LinkTool::ReduceX(o) => Tool::ReduceX(*o),
             LinkTool::Translate(s) => Tool::Translate(*s),
@@ -163,6 +173,7 @@ impl Project {
         let new_ids = report.new_columns.clone();
         let usable = outputs.len() == new_ids.len() && outputs.iter().all(|c| self.column(*c).is_some());
         if !usable {
+            self.retire_outputs(outputs, &new_ids, request, output, &mut report);
             return Ok((report, new_ids));
         }
         // Columns that the run wrote in place (an existing-columns target) need no copying.
@@ -198,6 +209,55 @@ impl Project {
             self.workbook(book)?.sheets.iter().position(|s| s.column(last).is_some())
         });
         Ok((report, outputs.to_vec()))
+    }
+
+    /// The number of result columns changed, so the new columns stay and the old linked results
+    /// would be left behind with a mark that no link names any more. Their columns (and a result
+    /// sheet that becomes empty) are removed; columns of an `Existing` target are the user's own, so
+    /// only their mark is cleared. Old columns without a mark were never linked and are left alone.
+    fn retire_outputs(
+        &mut self,
+        old: &[ColumnId],
+        new: &[ColumnId],
+        request: &Request,
+        output: &OutputTarget,
+        report: &mut Report,
+    ) {
+        let stale: Vec<ColumnId> = old
+            .iter()
+            .copied()
+            .filter(|id| !new.contains(id) && self.column(*id).is_some_and(|c| c.analysis.is_some()))
+            .collect();
+        if stale.is_empty() {
+            return;
+        }
+        let remove = !matches!(output, OutputTarget::Existing(_));
+        for id in &stale {
+            if let Some(c) = self.column_mut(*id) {
+                c.analysis = None;
+            }
+        }
+        if !remove {
+            return;
+        }
+        let book = report.book;
+        let Some(b) = self.workbook_mut(book) else { return };
+        let mut keep: Vec<bool> = Vec::new();
+        for (i, sheet) in b.sheets.iter_mut().enumerate() {
+            let had = sheet.columns.len();
+            sheet.columns.retain(|c| !stale.contains(&c.id));
+            // A sheet that held only old results is gone; the indices in the report move with it.
+            keep.push(sheet.columns.len() == had || !sheet.columns.is_empty() || i == report.sheet);
+        }
+        let mut k = keep.iter();
+        b.sheets.retain(|_| *k.next().unwrap_or(&true));
+        let position_of = |b: &crate::Workbook, id: ColumnId| b.sheets.iter().position(|s| s.column(id).is_some());
+        if let Some(i) = request.columns.first().and_then(|c| position_of(b, *c)) {
+            report.sheet = i;
+        }
+        if report.new_sheet.is_some() {
+            report.new_sheet = new.last().and_then(|c| position_of(b, *c));
+        }
     }
 
     /// Runs the link `index` again now (Manual links wait for this) and marks its columns current.

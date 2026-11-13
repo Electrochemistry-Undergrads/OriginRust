@@ -829,6 +829,21 @@ pub enum InterpKind {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AverageRange {
+    /// Only X values covered by every curve.
+    Intersection,
+    /// From the smallest start to the largest end; curves are not extrapolated.
+    Union,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AverageInterp {
+    Linear,
+    Spline,
+    Akima,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum PeakKind {
     Both,
     Positive,
@@ -998,6 +1013,43 @@ pub enum AnalyzeTool {
         /// 0 interpolates the points; Origin's automatic factor for 0 is not reproduced.
         #[arg(long, default_value_t = 0.0)]
         smoothing: f64,
+    },
+    /// Average the chosen curves on a common X: mean, standard deviation and count go to a new sheet.
+    /// Curves with the same X values are averaged row by row; otherwise each curve's X must rise or
+    /// fall all the way (use --rows for one sweep of a cyclic voltammogram).
+    Average {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Evaluate at this many evenly spaced X values (default: every X value of the curves).
+        #[arg(long, conflicts_with = "reference_curve")]
+        points: Option<usize>,
+        /// Evaluate at the X values of this curve, counted from 1 among the chosen columns.
+        #[arg(long)]
+        reference_curve: Option<usize>,
+        #[arg(long, value_enum, default_value_t = AverageRange::Intersection)]
+        range: AverageRange,
+        #[arg(long, value_enum, default_value_t = AverageInterp::Linear)]
+        method: AverageInterp,
+        /// Leave out the standard deviation column.
+        #[arg(long)]
+        no_sd: bool,
+        /// Leave out the count column.
+        #[arg(long)]
+        no_count: bool,
+    },
+    /// Find where two curves meet; X and Y of each point go to a new sheet. Needs exactly two curves.
+    Intersect {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Also list the points where the curves touch without crossing.
+        #[arg(long)]
+        touching: bool,
+    },
+    /// The area enclosed by each curve taken as a closed polygon (last point joined to the first):
+    /// area, signed area, centroid, perimeter and whether it crosses itself.
+    PolygonArea {
+        #[command(flatten)]
+        target: TargetArgs,
     },
     /// Subtract the straight line through two points from each curve. The points are X values;
     /// their Y values are read from the curve (straight lines between data points) unless

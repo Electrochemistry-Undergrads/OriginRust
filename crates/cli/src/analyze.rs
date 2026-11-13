@@ -239,6 +239,31 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Average { target, points, reference_curve, range, method, no_sd, no_count } => {
+            let x = match (points, reference_curve) {
+                (Some(n), _) => analysis::CommonX::Evenly(n),
+                (None, Some(0)) => bail!("--reference-curve counts from 1"),
+                (None, Some(r)) => analysis::CommonX::Reference(r - 1),
+                (None, None) => analysis::CommonX::Points,
+            };
+            let options = analysis::AverageOptions {
+                x,
+                range: match range {
+                    AverageRange::Intersection => analysis::XRange::Intersection,
+                    AverageRange::Union => analysis::XRange::Union,
+                },
+                method: match method {
+                    AverageInterp::Linear => analysis::AverageMethod::Linear,
+                    AverageInterp::Spline => analysis::AverageMethod::CubicSpline,
+                    AverageInterp::Akima => analysis::AverageMethod::Akima,
+                },
+            };
+            (target, Job::Tool(Tool::AverageCurves(analysis::AverageSpec { options, sd: !no_sd, count: !no_count })))
+        }
+        AnalyzeTool::Intersect { target, touching } => {
+            (target, Job::Tool(Tool::Intersect(analysis::IntersectSpec { include_touching: touching })))
+        }
+        AnalyzeTool::PolygonArea { target } => (target, Job::Tool(Tool::PolygonArea)),
         AnalyzeTool::SubtractLine { target, x1, x2, y1, y2 } => (
             target,
             Job::Tool(Tool::SubtractLine(analysis::SubtractLineSpec {

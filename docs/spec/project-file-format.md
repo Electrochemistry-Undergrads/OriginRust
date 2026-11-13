@@ -20,6 +20,27 @@ Every column has exactly one data member; an empty numeric column has a zero-len
 Members are stored with DEFLATE compression. `manifest.json` is the first member so that a reader
 can check the format without reading the rest.
 
+## Matrix windows (optional)
+
+`project.json` windows may also be `{"type": "matrix", "id", "name", "long_name", "sheets": [...], "active_sheet"}`
+(a matrix book; see `matrices.md`). Each sheet is `{"name", "data_id", "rows", "cols", "x_from", "x_to",
+"y_from", "y_to"}` plus the optional label objects `x`, `y` and `z` (`long_name`, `units`, `comments`, each
+omitted when empty). The sheet's numbers are the archive member `data/m<data_id>.f64`: `rows * cols`
+IEEE-754 doubles, little-endian, row by row, a missing value is NaN. `data_id` shares the identifier counter with
+windows and columns. A reader checks that the member has exactly `rows * cols` values and names the sheet when
+it does not; a matrix without a data member is an error. A file with no matrix window has no `data/m*.f64`
+member, so files written before matrix windows existed read as before and the format version stays 1 (a reader
+that does not know matrices would fail on the unknown window type, so a file with matrices should be opened
+with a version of Sheaf that has them).
+
+## Heat maps and contour plots (optional key of a graph layer)
+
+A layer of a graph in `project.json` may carry `field`: `{"source": {"kind": "matrix", "window", "sheet"} or
+{"kind": "xyz", "x", "y", "z"} (column ids), "kind": "contour" or "cells", "fill", "lines", "labels",
+"palette" (`rainbow`, `blue_white_red`, `gray`), "levels": {"min", "max" (optional), "major", "minor"}, "line",
+"label_font", "scale": {"visible", "title" (optional), "font", "title_font"}}`. A layer without `field` is an
+ordinary layer, so older files read as before.
+
 ## Companion file of an `.opj` (optional manifest key)
 
 `manifest.json` may carry `"companion": true`. Sheaf sets it only on the file it writes as

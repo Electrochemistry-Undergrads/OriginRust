@@ -13,6 +13,7 @@ pub mod anova2;
 pub mod baseline;
 pub mod correlation;
 pub mod curvemath;
+pub mod curves;
 pub mod dierckx;
 pub mod differentiate;
 pub mod freq;
@@ -37,6 +38,10 @@ pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
 pub use curvemath::{CurveMathResult, CurveOp, curve_math_const, curve_math_ref};
+pub use curves::{
+    AverageMethod, AverageOptions, AverageResult, CommonX, CurveError, Intersection, MeetKind, PolygonArea, XRange,
+    average_curves, intersections, polygon_area,
+};
 pub use differentiate::{DiffOptions, differentiate};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};

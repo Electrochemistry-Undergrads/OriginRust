@@ -134,14 +134,16 @@ fn simulated_potential(init: f64, high: f64, low: f64, step: f64, positive: bool
     let mut e = init;
     let mut dir = if positive { 1.0 } else { -1.0 };
     let mut out = Vec::new();
-    for _ in 0..n {
-        e += dir * step;
-        if e > high + 1e-9 {
-            e = 2.0 * high - e;
-            dir = -1.0;
-        } else if e < low - 1e-9 {
-            e = 2.0 * low - e;
-            dir = 1.0;
+    for k in 0..n {
+        if k > 0 {
+            e += dir * step;
+            if e > high + 1e-9 {
+                e = 2.0 * high - e;
+                dir = -1.0;
+            } else if e < low - 1e-9 {
+                e = 2.0 * low - e;
+                dir = 1.0;
+            }
         }
         out.push(e);
     }
@@ -169,16 +171,17 @@ fn the_waveform_formula_agrees_with_walking_the_sweep() {
 }
 
 #[test]
-fn a_cv_potential_runs_from_the_first_step_between_its_limits() {
+fn a_cv_potential_starts_at_init_e_and_runs_between_its_limits() {
     let up = cv_potential(0.4, 1.3, -0.35, 0.02, true, 200);
-    assert!((up[0] - 0.42).abs() < 1e-9, "the first point is one step from Init E: {}", up[0]);
-    assert!((up[44] - 1.3).abs() < 1e-9 && up[45] < up[44], "High E reached at point 45");
+    assert!((up[0] - 0.4).abs() < 1e-9, "the first row is Init E: {}", up[0]);
+    assert!((up[45] - 1.3).abs() < 1e-9 && up[46] < up[45], "High E reached at row 45");
     // The next limit is 82.5 steps away, so the extreme is visited twice in a row.
-    assert!((up[126] - -0.34).abs() < 1e-9 && (up[127] - -0.34).abs() < 1e-9, "{} {}", up[126], up[127]);
-    let down = cv_potential(1.2, 1.2, 0.2, 0.001, false, 3000);
-    assert!((down[0] - 1.199).abs() < 1e-9);
-    assert!((down[999] - 0.2).abs() < 1e-9 && (down[1000] - 0.201).abs() < 1e-9);
-    assert!((down[1999] - 1.2).abs() < 1e-9 && (down[2000] - 1.199).abs() < 1e-9);
+    assert!((up[127] - -0.34).abs() < 1e-9 && (up[128] - -0.34).abs() < 1e-9, "{} {}", up[127], up[128]);
+    let down = cv_potential(1.2, 1.2, 0.2, 0.001, false, 4001);
+    assert!((down[0] - 1.2).abs() < 1e-9 && (down[1] - 1.199).abs() < 1e-9);
+    assert!((down[1000] - 0.2).abs() < 1e-9 && (down[1001] - 0.201).abs() < 1e-9);
+    assert!((down[2000] - 1.2).abs() < 1e-9 && (down[2001] - 1.199).abs() < 1e-9);
+    assert!((down[4000] - 1.2).abs() < 1e-9);
 }
 
 #[test]
@@ -198,8 +201,10 @@ fn a_four_segment_cv_gives_two_scans_with_the_text_importers_layout() {
     assert_eq!((c[2].long_name.as_str(), c[2].units.as_str()), ("Current", "mA"));
     assert_eq!(c[2].formula.as_deref(), Some("col(B)*1000"));
     assert_eq!(c[3].comments, "Scan 2");
-    // The cut is at the second vertex, the 1.2 V row, which opens scan 2 (the rule of the text importer).
-    assert_eq!((c[0].len(), c[3].len()), (1999, 2001));
+    // The cut is at the second vertex, the 1.2 V row 2000, which opens scan 2: 2000 + 2000 rows as
+    // in the text export of such a run.
+    assert_eq!((c[0].len(), c[3].len()), (2000, 2000));
+    assert!((c[0].numeric().unwrap()[0] - 1.2).abs() < 1e-9 && (c[3].numeric().unwrap()[0] - 1.2).abs() < 1e-9);
     // The sweep reaches both limits and never leaves them.
     let e: Vec<f64> = c[0].numeric().unwrap().iter().chain(c[3].numeric().unwrap()).copied().collect();
     let (lo, hi) = e.iter().fold((f64::MAX, f64::MIN), |(l, h), &v| (l.min(v), h.max(v)));
@@ -252,7 +257,7 @@ fn a_long_cv_with_a_repeated_extreme_has_vertices_83_and_82_rows_apart() {
     let imp = import(&bytes);
     let lens: Vec<usize> = imp.workbook.sheets[0].columns.iter().step_by(3).map(|c| c.len()).collect();
     // Two sweeps are 165 rows, so every scan holds 165 rows, except the short first one.
-    assert_eq!(lens[0], 127, "0.42 up to 1.3 and down to the first -0.34 and its repeat: 45 + 82");
+    assert_eq!(lens[0], 128, "0.4 up to 1.3 and down to the first -0.34 and its repeat: 46 + 82");
     assert!(lens[1..lens.len() - 1].iter().all(|&l| l == 165), "{lens:?}");
     assert_eq!(lens.iter().sum::<usize>(), n);
 }

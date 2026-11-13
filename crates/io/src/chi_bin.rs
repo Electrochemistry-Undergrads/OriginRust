@@ -164,7 +164,8 @@ fn date_line(h: &Header) -> Option<String> {
 
 /// The potential of a cyclic voltammetry run, point by point.
 ///
-/// Point `k` (counted from 1) is the starting potential moved by `k` steps
+/// Point `k` (counted from 0, so the first row is Init E itself, as in the
+/// text export) is the starting potential moved by `k` steps
 /// in the initial direction, folded back and forth between the two limits
 /// like a triangle wave. A limit is reflected, not clamped: when the step
 /// would pass it, the overshoot is mirrored, so the potential can sit at the
@@ -174,7 +175,7 @@ pub(crate) fn cv_potential(init: f64, high: f64, low: f64, step: f64, positive: 
     let span = high - low;
     let period = 2.0 * span;
     let sign = if positive { 1.0 } else { -1.0 };
-    (1..=n)
+    (0..n)
         .map(|k| {
             let x = init + sign * k as f64 * step;
             let mut u = (x - low).rem_euclid(period);

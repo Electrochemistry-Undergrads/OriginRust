@@ -268,7 +268,7 @@ Cross-cutting findings:
 | Area and fill | Plot > Area | Plot > Area > Area, Stacked Area, 100% Stacked Area, Fill Area (between a pair of columns); CLI `plot -t area`, `stacked-area`, `stacked-area-100`, `fill-area`; Change Plot to Area: the line is filled down to Y = 0 (or to the lower edge) with the symbol colour | ◐ | no transparency, no fill to the next plot; stacked and fill areas written to .opj as plain areas (the companion keeps them) | P1 |
 | Drop lines, bubble, colour mapped | Plot > Symbol | Plot > Symbol > Bubble, Color Mapped, Bubble + Color Mapped (Z column after the Y column) | ◐ | no drop lines, no size legend or colour scale, colour map is a stand-in, not written to .opj | P1 |
 | Histogram, box chart, statistics plots | Plot > Statistics | Plot > Statistics > Histogram and Box Chart, CLI `plot -t histogram`, `box`: binned like Frequency Counts, touching bars; boxes with median, mean, whiskers, outliers | ◐ | no distribution curve, no hatch fill, no grouped box charts (need T10's group columns), other statistics plots missing; written to .opj as plain columns | P1 |
-| Pie | Plot > Pie | none | ✗ | | P2 |
+| Pie | Plot > Pie | Plot > Column/Bar/Pie > 2D Color Pie, CLI `plot -t pie`: flat colour pie, shares to two decimals, legend | ◐ | no 3D slant, no B&W hatch pie, no exploded slices; written to .opj as plain columns | P2 |
 | Polar, ternary, radar, Smith, wind rose | Specialized | none | ✗ | | P2 |
 | Stock | Plot > Stock | none | ✗ | | P2 |
 | Vector | Plot > Vector | none | ✗ | | P2 |

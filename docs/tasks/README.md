@@ -59,7 +59,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T09](T09-set-values-dialog.md) | Set Column Values dialog in Origin's layout | M | done (`20c37e1`); scripts box, Set Multiple Columns left |
 | [T10](T10-worksheet-operations.md) | Insert/delete rows, move/hide columns, mask, sort column, transpose | L | items 1-5 done (insert/delete, move, hide, width, sorts, mask); 6-8 open |
 | [T11](T11-axis-scales-and-features.md) | More axis scales and axis-dialog features | L | done; left: measure Origin's break layout and the reciprocal step rule, several breaks, reference lines |
-| [T12](T12-plot-types.md) | Stacked/horizontal columns, histogram, box, pie, bubble, polar | L | items 1-2 done (`d0dbb37`); 3-6 open |
+| [T12](T12-plot-types.md) | Stacked/horizontal columns, histogram, box, pie, bubble, polar | L | items 1-5 and pie done (branch `plot-types-more`); polar, ternary, radar, 3D pie, stacked/floating bar left |
 | [T13](T13-plot-details-and-axis-dialog-tabs.md) | Missing Plot Details tabs and axis-dialog controls | M | open, after T11/T12 pieces |
 | [T14](T14-statistics-breadth.md) | Descriptive-statistics columns, outlier tests, more tests | M | items 1-4 done (`c44a1a6`); 5, 6 open |
 | [T15](T15-fitting-breadth.md) | Multi-dataset global fit, Simplex, surface fits, compare models | L | open |

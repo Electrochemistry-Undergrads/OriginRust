@@ -31,6 +31,10 @@ pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
 /// Appends the items of one plot to `out`.
 pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
+    if plot.kind == PlotKind::Pie {
+        draw_pie(out, pd, geom);
+        return;
+    }
     if plot.kind.is_area() {
         draw_area(out, pd, geom);
     }
@@ -351,6 +355,107 @@ const BOX_CAP: f64 = 0.1;
 /// Size of the cross at the whisker ends and of the outliers, and of the square at the mean, in pt.
 const BOX_CROSS_PT: f64 = 7.0;
 const BOX_MEAN_PT: f64 = 5.0;
+
+/// Origin's pie: a pie of 70 % of the frame height, a little left of the middle, slices clockwise
+/// from 12 o'clock outlined in black, each labelled outside with its share to two decimals, a
+/// legend of squares and names at the top right, and a black frame around the layer (measured).
+fn draw_pie(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    use crate::scene::{Anchor, TextItem};
+    use sheaf_core::Color;
+    let Some(pie) = &pd.pie else { return };
+    let f = geom.frame;
+    out.push(Item::Rect { rect: f, fill: None, stroke: Some(Stroke::solid(Color::BLACK, 1.0)) });
+    let total: f64 = pie.values.iter().sum();
+    if total <= 0.0 {
+        return;
+    }
+    let r = 0.35 * f.h.min(f.w);
+    let (cx, cy) = (f.x + 0.42 * f.w, f.y + 0.5 * f.h);
+    let point = |angle: f64, radius: f64| (cx + radius * angle.sin(), cy - radius * angle.cos());
+    let outline = Stroke::solid(Color::BLACK, 0.5);
+    let mut from = 0.0;
+    for (i, v) in pie.values.iter().enumerate() {
+        let share = v / total;
+        let to = from + share * std::f64::consts::TAU;
+        let mut d = String::new();
+        if share >= 1.0 - 1e-12 {
+            move_to(&mut d, cx, cy - r);
+            for (x, y) in [(cx, cy + r), (cx, cy - r)] {
+                d.push('A');
+                push_num(&mut d, r);
+                d.push(' ');
+                push_num(&mut d, r);
+                d.push_str(" 0 1 1 ");
+                push_num(&mut d, x);
+                d.push(' ');
+                push_num(&mut d, y);
+            }
+        } else {
+            let (a, b) = (point(from, r), point(to, r));
+            move_to(&mut d, cx, cy);
+            line_to(&mut d, a.0, a.1);
+            d.push('A');
+            push_num(&mut d, r);
+            d.push(' ');
+            push_num(&mut d, r);
+            d.push_str(if share > 0.5 { " 0 1 1 " } else { " 0 0 1 " });
+            push_num(&mut d, b.0);
+            d.push(' ');
+            push_num(&mut d, b.1);
+        }
+        d.push('Z');
+        out.push(Item::Path { d, fill: Some(pie.colors[i]), stroke: Some(outline.clone()) });
+        // The share, outside the slice, next to its middle.
+        let mid = (from + to) / 2.0;
+        let (x, y) = point(mid, r * 1.12);
+        let size = pie.label_font.size_pt;
+        let anchor = if mid.sin() > 0.3 {
+            Anchor::Start
+        } else if mid.sin() < -0.3 {
+            Anchor::End
+        } else {
+            Anchor::Middle
+        };
+        out.push(Item::Text(TextItem {
+            x,
+            y: y + 0.35 * size,
+            text: format!("{:.2}%", share * 100.0),
+            family: pie.label_font.family.clone(),
+            size,
+            bold: pie.label_font.bold,
+            italic: pie.label_font.italic,
+            color: pie.label_font.color,
+            anchor,
+            rotate_ccw: 0.0,
+        }));
+        from = to;
+    }
+    // The legend: a square and the name of each slice, from the top right corner down.
+    let fs = pie.legend_font.size_pt;
+    let row = 1.3 * fs;
+    let width = pie.names.iter().map(|n| n.chars().count()).max().unwrap_or(0) as f64 * 0.55 * fs + 2.4 * fs;
+    let x0 = f.x + f.w - width - 0.5 * fs;
+    for (i, name) in pie.names.iter().enumerate() {
+        let y = f.y + 0.5 * fs + i as f64 * row;
+        out.push(Item::Rect {
+            rect: Rect { x: x0, y, w: fs, h: fs },
+            fill: Some(pie.colors[i]),
+            stroke: Some(outline.clone()),
+        });
+        out.push(Item::Text(TextItem {
+            x: x0 + 1.4 * fs,
+            y: y + 0.8 * fs,
+            text: name.clone(),
+            family: pie.legend_font.family.clone(),
+            size: fs,
+            bold: pie.legend_font.bold,
+            italic: pie.legend_font.italic,
+            color: pie.legend_font.color,
+            anchor: Anchor::Start,
+            rotate_ccw: 0.0,
+        }));
+    }
+}
 
 /// One box of a box chart: the box from the 25th to the 75th percentile with the median across it,
 /// whiskers with caps and a cross at their ends, the mean as a small open square and the outliers

@@ -628,6 +628,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Floating Column", Cmd::Plot(Template::FloatingColumn)),
                 ],
                 greys(&["Floating Bar", "3D Color Pie", "2D B&&W Pie"]),
+                vec![item("2D Color Pie", Cmd::Plot(Template::Pie))],
             ]
             .concat(),
         ),

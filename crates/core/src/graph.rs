@@ -793,6 +793,9 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
+    /// from 12 o'clock, each labelled with its share. The layer draws no axes.
+    Pie,
 }
 
 impl PlotKind {

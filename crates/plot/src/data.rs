@@ -56,6 +56,8 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
+    /// What a pie chart plot draws; `None` for other kinds.
+    pub pie: Option<PieData>,
     /// The values that set the size of each symbol of a bubble plot.
     pub size_z: Option<&'a [f64]>,
     /// The values that set the colour of each symbol of a colour mapped plot.
@@ -78,6 +80,19 @@ pub(crate) struct BoxStats {
     pub whisker_low: f64,
     pub whisker_high: f64,
     pub outliers: Vec<f64>,
+}
+
+/// The slices of a pie chart plot.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PieData {
+    /// The value of each slice (rows that are not positive numbers are left out).
+    pub values: Vec<f64>,
+    /// The legend text of each slice: the X column's cell, or the row number.
+    pub names: Vec<String>,
+    pub colors: Vec<sheaf_core::Color>,
+    /// The font of the percentages and of the legend.
+    pub label_font: sheaf_core::graph::Font,
+    pub legend_font: sheaf_core::graph::Font,
 }
 
 /// Width of a box, in X axis units (measured: 0.8 of the spacing of the boxes).
@@ -227,6 +242,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             member: place.member,
             bar: None,
             boxed: None,
+            pie: None,
             size_z: plot.size_from.and_then(|id| project.numeric(id)),
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
         };
@@ -238,6 +254,27 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.end = counts.len();
                 pd.x = Some(Cow::Owned(centres));
                 pd.y = Cow::Owned(counts);
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Pie => {
+                let labels = plot.x.and_then(|id| project.column(id));
+                let rows: Vec<usize> =
+                    (start..end).filter(|&r| y.get(r).is_some_and(|v| v.is_finite() && *v > 0.0)).collect();
+                pd.pie = Some(PieData {
+                    values: rows.iter().map(|&r| y[r]).collect(),
+                    names: rows
+                        .iter()
+                        .map(|&r| labels.map_or_else(|| (r + 1).to_string(), |c| c.cell_text(r)))
+                        .collect(),
+                    colors: (0..rows.len()).map(|i| layer.palette.color(i, rows.len())).collect(),
+                    label_font: layer.x_axis.tick_font.clone(),
+                    legend_font: layer.legend.font.clone(),
+                });
+                // A pie has no points on any axis.
+                pd.end = pd.start;
                 pd.mask = None;
                 pd.err = None;
                 pd.xerr = None;

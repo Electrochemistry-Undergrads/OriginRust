@@ -1238,6 +1238,15 @@ Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new templa
 - Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. No colour scale is drawn.
 - Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
 
+### 14.17 Pie; what was seen of polar (T12)
+
+Measured through COM: `plotxy iy:=[Book]Sheet1!1 plot:=225 ogl:=[<new template:=PIE>]` with the column set as Y (a column left as X puts its values into the legend instead). PNGs in `re-workspace/scratch/T12/`.
+
+- The pie template is a 3D pie viewed from above at a slant (an ellipse about half as high as wide, with a side band); the 2D template (`PIEBW`) is a flat black and white pie with hatch patterns. Both: the first slice starts at 12 o'clock and the slices follow clockwise, each outlined in black; every slice is labelled outside with its share to two decimals (`33.33%`); the legend lists one square per slice at the top right, named by the X column's cells or by the row numbers 1, 2, 3, ...; the slices take the base palette in order (black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple); the layer has no axes and a black frame around the whole layer; the legend font is the legend font of the layer, the percentages the tick label font.
+- Sheaf draws the flat pie in colour (`PlotKind::Pie`, `Template::Pie`, menu "2D Color Pie" which Origin does not have; "3D Color Pie" and "2D B&W Pie" stay greyed): a pie whose radius is 35 % of the frame height, centre at 42 % of the width, drawn by `draw_pie`. Rows that are not positive numbers are left out. Not done: the 3D slant, hatch patterns, exploded slices, label positions inside, other label contents.
+- `.opj`: written as plain columns, the save warns.
+- **Polar** (`POLAR` template, `plotxy iy:=[Book]Sheet1!(1,2) plot:=200`): theta from 0 to 360 degrees in steps of 30 with labels outside the circle (0 on the right, counter-clockwise), grey ring and spoke grid lines, the radius axis drawn twice along the vertical diameter (labels 1.0 to 2.0 up and down, mirrored) and a line curve. Needs a layer with polar axes (angle and radius scales, labels on a circle): not started.
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.

@@ -62,10 +62,12 @@ pub enum Template {
     ColorMapped,
     /// Both: bubbles whose size and colour follow the Z column.
     BubbleColorMapped,
+    /// Pie chart (Origin's pie): the Y column's rows as slices, in a layer without axes.
+    Pie,
 }
 
 impl Template {
-    pub const ALL: [Template; 21] = [
+    pub const ALL: [Template; 22] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -83,6 +85,7 @@ impl Template {
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
+        Template::Pie,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -113,6 +116,7 @@ impl Template {
             Template::Bubble => "bubble",
             Template::ColorMapped => "color-mapped",
             Template::BubbleColorMapped => "bubble-color-mapped",
+            Template::Pie => "pie",
         }
     }
 
@@ -139,6 +143,7 @@ impl Template {
             Template::Bubble => "Bubble",
             Template::ColorMapped => "Color Mapped",
             Template::BubbleColorMapped => "Bubble + Color Mapped",
+            Template::Pie => "Pie",
         }
     }
 
@@ -171,6 +176,7 @@ impl Template {
             Template::Bubble => bubble(id, name, false, true),
             Template::ColorMapped => bubble(id, name, true, false),
             Template::BubbleColorMapped => bubble(id, name, true, true),
+            Template::Pie => pie(id, name),
         }
     }
 }
@@ -366,6 +372,17 @@ fn bubble(id: WindowId, name: &str, mapped: bool, sized: bool) -> Graph {
         s.shape = SymbolShape::Circle;
         s.filled = mapped;
     }
+    g
+}
+
+/// The pie template: no axes (the plot draws its own frame, slices, labels and legend), the colour
+/// list of the line template (measured: black, red, green, blue, cyan, ...).
+fn pie(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Pie);
+    let l = &mut g.layers[0];
+    l.x_axis.side = AxisSide::Hidden;
+    l.y_axis.side = AxisSide::Hidden;
+    l.legend.visible = false;
     g
 }
 
@@ -577,7 +594,7 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 21);
+        assert_eq!(Template::ALL.len(), 22);
     }
 
     #[test]

@@ -2722,3 +2722,49 @@ fn golden_bubble_color_mapped_template() {
     let (p, g) = bubble_probe(Template::BubbleColorMapped);
     compare_golden("bubble-color-mapped", &svg_of(&p, g));
 }
+
+// ----- pie (graphing spec 14.17) ------------------------------------------------------------------
+
+/// The pie of Origin's probe: values 3, 5, 2, 7, 4 (21 in all).
+fn pie_probe() -> (Project, WindowId) {
+    let (p, g) = project(Template::Pie, vec![1.0, 2.0, 3.0, 4.0, 5.0], vec![vec![3.0, 5.0, 2.0, 7.0, 4.0]]);
+    if let Some(dir) = std::env::var_os("SHEAF_T12_OUT") {
+        let png = crate::render_png(&p, g, 300.0).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join("sheaf-pie.png"), png).unwrap();
+    }
+    (p, g)
+}
+
+#[test]
+fn a_pie_labels_every_slice_with_its_share_to_two_decimals() {
+    // Origin: 14.29 %, 23.81 %, 9.52 %, 33.33 %, 19.05 %; no axes.
+    let (p, g) = pie_probe();
+    let t = texts(&doc(&svg_of(&p, g)));
+    for s in ["14.29%", "23.81%", "9.52%", "33.33%", "19.05%"] {
+        assert!(t.iter().any(|x| x == s), "{s} in {t:?}");
+    }
+    assert!(!t.iter().any(|x| x == "0" || x == "Row"), "no axis labels or titles: {t:?}");
+}
+
+#[test]
+fn pie_slices_use_the_base_palette_and_start_at_twelve_oclock_clockwise() {
+    let (p, g) = pie_probe();
+    let colours: Vec<_> = p.graph(g).unwrap().layers[0].plots.iter().map(|pl| pl.symbol.color).collect();
+    assert_eq!(colours[0], Color::rgb(0, 0, 0));
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let plots = with_class(&d, "plots");
+    let slices: Vec<&str> =
+        paths_in(plots[0]).iter().filter_map(|n| n.attribute("d")).filter(|d| d.contains('A')).collect();
+    assert_eq!(slices.len(), 5);
+    // Every slice has the sweep flag 1 (clockwise on the page) and the first one starts straight up.
+    assert!(slices.iter().all(|s| s.contains(" 1 ") && s.ends_with('Z')));
+    let first: Vec<f64> = slices[0].split(['M', 'L', ',', ' ']).filter_map(|t| t.parse().ok()).collect();
+    assert!((first[0] - first[2]).abs() < 1e-6 && first[3] < first[1], "up from the centre: {first:?}");
+}
+
+#[test]
+fn golden_pie_template() {
+    let (p, g) = pie_probe();
+    compare_golden("pie", &svg_of(&p, g));
+}

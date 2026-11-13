@@ -659,8 +659,8 @@ impl Writer {
         }
         // Plot types the writer cannot store go out as plain columns; the companion file keeps them.
         let has = |f: &dyn Fn(PlotKind) -> bool| plots.iter().any(|r| f(r.plot.kind));
-        if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box) {
-            notes.push("histogram and box plots were written as plain columns of their data".into());
+        if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || k == PlotKind::Pie) {
+            notes.push("histogram, box and pie plots were written as plain columns of their data".into());
         }
         if plots.iter().any(|r| r.plot.size_from.is_some() || r.plot.color_from.is_some()) {
             notes.push("bubble sizes and colour mapped symbol colours were not written".into());
@@ -695,7 +695,8 @@ impl Writer {
                 | PlotKind::Bar
                 | PlotKind::FloatingColumn
                 | PlotKind::Histogram
-                | PlotKind::Box => CurveKind::Column,
+                | PlotKind::Box
+                | PlotKind::Pie => CurveKind::Column,
                 PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => CurveKind::Area,
             };
             let connect = match p.line.connect {

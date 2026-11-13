@@ -93,6 +93,7 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Stacked100Area => "100% Stacked Area",
         PlotKind::Histogram => "Histogram",
         PlotKind::Box => "Box Chart",
+        PlotKind::Pie => "Pie",
     }
 }
 
@@ -144,6 +145,7 @@ pub fn dialog_body(
                             PlotKind::Stacked100Area,
                             PlotKind::Histogram,
                             PlotKind::Box,
+                            PlotKind::Pie,
                         ] {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }

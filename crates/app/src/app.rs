@@ -733,6 +733,17 @@ impl SheafApp {
                     }
                 });
             }
+            Action::SetCategorical(columns) => {
+                let all = columns.iter().all(|id| self.doc.project().column(*id).is_some_and(|c| c.categorical));
+                self.doc.apply("Set as categorical", |p| {
+                    for id in &columns {
+                        if let Some(c) = p.column_mut(*id) {
+                            c.categorical = !all;
+                        }
+                    }
+                });
+                self.say(if all { "Categorical mark removed" } else { "Set as categorical" });
+            }
             Action::SetDesignation { columns, designation } => {
                 self.doc.apply("Set column designation", |p| {
                     for id in &columns {

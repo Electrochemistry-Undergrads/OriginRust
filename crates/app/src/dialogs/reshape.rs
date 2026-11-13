@@ -62,7 +62,11 @@ impl ReshapeDialog {
             book,
             sheet: sheet_index,
             kind,
-            key: columns.first().copied().or(first),
+            key: columns
+                .first()
+                .copied()
+                .or_else(|| sheet.columns.iter().find(|c| c.categorical).map(|c| c.id))
+                .or(first),
             value: columns.get(1).copied().or(second),
             columns,
             rows: 2,

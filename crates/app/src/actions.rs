@@ -155,6 +155,9 @@ pub enum Action {
     HideColumns(Vec<ColumnId>),
     /// Column > Hide/Unhide Columns > Unhide All, on the active sheet of the workbook.
     UnhideColumns(WindowId),
+    /// Column > Set as Categorical: marks the columns as categorical, or, when they all are
+    /// already, takes the mark off.
+    SetCategorical(Vec<ColumnId>),
     SetDesignation {
         columns: Vec<ColumnId>,
         designation: Designation,

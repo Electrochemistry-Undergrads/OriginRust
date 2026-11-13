@@ -25,6 +25,10 @@ pub enum Designation {
     Label,
     /// Not used for plotting.
     Disregard,
+    /// A grouping column (Origin's G): its values name the group each row belongs to.
+    Group,
+    /// The subject of a repeated-measures design (Origin's S): its values name who was measured.
+    Subject,
 }
 
 impl Designation {
@@ -37,17 +41,21 @@ impl Designation {
             Designation::YError => "yEr\u{b1}",
             Designation::XError => "xEr\u{b1}",
             Designation::Label => "L",
+            Designation::Group => "G",
+            Designation::Subject => "S",
             Designation::Disregard => "",
         }
     }
 
-    pub const ALL: [Designation; 7] = [
+    pub const ALL: [Designation; 9] = [
         Designation::X,
         Designation::Y,
         Designation::Z,
         Designation::YError,
         Designation::XError,
         Designation::Label,
+        Designation::Group,
+        Designation::Subject,
         Designation::Disregard,
     ];
 }
@@ -256,6 +264,10 @@ pub struct Column {
     /// graphs (drawn red) but analysis, fits and statistics leave it out.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub mask: BTreeSet<usize>,
+    /// Column > Set as Categorical: the values are categories (groups), not quantities. Tools
+    /// that need a grouping column, such as Unstack Columns, offer these columns first.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub categorical: bool,
     /// The values. Not part of the JSON description: the project file stores
     /// column data separately (see the `sheaf-io` crate).
     #[serde(skip)]
@@ -319,6 +331,7 @@ impl Column {
             hidden: false,
             width: None,
             mask: BTreeSet::new(),
+            categorical: false,
             data,
         }
     }

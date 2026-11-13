@@ -2192,11 +2192,22 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
         ],
     );
     // What Sheaf has is enabled, the rest is greyed.
-    for have in ["Plot", "Cut", "Copy", "Paste", "Insert", "Delete", "Clear", "Set As", "Properties...", "Normalize..."]
-    {
+    for have in [
+        "Plot",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Insert",
+        "Delete",
+        "Clear",
+        "Set As Categorical",
+        "Set As",
+        "Properties...",
+        "Normalize...",
+    ] {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    for lack in ["Copy Columns to...", "Set As Categorical", "Frequency Count..."] {
+    for lack in ["Copy Columns to...", "Frequency Count..."] {
         assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
     }
     // Clear empties the column and one undo brings it back.
@@ -4859,4 +4870,21 @@ fn transpose_and_reduce_rows_write_a_new_sheet_and_undo() {
     click(&mut h, "OK");
     let b = project(&h).workbooks().next().unwrap();
     assert_eq!(b.sheets[1].columns[0].numeric().unwrap(), [1.5, 3.5], "two rows to one, averaged");
+}
+
+#[test]
+fn set_as_categorical_toggles_and_group_and_subject_are_designations() {
+    use sheaf_core::Designation;
+    let mut h = start(vec![data_file("categorical")]);
+    let ctx = h.ctx.clone();
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
+    h.state_mut().apply(Action::SetCategorical(vec![b]), &ctx);
+    assert!(project(&h).column(b).unwrap().categorical);
+    assert_eq!(h.state().doc.undo_label(), Some("Set as categorical"));
+    h.state_mut().apply(Action::SetCategorical(vec![b]), &ctx);
+    assert!(!project(&h).column(b).unwrap().categorical, "a second use takes the mark off");
+    h.state_mut().apply(Action::SetDesignation { columns: vec![b], designation: Designation::Group }, &ctx);
+    assert_eq!(project(&h).column(b).unwrap().designation, Designation::Group);
+    assert_eq!(Designation::Group.tag(), "G");
+    assert_eq!(Designation::Subject.tag(), "S");
 }

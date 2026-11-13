@@ -31,6 +31,8 @@ pub fn designation_label(d: Designation) -> &'static str {
         Designation::YError => "Y error",
         Designation::XError => "X error",
         Designation::Label => "Label",
+        Designation::Group => "Group",
+        Designation::Subject => "Subject",
         Designation::Disregard => "Disregard",
     }
 }

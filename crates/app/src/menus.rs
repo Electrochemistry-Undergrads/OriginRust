@@ -84,6 +84,8 @@ pub enum Cmd {
     UnhideColumns,
     /// Column > Mask > Apply, Remove, Swap.
     Mask(MaskOp),
+    /// Column > Set as Categorical.
+    SetCategorical,
     /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
     Reshape(ReshapeKind),
     /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
@@ -757,11 +759,13 @@ fn column_menu() -> Vec<Entry> {
         ("&Disregard", Designation::Disregard),
         ("Y E&rror", Designation::YError),
         ("X Err&or", Designation::XError),
+        ("&Group", Designation::Group),
+        ("&Subject", Designation::Subject),
     ];
     let set_entries: Vec<Entry> = set_as.iter().map(|(l, d)| item(l, Cmd::SetAs(*d))).collect();
     vec![
         sub("Set &As", set_entries),
-        grey("Set as Categorical"),
+        item("Set as Categorical", Cmd::SetCategorical),
         sep(),
         keyed("Set Column &Values...", ctrl(Key::Q), Cmd::SetColumnValues),
         grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)),
@@ -1258,6 +1262,8 @@ pub fn column_header_menu() -> Vec<Entry> {
         ("Disregard", Designation::Disregard),
         ("Y Error", Designation::YError),
         ("X Error", Designation::XError),
+        ("Group", Designation::Group),
+        ("Subject", Designation::Subject),
     ]
     .iter()
     .map(|(l, d)| item(l, Cmd::SetAs(*d)))
@@ -1273,7 +1279,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey("Remove Links"));
     v.push(sep());
     v.push(sub("Set As", set_as));
-    v.push(grey("Set As Categorical"));
+    v.push(item("Set As Categorical", Cmd::SetCategorical));
     v.push(sep());
     v.push(keyed("Set Column Values...", ctrl(Key::Q), Cmd::SetColumnValues));
     v.push(grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)));
@@ -1831,6 +1837,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SortCustom { book, columns }
         }
         Cmd::SortByLabel => Action::SortByLabel(book?),
+        Cmd::SetCategorical => {
+            book?;
+            Action::SetCategorical(some()?)
+        }
         Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
         Cmd::ReverseOrder => {
             book?;

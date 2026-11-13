@@ -489,11 +489,16 @@ impl Writer {
         for (i, l) in layer.labels.iter().enumerate() {
             let text = styled(&l.text, &l.font);
             let (w, h) = text_size(&text, l.font.size_pt);
-            let cx = frame_pt.left + l.x * frame_pt.width + w / 2.0;
-            let cy = frame_pt.top + l.y * frame_pt.height;
             let angle = (((l.rotation_deg % 360.0) + 360.0) % 360.0 * 10.0).round() as u16;
             let rotated = (450..1350).contains(&angle) || (2250..3150).contains(&angle);
             let (rw, rh) = if rotated { (h, w) } else { (w, h) };
+            // Origin turns the text about the top-left corner of its unturned box, which is also the
+            // top-left corner of the stored rectangle (the reader's rule, opj-format.md 10.4): the
+            // label's anchor lies half a line height down the turned text from that corner.
+            let (sin, cos) = l.rotation_deg.to_radians().sin_cos();
+            let anchor = (frame_pt.left + l.x * frame_pt.width, frame_pt.top + l.y * frame_pt.height);
+            let corner = (anchor.0 - h / 2.0 * sin, anchor.1 - h / 2.0 * cos);
+            let (cx, cy) = (corner.0 + rw / 2.0, corner.1 + rh / 2.0);
             let name = if i == 0 { "Text".to_string() } else { format!("Text{i}") };
             annotations.push(self.annotation_bytes(
                 AnnKind::Text,

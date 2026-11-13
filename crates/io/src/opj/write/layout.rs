@@ -122,6 +122,8 @@ pub(super) struct WindowSpec<'a> {
     pub active_sheet: usize,
     /// Creation and change time as a Julian day number.
     pub time: f64,
+    /// Where the window was in the workspace; the cascade is used when unknown.
+    pub place: Option<sheaf_core::project::WindowPlace>,
 }
 
 const WINDOW_FIELDS: Fields = &[
@@ -159,9 +161,11 @@ pub(super) fn window_header(w: &WindowSpec) -> Vec<u8> {
     // left, top, right, bottom of the window and the size of the screen it was made on; each window
     // sits 26 pixels right of and below the one before it
     let shift = 26 * (w.ordinal % 10) as i16;
-    for (i, v) in [20 + shift, 20 + shift, 416 + shift, 342 + shift, 1920, 1080].into_iter().enumerate() {
+    let rect = window_rect(w.place).unwrap_or([20 + shift, 20 + shift, 416 + shift, 342 + shift]);
+    for (i, v) in rect.into_iter().chain([1920, 1080]).enumerate() {
         put(&mut h, 0x1B + 2 * i, &v.to_le_bytes());
     }
+    set_window_state(&mut h, w.place);
     h[0x29] = w.active_sheet.min(255) as u8;
     put(&mut h, 0x45, b"ORIGIN");
     put(&mut h, 0x73, &w.time.to_le_bytes());
@@ -299,4 +303,24 @@ pub(super) fn column_note(long: &str, units: &str, comments: &str) -> Vec<u8> {
     let (mut bytes, _) = encode_cp1252(&text);
     bytes.push(0);
     bytes
+}
+
+/// The window rectangle (left, top, right, bottom in workspace pixels) of a known place, spec 13.14.
+pub(super) fn window_rect(place: Option<sheaf_core::project::WindowPlace>) -> Option<[i16; 4]> {
+    let p = place?;
+    let v = |x: f64| x.round().clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16;
+    if ![p.x, p.y, p.width, p.height].iter().all(|v| v.is_finite()) || p.width < 1.0 || p.height < 1.0 {
+        return None;
+    }
+    Some([v(p.x), v(p.y), v(p.x + p.width), v(p.y + p.height)])
+}
+
+/// The state bits of a window header (byte 0x32, spec 13.14).
+pub(super) fn set_window_state(h: &mut [u8], place: Option<sheaf_core::project::WindowPlace>) {
+    use sheaf_core::project::WindowState;
+    match place.map(|p| p.state) {
+        Some(WindowState::Minimised) => h[0x32] |= 0x01,
+        Some(WindowState::Maximised) => h[0x32] |= 0x02,
+        _ => {}
+    }
 }

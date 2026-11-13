@@ -227,8 +227,12 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
                 assert_eq!(got.line.color, Color::rgb(200, 10, 10));
                 assert_eq!(got.symbol.color, Color::rgb(10, 10, 200));
             }
-            PlotKind::Column => assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of a bar"),
-            PlotKind::Area => {
+            PlotKind::Column
+            | PlotKind::StackedColumn
+            | PlotKind::Stacked100Column
+            | PlotKind::Bar
+            | PlotKind::FloatingColumn => assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of a bar"),
+            _ => {
                 assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of an area");
                 assert_eq!(got.line.color, Color::rgb(200, 10, 10), "its border");
             }
@@ -325,7 +329,7 @@ fn what_the_file_cannot_hold_is_named() {
         l.plots[0].symbol.every = 3;
         l.plots[1].visible = false;
         l.plots[2].y = other.id;
-        l.y_axis.tick_format = TickFormat::DateTime(sheaf_core::datetime::DatePattern::default());
+        l.y_axis.tick_format = TickFormat::DateTime(sheaf_core::datetime::DatePattern::Iso);
         l.x_axis.tick_label_divisor = 1000.0;
         l.x_axis.major_tick_len_pt = 12.0;
         l.y_axis.major_grid = Some(LineStyle::solid(Color::rgb(200, 200, 200), 0.5));
@@ -352,7 +356,7 @@ fn what_the_file_cannot_hold_is_named() {
         "hidden plot",
         "every n-th point",
         "not a worksheet column",
-        "date and time tick label format",
+        "no counterpart in Origin",
         "divisor",
         "tick lengths",
         "grid lines",
@@ -456,4 +460,18 @@ fn rotated_tick_labels_are_named() {
     graph_with(&mut p, Template::Line, &[(0, 1), (0, 2)], |g| g.layers[0].x_axis.tick_label_angle_deg = 45.0);
     let (_, warnings) = round_trip(&p);
     assert!(warnings.iter().any(|w| w.contains("rotated tick labels")), "{warnings:?}");
+}
+
+#[test]
+fn other_scale_types_survive_a_round_trip() {
+    let mut p = source();
+    graph_with(&mut p, Template::Scatter, &[(0, 3)], |g| {
+        g.layers[0].y_axis.scale = ScaleKind::Ln;
+        g.layers[0].x_axis.scale = ScaleKind::OffsetReciprocal;
+    });
+    let (imp, _) = round_trip(&p);
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!(l.y_axis.scale, ScaleKind::Ln);
+    assert_eq!(l.x_axis.scale, ScaleKind::OffsetReciprocal);
+    assert!(l.y_axis.min.is_some_and(|m| m > 0.0));
 }

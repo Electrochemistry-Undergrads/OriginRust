@@ -23,7 +23,7 @@
 use crate::analysis::{AnalysisError, RowRange, column_label, free_sheet_name, resolve_rows};
 use crate::color::Color;
 use crate::column::{Column, ColumnData, Designation};
-use crate::graph::{Dash, LineStyle, Plot, PlotKind};
+use crate::graph::{Dash, ErrorStyle, LineStyle, Plot, PlotKind};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
@@ -307,6 +307,12 @@ fn band_plot(layer: &crate::graph::Layer, x: ColumnId, band: &BandColumn, color:
         visible: true,
         auto_color: false,
         group: None,
+        x_error: None,
+        y_base: None,
+        error: ErrorStyle::default(),
+        hist: Default::default(),
+        size_from: None,
+        color_from: None,
     }
 }
 
@@ -436,7 +442,7 @@ impl Project {
         let book_id = book.id;
         let sheet_index = book.sheets.iter().position(|s| s.column(id).is_some()).expect("located here");
         let index = sheet.column_index(id).expect("located here");
-        let y_all = column.numeric().ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?;
+        let y_all = sheet.values_of(column).ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?;
         if y_all.is_empty() {
             return Err(AnalysisError::Empty(column.short_name.clone()).into());
         }
@@ -702,6 +708,12 @@ impl Project {
                         visible: true,
                         auto_color: false,
                         group: None,
+                        x_error: None,
+                        y_base: None,
+                        error: ErrorStyle::default(),
+                        hist: Default::default(),
+                        size_from: None,
+                        color_from: None,
                     });
                     if request.update_legend {
                         layer.legend.text = None;
@@ -982,6 +994,12 @@ impl Project {
             visible: true,
             auto_color: false,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         });
         layer.plot_offset_mut(outcome.curve_y).follows = Some(source);
         if outcome.plot_bands {

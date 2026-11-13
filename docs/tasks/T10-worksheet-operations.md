@@ -1,6 +1,6 @@
 # T10: Worksheet operations
 
-**Status:** open (`sheet-menus`, merged 2026-11-13, added drag auto-scroll and typing into a block in `grid.rs`). **Size:** L, one commit per
+**Status:** items 1-8 done on branch `worksheet-ops` (spec workbook-model 13.1-13.2). Left: Mask Change Color, Disable Masking, by condition and from the graph, `.opj` read of masks; one filter per column, date/text filters, plots skipping filtered rows; Stack/Unstack/Split/Reduce option layouts not compared with Origin; Group/Subject file codes unknown. Earlier: (`sheet-menus`, merged 2026-11-13, added drag auto-scroll and typing into a block in `grid.rs`). **Size:** L, one commit per
 operation. **Branch:** `sheet-ops`. **Model:** Sonnet.
 **Detail:** audit E "Missing" and "Partial"; A "Greyed" (Column and Worksheet menus).
 **Spec:** `docs/spec/workbook-model.md`, `docs/spec/ui-command-map.md` (Column, Worksheet menus).

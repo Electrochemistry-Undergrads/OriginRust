@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="771.84pt" height="590.76pt" viewBox="0 0 771.84 590.76">
+<rect x="0" y="0" width="771.84" height="590.76" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+<path d="M138.237 439.71L138.237 386.667L213.392 333.624L288.547 227.539L363.702 280.581L438.857 174.496L514.012 227.539L589.168 121.453L664.323 174.496L664.323 333.624L589.168 333.624L514.012 386.667L438.857 333.624L363.702 386.667L288.547 386.667L213.392 439.71L138.237 439.71Z" fill="#000000"/>
+<path d="M138.237 386.667L213.392 333.624L288.547 227.539L363.702 280.581L438.857 174.496L514.012 227.539L589.168 121.453L664.323 174.496" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="overlay">
+<path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 68.41L138.237 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M213.392 492.753L213.392 501.753M363.702 492.753L363.702 501.753M514.012 492.753L514.012 501.753M664.323 492.753L664.323 501.753M138.237 492.753L138.237 497.253M288.547 492.753L288.547 497.253M438.857 492.753L438.857 497.253M589.168 492.753L589.168 497.253" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 492.753L129.237 492.753M138.237 386.667L129.237 386.667M138.237 280.581L129.237 280.581M138.237 174.496L129.237 174.496M138.237 68.41L129.237 68.41M138.237 439.71L133.737 439.71M138.237 333.624L133.737 333.624M138.237 227.539L133.737 227.539M138.237 121.453L133.737 121.453" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="213.392" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">2</text>
+<text x="363.702" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">4</text>
+<text x="514.012" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">6</text>
+<text x="664.323" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">8</text>
+<text x="122.937" y="497.343" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="122.937" y="391.257" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="122.937" y="285.171" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="122.937" y="179.086" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
+<text x="122.937" y="73" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">8</text>
+<text x="401.28" y="553.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="95.217" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 95.217 280.581)">Current 1 (mA)</text>
+<rect x="497.123" y="86.01" width="149.6" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<path d="M505.923 109.11L554.323 109.11" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="505.923" y="98.11" width="48.4" height="22" fill="#000000" stroke="#000000" stroke-width="0.5"/>
+<text x="565.323" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 1</text>
+</g>
+</g>
+</svg>

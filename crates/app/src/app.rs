@@ -12,7 +12,10 @@ use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
+use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
+use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
+use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
 use crate::grid::{self, BookUi, Sel};
@@ -98,10 +101,13 @@ pub struct SheafApp {
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
     filter: Option<FilterDialog>,
+    row_filter: Option<RowFilterDialog>,
+    reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
+    sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
@@ -153,10 +159,13 @@ impl SheafApp {
             analysis: None,
             fit: None,
             filter: None,
+            row_filter: None,
+            reshape: None,
             export: None,
             export_sheet: None,
             rename: None,
             go_to: None,
+            sort: None,
             sheet_name: None,
             copied: String::new(),
             copied_page: None,
@@ -267,6 +276,9 @@ impl SheafApp {
         self.export_sheet = None;
         self.rename = None;
         self.go_to = None;
+        self.row_filter = None;
+        self.reshape = None;
+        self.sort = None;
         self.sheet_name = None;
         self.import = None;
         self.import_wizard = None;
@@ -569,6 +581,7 @@ impl SheafApp {
             GraphOp::HideAxis { .. } => "Hide axis",
             GraphOp::ToggleGrids { .. } => "Show or hide grids",
             GraphOp::Rescale { .. } => "Rescale to show all",
+            GraphOp::ExchangeAxes { .. } => "Exchange X-Y axes",
             GraphOp::AxisZoom { zoom_in: true, .. } => "Axis zoom in",
             GraphOp::AxisZoom { .. } => "Axis zoom out",
             GraphOp::HideLegend { .. } => "Delete legend",
@@ -680,6 +693,58 @@ impl SheafApp {
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
+            Action::MoveColumns { columns, to } => {
+                let ids = columns;
+                let mut moved = false;
+                self.doc.apply("Move columns", |p| {
+                    let Some(first) = ids.first().copied() else { return };
+                    if let Some((book, sheet_index)) = p
+                        .locate(first)
+                        .and_then(|(b, s, _)| Some((b.id, b.sheets.iter().position(|x| std::ptr::eq(x, s))?)))
+                        && let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index))
+                    {
+                        moved = ws.move_columns(&ids, to);
+                    }
+                });
+                if !moved {
+                    self.say("The columns are already there");
+                }
+            }
+            Action::HideColumns(columns) => {
+                self.doc.apply("Hide columns", |p| {
+                    for id in &columns {
+                        if let Some(c) = p.column_mut(*id) {
+                            c.hidden = true;
+                        }
+                    }
+                });
+                // The hidden columns are no longer on screen, so nothing of them stays selected.
+                if let Some(book) = columns.first().and_then(|c| self.doc.project().locate(*c)).map(|(b, ..)| b.id)
+                    && let Some(state) = self.books.get_mut(&book)
+                {
+                    state.clear_selection();
+                }
+            }
+            Action::UnhideColumns(book) => {
+                self.doc.apply("Unhide columns", |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        for c in &mut b.sheet_mut().columns {
+                            c.hidden = false;
+                        }
+                    }
+                });
+            }
+            Action::SetCategorical(columns) => {
+                let all = columns.iter().all(|id| self.doc.project().column(*id).is_some_and(|c| c.categorical));
+                self.doc.apply("Set as categorical", |p| {
+                    for id in &columns {
+                        if let Some(c) = p.column_mut(*id) {
+                            c.categorical = !all;
+                        }
+                    }
+                });
+                self.say(if all { "Categorical mark removed" } else { "Set as categorical" });
+            }
             Action::SetDesignation { columns, designation } => {
                 self.doc.apply("Set column designation", |p| {
                     for id in &columns {
@@ -767,7 +832,7 @@ impl SheafApp {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
-            Action::PlotYError { book, columns } => self.plot_y_error(book, columns),
+            Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
             Action::Fit { book, column, kind } => {
@@ -780,8 +845,47 @@ impl SheafApp {
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
             Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
             Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
+            Action::SortCustom { book, columns } => {
+                self.sort = SortDialog::nested(self.doc.project(), book, columns);
+            }
+            Action::Reshape { book, columns, kind } => {
+                self.reshape = ReshapeDialog::new(&self.doc, book, kind, columns);
+            }
+            Action::SortByLabel(book) => self.sort = Some(SortDialog::by_label(book)),
+            Action::ReverseColumns(columns) => {
+                let mut locked = 0;
+                self.doc.apply("Reverse order", |p| locked = p.reverse_columns(&columns));
+                if locked > 0 {
+                    self.warn(format!("{locked} column(s) calculated from a formula were left alone"));
+                }
+            }
             Action::AddErrorBars { graph, layer } => self.add_error_bars(graph, layer),
             Action::Refresh(active) => self.refresh(active),
+            Action::RowFilterDialog { book, column } => {
+                self.row_filter = RowFilterDialog::new(&self.doc, book, column);
+            }
+            Action::ToggleRowFilter(book) => {
+                let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet);
+                let has = sheet.is_some_and(|s| {
+                    self.doc.project().workbook(book).and_then(|b| b.sheets.get(s)).is_some_and(|s| s.filter.is_some())
+                });
+                if has {
+                    self.doc.apply("Enable or disable filter", |p| {
+                        if let Some(f) = p.workbook_mut(book).and_then(|b| b.sheet_mut().filter.as_mut()) {
+                            f.enabled = !f.enabled;
+                        }
+                    });
+                } else {
+                    self.warn("This sheet has no filter: use Add or Remove Filter first");
+                }
+            }
+            Action::ReapplyRowFilter(book) => {
+                let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+                match self.doc.edit("Reapply filter", |p| p.reapply_row_filter(book, sheet)) {
+                    Ok(()) => self.say("Filter applied again"),
+                    Err(e) => self.warn(format!("Could not apply the filter: {e}")),
+                }
+            }
             Action::FilterRows(book) => {
                 self.filter = FilterDialog::new(self.doc.project(), book);
             }
@@ -1033,6 +1137,16 @@ impl SheafApp {
                 }
             }
             CellOp::Clear => self.clear_cells(book, sheet_index, &t, "Clear cells"),
+            CellOp::Mask(m) => {
+                let mut changed = 0;
+                self.doc.apply("Mask cells", |p| {
+                    if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                        changed = ws.mask_cells(&t.columns, t.rows.clone(), m);
+                    }
+                });
+                self.say(format!("{changed} cell(s) changed"));
+            }
+            CellOp::Insert | CellOp::Delete => self.insert_or_delete(book, sheet_index, &t, op == CellOp::Insert),
             CellOp::Paste => {
                 // The system answers with the text in a later frame (an `Event::Paste`).
                 ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
@@ -1071,6 +1185,55 @@ impl SheafApp {
                     Err(e) => self.message = Some(("Could not paste".to_string(), e.to_string())),
                 }
             }
+        }
+    }
+
+    /// Edit > Insert and Edit > Delete on the selection: whole columns are inserted (left of the
+    /// first selected one) or deleted; rows and blocks of cells insert blank cells or remove
+    /// cells, moving the cells below them, in the columns the selection covers.
+    fn insert_or_delete(&mut self, book: WindowId, sheet_index: usize, t: &grid::Target, insert: bool) {
+        let by_columns = self.books.get(&book).is_some_and(|s| s.sel == grid::Sel::Columns);
+        if by_columns {
+            let ids: Vec<ColumnId> = self
+                .doc
+                .project()
+                .workbook(book)
+                .and_then(|b| b.sheets.get(sheet_index))
+                .map(|s| t.columns.iter().filter_map(|i| s.columns.get(*i).map(|c| c.id)).collect())
+                .unwrap_or_default();
+            if insert {
+                let (at, count) = (t.columns.first().copied().unwrap_or(0), t.columns.len());
+                let mut added = Vec::new();
+                self.doc.apply("Insert columns", |p| {
+                    added = p.insert_columns(book, sheet_index, at, count).unwrap_or_default();
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.selected = added;
+                }
+                self.say(format!("Inserted {count} column(s)"));
+            } else {
+                self.doc.apply("Delete columns", |p| delete_columns(p, &ids));
+            }
+            return;
+        }
+        let mut locked = 0;
+        let rows = t.rows.clone();
+        let label = if insert { "Insert rows" } else { "Delete rows" };
+        self.doc.apply(label, |p| {
+            if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                locked = if insert {
+                    ws.insert_rows(&t.columns, rows.start, rows.len())
+                } else {
+                    ws.delete_rows(&t.columns, rows.clone())
+                };
+            }
+            let _ = p.reapply_row_filter(book, sheet_index);
+        });
+        if locked > 0 {
+            self.warn(format!("{locked} column(s) calculated from a formula were left alone"));
+        } else {
+            let what = if insert { "Inserted" } else { "Deleted" };
+            self.say(format!("{what} {} row(s) in {} column(s)", rows.len(), t.columns.len()));
         }
     }
 
@@ -1190,26 +1353,43 @@ impl SheafApp {
 
     /// Plot > Symbol > Y Error: a scatter plot; the error bars come from the Y error column that
     /// follows each Y column (Column > Set As > Y Error).
-    fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+    fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>, x: bool) {
         let ys = self.plot_y_columns(book, columns, Template::Scatter);
         if ys.is_empty() {
             self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
             return;
         }
         let project = self.doc.project();
-        let with_errors = ys
-            .iter()
-            .filter(|y| {
-                project.locate(**y).is_some_and(|(_, sheet, _)| {
-                    sheet.column_index(**y).is_some_and(|i| sheet.y_error_for(i).is_some())
+        let count = |xerr: bool| {
+            ys.iter()
+                .filter(|y| {
+                    project.locate(**y).is_some_and(|(_, sheet, _)| {
+                        sheet.column_index(**y).is_some_and(|i| {
+                            if xerr { sheet.x_error_for(i).is_some() } else { sheet.y_error_for(i).is_some() }
+                        })
+                    })
                 })
-            })
-            .count();
-        match self.doc.edit("Plot Y error", |p| p.plot_columns(Template::Scatter, &ys)) {
-            Ok(_) if with_errors == 0 => {
-                self.warn("Plotted without error bars: no Y error column follows the selected columns".to_string())
+                .count()
+        };
+        let (with_y, with_x) = (count(false), if x { count(true) } else { 0 });
+        let what = if x { "X or Y error" } else { "Y error" };
+        let made = self.doc.edit("Plot error bars", |p| {
+            let graph = p.plot_columns(Template::Scatter, &ys)?;
+            if !x {
+                // Y Error shows no X error bars even when the sheet has an X error column.
+                if let Some(g) = p.graph_mut(graph) {
+                    g.layers.iter_mut().flat_map(|l| l.plots.iter_mut()).for_each(|pl| pl.x_error = None);
+                }
             }
-            Ok(_) => self.say(format!("Plotted {} column(s), {with_errors} with error bars", ys.len())),
+            Ok::<_, sheaf_core::project::ProjectError>(graph)
+        });
+        match made {
+            Ok(_) if with_y + with_x == 0 => {
+                self.warn(format!("Plotted without error bars: no {what} column follows the selected columns"))
+            }
+            Ok(_) => {
+                self.say(format!("Plotted {} column(s), {with_y} with Y and {with_x} with X error bars", ys.len()))
+            }
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
     }
@@ -1507,10 +1687,13 @@ impl SheafApp {
             || self.analysis.is_some()
             || self.fit.is_some()
             || self.filter.is_some()
+            || self.row_filter.is_some()
+            || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
+            || self.sort.is_some()
             || self.sheet_name.is_some()
             || self.about
             || self.message.is_some()
@@ -1745,6 +1928,22 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.reshape {
+            let book = d.book;
+            match d.show(ctx, &mut self.doc) {
+                ReshapeOutcome::Open => {}
+                ReshapeOutcome::Closed => self.reshape = None,
+                ReshapeOutcome::Done(sheet) => {
+                    self.reshape = None;
+                    self.show_sheet(book, sheet);
+                }
+            }
+        }
+        if let Some(d) = &mut self.row_filter
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.row_filter = None;
+        }
         if let Some(d) = &mut self.filter {
             match d.show(ctx, &mut self.doc) {
                 FilterOutcome::Open => {}
@@ -1799,6 +1998,35 @@ impl SheafApp {
                         state.go_to(sheet, column, row);
                     }
                     self.go_to = None;
+                }
+            }
+        }
+        if let Some(d) = &mut self.sort {
+            match d.show(ctx, self.doc.project()) {
+                SortOutcome::Open => {}
+                SortOutcome::Closed => self.sort = None,
+                SortOutcome::Nested { book, columns, keys } => {
+                    let sheet =
+                        self.doc.project().workbook(book).map(|b| b.active_sheet.min(b.sheets.len().saturating_sub(1)));
+                    if let Some(sheet) = sheet {
+                        match self.doc.edit("Sort (nested)", |p| p.sort_nested(book, sheet, &keys, &columns)) {
+                            Ok(()) => self.say(format!("Sorted by {} column(s)", keys.len())),
+                            Err(e) => self.message = Some(("Could not sort".to_string(), e.to_string())),
+                        }
+                    }
+                    self.sort = None;
+                }
+                SortOutcome::ByLabel { book, label, descending } => {
+                    let mut moved = false;
+                    self.doc.apply("Sort columns by label", |p| {
+                        if let Some(b) = p.workbook_mut(book) {
+                            moved = b.sheet_mut().sort_columns_by_label(label, descending);
+                        }
+                    });
+                    if !moved {
+                        self.say("The columns are already in that order");
+                    }
+                    self.sort = None;
                 }
             }
         }

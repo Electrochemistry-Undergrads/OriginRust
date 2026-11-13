@@ -4,7 +4,7 @@ use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
 use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
-use sheaf_core::graph::{Connect, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
+use sheaf_core::graph::{Connect, ErrorDirection, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
@@ -31,20 +31,66 @@ pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
 /// Appends the items of one plot to `out`.
 pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
-    if plot.kind == PlotKind::Area {
+    if plot.kind == PlotKind::Pie {
+        draw_pie(out, pd, geom);
+        return;
+    }
+    if plot.kind.is_area() {
         draw_area(out, pd, geom);
     }
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
     }
-    if plot.kind == PlotKind::Column {
+    if plot.kind == PlotKind::Box {
+        draw_box(out, pd, geom);
+    } else if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }
-    if pd.err.is_some() {
+    if pd.err.is_some() || pd.xerr.is_some() {
         draw_error_bars(out, pd, geom);
     }
     if plot.kind.has_symbols() {
         draw_symbols(out, pd, geom);
+    }
+    if pd.mask.is_some() && !plot.kind.is_bar() {
+        draw_masked(out, pd, geom);
+    }
+}
+
+/// Origin draws a masked point red: its symbol, and the two line segments that meet at it
+/// (measured with a line + symbol plot of five points, one masked). Drawn on top of the plot.
+fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    use sheaf_core::Color;
+    let Some(mask) = pd.mask else { return };
+    let page = |i: usize| -> Option<(f64, f64)> {
+        if i < pd.start || i >= pd.end {
+            return None;
+        }
+        geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))
+    };
+    let mut lines = String::new();
+    let mut symbols = String::new();
+    for &i in mask.range(pd.start..pd.end) {
+        let Some(p) = page(i) else { continue };
+        if pd.plot.kind.has_line() && pd.plot.line.width_pt > 0.0 {
+            for j in [i.checked_sub(1), Some(i + 1)].into_iter().flatten() {
+                if let Some(q) = page(j) {
+                    move_to(&mut lines, q.0, q.1);
+                    line_to(&mut lines, p.0, p.1);
+                }
+            }
+        }
+        if pd.plot.kind.has_symbols() {
+            symbol_path(&mut symbols, pd.plot.symbol.shape, p.0, p.1, pd.plot.symbol.size_pt);
+        }
+    }
+    if !lines.is_empty() {
+        let line = crate::plots::line_stroke(&pd.plot.line);
+        out.push(Item::Path { d: lines, fill: None, stroke: Some(Stroke { color: Color::RED, ..line }) });
+    }
+    if !symbols.is_empty() {
+        let red = SymbolStyle { color: Color::RED, ..pd.plot.symbol.clone() };
+        out.push(symbol_item(symbols, &red));
     }
 }
 
@@ -100,31 +146,42 @@ impl Run {
     }
 }
 
-/// The fill of an area plot: one closed shape per unbroken run of points, from the page height of
-/// Y = 0 (or the nearer frame edge when 0 cannot be placed or lies outside) up to the curve. Very
-/// long runs are thinned to about 20000 points, which looks the same at any export size.
+/// The fill of an area plot: one closed shape per unbroken run of points, from the lower edge up
+/// to the curve. The lower edge is the page height of Y = 0 (or the nearer frame edge when 0
+/// cannot be placed or lies outside); for a stacked area plot it is the curve of the plots below,
+/// for an area plot with a base column (`Plot::y_base`) that column's curve. Very long runs are
+/// thinned to about 20000 points, which looks the same at any export size.
 fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let f = geom.frame;
     let zero = geom.data_to_page(0.0, if pd.oy == 0.0 { 0.0 } else { pd.oy }).1;
-    let base = if zero.is_finite() { zero.clamp(f.y, f.y + f.h) } else { f.y + f.h };
+    let flat = if zero.is_finite() { zero.clamp(f.y, f.y + f.h) } else { f.y + f.h };
     let step = ((pd.end - pd.start) / 20_000).max(1);
     let mut d = String::new();
-    let mut run: Vec<(f64, f64)> = Vec::new();
-    let close = |run: &mut Vec<(f64, f64)>, d: &mut String| {
+    // Upper points, and the lower point under each.
+    let mut run: Vec<((f64, f64), f64)> = Vec::new();
+    let close = |run: &mut Vec<((f64, f64), f64)>, d: &mut String| {
         if run.len() >= 2 {
-            move_to(d, run[0].0, base);
-            for &(x, y) in run.iter() {
+            move_to(d, run[0].0.0, run[0].1);
+            for &((x, y), _) in run.iter() {
                 line_to(d, x, y);
             }
-            line_to(d, run[run.len() - 1].0, base);
+            for &((x, _), low) in run.iter().rev() {
+                line_to(d, x, low);
+            }
             d.push('Z');
         }
         run.clear();
     };
     let mut i = pd.start;
     while i < pd.end {
-        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
-            Some(p) => run.push(p),
+        let upper = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i));
+        // The lower edge of this row; a row without one breaks the shape.
+        let lower = match pd.base_at(i) {
+            None => Some(flat),
+            Some(b) => geom.checked_data_to_page(pd.x_at(i), b).map(|p| p.1),
+        };
+        match upper.zip(lower) {
+            Some((p, low)) => run.push((p, low)),
             None => close(&mut run, &mut d),
         }
         i = if i + step < pd.end || i + 1 == pd.end { i + step } else { pd.end - 1 };
@@ -253,69 +310,328 @@ fn near_frame(geom: &LayerGeometry, p: (f64, f64), margin: f64) -> bool {
 }
 
 /// One bar per row from the base to the value, in the plot's slot of the layer's group of bars
-/// (graphing spec 14.4). The base is 0 on a linear Y axis (the plot's offset in a stacked layer)
-/// and the lower axis limit on a log axis. A bar with a corner that cannot be placed is skipped.
+/// (graphing spec 14.4). The base is 0 on a linear value axis (the plot's offset in a stacked
+/// layer, the end of the bar below in a stacked column plot, the base column of a floating
+/// column) and the lower axis limit on a log axis. Horizontal bars lie down: values along X,
+/// positions along Y. A bar with a corner that cannot be placed is skipped.
 fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
     let slot = pd.bar.unwrap_or(crate::data::BarSlot { left: -0.4, width: 0.8, spacing: 1.0 });
-    let base = match geom.y.scale {
+    let transposed = pd.transposed();
+    let value_axis = if transposed { &geom.x } else { &geom.y };
+    let default_base = match value_axis.scale {
         ScaleKind::Linear => pd.oy,
-        ScaleKind::Log10 => geom.y.min,
+        _ => value_axis.min,
     };
-    let stroke = (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt));
+    let histogram = plot.kind == PlotKind::Histogram;
+    // A histogram's bars are outlined in the plot's colour and not filled (Origin hatches them).
+    let stroke = if histogram {
+        Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5)))
+    } else {
+        (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt))
+    };
+    let place = |cat: f64, val: f64| {
+        if transposed { geom.checked_data_to_page(val, cat) } else { geom.checked_data_to_page(cat, val) }
+    };
     for i in pd.start..pd.end {
-        let (x, y) = (pd.x_at(i), pd.y_at(i));
-        let left = x + slot.left;
-        let (Some(a), Some(b)) =
-            (geom.checked_data_to_page(left, base), geom.checked_data_to_page(left + slot.width, y))
-        else {
+        let (cat, top) = (pd.cat_at(i), pd.val_at(i));
+        let base = pd.base_at(i).unwrap_or(default_base);
+        let left = cat + slot.left;
+        let (Some(a), Some(b)) = (place(left, base), place(left + slot.width, top)) else {
             continue;
         };
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
         out.push(Item::Rect {
             rect: Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 },
-            fill: Some(plot.symbol.color),
+            fill: (!histogram).then_some(plot.symbol.color),
             stroke: stroke.clone(),
         });
     }
 }
 
+/// Width of a box's whisker caps, in X axis units (measured: a tenth of the box spacing).
+const BOX_CAP: f64 = 0.1;
+/// Size of the cross at the whisker ends and of the outliers, and of the square at the mean, in pt.
+const BOX_CROSS_PT: f64 = 7.0;
+const BOX_MEAN_PT: f64 = 5.0;
+
+/// Origin's pie: a pie of 70 % of the frame height, a little left of the middle, slices clockwise
+/// from 12 o'clock outlined in black, each labelled outside with its share to two decimals, a
+/// legend of squares and names at the top right, and a black frame around the layer (measured).
+fn draw_pie(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    use crate::scene::{Anchor, TextItem};
+    use sheaf_core::Color;
+    let Some(pie) = &pd.pie else { return };
+    let f = geom.frame;
+    out.push(Item::Rect { rect: f, fill: None, stroke: Some(Stroke::solid(Color::BLACK, 1.0)) });
+    let total: f64 = pie.values.iter().sum();
+    if total <= 0.0 {
+        return;
+    }
+    let r = 0.35 * f.h.min(f.w);
+    let (cx, cy) = (f.x + 0.42 * f.w, f.y + 0.5 * f.h);
+    let point = |angle: f64, radius: f64| (cx + radius * angle.sin(), cy - radius * angle.cos());
+    let outline = Stroke::solid(Color::BLACK, 0.5);
+    let mut from = 0.0;
+    for (i, v) in pie.values.iter().enumerate() {
+        let share = v / total;
+        let to = from + share * std::f64::consts::TAU;
+        let mut d = String::new();
+        if share >= 1.0 - 1e-12 {
+            move_to(&mut d, cx, cy - r);
+            for (x, y) in [(cx, cy + r), (cx, cy - r)] {
+                d.push('A');
+                push_num(&mut d, r);
+                d.push(' ');
+                push_num(&mut d, r);
+                d.push_str(" 0 1 1 ");
+                push_num(&mut d, x);
+                d.push(' ');
+                push_num(&mut d, y);
+            }
+        } else {
+            let (a, b) = (point(from, r), point(to, r));
+            move_to(&mut d, cx, cy);
+            line_to(&mut d, a.0, a.1);
+            d.push('A');
+            push_num(&mut d, r);
+            d.push(' ');
+            push_num(&mut d, r);
+            d.push_str(if share > 0.5 { " 0 1 1 " } else { " 0 0 1 " });
+            push_num(&mut d, b.0);
+            d.push(' ');
+            push_num(&mut d, b.1);
+        }
+        d.push('Z');
+        out.push(Item::Path { d, fill: Some(pie.colors[i]), stroke: Some(outline.clone()) });
+        // The share, outside the slice, next to its middle.
+        let mid = (from + to) / 2.0;
+        let (x, y) = point(mid, r * 1.12);
+        let size = pie.label_font.size_pt;
+        let anchor = if mid.sin() > 0.3 {
+            Anchor::Start
+        } else if mid.sin() < -0.3 {
+            Anchor::End
+        } else {
+            Anchor::Middle
+        };
+        out.push(Item::Text(TextItem {
+            x,
+            y: y + 0.35 * size,
+            text: format!("{:.2}%", share * 100.0),
+            family: pie.label_font.family.clone(),
+            size,
+            bold: pie.label_font.bold,
+            italic: pie.label_font.italic,
+            color: pie.label_font.color,
+            anchor,
+            rotate_ccw: 0.0,
+        }));
+        from = to;
+    }
+    // The legend: a square and the name of each slice, from the top right corner down.
+    let fs = pie.legend_font.size_pt;
+    let row = 1.3 * fs;
+    let width = pie.names.iter().map(|n| n.chars().count()).max().unwrap_or(0) as f64 * 0.55 * fs + 2.4 * fs;
+    let x0 = f.x + f.w - width - 0.5 * fs;
+    for (i, name) in pie.names.iter().enumerate() {
+        let y = f.y + 0.5 * fs + i as f64 * row;
+        out.push(Item::Rect {
+            rect: Rect { x: x0, y, w: fs, h: fs },
+            fill: Some(pie.colors[i]),
+            stroke: Some(outline.clone()),
+        });
+        out.push(Item::Text(TextItem {
+            x: x0 + 1.4 * fs,
+            y: y + 0.8 * fs,
+            text: name.clone(),
+            family: pie.legend_font.family.clone(),
+            size: fs,
+            bold: pie.legend_font.bold,
+            italic: pie.legend_font.italic,
+            color: pie.legend_font.color,
+            anchor: Anchor::Start,
+            rotate_ccw: 0.0,
+        }));
+    }
+}
+
+/// One box of a box chart: the box from the 25th to the 75th percentile with the median across it,
+/// whiskers with caps and a cross at their ends, the mean as a small open square and the outliers
+/// as crosses, all in the plot's colour (measured in Origin).
+fn draw_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let Some(b) = &pd.boxed else { return };
+    let color = pd.plot.symbol.color;
+    let width = pd.plot.line.width_pt.max(0.5);
+    let at = |x: f64, y: f64| geom.checked_data_to_page(x, y);
+    let (l, r) = (b.pos - crate::data::BOX_WIDTH / 2.0, b.pos + crate::data::BOX_WIDTH / 2.0);
+    if let (Some(a), Some(c)) = (at(l, b.q1), at(r, b.q3)) {
+        out.push(Item::Rect {
+            rect: Rect { x: a.0.min(c.0), y: a.1.min(c.1), w: (c.0 - a.0).abs(), h: (c.1 - a.1).abs() },
+            fill: None,
+            stroke: Some(Stroke::solid(color, width)),
+        });
+    }
+    let mut d = String::new();
+    let seg = |d: &mut String, p: Option<(f64, f64)>, q: Option<(f64, f64)>| {
+        if let (Some(p), Some(q)) = (p, q) {
+            move_to(d, p.0, p.1);
+            line_to(d, q.0, q.1);
+        }
+    };
+    seg(&mut d, at(l, b.median), at(r, b.median));
+    seg(&mut d, at(b.pos, b.q3), at(b.pos, b.whisker_high));
+    seg(&mut d, at(b.pos, b.q1), at(b.pos, b.whisker_low));
+    for end in [b.whisker_low, b.whisker_high] {
+        seg(&mut d, at(b.pos - BOX_CAP / 2.0, end), at(b.pos + BOX_CAP / 2.0, end));
+    }
+    out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, width)) });
+    let mut crosses = String::new();
+    for v in [b.whisker_low, b.whisker_high].iter().chain(b.outliers.iter()) {
+        if let Some(p) = at(b.pos, *v) {
+            symbol_path(&mut crosses, SymbolShape::Cross, p.0, p.1, BOX_CROSS_PT);
+        }
+    }
+    let style =
+        |shape, size| SymbolStyle { shape, size_pt: size, color, filled: false, edge_width_pt: width, every: 1 };
+    if !crosses.is_empty() {
+        out.push(symbol_item(crosses, &style(SymbolShape::Cross, BOX_CROSS_PT)));
+    }
+    if let Some(p) = at(b.pos, b.mean) {
+        let mut d = String::new();
+        symbol_path(&mut d, SymbolShape::Square, p.0, p.1, BOX_MEAN_PT);
+        out.push(symbol_item(d, &style(SymbolShape::Square, BOX_MEAN_PT)));
+    }
+}
+
+/// Error bars: along the Y values (along X for horizontal bars) from the Y error column, and along
+/// X from the X error column of a plot that is not a bar plot. Each bar reaches to the side or sides
+/// of the plot's direction and ends in a cap of the plot's cap width. A bar plot's error bars stand
+/// in the middle of its own bars, at the top of a stacked bar.
 fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let plot = pd.plot;
-    let column = plot.kind == PlotKind::Column;
-    let color = if plot.kind.has_line() || column { plot.line.color } else { plot.symbol.color };
-    let half_cap = 0.6 * plot.symbol.size_pt;
-    let width = if column { plot.line.width_pt.max(0.5) } else { (plot.line.width_pt / 2.0).max(0.5) };
-    // A column plot's error bars stand in the middle of its own bars.
+    let bar = plot.kind.is_bar();
+    let color = if plot.kind.has_line() || bar { plot.line.color } else { plot.symbol.color };
+    let half_cap = plot.error.cap_width_pt.max(0.0) / 2.0;
+    let width = if bar { plot.line.width_pt.max(0.5) } else { (plot.line.width_pt / 2.0).max(0.5) };
+    let dir = plot.error.direction;
     let shift = pd.bar.map_or(0.0, |b| b.centre());
+    let transposed = pd.transposed();
     let mut d = String::new();
+    // One bar from page point `a` to `b`; the caps lie across it, horizontally when `vertical`.
+    let mut segment = |a: (f64, f64), b: (f64, f64), vertical: bool, cap_a: bool, cap_b: bool| {
+        if !(near_frame(geom, a, half_cap + width) || near_frame(geom, b, half_cap + width)) {
+            return;
+        }
+        move_to(&mut d, a.0, a.1);
+        line_to(&mut d, b.0, b.1);
+        for (p, on) in [(a, cap_a), (b, cap_b)] {
+            if !on || half_cap <= 0.0 {
+                continue;
+            }
+            if vertical {
+                move_to(&mut d, p.0 - half_cap, p.1);
+                line_to(&mut d, p.0 + half_cap, p.1);
+            } else {
+                move_to(&mut d, p.0, p.1 - half_cap);
+                line_to(&mut d, p.0, p.1 + half_cap);
+            }
+        }
+    };
+    let cap_low = dir != ErrorDirection::Plus;
+    let cap_high = dir != ErrorDirection::Minus;
     for i in pd.start..pd.end {
-        let x = if shift == 0.0 { pd.x_at(i) } else { pd.x_at(i) + shift };
-        let (y, e) = (pd.y_at(i), pd.err_at(i));
-        if !e.is_finite() {
-            continue;
+        if let Some((below, above)) = pd.reach(pd.err_at(i), dir) {
+            let (cat, val) = (pd.cat_at(i) + shift, pd.val_at(i));
+            let place = |v: f64| {
+                if transposed { geom.checked_data_to_page(v, cat) } else { geom.checked_data_to_page(cat, v) }
+            };
+            if let (Some(lo), Some(hi)) = (place(val - below), place(val + above)) {
+                // The bar is vertical on the page unless the bars lie down.
+                segment(hi, lo, !transposed, cap_high, cap_low);
+            }
         }
-        let (Some(top), Some(bottom)) = (geom.checked_data_to_page(x, y + e), geom.checked_data_to_page(x, y - e))
-        else {
-            continue;
-        };
-        if !(near_frame(geom, top, half_cap + width) || near_frame(geom, bottom, half_cap + width)) {
-            continue;
+        if !bar && let Some((below, above)) = pd.reach(pd.xerr_at(i), dir) {
+            let (x, y) = (pd.x_at(i), pd.y_at(i));
+            if let (Some(lo), Some(hi)) =
+                (geom.checked_data_to_page(x - below, y), geom.checked_data_to_page(x + above, y))
+            {
+                segment(hi, lo, false, cap_high, cap_low);
+            }
         }
-        move_to(&mut d, top.0, top.1);
-        line_to(&mut d, bottom.0, bottom.1);
-        move_to(&mut d, top.0 - half_cap, top.1);
-        line_to(&mut d, top.0 + half_cap, top.1);
-        move_to(&mut d, bottom.0 - half_cap, bottom.1);
-        line_to(&mut d, bottom.0 + half_cap, bottom.1);
     }
     if !d.is_empty() {
         out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, width)) });
     }
 }
 
+/// Smallest and largest symbol width of a bubble plot, in points: Origin scales the width linearly
+/// with the Z value, from the smallest to the largest (measured: 8 points with Z from 1 to 9 gave
+/// rings 2.4 and 21 pt wide, 5 pt at Z = 2, 15 pt at Z = 6).
+const BUBBLE_MIN_PT: f64 = 2.0;
+const BUBBLE_MAX_PT: f64 = 20.0;
+
+/// The colour of a colour mapped symbol at `t` in 0..1: blue, cyan, green, yellow, red (a stand-in:
+/// Origin's default colour map was not measured).
+fn map_color(t: f64) -> sheaf_core::Color {
+    const STOPS: [(f64, f64, f64); 5] =
+        [(0.0, 0.0, 255.0), (0.0, 255.0, 255.0), (0.0, 255.0, 0.0), (255.0, 255.0, 0.0), (255.0, 0.0, 0.0)];
+    let x = t.clamp(0.0, 1.0) * (STOPS.len() - 1) as f64;
+    let i = (x.floor() as usize).min(STOPS.len() - 2);
+    let f = x - i as f64;
+    let mix = |a: f64, b: f64| (a + (b - a) * f).round() as u8;
+    sheaf_core::Color::rgb(
+        mix(STOPS[i].0, STOPS[i + 1].0),
+        mix(STOPS[i].1, STOPS[i + 1].1),
+        mix(STOPS[i].2, STOPS[i + 1].2),
+    )
+}
+
+/// The position of `v` between the smallest and largest finite value of `z[from..to]`, 0..1; 0.5
+/// when all values are equal.
+fn z_fraction(z: &[f64], from: usize, to: usize, v: f64) -> f64 {
+    let (lo, hi) = z[from.min(z.len())..to.min(z.len())]
+        .iter()
+        .filter(|x| x.is_finite())
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)));
+    if hi > lo { ((v - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.5 }
+}
+
+/// A scatter plot whose symbols differ: bubbles of different sizes and/or colours, one scene item
+/// per symbol.
+fn draw_varied_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let sym = &pd.plot.symbol;
+    for i in pd.start..pd.end {
+        let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
+        let mut style = sym.clone();
+        if let Some(z) = pd.size_z {
+            let v = z.get(i).copied().unwrap_or(f64::NAN);
+            if !v.is_finite() {
+                continue;
+            }
+            style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction(z, pd.start, pd.end, v);
+        }
+        if let Some(z) = pd.color_z {
+            let v = z.get(i).copied().unwrap_or(f64::NAN);
+            if !v.is_finite() {
+                continue;
+            }
+            style.color = map_color(z_fraction(z, pd.start, pd.end, v));
+        }
+        if !near_frame(geom, p, style.size_pt + style.edge_width_pt) {
+            continue;
+        }
+        let mut d = String::new();
+        symbol_path(&mut d, style.shape, p.0, p.1, style.size_pt);
+        out.push(symbol_item(d, &style));
+    }
+}
+
 fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    if pd.size_z.is_some() || pd.color_z.is_some() {
+        return draw_varied_symbols(out, pd, geom);
+    }
     let sym = &pd.plot.symbol;
     let every = sym.every.max(1) as usize;
     let mut d = String::new();

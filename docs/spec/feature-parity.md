@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 109 | 78 | 230 |
+| All rows | 43 | 116 | 71 | 230 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 40 | 78 | 129 |
+| P1 and P2 together | 11 | 47 | 71 | 129 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -40,7 +40,7 @@ Cross-cutting findings:
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
 | Project save and open, own format | File > Save/Open, Ctrl+S/O | File > Save Project and Save Project As write `.opj` by default (ADR 0008) and a `<name>.opj.sheaf` companion when something cannot be stored; `.sheaf` zip also works; New, Open (a companion opens with its `.opj`), prompt on quit; CLI | ✓ | Save As offers the Origin project type first | P0 |
-| Save project as .opj (owner's request) | File > Save Project As | File > Save Project and Save Project As in the app, CLI `export -o x.opj` and `plot --save`; writer in `io/src/opj/write` stores workbooks, graphs, column formulas with their recalculate mode and nested folders | ◐ | opens in Origin (spec 13.9, 13.10); not re-run in Origin on 2026-11-12. The writer names what it leaves out and the companion keeps it: the link of double-Y and panel layers, stack offsets, bar gap, area fill (written as a line), tick label source, rotated tick labels, tick number formats, window places; matrices, notes and fit results are not written | P0 |
+| Save project as .opj (owner's request) | File > Save Project As | File > Save Project and Save Project As in the app, CLI `export -o x.opj` and `plot --save`; writer in `io/src/opj/write` stores workbooks, graphs, column formulas with their recalculate mode and nested folders | ◐ | opens in Origin (spec 13.9, 13.10); not re-run in Origin on 2026-11-12. The writer names what it leaves out and the companion keeps it: bar overlap, hidden end tick labels, the colours of plot groups, error bars on side-by-side columns, Origin's own waterfall plot (a waterfall is written as X and Y offsets), date tick formats other than month/day/year, tick label source, rotated tick labels (X offsets, date tick labels and window places are written since opj-format.md 13.14); matrices, notes and fit results are not written | P0 |
 | Open .opj workbooks and basic graphs | File > Open | `io/src/opj`; app (File > Open, drag and drop), CLI; reads workbooks, graphs (plot groups with the list colours of their members, the legend frame), column formulas with their recalculate mode, nested folders, stacked-curve offsets and the second layer of a double-Y graph | ◐ | skips matrices, notes, layouts, fit results, masks, panel links and sparkline previews (the previews are not graph windows, opj-format.md 10.0); dates read as day numbers; .opju not read; pre-9 graphs unverified | P0 |
 | Undo and redo | Edit > Undo, Ctrl+Z | full history, labelled, Ctrl+Z/Y | ✓ | superset of Origin's one level; Alt+Backspace unbound | P0 |
 | Project Explorer | View > Project Explorer, Alt+1 | auto-hide panel on the left edge (slides out on hover, pin to dock, X and Alt+1 hide it): folder tree over a window list (Name, Long Name, Short Name, Type, sortable), active window in bold, double click shows, right-click Show/Hide/Rename/Delete/Export/Properties, drag a window onto a folder, New Folder | ◐ | no Duplicate, search or filters; folders cannot be renamed or deleted; Properties only edits the long name; no multi-select, F2 or Del keys | P0 |
@@ -108,8 +108,8 @@ Cross-cutting findings:
 | Numeric display format | decimals, significant, scientific, engineering | General, Decimal, Scientific, Significant | ◐ | no engineering or custom, no column width | P0 |
 | Missing values | shown as `--` | NaN shown as `--` | ✓ | cannot tell empty from missing | P0 |
 | Reference notation in formulas | `[Book]Sheet!Col`, cell(), `col(A)$`, `[L]` | `col`, `wcol`, index, range, `i` | ◐ | no other sheet or book, no cell(), no label access, no x/y shorthand | P0 |
-| Sorting | nested, range, columns | one key for the whole sheet; Sort Range (selected whole columns by the leftmost) and Sort Columns (each column alone) | ◐ | no nested keys, no Custom dialog, no cell-range subset | P0 |
-| Add, delete, move columns | Ctrl+D | add one, delete | ◐ | no insert at position, count dialog, move, swap, hide, no row insert or delete | P0 |
+| Sorting | nested, range, columns | whole sheet, range and column sorts, ascending or descending; Custom (nested keys) for the sheet and a range; Sort Columns by Label; Reverse Order; missing values sort first ascending and last descending, text ignores case (measured in Origin, workbook-model 13.1) | ◐ | Custom on Sort Columns and on the column menu's Sort Column is greyed; no cell-range subset sort | P0 |
+| Add, delete, move columns | Ctrl+D | add; insert and delete columns, rows or cell blocks (cells below shift up or down within the selected columns); move columns To First, Left, Right, To Last; hide and unhide; column width (characters) | ◐ | no count dialog or swap; GUI Insert/Delete on blocks follows Origin's documentation, not measured | P0 |
 | Sampling interval, Show X Column | Column menu | none | ◐ | no Set Sampling Interval, no Show X Column | P0 |
 | Cell selection, editing, copy, cut, paste, clear, fill | grid and Edit menu | double-click edit with undo; select column, row, block or all; Ctrl+C, X, V and Delete as one undo step each | ◐ | no fill, Paste Transpose, Paste Special, insert or delete of cells (columns and rows only move by Delete of whole columns); no Select... dialog; no keyboard cursor | P0 |
 | Multiple sheets per book | tabs menu | sheet tabs; right-click a tab: Insert, Delete, Add, Duplicate, Name and Comments; analysis adds result sheets | ◐ | a sheet cannot be moved; no Add Graph as Sheet, Duplicate Without Data or Navigate | P0 |
@@ -117,16 +117,16 @@ Cross-cutting findings:
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
 | Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
 | Simple math on curves | Analysis > Mathematics > Simple Math | Simple Math window, `analyze math`, `Tool::CurveMath` | ✓ | add, subtract, multiply, divide, power with a constant or a reference; checked against Origin (spec section 9); no graph rescale | P0 |
-| Row filter | Column > Filter | Filter Rows, in place or new sheet | ◐ | removes or copies, not a live hidden filter | P1 |
-| Masking | Column > Mask | none | ✗ | model has no mask; .opj reader skips it | P1 |
+| Row filter | Column > Filter | live sheet filter: a condition in the formula language with presets (above/below average, within 3 sigma, not missing); Enable/Disable, Reapply, Remove; the grid shows passing rows only and analysis and fits skip the others; sorts and row edits reapply it; Filter Rows (in place or new sheet) remains | ◐ | one filter per sheet, not per column; no date or text filters; plots still draw filtered rows | P1 |
+| Masking | Column > Mask | Apply, Remove, Swap on selected cells; masks follow rows through sorts, inserts and deletes; statistics, analysis tools and fits leave masked cells out; masked points draw red with their adjacent line segments (measured in Origin) | ◐ | no Change Color, Disable Masking, mask by condition or from the graph; two-way ANOVA ignores masks; the .opj reader skips masks and the writer leaves them to the companion | P1 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |
-| Categorical columns | Set as Categorical | none | ✗ | | P1 |
+| Categorical columns | Set as Categorical | Set as Categorical toggle (column and Column menus); Unstack Columns offers categorical columns first; Group and Subject designations in Set As and Column Properties | ◐ | no analysis tool reads Group or Subject yet; the .opj file codes of Group and Subject are unknown (companion keeps them) | P1 |
 | Worksheet display and view options | Format > Worksheet F4; hide, freeze, zoom | fixed layout | ✗ | | P1 |
 | Before-formula script, multi-column set | Set Column Values | none | ✗ | one column only | P1 |
 | Fill Column With | row numbers, random, patterns | only formula `i` | ◐ | no random, series or dates | P1 |
 | Date and time arithmetic | date columns | columns are plain numbers in formulas (days) | ◐ | no `date()`, `time()` or date functions | P1 |
 | String functions and text in formulas | text functions | text reads as missing | ✗ | | P1 |
-| Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | none | ✗ | | P1 |
+| Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | Transpose (measured in Origin), Stack Columns, Unstack Columns, Split Columns, Reduce Rows, each writing a new sheet with one undo step | ◐ | Origin's Transpose replaces the sheet in place by default; option layouts of stack, unstack, split and reduce not compared with Origin; no join, pivot or duplicates | P1 |
 | External links, Paste Link | Edit menu | none | ✗ | | P2 |
 | Complex numbers | complex type | none | ✗ | | P2 |
 | Worksheet script, query, clear | Worksheet menu | none | ✗ | | P2 |
@@ -265,10 +265,10 @@ Cross-cutting findings:
 | Layer Contents, add and remove data | F12 | F12 or Graph > Layer Contents opens Plot Details on the layer: plots can be added from any sheet, removed and reordered; Plot Setup opens the same page | ◐ | no separate X/Y/error assignment, no row range | P0 |
 | Spline and step connect | Line > Connect | Catmull-Rom spline, steps | ◐ | no B-spline, Bezier, segments; spline skipped above 2000 points | P1 |
 | Multi-panel and stack | 4 Panel, 9 Panel | CLI `plot --panels stack` or RxC (Stack, Vertical 2 Panel, Horizontal 2 Panel, 4 Panel) with `--panel-y`, `--per-panel`, gaps and margins; panels are linked layers that share X, and the graph window edits each layer | ◐ | Plot > Multi-Panel has Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel (one panel per selected Y column), no Stack... dialog; panel links are not written to .opj | P1 |
-| Area and fill | Plot > Area | Plot > Area > Area, CLI `plot -t area`, Change Plot to Area: the line is filled down to Y = 0 with the symbol colour | ◐ | no stacked area, no fill to another baseline, no transparency; written to .opj as a line (the companion keeps the fill) | P1 |
-| Drop lines, bubble, colour mapped | Plot > Symbol | none | ✗ | | P1 |
-| Histogram, box chart, statistics plots | Plot > Statistics | histogram tool makes a column plot of the bin counts | ◐ | bars have gaps, no distribution curve, no box chart or other statistics plots | P1 |
-| Pie | Plot > Pie | none | ✗ | | P2 |
+| Area and fill | Plot > Area | Plot > Area > Area, Stacked Area, 100% Stacked Area, Fill Area (between a pair of columns); CLI `plot -t area`, `stacked-area`, `stacked-area-100`, `fill-area`; Change Plot to Area: the line is filled down to Y = 0 (or to the lower edge) with the symbol colour | ◐ | no transparency, no fill to the next plot; stacked and fill areas written to .opj as plain areas (the companion keeps them) | P1 |
+| Drop lines, bubble, colour mapped | Plot > Symbol | Plot > Symbol > Bubble, Color Mapped, Bubble + Color Mapped (Z column after the Y column) | ◐ | no drop lines, no size legend or colour scale, colour map is a stand-in, not written to .opj | P1 |
+| Histogram, box chart, statistics plots | Plot > Statistics | Plot > Statistics > Histogram and Box Chart, CLI `plot -t histogram`, `box`: binned like Frequency Counts, touching bars; boxes with median, mean, whiskers, outliers | ◐ | no distribution curve, no hatch fill, no grouped box charts (need T10's group columns), other statistics plots missing; written to .opj as plain columns | P1 |
+| Pie | Plot > Pie | Plot > Column/Bar/Pie > 2D Color Pie, CLI `plot -t pie`: flat colour pie, shares to two decimals, legend | ◐ | no 3D slant, no B&W hatch pie, no exploded slices; written to .opj as plain columns | P2 |
 | Polar, ternary, radar, Smith, wind rose | Specialized | none | ✗ | | P2 |
 | Stock | Plot > Stock | none | ✗ | | P2 |
 | Vector | Plot > Vector | none | ✗ | | P2 |
@@ -284,9 +284,9 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Graph object model | page, layers, axes, plots, objects | `core/graph.rs`: several layers per graph, linked layers (double-Y, panels), an active layer, plot offsets, bar spacing; the graph window selects layers and objects | ◐ | no drawn objects (lines, arrows, shapes); layers have no background of their own yet; a top or right axis with its own scale exists only as a linked layer | P0 |
 | Units and sizing | cm, mm, pixel, scale modes | inches and percent | ◐ | | P0 |
-| Axis scale and range | many scale types, rescale modes | axis dialog, Scale tab: linear, log10, from and to, round out to ticks, exact data range, symmetric about zero, major step, minor tick count | ◐ | no reverse (box is grey), ln, log2, probability, custom ticks, rescale margin (grey) | P0 |
+| Axis scale and range | many scale types, rescale modes | axis dialog, Scale tab: linear, log10, ln, log2, reciprocal, offset reciprocal, probability, probit, logit and Weibull (limits and ticks measured in Origin, graphing.md 3.8), from and to, reverse, first tick, round out to ticks, exact data range, symmetric about zero, major step, minor tick count, rescale margin; tick label prefix and suffix | ◐ | no custom formula, discrete or symmetric-log scale; one axis break only (Breaks tab); the reciprocal default step fits 2 of 3 measured ranges; reverse, first tick, prefix and suffix are kept by the .opj companion only | P0 |
 | Axis line and ticks | Line and Ticks tab | direction, length, width, colour | ◐ | no separate tick colour, offset, arrows | P0 |
-| Tick labels | Tick Labels tab | axis dialog, Tick Labels tab: font, number format, divisor, rotation of X labels, text from a dataset (sample names), hide last label | ◐ | no prefix and suffix (grey), no minor labels; date labels follow a date X column automatically, not chosen in the dialog, and no month or year steps | P0 |
+| Tick labels | Tick Labels tab | axis dialog, Tick Labels tab: font, number format, divisor, rotation of X labels, text from a dataset (sample names), hide last label | ◐ | sub-tabs Format, Table and Minor Tick Labels; prefix, suffix, label formula and minor labels are kept by the .opj companion only; date labels follow a date X column automatically, not chosen in the dialog, and no month or year steps | P0 |
 | Axis titles | Title tab | default from long name and units | ◐ | no `%(?X)` substitution, rotation, offset | P0 |
 | Opposite and central axes | top and right, axis at value | top and right line and ticks; a right Y axis with labels and title as a linked layer (double-Y) | ◐ | no axis at zero; labels on an opposite side only through a linked layer | P0 |
 | Symmetric Y about zero | set by hand | automatic | ✓ | | P0 |
@@ -300,10 +300,10 @@ Cross-cutting findings:
 | Text objects and escapes | text tool, escapes | `markup.rs` renders many escapes | ◐ | free text labels can be added (Text tool, Graph > Add Text..., `--label`), edited (double click) and dragged; no colour, font or attachment choice; several escapes unsupported | P0 |
 | Fonts | Format > Font | per axis and legend | ◐ | no underline, no default-font setting | P0 |
 | Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label | ◐ | only text labels and the legend can be dragged; nothing can be resized; no drawing tools | P0 |
-| Plot Details dialog | tree, Apply, OK, Cancel | Plot Details in Origin's layout: a tree at the left (graph, layers, plots), tabs for what is chosen, OK, Cancel, Apply; the axis dialog has the same buttons | ◐ | no Worksheet button; the Group tab has no increments; some tabs are grey (layer Background); Special Ticks and Breaks of the axis dialog are grey | P0 |
+| Plot Details dialog | tree, Apply, OK, Cancel | Plot Details in Origin's layout: a tree at the left (graph, layers, plots), tabs for what is chosen, OK, Cancel, Apply; the axis dialog has the same buttons | ◐ | no Worksheet button; the Group tab has no increments; some tabs are grey (layer Background); the axis dialog lists Bottom, Top, Left and Right on the tabs other than Scale and Breaks, but Top and Right only hold the far-edge line and ticks; Apply To... copies the look to the other axis, all layers or both | P0 |
 | Grids | Grids tab | major and minor with style | ◐ | no opposite grid or zero line | P1 |
-| Axis breaks | Breaks tab | none | ✗ | | P1 |
-| Reference lines, special ticks | add line | none | ✗ | | P1 |
+| Axis breaks | Breaks tab | axis dialog, Breaks tab: one break with from, to, position and gap (percent of the axis) and its own tick step after the break; gap in the axis line with slashes | ◐ | one break, not 1 to 7; layout figures not measured in Origin; a line joining points on both sides of a break still crosses the gap; not written to .opj | P1 |
+| Reference lines, special ticks | add line | special ticks: extra ticks with own labels (Special Ticks tab) | ◐ | no reference lines | P1 |
 | Drawn lines, arrows, shapes | Tools toolbar | none | ✗ | | P1 |
 | Themes | Theme Organizer | none | ✗ | | P1 |
 | Graph templates | Save Template As | 9 built-in in the Plot menu: Line, Scatter, Line + Symbol, Column, Area, Cyclic voltammetry, Double-Y, Stacked Lines, Waterfall | ◐ | cannot save or load; .otp not read | P1 |

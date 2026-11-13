@@ -3,21 +3,21 @@
 <g id="layer0">
 <clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip0)">
-<rect x="148.758" y="229.66" width="28.058" height="263.093" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<rect x="253.975" y="157.522" width="28.058" height="335.231" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<rect x="359.193" y="106.601" width="28.058" height="386.152" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<rect x="464.41" y="289.068" width="28.058" height="203.685" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<rect x="569.627" y="486.388" width="28.058" height="6.365" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<rect x="176.816" y="426.98" width="28.058" height="65.773" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="282.033" y="435.467" width="28.058" height="57.286" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="387.251" y="446.075" width="28.058" height="46.678" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="492.468" y="420.615" width="28.058" height="72.138" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="597.685" y="490.631" width="28.058" height="2.122" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="204.874" y="475.355" width="28.058" height="17.398" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<rect x="310.091" y="470.475" width="28.058" height="22.278" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<rect x="415.309" y="479.81" width="28.058" height="12.942" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<rect x="520.526" y="462.625" width="28.058" height="30.128" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<rect x="625.743" y="492.329" width="28.058" height="0.424" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="148.758" y="229.66" width="28.058" height="263.093" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="253.975" y="157.522" width="28.058" height="335.231" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="359.193" y="106.601" width="28.058" height="386.152" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="464.41" y="289.068" width="28.058" height="203.685" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="569.627" y="486.388" width="28.058" height="6.365" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="176.816" y="426.98" width="28.058" height="65.773" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="282.033" y="435.467" width="28.058" height="57.286" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="387.251" y="446.075" width="28.058" height="46.678" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="492.468" y="420.615" width="28.058" height="72.138" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="597.685" y="490.631" width="28.058" height="2.122" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="204.874" y="475.355" width="28.058" height="17.398" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<rect x="310.091" y="470.475" width="28.058" height="22.278" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<rect x="415.309" y="479.81" width="28.058" height="12.942" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<rect x="520.526" y="462.625" width="28.058" height="30.128" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<rect x="625.743" y="492.329" width="28.058" height="0.424" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
 </g>
 <g class="overlay">
 <path d="M138.237 68.41L664.323 68.41L664.323 492.753L138.237 492.753Z" fill="none" stroke="#000000" stroke-width="1.5"/>
@@ -41,11 +41,11 @@
 <text x="401.28" y="544.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Sample</text>
 <text x="94.317" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 94.317 280.581)">Li</text>
 <rect x="545.523" y="86.01" width="101.2" height="103.4" fill="none" stroke="#000000" stroke-width="0.75"/>
-<rect x="554.323" y="98.11" width="48.4" height="22" fill="#000000" stroke="#000000" stroke-width="0.5"/>
+<rect x="554.323" y="98.11" width="48.4" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
 <text x="613.723" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Li</text>
-<rect x="554.323" y="126.71" width="48.4" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="554.323" y="126.71" width="48.4" height="22" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
 <text x="613.723" y="143.32" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Na</text>
-<rect x="554.323" y="155.31" width="48.4" height="22" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<rect x="554.323" y="155.31" width="48.4" height="22" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
 <text x="613.723" y="171.92" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Mn</text>
 </g>
 </g>

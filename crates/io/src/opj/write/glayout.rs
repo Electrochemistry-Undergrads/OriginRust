@@ -45,6 +45,7 @@ pub(super) struct WindowSpec<'a> {
     pub time: f64,
     /// A counter that Origin gives every window (3 for the first graph of a small project).
     pub serial: u8,
+    pub place: Option<sheaf_core::project::WindowPlace>,
 }
 
 const WINDOW_LABEL_AT: usize = 0xC3;
@@ -55,10 +56,12 @@ pub(super) fn window_header(w: &WindowSpec) -> Vec<u8> {
     let mut h = vec![0u8; len];
     fill(&mut h, GRAPH_WINDOW_FIELDS);
     put_name(&mut h, 0x02, 25, w.name);
-    let shift = 26 * (w.ordinal % 10) as u16;
-    for (i, v) in [46 + shift, 46 + shift, 553 + shift, 395 + shift, w.page.0, w.page.1].into_iter().enumerate() {
+    let shift = 26 * (w.ordinal % 10) as i16;
+    let rect = super::layout::window_rect(w.place).unwrap_or([46 + shift, 46 + shift, 553 + shift, 395 + shift]);
+    for (i, v) in rect.into_iter().map(|v| v as u16).chain([w.page.0, w.page.1]).enumerate() {
         put(&mut h, 0x1B + 2 * i, &v.to_le_bytes());
     }
+    super::layout::set_window_state(&mut h, w.place);
     put(&mut h, 0x3d, &w.page.0.to_le_bytes());
     put(&mut h, 0x3f, &w.page.1.to_le_bytes());
     put(&mut h, 0x73, &w.time.to_le_bytes());
@@ -77,6 +80,8 @@ pub(super) struct AxisScale {
     pub to: f64,
     pub step: f64,
     pub log: bool,
+    /// The scale type byte of the header (`ScaleKind::file_code`).
+    pub code: u8,
     pub minor: u8,
     /// The limits follow the data (Origin rescales them when the data change).
     pub auto: bool,
@@ -117,6 +122,8 @@ pub(super) struct LayerSpec {
     pub link: Option<LinkSpec>,
     /// The curves of the layer carry their own offsets (stacked lines).
     pub offsets: bool,
+    /// At least one curve has an X offset too.
+    pub x_offsets: bool,
 }
 
 /// Header bytes of a linked layer (spec section 13.12): the parent's number, the position among the
@@ -133,6 +140,8 @@ const LINK_UNIT_CODE: u8 = 6;
 /// Layer header byte that makes Origin move the curves by the offsets stored in their records.
 const OFFSETS_AT: usize = 0xFD;
 const OFFSETS_ON: u8 = 0x50;
+/// The extra bit of the same byte that makes Origin move curves along X by their X offsets.
+const X_OFFSETS_BIT: u8 = 0x20;
 
 pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
     let mut h = vec![0u8; 361];
@@ -150,7 +159,7 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
         h[count_at + 3] = u8::from(axis.auto);
         put(&mut h, count_at + 4, &(sign * axis.scale(extent)).to_le_bytes());
         h[minor_at] = axis.minor;
-        h[minor_at + 1] = u8::from(axis.log);
+        h[minor_at + 1] = axis.code;
     }
     for (i, v) in l.frame.iter().enumerate() {
         put(&mut h, 0x71 + 2 * i, &v.to_le_bytes());
@@ -175,7 +184,7 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
         }
     }
     if l.offsets {
-        h[OFFSETS_AT] = OFFSETS_ON;
+        h[OFFSETS_AT] = OFFSETS_ON | if l.x_offsets { X_OFFSETS_BIT } else { 0 };
     }
     h
 }
@@ -215,9 +224,15 @@ pub(super) struct AxisBlocks {
     /// decimal places (none: Origin chooses).
     pub scientific: bool,
     pub decimals: Option<u8>,
+    /// The tick labels are dates; the number is Origin's date format, counted from 0
+    /// (0 is `M/D/YYYY`, spec 13.14).
+    pub date_format: Option<u8>,
 }
 
 const SHOWN: u8 = 0x40;
+/// The label type "date" in the low nibble of byte 0x25 of a tick label block (0 numbers, 1 texts of a
+/// column, 3 dates).
+const DATE_LABELS: u8 = 3;
 
 fn show(b: &mut [u8], on: bool) {
     if on {
@@ -268,6 +283,11 @@ pub(super) fn axis_blocks(group: usize, a: &AxisBlocks) -> Vec<Vec<u8>> {
         if let Some(d) = a.decimals {
             b[0x25] |= 0x80;
             b[0x26] = b[0x26] & 0xF0 | d.min(15);
+        }
+        if let Some(f) = a.date_format {
+            // label type "date" (3 in the low nibble of 0x25), the format in the low nibble of 0x26
+            b[0x25] = b[0x25] & 0xF0 | DATE_LABELS;
+            b[0x26] = b[0x26] & 0xF0 | f.min(15);
         }
         if a.follows_plot {
             put_colour(b, Code::AUTO);
@@ -359,7 +379,7 @@ pub(super) enum Group {
 }
 
 /// Where a curve record keeps its X and Y offset (spec section 13.10).
-const X_OFFSET_AT: usize = 0x1B2;
+const X_OFFSET_AT: usize = 0x1AA;
 const Y_OFFSET_AT: usize = 0x1CA;
 
 pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {

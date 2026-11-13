@@ -2,7 +2,7 @@
 
 use crate::args::*;
 use anyhow::{Context, Result, anyhow, bail};
-use sheaf_core::graph::{Graph, LineStyle, PlotKind, Stack, TextLabel, TickDirection, TickLabelSource};
+use sheaf_core::graph::{Graph, LineStyle, Stack, TextLabel, TickDirection, TickLabelSource};
 use sheaf_core::panels::{MAX_PANELS, PanelLayout, PanelOrder};
 use sheaf_core::project::Window;
 use sheaf_core::template::{STACK_AUTO_DEFAULT, Template};
@@ -688,7 +688,7 @@ fn style_plots(g: &mut Graph, group: &[usize], s: &StyleArgs, colors: &[Color]) 
             }
             if let Some(c) = colors.get(i) {
                 // A column plot's color is its fill; its outline keeps its own color.
-                if plot.kind != PlotKind::Column {
+                if !plot.kind.is_bar() {
                     plot.line.color = *c;
                 }
                 plot.symbol.color = *c;

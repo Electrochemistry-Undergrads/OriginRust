@@ -280,6 +280,7 @@ impl Writer {
             page,
             time: self.time,
             serial: 3u8.wrapping_add(self.graphs as u8),
+            place: self.place,
         };
         self.graphs += 1;
         self.windows.extend(framed(&window_header(&spec)));
@@ -321,7 +322,10 @@ impl Writer {
 
     /// The plots of a layer that can be written, with where each is drawn, and the data ranges.
     fn plan<'a>(&self, project: &Project, layer: &'a Layer, sets: &Sets, notes: &mut Vec<String>) -> Plan<'a> {
-        let (places, _) = places(project, layer);
+        let (mut places, _) = places(project, layer);
+        if let Stack::Waterfall { dx_percent, dy_percent } = layer.stack {
+            waterfall_places(project, layer, dx_percent, dy_percent, &mut places, notes);
+        }
         let mut plots: Vec<Resolved> = Vec::new();
         for (plot_index, p) in layer.plots.iter().enumerate() {
             if !p.visible {
@@ -357,11 +361,7 @@ impl Writer {
             if p.symbol.every != 1 && p.kind.has_symbols() {
                 notes.push("symbols on every n-th point only were not written; every point has a symbol".into());
             }
-            let mut place = places[plot_index];
-            if place.ox != 0.0 {
-                notes.push("the X offset of a stacked curve was not written (Origin keeps only Y offsets)".into());
-                place.ox = 0.0;
-            }
+            let place = places[plot_index];
             plots.push(Resolved { plot: p, y, x, err, place });
         }
         let plain: Vec<(&Plot, Place)> = plots.iter().map(|r| (r.plot, r.place)).collect();
@@ -422,7 +422,8 @@ impl Writer {
             }),
             Role::Plain { .. } => None,
         };
-        let offsets = plots.iter().any(|r| r.place.oy != 0.0);
+        let offsets = plots.iter().any(|r| r.place.oy != 0.0 || r.place.ox != 0.0);
+        let x_offsets = plots.iter().any(|r| r.place.ox != 0.0);
         let mut out = framed(&layer_header(&LayerSpec {
             frame: [left, top, right, bottom],
             page,
@@ -430,6 +431,7 @@ impl Writer {
             y: y_scale,
             link,
             offsets,
+            x_offsets,
         }));
 
         // annotations: titles, free text, legend
@@ -487,11 +489,16 @@ impl Writer {
         for (i, l) in layer.labels.iter().enumerate() {
             let text = styled(&l.text, &l.font);
             let (w, h) = text_size(&text, l.font.size_pt);
-            let cx = frame_pt.left + l.x * frame_pt.width + w / 2.0;
-            let cy = frame_pt.top + l.y * frame_pt.height;
             let angle = (((l.rotation_deg % 360.0) + 360.0) % 360.0 * 10.0).round() as u16;
             let rotated = (450..1350).contains(&angle) || (2250..3150).contains(&angle);
             let (rw, rh) = if rotated { (h, w) } else { (w, h) };
+            // Origin turns the text about the top-left corner of its unturned box, which is also the
+            // top-left corner of the stored rectangle (the reader's rule, opj-format.md 10.4): the
+            // label's anchor lies half a line height down the turned text from that corner.
+            let (sin, cos) = l.rotation_deg.to_radians().sin_cos();
+            let anchor = (frame_pt.left + l.x * frame_pt.width, frame_pt.top + l.y * frame_pt.height);
+            let corner = (anchor.0 - h / 2.0 * sin, anchor.1 - h / 2.0 * cos);
+            let (cx, cy) = (corner.0 + rw / 2.0, corner.1 + rh / 2.0);
             let name = if i == 0 { "Text".to_string() } else { format!("Text{i}") };
             annotations.push(self.annotation_bytes(
                 AnnKind::Text,
@@ -610,13 +617,13 @@ impl Writer {
         // curves
         let mut first = true;
         let mut later_errors = Vec::new();
-        let n_columns = plots.iter().filter(|r| r.plot.kind == PlotKind::Column).count();
+        let n_columns = plots.iter().filter(|r| r.plot.kind.is_bar()).count();
         // The plot groups of the layer: the plots with a group number, and all column plots that
         // stand side by side as one group. A group is a run of neighbouring curves; a run of one
         // is no group.
         let ids: Vec<Option<u32>> = plots
             .iter()
-            .map(|r| r.plot.group.or((r.plot.kind == PlotKind::Column && n_columns >= 2).then_some(u32::MAX)))
+            .map(|r| r.plot.group.or((r.plot.kind.is_bar() && n_columns >= 2).then_some(u32::MAX)))
             .collect();
         let places: Vec<Group> = (0..ids.len())
             .map(|i| match ids[i] {
@@ -633,17 +640,15 @@ impl Writer {
             let mut at = 0;
             let replaced = plots.iter().zip(&places).any(|(r, g)| {
                 at = if *g == Group::First { 0 } else { at + 1 };
-                let c = if r.plot.kind == PlotKind::Column || r.plot.kind == PlotKind::Scatter {
+                let c = if r.plot.kind.is_bar() || r.plot.kind == PlotKind::Scatter {
                     r.plot.symbol.color
                 } else {
                     r.plot.line.color
                 };
                 *g != Group::None && !r.plot.auto_color && palette_position(c) != Some((at % PALETTE.len()) as u8)
             });
-            let bars_with_errors = plots
-                .iter()
-                .zip(&places)
-                .any(|(r, g)| *g != Group::None && r.plot.kind == PlotKind::Column && r.err.is_some());
+            let bars_with_errors =
+                plots.iter().zip(&places).any(|(r, g)| *g != Group::None && r.plot.kind.is_bar() && r.err.is_some());
             if bars_with_errors {
                 notes.push(
                     "error bars on column plots that stand side by side were written, but Origin did not place them on their bars"
@@ -657,14 +662,47 @@ impl Writer {
                 );
             }
         }
+        // Plot types the writer cannot store go out as plain columns; the companion file keeps them.
+        let has = |f: &dyn Fn(PlotKind) -> bool| plots.iter().any(|r| f(r.plot.kind));
+        if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || k == PlotKind::Pie) {
+            notes.push("histogram, box and pie plots were written as plain columns of their data".into());
+        }
+        if plots.iter().any(|r| r.plot.size_from.is_some() || r.plot.color_from.is_some()) {
+            notes.push("bubble sizes and colour mapped symbol colours were not written".into());
+        }
+        if has(&|k| k.is_stacked_column()) {
+            notes.push("stacked columns were written as columns side by side".into());
+        }
+        if has(&|k| k.is_stacked_area()) {
+            notes.push("stacked areas were written as areas from zero".into());
+        }
+        if plots.iter().any(|r| r.plot.kind == PlotKind::Area && r.plot.y_base.is_some()) {
+            notes.push("fill areas between two curves were written as areas down to zero".into());
+        }
+        if has(&|k| k == PlotKind::Bar) {
+            notes.push("horizontal bars were written as vertical columns".into());
+        }
+        if has(&|k| k == PlotKind::FloatingColumn) {
+            notes.push("floating columns were written as columns from zero".into());
+        }
+        if plots.iter().any(|r| r.plot.x_error.is_some() || !r.plot.error.is_default()) {
+            notes.push("X error bars, error bar directions and cap widths were not written".into());
+        }
         for (r, place) in plots.iter().zip(places.iter().copied()) {
             let p = r.plot;
             let kind = match p.kind {
                 PlotKind::Line => CurveKind::Line,
                 PlotKind::Scatter => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
-                PlotKind::Column => CurveKind::Column,
-                PlotKind::Area => CurveKind::Area,
+                PlotKind::Column
+                | PlotKind::StackedColumn
+                | PlotKind::Stacked100Column
+                | PlotKind::Bar
+                | PlotKind::FloatingColumn
+                | PlotKind::Histogram
+                | PlotKind::Box
+                | PlotKind::Pie => CurveKind::Column,
+                PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => CurveKind::Area,
             };
             let connect = match p.line.connect {
                 Connect::Straight => 1,
@@ -882,18 +920,19 @@ fn data_ranges(project: &Project, layer: &Layer, plots: &[(&Plot, Place)]) -> (O
             *r = Some(r.map_or((v, v), |(lo, hi)| (lo.min(v), hi.max(v))));
         }
     };
-    let log_x = layer.x_axis.scale == ScaleKind::Log10;
-    let log_y = layer.y_axis.scale == ScaleKind::Log10;
+    // Data that the scale cannot place (not positive on a log axis, outside 0..100 on a percent axis) are left out.
+    let (sx, sy) = (layer.x_axis.scale, layer.y_axis.scale);
+    let log_y = sy != ScaleKind::Linear;
     for (p, place) in plots {
         let (ox, oy) = (place.ox, place.oy);
         let ys = project.numeric(p.y).unwrap_or(&[]);
         let errs = p.y_error.and_then(|e| project.numeric(e));
         for (i, v) in ys.iter().enumerate() {
-            if !v.is_finite() || (log_y && *v <= 0.0) {
+            if !v.is_finite() || !sy.accepts(*v) {
                 continue;
             }
             let e = errs.and_then(|e| e.get(i)).copied().filter(|e| e.is_finite()).unwrap_or(0.0).abs();
-            if !log_y || *v + oy > 0.0 {
+            if sy.accepts(*v + oy) {
                 grow(&mut y, *v + oy);
             }
             if !log_y {
@@ -901,13 +940,13 @@ fn data_ranges(project: &Project, layer: &Layer, plots: &[(&Plot, Place)]) -> (O
                 grow(&mut y, v + oy + e);
             }
         }
-        if p.kind == PlotKind::Column {
+        if p.kind.is_bar() {
             grow(&mut y, oy);
         }
         match p.x.and_then(|c| project.numeric(c)) {
             Some(xs) => {
                 for v in xs {
-                    if !log_x || *v > 0.0 {
+                    if sx.accepts(*v) {
                         grow(&mut x, *v + ox);
                     }
                 }
@@ -945,7 +984,10 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         );
     }
     if matches!(layer.stack, Stack::Waterfall { .. }) {
-        notes.push("the offsets of a waterfall were not written; the curves are drawn where their data lies".into());
+        notes.push(
+            "a waterfall was written as curves moved by X and Y offsets on axes that cover them (Origin's own waterfall plot, with its Z axis, was not written)"
+                .into(),
+        );
     }
     if layer.bars.overlap_pct != 0.0 {
         notes.push("the overlap of column bars was not written; bars stand side by side".into());
@@ -963,10 +1005,61 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.hide_end_label {
             notes.push("a hidden tick label at the end of an axis was not written".into());
         }
+        if axis.reverse {
+            notes.push("a reversed axis was written in the normal direction".into());
+        }
+        if axis.axis_break.is_some() {
+            notes.push("an axis break was not written".into());
+        }
+        if !axis.special_ticks.is_empty() || !axis.tick_label_formula.is_empty() || axis.minor_tick_labels {
+            notes.push("special ticks, tick label formulas and minor tick labels were not written".into());
+        }
+        if axis.tick_color.is_some() || axis.tick_width_pt.is_some() {
+            notes.push("the colour and thickness of ticks (other than the axis line) were not written".into());
+        }
+        if axis.first_tick.is_some() {
+            notes.push("the first tick (anchor) of an axis was not written".into());
+        }
+        if !axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty() {
+            notes.push("the prefix and suffix of tick labels were not written".into());
+        }
         if axis.title_color_follows_plot {
             notes.push("axis title colours that follow the first plot's colour were not written".into());
         }
     }
+}
+
+/// A waterfall as offsets: Sheaf draws member k moved right and up by k times the given percentages
+/// of the front frame, which spans the axes of the unmoved data. Origin has no such shift, so the
+/// same positions are written as per-curve offsets in axis units (graphing spec 13.6); the axis
+/// range written then covers the moved curves.
+fn waterfall_places(
+    project: &Project,
+    layer: &Layer,
+    dx_percent: f64,
+    dy_percent: f64,
+    places: &mut [Place],
+    notes: &mut Vec<String>,
+) {
+    if layer.x_axis.scale != ScaleKind::Linear || layer.y_axis.scale != ScaleKind::Linear {
+        notes.push("the shifts of a waterfall on a logarithmic axis were not written".into());
+        return;
+    }
+    let plain: Vec<(&Plot, Place)> = layer.plots.iter().map(|p| (p, Place::default())).collect();
+    let (x, y) = data_ranges(project, layer, &plain);
+    let span = |axis: &Axis, data: Option<(f64, f64)>| {
+        let s = axis_scale(axis, data, &mut Vec::new());
+        s.to - s.from
+    };
+    let (sx, sy) = (dx_percent / 100.0 * span(&layer.x_axis, x), dy_percent / 100.0 * span(&layer.y_axis, y));
+    if !(sx.is_finite() && sy.is_finite()) {
+        return;
+    }
+    let shifted: Vec<Place> = places
+        .iter()
+        .map(|pl| pl.member.map_or(*pl, |k| Place { ox: k as f64 * sx, oy: k as f64 * sy, ..*pl }))
+        .collect();
+    places.copy_from_slice(&shifted);
 }
 
 fn sane_frame(f: sheaf_core::graph::Frame, notes: &mut Vec<String>) -> sheaf_core::graph::Frame {
@@ -989,17 +1082,32 @@ fn sane_frame(f: sheaf_core::graph::Frame, notes: &mut Vec<String>) -> sheaf_cor
 /// the data fit in.
 fn axis_scale(axis: &Axis, data: Option<(f64, f64)>, notes: &mut Vec<String>) -> AxisScale {
     let log = axis.scale == ScaleKind::Log10;
+    let other = !matches!(axis.scale, ScaleKind::Linear | ScaleKind::Log10);
     let (dlo, dhi) = data.unwrap_or(if log { (1.0, 10.0) } else { (0.0, 1.0) });
-    let (alo, ahi, astep) = nice_range(dlo, dhi, log, axis.auto_range, axis.rescale_margin_pct);
+    let (alo, ahi, astep) = match sheaf_core::scales::auto_range(axis.scale, dlo, dhi, axis.rescale_margin_pct) {
+        Some(r) if axis.scale.accepts(dlo) && axis.scale.accepts(dhi) => (r.from, r.to, r.inc),
+        Some(_) => {
+            let (a, b) = if axis.scale.is_percent() { (10.0, 90.0) } else { (1.0, 10.0) };
+            sheaf_core::scales::auto_range(axis.scale, a, b, axis.rescale_margin_pct)
+                .map_or((a, b, 1.0), |r| (r.from, r.to, r.inc))
+        }
+        None => nice_range(dlo, dhi, log, axis.auto_range, axis.rescale_margin_pct),
+    };
     let (mut from, mut to) = (axis.min.unwrap_or(alo), axis.max.unwrap_or(ahi));
-    if log && (from <= 0.0 || to <= 0.0) {
+    if (log || other) && !(axis.scale.accepts(from) && axis.scale.accepts(to)) {
         from = alo;
         to = ahi;
     }
     if to.partial_cmp(&from) != Some(std::cmp::Ordering::Greater) {
         (from, to) = (alo, ahi);
     }
-    let step = if log { 1.0 } else { axis.major_step.filter(|s| *s > 0.0).unwrap_or(astep) };
+    let step = if log {
+        1.0
+    } else if other {
+        axis.major_step.filter(|s| *s > 0.0).unwrap_or(astep)
+    } else {
+        axis.major_step.filter(|s| *s > 0.0).unwrap_or(astep)
+    };
     if axis.auto_range != AutoRange::Nice && (axis.min.is_none() || axis.max.is_none()) {
         notes.push(
             "an axis range that follows the data in another way than Origin's own (tight or symmetric about zero) was written as the limits it gives for the current data"
@@ -1020,6 +1128,7 @@ fn axis_scale(axis: &Axis, data: Option<(f64, f64)>, notes: &mut Vec<String>) ->
         to,
         step,
         log,
+        code: axis.scale.file_code(),
         minor: if log { axis.minor_ticks.clamp(0, 9) as u8 } else { axis.minor_ticks.min(100) as u8 },
         auto: axis.min.is_none() && axis.max.is_none() && axis.auto_range == AutoRange::Nice,
     }
@@ -1038,15 +1147,22 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
     if axis.side == AxisSide::Opposite && axis.show_opposite {
         notes.push("the line on the near side of an axis that is drawn on the opposite side was not written".into());
     }
-    let (scientific, decimals) = match axis.tick_format {
-        TickFormat::Auto => (false, None),
-        TickFormat::Decimal(d) => (false, Some(d.min(15))),
-        TickFormat::Scientific(d) => (true, Some(d.min(15))),
-        TickFormat::DateTime(_) => {
-            notes.push("a date and time tick label format was not written; Origin's automatic format is used".into());
-            (false, None)
+    let (mut scientific, mut decimals, mut date_format) = (false, None, None);
+    match axis.tick_format {
+        TickFormat::Auto => {}
+        TickFormat::Decimal(d) => decimals = Some(d.min(15)),
+        TickFormat::Scientific(d) => (scientific, decimals) = (true, Some(d.min(15))),
+        TickFormat::DateTime(pattern) => {
+            // Origin offers a fixed list of date formats; only month/day/year is in it
+            date_format = Some(0);
+            if pattern != sheaf_core::datetime::DatePattern::Mdy {
+                notes.push(format!(
+                    "the date format {} of tick labels has no counterpart in Origin's list; month/day/year was written",
+                    pattern.label()
+                ));
+            }
         }
-    };
+    }
     if (axis.tick_label_divisor - 1.0).abs() > f64::EPSILON {
         notes.push("a tick label divisor was not written".into());
     }
@@ -1087,5 +1203,6 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
         text_labels: false,
         scientific,
         decimals,
+        date_format,
     }
 }

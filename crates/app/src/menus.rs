@@ -20,6 +20,7 @@ use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
+use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
 use crate::panels::PanelId;
 use eframe::egui::{
@@ -27,6 +28,7 @@ use eframe::egui::{
     text::{LayoutJob, TextFormat},
 };
 use sheaf_core::graph::PlotKind;
+use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
 use std::sync::OnceLock;
@@ -74,6 +76,26 @@ pub enum Cmd {
     Undo,
     Redo,
     DeleteColumns,
+    /// Column > Move Columns.
+    MoveColumns(MoveTo),
+    /// Column > Hide/Unhide Columns > Hide Selected.
+    HideColumns,
+    /// Column > Hide/Unhide Columns > Unhide All.
+    UnhideColumns,
+    /// Column > Mask > Apply, Remove, Swap.
+    Mask(MaskOp),
+    /// Column > Set as Categorical.
+    SetCategorical,
+    /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
+    Reshape(ReshapeKind),
+    /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
+    RowFilterDialog,
+    ToggleRowFilter,
+    ReapplyRowFilter,
+    /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
+    InsertCells,
+    /// Delete the selected rows or columns (Edit > Delete and the cell menus).
+    DeleteCells,
     /// Copy the selected cells (Edit > Copy and the Copy item of the cell menus).
     Copy(CopyKind),
     Cut,
@@ -85,6 +107,8 @@ pub enum Cmd {
     Plot(Template),
     /// Plot > Symbol > Y Error.
     PlotYError,
+    /// Plot > Symbol > XY Error: a scatter plot with the X and Y error columns of each Y column.
+    PlotXYError,
     /// Plot > Multi-Panel > a fixed grid of panels (Vertical 2 Panel is 2 x 1, 4 Panel 2 x 2).
     PlotPanels {
         rows: usize,
@@ -109,6 +133,13 @@ pub enum Cmd {
     SortColumns {
         descending: bool,
     },
+    /// Worksheet > Sort Worksheet > Custom... and Sort Range > Custom...
+    SortCustom {
+        range: bool,
+    },
+    SortByLabel,
+    /// Column > Reverse Order.
+    ReverseOrder,
     FilterRows,
     Analyze(AnalysisKind),
     Fit(FitKind),
@@ -124,6 +155,8 @@ pub enum Cmd {
     GraphEdit(GraphOp),
     /// Rescale to Show All on the active layer (Ctrl+R).
     Rescale,
+    /// Graph > Exchange X-Y Axes on the active layer.
+    ExchangeAxes,
     /// Graph > Legend > Reconstruct Legend on the active layer (Ctrl+L).
     ReconstructLegend,
     /// Graph > Legend > Update Legend on the active layer.
@@ -465,8 +498,8 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
         v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
-        v.push(grey("Insert"));
-        v.push(item("&Delete", Cmd::DeleteColumns));
+        v.push(item("Insert", Cmd::InsertCells));
+        v.push(item("&Delete", Cmd::DeleteCells));
         v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
         v.push(grey_keyed("Find in Sheets...", ctrl(Key::F)));
@@ -573,8 +606,13 @@ fn plot_menu() -> Vec<Entry> {
             "&Symbol",
             [
                 vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
-                vec![item("Y Error", Cmd::PlotYError)],
-                greys(&["XY Error", "Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
+                vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
+                greys(&["Vertical Drop Line"]),
+                vec![
+                    item("Bubble", Cmd::Plot(Template::Bubble)),
+                    item("Color Mapped", Cmd::Plot(Template::ColorMapped)),
+                    item("Bubble + Color Mapped", Cmd::Plot(Template::BubbleColorMapped)),
+                ],
             ]
             .concat(),
         ),
@@ -587,22 +625,21 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sub(
             "Column/Bar/&Pie",
-            with(
+            [
                 vec![item("&Column", Cmd::Plot(Template::Column))],
-                &[
-                    "Column + Label",
-                    "Grouped Columns (indexed data)",
-                    "Bar",
-                    "Stacked Column",
-                    "Stacked Bar",
-                    "100% Stacked Column",
-                    "100% Stacked Bar",
-                    "Floating Column",
-                    "Floating Bar",
-                    "3D Color Pie",
-                    "2D B&&W Pie",
+                greys(&["Column + Label", "Grouped Columns (indexed data)"]),
+                vec![
+                    item("Bar", Cmd::Plot(Template::Bar)),
+                    item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
+                    grey("Stacked Bar"),
+                    item("100% Stacked Column", Cmd::Plot(Template::Stacked100Column)),
+                    grey("100% Stacked Bar"),
+                    item("Floating Column", Cmd::Plot(Template::FloatingColumn)),
                 ],
-            ),
+                greys(&["Floating Bar", "3D Color Pie", "2D B&&W Pie"]),
+                vec![item("2D Color Pie", Cmd::Plot(Template::Pie))],
+            ]
+            .concat(),
         ),
         sep(),
         sub(
@@ -662,26 +699,36 @@ fn plot_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey_sub(
+        sub(
             "S&tatistics",
-            &[
-                "Box Chart",
-                "Grouped Box Charts",
-                "Interval Plot",
-                "Histogram",
-                "Histogram + Probabilities",
-                "Stacked Histograms",
-                "Marginal Histograms",
-                "Marginal Box Charts",
-                "2D Kernel Density",
-                "QC (X bar R) Chart",
-                "Pareto",
-                "Scatter Matrix",
-                "Probability Plot",
-                "Q-Q Plot",
+            [
+                vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
+                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Histogram", Cmd::Plot(Template::Histogram))],
+                greys(&[
+                    "Histogram + Probabilities",
+                    "Stacked Histograms",
+                    "Marginal Histograms",
+                    "Marginal Box Charts",
+                    "2D Kernel Density",
+                    "QC (X bar R) Chart",
+                    "Pareto",
+                    "Scatter Matrix",
+                    "Probability Plot",
+                    "Q-Q Plot",
+                ]),
+            ]
+            .concat(),
+        ),
+        sub(
+            "&Area",
+            vec![
+                item("&Area", Cmd::Plot(Template::Area)),
+                item("Stacked Area", Cmd::Plot(Template::StackedArea)),
+                item("100% Stacked Area", Cmd::Plot(Template::Stacked100Area)),
+                item("Fill Area", Cmd::Plot(Template::FillArea)),
             ],
         ),
-        sub("&Area", vec![item("&Area", Cmd::Plot(Template::Area)), grey("Stacked Area"), grey("Fill Area")]),
         grey_sub(
             "Contour/&Heat Map",
             &[
@@ -730,11 +777,13 @@ fn column_menu() -> Vec<Entry> {
         ("&Disregard", Designation::Disregard),
         ("Y E&rror", Designation::YError),
         ("X Err&or", Designation::XError),
+        ("&Group", Designation::Group),
+        ("&Subject", Designation::Subject),
     ];
     let set_entries: Vec<Entry> = set_as.iter().map(|(l, d)| item(l, Cmd::SetAs(*d))).collect();
     vec![
         sub("Set &As", set_entries),
-        grey("Set as Categorical"),
+        item("Set as Categorical", Cmd::SetCategorical),
         sep(),
         keyed("Set Column &Values...", ctrl(Key::Q), Cmd::SetColumnValues),
         grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)),
@@ -756,11 +805,37 @@ fn column_menu() -> Vec<Entry> {
         grey("Show X Column..."),
         sep(),
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
-        grey_sub("Hide/Unhide Columns", &["Hide Selected", "Unhide All"]),
+        hide_menu(),
         sep(),
-        grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]),
-        grey_sub("Mask", &["Apply", "Remove", "Swap", "Change Color", "Disable Masking", "Mask Cells by Condition..."]),
+        filter_menu(),
+        mask_menu(&["Change Color", "Disable Masking", "Mask Cells by Condition..."]),
     ]
+}
+
+/// The Mask submenu: Apply, Remove and Swap work on the selected cells; the rest is greyed.
+fn mask_menu(grey_items: &[&str]) -> Entry {
+    let mut entries = vec![
+        item("Apply", Cmd::Mask(MaskOp::Apply)),
+        item("Remove", Cmd::Mask(MaskOp::Remove)),
+        item("Swap", Cmd::Mask(MaskOp::Swap)),
+    ];
+    entries.extend(greys(grey_items));
+    sub("Mask", entries)
+}
+
+fn filter_menu() -> Entry {
+    sub(
+        "Filter",
+        vec![
+            item("Add or Remove Filter", Cmd::RowFilterDialog),
+            item("Enable/Disable Filter", Cmd::ToggleRowFilter),
+            item("Reapply Filter", Cmd::ReapplyRowFilter),
+        ],
+    )
+}
+
+fn hide_menu() -> Entry {
+    sub("Hide/Unhide Columns", vec![item("Hide Selected", Cmd::HideColumns), item("Unhide All", Cmd::UnhideColumns)])
 }
 
 fn worksheet_menu() -> Vec<Entry> {
@@ -770,7 +845,7 @@ fn worksheet_menu() -> Vec<Entry> {
             vec![
                 item("Ascending", Cmd::SortRange { descending: false }),
                 item("Descending", Cmd::SortRange { descending: true }),
-                grey("Custom..."),
+                item("Custom...", Cmd::SortCustom { range: true }),
             ],
         ),
         sub(
@@ -783,14 +858,21 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         sub(
             "&Sort Worksheet",
-            vec![item("&Ascending", Cmd::SortAscending), item("&Descending", Cmd::SortDescending), grey("&Custom...")],
+            vec![
+                item("&Ascending", Cmd::SortAscending),
+                item("&Descending", Cmd::SortDescending),
+                item("&Custom...", Cmd::SortCustom { range: false }),
+            ],
         ),
-        grey("Sort Columns by Label..."),
+        item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
         grey("Clear Worksheet..."),
-        grey("Split Columns..."),
+        item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
-        grey("Reduce Rows..."),
+        item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
+        item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
+        item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
+        item("Unstack Columns...", Cmd::Reshape(ReshapeKind::Unstack)),
         grey_sub("Convert to Matrix", &["Direct", "XYZ Gridding", "Extract"]),
         sep(),
         grey("Worksheet Script..."),
@@ -1004,7 +1086,7 @@ fn graph_menu() -> Vec<Entry> {
         sep(),
         grey("Fit Layer to Graph"),
         grey("Fit Page to Layers..."),
-        grey("Exchange X-Y Axes"),
+        item("Exchange X-Y Axes", Cmd::ExchangeAxes),
         grey_sub("Offset Grouped Data in Layer", &["None", "Cumulative", "Constant", "Auto", "Individual"]),
         grey("Convert to Standard Font Size"),
     ]
@@ -1198,6 +1280,8 @@ pub fn column_header_menu() -> Vec<Entry> {
         ("Disregard", Designation::Disregard),
         ("Y Error", Designation::YError),
         ("X Error", Designation::XError),
+        ("Group", Designation::Group),
+        ("Subject", Designation::Subject),
     ]
     .iter()
     .map(|(l, d)| item(l, Cmd::SetAs(*d)))
@@ -1207,13 +1291,13 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey("Copy Columns to..."));
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
     v.push(sep());
-    v.push(grey("Insert"));
+    v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteColumns));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
     v.push(grey("Remove Links"));
     v.push(sep());
     v.push(sub("Set As", set_as));
-    v.push(grey("Set As Categorical"));
+    v.push(item("Set As Categorical", Cmd::SetCategorical));
     v.push(sep());
     v.push(keyed("Set Column Values...", ctrl(Key::Q), Cmd::SetColumnValues));
     v.push(grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)));
@@ -1232,23 +1316,46 @@ pub fn column_header_menu() -> Vec<Entry> {
         ],
     ));
     v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
-    v.push(grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]));
-    v.push(grey_sub("Mask", &["Apply", "Remove", "Swap", "Change Color", "Disable Masking"]));
+    v.push(filter_menu());
+    v.push(mask_menu(&["Change Color", "Disable Masking"]));
     v.push(grey("Mask Cells by Condition..."));
     v.push(sep());
-    v.push(grey_sub("Sort Column", &order));
+    v.push(sub(
+        "Sort Column",
+        vec![
+            item(order[0], Cmd::SortColumns { descending: false }),
+            item(order[1], Cmd::SortColumns { descending: true }),
+            grey(order[2]),
+        ],
+    ));
     v.push(sub(
         "Sort Worksheet",
-        vec![item("Ascending", Cmd::SortAscending), item("Descending", Cmd::SortDescending), grey("Custom...")],
+        vec![
+            item("Ascending", Cmd::SortAscending),
+            item("Descending", Cmd::SortDescending),
+            item("Custom...", Cmd::SortCustom { range: false }),
+        ],
     ));
-    v.extend(greys(&["Sort Columns by Label...", "Reverse Order", "-"]));
+    v.push(item("Sort Columns by Label...", Cmd::SortByLabel));
+    v.push(item("Reverse Order", Cmd::ReverseOrder));
+    v.push(sep());
     v.push(item("Normalize...", Cmd::Analyze(AnalysisKind::Normalize)));
     v.push(grey("Frequency Count..."));
     v.push(item("Statistics on Columns...", Cmd::Analyze(AnalysisKind::Statistics)));
     v.push(sep());
-    v.push(grey_sub("Hide/Unhide Columns", &["Hide Selected", "Unhide All"]));
-    v.push(grey_sub("Move Columns", &["To First", "Left", "Right", "To Last"]));
-    v.extend(greys(&["Swap Columns...", "Column Width...", "-", "Slide Show of Dependent Graphs"]));
+    v.push(hide_menu());
+    v.push(sub(
+        "Move Columns",
+        vec![
+            item("To First", Cmd::MoveColumns(MoveTo::First)),
+            item("Left", Cmd::MoveColumns(MoveTo::Left)),
+            item("Right", Cmd::MoveColumns(MoveTo::Right)),
+            item("To Last", Cmd::MoveColumns(MoveTo::Last)),
+        ],
+    ));
+    v.push(grey("Swap Columns..."));
+    v.push(item("Column Width...", Cmd::ColumnProperties));
+    v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
     v.extend(greys(&["Add or Update Sparklines...", "-", "Format Cells..."]));
     v.push(item("Properties...", Cmd::ColumnProperties));
     v
@@ -1259,7 +1366,9 @@ pub fn cell_menu() -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-    v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "-", "Insert", "Delete"]));
+    v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "-"]));
+    v.push(item("Insert", Cmd::InsertCells));
+    v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
     v.extend(greys(&["Remove Links", "-", "Set as Begin", "Set as End", "-"]));
     v.push(grey_sub("Insert Arrow", &["Arrow", "Double Arrow"]));
@@ -1272,7 +1381,7 @@ pub fn cell_menu() -> Vec<Entry> {
         "-",
         "Format Cells...",
     ]));
-    v.push(grey_sub("Mask", &["Apply", "Remove", "Swap"]));
+    v.push(mask_menu(&[]));
     v.push(grey_sub("Set Data Style", &["Default"]));
     v
 }
@@ -1281,7 +1390,8 @@ pub fn cell_menu() -> Vec<Entry> {
 pub fn row_menu() -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut), keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain))];
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-    v.extend(greys(&["Insert", "Delete"]));
+    v.push(item("Insert", Cmd::InsertCells));
+    v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
     v.extend(greys(&["Insert Graph...", "Format Cells..."]));
     v
@@ -1334,6 +1444,7 @@ pub fn graph_plot_menu(
                 change("Line + Symbol", PlotKind::LineSymbol),
                 change("Column", PlotKind::Column),
                 change("Area", PlotKind::Area),
+                change("Stacked Area", PlotKind::StackedArea),
             ],
         ),
         grey("Change X"),
@@ -1681,17 +1792,29 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::DeleteColumns(some()?)
         }
+        Cmd::MoveColumns(to) => {
+            book?;
+            Action::MoveColumns { columns: some()?, to: *to }
+        }
+        Cmd::HideColumns => {
+            book?;
+            Action::HideColumns(some()?)
+        }
+        Cmd::UnhideColumns => Action::UnhideColumns(book?),
         Cmd::Copy(kind) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::Cells { book, op: CellOp::Copy(*kind) }
         }
-        Cmd::Cut | Cmd::Paste | Cmd::Clear => {
+        Cmd::Cut | Cmd::Paste | Cmd::Clear | Cmd::InsertCells | Cmd::DeleteCells | Cmd::Mask(_) => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             let op = match cmd {
                 Cmd::Cut => CellOp::Cut,
                 Cmd::Paste => CellOp::Paste,
+                Cmd::InsertCells => CellOp::Insert,
+                Cmd::Mask(m) => CellOp::Mask(*m),
+                Cmd::DeleteCells => CellOp::Delete,
                 _ => CellOp::Clear,
             };
             Action::Cells { book, op }
@@ -1727,7 +1850,23 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::SortColumns { columns: some()?, descending: *descending }
         }
-        Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec() },
+        Cmd::SortCustom { range } => {
+            let book = book?;
+            let columns = if *range { some()? } else { Vec::new() };
+            Action::SortCustom { book, columns }
+        }
+        Cmd::SortByLabel => Action::SortByLabel(book?),
+        Cmd::SetCategorical => {
+            book?;
+            Action::SetCategorical(some()?)
+        }
+        Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
+        Cmd::ReverseOrder => {
+            book?;
+            Action::ReverseColumns(some()?)
+        }
+        Cmd::PlotYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: false },
+        Cmd::PlotXYError => Action::PlotYError { book: book?, columns: c.selected.to_vec(), x: true },
         Cmd::PlotPanels { rows, cols } => {
             Action::PlotPanels { book: book?, columns: c.selected.to_vec(), rows: *rows, cols: *cols }
         }
@@ -1737,6 +1876,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::UpdateLegend { layer: c.layer } }
         }
         Cmd::FilterRows => Action::FilterRows(book?),
+        Cmd::RowFilterDialog => Action::RowFilterDialog { book: book?, column: c.selected.first().copied() },
+        Cmd::ToggleRowFilter => Action::ToggleRowFilter(book?),
+        Cmd::ReapplyRowFilter => Action::ReapplyRowFilter(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {
@@ -1764,6 +1906,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::GraphEdit(op) => Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Rescale => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
+        }
+        Cmd::ExchangeAxes => {
+            Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ExchangeAxes { layer: c.layer } }
         }
         Cmd::ReconstructLegend => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ReconstructLegend { layer: c.layer } }

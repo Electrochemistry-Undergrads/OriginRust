@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="771.84pt" height="590.76pt" viewBox="0 0 771.84 590.76">
+<rect x="0" y="0" width="771.84" height="590.76" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+<path d="M195.691 439.71A1 1 0 1 0 197.691 439.71A1 1 0 1 0 195.691 439.71Z" fill="#0000FF"/>
+<path d="M250.77 333.624A4.375 4.375 0 1 0 259.52 333.624A4.375 4.375 0 1 0 250.77 333.624Z" fill="#00FF80"/>
+<path d="M311.474 386.667A2.125 2.125 0 1 0 315.724 386.667A2.125 2.125 0 1 0 311.474 386.667Z" fill="#0080FF"/>
+<path d="M362.053 227.539A10 10 0 1 0 382.053 227.539A10 10 0 1 0 362.053 227.539Z" fill="#FF0000"/>
+<path d="M427.257 280.581A3.25 3.25 0 1 0 433.757 280.581A3.25 3.25 0 1 0 427.257 280.581Z" fill="#00FFFF"/>
+<path d="M482.336 174.496A6.625 6.625 0 1 0 495.586 174.496A6.625 6.625 0 1 0 482.336 174.496Z" fill="#80FF00"/>
+<path d="M538.54 227.539A8.875 8.875 0 1 0 556.29 227.539A8.875 8.875 0 1 0 538.54 227.539Z" fill="#FF8000"/>
+<path d="M600.369 121.453A5.5 5.5 0 1 0 611.369 121.453A5.5 5.5 0 1 0 600.369 121.453Z" fill="#00FF00"/>
+</g>
+<g class="overlay">
+<path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 68.41L138.237 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 492.753L138.237 501.753M255.145 492.753L255.145 501.753M372.053 492.753L372.053 501.753M488.961 492.753L488.961 501.753M605.869 492.753L605.869 501.753M196.691 492.753L196.691 497.253M313.599 492.753L313.599 497.253M430.507 492.753L430.507 497.253M547.415 492.753L547.415 497.253M664.323 492.753L664.323 497.253" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 439.71L129.237 439.71M138.237 333.624L129.237 333.624M138.237 227.539L129.237 227.539M138.237 121.453L129.237 121.453M138.237 492.753L133.737 492.753M138.237 386.667L133.737 386.667M138.237 280.581L133.737 280.581M138.237 174.496L133.737 174.496M138.237 68.41L133.737 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="138.237" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0</text>
+<text x="255.145" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">2</text>
+<text x="372.053" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">4</text>
+<text x="488.961" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">6</text>
+<text x="605.869" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">8</text>
+<text x="122.937" y="444.3" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="122.937" y="338.214" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="122.937" y="232.129" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
+<text x="122.937" y="126.043" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">8</text>
+<text x="401.28" y="553.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">A</text>
+<text x="95.217" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 95.217 280.581)">B</text>
+<rect x="557.623" y="86.01" width="89.1" height="46.2" fill="none" stroke="#000000" stroke-width="0.75"/>
+<path d="M586.123 109.11A4.5 4.5 0 1 0 595.123 109.11A4.5 4.5 0 1 0 586.123 109.11Z" fill="#000000"/>
+<text x="625.823" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">B</text>
+</g>
+</g>
+</svg>

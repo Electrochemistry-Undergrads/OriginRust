@@ -2,7 +2,7 @@
 //! organizes them.
 
 use crate::column::{Column, ColumnData, Designation};
-use crate::graph::{Graph, LegendScope, Plot};
+use crate::graph::{ErrorStyle, Graph, LegendScope, Plot};
 use crate::ids::{ColumnId, WindowId};
 use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
 use crate::template::{Template, right_y_layer};
@@ -135,7 +135,7 @@ impl Project {
         }
     }
 
-    fn fresh_id(&mut self) -> u64 {
+    pub(crate) fn fresh_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         id
@@ -357,7 +357,26 @@ impl Project {
         let index = sheet.column_index(y).expect("column is in this sheet");
         let x = sheet.x_for(index).map(|c| c.id);
         let y_error = sheet.y_error_for(index).map(|c| c.id);
-        self.add_plot_xy(graph, layer, x, y, y_error)
+        let x_error = sheet.x_error_for(index).map(|c| c.id);
+        self.add_plot_xy(graph, layer, x, y, y_error)?;
+        if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.plots.last_mut()) {
+            p.x_error = x_error;
+        }
+        Ok(())
+    }
+
+    /// The Z column that belongs to the Y column `y`: a Z column after it, before the next X or Y
+    /// column.
+    pub fn z_column_for(&self, y: ColumnId) -> Option<ColumnId> {
+        let (_, sheet, _) = self.locate(y)?;
+        let index = sheet.column_index(y)?;
+        sheet
+            .columns
+            .iter()
+            .skip(index + 1)
+            .take_while(|c| !matches!(c.designation, Designation::X | Designation::Y))
+            .find(|c| c.designation == Designation::Z)
+            .map(|c| c.id)
     }
 
     /// Adds a plot with explicitly chosen X and error columns.
@@ -383,6 +402,12 @@ impl Project {
             visible: true,
             auto_color: true,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         });
         l.recolor_automatic();
         Ok(())
@@ -464,8 +489,32 @@ impl Project {
         }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
-        for y in ys {
-            self.add_plot(graph, 0, *y)?;
+        if matches!(template, Template::FloatingColumn | Template::FillArea) {
+            // Columns go in pairs: the first of a pair is the lower end of the bars (or the lower
+            // edge of the filled area), the second the upper end (and names the plot, as in
+            // Origin). A last odd column is left out.
+            for pair in ys.as_chunks::<2>().0 {
+                self.add_plot(graph, 0, pair[1])?;
+                if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
+                    p.y_base = Some(pair[0]);
+                }
+            }
+        } else {
+            for y in ys {
+                self.add_plot(graph, 0, *y)?;
+                // Bubble and colour mapped plots take their third variable from the Z column.
+                let z = self.z_column_for(*y);
+                let (size, color) = match template {
+                    Template::Bubble => (true, false),
+                    Template::ColorMapped => (false, true),
+                    Template::BubbleColorMapped => (true, true),
+                    _ => (false, false),
+                };
+                if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
+                    p.size_from = z.filter(|_| size);
+                    p.color_from = z.filter(|_| color);
+                }
+            }
         }
         if let Some(g) = self.graph_mut(graph) {
             // A new graph has no colors chosen by the user, so spread the palette over all plots.

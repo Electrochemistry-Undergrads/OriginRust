@@ -17,8 +17,7 @@ pub struct ColumnPropsDialog {
     comments: String,
     designation: Designation,
     format: NumberFormat,
-    /// Origin's default column width in characters. The grid draws every column at one width,
-    /// so the box is shown grey.
+    /// The width in characters the worksheet shows the column at (8 is Origin's default).
     width: u32,
     apply_to_right: bool,
     problem: Option<String>,
@@ -32,6 +31,8 @@ pub fn designation_label(d: Designation) -> &'static str {
         Designation::YError => "Y error",
         Designation::XError => "X error",
         Designation::Label => "Label",
+        Designation::Group => "Group",
+        Designation::Subject => "Subject",
         Designation::Disregard => "Disregard",
     }
 }
@@ -53,7 +54,7 @@ impl ColumnPropsDialog {
             comments: c.comments.clone(),
             designation: c.designation,
             format: c.format,
-            width: 8,
+            width: u32::from(c.shown_width()),
             apply_to_right: false,
             problem: None,
         })
@@ -84,6 +85,7 @@ impl ColumnPropsDialog {
             || self.comments != c.comments
             || self.designation != c.designation
             || self.format != c.format
+            || self.width != u32::from(c.shown_width())
     }
 
     /// The title: the window and sheet that hold the column.
@@ -158,8 +160,7 @@ impl ColumnPropsDialog {
                         ui.end_row();
                         format_rows(ui, &mut self.format);
                         ui.label("Column Width");
-                        ui.add_enabled(false, DragValue::new(&mut self.width).range(1..=255))
-                            .on_disabled_hover_text("Every column of the grid has the same width for now");
+                        ui.add(DragValue::new(&mut self.width).range(1..=255));
                         ui.end_row();
                     });
                     ui.checkbox(&mut self.apply_to_right, "Apply to all columns to the right")
@@ -217,6 +218,7 @@ impl ColumnPropsDialog {
         let id = self.column;
         let (long_name, units, comments) = (self.long_name.clone(), self.units.clone(), self.comments.clone());
         let (designation, format, to_right) = (self.designation, self.format, self.apply_to_right);
+        let width = (self.width as u16 != sheaf_core::column::DEFAULT_WIDTH).then_some(self.width as u16);
         doc.apply("Change column properties", move |p| {
             if let Some(c) = p.column_mut(id) {
                 c.short_name = name;
@@ -225,6 +227,7 @@ impl ColumnPropsDialog {
                 c.comments = comments;
                 c.designation = designation;
                 c.format = format;
+                c.width = width;
             }
             if to_right {
                 let right: Vec<ColumnId> = p
@@ -238,6 +241,7 @@ impl ColumnPropsDialog {
                     if let Some(c) = p.column_mut(other) {
                         c.designation = designation;
                         c.format = format;
+                        c.width = width;
                     }
                 }
             }

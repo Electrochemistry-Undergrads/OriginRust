@@ -29,6 +29,8 @@ use crate::worksheet::Worksheet;
 use serde::{Deserialize, Serialize};
 use sheaf_calc as calc;
 use sheaf_expr::Expr;
+use std::borrow::Cow;
+use std::cmp::Ordering;
 
 pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection, PeakFilter,
@@ -741,7 +743,7 @@ struct Input<'a> {
     x_units: String,
     /// X values, as long as `y` (row numbers when the sheet has no X column).
     x: Vec<f64>,
-    y: &'a [f64],
+    y: Cow<'a, [f64]>,
     /// First and last row of the range, 0-based inclusive.
     first: usize,
     last: usize,
@@ -1149,7 +1151,7 @@ impl Project {
                 }
             })?;
             let c = &sheet.columns[index];
-            let y = c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
+            let y = sheet.values_of(c).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
             if y.is_empty() {
                 return Err(AnalysisError::Empty(c.short_name.clone()));
             }
@@ -1842,9 +1844,11 @@ impl Project {
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
         for c in &mut ws.columns {
             if columns.is_empty() || columns.contains(&c.id) {
-                c.data = take_rows(&c.data, &order, n);
+                c.reorder_rows(&order, n);
             }
         }
+        // The rows moved, so a filter is applied again to the new order.
+        let _ = self.reapply_row_filter(book, sheet);
         Ok(())
     }
 
@@ -1866,9 +1870,11 @@ impl Project {
         for c in &mut ws.columns {
             if columns.contains(&c.id) {
                 let order = sort_order(&c.data, n, descending);
-                c.data = take_rows(&c.data, &order, n);
+                c.reorder_rows(&order, n);
             }
         }
+        // The rows moved, so a filter is applied again to the new order.
+        let _ = self.reapply_row_filter(book, sheet);
         Ok(())
     }
 
@@ -1907,7 +1913,7 @@ impl Project {
             let source = self.workbook(book).expect("checked above").sheets[sheet].columns.clone();
             for mut c in source {
                 c.id = self.new_column_id();
-                c.data = take_rows(&c.data, &keep, n);
+                c.reorder_rows(&keep, n);
                 c.formula = None;
                 c.recalc = crate::column::RecalcMode::None;
                 c.formula_state = crate::column::FormulaState::Current;
@@ -1920,54 +1926,55 @@ impl Project {
         } else {
             let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
             for c in &mut ws.columns {
-                c.data = take_rows(&c.data, &keep, n);
+                c.reorder_rows(&keep, n);
             }
             Ok((kept, sheet))
         }
     }
 }
 
-/// The row order that sorts `n` rows by one column: missing keys last, equal keys in their order,
-/// text without regard to case.
-fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..n).collect();
+/// How two rows compare by one key column: a missing value counts as smaller than every value, as
+/// in Origin (measured with `wsort`), so it comes first in an ascending sort and last in a
+/// descending one; text compares without regard to case and the empty text is the smallest.
+pub(crate) fn row_comparator(
+    key: &ColumnData,
+    n: usize,
+    descending: bool,
+) -> Box<dyn Fn(usize, usize) -> Ordering + '_> {
+    let direct = move |o: Ordering| if descending { o.reverse() } else { o };
     match key {
         ColumnData::Numeric(v) | ColumnData::Mixed { numbers: v, .. } => {
-            let value = |i: usize| v.get(i).copied().unwrap_or(f64::NAN);
-            order.sort_by(|a, b| {
-                let (x, y) = (value(*a), value(*b));
-                match (x.is_nan(), y.is_nan()) {
-                    (true, true) => std::cmp::Ordering::Equal,
-                    (true, false) => std::cmp::Ordering::Greater,
-                    (false, true) => std::cmp::Ordering::Less,
-                    (false, false) => {
-                        let o = x.partial_cmp(&y).expect("neither is NaN");
-                        if descending { o.reverse() } else { o }
-                    }
-                }
-            });
+            let value = move |i: usize| v.get(i).copied().unwrap_or(f64::NAN);
+            Box::new(move |a, b| {
+                let (x, y) = (value(a), value(b));
+                direct(match (x.is_nan(), y.is_nan()) {
+                    (true, true) => Ordering::Equal,
+                    (true, false) => Ordering::Less,
+                    (false, true) => Ordering::Greater,
+                    (false, false) => x.partial_cmp(&y).expect("neither is NaN"),
+                })
+            })
         }
         ColumnData::Text(v) => {
-            let value = |i: usize| v.get(i).map(|s| s.to_lowercase()).unwrap_or_default();
-            let keys: Vec<String> = (0..n).map(value).collect();
-            order.sort_by(|a, b| match (keys[*a].is_empty(), keys[*b].is_empty()) {
-                (true, true) => std::cmp::Ordering::Equal,
-                (true, false) => std::cmp::Ordering::Greater,
-                (false, true) => std::cmp::Ordering::Less,
-                (false, false) => {
-                    let o = keys[*a].cmp(&keys[*b]);
-                    if descending { o.reverse() } else { o }
-                }
-            });
+            let keys: Vec<String> = (0..n).map(|i| v.get(i).map(|s| s.to_lowercase()).unwrap_or_default()).collect();
+            Box::new(move |a, b| direct(keys[a].cmp(&keys[b])))
         }
     }
+}
+
+/// The row order that sorts `n` rows by one column. Equal keys keep their order (Origin's own
+/// order of equal keys is not stable, so it cannot be copied).
+pub(crate) fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..n).collect();
+    let cmp = row_comparator(key, n, descending);
+    order.sort_by(|a, b| cmp(*a, *b));
     order
 }
 
 /// The rows `order` of a column, in that order. A column shorter than the
 /// sheet (`rows` long) counts as padded with missing values; missing values
 /// at the end of the result are dropped again so that short columns stay short.
-fn take_rows(data: &ColumnData, order: &[usize], rows: usize) -> ColumnData {
+pub(crate) fn take_rows(data: &ColumnData, order: &[usize], rows: usize) -> ColumnData {
     debug_assert!(order.iter().all(|i| *i < rows));
     match data {
         ColumnData::Numeric(v) => {
@@ -2268,6 +2275,24 @@ mod tests {
     }
 
     #[test]
+    fn masked_cells_are_left_out_of_the_statistics() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let col = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 100.0])).unwrap();
+        let mean = |p: &mut Project| {
+            let r = p.analyze(&request(&[col], Tool::Statistics(StatisticsSpec::default()))).unwrap();
+            let t = r.table.unwrap();
+            let at = t.headers.iter().position(|h| h == "Mean").unwrap();
+            (t.rows[0].1[at], t.headers.iter().position(|h| h == "N").map(|i| t.rows[0].1[i]))
+        };
+        assert_eq!(mean(&mut p).0, 26.5);
+        p.column_mut(col).unwrap().mask.insert(3);
+        let (m, n) = mean(&mut p);
+        assert_eq!(m, 2.0);
+        assert!(n.is_none_or(|n| n == 3.0));
+    }
+
+    #[test]
     fn statistics_on_rows_add_columns_behind_the_last_chosen_column() {
         let mut p = Project::new();
         let book = p.add_workbook("");
@@ -2344,7 +2369,7 @@ mod tests {
     }
 
     #[test]
-    fn sort_keeps_rows_together_and_puts_missing_keys_last() {
+    fn sort_keeps_rows_together_and_treats_a_missing_key_as_the_smallest_value() {
         let mut p = Project::new();
         let book = p.add_workbook("");
         let key =
@@ -2359,17 +2384,22 @@ mod tests {
             .unwrap();
         let short = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![30.0, 0.0, 10.0])).unwrap();
         p.sort_sheet(book, 0, key, false).unwrap();
-        assert_eq!(p.column(tag).unwrap().text().unwrap(), ["a1", "a2", "b", "c", "n"]);
+        // Origin (wsort): a missing key is the smallest value, so it comes first when ascending.
+        assert_eq!(p.column(tag).unwrap().text().unwrap(), ["n", "a1", "a2", "b", "c"]);
         let k = p.numeric(key).unwrap();
-        assert_eq!(k[..4], [1.0, 1.0, 2.0, 3.0]);
-        assert!(k[4].is_nan());
+        assert!(k[0].is_nan());
+        assert_eq!(k[1..], [1.0, 1.0, 2.0, 3.0]);
         // The short column was padded with missing values for the sort; row "c" keeps its 30.
         let s = p.numeric(short).unwrap();
-        assert_eq!((s[0], s[3], s[4]), (10.0, 30.0, 0.0));
-        assert!(s[1].is_nan() && s[2].is_nan());
+        assert_eq!((s[0], s[1], s[4]), (0.0, 10.0, 30.0));
+        assert!(s[2].is_nan() && s[3].is_nan());
         p.sort_sheet(book, 0, key, true).unwrap();
-        assert_eq!(p.column(tag).unwrap().text().unwrap(), ["c", "b", "a1", "a2", "n"]);
-        // Sorting by a text column ignores case and puts empty cells last.
+        assert_eq!(
+            p.column(tag).unwrap().text().unwrap(),
+            ["c", "b", "a1", "a2", "n"],
+            "missing is last when descending"
+        );
+        // Sorting by a text column ignores case; an empty cell is the smallest.
         p.sort_sheet(book, 0, tag, false).unwrap();
         assert_eq!(p.column(tag).unwrap().text().unwrap(), ["a1", "a2", "b", "c", "n"]);
         assert_eq!(p.sort_sheet(book, 3, key, false), Err(AnalysisError::NoSuchSheet));

@@ -32,9 +32,41 @@ pub struct ResolvedAxis {
     /// `max` are still the smaller and larger value, but the axis runs from
     /// `max` to `min` (values decrease along the axis).
     pub reversed: bool,
+    /// The break of the axis, when it has one (see [`AxisBreak`]).
+    pub gap: Option<ResolvedBreak>,
+    /// Labels of the minor ticks, one per entry of `minor`; empty unless the axis writes them.
+    pub minor_labels: Vec<String>,
+}
+
+/// A break of an axis with its place on the axis, positions as fractions of the axis length from the
+/// low end (before any reversal).
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ResolvedBreak {
+    /// First and last value that is cut out.
+    pub from: f64,
+    pub to: f64,
+    /// Unit positions where the part before the break ends and the part after it starts.
+    pub u_from: f64,
+    pub u_to: f64,
+    /// The unit positions the same values would have without the break.
+    plain_from: f64,
+    plain_to: f64,
+}
+
+impl ResolvedBreak {
+    /// The gap on the page as `(low, high)` fractions of the length, in the direction the axis is drawn.
+    pub fn span(&self, reversed: bool) -> (f64, f64) {
+        if reversed { (1.0 - self.u_to, 1.0 - self.u_from) } else { (self.u_from, self.u_to) }
+    }
 }
 
 impl ResolvedAxis {
+    /// The ticks that carry a label and the label: the major ticks, then the minor ones when the axis
+    /// writes their labels.
+    pub fn labelled(&self) -> impl Iterator<Item = (f64, &String)> {
+        self.major.iter().copied().zip(&self.labels).chain(self.minor.iter().copied().zip(&self.minor_labels))
+    }
+
     /// Position of `v` along the axis: 0 at `min`, 1 at `max`. Linear or
     /// logarithmic according to the scale. Values that cannot be placed
     /// (non-positive on a log axis) give NaN.
@@ -44,6 +76,23 @@ impl ResolvedAxis {
     }
 
     fn to_unit_ascending(&self, v: f64) -> f64 {
+        let u = self.plain_unit(v);
+        match &self.gap {
+            Some(b) if u.is_finite() => {
+                if u <= b.plain_from + 1e-12 {
+                    u * b.u_from / b.plain_from
+                } else if u >= b.plain_to - 1e-12 {
+                    b.u_to + (u - b.plain_to) * (1.0 - b.u_to) / (1.0 - b.plain_to)
+                } else {
+                    f64::NAN
+                }
+            }
+            _ => u,
+        }
+    }
+
+    /// Position along the axis without the break.
+    fn plain_unit(&self, v: f64) -> f64 {
         match self.scale {
             ScaleKind::Linear => (v - self.min) / (self.max - self.min),
             ScaleKind::Log10 => {
@@ -53,17 +102,31 @@ impl ResolvedAxis {
                     f64::NAN
                 }
             }
+            other => {
+                let (a, b) = (other.forward(self.min), other.forward(self.max));
+                (other.forward(v) - a) / (b - a)
+            }
         }
     }
 
     /// Inverse of [`ResolvedAxis::to_unit`].
     pub fn from_unit(&self, u: f64) -> f64 {
         let u = if self.reversed { 1.0 - u } else { u };
+        let u = match &self.gap {
+            Some(b) if u <= b.u_from => u * b.plain_from / b.u_from,
+            Some(b) if u >= b.u_to => b.plain_to + (u - b.u_to) * (1.0 - b.plain_to) / (1.0 - b.u_to),
+            Some(b) => b.plain_from,
+            None => u,
+        };
         match self.scale {
             ScaleKind::Linear => self.min + u * (self.max - self.min),
             ScaleKind::Log10 => {
                 let (a, b) = (self.min.log10(), self.max.log10());
                 10f64.powf(a + u * (b - a))
+            }
+            other => {
+                let (a, b) = (other.forward(self.min), other.forward(self.max));
+                other.inverse(a + u * (b - a))
             }
         }
     }
@@ -120,7 +183,7 @@ fn clean_d(v: f64, date: bool) -> f64 {
 }
 
 /// Rounds to 12 significant digits to remove floating-point noise.
-fn clean(v: f64) -> f64 {
+pub(crate) fn clean(v: f64) -> f64 {
     if v == 0.0 || !v.is_finite() {
         return v;
     }
@@ -152,20 +215,135 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
     // Both limits fixed with the lower one above the upper one: a reversed axis.
     // Resolve it with the limits swapped and mark it.
     if let (Some(a), Some(b)) = (axis.min, axis.max) {
-        let valid = |v: f64| v.is_finite() && (axis.scale == ScaleKind::Linear || v > 0.0);
+        let valid = |v: f64| axis.scale.accepts(v);
         if valid(a) && valid(b) && a > b {
             let mut swapped = axis.clone();
             swapped.min = Some(b);
             swapped.max = Some(a);
+            swapped.reverse = false;
             let mut r = resolve_axis_edges(&swapped, data_min_max, free);
-            r.reversed = true;
+            r.reversed = !axis.reverse;
             return r;
         }
     }
-    match axis.scale {
+    let mut r = match axis.scale {
         ScaleKind::Linear => resolve_linear(axis, data_min_max, free),
         ScaleKind::Log10 => resolve_log(axis, data_min_max),
+        _ => crate::ticks_scales::resolve_other(axis, data_min_max),
+    };
+    r.reversed ^= axis.reverse;
+    apply_break(axis, &mut r);
+    add_special_ticks(axis, &mut r);
+    apply_label_formula(axis, &mut r);
+    if !axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty() {
+        for label in r.labels.iter_mut().filter(|l| !l.is_empty()) {
+            *label = format!("{}{label}{}", axis.tick_prefix, axis.tick_suffix);
+        }
     }
+    r
+}
+
+/// Adds the special ticks of `axis` that lie inside the limits (and outside a break), with their labels.
+fn add_special_ticks(axis: &Axis, r: &mut ResolvedAxis) {
+    let eps = 1e-9 * (r.max - r.min).abs();
+    for t in &axis.special_ticks {
+        let inside = t.value.is_finite() && t.value >= r.min - eps && t.value <= r.max + eps;
+        let cut = r.gap.is_some_and(|g| t.value > g.from + eps && t.value < g.to - eps);
+        if !inside || cut || r.major.iter().any(|v| (v - t.value).abs() <= eps) {
+            continue;
+        }
+        let label =
+            if t.label.is_empty() { linear_labels(axis, &[t.value], r.step.abs())[0].clone() } else { t.label.clone() };
+        // A tick that was a minor tick becomes a major one.
+        if let Some(i) = r.minor.iter().position(|v| (v - t.value).abs() <= eps) {
+            r.minor.remove(i);
+        }
+        r.major.push(t.value);
+        r.labels.push(label);
+    }
+}
+
+/// Writes the tick labels from the formula of `axis` (an expression of `x`, the tick value), and the
+/// labels of the minor ticks when the axis has them. Special ticks with their own text keep it.
+fn apply_label_formula(axis: &Axis, r: &mut ResolvedAxis) {
+    let formula = axis.tick_label_formula.trim();
+    let eps = 1e-9 * (r.max - r.min).abs();
+    let own: Vec<bool> = r
+        .major
+        .iter()
+        .map(|v| axis.special_ticks.iter().any(|t| !t.label.is_empty() && (t.value - v).abs() <= eps))
+        .collect();
+    let spacing = |values: &[f64]| {
+        let mut v = values.to_vec();
+        v.sort_by(f64::total_cmp);
+        v.windows(2).map(|w| w[1] - w[0]).filter(|d| *d > 0.0).fold(f64::INFINITY, f64::min)
+    };
+    let write = |values: &[f64]| -> Vec<String> {
+        if formula.is_empty() {
+            return Vec::new();
+        }
+        let mapped: Vec<f64> =
+            values.iter().map(|v| sheaf_core::scales::eval_tick_formula(formula, *v).unwrap_or(f64::NAN)).collect();
+        let step = spacing(&mapped);
+        let step = if step.is_finite() { step } else { 1.0 };
+        let good: Vec<f64> = mapped.iter().map(|v| if v.is_finite() { *v } else { 0.0 }).collect();
+        linear_labels(axis, &good, step)
+            .into_iter()
+            .zip(&mapped)
+            .map(|(l, m)| if m.is_finite() { l } else { String::new() })
+            .collect()
+    };
+    for (i, l) in write(&r.major).into_iter().enumerate() {
+        if !own[i] {
+            r.labels[i] = l;
+        }
+    }
+    if axis.minor_tick_labels && !r.minor.is_empty() {
+        r.minor_labels = if formula.is_empty() {
+            let gap = r.step.abs() / f64::from(axis.minor_ticks.max(1) + 1);
+            linear_labels(axis, &r.minor, if gap.is_finite() && gap > 0.0 { gap } else { 1.0 })
+        } else {
+            write(&r.minor)
+        };
+    }
+}
+
+/// Cuts the break of `axis` out of the resolved axis: the ticks inside it go, the ticks after it can
+/// follow their own step, and positions are squeezed to leave the gap. A break that does not lie
+/// inside the limits is ignored.
+fn apply_break(axis: &Axis, r: &mut ResolvedAxis) {
+    let Some(b) = axis.axis_break.filter(|b| b.from.is_finite() && b.to.is_finite() && b.from < b.to) else {
+        return;
+    };
+    if !(r.min < b.from && b.to < r.max) {
+        return;
+    }
+    let plain = ResolvedAxis { gap: None, ..r.clone() };
+    let (plain_from, plain_to) = (plain.plain_unit(b.from), plain.plain_unit(b.to));
+    let pos = (b.position_pct / 100.0).clamp(0.05, 0.95);
+    let gap = (b.gap_pct / 100.0).clamp(0.0, 0.3);
+    let (u_from, u_to) = (pos - gap / 2.0, pos + gap / 2.0);
+    if !(plain_from.is_finite() && plain_to.is_finite() && plain_from > 0.0 && plain_to < 1.0) {
+        return;
+    }
+    let eps = 1e-9 * (r.max - r.min);
+    let inside = |v: f64| v > b.from + eps && v < b.to - eps;
+    let keep: Vec<bool> = r.major.iter().map(|v| !inside(*v)).collect();
+    let mut labels: Vec<String> = r.labels.iter().zip(&keep).filter(|(_, k)| **k).map(|(l, _)| l.clone()).collect();
+    let mut major: Vec<f64> = r.major.iter().zip(&keep).filter(|(_, k)| **k).map(|(v, _)| *v).collect();
+    if let Some(step) = b.step_after.filter(|s| s.is_finite() && *s > 0.0 && r.scale == ScaleKind::Linear) {
+        let n = major.iter().take_while(|v| **v < b.to - eps).count();
+        major.truncate(n);
+        labels.truncate(n);
+        let after = linear_major(b.to, r.max, step, false).0;
+        let after_labels = linear_labels(axis, &after, step);
+        major.extend(after);
+        labels.extend(after_labels);
+    }
+    r.minor.retain(|v| !inside(*v));
+    r.major = major;
+    r.labels = labels;
+    r.gap = Some(ResolvedBreak { from: b.from, to: b.to, u_from, u_to, plain_from, plain_to });
 }
 
 /// The most ticks a category axis gets with one tick per row; beyond that its step follows the
@@ -286,13 +464,32 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>, free: (bool, bool)) -> 
         step = fixed_step.unwrap_or_else(|| auto_step(max - min));
     }
 
-    let (major, step) = linear_major(min, max, step, date);
-    let minor = linear_minor(min, max, step, axis.minor_ticks);
+    let (mut major, step) = linear_major(min, max, step, date);
+    let mut minor = linear_minor(min, max, step, axis.minor_ticks);
+    if let Some(anchor) = axis.first_tick.filter(|a| a.is_finite() && !date) {
+        // Ticks at the anchor and whole steps from it: the multiples of the step, shifted.
+        let shifted = |v: &mut Vec<f64>| v.iter_mut().for_each(|x| *x = clean(*x + anchor));
+        (major, _) = linear_major(min - anchor, max - anchor, step, false);
+        shifted(&mut major);
+        minor = linear_minor(min - anchor, max - anchor, step, axis.minor_ticks);
+        shifted(&mut minor);
+    }
     let labels = linear_labels(axis, &major, step);
-    ResolvedAxis { min, max, step, scale: ScaleKind::Linear, major, minor, labels, reversed: false }
+    ResolvedAxis {
+        min,
+        max,
+        step,
+        scale: ScaleKind::Linear,
+        major,
+        minor,
+        labels,
+        reversed: false,
+        gap: None,
+        minor_labels: Vec::new(),
+    }
 }
 
-fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64) {
+pub(crate) fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64) {
     let eps = 1e-9 * (max - min);
     loop {
         let k0 = ((min - eps) / step).ceil();
@@ -312,7 +509,7 @@ fn linear_major(min: f64, max: f64, mut step: f64, date: bool) -> (Vec<f64>, f64
     }
 }
 
-fn linear_minor(min: f64, max: f64, step: f64, per_gap: u32) -> Vec<f64> {
+pub(crate) fn linear_minor(min: f64, max: f64, step: f64, per_gap: u32) -> Vec<f64> {
     if per_gap == 0 {
         return Vec::new();
     }
@@ -383,6 +580,8 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
             minor: Vec::new(),
             labels,
             reversed: false,
+            gap: None,
+            minor_labels: Vec::new(),
         };
     }
     let e_min = (min.log10() - 1e-9).ceil() as i32;
@@ -408,7 +607,18 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
             }
         }
     }
-    ResolvedAxis { min, max, step: pow10(k), scale: ScaleKind::Log10, major, minor, labels, reversed: false }
+    ResolvedAxis {
+        min,
+        max,
+        step: pow10(k),
+        scale: ScaleKind::Log10,
+        major,
+        minor,
+        labels,
+        reversed: false,
+        gap: None,
+        minor_labels: Vec::new(),
+    }
 }
 
 /// The label of the major tick at `10^e` on a log axis. With the automatic format it is written as
@@ -432,7 +642,7 @@ fn signed(e: i32) -> String {
     if e < 0 { format!("{MINUS}{}", -e) } else { e.to_string() }
 }
 
-fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
+pub(crate) fn linear_labels(axis: &Axis, major: &[f64], step: f64) -> Vec<String> {
     let div = if axis.tick_label_divisor.is_finite() && axis.tick_label_divisor != 0.0 {
         axis.tick_label_divisor
     } else {
@@ -510,7 +720,7 @@ fn auto_decimals(step: f64) -> usize {
 }
 
 /// Fixed-decimal text with a real minus sign; negative zero prints as `0`.
-fn decimal(v: f64, d: usize) -> String {
+pub(crate) fn decimal(v: f64, d: usize) -> String {
     let s = format!("{:.*}", d, v.abs());
     let is_zero = s.bytes().all(|b| b == b'0' || b == b'.');
     if v < 0.0 && !is_zero { format!("{MINUS}{s}") } else { s }
@@ -518,7 +728,7 @@ fn decimal(v: f64, d: usize) -> String {
 
 /// `m×10^e` in markup form. `decimals` is the mantissa precision; `None`
 /// trims trailing zeros.
-fn scientific(v: f64, decimals: Option<usize>) -> String {
+pub(crate) fn scientific(v: f64, decimals: Option<usize>) -> String {
     if v == 0.0 {
         return decimal(0.0, decimals.unwrap_or(0));
     }
@@ -534,13 +744,19 @@ fn scientific(v: f64, decimals: Option<usize>) -> String {
     format!("{sign}{mant}{TIMES}10\\+({})", signed(exp))
 }
 
+/// A default axis for tests in other modules.
+#[cfg(test)]
+pub(crate) fn tests_axis() -> Axis {
+    tests::axis()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use sheaf_core::Color;
     use sheaf_core::graph::{Font, TickDirection};
 
-    fn axis() -> Axis {
+    pub(super) fn axis() -> Axis {
         Axis {
             scale: ScaleKind::Linear,
             min: None,
@@ -572,6 +788,16 @@ mod tests {
             tick_label_source: Default::default(),
             tick_label_angle_deg: 0.0,
             hide_end_label: false,
+            reverse: false,
+            first_tick: None,
+            axis_break: None,
+            special_ticks: Vec::new(),
+            tick_label_formula: String::new(),
+            minor_tick_labels: false,
+            tick_color: None,
+            tick_width_pt: None,
+            tick_prefix: String::new(),
+            tick_suffix: String::new(),
         }
     }
 
@@ -617,6 +843,32 @@ mod tests {
         }
         assert_eq!(nice_step(0.0), 1.0);
         assert_eq!(nice_step(f64::NAN), 1.0);
+    }
+
+    #[test]
+    fn first_tick_prefix_suffix_and_reverse() {
+        let mut a = axis();
+        a.min = Some(0.0);
+        a.max = Some(10.0);
+        a.major_step = Some(4.0);
+        a.first_tick = Some(1.0);
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.major, vec![1.0, 5.0, 9.0]);
+        a.first_tick = None;
+        a.tick_suffix = " V".into();
+        a.tick_prefix = "~".into();
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.labels, vec!["~0 V", "~4 V", "~8 V"]);
+        assert!(!r.reversed);
+        a.reverse = true;
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert!(r.reversed && (r.to_unit(0.0) - 1.0).abs() < 1e-12);
+        a.min = Some(10.0);
+        a.max = Some(0.0);
+        assert!(
+            !resolve_axis(&a, Some((0.0, 10.0))).reversed,
+            "a limit pair that is already reversed and the check box cancel"
+        );
     }
 
     #[test]
@@ -917,5 +1169,64 @@ mod tests {
         for v in [2.0, 3.5, 8.0] {
             assert!(close(r.from_unit(r.to_unit(v)), v));
         }
+    }
+}
+
+#[cfg(test)]
+mod feature_tests {
+    use super::*;
+    use sheaf_core::Color;
+    use sheaf_core::graph::{AxisBreak, SpecialTick};
+
+    fn fixed(min: f64, max: f64, step: f64) -> Axis {
+        Axis { min: Some(min), max: Some(max), major_step: Some(step), ..tests_axis() }
+    }
+
+    #[test]
+    fn a_break_cuts_out_a_region_and_squeezes_the_rest() {
+        let mut a = fixed(0.0, 100.0, 10.0);
+        a.axis_break = Some(AxisBreak { step_after: Some(20.0), ..AxisBreak::new(30.0, 70.0) });
+        let r = resolve_axis(&a, Some((0.0, 100.0)));
+        assert_eq!(r.major, vec![0.0, 10.0, 20.0, 30.0, 80.0, 100.0]);
+        // Ticks inside the break are gone; after it they follow the step after the break.
+        assert!(r.major.iter().all(|v| *v <= 30.0 || *v >= 70.0));
+        assert!(r.major.contains(&80.0) && !r.major.contains(&90.0));
+        assert_eq!(r.labels.len(), r.major.len());
+        // The gap sits at the middle of the axis (50 %, 2 % wide); the ends keep their place.
+        assert!((r.to_unit(0.0)).abs() < 1e-12 && (r.to_unit(100.0) - 1.0).abs() < 1e-12);
+        assert!((r.to_unit(30.0) - 0.49).abs() < 1e-12 && (r.to_unit(70.0) - 0.51).abs() < 1e-12);
+        assert!(r.to_unit(50.0).is_nan(), "values inside the break cannot be placed");
+        assert!((r.from_unit(r.to_unit(85.0)) - 85.0).abs() < 1e-9);
+        // A break outside the limits is ignored.
+        a.axis_break = Some(AxisBreak::new(200.0, 300.0));
+        assert!(resolve_axis(&a, Some((0.0, 100.0))).gap.is_none());
+    }
+
+    #[test]
+    fn special_ticks_the_label_formula_and_minor_labels() {
+        let mut a = fixed(0.0, 10.0, 5.0);
+        a.special_ticks = vec![
+            SpecialTick { value: 2.5, label: "low".into() },
+            SpecialTick { value: 7.0, label: String::new() },
+            SpecialTick { value: 50.0, label: "outside".into() },
+        ];
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.major, vec![0.0, 5.0, 10.0, 2.5, 7.0]);
+        assert_eq!(r.labels, ["0", "5", "10", "low", "7"]);
+        a.special_ticks.clear();
+        a.tick_label_formula = "x*100".into();
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.labels, ["0", "500", "1000"]);
+        a.tick_label_formula.clear();
+        a.minor_tick_labels = true;
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert_eq!(r.minor, vec![2.5, 7.5]);
+        assert_eq!(r.minor_labels, ["2.5", "7.5"]);
+        assert_eq!(r.labelled().count(), 5);
+        // A formula that does not parse leaves the labels empty rather than wrong.
+        a.tick_label_formula = "x*".into();
+        let r = resolve_axis(&a, Some((0.0, 10.0)));
+        assert!(r.labels.iter().all(String::is_empty));
+        let _ = Color::BLACK;
     }
 }

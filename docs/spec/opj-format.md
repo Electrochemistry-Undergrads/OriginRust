@@ -473,6 +473,16 @@ text), and internal objects whose names start with an underscore or that have an
 `\p89(...)` wraps text at 89 percent size; the reader drops that wrapper and keeps `\b(...)`,
 `\i(...)`, `\+(...)`, `\-(...)` and `\g(...)`. A text of several lines is separated by CR LF.
 
+**Where a text is drawn [obs, 2026-11-13].** Origin turns a text object about the top-left corner of
+its unturned box, and the stored rectangle has that corner as its own top-left corner, with width
+and height swapped for a quarter turn. Measured on the owner's XRD figure (`AllDopantsXRD` in
+"XRD of all dopants for Pittcon"): the label `111` at 90 degrees is stored at x 1729..1897, y
+946..1187, and Origin draws it at the same x but from y 667 up to 932, ending at the rectangle's top;
+the upright axis title is stored at x 2735..4112 and drawn from x 328 pt, the rectangle's left edge.
+Only 0 and 90 degrees were seen; 180 and 270 are assumed to follow the same rule. An object whose
+rectangle lies wholly outside the page is not drawn by Origin (the legends of that project sit right
+of the page), so the reader skips it.
+
 ### 10.5 Curve records
 
 The column records of a graph layer are its curves (515 bytes, the same size as worksheet columns).
@@ -534,10 +544,15 @@ A legend in a file with no legend object keeps Sheaf's template default (no fram
 Plots made by one plot command are a *group*: their curve records follow one another, the first with bit `0x20` in
 byte `0x06` and the others with bit `0x10` (10.5). Nothing else in the records or the layer header marks a group, so
 the group is the run that starts at a `0x20` curve and goes on while the following curves carry `0x10`; a curve with
-neither bit ends it, and a run of one curve is not a group. Origin gives the members the colours of its colour list
-(10.6) in order, black first, whatever the records hold (13.13), which is the group's colour increment "by one"; the
-model keeps the group as `Plot::group` (a number, equal for the members of one group in a layer), the reader sets
-the members' colours from the list, and the writer writes a run of neighbouring plots with the same group number as
+neither bit ends it, and a run of one curve is not a group. Origin gives the members the colours of a colour list in
+order, black first, which is the group's colour increment "by one". The list is not always the base list (10.6): the
+owner's XRD figure draws black, red, blue, dark cyan, magenta, dark yellow (positions 0, 1, 3, 12, 5, 7), and where a
+group's list is stored was not found. When Origin saves, each record holds the colour Origin drew (checked on that
+figure against Origin's own export), so the reader keeps a colour written in the record and uses the base list only
+for a record that says "automatic". (13.13: in a file Sheaf wrote, Origin ignored the record colours and drew the base
+list; that is about what Origin draws from a file it did not write, not about what a saved file holds.) The model
+keeps the group as `Plot::group` (a number, equal for the members of one group in a layer), the reader sets
+the members' colours as just described, and the writer writes a run of neighbouring plots with the same group number as
 a group again. Increment settings other than the colour (line style, symbol shape, width), "independent" mode and
 the Group Members list live in places that were not found (13.13); the line style, width and symbol of every member
 are read as stored.
@@ -546,8 +561,7 @@ are read as stored.
 
 Read: page size; for each layer the frame, both axis ranges, steps, scale (linear or log10), minor
 ticks, tick direction, tick label size and visibility, axis line width, the box; the titles of the
-bottom and left axes with their font size; free text (one label per line, centred on the object's
-rectangle with an estimated text width); a legend (present or not, and its position); plots with
+bottom and left axes with their font size; free text (one label per line, starting at the turned box's corner as in 10.4); a legend (present or not, and its position); plots with
 their columns, type, colours, line width and style, symbol shape and size; the gap between the bars
 of a layer's column plots (from its first column plot); error columns, which are attached to the
 plot they belong to. A Y error plot (487) is attached; other error kinds are not.
@@ -1262,3 +1276,55 @@ side by side bars for the first two (colours black, red, green as the list gives
 
 **Not done: X stack offsets and waterfall.** 13.12 found no field that Origin honours for an X offset of a curve; nothing new
 was tried, so these stay in warnings.
+
+### 13.14 X offsets, waterfalls, date tick labels, window places [orig]
+
+Code: `write/glayout.rs` (`layer_header`, `curve_record`, `axis_blocks`), `write/layout.rs` and `glayout.rs` (`window_header`),
+`write/graph.rs` (`waterfall_places`), reader `graph.rs`. Found on 2026-11-13 with `tools/origin-ref/opj-make-from-lines.ps1`
+(probe files from LabTalk lines, compared with a block-by-block diff) and by patching single bytes of files the writer made and loading
+them in Origin (the Origin property `get %C -sx` reads the X offset of the active plot). Files, dumps and pictures are in the
+git-ignored `re-workspace/scratch/T06/`; `cargo run -p sheaf-io --example opj_write_graph_features3 -- FOLDER` writes the test files
+(`gx-offsets`, `gx-dates`, `gx-places`).
+
+**X offsets of curves.** The earlier guess in 13.12 (f64 at `0x1B2`) was wrong. The curve record holds, as consecutive doubles,
+`0x1AA` X offset, `0x1BA` X factor, `0x1C2` Y factor and `0x1CA` Y offset (`get %C -sx`, `-sxs`, `-sys`, `-sy` returned the numbers put
+there; `0x1B2` is not reported by any of them and stays 0). Origin moves a curve along X by the offset only when bit `0x20` of
+the layer header byte `0xFD` is set in addition to `0x50` of 13.12 (`0x70`); `0x58` did not do it. Verified with `gx-offsets.opj`: curves
+written with X offsets 0, 2, 4 and Y offsets 0, 40, 80 were reported as written and the picture shows them moved. The reader takes the
+offsets from `0x1AA` and `0x1CA`. The layer range written covers the moved curves.
+
+**Waterfall.** Origin's own waterfall (template `WATERFAL`) is a pseudo-3D plot whose settings are in annotation objects that the
+template adds to the layer (a probe graph differed from a plain line graph only there; layer header and curve records were equal). That
+form was not written. Sheaf's waterfall (graphing 13.6) is written as what it draws: member k gets the offsets k times
+`dx_percent` and `dy_percent` of the axis span (X and Y, in axis units) and the axes cover the moved curves, with the 13.12 and X offset fields
+above. Positions of the curves match Sheaf's; the axes run along the whole layer instead of the smaller front frame, there is no Z axis,
+and the first curve is drawn first (Origin draws the last on top). Read back it is an individual stack. Verified: `gx-offsets.opj`
+(waterfall of 10 % and 15 %): Origin reported the offsets 0, 1.5, 3 and 0, 22.5, 45 for a span of 15 and 150. A waterfall on a logarithmic
+axis is not written (warning).
+
+**Date tick labels.** In a tick label block (2, and 4 for the second edge) the low nibble of byte `0x25` is the label type: 0 numbers,
+1 texts of a column, 2 tick-indexed texts, 3 dates (LabTalk `layer.x.label.type` 4), 4 months, 5 days of the week; for dates the low
+nibble of byte `0x26` holds Origin's format number minus 1 (`layer.x.label.numFormat`). Pictures of date data showed: 1 `M/D/YYYY`,
+2 long text (`Tuesday, October 27, 2026`), 3 `Oct 27`, 4 `10/27`, 5 `27`, 6 `Tue`, 7 `T`, 8 `2026`, 9 `26`, 10 `M/D/YYYY hh:mm`,
+11 `M/D/YYYY hh:mm:ss`, 12 `yymmdd`, 13 `yymmdd hh:mm`. The model's `DatePattern::Mdy` is number 1 and is written; the other patterns
+(day first, dashes, dots, ISO, `dd-MMM-yyyy`) are not in the list and are written as number 1 with a warning. Times of day alone were not
+found (type 6 and above showed no labels with date data). Verified with `gx-dates.opj`: `layer.x.label.type` 4, `numFormat` 1,
+and the picture shows `11/1/2025` style labels. The reader turns the date type into `DateTime(Mdy)` whatever the format number.
+
+**Window places.** The window header rectangle (left, top, right, bottom as i16 at `0x1B`) and the state bits of byte `0x32`
+(1 minimised, 2 maximised) are written from `Project::window_places` (screen points taken as workspace pixels; the cascade as before when
+a window has no place). Origin loaded `gx-places.opj` and saved it again with the rectangles of the normal windows unchanged
+(30, 40, 630, 340 and 200, 120, 700, 520) and the state bits unchanged; for the minimised and the maximised window Origin wrote its own
+rectangle, so those two rectangles are not reproduced. A hidden (closed) state was not found and is written as a normal window. The reader
+does not read places: an Origin project can list hundreds of windows, and every one would open.
+
+**Not found** (probes tried, nothing stored differed or LabTalk had no such property; the GUI was not driven):
+- Bar overlap: `layer.gap`, `.overlap`, `.barGap`, `.barOverlap`, `.bar.gap`, `.bar.overlap`, `.plot.overlap`, `.group.overlap`,
+  `.spacing`, `.groupGap`, `.barSpace`, `.columnGap`, `.plotOverlap`, `.gapBetweenBars`, `.gapInGroup`, `.groupSpacing`,
+  `.groupOverlap`, `.barWidth`, `.bargap` set to 37 changed no byte (they are accepted and ignored).
+- Group colours that differ from Origin's list: not tried beyond 13.13.
+- Error bars on grouped columns: `plotxy` over a range with a Y error column (designation 3) plots that column as another column plot
+  and no Y error plot (type 487) comes out, so no Origin file with the case was made; the record order seen (columns first, then the other
+  records) is what the writer already does.
+- Hidden end tick label: twenty property names (`layer.x.label.hideEnd`, `.hideFirst`, `.hideLast`, `.endLabel`, ...) changed no byte;
+  Origin's own Vertical 2 Panel template differs from a plain graph in many axis bytes, none identified as this flag.

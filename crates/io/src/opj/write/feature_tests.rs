@@ -496,3 +496,22 @@ fn a_tail_that_is_damaged_gives_a_note_and_no_folders() {
     assert_eq!(imp.workbooks.len(), 6, "the data is still read");
     assert!(imp.warnings.iter().any(|w| w.contains("folder tree could not be read")), "{:?}", imp.warnings);
 }
+
+#[test]
+fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[1].hidden = true;
+    b.sheets[0].columns[2].width = Some(14);
+    b.sheets[0].columns[0].mask.insert(0);
+    b.sheets[0].columns[3].designation = sheaf_core::Designation::Group;
+    b.sheets[0].filter =
+        Some(sheaf_core::rowfilter::RowFilter { condition: "col(A) > 0".into(), enabled: true, keep: vec![true] });
+    let all = written(&p).warnings.join(" | ");
+    assert!(all.contains("1 hidden column(s)"), "{all}");
+    assert!(all.contains("1 column(s) have their own width"), "{all}");
+    assert!(all.contains("1 column(s) have masked cells"), "{all}");
+    assert!(all.contains("1 Group or Subject column(s)"), "{all}");
+    assert!(all.contains("1 sheet(s) have a worksheet filter"), "{all}");
+}

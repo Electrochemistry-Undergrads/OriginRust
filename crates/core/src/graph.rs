@@ -389,7 +389,7 @@ impl Layer {
         let n = self.plots.len();
         for (i, p) in self.plots.iter_mut().enumerate().filter(|(_, p)| p.auto_color) {
             let c = self.palette.color(i, n);
-            if p.kind != PlotKind::Column {
+            if !p.kind.is_bar() {
                 p.line.color = c;
             }
             p.symbol.color = c;
@@ -434,6 +434,22 @@ pub enum ScaleKind {
     #[default]
     Linear,
     Log10,
+    /// Natural logarithm: ticks at powers of e.
+    Ln,
+    /// Base-2 logarithm: ticks at powers of 2.
+    Log2,
+    /// `1/x`, drawn with larger values at the top.
+    Reciprocal,
+    /// `1/(x + 273.14)`.
+    OffsetReciprocal,
+    /// Percent values placed by the normal quantile function, ticks from a list (0.01 .. 99.99).
+    Probability,
+    /// Percent values labelled with their probit (normal quantile plus 5).
+    Probit,
+    /// Percent values placed by `ln(p / (100 - p))`.
+    Logit,
+    /// Percent values placed by `ln(-ln(1 - p))`.
+    Weibull,
 }
 
 /// How an axis picks its limits when `min`/`max` are not fixed.
@@ -557,6 +573,68 @@ pub struct Axis {
     /// the labels of the next panel (graphing spec section 15).
     #[serde(default, skip_serializing_if = "is_false")]
     pub hide_end_label: bool,
+    /// Draw the axis the other way round: larger values towards the origin of the page's axes (Origin's
+    /// Reverse check box). It adds to a lower limit that is above the upper one.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reverse: bool,
+    /// A tick sits at this value and at whole steps from it (Origin's First Tick, "anchor"); `None` means
+    /// the ticks are at multiples of the step. Linear axes only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_tick: Option<f64>,
+    /// One break in the axis: a region of values that is left out, with a gap in the axis line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axis_break: Option<AxisBreak>,
+    /// Extra ticks at chosen values, each with its own label (the Special Ticks tab of Origin).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub special_ticks: Vec<SpecialTick>,
+    /// An expression of `x` (the tick value) whose result is written as the tick label, for example
+    /// `x*100` or `1/x`; empty means the value itself.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tick_label_formula: String,
+    /// Write labels at the minor ticks too.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub minor_tick_labels: bool,
+    /// Colour of the ticks; `None` means the colour of the axis line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tick_color: Option<Color>,
+    /// Thickness of the ticks in points; `None` means the thickness of the axis line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tick_width_pt: Option<f64>,
+    /// Text put before and after every tick label.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tick_prefix: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tick_suffix: String,
+}
+
+/// An extra tick of an axis.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SpecialTick {
+    pub value: f64,
+    /// The label; empty means the value written as the axis writes its numbers.
+    #[serde(default)]
+    pub label: String,
+}
+
+/// A break in an axis (graphing spec 3.6): the values from `from` to `to` are cut out; the axis
+/// shows a gap there, and the part after it can have its own tick step.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AxisBreak {
+    pub from: f64,
+    pub to: f64,
+    /// Where the gap starts to open, in percent of the axis length from its low end.
+    pub position_pct: f64,
+    /// Width of the gap in percent of the axis length.
+    pub gap_pct: f64,
+    /// Major tick step after the break; `None` keeps the step of the axis.
+    pub step_after: Option<f64>,
+}
+
+impl AxisBreak {
+    /// A break of the values `from..to` in the middle of the axis.
+    pub fn new(from: f64, to: f64) -> AxisBreak {
+        AxisBreak { from, to, position_pct: 50.0, gap_pct: 2.0, step_after: None }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -690,15 +768,103 @@ pub enum PlotKind {
     /// A line with the area between it and Y = 0 filled with the symbol color (Origin's Area
     /// plot). Where 0 is outside the Y axis the fill reaches the edge of the frame.
     Area,
+    /// Columns piled on each other: every plot of this kind in a layer shares one bar slot per
+    /// X position, and each bar starts where the one before it (in plot order) ends (Origin's
+    /// plot type 213).
+    StackedColumn,
+    /// Like [`PlotKind::StackedColumn`], with every pile scaled to 100 (Origin's "100 % Stacked
+    /// Column"). The Y axis runs from 0 to 100.
+    Stacked100Column,
+    /// Horizontal bars (Origin's plot type 215): the same bars as [`PlotKind::Column`] with the
+    /// roles of the axes exchanged: the horizontal axis (the layer's X axis here) carries the values and
+    /// the vertical axis (the Y axis) the bar positions. Origin names them the other way round.
+    Bar,
+    /// A column from the plot's base column (`Plot::y_base`) up to its Y column (Origin's
+    /// plot type 207).
+    FloatingColumn,
+    /// Areas piled on each other (Origin's plot type 214): each plot's area runs from the curve of
+    /// the plots before it (in plot order) up to the sum of their values and its own.
+    StackedArea,
+    /// Like [`PlotKind::StackedArea`] with every pile scaled to 100; the Y axis runs from 0 to 100.
+    Stacked100Area,
+    /// A histogram of the plot's Y column (Origin's plot type 219): the values are counted into bins
+    /// (`Plot::hist`) and drawn as touching bars; the bars stand at the bin centres.
+    Histogram,
+    /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
+    /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
+    Box,
+    /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
+    /// from 12 o'clock, each labelled with its share. The layer draws no axes.
+    Pie,
 }
 
 impl PlotKind {
     pub fn has_line(&self) -> bool {
-        matches!(self, PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area)
+        matches!(self, PlotKind::Line | PlotKind::LineSymbol) || self.is_area()
+    }
+
+    /// True for the kinds drawn as a filled area under a curve.
+    pub fn is_area(&self) -> bool {
+        matches!(self, PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area)
+    }
+
+    /// True for every kind drawn as rectangles standing on a base: the column kinds and bars.
+    pub fn is_bar(&self) -> bool {
+        matches!(
+            self,
+            PlotKind::Column
+                | PlotKind::StackedColumn
+                | PlotKind::Stacked100Column
+                | PlotKind::Bar
+                | PlotKind::FloatingColumn
+                | PlotKind::Histogram
+        )
+    }
+
+    /// True for the kinds that pile on each other instead of standing side by side.
+    pub fn is_stacked(&self) -> bool {
+        self.is_stacked_column() || self.is_stacked_area()
+    }
+
+    /// True for the piled column kinds.
+    pub fn is_stacked_column(&self) -> bool {
+        matches!(self, PlotKind::StackedColumn | PlotKind::Stacked100Column)
+    }
+
+    /// True for the piled area kinds.
+    pub fn is_stacked_area(&self) -> bool {
+        matches!(self, PlotKind::StackedArea | PlotKind::Stacked100Area)
+    }
+
+    /// True when every pile is scaled to a total of 100.
+    pub fn is_percent_stacked(&self) -> bool {
+        matches!(self, PlotKind::Stacked100Column | PlotKind::Stacked100Area)
+    }
+
+    /// True when the bars lie down: values along the horizontal axis.
+    pub fn is_horizontal(&self) -> bool {
+        matches!(self, PlotKind::Bar)
     }
 
     pub fn has_symbols(&self) -> bool {
         matches!(self, PlotKind::Scatter | PlotKind::LineSymbol)
+    }
+}
+
+/// How the values of a [`PlotKind::Histogram`] plot are binned. `None` takes Origin's automatic
+/// choice (see `sheaf_calc::freq`).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HistogramStyle {
+    pub bin_size: Option<f64>,
+    /// First bin edge.
+    pub begin: Option<f64>,
+    /// End of the last bin.
+    pub end: Option<f64>,
+}
+
+impl HistogramStyle {
+    pub fn is_default(&self) -> bool {
+        *self == HistogramStyle::default()
     }
 }
 
@@ -733,6 +899,62 @@ pub struct Plot {
     /// ([`Layer::bars`]), and are written to `.opj` as one group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<u32>,
+    /// Error values in X (the third column type "X error"); drawn as horizontal error bars.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_error: Option<ColumnId>,
+    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] plot, or
+    /// the lower edge of the fill of an [`PlotKind::Area`] plot (Origin's Fill Area between two
+    /// curves).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y_base: Option<ColumnId>,
+    /// Direction and cap width of the error bars.
+    #[serde(default, skip_serializing_if = "ErrorStyle::is_default")]
+    pub error: ErrorStyle,
+    /// The bins of a histogram plot.
+    #[serde(default, skip_serializing_if = "HistogramStyle::is_default")]
+    pub hist: HistogramStyle,
+    /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
+    /// Z column of a Bubble plot).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_from: Option<ColumnId>,
+    /// A colour mapped plot: the symbol of each point takes its colour from this column's value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_from: Option<ColumnId>,
+}
+
+/// Which side of the point an error bar reaches.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorDirection {
+    #[default]
+    Both,
+    Plus,
+    Minus,
+}
+
+/// Origin's default cap width of an error bar, in points, whatever the symbol size (measured:
+/// 8.5 pt over all, 9 pt symbols or 18 pt or 3 pt).
+pub const DEFAULT_ERROR_CAP_PT: f64 = 8.0;
+
+/// How the error bars of a plot are drawn.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ErrorStyle {
+    #[serde(default)]
+    pub direction: ErrorDirection,
+    /// Total width of the cap in points; 0 draws no cap.
+    pub cap_width_pt: f64,
+}
+
+impl Default for ErrorStyle {
+    fn default() -> Self {
+        ErrorStyle { direction: ErrorDirection::Both, cap_width_pt: DEFAULT_ERROR_CAP_PT }
+    }
+}
+
+impl ErrorStyle {
+    pub fn is_default(&self) -> bool {
+        *self == ErrorStyle::default()
+    }
 }
 
 fn yes() -> bool {
@@ -1101,6 +1323,12 @@ mod tests {
             visible: true,
             auto_color: true,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1174,6 +1402,12 @@ mod tests {
             visible: true,
             auto_color: true,
             group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);

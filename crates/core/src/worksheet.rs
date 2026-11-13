@@ -9,11 +9,14 @@ use serde::{Deserialize, Serialize};
 pub struct Worksheet {
     pub name: String,
     pub columns: Vec<Column>,
+    /// Column > Filter: hides the rows that fail a condition (see [`crate::rowfilter`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<crate::rowfilter::RowFilter>,
 }
 
 impl Worksheet {
     pub fn new(name: impl Into<String>) -> Self {
-        Worksheet { name: name.into(), columns: Vec::new() }
+        Worksheet { name: name.into(), columns: Vec::new(), filter: None }
     }
 
     /// Number of rows: the length of the longest column.
@@ -66,6 +69,16 @@ impl Worksheet {
             .skip(index + 1)
             .take_while(|c| !matches!(c.designation, Designation::X | Designation::Y))
             .find(|c| c.designation == Designation::YError)
+    }
+
+    /// The X-error column that belongs to the Y column at `index`: an X error column directly
+    /// after it, before the next X or Y column.
+    pub fn x_error_for(&self, index: usize) -> Option<&Column> {
+        self.columns
+            .iter()
+            .skip(index + 1)
+            .take_while(|c| !matches!(c.designation, Designation::X | Designation::Y))
+            .find(|c| c.designation == Designation::XError)
     }
 
     /// Indices of all Y columns, in sheet order.

@@ -256,7 +256,7 @@ impl GraphPropsDialog {
                     View::Axis { vertical, tab } => {
                         let resolved =
                             geometry.as_ref().and_then(|g| g.get(li)).map(|g| if *vertical { &g.y } else { &g.x });
-                        graph_axis::dialog_body(ui, vertical, tab, &mut graph.layers[li], resolved, &columns);
+                        graph_axis::dialog_body(ui, vertical, tab, &mut graph, li, resolved, &columns);
                     }
                     View::Details { node, tab } => {
                         graph_details::dialog_body(

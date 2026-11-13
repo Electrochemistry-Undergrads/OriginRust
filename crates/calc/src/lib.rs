@@ -19,6 +19,7 @@ pub mod freq;
 pub mod hypothesis;
 pub mod integrate;
 pub mod interp;
+pub mod manip;
 pub mod nonparam;
 pub mod normality;
 pub mod normalize;
@@ -49,6 +50,10 @@ pub use nonparam::{
 pub use normality::{
     DAgostino, TestResult, anderson_darling, dagostino, kolmogorov_cdf, kolmogorov_smirnov, ks_distance, lilliefors,
     shapiro_wilk,
+};
+pub use manip::{
+    EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions, even_grid, median_filter, reduce_evenly, shift_to_land,
+    subtract_line_through, translate, value_at,
 };
 pub use normalize::{NormalizeMethod, normalize};
 pub use nptests::{

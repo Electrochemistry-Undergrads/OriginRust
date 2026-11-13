@@ -11,11 +11,14 @@
 pub mod anova;
 pub mod anova2;
 pub mod baseline;
+pub mod bin2d;
 pub mod correlation;
+pub mod crosstab;
 pub mod curvemath;
 pub mod curves;
 pub mod dierckx;
 pub mod differentiate;
+pub mod dunnett;
 pub mod freq;
 pub mod hypothesis;
 pub mod integrate;
@@ -33,17 +36,21 @@ pub mod stats;
 mod util;
 
 pub use anova::{
-    Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, ptukey, qtukey,
+    Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, compare_to_control,
+    holm_adjust, ptukey, qtukey,
 };
 pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
+pub use bin2d::{AxisBins, Bin2d, Bin2dError, Bin2dOptions, MAX_BINS_PER_AXIS, bin_2d};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
+pub use crosstab::{ChiSquareTest, Crosstab, CrosstabError, Fisher};
 pub use curvemath::{CurveMathResult, CurveOp, curve_math_const, curve_math_ref};
 pub use curves::{
     AverageMethod, AverageOptions, AverageResult, CommonX, CurveError, Intersection, MeetKind, PolygonArea, XRange,
     average_curves, intersections, polygon_area,
 };
 pub use differentiate::{DiffOptions, differentiate};
+pub use dunnett::{dunnett_cdf, dunnett_critical, dunnett_loadings, dunnett_p};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};

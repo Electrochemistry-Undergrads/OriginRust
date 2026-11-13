@@ -2,7 +2,8 @@
 //!
 //! The summary table, the descriptive statistics of the groups and the means comparisons (Tukey,
 //! Bonferroni, Sidak, Fisher's least significant difference, Scheffe) follow what Origin
-//! reports for "One-Way ANOVA" (see `docs/spec/statistics.md`).
+//! reports for "One-Way ANOVA" (see `docs/spec/statistics.md`). Holm-Bonferroni (step-down) and Dunnett
+//! (every group against a control) are added after scipy and the textbook definitions, not after Origin.
 
 use crate::hypothesis::SampleStats;
 use statrs::distribution::{ContinuousCDF, FisherSnedecor, Normal, StudentsT};
@@ -46,15 +47,23 @@ pub enum MeansComparison {
     /// Fisher's least significant difference: no adjustment for the number of comparisons.
     FisherLsd,
     Scheffe,
+    /// Holm-Bonferroni: the step-down version of Bonferroni, all pairs. It has adjusted p-values but no
+    /// confidence intervals (the limits are NaN).
+    Holm,
+    /// Dunnett: every group against one control group (the first group unless the caller says otherwise),
+    /// with simultaneous confidence intervals. See [`crate::dunnett`].
+    Dunnett,
 }
 
 impl MeansComparison {
-    pub const ALL: [MeansComparison; 5] = [
+    pub const ALL: [MeansComparison; 7] = [
         MeansComparison::Tukey,
         MeansComparison::Bonferroni,
         MeansComparison::Sidak,
         MeansComparison::FisherLsd,
         MeansComparison::Scheffe,
+        MeansComparison::Holm,
+        MeansComparison::Dunnett,
     ];
 
     pub fn label(self) -> &'static str {
@@ -64,6 +73,8 @@ impl MeansComparison {
             MeansComparison::Sidak => "Sidak",
             MeansComparison::FisherLsd => "Fisher LSD",
             MeansComparison::Scheffe => "Scheffe",
+            MeansComparison::Holm => "Holm-Bonferroni",
+            MeansComparison::Dunnett => "Dunnett",
         }
     }
 }
@@ -156,8 +167,18 @@ impl Anova {
     /// All pairwise comparisons of the group means with the given method, at significance level `alpha`
     /// (the confidence level of the intervals is `1 - alpha`). Pairs come in Origin's order: (1,2), (1,3), (2,3), (1,4), (2,4), (3,4), ...
     pub fn compare(&self, method: MeansComparison, alpha: f64) -> Vec<Comparison> {
+        self.compare_with_control(method, 0, alpha)
+    }
+
+    /// Like [`Anova::compare`]; `control` (counted from 0) is the control group of Dunnett's test and
+    /// ignored by the other methods.
+    pub fn compare_with_control(&self, method: MeansComparison, control: usize, alpha: f64) -> Vec<Comparison> {
         let levels: Vec<(usize, f64)> = self.groups.iter().map(|g| (g.n, g.mean)).collect();
-        let mut out = compare_means(&levels, self.error.mean_sq, self.error.df, method, alpha);
+        let mut out = if method == MeansComparison::Dunnett {
+            compare_to_control(&levels, control, self.error.mean_sq, self.error.df, alpha)
+        } else {
+            compare_means(&levels, self.error.mean_sq, self.error.df, method, alpha)
+        };
         // The one-way table reports the size of the statistic; the two-way table keeps the sign.
         for c in &mut out {
             c.stat = c.stat.abs();
@@ -177,6 +198,9 @@ pub fn compare_means(
     method: MeansComparison,
     alpha: f64,
 ) -> Vec<Comparison> {
+    if method == MeansComparison::Dunnett {
+        return compare_to_control(levels, 0, mse, dfe, alpha);
+    }
     let k = levels.len();
     let pairs = k * k.saturating_sub(1) / 2;
     let mut out = Vec::with_capacity(pairs);
@@ -202,6 +226,9 @@ pub fn compare_means(
             let (stat, p, half) = match method {
                 MeansComparison::FisherLsd => (t, p_lsd, t_crit(alpha) * se),
                 MeansComparison::Bonferroni => (t, (m * p_lsd).min(1.0), t_crit(alpha / m) * se),
+                // The adjusted p-value is found below, from all the p-values together.
+                MeansComparison::Holm => (t, p_lsd, f64::NAN),
+                MeansComparison::Dunnett => unreachable!("handled above"),
                 MeansComparison::Sidak => {
                     (t, 1.0 - (1.0 - p_lsd).powf(m), t_crit(1.0 - (1.0 - alpha).powf(1.0 / m)) * se)
                 }
@@ -230,7 +257,66 @@ pub fn compare_means(
             });
         }
     }
+    if method == MeansComparison::Holm {
+        let raw: Vec<f64> = out.iter().map(|c| c.p).collect();
+        for (c, p) in out.iter_mut().zip(holm_adjust(&raw)) {
+            c.p = p;
+            c.significant = p < alpha;
+        }
+    }
     out
+}
+
+/// Holm's step-down adjustment of p-values: the smallest of `m` is multiplied by `m`, the next by `m - 1`, and
+/// so on, and no adjusted value is smaller than one before it (in the order of the raw values); all are
+/// capped at 1. The adjusted values come back in the order of the input; NaN stays NaN.
+pub fn holm_adjust(p: &[f64]) -> Vec<f64> {
+    let m = p.len();
+    let mut order: Vec<usize> = (0..m).filter(|&i| !p[i].is_nan()).collect();
+    order.sort_by(|&a, &b| p[a].total_cmp(&p[b]));
+    let count = order.len();
+    let mut out = vec![f64::NAN; m];
+    let mut running = 0.0_f64;
+    for (rank, &i) in order.iter().enumerate() {
+        running = running.max(((count - rank) as f64 * p[i]).min(1.0));
+        out[i] = running;
+    }
+    out
+}
+
+/// Dunnett's comparison of every level with level `control` (counted from 0), the way [`compare_means`] takes its
+/// arguments. Each comparison has `i = control` and `j` the other level; `diff` is `mean(j) - mean(control)`.
+/// The p-values are adjusted for the whole family and the intervals are simultaneous.
+pub fn compare_to_control(levels: &[(usize, f64)], control: usize, mse: f64, dfe: f64, alpha: f64) -> Vec<Comparison> {
+    if control >= levels.len() || !mse.is_finite() || !dfe.is_finite() || levels.iter().any(|l| !l.1.is_finite()) {
+        return Vec::new();
+    }
+    let (nc, mc) = levels[control];
+    let others: Vec<usize> = (0..levels.len()).filter(|&j| j != control).collect();
+    let sizes: Vec<usize> = others.iter().map(|&j| levels[j].0).collect();
+    let loadings = crate::dunnett::dunnett_loadings(&sizes, nc);
+    let d = crate::dunnett::dunnett_critical(alpha, &loadings, dfe);
+    others
+        .into_iter()
+        .map(|j| {
+            let (nj, mj) = levels[j];
+            let diff = mj - mc;
+            let se = (mse * (1.0 / nj as f64 + 1.0 / nc as f64)).sqrt();
+            let t = if se == 0.0 { if diff == 0.0 { 0.0 } else { f64::INFINITY.copysign(diff) } } else { diff / se };
+            let p = if t.is_infinite() { 0.0 } else { crate::dunnett::dunnett_p(t, &loadings, dfe) };
+            Comparison {
+                i: control,
+                j,
+                diff,
+                se,
+                stat: t,
+                p,
+                lcl: diff - d * se,
+                ucl: diff + d * se,
+                significant: p < alpha,
+            }
+        })
+        .collect()
 }
 
 // ----- studentized range distribution ----------------------------------------------------------

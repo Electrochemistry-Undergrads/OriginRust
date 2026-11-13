@@ -132,24 +132,38 @@ pub fn auto_bin_range(min: f64, max: f64, inc: f64) -> (f64, f64) {
     (start, end)
 }
 
-/// Frequency counts of `data` (NaN entries are ignored). `None` if there are no numbers, or the range or
-/// the bin size is not usable.
-pub fn freq_counts(data: &[f64], opts: &FreqOptions) -> Option<Freq> {
-    let v: Vec<f64> = data.iter().copied().filter(|x| !x.is_nan()).collect();
-    if v.is_empty() {
-        return None;
-    }
+/// Where the bins of one axis lie: first edge, bin width, number of bins and whether the last bin also takes
+/// its upper edge (true when the range is the data range, divided into a number of bins).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct BinLayout {
+    pub start: f64,
+    pub inc: f64,
+    pub bins: usize,
+    pub last_closed: bool,
+    /// The upper edge of the last bin; for a range cut into a number of bins exactly the end of the range, not
+    /// `start + inc * bins`, which can differ from it by rounding.
+    pub end: f64,
+}
+
+/// The bin layout for the finite values `v` (not empty) under the range and size rules of `opts` (the `below`
+/// and `above` flags are not used here). `None` if the range or the size is not usable.
+pub(crate) fn bin_layout(v: &[f64], min: Option<f64>, max: Option<f64>, size: BinSize) -> Option<BinLayout> {
     let dmin = v.iter().copied().fold(f64::INFINITY, f64::min);
     let dmax = v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let mut last_closed = false;
-    let (start, inc, bins) = match (opts.min, opts.max, opts.size) {
-        (Some(lo), Some(hi), BinSize::Count(c)) if c > 0 && hi > lo => (lo, (hi - lo) / c as f64, c),
+    let mut end = None;
+    let (start, inc, bins) = match (min, max, size) {
+        (Some(lo), Some(hi), BinSize::Count(c)) if c > 0 && hi > lo => {
+            end = Some(hi);
+            (lo, (hi - lo) / c as f64, c)
+        }
         (lo, hi, BinSize::Count(c)) if c > 0 => {
             let (lo, hi) = (lo.unwrap_or(dmin), hi.unwrap_or(dmax));
             if hi.partial_cmp(&lo) != Some(std::cmp::Ordering::Greater) {
                 return None;
             }
-            last_closed = opts.max.is_none();
+            last_closed = max.is_none();
+            end = Some(hi);
             (lo, (hi - lo) / c as f64, c)
         }
         (_, _, BinSize::Count(_)) => return None,
@@ -168,6 +182,17 @@ pub fn freq_counts(data: &[f64], opts: &FreqOptions) -> Option<Freq> {
             (start, inc, (((end - start) / inc) + 0.5).floor().max(1.0) as usize)
         }
     };
+    Some(BinLayout { start, inc, bins, last_closed, end: end.unwrap_or(start + inc * bins as f64) })
+}
+
+/// Frequency counts of `data` (NaN entries are ignored). `None` if there are no numbers, or the range or
+/// the bin size is not usable.
+pub fn freq_counts(data: &[f64], opts: &FreqOptions) -> Option<Freq> {
+    let v: Vec<f64> = data.iter().copied().filter(|x| !x.is_nan()).collect();
+    if v.is_empty() {
+        return None;
+    }
+    let BinLayout { start, inc, bins, last_closed, .. } = bin_layout(&v, opts.min, opts.max, opts.size)?;
     let edge = |i: usize| start + inc * i as f64;
     let mut counts = vec![0usize; bins];
     for x in &v {

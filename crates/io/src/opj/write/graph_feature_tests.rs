@@ -259,3 +259,40 @@ fn axis_colours_that_follow_the_plot_come_back_and_title_colours_are_named() {
     let (_, out) = round_trip(&one_layer(|l| l.y_axis.title_color_follows_plot = true));
     assert!(out.warnings.iter().any(|w| w.contains("title colours")), "{:?}", out.warnings);
 }
+
+#[test]
+fn tick_label_number_formats_are_written_and_read_back() {
+    let formats = [
+        (TickFormat::Auto, TickFormat::Auto),
+        (TickFormat::Decimal(0), TickFormat::Decimal(0)),
+        (TickFormat::Decimal(3), TickFormat::Decimal(3)),
+        (TickFormat::Scientific(2), TickFormat::Scientific(2)),
+        (TickFormat::Decimal(40), TickFormat::Decimal(15)),
+    ];
+    for (put, want) in formats {
+        let mut p = source();
+        let c = ids(&p);
+        let id = p.add_graph(Template::Line);
+        p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
+        let l = &mut p.graph_mut(id).unwrap().layers[0];
+        l.x_axis.tick_format = put;
+        l.y_axis.tick_format = TickFormat::Scientific(1);
+        let (imp, out) = round_trip(&p);
+        assert!(out.warnings.is_empty(), "{put:?}: {:?}", out.warnings);
+        let l = &imp.graphs[0].layers[0];
+        assert_eq!(l.x_axis.tick_format, want, "{put:?}");
+        assert_eq!(l.y_axis.tick_format, TickFormat::Scientific(1));
+    }
+}
+
+#[test]
+fn a_number_format_on_a_column_plot_comes_back() {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.add_graph(Template::Column);
+    p.add_plot_xy(id, 0, None, c[5], None).unwrap();
+    p.graph_mut(id).unwrap().layers[0].y_axis.tick_format = TickFormat::Decimal(2);
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].y_axis.tick_format, TickFormat::Decimal(2));
+}

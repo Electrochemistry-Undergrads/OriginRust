@@ -874,9 +874,15 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
     if axis.side == AxisSide::Opposite && axis.show_opposite {
         notes.push("the line on the near side of an axis that is drawn on the opposite side was not written".into());
     }
-    if axis.tick_format != TickFormat::Auto {
-        notes.push("a tick label number format was not written; Origin's automatic format is used".into());
-    }
+    let (scientific, decimals) = match axis.tick_format {
+        TickFormat::Auto => (false, None),
+        TickFormat::Decimal(d) => (false, Some(d.min(15))),
+        TickFormat::Scientific(d) => (true, Some(d.min(15))),
+        TickFormat::DateTime(_) => {
+            notes.push("a date and time tick label format was not written; Origin's automatic format is used".into());
+            (false, None)
+        }
+    };
     if (axis.tick_label_divisor - 1.0).abs() > f64::EPSILON {
         notes.push("a tick label divisor was not written".into());
     }
@@ -910,5 +916,7 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
         label_color: code_of(axis.tick_font.color),
         follows_plot: axis.color_follows_plot,
         text_labels: false,
+        scientific,
+        decimals,
     }
 }

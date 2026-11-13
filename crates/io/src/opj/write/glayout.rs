@@ -203,6 +203,10 @@ pub(super) struct AxisBlocks {
     pub follows_plot: bool,
     /// The tick labels are the texts of the X column of the first plot.
     pub text_labels: bool,
+    /// Number format of the tick labels: scientific instead of decimal, and a fixed number of
+    /// decimal places (none: Origin chooses).
+    pub scientific: bool,
+    pub decimals: Option<u8>,
 }
 
 const SHOWN: u8 = 0x40;
@@ -248,6 +252,15 @@ pub(super) fn axis_blocks(group: usize, a: &AxisBlocks) -> Vec<Vec<u8>> {
         let b = &mut blocks[own_labels];
         b[0x15] = a.label_pt;
         show(b, a.labels_shown);
+        // number format: bits 4 and 5 of byte 0x25 (0 decimal, 1 scientific), bit 7 "fixed decimals"
+        // with their number in the low nibble of 0x26
+        if a.scientific {
+            b[0x25] |= 0x10;
+        }
+        if let Some(d) = a.decimals {
+            b[0x25] |= 0x80;
+            b[0x26] = b[0x26] & 0xF0 | d.min(15);
+        }
         if a.follows_plot {
             put_colour(b, Code::AUTO);
         } else if a.label_color != Code::AUTO && a.label_color != Code::index(0) {

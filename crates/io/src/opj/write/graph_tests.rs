@@ -322,7 +322,7 @@ fn what_the_file_cannot_hold_is_named() {
         l.plots[0].symbol.every = 3;
         l.plots[1].visible = false;
         l.plots[2].y = other.id;
-        l.x_axis.tick_format = TickFormat::Scientific(2);
+        l.y_axis.tick_format = TickFormat::DateTime(sheaf_core::datetime::DatePattern::default());
         l.x_axis.tick_label_divisor = 1000.0;
         l.x_axis.major_tick_len_pt = 9.0;
         l.y_axis.major_grid = Some(LineStyle::solid(Color::rgb(200, 200, 200), 0.5));
@@ -349,7 +349,7 @@ fn what_the_file_cannot_hold_is_named() {
         "hidden plot",
         "every n-th point",
         "not a worksheet column",
-        "number format",
+        "date and time tick label format",
         "divisor",
         "tick lengths",
         "grid lines",

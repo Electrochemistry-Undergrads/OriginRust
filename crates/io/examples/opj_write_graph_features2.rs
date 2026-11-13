@@ -5,9 +5,11 @@
 //! Usage: `cargo run -p sheaf-io --example opj_write_graph_features2 -- <output folder>`
 //!
 //! - `gw-area.opj`: area plots, one and two curves, with chosen colours.
+//! - `gw-fmt.opj`: tick label number formats (decimal places, scientific).
 
 use sheaf_core::Project;
 use sheaf_core::color::Color;
+use sheaf_core::graph::TickFormat;
 use sheaf_core::column::{Column, ColumnData, Designation};
 use sheaf_core::ids::{ColumnId, WindowId};
 use sheaf_core::template::Template;
@@ -66,6 +68,24 @@ fn area() -> Project {
     p
 }
 
+fn fmt() -> Project {
+    let mut p = source();
+    let c = ids(&p);
+    for (n, fx, fy) in [
+        ("Fm0", TickFormat::Auto, TickFormat::Auto),
+        ("Fm1", TickFormat::Decimal(0), TickFormat::Decimal(3)),
+        ("Fm2", TickFormat::Scientific(2), TickFormat::Decimal(1)),
+    ] {
+        let id = p.add_graph(Template::Line);
+        p.add_plot_xy(id, 0, Some(c[0]), c[1], None).unwrap();
+        name(&mut p, id, n);
+        let l = &mut p.graph_mut(id).unwrap().layers[0];
+        l.x_axis.tick_format = fx;
+        l.y_axis.tick_format = fy;
+    }
+    p
+}
+
 fn main() {
     let Some(dir) = std::env::args().nth(1) else {
         eprintln!("usage: opj_write_graph_features2 <output folder>");
@@ -73,7 +93,7 @@ fn main() {
     };
     let dir = Path::new(&dir);
     std::fs::create_dir_all(dir).expect("the output folder can be made");
-    for (name, project) in [("gw-area", area())] {
+    for (name, project) in [("gw-area", area()), ("gw-fmt", fmt())] {
         let path = dir.join(format!("{name}.opj"));
         match sheaf_io::opj::write_file(&project, &path) {
             Ok(warnings) => {

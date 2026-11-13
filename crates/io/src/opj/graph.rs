@@ -48,6 +48,8 @@ const AXIS_AUTO_COLOR: u16 = 0xFFF7;
 const AXIS_SHOWN_BIT: u8 = 0x40;
 const AXIS_FONT_AT: usize = 0x15;
 const AXIS_FLAGS_AT: usize = 0x26;
+const AXIS_FORMAT_AT: usize = 0x25;
+const AXIS_FIXED_DECIMALS_BIT: u8 = 0x80;
 const AXIS_LINE_WIDTH_AT: usize = 0x15;
 const AXIS_TICKS_AT: usize = 0x25;
 // Curve record.
@@ -392,6 +394,7 @@ fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>], side: AxisSide) {
             axis.title_font.size_pt = f64::from(size);
         }
         axis.show_tick_labels = u8_at(b, AXIS_FLAGS_AT) & AXIS_SHOWN_BIT != 0;
+        axis.tick_format = tick_format(b);
     }
     if let Some(b) = blocks.get(line) {
         axis.color_follows_plot = u16_at(b, AXIS_COLOR_AT) == AXIS_AUTO_COLOR;
@@ -407,6 +410,20 @@ fn apply_axis_blocks(axis: &mut Axis, blocks: &[Vec<u8>], side: AxisSide) {
     // is not drawn (the model has one line per axis there).
     axis.show_opposite = side != AxisSide::Opposite && shown(blocks, far_line);
     axis.opposite_ticks = false;
+}
+
+/// The number format of the tick labels: bits 4 and 5 of byte 0x25 (0 decimal, 1 scientific; the
+/// other kinds are read as decimal), bit 7 "fixed number of decimals" and that number in the low
+/// nibble of byte 0x26.
+fn tick_format(b: &[u8]) -> TickFormat {
+    let kind = u8_at(b, AXIS_FORMAT_AT);
+    let fixed = kind & AXIS_FIXED_DECIMALS_BIT != 0;
+    let decimals = u8_at(b, AXIS_FLAGS_AT) & 0x0F;
+    match (kind >> 4) & 3 {
+        1 => TickFormat::Scientific(if fixed { decimals } else { 0 }),
+        _ if fixed => TickFormat::Decimal(decimals),
+        _ => TickFormat::Auto,
+    }
 }
 
 fn tick_direction(code: u8) -> TickDirection {

@@ -1159,3 +1159,15 @@ Origin area record hold changing junk and are not written. The model's area has 
 border in the line colour; the reader (`read_curve`) turns type 204 into `PlotKind::Area` the same way, with a black
 border when the line colour is automatic. Verified: Origin 2016 loaded `gw-area.opj` (a green area with a red 2 pt border; two
 curves with their own fills), and the exported pictures show the same fills and borders. The warning for areas is gone.
+
+**Tick label number formats.** In the tick label block of an axis group (block 2, block 4 for the second edge): bits 4 and 5
+of byte `0x25` hold the format (0 decimal, 1 scientific, 2 engineering, 3 decimal with a thousands separator; Origin's
+property `layer.x.label.numFormat` is this value plus one), bit 7 of the same byte says "fixed number of decimals" and the
+low nibble of byte `0x26` holds that number (`layer.x.label.decPlaces`, which Origin reports as -1 when the bit is not set).
+The "shown" bit of `0x26` (`0x40`) and the flag byte of a text X column (`0x25` = 1) are separate bits. Found by setting
+`numFormat` 1 to 4 and `decPlaces` 0, 1, 3, 6 on separate graphs and comparing the blocks; verified by writing
+`gw-fmt.opj` (X decimal 0 and Y decimal 3; X scientific 2 and Y decimal 1; automatic) and loading it in Origin 2016: it reported
+`numFormat` 1 / `decPlaces` 0 and 3, `numFormat` 2 / `decPlaces` 2 and 1, and -1 for the automatic axis, and the pictures show
+`100.000`, `1.0x10^1` and plain labels respectively. The model's Decimal(n) and Scientific(n) are written and read back
+(n up to 15); engineering and thousands formats are read as decimal or automatic. Date and time formats are still named in a
+warning.

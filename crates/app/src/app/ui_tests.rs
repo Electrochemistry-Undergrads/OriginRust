@@ -5242,3 +5242,15 @@ fn ctrl_page_down_and_up_step_through_the_sheets() {
     key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageUp);
     assert_eq!(active(&h), 0, "stays on the first sheet");
 }
+
+#[test]
+fn clear_worksheet_empties_every_column_in_one_undo_step() {
+    let mut h = start(vec![data_file("clearsheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Worksheet", "Clear Worksheet..."]);
+    assert!(column(&h, "A").is_empty() && column(&h, "C").is_empty());
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().columns.len(), 3, "the columns stay");
+    assert_eq!(h.state().doc.undo_label(), Some("Clear worksheet"));
+    menu(&mut h, "Edit", "Undo Clear worksheet");
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0]);
+}

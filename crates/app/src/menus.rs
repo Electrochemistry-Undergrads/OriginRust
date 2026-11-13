@@ -139,6 +139,8 @@ pub enum Cmd {
         range: bool,
     },
     SortByLabel,
+    /// Worksheet > Clear Worksheet: empty every column of the active sheet.
+    ClearWorksheet,
     /// Column > Reverse Order.
     ReverseOrder,
     FilterRows,
@@ -868,7 +870,7 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
-        grey("Clear Worksheet..."),
+        item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
         item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
@@ -1858,6 +1860,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SortCustom { book, columns }
         }
         Cmd::SortByLabel => Action::SortByLabel(book?),
+        Cmd::ClearWorksheet => Action::ClearWorksheet(book?),
         Cmd::SetCategorical => {
             book?;
             Action::SetCategorical(some()?)

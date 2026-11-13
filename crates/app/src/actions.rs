@@ -250,6 +250,8 @@ pub enum Action {
     },
     /// Column > Reverse Order: turn the values of each selected column round.
     ReverseColumns(Vec<ColumnId>),
+    /// Empty every column of the active sheet of this workbook (one undo step).
+    ClearWorksheet(WindowId),
     /// Column > Filter > Add or Remove Filter: the window for the sheet filter, with presets for
     /// this column.
     RowFilterDialog {

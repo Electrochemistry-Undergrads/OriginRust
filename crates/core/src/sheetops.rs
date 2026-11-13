@@ -268,6 +268,20 @@ impl Project {
         Ok(())
     }
 
+    /// Empties every column of a sheet (Worksheet > Clear Worksheet): the columns, their labels,
+    /// designations and formulas stay; the values go. Returns how many columns were cleared.
+    pub fn clear_sheet(&mut self, book: WindowId, sheet: usize) -> usize {
+        let Some(ws) = self.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet)) else { return 0 };
+        for c in &mut ws.columns {
+            c.data = match &c.data {
+                ColumnData::Numeric(_) => ColumnData::numeric(Vec::new()),
+                ColumnData::Text(_) => ColumnData::text(Vec::new()),
+                ColumnData::Mixed { .. } => ColumnData::mixed_numbers(Vec::new()),
+            };
+        }
+        ws.columns.len()
+    }
+
     /// Reverses the order of the values of each of these columns on its own (Column > Reverse
     /// Order). Columns kept up to date by a formula are left alone; returns how many.
     pub fn reverse_columns(&mut self, ids: &[ColumnId]) -> usize {

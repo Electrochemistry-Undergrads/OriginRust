@@ -862,6 +862,13 @@ impl SheafApp {
                 self.reshape = ReshapeDialog::new(&self.doc, book, kind, columns);
             }
             Action::SortByLabel(book) => self.sort = Some(SortDialog::by_label(book)),
+            Action::ClearWorksheet(book) => {
+                if let Some(sheet) = self.doc.project().workbook(book).map(|b| b.active_sheet) {
+                    let mut n = 0;
+                    self.doc.apply("Clear worksheet", |p| n = p.clear_sheet(book, sheet));
+                    self.say(format!("Cleared {n} column(s); Edit > Undo brings the values back"));
+                }
+            }
             Action::ReverseColumns(columns) => {
                 let mut locked = 0;
                 self.doc.apply("Reverse order", |p| locked = p.reverse_columns(&columns));

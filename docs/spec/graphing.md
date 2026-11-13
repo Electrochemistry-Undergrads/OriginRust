@@ -90,7 +90,7 @@ A data plot references X column (or row index), Y column, optional error column,
 | 19 | idx 19 | 128,128,128 gray |
 | 20-23 | rgb | (150,100,100) (100,150,100) (43,163,202) (50,100,150) |
 
-The byte layout is [INF], cross-checked on "Q03 Rainbow7", which decodes to red, orange, yellow, green, blue, violet, purple. That a fresh overlay gets black, red, blue, magenta, ... must be confirmed (U1). The file "System Color List" holds 13 RGB values, role unconfirmed: (240,0,130) (250,60,60) (240,130,40) (230,175,45) (230,220,50) (160,230,50) (0,220,0) (0,210,140) (0,200,200) (0,160,255) (30,60,255) (110,0,220) (160,0,200).
+The byte layout is [INF], cross-checked on "Q03 Rainbow7", which decodes to red, orange, yellow, green, blue, violet, purple. **Measured (U1 closed, 2026-11-13):** a fresh `plotxy iy:=(1,2:26) plot:=200` of 25 Y columns, exported with `expGraph type:=png path:="DIR" filename:=NAME overwrite:=1 tr1.unit:=2 tr1.width:=800` and read pixel by pixel from the legend, colours the plots with the BASE palette below in order, not with the theme list above: black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, dark cyan, royal, orange, violet, pink, white (the 18th plot is invisible), light gray, gray, light yellow, light cyan, light magenta, dark gray (24 entries; the 25th plot is black again). Lines, scatter, line+symbol and columns all use this order. Sheaf's templates copy it (`ORIGIN_COLOR_LIST` in `template.rs`); the `.opj` writer's `PALETTE` has the same 24 entries. The file "System Color List" holds 13 RGB values, role unconfirmed: (240,0,130) (250,60,60) (240,130,40) (230,175,45) (230,220,50) (160,230,50) (0,220,0) (0,210,140) (0,200,200) (0,160,255) (30,60,255) (110,0,220) (160,0,200).
 
 **Base palette** (0-based index = LabTalk index minus 1) [W:labtalk list-of-colors]: 0 black 0,0,0; 1 red 255,0,0; 2 green 0,255,0; 3 blue 0,0,255; 4 cyan 0,255,255; 5 magenta 255,0,255; 6 yellow 255,255,0; 7 dark yellow 128,128,0; 8 navy 0,0,128; 9 purple 128,0,128; 10 wine 128,0,0; 11 olive 0,128,0; 12 dark cyan 0,128,128; 13 royal 0,0,160; 14 orange 255,128,0; 15 violet 128,0,255; 16 pink 255,0,128; 17 white; 18 light gray 192; 19 gray 128; 20 light yellow 255,255,128; 21 light cyan 128,255,255; 22 light magenta 255,128,255; 23 dark gray 64. Specials: -9 automatic, -4 none.
 
@@ -119,14 +119,15 @@ The byte layout is [INF], cross-checked on "Q03 Rainbow7", which decodes to red,
 | spline step | `SplineStep=30` (units 0.1 pt; 10 = one step per point of X extent) | smaller is finer | [F:Origin.ini [Display]] |
 
 ### 2.1 Known defaults
-- Dash dot dot pattern: 18 12 5 12 5 12 (dash, space, dot, space, dot, space), editable; a "scale dash pattern by line width" option exists; units unstated. Other seven styles: UNKNOWN U6 [W:options-dialog-graph-tab].
+- Dash patterns (U6 closed, measured 2026-11-13): one plot per graph (`plotxy iy:=(1,2) plot:=200`, Y constant), then `set %C -d N`, `set %C -w W`, `set %C -c 1` as three separate calls, PNG at 3200 px wide (4.145 px per pt: the page is 10.72 in), run lengths read along the line. In a plot group `set -d` is ignored, so use one plot per graph. Patterns grow with the width but not exactly linearly (below 1 pt they are relatively longer); the values are on, off, ... in multiples of the line width, mean of widths 1.5 and 2 pt: dash 5.1 4.9; dot 1.6 4.3; dash dot 6.1 2.4 1.6 2.4; dash dot dot 4.7 2.35 1.6 2.4 1.55 2.5; short dash 2.6 1.95; short dot 0.95 1.05; short dash dot 3.95 1.5 0.95 1.5. (At 0.5 pt: dash 3.5 2.35 pt, dot 1.5 2.1 pt.) Sheaf's `Dash::pattern` uses these. The older 18 12 5 12 5 12 for dash dot dot is in other units [W:options-dialog-graph-tab].
 - Elements scale with the layer frame [W:quick-help/change-size-of-textlabels].
 - Symbol color automatic = follows line color [W:pd-dialog-line-tab].
 - Axis line color Auto = darker shade of plot fill; if no fill, of border; else follows line color [W:axesref-lineticks].
 - Anti-aliasing covers plots, axes/grid and line objects; purely horizontal/vertical lines are never anti-aliased [W:options-dialog-graph-tab].
 
-### 2.2 Font, width, size defaults: UNKNOWN (U3)
-No public page and no installed text file gives them. [REC] Arial; axis titles, tick labels and legend 22 pt on the stock page; data line 1.5 pt; axis line 1.5 pt; major tick 9 pt, minor 4.5 pt; symbol 9 pt. Weak support: themes "Black on paper" and "Physical Review Letters" contain the numbers 1.5 and 8 [F:Themes\Graph]. Do not hard-code until measured.
+### 2.2 Font, width, size defaults (U3 measured 2026-11-13)
+Measured on a fresh `plotxy` with `?layer.x.label.pt`, `?layer.x.thickness`, `get %C -z` (symbol size), `get %C -w` (line width x 500), `get %C -k` (shape), and from PNG exports at 3200 px (4.145 px per pt): page 6432 x 4923 units of 1/600 in (10.72 x 8.205 in); layer frame left 17.91 %, top 11.58 %, width 68.16 %, height 71.83 % (`layer.left/top/width/height`); tick labels 18 pt, axis titles about 22 pt (cap height 66 px), legend text about 22 pt, all Arial; axis line 1.5 pt; major tick 9 pt and minor 4.5 pt long (pixels), direction out, bottom and left only, one minor tick; data line 0.5 pt (`get -w` = 250); symbol square, 9 pt, solid; legend has a black frame. Sheaf's generic templates copy all of these (page 10.72 x 8.205 in); the legend position is Sheaf's own (inside the frame). Earlier recommendation, kept for the record:
+No public page and no installed text file gives them. [REC] Arial; axis titles, tick labels and legend 22 pt on the stock page; data line 1.5 pt; axis line 1.5 pt; major tick 9 pt, minor 4.5 pt; symbol 9 pt. Weak support: themes "Black on paper" and "Physical Review Letters" contain the numbers 1.5 and 8 [F:Themes\Graph]. 
 
 ### 2.3 Scale elements
 Attached elements (font sizes, line and arrow widths, arrowheads, drawn objects) respond to layer resizing:
@@ -162,11 +163,11 @@ Script: `laysetscale` (axis x/y/z, from, to, inc, type; all default auto) [F:lay
 | Option | Meaning | Default |
 |---|---|---|
 | show line and ticks | per axis; "same for opposite" shares | UNKNOWN U15 |
-| line color, thickness (pt) | color Auto rule in 2.1 | UNKNOWN |
+| line color, thickness (pt) | color Auto rule in 2.1 | 1.5 pt, black (2.2) |
 | position | % offset from default (positive away from page centre), or at a scale value | at frame |
 | arrow at begin/end | shape, width, length, offset % | off |
 | tick direction | theme value 1 = in, 2 = out (for major and minor separately); none and both exist, ids [INF] 0 and 3 | UNKNOWN U15 ([REC] out) |
-| tick length (pt), color, thickness | minor Auto = half major | UNKNOWN |
+| tick length (pt), color, thickness | minor Auto = half major | 9 major, 4.5 minor, direction out (2.2) |
 Observed themes: "Ticks All In" sets major=minor=1; "Ticks All Out" 2; "Ticks YL XB Out YR XT In" sets left and bottom 2, right and top 1. Property ids: 57 minor, 58 major [F:Themes\Graph\Ticks*.OTH].
 
 ### 3.3 Tick labels tab [W:axesref-ticklabels]
@@ -263,7 +264,7 @@ Also: connect begin and end (closes; off), connect within subset (on for line pl
 | Option | Meaning | Default |
 |---|---|---|
 | style | 0 solid, 1 dash, 2 dot, 3 dash dot, 4 dash dot dot, 5 short dash, 6 short dot, 7 short dash dot | solid |
-| width | points | UNKNOWN U3 |
+| width | points | 0.5 (2.2) |
 | color | palette index, RGB, automatic (group), none | group |
 | transparency | 0 opaque .. 100 clear | 0 |
 | fill under curve | enable; base line (auto, bottom, top, left, right axis, value, extra line); fill to another plot; above/below colours; pattern | off |
@@ -273,7 +274,7 @@ Also: connect begin and end (closes; off), connect within subset (on for line pl
 ### 5.4 Symbols [W:labtalk list-of-symbol-shapes, pd-dialog-sym-tab]
 Shapes: 0 none, 1 square, 2 circle, 3 up triangle, 4 down triangle, 5 diamond, 6 plus, 7 cross, 8 star(*), 9 h-bar, 10 v-bar, 11 numbers, 12 capital letters, 13 lowercase letters, 14 right arrow, 15 left triangle, 16 right triangle, 17 hexagon, 18 star, 19 pentagon, 20 sphere; 56 data markers, 58 X-position marker lines.
 Interiors: 0 solid, 1 open, 2 dot centre, 3 hollow, 4 + centre, 5 x centre, 6 - centre, 7 | centre, 8 half up, 9 half right, 10 half down, 11 half left. Hollow lets objects beneath show; open hides them unless fill is none.
-Other: size (pt, default UNKNOWN), edge thickness (2), colour automatic = line colour, fill colour (global default), size from column with scaling factor and formula (`s`, `s1` min, `s2` max), user bitmap/SVG symbols (P2).
+Other: size (pt, default 9, shape square, solid), edge thickness (2), colour automatic = line colour, fill colour (global default), size from column with scaling factor and formula (`s`, `s1` min, `s2` max), user bitmap/SVG symbols (P2).
 
 ### 5.5 Error bars (P0)
 Error column attached as third plot column; types 231 (Y) and 233 (X). Template ERRBAR exists. Options: direction plus/minus/both, cap width, line width/colour/style. Numeric defaults UNKNOWN U9.

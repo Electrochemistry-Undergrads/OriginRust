@@ -88,10 +88,10 @@ fn the_column_template_draws_one_group_of_bars_per_sample_with_the_names_under_i
         assert!(texts.contains(&name.to_string()), "{name} in {texts:?}");
     }
     assert!(!texts.contains(&"Row".to_string()));
-    // 15 bars in the plot area; besides them the page background, the clip rectangle and three
-    // small bars in the legend.
+    // 15 bars in the plot area; besides them the page background, the clip rectangle, the legend
+    // frame and three small bars in the legend.
     assert_eq!(bars_in_plot_area(&svg), 15);
-    assert_eq!(svg.matches("<rect ").count(), 1 + 1 + 15 + 3);
+    assert_eq!(svg.matches("<rect ").count(), 1 + 1 + 15 + 3 + 1);
     // Nothing of the new settings is written while they keep their defaults.
     assert_eq!(l.bars, BarSpacing::default());
     assert_eq!(l.x_axis.tick_label_source, TickLabelSource::Auto);

@@ -91,7 +91,7 @@ const ANN_FONT_AT: usize = 0x04;
 const ANN_ANGLE_AT: usize = 0x02;
 
 /// Origin's colour list: the number stored in a curve record is the position in this list.
-pub(crate) const PALETTE: [(u8, u8, u8); 22] = [
+pub(crate) const PALETTE: [(u8, u8, u8); 24] = [
     (0, 0, 0),
     (255, 0, 0),
     (0, 255, 0),
@@ -114,6 +114,8 @@ pub(crate) const PALETTE: [(u8, u8, u8); 22] = [
     (128, 128, 128),
     (255, 255, 128),
     (128, 255, 255),
+    (255, 128, 255),
+    (64, 64, 64),
 ];
 
 fn palette_color(i: usize) -> Color {
@@ -1087,7 +1089,8 @@ mod tests {
         assert_eq!(palette_color(0), Color::BLACK);
         assert_eq!(palette_color(1), Color::RED);
         assert_eq!(palette_color(3), Color::BLUE);
-        assert_eq!(palette_color(22), Color::BLACK);
+        assert_eq!(palette_color(22), Color::rgb(255, 128, 255));
+        assert_eq!(palette_color(24), Color::BLACK);
     }
 
     /// Axis blocks with the visibility bits of graphing spec 12.7: primary-side tick labels,

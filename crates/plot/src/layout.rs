@@ -19,7 +19,7 @@ use crate::scene::{
 };
 use crate::stack;
 use crate::text::{self, ASCENT, DESCENT};
-use crate::ticks::{ResolvedAxis, resolve_axis};
+use crate::ticks::{ResolvedAxis, resolve_axis_edges};
 use crate::{LayerGeometry, PlotError, Rect};
 use sheaf_core::Color;
 use sheaf_core::graph::{
@@ -111,6 +111,7 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
     } else {
         let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
         let linear = axis.scale == sheaf_core::graph::ScaleKind::Linear;
+        let mut free = (true, true);
         let bars: Vec<&data::PlotData> = sources.iter().copied().filter(|pd| pd.bar.is_some()).collect();
         if linear && let (Some((lo, hi)), Some(pd)) = (range, bars.first()) {
             match dim {
@@ -122,12 +123,23 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
                 }
                 Dim::Y => {
                     // Bars rise from their base: 0, or the plot's offset in a stacked layer.
-                    let (lo, hi) = bars.iter().fold((lo, hi), |(lo, hi), pd| (lo.min(pd.oy), hi.max(pd.oy)));
-                    range = Some((lo, hi));
+                    let (blo, bhi) =
+                        bars.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), pd| (a.min(pd.oy), b.max(pd.oy)));
+                    // A base at or beyond the data limit is the axis limit itself, without a margin.
+                    free = (blo > lo, bhi < hi);
+                    range = Some((lo.min(blo), hi.max(bhi)));
                 }
             }
         }
-        resolve_axis(drawn.as_ref().unwrap_or(axis), range)
+        // Tick labels from a column sit on whole-number ticks: the step stays the plain rule (about five ticks)
+        // instead of Origin's table, which can skip rows.
+        if let (Some((lo, hi)), true) = (range, data::label_column(project, axis, dim, first).is_some())
+            && axis.major_step.is_none()
+        {
+            let base = drawn.as_ref().unwrap_or(axis);
+            drawn = Some(Axis { major_step: Some(crate::ticks::nice_step((hi - lo) / 5.0)), ..base.clone() });
+        }
+        resolve_axis_edges(drawn.as_ref().unwrap_or(axis), range, free)
     };
     if let Some(column) = data::label_column(project, axis, dim, first) {
         crate::ticks::label_from_cells(&mut resolved, &data::cell_texts(column));

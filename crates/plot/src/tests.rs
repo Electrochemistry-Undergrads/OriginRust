@@ -217,7 +217,7 @@ fn hidden_plots_and_row_ranges_are_respected() {
         layer.plots[1].rows = Some((10, 20));
     }
     let geom = &layout_geometry(&p, g).unwrap()[0];
-    assert_eq!((geom.x.min, geom.x.max), (10.0, 20.0));
+    assert_eq!((geom.x.min, geom.x.max), (9.0, 20.0));
     let svg = svg_of(&p, g);
     let d = doc(&svg);
     assert_eq!(paths_in(with_class(&d, "plots")[0]).len(), 1);
@@ -302,7 +302,7 @@ fn log_axis_places_decades_evenly() {
     let (mut p, g) = project(Template::Line, vec![1.0, 10.0, 100.0, 1000.0], vec![vec![1.0, 2.0, 3.0, 4.0]]);
     p.graph_mut(g).unwrap().layers[0].x_axis.scale = ScaleKind::Log10;
     let geom = &layout_geometry(&p, g).unwrap()[0];
-    assert_eq!((geom.x.min, geom.x.max), (1.0, 1000.0));
+    assert_eq!((geom.x.min, geom.x.max), (0.5, 2000.0), "Origin pads 8 % of the log span, then rounds to a 1..9 tick");
     let (a, _) = geom.data_to_page(10.0, 1.0);
     let (b, _) = geom.data_to_page(100.0, 1.0);
     let (c, _) = geom.data_to_page(1000.0, 1.0);
@@ -838,17 +838,17 @@ fn double_y_layout_puts_the_right_axis_labels_and_title_beside_the_frame() {
     for geom in &geoms {
         let f = geom.frame;
         assert!(near(f.x, 73.728) && near(f.y, 24.192) && near(f.w, 313.344) && near(f.h, 259.2), "{f:?}");
-        assert_eq!((geom.x.min, geom.x.max, geom.x.step), (0.0, 10.0, 2.0));
+        assert_eq!((geom.x.min, geom.x.max, geom.x.step), (-2.5, 12.5, 5.0));
     }
-    assert_eq!((geoms[0].y.min, geoms[0].y.max, geoms[0].y.step), (0.0, 100.0, 20.0));
+    assert_eq!((geoms[0].y.min, geoms[0].y.max, geoms[0].y.step), (-25.0, 125.0, 50.0));
     let right = &geoms[1].y;
-    assert!(near(right.min, -0.06) && near(right.max, 0.06) && near(right.step, 0.02), "{right:?}");
-    assert_eq!(right.major.len(), 7);
+    assert!(near(right.min, -0.075) && near(right.max, 0.075) && near(right.step, 0.05), "{right:?}");
+    assert_eq!(right.major.len(), 3);
 
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let texts = texts_of(&scene.layers[1].overlay);
     let tick_labels: Vec<_> = texts.iter().filter(|t| t.rotate_ccw == 0.0 && t.x > 387.0).collect();
-    assert_eq!(tick_labels.len(), 7);
+    assert_eq!(tick_labels.len(), 3);
     assert!(tick_labels.iter().all(|t| t.anchor == scene::Anchor::Start && near(t.x, 396.272)), "{tick_labels:?}");
     let titles: Vec<_> = texts.iter().filter(|t| t.rotate_ccw == 90.0).collect();
     assert_eq!(titles.len(), 1);
@@ -884,10 +884,10 @@ fn a_linked_x_axis_covers_the_data_of_both_layers_and_follows_the_parent() {
         double_y(Template::DoubleY, vec![curve("Left", "V", &a, |v| v)], vec![curve("Right", "A", &b, |v| 1000.0 + v)]);
     let geoms = fixed_geometry(&p, g);
     for geom in &geoms {
-        assert_eq!((geom.x.min, geom.x.max, geom.x.step), (0.0, 25.0, 5.0));
+        assert_eq!((geom.x.min, geom.x.max, geom.x.step), (-2.0, 27.0, 2.0));
     }
-    assert_eq!((geoms[0].y.min, geoms[0].y.max), (0.0, 10.0), "the left Y axis sees only its own data");
-    assert_eq!((geoms[1].y.min, geoms[1].y.max), (1005.0, 1025.0), "the right Y axis sees only its own data");
+    assert_eq!((geoms[0].y.min, geoms[0].y.max), (-2.5, 12.5), "the left Y axis sees only its own data");
+    assert_eq!((geoms[1].y.min, geoms[1].y.max), (1003.0, 1027.0), "the right Y axis sees only its own data");
     // The linked layer's own X settings are not used while it is linked.
     p.graph_mut(g).unwrap().layers[1].x_axis.min = Some(100.0);
     assert_eq!(fixed_geometry(&p, g)[1].x, geoms[1].x);
@@ -1038,7 +1038,7 @@ fn invalid_links_draw_independent_layers() {
         // The frame {0, 0, 1, 1} is read as the whole page; only its right side moves in.
         let f = geoms[1].frame;
         assert!(f.x == 0.0 && f.y == 0.0 && near(f.h, 345.6) && f.w < 460.8, "{f:?}");
-        assert_eq!((geoms[1].x.min, geoms[1].x.max), (0.0, 10.0), "its own X range");
+        assert_eq!((geoms[1].x.min, geoms[1].x.max), (-2.5, 12.5), "its own X range");
         svg_of(&p, g);
         layout_geometry(&p, g).unwrap();
     }
@@ -1387,7 +1387,7 @@ fn a_waterfall_draws_later_curves_moved_and_the_first_on_top() {
     assert_eq!(geom.clip, f, "data are clipped to the whole frame");
     let b = stack::front_frame(f, 3, 0.05, 0.1);
     assert_eq!(geom.frame, b, "the axes are on the front frame");
-    assert_eq!((geom.y.min, geom.y.max), (0.0, 20.0), "limits from the unmoved data");
+    assert_eq!((geom.y.min, geom.y.max), (-2.0, 22.0), "limits from the unmoved data");
 
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let layer = &scene.layers[0];
@@ -1628,7 +1628,7 @@ fn labels_from_a_chosen_column() {
     assert_eq!(p.graph(g).unwrap().layers[0].plots[0].x, None);
     // Without a chosen column the row numbers show, as before.
     let geom = &fixed_geometry(&p, g)[0];
-    assert_eq!((geom.x.min, geom.x.max), (1.0, 4.0));
+    assert_eq!((geom.x.min, geom.x.max), (0.5, 4.5));
     assert!(texts(&doc(&svg_of(&p, g))).contains(&"Row".to_string()));
     p.graph_mut(g).unwrap().layers[0].x_axis.tick_label_source = TickLabelSource::Column { column: names };
     let geom = &fixed_geometry(&p, g)[0];
@@ -1640,7 +1640,7 @@ fn labels_from_a_chosen_column() {
     p.graph_mut(g).unwrap().layers[0].x_axis.tick_label_source =
         TickLabelSource::Column { column: sheaf_core::ColumnId(999_999) };
     let geom = &fixed_geometry(&p, g)[0];
-    assert_eq!((geom.x.min, geom.x.max), (1.0, 4.0));
+    assert_eq!((geom.x.min, geom.x.max), (0.5, 4.5));
     assert_eq!(geom.x.labels[0], "1");
 
     // A numeric X axis keeps its range; whole-number ticks show the rows' cells.
@@ -1663,7 +1663,7 @@ fn one_column_plot_draws_bars_from_zero_over_80_percent_of_the_spacing() {
     let (l, r, b, t) = bar_in_data(geom, bars[0].0);
     assert!(close9(l, 0.6) && close9(r, 1.4) && close9(b, 0.0) && close9(t, 1.2), "{l} {r} {b} {t}");
     assert!(bars.iter().all(|(_, fill, _)| *fill == Some(Color::BLACK)));
-    assert_eq!((geom.y.min, geom.y.max), (0.0, 4.0), "the Y axis reaches down to 0");
+    assert_eq!((geom.y.min, geom.y.max), (0.0, 3.5), "the Y axis reaches down to 0");
     let svg = svg_of(&p, g);
     let d = doc(&svg);
     assert_eq!(paths_in(with_class(&d, "plots")[0]).len(), 0, "no line");
@@ -1732,13 +1732,18 @@ fn several_column_plots_stand_side_by_side() {
 fn column_plots_reach_down_to_zero_or_to_the_bottom_of_a_log_axis() {
     let (mut p, g) = project(Template::Line, vec![1.0, 2.0, 3.0, 4.0], vec![vec![5.0, 6.0, 7.0, 8.0]]);
     let geom = &fixed_geometry(&p, g)[0];
-    assert_eq!((geom.y.min, geom.y.max), (5.0, 8.0), "a line keeps its range");
+    assert_eq!((geom.y.min, geom.y.max), (4.5, 8.5), "a line keeps its range");
     p.graph_mut(g).unwrap().layers[0].plots[0].kind = PlotKind::Column;
     let geom = &fixed_geometry(&p, g)[0];
-    assert_eq!((geom.y.min, geom.y.max), (0.0, 8.0));
+    assert_eq!((geom.y.min, geom.y.max), (0.0, 9.0));
     p.graph_mut(g).unwrap().layers[0].y_axis.scale = ScaleKind::Log10;
     let geom = &fixed_geometry(&p, g)[0];
-    assert_eq!((geom.y.min, geom.y.max), (1.0, 10.0));
+    // 5..8 is under a decade: Origin gives 4.78..8.33 (ninths of the step 1) with linear ticks.
+    assert!(
+        (geom.y.min - 43.0 / 9.0).abs() < 1e-9 && (geom.y.max - 25.0 / 3.0).abs() < 1e-9,
+        "{:?}",
+        (geom.y.min, geom.y.max)
+    );
     let bars = bars_of(&p, g);
     let f = geom.frame;
     assert!(bars.iter().all(|(r, _, _)| near(r.y + r.h, f.y + f.h)), "bars start at the bottom of the axis");
@@ -1959,18 +1964,21 @@ fn the_panels_of_a_stack_share_one_x_axis_that_covers_every_panel() {
     let (mut p, g) = panel_graph(Template::Line, &PanelLayout::stack(2), curves);
     let geoms = fixed_geometry(&p, g);
     for geom in &geoms {
-        assert_eq!((geom.x.min, geom.x.max), (-1.0, 2.0));
+        assert_eq!((geom.x.min, geom.x.max), (-1.5, 2.5));
         assert_eq!(geom.x.major, vec![-1.0, 0.0, 1.0, 2.0]);
     }
     // Each panel has its own Y axis.
-    assert_eq!((geoms[0].y.min, geoms[0].y.max), (-1.0, 1.0));
-    assert_eq!((geoms[1].y.min, geoms[1].y.max), (0.0, 20.0));
+    assert_eq!((geoms[0].y.min, geoms[0].y.max), (-1.5, 1.5));
+    assert_eq!((geoms[1].y.min, geoms[1].y.max), (-2.0, 22.0));
     // Panel 1 sits right on top of panel 0, as wide as it.
     let (f0, f1) = (geoms[0].frame, geoms[1].frame);
     assert!(near(f1.y + f1.h, f0.y) && near(f1.x, f0.x) && near(f1.w, f0.w) && near(f1.h, f0.h), "{f0:?} {f1:?}");
-    // The Y labels and titles need a little more than the 15 % margin, so both panels lose the same
-    // width on the left; the right side (90 %) and the top of the stack (10 %) stay.
-    assert!(f0.x > 0.15 * 345.6 && near(f0.x + f0.w, 0.90 * 345.6) && near(f1.y, 0.10 * 460.8), "{f0:?} {f1:?}");
+    // The Y labels and titles need at least the 15 % margin, and both panels lose the same width on
+    // the left; the right side (90 %) and the top of the stack (10 %) stay.
+    assert!(
+        f0.x >= 0.15 * 345.6 - 1e-9 && near(f0.x + f0.w, 0.90 * 345.6) && near(f1.y, 0.10 * 460.8),
+        "{f0:?} {f1:?}"
+    );
     // Limits set on the first panel apply to both.
     p.graph_mut(g).unwrap().layers[0].x_axis.max = Some(3.0);
     assert!(fixed_geometry(&p, g).iter().all(|geom| geom.x.max == 3.0));
@@ -1978,8 +1986,8 @@ fn the_panels_of_a_stack_share_one_x_axis_that_covers_every_panel() {
     // Without the X link each panel has its own X range; the panel keeps its place.
     p.graph_mut(g).unwrap().layers[1].link.as_mut().unwrap().x = sheaf_core::graph::ScaleLink::None;
     let geoms = fixed_geometry(&p, g);
-    assert_eq!((geoms[0].x.min, geoms[0].x.max), (-1.0, 1.0));
-    assert_eq!((geoms[1].x.min, geoms[1].x.max), (0.0, 2.0));
+    assert_eq!((geoms[0].x.min, geoms[0].x.max), (-1.5, 1.5));
+    assert_eq!((geoms[1].x.min, geoms[1].x.max), (-0.5, 2.5));
     assert!(near(geoms[1].frame.y + geoms[1].frame.h, geoms[0].frame.y));
 }
 
@@ -2075,9 +2083,14 @@ fn panels_side_by_side_that_share_y_hide_the_inner_y_labels_and_the_joint_x_labe
     let x: Vec<f64> = (0..=10).map(f64::from).collect();
     let curves = vec![curve("A", "V", &x, |v| v), curve("B", "V", &x, |v| 2.0 * v)];
     let layout = PanelLayout { h_gap: 0.0, link_y: true, ..PanelLayout::arrange(1, 2) };
-    let (p, g) = panel_graph(Template::Line, &layout, curves);
+    let (mut p, g) = panel_graph(Template::Line, &layout, curves);
     let geoms = fixed_geometry(&p, g);
-    assert_eq!((geoms[0].y.min, geoms[0].y.max), (0.0, 20.0), "one Y range for both");
+    assert_eq!((geoms[0].y.min, geoms[0].y.max), (-2.0, 22.0), "one Y range for both");
+    // The joint label only matters when the axis ends on a tick: fix the X limits on 0..10.
+    for l in &mut p.graph_mut(g).unwrap().layers {
+        l.x_axis.min = Some(0.0);
+        l.x_axis.max = Some(10.0);
+    }
     assert_eq!(geoms[1].y, geoms[0].y);
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     assert!(left_labels(&scene, 1).is_empty());
@@ -2103,7 +2116,7 @@ fn a_right_y_axis_in_a_panel_lists_only_that_panels_curves_and_follows_the_share
     let geoms = fixed_geometry(&p, g);
     assert_eq!(geoms[right].frame, geoms[1].frame);
     assert!(geoms.iter().all(|geom| geom.x == geoms[0].x), "one X axis for all");
-    assert_eq!((geoms[0].x.min, geoms[0].x.max), (0.0, 20.0));
+    assert_eq!((geoms[0].x.min, geoms[0].x.max), (-2.0, 22.0));
     let svg = svg_of(&p, g);
     for name in ["A", "B", "Q"] {
         assert_eq!(svg.matches(&format!(">{name}</text>")).count(), 1, "{name} is listed once");

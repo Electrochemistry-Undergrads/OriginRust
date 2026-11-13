@@ -452,7 +452,8 @@ fn a_change_on_the_scale_tab_fixes_the_limit() {
     // The first "Auto" box is the one of From.
     h.query_all_by_label("Auto").next().expect("From has an Auto box").click();
     settle(&mut h);
-    assert_eq!(graph(&h).layers[0].y_axis.min, Some(0.0));
+    // The automatic lower limit (Origin's 8 % margin below the data) becomes the fixed one.
+    assert_eq!(graph(&h).layers[0].y_axis.min, Some(-2.0));
     assert!(graph(&h).layers[0].y_axis.max.is_none());
     click(&mut h, "Tick Labels");
     click(&mut h, "Hide Last Label");

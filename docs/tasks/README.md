@@ -64,10 +64,10 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T14](T14-statistics-breadth.md) | Descriptive-statistics columns, outlier tests, more tests | M | items 1-4 done on `stats-breadth`, not merged; 5, 6 open |
 | [T15](T15-fitting-breadth.md) | Multi-dataset global fit, Simplex, surface fits, compare models | L | open |
 | [T16](T16-numeric-differences.md) | Small numeric/behaviour differences (Mann-Whitney print, spline, error caps) | S | 1, 5 done, 4 investigated (`b967898`); 2, 3, 6 open |
-| [T17](T17-docs-cleanup.md) | Stale spec paragraphs and parity counts | S | done except item 3 (with T20) |
+| [T17](T17-docs-cleanup.md) | Stale spec paragraphs and parity counts | S | done (item 3 on branch `axis-range2`, not merged) |
 | [T18](T18-backlog.md) | Large items not yet briefed (scripting, 3D, Options, importers, templates) | - | backlog |
 | [T19](T19-import-and-column-dialogs.md) | ASCII import options, Import Wizard pages, Column Properties formats | M | open, wizard needs Origin pages |
-| [T20](T20-automatic-axis-range.md) | Automatic axis range as Origin (8 % margin, step rule, log padding), Rescale Margin | M | open |
+| [T20](T20-automatic-axis-range.md) | Automatic axis range as Origin (8 % margin, step rule, log padding), Rescale Margin | M | done on branch `axis-range2`, not merged |
 | [T21](T21-graph-defaults.md) | Graph defaults as Origin: colour order, fonts, line widths, ticks, symbols, dashes | M | open |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of

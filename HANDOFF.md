@@ -1,6 +1,6 @@
 # Handoff
 
-Last rewritten: 2026-11-12, about 22:30. This file is short on purpose. **To start work, read this
+Last rewritten: 2026-11-13. This file is short on purpose. **To start work, read this
 file, then `docs/tasks/README.md`, then one brief `docs/tasks/Txx-*.md`.** Do not read
 `docs/audit/origin-differences-2026-11-12.md` or whole specs up front; the brief names the section to
 open. History of what was merged when is in `git log` (not repeated here).
@@ -20,7 +20,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   (local only, read its last 40 lines on start); merge to `main` one branch at a time, after
   `git fetch`. See LESSONS "Two sessions on one repository need a written split".
 
-## State of `main` (`6913bfe` + this rewrite)
+## State of `main`
 
 - Milestones 1-5 done (M2 waits on the owner's click-through; M5 lacks plot groups/legend frames).
   Owner requests of 2026-11-11 done: parity audit, Origin-style workspace (ADR 0007, most steps),
@@ -35,7 +35,12 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
-| (several) | `originrust-3a` | Matrices, contour plots, heatmaps | offline since 2026-11-12 night; nothing pushed |
+| `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
+| `axis-range2` | "Handoff.md token optimization" | T20 automatic axis range | started 2026-11-13 |
+| `stats-breadth` | "Handoff.md token optimization" | T14 items 1-4 | started 2026-11-13 |
+
+`merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same
+branches that are now on `main`; it holds nothing `main` lacks and can be removed.
 
 On 2026-11-13 no other OriginRust session was live, so the finished branches of the other sessions were
 integrated into `main` by "Handoff.md token optimization": `text-numeric`, `opj-params-welch` (plus the

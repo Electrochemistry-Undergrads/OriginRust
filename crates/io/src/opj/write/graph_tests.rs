@@ -258,8 +258,8 @@ fn logarithmic_axes_and_automatic_ranges() {
     let (imp, _) = round_trip(&p);
     let log = &imp.graphs[0].layers[0];
     assert_eq!(log.y_axis.scale, ScaleKind::Log10);
-    // the data run from 1 to 316: whole decades around them
-    assert_eq!((log.y_axis.min, log.y_axis.max), (Some(1.0), Some(1000.0)));
+    // the data run from 1 to 316: Origin's own range (8 % of the log span, then the next 1..9 tick)
+    assert_eq!((log.y_axis.min, log.y_axis.max), (Some(0.6), Some(600.0)));
     assert_eq!(log.x_axis.scale, ScaleKind::Linear);
     let auto = &imp.graphs[1].layers[0];
     let (lo, hi) = (auto.y_axis.min.unwrap(), auto.y_axis.max.unwrap());
@@ -271,17 +271,18 @@ fn logarithmic_axes_and_automatic_ranges() {
 
 #[test]
 fn nice_ranges_have_round_limits() {
-    let (a, b, s) = graph::nice_range(0.0, 25.0, false, AutoRange::Nice);
-    assert!((-5.0..=0.0).contains(&a) && (25.0..=30.0).contains(&b) && s == 5.0, "{a} {b} {s}");
-    let (a, b, s) = graph::nice_range(-0.00042, 0.00043, false, AutoRange::Nice);
+    // Origin's own range for data 0..25 (graphing spec section 4): 8 % margin, rounded to half the step 2.
+    let (a, b, s) = graph::nice_range(0.0, 25.0, false, AutoRange::Nice, 8.0);
+    assert!((a, b, s) == (-2.0, 27.0, 2.0), "{a} {b} {s}");
+    let (a, b, s) = graph::nice_range(-0.00042, 0.00043, false, AutoRange::Nice, 8.0);
     assert!(a <= -0.00042 && b >= 0.00043 && s > 0.0);
-    let (a, b, _) = graph::nice_range(0.3, 20.0, true, AutoRange::Nice);
-    assert_eq!((a, b), (0.1, 100.0));
-    let (a, b, _) = graph::nice_range(2.0, 2.0, false, AutoRange::Nice);
+    let (a, b, _) = graph::nice_range(0.3, 20.0, true, AutoRange::Nice, 8.0);
+    assert_eq!((a, b), (0.2, 30.0));
+    let (a, b, _) = graph::nice_range(2.0, 2.0, false, AutoRange::Nice, 8.0);
     assert!(a < 2.0 && b > 2.0);
-    let (a, b, _) = graph::nice_range(-3.0, 8.0, false, AutoRange::SymmetricZero);
+    let (a, b, _) = graph::nice_range(-3.0, 8.0, false, AutoRange::SymmetricZero, 8.0);
     assert!(a <= -8.0 && b >= 8.0 && close(a, -b));
-    assert_eq!(graph::nice_range(1.0, 7.0, false, AutoRange::Tight).0, 1.0);
+    assert_eq!(graph::nice_range(1.0, 7.0, false, AutoRange::Tight, 8.0).0, 1.0);
 }
 
 #[test]

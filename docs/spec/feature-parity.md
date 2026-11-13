@@ -290,7 +290,7 @@ Cross-cutting findings:
 | Axis titles | Title tab | default from long name and units | ◐ | no `%(?X)` substitution, rotation, offset | P0 |
 | Opposite and central axes | top and right, axis at value | top and right line and ticks; a right Y axis with labels and title as a linked layer (double-Y) | ◐ | no axis at zero; labels on an opposite side only through a linked layer | P0 |
 | Symmetric Y about zero | set by hand | automatic | ✓ | | P0 |
-| Auto-scale and tick algorithm | automatic | `ticks.rs` from a proposed rule | ◐ | never validated against Origin | P0 |
+| Auto-scale and tick algorithm | automatic | `core/autorange.rs`: Origin's 8 % margin, step table and log rule, checked against 600 measured cases; Rescale Margin in the axis dialog | ◐ | an exception in the step table is empirical; all-negative columns, date axes and margins on log axes not measured | P0 |
 | Rescale command | Ctrl+R | Ctrl+R, Graph > Rescale to Show All, the Rescale button, and the right-click menus of an axis, a layer and the page: fixed limits go back to automatic | ✓ | no Rescale for X only or Y only | P0 |
 | Line style, width, colour | Line tab | 8 dash styles, connect; area plots fill under the curve with the symbol colour | ◐ | no transparency; dash patterns are guesses | P0 |
 | Symbols | Symbol tab | 8 shapes, size, filled or open | ◐ | Origin has 20 shapes, 12 interiors; no separate fill and edge colour | P0 |

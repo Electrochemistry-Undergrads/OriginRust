@@ -26,6 +26,7 @@ use crate::column::{Column, ColumnData, Designation};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
+use serde::{Deserialize, Serialize};
 use sheaf_calc as calc;
 use sheaf_expr::Expr;
 
@@ -57,7 +58,7 @@ pub struct PeakChainSpec {
 }
 
 /// Which rows of the chosen columns a tool works on.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum RowRange {
     #[default]
     All,
@@ -71,7 +72,7 @@ pub enum RowRange {
 }
 
 /// What [`Tool::Integrate`] does.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct IntegrateSpec {
     pub area_type: AreaType,
     /// Subtract the straight line through the first and the last point of
@@ -582,6 +583,20 @@ impl Tool {
             _ => "Result",
         }
     }
+}
+
+/// Where the one-value-per-row results of a tool go (the Output node of the analysis windows). Tools
+/// that write a table of numbers always use a new sheet.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub enum OutputTarget {
+    /// New columns directly after each input column (ADR 0005).
+    #[default]
+    NextToInput,
+    /// A new sheet in the same workbook, with an X and a Y column per input column.
+    NewSheet,
+    /// Existing columns of the input sheet, one per result column in order; their values and
+    /// labels are replaced.
+    Existing(Vec<ColumnId>),
 }
 
 /// One run of a tool: the Y columns to work on (all in one sheet), the rows
@@ -1107,6 +1122,11 @@ impl Project {
     /// Runs an analysis tool on worksheet columns. See the module text for
     /// where the results go. On error nothing is changed.
     pub fn analyze(&mut self, request: &Request) -> Result<Report, AnalysisError> {
+        self.analyze_to(request, &OutputTarget::NextToInput)
+    }
+
+    /// Like [`Project::analyze`], with a choice of where the one-value-per-row results go.
+    pub fn analyze_to(&mut self, request: &Request, output: &OutputTarget) -> Result<Report, AnalysisError> {
         let first = *request.columns.first().ok_or(AnalysisError::NoColumns)?;
         let (book, _, _) = self.locate(first).ok_or(AnalysisError::NoSuchColumn(first))?;
         let book_id = book.id;
@@ -1648,12 +1668,68 @@ impl Project {
             }
         }
 
+        match output {
+            OutputTarget::NextToInput => {}
+            OutputTarget::NewSheet => {
+                for nc in std::mem::take(&mut beside) {
+                    let inp = inputs.iter().find(|i| i.id == nc.after).expect("every result column has a source");
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: inp.x_name.clone(),
+                        units: inp.x_units.clone(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(inp.x.clone()),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: nc.long_name,
+                        units: nc.units,
+                        comments: nc.comments,
+                        data: ColumnData::numeric(nc.data),
+                    });
+                }
+            }
+            OutputTarget::Existing(targets) => {
+                if beside.is_empty() {
+                    return Err(AnalysisError::BadOption(
+                        "this tool writes a table of numbers, which always goes to a new sheet".into(),
+                    ));
+                }
+                if targets.len() != beside.len() {
+                    return Err(AnalysisError::BadOption(format!(
+                        "choose {} existing column(s) for the result, not {}",
+                        beside.len(),
+                        targets.len()
+                    )));
+                }
+                for t in targets {
+                    if sheet.column(*t).is_none() {
+                        return Err(AnalysisError::BadOption(
+                            "the existing columns for the result must be in the sheet of the input".into(),
+                        ));
+                    }
+                }
+            }
+        }
+        let existing: Option<&Vec<ColumnId>> = if let OutputTarget::Existing(t) = output { Some(t) } else { None };
+
         // Everything was computed; now change the project.
         let count = request.columns.len();
         drop(inputs);
         let mut new_columns = Vec::with_capacity(beside.len());
         let mut added_names: Vec<String> = Vec::new();
-        for nc in beside {
+        for (k, nc) in beside.into_iter().enumerate() {
+            if let Some(targets) = existing {
+                let ws = &mut self.workbook_mut(book_id).expect("workbook exists").sheets[sheet_index];
+                let c = ws.column_mut(targets[k]).expect("checked above");
+                c.data = ColumnData::numeric(nc.data);
+                c.long_name = nc.long_name.clone();
+                c.units = nc.units;
+                c.comments = nc.comments;
+                added_names.push(format!("{} \"{}\"", c.short_name, nc.long_name));
+                new_columns.push(targets[k]);
+                continue;
+            }
             let id = self.new_column_id();
             let ws = &mut self.workbook_mut(book_id).expect("workbook exists").sheets[sheet_index];
             let source = ws.column_index(nc.after).expect("source column exists");
@@ -1717,6 +1793,9 @@ impl Project {
             (Some(_), true) => format!("{}: {columns}, results in sheet {sheet_name}", request.tool.name()),
             (Some(_), false) => {
                 format!("{}: {columns}, results in sheet {sheet_name} and in new columns {added}", request.tool.name())
+            }
+            (None, _) if existing.is_some() => {
+                format!("{}: {columns}, results in existing columns {added}", request.tool.name())
             }
             (None, _) => format!("{}: {columns}, results in new columns {added}", request.tool.name()),
         };

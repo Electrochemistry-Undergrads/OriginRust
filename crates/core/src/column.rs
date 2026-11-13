@@ -193,6 +193,14 @@ pub enum FormulaState {
     Broken,
 }
 
+/// Set on the columns that an analysis tool wrote while its Recalculate choice was Auto or Manual
+/// (ADR 0005, "Recalculating results"); the lock in the column head follows it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnalysisMark {
+    pub mode: RecalcMode,
+    pub state: FormulaState,
+}
+
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
 }
@@ -225,6 +233,9 @@ pub struct Column {
     /// The 0-based rows the formula fills; `None` means all rows its inputs have.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formula_rows: Option<std::ops::Range<usize>>,
+    /// Present on the result columns of an analysis that recalculates (see [`AnalysisMark`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<AnalysisMark>,
     /// Extra label rows (name -> value), for example instrument settings.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, String>,
@@ -258,6 +269,7 @@ impl Column {
             recalc: RecalcMode::None,
             formula_state: FormulaState::Current,
             formula_rows: None,
+            analysis: None,
             params: BTreeMap::new(),
             fit_result: false,
             data,

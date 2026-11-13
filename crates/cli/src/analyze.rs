@@ -630,6 +630,10 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     Ok(())
 }
 
+fn local_span(span: f64) -> analysis::LocalSpan {
+    if span > 0.0 { analysis::LocalSpan::Proportion(span) } else { analysis::LocalSpan::Points }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -653,8 +657,4 @@ mod tests {
         assert!(parse_pair::<usize>("12-48", "row range", "120:480").is_err());
         assert!(parse_pair::<usize>("a:3", "row range", "120:480").is_err());
     }
-}
-
-fn local_span(span: f64) -> analysis::LocalSpan {
-    if span > 0.0 { analysis::LocalSpan::Proportion(span) } else { analysis::LocalSpan::Points }
 }

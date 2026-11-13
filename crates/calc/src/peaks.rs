@@ -13,7 +13,7 @@
 //! magnitude is below it, and `max_half_width` limits how far from the peak a foot may lie.
 
 /// Which peaks are wanted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum PeakDirection {
     Positive,
     Negative,
@@ -22,7 +22,7 @@ pub enum PeakDirection {
 }
 
 /// Peak filter (`filter` / `value`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PeakFilter {
     /// Keep every candidate.
     None,
@@ -34,7 +34,7 @@ pub enum PeakFilter {
 }
 
 /// Options of [`find_peaks`].
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PeakOptions {
     /// Neighbours compared on each side (Origin `npts`, default 2).
     pub npts: usize,

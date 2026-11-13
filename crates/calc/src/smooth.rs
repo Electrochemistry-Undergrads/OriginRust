@@ -9,7 +9,7 @@
 use crate::util::{polyfit_centered, valid_indices};
 
 /// What happens where the window sticks out of the data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Boundary {
     /// The window shrinks symmetrically (adjacent averaging, percentile); Savitzky-Golay fits the
     /// first or last full window and evaluates it at the edge point.
@@ -26,7 +26,7 @@ pub enum Boundary {
 }
 
 /// Smoothing method.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SmoothMethod {
     /// Moving average; `weighted` uses parabolic weights `1 - (j / (h + 1))^2`.
     AdjacentAveraging { weighted: bool },
@@ -52,7 +52,7 @@ pub enum SmoothMethod {
 }
 
 /// How Lowess and Loess choose the points of each local fit.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum LocalSpan {
     /// A fraction of the points (Origin `span`, 0 to 1, default 0.1).
     Proportion(f64),
@@ -61,7 +61,7 @@ pub enum LocalSpan {
 }
 
 /// Options of [`smooth`].
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SmoothOptions {
     pub method: SmoothMethod,
     /// Points of the window (default 5).
@@ -242,6 +242,7 @@ fn local_regression(x: &[f64], y: &[f64], q: usize, deg: usize) -> Vec<f64> {
 }
 
 /// Value at 0 of the weighted least-squares polynomial of degree `deg` (normal equations).
+#[allow(clippy::needless_range_loop)]
 fn weighted_poly_at_zero(xs: &[f64], ys: &[f64], ws: &[f64], deg: usize) -> Option<f64> {
     let m = deg + 1;
     if xs.len() < m {

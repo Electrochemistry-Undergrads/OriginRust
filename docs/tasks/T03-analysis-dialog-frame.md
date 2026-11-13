@@ -1,6 +1,6 @@
 # T03: Analysis dialogs: Recalculate, Output, smoothing methods, pkFind options
 
-**Status:** open. Auto Apply is not done yet either (branch `export-margin` did not include it): add it here.
+**Status:** done on branch `analysis-frame`, not merged: items 1 to 4 and Auto Apply. Left: Recalculate only links Smooth, Integrate and Find Peaks (the other tools run once); pkFind methods `win`, `first`, `second`, `residue` were measured but their rules are not reproduced; `hwidth` at an exact grid multiple (0.2 on a 0.1 grid) differs per peak; no saved dialog themes; the Output choice is offered for the six column-writing tools only; Cancel keeps what Apply or Auto Apply already made.
 **Size:** M. **Branch:** `analysis-frame`. **Model:** Sonnet.
 **Detail:** audit B "Analysis X-Function dialogs", D "Partial".
 **Spec:** `docs/spec/gui-look.md` around the X-Function dialog (search "Recalculate"),

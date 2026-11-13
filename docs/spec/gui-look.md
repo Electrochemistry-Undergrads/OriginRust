@@ -662,19 +662,20 @@ disabled controls are grey; blue bold text marks a hint or a state message.
 
 ## 7. Differences between Origin's interface and Sheaf's present app
 
-Pictures of Sheaf: `re-workspace/scratch/gui-study/sheaf/sheaf-none.png` and the other
-`sheaf-*.png` files (made with `cargo run -p sheaf-app -- d.csv --show ITEM --screenshot FILE`).
+Updated 2026-11-12 after the ADR 0007 work (the first version of this table, from the study, described
+the old tabbed app and is in git history). Element by element gaps are listed in
+`docs/audit/origin-differences-2026-11-12.md` sections A and B; this table keeps only the big picture.
 
 | Origin 2016 | Sheaf now |
 |---|---|
-| Child windows floating in a grey workspace, cascade, own title bars with minimise/maximise/close | Tabs ("Book1 - d", "Graph1 - d" with an x) in `egui_dock` filling the whole centre |
-| Project Explorer is an auto-hide panel at the left edge (folder tree over window list with Name, Long Name, Short Name, Type) | Always-open left panel "Project" with a flat list of windows |
-| Menu bar changes per window type with about 12 menus | One bar: File, Edit, Worksheet, Plot, Analysis, Graph, Window, Help |
-| Two rows of toolbars, a Tools toolbar at the left, 2D Graphs toolbar at the bottom, Object Edit at the right | A small button row only inside the graph (Axes..., Plots..., Legend..., Page..., Export...) |
-| Column label rows Long Name, Units, Comments, F(x)= (and Sparklines) over the data; label "A(X1)" | Seen in `sheaf-book.png`: label block Long Name / Units / Comments with no F(x)= or Sparklines row, label text above the data instead of in a titled grey row header, column names "A(X)" without the group number, sheet tab shown as a blue chip with the book name, values shown with 2 decimals |
-| Status bar with data statistics, AU, angle unit, active object | One line message and "unsaved changes" |
-| Plot Details dialog with layer/plot tree on the left, tabs; axis dialog with Horizontal/Vertical list | `egui::Window` dialogs with different layout (`sheaf-graph-settings_y.png`) |
-| Light, small, flat Windows controls (9 pt Segoe UI), grey workspace | egui default dark-grey-on-white theme at a larger size |
+| Child windows floating in a grey workspace, cascade, own title bars with minimise/maximise/close | Same (Window > Cascade, Tile). A maximised child still draws its own title bar; Origin moves its buttons into the menu-bar row |
+| Project Explorer at the left edge (folder tree over window list with Name, Long Name, Short Name, Type) | Same columns and folder tree (`panels/explorer.rs`); not auto-hide; folder Rename/Delete and keys F2, Del, Ctrl+A missing |
+| Menu bar changes per window type with about 12 menus | Same names and order per window type; items without a feature are drawn greyed |
+| Two rows of toolbars, a Tools toolbar at the left, 2D Graphs toolbar at the bottom, Object Edit at the right | Standard, Edit, Format (all greyed), Graph, 2D Graphs and Tools bars with fewer buttons; no separate Column, Worksheet Data, Style and other bars |
+| Column label rows Long Name, Units, Comments, F(x)= (and Sparklines) over the data; label "A(X1)" | Long Name, Units, Comments and F(x)= rows; "A(X1)" with group numbers; values with 5 decimals (General). Sparklines and Parameters rows missing; label rows cannot be hidden |
+| Status bar with data statistics, AU, angle unit, active object | Average/Sum/Count, AU : ON, reference and Radian boxes; reference lacks Origin's `1: ` prefix and `col[r1:r2]` range |
+| Plot Details dialog with layer/plot tree on the left, tabs; axis dialog with Horizontal/Vertical list | Same layout with OK/Cancel/Apply; several tabs and controls missing (audit B) |
+| Light, small, flat Windows controls (9 pt Segoe UI), grey workspace | Light theme, Segoe UI from the Windows font folder when present, grey workspace |
 
 
 ## 8. Unknowns left after the second study

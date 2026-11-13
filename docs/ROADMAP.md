@@ -168,11 +168,16 @@ the default project format.
 - [ ] More 2D graph types. Done (second session's `graph-p0`, reviewed and merged 2026-11-12):
       double-Y as linked layers (ADR 0009), stacked lines by Y offsets and waterfall (ADR 0010),
       column charts with sample names as tick labels, multi-panel graphs and stacks that share
-      X; log10 axes and error bars existed before. To do: area plots, reciprocal and other
-      scales, writing these features into `.opj` (today saving names them and keeps the
-      companion), the app controls for per-plot left/right axis and offsets
+      X; log10 axes and error bars existed before; area plots, the app's per-plot left/right
+      axis choice, and `.opj` writing of double-Y, stack Y offsets, bar groups, panels and area
+      plots (opj-format.md 13.12, 13.13) are done too. To do: stacked/horizontal columns,
+      histogram, box, pie, bubble, polar and others (`docs/tasks/T12-plot-types.md`); reciprocal
+      and other scales (T11); an offset editor in the app; `.opj` writing of X offsets, bar
+      overlap and waterfall (T06)
 - [ ] Matrices, contour plots and heatmaps
-- [ ] Statistics: t-tests, ANOVA
+- [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,
+      correlation, normality tests, checked against Origin (`148e9b1`); more tests in
+      `docs/tasks/T14-statistics-breadth.md`
 - [ ] Batch processing and analysis templates
 - [ ] Scripting through an embedded language
 - [ ] 3D graphs

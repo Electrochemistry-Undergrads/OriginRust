@@ -1443,43 +1443,57 @@ impl Project {
         key: ColumnId,
         descending: bool,
     ) -> Result<(), AnalysisError> {
+        self.sort_range(book, sheet, key, &[], descending)
+    }
+
+    /// Sorts the rows of the given columns of a sheet (all columns when `columns` is empty) by
+    /// the values of `key`, as [`Project::sort_sheet`] does; columns that are not listed keep
+    /// their rows (Worksheet > Sort Range on whole columns). `key` must be one of the columns
+    /// when `columns` is not empty.
+    pub fn sort_range(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        key: ColumnId,
+        columns: &[ColumnId],
+        descending: bool,
+    ) -> Result<(), AnalysisError> {
         let ws = self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or(AnalysisError::NoSuchSheet)?;
         let key_col = ws.column(key).ok_or(AnalysisError::NoSuchColumn(key))?;
-        let n = ws.row_count();
-        let mut order: Vec<usize> = (0..n).collect();
-        match &key_col.data {
-            ColumnData::Numeric(v) => {
-                let value = |i: usize| v.get(i).copied().unwrap_or(f64::NAN);
-                order.sort_by(|a, b| {
-                    let (x, y) = (value(*a), value(*b));
-                    match (x.is_nan(), y.is_nan()) {
-                        (true, true) => std::cmp::Ordering::Equal,
-                        (true, false) => std::cmp::Ordering::Greater,
-                        (false, true) => std::cmp::Ordering::Less,
-                        (false, false) => {
-                            let o = x.partial_cmp(&y).expect("neither is NaN");
-                            if descending { o.reverse() } else { o }
-                        }
-                    }
-                });
-            }
-            ColumnData::Text(v) => {
-                let value = |i: usize| v.get(i).map(|s| s.to_lowercase()).unwrap_or_default();
-                let keys: Vec<String> = (0..n).map(value).collect();
-                order.sort_by(|a, b| match (keys[*a].is_empty(), keys[*b].is_empty()) {
-                    (true, true) => std::cmp::Ordering::Equal,
-                    (true, false) => std::cmp::Ordering::Greater,
-                    (false, true) => std::cmp::Ordering::Less,
-                    (false, false) => {
-                        let o = keys[*a].cmp(&keys[*b]);
-                        if descending { o.reverse() } else { o }
-                    }
-                });
-            }
+        for c in columns {
+            ws.column(*c).ok_or(AnalysisError::NoSuchColumn(*c))?;
         }
+        let n = ws.row_count();
+        let order = sort_order(&key_col.data, n, descending);
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
         for c in &mut ws.columns {
-            c.data = take_rows(&c.data, &order, n);
+            if columns.is_empty() || columns.contains(&c.id) {
+                c.data = take_rows(&c.data, &order, n);
+            }
+        }
+        Ok(())
+    }
+
+    /// Sorts each of the given columns on its own by its values (Worksheet > Sort Columns);
+    /// the other columns and the rows of the other columns do not move.
+    pub fn sort_columns(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        columns: &[ColumnId],
+        descending: bool,
+    ) -> Result<(), AnalysisError> {
+        let ws = self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or(AnalysisError::NoSuchSheet)?;
+        for c in columns {
+            ws.column(*c).ok_or(AnalysisError::NoSuchColumn(*c))?;
+        }
+        let n = ws.row_count();
+        let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
+        for c in &mut ws.columns {
+            if columns.contains(&c.id) {
+                let order = sort_order(&c.data, n, descending);
+                c.data = take_rows(&c.data, &order, n);
+            }
         }
         Ok(())
     }
@@ -1537,6 +1551,43 @@ impl Project {
             Ok((kept, sheet))
         }
     }
+}
+
+/// The row order that sorts `n` rows by one column: missing keys last, equal keys in their order,
+/// text without regard to case.
+fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..n).collect();
+    match key {
+        ColumnData::Numeric(v) => {
+            let value = |i: usize| v.get(i).copied().unwrap_or(f64::NAN);
+            order.sort_by(|a, b| {
+                let (x, y) = (value(*a), value(*b));
+                match (x.is_nan(), y.is_nan()) {
+                    (true, true) => std::cmp::Ordering::Equal,
+                    (true, false) => std::cmp::Ordering::Greater,
+                    (false, true) => std::cmp::Ordering::Less,
+                    (false, false) => {
+                        let o = x.partial_cmp(&y).expect("neither is NaN");
+                        if descending { o.reverse() } else { o }
+                    }
+                }
+            });
+        }
+        ColumnData::Text(v) => {
+            let value = |i: usize| v.get(i).map(|s| s.to_lowercase()).unwrap_or_default();
+            let keys: Vec<String> = (0..n).map(value).collect();
+            order.sort_by(|a, b| match (keys[*a].is_empty(), keys[*b].is_empty()) {
+                (true, true) => std::cmp::Ordering::Equal,
+                (true, false) => std::cmp::Ordering::Greater,
+                (false, true) => std::cmp::Ordering::Less,
+                (false, false) => {
+                    let o = keys[*a].cmp(&keys[*b]);
+                    if descending { o.reverse() } else { o }
+                }
+            });
+        }
+    }
+    order
 }
 
 /// The rows `order` of a column, in that order. A column shorter than the
@@ -1878,6 +1929,25 @@ mod tests {
         p.sort_sheet(book, 0, tag, false).unwrap();
         assert_eq!(p.column(tag).unwrap().text().unwrap(), ["a1", "a2", "b", "c", "n"]);
         assert_eq!(p.sort_sheet(book, 3, key, false), Err(AnalysisError::NoSuchSheet));
+    }
+
+    #[test]
+    fn sort_range_moves_only_the_listed_columns_and_sort_columns_sorts_each_alone() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![3.0, 1.0, 2.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![30.0, 10.0, 20.0])).unwrap();
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![7.0, 8.0, 9.0])).unwrap();
+        p.sort_range(book, 0, a, &[a, b], false).unwrap();
+        assert_eq!(p.numeric(a).unwrap(), [1.0, 2.0, 3.0]);
+        assert_eq!(p.numeric(b).unwrap(), [10.0, 20.0, 30.0]);
+        assert_eq!(p.numeric(c).unwrap(), [7.0, 8.0, 9.0], "column C is not in the range");
+        let d = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 9.0, 1.0])).unwrap();
+        p.sort_columns(book, 0, &[c, d], true).unwrap();
+        assert_eq!(p.numeric(c).unwrap(), [9.0, 8.0, 7.0]);
+        assert_eq!(p.numeric(d).unwrap(), [9.0, 5.0, 1.0]);
+        assert_eq!(p.numeric(a).unwrap(), [1.0, 2.0, 3.0], "column A keeps its order");
+        assert_eq!(p.sort_columns(book, 0, &[ColumnId(9999)], false), Err(AnalysisError::NoSuchColumn(ColumnId(9999))));
     }
 
     #[test]

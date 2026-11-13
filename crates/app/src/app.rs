@@ -541,6 +541,7 @@ impl SheafApp {
             GraphOp::AxisZoom { .. } => "Axis zoom out",
             GraphOp::HideLegend { .. } => "Delete legend",
             GraphOp::ReconstructLegend { .. } => "Reconstruct legend",
+            GraphOp::UpdateLegend { .. } => "Update legend",
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
             GraphOp::HideLayer { .. } => "Hide layer",
@@ -746,6 +747,12 @@ impl SheafApp {
                 }
             }
             Action::SortSheet { column, descending } => self.sort_sheet(column, descending),
+            Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
+            Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
+            Action::PlotYError { book, columns } => self.plot_y_error(book, columns),
+            Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
+            Action::AddErrorBars { graph, layer } => self.add_error_bars(graph, layer),
+            Action::Refresh(active) => self.refresh(active),
             Action::FilterRows(book) => {
                 self.filter = FilterDialog::new(self.doc.project(), book);
             }
@@ -1090,22 +1097,27 @@ impl SheafApp {
         }
     }
 
-    fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+    /// The columns a plot command takes: the numeric Y columns among the selected ones, or the
+    /// columns a plot of the active sheet would show when none is selected.
+    fn plot_y_columns(&self, book: WindowId, columns: Vec<ColumnId>, template: Template) -> Vec<ColumnId> {
         let project = self.doc.project();
-        let ys: Vec<ColumnId> = if columns.is_empty() {
+        if columns.is_empty() {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
-            project.default_plot_columns(book, sheet, template)
-        } else {
-            columns
-                .into_iter()
-                .filter(|id| {
-                    project.column(*id).is_some_and(|c| {
-                        c.data.is_numeric()
-                            && matches!(c.designation, Designation::Y | Designation::Z | Designation::Disregard)
-                    })
+            return project.default_plot_columns(book, sheet, template);
+        }
+        columns
+            .into_iter()
+            .filter(|id| {
+                project.column(*id).is_some_and(|c| {
+                    c.data.is_numeric()
+                        && matches!(c.designation, Designation::Y | Designation::Z | Designation::Disregard)
                 })
-                .collect()
-        };
+            })
+            .collect()
+    }
+
+    fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
             self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
             return;
@@ -1113,6 +1125,132 @@ impl SheafApp {
         match self.doc.edit("Plot columns", |p| p.plot_columns(template, &ys)) {
             Ok(_) => self.say(format!("Plotted {} column(s)", ys.len())),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    /// Plot > Symbol > Y Error: a scatter plot; the error bars come from the Y error column that
+    /// follows each Y column (Column > Set As > Y Error).
+    fn plot_y_error(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+        let ys = self.plot_y_columns(book, columns, Template::Scatter);
+        if ys.is_empty() {
+            self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
+            return;
+        }
+        let project = self.doc.project();
+        let with_errors = ys
+            .iter()
+            .filter(|y| {
+                project.locate(**y).is_some_and(|(_, sheet, _)| {
+                    sheet.column_index(**y).is_some_and(|i| sheet.y_error_for(i).is_some())
+                })
+            })
+            .count();
+        match self.doc.edit("Plot Y error", |p| p.plot_columns(Template::Scatter, &ys)) {
+            Ok(_) if with_errors == 0 => {
+                self.warn("Plotted without error bars: no Y error column follows the selected columns".to_string())
+            }
+            Ok(_) => self.say(format!("Plotted {} column(s), {with_errors} with error bars", ys.len())),
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    /// Plot > Multi-Panel > Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel: one panel per
+    /// Y column, in a grid of `rows` x `cols` panels (more columns than panels wrap around).
+    fn plot_panels(&mut self, book: WindowId, columns: Vec<ColumnId>, rows: usize, cols: usize) {
+        let ys = self.plot_y_columns(book, columns, Template::Line);
+        if ys.is_empty() {
+            self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
+            return;
+        }
+        let frame = Template::Line.new_graph(WindowId(0), "").layers[0].frame;
+        let layout = sheaf_core::panels::PanelLayout::grid(rows, cols, &frame);
+        let groups: Vec<Vec<ColumnId>> = ys.iter().map(|y| vec![*y]).collect();
+        match self.doc.edit("Plot panels", |p| p.plot_panels(Template::Line, &groups, &layout)) {
+            Ok(_) => self.say(format!("Plotted {} column(s) in a {rows} x {cols} grid of panels", ys.len())),
+            Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+        }
+    }
+
+    /// Graph > Add Error Bars: every plot of the layer without error bars takes the Y error
+    /// column that follows its Y column in the sheet.
+    fn add_error_bars(&mut self, graph: WindowId, layer: usize) {
+        let project = self.doc.project();
+        let Some(l) = project.graph(graph).and_then(|g| g.layers.get(layer)) else { return };
+        let found: Vec<(usize, ColumnId)> = l
+            .plots
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.y_error.is_none())
+            .filter_map(|(k, p)| {
+                let (_, sheet, _) = project.locate(p.y)?;
+                let err = sheet.y_error_for(sheet.column_index(p.y)?)?;
+                Some((k, err.id))
+            })
+            .collect();
+        if found.is_empty() {
+            self.warn(
+                "No error bars added: the plots have none left to add, or no Y error column follows their Y column",
+            );
+            return;
+        }
+        self.doc.apply("Add error bars", |p| {
+            if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                for (k, err) in &found {
+                    l.plots[*k].y_error = Some(*err);
+                }
+            }
+        });
+        self.say(format!("Added error bars to {} plot(s)", found.len()));
+    }
+
+    /// Window > Refresh: recalculates the columns of the active workbook that wait for it.
+    fn refresh(&mut self, active: Option<WindowId>) {
+        let Some(book) = active.filter(|id| self.doc.project().workbook(*id).is_some()) else {
+            self.say("Refreshed");
+            return;
+        };
+        let sheets = self.doc.project().workbook(book).map(|b| b.sheets.len()).unwrap_or(0);
+        let pending = self.doc.project().workbook(book).is_some_and(|b| {
+            b.sheets
+                .iter()
+                .any(|s| s.columns.iter().any(|c| c.formula_state == sheaf_core::column::FormulaState::Pending))
+        });
+        if !pending {
+            self.say("Refreshed");
+            return;
+        }
+        let problems =
+            self.doc.apply("Refresh", |p| (0..sheets).flat_map(|s| p.recalculate_pending(book, s)).collect::<Vec<_>>());
+        match problems.first() {
+            Some(first) => self.warn(format!("Refreshed; a column could not be recalculated: {}", first.message)),
+            None => self.say("Refreshed and recalculated"),
+        }
+    }
+
+    /// Worksheet > Sort Range (`range`: the rows of the selected columns move together, ordered
+    /// by the leftmost of them) and Sort Columns (each selected column is sorted on its own).
+    fn sort_selected(&mut self, columns: Vec<ColumnId>, descending: bool, range: bool) {
+        let project = self.doc.project();
+        let Some(first) = columns.first().and_then(|c| project.locate(*c)) else { return };
+        let (book_id, sheet) = (first.0.id, first.1);
+        let Some(sheet_index) = first.0.sheets.iter().position(|s| std::ptr::eq(s, sheet)) else { return };
+        let mut on_sheet: Vec<(usize, ColumnId)> =
+            columns.iter().filter_map(|c| Some((sheet.column_index(*c)?, *c))).collect();
+        on_sheet.sort();
+        let ids: Vec<ColumnId> = on_sheet.iter().map(|(_, c)| *c).collect();
+        let Some(&key) = ids.first() else { return };
+        let order = if descending { "descending" } else { "ascending" };
+        let result = self.doc.edit(if range { "Sort range" } else { "Sort columns" }, |p| {
+            if range {
+                p.sort_range(book_id, sheet_index, key, &ids, descending)
+            } else {
+                p.sort_columns(book_id, sheet_index, &ids, descending)
+            }
+        });
+        match result {
+            Ok(()) if range => self.say(format!("Sorted {} column(s) as a range, {order}", ids.len())),
+            Ok(()) => self.say(format!("Sorted {} column(s), each on its own, {order}", ids.len())),
+            Err(e) => self.message = Some(("Could not sort".to_string(), e.to_string())),
         }
     }
 

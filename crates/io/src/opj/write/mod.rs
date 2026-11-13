@@ -141,6 +141,8 @@ struct Notes {
     params_dropped: usize,
     /// Columns with a display format other than General that is not stored.
     formats_dropped: usize,
+    /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
+    analysis_links_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
     graph_notes: Vec<String>,
 }
@@ -195,6 +197,7 @@ impl Writer {
 
     fn project(&mut self, project: &Project, name: &str) -> Result<(), IoError> {
         self.check_text("project name", name)?;
+        self.notes.analysis_links_dropped = project.analysis_links.len();
         self.tree = self.folder_tree(project, name)?;
         let mut seen: HashSet<String> = HashSet::new();
         // the data-set position of every column, as the workbooks will number them
@@ -669,6 +672,12 @@ impl Writer {
             warnings.push(format!(
                 "{} column(s) have a display format (decimals, scientific, date or time) that the project file written here does not hold; Origin shows them in its default format.",
                 n.formats_dropped
+            ));
+        }
+        if n.analysis_links_dropped > 0 {
+            warnings.push(format!(
+                "{} analysis result(s) recalculate from their source (Recalculate Manual or Auto); the project file written here holds their values only, not the link.",
+                n.analysis_links_dropped
             ));
         }
         OpjWrite { bytes, warnings }

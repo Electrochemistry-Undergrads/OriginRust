@@ -3300,3 +3300,45 @@ fn a_ternary_layer_labels_three_axes_with_the_column_names_and_steps_of_a_fifth(
         assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
     }
 }
+
+// ----- drawn objects (graphing spec section 17) ----------------------------
+
+fn graph_with_one_of_each_shape() -> (sheaf_core::Project, sheaf_core::WindowId) {
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let mut line = Shape::new(ShapeKind::Line, (0.1, 0.1), (0.4, 0.1));
+    line.dash = sheaf_core::graph::Dash::Dash;
+    let mut arrow = Shape::new(ShapeKind::Arrow, (0.1, 0.3), (0.4, 0.5));
+    arrow.color = Color { r: 200, g: 0, b: 0, a: 255 };
+    arrow.head_at_start = true;
+    let mut rect = Shape::new(ShapeKind::Rectangle, (0.55, 0.1), (0.9, 0.3));
+    rect.fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    let ellipse = Shape::new(ShapeKind::Ellipse, (0.55, 0.5), (0.9, 0.9));
+    layer.shapes = vec![line, arrow, rect, ellipse];
+    (p, g)
+}
+
+#[test]
+fn golden_drawn_shapes() {
+    let (p, g) = graph_with_one_of_each_shape();
+    compare_golden("shapes", &svg_of(&p, g));
+}
+
+#[test]
+fn drawn_shapes_are_picked_by_outline_or_fill() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    let (p, g) = graph_with_one_of_each_shape();
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.25, 0.1), shape(0), "on the line");
+    assert_eq!(at(0.25, 0.4), shape(1), "on the arrow's middle");
+    assert_eq!(at(0.7, 0.2), shape(2), "inside the filled rectangle");
+    assert_eq!(at(0.55, 0.2), shape(2), "on its outline");
+    assert_eq!(at(0.725, 0.5), shape(3), "on the ellipse's top");
+    assert_eq!(at(0.56, 0.51), Hit::Layer(0), "in the ellipse's box corner");
+}

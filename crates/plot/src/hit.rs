@@ -203,6 +203,30 @@ fn near_items(items: &[Item], p: (f64, f64), tol: f64) -> bool {
     })
 }
 
+/// True when `p` is on a drawn object: near its outline, or inside it when it is filled (a
+/// polygon test, so the empty corners of an ellipse's box do not count).
+fn near_shape(items: &[Item], p: (f64, f64), tol: f64) -> bool {
+    items.iter().any(|item| {
+        let Item::Path { d, fill, stroke } = item else { return false };
+        let half = stroke.as_ref().map_or(0.0, |s| s.width / 2.0);
+        subpaths(d).iter().any(|sub| {
+            sub.windows(2).any(|w| segment_distance(p, w[0], w[1]) <= tol + half)
+                || (fill.is_some() && inside_polygon(sub, p))
+        })
+    })
+}
+
+fn inside_polygon(poly: &[(f64, f64)], (px, py): (f64, f64)) -> bool {
+    let mut inside = false;
+    for w in poly.windows(2) {
+        let ((ax, ay), (bx, by)) = (w[0], w[1]);
+        if (ay > py) != (by > py) && px < ax + (py - ay) / (by - ay) * (bx - ax) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
 fn list(layer: &LayerScene, which: ItemList) -> &[Item] {
     match which {
         ItemList::Plots => &layer.plots,
@@ -215,7 +239,7 @@ fn list(layer: &LayerScene, which: ItemList) -> &[Item] {
 pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
     let all = || scene.layers.iter().rev().flat_map(|l| l.objects.iter().map(move |o| (l, o)));
     let rank = |k: ObjectKind| match k {
-        ObjectKind::Label(_) => 0,
+        ObjectKind::Label(_) | ObjectKind::Shape(_) => 0,
         ObjectKind::Legend => 1,
         ObjectKind::XTitle | ObjectKind::YTitle => 2,
         ObjectKind::XAxis | ObjectKind::YAxis => 3,
@@ -229,6 +253,7 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
             let hit = match o.kind {
                 // Lines can be far apart inside their box (ticks on both edges, a curve across the
                 // frame): only a click near a line, a symbol or a tick label counts.
+                ObjectKind::Shape(_) => near_shape(&list(layer, o.list)[o.items.clone()], p, tol),
                 ObjectKind::Plot(_) | ObjectKind::XAxis | ObjectKind::YAxis => {
                     o.boxes.iter().any(|&b| contains(b, p, tol))
                         || near_items(&list(layer, o.list)[o.items.clone()], p, tol)

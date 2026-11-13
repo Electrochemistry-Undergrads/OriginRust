@@ -1,6 +1,6 @@
 # T05: Export Graphs dialog, raster formats, units, Ctrl+G, Copy Page
 
-**Status:** open; start after branch `export-margin` (export margin options) merges. **Size:** M.
+**Status:** open. Margin modes, pixel and page-ratio units, and Copy Page at 40 % with an EMF are done (`export-margin`, merged 2026-11-13); items 3 and 4 below are therefore done. **Size:** M.
 **Branch:** `export-dialog`. **Model:** Sonnet.
 **Detail:** audit B "Export Graphs", C "Templates, themes, export".
 **Spec:** `docs/spec/graphing.md` section 9 (9.1 formats, 9.4 colour depth/compression, 9.6 Copy

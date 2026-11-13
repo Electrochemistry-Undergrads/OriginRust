@@ -1,7 +1,6 @@
 # T10: Worksheet operations
 
-**Status:** open; the worksheet editing branch `sheet-menus` (session 05b367c2: drag scroll, typing
-into a block) touches `crates/app/src/grid.rs`; start after it merges. **Size:** L, one commit per
+**Status:** open (`sheet-menus`, merged 2026-11-13, added drag auto-scroll and typing into a block in `grid.rs`). **Size:** L, one commit per
 operation. **Branch:** `sheet-ops`. **Model:** Sonnet.
 **Detail:** audit E "Missing" and "Partial"; A "Greyed" (Column and Worksheet menus).
 **Spec:** `docs/spec/workbook-model.md`, `docs/spec/ui-command-map.md` (Column, Worksheet menus).

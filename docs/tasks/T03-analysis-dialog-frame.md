@@ -1,7 +1,6 @@
 # T03: Analysis dialogs: Recalculate, Output, smoothing methods, pkFind options
 
-**Status:** open. **First** check branch `export-margin` (session 05b367c2, peer notes "auto-apply-margin"):
-it adds Auto Apply to the shared frame. Start after it merges, or coordinate in peer-notes.
+**Status:** open. Auto Apply is not done yet either (branch `export-margin` did not include it): add it here.
 **Size:** M. **Branch:** `analysis-frame`. **Model:** Sonnet.
 **Detail:** audit B "Analysis X-Function dialogs", D "Partial".
 **Spec:** `docs/spec/gui-look.md` around the X-Function dialog (search "Recalculate"),

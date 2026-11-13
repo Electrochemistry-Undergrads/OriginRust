@@ -1,8 +1,8 @@
 # T19: Import dialogs and Column Properties as Origin
 
 **Status:** open; the Import Wizard part needs Origin's pages 2-6 seen first (owner screenshots or a
-scripted run). Check branch `text-numeric` (touches `crates/io/src/ascii.rs`, `column.rs`) before
-editing those files. **Size:** M. **Branch:** `import-dialogs`. **Model:** Sonnet.
+scripted run). Text & Numeric columns exist since `text-numeric` (merged 2026-11-13;
+`ColumnData::Mixed`). **Size:** M. **Branch:** `import-dialogs`. **Model:** Sonnet.
 **Detail:** audit B "Column Properties", "Import Wizard", "ASCII import"; E "Partial" (import).
 **Spec:** `docs/spec/import-ascii.md`, `docs/spec/gui-look.md`, `docs/spec/workbook-model.md`.
 

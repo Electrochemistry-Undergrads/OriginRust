@@ -1,7 +1,6 @@
 # T11: More axis scales and axis features
 
-**Status:** open; start after branch `axis-range` (automatic range padding, Rescale Margin, log
-range) merges: both touch `crates/plot/src/ticks.rs` and `dialogs/graph_axis.rs`. **Size:** L, one
+**Status:** open; do T20 (automatic axis range) first, both touch `crates/plot/src/ticks.rs` and `dialogs/graph_axis.rs`. **Size:** L, one
 commit per feature. **Branch:** `axis-more`. **Model:** Sonnet.
 **Detail:** audit C "Missing scales", "Missing axis features"; B "Axis dialog".
 **Spec:** `docs/spec/graphing.md` sections 3-4 (axes, ticks), 12 (linked layers).

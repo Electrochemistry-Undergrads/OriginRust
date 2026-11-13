@@ -29,38 +29,31 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1097 passed on the T16 branch merged with `main` at `20c37e1` (2026-11-13); `b967898`
-  adds only a doc conflict resolution on top. Parity table: 41 done, 109 partial, 80 missing of 230 rows; P0 31 / 70 / 0
-  (`python tools/parity-count.py`).
+- Tests: 1130 passed on `main` at `28fe094` (2026-11-13). Parity table: 42 done, 108 partial, 80 missing of 230 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 
-| Branch | Owner session | What | State at 22:05 |
+| Branch | Owner session | What | State |
 |---|---|---|---|
-| `axis-range` | "Rust prompt handoff" | Automatic axis range as Origin (8 % margin, step rule {1,2,2.5,5}, log padding), Rescale Margin, `nice_range` in the `.opj` writer | started, nothing committed |
-| `graph-defaults` | "Rust prompt handoff" | Origin's default colour list, tick label font 18 pt, axis line 1.5 pt, tick length, symbol size, dash patterns | started, nothing committed |
-| `opj-params-welch` | "Rust prompt handoff" | `.opj` writer names parameter rows and column formats (`a2952df`, done); Welch t-test interval as Origin (pooled SE, df n1+n2-2) | half done |
-| `nlfit-origin` | "Rust prompt handoff" | NLFit tabs, lower panel, Origin's Fit/Done/Cancel | 3 commits, not merged |
-| `sheet-menus` | 05b367c2 | Worksheet scrolls on drag past edge; typing into a block; fit report fixed-parameter SE = 0 | started |
-| `opj-groups-frames` | 05b367c2 | `.opj` reader keeps plot groups and legend frames; frames drawn | started |
-| `export-margin` | 05b367c2 | Auto Apply in the analysis frame; export margin options | started |
-| `text-numeric` | 05b367c2 | Mixed text/number import kept as Origin's Text & Numeric | started |
-| (several) | `originrust-3a` | Matrices, contour plots, heatmaps | running |
+| (several) | `originrust-3a` | Matrices, contour plots, heatmaps | offline since 2026-11-12 night; nothing pushed |
 
-Merged by "Rust prompt handoff" on 2026-11-12/13: T01 greyed menus with code (`a2fb77b`), T08 formula
-functions (`04a8a80`), T07 worksheet export as Origin's expASC (`826f390`), T17 doc fixes (`e209068`),
-T02 menu keys and labels (`bbdb60a`), T09 Set Values dialog (`20c37e1`), T16 Mann-Whitney print and
-histogram bin rule (`b967898`). See each brief's Status for what is left.
+On 2026-11-13 no other OriginRust session was live, so the finished branches of the other sessions were
+integrated into `main` by "Handoff.md token optimization": `text-numeric`, `opj-params-welch` (plus the
+Welch interval, `f522bb2`), `opj-groups-frames`, `export-margin`, `sheet-menus` (its Multi-Panel and Y
+Error duplicates of T01 dropped), `nlfit-origin`. `axis-range` and `graph-defaults` never got a commit:
+they are briefs T20 and T21 now.
 
-Stale worktrees of merged branches (`merge-keys-nlfit`, `merge-pub-export`, `nlfit-steps`,
-`handoff-rule`, `origin-diff-4`, `worktree-agent-*`) can be removed by whoever merges next
-(`git worktree remove`, then `tools/clean-target.sh`).
+Merged earlier from briefs: T01 (`a2fb77b`), T08 (`04a8a80`), T07 (`826f390`), T17 part (`e209068`), T02
+(`bbdb60a`), T09 (`20c37e1`), T16 part (`b967898`). See each brief's Status for what is left.
+
+Stale worktrees of merged branches (`.claude/worktrees/agent-*`, `wf_*`, `merge-*`, `origin-diff-4`,
+`opj-graph-write2`, `export-options`, `graph-analysis`) and their `target/wt-*` build folders can be
+removed (`git worktree remove`, then `tools/clean-target.sh`); the disk is at 94 %.
 
 ## Next step
 
-Pick the first open brief in `docs/tasks/README.md` whose "Status" has no unmet dependency. Suggested
-order by effect on the owner's work: T01 (greyed items with code), T07 (export/copy), T17 (docs, cheap),
-T03, T05, T12, then the rest. All earlier "open questions" are assigned to the in-flight branches
+Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
+analysis: T20 (automatic axis range), T21 (graph defaults), T03, T05, T12, T14, T15, then the rest. All earlier "open questions" are assigned to the in-flight branches
 above or to briefs; none waits on the owner.
 
 ## Commands that verify the state

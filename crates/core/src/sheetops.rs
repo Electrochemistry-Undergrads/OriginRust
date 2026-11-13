@@ -263,6 +263,8 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        // The rows moved, so a filter is applied again to the new order.
+        let _ = self.reapply_row_filter(book, sheet);
         Ok(())
     }
 

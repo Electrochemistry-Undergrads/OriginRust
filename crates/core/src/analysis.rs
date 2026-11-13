@@ -1151,7 +1151,7 @@ impl Project {
                 }
             })?;
             let c = &sheet.columns[index];
-            let y = c.numeric_unmasked().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
+            let y = sheet.values_of(c).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
             if y.is_empty() {
                 return Err(AnalysisError::Empty(c.short_name.clone()));
             }
@@ -1847,6 +1847,8 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        // The rows moved, so a filter is applied again to the new order.
+        let _ = self.reapply_row_filter(book, sheet);
         Ok(())
     }
 
@@ -1871,6 +1873,8 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        // The rows moved, so a filter is applied again to the new order.
+        let _ = self.reapply_row_filter(book, sheet);
         Ok(())
     }
 

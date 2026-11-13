@@ -12,6 +12,8 @@ use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
+use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
+use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::text_object::TextDialog;
@@ -99,6 +101,8 @@ pub struct SheafApp {
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
     filter: Option<FilterDialog>,
+    row_filter: Option<RowFilterDialog>,
+    reshape: Option<ReshapeDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
@@ -155,6 +159,8 @@ impl SheafApp {
             analysis: None,
             fit: None,
             filter: None,
+            row_filter: None,
+            reshape: None,
             export: None,
             export_sheet: None,
             rename: None,
@@ -270,6 +276,8 @@ impl SheafApp {
         self.export_sheet = None;
         self.rename = None;
         self.go_to = None;
+        self.row_filter = None;
+        self.reshape = None;
         self.sort = None;
         self.sheet_name = None;
         self.import = None;
@@ -726,6 +734,17 @@ impl SheafApp {
                     }
                 });
             }
+            Action::SetCategorical(columns) => {
+                let all = columns.iter().all(|id| self.doc.project().column(*id).is_some_and(|c| c.categorical));
+                self.doc.apply("Set as categorical", |p| {
+                    for id in &columns {
+                        if let Some(c) = p.column_mut(*id) {
+                            c.categorical = !all;
+                        }
+                    }
+                });
+                self.say(if all { "Categorical mark removed" } else { "Set as categorical" });
+            }
             Action::SetDesignation { columns, designation } => {
                 self.doc.apply("Set column designation", |p| {
                     for id in &columns {
@@ -829,6 +848,9 @@ impl SheafApp {
             Action::SortCustom { book, columns } => {
                 self.sort = SortDialog::nested(self.doc.project(), book, columns);
             }
+            Action::Reshape { book, columns, kind } => {
+                self.reshape = ReshapeDialog::new(&self.doc, book, kind, columns);
+            }
             Action::SortByLabel(book) => self.sort = Some(SortDialog::by_label(book)),
             Action::ReverseColumns(columns) => {
                 let mut locked = 0;
@@ -839,6 +861,31 @@ impl SheafApp {
             }
             Action::AddErrorBars { graph, layer } => self.add_error_bars(graph, layer),
             Action::Refresh(active) => self.refresh(active),
+            Action::RowFilterDialog { book, column } => {
+                self.row_filter = RowFilterDialog::new(&self.doc, book, column);
+            }
+            Action::ToggleRowFilter(book) => {
+                let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet);
+                let has = sheet.is_some_and(|s| {
+                    self.doc.project().workbook(book).and_then(|b| b.sheets.get(s)).is_some_and(|s| s.filter.is_some())
+                });
+                if has {
+                    self.doc.apply("Enable or disable filter", |p| {
+                        if let Some(f) = p.workbook_mut(book).and_then(|b| b.sheet_mut().filter.as_mut()) {
+                            f.enabled = !f.enabled;
+                        }
+                    });
+                } else {
+                    self.warn("This sheet has no filter: use Add or Remove Filter first");
+                }
+            }
+            Action::ReapplyRowFilter(book) => {
+                let sheet = self.doc.project().workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+                match self.doc.edit("Reapply filter", |p| p.reapply_row_filter(book, sheet)) {
+                    Ok(()) => self.say("Filter applied again"),
+                    Err(e) => self.warn(format!("Could not apply the filter: {e}")),
+                }
+            }
             Action::FilterRows(book) => {
                 self.filter = FilterDialog::new(self.doc.project(), book);
             }
@@ -1180,6 +1227,7 @@ impl SheafApp {
                     ws.delete_rows(&t.columns, rows.clone())
                 };
             }
+            let _ = p.reapply_row_filter(book, sheet_index);
         });
         if locked > 0 {
             self.warn(format!("{locked} column(s) calculated from a formula were left alone"));
@@ -1639,6 +1687,8 @@ impl SheafApp {
             || self.analysis.is_some()
             || self.fit.is_some()
             || self.filter.is_some()
+            || self.row_filter.is_some()
+            || self.reshape.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.rename.is_some()
@@ -1861,6 +1911,22 @@ impl SheafApp {
                     self.say(outcome.message);
                 }
             }
+        }
+        if let Some(d) = &mut self.reshape {
+            let book = d.book;
+            match d.show(ctx, &mut self.doc) {
+                ReshapeOutcome::Open => {}
+                ReshapeOutcome::Closed => self.reshape = None,
+                ReshapeOutcome::Done(sheet) => {
+                    self.reshape = None;
+                    self.show_sheet(book, sheet);
+                }
+            }
+        }
+        if let Some(d) = &mut self.row_filter
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.row_filter = None;
         }
         if let Some(d) = &mut self.filter {
             match d.show(ctx, &mut self.doc) {

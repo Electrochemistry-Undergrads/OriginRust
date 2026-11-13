@@ -20,6 +20,7 @@ use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
+use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
 use crate::panels::PanelId;
 use eframe::egui::{
@@ -83,6 +84,14 @@ pub enum Cmd {
     UnhideColumns,
     /// Column > Mask > Apply, Remove, Swap.
     Mask(MaskOp),
+    /// Column > Set as Categorical.
+    SetCategorical,
+    /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
+    Reshape(ReshapeKind),
+    /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
+    RowFilterDialog,
+    ToggleRowFilter,
+    ReapplyRowFilter,
     /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
     InsertCells,
     /// Delete the selected rows or columns (Edit > Delete and the cell menus).
@@ -768,11 +777,13 @@ fn column_menu() -> Vec<Entry> {
         ("&Disregard", Designation::Disregard),
         ("Y E&rror", Designation::YError),
         ("X Err&or", Designation::XError),
+        ("&Group", Designation::Group),
+        ("&Subject", Designation::Subject),
     ];
     let set_entries: Vec<Entry> = set_as.iter().map(|(l, d)| item(l, Cmd::SetAs(*d))).collect();
     vec![
         sub("Set &As", set_entries),
-        grey("Set as Categorical"),
+        item("Set as Categorical", Cmd::SetCategorical),
         sep(),
         keyed("Set Column &Values...", ctrl(Key::Q), Cmd::SetColumnValues),
         grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)),
@@ -796,7 +807,7 @@ fn column_menu() -> Vec<Entry> {
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
         hide_menu(),
         sep(),
-        grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]),
+        filter_menu(),
         mask_menu(&["Change Color", "Disable Masking", "Mask Cells by Condition..."]),
     ]
 }
@@ -810,6 +821,17 @@ fn mask_menu(grey_items: &[&str]) -> Entry {
     ];
     entries.extend(greys(grey_items));
     sub("Mask", entries)
+}
+
+fn filter_menu() -> Entry {
+    sub(
+        "Filter",
+        vec![
+            item("Add or Remove Filter", Cmd::RowFilterDialog),
+            item("Enable/Disable Filter", Cmd::ToggleRowFilter),
+            item("Reapply Filter", Cmd::ReapplyRowFilter),
+        ],
+    )
 }
 
 fn hide_menu() -> Entry {
@@ -845,9 +867,12 @@ fn worksheet_menu() -> Vec<Entry> {
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
         grey("Clear Worksheet..."),
-        grey("Split Columns..."),
+        item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
-        grey("Reduce Rows..."),
+        item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
+        item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
+        item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
+        item("Unstack Columns...", Cmd::Reshape(ReshapeKind::Unstack)),
         grey_sub("Convert to Matrix", &["Direct", "XYZ Gridding", "Extract"]),
         sep(),
         grey("Worksheet Script..."),
@@ -1255,6 +1280,8 @@ pub fn column_header_menu() -> Vec<Entry> {
         ("Disregard", Designation::Disregard),
         ("Y Error", Designation::YError),
         ("X Error", Designation::XError),
+        ("Group", Designation::Group),
+        ("Subject", Designation::Subject),
     ]
     .iter()
     .map(|(l, d)| item(l, Cmd::SetAs(*d)))
@@ -1270,7 +1297,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey("Remove Links"));
     v.push(sep());
     v.push(sub("Set As", set_as));
-    v.push(grey("Set As Categorical"));
+    v.push(item("Set As Categorical", Cmd::SetCategorical));
     v.push(sep());
     v.push(keyed("Set Column Values...", ctrl(Key::Q), Cmd::SetColumnValues));
     v.push(grey_keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q)));
@@ -1289,7 +1316,7 @@ pub fn column_header_menu() -> Vec<Entry> {
         ],
     ));
     v.extend(greys(&["Set Sampling Interval...", "Show X Column...", "-"]));
-    v.push(grey_sub("Filter", &["Add or Remove Filter", "Enable/Disable Filter", "Reapply Filter"]));
+    v.push(filter_menu());
     v.push(mask_menu(&["Change Color", "Disable Masking"]));
     v.push(grey("Mask Cells by Condition..."));
     v.push(sep());
@@ -1829,6 +1856,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SortCustom { book, columns }
         }
         Cmd::SortByLabel => Action::SortByLabel(book?),
+        Cmd::SetCategorical => {
+            book?;
+            Action::SetCategorical(some()?)
+        }
+        Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
         Cmd::ReverseOrder => {
             book?;
             Action::ReverseColumns(some()?)
@@ -1844,6 +1876,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::UpdateLegend { layer: c.layer } }
         }
         Cmd::FilterRows => Action::FilterRows(book?),
+        Cmd::RowFilterDialog => Action::RowFilterDialog { book: book?, column: c.selected.first().copied() },
+        Cmd::ToggleRowFilter => Action::ToggleRowFilter(book?),
+        Cmd::ReapplyRowFilter => Action::ReapplyRowFilter(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {

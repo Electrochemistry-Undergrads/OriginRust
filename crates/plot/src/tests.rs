@@ -3087,3 +3087,23 @@ fn a_radar_chart_without_an_x_column_numbers_its_spokes() {
     assert_eq!(geom.x.labels, ["1", "2", "3", "4"]);
     assert_eq!(geom.x.major, [0.0, 90.0, 180.0, 270.0]);
 }
+
+#[test]
+fn a_radar_polygon_draws_one_symbol_per_row_and_keeps_masked_rows() {
+    let (mut p, g) = radar_probe();
+    let plain = svg_of(&p, g);
+    let symbols = |svg: &str| {
+        let d = doc(svg);
+        with_class(&d, "plots")
+            .iter()
+            .flat_map(|n| paths_in(*n))
+            .filter_map(|n| n.attribute("d").map(|s| s.matches('M').count()))
+            .collect::<Vec<_>>()
+    };
+    // The closing point of a polygon of 6 rows carries no symbol: no path has 7 subpaths.
+    assert!(symbols(&plain).iter().all(|&n| n != 7), "{:?}", symbols(&plain));
+    let y = p.graph(g).unwrap().layers[0].plots[0].y;
+    p.column_mut(y).unwrap().mask.insert(2);
+    let masked = svg_of(&p, g);
+    assert!(masked.contains("#FF0000"), "masked row is red");
+}

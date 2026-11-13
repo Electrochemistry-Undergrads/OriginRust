@@ -172,12 +172,12 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
         if dim == Dim::Y
             && linear
             && let Some((lo, hi)) = range
-            && lo > 0.0
+            && lo >= 0.0
             && axis.min.is_none()
             && sources.iter().any(|pd| pd.spokes.is_some())
         {
-            // A radar chart starts at the centre with 0 (graphing spec 14.19).
-            range = Some((0.0, hi));
+            // A radar chart starts at the centre with 0 (graphing spec 14.19); all zeros give 0..1.
+            range = Some((0.0, if hi > 0.0 { hi } else { 1.0 }));
             free.0 = false;
         }
         if dim == Dim::Y && linear && sources.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Area) {
@@ -267,6 +267,18 @@ fn group_geometry(
                 None => clip,
             };
             let polar = g.layers[i].coords.polar().map(|p| polar::PolarMap::new(frame, p));
+            // A symbol on the outer polygon sticks out of the frame; the clip leaves room for it.
+            let clip = match g.layers[i].coords.polar() {
+                Some(p) if p.radar => {
+                    let pad = pds[i]
+                        .plots
+                        .iter()
+                        .map(|pd| pd.plot.symbol.size_pt + pd.plot.symbol.edge_width_pt)
+                        .fold(0.0, f64::max);
+                    Rect { x: clip.x - pad, y: clip.y - pad, w: clip.w + 2.0 * pad, h: clip.h + 2.0 * pad }
+                }
+                _ => clip,
+            };
             (i, LayerGeometry { frame, clip, x, y, polar })
         })
         .collect()

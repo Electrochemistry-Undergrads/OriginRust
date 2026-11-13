@@ -64,6 +64,9 @@ pub(crate) struct PlotData<'a> {
     pub color_z: Option<&'a [f64]>,
     /// The spoke names of a plot of a radar layer (graphing spec 14.19); `None` elsewhere.
     pub spokes: Option<Vec<String>>,
+    /// The last row is the first point repeated to close a radar polygon: the line runs to it, but
+    /// no symbol or mask belongs to it.
+    pub closing: bool,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -248,6 +251,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             size_z: plot.size_from.and_then(|id| project.numeric(id)),
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
             spokes: None,
+            closing: false,
         };
         match plot.kind {
             PlotKind::Histogram => {
@@ -351,15 +355,20 @@ fn radar_columns(project: &Project, plots: &mut [PlotData]) {
         .collect();
     let angle = |i: usize| 360.0 * i as f64 / n as f64;
     for pd in plots.iter_mut() {
-        let mut ys: Vec<f64> = pd.y[pd.start..pd.end.min(pd.y.len())].to_vec();
-        if let Some(&y0) = ys.first() {
-            ys.push(y0);
+        // Rows keep their place (the mask counts rows of the column); the first drawn row is
+        // repeated once after the last, at 360 degrees, to close the polygon.
+        let (start, end) = (pd.start, pd.end.min(pd.y.len()));
+        if start >= end {
+            continue;
         }
-        pd.x = Some(Cow::Owned((0..ys.len()).map(angle).collect()));
-        pd.start = 0;
+        let mut ys: Vec<f64> = pd.y[..end].to_vec();
+        let mut xs: Vec<f64> = (0..end).map(|r| angle(r.saturating_sub(start))).collect();
+        ys.push(ys[start]);
+        xs.push(360.0);
         pd.end = ys.len();
+        pd.x = Some(Cow::Owned(xs));
         pd.y = Cow::Owned(ys);
-        pd.mask = None;
+        pd.closing = true;
         pd.err = None;
         pd.xerr = None;
         pd.x_format = None;

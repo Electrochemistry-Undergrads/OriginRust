@@ -1298,6 +1298,12 @@ tools/origin-ref.
   degrees and clockwise, so `data_to_page`, `page_to_data`, symbols and hit testing are those of the
   polar layer. `data::radar_columns` turns the rows into `(angle, value)`; `polar::radar_axis` gives
   the spoke ticks and names. The radar page is 8 by 6 inches with the legend right of the circle.
+- The closing point is a repeated row marked `PlotData::closing`: the line runs to it, but it gets
+  no symbol and no mask, and a masked first row also reddens the closing segment. Rows keep their
+  place, so the column's mask still counts the right rows. The plot clip of a radar layer is
+  widened by one symbol size, so a symbol on the outer polygon is not cut. When every value is 0
+  the radius runs 0 to 1. Spoke names go through the label markup like every other label column
+  (see 14.11).
 - The .opj writer stores plain line + symbol plots and warns; the companion keeps the layer.
 
 ### 14.11 Unknowns

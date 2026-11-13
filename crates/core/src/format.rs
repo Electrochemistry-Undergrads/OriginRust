@@ -124,10 +124,9 @@ impl NumberFormat {
                 Some(d) if d >= 0 => style.apply(datetime::WEEKDAYS[((d + 6) % 7) as usize]),
                 _ => String::new(),
             },
-            NumberFormat::Time(t) if t.is_elapsed() => datetime::format_time(v, t),
             NumberFormat::Date(_) | NumberFormat::DateTime(..) if !datetime::in_range(v) => format_general(v, 9),
             NumberFormat::Date(d) => datetime::format_date(v, d),
-            NumberFormat::Time(t) => datetime::format_time(datetime::time_only_fraction(v), t),
+            NumberFormat::Time(t) => datetime::format_time(v, t),
             NumberFormat::DateTime(d, t) => datetime::format_date_time(v, d, t),
         }
     }
@@ -644,34 +643,109 @@ mod tests {
 
     #[test]
     fn every_time_pattern_shows_origins_text_for_a_fixed_value() {
-        // 13:45:10.256 as a fraction of a day.
+        // 13:45:10.256 as a fraction of a day; the step of each pattern rounds the seconds.
         let v = (13.0 * 3600.0 + 45.0 * 60.0 + 10.256) / 86_400.0;
         let want = [
             (TimePattern::Hm, "13:45"),
-            (TimePattern::Hms, "13:45:10"),
-            (TimePattern::HmsMs, "13:45:10.256"),
             (TimePattern::H, "13"),
-            (TimePattern::HmsCs, "13:45:10.25"),
+            (TimePattern::Hms, "13:45:10"),
+            (TimePattern::HmsCs, "13:45:10.26"),
             (TimePattern::H12, "01 PM"),
             (TimePattern::Hm12, "01:45 PM"),
             (TimePattern::Ms, "45:10"),
-            (TimePattern::MsCs, "45:10.25"),
+            (TimePattern::MsCs, "45:10.26"),
             (TimePattern::Hhmm, "1345"),
             (TimePattern::Hhmmss, "134510"),
-            (TimePattern::Millis, "256"),
+            (TimePattern::HmsMs, "13:45:10.256"),
+            (TimePattern::ElapsedD, "000"),
             (TimePattern::ElapsedDh, "000:13"),
             (TimePattern::ElapsedDhm, "000:13:45"),
+            (TimePattern::ElapsedDhms, "000:13:45:10"),
+            (TimePattern::ElapsedDhmsCs, "000:13:45:10.26"),
+            (TimePattern::ElapsedDhmsMicro, "000:13:45:10.256000"),
         ];
         assert_eq!(want.len(), TimePattern::ALL.len());
         for (p, text) in want {
             assert_eq!(NumberFormat::Time(p).format(v), text, "{p:?}");
         }
-        // Midnight and noon on the 12-hour clock; elapsed time counts whole days.
+        // Midnight and noon on the 12-hour clock.
         assert_eq!(NumberFormat::Time(TimePattern::Hm12).format(0.0), "12:00 AM");
         assert_eq!(NumberFormat::Time(TimePattern::H12).format(0.5), "12 PM");
-        assert_eq!(NumberFormat::Time(TimePattern::ElapsedDh).format(2.5), "002:12");
         // A calendar date never shows the serial number as an elapsed day count.
         let s = NumberFormat::DateTime(DatePattern::Iso, TimePattern::ElapsedDh).format(2461355.5);
         assert!(s.ends_with(" 12"), "{s}");
+    }
+
+    #[test]
+    fn time_columns_count_hours_round_and_sign_like_origin() {
+        // Every text below was shown by Origin 2016 for a Time column (workbook-model.md).
+        let t = |p: TimePattern, v: f64| NumberFormat::Time(p).format(v);
+        use TimePattern::*;
+        // Hours do not wrap while the number is below 240 days.
+        assert_eq!(t(Hm, 1.0625), "25:30");
+        assert_eq!(t(Hms, 2.5), "60:00:00");
+        assert_eq!(t(Hms, 100.5), "2412:00:00");
+        assert_eq!(t(Hms, 230.5), "5532:00:00");
+        assert_eq!(t(Hms, 239.9999), "5759:59:51");
+        assert_eq!(t(Hhmm, 1.0625), "2530");
+        assert_eq!(t(Hhmmss, 2.5), "600000");
+        assert_eq!(t(H, 2.5), "60");
+        assert_eq!(t(HmsMs, 1.0625), "25:30:00.000");
+        // From 240 days on only the time of day is shown, also for dates.
+        assert_eq!(t(Hms, 240.0), "00:00:00");
+        assert_eq!(t(Hms, 240.0001), "00:00:09");
+        assert_eq!(t(Hms, 1000.5), "12:00:00");
+        assert_eq!(t(Hms, 2_461_355.5), "12:00:00");
+        assert_eq!(t(Hm, 2_461_355.573_032_407), "13:45");
+        // The 12-hour clock and the minute patterns wrap.
+        assert_eq!(t(H12, 1.0625), "01 AM");
+        assert_eq!(t(Hm12, 2.5), "12:00 PM");
+        assert_eq!(t(Ms, 1.0625), "30:00");
+        assert_eq!(t(Ms, 0.99999), "59:59");
+        // Rounding is to the step of the pattern; the hours then do not wrap at 24.
+        assert_eq!(t(Hms, 0.0004), "00:00:35");
+        assert_eq!(t(HmsCs, 0.0004), "00:00:34.56");
+        assert_eq!(t(Hm, 0.00068981), "00:01");
+        assert_eq!(t(Hms, 0.0000058), "00:00:01");
+        assert_eq!(t(HmsCs, 0.000001), "00:00:00.09");
+        assert_eq!(t(Hms, 0.99999999), "24:00:00");
+        assert_eq!(t(Hm, 0.99999999), "24:00");
+        assert_eq!(t(HmsMs, 0.99999999), "23:59:59.999");
+        assert_eq!(t(H12, 0.99999999), "12 AM");
+        assert_eq!(t(Ms, 0.99999999), "00:00");
+        assert_eq!(t(HmsCs, 0.0416666), "00:59:59.99");
+        assert_eq!(t(Hms, 0.0416666), "01:00:00");
+        // Elapsed patterns: whole days of the number, and the hours stay below or at 24.
+        assert_eq!(t(ElapsedD, 1.0625), "001");
+        assert_eq!(t(ElapsedDh, 1.0625), "001:01");
+        assert_eq!(t(ElapsedDhm, 2.5), "002:12:00");
+        assert_eq!(t(ElapsedDhms, 1.0625), "001:01:30:00");
+        assert_eq!(t(ElapsedDhmsCs, 0.0007), "000:00:01:00.48");
+        assert_eq!(t(ElapsedDhmsMicro, 0.99999999), "000:23:59:59.999136");
+        assert_eq!(t(ElapsedDhms, 0.99999999), "000:24:00:00");
+        assert_eq!(t(ElapsedDh, 2_461_355.5), "2461355:12");
+        // A negative number is its magnitude behind a minus sign, even when it shows as zero.
+        assert_eq!(t(Hm, -0.0625), "-01:30");
+        assert_eq!(t(Hm, -1.0625), "-25:30");
+        assert_eq!(t(Hms, -2.5), "-60:00:00");
+        assert_eq!(t(Hms, -0.0000115741), "-00:00:01");
+        assert_eq!(t(Hm, -0.0004), "-00:00");
+        assert_eq!(t(Hms, -1e-9), "-00:00:00");
+        assert_eq!(t(HmsCs, -0.000001), "-00:00:00.09");
+        assert_eq!(t(H12, -0.0625), "-01 AM");
+        assert_eq!(t(H12, -0.5), "-12 PM");
+        assert_eq!(t(Hhmm, -1.0625), "-2530");
+        assert_eq!(t(Ms, -1.0625), "-30:00");
+        assert_eq!(t(ElapsedD, -1.0625), "-001");
+        assert_eq!(t(ElapsedDh, -1.0625), "-001:01");
+        assert_eq!(t(ElapsedDhm, -2.5), "-002:12:00");
+        assert_eq!(t(ElapsedDhms, -1.0), "-001:00:00:00");
+        assert_eq!(t(ElapsedDhmsCs, -0.0007), "-000:00:01:00.48");
+        assert_eq!(t(Hms, -240.0), "-00:00:00");
+        assert_eq!(t(Hms, -1000.5), "-12:00:00");
+        assert_eq!(t(Hms, -2_461_355.5), "-12:00:00");
+        // Zero has no sign.
+        assert_eq!(t(Hms, 0.0), "00:00:00");
+        assert_eq!(t(ElapsedDhm, 0.0), "000:00:00");
     }
 }

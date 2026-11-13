@@ -626,6 +626,7 @@ fn read_curve(
         201 => PlotKind::Scatter,
         202 => PlotKind::LineSymbol,
         203 => PlotKind::Column,
+        204 => PlotKind::Area,
         _ => {
             notes.push(format!("plot type {ptype} is not supported and is drawn as a line with symbols"));
             PlotKind::LineSymbol
@@ -647,7 +648,7 @@ fn read_curve(
     let size = f64::from(u16_at(r, CURVE_SIZE_AT)) / CURVE_UNITS_PER_POINT;
     let size = if size > 0.0 && size < 60.0 { size } else { 5.0 };
     let shape = if shape_code == 0 { SymbolShape::Square } else { symbol_shape(shape_code, notes) };
-    let fill = if kind == PlotKind::Column {
+    let fill = if matches!(kind, PlotKind::Column | PlotKind::Area) {
         if u8_at(r, CURVE_FILL_USED_AT) & CURVE_FILL_USED_BIT != 0 {
             color_code(r, CURVE_FILL_AT).unwrap_or_else(|| palette_color(index))
         } else {
@@ -673,7 +674,7 @@ fn read_curve(
             shape,
             size_pt: size,
             color: fill,
-            filled: kind == PlotKind::Column || u8_at(r, CURVE_SYMBOL_FILL_AT) == 0,
+            filled: matches!(kind, PlotKind::Column | PlotKind::Area) || u8_at(r, CURVE_SYMBOL_FILL_AT) == 0,
             edge_width_pt: 0.75,
             every: 1,
         },
@@ -681,6 +682,10 @@ fn read_curve(
         visible: true,
         auto_color: false,
     };
+    if kind == PlotKind::Area && auto {
+        // an area is outlined in black unless the line colour was chosen
+        plot.line.color = Color::BLACK;
+    }
     if kind == PlotKind::Column {
         // Bars are outlined in black unless the line colour was chosen.
         plot.line.color = if auto { Color::BLACK } else { line_color };

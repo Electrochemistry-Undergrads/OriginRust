@@ -522,10 +522,7 @@ impl Writer {
                 PlotKind::Scatter => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column => CurveKind::Column,
-                PlotKind::Area => {
-                    notes.push("an area plot was written as a line plot (its fill is not kept)".into());
-                    CurveKind::Line
-                }
+                PlotKind::Area => CurveKind::Area,
             };
             let connect = match p.line.connect {
                 Connect::Straight => 1,

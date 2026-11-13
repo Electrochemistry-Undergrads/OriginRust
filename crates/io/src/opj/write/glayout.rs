@@ -294,6 +294,7 @@ pub(super) enum CurveKind {
     Scatter,
     LineSymbol,
     Column,
+    Area,
     /// A Y error plot attached to the curve whose Y data set is `x_set`.
     Error,
 }
@@ -338,6 +339,7 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
         CurveKind::Scatter => (CURVE_SCATTER, 201),
         CurveKind::LineSymbol => (CURVE_LINE_SYMBOL, 202),
         CurveKind::Column => (CURVE_COLUMN, 203),
+        CurveKind::Area => (CURVE_AREA, 204),
         CurveKind::Error => (CURVE_ERROR, 487),
     };
     fill(&mut r, table);
@@ -360,7 +362,7 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     put(&mut r, 0x16a, &c.line.0);
     r[0x12] = c.dash;
     put(&mut r, 0x15, &c.width.to_le_bytes());
-    if matches!(c.kind, CurveKind::Line | CurveKind::LineSymbol) {
+    if matches!(c.kind, CurveKind::Line | CurveKind::LineSymbol | CurveKind::Area) {
         r[0x11] = c.connect;
     }
     if matches!(c.kind, CurveKind::Scatter | CurveKind::LineSymbol) {
@@ -368,6 +370,10 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
         put(&mut r, 0x19, &c.size.to_le_bytes());
         r[0x18] = u8::from(c.open_symbol);
         put(&mut r, 0x132, &c.symbol.0);
+    }
+    if c.kind == CurveKind::Area {
+        // the fill; the line colour above is the border
+        put(&mut r, 0xc2, &c.fill.0);
     }
     if c.kind == CurveKind::Column {
         put(&mut r, 0xc2, &c.fill.0);

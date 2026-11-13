@@ -80,12 +80,12 @@ try {
             $w.WriteLine("LAYER $l")
             [void](Lt 'double xf = layer.x.from; double xt = layer.x.to; double xi = layer.x.inc; double xs = layer.x.type; double xm = layer.x.minorTicks;')
             [void](Lt 'double yf = layer.y.from; double yt = layer.y.to; double yi = layer.y.inc; double ys = layer.y.type; double ym = layer.y.minorTicks;')
-            [void](Lt 'double ll = layer.left; double lt = layer.top; double lw = layer.width; double lh = layer.height; double np = layer.nplots;')
-            foreach ($v in 'xf', 'xt', 'xi', 'xs', 'xm', 'yf', 'yt', 'yi', 'ys', 'ym', 'll', 'lt', 'lw', 'lh', 'np') { $w.WriteLine("$v=" + (Num $v)) }
+            [void](Lt 'double ll = layer.left; double lt = layer.top; double lw = layer.width; double lh = layer.height; double npl = layer.nplots;')
+            foreach ($v in 'xf', 'xt', 'xi', 'xs', 'xm', 'yf', 'yt', 'yi', 'ys', 'ym', 'll', 'lt', 'lw', 'lh', 'npl') { $w.WriteLine("$v=" + (Num $v)) }
             [void](Lt 'double lk = layer.link; double xl = layer.x.link; double yl = layer.y.link; double un = layer.unit;')
             [void](Lt 'double xa = layer.x.showAxes; double ya = layer.y.showAxes; double xb = layer.x.showLabels; double yb = layer.y.showLabels; double xc = layer.x.color; double yc = layer.y.color;')
             foreach ($v in 'lk', 'xl', 'yl', 'un', 'xa', 'ya', 'xb', 'yb', 'xc', 'yc') { $w.WriteLine("$v=" + (Num $v)) }
-            for ($p = 1; $p -le [int](Num 'np'); $p++) {
+            for ($p = 1; $p -le [int](Num 'npl'); $p++) {
               [void](Lt "layer.plot = $p; string pn`$ = %C; double pt = 0;")
               $w.WriteLine("plot$p=" + [string]$origin.LTStr('pn$'))
             }

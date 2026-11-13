@@ -1139,3 +1139,23 @@ import did not change). The title of a top axis is `XT`.
 double-Y graph (panels, a linked Y scale); a right layer whose X scale is not linked; the overlap of bars; the line on the near
 side of an axis that is drawn on the opposite side; rotated tick labels, tick label sources and the colour of axis titles
 that follow the plot.
+
+### 13.13 Area plots, number formats, plot groups, panels [orig]
+
+Code: `write/glayout.rs` (`curve_record`), `write/graph_tables.rs` (`CURVE_AREA`), `graph.rs` (reader), tests in
+`write/graph_tests.rs` and `write/graph_feature_tests.rs`. Found on 2026-11-12 with
+`tools/origin-ref/opj-make-from-lines.ps1` (builds a project from a file of LabTalk lines, saves it and exports the pictures;
+with `-Open FILE` it loads a file and prints chosen values), `opj-diff-curves.py` (byte differences of curve records and
+layer headers between windows) and `opj-verify-graph-features.ps1`. Files, dumps and pictures are in the git-ignored
+`re-workspace/scratch/opj-gw2/`. `cargo run -p sheaf-io --example opj_write_graph_features2 -- FOLDER` writes the test files.
+
+**Area plots.** Plot type word 204 (at `0x4C`). An Origin area record is a column-like record: connection 1 at `0x11`
+(straight; the other connections are kept the same way as for lines), border width at `0x15`, the border colour at `0x0F`
+and `0x16A`, the **fill colour at `0xC2`** (a four byte colour as for columns, auto = `F7 FF FF FF`), and the flag bit `0x10`
+of byte `0x1E` ("fill used", as for columns). Origin's own default area is black fill with a black 0.5 pt border; setting the
+line colour changes the border (`0x0F`, `0x132`, `0x16A`), setting the fill colour changes `0xC2` only. The bytes that a
+line record has and an area record does not: `0x9D`, `0xDE`, `0x148`, `0x18A`, `0x174`. The four bytes at `0x17E` of an
+Origin area record hold changing junk and are not written. The model's area has its fill in the symbol colour and the
+border in the line colour; the reader (`read_curve`) turns type 204 into `PlotKind::Area` the same way, with a black
+border when the line colour is automatic. Verified: Origin 2016 loaded `gw-area.opj` (a green area with a red 2 pt border; two
+curves with their own fills), and the exported pictures show the same fills and borders. The warning for areas is gone.

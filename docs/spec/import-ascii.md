@@ -49,6 +49,11 @@ Behavior notes:
 - For space delimiting (7) and tab/space (3), whether runs collapse is **[?]**. Safest implementation: collapse runs of spaces for 3 and 7, because aligned-column text files are the common case.
 - Auto-detect (Delimiter=0) "searches the file for a repeating delimiter". The candidates it tries are presumably comma, tab, semicolon, space. **[I]** The exact scoring is **[?]**; see section 13 for a proposed algorithm.
 
+What Sheaf does (`Delimiter` in `crates/io/src/ascii.rs`, CLI `--delimiter`, `--fixed-width`, import window "Delimiter"):
+
+- **Multi-character delimiter** (`Delimiter::Multi`): the "Other" field takes a string; one character is the old single-character delimiter, two or more separate the fields as a whole string (`||`, `::`), as Origin's `MultipleDelimiters` (DataStruct 2). A quoted field may hold the string; a lone character of it is not a separator. Origin's other reading of the "Other" field, a set of characters that each separate fields (DataStruct 1 with `OtherDelimiter`), is not implemented, nor is "combine consecutive delimiters". An empty string is an error.
+- **Fixed width** (`Delimiter::Fixed(widths)`, CLI `--fixed-width 8,12,10`, window "Fixed Width" with a "Widths" field): the line is cut every `w` characters (Unicode characters, not display columns, so wide CJK text counts one each), the last width repeats for the rest of the line (so one width applies to every column), fields are trimmed, quotes mean nothing, a shorter line has fewer fields. Header detection then works on the cut fields as for any delimiter. A width of 0 or an empty list is an error. Origin's ruler-style click-to-place column breaks are not offered; widths are typed. Widths are taken from Origin's public documentation (`ColWidths`), not measured; measure on the Windows machine with tools/origin-ref.
+
 ## 3. Header handling (P0)
 
 Option group `Headers` (CSV import calls it `HeaderLines` with slightly different node names).
@@ -79,6 +84,8 @@ Concepts [W impwiz-asc-headlinepage]:
 Important note: the defaults above are the documented defaults of the import tree. They mean: when the file has sub-header lines, line 1 is the long name, line 2 is the units, and lines 3 and later are comments. If only one sub-header line is found, it becomes the long name and there are no units or comments. **[I]** Whether the auto mode only counts lines or also assigns "line 2 = unit" even when the file has just one text line is **[?]**.
 
 Fields that appear in the legacy `ASCII.oif`: `iHeaderLines=0`, `iSubHeaderLines=0`, `iAutoSubHeaderLines=1`, `iAutoColTypes=1`, `iTestLines=4`, `iMaxTestLines=50`. **[F]** These match the tree defaults (4 and 50).
+
+Data Import Options in Sheaf (`AsciiOptions`, import window node "Data Import Options", CLI flags; the option names and defaults are from Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref): `rename_columns` (default on; off leaves long name, units and comments empty and still skips the header lines; CLI `--no-rename-columns`); `short_name_line` (0 = none; a header line whose cells become the short names, keeping letters, digits and underscores, at most 18 characters, not starting with a digit, unique; an unusable cell keeps the automatic `A`, `B`, ...; CLI `--short-name-line N`); the 18-character limit is unverified (T19 item 3).
 
 Where the header text goes in the workbook:
 
@@ -241,6 +248,12 @@ Name derivation from file name (group `Names`):
 | FNameToColComm | append file name to each column comment | 0 | [W] |
 | FNameToUDL | write file name to a user parameter row named `SourceFile` | 0 | [W] |
 | FPathToComm | include path and extension in appended names | 0 | [W] |
+
+Sheaf's Data Import Options for names (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on as `FNameToSht` and `FNameToBk`; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. File name trimming (`FNameToShtFrom/To`) is not done.
+
+**Apply the new range to plots** (`batch::PlaceOptions::apply_range_to_plots`, window tick, grey unless the mode is Replace Existing Data; default on, unmeasured). A plot stores a fixed half-open row range (`Plot::rows`, `None` = all rows), so it does not follow new data by itself. Replacing the data of a sheet now keeps the identifiers of the columns by position, so graphs of the sheet keep plotting them (before, the new columns got new identifiers and the plots lost their data). With the option on, plots of those columns that had a row range are set to all rows of the new data; with it off the old range stays.
+
+Mode names in Sheaf's window and `ImportMode::label`: Replace Existing Data, New Books, New Sheets, New Columns, New Rows, in that order (the order of the task brief; the spec table above lists the codes 0 to 4). The window also has an Apply button (order OK, Cancel, Apply): it imports with the current settings and keeps the window open. That the impASC window has Apply is from the general X-Function dialog layout (gui-look.md section 5), not seen on this dialog; check on the Windows machine.
 
 Name limits apply after derivation (book short name max 13 chars of letters/digits; sheet name 64 per the limits page; see workbook-model.md). When a book is made from a file name with spaces, punctuation or length over the limit, the short name is auto-generated and the file name goes into the long name. **[I]**
 

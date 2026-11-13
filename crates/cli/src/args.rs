@@ -207,9 +207,14 @@ pub struct ReadOptions {
     /// recomputing them from the sampling interval in the header.
     #[arg(long)]
     pub keep_file_times: bool,
-    /// Delimited text: the separator. One of comma, tab, semicolon, space, or a single character.
+    /// Delimited text: the separator. One of comma, tab, semicolon, space, a single character, or a
+    /// string of several characters that separates fields as a whole (for example "||").
     #[arg(long, value_name = "SEP")]
     pub delimiter: Option<String>,
+    /// Delimited text: fixed-width columns instead of a separator. The widths in characters, as a
+    /// comma-separated list; the last width repeats for the remaining columns.
+    #[arg(long, value_name = "W,W,...", value_delimiter = ',', conflicts_with = "delimiter")]
+    pub fixed_width: Vec<usize>,
     /// Delimited text: number of lines before the first data row (default: detect).
     #[arg(long, value_name = "N")]
     pub header_lines: Option<usize>,
@@ -238,6 +243,19 @@ pub struct ReadOptions {
     /// of an ICP-OES export), as a comma-separated list. The first cell of the line is the name.
     #[arg(long, value_name = "N,N", value_delimiter = ',')]
     pub param_lines: Vec<usize>,
+    /// Delimited text: line holding the short names of the columns (default: A, B, C, ...).
+    #[arg(long, value_name = "N")]
+    pub short_name_line: Option<usize>,
+    /// Delimited text: leave the long name, units and comments of the columns empty; the header
+    /// lines are still skipped.
+    #[arg(long)]
+    pub no_rename_columns: bool,
+    /// Delimited text: name the sheet Sheet1 instead of after the file.
+    #[arg(long)]
+    pub no_rename_sheet: bool,
+    /// Delimited text: leave the long name of the book empty instead of the file name.
+    #[arg(long)]
+    pub no_rename_book: bool,
     /// Delimited text: a file with several blocks of data separated by blank lines gets one sheet per block.
     #[arg(long)]
     pub blocks_as_sheets: bool,

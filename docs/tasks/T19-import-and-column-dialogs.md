@@ -1,6 +1,6 @@
 # T19: Import dialogs and Column Properties as Origin
 
-**Status:** open; the Import Wizard part needs Origin's pages 2-6 seen first (owner screenshots or a
+**Status:** item 1 (ASCII import) done on branch `import-ascii-options`: multi-character and fixed-width delimiters, Data Import Options (rename columns, short-name line, rename sheet and book, apply the new range to plots), Origin's mode names, Apply button; column ranges and patterns left. Rest open; the Import Wizard part needs Origin's pages 2-6 seen first (owner screenshots or a
 scripted run). Text & Numeric columns exist since `text-numeric` (merged 2026-11-13;
 `ColumnData::Mixed`). **Size:** M. **Branch:** `import-dialogs`. **Model:** Sonnet.
 **Detail:** audit B "Column Properties", "Import Wizard", "ASCII import"; E "Partial" (import).

@@ -1598,6 +1598,15 @@ impl Project {
                         comments: inp.label.clone(),
                         data: ColumnData::numeric(found.rows.iter().map(|r| (r + inp.first) as f64).collect()),
                     });
+                    for (name, rows) in [("Left foot", &found.left), ("Right foot", &found.right)] {
+                        on_sheet.push(SheetColumn {
+                            designation: Designation::Disregard,
+                            long_name: format!("{name} ({})", inp.x_name),
+                            units: inp.x_units.clone(),
+                            comments: inp.label.clone(),
+                            data: ColumnData::numeric(rows.iter().map(|&r| inp.xs()[r - 1]).collect()),
+                        });
+                    }
                 }
                 table = Some(t);
             }

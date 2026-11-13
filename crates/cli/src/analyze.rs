@@ -277,7 +277,15 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 || anchors.is_some()
                 || limits.is_some();
             if !chain {
-                (target, Job::Tool(Tool::FindPeaks(analysis::PeakOptions { npts: points, direction, filter })))
+                (
+                    target,
+                    Job::Tool(Tool::FindPeaks(analysis::PeakOptions {
+                        npts: points,
+                        direction,
+                        filter,
+                        ..Default::default()
+                    })),
+                )
             } else {
                 let baseline = match (baseline, &anchors) {
                     (Some(PeakBaselineKind::Anchors), None) => bail!("--baseline anchors needs --anchors X1:Y1,X2:Y2"),

@@ -1028,6 +1028,23 @@ impl AnalysisDialog {
                     );
                 });
                 ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+                if !chain {
+                    ui.horizontal(|ui| {
+                        ui.label("Smoothing points before the search");
+                        ui.add(DragValue::new(&mut self.peaks.smooth_points).range(0..=1001));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Foot height");
+                        ui.add(DragValue::new(&mut self.peaks.foot_height).speed(0.01).range(0.0..=f64::MAX));
+                    });
+                    ui.horizontal(|ui| {
+                        let mut limited = self.peaks.max_half_width.is_some();
+                        ui.checkbox(&mut limited, "Limit the distance of the feet from the peak");
+                        let mut w = self.peaks.max_half_width.unwrap_or(1.0);
+                        ui.add_enabled(limited, DragValue::new(&mut w).speed(0.01).range(0.0..=f64::MAX));
+                        self.peaks.max_half_width = limited.then_some(w);
+                    });
+                }
                 if chain {
                     ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak");
                     ui.checkbox(&mut self.chain_integrate, "Integrate every peak (area, area %, FWHM, limits)");

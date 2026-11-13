@@ -3627,6 +3627,41 @@ fn smoothing_offers_lowess_loess_and_binomial_with_their_own_fields() {
 }
 
 #[test]
+fn find_peaks_has_smoothing_and_foot_options_and_writes_the_feet() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-pkfeet-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("feet.csv");
+    let mut text = String::from(
+        "x,y
+",
+    );
+    for k in 0..201 {
+        let x = k as f64 * 0.1;
+        text.push_str(&format!(
+            "{x},{}
+",
+            (-(x - 4.0).powi(2)).exp() + 0.8 * (-(x - 9.0).powi(2)).exp() + 0.2
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    open_analysis(&mut h, AnalysisKind::Peaks);
+    for label in ["Smoothing points before the search", "Foot height", "Limit the distance of the feet from the peak"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let peaks = &b.sheets[1];
+    assert_eq!(peaks.column_by_name("Peak position (x)").unwrap().numeric().unwrap(), [4.0, 9.0]);
+    // Without a limit the feet are the lowest points on each side: the start, the valley, the flat tail.
+    let left = peaks.columns.iter().find(|c| c.long_name.starts_with("Left foot")).unwrap().numeric().unwrap();
+    let right = peaks.columns.iter().find(|c| c.long_name.starts_with("Right foot")).unwrap().numeric().unwrap();
+    assert!(left[0] == 0.0 && right[1] > 14.0, "{left:?} {right:?}");
+    assert!((left[1] - right[0]).abs() < 1e-9, "the valley is the shared foot: {left:?} {right:?}");
+}
+
+#[test]
 fn the_analysis_window_cancel_changes_nothing() {
     let mut h = start(vec![data_file("frame-cancel")]);
     open_analysis(&mut h, AnalysisKind::Smooth);

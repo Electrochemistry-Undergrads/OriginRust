@@ -40,6 +40,9 @@ const CP_ANODIC_CURRENT: usize = 0x4ac;
 const SENSITIVITY_2: usize = 0x4b4;
 const CP_CATHODIC_TIME: usize = 0x4b8;
 const CP_ANODIC_TIME: usize = 0x4bc;
+/// Float 1.0 in the files of the newer programs, 0.0 in the files of the older ones that ship in
+/// the `Test Data` folder of the CHI1040C program. Decides how several channels are stored.
+const LAYOUT_FLAG: usize = 0x630;
 
 /// Significant digits of a current in the text export; pinned-current detection compares at this precision.
 const TEXT_DIGITS: usize = 4;
@@ -188,6 +191,22 @@ fn grid(k: usize, step: f64) -> f64 {
     (k as f64 * step * 1e9).round() / 1e9
 }
 
+/// Splits the data block into channels. In the files of the newer programs the values of the
+/// channels alternate point by point (`i1, i2, i1, i2, ...`). In the older files (layout flag 0.0)
+/// the first channel comes alone as one array and the others alternate after it, which for the
+/// three-channel sample is `i1 ... i1, i2, i3, i2, i3, ...`. A single channel is just its array.
+fn split_channels(data: &[u8], n: usize, channels: usize, old_layout: bool) -> Vec<Vec<f64>> {
+    let values: Vec<f64> = data.as_chunks::<4>().0.iter().map(|w| decimal(f32::from_le_bytes(*w))).collect();
+    let (alone, rest) = if old_layout && channels > 1 { (1, &values[n..]) } else { (0, &values[..]) };
+    let stride = channels - alone;
+    let mut out: Vec<Vec<f64>> = Vec::with_capacity(channels);
+    if alone == 1 {
+        out.push(values[..n].to_vec());
+    }
+    out.extend((0..stride).map(|c| rest.iter().skip(c).step_by(stride).copied().collect::<Vec<f64>>()));
+    out
+}
+
 /// Reads a CHI binary file. `file_stem` becomes the workbook long name and is
 /// used in messages.
 pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result<ChiImport, IoError> {
@@ -229,8 +248,8 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             detail: "the file holds no data points".to_string(),
         });
     }
-    // The channels are stored one after the other, each `claimed` values long. A cut-short file
-    // can only be read when there is a single channel.
+    // The data are `claimed` values for each of the channels (see `split_channels`). A cut-short
+    // file can only be read when there is a single channel.
     let needed = claimed.saturating_mul(4 * channels);
     let n = if data.len() >= needed {
         claimed
@@ -249,11 +268,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
     if extra > 0 {
         warnings.push(format!("{extra} bytes after the data were ignored"));
     }
-    let channel_data: Vec<Vec<f64>> = (0..channels)
-        .map(|c| {
-            data[c * n * 4..][..n * 4].as_chunks::<4>().0.iter().map(|w| decimal(f32::from_le_bytes(*w))).collect()
-        })
-        .collect();
+    let channel_data = split_channels(&data[..n * 4 * channels], n, channels, h.f32_at(LAYOUT_FLAG) == 0.0);
     let not_finite: usize = channel_data.iter().flatten().filter(|v| !v.is_finite()).count();
     if not_finite > 0 {
         warnings.push(format!("{not_finite} stored values are not finite numbers"));

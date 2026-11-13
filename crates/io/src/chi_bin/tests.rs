@@ -15,6 +15,8 @@ struct Builder {
     points: usize,
     words: Vec<(usize, u32)>,
     data: Vec<Vec<f32>>,
+    /// The layout of the older programs (flag word 0.0).
+    legacy: bool,
 }
 
 impl Builder {
@@ -26,6 +28,7 @@ impl Builder {
             points: 0,
             words: Vec::new(),
             data: Vec::new(),
+            legacy: false,
         };
         b.f(E_INIT, 0.0).u(MODEL, 627).date([2026, 10, 28, 17, 45, 56]);
         b
@@ -38,6 +41,12 @@ impl Builder {
 
     fn f(&mut self, rel: usize, v: f32) -> &mut Self {
         self.u(rel, v.to_bits())
+    }
+
+    /// The layout of the older programs: channel 1 alone, the others alternating after it.
+    fn legacy(&mut self) -> &mut Self {
+        self.legacy = true;
+        self
     }
 
     fn date(&mut self, d: [u32; 6]) -> &mut Self {
@@ -74,13 +83,24 @@ impl Builder {
         for &(rel, v) in &self.words {
             put(rel, v);
         }
-        for ch in &self.data {
-            for v in ch {
-                out.extend(v.to_le_bytes());
+        if !self.legacy {
+            put_f32(&mut out, body + LAYOUT_FLAG, 1.0);
+        }
+        let alone = usize::from(self.legacy && self.channels > 1);
+        for ch in &self.data[..alone] {
+            out.extend(ch.iter().flat_map(|v| v.to_le_bytes()));
+        }
+        for k in 0..self.points {
+            for ch in &self.data[alone..] {
+                out.extend(ch[k].to_le_bytes());
             }
         }
         out
     }
+}
+
+fn put_f32(out: &mut [u8], at: usize, v: f32) {
+    out[at..at + 4].copy_from_slice(&v.to_le_bytes());
 }
 
 /// A cyclic voltammetry file; the current of point `i` is `current(i)`.
@@ -261,7 +281,7 @@ fn the_charge_of_an_i_t_run_follows_the_sample_interval() {
 }
 
 #[test]
-fn two_channel_i_t_data_is_stored_one_channel_after_the_other() {
+fn two_channel_i_t_data_alternates_point_by_point() {
     let n = 40;
     let mut b = Builder::new("i-t", "Amperometric i-t Curve");
     b.f(E_INIT, 1.0).f(E_HIGH, 0.9).f(INTERVAL, 0.1).f(RUN_TIME, 4.0).f(SENSITIVITY, 1e-3).f(SENSITIVITY_2, 1e-4);
@@ -293,6 +313,42 @@ fn two_channel_i_t_data_is_stored_one_channel_after_the_other() {
     assert_eq!(meta(&imp, "E2"), "0.9");
     assert_eq!(meta(&imp, "Sens2"), "0.0001");
     assert_eq!(meta(&imp, "Channels"), "2");
+}
+
+#[test]
+fn the_bytes_of_a_two_channel_run_alternate_and_an_old_three_channel_file_keeps_channel_1_apart() {
+    let n = 5;
+    let ch = |c: usize| -> Vec<f32> { (0..n).map(|k| (c * 100 + k) as f32).collect() };
+    let mut b = Builder::new("i-t", "Amperometric i-t Curve");
+    b.f(INTERVAL, 0.1).f(SENSITIVITY, 1e-3).channels(vec![ch(1), ch(2)]);
+    let bytes = b.build();
+    let raw: Vec<f32> =
+        bytes[bytes.len() - 8 * n..].as_chunks::<4>().0.iter().map(|w| f32::from_le_bytes(*w)).collect();
+    assert_eq!(raw, [100.0, 200.0, 101.0, 201.0, 102.0, 202.0, 103.0, 203.0, 104.0, 204.0]);
+    let cols = |imp: &ChiImport| -> Vec<Vec<f64>> {
+        let s = &imp.workbook.sheets[0];
+        ["i1", "i2", "i3"]
+            .iter()
+            .filter_map(|name| s.columns.iter().find(|c| c.long_name == *name && c.units == "A"))
+            .map(|c| c.numeric().unwrap().to_vec())
+            .collect()
+    };
+    let got = cols(&import(&bytes));
+    assert_eq!(got[0], [100.0, 101.0, 102.0, 103.0, 104.0]);
+    assert_eq!(got[1], [200.0, 201.0, 202.0, 203.0, 204.0]);
+
+    // Old layout, three channels: channel 1, then channels 2 and 3 alternating.
+    let mut b = Builder::new("i-t", "Amperometric i-t Curve");
+    b.f(INTERVAL, 0.1).f(SENSITIVITY, 1e-3).legacy().channels(vec![ch(1), ch(2), ch(3)]);
+    let bytes = b.build();
+    let raw: Vec<f32> =
+        bytes[bytes.len() - 12 * n..].as_chunks::<4>().0.iter().map(|w| f32::from_le_bytes(*w)).collect();
+    assert_eq!(&raw[..7], [100.0, 101.0, 102.0, 103.0, 104.0, 200.0, 300.0]);
+    let got = cols(&import(&bytes));
+    assert_eq!(got.len(), 3);
+    assert_eq!(got[0], [100.0, 101.0, 102.0, 103.0, 104.0]);
+    assert_eq!(got[1], [200.0, 201.0, 202.0, 203.0, 204.0]);
+    assert_eq!(got[2], [300.0, 301.0, 302.0, 303.0, 304.0]);
 }
 
 #[test]

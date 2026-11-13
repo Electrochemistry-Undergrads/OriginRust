@@ -600,14 +600,22 @@ impl BookUi {
     /// With a block of several cells selected and `from` inside it: moves the active cell as
     /// Enter and Tab do in Origin, keeping the block selected. Returns false when the selection
     /// is not such a block.
-    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize) -> bool {
+    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize, visible: &dyn Fn(usize) -> bool) -> bool {
         let Sel::Cells { anchor, end } = self.sel else { return false };
         let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
         let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
         if anchor == end || !(c0..=c1).contains(&from.0) || !(r0..=r1).contains(&from.1) {
             return false;
         }
-        self.active = Some(block_next((c0, c1), (r0, r1), from, dx, dy));
+        // A hidden column is stepped over.
+        let mut next = block_next((c0, c1), (r0, r1), from, dx, dy);
+        for _ in 0..(c1 - c0 + 1) {
+            if visible(next.0) {
+                break;
+            }
+            next = block_next((c0, c1), (r0, r1), next, dx, dy);
+        }
+        self.active = Some(next);
         self.reveal = 4;
         self.focus_grid = true;
         true
@@ -1325,7 +1333,9 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, actions: 
         }
         state.editing = None;
         let in_block = match (step, sheet.column_index(column)) {
-            (Some((dx, dy)), Some(position)) => state.step_in_block((position, row), dx, dy),
+            (Some((dx, dy)), Some(position)) => {
+                state.step_in_block((position, row), dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
+            }
             _ => false,
         };
         if let (false, Some((dx, dy)), Some(position)) = (in_block, step, sheet.column_index(column)) {
@@ -1457,7 +1467,7 @@ pub fn handle_keys(ctx: &egui::Context, doc: &Document, book_id: WindowId, state
                     let step = if shift { -1 } else { 1 };
                     let (dx, dy) = if *key == egui::Key::Tab { (step, 0) } else { (0, step) };
                     if let Some(from) = state.active_cell()
-                        && state.step_in_block(from, dx, dy)
+                        && state.step_in_block(from, dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
                     {
                         consumed.push(*key);
                         taken = true;
@@ -1731,11 +1741,16 @@ mod tests {
     #[test]
     fn stepping_in_a_block_moves_the_active_cell_and_keeps_the_block() {
         let mut state = BookUi { sel: Sel::Cells { anchor: (0, 0), end: (1, 1) }, ..Default::default() };
-        assert!(state.step_in_block((0, 0), 0, 1));
+        let all = |_: usize| true;
+        assert!(state.step_in_block((0, 0), 0, 1, &all));
         assert_eq!(state.active_cell(), Some((0, 1)));
         assert_eq!(state.sel, Sel::Cells { anchor: (0, 0), end: (1, 1) });
         // A single cell is not stepped.
         state.sel = Sel::Cells { anchor: (0, 0), end: (0, 0) };
-        assert!(!state.step_in_block((0, 0), 0, 1));
+        assert!(!state.step_in_block((0, 0), 0, 1, &all));
+        // Tab over a hidden column: from column 0 the next column 1 is hidden, so the walk goes on.
+        state.sel = Sel::Cells { anchor: (0, 0), end: (2, 0) };
+        assert!(state.step_in_block((0, 0), 1, 0, &|c| c != 1));
+        assert_eq!(state.active_cell(), Some((2, 0)));
     }
 }

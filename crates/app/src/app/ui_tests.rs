@@ -2183,10 +2183,11 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
         ],
     );
     // What Sheaf has is enabled, the rest is greyed.
-    for have in ["Plot", "Cut", "Copy", "Paste", "Delete", "Clear", "Set As", "Properties...", "Normalize..."] {
+    for have in ["Plot", "Cut", "Copy", "Paste", "Insert", "Delete", "Clear", "Set As", "Properties...", "Normalize..."]
+    {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    for lack in ["Insert", "Copy Columns to...", "Set As Categorical", "Frequency Count...", "Column Width..."] {
+    for lack in ["Copy Columns to...", "Set As Categorical", "Frequency Count...", "Column Width..."] {
         assert!(!entry_enabled(&h, lack), "{lack} should be greyed");
     }
     // Clear empties the column and one undo brings it back.
@@ -4662,4 +4663,47 @@ fn typing_with_a_block_selected_edits_its_active_cell_and_enter_and_tab_move_ins
     // Tab moved right inside the block: past the last column, to the start of the next row.
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
     assert_eq!(book_ui(&h).active_cell(), Some((1, 1)));
+}
+
+#[test]
+fn insert_and_delete_rows_and_columns_from_the_selection_and_undo() {
+    use crate::actions::CellOp;
+    let mut h = start(vec![data_file("insdel")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let sheet = project(&h).workbooks().next().unwrap().sheet().clone();
+
+    // A block of cells in the second column: only that column moves.
+    h.state_mut().books.entry(book).or_default().select_cells(&sheet, (1, 1), (1, 2));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Insert }, &ctx);
+    settle(&mut h);
+    let up = column(&h, "B");
+    assert_eq!(up.len(), 6);
+    assert!(up[1].is_nan() && up[2].is_nan());
+    assert_eq!(column(&h, "A").len(), 4);
+    assert_eq!(h.state().doc.undo_label(), Some("Insert rows"));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Delete }, &ctx);
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "B").len(), 6);
+
+    // Whole columns: Insert adds a column before the selection, Delete removes it.
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    h.state_mut().books.entry(book).or_default().clear_selection();
+    h.state_mut().books.entry(book).or_default().sel = crate::grid::Sel::Columns;
+    let b = project(&h).workbooks().next().unwrap().sheet().columns[1].id;
+    h.state_mut().books.entry(book).or_default().selected = vec![b];
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Insert }, &ctx);
+    settle(&mut h);
+    let names: Vec<String> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
+    assert_eq!(names, ["A", "D", "B", "C"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Insert columns"));
+    h.state_mut().apply(Action::Cells { book, op: CellOp::Delete }, &ctx);
+    settle(&mut h);
+    let names: Vec<String> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.short_name.clone()).collect();
+    assert_eq!(names, ["A", "B", "C"], "the inserted column was the selection");
 }

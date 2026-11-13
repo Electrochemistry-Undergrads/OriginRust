@@ -74,6 +74,10 @@ pub enum Cmd {
     Undo,
     Redo,
     DeleteColumns,
+    /// Insert rows or columns at the selection (Edit > Insert and the cell menus).
+    InsertCells,
+    /// Delete the selected rows or columns (Edit > Delete and the cell menus).
+    DeleteCells,
     /// Copy the selected cells (Edit > Copy and the Copy item of the cell menus).
     Copy(CopyKind),
     Cut,
@@ -467,8 +471,8 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
         v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
-        v.push(grey("Insert"));
-        v.push(item("&Delete", Cmd::DeleteColumns));
+        v.push(item("Insert", Cmd::InsertCells));
+        v.push(item("&Delete", Cmd::DeleteCells));
         v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
         v.push(grey_keyed("Find in Sheets...", ctrl(Key::F)));
@@ -1207,7 +1211,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(grey("Copy Columns to..."));
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
     v.push(sep());
-    v.push(grey("Insert"));
+    v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteColumns));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
     v.push(grey("Remove Links"));
@@ -1259,7 +1263,9 @@ pub fn cell_menu() -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-    v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "-", "Insert", "Delete"]));
+    v.extend(greys(&["Paste Transpose", "Paste Link", "Paste Link Transpose", "-"]));
+    v.push(item("Insert", Cmd::InsertCells));
+    v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
     v.extend(greys(&["Remove Links", "-", "Set as Begin", "Set as End", "-"]));
     v.push(grey_sub("Insert Arrow", &["Arrow", "Double Arrow"]));
@@ -1281,7 +1287,8 @@ pub fn cell_menu() -> Vec<Entry> {
 pub fn row_menu() -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut), keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain))];
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
-    v.extend(greys(&["Insert", "Delete"]));
+    v.push(item("Insert", Cmd::InsertCells));
+    v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
     v.extend(greys(&["Insert Graph...", "Format Cells..."]));
     v
@@ -1686,12 +1693,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::Cells { book, op: CellOp::Copy(*kind) }
         }
-        Cmd::Cut | Cmd::Paste | Cmd::Clear => {
+        Cmd::Cut | Cmd::Paste | Cmd::Clear | Cmd::InsertCells | Cmd::DeleteCells => {
             let book = book?;
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             let op = match cmd {
                 Cmd::Cut => CellOp::Cut,
                 Cmd::Paste => CellOp::Paste,
+                Cmd::InsertCells => CellOp::Insert,
+                Cmd::DeleteCells => CellOp::Delete,
                 _ => CellOp::Clear,
             };
             Action::Cells { book, op }

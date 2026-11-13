@@ -1033,6 +1033,7 @@ impl SheafApp {
                 }
             }
             CellOp::Clear => self.clear_cells(book, sheet_index, &t, "Clear cells"),
+            CellOp::Insert | CellOp::Delete => self.insert_or_delete(book, sheet_index, &t, op == CellOp::Insert),
             CellOp::Paste => {
                 // The system answers with the text in a later frame (an `Event::Paste`).
                 ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
@@ -1071,6 +1072,54 @@ impl SheafApp {
                     Err(e) => self.message = Some(("Could not paste".to_string(), e.to_string())),
                 }
             }
+        }
+    }
+
+    /// Edit > Insert and Edit > Delete on the selection: whole columns are inserted (left of the
+    /// first selected one) or deleted; rows and blocks of cells insert blank cells or remove
+    /// cells, moving the cells below them, in the columns the selection covers.
+    fn insert_or_delete(&mut self, book: WindowId, sheet_index: usize, t: &grid::Target, insert: bool) {
+        let by_columns = self.books.get(&book).is_some_and(|s| s.sel == grid::Sel::Columns);
+        if by_columns {
+            let ids: Vec<ColumnId> = self
+                .doc
+                .project()
+                .workbook(book)
+                .and_then(|b| b.sheets.get(sheet_index))
+                .map(|s| t.columns.iter().filter_map(|i| s.columns.get(*i).map(|c| c.id)).collect())
+                .unwrap_or_default();
+            if insert {
+                let (at, count) = (t.columns.first().copied().unwrap_or(0), t.columns.len());
+                let mut added = Vec::new();
+                self.doc.apply("Insert columns", |p| {
+                    added = p.insert_columns(book, sheet_index, at, count).unwrap_or_default();
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.selected = added;
+                }
+                self.say(format!("Inserted {count} column(s)"));
+            } else {
+                self.doc.apply("Delete columns", |p| delete_columns(p, &ids));
+            }
+            return;
+        }
+        let mut locked = 0;
+        let rows = t.rows.clone();
+        let label = if insert { "Insert rows" } else { "Delete rows" };
+        self.doc.apply(label, |p| {
+            if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                locked = if insert {
+                    ws.insert_rows(&t.columns, rows.start, rows.len())
+                } else {
+                    ws.delete_rows(&t.columns, rows.clone())
+                };
+            }
+        });
+        if locked > 0 {
+            self.warn(format!("{locked} column(s) calculated from a formula were left alone"));
+        } else {
+            let what = if insert { "Inserted" } else { "Deleted" };
+            self.say(format!("{what} {} row(s) in {} column(s)", rows.len(), t.columns.len()));
         }
     }
 

@@ -35,6 +35,12 @@ pub enum CellOp {
     PasteText(String),
     /// Empty the cells (the Delete key).
     Clear,
+    /// Edit > Insert: blank rows above the selected rows (only in the selected columns for a
+    /// block of cells), or new columns left of the selected columns.
+    Insert,
+    /// Edit > Delete: the selected rows (only in the selected columns for a block of cells) or
+    /// the selected columns.
+    Delete,
 }
 
 /// One of the label rows above the data of a column.

@@ -5,7 +5,7 @@
 <h1 align="center">Sheaf</h1>
 
 <p align="center">
-  <b>Scientific data analysis and graphing; an open-source, clean-room reimplementation of Origin and OriginPro workflows, rebuilt in Rust.</b><br>
+  <b>Scientific data analysis and graphing, Sheaf: an open-source, clean-room reimplementation of Origin and OriginPro workflows, rebuilt in Rust.</b><br>
   Workbooks, scientific plots, curve fitting, and data analysis,<br>
   in a native app written in Rust. Open source and offline.
 </p>

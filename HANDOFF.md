@@ -29,7 +29,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1267 passed on `main` after T12 items 3-5 (2026-11-13). Parity table: see `python tools/parity-count.py`; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1285 passed on `main` at `704a1d6` (2026-11-13). Parity table: see `python tools/parity-count.py`; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 

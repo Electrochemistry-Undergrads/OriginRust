@@ -8,6 +8,7 @@ use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_sheet::SheetExportDialog;
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
+use crate::dialogs::fit_more::{FitMoreDialog, FitMoreKind, FitMoreOutcome};
 use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome};
@@ -100,6 +101,7 @@ pub struct SheafApp {
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
+    fit_more: Option<FitMoreDialog>,
     filter: Option<FilterDialog>,
     row_filter: Option<RowFilterDialog>,
     reshape: Option<ReshapeDialog>,
@@ -158,6 +160,7 @@ impl SheafApp {
             set_values: None,
             analysis: None,
             fit: None,
+            fit_more: None,
             filter: None,
             row_filter: None,
             reshape: None,
@@ -839,6 +842,13 @@ impl SheafApp {
                 let column = column.filter(|c| self.doc.project().column(*c).is_some_and(|c| c.data.is_numeric()));
                 self.fit = FitDialog::new(self.doc.project(), book, column, kind);
                 if self.fit.is_none() {
+                    self.warn("Nothing to fit: choose a column that holds numbers and is set as Y".to_string());
+                }
+            }
+            Action::FitMore { book, column, kind } => {
+                let column = column.filter(|c| self.doc.project().column(*c).is_some_and(|c| c.data.is_numeric()));
+                self.fit_more = FitMoreDialog::new(self.doc.project(), book, column, kind);
+                if self.fit_more.is_none() {
                     self.warn("Nothing to fit: choose a column that holds numbers and is set as Y".to_string());
                 }
             }
@@ -1928,6 +1938,36 @@ impl SheafApp {
                 }
             }
         }
+        if let Some(d) = &mut self.fit_more {
+            match d.show(ctx, &mut self.doc) {
+                FitMoreOutcome::Open => {}
+                FitMoreOutcome::Closed => self.fit_more = None,
+                FitMoreOutcome::Multiple(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.param_sheet);
+                    self.logs.result(o.message.clone(), fit_report_lines(&o.report));
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
+                FitMoreOutcome::Compare(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.sheet);
+                    let mut lines = o.comparison.warnings.clone();
+                    lines.splice(0..0, o.reports.iter().flat_map(fit_report_lines));
+                    self.logs.result(o.message.clone(), lines);
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
+                FitMoreOutcome::Rank(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.sheet);
+                    let lines = o.skipped.iter().map(|(f, e)| format!("Skipped {f}: {e}")).collect();
+                    self.logs.result(o.message.clone(), lines);
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
+            }
+        }
         if let Some(d) = &mut self.reshape {
             let book = d.book;
             match d.show(ctx, &mut self.doc) {
@@ -2296,6 +2336,13 @@ impl SheafApp {
                         self.focus(book);
                     }
                 }
+                "fitmore" => {
+                    let book = project.workbooks().next().map(|b| b.id);
+                    if let (Some(book), Some(kind)) = (book, FitMoreKind::from_name(arg)) {
+                        self.fit_more = FitMoreDialog::new(self.doc.project(), book, None, kind);
+                        self.focus(book);
+                    }
+                }
                 "filter" => {
                     let book = project.workbooks().next().map(|b| b.id);
                     if let Some(book) = book {
@@ -2372,7 +2419,15 @@ impl SheafApp {
 /// standard errors, the fit statistics and any warnings.
 fn fit_lines(outcome: &sheaf_core::fitting::FitOutcome) -> Vec<String> {
     let n = |v: f64| sheaf_core::format::format_general(v, 6);
-    let r = &outcome.report;
+    let mut lines = fit_report_lines(&outcome.report);
+    let at = lines.iter().position(|l| l.starts_with("  Note: ")).unwrap_or(lines.len());
+    lines.splice(at..at, outcome.derived.iter().map(|(name, value)| format!("  {name} = {}", n(*value))));
+    lines
+}
+
+/// The lines of [`fit_lines`] that come from the report alone.
+fn fit_report_lines(r: &sheaf_core::fitting::Report) -> Vec<String> {
+    let n = |v: f64| sheaf_core::format::format_general(v, 6);
     let mut lines = vec![format!("{}: {}", r.model, r.equation)];
     for p in &r.params {
         lines.push(if p.fixed {
@@ -2389,9 +2444,6 @@ fn fit_lines(outcome: &sheaf_core::fitting::FitOutcome) -> Vec<String> {
         n(st.adj_r_squared),
         n(st.reduced_chi_sqr)
     ));
-    for (name, value) in &outcome.derived {
-        lines.push(format!("  {name} = {}", n(*value)));
-    }
     lines.extend(r.warnings.iter().map(|w| format!("  Note: {w}")));
     lines
 }

@@ -27,7 +27,12 @@ use crate::graph::{Dash, ErrorStyle, LineStyle, Plot, PlotKind};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
+pub use sheaf_fit::FitReport as Report;
 pub use sheaf_fit::FitStatus;
+pub use sheaf_fit::compare::{Comparison, Ranked, Verdict};
+
+mod more;
+pub use more::{CompareOutcome, MultiRegOutcome, MultiRegRequest, RankOutcome};
 pub use sheaf_fit::nlsf::Algorithm;
 use sheaf_fit::{Bands, FitError, FitReport};
 
@@ -39,6 +44,9 @@ pub enum FitModel {
     Linear,
     /// A polynomial of the given order, parameters `Intercept`, `B1`, `B2`, ...
     Polynomial { order: usize },
+    /// A straight line fitted with errors in x and y (Origin's "Linear Fit with X Error");
+    /// needs an X-error column and uses the Y-error column when weighting is instrumental.
+    LinearXError,
     /// A function of the built-in library, by name (for example `Gauss`).
     BuiltIn(String),
     /// A formula typed by the user, for example `y0 + A*exp(-x/t)`, with its parameter names.
@@ -51,7 +59,7 @@ impl FitModel {
     /// Prefix of the report sheet's name, as Origin names its report sheets.
     pub fn sheet_prefix(&self) -> &'static str {
         match self {
-            FitModel::Linear => "FitLinear",
+            FitModel::Linear | FitModel::LinearXError => "FitLinear",
             FitModel::Polynomial { .. } => "FitPolynomial",
             _ => "FitNL",
         }
@@ -116,6 +124,9 @@ pub struct FitRequest {
     /// The Y-error column for instrumental weighting, or the weight column for direct weighting;
     /// `None` uses the error column that belongs to `y` in the sheet, if there is one.
     pub y_error: Option<ColumnId>,
+    /// The X-error column of [`FitModel::LinearXError`]; `None` uses the one that belongs to the
+    /// X column in the sheet.
+    pub x_error: Option<ColumnId>,
     pub rows: RowRange,
     pub model: FitModel,
     pub params: Vec<ParamSetting>,
@@ -160,6 +171,7 @@ impl FitRequest {
         FitRequest {
             y,
             y_error: None,
+            x_error: None,
             rows: RowRange::All,
             model,
             params: Vec::new(),
@@ -189,6 +201,8 @@ pub struct FitData {
     pub y: Vec<f64>,
     /// Present for instrumental weighting (errors) and direct weighting (weights).
     pub y_error: Option<Vec<f64>>,
+    /// The X errors of a [`FitModel::LinearXError`] fit.
+    pub x_error: Option<Vec<f64>>,
     pub weighting: FitWeighting,
     pub confidence_level: f64,
     /// Iteration limit and tolerance of a nonlinear fit (see [`FitRequest`]).
@@ -273,6 +287,8 @@ pub enum FitRequestError {
     NoErrorColumn(String),
     #[error("column {0} holds text and cannot be used as Y errors")]
     ErrorColumnNotNumeric(String),
+    #[error("a linear fit with X error needs an X-error column for {0}; set one column's designation to X error")]
+    NoXErrorColumn(String),
     #[error("the confidence level must be between 0 and 1 (exclusive), not {0}")]
     BadConfidence(f64),
     #[error("{0}")]
@@ -471,10 +487,12 @@ impl Project {
             }
             _ => None,
         };
+        let x_error = self.gather_x_error(request, sheet, index, column, first, last)?;
         let data = FitData {
             x: x_all[first..=last].to_vec(),
             y: y_all[first..=last].to_vec(),
             y_error,
+            x_error,
             weighting: request.weighting,
             confidence_level: request.confidence_level,
             max_iterations: request.max_iterations,
@@ -784,6 +802,28 @@ impl Project {
         self.fit_with(request, move |data| run_engine(&model, &settings, data))
     }
 
+    /// The X-error values of the chosen rows, for [`FitModel::LinearXError`] only.
+    fn gather_x_error(
+        &self,
+        request: &FitRequest,
+        sheet: &Worksheet,
+        index: usize,
+        column: &Column,
+        first: usize,
+        last: usize,
+    ) -> Result<Option<Vec<f64>>, FitRequestError> {
+        if request.model != FitModel::LinearXError {
+            return Ok(None);
+        }
+        let err_col = match request.x_error {
+            Some(e) => Some(self.column(e).ok_or(AnalysisError::NoSuchColumn(e))?),
+            None => sheet.x_error_for(index),
+        }
+        .ok_or_else(|| FitRequestError::NoXErrorColumn(column.short_name.clone()))?;
+        let e = err_col.numeric().ok_or_else(|| FitRequestError::ErrorColumnNotNumeric(err_col.short_name.clone()))?;
+        Ok(Some((first..=last).map(|i| e.get(i).copied().unwrap_or(f64::NAN)).collect()))
+    }
+
     /// The values a fit of this request would hand to the engine: the X, Y and weight or error
     /// values of the chosen rows (the same gathering as [`Project::fit_with`]).
     fn collect_fit_data(&self, request: &FitRequest) -> Result<FitData, FitRequestError> {
@@ -814,10 +854,12 @@ impl Project {
             }
             _ => None,
         };
+        let x_error = self.gather_x_error(request, sheet, index, column, first, last)?;
         Ok(FitData {
             x: x_all[first..=last].to_vec(),
             y: y_all[first..=last].to_vec(),
             y_error,
+            x_error,
             weighting: request.weighting,
             confidence_level: request.confidence_level,
             max_iterations: request.max_iterations,
@@ -1034,7 +1076,7 @@ pub fn builtin_functions() -> Vec<FunctionInfo> {
 /// text is parsed; a file that cannot be used gives an error that says why.
 pub fn model_parameters(model: &FitModel) -> Result<Vec<String>, FitError> {
     Ok(match model {
-        FitModel::Linear => vec!["Intercept".into(), "Slope".into()],
+        FitModel::Linear | FitModel::LinearXError => vec!["Intercept".into(), "Slope".into()],
         FitModel::Polynomial { order } => {
             std::iter::once("Intercept".to_string()).chain((1..=*order).map(|k| format!("B{k}"))).collect()
         }
@@ -1218,6 +1260,40 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 derived: Vec::new(),
             })
         }
+        FitModel::LinearXError => {
+            if !settings.is_empty() {
+                return Err(FitError::Failed("a linear fit with X error has no parameter settings".into()));
+            }
+            let sx = d.x_error.as_deref().ok_or_else(|| FitError::Failed("no X errors were given".into()))?;
+            let sy: Vec<f64> = match (d.weighting, &d.y_error) {
+                (FitWeighting::None, _) => vec![1.0; d.x.len()],
+                (FitWeighting::Instrumental, Some(e)) => e.clone(),
+                _ => {
+                    return Err(FitError::Failed(
+                        "a linear fit with X error is weighted by the X and Y errors only (no weights, or instrumental)"
+                            .into(),
+                    ));
+                }
+            };
+            let opts = sheaf_fit::xerr::XErrOptions {
+                confidence_level: d.confidence_level,
+                scale_errors: scale_errors(d) || d.weighting == FitWeighting::None,
+            };
+            let report = sheaf_fit::xerr::fit_linear_xerr(&d.x, &d.y, sx, &sy, &opts)?;
+            let (a, b) = (report.params[0].value, report.params[1].value);
+            let cov = report.covariance.clone();
+            let (dof, s2) = (report.stats.dof, report.stats.reduced_chi_sqr);
+            Ok(FittedModel {
+                report,
+                curve: Box::new(move |x| a + b * x),
+                bands: Some(Box::new(move |xs, level| {
+                    let fit: Vec<f64> = xs.iter().map(|x| a + b * x).collect();
+                    let var: Vec<f64> = xs.iter().map(|x| cov[0] + 2.0 * x * cov[1] + x * x * cov[3]).collect();
+                    Ok(Bands::from_variances(xs, &fit, &var, s2, dof, level))
+                })),
+                derived: Vec::new(),
+            })
+        }
         FitModel::Polynomial { order } => {
             let fixed = closed_form_fixed(settings, &["Intercept"])?;
             let opts = linear::PolyOptions {
@@ -1371,6 +1447,7 @@ mod tests {
             x: x.clone(),
             y,
             y_error: None,
+            x_error: None,
             weighting: FitWeighting::None,
             confidence_level: 0.95,
             max_iterations: 400,
@@ -1896,6 +1973,7 @@ mod tests {
             x,
             y,
             y_error,
+            x_error: None,
             weighting,
             confidence_level: 0.95,
             max_iterations: 400,

@@ -1,0 +1,352 @@
+newbook;
+col(A) = data(1, 20, 1);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(B) = 0.5*col(A) + 3*sin(col(A)*1.7);
+col(C) = 2 + 0.7*col(A) + -0.6*col(B) + 0.8*sin(col(A)*5.3) + 0.5*cos(col(A)*11.1);
+tree mrt;
+fitMR dep:=[Book1]Sheet1!C indep:=[Book1]Sheet1!(A,B) mrtree:=mrt;
+double r_v1 = mrt.v1;
+?r_v1
+double r_e1 = mrt.e1;
+?r_e1
+double r_t1 = mrt.t1;
+?r_t1
+double r_p1 = mrt.p1;
+?r_p1
+double r_v2 = mrt.v2;
+?r_v2
+double r_e2 = mrt.e2;
+?r_e2
+double r_t2 = mrt.t2;
+?r_t2
+double r_p2 = mrt.p2;
+?r_p2
+double r_v3 = mrt.v3;
+?r_v3
+double r_e3 = mrt.e3;
+?r_e3
+double r_t3 = mrt.t3;
+?r_t3
+double r_p3 = mrt.p3;
+?r_p3
+double r_SSE = mrt.SSE;
+?r_SSE
+double r_SST = mrt.SST;
+?r_SST
+double r_MSR = mrt.MSR;
+?r_MSR
+double r_MSE = mrt.MSE;
+?r_MSE
+double r_RMSE = mrt.RMSE;
+?r_RMSE
+double r_DOF = mrt.DOF;
+?r_DOF
+double r_ssr = mrt.ssr;
+?r_ssr
+double r_COD = mrt.COD;
+?r_COD
+double r_Rvalue = mrt.Rvalue;
+?r_Rvalue
+double r_Npts = mrt.Npts;
+?r_Npts
+double r_Fvalue = mrt.Fvalue;
+?r_Fvalue
+double r_PValue = mrt.PValue;
+?r_PValue
+#[Book1]Sheet1
+newbook;
+col(A) = data(1, 25, 1);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = col(A)*0;
+col(B) = 0.5*col(A) + 3*sin(col(A)*1.7);
+col(C) = 4*cos(col(A)*0.9) + 0.1*col(A);
+col(D) = 2 + 0.7*col(A) + -0.6*col(B) + 0.9*col(C) + 0.8*sin(col(A)*5.3) + 0.5*cos(col(A)*11.1);
+tree mrt;
+fitMR dep:=[Book2]Sheet1!D indep:=[Book2]Sheet1!(A,B,C) mrtree:=mrt;
+double r_v1 = mrt.v1;
+?r_v1
+double r_e1 = mrt.e1;
+?r_e1
+double r_t1 = mrt.t1;
+?r_t1
+double r_p1 = mrt.p1;
+?r_p1
+double r_v2 = mrt.v2;
+?r_v2
+double r_e2 = mrt.e2;
+?r_e2
+double r_t2 = mrt.t2;
+?r_t2
+double r_p2 = mrt.p2;
+?r_p2
+double r_v3 = mrt.v3;
+?r_v3
+double r_e3 = mrt.e3;
+?r_e3
+double r_t3 = mrt.t3;
+?r_t3
+double r_p3 = mrt.p3;
+?r_p3
+double r_v4 = mrt.v4;
+?r_v4
+double r_e4 = mrt.e4;
+?r_e4
+double r_t4 = mrt.t4;
+?r_t4
+double r_p4 = mrt.p4;
+?r_p4
+double r_SSE = mrt.SSE;
+?r_SSE
+double r_SST = mrt.SST;
+?r_SST
+double r_MSR = mrt.MSR;
+?r_MSR
+double r_MSE = mrt.MSE;
+?r_MSE
+double r_RMSE = mrt.RMSE;
+?r_RMSE
+double r_DOF = mrt.DOF;
+?r_DOF
+double r_ssr = mrt.ssr;
+?r_ssr
+double r_COD = mrt.COD;
+?r_COD
+double r_Rvalue = mrt.Rvalue;
+?r_Rvalue
+double r_Npts = mrt.Npts;
+?r_Npts
+double r_Fvalue = mrt.Fvalue;
+?r_Fvalue
+double r_PValue = mrt.PValue;
+?r_PValue
+#[Book2]Sheet1
+newbook;
+col(A) = data(1, 20, 1);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(B) = 0.5*col(A) + 3*sin(col(A)*1.7);
+col(C) = 2 + 0.7*col(A) + -0.6*col(B) + 0.8*sin(col(A)*5.3) + 0.5*cos(col(A)*11.1);
+tree mrt;
+fitMR dep:=[Book3]Sheet1!C indep:=[Book3]Sheet1!(A,B) mrtree:=mrt fixint:=1 intercept:=0.0;
+double r_v1 = mrt.v1;
+?r_v1
+double r_e1 = mrt.e1;
+?r_e1
+double r_t1 = mrt.t1;
+?r_t1
+double r_p1 = mrt.p1;
+?r_p1
+double r_v2 = mrt.v2;
+?r_v2
+double r_e2 = mrt.e2;
+?r_e2
+double r_t2 = mrt.t2;
+?r_t2
+double r_p2 = mrt.p2;
+?r_p2
+double r_v3 = mrt.v3;
+?r_v3
+double r_e3 = mrt.e3;
+?r_e3
+double r_t3 = mrt.t3;
+?r_t3
+double r_p3 = mrt.p3;
+?r_p3
+double r_SSE = mrt.SSE;
+?r_SSE
+double r_SST = mrt.SST;
+?r_SST
+double r_MSR = mrt.MSR;
+?r_MSR
+double r_MSE = mrt.MSE;
+?r_MSE
+double r_RMSE = mrt.RMSE;
+?r_RMSE
+double r_DOF = mrt.DOF;
+?r_DOF
+double r_ssr = mrt.ssr;
+?r_ssr
+double r_COD = mrt.COD;
+?r_COD
+double r_Rvalue = mrt.Rvalue;
+?r_Rvalue
+double r_Npts = mrt.Npts;
+?r_Npts
+double r_Fvalue = mrt.Fvalue;
+?r_Fvalue
+double r_PValue = mrt.PValue;
+?r_PValue
+#[Book3]Sheet1
+newbook;
+col(A) = data(1, 20, 1);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(B) = 0.5*col(A) + 3*sin(col(A)*1.7);
+col(C) = 2 + 0.7*col(A) + -0.6*col(B) + 0.8*sin(col(A)*5.3) + 0.5*cos(col(A)*11.1);
+tree mrt;
+fitMR dep:=[Book4]Sheet1!C indep:=[Book4]Sheet1!(A,B) mrtree:=mrt fixint:=1 intercept:=1.5;
+double r_v1 = mrt.v1;
+?r_v1
+double r_e1 = mrt.e1;
+?r_e1
+double r_t1 = mrt.t1;
+?r_t1
+double r_p1 = mrt.p1;
+?r_p1
+double r_v2 = mrt.v2;
+?r_v2
+double r_e2 = mrt.e2;
+?r_e2
+double r_t2 = mrt.t2;
+?r_t2
+double r_p2 = mrt.p2;
+?r_p2
+double r_v3 = mrt.v3;
+?r_v3
+double r_e3 = mrt.e3;
+?r_e3
+double r_t3 = mrt.t3;
+?r_t3
+double r_p3 = mrt.p3;
+?r_p3
+double r_SSE = mrt.SSE;
+?r_SSE
+double r_SST = mrt.SST;
+?r_SST
+double r_MSR = mrt.MSR;
+?r_MSR
+double r_MSE = mrt.MSE;
+?r_MSE
+double r_RMSE = mrt.RMSE;
+?r_RMSE
+double r_DOF = mrt.DOF;
+?r_DOF
+double r_ssr = mrt.ssr;
+?r_ssr
+double r_COD = mrt.COD;
+?r_COD
+double r_Rvalue = mrt.Rvalue;
+?r_Rvalue
+double r_Npts = mrt.Npts;
+?r_Npts
+double r_Fvalue = mrt.Fvalue;
+?r_Fvalue
+double r_PValue = mrt.PValue;
+?r_PValue
+#[Book4]Sheet1
+newbook;
+col(A) = data(1, 15, 1);
+col(B) = col(A)*0;
+col(B) = 2 + 0.7*col(A) + 0.8*sin(col(A)*5.3) + 0.5*cos(col(A)*11.1);
+tree mrt;
+fitMR dep:=[Book5]Sheet1!B indep:=[Book5]Sheet1!A mrtree:=mrt;
+double r_v1 = mrt.v1;
+?r_v1
+double r_e1 = mrt.e1;
+?r_e1
+double r_t1 = mrt.t1;
+?r_t1
+double r_p1 = mrt.p1;
+?r_p1
+double r_v2 = mrt.v2;
+?r_v2
+double r_e2 = mrt.e2;
+?r_e2
+double r_t2 = mrt.t2;
+?r_t2
+double r_p2 = mrt.p2;
+?r_p2
+double r_SSE = mrt.SSE;
+?r_SSE
+double r_SST = mrt.SST;
+?r_SST
+double r_MSR = mrt.MSR;
+?r_MSR
+double r_MSE = mrt.MSE;
+?r_MSE
+double r_RMSE = mrt.RMSE;
+?r_RMSE
+double r_DOF = mrt.DOF;
+?r_DOF
+double r_ssr = mrt.ssr;
+?r_ssr
+double r_COD = mrt.COD;
+?r_COD
+double r_Rvalue = mrt.Rvalue;
+?r_Rvalue
+double r_Npts = mrt.Npts;
+?r_Npts
+double r_Fvalue = mrt.Fvalue;
+?r_Fvalue
+double r_PValue = mrt.PValue;
+?r_PValue
+#[Book5]Sheet1
+newbook;
+col(A) = data(1, 30, 1);
+col(B) = col(A)*0;
+col(C) = col(A)*0;
+col(D) = col(A)*0;
+col(B) = 0.5*col(A) + 3*sin(col(A)*1.7);
+col(C) = 4*cos(col(A)*0.9) + 0.1*col(A);
+col(D) = 2 + 0.7*col(A) + -0.6*col(B) + 0.9*col(C) + 0.8*sin(col(A)*5.3) + 0.5*cos(col(A)*11.1);
+tree mrt;
+fitMR dep:=[Book6]Sheet1!D indep:=[Book6]Sheet1!(A,B,C) mrtree:=mrt fixint:=1 intercept:=-2.0;
+double r_v1 = mrt.v1;
+?r_v1
+double r_e1 = mrt.e1;
+?r_e1
+double r_t1 = mrt.t1;
+?r_t1
+double r_p1 = mrt.p1;
+?r_p1
+double r_v2 = mrt.v2;
+?r_v2
+double r_e2 = mrt.e2;
+?r_e2
+double r_t2 = mrt.t2;
+?r_t2
+double r_p2 = mrt.p2;
+?r_p2
+double r_v3 = mrt.v3;
+?r_v3
+double r_e3 = mrt.e3;
+?r_e3
+double r_t3 = mrt.t3;
+?r_t3
+double r_p3 = mrt.p3;
+?r_p3
+double r_v4 = mrt.v4;
+?r_v4
+double r_e4 = mrt.e4;
+?r_e4
+double r_t4 = mrt.t4;
+?r_t4
+double r_p4 = mrt.p4;
+?r_p4
+double r_SSE = mrt.SSE;
+?r_SSE
+double r_SST = mrt.SST;
+?r_SST
+double r_MSR = mrt.MSR;
+?r_MSR
+double r_MSE = mrt.MSE;
+?r_MSE
+double r_RMSE = mrt.RMSE;
+?r_RMSE
+double r_DOF = mrt.DOF;
+?r_DOF
+double r_ssr = mrt.ssr;
+?r_ssr
+double r_COD = mrt.COD;
+?r_COD
+double r_Rvalue = mrt.Rvalue;
+?r_Rvalue
+double r_Npts = mrt.Npts;
+?r_Npts
+double r_Fvalue = mrt.Fvalue;
+?r_Fvalue
+double r_PValue = mrt.PValue;
+?r_PValue
+#[Book6]Sheet1

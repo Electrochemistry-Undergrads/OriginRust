@@ -17,9 +17,11 @@ pub mod fdf;
 pub mod global;
 pub mod library;
 pub mod linear;
+pub mod multi;
 pub mod multipeak;
 pub mod nlsf;
 pub mod report;
+pub mod xerr;
 
 pub use bands::Bands;
 pub use report::{Anova, FitError, FitReport, FitStatus, Parameter, Statistics, Weighting};

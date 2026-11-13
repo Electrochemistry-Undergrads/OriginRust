@@ -112,7 +112,8 @@ fn simplex_iterations_can_be_stepped() {
     let x: Vec<f64> = (1..=30).map(|i| i as f64 * 0.3).collect();
     let y: Vec<f64> = x.iter().map(|x| 1.5 + 4.0 * (-x / 2.0).exp()).collect();
     let f = library::get("ExpDec1").unwrap().with_initial("y0", 0.0).with_initial("A1", 1.0).with_initial("t1", 1.0);
-    let mut fitter = Fitter::new(&f, &x, &y, &FitOptions { algorithm: Algorithm::Simplex, ..Default::default() }).unwrap();
+    let mut fitter =
+        Fitter::new(&f, &x, &y, &FitOptions { algorithm: Algorithm::Simplex, ..Default::default() }).unwrap();
     let first = fitter.step();
     assert!(!first.converged && first.iteration == 1);
     let second = fitter.step();

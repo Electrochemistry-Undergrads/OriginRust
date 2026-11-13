@@ -6,6 +6,7 @@ pub mod column_props;
 pub mod export;
 pub mod export_sheet;
 pub mod fit;
+pub mod fit_more;
 pub mod frame;
 pub mod go_to;
 pub mod graph_axis;

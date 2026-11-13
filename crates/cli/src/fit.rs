@@ -18,6 +18,9 @@ fn model_from(text: &str) -> Result<FitModel> {
     if t.eq_ignore_ascii_case("linear") || t.eq_ignore_ascii_case("line") {
         return Ok(FitModel::Linear);
     }
+    if t.eq_ignore_ascii_case("linearx") || t.eq_ignore_ascii_case("xerror") {
+        return Ok(FitModel::LinearXError);
+    }
     let lower = t.to_ascii_lowercase();
     if let Some(order) = lower.strip_prefix("poly:").or_else(|| lower.strip_prefix("polynomial:")) {
         let order: usize = order
@@ -295,6 +298,10 @@ pub fn fit(a: FitArgs) -> Result<()> {
         );
     }
 
+    let x_error = match &a.xerr {
+        Some(n) => named_columns(&project, book, sheet, std::slice::from_ref(n))?.first().copied(),
+        None => None,
+    };
     let mut requests = Vec::new();
     for (i, y) in columns.iter().enumerate() {
         let mut request = FitRequest::new(*y, model.clone());
@@ -308,7 +315,24 @@ pub fn fit(a: FitArgs) -> Result<()> {
         request.max_iterations = a.max_iterations;
         request.tolerance = a.tolerance;
         request.scale_errors = !a.no_scale_errors;
+        request.x_error = x_error;
         requests.push(request);
+    }
+    if !a.regress.is_empty() {
+        return regress(&mut project, &a, book, sheet, columns[0]);
+    }
+    if let Some(other) = &a.compare {
+        let mut second = requests[0].clone();
+        second.model = model_from(other)?;
+        second.params = Vec::new();
+        let out = project.compare_models(&requests[0], &second)?;
+        print_comparison(&out);
+        return finish(&project, &a, book, out.sheet);
+    }
+    if !a.rank.is_empty() {
+        let out = project.rank_models(&requests[0], &a.rank)?;
+        print_ranking(&out);
+        return finish(&project, &a, book, out.sheet);
     }
     let outcomes = if a.global {
         let multi = project.fit_multi(&requests, Some(&a.share))?;
@@ -358,6 +382,123 @@ pub fn fit(a: FitArgs) -> Result<()> {
         save_project(&project, path)?;
     }
     Ok(())
+}
+
+/// Writes what --export and --save ask for after a tool that has one result sheet.
+fn finish(project: &Project, a: &FitArgs, book: sheaf_core::WindowId, sheet: usize) -> Result<()> {
+    if let Some(path) = &a.export {
+        write_sheet(&project.workbook(book).expect("picked above").sheets[sheet], path)?;
+    }
+    if let Some(path) = &a.save {
+        save_project(project, path)?;
+    }
+    Ok(())
+}
+
+fn regress(
+    project: &mut Project,
+    a: &FitArgs,
+    book: sheaf_core::WindowId,
+    sheet: usize,
+    y: sheaf_core::ColumnId,
+) -> Result<()> {
+    let xs = named_columns(project, book, sheet, &a.regress)?;
+    let mut request = sheaf_core::fitting::MultiRegRequest::new(y, xs);
+    request.confidence_level = a.confidence;
+    for text in &a.fix {
+        let (n, v) = name_value(text, "--fix")?;
+        if n != "Intercept" {
+            bail!("--fix with --regress holds only the Intercept, as in --fix Intercept=0");
+        }
+        request.fix_intercept = Some(v);
+    }
+    let out = project.fit_multiple_regression(&request)?;
+    println!("{}: {}\n", out.report.model, out.report.equation);
+    let mut rows = vec![["Parameter", "Value", "Standard Error", "t-Value", "Prob>|t|", ""].map(String::from).to_vec()];
+    for p in &out.report.params {
+        rows.push(vec![
+            p.name.clone(),
+            short_number(p.value),
+            short_number(p.std_error),
+            short_number(p.t_value),
+            short_number(p.prob_t),
+            if p.fixed { "fixed".to_string() } else { String::new() },
+        ]);
+    }
+    print_columns(&rows);
+    let s = &out.report.stats;
+    println!();
+    print_columns(&[
+        vec!["Number of points".to_string(), s.n_points.to_string()],
+        vec!["Degrees of freedom".to_string(), s.dof.to_string()],
+        vec!["Residual sum of squares".to_string(), short_number(s.rss)],
+        vec!["R-square (COD)".to_string(), short_number(s.r_squared)],
+        vec!["Adj. R-square".to_string(), short_number(s.adj_r_squared)],
+    ]);
+    if let Some(an) = &out.report.anova {
+        println!("\nF = {}, Prob>F = {}", short_number(an.f_value), short_number(an.prob_f));
+    }
+    println!("\n{}", out.message);
+    finish(project, a, book, out.param_sheet)
+}
+
+fn print_comparison(o: &sheaf_core::fitting::CompareOutcome) {
+    use sheaf_core::fitting::Verdict;
+    let c = &o.comparison;
+    let names = [c.models[0].name.clone(), c.models[1].name.clone()];
+    let verdict = |v: Verdict| match v {
+        Verdict::Model(i) => format!("{} is preferred", names[i]),
+        Verdict::Inconclusive => "inconclusive".to_string(),
+        Verdict::NoConclusion => "no conclusion".to_string(),
+    };
+    let mut rows = vec![vec![String::new(), names[0].clone(), names[1].clone()]];
+    let mut row = |q: &str, x: String, y: String| rows.push(vec![q.to_string(), x, y]);
+    row("Points", c.models[0].n.to_string(), c.models[1].n.to_string());
+    row("Parameters", c.models[0].params.to_string(), c.models[1].params.to_string());
+    row("Residual sum of squares", short_number(c.models[0].rss), short_number(c.models[1].rss));
+    row("AICc", short_number(c.aic[0]), short_number(c.aic[1]));
+    row("Akaike weight", short_number(c.aic_weight[0]), short_number(c.aic_weight[1]));
+    row("BIC", short_number(c.bic[0]), short_number(c.bic[1]));
+    row("BIC minus the smaller", short_number(c.bic_delta[0]), short_number(c.bic_delta[1]));
+    print_columns(&rows);
+    println!();
+    println!("AICc:   {}", verdict(c.aic_verdict));
+    println!("BIC:    {}", verdict(c.bic_verdict));
+    println!(
+        "F-test: F = {}, df1 = {}, df2 = {}, Prob>F = {}: {}",
+        short_number(c.ftest.f),
+        c.ftest.df1,
+        c.ftest.df2,
+        short_number(c.ftest.prob),
+        verdict(c.ftest.verdict)
+    );
+    for w in &c.warnings {
+        eprintln!("warning: {w}");
+    }
+    println!("\n{}", o.message);
+}
+
+fn print_ranking(o: &sheaf_core::fitting::RankOutcome) {
+    let head =
+        ["Rank", "Function", "Parameters", "RSS", "AICc", "AICc delta", "Weight", "BIC"].map(String::from).to_vec();
+    let mut table = vec![head];
+    for (i, r) in o.ranking.iter().enumerate() {
+        table.push(vec![
+            (i + 1).to_string(),
+            r.summary.name.clone(),
+            r.summary.params.to_string(),
+            short_number(r.summary.rss),
+            short_number(r.aic),
+            short_number(r.aic_delta),
+            short_number(r.aic_weight),
+            short_number(r.bic),
+        ]);
+    }
+    print_columns(&table);
+    for (f, e) in &o.skipped {
+        eprintln!("warning: {f} was skipped: {e}");
+    }
+    println!("\n{}", o.message);
 }
 
 #[cfg(test)]

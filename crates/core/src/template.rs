@@ -200,6 +200,12 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         hide_end_label: false,
         reverse: false,
         first_tick: None,
+        axis_break: None,
+        special_ticks: Vec::new(),
+        tick_label_formula: String::new(),
+        minor_tick_labels: false,
+        tick_color: None,
+        tick_width_pt: None,
         tick_prefix: String::new(),
         tick_suffix: String::new(),
     }

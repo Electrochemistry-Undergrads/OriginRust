@@ -184,6 +184,8 @@ struct Writer {
     next_object: u32,
     /// The folder tree, with the windows of every folder as positions in the window list.
     tree: FolderOut,
+    /// Where the window being written stood in the workspace, if the project knows.
+    place: Option<sheaf_core::project::WindowPlace>,
 }
 
 impl Writer {
@@ -201,6 +203,7 @@ impl Writer {
             dependencies: Vec::new(),
             next_object: OBJECT_NUMBER_START,
             tree: FolderOut::default(),
+            place: None,
         }
     }
 
@@ -223,6 +226,7 @@ impl Writer {
             if !seen.insert(window.name().to_lowercase()) {
                 return fail(format!("two windows are named '{}'; Origin needs distinct window names", window.name()));
             }
+            self.place = project.window_places.iter().find(|p| p.window == window.id()).copied();
             self.window(project, window, &sets)?;
         }
         Ok(())
@@ -245,6 +249,7 @@ impl Writer {
             ordinal: self.written_windows,
             active_sheet: book.active_sheet.min(book.sheets.len().saturating_sub(1)),
             time: self.time,
+            place: self.place,
         };
         self.windows.extend(framed(&layout::window_header(&spec)));
         let mut sheet_names: HashSet<String> = HashSet::new();

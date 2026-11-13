@@ -581,6 +581,7 @@ impl SheafApp {
             GraphOp::HideAxis { .. } => "Hide axis",
             GraphOp::ToggleGrids { .. } => "Show or hide grids",
             GraphOp::Rescale { .. } => "Rescale to show all",
+            GraphOp::ExchangeAxes { .. } => "Exchange X-Y axes",
             GraphOp::AxisZoom { zoom_in: true, .. } => "Axis zoom in",
             GraphOp::AxisZoom { .. } => "Axis zoom out",
             GraphOp::HideLegend { .. } => "Delete legend",

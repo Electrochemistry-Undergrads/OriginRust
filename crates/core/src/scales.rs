@@ -148,6 +148,13 @@ impl ScaleKind {
     }
 }
 
+/// The value of a tick label formula (an expression of `x`) at `x`; `None` when it does not parse or
+/// does not give a finite number.
+pub fn eval_tick_formula(formula: &str, x: f64) -> Option<f64> {
+    let host = sheaf_expr::SimpleHost::from_vars([("x", x)]);
+    sheaf_expr::Expr::parse(formula).ok()?.eval(&host).ok().filter(|v| v.is_finite())
+}
+
 /// The standard normal distribution function (West's double-precision algorithm, error about 1e-15).
 pub fn norm_cdf(x: f64) -> f64 {
     if x.is_nan() {

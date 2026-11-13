@@ -201,7 +201,7 @@ fn median_of(mut w: Vec<f64>) -> f64 {
 /// as missing (as Origin's smoothing does). The window needs an odd number of points, at least 1;
 /// `None` otherwise.
 pub fn median_filter(y: &[f64], npts: usize, edge: MedianEdge) -> Option<Vec<f64>> {
-    if npts == 0 || npts % 2 == 0 {
+    if npts == 0 || npts.is_multiple_of(2) {
         return None;
     }
     let valid: Vec<f64> = y.iter().copied().filter(|v| v.is_finite()).collect();
@@ -324,8 +324,7 @@ mod tests {
         // nothing, bin 3 holds 3.0 (value 7).
         let x = [0.0, 0.4, 0.5, 1.4, 3.0];
         let y = [2.0, 4.0, 6.0, 10.0, 7.0];
-        let opts =
-            ReduceOptions { grid: EvenGrid::Step(1.0), method: ReduceMethod::Average, range: Some((0.0, 3.0)) };
+        let opts = ReduceOptions { grid: EvenGrid::Step(1.0), method: ReduceMethod::Average, range: Some((0.0, 3.0)) };
         let (gx, gy) = reduce_evenly(&x, &y, &opts).unwrap();
         close(&gx, &[0.0, 1.0, 2.0, 3.0]);
         close(&gy, &[3.0, 8.0, f64::NAN, 7.0]);

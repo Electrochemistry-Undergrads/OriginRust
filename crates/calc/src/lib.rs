@@ -43,6 +43,10 @@ pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_siz
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
+pub use manip::{
+    EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions, even_grid, median_filter, reduce_evenly,
+    shift_to_land, subtract_line_through, translate, value_at,
+};
 pub use nonparam::{
     KruskalWallis, MannWhitney, RankGroup, RankTestError, SIGNED_RANK_EXACT_MAX_N, SignedRank, kruskal_wallis,
     mann_whitney, midranks, signed_rank, signed_rank_one, signed_rank_paired,
@@ -50,10 +54,6 @@ pub use nonparam::{
 pub use normality::{
     DAgostino, TestResult, anderson_darling, dagostino, kolmogorov_cdf, kolmogorov_smirnov, ks_distance, lilliefors,
     shapiro_wilk,
-};
-pub use manip::{
-    EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions, even_grid, median_filter, reduce_evenly, shift_to_land,
-    subtract_line_through, translate, value_at,
 };
 pub use normalize::{NormalizeMethod, normalize};
 pub use nptests::{

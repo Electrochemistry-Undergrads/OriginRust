@@ -1,6 +1,6 @@
 # T23: Data Manipulation tools and Median Filter
 
-**Status:** done on branch `math-manip`, built on macOS without Origin; not merged. The four menu items
+**Status:** done, merged (`f66dbea`), built on macOS without Origin. The four menu items
 (and Curve Translate Y, Sheaf's own, next to X) open working dialogs, run as tools of the shared analysis
 frame with Recalculate Manual/Auto, and have `sheaf analyze` subcommands. Every Origin behaviour that is
 not in an earlier spec table is from Origin's public documentation, paraphrased, and is not measured; each

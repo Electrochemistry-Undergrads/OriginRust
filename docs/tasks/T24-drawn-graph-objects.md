@@ -1,6 +1,6 @@
 # T24: Drawn objects on graphs: Line, Arrow, Rectangle, Ellipse
 
-**Status:** done on branch `draw-objects`, not merged. Checks pass (fmt, clippy with warnings denied, all tests). Nothing was measured in Origin; spec section 17 lists what is from documentation and what Sheaf chose. Not done: reading drawn objects from `.opj`, attachment to the page or to scales, copy and paste, ordering.
+**Status:** done, merged (`542fef7`). Checks pass (fmt, clippy with warnings denied, all tests). Nothing was measured in Origin; spec section 17 lists what is from documentation and what Sheaf chose. Not done: reading drawn objects from `.opj`, attachment to the page or to scales, copy and paste, ordering.
 **Size:** M. **Branch:** `draw-objects`. **Model:** Sonnet.
 **Detail:** audit C "Drawing tools"; T18 backlog row "Drawing tools" (this brief covers lines, arrows,
 rectangles and ellipses; pictures and the inset graph stay in the backlog).

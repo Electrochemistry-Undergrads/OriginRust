@@ -451,7 +451,8 @@ fn layer_scene(
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
-    draw_axis_lines(out, xa, ya, f, xp.line, yp.line);
+    let gaps = (geom.x.gap.map(|g| g.span(geom.x.reversed)), geom.y.gap.map(|g| g.span(geom.y.reversed)));
+    draw_axis_lines(out, xa, ya, f, xp.line, yp.line, gaps);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
     if xa.side != AxisSide::Hidden {
@@ -586,11 +587,19 @@ fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
 
 /// Draws the axis lines of a layer: each shown axis on its own edge and, with `show_opposite`,
 /// on the edge across. `xc` and `yc` are the axes' line colors.
-fn draw_axis_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, f: Rect, xc: Color, yc: Color) {
+fn draw_axis_lines(
+    out: &mut Vec<Item>,
+    xa: &Axis,
+    ya: &Axis,
+    f: Rect,
+    xc: Color,
+    yc: Color,
+    gaps: (Option<(f64, f64)>, Option<(f64, f64)>),
+) {
     let (l, r, t, b) = (f.x, f.x + f.w, f.y, f.y + f.h);
     let shown = |a: &Axis| a.side != AxisSide::Hidden;
     let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
-    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same {
+    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same && gaps == (None, None) {
         // All four edges in one stroke, so that the corners join cleanly.
         let mut d = String::new();
         move_to(&mut d, l, t);
@@ -601,27 +610,58 @@ fn draw_axis_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, f: Rect, xc: Color
         out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(xc, xa.line_width_pt)) });
         return;
     }
-    let line = |out: &mut Vec<Item>, (x0, y0): (f64, f64), (x1, y1): (f64, f64), a: &Axis, color: Color| {
+    let line = |out: &mut Vec<Item>,
+                (x0, y0): (f64, f64),
+                (x1, y1): (f64, f64),
+                a: &Axis,
+                color: Color,
+                gap: Option<(f64, f64)>| {
         let mut d = String::new();
-        move_to(&mut d, x0, y0);
-        line_to(&mut d, x1, y1);
         let stroke = Stroke { color, width: a.line_width_pt, dash: Vec::new(), cap: Cap::Square, join: Join::Miter };
+        match gap {
+            None => {
+                move_to(&mut d, x0, y0);
+                line_to(&mut d, x1, y1);
+            }
+            Some((lo, hi)) => {
+                // Two pieces, and a short slash across the axis at each end of the gap.
+                let at = |u: f64| (x0 + u * (x1 - x0), y0 + u * (y1 - y0));
+                let (a0, a1, b0, b1) = (at(0.0), at(lo), at(hi), at(1.0));
+                move_to(&mut d, a0.0, a0.1);
+                line_to(&mut d, a1.0, a1.1);
+                move_to(&mut d, b0.0, b0.1);
+                line_to(&mut d, b1.0, b1.1);
+                let horizontal = (y1 - y0).abs() < 1e-9;
+                let k = 3.0;
+                for p in [a1, b0] {
+                    if horizontal {
+                        move_to(&mut d, p.0 - k * 0.5, p.1 + k);
+                        line_to(&mut d, p.0 + k * 0.5, p.1 - k);
+                    } else {
+                        move_to(&mut d, p.0 - k, p.1 - k * 0.5);
+                        line_to(&mut d, p.0 + k, p.1 + k * 0.5);
+                    }
+                }
+            }
+        }
         out.push(Item::Path { d, fill: None, stroke: Some(stroke) });
     };
+    // The line of a Y axis runs from the top down, so its gap is measured from the top.
+    let gap_y = gaps.1.map(|(lo, hi)| (1.0 - hi, 1.0 - lo));
     // The edge each axis is drawn on, and the edge across from it.
     let (x_main, x_other) = if xa.side == AxisSide::Opposite { (t, b) } else { (b, t) };
     let (y_main, y_other) = if ya.side == AxisSide::Opposite { (r, l) } else { (l, r) };
     if shown(xa) {
-        line(out, (l, x_main), (r, x_main), xa, xc);
+        line(out, (l, x_main), (r, x_main), xa, xc, gaps.0);
     }
     if shown(ya) {
-        line(out, (y_main, t), (y_main, b), ya, yc);
+        line(out, (y_main, t), (y_main, b), ya, yc, gap_y);
     }
     if shown(xa) && xa.show_opposite {
-        line(out, (l, x_other), (r, x_other), xa, xc);
+        line(out, (l, x_other), (r, x_other), xa, xc, gaps.0);
     }
     if shown(ya) && ya.show_opposite {
-        line(out, (y_other, t), (y_other, b), ya, yc);
+        line(out, (y_other, t), (y_other, b), ya, yc, gap_y);
     }
 }
 
@@ -685,7 +725,9 @@ fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect
             }
         }
         if !d.is_empty() {
-            out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, axis.line_width_pt)) });
+            let stroke =
+                Stroke::solid(axis.tick_color.unwrap_or(color), axis.tick_width_pt.unwrap_or(axis.line_width_pt));
+            out.push(Item::Path { d, fill: None, stroke: Some(stroke) });
         }
     };
     side(out, main);
@@ -740,8 +782,8 @@ fn draw_x_labels(
     }
     // The side of the label block that faces the axis.
     let near = if top_side { tick_end - label_gap(axis) } else { tick_end + label_gap(axis) };
-    let labels = resolved.major.iter().zip(&resolved.labels).filter_map(|(v, label)| {
-        let u = resolved.to_unit(*v);
+    let labels = resolved.labelled().filter_map(|(v, label)| {
+        let u = resolved.to_unit(v);
         (u.is_finite() && !at_hidden_end(axis, u)).then_some((f.x + u * f.w, label))
     });
     let angle = label_angle(axis);
@@ -800,8 +842,8 @@ fn draw_y_labels(
         (tick_end - label_gap(axis), Anchor::End)
     };
     let mut edge = start;
-    for (v, label) in resolved.major.iter().zip(&resolved.labels) {
-        let u = resolved.to_unit(*v);
+    for (v, label) in resolved.labelled() {
+        let u = resolved.to_unit(v);
         if !u.is_finite() || at_hidden_end(axis, u) {
             continue;
         }

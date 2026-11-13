@@ -983,6 +983,15 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.reverse {
             notes.push("a reversed axis was written in the normal direction".into());
         }
+        if axis.axis_break.is_some() {
+            notes.push("an axis break was not written".into());
+        }
+        if !axis.special_ticks.is_empty() || !axis.tick_label_formula.is_empty() || axis.minor_tick_labels {
+            notes.push("special ticks, tick label formulas and minor tick labels were not written".into());
+        }
+        if axis.tick_color.is_some() || axis.tick_width_pt.is_some() {
+            notes.push("the colour and thickness of ticks (other than the axis line) were not written".into());
+        }
         if axis.first_tick.is_some() {
             notes.push("the first tick (anchor) of an axis was not written".into());
         }

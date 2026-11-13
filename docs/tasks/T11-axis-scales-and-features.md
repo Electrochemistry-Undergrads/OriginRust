@@ -1,6 +1,6 @@
 # T11: More axis scales and axis features
 
-**Status:** items 1 (all eight scales, measured, spec 3.8) and 2 (Reverse, First Tick, Prefix/Suffix) done on branch `axis-scales`; 3-6 open (axis breaks, special ticks and tick label formula, Exchange X-Y, dialog Apply To/tab names). Not yet done for item 1: Origin picture comparison of our render, minor ticks of the list scales, the reciprocal step rule. **Size:** L, one
+**Status:** items 1-2 merged (`3e9f619`); items 3-6 done on branch `axis-scales` (one break per axis, not measured in Origin; special ticks, tick label formula, minor tick labels, tick colour and thickness; Exchange X-Y Axes; Apply To..., Bottom/Top/Left/Right list, Tick Labels sub-tabs). Left: more than one break, reference lines, the reciprocal default step (fits 2 of 3), Origin picture comparison, .opj storage of the new axis fields (named in the save warnings). **Size:** L, one
 commit per feature. **Branch:** `axis-more`. **Model:** Sonnet.
 **Detail:** audit C "Missing scales", "Missing axis features"; B "Axis dialog".
 **Spec:** `docs/spec/graphing.md` sections 3-4 (axes, ticks), 12 (linked layers).

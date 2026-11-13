@@ -97,6 +97,8 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Histogram => "Histogram",
         PlotKind::Box => "Box Chart",
         PlotKind::Pie => "Pie",
+        PlotKind::Pie3D => "3D Color Pie",
+        PlotKind::PieBw => "2D B&W Pie",
     }
 }
 
@@ -165,6 +167,8 @@ pub fn dialog_body(
                             PlotKind::Histogram,
                             PlotKind::Box,
                             PlotKind::Pie,
+                            PlotKind::Pie3D,
+                            PlotKind::PieBw,
                         ] {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }

@@ -40,6 +40,14 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
         draw_pie(out, pd, geom);
         return;
     }
+    if plot.kind == PlotKind::Pie3D {
+        crate::pie::draw_pie_3d(out, pd, geom);
+        return;
+    }
+    if plot.kind == PlotKind::PieBw {
+        crate::pie::draw_pie_bw(out, pd, geom);
+        return;
+    }
     if plot.kind.is_area() {
         draw_area(out, pd, geom);
     }

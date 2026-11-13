@@ -19,6 +19,7 @@ mod layout;
 mod legend;
 mod margin;
 pub mod markup;
+mod pie;
 mod plots;
 mod polar;
 mod raster;

@@ -641,8 +641,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Floating Column", Cmd::Plot(Template::FloatingColumn)),
                     item("Floating Bar", Cmd::Plot(Template::FloatingBar)),
                 ],
-                greys(&["3D Color Pie", "2D B&&W Pie"]),
-                vec![item("2D Color Pie", Cmd::Plot(Template::Pie))],
+                vec![item("3D Color Pie", Cmd::Plot(Template::Pie3D)), item("2D B&&W Pie", Cmd::Plot(Template::PieBw))],
             ]
             .concat(),
         ),
@@ -2222,6 +2221,10 @@ mod tests {
             walk(&m.entries, &mut |i| cmds.extend(i.cmd.clone()));
         }
         for t in Template::ALL {
+            // The flat colour pie stays as a CLI name only: Origin has no "2D Color Pie".
+            if t == Template::Pie {
+                continue;
+            }
             assert!(cmds.contains(&Cmd::Plot(t)), "{t:?} is not in the Plot menu");
         }
         for d in Designation::ALL {

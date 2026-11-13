@@ -266,7 +266,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
             }
-            PlotKind::Pie => {
+            PlotKind::Pie | PlotKind::Pie3D | PlotKind::PieBw => {
                 let labels = plot.x.and_then(|id| project.column(id));
                 let rows: Vec<usize> =
                     (start..end).filter(|&r| y.get(r).is_some_and(|v| v.is_finite() && *v > 0.0)).collect();

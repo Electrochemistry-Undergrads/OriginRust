@@ -70,6 +70,10 @@ pub enum Template {
     BubbleColorMapped,
     /// Pie chart (Origin's pie): the Y column's rows as slices, in a layer without axes.
     Pie,
+    /// 3D pie seen from above at a slant (Origin's "3D Color Pie").
+    Pie3D,
+    /// Flat black and white pie with hatch patterns (Origin's "2D B&W Pie").
+    PieBw,
     /// Polar plot, angle in degrees from the X column and radius from Y (Origin's "Polar theta(X) r(Y)").
     Polar,
     /// Polar plot with the radius from the X column and the angle from Y ("Polar r(X) theta(Y)").
@@ -81,7 +85,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 29] = [
+    pub const ALL: [Template; 31] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -103,6 +107,8 @@ impl Template {
         Template::ColorMapped,
         Template::BubbleColorMapped,
         Template::Pie,
+        Template::Pie3D,
+        Template::PieBw,
         Template::Polar,
         Template::PolarRTheta,
         Template::Radar,
@@ -141,6 +147,8 @@ impl Template {
             Template::ColorMapped => "color-mapped",
             Template::BubbleColorMapped => "bubble-color-mapped",
             Template::Pie => "pie",
+            Template::Pie3D => "pie-3d",
+            Template::PieBw => "pie-bw",
             Template::Polar => "polar",
             Template::PolarRTheta => "polar-r-theta",
             Template::Radar => "radar",
@@ -175,6 +183,8 @@ impl Template {
             Template::ColorMapped => "Color Mapped",
             Template::BubbleColorMapped => "Bubble + Color Mapped",
             Template::Pie => "Pie",
+            Template::Pie3D => "3D Color Pie",
+            Template::PieBw => "2D B&W Pie",
             Template::Polar => "Polar theta(X) r(Y)",
             Template::PolarRTheta => "Polar r(X) theta(Y)",
             Template::Radar => "Radar",
@@ -214,7 +224,9 @@ impl Template {
             Template::Bubble => bubble(id, name, false, true),
             Template::ColorMapped => bubble(id, name, true, false),
             Template::BubbleColorMapped => bubble(id, name, true, true),
-            Template::Pie => pie(id, name),
+            Template::Pie => pie(id, name, PlotKind::Pie),
+            Template::Pie3D => pie(id, name, PlotKind::Pie3D),
+            Template::PieBw => pie(id, name, PlotKind::PieBw),
             Template::Polar => polar(id, name, RadiusColumn::Y),
             Template::PolarRTheta => polar(id, name, RadiusColumn::X),
             Template::Radar => radar(id, name),
@@ -431,8 +443,8 @@ fn bubble(id: WindowId, name: &str, mapped: bool, sized: bool) -> Graph {
 
 /// The pie template: no axes (the plot draws its own frame, slices, labels and legend), the colour
 /// list of the line template (measured: black, red, green, blue, cyan, ...).
-fn pie(id: WindowId, name: &str) -> Graph {
-    let mut g = general(id, name, PlotKind::Pie);
+fn pie(id: WindowId, name: &str, kind: PlotKind) -> Graph {
+    let mut g = general(id, name, kind);
     let l = &mut g.layers[0];
     l.x_axis.side = AxisSide::Hidden;
     l.y_axis.side = AxisSide::Hidden;
@@ -714,7 +726,9 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 29);
+        assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
+        assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
+        assert_eq!(Template::ALL.len(), 31);
     }
 
     #[test]

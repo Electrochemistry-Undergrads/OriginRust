@@ -1,6 +1,6 @@
 # T09: Set Column Values dialog in Origin's layout
 
-**Status:** open; easier after T08 (the function list shows T08's functions). **Size:** M.
+**Status:** done on branch set-values-dialog, not merged (menu line, row range, column arrows, Function menu with descriptions, Recalculate drop-down, Apply grey until changed; Before Formula Scripts box is shown but inert; multi-column variant and the find button left). **Size:** M.
 **Branch:** `set-values-dialog`. **Model:** Sonnet.
 **Detail:** audit B "Set Column Values". **Spec:** `docs/spec/gui-look.md` (search "Set Values").
 

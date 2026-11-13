@@ -307,6 +307,14 @@ fn the_column_menu_changes_the_designation() {
     assert_eq!(book.sheet().column_by_name("C").unwrap().designation, Designation::YError);
 }
 
+/// Opens the Recalculate drop-down of the Set Values window (showing `from`) and picks `to`.
+fn choose_recalc(h: &mut Harness<'static, SheafApp>, from: &str, to: &str) {
+    h.get_by_value(from).click();
+    settle(h);
+    h.get_all_by_label(to).last().unwrap().click();
+    settle(h);
+}
+
 #[test]
 fn set_column_values_fills_the_column_from_a_formula() {
     let mut h = start(vec![data_file("formula")]);
@@ -341,7 +349,7 @@ fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_rec
     click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text("col(B)*2".to_string()));
     settle(&mut h);
-    click(&mut h, "Auto");
+    choose_recalc(&mut h, "Manual", "Auto");
     click(&mut h, "OK");
     assert_eq!(column(&h, "C"), [5.0, 9.0, 13.0, 17.0]);
     let mark = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().recalc;
@@ -361,7 +369,7 @@ fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_rec
     // Make it Manual: the next source edit only marks the column, Recalculate updates it.
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Set Column Values...");
-    click(&mut h, "Manual");
+    choose_recalc(&mut h, "Auto", "Manual");
     click(&mut h, "OK");
     edit_cell(&mut h, "B", 2, "1");
     assert_eq!(column(&h, "C")[2], 13.0, "a Manual column keeps its values");
@@ -1935,7 +1943,7 @@ fn the_lock_mark_shows_the_recalculate_mode_and_the_state_of_a_formula_column() 
     click_containing(&mut h, "Set Column Values...");
     h.event(egui::Event::Text("col(B)*2".to_string()));
     settle(&mut h);
-    click(&mut h, "Auto");
+    choose_recalc(&mut h, "Manual", "Auto");
     click(&mut h, "OK");
     h.get_by_label("Lock of column C: auto, current");
     // The formula text is in the F(x)= row.
@@ -3992,6 +4000,57 @@ fn sort_range_moves_the_selected_columns_together_and_sort_columns_sorts_each_al
     assert_eq!(h.state().doc.undo_label(), Some("Sort columns"));
     menu_path(&mut h, &["Worksheet", "Sort Columns", "Descending"]);
     assert_eq!(project(&h).numeric(c).unwrap(), [30.5, 20.5, 10.5, 0.5]);
+}
+
+#[test]
+fn set_values_apply_waits_for_a_change_and_recalculate_defaults_to_manual() {
+    let mut h = start(vec![data_file("setvals")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    // Apply is grey until something changes; the drop-down opens on Manual.
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    assert!(h.state().set_values.is_some());
+    h.get_by_value("Manual").click();
+    settle(&mut h);
+    h.get_all_by_label("Auto").last().unwrap().click();
+    settle(&mut h);
+    assert!(!h.get_by_label("Apply").accesskit_node().is_disabled());
+    h.get_by_value("Auto").click();
+    settle(&mut h);
+    h.get_all_by_label("Manual").last().unwrap().click();
+    settle(&mut h);
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+
+    // Typing a formula enables Apply; Apply keeps the window open and then goes grey again.
+    h.state_mut().set_values.as_mut().unwrap().set_formula("col(B)*2");
+    settle(&mut h);
+    assert!(!h.get_by_label("Apply").accesskit_node().is_disabled());
+    click(&mut h, "Apply");
+    assert_eq!(column(&h, "C"), [5.0, 9.0, 13.0, 17.0]);
+    assert!(h.state().set_values.is_some());
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    let book = project(&h).workbooks().next().unwrap();
+    assert_eq!(book.sheet().column_by_name("C").unwrap().recalc, sheaf_core::RecalcMode::Manual);
+}
+
+#[test]
+fn set_values_row_range_limits_the_rows_that_are_filled() {
+    let mut h = start(vec![data_file("setrows")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    h.event(egui::Event::Text("100".to_string()));
+    settle(&mut h);
+    // Both ends are <auto> until typed into: rows 2 to 3 only.
+    h.state_mut().set_values.as_mut().unwrap().set_rows("2", "3");
+    settle(&mut h);
+    click(&mut h, "OK");
+    let c = column(&h, "C");
+    assert_eq!(c.len(), 4);
+    assert_ne!(c[0], 100.0);
+    assert_eq!(&c[1..3], [100.0, 100.0]);
+    assert!(c[3] != 100.0);
 }
 
 // ----- T02: menu labels, keys and context menus as in Origin -----

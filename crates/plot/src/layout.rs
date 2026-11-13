@@ -138,7 +138,7 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
                     // A base at or beyond the data limit is the axis limit itself, without a margin.
                     free = (blo > lo, bhi < hi);
                     range = Some((lo.min(blo), hi.max(bhi)));
-                    if bars.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Column) {
+                    if bars.iter().any(|pd| pd.plot.kind.is_percent_stacked()) {
                         // Piles of 100: the axis ends exactly at 0 and 100.
                         range = Some((0.0, 100.0));
                         free = (false, false);
@@ -1041,7 +1041,7 @@ fn draw_legend(
     let col_gap = fs;
 
     // Piled and lying bars list the last plot first, as they appear on the page.
-    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked_column() || pd.plot.kind.is_horizontal());
+    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked_column() || pd.plot.kind == PlotKind::Bar);
     let text = lg.text.clone().unwrap_or_else(|| {
         if reversed {
             let rev: Vec<String> = ids.iter().rev().cloned().collect();

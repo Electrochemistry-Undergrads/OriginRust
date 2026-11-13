@@ -489,7 +489,7 @@ impl Project {
         }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
-        if matches!(template, Template::FloatingColumn | Template::FillArea) {
+        if matches!(template, Template::FloatingColumn | Template::FloatingBar | Template::FillArea) {
             // Columns go in pairs: the first of a pair is the lower end of the bars (or the lower
             // edge of the filled area), the second the upper end (and names the plot, as in
             // Origin). A last odd column is left out.

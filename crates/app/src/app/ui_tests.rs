@@ -1886,8 +1886,11 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     click(&mut h, "Title Book1 - sample");
     menu_path(&mut h, &["Plot", "Column/Bar/Pie"]);
     assert!(entry_enabled(&h, "Stacked Column"), "stacked columns exist now");
-    assert!(!entry_enabled(&h, "Stacked Bar"), "an item Sheaf lacks is greyed");
-    menu_entry(&h, "Stacked Bar").hover();
+    for live in ["Stacked Bar", "100% Stacked Bar", "Floating Bar"] {
+        assert!(entry_enabled(&h, live), "{live} exists now");
+    }
+    assert!(!entry_enabled(&h, "3D Color Pie"), "an item Sheaf lacks is greyed");
+    menu_entry(&h, "3D Color Pie").hover();
     h.run_steps(30);
     assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
     close_menus(&mut h);

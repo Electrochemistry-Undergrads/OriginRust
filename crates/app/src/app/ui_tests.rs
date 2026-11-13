@@ -4831,3 +4831,32 @@ fn the_worksheet_filter_hides_rows_without_deleting_them_and_undoes() {
     h.state_mut().apply(Action::Undo, &ctx);
     assert!(project(&h).workbooks().next().unwrap().sheet().filter.is_none());
 }
+
+#[test]
+fn transpose_and_reduce_rows_write_a_new_sheet_and_undo() {
+    use crate::dialogs::reshape::ReshapeKind;
+    let mut h = start(vec![data_file("reshape")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Reshape { book, columns: Vec::new(), kind: ReshapeKind::Transpose }, &ctx);
+    settle(&mut h);
+    assert!(h.state().reshape.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().reshape.is_none());
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert_eq!(b.active_sheet, 1, "the new sheet is shown");
+    // Three columns of four rows give four columns of three rows; the first is the first data row.
+    assert_eq!(b.sheets[1].columns.len(), 4);
+    assert_eq!(b.sheets[1].columns[0].numeric().unwrap(), [1.0, 2.5, 30.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Transpose"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+
+    h.state_mut().apply(Action::SelectSheet { book, sheet: 0 }, &ctx);
+    h.state_mut().apply(Action::Reshape { book, columns: Vec::new(), kind: ReshapeKind::Reduce }, &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets[1].columns[0].numeric().unwrap(), [1.5, 3.5], "two rows to one, averaged");
+}

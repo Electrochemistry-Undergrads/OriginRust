@@ -20,6 +20,7 @@ use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
 use crate::dialogs::graph_props::PropsTab;
+use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
 use crate::panels::PanelId;
 use eframe::egui::{
@@ -83,6 +84,8 @@ pub enum Cmd {
     UnhideColumns,
     /// Column > Mask > Apply, Remove, Swap.
     Mask(MaskOp),
+    /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
+    Reshape(ReshapeKind),
     /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
     RowFilterDialog,
     ToggleRowFilter,
@@ -842,9 +845,12 @@ fn worksheet_menu() -> Vec<Entry> {
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
         grey("Clear Worksheet..."),
-        grey("Split Columns..."),
+        item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
-        grey("Reduce Rows..."),
+        item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
+        item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
+        item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
+        item("Unstack Columns...", Cmd::Reshape(ReshapeKind::Unstack)),
         grey_sub("Convert to Matrix", &["Direct", "XYZ Gridding", "Extract"]),
         sep(),
         grey("Worksheet Script..."),
@@ -1825,6 +1831,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SortCustom { book, columns }
         }
         Cmd::SortByLabel => Action::SortByLabel(book?),
+        Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
         Cmd::ReverseOrder => {
             book?;
             Action::ReverseColumns(some()?)

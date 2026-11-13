@@ -226,6 +226,13 @@ pub enum Action {
     },
     /// Worksheet > Sort Columns by Label...
     SortByLabel(WindowId),
+    /// Worksheet > Transpose, Stack Columns, Unstack Columns, Split Columns, Reduce Rows: open
+    /// the window; the result goes to a new sheet.
+    Reshape {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        kind: crate::dialogs::reshape::ReshapeKind,
+    },
     /// Column > Reverse Order: turn the values of each selected column round.
     ReverseColumns(Vec<ColumnId>),
     /// Column > Filter > Add or Remove Filter: the window for the sheet filter, with presets for

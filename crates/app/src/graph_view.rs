@@ -626,6 +626,16 @@ fn draw_selection(
 /// Applies a change made from the graph window to the project. `resolved` is the present layout
 /// of the graph (its axes' ranges), used by the axis zoom.
 pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: Option<&[LayerGeometry]>) {
+    if let GraphOp::UpdateLegend { layer } = op {
+        let Ok(auto) = sheaf_plot::legend_automatic_text(project, graph, layer) else { return };
+        if let Some(l) = project.graph_mut(graph).and_then(|g| g.layers.get_mut(layer))
+            && let Some(text) = &l.legend.text
+        {
+            let updated = update_legend_text(text, &auto);
+            l.legend.text = (updated != auto).then_some(updated);
+        }
+        return;
+    }
     let Some(g) = project.graph_mut(graph) else { return };
     let layers = g.layers.len();
     let layer_index = match op {
@@ -638,6 +648,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::AxisZoom { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::ReconstructLegend { layer }
+        | GraphOp::UpdateLegend { layer }
         | GraphOp::HideTitle { layer, .. }
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::HideLayer { layer }
@@ -714,8 +725,52 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),
-        GraphOp::HideOtherLayers { .. } | GraphOp::MovePlotToAxis { .. } => unreachable!("handled above"),
+        GraphOp::HideOtherLayers { .. } | GraphOp::MovePlotToAxis { .. } | GraphOp::UpdateLegend { .. } => {
+            unreachable!("handled above")
+        }
     }
+}
+
+/// The plot ids a legend line refers to, through `\l(id)` and `%(id)`.
+fn legend_refs(line: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(at) = rest.find(['\\', '%']) {
+        rest = &rest[at..];
+        let body = rest.strip_prefix("\\l(").or_else(|| rest.strip_prefix("\\L(")).or_else(|| rest.strip_prefix("%("));
+        match body.and_then(|b| b.split_once(')')) {
+            Some((id, _)) => {
+                out.push(id);
+                rest = &rest[1..];
+            }
+            None => rest = &rest[1..],
+        }
+    }
+    out
+}
+
+/// Update Legend for custom legend text: keeps every line that refers to a plot that still
+/// exists (or to none), drops the lines that refer only to plots that are gone, and appends the
+/// automatic line of each plot that no kept line mentions. `auto` is the automatic text.
+fn update_legend_text(custom: &str, auto: &str) -> String {
+    let valid: Vec<&str> = auto.lines().filter_map(|l| legend_refs(l).first().copied()).collect();
+    let mut kept: Vec<&str> = Vec::new();
+    let mut mentioned: Vec<&str> = Vec::new();
+    for line in custom.split('\n') {
+        let refs = legend_refs(line);
+        if !refs.is_empty() && !refs.iter().any(|r| valid.contains(r)) {
+            continue;
+        }
+        mentioned.extend(refs);
+        kept.push(line);
+    }
+    let mut out: Vec<&str> = kept;
+    for line in auto.lines() {
+        if legend_refs(line).first().is_some_and(|id| !mentioned.contains(id)) {
+            out.push(line);
+        }
+    }
+    out.join("\n")
 }
 
 /// The colour of grid lines that "Show Grids" adds: Origin's light grey.
@@ -723,4 +778,17 @@ const GRID_COLOR: sheaf_core::Color = sheaf_core::Color { r: 204, g: 204, b: 204
 
 fn short(v: f64) -> String {
     sheaf_core::format::format_general(v, 5)
+}
+
+#[cfg(test)]
+mod legend_update_tests {
+    use super::update_legend_text;
+
+    #[test]
+    fn keeps_custom_lines_drops_gone_plots_and_adds_new_ones() {
+        let auto = "\\l(1) %(1)\n\\l(2) %(2)\n\\l(3) %(3)";
+        // Plot 4 is gone, plot 3 is new, plot 1 keeps its custom text.
+        let custom = "\\l(1) T = 5 K\n\\l(4) %(4)\nnote\n\\l(2) %(2)";
+        assert_eq!(update_legend_text(custom, auto), "\\l(1) T = 5 K\nnote\n\\l(2) %(2)\n\\l(3) %(3)");
+    }
 }

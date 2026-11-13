@@ -3823,3 +3823,173 @@ fn dragging_over_row_numbers_selects_the_rows_in_between() {
     drag(&mut h, egui::pos2(x, y1), egui::pos2(x, y3));
     assert_eq!(cells(&h), Sel::Rows { anchor: 0, end: 2 });
 }
+
+// ----- menu items that were greyed although the code existed (brief T01) -----
+
+/// Selects the columns B and C of the first workbook with the mouse and returns their ids.
+fn select_b_and_c(h: &mut Harness<'static, SheafApp>) -> (ColumnId, ColumnId) {
+    show_window(h, "Book1 - sample");
+    click_text(h, "B(Y1)");
+    click_text_with(h, "C(Y1)", egui::Modifiers::COMMAND);
+    settle(h);
+    let (b, c) = (column_id(h, "B"), column_id(h, "C"));
+    assert_eq!(book_ui(h).selected, vec![b, c]);
+    (b, c)
+}
+
+#[test]
+fn multi_panel_items_make_one_panel_per_selected_column() {
+    for item in ["Vertical 2 Panel", "Horizontal 2 Panel", "4 Panel", "9 Panel"] {
+        let mut h = start(vec![data_file("panels")]);
+        let (b, c) = select_b_and_c(&mut h);
+        menu_path(&mut h, &["Plot", "Multi-Panel", item]);
+        assert_eq!(project(&h).graphs().count(), 2, "{item} makes a graph");
+        let g = project(&h).graphs().last().unwrap();
+        // Two columns fill two of the cells; each panel holds one plot.
+        assert_eq!(g.layers.len(), 2, "{item}");
+        assert_eq!(g.layers[0].plots.iter().map(|p| p.y).collect::<Vec<_>>(), vec![b]);
+        assert_eq!(g.layers[1].plots.iter().map(|p| p.y).collect::<Vec<_>>(), vec![c]);
+    }
+    // The layouts follow Origin: 2 x 1 stacks the panels, 1 x 2 puts them side by side.
+    let mut h = start(vec![data_file("panels2")]);
+    select_b_and_c(&mut h);
+    menu_path(&mut h, &["Plot", "Multi-Panel", "Vertical 2 Panel"]);
+    let f = |h: &Harness<'static, SheafApp>, i: usize| project(h).graphs().last().unwrap().layers[i].frame;
+    assert!((f(&h, 0).left - f(&h, 1).left).abs() < 1e-9 && f(&h, 0).top != f(&h, 1).top, "stacked");
+    select_b_and_c(&mut h);
+    menu_path(&mut h, &["Plot", "Multi-Panel", "Horizontal 2 Panel"]);
+    assert!((f(&h, 0).top - f(&h, 1).top).abs() < 1e-9 && f(&h, 0).left != f(&h, 1).left, "side by side");
+}
+
+#[test]
+fn y_error_plots_a_scatter_with_the_error_bars_of_the_error_column() {
+    let mut h = start(vec![data_file("yerr")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let err = h
+        .state_mut()
+        .doc
+        .edit("Add error column", |p| {
+            p.add_column(book, 0, Designation::YError, sheaf_core::ColumnData::numeric(vec![0.5; 4]))
+        })
+        .unwrap();
+    settle(&mut h);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    menu_path(&mut h, &["Plot", "Symbol", "Y Error"]);
+    assert_eq!(project(&h).graphs().count(), 2);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers[0].plots.len(), 1);
+    assert_eq!(g.layers[0].plots[0].y_error, Some(err), "the error column that follows the Y column");
+    assert!(g.layers[0].plots[0].kind.has_symbols() && !g.layers[0].plots[0].kind.has_line());
+}
+
+#[test]
+fn y_error_without_an_error_column_still_plots_but_says_so() {
+    let mut h = start(vec![data_file("yerr2")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Plot", "Symbol", "Y Error"]);
+    assert_eq!(project(&h).graphs().count(), 2);
+    assert!(h.state().status.contains("without error bars"), "{}", h.state().status);
+}
+
+#[test]
+fn add_error_bars_gives_the_plots_the_error_column_of_their_sheet() {
+    let mut h = start(vec![data_file("adderr")]);
+    let (book, graph) = window_ids(&h);
+    let err = h
+        .state_mut()
+        .doc
+        .edit("Add error column", |p| {
+            p.add_column(book, 0, Designation::YError, sheaf_core::ColumnData::numeric(vec![0.5; 4]))
+        })
+        .unwrap();
+    settle(&mut h);
+    // Column C is the last Y column, so only its plot has an error column after it.
+    assert!(project(&h).graph(graph).unwrap().layers[0].plots.iter().all(|p| p.y_error.is_none()));
+    menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    let plots = &project(&h).graph(graph).unwrap().layers[0].plots;
+    assert_eq!(plots[0].y_error, None, "B has no error column");
+    assert_eq!(plots[1].y_error, Some(err));
+    assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
+    // Nothing left to add: no new undo step, and a message.
+    menu_path(&mut h, &["Graph", "Add Error Bars..."]);
+    assert_eq!(h.state().doc.undo_label(), Some("Add error bars"));
+    assert!(h.state().status.contains("No error bars added"));
+}
+
+#[test]
+fn update_legend_keeps_custom_text_and_adds_the_plots_it_lacks() {
+    let mut h = start(vec![data_file("updleg")]);
+    h.state_mut().doc.apply("Legend text", |p| {
+        let g = p.graphs().next().unwrap().id;
+        p.graph_mut(g).unwrap().layers[0].legend.text = Some("\\l(1) first\n\\l(9) %(9)".into());
+    });
+    settle(&mut h);
+    menu(&mut h, "Graph", "Legend");
+    menu_path(&mut h, &["Update Legend"]);
+    // Plot 1 keeps its text, plot 9 does not exist, plot 2 is added.
+    assert_eq!(graph(&h).layers[0].legend.text.as_deref(), Some("\\l(1) first\n\\l(2) %(2)"));
+    assert_eq!(h.state().doc.undo_label(), Some("Update legend"));
+    // From the legend's right-click menu: text that equals the automatic one is not stored.
+    h.state_mut().doc.apply("Legend text", |p| {
+        let g = p.graphs().next().unwrap().id;
+        p.graph_mut(g).unwrap().layers[0].legend.text = Some("\\l(1) %(1)".into());
+    });
+    settle(&mut h);
+    let at = on(&h, 0, ObjectKind::Legend);
+    right_click_at(&mut h, at);
+    menu_path(&mut h, &["Legend", "Update Legend"]);
+    assert_eq!(graph(&h).layers[0].legend.text, None, "the updated text is the automatic one");
+}
+
+#[test]
+fn window_refresh_recalculates_the_waiting_columns_of_the_workbook() {
+    let mut h = start(vec![data_file("refresh")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let (b, c) = {
+        let s = project(&h).workbooks().next().unwrap().sheet();
+        (s.column_by_name("B").unwrap().id, s.column_by_name("C").unwrap().id)
+    };
+    h.state_mut()
+        .doc
+        .edit("Formula", |p| p.set_column_values_with(c, "col(B) * 2", None, sheaf_core::RecalcMode::Manual))
+        .unwrap();
+    h.state_mut().doc.apply("Change B", |p| {
+        p.column_mut(b).unwrap().set_cell_text(0, "10");
+    });
+    settle(&mut h);
+    let state = |h: &Harness<'static, SheafApp>| project(h).column(c).unwrap().formula_state;
+    assert_eq!(state(&h), sheaf_core::FormulaState::Pending, "Manual: waits for the user");
+    show_window(&mut h, "Book1 - sample");
+    assert_eq!(h.state().active, Some(book));
+    // F5 is the key of Window > Refresh.
+    h.key_press(egui::Key::F5);
+    settle(&mut h);
+    assert_eq!(state(&h), sheaf_core::FormulaState::Current);
+    assert_eq!(project(&h).numeric(c).unwrap()[0], 20.0);
+    assert_eq!(h.state().doc.undo_label(), Some("Refresh"));
+    // From the menu, with nothing waiting: no new undo step.
+    menu_path(&mut h, &["Window", "Refresh"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Refresh"));
+    assert!(h.state().status.contains("Refreshed"));
+}
+
+#[test]
+fn sort_range_moves_the_selected_columns_together_and_sort_columns_sorts_each_alone() {
+    let mut h = start(vec![data_file("sortrange")]);
+    let (b, c) = select_b_and_c(&mut h);
+    // B rises with t and C falls: sorting the range by B descending reverses both together.
+    menu_path(&mut h, &["Worksheet", "Sort Range", "Descending"]);
+    assert_eq!(project(&h).numeric(b).unwrap(), [8.5, 6.5, 4.5, 2.5]);
+    assert_eq!(project(&h).numeric(c).unwrap(), [0.5, 10.5, 20.5, 30.5]);
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "column A is not in the range");
+    assert_eq!(h.state().doc.undo_label(), Some("Sort range"));
+    // Each column on its own: B ascending again, C stays as it is.
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Ascending"]);
+    assert_eq!(project(&h).numeric(b).unwrap(), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(project(&h).numeric(c).unwrap(), [0.5, 10.5, 20.5, 30.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Sort columns"));
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Descending"]);
+    assert_eq!(project(&h).numeric(c).unwrap(), [30.5, 20.5, 10.5, 0.5]);
+}

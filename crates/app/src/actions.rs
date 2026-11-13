@@ -84,6 +84,9 @@ pub enum GraphOp {
     HideLegend { layer: usize },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
     ReconstructLegend { layer: usize },
+    /// Update Legend: custom legend text is kept; lines of plots that are gone are dropped and
+    /// lines for plots that the text does not mention are added. Automatic text needs no update.
+    UpdateLegend { layer: usize },
     /// Delete on an axis title: it is hidden.
     HideTitle { layer: usize, y: bool },
     /// Delete on a free text label.
@@ -172,6 +175,17 @@ pub enum Action {
         column: ColumnId,
         descending: bool,
     },
+    /// Worksheet > Sort Range: sort the rows of the selected columns by the first of them; the
+    /// other columns of the sheet keep their rows.
+    SortRange {
+        columns: Vec<ColumnId>,
+        descending: bool,
+    },
+    /// Worksheet > Sort Columns: sort each selected column on its own.
+    SortColumns {
+        columns: Vec<ColumnId>,
+        descending: bool,
+    },
     /// Open the window that keeps only the rows matching a condition.
     FilterRows(WindowId),
     PlotColumns {
@@ -179,6 +193,28 @@ pub enum Action {
         columns: Vec<ColumnId>,
         template: Template,
     },
+    /// Plot > Symbol > Y Error: a scatter plot of the Y columns that shows the error bars of
+    /// their Y error columns.
+    PlotYError {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Plot > Multi-Panel: one panel per selected Y column on a rows x columns grid.
+    PlotPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        rows: usize,
+        cols: usize,
+    },
+    /// Graph > Add Error Bars: the plots of the layer that have none take the Y error column
+    /// of their sheet.
+    AddErrorBars {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Window > Refresh (F5): recalculates the columns of the active workbook that are waiting
+    /// for it; a graph is redrawn every frame anyway.
+    Refresh(Option<WindowId>),
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {
         graph: WindowId,

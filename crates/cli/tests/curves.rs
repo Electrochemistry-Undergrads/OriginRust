@@ -47,15 +47,8 @@ fn intersect_needs_two_curves_and_lists_the_point() {
     let (ok, _, stderr) = sheaf(&["analyze", "intersect", data.to_str().unwrap()]);
     assert!(!ok && stderr.contains("exactly two"), "{stderr}");
     let export = dir.join("pts.csv");
-    let (ok, stdout, stderr) = sheaf(&[
-        "analyze",
-        "intersect",
-        data.to_str().unwrap(),
-        "-y",
-        "up,down",
-        "--export",
-        export.to_str().unwrap(),
-    ]);
+    let (ok, stdout, stderr) =
+        sheaf(&["analyze", "intersect", data.to_str().unwrap(), "-y", "up,down", "--export", export.to_str().unwrap()]);
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("1 point"), "{stdout}");
     assert!(std::fs::read_to_string(&export).unwrap().lines().any(|r| r.starts_with("2,2")));

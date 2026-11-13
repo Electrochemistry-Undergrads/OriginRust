@@ -505,19 +505,35 @@ impl Writer {
             }
         }
         if layer.legend.visible && !entries.is_empty() {
-            let mut lines = Vec::new();
-            for (id, plot) in &entries {
-                match &plot.label {
-                    Some(t) => lines.push(format!("\\l({id}) {}", t.replace(['\r', '\n'], " "))),
-                    None => lines.push(format!("\\l({id}) %({id})")),
+            // The legend's own text when it has one (its `\l(n)` and `%(n)` count the plots the
+            // legend lists, as here), otherwise a line per plot.
+            let (lines, longest): (Vec<String>, usize) = match &layer.legend.text {
+                Some(custom) => {
+                    let lines: Vec<String> =
+                        custom.replace("\r\n", "\n").replace('\r', "\n").split('\n').map(str::to_string).collect();
+                    let longest = lines.iter().map(|l| l.chars().count()).max().unwrap_or(1);
+                    (lines, longest)
                 }
-            }
+                None => {
+                    let mut lines = Vec::new();
+                    for (id, plot) in &entries {
+                        match &plot.label {
+                            Some(t) => lines.push(format!("\\l({id}) {}", t.replace(['\r', '\n'], " "))),
+                            None => lines.push(format!("\\l({id}) %({id})")),
+                        }
+                    }
+                    let longest = entries
+                        .iter()
+                        .map(|(_, p)| p.label.as_ref().map_or(12, |t| t.chars().count()))
+                        .max()
+                        .unwrap_or(1);
+                    (lines, longest)
+                }
+            };
             let text = lines.join("\r\n");
             let size = layer.legend.font.size_pt;
-            let longest =
-                entries.iter().map(|(_, p)| p.label.as_ref().map_or(12, |t| t.chars().count())).max().unwrap_or(1);
             let w = CHAR_WIDTH * size * longest as f64 + 2.6 * size;
-            let h = LINE_HEIGHT * size * entries.len() as f64;
+            let h = LINE_HEIGHT * size * lines.len().max(1) as f64;
             let margin = 0.4 * size;
             let (cx, cy) = match layer.legend.position {
                 LegendPosition::TopRight => {
@@ -897,6 +913,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     }
     if layer.bars.overlap_pct != 0.0 {
         notes.push("the overlap of column bars was not written; bars stand side by side".into());
+    }
+    if layer.legend.visible && layer.legend.columns > 1 {
+        notes.push("the number of columns of the legend was not written; its entries stand in one column".into());
     }
     for axis in [&layer.x_axis, &layer.y_axis] {
         if axis.tick_label_source != TickLabelSource::Auto {

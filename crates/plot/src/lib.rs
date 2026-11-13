@@ -16,6 +16,7 @@ mod eps;
 mod fonts;
 pub mod hit;
 mod layout;
+mod legend;
 pub mod markup;
 mod plots;
 mod raster;
@@ -28,6 +29,8 @@ mod vector;
 
 #[cfg(test)]
 mod export_tests;
+#[cfg(test)]
+mod legend_tests;
 #[cfg(test)]
 mod tests;
 
@@ -199,6 +202,24 @@ pub fn render_svg(project: &Project, graph: WindowId) -> Result<String, PlotErro
 pub fn render_svg_with(project: &Project, graph: WindowId, measurer: &dyn TextMeasurer) -> Result<String, PlotError> {
     let scene = layout::build_scene(project, graph, measurer)?;
     Ok(svg::write_svg(&scene))
+}
+
+/// The text of the legend of layer `layer`: its own text when it has one, otherwise the automatic
+/// text with one `\l(n) %(n)` line per plot the legend lists (see [`sheaf_core::graph::Legend::text`]).
+pub fn legend_text(project: &Project, graph: WindowId, layer: usize) -> Result<String, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let l = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
+    Ok(l.legend.text.clone().unwrap_or(legend_automatic_text(project, graph, layer)?))
+}
+
+/// The automatic text of the legend of layer `layer`, which "Refresh legend" goes back to.
+pub fn legend_automatic_text(project: &Project, graph: WindowId, layer: usize) -> Result<String, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    if layer >= g.layers.len() {
+        return Err(PlotError::NoSuchLayer(layer));
+    }
+    let counts: Vec<usize> = g.layers.iter().map(|l| data::collect(project, l).plots.len()).collect();
+    Ok(sheaf_core::graph::Legend::automatic_text(&legend::ids(g, layer, &|j| counts[j])))
 }
 
 /// The scene of a graph, with the pickable objects that [`hit::hit_test`] looks at, measured

@@ -174,6 +174,8 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 frame: false,
                 background: None,
                 scope: LegendScope::Layer,
+                columns: 1,
+                text: None,
             },
             labels: Vec::new(),
             palette,
@@ -223,6 +225,8 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
         frame: false,
         background: None,
         scope: LegendScope::Layer,
+        columns: 1,
+        text: None,
     };
     g
 }

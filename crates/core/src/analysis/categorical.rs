@@ -1,0 +1,381 @@
+//! Cross tabulation and 2D binning: the two statistics tools that work on a pair of columns. The numerics
+//! are in `sheaf_calc` (`Crosstab`, `bin_2d`); this module reads the columns and writes the result sheet.
+//! What the tools report is described in `docs/spec/statistics.md`, section 11.
+
+use super::statistics::{Output, check_alpha, label_column, level_text, num, number_column};
+use super::*;
+use sheaf_calc::{Crosstab, bin_2d};
+
+/// Levels in the order a table lists them: numbers from small to large when every level is a number,
+/// otherwise text in character order ignoring case (A before a).
+fn ordered_levels(mut levels: Vec<String>) -> Vec<String> {
+    let numbers: Option<Vec<f64>> = levels.iter().map(|l| l.parse::<f64>().ok()).collect();
+    if numbers.is_some() {
+        levels.sort_by(|a, b| a.parse::<f64>().unwrap_or(0.0).total_cmp(&b.parse::<f64>().unwrap_or(0.0)));
+    } else {
+        levels.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| a.cmp(b)));
+    }
+    levels
+}
+
+pub(super) fn crosstab(
+    spec: &CrosstabSpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    check_alpha(spec.alpha)?;
+    if columns.len() != 2 {
+        return Err(AnalysisError::BadOption(format!(
+            "a cross tabulation needs exactly two columns (the row variable and the column variable), {} were chosen",
+            columns.len()
+        )));
+    }
+    let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
+    let (cr, cc) = (column(columns[0])?, column(columns[1])?);
+    let len = cr.data.len().max(cc.data.len());
+    if len == 0 {
+        return Err(AnalysisError::Empty(cr.short_name.clone()));
+    }
+    let (first, last) = match rows {
+        RowRange::All => (0, len - 1),
+        RowRange::Rows(..) => resolve_rows(rows, &cr.short_name, &[], len)?,
+        RowRange::XBetween(..) => {
+            return Err(AnalysisError::BadOption(
+                "the cross tabulation has no X column to limit; choose rows with a row range".into(),
+            ));
+        }
+    };
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    let mut left_out = 0usize;
+    for row in first..=last.min(len - 1) {
+        match (level_text(cr, row), level_text(cc, row)) {
+            (Some(a), Some(b)) => pairs.push((a, b)),
+            (None, None) => {}
+            _ => left_out += 1,
+        }
+    }
+    if pairs.is_empty() {
+        return Err(AnalysisError::BadOption("no row has a level in both columns".to_string()));
+    }
+    let levels_r = ordered_levels(
+        pairs.iter().map(|p| p.0.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect(),
+    );
+    let levels_c = ordered_levels(
+        pairs.iter().map(|p| p.1.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect(),
+    );
+    let mut counts = vec![vec![0usize; levels_c.len()]; levels_r.len()];
+    for (a, b) in &pairs {
+        let i = levels_r.iter().position(|l| l == a).expect("collected above");
+        let j = levels_c.iter().position(|l| l == b).expect("collected above");
+        counts[i][j] += 1;
+    }
+    let t = Crosstab::new(counts).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let (name_r, name_c) = (cr.display_name().to_string(), cc.display_name().to_string());
+    let (nr, nc) = (t.rows(), t.cols());
+
+    // Block 1: the table of counts with its totals.
+    let mut on_sheet = vec![label_column(
+        &format!("{name_r} \\ {name_c}"),
+        levels_r.iter().cloned().chain(std::iter::once("Total".to_string())).collect(),
+    )];
+    for j in 0..nc {
+        let mut v: Vec<f64> = (0..nr).map(|i| t.counts[i][j] as f64).collect();
+        v.push(t.col_totals[j] as f64);
+        let mut col = number_column(&levels_c[j], "", v);
+        col.comments = name_c.clone();
+        on_sheet.push(col);
+    }
+    let mut totals: Vec<f64> = t.row_totals.iter().map(|&x| x as f64).collect();
+    totals.push(t.total as f64);
+    on_sheet.push(number_column("Total", "", totals));
+
+    // Block 2: one row per cell.
+    let cells: Vec<(usize, usize)> = (0..nr).flat_map(|i| (0..nc).map(move |j| (i, j))).collect();
+    on_sheet.push(label_column("Row level", cells.iter().map(|&(i, _)| levels_r[i].clone()).collect()));
+    on_sheet.push(label_column("Column level", cells.iter().map(|&(_, j)| levels_c[j].clone()).collect()));
+    on_sheet.push(number_column("Count", "", cells.iter().map(|&(i, j)| t.counts[i][j] as f64).collect()));
+    if spec.expected {
+        on_sheet.push(number_column("Expected", "", cells.iter().map(|&(i, j)| t.expected[i][j]).collect()));
+    }
+    if spec.row_percent {
+        on_sheet.push(number_column("Row %", "%", cells.iter().map(|&(i, j)| t.row_percent(i, j)).collect()));
+    }
+    if spec.column_percent {
+        on_sheet.push(number_column("Column %", "%", cells.iter().map(|&(i, j)| t.col_percent(i, j)).collect()));
+    }
+    if spec.total_percent {
+        on_sheet.push(number_column("Total %", "%", cells.iter().map(|&(i, j)| t.total_percent(i, j)).collect()));
+    }
+
+    // Block 3: the tests.
+    let (pearson, lr) = (t.pearson(), t.likelihood_ratio());
+    let mut names: Vec<String> = ["Pearson chi-square", "DF", "Prob>Pearson chi-square"].map(str::to_string).to_vec();
+    let mut values = vec![pearson.statistic, pearson.df, pearson.p];
+    names.extend(["Likelihood ratio chi-square", "DF", "Prob>Likelihood ratio chi-square"].map(str::to_string));
+    values.extend([lr.statistic, lr.df, lr.p]);
+    let yates = t.yates();
+    if let Some(y) = yates {
+        names.extend(["Yates chi-square", "Prob>Yates chi-square"].map(str::to_string));
+        values.extend([y.statistic, y.p]);
+    }
+    let fisher = t.fisher();
+    if let Some(f) = fisher {
+        names.extend(
+            ["Fisher exact Prob (two-sided)", "Fisher exact Prob (left)", "Fisher exact Prob (right)", "Odds ratio"]
+                .map(str::to_string),
+        );
+        values.extend([f.p_two_sided, f.p_less, f.p_greater, f.odds_ratio]);
+    }
+    on_sheet.push(label_column("Statistic", names));
+    on_sheet.push(number_column("Value", "", values));
+
+    let mut table = ResultTable::new(&[
+        "N",
+        "Rows",
+        "Columns",
+        "Pearson chi-square",
+        "DF",
+        "Prob>Pearson",
+        "Likelihood ratio chi-square",
+        "Prob>Likelihood ratio",
+        "Fisher Prob (two-sided)",
+    ]);
+    table.push_row(
+        format!("{name_r} by {name_c}"),
+        vec![
+            t.total as f64,
+            nr as f64,
+            nc as f64,
+            pearson.statistic,
+            pearson.df,
+            pearson.p,
+            lr.statistic,
+            lr.p,
+            fisher.map_or(f64::NAN, |f| f.p_two_sided),
+        ],
+        vec![String::new(); 9],
+    );
+
+    let verdict = |p: f64| if p < spec.alpha { "associated" } else { "not shown to be associated" };
+    let mut notes = vec![format!(
+        "Cross tabulation of {name_r} ({nr} levels) by {name_c} ({nc} levels), {} rows: Pearson chi-square({}) = {}, p = {}; likelihood ratio chi-square({}) = {}, p = {}; the variables are {} at the {} level.",
+        t.total,
+        num(pearson.df),
+        num(pearson.statistic),
+        num(pearson.p),
+        num(lr.df),
+        num(lr.statistic),
+        num(lr.p),
+        verdict(pearson.p),
+        num(spec.alpha)
+    )];
+    if let Some(f) = fisher {
+        notes.push(format!(
+            "Fisher's exact test: two-sided p = {}, odds ratio {}.",
+            num(f.p_two_sided),
+            num(f.odds_ratio)
+        ));
+    }
+    let small = t.cells_expected_below_5();
+    if small > 0 {
+        notes.push(format!(
+            "{small} of {} cells have an expected count below 5: the chi-square approximation is rough{}.",
+            nr * nc,
+            if fisher.is_some() { "; the exact test is the safer one" } else { "" }
+        ));
+    }
+    if left_out > 0 {
+        notes.push(format!("{left_out} rows with a level in only one of the two columns were left out."));
+    }
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+}
+
+/// Edge of a bin as text: no binary noise, no trailing zeros.
+fn edge_text(v: f64) -> String {
+    let text = format!("{v:.10}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    if text == "-0" { "0".to_string() } else { text.to_string() }
+}
+
+pub(super) fn bin_2d_tool(spec: &Bin2dSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    if inputs.len() != 2 {
+        return Err(AnalysisError::BadOption(format!(
+            "the 2D frequency count needs exactly two columns (X and Y), {} were chosen",
+            inputs.len()
+        )));
+    }
+    let (xi, yi) = (&inputs[0], &inputs[1]);
+    let r = bin_2d(xi.ys(), yi.ys(), &spec.bins).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let (nx, ny) = (r.counts.len(), r.y_edges.len() - 1);
+    let range = |edges: &[f64]| (edges[0], edges[1] - edges[0]);
+    let (xs, xw) = range(&r.x_edges);
+    let (ys, yw) = range(&r.y_edges);
+    let largest = r.counts.iter().flatten().copied().max().unwrap_or(0);
+    let mut table = ResultTable::new(&[
+        "N",
+        "Counted",
+        "X bins",
+        "X first edge",
+        "X bin size",
+        "Y bins",
+        "Y first edge",
+        "Y bin size",
+        "Largest count",
+    ]);
+    table.push_row(
+        format!("{} vs {}", yi.label, xi.label),
+        vec![r.pairs as f64, r.counted as f64, nx as f64, xs, xw, ny as f64, ys, yw, largest as f64],
+        ["", "", "", &xi.units, &xi.units, "", &yi.units, &yi.units, ""].map(str::to_string).to_vec(),
+    );
+
+    let x_end = |i: usize| r.x_edges[i + 1];
+    let mut on_sheet = vec![
+        {
+            let mut c = number_column("X bin start", &xi.units, r.x_edges[..nx].to_vec());
+            c.designation = Designation::Disregard;
+            c
+        },
+        {
+            let mut c = number_column("X bin end", &xi.units, (0..nx).map(x_end).collect());
+            c.designation = Designation::Disregard;
+            c
+        },
+        {
+            let mut c = number_column("X bin center", &xi.units, r.x_centers());
+            c.designation = Designation::X;
+            c
+        },
+    ];
+    let y_centers = r.y_centers();
+    for j in 0..ny {
+        let last = j + 1 == ny;
+        let mut col = number_column(
+            &format!("[{}, {}{}", edge_text(r.y_edges[j]), edge_text(r.y_edges[j + 1]), if last { "]" } else { ")" }),
+            "",
+            (0..nx).map(|i| r.counts[i][j] as f64).collect(),
+        );
+        col.comments = format!("{} bin, center {}", yi.name, edge_text(y_centers[j]));
+        on_sheet.push(col);
+    }
+    on_sheet.push(number_column("Total", "", r.x_totals().iter().map(|&c| c as f64).collect()));
+
+    let mut notes = vec![format!(
+        "2D frequency count of {} against {}: {} pairs in a grid of {nx} x {ny} bins (X bins of width {} from {}, Y bins of width {} from {}); largest count {largest}.",
+        yi.name,
+        xi.name,
+        r.counted,
+        num(xw),
+        num(xs),
+        num(yw),
+        num(ys)
+    )];
+    if r.counted < r.pairs {
+        notes.push(format!(
+            "{} of the {} pairs lie outside the grid and are not counted.",
+            r.pairs - r.counted,
+            r.pairs
+        ));
+    }
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text(v: &[&str]) -> ColumnData {
+        ColumnData::text(v.iter().map(|s| s.to_string()).collect())
+    }
+
+    fn project(columns: Vec<ColumnData>) -> (Project, Vec<ColumnId>) {
+        let mut p = Project::new();
+        let book = p.add_workbook("tab");
+        let ids = columns.into_iter().map(|d| p.add_column(book, 0, Designation::Y, d).unwrap()).collect();
+        (p, ids)
+    }
+
+    fn request(columns: &[ColumnId], tool: Tool) -> Request {
+        Request { columns: columns.to_vec(), rows: RowRange::All, tool }
+    }
+
+    fn column(p: &Project, r: &Report, name: &str) -> Column {
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        ws.columns.iter().find(|c| c.long_name == name).unwrap_or_else(|| panic!("no column {name}")).clone()
+    }
+
+    #[test]
+    fn crosstab_of_two_text_columns() {
+        // 2 x 2: treated/control against better/same; one row has no second level.
+        let a = ["treated", "treated", "treated", "control", "control", "control", "control", "treated", "control"];
+        let b = ["better", "better", "same", "same", "same", "better", "same", "better", ""];
+        let (mut p, ids) = project(vec![text(&a), text(&b)]);
+        let r = p.analyze(&request(&ids, Tool::Crosstab(CrosstabSpec::default()))).unwrap();
+        assert!(r.message.contains("Cross tabulation") && r.message.contains("Crosstab1"), "{}", r.message);
+        // Rows control, treated; columns better, same.
+        let better = column(&p, &r, "better");
+        assert_eq!(better.numeric().unwrap(), [1.0, 3.0, 4.0]);
+        assert_eq!(column(&p, &r, "same").numeric().unwrap(), [3.0, 1.0, 4.0]);
+        assert_eq!(column(&p, &r, "Total").numeric().unwrap(), [4.0, 4.0, 8.0]);
+        assert_eq!(column(&p, &r, "Row %").numeric().unwrap(), [25.0, 75.0, 75.0, 25.0]);
+        assert_eq!(column(&p, &r, "Total %").numeric().unwrap(), [12.5, 37.5, 37.5, 12.5]);
+        let stats = column(&p, &r, "Value").numeric().unwrap().to_vec();
+        // Pearson chi-square 2, df 1 for this table, as for the tea tasting table.
+        assert!((stats[0] - 2.0).abs() < 1e-12 && stats[1] == 1.0);
+        let fisher = column(&p, &r, "Statistic")
+            .text()
+            .unwrap()
+            .iter()
+            .position(|s| s.starts_with("Fisher exact Prob (two"))
+            .unwrap();
+        assert!((stats[fisher] - 34.0 / 70.0).abs() < 1e-12);
+        assert!(r.notes.iter().any(|n| n.contains("1 rows with a level in only one")), "{:?}", r.notes);
+        assert!(r.notes.iter().any(|n| n.contains("expected count below 5")), "{:?}", r.notes);
+    }
+
+    #[test]
+    fn crosstab_levels_are_ordered_and_numbers_may_be_levels() {
+        let a = ColumnData::numeric(vec![10.0, 2.0, 2.0, 10.0, 2.0, 10.0]);
+        let (mut p, ids) = project(vec![a, text(&["b", "a", "B", "a", "b", "A"])]);
+        let r =
+            p.analyze(&request(&ids, Tool::Crosstab(CrosstabSpec { expected: false, ..Default::default() }))).unwrap();
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        // Numbers from small to large (2 before 10), text ignoring case.
+        assert_eq!(ws.columns[0].text().unwrap(), ["2", "10", "Total"]);
+        let heads: Vec<&str> = ws.columns[1..5].iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(heads, ["A", "a", "B", "b"]);
+        assert!(ws.columns.iter().all(|c| c.long_name != "Expected"));
+    }
+
+    #[test]
+    fn crosstab_needs_two_columns_and_two_levels() {
+        let (mut p, ids) = project(vec![text(&["a", "b"]), text(&["x", "y"]), text(&["u", "v"])]);
+        assert!(p.analyze(&request(&ids, Tool::Crosstab(CrosstabSpec::default()))).is_err());
+        let (mut p, ids) = project(vec![text(&["a", "a"]), text(&["x", "y"])]);
+        let err = p.analyze(&request(&ids, Tool::Crosstab(CrosstabSpec::default()))).unwrap_err();
+        assert!(err.to_string().contains("at least two levels"), "{err}");
+    }
+
+    #[test]
+    fn bin_2d_writes_a_matrix_sheet() {
+        let x = ColumnData::numeric(vec![0.0, 1.0, 2.0, 3.0, 4.0, f64::NAN]);
+        let y = ColumnData::numeric(vec![0.0, 0.0, 5.0, 10.0, 10.0, 3.0]);
+        let (mut p, ids) = project(vec![x, y]);
+        let size = BinSize::Count(2);
+        let spec = Bin2dSpec {
+            bins: Bin2dOptions {
+                x: AxisBins { size, ..Default::default() },
+                y: AxisBins { size, ..Default::default() },
+            },
+        };
+        let r = p.analyze(&request(&ids, Tool::Bin2d(spec))).unwrap();
+        assert!(r.message.contains("2D frequency count") && r.message.contains("Bin2D1"), "{}", r.message);
+        assert_eq!(column(&p, &r, "[0, 5)").numeric().unwrap(), [2.0, 0.0]);
+        assert_eq!(column(&p, &r, "[5, 10]").numeric().unwrap(), [0.0, 3.0]);
+        assert_eq!(column(&p, &r, "Total").numeric().unwrap(), [2.0, 3.0]);
+        assert_eq!(column(&p, &r, "X bin center").numeric().unwrap(), [1.0, 3.0]);
+        let t = r.table.unwrap();
+        assert_eq!(t.rows[0].1[0], 5.0);
+        assert!(p.analyze(&request(&ids[..1], Tool::Bin2d(spec))).is_err());
+    }
+}

@@ -36,7 +36,7 @@ pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection, PeakFilter,
     PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
-pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
+pub use sheaf_calc::{AxisBins, Bin2dOptions, BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
@@ -197,13 +197,16 @@ impl Default for TTestSpec {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnovaSpec {
     pub alpha: f64,
-    /// Means comparison of all pairs of groups; `None` leaves it out.
+    /// Means comparison of all pairs of groups (of every group against the control for Dunnett); `None`
+    /// leaves it out.
     pub comparison: Option<MeansComparison>,
+    /// Dunnett's control group, counted from 0 in the order of the chosen columns; ignored by the other methods.
+    pub control: usize,
 }
 
 impl Default for AnovaSpec {
     fn default() -> Self {
-        AnovaSpec { alpha: 0.05, comparison: Some(MeansComparison::Tukey) }
+        AnovaSpec { alpha: 0.05, comparison: Some(MeansComparison::Tukey), control: 0 }
     }
 }
 
@@ -213,6 +216,32 @@ pub struct HistogramSpec {
     pub freq: FreqOptions,
     /// Also make a graph with a column plot of the counts.
     pub graph: bool,
+}
+
+/// What [`Tool::Bin2d`] does: the first chosen column is X, the second Y.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Bin2dSpec {
+    pub bins: Bin2dOptions,
+}
+
+/// What [`Tool::Crosstab`] does: the first chosen column holds the levels of the row variable, the second
+/// those of the column variable (text or numbers).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CrosstabSpec {
+    /// Add each count's percentage of its row total.
+    pub row_percent: bool,
+    pub column_percent: bool,
+    pub total_percent: bool,
+    /// Add the counts expected under independence.
+    pub expected: bool,
+    /// Level for the sentence about the tests.
+    pub alpha: f64,
+}
+
+impl Default for CrosstabSpec {
+    fn default() -> Self {
+        CrosstabSpec { row_percent: true, column_percent: true, total_percent: true, expected: true, alpha: 0.05 }
+    }
 }
 
 /// What [`Tool::Normality`] does: all the normality tests on each chosen column.
@@ -512,6 +541,8 @@ pub enum Tool {
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
     Normality(NormalitySpec),
+    Crosstab(CrosstabSpec),
+    Bin2d(Bin2dSpec),
     TwoWayAnova(TwoWayAnovaSpec),
     MannWhitney(MannWhitneySpec),
     SignedRank(SignedRankSpec),
@@ -562,6 +593,8 @@ impl Tool {
             Tool::Anova(_) => "One-way ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Normality(_) => "Normality test",
+            Tool::Crosstab(_) => "Cross tabulation",
+            Tool::Bin2d(_) => "2D frequency count",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
             Tool::MannWhitney(_) => "Mann-Whitney test",
             Tool::SignedRank(spec) => match spec.kind {
@@ -597,6 +630,8 @@ impl Tool {
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Normality(_) => "Normality",
+            Tool::Crosstab(_) => "Crosstab",
+            Tool::Bin2d(_) => "Bin2D",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
             Tool::MannWhitney(_) => "MannWhitney",
             Tool::SignedRank(_) => "SignedRank",
@@ -1122,6 +1157,7 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod categorical;
 mod curves;
 mod manip;
 mod statistics;
@@ -1174,7 +1210,7 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_));
+        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_));
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1223,8 +1259,15 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }
+            Tool::Crosstab(spec) => {
+                let out = categorical::crosstab(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
             Tool::TTest(_)
             | Tool::Anova(_)
+            | Tool::Bin2d(_)
             | Tool::Histogram(_)
             | Tool::Normality(_)
             | Tool::MannWhitney(_)

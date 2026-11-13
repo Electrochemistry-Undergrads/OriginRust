@@ -90,13 +90,17 @@ give the same p-value as the pooled two-sample t-test (checked).
   wider on that side. The margin is not a clean threshold in Origin (a gap of 0.0802 bins did not widen
   the end for one sample, 0.0855 did for another); ours is 0.1 at the start and 0.08 at the end, which
   reproduces 98 % of 600 random starts and ends.
-- Automatic bin size: Origin's rule is not published and could not be read out. The rule used here picks a
-  round number (one significant digit) from `range / (1.75 ln n - 0.25)`; it agrees with Origin in
-  about 57 % of 600 random cases and in at least half of the 24 hand-picked ones. When it matters the
-  user gives the bin size or number of bins, which agree exactly (checked on the runs with given ranges
-  and on the edge cases above). Default bin count in Origin 2016 is therefore not a fixed number: for
-  40 values with a range of about 9.4 it chose 5 bins of 2; for 8 values between 9.9 and 13.4 it chose bins
-  of 0.9.
+- Automatic bin size (measured 2026-11-13 on 600 generated cases of Origin's `RoundBinningRange(min, max, n)`,
+  which depends on n, min and max only; `tools/origin-ref/stats-bins2.lines.txt`, fixture
+  `crates/calc/tests/fixtures/bins_origin.rs`): the number of bins is `m = round(1.75 ln n)` (at least 2;
+  steps at n = 5, 8, 14, 24, 42), the size is `range / (m - 0.19)` rounded to the nearest round number:
+  one significant digit for n < 14 (sizes such as 0.9, 3, 9, 40000 occur), and 1, 2 or 5 times a power of
+  ten from n = 14 (midpoints 1.5, 3.5, 7.5). Sheaf reproduces 593 of 600 sizes (the misses lie within
+  rounding of a midpoint; the offset 0.19 is a fit, 0.2 gives 9 misses). The first and last edge follow
+  from the size as described above, with 28 differences in 566 cases; in a further 34 cases Origin returns a
+  last edge that is not a multiple of the size (for example -1.6212428 for data ending at -1.622), not copied.
+  When it matters the user gives the bin size or number of bins, which agree exactly. For 40 values with a
+  range of about 9.4 Origin chose 5 bins of 2; for 8 values between 9.9 and 13.4 bins of 0.9.
 
 The histogram tool in Sheaf writes the counts to a sheet (bin centre as X, bin end, count, cumulative
 count, percent) and, unless switched off, makes a graph with a column plot (`PlotKind::Column`) of the
@@ -112,8 +116,8 @@ D'Agostino-Pearson; Sheaf computes all five for each column and reports the stat
 | Test | Needs | Statistic | Agreement with Origin |
 |---|---|---|---|
 | Shapiro-Wilk | 3 to 5000 numbers | W | W to 1e-9, p (Royston's approximation) to 1e-6 |
-| Kolmogorov-Smirnov | 2 numbers | D against a normal with the sample mean and SD | D exact; p is the exact distribution for given parameters: within 3 % of Origin for 8 to 20 numbers; Origin's p for 40 and for 5 numbers is far from the exact value and is not copied |
-| Lilliefors | 5 numbers | same D | p below 0.1 to six digits (Dallal and Wilkinson); above 0.1 Origin interpolates in a table we do not have, ours is within 6 %; capped at 0.2 as in Origin |
+| Kolmogorov-Smirnov | 2 numbers | D against a normal with the sample mean and SD | D exact; p is the exact distribution for given parameters. 70 further Origin runs (n = 5 to 100, `ks-probe.lines.txt`) show: Origin agrees with the exact p within 3 % wherever p < 0.5; above that its p is higher than the exact one (0.97 against 0.86 for n = 40) and is exactly 1 for a scaled statistic `(sqrt(n) + 0.12 + 0.11/sqrt(n)) D` below about 0.57. It is not a single function of that scaled statistic and none of the Kolmogorov series (1 to 100 terms, Stephens' or plain scaling) reproduced it, so the rule is not copied |
+| Lilliefors | 5 numbers | same D | p below 0.1 to six digits (Dallal and Wilkinson); above 0.1 Origin interpolates in a table we do not have, ours is within 8 % (checked on 70 more runs, n = 5 to 100); capped at 0.2 as in Origin |
 | Anderson-Darling | 8 numbers | A squared | A squared to 1e-9, p to 1e-6 |
 | D'Agostino-Pearson | 8 numbers (kurtosis part 5) | K squared with 2 DF | z-scores, K squared and p to 1e-6 |
 
@@ -238,7 +242,7 @@ Confirmed on four columns with ties and several missing-value layouts (agreement
 There is no p-value where r is exactly +1 or -1 (which includes every case of two pairs) and for the diagonal;
 a constant column has no coefficients at all (its row and column are empty, including the diagonal). Pairwise
 deletion uses, for each pair of columns, the rows where both have a number. With missing values Origin's
-Kendall p-value differs from this formula by up to 17 % in the pairs that lost rows (its tie bookkeeping is not
+Kendall p-value differs from this formula by up to 17 % (re-examined 2026-11-13: for the four pairs with a missing row the variance Origin implies is 127.7, 165.0, 162.9 and 160.7 against 124.0, 163.0, 159.1 and 158.4 here; the exact permutation p, the full-column tie counts and tau-b scaling variants did not reproduce them, and with only four rounded values the rule was not found) in the pairs that lost rows (its tie bookkeeping is not
 the textbook one and was not worked out); the coefficient itself agrees, and the Pearson and Spearman p-values
 agree in all cases. Sheaf keeps the textbook formula and the test does not compare those Kendall p-values.
 
@@ -287,7 +291,7 @@ rank statistic, Z and both p-values for one sample and pairs, with ties and zero
 
 Not verified or not done:
 
-- The automatic bin size is a fitted rule and often differs from Origin's.
+- The automatic bin size is a rule fitted to 600 measured cases (593 agree).
 - Origin's own sheet layout and graph (report sheets with several tables, histogram without gaps,
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no sample size or power

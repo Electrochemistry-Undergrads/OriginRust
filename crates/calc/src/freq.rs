@@ -4,9 +4,9 @@
 //! A bin holds the values from its lower edge up to, but not including, its upper edge, so a value that
 //! sits exactly on the very last edge is not counted (as in Origin). When the bin range and
 //! size are left on automatic, the first bin starts below the smallest value and the last bin ends above
-//! the largest, with a margin of one tenth of a bin; the bin size is a round number. Origin's own rule for
-//! the automatic size is not published; the rule used here is a fit to Origin's answers and agrees with
-//! them in about three of five cases (see `docs/spec/statistics.md`).
+//! the largest, with a margin of one tenth of a bin; the bin size is a round number. Origin's rule for
+//! the automatic size was reverse-engineered from 600 measured cases (see [`auto_bin_size`] and
+//! `docs/spec/statistics.md`).
 
 /// How the bin size is chosen when the caller does not give the range as well.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -80,21 +80,41 @@ impl Freq {
 }
 
 /// A number rounded half up to one significant digit.
+/// `x` rounded to one significant digit (halves go up).
 fn round_one_digit(x: f64) -> f64 {
-    let e = x.abs().log10().floor();
-    let unit = 10f64.powf(e);
-    ((x / unit) + 0.5 + 1e-9).floor() * unit
+    let unit = 10f64.powf(x.abs().log10().floor());
+    ((x / unit) + 0.5).floor() * unit
 }
 
-/// The automatic bin size for `n` values between `min` and `max`.
+/// `x` rounded to the nearest of 1, 2 and 5 times a power of ten (midpoints 1.5, 3.5 and 7.5).
+fn round_one_two_five(x: f64) -> f64 {
+    let unit = 10f64.powf(x.abs().log10().floor());
+    let m = x / unit;
+    let step = if m < 1.5 {
+        1.0
+    } else if m < 3.5 {
+        2.0
+    } else if m < 7.5 {
+        5.0
+    } else {
+        10.0
+    };
+    step * unit
+}
+
+/// The automatic bin size for `n` values between `min` and `max`: the number of bins is
+/// `m = round(1.75 ln n)` (at least 2) and the size is `range / (m - 0.19)` rounded to one significant
+/// digit for fewer than 14 values and to 1, 2 or 5 times a power of ten from 14 values on. Reproduces
+/// 593 of the 600 sizes Origin's `RoundBinningRange` gave (`tests/fixtures/bins_origin.rs`).
 pub fn auto_bin_size(n: usize, min: f64, max: f64) -> f64 {
     let range = max - min;
     if range.is_nan() || range <= 0.0 {
         let scale = if min == 0.0 { 1.0 } else { 10f64.powf(min.abs().log10().floor()) };
         return scale;
     }
-    let k = (1.75 * (n.max(2) as f64).ln() - 0.25).max(1.0);
-    round_one_digit(range / k)
+    let m = ((1.75 * (n.max(2) as f64).ln() + 0.5).floor()).max(2.0);
+    let x = range / (m - 0.19);
+    if n < 14 { round_one_digit(x) } else { round_one_two_five(x) }
 }
 
 /// First and last edge of the automatic bin range for bins of width `inc`: the data range widened to

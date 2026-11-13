@@ -656,12 +656,36 @@ fn automatic_bin_range_agrees_with_origin_for_the_size_origin_chose() {
 
 #[test]
 fn automatic_bin_size_agrees_with_origin_in_most_cases() {
+    // The 24 hand-picked cases: all but a few (the fixed rule misses the ones within rounding of a midpoint).
     let hits = BIN_CASES
         .iter()
         .filter(|(n, lo, hi, _, _, inc)| (auto_bin_size(*n, *lo, *hi) - inc).abs() < 1e-9 * inc)
         .count();
-    // Measured on 600 random cases the rule agrees in 57 % of them; on these hand-picked ones it does at least half.
-    assert!(hits * 2 >= BIN_CASES.len(), "{hits} of {}", BIN_CASES.len());
+    assert!(hits >= 22, "{hits} of {}", BIN_CASES.len());
+}
+
+#[path = "fixtures/bins_origin.rs"]
+mod bins_origin;
+
+#[test]
+fn automatic_bin_size_matches_600_origin_cases() {
+    // Origin's `RoundBinningRange` on 600 generated (n, min, max); the rule has a free offset fitted to them.
+    let cases = bins_origin::BINS;
+    let misses: Vec<_> =
+        cases.iter().filter(|&&(n, lo, hi, _, _, inc)| (auto_bin_size(n, lo, hi) - inc).abs() > 1e-9 * inc).collect();
+    assert!(misses.len() <= 8, "{} misses: {misses:?}", misses.len());
+    // The edges follow from the size Origin chose (the margin rule is a fit: 28 of 566 differ). In 34 cases
+    // Origin returns an end that is not a multiple of the size (a quirk, not copied); they are skipped.
+    let on_grid = |x: f64, inc: f64| (x / inc - (x / inc).round()).abs() < 1e-6;
+    let edge_misses = cases
+        .iter()
+        .filter(|&&(_, _, _, first, last, inc)| on_grid(first, inc) && on_grid(last, inc))
+        .filter(|&&(_, lo, hi, first, last, inc)| {
+            let (s, e) = auto_bin_range(lo, hi, inc);
+            (s - first).abs() > 1e-9 * inc.max(1.0) || (e - last).abs() > 1e-9 * inc.max(1.0)
+        })
+        .count();
+    assert!(edge_misses <= 28, "{edge_misses} edge misses");
 }
 
 #[test]
@@ -686,4 +710,42 @@ fn default_bins_of_the_freqcounts_runs() {
         assert!((g - w).abs() < 1e-9, "{ends:?}");
     }
     assert_eq!(f.rows.iter().map(|r| r.count).collect::<Vec<_>>(), vec![0, 5, 1, 1, 1, 0]);
+}
+
+// ----- Kolmogorov-Smirnov and Lilliefors on 70 generated samples ------------------------------------------------
+
+#[path = "fixtures/ks_origin.rs"]
+mod ks_origin;
+
+/// The samples of `tools/origin-ref/ks-gen-probe.py`: `a sin(b i) + c cos(d i^1.3) + 0.05 v i`, i = 1..n.
+fn probe_sample(n: usize, v: usize) -> Vec<f64> {
+    let vf = v as f64;
+    let a = 1.0 + 0.7 * vf;
+    let b = 0.9 + 0.37 * vf + 0.013 * n as f64;
+    let c = 1.3 + 0.5 * (v % 3) as f64;
+    let d = 0.21 + 0.17 * vf;
+    (1..=n).map(|i| a * (b * i as f64).sin() + c * (d * (i as f64).powf(1.3)).cos() + 0.05 * vf * i as f64).collect()
+}
+
+#[test]
+fn ks_and_lilliefors_p_follow_origin_where_origin_uses_the_exact_tail() {
+    // Origin's KS p equals the exact distribution (ours) within 3 % where p < 0.5; above that Origin's
+    // approximation is higher and is exactly 1 for small statistics (not copied, see statistics.md).
+    // Lilliefors: below 0.1 the Dallal-Wilkinson formula agrees to 1e-6; Origin caps the value at 0.2.
+    for &(n, v, d, ks_p, lil_p) in ks_origin::KS {
+        let x = probe_sample(n, v);
+        let tag = format!("n {n} v {v}");
+        close(&format!("{tag} D"), ks_distance(&x).unwrap(), d, 1e-6);
+        if ks_p < 0.5 {
+            close(&format!("{tag} KS p"), kolmogorov_smirnov(&x).unwrap().p, ks_p, 0.03);
+        }
+        let got = lilliefors(&x).unwrap().p.min(0.2);
+        if lil_p < 0.1 {
+            close(&format!("{tag} Lilliefors p"), got, lil_p, 1e-4);
+        } else if lil_p < 0.2 {
+            close(&format!("{tag} Lilliefors p"), got, lil_p, 0.08);
+        } else {
+            assert!((got - 0.2).abs() < 1e-12, "{tag}: got {got}");
+        }
+    }
 }

@@ -2919,9 +2919,9 @@ fn the_bw_pie_uses_white_slices_and_hatches_that_differ() {
         .filter_map(|n| n.attribute("d"))
         .filter(|d| !d.contains('A'))
         .collect();
-    assert_eq!(hatches.len(), 5);
-    for i in 0..5 {
-        for j in i + 1..5 {
+    assert_eq!(hatches.len(), 10, "one hatch per slice and one per legend square");
+    for i in 0..10 {
+        for j in i + 1..10 {
             assert_ne!(hatches[i], hatches[j]);
         }
     }

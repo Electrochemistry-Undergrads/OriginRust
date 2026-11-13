@@ -1239,7 +1239,10 @@ impl SheafApp {
     /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands
     /// Sheaf has), and nothing else.
     fn shortcuts(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
-        let typing = ctx.wants_keyboard_input();
+        // A widget with the keyboard is a text field, except the grid itself (it takes the
+        // keyboard when a cell is clicked so that Tab and the arrows stay with it).
+        let grids: HashSet<egui::Id> = self.books.keys().map(|b| grid::grid_id(*b)).collect();
+        let typing = ctx.memory(|m| m.focused()).is_some_and(|id| !grids.contains(&id));
         // Delete on a graph removes its selected object (a legend, a title, a text label).
         if !typing
             && let Some(graph) = self.active.filter(|id| self.doc.project().graph(*id).is_some())
@@ -1251,6 +1254,16 @@ impl SheafApp {
                 actions.push(Action::GraphEdit { graph, op });
             }
             ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
+        }
+        // The cursor keys, Tab, Enter and typing belong to the cells of the active worksheet,
+        // unless a text field, a menu or a dialog has the keyboard.
+        if !typing
+            && !egui::Popup::is_any_open(ctx)
+            && !self.dialog_open()
+            && let Some(book) = self.active.filter(|id| self.doc.project().workbook(*id).is_some())
+            && let Some(state) = self.books.get_mut(&book)
+        {
+            grid::handle_keys(ctx, &self.doc, book, state);
         }
         let menu_ctx = self.menu_context();
         // Ctrl+C, Ctrl+X and Ctrl+V reach the program as events of their own, not as keys. They
@@ -1281,6 +1294,25 @@ impl SheafApp {
                 }
             }
         });
+    }
+
+    /// True while a dialog or a message box is open.
+    fn dialog_open(&self) -> bool {
+        self.import.is_some()
+            || self.import_wizard.is_some()
+            || self.graph_props.is_some()
+            || self.column_props.is_some()
+            || self.text_dialog.is_some()
+            || self.set_values.is_some()
+            || self.analysis.is_some()
+            || self.fit.is_some()
+            || self.filter.is_some()
+            || self.export.is_some()
+            || self.rename.is_some()
+            || self.sheet_name.is_some()
+            || self.about
+            || self.message.is_some()
+            || self.pending.is_some()
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {

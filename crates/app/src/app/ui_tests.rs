@@ -248,11 +248,11 @@ fn enter_then_clicking_elsewhere_leaves_the_next_cell_alone() {
     cell.click();
     cell.click();
     settle(&mut h);
-    // Enter without typing: nothing changes, and the editor moves to the next row.
+    // Enter without typing: nothing changes, and the cell below becomes the active cell.
     h.key_press(egui::Key::Enter);
     settle(&mut h);
-    let editing = h.state().books.values().next().unwrap().editing.clone();
-    assert_eq!(editing.map(|e| (e.1, e.2)), Some((2, "6.5".to_string())), "the next cell is shown with its value");
+    assert!(book_ui(&h).editing.is_none());
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 2) });
     // Click somewhere else to leave the editor.
     show_window(&mut h, "Book1 - sample");
     h.key_press(egui::Key::Tab);
@@ -3566,4 +3566,142 @@ fn ctrl_3_with_the_wizard_open_keeps_it_and_its_file() {
     ctrl(&mut h, egui::Key::Num3);
     assert_eq!(h.state().import_wizard.as_ref().map(|w| w.page()), Some(WizardPage::HeaderLines));
     assert!(!is_disabled(&h, "Finish"), "the file is still chosen");
+}
+
+// ----- worksheet keyboard navigation and drag selection -----------------------------------------------
+
+fn key(h: &mut Harness<'static, SheafApp>, key: egui::Key) {
+    h.key_press(key);
+    settle(h);
+}
+
+fn key_with(h: &mut Harness<'static, SheafApp>, modifiers: egui::Modifiers, key: egui::Key) {
+    h.key_press_modifiers(modifiers, key);
+    settle(h);
+}
+
+fn cells(h: &Harness<'static, SheafApp>) -> Sel {
+    book_ui(h).sel.clone()
+}
+
+fn at(col: usize, row: usize) -> Sel {
+    Sel::Cells { anchor: (col, row), end: (col, row) }
+}
+
+#[test]
+fn arrow_keys_move_the_active_cell_and_shift_extends_the_block() {
+    let mut h = start(vec![data_file("arrows")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    assert_eq!(cells(&h), at(1, 1));
+    key(&mut h, egui::Key::ArrowDown);
+    assert_eq!(cells(&h), at(1, 2));
+    key(&mut h, egui::Key::ArrowRight);
+    assert_eq!(cells(&h), at(2, 2));
+    key(&mut h, egui::Key::ArrowRight);
+    assert_eq!(cells(&h), at(2, 2), "clamped at the last column");
+    for _ in 0..4 {
+        key(&mut h, egui::Key::ArrowUp);
+    }
+    assert_eq!(cells(&h), at(2, 0), "clamped at row 0");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowLeft);
+    assert_eq!(cells(&h), Sel::Cells { anchor: (2, 0), end: (1, 1) });
+    assert_eq!(book_ui(&h).selected.len(), 2);
+    // Down goes on into the empty rows below the data.
+    click_text(&mut h, "8.5");
+    key(&mut h, egui::Key::ArrowDown);
+    assert_eq!(cells(&h), at(1, 4));
+}
+
+#[test]
+fn ctrl_arrows_home_and_end_jump_to_the_edges() {
+    let mut h = start(vec![data_file("jumps")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::ArrowDown);
+    assert_eq!(cells(&h), at(1, 3), "the last data row");
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::ArrowUp);
+    assert_eq!(cells(&h), at(1, 0));
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::ArrowRight);
+    assert_eq!(cells(&h), at(2, 0));
+    key(&mut h, egui::Key::Home);
+    assert_eq!(cells(&h), at(0, 0));
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::End);
+    assert_eq!(cells(&h), at(2, 3));
+    key_with(&mut h, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Home);
+    assert_eq!(cells(&h), Sel::Cells { anchor: (2, 3), end: (0, 0) });
+}
+
+#[test]
+fn typing_starts_editing_and_enter_stores_the_value_and_moves_down() {
+    let mut h = start(vec![data_file("typing")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    h.event(egui::Event::Text("9".to_string()));
+    settle(&mut h);
+    assert_eq!(book_ui(&h).editing.as_ref().map(|e| (e.1, e.2.clone())), Some((1, "9".to_string())));
+    h.event(egui::Event::Text(".5".to_string()));
+    settle(&mut h);
+    key(&mut h, egui::Key::Enter);
+    assert_eq!(column(&h, "B"), [2.5, 9.5, 6.5, 8.5]);
+    assert!(book_ui(&h).editing.is_none());
+    assert_eq!(cells(&h), at(1, 2));
+    assert_eq!(h.state().doc.undo_label(), Some("Edit cell"));
+    // Tab stores and moves right; Escape gives up.
+    h.event(egui::Event::Text("1".to_string()));
+    settle(&mut h);
+    key(&mut h, egui::Key::Tab);
+    assert_eq!(column(&h, "B"), [2.5, 9.5, 1.0, 8.5]);
+    assert_eq!(cells(&h), at(2, 2));
+    h.event(egui::Event::Text("5".to_string()));
+    settle(&mut h);
+    key(&mut h, egui::Key::Escape);
+    assert!(book_ui(&h).editing.is_none());
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+    // F2 edits keeping the content.
+    key(&mut h, egui::Key::F2);
+    assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.clone()), Some("10.5".to_string()));
+}
+
+#[test]
+fn tab_moves_right_shift_tab_left_and_enter_down() {
+    let mut h = start(vec![data_file("tab")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "2.5");
+    key(&mut h, egui::Key::Tab);
+    assert_eq!(cells(&h), at(2, 0));
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Tab);
+    assert_eq!(cells(&h), at(1, 0));
+    key(&mut h, egui::Key::Enter);
+    assert_eq!(cells(&h), at(1, 1));
+}
+
+#[test]
+fn dragging_over_column_heads_selects_the_columns_in_between() {
+    let mut h = start(vec![data_file("headdrag")]);
+    show_window(&mut h, "Book1 - sample");
+    let (a, b, c) = (column_id(&h, "A"), column_id(&h, "B"), column_id(&h, "C"));
+    let (pa, pc) = (text_pos(&h, "A(X1)"), text_pos(&h, "C(Y1)"));
+    drag(&mut h, pa, pc);
+    assert_eq!(cells(&h), Sel::Columns);
+    assert_eq!(book_ui(&h).selected, vec![a, b, c]);
+    // Right to left gives the same columns, in sheet order.
+    click_text(&mut h, "A(X1)");
+    let pb = text_pos(&h, "B(Y1)");
+    drag(&mut h, pc, pb);
+    assert_eq!(book_ui(&h).selected, vec![b, c]);
+    // A plain click on a head still selects just that column.
+    click_text(&mut h, "A(X1)");
+    assert_eq!(book_ui(&h).selected, vec![a]);
+}
+
+#[test]
+fn dragging_over_row_numbers_selects_the_rows_in_between() {
+    let mut h = start(vec![data_file("rowdrag")]);
+    show_window(&mut h, "Book1 - sample");
+    let x = text_pos(&h, "Long Name").x;
+    let (y1, y3) = (text_pos(&h, "2.5").y, text_pos(&h, "6.5").y);
+    drag(&mut h, egui::pos2(x, y1), egui::pos2(x, y3));
+    assert_eq!(cells(&h), Sel::Rows { anchor: 0, end: 2 });
 }

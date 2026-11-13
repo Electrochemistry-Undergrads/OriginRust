@@ -16,10 +16,7 @@ const ELLIPSE_SEGMENTS: usize = 96;
 /// Page points of the end points of a line or arrow, or the corners of a box, of `shape` in the
 /// layer frame `f`.
 pub(crate) fn page_points(shape: &Shape, f: Rect) -> ((f64, f64), (f64, f64)) {
-    (
-        (f.x + shape.x1 * f.w, f.y + shape.y1 * f.h),
-        (f.x + shape.x2 * f.w, f.y + shape.y2 * f.h),
-    )
+    ((f.x + shape.x1 * f.w, f.y + shape.y1 * f.h), (f.x + shape.x2 * f.w, f.y + shape.y2 * f.h))
 }
 
 /// The head of an arrow at `tip`, pointing along `dir` (unit vector): the three corners.
@@ -47,7 +44,8 @@ fn polygon(points: &[(f64, f64)]) -> String {
 /// The items of one shape.
 pub(crate) fn shape_items(shape: &Shape, f: Rect) -> Vec<Item> {
     let (a, b) = page_points(shape, f);
-    let style = LineStyle { color: shape.color, width_pt: shape.width_pt, dash: shape.dash, connect: Default::default() };
+    let style =
+        LineStyle { color: shape.color, width_pt: shape.width_pt, dash: shape.dash, connect: Default::default() };
     let mut stroke = line_stroke(&style);
     stroke.cap = crate::scene::Cap::Butt;
     let mut items = Vec::new();

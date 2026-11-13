@@ -115,7 +115,8 @@ impl ShapeDialog {
             s.head_at_start = self.head_at_start && self.kind == ShapeKind::Arrow;
         };
         doc.apply("Edit drawn object", |p| {
-            if let Some(s) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.shapes.get_mut(k)) {
+            if let Some(s) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.shapes.get_mut(k))
+            {
                 new(s);
             }
         });

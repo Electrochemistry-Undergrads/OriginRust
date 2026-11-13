@@ -28,6 +28,7 @@ use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Worksheet;
 pub use sheaf_fit::FitStatus;
+pub use sheaf_fit::nlsf::Algorithm;
 use sheaf_fit::{Bands, FitError, FitReport};
 
 /// Which kind of model is fitted. It decides the name of the report sheet
@@ -148,6 +149,8 @@ pub struct FitRequest {
     /// Chi-Sqr)", Origin's default). Without weights Origin always scales, so the switch only
     /// matters for weighted fits.
     pub scale_errors: bool,
+    /// Iteration algorithm of a nonlinear fit (Origin's "Iteration Algorithm").
+    pub algorithm: Algorithm,
 }
 
 impl FitRequest {
@@ -172,6 +175,7 @@ impl FitRequest {
             max_iterations: 400,
             tolerance: 1e-9,
             scale_errors: true,
+            algorithm: Algorithm::LevenbergMarquardt,
         }
     }
 }
@@ -192,6 +196,7 @@ pub struct FitData {
     pub tolerance: f64,
     /// See [`FitRequest::scale_errors`].
     pub scale_errors: bool,
+    pub algorithm: Algorithm,
 }
 
 /// Computes the bands of a fitted model at the given x values and confidence level.
@@ -475,6 +480,7 @@ impl Project {
             max_iterations: request.max_iterations,
             tolerance: request.tolerance,
             scale_errors: request.scale_errors,
+            algorithm: request.algorithm,
         };
         let source_label = column_label(column);
         let source_name = column.display_name().to_string();
@@ -817,6 +823,7 @@ impl Project {
             max_iterations: request.max_iterations,
             tolerance: request.tolerance,
             scale_errors: request.scale_errors,
+            algorithm: request.algorithm,
         })
     }
 
@@ -870,6 +877,7 @@ impl Project {
             FitWeighting::Direct => sheaf_fit::global::GlobalWeighting::Direct(extra),
         };
         go.max_iterations = first.max_iterations;
+        go.algorithm = first.algorithm;
         go.tolerance = first.tolerance;
         go.confidence_level = first.confidence_level;
         let scaled = first.scale_errors || first.weighting == FitWeighting::None;
@@ -1236,6 +1244,7 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
                 max_iterations: d.max_iterations,
                 tolerance: d.tolerance,
                 scale_errors: Some(scale_errors(d)),
+                algorithm: d.algorithm,
             };
             let report = nlsf::fit(&func, &d.x, &d.y, &opts)?;
             let values: Vec<f64> = report.params.iter().map(|p| p.value).collect();
@@ -1367,6 +1376,7 @@ mod tests {
             max_iterations: 400,
             tolerance: 1e-9,
             scale_errors: true,
+            algorithm: Algorithm::LevenbergMarquardt,
         };
         let m = run_engine(&FitModel::Polynomial { order: 5 }, &[], &d).unwrap();
         let worst = x.iter().zip(&m.report.fitted).map(|(x, f)| ((m.curve)(*x) - f).abs()).fold(0.0, f64::max);
@@ -1835,6 +1845,14 @@ mod tests {
             Err(_) => 1,
         };
         assert!(iterations <= 1, "{iterations}");
+        // The simplex algorithm reaches the same fit.
+        let mut sx = req.clone();
+        sx.bands = BandChoice::None;
+        let lm_rss = p.fit(&sx).unwrap().report.stats.rss;
+        sx.algorithm = Algorithm::Simplex;
+        let o = p.fit(&sx).unwrap();
+        assert_eq!(o.report.status, FitStatus::Converged);
+        assert!((o.report.stats.rss - lm_rss).abs() <= 1e-6 * lm_rss.max(1e-12), "{} {lm_rss}", o.report.stats.rss);
         // No iterations at all reports the starting values and says the fit did not converge.
         let mut none = req.clone();
         none.bands = BandChoice::None;
@@ -1883,6 +1901,7 @@ mod tests {
             max_iterations: 400,
             tolerance: 1e-9,
             scale_errors: scale,
+            algorithm: Algorithm::LevenbergMarquardt,
         }
     }
 

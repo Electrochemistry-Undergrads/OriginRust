@@ -16,7 +16,7 @@
 use std::sync::Arc;
 
 use crate::dist::f_upper_p;
-use crate::nlsf::{FitFunction, FitOptions, Fitter, Model, ParamSpec};
+use crate::nlsf::{Algorithm, FitFunction, FitOptions, Fitter, Model, ParamSpec};
 use crate::report::{FitError, FitReport, Parameter, Statistics, Weighting};
 
 /// One dataset of a global fit.
@@ -64,6 +64,7 @@ pub struct GlobalOptions {
     pub scale_errors: Option<bool>,
     /// Settings that differ between the datasets' copies of a parameter.
     pub overrides: Vec<ParamOverride>,
+    pub algorithm: Algorithm,
 }
 
 impl GlobalOptions {
@@ -77,6 +78,7 @@ impl GlobalOptions {
             confidence_level: 0.95,
             scale_errors: None,
             overrides: Vec::new(),
+            algorithm: Algorithm::LevenbergMarquardt,
         }
     }
 }
@@ -257,6 +259,7 @@ pub fn fit_global(func: &FitFunction, datasets: &[GlobalDataset], opts: &GlobalO
         tolerance: opts.tolerance,
         confidence_level: opts.confidence_level,
         scale_errors: opts.scale_errors,
+        algorithm: opts.algorithm,
     };
     let mut fitter = Fitter::new(&composite, &positions, &stack_y, &fit_opts)?;
     for _ in 0..opts.max_iterations {

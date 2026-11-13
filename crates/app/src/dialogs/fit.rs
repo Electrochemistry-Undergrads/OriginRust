@@ -18,6 +18,7 @@ use sheaf_core::fitting::{
     ParamSetting, builtin_functions, model_parameters,
 };
 use sheaf_core::{ColumnId, Designation, Document, Project, WindowId};
+use sheaf_core::fitting::Algorithm;
 use std::path::PathBuf;
 
 /// The model families of the window; also the entries of the Analysis menu.
@@ -191,6 +192,7 @@ pub struct FitDialog {
     /// Confidence level of the bands, in percent.
     band_level: f64,
     max_iterations: usize,
+    algorithm: Algorithm,
     /// The tolerance is 10^-digits (Origin's default 1e-9 is 9 digits).
     tolerance_digits: u32,
     row_mode: RowMode,
@@ -312,6 +314,7 @@ impl FitDialog {
             bands: BandChoice::None,
             band_level: 95.0,
             max_iterations: 400,
+            algorithm: Algorithm::LevenbergMarquardt,
             tolerance_digits: 9,
             row_mode: RowMode::All,
             rows_in_sheet,
@@ -588,6 +591,7 @@ impl FitDialog {
         r.bands = self.bands;
         r.band_level = self.band_level / 100.0;
         r.max_iterations = self.max_iterations;
+        r.algorithm = self.algorithm;
         r.curve_points = self.curve_points;
         r.curve_range = self.curve_custom.then_some((self.curve_from, self.curve_to));
         r.add_to_graphs = self.plot_on_graph;
@@ -809,12 +813,18 @@ impl FitDialog {
             }
             _ => {}
         }
-        ui.add_enabled_ui(false, |ui| {
+        if self.iterative() {
             ui.horizontal(|ui| {
                 ui.label("Iteration Algorithm");
-                egui::ComboBox::from_id_salt("fit_algorithm").selected_text("Levenberg Marquardt").show_ui(ui, |_| {});
+                egui::ComboBox::from_id_salt("fit_algorithm").selected_text(self.algorithm.label()).show_ui(ui, |ui| {
+                    for a in Algorithm::ALL {
+                        if ui.selectable_value(&mut self.algorithm, a, a.label()).changed() {
+                            changed = true;
+                        }
+                    }
+                });
             });
-        });
+        }
         ui.horizontal_top(|ui| {
             ui.label("Description");
             ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace().small()).wrap());
@@ -1631,6 +1641,9 @@ mod tests {
         d.tolerance_digits = 12;
         let r = d.request().unwrap();
         assert_eq!((r.bands, r.band_level, r.max_iterations, r.tolerance), (BandChoice::Both, 0.9, 50, 1e-12));
+        assert_eq!(r.algorithm, Algorithm::LevenbergMarquardt);
+        d.algorithm = Algorithm::Simplex;
+        assert_eq!(d.request().unwrap().algorithm, Algorithm::Simplex);
 
         // Switching to a straight line keeps only fixed values.
         let (p, book, y) = project();

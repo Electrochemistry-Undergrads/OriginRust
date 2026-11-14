@@ -65,6 +65,8 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
   Auto/Manual recalculation after header edits, and self-label references without false cycles.
   `char(n)$` and `code(s)` create characters and read code points (Function > Text); the
   published references, Unicode bounds and unmeasured edge choices are in expression-language.md section 3.
+  Typed `format(x,fmt)$` is a Text compatibility alias; formatting columns work with both names.
+  Omitted/empty formats still use Sheaf general formatting; Origin column/global/`@SD` defaults remain open.
 
 - [x] **Single yellow-cell selection** (fixed 2026-11-13): labels have their own `Sel::Label`
       selection, with a border around just that cell; column letters still select columns.

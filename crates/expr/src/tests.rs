@@ -927,6 +927,43 @@ fn char_reads_numeric_columns_and_code_reads_text_columns() {
     assert_eq!(texts(&h, "char(code(col(A)))$"), ["a", "µ", ""]);
 }
 
+#[test]
+fn format_accepts_texts_explicit_formats_and_its_documented_example() {
+    for (src, expected) in [
+        (r#"Format(123000,"E*3")$"#, "123k"),
+        (r#"format(2.01232,"*3")$"#, "2.01"),
+        (r#"format(12.5,".0")$"#, "13"),
+        (r#"format(1.25,".2")$"#, "1.25"),
+        (r#"format(na(),".2")$"#, "--"),
+        ("format(1234.5678)$", "1234.5678"),
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text(expected.into())],
+            "{src}"
+        );
+    }
+    for src in ["format()", r#"format(1,"*3",2)"#] {
+        let err = Expr::parse(src).unwrap_err();
+        assert!(err.to_string().contains("function 'format'"), "{err}");
+    }
+}
+
+#[test]
+fn text_and_format_read_numeric_values_and_text_format_columns() {
+    let h = TextHost {
+        cols: vec![
+            ("A", vec![Cell::N(12.5), Cell::N(123000.0), Cell::S("sample"), Cell::N(f64::NAN)]),
+            ("B", vec![Cell::S(".2"), Cell::S("E*3"), Cell::S("*3"), Cell::S(".1")]),
+        ],
+    };
+    for name in ["text", "format"] {
+        assert_eq!(texts(&h, &format!("{name}(col(A),col(B))$")), ["12.50", "123k", "--", "--"]);
+    }
+    let e = Expr::parse("format(col(A),col(B))$").unwrap();
+    assert_eq!(e.data_columns(), [ColumnRef::Short("A".into()), ColumnRef::Short("B".into())]);
+}
+
 impl Host for LabelHost {
     fn variable(&self, name: &str) -> Option<f64> {
         (name == "L").then_some(2.0)

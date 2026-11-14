@@ -5278,6 +5278,24 @@ fn char_and_code_functions_are_available_in_set_values() {
 }
 
 #[test]
+fn format_compatibility_function_fills_formatted_text_in_set_values() {
+    let mut h = start(vec![data_file("format_function")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    let formula = r#"format(col(B),".2")$"#;
+    h.event(egui::Event::Text(formula.into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "Format is accepted as a typed compatibility function");
+    let col = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap();
+    assert_eq!(col.formula.as_deref(), Some(formula));
+    for (row, expected) in ["2.50", "4.50", "6.50", "8.50"].iter().enumerate() {
+        assert_eq!(col.data.text_cell(row), Some(*expected));
+    }
+}
+
+#[test]
 fn set_values_apply_waits_for_a_change_and_recalculate_defaults_to_manual() {
     let mut h = start(vec![data_file("setvals")]);
     show_window(&mut h, "Book1 - sample");

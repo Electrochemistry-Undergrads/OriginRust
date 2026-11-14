@@ -1027,55 +1027,74 @@ fn link_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize) {
     });
 }
 
+/// Origin's Stack tab (measured, graphing spec 13.12): an Offset group of radio buttons with the
+/// Constant step, the Auto gap (8 % when chosen here) and Individual, then the column/bar options.
+/// Cumulative, Incremental and the column/bar options are greyed (stacked columns are not in Sheaf
+/// yet); Waterfall is Sheaf's own.
 fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
-    let name = |s: &Stack| match s {
-        Stack::None => "None",
-        Stack::Auto { .. } => "Automatic",
-        Stack::Constant { .. } => "Constant step",
-        Stack::Individual => "Individual offsets",
-        Stack::Waterfall { .. } => "Waterfall",
-    };
-    grid(ui, "stack_mode", |ui| {
-        ui.label("Offset Grouped Data");
+    let is = |s: &Stack, other: &Stack| std::mem::discriminant(s) == std::mem::discriminant(other);
+    let later = "Stacked columns and areas are not in Sheaf yet";
+    group_box(ui, "Offset", |ui| {
         let mut mode = layer.stack;
-        egui::ComboBox::from_id_salt("stack_mode_box").selected_text(name(&mode)).show_ui(ui, |ui| {
-            for s in [
-                Stack::None,
-                Stack::Auto { gap_percent: 10.0 },
-                Stack::Constant { step: 1.0 },
-                Stack::Individual,
-                Stack::Waterfall { dx_percent: 5.0, dy_percent: 5.0 },
-            ] {
-                let same = std::mem::discriminant(&s) == std::mem::discriminant(&mode);
-                if ui.selectable_label(same, name(&s)).clicked() && !same {
-                    mode = s;
+        let radio = |ui: &mut egui::Ui, mode: &mut Stack, choice: Stack, label: &str| {
+            let r = ui.radio(is(mode, &choice), label);
+            if r.clicked() && !is(mode, &choice) {
+                *mode = choice;
+            }
+            r
+        };
+        radio(ui, &mut mode, Stack::None, "None");
+        ui.add_enabled(false, egui::RadioButton::new(false, "Cumulative")).on_disabled_hover_text(later);
+        ui.add_enabled(false, egui::RadioButton::new(false, "Incremental")).on_disabled_hover_text(later);
+        ui.horizontal(|ui| {
+            radio(ui, &mut mode, Stack::Constant { step: 1.0 }, "Constant");
+            if let Stack::Constant { step } = &mut mode {
+                ui.add(DragValue::new(step).speed(0.05).max_decimals(8))
+                    .on_hover_text("The step between neighbouring curves, in axis units (Origin also takes a list)");
+            }
+        });
+        ui.horizontal(|ui| {
+            // Origin's tab starts the gap at 8 % (the stacked template uses 10 %).
+            radio(ui, &mut mode, Stack::Auto { gap_percent: 8.0 }, "Auto");
+            ui.add_space(24.0);
+            ui.label("Gap (%)");
+            match &mut mode {
+                Stack::Auto { gap_percent } => {
+                    ui.add(DragValue::new(gap_percent).range(0.0..=500.0).speed(0.5));
                 }
+                _ => {
+                    ui.add_enabled(false, DragValue::new(&mut 8.0));
+                }
+            }
+            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Keep Proportion of Plot Range"));
+        });
+        ui.horizontal(|ui| {
+            radio(ui, &mut mode, Stack::Individual, "Individual");
+            ui.add_space(12.0);
+            let tip = "Sheaf moves each curve by both offsets of its entry";
+            ui.add_enabled(false, egui::Checkbox::new(&mut false, "X")).on_disabled_hover_text(tip);
+            ui.add_enabled(false, egui::Checkbox::new(&mut true, "Y")).on_disabled_hover_text(tip);
+        });
+        ui.horizontal(|ui| {
+            radio(ui, &mut mode, Stack::Waterfall { dx_percent: 5.0, dy_percent: 5.0 }, "Waterfall")
+                .on_hover_text("Sheaf's own: a flat two-dimensional waterfall");
+            if let Stack::Waterfall { dx_percent, dy_percent } = &mut mode {
+                ui.label("X shift (%)");
+                ui.add(DragValue::new(dx_percent).range(0.0..=100.0).speed(0.2));
+                ui.label("Y shift (%)");
+                ui.add(DragValue::new(dy_percent).range(0.0..=100.0).speed(0.2));
             }
         });
         layer.stack = mode;
-        ui.end_row();
-        match &mut layer.stack {
-            Stack::None | Stack::Individual => {}
-            Stack::Auto { gap_percent } => {
-                ui.label("Gap (% of height)");
-                ui.add(DragValue::new(gap_percent).range(0.0..=500.0).speed(0.5));
-                ui.end_row();
-            }
-            Stack::Constant { step } => {
-                ui.label("Step (axis units)");
-                ui.add(DragValue::new(step).speed(0.05).max_decimals(8));
-                ui.end_row();
-            }
-            Stack::Waterfall { dx_percent, dy_percent } => {
-                ui.label("X shift (%)");
-                ui.add(DragValue::new(dx_percent).range(0.0..=100.0).speed(0.2));
-                ui.end_row();
-                ui.label("Y shift (%)");
-                ui.add(DragValue::new(dy_percent).range(0.0..=100.0).speed(0.2));
-                ui.end_row();
-            }
-        }
     });
+    for label in [
+        "Display column/bar plot by sorted order",
+        "Use Subgrouping ( in Group tab ) for Cumulative/Incremental",
+        "Normalize to Percent for Cumulative/Incremental",
+        "Show Connect Line on Stacked Column/Bar",
+    ] {
+        ui.add_enabled(false, egui::Checkbox::new(&mut false, label)).on_disabled_hover_text(later);
+    }
     if layer.stack == Stack::Individual {
         section(ui, "Offset of each plot (axis units)");
         let plots: Vec<(ColumnId, usize)> = layer.plots.iter().enumerate().map(|(i, p)| (p.y, i)).collect();

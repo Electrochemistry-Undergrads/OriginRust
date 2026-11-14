@@ -6,7 +6,7 @@
 use super::*;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{By, NodeT, Queryable};
-use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink};
+use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -547,6 +547,25 @@ fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
     let after = &graph(&h).layers[1];
     assert_eq!(after.link, None);
     assert!((after.frame.left - on_page.left).abs() < 1e-12 && (after.frame.width - on_page.width).abs() < 1e-12);
+}
+
+/// Origin's Stack tab: the Offset radio buttons; Auto chosen here starts with Origin's 8 % gap.
+#[test]
+fn the_stack_tab_has_origins_offset_choices_and_auto_gap() {
+    let mut h = start(vec![data_file("stack-tab")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    for label in
+        ["Offset", "Cumulative", "Incremental", "Constant", "Gap (%)", "Individual", "Keep Proportion of Plot Range"]
+    {
+        assert!(has_label(&h, label), "{label}");
+    }
+    assert!(is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Auto")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Auto { gap_percent: 8.0 });
 }
 
 #[test]

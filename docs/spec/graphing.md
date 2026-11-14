@@ -993,14 +993,36 @@ With the second plot of the first row hidden, the visible curves span 0..10, 130
 
 ### 13.13 Unknowns
 
-- Origin's codes for the modes other than Auto: None, Constant, Individual and Cumulative cannot be set by script in 2016 (`set -sy` is refused and there is no layer property). Confirming them needs a click test of Graph > Offset Grouped Data in Layer and a byte comparison.
+- Origin's codes for the modes other than Auto: None, Constant, Individual and Cumulative cannot be set by script in 2016 (`set -sy` is refused and there is no layer property). The modes were clicked on the Stack tab (13.14); the bytes they write were not compared.
 - The storage of X offsets and multipliers (13.10) is inferred; the layer header differences are unexplained.
-- Whether the Auto gap percent can be edited in the 2016 dialog. Only 10 was seen, so the H = 10 rule for flat curves is confirmed only at 10 %.
+- The Auto gap percent can be edited on the Stack tab (13.14), and 8 % and 20 % follow the rule; the H = 10 rule for flat curves is confirmed only at 10 %.
 - Whether Origin's Auto uses a plot's display row range for the curve heights; Sheaf uses the plotted rows.
 - What Origin's Data Reader shows on a moved curve (the stored or the moved value).
 - Origin's exact waterfall geometry.
 - Owner preferences: whether the stacked template should hide the legend (he deletes it and types the curve names next to the curves); whether he wants an option that writes each curve's name at its right end (a possible follow-up); whether hidden curves should keep their place (Origin's behaviour, adopted here).
 - The current online help describes Individual offsets in the template and a pairwise Auto gap; neither matches Origin, and later versions may differ.
+
+### 13.14 Plot Details Stack tab (measured 2026-11-14)
+
+Clicked in Origin with `tools/origin-ref/origin-dialog.ps1` on a layer of three or four grouped lines (`plotxy`
+then `layer -g`; Y = x, x+1, x+2, x+3 for X = 0..10, so each curve is 10 high); offsets read after OK with
+`layer.plot=k; get %C -sy`; pictures and control lists in `re-workspace/scratch/t13stack`:
+
+- The tab: an Offset group with the choices None, Cumulative, Incremental, Constant (a box), Auto (Gap (%) 8 and
+  Keep Proportion of Plot Range) and Individual (X and Y ticks, Y ticked); below it Display column/bar plot by
+  sorted order, Use Subgrouping (in Group tab) for Cumulative/Incremental, Normalize to Percent for
+  Cumulative/Incremental and Show Connect Line on Stacked Column/Bar (greyed for line plots). The boxes are
+  greyed unless their choice is on. Without a plot group Origin shows a hint that the plots must be grouped
+  first, and OK moves nothing.
+- Auto as it opens (8 %): offsets 0, 9.8, 19.6 (gap 0.8 = 8 % of the height 10). Gap 20: 0, 11, 22. Both follow
+  the rule of 13.1, so the dialog's gap is the percent of that rule (the stacked template stores 10).
+- Constant: the box starts empty, with a note that it takes numbers separated by spaces, used in a loop.
+  "3" gives 0, 3, 6; "2 5" on four curves gives 0, 2, 7, 9 (the steps between neighbours, repeated).
+
+Sheaf (`graph_details.rs` `stack_tab`): the same Offset group of choices. Constant takes one step, not a
+list; Auto chosen on this tab starts at 8 %; Cumulative, Incremental, Keep Proportion, the X/Y ticks and the
+column/bar options are greyed (no stacked columns yet, GP-COL-01); Waterfall is Sheaf's own extra choice
+with its two shifts. The per-plot offsets of Individual stay listed under the group.
 
 ---
 

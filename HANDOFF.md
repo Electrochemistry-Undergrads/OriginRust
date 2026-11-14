@@ -176,21 +176,11 @@ about 88 % full, check `df -h /c` before parallel builds.
    charge-discharge file in a spec paragraph (the copy on `main` does not).
 6. Done for the Peak Analyzer (2026-11-13: opened through its menu with `origin-dialog.ps1 -MenuClicks`, T04); the
    Import Wizard pages were measured the same way (Ctrl+3, T19 item 2).
-7. **Origin checks for the macOS session's work** (no Origin there; each item is marked "not measured" in its
-   spec). A session on the Windows machine can answer them with `tools/origin-ref/`: polar (graphing 14.18:
-   default legend place, whether the radius limits round to a tick, angle units and zero direction); horizontal
-   stacked and floating bars (14.12: colour lists, legend order, the 100 % axis); ASCII import (import-ascii.md
-   2, 3, 10: whether impASC's dialog has Apply, Data Import Options names and defaults, the 18-character
-   short-name limit); Column Properties (workbook-model.md: day-of-week numbers from 1 = Sunday, Engineering
-   digits and SI letters, name-style wording, elapsed-time patterns for negative values); radar (14.19: first
-   spoke up and clockwise, scale from 0, spoke names, grid polygons, page and legend place); ternary (14.20:
-   corner and axis directions, 0.2 step, when Origin uses 0-100, grid and legend defaults, tick direction,
-   rows with a negative part); pies (14.21: the 3D pie's band thickness and shade, Origin's hatch list); curve mathematics
-   (`analysis-curve-math.md` 4, measured 2026-11-13; left: avecurves spline ends and a turning
-   X); data manipulation (analysis-tools.md 12; X-Function names and Reduce to Evenly Spaced X measured
-   2026-11-13, left: how the interactive Subtract Straight Line and Curve Translate behave on the graph);
-   drawn objects (graphing.md 17: defaults, properties tabs and attachment measured 2026-11-13; left: Shift
-   snapping, the ellipse tool, Sheaf's lack of scale attachment).
+7. **Origin checks for the macOS session's work**: done on 2026-11-13/14 on the Windows machine for polar, bars,
+   radar, ASCII import, Column Properties (merged branches `origin-checks-*`), ternary (graphing 14.20), pies (14.21),
+   curve mathematics (analysis-curve-math 4), Reduce to Evenly Spaced X (analysis-tools 12.2) and the drawn-object
+   tools (graphing 17). Left: avecurves spline ends and a turning X; the interactive Subtract Straight Line and Curve
+   Translate on the graph; Shift snapping and the ellipse tool; ternary title placement.
 
 ## Local-only resources
 

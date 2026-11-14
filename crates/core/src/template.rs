@@ -450,6 +450,9 @@ fn bubble(id: WindowId, name: &str, mapped: bool, sized: bool) -> Graph {
 fn pie(id: WindowId, name: &str, kind: PlotKind) -> Graph {
     let mut g = general(id, name, kind);
     let l = &mut g.layers[0];
+    // Origin's pie templates have a larger layer than the line template (measured on the 3D and
+    // the B&W pie: 7 % from the left, 86.5 % wide, 8 % from the top, 83 % high).
+    l.frame = Frame { left: 0.0695, top: 0.079, width: 0.865, height: 0.83 };
     l.x_axis.side = AxisSide::Hidden;
     l.y_axis.side = AxisSide::Hidden;
     l.legend.visible = false;

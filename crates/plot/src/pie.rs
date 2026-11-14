@@ -12,12 +12,21 @@ use crate::scene::{Anchor, Item, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::Color;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
-/// Height of the ellipse over its width in the 3D pie (measured: about one half).
-pub(crate) const SLANT: f64 = 0.5;
-/// Thickness of the 3D pie's side band over the ellipse's width.
-const BAND: f64 = 0.1;
-/// Share of each channel kept in the side band's darker shade.
-const DARKER: f64 = 0.6;
+/// Height of the ellipse over its width in the 3D pie (measured in Origin: 0.5455).
+pub(crate) const SLANT: f64 = 0.5455;
+/// Thickness of the 3D pie's side band over the ellipse's width (measured: 0.278 of the radius).
+const BAND: f64 = 0.139;
+/// Where the 3D pie's first slice starts, clockwise from 12 o'clock (measured in Origin: the first
+/// boundary of four equal slices lies 32.4 degrees below 3 o'clock).
+const START_3D: f64 = 122.4 * PI / 180.0;
+
+/// A share as Origin prints it on a pie: at most two decimals, trailing zeros dropped (measured:
+/// `18.6%`, `25%`, `33.33%`).
+pub(crate) fn share_text(percent: f64) -> String {
+    let s = format!("{percent:.2}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    format!("{s}%")
+}
 
 /// The legend's measures: the width of the column (capped to 40% of the frame), the font size and
 /// row height (shrunk so every row fits in the frame's height) and the longest name in characters.
@@ -30,18 +39,20 @@ struct LegendBox {
 
 fn legend_box(pie: &PieData, f: Rect) -> LegendBox {
     let n = pie.names.len().max(1) as f64;
-    let fs = pie.legend_font.size_pt.min((f.h - 0.5 * pie.legend_font.size_pt) / (1.3 * n)).max(3.0);
+    let fs = pie.legend_font.size_pt.min((f.h - 0.5 * pie.legend_font.size_pt) / (1.15 * n)).max(3.0);
     let longest = pie.names.iter().map(|n| n.chars().count()).max().unwrap_or(0);
-    let wanted = longest as f64 * 0.55 * fs + 2.4 * fs;
+    // Origin's samples are two font sizes wide and one high, in rows 1.15 font sizes apart (measured).
+    let wanted = longest as f64 * 0.55 * fs + 2.4 * fs + fs;
     let width = wanted.min(0.4 * f.w);
-    let chars = (((width - 2.4 * fs) / (0.55 * fs)).floor().max(1.0)) as usize;
-    LegendBox { width, fs, row: 1.3 * fs, chars }
+    let chars = (((width - 3.4 * fs) / (0.55 * fs)).floor().max(1.0)) as usize;
+    LegendBox { width, fs, row: 1.15 * fs, chars }
 }
 
-/// The angles (from, to) in radians of every slice, clockwise from 12 o'clock.
-fn spans(pie: &PieData) -> Vec<(f64, f64)> {
+/// The angles (from, to) in radians of every slice, clockwise from 12 o'clock, the first slice
+/// starting at `start`.
+fn spans(pie: &PieData, start: f64) -> Vec<(f64, f64)> {
     let total: f64 = pie.values.iter().sum();
-    let mut from = 0.0;
+    let mut from = start;
     pie.values
         .iter()
         .map(|v| {
@@ -51,11 +62,6 @@ fn spans(pie: &PieData) -> Vec<(f64, f64)> {
             s
         })
         .collect()
-}
-
-fn darker(c: Color) -> Color {
-    let k = |v: u8| (f64::from(v) * DARKER).round() as u8;
-    Color::rgb(k(c.r), k(c.g), k(c.b))
 }
 
 fn arc_to(d: &mut String, rx: f64, ry: f64, sweep: bool, x: f64, y: f64) {
@@ -102,30 +108,32 @@ pub(crate) fn draw_pie_3d(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
     if pie.values.iter().sum::<f64>() <= 0.0 {
         return;
     }
-    let lb = legend_box(pie, f);
-    let room = f.w - lb.width - lb.fs;
-    // Keep a margin on both sides for the labels (about four and a half characters wide).
-    let side = 0.5 * room - 4.6 * pie.label_font.size_pt;
-    let rx = (0.42 * f.h / (SLANT + BAND)).min(0.3 * room).min(side / 1.12).max(5.0);
+    // Origin centres the pie (top and band together) in the frame; its radius is a quarter of the
+    // frame's width, or less in a tall frame (measured: 0.254 of the width, 0.349 of the height).
+    let rx = (0.254 * f.w).min(0.349 * f.h).max(5.0);
     let (ry, t) = (SLANT * rx, BAND * 2.0 * rx);
-    let (cx, cy) = (f.x + 0.5 * room, f.y + 0.5 * f.h - 0.5 * t);
+    let (cx, cy) = (f.x + 0.5 * f.w, f.y + 0.5 * f.h - 0.5 * t);
     let point = |a: f64| (cx + rx * a.sin(), cy - ry * a.cos());
     let outline = Stroke::solid(Color::BLACK, 0.5);
-    let spans = spans(pie);
-    // The visible part of the side band is the front half of the rim: angles 90 to 270 degrees.
+    let spans = spans(pie, START_3D);
+    // The visible part of the side band is the front half of the rim: angles 90 to 270 degrees (and
+    // the same a turn later, since the slices start past 12 o'clock). The band has the slice's own
+    // colour, as in Origin.
     for (i, &(from, to)) in spans.iter().enumerate() {
-        let (a, b) = (from.max(FRAC_PI_2), to.min(PI + FRAC_PI_2));
-        if b <= a {
-            continue;
+        for turn in [0.0, TAU] {
+            let (a, b) = (from.max(FRAC_PI_2 + turn), to.min(PI + FRAC_PI_2 + turn));
+            if b <= a {
+                continue;
+            }
+            let (p, q) = (point(a), point(b));
+            let mut d = String::new();
+            move_to(&mut d, p.0, p.1);
+            arc_to(&mut d, rx, ry, true, q.0, q.1);
+            line_to(&mut d, q.0, q.1 + t);
+            arc_to(&mut d, rx, ry, false, p.0, p.1 + t);
+            d.push('Z');
+            out.push(Item::Path { d, fill: Some(pie.colors[i]), stroke: Some(outline.clone()) });
         }
-        let (p, q) = (point(a), point(b));
-        let mut d = String::new();
-        move_to(&mut d, p.0, p.1);
-        arc_to(&mut d, rx, ry, true, q.0, q.1);
-        line_to(&mut d, q.0, q.1 + t);
-        arc_to(&mut d, rx, ry, false, p.0, p.1 + t);
-        d.push('Z');
-        out.push(Item::Path { d, fill: Some(darker(pie.colors[i])), stroke: Some(outline.clone()) });
     }
     for (i, &(from, to)) in spans.iter().enumerate() {
         let d = slice_path(cx, cy, rx, ry, from, to);
@@ -154,14 +162,12 @@ pub(crate) fn draw_pie_bw(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
     if pie.values.iter().sum::<f64>() <= 0.0 {
         return;
     }
-    let lb = legend_box(pie, f);
-    let room = f.w - lb.width - lb.fs;
-    let side = 0.5 * room - 4.6 * pie.label_font.size_pt;
-    let r = (0.35 * f.h.min(room)).min(side / 1.12).max(5.0);
-    let (cx, cy) = (f.x + 0.5 * room, f.y + 0.5 * f.h);
+    // Centred in the frame, as Origin draws it (measured: radius 0.349 of the frame's height).
+    let r = (0.349 * f.h).min(0.259 * f.w).max(5.0);
+    let (cx, cy) = (f.x + 0.5 * f.w, f.y + 0.5 * f.h);
     let point = |a: f64, k: f64| (cx + k * r * a.sin(), cy - k * r * a.cos());
     let outline = Stroke::solid(Color::BLACK, 0.5);
-    let spans = spans(pie);
+    let spans = spans(pie, 0.0);
     let mut labels = Vec::new();
     for (i, &(from, to)) in spans.iter().enumerate() {
         // The slice as a polygon (the arc in steps of about 1 degree) for the hatch.
@@ -237,7 +243,7 @@ fn place_labels(
         out.push(Item::Text(TextItem {
             x,
             y: y + 0.35 * size,
-            text: format!("{:.2}%", span / TAU * 100.0),
+            text: share_text(span / TAU * 100.0),
             family: pie.label_font.family.clone(),
             size,
             bold: pie.label_font.bold,
@@ -257,7 +263,7 @@ fn legend(out: &mut Vec<Item>, pie: &PieData, f: Rect, square: &mut dyn FnMut(&m
     let x0 = (f.x + f.w - lb.width - 0.5 * fs).max(f.x + 0.5 * fs);
     for (i, name) in pie.names.iter().enumerate() {
         let y = f.y + 0.5 * fs + i as f64 * row;
-        square(out, Rect { x: x0, y, w: fs, h: fs }, i);
+        square(out, Rect { x: x0, y, w: 2.0 * fs, h: fs }, i);
         // A name too long for the column is cut and ends in an ellipsis.
         let text = if name.chars().count() > lb.chars {
             let kept: String = name.chars().take(lb.chars.saturating_sub(1)).collect();
@@ -266,7 +272,7 @@ fn legend(out: &mut Vec<Item>, pie: &PieData, f: Rect, square: &mut dyn FnMut(&m
             name.clone()
         };
         out.push(Item::Text(TextItem {
-            x: x0 + 1.4 * fs,
+            x: x0 + 2.4 * fs,
             y: y + 0.8 * fs,
             text,
             family: pie.legend_font.family.clone(),
@@ -280,24 +286,25 @@ fn legend(out: &mut Vec<Item>, pie: &PieData, f: Rect, square: &mut dyn FnMut(&m
     }
 }
 
-/// The hatch patterns of the black and white pie, by slice: the angles of the line families
-/// (degrees, counter-clockwise from the right) and their spacing in points. Slices past the
-/// eighth reuse the patterns with a wider spacing.
-const PATTERNS: [(&[f64], f64); 8] = [
-    (&[45.0], 3.0),
-    (&[135.0], 3.0),
-    (&[0.0], 3.0),
-    (&[90.0], 3.0),
-    (&[0.0, 90.0], 4.0),
-    (&[45.0, 135.0], 4.0),
-    (&[45.0], 1.8),
-    (&[135.0], 1.8),
+/// The hatch patterns of the black and white pie, by slice, as Origin's PIEBW template draws them
+/// (measured on ten slices): the angles of the line families (degrees, counter-clockwise from the
+/// right) and their spacing in points. Slices past the tenth start the list again.
+const PATTERNS: [(&[f64], f64); 10] = [
+    (&[45.0], 3.9),
+    (&[45.0], 5.6),
+    (&[45.0], 8.3),
+    (&[135.0], 3.9),
+    (&[135.0], 5.6),
+    (&[135.0], 8.3),
+    (&[45.0, 135.0], 3.9),
+    (&[45.0, 135.0], 5.6),
+    (&[45.0, 135.0], 8.3),
+    (&[0.0], 4.0),
 ];
 
 /// Draws the hatch pattern of slice `i` inside `poly`.
 pub(crate) fn pattern(out: &mut Vec<Item>, poly: &[(f64, f64)], i: usize) {
     let (angles, spacing) = PATTERNS[i % PATTERNS.len()];
-    let spacing = spacing * (1 + i / PATTERNS.len()) as f64;
     let mut d = String::new();
     for &a in angles {
         for (p, q) in hatch(poly, a.to_radians(), spacing) {

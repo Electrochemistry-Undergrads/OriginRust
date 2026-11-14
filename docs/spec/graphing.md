@@ -1358,12 +1358,22 @@ largest that fits in the usual layer frame.
 
 Origin's Plot > Column/Bar/Pie menu has "3D Color Pie" (template `PIE`) and "2D B&W Pie" (template `PIEBW`); it has no "2D Color Pie". What was measured is in 14.17 (3D pie from above at a slant, ellipse about half as high as wide with a side band; flat black and white pie with hatch patterns; slices clockwise from 12 o'clock, black outlines, outside labels with two decimals, legend squares at the top right, palette in order for the 3D pie).
 
-**From Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref:** the 3D pie's view angle, thickness and rotation can be changed in the plot's details; slices can be pulled out; Origin's hatch patterns are a fixed list of pattern fills cycling over the slices; exact side band shade, band thickness and the exact patterns of the 2D template.
+**Measured (2026-11-13, Windows; `plotxy iy:=[Book]Sheet1!1 plot:=225 ogl:=[<new template:=PIE>]` and
+`PIEBW`, pictures in `re-workspace/scratch/pies`):** the pie layer is larger than the line template's (7 % from the
+left, 86.5 % wide, 8 % from the top, 83 % high) and the pie is centred in it. The 3D pie: an ellipse 0.5455 as
+high as wide, radius 0.254 of the frame width; the side band 0.278 of the radius thick in the slice's own colour
+(not darker), outlined in black; the slices clockwise, the first starting 32.4 degrees below 3 o'clock (four equal
+slices meet at -32.4 and -123.0 degrees), so not at 12 o'clock as 14.17 assumed. The B&W pie: radius 0.349 of the
+frame height, first slice at 12 o'clock, clockwise; hatches in this order: lines at 45 degrees about 3.9, 5.6
+and 8.3 pt apart, the same at 135 degrees, diagonal cross hatches at the same three spacings, then horizontal lines
+4 pt apart (ten slices measured). Shares print with at most two decimals and no trailing zeros (`18.6%`, `25%`).
+Legend samples are two font sizes wide and one high, rows 1.15 font sizes apart. A worksheet whose first column is
+X gives a one-entry legend named after it instead.
 
 **What Sheaf does**
 
 - Plot kinds `PlotKind::Pie3D` and `PlotKind::PieBw`, templates `pie-3d` ("3D Color Pie") and `pie-bw` ("2D B&W Pie"), both live in the menu; the item "2D Color Pie" is gone from the menu. `Template::Pie` (`-t pie`, `PlotKind::Pie`) stays as a CLI name and for existing projects: the flat colour pie of 14.17, golden `pie.svg` unchanged.
-- Drawing (`crates/plot/src/pie.rs`): same frame, labels (share to two decimals outside the slice) and legend placement as the flat pie. 3D: the ellipse is 0.5 as high as wide (`SLANT`), the width the largest that fits (at most 30 % of the frame width as radius); the side band is 0.2 of the radius thick (`BAND`), drawn only on the front half of the rim (90 to 270 degrees) in 60 % of the slice colour, then the tops on it, all outlined 0.5 pt black; labels of the front half sit below the band. B&W: white slices, each with one of eight hatch patterns (45 degrees, 135 degrees, horizontal, vertical, grid, diagonal grid, dense 45, dense 135; slices past the eighth reuse them at wider spacing), 0.5 pt black lines; legend squares carry the same pattern.
+- Drawing (`crates/plot/src/pie.rs`): same frame, labels (share to two decimals outside the slice) and legend placement as the flat pie. 3D (measured values): the ellipse 0.5455 as high as wide (`SLANT`), radius 0.254 of the frame width (0.349 of its height at most), centred; the side band 0.278 of the radius thick (`BAND`) in the slice's own colour, drawn on the front half of the rim, then the tops, all outlined 0.5 pt black; the first slice starts at `START_3D` (122.4 degrees clockwise from 12 o'clock); labels of the front half sit below the band. B&W: white slices with Origin's ten hatch patterns in its order (above; slices past the tenth start the list again), 0.5 pt black lines, centred with radius 0.349 of the frame height; legend samples carry the same pattern. Shares as Origin prints them (`share_text`). The labels sit 1.12 radii out (Origin about 1.26), so a label next to the legend can touch it.
 - Pattern fills: the scene has no clip item, so `pie::hatch` cuts parallel lines against the slice polygon (the arc in steps of about 2 degrees; works for concave shapes) and the lines are drawn as one path per slice. Lines sit at multiples of the spacing from the page origin, so patterns continue across shapes. Works in every renderer since it is plain paths. It is not a general pattern fill of the model (`FillStyle` has none yet).
 - `.opj`: written as plain columns, the save warns (same note as the flat pie); the `.opj.sheaf` companion keeps the kind.
 - Goldens: `pie-3d.svg`, `pie-bw.svg` (values 3, 5, 2, 7, 4).

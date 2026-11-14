@@ -2894,7 +2894,7 @@ fn pie_variant(template: Template) -> (Project, WindowId) {
 }
 
 #[test]
-fn the_3d_pie_is_an_ellipse_half_as_high_as_wide_with_a_darker_side_band() {
+fn the_3d_pie_is_an_ellipse_as_origin_draws_it_with_a_band_in_the_slice_colours() {
     let (p, g) = pie_variant(Template::Pie3D);
     let svg = svg_of(&p, g);
     let d = doc(&svg);
@@ -2904,12 +2904,12 @@ fn the_3d_pie_is_an_ellipse_half_as_high_as_wide_with_a_darker_side_band() {
     }
     let plots = with_class(&d, "plots");
     let ds: Vec<&str> = paths_in(plots[0]).iter().filter_map(|n| n.attribute("d")).collect();
-    // The arcs are elliptical: ry is half of rx.
+    // The arcs are elliptical: ry is 0.5455 of rx (measured in Origin).
     let top = ds.iter().find(|d| d.contains(" 0 0 1 ") && d.starts_with('M')).unwrap();
     let arc = top.find('A').unwrap();
     let v: Vec<f64> = top[arc + 1..].split(' ').take(2).map(|t| t.parse().unwrap()).collect();
-    assert!((v[1] / v[0] - 0.5).abs() < 1e-3, "{v:?}");
-    assert!(svg.contains("#990000"), "a darker red band");
+    assert!((v[1] / v[0] - 0.5455).abs() < 2e-3, "{v:?}");
+    assert!(!svg.contains("#990000"), "the band keeps the slice's own red, as Origin's");
 }
 
 #[test]

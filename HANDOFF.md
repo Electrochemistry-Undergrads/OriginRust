@@ -57,6 +57,13 @@ optimization", free for reuse with their build folders `target/wt-axis` and `tar
 `merge-05b`, an unfinished merge of branches that are all on `main` already (abort it, do not push it).
 The disk is about 96 % full; reuse a worktree and its build folder instead of making new ones.
 
+App icon (owner's request, 2026-11-14, branch `app-icon`): `tools/make-icon.py` builds the icon from the
+owner's bronze S (`docs/brand/sheaf.png`) into `crates/app/assets/icon/` (PNG, `.ico`, `.icns`); the app embeds
+`sheaf-256.png` as its window, Dock and taskbar icon. `tools/make-macos-app.sh --install` builds `Sheaf.app` into
+`~/Applications` (Spotlight, Launchpad, Dock). Left: the `.ico` in the Windows `.exe` resources (Explorer icon;
+needs a Windows session to add and test a `build.rs`), a Start Menu shortcut, and opening files double-clicked in
+Finder (Apple open-document events; the bundle declares no document types until then).
+
 ## Known issues and table UI verification
 
 - T01 sorting: Sort Range and range Custom respect selected cell/row bounds. Sort Columns

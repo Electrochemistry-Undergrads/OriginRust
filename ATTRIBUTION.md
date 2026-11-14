@@ -10,6 +10,7 @@ when introducing an asset; do not assume the project license covers material fro
 | Path | Creator and source | License |
 |---|---|---|
 | `docs/brand/sheaf.png` | Project owner; original logo, ownership confirmed by the owner | MIT OR Apache-2.0 |
+| `crates/app/assets/icon/*` | Sheaf contributors; app icon generated from `docs/brand/sheaf.png` by `tools/make-icon.py` | MIT OR Apache-2.0 |
 | `docs/images/macos-desktop.png` | Sheaf contributors; screenshot of Sheaf displaying synthetic data | MIT OR Apache-2.0 for the original screenshot; embedded third-party typefaces retain their own licenses |
 | `crates/plot/tests/golden/*.svg` | Sheaf contributors; figures generated from synthetic test data | MIT OR Apache-2.0 |
 | `crates/io/tests/fixtures/sheaf-written.opj` | Sheaf contributors; project written by Sheaf, not an Origin-supplied sample | MIT OR Apache-2.0 |

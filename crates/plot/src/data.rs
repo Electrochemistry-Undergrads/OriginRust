@@ -398,12 +398,12 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
         percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
     };
     let overlap = percent(bars.overlap_pct, -100.0, 100.0, 0.0) / 100.0;
-    // Stacked plots share one slot, which stands where the first of them stands.
+    // Stacked plots share one slot, which stands where the first of them stands; so do floating ones.
     let mut slot_of = vec![0usize; plots.len()];
     let mut slots = 0usize;
     let mut stacked_slot = None;
     for &i in &columns {
-        if plots[i].plot.kind.is_stacked_column() {
+        if plots[i].plot.kind.is_stacked_column() || plots[i].plot.kind.is_floating() {
             slot_of[i] = *stacked_slot.get_or_insert_with(|| {
                 slots += 1;
                 slots - 1

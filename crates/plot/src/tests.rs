@@ -3389,3 +3389,44 @@ fn a_ternary_layer_labels_three_axes_with_the_column_names_and_steps_of_a_fifth(
         assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
     }
 }
+
+// ----- floating bars measured in Origin (graphing spec 14.12) -----------------------------------
+
+/// Four columns B..E for a floating plot: Origin made the bars B-C, C-D and D-E.
+fn floating_chain(template: Template) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let mut ys = Vec::new();
+    for (i, v) in [[1.0, 2.0], [3.0, 4.0], [4.0, 6.0], [7.0, 7.5]].into_iter().enumerate() {
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(v.to_vec())).unwrap();
+        p.column_mut(c).unwrap().long_name = ["B", "C", "D", "E"][i].into();
+        ys.push(c);
+    }
+    let g = p.plot_columns(template, &ys).unwrap();
+    (p, g)
+}
+
+#[test]
+fn floating_plots_chain_the_columns_and_share_one_slot() {
+    for template in [Template::FloatingColumn, Template::FloatingBar] {
+        let (p, g) = floating_chain(template);
+        let plots = &p.graph(g).unwrap().layers[0].plots;
+        assert_eq!(plots.len(), 3);
+        assert_eq!(plots[1].y_base, Some(plots[0].y));
+        assert_eq!(plots[2].y_base, Some(plots[1].y));
+        let l = layer_data(&p, g);
+        let slots: Vec<_> = l.plots.iter().map(|pd| pd.bar.unwrap().left).collect();
+        assert!(slots.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-12), "the same slot: {slots:?}");
+    }
+}
+
+#[test]
+fn floating_bar_and_column_legends_list_the_last_plot_first() {
+    for template in [Template::FloatingColumn, Template::FloatingBar] {
+        let (p, g) = floating_chain(template);
+        let t = texts(&doc(&svg_of(&p, g)));
+        let at = |s: &str| t.iter().rposition(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        assert!(at("E") < at("D") && at("D") < at("C"), "E, D, C from the top: {t:?}");
+    }
+}

@@ -1190,8 +1190,10 @@ fn draw_legend(
     let row_h = 1.3 * fs;
     let col_gap = fs;
 
-    // Piled and lying bars list the last plot first, as they appear on the page.
-    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked_column() || pd.plot.kind == PlotKind::Bar);
+    // Piled, floating and lying bars list the last plot first (measured, spec 14.12).
+    let reversed = entries.first().is_some_and(|pd| {
+        pd.plot.kind.is_stacked_column() || pd.plot.kind.is_floating() || pd.plot.kind == PlotKind::Bar
+    });
     let text = lg.text.clone().unwrap_or_else(|| {
         if reversed {
             let rev: Vec<String> = ids.iter().rev().cloned().collect();

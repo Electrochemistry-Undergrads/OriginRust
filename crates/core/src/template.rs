@@ -876,4 +876,34 @@ mod tests {
         let c = Template::Column.new_graph(WindowId(0), "");
         assert_eq!(c.layers[0].palette.colors[0], Color::rgb(255, 0, 0), "plain columns still start at red");
     }
+
+    /// Measured on the legends of 12 and 13 plots in Origin (spec 14.12).
+    #[test]
+    fn horizontal_stacked_and_floating_bars_use_the_colour_lists_of_their_vertical_forms() {
+        let colors = |t: Template| t.new_graph(WindowId(0), "").layers[0].palette.colors.clone();
+        let floating: Vec<Color> = [
+            (0, 0, 255),
+            (0, 255, 255),
+            (255, 0, 255),
+            (255, 255, 0),
+            (128, 128, 0),
+            (0, 0, 128),
+            (128, 0, 128),
+            (128, 0, 0),
+            (0, 128, 0),
+            (0, 128, 128),
+            (0, 0, 160),
+            (255, 128, 0),
+        ]
+        .map(|(r, g, b)| Color::rgb(r, g, b))
+        .to_vec();
+        for t in [Template::FloatingColumn, Template::FloatingBar] {
+            assert_eq!(colors(t)[..12], floating[..], "{t:?}");
+        }
+        for t in [Template::StackedBar, Template::Stacked100Bar] {
+            assert_eq!(colors(t), colors(Template::StackedColumn), "{t:?}");
+            assert_eq!(colors(t)[1], Color::rgb(255, 0, 0));
+            assert_eq!(colors(t)[2], Color::rgb(0, 0, 255), "black, red, blue, magenta, green, ...");
+        }
+    }
 }

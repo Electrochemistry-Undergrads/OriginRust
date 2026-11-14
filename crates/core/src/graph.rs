@@ -987,6 +987,12 @@ impl PlotKind {
         )
     }
 
+    /// True for the floating column and floating bar kinds: every plot is a bar between two columns,
+    /// and all the plots of a layer stand in the same slot, on top of each other (measured, spec 14.12).
+    pub fn is_floating(&self) -> bool {
+        matches!(self, PlotKind::FloatingColumn | PlotKind::FloatingBar)
+    }
+
     /// True for the piled area kinds.
     pub fn is_stacked_area(&self) -> bool {
         matches!(self, PlotKind::StackedArea | PlotKind::Stacked100Area)

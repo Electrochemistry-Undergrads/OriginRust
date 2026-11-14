@@ -1743,10 +1743,12 @@ line's Transparency slider sets the alpha of the line colour; both drop lines wi
 an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame;
 data labels with font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y),
 written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
-significant digits); the layer Background colour fills the frame behind the grid. Not done: the
-other fill modes, gradient and pattern fills, label frames, offsets, white out, custom forms and
-display formats, leader lines, skip points, Size/Speed and Display tabs. The `.opj` writer does not
-store any of these; the save names them and the companion file keeps them.
+significant digits); the layer Background colour fills the frame behind the grid. Sheaf's own additions
+beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
+background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
+section 18.6. Not done: the other fill modes, label frames, white out, custom forms and display formats
+beyond decimals, leader lines, skip points. The `.opj` writer does not store any of these; the save names
+them and the companion file keeps them.
 
 ### 18.1 Group tab (measured 2026-11-13)
 
@@ -1764,7 +1766,7 @@ the layer except the incremented properties, `Layer::follow_leader`); Line Color
 Stretch (the palette modes Same, Cycle and Spread over the layer's colour list), and Line Style, Symbol
 Type and Symbol Interior with None and By One, running on from the first plot (`apply_group_increments`;
 Symbol Interior alternates filled and open); Group Members lists the plots. Not done: Binned, several
-groups in one layer, subgrouping.
+groups in one layer, subgrouping by column label. Subgrouping by size is Sheaf's own (section 18.6).
 
 Offset tab (measured): rows X and Y with Multiplier and Offset boxes, and a note that offsets take effect
 when the layer's Stack tab is set to Individual with X and/or Y enabled. Sheaf shows the tab on each
@@ -1773,8 +1775,9 @@ unless the layer stacks Individually; Multiplier is not offered.
 
 Display tab (measured, section 18 list): Sheaf offers Labels (the tick labels of both axes), Data
 (`LayerDisplay::show_data`), Frame (the opposite-edge lines of both axes), Clip Data to Frame (off: the
-data may run over the whole page) and Grid on Top of Data (the grid lines are drawn after the plots);
-X Axes, Y Axes and Data on Top of Axes are shown greyed, and Scale Elements and Clipping Margins are
+data may run over the whole page), Grid on Top of Data (the grid lines are drawn after the plots), and
+X Axes and Y Axes (off hides that axis: line, ticks, tick labels and title; the grid stays; what Origin
+hides is not measured); Data on Top of Axes is shown greyed, and Scale Elements and Clipping Margins are
 not offered. The `.opj` writer names a changed Display tab in its save warnings.
 
 Size/Speed tab (measured): Layer Area Left, Top, Width, Height with Units % of Page (default), inch, cm,
@@ -1791,8 +1794,10 @@ Gradient Fill, connect lines across axis breaks and missing data, Master Items) 
 %(n) translation mode @LM by default, units in auto axis titles, data plot index, Legend Update Mode
 Update when Adding, Include data plots from all Layers (off), Legend Symbol Width, Indicate Active Dataset).
 Sheaf shows Print/Dimensions (size in inch, cm, mm or point, and Sheaf's page title), Display (page
-colour), Legends/Titles (Include data plots from all Layers, which sets every layer's legend scope) and
-its own Text tab; Miscellaneous and the other controls are not offered.
+colour, and a border line around the page, Sheaf's own), Legends/Titles (Include data plots from all Layers,
+which sets every layer's legend scope; what the window title shows, Sheaf's own) and its own Text tab.
+Miscellaneous holds only Sheaf's own settings (layer icons, comments); Origin's controls on it are not
+offered. Print/Dimensions can keep the layers the same size in points when the page is resized (Sheaf's own).
 
 Buttons (measured): Origin's Plot Details has `>>` (left of the buttons), Workbook (on a plot node), OK,
 Cancel and Apply. Sheaf has OK, Cancel and Apply, and Workbook on a plot node, which brings the
@@ -1861,3 +1866,44 @@ frame is converted between fractions of the page and of the parent's frame.
 Origin's Plot Details has a ">>" button at the bottom left. It hides the tree: the window shrinks to the tabs of
 the chosen node and the button becomes "<<", which brings the tree back (`re-workspace/scratch/t13link/open5`).
 Sheaf: the same button; the window keeps its size and the tabs take the room; the choice lasts while Sheaf runs.
+
+### 18.6 Look settings beyond the measured tabs (T13, Sheaf's own, not measured)
+
+Written on a machine without Origin. Each setting below is a Sheaf choice for something Origin's tab has
+(or a close neighbour of it) and has to be compared with Origin on the Windows machine with
+`tools/origin-ref`. The settings are in `crates/core/src/graph_style.rs` and `Plot::decor`, written to the
+project file only when they differ from the default (a file written before loads unchanged), drawn by
+`sheaf-plot` in SVG, PNG, PDF, EPS and EMF, and edited in Plot Details (`dialogs/details_look.rs`).
+
+- **Fill style** (`PlotDecor::fill`): the Pattern tab of columns, bars, histograms and areas, and the
+  fill under a curve on the Line tab. Transparency (on top of the alpha of the colour), a hatch (forward or
+  backward diagonal, horizontal, vertical, cross, diagonal cross; colour, line width 0.5 pt and spacing
+  3 pt by default) cut to the shape, and a linear gradient from the fill colour to a second colour in one
+  of four directions, drawn as bands that meet edge to edge when the fill is see-through. Not measured:
+  Origin's list of patterns, its default hatch width and spacing, how a gradient and a pattern combine.
+- **Drop lines** are drawn only for the kinds whose tab offers them (line and symbol plots, not bars and
+  areas); the settings of a plot that changes kind are kept.
+- **Spacing, Width (in %)**: the bars at one X position together take this share of the X spacing, which
+  replaces the gap while it is set; 0 and 100 are the ends, other values are clamped; histogram bars
+  always touch.
+- **Label**: besides Origin's forms, a column of the project (the cell of the same row, as the worksheet shows
+  it); a list of the rows that are labelled (`1,3,5-8`); decimal places; a horizontal and vertical offset in
+  points. Deleting the column puts the form back to Y.
+- **Group**: Subgrouping None or By Size (n plots per subgroup, in plot order); "Subgroup on Increment" names the
+  property that steps from one subgroup to the next (colour, line style or symbol type) while the others step
+  inside the subgroup. The dash and symbol lists are Origin's default lists (section 3, "Default line style
+  list": 8 dash styles; the first 8 of the 16 default symbol shapes).
+- **Layer Background**: a gradient from the colour and a border line (colour, style, width) around the frame.
+  The right Y layer made by Double-Y draws no background of its own.
+- **Display**: X Axes and Y Axes switches (section 18.1).
+- **Page**: a border line inside the page edge; the layer icons can be hidden (they are not part of exported
+  pictures); comments, shown as the graph's hover text in the Object Manager; what the window title shows
+  (both names, the short or the long one); Print/Dimensions can keep the layers the same size in points when the
+  page is resized (linked layers are fractions of their parent and need no change).
+
+### 18.7 Not done
+
+Speed mode and X:Y ratio of Size/Speed, Skip Points of Drop Lines, "White Out", frame, margin, attach-to,
+automatic overlap avoidance and leader lines of Label, X and Y multiplier of Offset, the other fill modes and
+Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
+print margins, writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).

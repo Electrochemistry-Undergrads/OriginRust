@@ -3185,6 +3185,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sheaf-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sheaf-core",
+ "sheaf-io",
+ "sheaf-ops",
+ "sheaf-plot",
+]
+
+[[package]]
 name = "sheaf-ops"
 version = "0.1.0"
 dependencies = [

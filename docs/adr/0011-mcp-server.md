@@ -48,12 +48,13 @@ Three facts from the code decide how:
    (`list_analysis_tools`, `tools/list`). Tools are moved into the registry in steps; the tool
    `list_analysis_tools` reports exactly the ones present. Fits use the same pattern for
    `FitRequest` (`fit_spec`).
-6. **Hand-written schemas.** Input schemas are `serde_json::json!` values built next to the
-   request structs and checked by a unit test that deserializes an example for every tool.
+6. **Hand-written schemas.** Input schemas are `serde_json::json!` values in `crates/mcp/src/schemas.rs`,
+   each with an example call that a unit test checks against the schema and the argument parser.
 7. **Roots.** `--root DIR` (repeatable) lists the folders the server may touch. Every path is made
    absolute and canonical (the nearest existing parent for files not yet written) and must lie
    under a root. This includes wildcard matches, the `.opj.sheaf` companion and the `.bak` copy.
-   Without `--root` the working directory is the only root.
+   Without `--root` no folder is allowed: tools that read or write files refuse and say to start the
+   server with `--root`. Tools that touch no file (analysis, plots, fits on data in the project) work.
 8. **Images.** `sheaf_plot::export_bytes` renders in memory, so `export_graph` returns PNG as an
    MCP image content block and also writes the file when a path is given. No base64 crate is
    needed; a 40-line encoder lives in `sheaf-mcp`.

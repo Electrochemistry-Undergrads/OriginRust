@@ -109,6 +109,8 @@ pub struct PlotSpec {
     pub panels: Option<PanelsSpec>,
     /// The project holds one workbook per input file, drawn together in one graph.
     pub overlay: bool,
+    /// With `overlay`: draw only these workbooks (by name). Empty: every workbook of the project.
+    pub overlay_books: Vec<String>,
     pub style: Style,
 }
 
@@ -544,7 +546,7 @@ fn panel_groups(
     let split = |spec: &String| -> Vec<String> { spec.split(',').map(|n| n.trim().to_string()).collect() };
     let mut labels = Vec::new();
     if a.overlay {
-        let books: Vec<WindowId> = project.workbooks().map(|b| b.id).collect();
+        let books = overlay_book_ids(project, a);
         let mut sheets = Vec::new();
         for &book in &books {
             sheets.push((book, pick_sheet(project, book, a.sheet.as_deref())?));
@@ -768,8 +770,17 @@ fn overlay_labels(project: &Project, book: WindowId, columns: &[ColumnId]) -> Ve
 /// Legend entries name the file, plus the column when a file gives several curves.
 /// With `--y2` (or the double-y template) each file's columns are split between the axes as for a
 /// single file, and the right axis lists its curves after the left axis' curves.
+/// The workbooks an overlay draws: the ones named in `overlay_books`, else all.
+fn overlay_book_ids(project: &Project, a: &PlotSpec) -> Vec<WindowId> {
+    project
+        .workbooks()
+        .filter(|b| a.overlay_books.is_empty() || a.overlay_books.iter().any(|n| n.eq_ignore_ascii_case(&b.name)))
+        .map(|b| b.id)
+        .collect()
+}
+
 fn overlay_files(project: &mut Project, template: Template, a: &PlotSpec) -> Result<WindowId> {
-    let books: Vec<WindowId> = project.workbooks().map(|b| b.id).collect();
+    let books = overlay_book_ids(project, a);
     let (mut left, mut right) = (Vec::new(), Vec::new());
     let (mut left_labels, mut right_labels) = (Vec::new(), Vec::new());
     for book in books {

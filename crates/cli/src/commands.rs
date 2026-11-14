@@ -306,6 +306,7 @@ fn plot_spec(a: &PlotArgs) -> PlotSpec {
             }),
         }),
         overlay: a.inputs.len() > 1,
+        overlay_books: Vec::new(),
         style: style_spec(&a.style),
     }
 }

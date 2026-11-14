@@ -97,8 +97,7 @@ companion and the reason, and `structuredContent` has `{companion, refusal}`.
  "ascii": {"delimiter": "auto|comma|tab|semicolon|space|<one character>",
            "header_lines": 0, "long_name_line": 0, "units_line": 0, "comments_line": 0,
            "decimal_comma": false, "thousands": "auto|off|comma|dot|space|apostrophe",
-           "skip_rows": 0, "max_rows": 0, "dates": "detect|text", "date_order": "mdy|dmy",
-           "first_column_x": true},
+           "skip_rows": 0, "max_rows": 0, "dates": "detect|text", "date_order": "mdy|dmy"},
  "chi": {"split_scans": true, "split_segments": true, "add_milliamp": true,
          "add_charge": true, "invert_current": false, "exact_time": true},
  "plot": false}
@@ -138,10 +137,12 @@ Numbers are JSON numbers, text and dates are strings, missing cells are `null`, 
 values are the strings `"NaN"`, `"Infinity"`, `"-Infinity"`. `next` is present when `truncated`; pass
 it to continue.
 
-**`set_column_values`** `{book?, sheet?, column, formula, rows?, create?: {designation?, long_name?, units?}}`.
+**`set_column_values`** `{book?, sheet?, column, formula, rows?, create?: {designation?, long_name?, units?}}` (`rows` is
+"FROM:TO", counted from 1, an end may be empty).
 Sets a column from a formula of Sheaf's expression language (`docs/spec/expression-language.md`, for
 example `col(B)*1000`). A column that does not exist is created when `create` is given. Result
-`{column, rows, recalculate: "auto|manual"}`. Limit: 10 000 000 rows. Nothing changes on error.
+`{column, created, rows, recalculate: "none|auto|manual"}`. A column made by `create` is removed again when
+the formula fails. Limit: 10 000 000 rows. Nothing changes on error.
 
 ### 5.2 Graphs and export
 
@@ -154,22 +155,28 @@ example `col(B)*1000`). A column that does not exist is created when `create` is
  "y2": ["string"],
  "graph": "string?",
  "panels": {"shape": "stack|2x2", "per_panel": 2, "y": [["B","C"],["D"]],
-            "gap": 0.0, "margins": "", "order": "", "link": ""},
+            "gap": 0.0, "margins": [0.1], "order": "bottom_up|top_down", "link": "x|y|xy|none"},
  "overlay_files": ["Path"],
- "style": {"title": "", "x_title": "", "y_title": "",
-           "x_min": 0, "x_max": 1, "y_min": 0, "y_max": 1, "line_width": 1.5,
-           "colors": ["#1f77b4"], "stack": "auto:10", "offsets": [0],
-           "x_labels": "auto|numbers|<column>",
-           "labels": [{"text": "peak", "x": 0.5, "y": 2}],
-           "draw": [{"kind": "line", "x1": 0, "y1": 0, "x2": 1, "y2": 1}],
-           "bar_gap": 0, "bar_overlap": 0, "label_angle": 0},
+ "style": {"x_title": "", "y_title": "", "y2_title": "",
+           "x_min": 0, "x_max": 1, "y_min": 0, "y_max": 1, "x_step": 0, "y_step": 0,
+           "y2_min": 0, "y2_max": 1, "y2_step": 0, "axis_colors": "plot|fixed",
+           "width": 5, "height": 3.5, "line_width": 1.5,
+           "colors": ["#1f77b4"], "labels": ["legend text"], "no_legend": false,
+           "stack": "auto:10", "offsets": [0], "waterfall": [0],
+           "no_y_tick_labels": false, "no_y_ticks": false,
+           "x_labels": "auto|numbers|<column>", "x_label_angle": 0,
+           "bar_gap": 0, "bar_overlap": 0,
+           "text_labels": [{"text": "peak", "x": 0.5, "y": 0.2}],
+           "draw": [{"kind": "line|arrow|rectangle|ellipse", "x1": 0, "y1": 0, "x2": 1, "y2": 1}]},
  "size": {"width_in": 5, "height_in": 3.5}}
 ```
 
 `template` takes the names of `sheaf plot --template` (`Template::from_name`). `y` defaults to the
 sheet's Y columns. `graph` adds to that graph instead of creating one. `panels` fields and values are
 those of `sheaf plot --panels` and its panel flags. `overlay_files` imports each file and overlays
-its first Y column. Result `{graph, created, plots, warnings}`. Rules kept from the CLI: panels do not
+each file's Y columns. `text_labels` and `draw` positions are fractions of the layer frame, (0,0) the
+top left; `size` sets the page size (the same as `style.width` and `style.height`, not both). The
+`style` fields are those of `sheaf plot`'s style flags. Result `{graph, created, plots, warnings}`. Rules kept from the CLI: panels do not
 combine with double-Y or waterfall templates; a waterfall takes no `y2`; `graph` and `panels` are
 exclusive; `y2` and `graph` are exclusive; `overlay_files` excludes `book` and `sheet`. Style values
 are checked as the CLI checks them: width and height 0.1 to 100 inches, finite axis limits that
@@ -200,12 +207,15 @@ This is the registry of ADR 0011 item 5; it names exactly what `analyze` accepts
  "book": "string?", "sheet": "string?",
  "columns": ["string"],
  "rows": "FROM:TO", "x_range": "FROM:TO",
- "output": "next_to_input|new_sheet"}
+ "output": "next_to_input"}
 ```
 
 `options` are those `list_analysis_tools` gives for the tool. A column a tool reads besides the Y
-columns (a reference, a second signal) is an option holding a name. `output` follows ADR 0005
-(tools that write a table always use a new sheet). The result is the `Report`:
+columns (a reference, a second signal) is an option holding a name. `output` accepts only `next_to_input`: results go next to the input and
+tools that write a table use a new sheet by themselves (ADR 0005); `new_sheet` is refused with a
+message. `list_analysis_tools` lists what is registered; analysis tools of the command line that it
+does not list (tests, ANOVA, peak chains, FFT filter, coherence, averaging, ...) are not yet
+available here. The result is the `Report`:
 
 ```json
 {"book":"","sheet":"","new_columns":["Book1:Sheet1:D"],"new_sheet":"Integrate1","new_graph":null,
@@ -274,7 +284,9 @@ the limits of section 7. No resource reads a file by path.
 - **Roots.** Only `--root` folders. A path is made absolute and canonical (links and `..` resolved; for
   a file not yet written, its nearest existing parent plus the file name) and must lie under a root.
   Wildcard matches, the `.opj.sheaf` companion and the `.bak` copy are checked the same way. Refused
-  with `path is outside the allowed folders: <path>`. Without `--root` the working directory is the root.
+  with `path is outside the allowed folders: <path>`. Without `--root` nothing is allowed: a tool that
+  names a file fails with `no folder is allowed: start sheaf-mcp with --root DIR`. A link that points
+  nowhere is refused (a write through it could land anywhere).
 - **No shell, no script.** No tool runs a command or a script. Formulas use the expression language,
   which has no file or process access.
 - **Size.** 10 000 cells per `read_columns` or resource reply; the caps of `export_graph` above; an

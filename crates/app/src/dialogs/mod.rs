@@ -4,6 +4,7 @@
 pub mod analysis;
 pub mod bin2d_options;
 pub mod column_props;
+pub mod details_look;
 pub mod export;
 pub mod export_sheet;
 pub mod find;

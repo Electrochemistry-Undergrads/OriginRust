@@ -583,7 +583,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // Layer icons: after the page, so that they get the clicks on them.
     let mut icon_menu = None;
-    for i in 0..layers {
+    // Plot Details > Miscellaneous can hide the icons.
+    let shown_icons = if doc.project().graph(graph_id).is_some_and(|g| g.page.style.layer_icons) { layers } else { 0 };
+    for i in 0..shown_icons {
         let r = Rect::from_min_size(image_rect.min + egui::vec2(2.0 + i as f32 * (ICON + 2.0), 2.0), Vec2::splat(ICON));
         let id = ui.id().with(("layer_icon", graph_id.0, i));
         let resp = ui.interact(r, id, Sense::click()).on_hover_text(format!("Layer {}", i + 1));

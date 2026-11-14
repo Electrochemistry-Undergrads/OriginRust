@@ -33,7 +33,7 @@ mod workspace;
 
 use std::path::PathBuf;
 
-/// Sheaf's icon (the owner's bronze S on a tile, made by `tools/make-icon.py`). eframe shows it on the
+/// Sheaf's icon (the owner's S logo in paper white on a rust tile, made by `tools/make-icon.py`). eframe shows it on the
 /// window, in the macOS Dock and in the Windows taskbar, also when the app is started with `cargo run`.
 const ICON_PNG: &[u8] = include_bytes!("../assets/icon/sheaf-256.png");
 

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Build Sheaf's application icon from the owner's logo, docs/brand/sheaf.png.
 
-    python3 tools/make-icon.py                 # writes crates/app/assets/icon/
-    python3 tools/make-icon.py --style rust    # rust tile with a cream S instead
+    python3 tools/make-icon.py                 # writes crates/app/assets/icon/ (rust tile, the chosen look)
+    python3 tools/make-icon.py --style paper   # the logo's rust S on a paper-white tile instead
 
 The logo (the bronze S) is kept as drawn: its outline comes from the logo's alpha channel, cleaned of
-the faint specks around it and smoothed. It is set on a rounded tile in the macOS icon grid (an 824
-of 1024 body with a shadow) over a faint graph-paper grid, since Sheaf is a plotting program. Sizes
+the faint specks around it and smoothed. It is set in paper white on a rounded tile in the logo's rust
+(the owner chose this look on 2026-11-14), in the macOS icon grid (an 824 of 1024 body with a shadow),
+over a faint graph-paper grid, since Sheaf is a plotting program. Sizes
 of 32 pixels and less use a plainer tile with a larger S and no grid, so the letter stays readable.
 
 Outputs (all in crates/app/assets/icon/):
@@ -49,7 +50,7 @@ STYLES = {
         grid=(186, 82, 41), grid_major=(176, 74, 36),
     ),
 }
-STYLE = STYLES["paper"]
+STYLE = STYLES["rust"]
 
 
 def logo_mask() -> Image.Image:

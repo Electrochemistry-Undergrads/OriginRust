@@ -1,6 +1,6 @@
 # T14: Statistics breadth
 
-**Status:** items 1 to 4 done, merged (`c44a1a6`) (measured against Origin, `statistics.md` section 10); items 5 and 6 (Holm and Dunnett, cross tabulation, 2D binning, distribution fit, power) open. **Size:** M. **Branch:** `stats-breadth`. **Model:** Sonnet.
+**Status:** items 1 to 4 done, merged (`c44a1a6`) (measured against Origin, `statistics.md` section 10); second half of item 6 (distribution fit, probability plot and Q-Q plot, power and sample size) done on `stats-dist`, not merged (checked against scipy 1.18, not Origin; spec section 12, number may change at merge; Origin details listed there as not measured); item 5 (Holm, Dunnett) and the first half of item 6 (cross tabulation, 2D binning) are on `stats-compare`. Left: measure the section 12 details on the Windows machine with `tools/origin-ref`. **Size:** M. **Branch:** `stats-breadth`. **Model:** Sonnet.
 **Detail:** audit D "Missing", "Partial". **Spec:** `docs/spec/statistics.md`.
 
 ## Today

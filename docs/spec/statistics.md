@@ -341,11 +341,119 @@ Paired Sample Sign Test and Statistics > Descriptive Statistics > Statistics on 
 (labels from the X-Function descriptions). Not done: the indexed input forms, the outlier box plot (`box`),
 Origin's report layout, outlier tests that remove several points in turn.
 
+## 12 Distribution fit, probability plot and Q-Q plot, power and sample size
+
+(Section number chosen on the `stats-dist` branch; the `stats-compare` branch adds section 11, so this one comes
+after it and may be renumbered at merge.)
+
+**Source of the numbers: scipy, not Origin.** Nothing in this section was measured against Origin (this was
+built on a machine without it). The reference numbers are from scipy 1.18 (`scipy.stats.<dist>.fit`, `probplot`,
+`kstest`, `nct`, `ncf`, `t`, `f`), written by `tools/stats-dist-ref.py` into
+`crates/calc/tests/fixtures/scipy_stats_dist.rs` and checked by `crates/calc/tests/scipy_stats_dist.rs`. Every
+rule below is the textbook one; where Origin may differ the item is listed under "Not measured".
+
+The numerics are in `crates/calc` (`distfit`, `noncentral`, `power`), the tools in
+`crates/core/src/analysis/dist.rs`, the command line is `sheaf analyze distfit | probplot | qqplot | power`, and
+the app has Statistics > Descriptive Statistics > Distribution Fit, Probability Plot, Q-Q Plot and the
+Statistics > Power and Sample Size submenu (one window per test; options in `dialogs/dist_options.rs`).
+
+### 12.1 Distribution fit
+
+Five families, each fitted to each chosen column by maximum likelihood (missing values are ignored; at least two
+numbers with some spread). Lognormal, exponential, gamma and Weibull have their threshold fixed at 0, as
+`scipy.stats.<dist>.fit(x, floc=0)` does, so they need positive numbers (the exponential accepts 0). A family that
+cannot take a column is left out for that column with a note; if none can, the run is refused.
+
+| Family | Parameters | Estimate |
+|---|---|---|
+| Normal | mean, SD | sample mean; SD with divisor n |
+| Lognormal | mu, sigma of the logarithm | mean and SD (divisor n) of ln x |
+| Exponential | scale (the mean) | sample mean |
+| Gamma | shape k, scale | k solves `ln k - digamma(k) = ln(mean) - mean(ln x)` (Newton), scale = mean / k |
+| Weibull | shape c, scale | c solves the likelihood equation (bisection on ln c), scale from c |
+
+Reported per row: N, the parameters, log-likelihood `ln L`, `AIC = 2k - 2 ln L`, `BIC = k ln n - 2 ln L` (k = number
+of fitted parameters, the fixed threshold not counted), Kolmogorov-Smirnov D and p, Anderson-Darling A2 (and an
+approximate p for normal and lognormal). The notes name the family with the lowest AIC. KS p is for a distribution
+known in advance (as `scipy.stats.kstest`), so it is too large when the parameters were estimated from the same
+data; this is said in the note. A2 is `-n - (1/n) sum (2i-1) (ln F(x_i) + ln(1 - F(x_(n+1-i))))` against the fitted
+distribution. The A2 p-value uses the D'Agostino-Stephens formula for estimated mean and SD, applied to the
+normal and to the lognormal (on the logarithm); no p is given for the other families.
+
+Result sheet `DistFit1`: columns Data, Distribution, N, Parameter 1 (name), Value 1, Parameter 2 (name),
+Value 2 (empty for the exponential), Log-likelihood, AIC, BIC, KS D, KS Prob, Anderson-Darling A2 and Prob.
+
+### 12.2 Probability plot and Q-Q plot
+
+Both use the plotting positions of `scipy.stats.probplot` (Filliben's medians of the uniform order statistics:
+`(i - 0.3175) / (n + 0.365)`, with `1 - 0.5^(1/n)` and `0.5^(1/n)` at the ends).
+
+- **Q-Q plot** (`QQPlot1`): X is the theoretical quantile at the plotting position, Y the ordered data; the
+  reference line is the least-squares line through the points (slope estimates the scale, intercept the location,
+  `r` printed). Families with a shape (lognormal sigma, gamma, Weibull) take the shape fitted by maximum
+  likelihood; the quantiles are those of the standard form, as `probplot(..., sparams=shape)`. A linear graph.
+- **Probability plot** (`ProbPlot1`): X is the ordered data, Y the plotting position in percent; the Y axis is a
+  probability axis (normal and lognormal use the normal probability scale, Weibull and exponential the Weibull
+  scale; gamma the normal one), the X axis is logarithmic for lognormal, Weibull and (positive data) exponential.
+  The reference line is the distribution function of the maximum likelihood fit over the range of the data, kept
+  to 0.01 % to 99.99 %.
+
+Both make a new graph (a scatter plot and a line plot per column, the line in the colour of its points) unless
+"Make a graph" is off, plus the result sheet with the plotted columns and a table (N, parameters or slope,
+intercept, r). One undo step removes sheet and graph.
+
+### 12.3 Power and sample size
+
+Equal variances, balanced designs, textbook formulas. With `d` = difference over standard deviation (the SD of the
+differences for pairs):
+
+| Test | df | Non-centrality |
+|---|---|---|
+| One sample, paired (n pairs) | n - 1 | `d sqrt(n)` |
+| Two sample, n1 and n2 = ceil(ratio n1) | n1 + n2 - 2 | `d / sqrt(1/n1 + 1/n2)` |
+| One-way ANOVA, k groups, n each, N = kn | k - 1, N - k | `f^2 N` |
+
+The t statistic then has a noncentral t distribution: two-tailed power = `P(T > c) + P(T < -c)` with `c` the
+`1 - alpha/2` quantile of the central t; one-tailed `P(T > c)` with the `1 - alpha` quantile (the effect is taken
+on the side of the alternative, so upper and lower give the same number). The ANOVA power is `P(F' > F_crit)` with
+a noncentral F. Cohen's `f` is the SD of the group means about their mean (divisor k) over the common SD; the window
+takes `f` or the means and the SD. The sample size is the smallest integer whose power reaches the wanted power
+(doubling and bisection; refused above 10 million). The one-sample test's sample size counts observations, the paired
+test's pairs, the two-sample test's the first sample (the second follows from the ratio), ANOVA's per group.
+Needs no data: any column of the active sheet only names the workbook that receives the sheet `Power1`.
+
+Noncentral t: Lenth's AS 243 series in the incomplete beta function; above |ncp| 37.62 a normal approximation (the
+answer is 1 to 1e-10 there). Noncentral F: the Poisson mixture of incomplete beta functions summed outward from
+the largest weight.
+
+### 12.4 Checked against scipy, tolerances
+
+Normal, lognormal and exponential estimates, log-likelihood, AIC, BIC, KS D, A2, probability plot quantiles, slope,
+intercept and r: 1e-9 relative. Gamma shape: 1e-9 against `scipy.stats.gamma.fit`. Weibull: scipy's general
+optimizer stops 1e-5 to 2.5e-5 short of the maximum, so against its fit the parameters agree to 1e-4; against the
+same equation solved with `scipy.optimize.brentq` to machine precision they agree to 1e-9, and the quantities
+computed from the parameters are compared with scipy's for those parameters. KS p: 1e-7 (Marsaglia-Tsang-Wang
+against scipy's exact algorithm). `nct` and `ncf` cdf and sf, power and sample size: 1e-9 absolute plus relative.
+
+### 12.5 Not measured (Origin), to check on the Windows machine with `tools/origin-ref`
+
+- Whether Origin's Distribution Fit uses the same parameterizations and a free threshold (three-parameter
+  lognormal, gamma, Weibull), its list of families (it has many more), and whether it reports AIC, BIC, KS and
+  Anderson-Darling the same way (divisor of the normal SD, p-values with estimated parameters).
+- Origin's plotting positions for its probability plot, its axis scales and tick percentages, whether its Q-Q plot
+  plots data or quantiles on X, and its reference line (through the quartiles or a fit).
+- Origin's power: its PSS functions (`PSS_tTest1`, `PSS_tTest2`, `PSS_tTestPair`, `PSS_ANOVA1`) input names,
+  effect-size conventions, one-tailed handling, how it rounds the sample size, and result layout.
+- The window titles, option labels and defaults of all seven new windows, the sheet and graph names (`DistFit1`,
+  `ProbPlot1`, `QQPlot1`, `Power1`), and the menu order of the new entries.
+- Not built: fitting a threshold, censored data, other families, tests of proportions and variances (`PSS_proportionTest*`,
+  `PSS_varTest*`), power curves, unequal variances, a probability plot of several families on one graph.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
 "One-way ANOVA", "Histogram", "Normality test", "Two-way ANOVA", "Mann-Whitney test", "One-sample Wilcoxon signed
-rank test", "Paired Wilcoxon signed rank test", "Kruskal-Wallis test", "Correlation coefficients"). Results go to a new
+rank test", "Paired Wilcoxon signed rank test", "Kruskal-Wallis test", "Correlation coefficients"; section 12 adds "Distribution fit", "Probability plot", "Q-Q plot" and "Power and sample size of the ... test"). Results go to a new
 sheet of the workbook of the input (`TTest1`, `ANOVA1`, `Histogram1`, `Normality1`, `ANOVA2Way1`, `MannWhitney1`,
 `SignedRank1`, `KruskalWallis1`, `Correlation1`); the histogram graph is a new graph window. The input
 columns must be in one sheet and are the Y columns chosen (for the two-sample and paired test exactly
@@ -378,9 +486,8 @@ Not verified or not done:
 - The automatic bin size is a rule fitted to 600 measured cases (593 agree).
 - Origin's own sheet layout and graph (report sheets with several tables, histogram without gaps,
   distribution curve on the histogram, normal probability plot) are not copied.
-- No test of equal variance (Levene, F test) next to the two-sample t-test, no sample size or power
-  analysis, no t-test from summary data, no row-wise t-tests.
-- Three-way and repeated measures ANOVA, Holm and Dunnett comparisons, power analysis and means plots of the
+- No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
+- Three-way and repeated measures ANOVA, Holm and Dunnett comparisons and means plots of the
   ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).

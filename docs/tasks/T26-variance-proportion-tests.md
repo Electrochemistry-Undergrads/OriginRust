@@ -3,7 +3,10 @@
 **Status:** started 2026-11-14 by a session that could not build, run Origin or commit (no permission for
 cargo, PowerShell scripts or git writes). Done so far, all untracked in the main checkout: the calc module
 `crates/calc/src/vartest.rs` (not yet in `lib.rs`, never compiled), the Origin probe
-`re-workspace/scratch/vartest/probe1.lines.txt`. Nothing measured yet. **Size:** M. **Branch:** `vartest`.
+`re-workspace/scratch/vartest/probe1.lines.txt`. Taken over by session 318653a1 (branch `vartest`, worktree
+`.claude/worktrees/vartest`, local commit `91674e9` with this brief and the module); it ran probes 1-3 and one
+dialog capture and stopped for the day. The findings are under Origin facts below. Next: the report sheets
+and proportion dialogs in Origin, then steps 3-5. **Size:** M. **Branch:** `vartest`.
 **Model:** Sonnet (Haiku to run the suites).
 
 **Goal:** Origin's Statistics > Hypothesis Testing has eight entries; Sheaf has the three t-tests. Add
@@ -11,9 +14,39 @@ One-Sample Test for Variance, Two-Sample Test for Variance, One-Sample Test for 
 Test for Proportions, measured against Origin. Closes the feature-parity row "Variance and proportion
 tests" (`vartest`, P2). (Two-Sample t-Test on Rows is the eighth entry; separate.)
 
-**Origin facts:** none measured. X-function names `vartest1` and `vartest2` are from memory; the proportion
-tests' names are unknown (probe1 tries ten guesses with `-h`, an unknown name returns `[False]`).
-Find out with probe1, or open the dialogs through the menu (`tools/origin-ref/origin-dialog.ps1
+**Origin facts (OriginPro 2016, probes 1-3 and a dialog capture by session 318653a1, read and written down
+2026-11-14 evening; raw files in `re-workspace/scratch/vartest/`):**
+- Menu Statistics > Hypothesis Testing, in order: One-Sample t-Test..., Pair-Sample t-Test..., Two-Sample
+  t-Test..., One-Sample Test for Variance..., Two-Sample Test for Variance..., separator, Two-Sample t-test on
+  Rows..., Pair-Sample t-test on Rows..., separator, One-Sample Proportion Test..., Two-Sample Proportion
+  Test... (`shots/m1.png`). Screen clicks with the Origin window at 0,0: Statistics `372,43`, Hypothesis
+  Testing `420,87`, then the item at x `645` and y `153` (one-sample variance), `175` (two-sample variance),
+  `257` (one-sample proportion), `279` (two-sample proportion).
+- `vartest1` and `vartest2` exist as X-functions; none of the twelve proportion names tried (`proportion1`,
+  `prop1`, `ztest1prop`, `oneprop`, `proptest1`, `ptest1` and their `2`s) does. The dialogs are titled
+  `One-Sample Test for Variance: OneSampleTestVar` etc., but `OneSampleTestVar`, `TwoSampleTestVar`,
+  `OneSampleProportionTest`, `TwoSampleProportionTest` all fail from LabTalk (`-h` and with arguments,
+  probes 2-3), so the proportion tests can only be measured through the dialogs.
+- `vartest1 irng:=A var:=2` on probe column A (n 8, `10 + 2 sin(3i) + i/4`): stat 6.3788381990149663, df 7,
+  prob 0.99254933044912774, lcl 0.79671917636177081, ucl 7.54950463751445. Statistic and interval are the
+  textbook ones in this module (interval of the variance at 95 %), and the two-sided p is
+  `2 min(cdf, sf)` (the chi-square median at 7 df is 6.35, so both tails are near 0.5). One case only:
+  tails, alpha and the one-sided interval are still unmeasured.
+- `vartest2 irng:=(A,B)` (B n 10, `11.5 + 2.5 cos(2i) + i/5`): stat 0.45323022914345851 (= s_A^2 / s_B^2),
+  prob 0.30934827784074181 (two-sided). `vartest2` accepts neither `df`, `df1`/`df2` nor `lcl`/`ucl`
+  (probe1 lines 28-35 failed; the values printed after them are left over from `vartest1`).
+- One-Sample Test for Variance dialog (`d1/first.png`, `first.controls.txt`): Results Log Output, Recalculate
+  (None, Auto, Manual), Input; group "Chi-Square Test for Variance": Test Variance (default 1), Null
+  Hypothesis (read-only "Variance = 1"), Alternate Hypothesis radios `Variance <> 1` / `> 1` / `< 1`,
+  Significance Level 0.05, Confidence Interval(s) tick (off), Confidence Level(s) in % "90 95 99"; Plots
+  (Histogram, Box Chart, Arrange Plots of Same Type in One Graph); Output Plot Data, Output Results
+  `[<input>]<new>`.
+- Still to do in Origin: the report sheet of each dialog (run through the menu, read with `-AfterFile`
+  lines `#[Book1]<sheet>` or cell by cell, see `tools/origin-ref/stats3/gen.py`), the two proportion dialogs'
+  controls, and the cases of step 2. This session (2026-11-14 evening) had no permission for cargo or
+  PowerShell scripts either, so nothing more was run.
+
+Open the dialogs through the menu (`tools/origin-ref/origin-dialog.ps1
 -MenuClicks`, as for the Peak Analyzer in T04) and screenshot each page.
 
 **Where:**

@@ -318,6 +318,25 @@ Run through `tools/origin-ref/run-labtalk-lines.ps1` on a book whose first colum
 - Column > Set as Categorical (`Column::categorical`, a toggle) and the designations Group (G) and Subject (S) in Set As and Column Properties. Origin accepts the column type codes 7, 8 and 9 in `wks.colN.type` (set through scripting; which code is which was not read back as a name), so the codes of Group and Subject in a file are not known: the `.opj` writer stores them as unused and names them in the save warnings. Categorical columns are offered first as the key of Unstack Columns; no analysis tool reads Group or Subject yet.
 - The `.opj` writer does not store hidden columns or column widths: `Writer::finish` names them in the save warnings, so the `.sheaf` companion keeps them.
 
+### 13.3 Cell selection and editing (owner-requested behavior, 2026-11-13)
+
+A click in a yellow label cell selects only that label, outlined in black; only the grey
+column-letter header selects the entire column. Labels have their own selection state, separate
+from data ranges, so Copy/Cut/Paste/Clear on a label never change the data below it. Long Name,
+Units, Comments and user-parameter cells accept typing or F2; Enter/Tab commit and move,
+Shift reverses the direction, and Escape cancels. Arrow keys move between label cells; Down
+after the last label enters data row 1. Formula labels continue to use Set Column Values.
+Structural Insert/Delete and Mask are data-range operations, absent from the label-cell context menu.
+
+The same grid handles newly created and imported workbooks, including initially empty cells.
+Regression UI tests exercise both creation paths with mouse selection, typing, Enter/Tab,
+clipboard operations, Delete and undo, and assert that editing labels leaves the data unchanged.
+The cell editors retain Tab themselves so egui's widget-focus traversal cannot steal the grid's
+focus after committing. Each new edit uses a fresh editor state with the cursor after the initial
+typed text, including Unicode; stale cursor positions must not turn typing `a`, then `b`, into
+`ba`. Navigation within an ongoing edit retains its normal cursor/selection state.
+This selection behavior follows the owner's report, not a new measurement of Origin.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

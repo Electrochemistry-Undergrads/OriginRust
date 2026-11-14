@@ -73,7 +73,8 @@ pub struct ChiImport {
     /// Number of chronopotentiometry segments in the `Segments` sheet, 0 when
     /// there is no such sheet.
     pub segments: usize,
-    /// `Technique`, `Date`, `Instrument Model` (when present), then every
+    /// `Technique`, `Date`, `Instrument Model` (when present), `Header` and `Note` (when the
+    /// run has such a text), then every
     /// `name = value` line of the header in file order. Lines of the
     /// `Results:` block carry their heading, for example `Segment 2: Ep`.
     pub meta: Vec<(String, String)>,
@@ -384,6 +385,7 @@ fn read_preamble(lines: &[&str]) -> (String, Vec<(String, String)>) {
     let mut technique = String::new();
     let mut date = String::new();
     let mut instrument = String::new();
+    let (mut header_text, mut note) = (String::new(), String::new());
     let mut params = Vec::new();
     let mut seen = 0;
     let channels = lines.iter().filter_map(|l| heading(l.trim())).filter(|h| is_channel(h)).count();
@@ -418,8 +420,11 @@ fn read_preamble(lines: &[&str]) -> (String, Vec<(String, String)>) {
             continue;
         }
         if let Some((key, value)) = line.split_once(':') {
-            if key.trim().eq_ignore_ascii_case("instrument model") {
-                instrument = value.trim().to_string();
+            match key.trim().to_ascii_lowercase().as_str() {
+                "instrument model" => instrument = value.trim().to_string(),
+                "header" => header_text = value.trim().to_string(),
+                "note" => note = value.trim().to_string(),
+                _ => {}
             }
             if matches!(key.trim().to_ascii_lowercase().as_str(), "file" | "data source" | "header" | "note")
                 || key.trim().eq_ignore_ascii_case("instrument model")
@@ -460,6 +465,11 @@ fn read_preamble(lines: &[&str]) -> (String, Vec<(String, String)>) {
     }
     if !instrument.is_empty() {
         meta.push(("Instrument Model".to_string(), instrument));
+    }
+    for (name, value) in [("Header", header_text), ("Note", note)] {
+        if !value.is_empty() {
+            meta.push((name.to_string(), value));
+        }
     }
     meta.extend(params);
     (technique, meta)
@@ -1156,6 +1166,63 @@ mod tests {
         );
         assert!(parse_chi(&make(19), "clip", &ChiOptions::default()).unwrap().warnings.is_empty());
         assert!(parse_chi(&make(5), "clip", &ChiOptions::default()).unwrap().warnings.is_empty());
+    }
+
+    #[test]
+    fn a_pinned_current_is_found_in_every_numbered_current_column_of_an_i_t_text() {
+        let mut text = String::from(
+            "Sept. 17, 2026   13:52:07
+Amperometric i-t Curve
+File: x
+Data Source:  Experiment
+             Instrument Model:  CHI627E
+Header: 
+Note: 
+
+Init E (V) = 1
+Sample Interval (s) = 0.1
+
+             Results:
+
+Time/s, i1/A, i2/A
+
+",
+        );
+        for k in 0..100 {
+            let t = k as f64 * 0.1;
+            let i1 = if k < 30 { 1.05e-2 } else { 1e-3 + k as f64 * 1e-5 };
+            let i2 = if (40..70).contains(&k) { -1.05e-2 } else { 1e-3 };
+            text.push_str(&format!(
+                "{t:.3e}, {i1:.3e}, {i2:.3e}
+"
+            ));
+        }
+        let w = parse_chi(&text, "it", &ChiOptions::default()).unwrap().warnings;
+        let (a, b) = (w.iter().find(|m| m.starts_with("i1:")), w.iter().find(|m| m.starts_with("i2: negative")));
+        assert!(a.is_some_and(|m| m.contains("positive") && m.contains("30 consecutive")), "{w:?}");
+        assert!(b.is_some_and(|m| m.contains("30 consecutive")), "{w:?}");
+    }
+
+    #[test]
+    fn header_and_note_text_of_a_text_export_are_kept() {
+        let text = "Oct. 28, 2026   17:45:56
+Cyclic Voltammetry
+File: x
+Data Source:  Experiment
+                    Instrument Model:  CHI627E
+Header: CV
+Note: after cycling
+
+Init E (V) = 1.2
+
+                    Potential/V, Current/A
+
+1.200, 1.0e-3
+1.199, 2.0e-3
+";
+        let imp = parse_chi(text, "x", &ChiOptions::default()).unwrap();
+        let names: Vec<(&str, &str)> = imp.meta.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        assert_eq!(names[2..5], [("Instrument Model", "CHI627E"), ("Header", "CV"), ("Note", "after cycling")]);
     }
 
     #[test]

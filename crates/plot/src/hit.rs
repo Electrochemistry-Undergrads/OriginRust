@@ -55,7 +55,7 @@ pub(crate) fn record(
     }
 }
 
-fn union(a: Rect, b: Rect) -> Rect {
+pub(crate) fn union(a: Rect, b: Rect) -> Rect {
     let (x0, y0) = (a.x.min(b.x), a.y.min(b.y));
     let (x1, y1) = ((a.x + a.w).max(b.x + b.w), (a.y + a.h).max(b.y + b.h));
     Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
@@ -203,6 +203,30 @@ fn near_items(items: &[Item], p: (f64, f64), tol: f64) -> bool {
     })
 }
 
+/// True when `p` is on a drawn object: near its outline, or inside it when it is filled (a
+/// polygon test, so the empty corners of an ellipse's box do not count).
+fn near_shape(items: &[Item], p: (f64, f64), tol: f64) -> bool {
+    items.iter().any(|item| {
+        let Item::Path { d, fill, stroke } = item else { return false };
+        let half = stroke.as_ref().map_or(0.0, |s| s.width / 2.0);
+        subpaths(d).iter().any(|sub| {
+            sub.windows(2).any(|w| segment_distance(p, w[0], w[1]) <= tol + half)
+                || (fill.is_some() && inside_polygon(sub, p))
+        })
+    })
+}
+
+fn inside_polygon(poly: &[(f64, f64)], (px, py): (f64, f64)) -> bool {
+    let mut inside = false;
+    for w in poly.windows(2) {
+        let ((ax, ay), (bx, by)) = (w[0], w[1]);
+        if (ay > py) != (by > py) && px < ax + (py - ay) / (by - ay) * (bx - ax) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
 fn list(layer: &LayerScene, which: ItemList) -> &[Item] {
     match which {
         ItemList::Plots => &layer.plots,
@@ -213,22 +237,31 @@ fn list(layer: &LayerScene, which: ItemList) -> &[Item] {
 /// The object of `scene` under page point `p` (points, y down). `tol` is how far from a line, in
 /// points, a click still counts as on it (about 3 screen pixels is a good choice).
 pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
-    let all = || scene.layers.iter().rev().flat_map(|l| l.objects.iter().map(move |o| (l, o)));
+    // Objects of a layer are recorded in paint order, so within the rank of labels and drawn
+    // objects the last recorded is on top and is tried first: a click picks what the eye sees.
+    let all = |topmost_first: bool| {
+        scene.layers.iter().rev().flat_map(move |l| {
+            let objects: Box<dyn Iterator<Item = &SceneObject> + '_> =
+                if topmost_first { Box::new(l.objects.iter().rev()) } else { Box::new(l.objects.iter()) };
+            objects.map(move |o| (l, o))
+        })
+    };
     let rank = |k: ObjectKind| match k {
-        ObjectKind::Label(_) => 0,
+        ObjectKind::Label(_) | ObjectKind::Shape(_) => 0,
         ObjectKind::Legend => 1,
         ObjectKind::XTitle | ObjectKind::YTitle => 2,
         ObjectKind::XAxis | ObjectKind::YAxis => 3,
         ObjectKind::Plot(_) => 4,
     };
     for wanted in 0..=4 {
-        for (layer, o) in all() {
+        for (layer, o) in all(wanted == 0) {
             if rank(o.kind) != wanted || !contains(o.bounds, p, tol) {
                 continue;
             }
             let hit = match o.kind {
                 // Lines can be far apart inside their box (ticks on both edges, a curve across the
                 // frame): only a click near a line, a symbol or a tick label counts.
+                ObjectKind::Shape(_) => near_shape(&list(layer, o.list)[o.items.clone()], p, tol),
                 ObjectKind::Plot(_) | ObjectKind::XAxis | ObjectKind::YAxis => {
                     o.boxes.iter().any(|&b| contains(b, p, tol))
                         || near_items(&list(layer, o.list)[o.items.clone()], p, tol)

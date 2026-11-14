@@ -12,13 +12,13 @@ the audit section named and the parity table row.
 | Templates (save/load), themes (.OTH), Theme Organizer (F7) | C, B | 9 built-in templates today |
 | Tools > Options (ten tabs), Fitting Function Builder/Organizer (F8/F9) | B | |
 | Importers: Excel, HDF5, NetCDF, JCAMP, Matlab, Thermo, ODBC | A, E | only CH Instruments and ASCII today |
-| `.opju` reading | E | refused in `crates/io/src/opj/mod.rs` |
+| `.opju` reading and writing | E | workbooks read since `39178fc` (`crates/io/src/opju`, spec `opju-format.md`); left: decoding drift in about 200 columns of the samples (section 5.4), designations and labels, graphs, matrices, folders; no writer (a save to `.opju` is refused) |
 | `.opj` read of matrices, notes, layouts, fits, masks, number formats, hidden columns, widths | E | plot groups and legend frames: branch `opj-groups-frames` |
 | Signal processing: FFT/IFFT tool, FFT filters beyond low-pass, Hilbert, convolution, deconvolution, STFT, wavelets, IIR | D | |
-| Mathematics: cumulative sum tool, level crossing, curve intersect, average curves, polygon area | D | |
+| Mathematics: cumulative sum tool, level crossing, curve intersect, average curves, polygon area | D | curve intersect, average curves and polygon area: brief T22; Median Filter, Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate: brief T23 (both done); cumulative sum and level crossing remain |
 | Multivariate: PCA, k-means, ROC, Kaplan-Meier | D | |
 | Toolbars as separate bars, View > Toolbars customisation | A | |
-| Drawing tools: lines, arrows, rectangles, pictures, inset | C | only TextLabel today |
-| Autosave and recovery; Append Project | E | |
+| Drawing tools: lines, arrows, rectangles, pictures, inset | C | lines, arrows, rectangles, ellipses: brief T24 (`draw-objects`); pictures and inset still open |
+| Autosave and recovery | E | Append Project done (`21c2aea`: File > Append, the appended project in its own folder, its recalculation links dropped with a note) |
 | Print, Print Preview, Page Setup | A | |
 | 3D graphs | C | last (owner's request) |

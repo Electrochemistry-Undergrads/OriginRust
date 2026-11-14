@@ -2981,9 +2981,9 @@ fn a_polar_layer_labels_the_angles_every_30_degrees_and_the_radius_twice() {
         assert!(t.iter().any(|x| *x == a.to_string()), "angle {a} in {t:?}");
     }
     assert!(!t.iter().any(|x| x == "360"), "360 coincides with 0: {t:?}");
-    // The radius labels run up and down the vertical diameter: each one twice.
+    // The radius labels stand on two axes left of the circle, one above the other: each one twice.
     let geom = &crate::layout_geometry(&p, g).unwrap()[0];
-    for v in geom.y.major.iter().zip(&geom.y.labels).filter(|(v, _)| geom.y.to_unit(**v) > 1e-9).map(|(_, l)| l) {
+    for v in geom.y.major.iter().zip(&geom.y.labels).filter(|(v, _)| geom.radius_unit(**v) > 1e-9).map(|(_, l)| l) {
         assert!(t.iter().filter(|x| *x == v).count() >= 2, "{v} twice in {t:?}");
     }
     assert!(!t.iter().any(|x| x == "Row" || x.contains("Current")), "no axis titles: {t:?}");
@@ -3000,8 +3000,8 @@ fn polar_geometry_puts_angle_zero_on_the_right_and_counts_counter_clockwise() {
     assert!((x0 - (map.cx + map.radius)).abs() < 1e-6 && (y0 - map.cy).abs() < 1e-6, "0 degrees at 3 o'clock");
     let (x1, y1) = geom.data_to_page(90.0, rmax);
     assert!((x1 - map.cx).abs() < 1e-6 && (y1 - (map.cy - map.radius)).abs() < 1e-6, "90 degrees at 12 o'clock");
-    let (x2, y2) = geom.data_to_page(180.0, geom.y.min);
-    assert!((x2 - map.cx).abs() < 1e-6 && (y2 - map.cy).abs() < 1e-6, "the lowest radius is the centre");
+    let (x2, y2) = geom.data_to_page(180.0, 0.0);
+    assert!((x2 - map.cx).abs() < 1e-6 && (y2 - map.cy).abs() < 1e-6, "radius 0 is the centre");
 }
 
 #[test]
@@ -3035,16 +3035,103 @@ fn polar_data_to_page_and_page_to_data_invert_each_other() {
 
 #[test]
 fn the_radius_axis_of_a_polar_layer_follows_the_radius_values() {
+    // Measured in Origin: data 1 to 2 gave 0.75 to 2.25 (steps of 0.5), data 1.13 to 2.37 gave 1 to 2.5, data 3.2 to 87
+    // gave 0 to 100, and a negative lower end is cut at 0: the usual rule with its 8 % margin.
     let (p, g) = polar_probe(Template::Polar);
     let small = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
-    // No margin: the centre is the smallest radius and the edge the largest (spec 14.17 probe).
-    assert!((small.min - 1.0).abs() < 1e-9 && (small.max - 2.0).abs() < 1e-9, "radii 1 to 2: {small:?}");
+    assert!((small.min - 0.75).abs() < 1e-9 && (small.max - 2.25).abs() < 1e-9, "radii 1 to 2: {small:?}");
+    assert_eq!(small.major, vec![1.0, 1.5, 2.0]);
+    let radii = |lo: f64, hi: f64| {
+        let r: Vec<f64> =
+            (0..19).map(|i| lo + (hi - lo) * (0.5 + 0.5 * (f64::from(i) * 20.0).to_radians().cos())).collect();
+        let theta: Vec<f64> = (0..19).map(|i| f64::from(i) * 20.0).collect();
+        let (p, g) = project(Template::Polar, theta, vec![r]);
+        let y = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+        (y.min, y.max, y.step)
+    };
+    let close = |a: (f64, f64, f64), b: (f64, f64, f64)| {
+        assert!((a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9 && (a.2 - b.2).abs() < 1e-9, "{a:?} vs {b:?}")
+    };
+    close(radii(1.13, 2.37), (1.0, 2.5, 0.5));
+    close(radii(0.0, 2.37), (0.0, 3.0, 1.0));
+    close(radii(3.2, 87.0), (0.0, 100.0, 20.0));
+    // (Origin kept steps of 0.5 and a limit of 2.25 for data -1 to 2; Sheaf only cuts the lower limit at 0.)
+    assert_eq!(radii(-1.0, 2.0).0, 0.0);
+    close(radii(1.45, 2.05), (1.4, 2.1, 0.2));
+    // The angle axis ignores the data.
     let (p, g) = project(Template::Polar, vec![0.0, 90.0, 180.0, 270.0], vec![vec![10.0, 40.0, 25.0, 30.0]]);
     let geom = &crate::layout_geometry(&p, g).unwrap()[0];
-    assert!((geom.y.min - 10.0).abs() < 1e-9 && (geom.y.max - 40.0).abs() < 1e-9, "radii 10 to 40: {:?}", geom.y);
-    // The angle axis ignores the data.
     assert_eq!((geom.x.min, geom.x.max), (0.0, 360.0));
     assert_eq!(geom.x.major.len(), 12);
+}
+
+#[test]
+fn the_centre_of_a_polar_layer_is_radius_zero_and_the_lower_limit_leaves_a_hole() {
+    // Origin's "Center at Zero" (default): a radius is placed at |r| / upper limit of the circle's radius, and
+    // what lies below the lower limit is not drawn (measured: limits 1.5 to 2.5 left the ring 1.5 empty inside).
+    let (mut p, g) = polar_probe(Template::Polar);
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(1.5);
+    axis.max = Some(2.5);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(0.0, 2.0);
+    assert!((x - (map.cx + 0.8 * map.radius)).abs() < 1e-6 && (y - map.cy).abs() < 1e-6, "2 of 2.5 is 0.8 radii out");
+    let (t, r) = geom.page_to_data(x, y);
+    assert!(t.abs() < 1e-6 && (r - 2.0).abs() < 1e-9);
+    assert!(geom.checked_data_to_page(0.0, 1.0).is_none(), "inside the hole");
+    assert!(geom.checked_data_to_page(0.0, 1.5).is_some());
+    // A negative radius is drawn on the opposite side of the centre.
+    axis_free(&mut p, g);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let (x1, y1) = geom.data_to_page(0.0, 1.0);
+    let (x2, y2) = geom.data_to_page(180.0, -1.0);
+    assert!((x1 - x2).abs() < 1e-9 && (y1 - y2).abs() < 1e-9);
+}
+
+fn axis_free(p: &mut Project, g: WindowId) {
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(0.0);
+    axis.max = Some(2.5);
+}
+
+#[test]
+fn the_radius_axis_stands_left_of_the_circle_in_two_pieces_when_there_is_a_hole() {
+    let (p, g) = polar_probe(Template::Polar);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    // The labels of the radius axis are all left of the circle.
+    let left = map.cx - map.radius;
+    let radius_labels: Vec<_> = d
+        .descendants()
+        .filter(|n| n.has_tag_name("text") && n.text().is_some_and(|t| t == "1.5" || t == "2.0" || t == "1.0"))
+        .collect();
+    assert!(radius_labels.len() >= 6, "three labels twice");
+    for n in radius_labels {
+        let x: f64 = n.attribute("x").and_then(|v| v.parse().ok()).unwrap();
+        assert!(x < left, "label at x={x} left of the circle at {left}");
+    }
+}
+
+#[test]
+fn a_polar_layer_in_radians_has_eight_ticks_labelled_in_pi() {
+    let (mut p, g) = polar_probe(Template::Polar);
+    if let Some(sheaf_core::graph::Coords::Polar(c)) = p.graph_mut(g).map(|g| &mut g.layers[0].coords) {
+        c.angle_unit = sheaf_core::graph::AngleUnit::Radians;
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert_eq!((geom.x.min, geom.x.max), (0.0, std::f64::consts::TAU));
+    assert_eq!(geom.x.major.len(), 8);
+    assert_eq!(geom.x.labels[0], "0.00\u{3c0}");
+    assert_eq!(geom.x.labels[2], "0.50\u{3c0}");
+    // An angle of pi / 2 points straight up, and the cursor reads it back in radians.
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(std::f64::consts::FRAC_PI_2, geom.y.max);
+    assert!((x - map.cx).abs() < 1e-6 && y < map.cy);
+    let (t, _) = geom.page_to_data(x, y);
+    assert!((t - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
 }
 
 #[test]
@@ -3072,7 +3159,9 @@ fn a_radius_outside_the_axis_range_is_not_drawn() {
     let geom = &crate::layout_geometry(&p, g).unwrap()[0];
     assert!(geom.checked_data_to_page(0.0, 1.0).is_some());
     assert!(geom.checked_data_to_page(0.0, 2.0).is_none());
-    assert!(geom.checked_data_to_page(0.0, -0.5).is_none());
+    // A negative radius is drawn on the other side, so only its size has to be in range.
+    assert!(geom.checked_data_to_page(0.0, -0.5).is_some());
+    assert!(geom.checked_data_to_page(0.0, -2.0).is_none());
 }
 
 // ----- radar charts (graphing spec 14.19) ---------------------------------------------------------
@@ -3090,6 +3179,25 @@ fn radar_probe() -> (Project, WindowId) {
         p.add_plot(g, 0, yc).unwrap();
     }
     (p, g)
+}
+
+/// The radius range of a radar chart of one column of values, rows spread over the spokes.
+fn radar_range(values: Vec<f64>) -> (f64, f64, f64) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let g = p.add_graph(Template::Radar);
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(values)).unwrap();
+    p.add_plot(g, 0, yc).unwrap();
+    let y = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+    (y.min, y.max, y.step)
+}
+
+#[test]
+fn the_radar_scale_follows_the_values_in_steps_of_half_the_usual_table() {
+    // Measured in Origin (spec 14.19): the limits are the values plus the 8 % margin rounded outwards to whole steps.
+    assert_eq!(radar_range(vec![3.2, 4.1, 2.5, 5.2, 4.4, 3.0, 2.1]), (1.5, 5.5, 0.5));
+    assert_eq!(radar_range(vec![0.0, 4.0, 1.0, 3.0, 2.0]), (-1.0, 5.0, 1.0));
+    assert_eq!(radar_range(vec![-3.0, -1.0, -2.0, -4.0]), (-4.5, -0.5, 0.5));
 }
 
 #[test]
@@ -3112,9 +3220,9 @@ fn radar_spokes_are_evenly_spaced_from_twelve_oclock_clockwise_and_named_by_the_
     assert!(x1 > map.cx && y1 < map.cy, "the second spoke is up and to the right (clockwise)");
     let (x3, y3) = geom.data_to_page(180.0, top);
     assert!((x3 - map.cx).abs() < 1e-6 && y3 > map.cy, "the fourth of six points down");
-    // The radial scale starts at 0 in the centre although the values start at 2.
-    assert_eq!(geom.y.min, 0.0);
-    let (cx, cy) = geom.data_to_page(0.0, 0.0);
+    // The radial scale starts at its lower limit in the centre (not at 0): values 2 to 5 gave 1.5 to 5.5.
+    assert_eq!((geom.y.min, geom.y.max, geom.y.step), (1.5, 5.5, 0.5));
+    let (cx, cy) = geom.data_to_page(0.0, geom.y.min);
     assert!((cx - map.cx).abs() < 1e-6 && (cy - map.cy).abs() < 1e-6);
     let t = texts(&doc(&svg_of(&p, g)));
     for name in ["Speed", "Power", "Range", "Comfort", "Safety", "Price"] {
@@ -3299,4 +3407,165 @@ fn a_ternary_layer_labels_three_axes_with_the_column_names_and_steps_of_a_fifth(
     for v in ["0", "20", "40", "60", "80", "100"] {
         assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
     }
+}
+
+// ----- floating bars measured in Origin (graphing spec 14.12) -----------------------------------
+
+/// Four columns B..E for a floating plot: Origin made the bars B-C, C-D and D-E.
+fn floating_chain(template: Template) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let mut ys = Vec::new();
+    for (i, v) in [[1.0, 2.0], [3.0, 4.0], [4.0, 6.0], [7.0, 7.5]].into_iter().enumerate() {
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(v.to_vec())).unwrap();
+        p.column_mut(c).unwrap().long_name = ["B", "C", "D", "E"][i].into();
+        ys.push(c);
+    }
+    let g = p.plot_columns(template, &ys).unwrap();
+    (p, g)
+}
+
+#[test]
+fn floating_plots_chain_the_columns_and_share_one_slot() {
+    for template in [Template::FloatingColumn, Template::FloatingBar] {
+        let (p, g) = floating_chain(template);
+        let plots = &p.graph(g).unwrap().layers[0].plots;
+        assert_eq!(plots.len(), 3);
+        assert_eq!(plots[1].y_base, Some(plots[0].y));
+        assert_eq!(plots[2].y_base, Some(plots[1].y));
+        let l = layer_data(&p, g);
+        let slots: Vec<_> = l.plots.iter().map(|pd| pd.bar.unwrap().left).collect();
+        assert!(slots.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-12), "the same slot: {slots:?}");
+    }
+}
+
+#[test]
+fn floating_bar_and_column_legends_list_the_last_plot_first() {
+    for template in [Template::FloatingColumn, Template::FloatingBar] {
+        let (p, g) = floating_chain(template);
+        let t = texts(&doc(&svg_of(&p, g)));
+        let at = |s: &str| t.iter().rposition(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        assert!(at("E") < at("D") && at("D") < at("C"), "E, D, C from the top: {t:?}");
+    }
+}
+
+// ----- drawn objects (graphing spec section 17) ----------------------------
+
+fn graph_with_one_of_each_shape() -> (sheaf_core::Project, sheaf_core::WindowId) {
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let mut line = Shape::new(ShapeKind::Line, (0.1, 0.1), (0.4, 0.1));
+    line.dash = sheaf_core::graph::Dash::Dash;
+    let mut arrow = Shape::new(ShapeKind::Arrow, (0.1, 0.3), (0.4, 0.5));
+    arrow.color = Color { r: 200, g: 0, b: 0, a: 255 };
+    arrow.head_at_start = true;
+    let mut rect = Shape::new(ShapeKind::Rectangle, (0.55, 0.1), (0.9, 0.3));
+    rect.fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    let ellipse = Shape::new(ShapeKind::Ellipse, (0.55, 0.5), (0.9, 0.9));
+    layer.shapes = vec![line, arrow, rect, ellipse];
+    (p, g)
+}
+
+#[test]
+fn golden_drawn_shapes() {
+    let (p, g) = graph_with_one_of_each_shape();
+    compare_golden("shapes", &svg_of(&p, g));
+}
+
+#[test]
+fn drawn_shapes_are_picked_by_outline_or_fill() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    let (p, g) = graph_with_one_of_each_shape();
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.25, 0.1), shape(0), "on the line");
+    assert_eq!(at(0.25, 0.4), shape(1), "on the arrow's middle");
+    assert_eq!(at(0.7, 0.2), shape(2), "inside the filled rectangle");
+    assert_eq!(at(0.55, 0.2), shape(2), "on its outline");
+    assert_eq!(at(0.725, 0.5), shape(3), "on the ellipse's top");
+    assert_eq!(at(0.56, 0.51), Hit::Layer(0), "in the ellipse's box corner");
+    // An unfilled shape is hit on its outline only: its inside is the layer behind it.
+    assert_eq!(at(0.725, 0.7), Hit::Layer(0), "inside the unfilled ellipse");
+    assert_eq!(at(0.9, 0.7), shape(3), "on the unfilled ellipse's right end");
+    // Outside the filled rectangle, 1 pt from its edge, is within the pick tolerance; 10 pt is not.
+    assert_eq!(hit_test(&scene, (f.x + 0.55 * f.w - 1.0, f.y + 0.2 * f.h), 2.0), shape(2), "1 pt outside the edge");
+    assert_eq!(hit_test(&scene, (f.x + 0.55 * f.w - 10.0, f.y + 0.2 * f.h), 2.0), Hit::Layer(0), "10 pt outside");
+}
+
+#[test]
+fn an_unfilled_rectangle_is_hit_on_its_edge_and_a_filled_ellipse_inside_only() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let mut rect = Shape::new(ShapeKind::Rectangle, (0.1, 0.1), (0.4, 0.4));
+    rect.fill = None;
+    let mut ellipse = Shape::new(ShapeKind::Ellipse, (0.55, 0.5), (0.9, 0.9));
+    ellipse.fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    p.graph_mut(g).unwrap().layers[0].shapes = vec![rect, ellipse];
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.1, 0.25), shape(0), "on the unfilled rectangle's edge");
+    assert_eq!(at(0.25, 0.25), Hit::Layer(0), "inside the unfilled rectangle");
+    assert_eq!(at(0.725, 0.7), shape(1), "inside the filled ellipse");
+    assert_eq!(at(0.56, 0.51), Hit::Layer(0), "the filled ellipse's box corner");
+}
+
+#[test]
+fn the_topmost_of_overlapping_drawn_objects_is_picked() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    // Shape 0 is a big filled rectangle, shape 1 a smaller filled one drawn over it, shape 2 a
+    // filled rectangle that covers the label.
+    let mut big = Shape::new(ShapeKind::Rectangle, (0.1, 0.1), (0.6, 0.6));
+    big.fill = fill;
+    let mut small = Shape::new(ShapeKind::Rectangle, (0.3, 0.3), (0.5, 0.5));
+    small.fill = fill;
+    let mut cover = Shape::new(ShapeKind::Rectangle, (0.7, 0.7), (0.95, 0.95));
+    cover.fill = fill;
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.shapes = vec![big, small, cover];
+    layer.labels.push(sheaf_core::graph::TextLabel::new("peak", 0.8, 0.8, sheaf_core::graph::Font::new("Arial", 10.0)));
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.4, 0.4), shape(1), "the overlap picks the rectangle painted last");
+    assert_eq!(at(0.2, 0.2), shape(0), "outside the small one the big one is picked");
+    assert_eq!(at(0.82, 0.8), shape(2), "a shape over a label is picked, not the label");
+}
+
+#[test]
+fn a_thick_line_is_picked_on_its_visible_width() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let mut line = Shape::new(ShapeKind::Line, (0.1, 0.5), (0.4, 0.5));
+    line.width_pt = 10.0;
+    p.graph_mut(g).unwrap().layers[0].shapes = vec![line];
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |dy: f64| hit_test(&scene, (f.x + 0.25 * f.w, f.y + 0.5 * f.h + dy), 1.0);
+    let shape = Hit::Object { layer: 0, kind: ObjectKind::Shape(0) };
+    assert_eq!(at(4.0), shape, "4 pt off the centre of a 10 pt line is on the stroke");
+    assert_eq!(at(-4.0), shape);
+    assert_eq!(at(20.0), Hit::Layer(0), "far from it is not");
+    // The selection box (the recorded bounds) holds the stroke.
+    let o = scene.layers[0].objects.iter().find(|o| o.kind == ObjectKind::Shape(0)).unwrap();
+    assert!(o.bounds.h >= 10.0 - 1e-9, "{:?}", o.bounds);
 }

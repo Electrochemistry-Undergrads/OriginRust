@@ -479,6 +479,26 @@ fn rotated_tick_labels_are_named() {
 }
 
 #[test]
+fn drawn_objects_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].shapes = vec![
+            Shape::new(ShapeKind::Arrow, (0.1, 0.1), (0.4, 0.4)),
+            Shape::new(ShapeKind::Arrow, (0.1, 0.2), (0.4, 0.5)),
+            Shape::new(ShapeKind::Ellipse, (0.5, 0.5), (0.9, 0.9)),
+        ];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("drawn objects")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("2 arrow") && w.contains("1 ellipse"), "{w}");
+    assert!(imp.graphs[0].layers[0].shapes.is_empty());
+    // A layer without drawn objects says nothing.
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("drawn objects")));
+}
+
+#[test]
 fn other_scale_types_survive_a_round_trip() {
     let mut p = source();
     graph_with(&mut p, Template::Scatter, &[(0, 3)], |g| {

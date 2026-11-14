@@ -13,12 +13,14 @@ pub mod anova2;
 pub mod baseline;
 pub mod correlation;
 pub mod curvemath;
+pub mod curves;
 pub mod dierckx;
 pub mod differentiate;
 pub mod freq;
 pub mod hypothesis;
 pub mod integrate;
 pub mod interp;
+pub mod manip;
 pub mod nonparam;
 pub mod normality;
 pub mod normalize;
@@ -37,11 +39,19 @@ pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
 pub use curvemath::{CurveMathResult, CurveOp, curve_math_const, curve_math_ref};
+pub use curves::{
+    AverageMethod, AverageOptions, AverageResult, CommonX, CurveError, Intersection, MeetKind, PolygonArea, XRange,
+    average_curves, intersections, polygon_area,
+};
 pub use differentiate::{DiffOptions, differentiate};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
+pub use manip::{
+    DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions, Reduced, even_grid,
+    median_filter, reduce_duplicates, reduce_evenly, shift_to_land, subtract_line_through, translate, value_at,
+};
 pub use nonparam::{
     KruskalWallis, MannWhitney, RankGroup, RankTestError, SIGNED_RANK_EXACT_MAX_N, SignedRank, kruskal_wallis,
     mann_whitney, midranks, signed_rank, signed_rank_one, signed_rank_paired,

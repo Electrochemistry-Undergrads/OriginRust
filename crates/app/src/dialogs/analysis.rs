@@ -21,7 +21,8 @@ use sheaf_core::analysis::{
     PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
 use sheaf_core::analysis::{
-    ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec, PeakFitSpec, PeakShape,
+    BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
+    PeakFitSpec, PeakShape,
 };
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
@@ -218,11 +219,50 @@ enum BaselineKind {
     Line,
 }
 
+/// Origin's Baseline Modes of the Peak Analyzer that Sheaf offers (the others are listed greyed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChainBaselineKind {
+    /// Origin's default: Y is a value of the data (minimum by default) or a custom number.
+    Constant,
+    /// None (Y=0).
     None,
+    /// Straight Line: through the first and the last point (Sheaf's reading of the mode).
     EndPoints,
+    /// User Defined, with Sheaf's anchors: the lowest points of n stretches.
     Minima,
+}
+
+/// The Goal page of Origin's Peak Analyzer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChainGoal {
+    Integrate,
+    CreateBaseline,
+    SubtractBaseline,
+    Find,
+    Fit,
+}
+
+impl ChainGoal {
+    fn name(self) -> &'static str {
+        match self {
+            ChainGoal::Integrate => "Integrate Peaks",
+            ChainGoal::CreateBaseline => "Create Baseline",
+            ChainGoal::SubtractBaseline => "Subtract Baseline",
+            ChainGoal::Find => "Find Peaks",
+            ChainGoal::Fit => "Fit Peaks",
+        }
+    }
+
+    /// Origin's pages after Goal for this goal (measured, analysis-tools.md 11.1).
+    fn pages(self) -> &'static [&'static str] {
+        match self {
+            ChainGoal::Integrate => &["Baseline Mode", "Baseline Treatment", "Find Peaks", "Integrate Peaks", "Finish"],
+            ChainGoal::Find => &["Baseline Mode", "Baseline Treatment", "Find Peaks", "Finish"],
+            ChainGoal::Fit => &["Baseline Mode", "Baseline Treatment", "Find Peaks", "Fit Peaks", "Finish"],
+            ChainGoal::CreateBaseline => &["Baseline Mode", "Create Baseline", "Finish"],
+            ChainGoal::SubtractBaseline => &["Baseline Mode", "Subtract Baseline", "Finish"],
+        }
+    }
 }
 
 const FIND_METHODS: [(&str, FindMethod); 4] = [
@@ -438,10 +478,15 @@ pub struct AnalysisDialog {
     peak_count: usize,
     chain_baseline: ChainBaselineKind,
     chain_minima: usize,
+    /// Constant baseline: a value of the data, or `None` for the custom number.
+    chain_const: Option<BaselineStat>,
+    chain_custom_y: f64,
     find_method: usize,
     chain_half_height: bool,
-    chain_integrate: bool,
-    chain_fit: Option<PeakShape>,
+    chain_goal: ChainGoal,
+    /// The wizard page shown: 0 is Goal, then the pages of the goal.
+    chain_page: usize,
+    chain_fit: PeakShape,
     chain_fit_linear: bool,
     /// X intervals of "Integrate Ranges".
     ranges: Vec<(f64, f64)>,
@@ -625,12 +670,15 @@ impl AnalysisDialog {
             peak_keep: PeakKeep::Default,
             peak_height: 0.0,
             peak_count: 1,
-            chain_baseline: ChainBaselineKind::Minima,
+            chain_baseline: ChainBaselineKind::Constant,
             chain_minima: 5,
+            chain_const: Some(BaselineStat::Minimum),
+            chain_custom_y: 0.0,
             find_method: 0,
             chain_half_height: false,
-            chain_integrate: true,
-            chain_fit: None,
+            chain_goal: ChainGoal::Integrate,
+            chain_page: 0,
+            chain_fit: PeakShape::Gauss,
             chain_fit_linear: true,
             stats,
             curves: Default::default(),
@@ -652,6 +700,205 @@ impl AnalysisDialog {
             failed_key: None,
             undo_token: next_undo_token(),
         })
+    }
+
+    /// The peak search controls of Find Peaks and of the Peak Analyzer's Find Peaks page.
+    fn peak_search_controls(&mut self, ui: &mut egui::Ui, chain: bool) {
+        if chain {
+            ui.horizontal(|ui| {
+                ui.label("Method");
+                egui::ComboBox::from_id_salt("peak_find_method")
+                    .selected_text(FIND_METHODS[self.find_method].0)
+                    .show_ui(ui, |ui| {
+                        for (i, (name, _)) in FIND_METHODS.iter().enumerate() {
+                            ui.selectable_value(&mut self.find_method, i, *name);
+                        }
+                    });
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.label("Direction");
+            ui.radio_value(&mut self.peaks.direction, PeakDirection::Both, "Both");
+            ui.radio_value(&mut self.peaks.direction, PeakDirection::Positive, "Positive");
+            ui.radio_value(&mut self.peaks.direction, PeakDirection::Negative, "Negative");
+        });
+        ui.horizontal(|ui| {
+            ui.label("Neighbours compared on each side");
+            ui.add(DragValue::new(&mut self.peaks.npts).range(1..=10_000));
+        });
+        ui.radio_value(&mut self.peak_keep, PeakKeep::Default, "Keep peaks of at least 20 % of the largest");
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.peak_keep, PeakKeep::Height, "Keep peaks of at least this height");
+            ui.add_enabled(self.peak_keep == PeakKeep::Height, DragValue::new(&mut self.peak_height).speed(0.01));
+        });
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.peak_keep, PeakKeep::Count, "Keep only the highest");
+            ui.add_enabled(self.peak_keep == PeakKeep::Count, DragValue::new(&mut self.peak_count).range(1..=10_000));
+        });
+        ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+    }
+
+    /// Origin's Peak Analyzer as a wizard: the page list of the goal, Prev and Next, and the page
+    /// (analysis-tools.md 11.1). OK runs it (Origin's Finish).
+    fn peak_wizard(&mut self, ui: &mut egui::Ui) {
+        let pages = self.chain_goal.pages();
+        self.chain_page = self.chain_page.min(pages.len());
+        let current = if self.chain_page == 0 { "Goal" } else { pages[self.chain_page - 1] };
+        egui::Frame::new().fill(egui::Color32::BLACK).inner_margin(6.0).show(ui, |ui| {
+            ui.set_min_width(260.0);
+            ui.vertical(|ui| {
+                let mut go = None;
+                let goal = format!("Goal - {}", self.chain_goal.name());
+                let items = std::iter::once(goal.as_str()).chain(pages.iter().copied());
+                for (k, name) in items.enumerate() {
+                    let here = k == self.chain_page;
+                    let marker = if here {
+                        "\u{25A0}"
+                    } else if k < self.chain_page {
+                        "\u{25A3}"
+                    } else {
+                        "\u{25A1}"
+                    };
+                    let indent = if k == 0 { "" } else { "    " };
+                    let color = if here { egui::Color32::WHITE } else { egui::Color32::YELLOW };
+                    let mut text = egui::RichText::new(format!("{indent}{marker} {name}")).color(color);
+                    if here {
+                        text = text.strong();
+                    }
+                    if ui.add(egui::Label::new(text).sense(egui::Sense::click())).clicked() {
+                        go = Some(k);
+                    }
+                }
+                if let Some(k) = go {
+                    self.chain_page = k;
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            if ui.add_enabled(self.chain_page > 0, egui::Button::new("Prev")).clicked() {
+                self.chain_page -= 1;
+            }
+            // Next stops on the last page before Finish, as in Origin.
+            if ui.add_enabled(self.chain_page + 1 < pages.len(), egui::Button::new("Next")).clicked() {
+                self.chain_page += 1;
+            }
+            ui.weak("OK runs the analysis (Origin's Finish).");
+        });
+        ui.separator();
+        match current {
+            "Goal" => {
+                ui.label(egui::RichText::new("Define a baseline, find and integrate peaks").strong());
+                ui.horizontal(|ui| {
+                    ui.label("Goal");
+                    ui.vertical(|ui| {
+                        for g in [
+                            ChainGoal::Integrate,
+                            ChainGoal::CreateBaseline,
+                            ChainGoal::SubtractBaseline,
+                            ChainGoal::Find,
+                            ChainGoal::Fit,
+                        ] {
+                            let offered = !matches!(g, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline);
+                            let r = ui.add_enabled_ui(offered, |ui| ui.radio_value(&mut self.chain_goal, g, g.name()));
+                            if !offered {
+                                r.response.on_disabled_hover_text(
+                                    "Not offered yet: use Analysis > Peaks and Baseline > Baseline",
+                                );
+                            }
+                        }
+                    });
+                });
+            }
+            "Baseline Mode" => {
+                const MODES: [(&str, Option<ChainBaselineKind>); 8] = [
+                    ("Constant", Some(ChainBaselineKind::Constant)),
+                    ("User Defined", Some(ChainBaselineKind::Minima)),
+                    ("Use Existing Dataset", None),
+                    ("XPS", None),
+                    ("None (Y=0)", Some(ChainBaselineKind::None)),
+                    ("End Points Weighted", None),
+                    ("Straight Line", Some(ChainBaselineKind::EndPoints)),
+                    ("Asymmetric Least Squares Smoothing", None),
+                ];
+                let name = MODES.iter().find(|m| m.1 == Some(self.chain_baseline)).map_or("", |m| m.0);
+                ui.horizontal(|ui| {
+                    ui.label("Baseline Mode");
+                    egui::ComboBox::from_id_salt("pa_basemode").selected_text(name).width(240.0).show_ui(ui, |ui| {
+                        for (label, kind) in MODES {
+                            match kind {
+                                Some(k) => {
+                                    ui.selectable_value(&mut self.chain_baseline, k, label);
+                                }
+                                None => {
+                                    ui.add_enabled(false, egui::Button::selectable(false, label));
+                                }
+                            }
+                        }
+                    });
+                });
+                match self.chain_baseline {
+                    ChainBaselineKind::Constant => {
+                        ui.horizontal(|ui| {
+                            ui.label("Y =");
+                            for (label, stat) in [
+                                ("Minimum", Some(BaselineStat::Minimum)),
+                                ("Maximum", Some(BaselineStat::Maximum)),
+                                ("Mean", Some(BaselineStat::Mean)),
+                                ("Median", Some(BaselineStat::Median)),
+                                ("Custom", None),
+                            ] {
+                                ui.radio_value(&mut self.chain_const, stat, label);
+                            }
+                            ui.add_enabled(
+                                self.chain_const.is_none(),
+                                DragValue::new(&mut self.chain_custom_y).speed(0.01),
+                            );
+                        });
+                    }
+                    ChainBaselineKind::Minima => {
+                        ui.horizontal(|ui| {
+                            ui.label("Anchor points: the lowest point of each of");
+                            ui.add(DragValue::new(&mut self.chain_minima).range(2..=1000));
+                            ui.label("stretches (Sheaf's way of finding them)");
+                        });
+                    }
+                    ChainBaselineKind::EndPoints => {
+                        ui.weak("The line through the first and the last point.");
+                    }
+                    ChainBaselineKind::None => {}
+                }
+            }
+            "Baseline Treatment" => {
+                ui.add_enabled(false, egui::Checkbox::new(&mut false, "Auto Subtract Baseline"));
+                ui.add_enabled(false, egui::Checkbox::new(&mut false, "Auto Rescale"));
+                ui.weak(
+                    "The peaks are measured from the baseline; a column with the baseline is written beside the data.",
+                );
+            }
+            "Find Peaks" => self.peak_search_controls(ui, true),
+            "Integrate Peaks" => {
+                ui.horizontal(|ui| {
+                    ui.label("Integrate From");
+                    ui.add_enabled(false, egui::Button::selectable(true, "Baseline"));
+                });
+                ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak (Sheaf's own)");
+                ui.weak(
+                    "Quantities: Peak Area, Percent Area (of the whole curve's area), Row Index, Beginning X, \
+                     Ending X, Peak Center, Peak Height, FWHM.",
+                );
+            }
+            "Fit Peaks" => {
+                ui.horizontal(|ui| {
+                    ui.label("Function");
+                    ui.radio_value(&mut self.chain_fit, PeakShape::Gauss, "Gauss");
+                    ui.radio_value(&mut self.chain_fit, PeakShape::Lorentz, "Lorentz");
+                });
+                ui.checkbox(&mut self.chain_fit_linear, "Sloped baseline in the fit");
+            }
+            _ => {
+                ui.label(format!("{}: press OK to run it.", self.chain_goal.name()));
+            }
+        }
     }
 
     fn tool(&self) -> Result<Tool, String> {
@@ -728,6 +975,10 @@ impl AnalysisDialog {
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
                 chain: ChainOptions {
                     baseline: match self.chain_baseline {
+                        ChainBaselineKind::Constant => match self.chain_const {
+                            Some(stat) => ChainBaseline::ConstantStat(stat),
+                            None => ChainBaseline::Constant(self.chain_custom_y),
+                        },
                         ChainBaselineKind::None => ChainBaseline::None,
                         ChainBaselineKind::EndPoints => ChainBaseline::EndPoints,
                         ChainBaselineKind::Minima => ChainBaseline::AutoMinima(self.chain_minima),
@@ -746,9 +997,9 @@ impl AnalysisDialog {
                     },
                     limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
                 },
-                integrate: self.chain_integrate,
-                fit: self.chain_fit.map(|shape| PeakFitSpec {
-                    shape,
+                integrate: self.chain_goal == ChainGoal::Integrate,
+                fit: (self.chain_goal == ChainGoal::Fit).then_some(PeakFitSpec {
+                    shape: self.chain_fit,
                     baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
                 }),
             }),
@@ -1158,88 +1409,24 @@ impl AnalysisDialog {
                     self.interp.range = Some((lo, hi));
                 });
             }
-            AnalysisKind::Peaks | AnalysisKind::PeakChain => {
-                let chain = self.kind == AnalysisKind::PeakChain;
-                if chain {
-                    ui.horizontal(|ui| {
-                        ui.label("Baseline");
-                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::None, "None");
-                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::EndPoints, "End points");
-                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::Minima, "Lowest points of");
-                        ui.add_enabled(
-                            self.chain_baseline == ChainBaselineKind::Minima,
-                            DragValue::new(&mut self.chain_minima).range(2..=1000),
-                        );
-                        ui.label("stretches");
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Search method");
-                        egui::ComboBox::from_id_salt("peak_find_method")
-                            .selected_text(FIND_METHODS[self.find_method].0)
-                            .show_ui(ui, |ui| {
-                                for (i, (name, _)) in FIND_METHODS.iter().enumerate() {
-                                    ui.selectable_value(&mut self.find_method, i, *name);
-                                }
-                            });
-                    });
-                }
+            AnalysisKind::PeakChain => self.peak_wizard(ui),
+            AnalysisKind::Peaks => {
+                self.peak_search_controls(ui, false);
                 ui.horizontal(|ui| {
-                    ui.label("Direction");
-                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Both, "Both");
-                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Positive, "Positive");
-                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Negative, "Negative");
+                    ui.label("Smoothing points before the search");
+                    ui.add(DragValue::new(&mut self.peaks.smooth_points).range(0..=1001));
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Neighbours compared on each side");
-                    ui.add(DragValue::new(&mut self.peaks.npts).range(1..=10_000));
-                });
-                ui.radio_value(&mut self.peak_keep, PeakKeep::Default, "Keep peaks of at least 20 % of the largest");
-                ui.horizontal(|ui| {
-                    ui.radio_value(&mut self.peak_keep, PeakKeep::Height, "Keep peaks of at least this height");
-                    ui.add_enabled(
-                        self.peak_keep == PeakKeep::Height,
-                        DragValue::new(&mut self.peak_height).speed(0.01),
-                    );
+                    ui.label("Foot height");
+                    ui.add(DragValue::new(&mut self.peaks.foot_height).speed(0.01).range(0.0..=f64::MAX));
                 });
                 ui.horizontal(|ui| {
-                    ui.radio_value(&mut self.peak_keep, PeakKeep::Count, "Keep only the highest");
-                    ui.add_enabled(
-                        self.peak_keep == PeakKeep::Count,
-                        DragValue::new(&mut self.peak_count).range(1..=10_000),
-                    );
+                    let mut limited = self.peaks.max_half_width.is_some();
+                    ui.checkbox(&mut limited, "Limit the distance of the feet from the peak");
+                    let mut w = self.peaks.max_half_width.unwrap_or(1.0);
+                    ui.add_enabled(limited, DragValue::new(&mut w).speed(0.01).range(0.0..=f64::MAX));
+                    self.peaks.max_half_width = limited.then_some(w);
                 });
-                ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
-                if !chain {
-                    ui.horizontal(|ui| {
-                        ui.label("Smoothing points before the search");
-                        ui.add(DragValue::new(&mut self.peaks.smooth_points).range(0..=1001));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Foot height");
-                        ui.add(DragValue::new(&mut self.peaks.foot_height).speed(0.01).range(0.0..=f64::MAX));
-                    });
-                    ui.horizontal(|ui| {
-                        let mut limited = self.peaks.max_half_width.is_some();
-                        ui.checkbox(&mut limited, "Limit the distance of the feet from the peak");
-                        let mut w = self.peaks.max_half_width.unwrap_or(1.0);
-                        ui.add_enabled(limited, DragValue::new(&mut w).speed(0.01).range(0.0..=f64::MAX));
-                        self.peaks.max_half_width = limited.then_some(w);
-                    });
-                }
-                if chain {
-                    ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak");
-                    ui.checkbox(&mut self.chain_integrate, "Integrate every peak (area, area %, FWHM, limits)");
-                    ui.horizontal(|ui| {
-                        ui.label("Fit all peaks together");
-                        ui.radio_value(&mut self.chain_fit, None, "No fit");
-                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Gauss), "Gauss");
-                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Lorentz), "Lorentz");
-                    });
-                    ui.add_enabled(
-                        self.chain_fit.is_some(),
-                        egui::Checkbox::new(&mut self.chain_fit_linear, "Sloped baseline in the fit"),
-                    );
-                }
             }
             AnalysisKind::Statistics => {
                 let d = &mut self.stats.desc;

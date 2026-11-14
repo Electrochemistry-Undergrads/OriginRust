@@ -1452,6 +1452,16 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     show_window(&mut h, "Book1 - peaks");
     menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
     assert!(h.state().analysis.is_some(), "the Peak Analyzer window is open");
+    // Origin's wizard: the pages of the goal Integrate Peaks, Prev and Next.
+    for page in ["Baseline Mode", "Baseline Treatment", "Find Peaks", "Integrate Peaks", "Finish"] {
+        assert!(label_containing(&h, page), "{page}");
+    }
+    assert!(label_containing(&h, "Goal - Integrate Peaks"));
+    click(&mut h, "Next");
+    assert!(has_label(&h, "Y ="), "the Baseline Mode page with Origin's Constant baseline");
+    click(&mut h, "Next");
+    click(&mut h, "Next");
+    assert!(has_label(&h, "Direction"), "the Find Peaks page");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "OK closes the window");
     let b = project(&h).workbooks().next().unwrap();

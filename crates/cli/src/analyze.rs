@@ -391,6 +391,18 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     }
                     (Some(PeakBaselineKind::EndPoints), _) => analysis::ChainBaseline::EndPoints,
                     (Some(PeakBaselineKind::Minima), _) => analysis::ChainBaseline::AutoMinima(baseline_points),
+                    (Some(PeakBaselineKind::Minimum), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Minimum)
+                    }
+                    (Some(PeakBaselineKind::Maximum), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Maximum)
+                    }
+                    (Some(PeakBaselineKind::Mean), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Mean)
+                    }
+                    (Some(PeakBaselineKind::Median), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Median)
+                    }
                     (Some(PeakBaselineKind::None) | None, None) => analysis::ChainBaseline::None,
                 };
                 let method = match method.unwrap_or(PeakMethodKind::LocalMax) {

@@ -15,12 +15,15 @@
 param(
   [string]$Setup = '',
   [string]$Command = '',
+  [string]$MenuClicks = '',    # instead of -Command: click these screen positions "x,y;x,y" in order (a menu path) in the Origin window placed at 0,0
   [string]$DoubleClick = '',   # instead of -Command: double-click this screen position "x,y" in the Origin window placed at 0,0 (for example a column header)
   [Parameter(Mandatory = $true)][string]$OutDir,
   [string]$StepsFile = '',
   [string]$WorkDir = '.',
-  [string[]]$After = @()   # LabTalk lines run after the dialog closed; "$name$" lines print a string, "?name" a number
+  [string[]]$After = @(),  # LabTalk lines run after the dialog closed; "$name$" lines print a string, "?name" a number
+  [string]$AfterFile = ''  # the same, one line each, from a file (bash passes -After as one string)
 )
+if ($AfterFile -ne '') { $After = @(Get-Content -LiteralPath $AfterFile | Where-Object { $_.Trim() -ne '' }) }
 $ErrorActionPreference = 'Stop'
 $work = (Resolve-Path $WorkDir).Path.TrimEnd('\') + '\'
 $watch = Join-Path $PSScriptRoot 'origin-dialog-watch.ps1'
@@ -40,6 +43,7 @@ try {
   if ($Setup -ne '') { "setup=" + $origin.Execute((Get-Content -Raw -LiteralPath $Setup).Replace('%WORK%', $work)) }
   $helperArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $watch, '-OriginPid', $proc.Id, '-OutDir', $OutDir)
   if ($DoubleClick -ne '') { $helperArgs += @('-DoubleClick', $DoubleClick) }
+  if ($MenuClicks -ne '') { $helperArgs += @('-MenuClicks', $MenuClicks) }
   if ($StepsFile -ne '') { $helperArgs += @('-StepsFile', (Resolve-Path $StepsFile).Path) }
   $helper = Start-Process -FilePath 'powershell.exe' -ArgumentList $helperArgs -WindowStyle Hidden -PassThru
   if ($Command -ne '') {
@@ -67,6 +71,16 @@ public static class DlgOpen {
   }
   [void]$helper.WaitForExit(60000)
   foreach ($l in $After) {
+    if ($l.StartsWith('#')) {
+      # "#[Book]Sheet" prints the sheet's cells, as run-labtalk-lines.ps1 does.
+      $sh = $l.Substring(1).Trim(); $inv = [Globalization.CultureInfo]::InvariantCulture; $t = [System.__ComObject]
+      try { $r = $t.InvokeMember('GetWorksheet', [Reflection.BindingFlags]::InvokeMethod, $null, $origin, @($sh)) } catch { "#ERR $sh $_"; continue }
+      if ($r -is [Array]) {
+        $rows = $r.GetLength(0); $cols = $r.GetLength(1); "#SHEET $sh $rows $cols"; $l0 = $r.GetLowerBound(0); $l1 = $r.GetLowerBound(1)
+        for ($i = $l0; $i -lt $l0 + $rows; $i++) { $line = for ($j = $l1; $j -lt $l1 + $cols; $j++) { $c = $r[$i, $j]; if ($c -is [DBNull] -or $null -eq $c) { '' } elseif ($c -is [double]) { $c.ToString('R', $inv) } else { [string]$c } }; $line -join "`t" }
+      } else { "#NOARRAY $sh" }
+      continue
+    }
     if ($l.StartsWith('?')) { $v = $l.Substring(1); "$v = " + $origin.LTVar($v) }
     elseif ($l.StartsWith('$')) { $v = $l.Substring(1); "$v = " + $origin.LTStr($v) }
     else { "[" + $origin.Execute($l) + "] $l" }

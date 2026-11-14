@@ -36,8 +36,8 @@ pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
     PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
+pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
 pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
-pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -2755,7 +2755,8 @@ mod tests {
         assert!((t.rows[0].1[3] - exact).abs() < 0.02 * exact, "{}", t.rows[0].1[3]);
         assert!((t.rows[0].1[1] - 6.0).abs() < 1e-9);
         assert_eq!(t.unit(0, 3), "C");
-        assert!((t.rows[0].1[4] + t.rows[1].1[4] - 100.0).abs() < 1e-9);
+        // Area % is of the whole corrected curve (Origin's AreaIntgP): the two peaks hold nearly all of it.
+        assert!((t.rows[0].1[4] + t.rows[1].1[4] - 100.0).abs() < 1.0);
         let ws = &p.workbook(book).unwrap().sheets;
         assert_eq!(ws.len(), 2);
         assert!(ws[1].name.starts_with("PeakAnalysis"));

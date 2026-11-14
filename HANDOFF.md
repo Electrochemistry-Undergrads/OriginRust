@@ -149,8 +149,8 @@ about 88 % full, check `df -h /c` before parallel builds.
 4. Charge/discharge curves: against time or capacity, and per gram (needs the mass)?
 5. May the remote branch `chi-text-real` be deleted? It holds a few numbers from your
    charge-discharge file in a spec paragraph (the copy on `main` does not).
-6. If scripting cannot open them: screenshots of Origin's Peak Analyzer pages 2+, Import Wizard
-   pages 2-6 (briefs T04, T19). These two wizards are the open briefs that wait on them.
+6. Done for the Peak Analyzer (2026-11-13: opened through its menu with `origin-dialog.ps1 -MenuClicks`, T04); the
+   Import Wizard pages 2-6 (T19) can be measured the same way.
 7. **Origin checks for the macOS session's work** (no Origin there; each item is marked "not measured" in its
    spec). A session on the Windows machine can answer them with `tools/origin-ref/`: polar (graphing 14.18:
    default legend place, whether the radius limits round to a tick, angle units and zero direction); horizontal

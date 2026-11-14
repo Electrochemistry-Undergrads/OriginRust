@@ -479,6 +479,67 @@ Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivat
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
 
+### 11.1 Origin's Peak Analyzer wizard (measured 2026-11-13)
+
+Opened through Analysis > Peaks and Baseline > Peak Analyzer > Open Dialog... on a graph
+(`tools/origin-ref/origin-dialog.ps1 -MenuClicks`, pictures and control lists in
+`re-workspace/scratch/t04/d2..d4`). The menu Peaks and Baseline holds Multiple Peak Fit..., Peak Analyzer
+(a submenu: `<Last used>`, `QuickPeaks (System)`, Open Dialog...) and Batch Peak Analysis Using Theme....
+
+The window "Peak Analyzer" (about 400 x 600) has Dialog Theme, a page tree on black, Prev, Next, Finish
+and Cancel, the X-Function name of the page with a one-line description, and the page's settings. The
+page list follows the Goal:
+
+| Goal | Pages after Goal |
+|---|---|
+| Integrate Peaks (default) | Baseline Mode, Baseline Treatment, Find Peaks, Integrate Peaks, Finish |
+| Find Peaks | Baseline Mode, Baseline Treatment, Find Peaks, Finish |
+| Fit Peaks (Pro) | Baseline Mode, Baseline Treatment, Find Peaks, Fit Peaks (Pro), Finish |
+| Create Baseline | Baseline Mode, Create Baseline, Finish |
+| Subtract Baseline | Baseline Mode, Subtract Baseline, Finish |
+
+Next is greyed on the last page before Finish.
+
+- Goal (`pa_goal`, "Select spectrum data and Goal"): Recalculate (Manual), Goal, Input.
+- Baseline Mode (`pa_basemode`): Constant (default; Y = the Minimum (default), Maximum, Mean or Median of
+  the data, or Custom), User Defined (anchor points found by 2nd Derivative (default), 1st and 2nd
+  Derivative, a script or an existing dataset; smoothing window Auto; Number of Points to Find; Snap to
+  Spectrum), Use Existing Dataset, XPS, None (Y=0), End Points Weighted, Straight Line, Asymmetric Least
+  Squares Smoothing.
+- Baseline Treatment (`pa_basetreat`): Auto Subtract Baseline (off), Auto Rescale (off), Subtract Now,
+  Undo, Rescale.
+- Find Peaks (`pa_peaks`): Current Number of Peaks, Enable Auto Find (on), Find, Add, Modify/Del, Clear
+  All, Save..., Load..., Peaks Info..., Snap to Spectrum (off); Peak Finding Settings: Direction Both
+  (Positive, Negative), Method Local Maximum (Window Search, 1st Derivative, 2nd Derivative (search Hidden
+  peaks), Residual after 1st Derivative (search Hidden peaks)), Smooth Derivative None or Savitzky-Golay,
+  smoothing None (FFT Filter, Adjacent-Averaging, Savitzky-Golay, Quadratic Savitzky-Golay), Local Points
+  and Size Option (Percent of Raw Data); Peak Filtering: Method By Height (None, By Number), Threshold
+  Height (%) 20 with Auto; Labels and Markers: center label X of Peaks (Y, Indices, (X,Y)), rotated, Above,
+  with a center marker.
+- Integrate Peaks (`pa_int`, "Calculate the peak area"): Number of Ranges to Integrate (All Peaks),
+  Integration Window Width Auto (Adjust on Preview Graph, Fix Width For All Peaks; left and right half
+  width), Integrate From Baseline (or Y=0), Show Integrated Area (on), Quantities: Peak Area, Percent
+  Area, Row Index, Beginning X, Ending X, Peak Center, Peak Height, FWHM (on), Curve Area, Left Half
+  Width, Right Half Width, Peak Centroid (off).
+
+Results of Integrate Peaks with every default (`re-workspace/scratch/t04/r-*.out`, d10): a sheet
+`Integration_Result1` with Index, Area, AreaIntgP(%) (comment "Integral Result of B"), Row Index, Beginning X,
+Ending X, FWHM, Center, Height. On 0.2 + 0.01 x + exp(-(x-5)^2/0.5) + 0.6 exp(-(x-12)^2/0.8), x = 0..20 step
+0.05: the Constant baseline is the minimum 0.2; peak 1 row 101, X 0.3 to 6.8, area 1.48386, 35.292 %,
+FWHM 1.220641, height 1.05; peak 2 row 241, X 6.8 to 14.15, area 1.72099, 40.932 %, FWHM 1.713769, height 0.72.
+AreaIntgP is the share of the area of the whole baseline-corrected curve (4.2045 here), not of the sum of
+the peaks. The Auto integration window of a lone Gaussian exp(-(x-10)^2/(2 s^2)) on the same X ran from
+10 - d to 10 + d with d = 1.75, 3.75 and 8 for s = 0.5, 1 and 2 (3.5 s, 3.75 s and 4 s; no rule found yet).
+
+Sheaf (2026-11-13): the Peak Analyzer window shows Origin's page tree for the goal, Prev and Next, and the
+pages Goal (Integrate, Find and Fit Peaks; Create and Subtract Baseline greyed), Baseline Mode (Constant with
+Minimum by default, Maximum, Mean, Median or Custom; User Defined with Sheaf's anchors; None (Y=0); Straight
+Line through the end points; the other modes greyed), Baseline Treatment (greyed: the baseline is always
+measured from, never subtracted from the data), Find Peaks, Integrate Peaks and Fit Peaks; OK is Finish.
+Center, Row, Height and FWHM match Origin to 1e-9 on the data above, Area % follows Origin's definition,
+and the limit between two peaks (the valley, 6.8) matches; the outer limits do not (Sheaf integrates to
+where the corrected curve meets the baseline or the end of the data: 0 and 20 here, Origin 0.3 and 14.15).
+
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve

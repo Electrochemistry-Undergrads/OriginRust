@@ -896,6 +896,11 @@ pub enum PeakBaselineKind {
     EndPoints,
     Minima,
     Anchors,
+    /// Origin's Constant baseline at the minimum (its default), maximum, mean or median of the data.
+    Minimum,
+    Maximum,
+    Mean,
+    Median,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]

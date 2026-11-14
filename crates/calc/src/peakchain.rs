@@ -90,6 +90,39 @@ pub enum ChainBaseline {
     /// `n` anchors, each the lowest point of one of `n` equal stretches of the data (found on a
     /// lightly smoothed copy), joined by straight lines. This is Sheaf's own automatic mode.
     AutoMinima(usize),
+    /// Origin's Baseline Mode "Constant": Y is the minimum (Origin's default), maximum, mean or
+    /// median of the data.
+    ConstantStat(BaselineStat),
+}
+
+/// Which value of the data a constant baseline takes (Origin's Constant choices).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BaselineStat {
+    #[default]
+    Minimum,
+    Maximum,
+    Mean,
+    Median,
+}
+
+impl BaselineStat {
+    /// The value of the finite numbers of `y`; `None` when there is none.
+    pub fn of(self, y: &[f64]) -> Option<f64> {
+        let mut v: Vec<f64> = y.iter().copied().filter(|a| a.is_finite()).collect();
+        if v.is_empty() {
+            return None;
+        }
+        Some(match self {
+            BaselineStat::Minimum => v.iter().copied().fold(f64::INFINITY, f64::min),
+            BaselineStat::Maximum => v.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+            BaselineStat::Mean => v.iter().sum::<f64>() / v.len() as f64,
+            BaselineStat::Median => {
+                v.sort_by(f64::total_cmp);
+                let n = v.len();
+                if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 }
+            }
+        })
+    }
 }
 
 /// Everything [`analyze_peaks`] needs.
@@ -161,6 +194,7 @@ fn baseline_method(x: &[f64], y: &[f64], b: &ChainBaseline) -> Option<BaselineMe
     Some(match b {
         ChainBaseline::None => BaselineMethod::Constant(0.0),
         ChainBaseline::Constant(c) => BaselineMethod::Constant(*c),
+        ChainBaseline::ConstantStat(s) => BaselineMethod::Constant(s.of(&y[..n])?),
         ChainBaseline::EndPoints => BaselineMethod::Line((x[0], y[0]), (x[n - 1], y[n - 1])),
         ChainBaseline::Anchors(points, method) => {
             if points.len() < 2 {
@@ -388,7 +422,15 @@ pub fn integrate_peaks(x: &[f64], c: &[f64], peaks: &[usize], mode: LimitMode) -
             right_index: ri,
         });
     }
-    let total: f64 = out.iter().map(|p| p.area).sum();
+    // Origin's "AreaIntgP(%)": the share of the area of the whole corrected curve (measured: two
+    // peaks on a slope gave 35.29 % and 40.93 %, a lone Gaussian 99.98 %), not of the sum of the
+    // peaks.
+    let mut total = 0.0;
+    for i in 1..n {
+        if x[i].is_finite() && x[i - 1].is_finite() && c[i].is_finite() && c[i - 1].is_finite() {
+            total += (x[i] - x[i - 1]) * (c[i] + c[i - 1]) / 2.0;
+        }
+    }
     for p in out.iter_mut() {
         p.area_percent = if total != 0.0 { 100.0 * p.area / total } else { f64::NAN };
     }
@@ -466,7 +508,8 @@ mod tests {
         assert!((r.peaks[0].area - a1).abs() < 2e-3 * a1, "{}", r.peaks[0].area);
         assert!((r.peaks[1].area - a2).abs() < 2e-3 * a2);
         assert!((r.peaks[0].fwhm - 0.4 * 2.354_820).abs() < 2e-3);
-        assert!((r.peaks[0].area_percent + r.peaks[1].area_percent - 100.0).abs() < 1e-9);
+        // Area % is of the whole corrected curve (Origin's AreaIntgP); here the peaks hold almost all of it.
+        assert!((r.peaks[0].area_percent + r.peaks[1].area_percent - 100.0).abs() < 0.5);
     }
 
     #[test]
@@ -610,5 +653,33 @@ mod tests {
         let (mut x, y) = two_peaks();
         x.swap(10, 300);
         assert_eq!(analyze_peaks(&x, &y, &ChainOptions::default()), Err(ChainError::UnsortedX));
+    }
+
+    /// Origin's Peak Analyzer, Integrate Peaks with its defaults (Constant baseline at the minimum),
+    /// on two Gaussians over a slope (`re-workspace/scratch/t04`, `[Book1]Integration_Result1`).
+    #[test]
+    #[allow(clippy::excessive_precision)] // the digits as Origin printed them
+    fn the_peak_analyzer_defaults_match_origin_where_the_rules_are_known() {
+        let x: Vec<f64> = (0..401).map(|k| k as f64 * 0.05).collect();
+        let y: Vec<f64> = x
+            .iter()
+            .map(|&x| {
+                0.2 + 0.01 * x + (-(x - 5.0) * (x - 5.0) / 0.5).exp() + 0.6 * (-(x - 12.0) * (x - 12.0) / 0.8).exp()
+            })
+            .collect();
+        let opts = ChainOptions { baseline: ChainBaseline::ConstantStat(BaselineStat::Minimum), ..Default::default() };
+        let r = analyze_peaks(&x, &y, &opts).unwrap();
+        assert_eq!(r.peaks.len(), 2);
+        let (a, b) = (&r.peaks[0], &r.peaks[1]);
+        assert_eq!((a.index + 1, b.index + 1), (101, 241), "Origin's Row Index");
+        assert!((a.center - 5.0).abs() < 1e-12 && (b.center - 12.0).abs() < 1e-12);
+        assert!((a.height - 1.05).abs() < 1e-12 && (b.height - 0.72).abs() < 1e-9);
+        assert!((a.fwhm - 1.2206410202285873).abs() < 1e-9, "{}", a.fwhm);
+        assert!((b.fwhm - 1.7137688378654659).abs() < 1e-9, "{}", b.fwhm);
+        // Area % is of the whole corrected curve (total 4.2045): Origin 35.292 % for its area
+        // 1.48386 over X 0.3 to 6.8; Sheaf's window starts at 0, so its area is a little larger.
+        let total = 1.4838624273683825 / 0.35292138167211256;
+        assert!((a.area_percent / 100.0 * total - a.area).abs() < 1e-3, "{} {}", a.area_percent, a.area);
+        assert!((a.right_x - 6.8).abs() < 1e-9 && (b.left_x - 6.8).abs() < 1e-9, "the valley between them");
     }
 }

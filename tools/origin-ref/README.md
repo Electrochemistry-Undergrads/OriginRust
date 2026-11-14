@@ -71,7 +71,7 @@ LabTalk command that opens the dialog (`-Command 'impasc fname:="%WORK%file.txt"
 `name=actions`; actions are `@L:x,y` click, `@D:x,y` double click, `@S:x,y,n` mouse wheel, `@C:i,j` pick item j of the
 i-th combo box (and tell the dialog), `@T:i,text` set the i-th edit box, `@B:text` click a button, `@W:ms` wait, or
 SendKeys text; positions are pixels from the top-left corner of the dialog. `-After` runs LabTalk after the dialog closed
-(`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin.
+(`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin. `-MenuClicks "x,y;x,y"` opens a dialog through a menu path instead (screen positions of the Origin window placed at 0,0; the Peak Analyzer: `258,43;311,175;492,205;735,257`), `-AfterFile` reads the after-lines from a file, and an after-line `#[Book]Sheet` prints that sheet's cells.
 
 ## Column format reference runs
 

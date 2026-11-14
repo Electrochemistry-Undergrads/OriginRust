@@ -9,6 +9,7 @@ param(
   [Parameter(Mandatory = $true)][string]$OutDir,
   [string]$StepsFile = '',
   [string]$DoubleClick = '',   # screen position "x,y" to double-click until a dialog appears (up to 4 tries)
+  [string]$MenuClicks = '',    # screen positions "x,y;x,y;..." clicked once, in order (a menu path), to open the dialog
   [int]$WaitSeconds = 40,
   [int]$SettleMs = 800
 )
@@ -154,6 +155,15 @@ $deadline = (Get-Date).AddSeconds($WaitSeconds)
 $dlg = [IntPtr]::Zero
 $tries = 0
 $nextClick = (Get-Date).AddSeconds(4)
+if ($MenuClicks -ne '') {
+  Start-Sleep -Milliseconds 4000
+  foreach ($p in ($MenuClicks -split ';')) {
+    $xy = $p -split ','
+    [void][DlgWin]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 300
+    [DlgWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [DlgWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 700
+  }
+}
 while ((Get-Date) -lt $deadline) {
   $dlg = Find-Dialog; if ($dlg -ne [IntPtr]::Zero) { break }
   if ($DoubleClick -ne '' -and $tries -lt 4 -and (Get-Date) -gt $nextClick) {

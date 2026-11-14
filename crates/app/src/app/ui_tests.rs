@@ -6,7 +6,7 @@
 use super::*;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{By, NodeT, Queryable};
-use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind};
+use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -512,6 +512,73 @@ fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
     click(&mut h, "Grid on Top of Data");
     click(&mut h, "OK");
     assert!(graph(&h).layers[0].display.grid_on_top);
+}
+
+/// Origin's Link Axes Scales tab: only for a layer after the first; Straight on the Y side links the
+/// Y scale too, and Link to None unlinks the layer without moving it.
+#[test]
+fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
+    let mut h = start(vec![data_file("link-tab")]);
+    let (_, g) = window_ids(&h);
+    h.state_mut().doc.apply("Double Y", |p| {
+        p.add_right_y_layer(g, 0).unwrap();
+    });
+    let before = graph(&h).layers[1].link.unwrap();
+    assert_eq!((before.x, before.y), (ScaleLink::Straight, ScaleLink::None));
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    assert!(!has_label(&h, "Link Axes Scales"), "the first layer has nothing to link to");
+    click(&mut h, "Layer 2");
+    click(&mut h, "Link Axes Scales");
+    for label in ["Link to", "Link Axes in Child Layer to Parent", "X Axis Link", "Y Axis Link", "Align", "Custom"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    h.query_all_by_label("Straight (1 to 1)").nth(1).expect("the Y side").click();
+    settle(&mut h);
+    click(&mut h, "Apply");
+    assert_eq!(graph(&h).layers[1].link.unwrap().y, ScaleLink::Straight);
+    // Link to None: unlinked, at the same place on the page.
+    let on_page = graph(&h).layers[1].frame.within(graph(&h).layers[0].frame);
+    h.get_by_value("Layer1").click();
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::Button).label("None")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    let after = &graph(&h).layers[1];
+    assert_eq!(after.link, None);
+    assert!((after.frame.left - on_page.left).abs() < 1e-12 && (after.frame.width - on_page.width).abs() < 1e-12);
+}
+
+/// Origin's Stack tab: the Offset radio buttons; Auto chosen here starts with Origin's 8 % gap.
+#[test]
+fn the_stack_tab_has_origins_offset_choices_and_auto_gap() {
+    let mut h = start(vec![data_file("stack-tab")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    for label in
+        ["Offset", "Cumulative", "Incremental", "Constant", "Gap (%)", "Individual", "Keep Proportion of Plot Range"]
+    {
+        assert!(has_label(&h, label), "{label}");
+    }
+    assert!(is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Auto")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Auto { gap_percent: 8.0 });
+}
+
+/// Origin's ">>" button hides the Plot Details tree and "<<" brings it back.
+#[test]
+fn plot_details_hides_and_shows_its_tree_as_origin() {
+    let mut h = start(vec![data_file("details-more")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    assert!(has_label(&h, "Layer 1"));
+    click(&mut h, ">>");
+    assert!(!has_label(&h, "Layer 1"), "the tree is hidden");
+    assert!(has_label(&h, "Size/Speed"), "the tabs stay");
+    click(&mut h, "<<");
+    assert!(has_label(&h, "Layer 1"));
 }
 
 #[test]
@@ -1339,6 +1406,93 @@ fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
     assert_eq!(plus.len(), 2);
     assert_eq!(plus[0].numeric().unwrap(), [3.5, 5.5, 7.5, 9.5]);
     assert_eq!(h.state().doc.undo_label(), Some("Curve math"));
+}
+
+#[test]
+fn simple_column_math_adds_ten_into_the_input_columns_as_origin() {
+    let mut h = start(vec![data_file("colmath")]);
+    show_window(&mut h, "Book1 - sample");
+    let before: Vec<Vec<f64>> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.numeric().unwrap().to_vec()).collect();
+    menu_path(&mut h, &["Analysis", "Mathematics", "Simple Column Math..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    // Origin's defaults: Add, the constant 10, the result written back into each input column.
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheet().columns.len(), before.len(), "no new columns");
+    let changed: Vec<usize> =
+        (0..before.len()).filter(|&i| b.sheet().columns[i].numeric().unwrap() != before[i]).collect();
+    assert_eq!(changed.len(), 2, "both Y columns");
+    for i in changed {
+        let want: Vec<f64> = before[i].iter().map(|v| v + 10.0).collect();
+        assert_eq!(b.sheet().columns[i].numeric().unwrap(), want);
+    }
+    assert_eq!(h.state().doc.undo_label(), Some("Column math"));
+}
+
+#[test]
+fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet() {
+    for (item, prefix, rows) in [("Convolution...", "Convolution", 7), ("Correlation...", "Correlation", 7)] {
+        let mut h = start(vec![data_file("signal")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Analysis", "Signal Processing", item]);
+        assert!(h.state().analysis.is_some(), "the {item} window is open");
+        // The first Y column is the second signal (an input may be used: autocorrelation).
+        click(&mut h, "OK");
+        let b = project(&h).workbooks().next().unwrap();
+        let sheet = b.sheets.iter().find(|s| s.name.starts_with(prefix)).expect("a result sheet");
+        assert_eq!(sheet.columns.len(), 4, "X and Y for each of the two inputs");
+        assert_eq!(sheet.columns[1].numeric().unwrap().len(), rows, "4 + 4 - 1 values");
+    }
+}
+
+#[test]
+fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
+    let mut h = start(vec![data_file("hilbert")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Hilbert Transform..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added = b.sheet().columns.iter().filter(|c| c.comments.starts_with("Hilbert transform of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("Hilbert transform"));
+}
+
+#[test]
+fn level_crossing_opens_from_mathematics_and_lists_the_crossings() {
+    let mut h = start(vec![data_file("levelx")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 1, "Origin writes into the input sheet");
+    let names: Vec<&str> = b.sheet().columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert!(names.contains(&"CrossingX1") && names.contains(&"CrossingX2"), "one per input: {names:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Level crossing"));
+}
+
+/// Origin's `levelcrossing` numbers for this curve at Y = 1.5, with the optional direction and row
+/// columns beside the crossing X values.
+#[test]
+fn level_crossing_matches_origins_numbers_and_optional_outputs() {
+    let data = csv_file("levelcross", "wave", "x,y\n0,0\n1,2\n2,4\n3,1\n4,-1\n5,-2\n6,1\n7,1\n8,3\n9,0.5\n10,2\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - wave");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
+    h.state_mut().analysis.as_mut().unwrap().set_crossing_level(1.5);
+    click(&mut h, "Also output directions, X indices and Y crossing values");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let ws = b.sheet();
+    let col = |name: &str| ws.columns.iter().find(|c| c.long_name == name).unwrap_or_else(|| panic!("no {name}"));
+    assert_eq!(col("CrossingX1").comments, "X values of Y= 1.5 Level Crossing of B");
+    let x = col("CrossingX1").numeric().unwrap();
+    let want = [0.75, 2.833_333_333_333_333_5, 7.25, 8.6, 9.666_666_666_666_666];
+    assert!(x.len() == 5 && x.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-12), "{x:?}");
+    assert_eq!(col("Directions1").numeric().unwrap(), [1.0, -1.0, 1.0, -1.0, 1.0]);
+    assert_eq!(col("X Indices1").numeric().unwrap(), [2.0, 4.0, 8.0, 10.0, 11.0]);
 }
 
 fn date_file(tag: &str) -> PathBuf {
@@ -3472,6 +3626,29 @@ fn f12_opens_origins_layer_contents_window_that_removes_adds_and_groups_plots() 
 }
 
 #[test]
+fn plot_setup_opens_from_the_graph_menu_and_from_layer_contents() {
+    let mut h = start(vec![data_file("plot-setup")]);
+    let (_, graph) = window_ids(&h);
+    let before = project(&h).graph(graph).unwrap().clone();
+    menu_path(&mut h, &["Graph", "Plot Setup..."]);
+    assert!(h.state().plot_setup.is_some(), "Graph > Plot Setup... opens Origin's window");
+    for label in ["Plot Type:", "Line + Symbol", "Column / Bar", "Rescale", "Range", "Legend"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    assert!(is_disabled(&h, "Preview"));
+    click(&mut h, "Cancel");
+    assert!(h.state().plot_setup.is_none());
+    assert_eq!(project(&h).graph(graph).unwrap(), &before, "Cancel changes nothing");
+    // Layer Contents' Plot Setup... replaces it with Plot Setup, as in Origin.
+    h.key_press(egui::Key::F12);
+    settle(&mut h);
+    click(&mut h, "Plot Setup...");
+    assert!(h.state().layer_contents.is_none() && h.state().plot_setup.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().plot_setup.is_none());
+}
+
+#[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
     show_window(&mut h, "Book1 - sample");
@@ -3590,6 +3767,43 @@ fn the_statistics_menu_makes_a_histogram_graph() {
     let g = p.graphs().last().unwrap();
     assert_eq!(g.layers[0].plots[0].kind, sheaf_core::graph::PlotKind::Column);
     assert!(p.workbooks().next().unwrap().sheets[1].name.starts_with("Histogram"));
+}
+
+/// Statistics > Discrete Frequency... counts the distinct values of the chosen columns.
+#[test]
+fn the_statistics_menu_makes_a_discrete_frequency() {
+    let mut h = start(vec![data_file("discfreq")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Discrete Frequency..."]);
+    for label in ["Count", "Relative Frequency", "Cumulative Frequency", "Case Sensitive", "Sort Data by"] {
+        assert!(h.query_by_label(label).is_some(), "{label} is shown");
+    }
+    click(&mut h, "OK");
+    let p = project(&h);
+    let ws = &p.workbooks().next().unwrap().sheets[1];
+    assert!(ws.name.starts_with("DiscretFreq"), "{}", ws.name);
+    assert_eq!(ws.columns[0].long_name, "Data");
+    assert_eq!(ws.columns[1].long_name, "Count");
+}
+
+/// Statistics > 2D Frequency Counts/Binning... opens Origin's option groups and writes the grid sheet.
+#[test]
+fn the_statistics_menu_makes_2d_frequency_counts() {
+    let mut h = start(vec![data_file("bin2d")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "2D Frequency Counts/Binning..."]);
+    // One group per axis, then the quantity.
+    for label in ["Specify Binning Range by", "Minimum Bin Beginning", "Step by"] {
+        assert_eq!(h.query_all_by_label(label).count(), 2, "{label} is shown for X and for Y");
+    }
+    assert!(h.query_by_label("Quantity to Compute").is_some());
+    click(&mut h, "OK");
+    let p = project(&h);
+    let ws = &p.workbooks().next().unwrap().sheets[1];
+    assert!(ws.name.starts_with("Binning2D"), "{}", ws.name);
+    assert!(ws.columns[0].long_name.starts_with("Bin Ends of"), "{}", ws.columns[0].long_name);
+    assert!(ws.columns.len() >= 2 && ws.columns[1].long_name == "Count");
+    assert_eq!(h.state().doc.undo_label(), Some("2D frequency counts"));
 }
 
 // ----- graph window: picking objects with the mouse (gui-look.md section 4) -----------------------

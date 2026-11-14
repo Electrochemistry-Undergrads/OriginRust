@@ -686,7 +686,7 @@ fn draw_pie(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         out.push(Item::Text(TextItem {
             x,
             y: y + 0.35 * size,
-            text: format!("{:.2}%", share * 100.0),
+            text: crate::pie::share_text(share * 100.0),
             family: pie.label_font.family.clone(),
             size,
             bold: pie.label_font.bold,

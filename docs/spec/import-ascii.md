@@ -468,7 +468,24 @@ Origin's Import Wizard (File > Import > Import Wizard..., Ctrl+3; opened with `o
    file name; data file names to associate; description; Show Filter in File:Open List; Specify advanced
    filter options.
 
+Data Selection rules, measured through the wizard on a 5 column by 12 row file (`re-workspace/scratch/t19wiz/ps2`,
+`ps3`): From Column 2 To 4 imports columns b, c, d; From Row 3 To 10 imports data rows 3 to 10 (counted after
+the header, both ends included), the header still naming the columns; Read Rows 2 and Skip Rows 1 inside that
+range keep rows 3, 4, 6, 7, 9, 10, and the same for columns keeps b, c (the pattern starts with a read). The
+wizard remembers these settings for the next import. Sheaf's `ImportSelection` gives the same rows and columns
+(test `partial_import_matches_origins_data_selection`).
+
 Sheaf's wizard has these seven pages with these titles (`import_wizard.rs`): Header Lines holds the header
 line count and the Long Names, Units, Comments and Short Names lines; Variable Extraction and Save Filters
 are shown greyed; Data Selection holds Sheaf's partial import (rows to skip and to read); Data Columns the
 delimiter, designations and number and date settings. The other controls listed above are not offered.
+
+### 16.1 Quoted fields and the CSV import (measured 2026-11-14)
+
+On a file with quoted fields (`"Smith, J",1.5,"a ""quoted"" word"` and `'single, quote'`,
+`re-workspace/scratch/partimp`): `impASC` (File > Import > Single ASCII) has no text qualifier by default and
+splits inside the quotes; `impCSV` (File > Import > Comma Delimited (CSV)) treats `"` as the qualifier, removes
+it and reads `""` as one quote, but not `'`. Run from a script with no options, `impCSV` keeps every header line
+as data (Text & Numeric columns, no long names), while `impASC` makes the header into long names and units.
+Sheaf splits fields like `impCSV` (double quotes are a qualifier) and finds header lines like `impASC`; no change
+was made.

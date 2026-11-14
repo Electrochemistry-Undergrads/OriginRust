@@ -851,6 +851,15 @@ pub enum MathKind {
     Power,
 }
 
+/// The row given for a level crossing between two rows (Origin's `type`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum CrossingRow {
+    /// The row whose X is nearest, the smaller X on a tie.
+    Any,
+    Left,
+    Right,
+}
+
 /// The second operand of curve math: a number, or a reference column.
 #[derive(Args, Debug, Clone)]
 pub struct OperandArgs {
@@ -1000,6 +1009,76 @@ pub enum AnalyzeTool {
         op: MathKind,
         #[command(flatten)]
         operand: OperandArgs,
+    },
+    /// Combine each column with a constant or another column row by row, without X values
+    /// (Origin's Simple Column Math): rows past the end of the operand column count as 0. The
+    /// results go into new columns beside the input.
+    ColumnMath {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = MathKind::Add)]
+        op: MathKind,
+        #[command(flatten)]
+        operand: OperandArgs,
+    },
+    /// Convolve each column with a response column (Origin's Signal Processing > Convolution):
+    /// the full linear convolution, or circular; X steps of the input's X spacing unless
+    /// --interval is given. The results go to a new sheet.
+    Convolution {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The response column (short or long name).
+        #[arg(long)]
+        response: String,
+        #[arg(long)]
+        circular: bool,
+        /// Divide the response by its Euclidean norm first.
+        #[arg(long)]
+        normalize: bool,
+        /// Sampling interval of the result.
+        #[arg(long)]
+        interval: Option<f64>,
+    },
+    /// Correlate each column with another column (Origin's Signal Processing > Correlation):
+    /// lags -(N-1) to N-1, or 0 to N-1 when circular. The results go to a new sheet.
+    SignalCorrelation {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The second signal (may be the same column for an autocorrelation).
+        #[arg(long = "with")]
+        other: String,
+        #[arg(long)]
+        circular: bool,
+        /// Divide by the square root of the product of the two sums of squares.
+        #[arg(long)]
+        normalize: bool,
+        /// Lag step of the result.
+        #[arg(long, default_value_t = 1.0)]
+        interval: f64,
+    },
+    /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
+    /// new column beside it.
+    Hilbert {
+        #[command(flatten)]
+        target: TargetArgs,
+    },
+    /// Where each curve crosses a level (Origin's levelcrossing): the crossing X values in a column
+    /// CrossingX<n> beside the curve, as Origin; --details adds the direction, row and Y.
+    LevelCrossing {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        level: f64,
+        /// The row given for a crossing between two rows.
+        #[arg(long, value_enum, default_value_t = CrossingRow::Any)]
+        row: CrossingRow,
+        /// Drop both crossings of a pair whose rows are closer than this.
+        #[arg(long, default_value_t = 1)]
+        min_gap: usize,
+        /// Also write the direction of each crossing (1 up, -1 down, 0 on the level without
+        /// passing through), its row and its Y.
+        #[arg(long)]
+        details: bool,
     },
     /// Derivative of each curve with respect to its X column.
     Differentiate {
@@ -1540,6 +1619,86 @@ pub enum AnalyzeTool {
         /// Do not make a graph.
         #[arg(long)]
         no_graph: bool,
+    },
+    /// Discrete frequency (Origin's discfreqs): how often each distinct value of each column occurs, text or
+    /// numbers; empty and missing cells count as values of their own. Writes Data and Count, and with the
+    /// options the relative and cumulative frequency, to a new sheet.
+    Discfreq {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Add the relative frequency.
+        #[arg(long)]
+        relative: bool,
+        /// Add the cumulative (relative) frequency.
+        #[arg(long)]
+        cumulative: bool,
+        /// Give the frequencies in percent instead of fractions.
+        #[arg(long)]
+        percent: bool,
+        /// Leave the Count column out.
+        #[arg(long)]
+        no_count: bool,
+        /// Tell "a" and "A" apart.
+        #[arg(long)]
+        case_sensitive: bool,
+        /// Order: cdesc (descending counts, the default), casc, vasc (ascending values), vdesc.
+        #[arg(long, default_value = "cdesc", value_parser = ["cdesc", "casc", "vasc", "vdesc"])]
+        sort: String,
+    },
+    /// 2D frequency counts and binning (Origin's twoDBinning): the points of one Y column against its X
+    /// column, or of two columns (--y X --y Y), counted in a grid of X and Y bins; one row per X bin and
+    /// one column per Y bin go to a new sheet. Each axis takes a bin size or a number of bins, and a
+    /// range; what is left out is chosen from the data as Origin does.
+    #[command(name = "bin2d")]
+    Bin2d {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// What each cell holds: count, freq (percent of the binned points), or sum, mean, min, max,
+        /// median of the Y values.
+        #[arg(long, default_value = "count", value_parser = ["count", "freq", "sum", "mean", "min", "max", "median"])]
+        stat: String,
+        /// Width of an X bin.
+        #[arg(long, conflicts_with = "x_bins")]
+        x_inc: Option<f64>,
+        /// Number of X bins.
+        #[arg(long)]
+        x_bins: Option<usize>,
+        /// First X edge (the first bin's centre with --x-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        x_min: Option<f64>,
+        /// Last X edge (the last bin's centre with --x-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        x_max: Option<f64>,
+        /// Label the X bins by their centres, and read --x-min and --x-max as centres.
+        #[arg(long)]
+        x_centers: bool,
+        /// Add an X bin for the values below the range.
+        #[arg(long)]
+        x_below: bool,
+        /// Add an X bin for the values at or above the range.
+        #[arg(long)]
+        x_above: bool,
+        /// Width of a Y bin.
+        #[arg(long, conflicts_with = "y_bins")]
+        y_inc: Option<f64>,
+        /// Number of Y bins.
+        #[arg(long)]
+        y_bins: Option<usize>,
+        /// First Y edge (the first bin's centre with --y-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        y_min: Option<f64>,
+        /// Last Y edge (the last bin's centre with --y-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        y_max: Option<f64>,
+        /// Read --y-min and --y-max as the centres of the first and last Y bin.
+        #[arg(long)]
+        y_centers: bool,
+        /// Add a Y bin for the values below the range.
+        #[arg(long)]
+        y_below: bool,
+        /// Add a Y bin for the values at or above the range.
+        #[arg(long)]
+        y_above: bool,
     },
     /// Normality tests (Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson)
     /// of each column; the result goes to a new sheet.

@@ -28,6 +28,7 @@ public static class DlgWin {
   [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr h, EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
@@ -206,6 +207,12 @@ if ($StepsFile -ne '') {
   $steps = @(Get-Content -LiteralPath $StepsFile | Where-Object { $_.Trim() -ne '' -and -not $_.TrimStart().StartsWith('#') })
   foreach ($step in $steps) {
     $name, $acts = $step -split '=', 2
+    # A button can close the dialog and open another in its place (Layer Contents > Plot Setup...):
+    # the steps then go to the new one.
+    if (-not [DlgWin]::IsWindow($dlg)) {
+      for ($k = 0; $k -lt 20 -and -not [DlgWin]::IsWindow($dlg); $k++) { $n = Find-Dialog; if ($n -ne [IntPtr]::Zero) { $dlg = $n } else { Start-Sleep -Milliseconds 300 } }
+      [void][DlgWin]::SetWindowPos($dlg, [IntPtr]::new(-1), 0, 0, 0, 0, 0x0003)
+    }
     foreach ($a in ($acts -split '\|')) {
       if ($a.StartsWith('@')) {
         $kind = $a.Substring(1, 1); $arg = $a.Substring(3)

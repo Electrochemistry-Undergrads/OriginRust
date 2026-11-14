@@ -314,6 +314,11 @@ pub enum Action {
     /// Window > Refresh (F5): recalculates the columns of the active workbook that are waiting
     /// for it; a graph is redrawn every frame anyway.
     Refresh(Option<WindowId>),
+    /// Opens Plot Setup (Origin's window for the data of the plots) for one layer.
+    PlotSetup {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Opens Layer Contents (Origin's add, remove, group and order window) for one layer.
     LayerContents {
         graph: WindowId,

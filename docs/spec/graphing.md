@@ -993,14 +993,36 @@ With the second plot of the first row hidden, the visible curves span 0..10, 130
 
 ### 13.13 Unknowns
 
-- Origin's codes for the modes other than Auto: None, Constant, Individual and Cumulative cannot be set by script in 2016 (`set -sy` is refused and there is no layer property). Confirming them needs a click test of Graph > Offset Grouped Data in Layer and a byte comparison.
+- Origin's codes for the modes other than Auto: None, Constant, Individual and Cumulative cannot be set by script in 2016 (`set -sy` is refused and there is no layer property). The modes were clicked on the Stack tab (13.14); the bytes they write were not compared.
 - The storage of X offsets and multipliers (13.10) is inferred; the layer header differences are unexplained.
-- Whether the Auto gap percent can be edited in the 2016 dialog. Only 10 was seen, so the H = 10 rule for flat curves is confirmed only at 10 %.
+- The Auto gap percent can be edited on the Stack tab (13.14), and 8 % and 20 % follow the rule; the H = 10 rule for flat curves is confirmed only at 10 %.
 - Whether Origin's Auto uses a plot's display row range for the curve heights; Sheaf uses the plotted rows.
 - What Origin's Data Reader shows on a moved curve (the stored or the moved value).
 - Origin's exact waterfall geometry.
 - Owner preferences: whether the stacked template should hide the legend (he deletes it and types the curve names next to the curves); whether he wants an option that writes each curve's name at its right end (a possible follow-up); whether hidden curves should keep their place (Origin's behaviour, adopted here).
 - The current online help describes Individual offsets in the template and a pairwise Auto gap; neither matches Origin, and later versions may differ.
+
+### 13.14 Plot Details Stack tab (measured 2026-11-14)
+
+Clicked in Origin with `tools/origin-ref/origin-dialog.ps1` on a layer of three or four grouped lines (`plotxy`
+then `layer -g`; Y = x, x+1, x+2, x+3 for X = 0..10, so each curve is 10 high); offsets read after OK with
+`layer.plot=k; get %C -sy`; pictures and control lists in `re-workspace/scratch/t13stack`:
+
+- The tab: an Offset group with the choices None, Cumulative, Incremental, Constant (a box), Auto (Gap (%) 8 and
+  Keep Proportion of Plot Range) and Individual (X and Y ticks, Y ticked); below it Display column/bar plot by
+  sorted order, Use Subgrouping (in Group tab) for Cumulative/Incremental, Normalize to Percent for
+  Cumulative/Incremental and Show Connect Line on Stacked Column/Bar (greyed for line plots). The boxes are
+  greyed unless their choice is on. Without a plot group Origin shows a hint that the plots must be grouped
+  first, and OK moves nothing.
+- Auto as it opens (8 %): offsets 0, 9.8, 19.6 (gap 0.8 = 8 % of the height 10). Gap 20: 0, 11, 22. Both follow
+  the rule of 13.1, so the dialog's gap is the percent of that rule (the stacked template stores 10).
+- Constant: the box starts empty, with a note that it takes numbers separated by spaces, used in a loop.
+  "3" gives 0, 3, 6; "2 5" on four curves gives 0, 2, 7, 9 (the steps between neighbours, repeated).
+
+Sheaf (`graph_details.rs` `stack_tab`): the same Offset group of choices. Constant takes one step, not a
+list; Auto chosen on this tab starts at 8 %; Cumulative, Incremental, Keep Proportion, the X/Y ticks and the
+column/bar options are greyed (no stacked columns yet, GP-COL-01); Waterfall is Sheaf's own extra choice
+with its two shifts. The per-plot offsets of Individual stay listed under the group.
 
 ---
 
@@ -1329,17 +1351,26 @@ pictures `rad1.png`, `rad2_*.png`, `rad4.png`):
 
 Origin's Plot > Specialized > "Ternary" and the 2D Graphs toolbar button of the same name.
 
-**Measured:** nothing yet; this machine has no Origin. Everything below about Origin is **from Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref**: three columns X, Y and Z (Z the designated column after the Y column) give the three parts of each point; a row that does not sum to 1 (or 100) is normalised; the plot is a scatter plot by default; the layer is an equilateral triangle with three axes along its sides, ticks from 0 to 1 in steps of 0.2 (0 to 100 for percentages), tick labels outside the triangle, the column names as axis titles; X runs along the bottom from left to right (X = 1 at the bottom right corner), Y along the right side from bottom to top (Y = 1 at the top corner), Z along the left side from top to bottom (Z = 1 at the bottom left corner); grid lines parallel to the sides at the major ticks.
+**Measured (2026-11-13, Windows, `worksheet -p 245 ternary` on an X Y Z sheet, pictures and runs in
+`re-workspace/scratch/tern`):** the three axes run 0 to 1 in steps of 0.25 with one minor tick between, labels
+with two decimals (0.00 to 1.00), or 0 to 100 in steps of 25 with whole numbers when the rows sum to 100;
+`layer.x.inc` reads 0.25. X runs along the bottom from left to right, Y up the right side, Z down the left side;
+the ticks leave each side along the grid lines. Major grid lines are Gray (128) solid, minor ones LT Gray (192)
+dashed. A legend is shown at the top right of the page, the plot named after its Z column. A row with a
+negative part is not drawn. Rows that do not sum to 1 or 100 make Origin ask "Ternary plots assume that the
+data are normalized (x+y+z=1 or 100)... Would you like your data to be normalized?"; after Yes they are drawn
+as fractions (0 to 1). The page is Origin's usual one (the picture is 10.72 by 8.205 in), the triangle the
+largest that fits in the usual layer frame.
 
-**Could not confirm (to measure):** whether the grid is on in Origin's default ternary graph (Sheaf draws it, grey 0.5 pt); the direction of the tick marks (Sheaf: along the grid line, pointing out of the triangle, so each tick continues the grid line that starts at it); the default legend (Sheaf hides it, because a one-plot legend would be named after the Y column only); how Origin decides between 0 to 1 and 0 to 100; the title rotation and distance; the size of the triangle in the default page (Sheaf: a 6 by 6 in page with a square frame of 60 %); whether Origin skips rows with a negative part (Sheaf does).
+**Still to measure:** the title rotation and distance, tick lengths.
 
 **What Sheaf does**
 
 - Model (`sheaf-core`): `Coords::Ternary(TernaryCoords)`, `TernaryCoords { scale: TernaryScale }` with `Auto` (default), `Fraction` and `Percent`. Old files load unchanged (`coords` is only written when it is not rectangular). The Z column of a plot is `Plot::size_from` (the field the bubble plot uses for its sizes; a ternary layer draws no bubbles). `Project::plot_columns(Template::Ternary, ys)` fills it from `Project::ternary_z_for`: the Z column after the Y column (`z_column_for`), or, in a sheet without Z designations, the numeric column right after Y, so that a plain three column file works (CLI `sheaf plot soil.csv -t ternary`). `default_plot_columns` for the template gives the Y columns that have a Z column, else the first Y column that has a column after it.
-- Template `ternary` (menu item and button live): a scatter plot, page 6 by 6 in, square frame, grid on, outward major ticks, no minor ticks, legend off.
+- Template `ternary` (menu item and button live): a scatter plot on the usual page and frame, major grid Gray solid and minor grid LT Gray dashed, outward major and minor ticks (one minor), legend on with the plot named after its Z column (as measured; Sheaf normalises rows without asking).
 - Data (`data::collect`, `ternary::columns`): each row is divided by its sum; the plot's `x` and `y` become the normalised X and Y fractions and Z is `1 - x - y`. A row with a missing or negative part, or with a zero sum, becomes NaN and is not drawn (a line breaks there).
 - Geometry (`LayerGeometry::ternary`, a `TernaryMap`): the largest equilateral triangle that fits in the frame, centred in it. `data_to_page(x, y)` is the barycentric combination `x * right + y * top + (1 - x - y) * left` and `page_to_data` its inverse, so symbols, lines, hit testing and the cursor read-out use the usual functions; they work in fractions whatever the tick scale. The clip rectangle is the frame widened by 9 pt so that symbols on the sides are whole.
-- Ticks: 0 to 1 in steps of 0.2, or 0 to 100 in steps of 20 when the scale is percent (`Auto`: some row of the raw data sums to between 99 and 101, so raw counts such as 1, 2, 3 stay in fractions; unmeasured). Tick font, length, direction and line settings are those of the layer's X axis (bottom and left sides) and Y axis (right side); the major grid styles likewise (X and Z lines from the X axis, Y lines from the Y axis). Labels of the three axes are the same numbers.
+- Ticks: 0 to 1 in steps of 0.25, or 0 to 100 in steps of 25 when the scale is percent (`Auto`: some row of the raw data sums to between 99 and 101, so raw counts such as 1, 2, 3 stay in fractions; unmeasured). Tick font, length, direction and line settings are those of the layer's X axis (bottom and left sides) and Y axis (right side); the major grid styles likewise (X and Z lines from the X axis, Y lines from the Y axis). Labels of the three axes are the same numbers.
 - Drawing (`crates/plot/src/ternary.rs`): grid lines first (for each interior tick, the line of constant X, of constant Y and of constant Z: the first parallel to the left side, the second to the bottom, the third to the right side), then the data, then the triangle outline, the ticks, the tick labels outside (each pushed off its tick end along the outward normal of the side until the nearest point of its box is a fixed gap away), and the three titles: X (the X column's name and units) under the bottom side, Y rotated -60 degrees along the right side, Z (the Z column's name) rotated +60 degrees along the left side; titles can be replaced with the X and Y axis' title text (Z has no setting yet). The labels and titles count towards the room kept inside the page. Cartesian axes and the rectangular frame are not drawn.
 - `.opj`: written as a plain scatter plot of X and Y; the save warns that the ternary layer was not written, and the `.opj.sheaf` companion keeps it with its Z column (round trip tested). Plot Details shows the plot type as "Ternary Scatter".
 - Golden image: `crates/plot/tests/golden/ternary.svg` (eight rows that sum to 1 and two that sum to 0.9 and 1.2).
@@ -1349,12 +1380,22 @@ Origin's Plot > Specialized > "Ternary" and the 2D Graphs toolbar button of the 
 
 Origin's Plot > Column/Bar/Pie menu has "3D Color Pie" (template `PIE`) and "2D B&W Pie" (template `PIEBW`); it has no "2D Color Pie". What was measured is in 14.17 (3D pie from above at a slant, ellipse about half as high as wide with a side band; flat black and white pie with hatch patterns; slices clockwise from 12 o'clock, black outlines, outside labels with two decimals, legend squares at the top right, palette in order for the 3D pie).
 
-**From Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref:** the 3D pie's view angle, thickness and rotation can be changed in the plot's details; slices can be pulled out; Origin's hatch patterns are a fixed list of pattern fills cycling over the slices; exact side band shade, band thickness and the exact patterns of the 2D template.
+**Measured (2026-11-13, Windows; `plotxy iy:=[Book]Sheet1!1 plot:=225 ogl:=[<new template:=PIE>]` and
+`PIEBW`, pictures in `re-workspace/scratch/pies`):** the pie layer is larger than the line template's (7 % from the
+left, 86.5 % wide, 8 % from the top, 83 % high) and the pie is centred in it. The 3D pie: an ellipse 0.5455 as
+high as wide, radius 0.254 of the frame width; the side band 0.278 of the radius thick in the slice's own colour
+(not darker), outlined in black; the slices clockwise, the first starting 32.4 degrees below 3 o'clock (four equal
+slices meet at -32.4 and -123.0 degrees), so not at 12 o'clock as 14.17 assumed. The B&W pie: radius 0.349 of the
+frame height, first slice at 12 o'clock, clockwise; hatches in this order: lines at 45 degrees about 3.9, 5.6
+and 8.3 pt apart, the same at 135 degrees, diagonal cross hatches at the same three spacings, then horizontal lines
+4 pt apart (ten slices measured). Shares print with at most two decimals and no trailing zeros (`18.6%`, `25%`).
+Legend samples are two font sizes wide and one high, rows 1.15 font sizes apart. A worksheet whose first column is
+X gives a one-entry legend named after it instead.
 
 **What Sheaf does**
 
 - Plot kinds `PlotKind::Pie3D` and `PlotKind::PieBw`, templates `pie-3d` ("3D Color Pie") and `pie-bw` ("2D B&W Pie"), both live in the menu; the item "2D Color Pie" is gone from the menu. `Template::Pie` (`-t pie`, `PlotKind::Pie`) stays as a CLI name and for existing projects: the flat colour pie of 14.17, golden `pie.svg` unchanged.
-- Drawing (`crates/plot/src/pie.rs`): same frame, labels (share to two decimals outside the slice) and legend placement as the flat pie. 3D: the ellipse is 0.5 as high as wide (`SLANT`), the width the largest that fits (at most 30 % of the frame width as radius); the side band is 0.2 of the radius thick (`BAND`), drawn only on the front half of the rim (90 to 270 degrees) in 60 % of the slice colour, then the tops on it, all outlined 0.5 pt black; labels of the front half sit below the band. B&W: white slices, each with one of eight hatch patterns (45 degrees, 135 degrees, horizontal, vertical, grid, diagonal grid, dense 45, dense 135; slices past the eighth reuse them at wider spacing), 0.5 pt black lines; legend squares carry the same pattern.
+- Drawing (`crates/plot/src/pie.rs`): same frame, labels (share to two decimals outside the slice) and legend placement as the flat pie. 3D (measured values): the ellipse 0.5455 as high as wide (`SLANT`), radius 0.254 of the frame width (0.349 of its height at most), centred; the side band 0.278 of the radius thick (`BAND`) in the slice's own colour, drawn on the front half of the rim, then the tops, all outlined 0.5 pt black; the first slice starts at `START_3D` (122.4 degrees clockwise from 12 o'clock); labels of the front half sit below the band. B&W: white slices with Origin's ten hatch patterns in its order (above; slices past the tenth start the list again), 0.5 pt black lines, centred with radius 0.349 of the frame height; legend samples carry the same pattern. Shares as Origin prints them (`share_text`). The labels sit 1.12 radii out (Origin about 1.26), so a label next to the legend can touch it.
 - Pattern fills: the scene has no clip item, so `pie::hatch` cuts parallel lines against the slice polygon (the arc in steps of about 2 degrees; works for concave shapes) and the lines are drawn as one path per slice. Lines sit at multiples of the spacing from the page origin, so patterns continue across shapes. Works in every renderer since it is plain paths. It is not a general pattern fill of the model (`FillStyle` has none yet).
 - `.opj`: written as plain columns, the save warns (same note as the flat pie); the `.opj.sheaf` companion keeps the kind.
 - Goldens: `pie-3d.svg`, `pie-bw.svg` (values 3, 5, 2, 7, 4).
@@ -1772,3 +1813,47 @@ Up and Down move one plot; Rescale on Apply makes the axes automatic again; Laye
 Details on the layer; Plot Setup... and `>>` are greyed. Edits show at once and are one undo step; Cancel
 takes them back, Close keeps them. Plot Setup... in the Graph menu still opens Plot Details' Layer
 Contents tab.
+
+### 18.3 Plot Setup (measured 2026-11-14)
+
+Origin's Plot Setup (Layer Contents > Plot Setup..., which closes Layer Contents and opens this window;
+`re-workspace/scratch/plotsetup/p1`, `p3`) is titled "Plot Setup: Configure Data Plots in Layer". It opens with
+the Plot List only: a tree of Layer 1 (Rescale, Show), its Group and each plot by its data name, with Range
+(`[1*:11*] 0 < X < 10 , 5 < Y < 5`), Show, Plot Type and Legend; Preview, OK, Cancel, Apply. Its chevron
+shows the upper panels: Plot Type (Line, Scatter, Line + Symbol, Column / Bar, Bubble, Color Mapped, Bubble +
+Color Mapped, ...), Show(S) and the chosen sheet, the sheet's columns with X, Y, yEr and L ticks, Column, Long
+Name, Comments, Sampling Interval and Position (an `<autoX>` row first), Replace and Add.
+
+Sheaf (`dialogs/plot_setup.rs`, Graph > Plot Setup..., the layer's right-click menu and Layer Contents'
+button): the window always shows both parts: Plot Type (the first four; Bubble and the colour mapped kinds
+greyed), a sheet list, the sheet's columns with one X, any number of Y and one yEr tick (L greyed), Add (a
+plot per ticked Y with the ticked X and error column) and Replace (the chosen plot takes the ticked columns);
+the Plot List with Rescale, Range, a Show tick, Plot Type and Legend; Preview greyed, OK, Cancel, Apply. Edits
+are one undo step; Cancel takes them back. Not offered: groups in the list, drag to reorder, Sampling
+Interval, Position, `<autoX>`.
+
+### 18.4 Link Axes Scales (measured 2026-11-14)
+
+Measured with `tools/origin-ref/origin-dialog.ps1` on a graph whose second layer was made by `layer -n y`
+(a right Y layer); pictures and control lists in `re-workspace/scratch/t13link`:
+
+- The layer node's tabs are Background, Size/Speed, Display, Link Axes Scales and Stack for the second
+  layer; the first layer has no Link Axes Scales tab.
+- The tab: Link to (a list of None and the other layer, here None and Layer1), the line "Link Axes in Child
+  Layer to Parent", then two groups side by side, X Axis Link and Y Axis Link, each with the choices None,
+  Straight (1 to 1), Align (with an "X =" box) and Custom (with "X1 =" and "X2 =" boxes). The boxes are
+  greyed unless their choice is on. `layer -n y` gives X Straight and Y None.
+- Link to None turns both groups to None and greys all their choices; choosing Layer1 again leaves both on
+  None (a new link starts unlinked).
+
+Sheaf (`graph_details.rs` `link_tab`, `Graph::set_link`): the same tab for every layer after the first, with
+None and Straight; Align and Custom are drawn greyed with their boxes (Sheaf has no formula links). Link to
+lists None and the earlier layers that are not linked themselves (Sheaf follows one level of links); a layer
+that others are linked to cannot be linked. Changing the link keeps the layer where it is on the page: its
+frame is converted between fractions of the page and of the parent's frame.
+
+### 18.5 The ">>" button (measured 2026-11-14)
+
+Origin's Plot Details has a ">>" button at the bottom left. It hides the tree: the window shrinks to the tabs of
+the chosen node and the button becomes "<<", which brings the tree back (`re-workspace/scratch/t13link/open5`).
+Sheaf: the same button; the window keeps its size and the tabs take the room; the choice lasts while Sheaf runs.

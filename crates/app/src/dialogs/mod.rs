@@ -2,6 +2,7 @@
 //! application shows while its `Option` is filled.
 
 pub mod analysis;
+pub mod bin2d_options;
 pub mod column_props;
 pub mod export;
 pub mod export_sheet;
@@ -18,6 +19,7 @@ pub mod import_wizard;
 pub mod layer_contents;
 pub mod manip_options;
 pub mod math_curves;
+pub mod plot_setup;
 pub mod power;
 pub mod reshape;
 pub mod row_filter;

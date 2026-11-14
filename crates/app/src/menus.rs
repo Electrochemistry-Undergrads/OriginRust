@@ -163,6 +163,8 @@ pub enum Cmd {
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
     /// active layer.
     LayerContents(Option<usize>),
+    /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
+    PlotSetup(Option<usize>),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
     GraphPropsAt {
         layer: usize,
@@ -935,7 +937,7 @@ fn analysis_menu() -> Vec<Entry> {
             "&Mathematics",
             vec![
                 item("Simple Curve Math...", Cmd::Analyze(AnalysisKind::CurveMath)),
-                grey("Simple Column Math..."),
+                item("Simple Column Math...", Cmd::Analyze(AnalysisKind::ColumnMath)),
                 sep(),
                 item("Differentiate...", Cmd::Analyze(AnalysisKind::Differentiate)),
                 item("Integrate...", Cmd::Analyze(AnalysisKind::Integrate)),
@@ -950,6 +952,8 @@ fn analysis_menu() -> Vec<Entry> {
                 item("B-Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::BSpline)),
                 sep(),
                 item("Intersect...", Cmd::Analyze(AnalysisKind::Intersect)),
+                // Sheaf's own: Origin has the levelcrossing X-Function but no menu item for it.
+                item("Level Crossing...", Cmd::Analyze(AnalysisKind::LevelCrossing)),
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
                 item("Average Multiple Curves...", Cmd::Analyze(AnalysisKind::AverageCurves)),
                 item("Polygon Area...", Cmd::Analyze(AnalysisKind::PolygonArea)),
@@ -1001,13 +1005,13 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Smooth...", Cmd::Analyze(AnalysisKind::Smooth)),
                 grey("FFT Filters..."),
                 grey_sub("FFT", &["FFT...", "IFFT...", "2D FFT...", "2D IFFT..."]),
-                grey("Convolution..."),
+                item("Convolution...", Cmd::Analyze(AnalysisKind::Convolution)),
                 grey("Deconvolution..."),
-                grey("Correlation..."),
+                item("Correlation...", Cmd::Analyze(AnalysisKind::SignalCorrelation)),
                 grey("Coherence..."),
                 grey("Decimation..."),
                 grey("Envelope..."),
-                grey("Hilbert Transform..."),
+                item("Hilbert Transform...", Cmd::Analyze(AnalysisKind::Hilbert)),
                 grey("IIR Filter..."),
                 grey("STFT..."),
                 grey_sub(
@@ -1041,9 +1045,9 @@ fn statistics_menu() -> Vec<Entry> {
                 sep(),
                 grey("Cross Tabulation..."),
                 sep(),
-                grey("Discrete Frequency..."),
+                item("Discrete Frequency...", Cmd::Analyze(AnalysisKind::DiscreteFreq)),
                 item("Frequency Counts...", Cmd::Analyze(AnalysisKind::Histogram)),
-                grey("2D Frequency Counts/Binning..."),
+                item("2D Frequency Counts/Binning...", Cmd::Analyze(AnalysisKind::Binning2D)),
                 sep(),
                 grey("Distribution Fit..."),
                 item("Normality Test...", Cmd::Analyze(AnalysisKind::Normality)),
@@ -1117,7 +1121,7 @@ fn graph_menu() -> Vec<Entry> {
     vec![
         // Layer Contents is Origin's own window; Plot Setup opens Sheaf's Plots tab (add and remove plots).
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(None)),
-        item("Plot Setup...", Cmd::GraphProps(PropsTab::Plots)),
+        item("Plot Setup...", Cmd::PlotSetup(None)),
         grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
         sep(),
         grey("Layer Management..."),
@@ -1660,7 +1664,6 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
     } else {
         grey("Hide Other Layers")
     };
-    let contents = Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None };
     let mut v = vec![
         item("Hide Layer", Cmd::GraphEdit(GraphOp::HideLayer { layer })),
         others,
@@ -1669,7 +1672,7 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         grey("Delete Layer"),
         sep(),
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(Some(layer))),
-        item("Plot Setup...", contents),
+        item("Plot Setup...", Cmd::PlotSetup(Some(layer))),
         grey("Double click to open Plot Setup"),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
@@ -2015,6 +2018,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         Cmd::GraphProps(tab) => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, tab: *tab, plot: None }
+        }
+        Cmd::PlotSetup(layer) => {
+            Action::PlotSetup { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
         Cmd::LayerContents(layer) => {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }

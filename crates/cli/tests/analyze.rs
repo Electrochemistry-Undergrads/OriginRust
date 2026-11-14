@@ -318,6 +318,114 @@ fn subtract_ref_and_math_use_a_reference_from_another_file() {
 }
 
 #[test]
+fn column_math_goes_row_by_row() {
+    let dir = scratch("column-math");
+    let data = data_file(&dir);
+    let out = dir.join("colmath.csv");
+    // ramp minus flat (2), row by row; Add is the default operator as in Origin.
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "column-math",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--op",
+        "subtract",
+        "--ref",
+        "flat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Column math"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows[0], "0,2,0,-2");
+    assert_eq!(rows[10], "10,2,10,8");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "column-math", data.to_str().unwrap(), "--y", "ramp", "--value", "1", "--common"]);
+    assert!(!ok && stderr.contains("row by row"), "{stderr}");
+}
+
+#[test]
+fn convolution_and_signal_correlation_write_a_new_sheet() {
+    let dir = scratch("signal");
+    let data = data_file(&dir);
+    let out = dir.join("conv.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "convolution",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--response",
+        "flat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Convolution"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows.len(), 21, "11 + 11 - 1");
+    // 0..10 convolved with eleven 2s: 0, 2, 6, ...
+    assert_eq!(rows[..3], ["0,0", "1,2", "2,6"]);
+    let out = dir.join("corr.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "signal-correlation",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--with",
+        "ramp",
+        "--circular",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    // Names and comments (no units row: lags and correlations have none), then the values.
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(2).map(str::to_string).collect();
+    assert_eq!(rows.len(), 11, "circular: lags 0 to 10");
+    // Origin's circular order starts from the far end: lag 0 holds sum a[j - 1] a[j] = 330.
+    assert_eq!(rows[0], "0,330");
+}
+
+#[test]
+fn hilbert_adds_a_column() {
+    let dir = scratch("hilbert");
+    let data = data_file(&dir);
+    let (ok, stdout, stderr) = sheaf(&["analyze", "hilbert", data.to_str().unwrap(), "--y", "ramp"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Hilbert transform"), "{stdout}");
+}
+
+#[test]
+fn level_crossing_lists_the_crossings() {
+    let dir = scratch("level-crossing");
+    let data = data_file(&dir);
+    let out = dir.join("lx.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "level-crossing",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--level",
+        "2.5",
+        "--row",
+        "right",
+        "--details",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Level crossing") && stdout.contains("C reaches Y = 2.5 once"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.lines().next().unwrap().contains("CrossingX1"), "{text}");
+    // t, flat, ramp, then X, direction, the right-hand row (X 2.5 lies between rows 3 and 4) and Y.
+    assert!(text.lines().any(|l| l == "0,2,0,2.5,1,4,2.5"), "{text}");
+}
+
+#[test]
 fn curve_math_and_range_mistakes_are_explained() {
     let dir = scratch("math-errors");
     let data = data_file(&dir);
@@ -731,4 +839,40 @@ fn power_needs_no_file_and_prints_origins_numbers() {
     assert!(out.contains("37") && out.contains("49"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "power", "--test", "anova"]);
     assert!(!ok && err.contains("either --sizes"), "{err}");
+}
+
+#[test]
+fn bin2d_counts_points_in_a_grid() {
+    let dir = scratch("bin2d");
+    let file = dir.join("points.csv");
+    let x = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 1.2, 1.7, 2.2, 8.1, 8.8, 10.0, 0.0];
+    let y = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 2.2, 2.7, 9.1, 0.4, 3.3, 5.0, 0.0];
+    let text: String =
+        std::iter::once("x,y\n".to_string()).chain(x.iter().zip(y).map(|(a, b)| format!("{a},{b}\n"))).collect();
+    std::fs::write(&file, text).unwrap();
+    let file = file.to_str().unwrap();
+    let grid = ["--x-min", "0", "--x-max", "10", "--x-inc", "2", "--y-min", "0", "--y-max", "10", "--y-inc", "5"];
+    let args: Vec<&str> = ["analyze", "bin2d", file, "--y", "y"].into_iter().chain(grid).collect();
+    let (ok, out, err) = sheaf(&args);
+    assert!(ok, "{err}");
+    assert!(out.contains("Binning2D1") && out.contains("17 points") && out.contains("5 X bins by 2 Y bins"), "{out}");
+    let args: Vec<&str> = ["analyze", "bin2d", file, "--y", "x,y", "--stat", "mean"].into_iter().chain(grid).collect();
+    let (ok, out, err) = sheaf(&args);
+    assert!(ok, "{err}");
+    assert!(out.contains("(mean)"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "bin2d", file, "--y", "y", "--stat", "mode"]);
+    assert!(!ok && err.contains("mode"), "{err}");
+}
+
+#[test]
+fn discfreq_counts_the_distinct_values() {
+    let dir = scratch("discfreq");
+    let file = dir.join("cats.csv");
+    std::fs::write(&file, "kind,n\nb,3\na,1\nB,3\nc,2\na,3\n").unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind,n", "--relative", "--percent"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("DiscretFreq1") && out.contains("5 cells, 3 distinct values"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind", "--no-count"]);
+    assert!(!ok && err.contains("at least one"), "{err}");
 }

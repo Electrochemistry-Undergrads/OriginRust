@@ -2125,6 +2125,37 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert_eq!(col(&full, 1).long_name, "signal");
     }
 
+    /// Origin's Import Wizard, Data Selection page (measured 2026-11-14, import-ascii.md 16): columns 2 to 4
+    /// and data rows 3 to 10, inclusive and counted after the header; then within that range read 2
+    /// skip 1 for rows and columns, starting with a read.
+    #[test]
+    fn partial_import_matches_origins_data_selection() {
+        let mut text = String::from("a,b,c,d,e\n");
+        for r in 1..=12 {
+            let cells: Vec<String> = (1..=5).map(|c| (r * 10 + c).to_string()).collect();
+            text.push_str(&cells.join(","));
+            text.push('\n');
+        }
+        let mut opts = AsciiOptions {
+            rows: ImportSelection { first: 3, last: 10, ..ImportSelection::default() },
+            columns: ImportSelection { first: 2, last: 4, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(&text, &opts);
+        let cols = &imp.workbook.sheet().columns;
+        assert_eq!(cols.len(), 3);
+        assert_eq!(cols[0].long_name, "b", "the header still names the columns");
+        assert_eq!(cols[0].numeric().unwrap(), [32.0, 42.0, 52.0, 62.0, 72.0, 82.0, 92.0, 102.0]);
+        opts.rows.read = 2;
+        opts.rows.skip = 1;
+        opts.columns.read = 2;
+        opts.columns.skip = 1;
+        let imp = parse_with(&text, &opts);
+        let cols = &imp.workbook.sheet().columns;
+        assert_eq!((cols.len(), cols[1].long_name.as_str()), (2, "c"));
+        assert_eq!(cols[0].numeric().unwrap(), [32.0, 42.0, 62.0, 72.0, 92.0, 102.0]);
+    }
+
     #[test]
     fn fixed_width_columns_are_cut_by_the_widths_and_the_last_width_repeats() {
         let text = "  x   y   z\n 1.0 2.5 3.5\n 2.0 3.5 4.5\n 3.0 4.5 5.5\n 4.0 5.5 6.5\n";

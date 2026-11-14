@@ -61,6 +61,19 @@ kept here), the case lists `cases2..5.json` and `stats3-make-fixture.py`, which 
 explicitly. Report sheets are read cell by cell (`wcol(c)[r]`) because `GetWorksheet` does not return them.
 What the runs showed is in `docs/spec/statistics.md`, section 10.
 
+## 2D frequency counts and binning
+
+`stats4/g3.py`, `g4.py` and `g5.py` write the line scripts of the `twoDBinning` runs (worksheet output, each cell read
+with `wcol(c)[r]`; run with `run-labtalk-safe.ps1`), `parse3.py` reads their raw output and `make-fixture3.py` turns
+the three outputs into `crates/calc/tests/fixtures/bin2d_origin.rs` and `stats4/bin2d-origin.compact.json`. What they
+showed is in `docs/spec/statistics.md`, section 13.
+
+## Discrete frequency
+
+`stats5/g1.py` writes the line script of the `discfreqs` runs (output sheet read cell by cell as shown), `parse1.py`
+reads the raw output and `make-fixture1.py` writes `crates/calc/tests/fixtures/discfreq_origin.rs` and
+`stats5/discfreq-origin.compact.json`. Findings: `docs/spec/statistics.md`, section 14.
+
 ## Origin's own dialogs (lists of controls, defaults, combo box items)
 
 `origin-dialog.ps1` opens one of Origin's dialogs in a temporary visible Origin (same lock) and writes, per step, a picture

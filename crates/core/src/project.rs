@@ -653,6 +653,7 @@ impl Project {
                 // Bubble and colour mapped plots take their third variable from the Z column.
                 let z = self.z_column_for(*y);
                 let ternary_z = if template == Template::Ternary { self.ternary_z_for(*y) } else { None };
+                let z_name = ternary_z.and_then(|z| self.column(z)).map(|c| c.display_name().to_string());
                 let (size, color) = match template {
                     Template::Bubble => (true, false),
                     Template::ColorMapped => (false, true),
@@ -663,8 +664,10 @@ impl Project {
                     p.size_from = z.filter(|_| size);
                     p.color_from = z.filter(|_| color);
                     if template == Template::Ternary {
-                        // The Z column of a ternary plot, the third part of each row.
+                        // The Z column of a ternary plot, the third part of each row; Origin's
+                        // legend names the plot after it (measured).
                         p.size_from = ternary_z;
+                        p.label = z_name;
                     }
                 }
             }

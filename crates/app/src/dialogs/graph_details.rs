@@ -42,6 +42,8 @@ pub enum DetailTab {
     LayerContents,
     Background,
     Size,
+    /// Origin's Link Axes Scales tab, for every layer but the first.
+    Link,
     Stack,
     Legend,
     Page,
@@ -57,14 +59,21 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             (DetailTab::LegendsTitles, "Legends/Titles", true),
             (DetailTab::Text, "Text", true),
         ],
-        Node::Layer(_) => vec![
-            (DetailTab::LayerContents, "Layer Contents", true),
-            (DetailTab::Background, "Background", true),
-            (DetailTab::Size, "Size/Speed", true),
-            (DetailTab::Display, "Display", true),
-            (DetailTab::Stack, "Stack", true),
-            (DetailTab::Legend, "Legend", true),
-        ],
+        Node::Layer(l) => {
+            let mut tabs = vec![
+                (DetailTab::LayerContents, "Layer Contents", true),
+                (DetailTab::Background, "Background", true),
+                (DetailTab::Size, "Size/Speed", true),
+                (DetailTab::Display, "Display", true),
+            ];
+            // Origin has no Link Axes Scales tab for the first layer: it has nothing to link to.
+            if l > 0 {
+                tabs.push((DetailTab::Link, "Link Axes Scales", true));
+            }
+            tabs.push((DetailTab::Stack, "Stack", true));
+            tabs.push((DetailTab::Legend, "Legend", true));
+            tabs
+        }
         Node::Plot(l, p) => {
             let plot = &graph.layers[l].plots[p];
             let mut tabs = vec![(DetailTab::Group, "Group", true)];
@@ -127,6 +136,11 @@ fn kind_name(k: PlotKind) -> &'static str {
     }
 }
 
+/// Whether Origin's ">>" button has hidden the tree (kept in egui's memory while the app runs).
+pub fn tree_hidden_id() -> egui::Id {
+    egui::Id::new("plot_details_tree_hidden")
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn dialog_body(
     ui: &mut egui::Ui,
@@ -146,65 +160,69 @@ pub fn dialog_body(
         n => n,
     };
     let before = *node;
+    let tree_hidden = ui.data(|d| d.get_temp::<bool>(tree_hidden_id()).unwrap_or(false));
 
     ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width(300.0);
-            let tree_h = (ui.available_height() - 40.0).max(120.0);
-            egui::ScrollArea::vertical()
-                .id_salt("details_tree")
-                .max_height(tree_h)
-                .auto_shrink([false, false])
-                .show(ui, |ui| tree(ui, node, graph, names));
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.label("Plot Type");
-                if let Node::Plot(l, p) = *node {
-                    let polar = graph.layers[l].coords.polar().is_some();
-                    let radar = graph.layers[l].coords.polar().is_some_and(|p| p.radar);
-                    let ternary = graph.layers[l].coords.ternary().is_some();
-                    let plot = &mut graph.layers[l].plots[p];
-                    // A plot of a polar or ternary layer is an ordinary line or symbol plot.
-                    let shown = if radar {
-                        format!("Radar {}", kind_name(plot.kind))
-                    } else if ternary {
-                        format!("Ternary {}", kind_name(plot.kind))
-                    } else if polar {
-                        format!("Polar {}", kind_name(plot.kind))
+        // Origin's ">>" leaves only the tabs of the chosen node.
+        if !tree_hidden {
+            ui.vertical(|ui| {
+                ui.set_width(300.0);
+                let tree_h = (ui.available_height() - 40.0).max(120.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("details_tree")
+                    .max_height(tree_h)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| tree(ui, node, graph, names));
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label("Plot Type");
+                    if let Node::Plot(l, p) = *node {
+                        let polar = graph.layers[l].coords.polar().is_some();
+                        let radar = graph.layers[l].coords.polar().is_some_and(|p| p.radar);
+                        let ternary = graph.layers[l].coords.ternary().is_some();
+                        let plot = &mut graph.layers[l].plots[p];
+                        // A plot of a polar or ternary layer is an ordinary line or symbol plot.
+                        let shown = if radar {
+                            format!("Radar {}", kind_name(plot.kind))
+                        } else if ternary {
+                            format!("Ternary {}", kind_name(plot.kind))
+                        } else if polar {
+                            format!("Polar {}", kind_name(plot.kind))
+                        } else {
+                            kind_name(plot.kind).to_string()
+                        };
+                        egui::ComboBox::from_id_salt("plot_type").selected_text(shown).show_ui(ui, |ui| {
+                            for k in [
+                                PlotKind::Line,
+                                PlotKind::Scatter,
+                                PlotKind::LineSymbol,
+                                PlotKind::Column,
+                                PlotKind::StackedColumn,
+                                PlotKind::Stacked100Column,
+                                PlotKind::Bar,
+                                PlotKind::FloatingColumn,
+                                PlotKind::StackedBar,
+                                PlotKind::Stacked100Bar,
+                                PlotKind::FloatingBar,
+                                PlotKind::Area,
+                                PlotKind::StackedArea,
+                                PlotKind::Stacked100Area,
+                                PlotKind::Histogram,
+                                PlotKind::Box,
+                                PlotKind::Pie,
+                                PlotKind::Pie3D,
+                                PlotKind::PieBw,
+                            ] {
+                                ui.selectable_value(&mut plot.kind, k, kind_name(k));
+                            }
+                        });
                     } else {
-                        kind_name(plot.kind).to_string()
-                    };
-                    egui::ComboBox::from_id_salt("plot_type").selected_text(shown).show_ui(ui, |ui| {
-                        for k in [
-                            PlotKind::Line,
-                            PlotKind::Scatter,
-                            PlotKind::LineSymbol,
-                            PlotKind::Column,
-                            PlotKind::StackedColumn,
-                            PlotKind::Stacked100Column,
-                            PlotKind::Bar,
-                            PlotKind::FloatingColumn,
-                            PlotKind::StackedBar,
-                            PlotKind::Stacked100Bar,
-                            PlotKind::FloatingBar,
-                            PlotKind::Area,
-                            PlotKind::StackedArea,
-                            PlotKind::Stacked100Area,
-                            PlotKind::Histogram,
-                            PlotKind::Box,
-                            PlotKind::Pie,
-                            PlotKind::Pie3D,
-                            PlotKind::PieBw,
-                        ] {
-                            ui.selectable_value(&mut plot.kind, k, kind_name(k));
-                        }
-                    });
-                } else {
-                    ui.add_enabled(false, egui::Button::new("-"));
-                }
+                        ui.add_enabled(false, egui::Button::new("-"));
+                    }
+                });
             });
-        });
-        ui.separator();
+            ui.separator();
+        }
         ui.vertical(|ui| {
             let tabs = tabs_for(*node, graph);
             if *node != before || !tabs.iter().any(|(t, _, on)| t == tab && *on) {
@@ -780,6 +798,10 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
 // ----- layer --------------------------------------------------------------------------------
 
 fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sources: &[Source], add_from: &mut usize) {
+    if tab == DetailTab::Link {
+        link_tab(ui, graph, l);
+        return;
+    }
     let link = graph.layers[l].link.map(|k| k.parent);
     // The ids that `\l(n)` and `%(n)` in the legend text refer to.
     let legend_ids = graph.legend_ids(l, &|j| graph.layers[j].plots.iter().filter(|p| p.visible).count());
@@ -945,55 +967,143 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
     }
 }
 
-fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
-    let name = |s: &Stack| match s {
-        Stack::None => "None",
-        Stack::Auto { .. } => "Automatic",
-        Stack::Constant { .. } => "Constant step",
-        Stack::Individual => "Individual offsets",
-        Stack::Waterfall { .. } => "Waterfall",
-    };
-    grid(ui, "stack_mode", |ui| {
-        ui.label("Offset Grouped Data");
-        let mut mode = layer.stack;
-        egui::ComboBox::from_id_salt("stack_mode_box").selected_text(name(&mode)).show_ui(ui, |ui| {
-            for s in [
-                Stack::None,
-                Stack::Auto { gap_percent: 10.0 },
-                Stack::Constant { step: 1.0 },
-                Stack::Individual,
-                Stack::Waterfall { dx_percent: 5.0, dy_percent: 5.0 },
-            ] {
-                let same = std::mem::discriminant(&s) == std::mem::discriminant(&mode);
-                if ui.selectable_label(same, name(&s)).clicked() && !same {
-                    mode = s;
+/// Origin's Link Axes Scales tab (measured, graphing spec 18.4): Link to (None or an earlier
+/// layer), then an X Axis Link and a Y Axis Link group with None, Straight (1 to 1), Align and
+/// Custom. Sheaf has None and Straight; Align and Custom are shown greyed with their boxes.
+fn link_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize) {
+    let current = graph.layers[l].link.map(|k| k.parent);
+    let name = |p: Option<usize>| p.map_or_else(|| "None".to_string(), |p| format!("Layer{}", p + 1));
+    let children = graph.has_children(l);
+    ui.horizontal(|ui| {
+        ui.label("Link to");
+        let mut chosen = current;
+        ui.add_enabled_ui(!children, |ui| {
+            egui::ComboBox::from_id_salt("link_to").selected_text(name(current)).width(105.0).show_ui(ui, |ui| {
+                ui.selectable_value(&mut chosen, None, "None");
+                // Sheaf follows one level of links: the parent must not be linked itself.
+                for p in (0..l).filter(|&p| graph.layers[p].link.is_none()) {
+                    ui.selectable_value(&mut chosen, Some(p), name(Some(p)));
                 }
+            });
+        });
+        if chosen != current {
+            graph.set_link(l, chosen);
+        }
+    });
+    if children {
+        ui.weak("Other layers are linked to this layer, so it cannot be linked itself.");
+    } else if current.is_some() && graph.link_parent(l).is_none() {
+        ui.weak("The layer it is linked to is linked itself, so this link is not followed.");
+    }
+    ui.add_space(6.0);
+    ui.label("Link Axes in Child Layer to Parent");
+    let linked = graph.layers[l].link.is_some();
+    let layer = &mut graph.layers[l];
+    ui.columns(2, |cols| {
+        for (col, axis) in cols.iter_mut().zip(["X", "Y"]) {
+            group_box(col, &format!("{axis} Axis Link"), |ui| {
+                ui.add_enabled_ui(linked, |ui| {
+                    let mut value = layer.link.map_or(ScaleLink::None, |k| if axis == "X" { k.x } else { k.y });
+                    ui.radio_value(&mut value, ScaleLink::None, "None");
+                    ui.radio_value(&mut value, ScaleLink::Straight, "Straight (1 to 1)");
+                    if let Some(k) = layer.link.as_mut() {
+                        if axis == "X" {
+                            k.x = value;
+                        } else {
+                            k.y = value;
+                        }
+                    }
+                    let not_yet = "Not in Sheaf yet: the scale is a formula of the parent's";
+                    ui.add_enabled(false, egui::RadioButton::new(false, "Align")).on_disabled_hover_text(not_yet);
+                    let boxes = |ui: &mut egui::Ui, labels: &[String]| {
+                        for label in labels {
+                            ui.horizontal(|ui| {
+                                ui.add_space(12.0);
+                                ui.add_enabled(false, egui::Label::new(format!("{label} =")));
+                                ui.add_enabled(
+                                    false,
+                                    egui::TextEdit::singleline(&mut String::new()).desired_width(80.0),
+                                );
+                            });
+                        }
+                    };
+                    boxes(ui, &[axis.to_string()]);
+                    ui.add_enabled(false, egui::RadioButton::new(false, "Custom")).on_disabled_hover_text(not_yet);
+                    boxes(ui, &[format!("{axis}1"), format!("{axis}2")]);
+                });
+            });
+        }
+    });
+}
+
+/// Origin's Stack tab (measured, graphing spec 13.12): an Offset group of radio buttons with the
+/// Constant step, the Auto gap (8 % when chosen here) and Individual, then the column/bar options.
+/// Cumulative, Incremental and the column/bar options are greyed (stacked columns are not in Sheaf
+/// yet); Waterfall is Sheaf's own.
+fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
+    let is = |s: &Stack, other: &Stack| std::mem::discriminant(s) == std::mem::discriminant(other);
+    let later = "Stacked columns and areas are not in Sheaf yet";
+    group_box(ui, "Offset", |ui| {
+        let mut mode = layer.stack;
+        let radio = |ui: &mut egui::Ui, mode: &mut Stack, choice: Stack, label: &str| {
+            let r = ui.radio(is(mode, &choice), label);
+            if r.clicked() && !is(mode, &choice) {
+                *mode = choice;
+            }
+            r
+        };
+        radio(ui, &mut mode, Stack::None, "None");
+        ui.add_enabled(false, egui::RadioButton::new(false, "Cumulative")).on_disabled_hover_text(later);
+        ui.add_enabled(false, egui::RadioButton::new(false, "Incremental")).on_disabled_hover_text(later);
+        ui.horizontal(|ui| {
+            radio(ui, &mut mode, Stack::Constant { step: 1.0 }, "Constant");
+            if let Stack::Constant { step } = &mut mode {
+                ui.add(DragValue::new(step).speed(0.05).max_decimals(8))
+                    .on_hover_text("The step between neighbouring curves, in axis units (Origin also takes a list)");
+            }
+        });
+        ui.horizontal(|ui| {
+            // Origin's tab starts the gap at 8 % (the stacked template uses 10 %).
+            radio(ui, &mut mode, Stack::Auto { gap_percent: 8.0 }, "Auto");
+            ui.add_space(24.0);
+            ui.label("Gap (%)");
+            match &mut mode {
+                Stack::Auto { gap_percent } => {
+                    ui.add(DragValue::new(gap_percent).range(0.0..=500.0).speed(0.5));
+                }
+                _ => {
+                    ui.add_enabled(false, DragValue::new(&mut 8.0));
+                }
+            }
+            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Keep Proportion of Plot Range"));
+        });
+        ui.horizontal(|ui| {
+            radio(ui, &mut mode, Stack::Individual, "Individual");
+            ui.add_space(12.0);
+            let tip = "Sheaf moves each curve by both offsets of its entry";
+            ui.add_enabled(false, egui::Checkbox::new(&mut false, "X")).on_disabled_hover_text(tip);
+            ui.add_enabled(false, egui::Checkbox::new(&mut true, "Y")).on_disabled_hover_text(tip);
+        });
+        ui.horizontal(|ui| {
+            radio(ui, &mut mode, Stack::Waterfall { dx_percent: 5.0, dy_percent: 5.0 }, "Waterfall")
+                .on_hover_text("Sheaf's own: a flat two-dimensional waterfall");
+            if let Stack::Waterfall { dx_percent, dy_percent } = &mut mode {
+                ui.label("X shift (%)");
+                ui.add(DragValue::new(dx_percent).range(0.0..=100.0).speed(0.2));
+                ui.label("Y shift (%)");
+                ui.add(DragValue::new(dy_percent).range(0.0..=100.0).speed(0.2));
             }
         });
         layer.stack = mode;
-        ui.end_row();
-        match &mut layer.stack {
-            Stack::None | Stack::Individual => {}
-            Stack::Auto { gap_percent } => {
-                ui.label("Gap (% of height)");
-                ui.add(DragValue::new(gap_percent).range(0.0..=500.0).speed(0.5));
-                ui.end_row();
-            }
-            Stack::Constant { step } => {
-                ui.label("Step (axis units)");
-                ui.add(DragValue::new(step).speed(0.05).max_decimals(8));
-                ui.end_row();
-            }
-            Stack::Waterfall { dx_percent, dy_percent } => {
-                ui.label("X shift (%)");
-                ui.add(DragValue::new(dx_percent).range(0.0..=100.0).speed(0.2));
-                ui.end_row();
-                ui.label("Y shift (%)");
-                ui.add(DragValue::new(dy_percent).range(0.0..=100.0).speed(0.2));
-                ui.end_row();
-            }
-        }
     });
+    for label in [
+        "Display column/bar plot by sorted order",
+        "Use Subgrouping ( in Group tab ) for Cumulative/Incremental",
+        "Normalize to Percent for Cumulative/Incremental",
+        "Show Connect Line on Stacked Column/Bar",
+    ] {
+        ui.add_enabled(false, egui::Checkbox::new(&mut false, label)).on_disabled_hover_text(later);
+    }
     if layer.stack == Stack::Individual {
         section(ui, "Offset of each plot (axis units)");
         let plots: Vec<(ColumnId, usize)> = layer.plots.iter().enumerate().map(|(i, p)| (p.y, i)).collect();

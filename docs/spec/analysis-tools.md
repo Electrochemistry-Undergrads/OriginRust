@@ -370,6 +370,31 @@ book or sheet is named; a file named with `--ref-file` is added to the project a
 so appears in `--save`). Window: Analysis > Subtract Reference Data... and Simple Math..., with a
 list of all other numeric Y columns of the project as references.
 
+### 9.1 Simple Column Math (`vmathtool`)
+
+Analysis > Mathematics > Simple Column Math combines a column with a constant or another column row
+by row, with no X values. Inputs (from its X-Function file): `ix1`, `operator` (add, sub, div, mul,
+pow; default add), `operand` (Constant or Reference Data; Constant first), `ix2`, `constant`
+(default 10) and the output `ox`, whose default is the input column itself.
+
+Observed (Origin, `re-workspace/scratch/vmath/vmath.out.txt`; the Rust test is
+`column_math_matches_origin_vmathtool` in `crates/calc/src/curvemath.rs`):
+
+- Without an output range the result replaces the values of the input column.
+- Row `i` of the data goes with row `i` of the operand column. Rows past the end of the operand
+  column count as 0: with a five-row operand, row 6 of `A - B` is `A`, of `A ^ B` is 1 and of
+  `A / B` missing.
+- A missing operand inside its length, or division by 0, gives a missing value; so does a
+  negative number to the power 0.5.
+- The result has one row per data row (a longer operand adds nothing).
+- Division by the constant 0 is refused (the X-Function fails and nothing changes).
+
+Sheaf: `sheaf_calc::column_math`, `Tool::ColumnMath(ColumnMathSpec)` (undo step "Column math").
+The window starts on Add with the constant 10 and its Output on the input columns themselves
+(Existing columns), as Origin; new columns beside the input or a new sheet can be chosen instead.
+Command line: `sheaf analyze column-math FILE --y B [--op ...] (--value N | --ref COLUMN)`, results
+beside the input. Not compared: a missing value in the data raised to the power 0.
+
 ## 10. Integrating several ranges at once (`integ1` per range)
 
 Origin's Integrate reports for one curve and one range: `area`, `x0`/`y0` (position and signed
@@ -670,6 +695,102 @@ Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--
 `sheaf analyze reduce-x` (12.2), `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
 and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
 `--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
+
+## 13. Convolution and Correlation (`conv`, `corr1`)
+
+Analysis > Signal Processing > Convolution and Correlation. Inputs (from the X-Function files):
+`conv`: the signal `ix`, the `response`, `interval` (`<auto>`), `norm` (off), `wrap` (off),
+`circular` (Linear or Circular) and the output `oy` (X and Y); `corr1`: `ix1`, `ix2` (the same
+column for an autocorrelation), `interval`, `type` (Linear or Circular), `norm` (off), `oy`.
+
+Observed (Origin, `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`; Rust tests
+`convolution_matches_origin_conv` and `correlation_matches_origin_corr1` in
+`crates/calc/src/signal.rs`, 1e-12). Origin computes by FFT, so its numbers carry noise of about
+1e-15 (`2.4999999999999996`, values like `2e-16` where the exact result is 0); Sheaf sums directly.
+
+- Convolution, linear: the full convolution of the signal (n points) and the response (m), n + m - 1
+  values. X is `k * interval`, k from 0. With `<auto>` the interval is the X step of the signal's
+  sheet (X 0, 0.1, 0.2, 0.3 gave 0, 0.1, ..., 0.4); without X it is 1. Checked with a longer
+  response than signal too.
+- Convolution, circular: both padded with zeros to N = max(n, m); N values,
+  `c[k] = sum_j s[j] r[(k - j) mod N]`.
+- Normalize: the response is divided by its Euclidean norm (1 / sqrt(1.3125) = 0.8729 for
+  1, 0.5, 0.25).
+- Wrap response: no difference found with a three-point response, linear or circular; not
+  offered in Sheaf.
+- Correlation, linear: both padded with zeros to N = max(n, m); lags -(N-1) to N-1 (2N - 1 values,
+  so a leading 0 when the lengths differ), value `sum_j a[j + k] b[j]`; lag 0 is the dot product.
+  The X is the lag times the interval, 1 by default (the X spacing of the sheet is not used).
+- Correlation, circular: N values at lags 0 to N-1, but in Origin's order value k is
+  `sum_j a[(j - k - 1) mod N] b[j]`, that is the plain circular correlation read from the far end.
+  Checked on two data sets and both argument orders.
+- Normalize (correlation): divided by sqrt(sum a^2 * sum b^2).
+- Decimation (`decimate`) was probed as well, but Origin refused factors 3, 4 and 5 on 11 and 12
+  points and its moving-average filter gave values not explained yet; not built.
+
+Sheaf: `sheaf_calc::convolve`, `correlate`; `Tool::Convolution(ConvolutionSpec)` and
+`Tool::SignalCorrelation(SignalCorrelationSpec)`. The results go to a new sheet `Convolution<n>`
+or `Correlation<n>` with an X (the input's X name and unit, or "Lag") and a Y column per input.
+Trailing missing values are dropped; a missing value inside a signal is refused. The windows list
+every numeric Y column of the project, the inputs included, as the response or second signal.
+Command line: `sheaf analyze convolution FILE --y B --response C [--circular] [--normalize]
+[--interval D]` and `sheaf analyze signal-correlation FILE --y B --with C [--circular] [--normalize]
+[--interval D]`.
+
+### 13.1 Hilbert Transform (`hilbert`)
+
+Analysis > Signal Processing > Hilbert Transform. Inputs: `ix`, `hil` (output the transform, on),
+`ansig` (output the analytic signal; on in the X-Function file although its help says off) and the
+report sheet `rd` (a new sheet of the input book). Observed (`re-workspace/scratch/hilbert/hb.out.txt`,
+eight and seven points; Rust test `hilbert_matches_origin`, 1e-12): the transform is the standard
+discrete one, the imaginary part of the analytic signal made by FFT (positive frequencies doubled,
+negative removed, zero and, for an even length, the middle frequency kept); the analytic signal is a
+complex column whose real part is the input. Sheaf writes the transform only, in a new column beside
+each input (no complex columns); `Tool::Hilbert`, `sheaf analyze hilbert FILE --y B`.
+
+## 14. Level crossing (`levelcrossing`)
+
+Origin has the `levelcrossing` X-Function (Data Manipulation) but no menu item for it; Sheaf puts it
+under Analysis > Mathematics > Level Crossing. Inputs (from its X-Function file): the curve `iy`,
+`level` (0), `type` (Any, Left, Right: the row given for a crossing between two rows), `pts` (1: both
+crossings of a pair closer than this many rows are dropped) and the outputs: X of each crossing
+(`oy`, an X column), `direction` (1 up, -1 down, 0 "derivative zero"), `xindex` (a Label column)
+and `yval` (the level).
+
+Observed (Origin, `re-workspace/scratch/levelx/lx.out.txt` and `re-workspace/scratch/lcross/lc2.out.txt`,
+`lc3.out.txt`, `lc4.out.txt`; Rust tests `level_crossings_match_origin` and `more_cases_match_origin` in
+`crates/calc/src/levelcross.rs`):
+
+- A data point exactly on the level is a crossing at its own X and row. Its direction is the sign
+  of the steps before and after it when they agree, else 0: a touch (1, 0, 1 at level 0) and each
+  point of a run on the level (-1, 0, 0, 3) have direction 0. At the first and the last point the one
+  step there decides (0, 1, ... gives 1; ..., 0, 1 at level 1 gives 1).
+- Between two points on opposite sides the crossing is interpolated linearly, direction of the step
+  in row order (also with falling X: X 10, 8, 7, 3, 0 and Y 0, 2, 0, 2, 0 at level 1 give 9, 7.5, 5, 1.5
+  with 1, -1, 1, -1).
+- A missing Y is skipped and its neighbours are joined: 0, 2, missing, 0, 2 at level 1 gives 0.5, 2 and
+  3.5 (the crossing at 2 is not lost).
+- The row (1-based) for an interpolated crossing: Left the row before, Right the row after, Any the
+  row whose X is nearest, counting rows whose Y is missing (the crossing at 2 above is row 3, the
+  missing row), and on a tie the one with the smaller X (0.5 between X 0 and 1 is row 1; 9 between
+  X 10 and 8 is row 2).
+- `pts`: with indices 2, 4, 8, 9 and `pts` 3 all four were dropped; with 1, 2, 3, 4, 7 and `pts` 2
+  only 7 was left. Sheaf takes the crossings in pairs in order (first with second, third with
+  fourth); a sliding comparison would fit these two cases as well.
+- No crossing: empty outputs (Origin still wrote the level once into `yval`; Sheaf writes nothing).
+- Default output (no output columns named): only the X values, in a new column at the end of the input
+  sheet with long name `CrossingX1` (then `CrossingX2`, ... for later runs on that sheet), the comment
+  `X values of Y= 1.5 Level Crossing of B` (the level as typed: 1, 0.25, -3) and no units. The column
+  is added even when the curve never reaches the level. Origin writes the direction, index and Y values
+  only into columns that the script names.
+
+Sheaf: `sheaf_calc::level_crossings`, `Tool::LevelCrossing(LevelCrossingSpec)`; the `CrossingX<n>`
+column as Origin, beside its input (ADR 0005) instead of at the end of the sheet. The switch "Also output
+directions, X indices and Y crossing values" (`details`) adds `Directions<n>`, `X Indices<n>` (rows of
+the sheet) and `Y Crossing Values<n>` (with the input's units) beside it; these names are Sheaf's, from
+the labels of Origin's outputs. Origin's index for a row range that does not start at row 1 was not
+measured. Command line: `sheaf analyze level-crossing FILE --y B [--level L] [--row any|left|right]
+[--min-gap N] [--details]`.
 
 ## Files
 

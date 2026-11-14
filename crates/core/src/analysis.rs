@@ -36,8 +36,8 @@ pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
     PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
-pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
-pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
+pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
+pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -175,6 +175,65 @@ pub struct CurveMathSpec {
     pub common_only: bool,
 }
 
+/// What [`Tool::ColumnMath`] does (Origin's Simple Column Math, `vmathtool`): `y op operand` row by
+/// row. A [`CurveOperand::Reference`] is used as a plain column here: its row `i` goes with row `i`
+/// of the data, with no X values and no interpolation, and rows past its end count as 0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ColumnMathSpec {
+    pub op: CurveOp,
+    pub operand: CurveOperand,
+}
+
+/// What [`Tool::Convolution`] does (Origin's Signal Processing > Convolution, `conv`, measured;
+/// analysis-tools.md 13): each input column convolved with the response column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ConvolutionSpec {
+    pub response: ColumnId,
+    /// Circular instead of linear (Origin's `circular`).
+    pub circular: bool,
+    /// Divide the response by its Euclidean norm first (Origin's `norm`).
+    pub normalize: bool,
+    /// Sampling interval of the result's X; `None` is Origin's `<auto>`, the X step of the input.
+    pub interval: Option<f64>,
+}
+
+/// What [`Tool::SignalCorrelation`] does (Origin's Signal Processing > Correlation, `corr1`,
+/// measured; analysis-tools.md 13): each input column correlated with the other column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SignalCorrelationSpec {
+    pub other: ColumnId,
+    pub circular: bool,
+    /// Divide by the square root of the product of the two sums of squares.
+    pub normalize: bool,
+    /// The lag step of the result's X (Origin: 1 unless given).
+    pub interval: f64,
+}
+
+/// What [`Tool::LevelCrossing`] does (Origin's `levelcrossing` X-Function, measured;
+/// analysis-tools.md 14).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LevelCrossingSpec {
+    pub level: f64,
+    /// The row given for a crossing between two rows (Origin's `type`).
+    pub index: CrossingIndex,
+    /// Drop both crossings of a pair whose rows are closer than this (Origin's `pts`, 1: keep all).
+    pub min_gap: usize,
+    /// Also write the direction, the row and the Y of each crossing (Origin's optional outputs);
+    /// Origin's default writes only the X values.
+    pub details: bool,
+}
+
+/// The number of the next `CrossingX<n>` column of a sheet, as Origin numbers them: one more than
+/// the largest in use.
+fn next_crossing_number(sheet: &Worksheet) -> usize {
+    sheet
+        .columns
+        .iter()
+        .filter_map(|c| c.long_name.strip_prefix("CrossingX")?.parse::<usize>().ok())
+        .max()
+        .map_or(1, |n| n + 1)
+}
+
 /// Which t-test [`TTestSpec`] runs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TTestKind {
@@ -246,6 +305,33 @@ pub enum TwoWayLayout {
     /// Origin's "Raw Data": every chosen column holds the data of one cell of the design; `levels` gives
     /// the level of factor A and of factor B of each column, in the order of the columns.
     Raw { levels: Vec<(String, String)> },
+}
+
+/// What [`Tool::DiscreteFrequency`] does (Origin's Discrete Frequency, `discfreqs`): the distinct values of each
+/// chosen column, text or numbers, with the quantities ticked.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DiscreteFreqSpec {
+    pub count: bool,
+    pub relative: bool,
+    pub cumulative: bool,
+    /// Relative and cumulative frequency in percent (else as a fraction).
+    pub percent: bool,
+    pub case_sensitive: bool,
+    pub sort: DiscSort,
+}
+
+impl Default for DiscreteFreqSpec {
+    /// Origin's defaults: Count only, case-insensitive, by descending counts.
+    fn default() -> Self {
+        DiscreteFreqSpec {
+            count: true,
+            relative: false,
+            cumulative: false,
+            percent: false,
+            case_sensitive: false,
+            sort: DiscSort::CountDesc,
+        }
+    }
 }
 
 /// What [`Tool::TwoWayAnova`] does.
@@ -501,6 +587,12 @@ pub enum Tool {
     Integrate(IntegrateSpec),
     IntegrateRanges(IntegrateRangesSpec),
     CurveMath(CurveMathSpec),
+    ColumnMath(ColumnMathSpec),
+    Convolution(ConvolutionSpec),
+    SignalCorrelation(SignalCorrelationSpec),
+    LevelCrossing(LevelCrossingSpec),
+    /// Signal Processing > Hilbert Transform (Origin's `hilbert`, measured; analysis-tools.md 13).
+    Hilbert,
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -522,6 +614,12 @@ pub enum Tool {
     TTest(TTestSpec),
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
+    /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (Origin's `twoDBinning`): the
+    /// points of a Y column against its X column, or of two chosen columns (X, then Y), counted in a grid
+    /// of bins. A third chosen column is ignored, as in Origin.
+    Binning2D(Bin2dOptions),
+    /// Statistics > Descriptive Statistics > Discrete Frequency.
+    DiscreteFrequency(DiscreteFreqSpec),
     Normality(NormalitySpec),
     TwoWayAnova(TwoWayAnovaSpec),
     MannWhitney(MannWhitneySpec),
@@ -550,6 +648,11 @@ impl Tool {
                 (CurveOperand::Reference(_), CurveOp::Subtract) => "Subtract reference",
                 _ => "Curve math",
             },
+            Tool::ColumnMath(_) => "Column math",
+            Tool::Convolution(_) => "Convolution",
+            Tool::SignalCorrelation(_) => "Signal correlation",
+            Tool::LevelCrossing(_) => "Level crossing",
+            Tool::Hilbert => "Hilbert transform",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -573,6 +676,8 @@ impl Tool {
             },
             Tool::Anova(_) => "One-way ANOVA",
             Tool::Histogram(_) => "Histogram",
+            Tool::Binning2D(_) => "2D frequency counts",
+            Tool::DiscreteFrequency(_) => "Discrete frequency",
             Tool::Normality(_) => "Normality test",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
             Tool::MannWhitney(_) => "Mann-Whitney test",
@@ -598,7 +703,11 @@ impl Tool {
     fn sheet_prefix(&self) -> &'static str {
         match self {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
-            Tool::CurveMath(_) => "Math",
+            Tool::CurveMath(_) | Tool::ColumnMath(_) => "Math",
+            Tool::Convolution(_) => "Convolution",
+            Tool::SignalCorrelation(_) => "Correlation",
+            Tool::LevelCrossing(_) => "LevelCrossing",
+            Tool::Hilbert => "Hilbert",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -609,6 +718,8 @@ impl Tool {
             Tool::TTest(_) => "TTest",
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
+            Tool::Binning2D(_) => "Binning2D",
+            Tool::DiscreteFrequency(_) => "DiscretFreq",
             Tool::Normality(_) => "Normality",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
             Tool::MannWhitney(_) => "MannWhitney",
@@ -772,6 +883,33 @@ struct SheetColumn {
 }
 
 /// The data one input column contributes to a tool run.
+/// The values of a signal for Convolution and Correlation: trailing missing values dropped, a
+/// missing value inside refused.
+fn signal_values(v: &[f64], name: &str) -> Result<Vec<f64>, AnalysisError> {
+    let end = v.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1);
+    let v = &v[..end];
+    if v.is_empty() {
+        return Err(AnalysisError::TooFewPoints(name.to_string()));
+    }
+    if v.iter().any(|x| !x.is_finite()) {
+        return Err(AnalysisError::BadOption(format!("column {name} has missing values")));
+    }
+    Ok(v.to_vec())
+}
+
+/// Origin's `<auto>` sampling interval: the mean X step of the input, 1 without a usable X.
+fn auto_interval(x: &[f64]) -> f64 {
+    let first = x.iter().position(|v| v.is_finite());
+    let last = x.iter().rposition(|v| v.is_finite());
+    match (first, last) {
+        (Some(a), Some(b)) if b > a => {
+            let d = (x[b] - x[a]) / (b - a) as f64;
+            if d.is_finite() && d > 0.0 { d } else { 1.0 }
+        }
+        _ => 1.0,
+    }
+}
+
 struct Input<'a> {
     id: ColumnId,
     /// Short name, for error messages.
@@ -782,6 +920,8 @@ struct Input<'a> {
     name: String,
     units: String,
     x_name: String,
+    /// Short name of the X column ("Row" without one).
+    x_short: String,
     x_units: String,
     /// X values, as long as `y` (row numbers when the sheet has no X column).
     x: Vec<f64>,
@@ -1193,7 +1333,7 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_));
+        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::DiscreteFrequency(_));
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1220,6 +1360,7 @@ impl Project {
                 name: c.display_name().to_string(),
                 units: c.units.clone(),
                 x_name: x_col.map_or_else(|| "Row".to_string(), |x| x.display_name().to_string()),
+                x_short: x_col.map_or_else(|| "Row".to_string(), |x| x.short_name.clone()),
                 x_units: x_col.map_or_else(String::new, |x| x.units.clone()),
                 x,
                 y,
@@ -1242,9 +1383,15 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }
+            Tool::DiscreteFrequency(spec) => {
+                let out = statistics::discrete_frequency(spec, sheet, &request.columns, request.rows)?;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
             Tool::TTest(_)
             | Tool::Anova(_)
             | Tool::Histogram(_)
+            | Tool::Binning2D(_)
             | Tool::Normality(_)
             | Tool::MannWhitney(_)
             | Tool::SignedRank(_)
@@ -1476,6 +1623,174 @@ impl Project {
                         }
                         (None, CurveOperand::Reference(_)) => unreachable!("the reference was read above"),
                     }
+                }
+            }
+            Tool::Convolution(ConvolutionSpec { response: other, circular, normalize, interval: _ })
+            | Tool::SignalCorrelation(SignalCorrelationSpec { other, circular, normalize, interval: _ }) => {
+                let conv = matches!(request.tool, Tool::Convolution(_));
+                let (_, _, ocol) = self.locate(*other).ok_or(AnalysisError::NoSuchColumn(*other))?;
+                let oshort = ocol.short_name.clone();
+                let ovalues =
+                    signal_values(ocol.numeric().ok_or_else(|| AnalysisError::NotNumeric(oshort.clone()))?, &oshort)?;
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let (x, v, x_name, what) = if conv {
+                        let Tool::Convolution(spec) = &request.tool else { unreachable!() };
+                        let step = match spec.interval {
+                            Some(d) if d.is_finite() && d > 0.0 => d,
+                            Some(d) => return Err(AnalysisError::BadOption(format!("{d} is not a usable interval"))),
+                            None => auto_interval(inp.xs()),
+                        };
+                        let v = calc::convolve(&y, &ovalues, *circular, *normalize);
+                        let x = (0..v.len()).map(|k| k as f64 * step).collect();
+                        (x, v, inp.x_name.clone(), "convolved with")
+                    } else {
+                        let Tool::SignalCorrelation(spec) = &request.tool else { unreachable!() };
+                        if !(spec.interval.is_finite() && spec.interval > 0.0) {
+                            return Err(AnalysisError::BadOption(format!(
+                                "{} is not a usable interval",
+                                spec.interval
+                            )));
+                        }
+                        let (lags, v) = calc::correlate(&y, &ovalues, *circular, *normalize);
+                        (lags.iter().map(|l| l * spec.interval).collect(), v, "Lag".to_string(), "correlated with")
+                    };
+                    let x_units = if conv { inp.x_units.clone() } else { String::new() };
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: x_name,
+                        units: x_units,
+                        comments: String::new(),
+                        data: ColumnData::numeric(x),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("{} {what} {}", inp.name, ocol.display_name()),
+                        units: String::new(),
+                        comments: format!(
+                            "{} {what} {oshort}{}{}",
+                            inp.short,
+                            if *circular { ", circular" } else { "" },
+                            if *normalize { ", normalized" } else { "" }
+                        ),
+                        data: ColumnData::numeric(v),
+                    });
+                }
+            }
+            Tool::Hilbert => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("Hilbert transform of {}", inp.name),
+                        units: inp.units.clone(),
+                        comments: format!("Hilbert transform of {}{}", inp.short, inp.range_note()),
+                        data: inp.aligned(&calc::hilbert(&y)),
+                    });
+                }
+            }
+            Tool::LevelCrossing(spec) => {
+                if !spec.level.is_finite() {
+                    return Err(AnalysisError::BadOption(format!("{} is not a usable level", spec.level)));
+                }
+                // Origin's default output (measured, analysis-tools.md 14): a column CrossingX<n> of
+                // the crossing X values, without units, written even when there is no crossing.
+                let level = spec.level;
+                let first_number = next_crossing_number(sheet);
+                for (k, inp) in inputs.iter().enumerate() {
+                    let n = first_number + k;
+                    let found = calc::level_crossings(inp.xs(), inp.ys(), level, spec.index, spec.min_gap);
+                    let column = |long_name: String, units: &str, comments: String, data: Vec<f64>| NewColumn {
+                        after: inp.id,
+                        long_name,
+                        units: units.to_string(),
+                        comments,
+                        data,
+                    };
+                    beside.push(column(
+                        format!("CrossingX{n}"),
+                        "",
+                        format!("X values of Y= {level} Level Crossing of {}{}", inp.short, inp.range_note()),
+                        found.iter().map(|c| c.x).collect(),
+                    ));
+                    if spec.details {
+                        let about = format!("Level Crossing of {} at Y= {level}", inp.short);
+                        beside.push(column(
+                            format!("Directions{n}"),
+                            "",
+                            format!("{about}: 1 up, -1 down, 0 on the level without passing through"),
+                            found.iter().map(|c| f64::from(c.direction)).collect(),
+                        ));
+                        beside.push(column(
+                            format!("X Indices{n}"),
+                            "",
+                            format!("{about}: the row of each crossing"),
+                            // Rows of the sheet, not of the chosen range.
+                            found.iter().map(|c| (c.row + inp.first) as f64).collect(),
+                        ));
+                        beside.push(column(
+                            format!("Y Crossing Values{n}"),
+                            &inp.units,
+                            about,
+                            vec![level; found.len()],
+                        ));
+                    }
+                    notes.push(match found.len() {
+                        0 => format!("{} does not reach Y = {level}", inp.short),
+                        1 => format!("{} reaches Y = {level} once", inp.short),
+                        c => format!("{} reaches Y = {level} {c} times", inp.short),
+                    });
+                }
+            }
+            Tool::ColumnMath(spec) => {
+                let operand: Option<(String, String, Vec<f64>)> = match spec.operand {
+                    CurveOperand::Constant(c) => {
+                        if !c.is_finite() {
+                            return Err(AnalysisError::BadOption(format!("{c} is not a usable operand")));
+                        }
+                        // Origin refuses to divide a column by the constant 0.
+                        if spec.op == CurveOp::Divide && c == 0.0 {
+                            return Err(AnalysisError::BadOption("cannot divide by 0".into()));
+                        }
+                        None
+                    }
+                    CurveOperand::Reference(id) => {
+                        let (_, _, rcol) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+                        let r = rcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
+                        Some((rcol.short_name.clone(), rcol.display_name().to_string(), r.to_vec()))
+                    }
+                };
+                let word = match spec.op {
+                    CurveOp::Add => "plus",
+                    CurveOp::Subtract => "minus",
+                    CurveOp::Multiply => "times",
+                    CurveOp::Divide => "divided by",
+                    CurveOp::Power => "to the power of",
+                };
+                for inp in &inputs {
+                    let units = match (spec.op, operand.is_some()) {
+                        (CurveOp::Add | CurveOp::Subtract, _) => inp.units.clone(),
+                        (CurveOp::Multiply | CurveOp::Divide, false) => inp.units.clone(),
+                        _ => String::new(),
+                    };
+                    let (long_name, comments, values) = match (&operand, spec.operand) {
+                        (Some((rshort, rname, r)), _) => {
+                            // Row i of the data goes with row i of the operand column.
+                            let rows = r.get(inp.first..).unwrap_or(&[]);
+                            (
+                                format!("{} {word} {rname}", inp.name),
+                                format!("{} {word} column {rshort}{}", inp.short, inp.range_note()),
+                                calc::column_math(inp.ys(), spec.op, rows),
+                            )
+                        }
+                        (None, CurveOperand::Constant(c)) => (
+                            format!("{} {word} {c}", inp.name),
+                            format!("{} {word} {c}{}", inp.short, inp.range_note()),
+                            calc::curve_math_const(inp.ys(), spec.op, c),
+                        ),
+                        (None, CurveOperand::Reference(_)) => unreachable!("the operand column was read above"),
+                    };
+                    beside.push(NewColumn { after: inp.id, long_name, units, comments, data: inp.aligned(&values) });
                 }
             }
             Tool::Differentiate(options) => {
@@ -1747,6 +2062,18 @@ impl Project {
 
         match output {
             OutputTarget::NextToInput => {}
+            // The crossings are not one value per input row: on a new sheet they go as they are.
+            OutputTarget::NewSheet if matches!(request.tool, Tool::LevelCrossing(_)) => {
+                for nc in std::mem::take(&mut beside) {
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: nc.long_name,
+                        units: nc.units,
+                        comments: nc.comments,
+                        data: ColumnData::numeric(nc.data),
+                    });
+                }
+            }
             OutputTarget::NewSheet => {
                 for nc in std::mem::take(&mut beside) {
                     let inp = inputs.iter().find(|i| i.id == nc.after).expect("every result column has a source");
@@ -2643,6 +2970,109 @@ mod tests {
         };
         let tool = curve_math(CurveOp::Add, CurveOperand::Reference(far), true);
         assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn column_math_goes_row_by_row_and_can_replace_its_input_as_origin() {
+        let (mut p, book, _, ramp) = sample();
+        let reference = add_reference(&mut p);
+        let tool =
+            Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Subtract, operand: CurveOperand::Reference(reference) });
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        // Rows 1-3 minus 1, 2, 3 (no X, no interpolation); the rows past the operand's end minus 0.
+        let mut want: Vec<f64> = (0..11).map(f64::from).collect();
+        for (w, d) in want.iter_mut().zip([1.0, 2.0, 3.0]) {
+            *w -= d;
+        }
+        assert_eq!(p.numeric(r.new_columns[0]).unwrap(), want);
+        assert_eq!(p.column(r.new_columns[0]).unwrap().comments, "C minus column B");
+        assert!(r.message.starts_with("Column math"), "{}", r.message);
+        // Origin's default output is the input column itself.
+        let tool = Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Add, operand: CurveOperand::Constant(10.0) });
+        let before = p.workbook(book).unwrap().sheets[0].columns.len();
+        p.analyze_to(&request(&[ramp], tool), &OutputTarget::Existing(vec![ramp])).unwrap();
+        assert_eq!(p.numeric(ramp).unwrap()[..3], [10.0, 11.0, 12.0]);
+        assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), before);
+        let zero = Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Divide, operand: CurveOperand::Constant(0.0) });
+        assert!(matches!(p.analyze(&request(&[ramp], zero)), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn convolution_and_correlation_write_x_and_y_to_a_new_sheet() {
+        let (mut p, book, flat, ramp) = sample();
+        let response = add_reference(&mut p);
+        let spec = ConvolutionSpec { response, circular: false, normalize: false, interval: None };
+        let r = p.analyze(&request(&[ramp], Tool::Convolution(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("Convolution"), "{}", rs.name);
+        // 11 + 3 - 1 values at the X step of the input (1 s).
+        let x = rs.columns[0].numeric().unwrap();
+        assert_eq!(x.len(), 13);
+        assert_eq!((x[12], rs.columns[0].units.as_str()), (12.0, "s"));
+        assert_eq!(rs.columns[1].numeric().unwrap()[..3], [0.0, 1.0, 4.0]);
+        assert_eq!(rs.columns[1].comments, "C convolved with B");
+        let spec = SignalCorrelationSpec { other: flat, circular: false, normalize: false, interval: 0.5 };
+        let r = p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let lags = rs.columns[0].numeric().unwrap();
+        assert_eq!((lags.len(), lags[0], lags[20]), (21, -5.0, 5.0));
+        // Lag 0: the dot product of 0..10 with 2.
+        assert_eq!(rs.columns[1].numeric().unwrap()[10], 110.0);
+        assert_eq!(r.message.split(':').next(), Some("Signal correlation"));
+        // A missing value inside a signal is refused.
+        let mut holes = vec![1.0; 5];
+        holes[2] = f64::NAN;
+        let gappy = p.add_column(book, 0, Designation::Y, ColumnData::numeric(holes)).unwrap();
+        let spec = SignalCorrelationSpec { other: gappy, circular: true, normalize: true, interval: 1.0 };
+        assert!(matches!(
+            p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))),
+            Err(AnalysisError::BadOption(_))
+        ));
+    }
+
+    #[test]
+    fn the_hilbert_transform_goes_beside_its_column() {
+        let (mut p, book, _, ramp) = sample();
+        let r = p.analyze(&request(&[ramp], Tool::Hilbert)).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[3].id, r.new_columns[0], "right behind its source column");
+        assert_eq!(ws.columns[3].comments, "Hilbert transform of C");
+        let h = p.numeric(r.new_columns[0]).unwrap();
+        let want = sheaf_calc::hilbert(&(0..=10).map(f64::from).collect::<Vec<_>>());
+        assert_eq!(h, want);
+        assert!(r.message.starts_with("Hilbert transform"), "{}", r.message);
+    }
+
+    #[test]
+    fn level_crossing_writes_origins_crossing_column_beside_the_input() {
+        let (mut p, book, _, ramp) = sample();
+        let spec = LevelCrossingSpec { level: 4.5, index: CrossingIndex::Nearest, min_gap: 1, details: false };
+        let r = p.analyze(&request(&[ramp], Tool::LevelCrossing(spec))).unwrap();
+        assert!(r.new_sheet.is_none());
+        let col = p.column(r.new_columns[0]).unwrap();
+        assert_eq!(col.long_name, "CrossingX1");
+        assert_eq!(col.comments, "X values of Y= 4.5 Level Crossing of C");
+        assert_eq!(col.units, "", "Origin gives the crossings no units");
+        assert_eq!(p.numeric(r.new_columns[0]).unwrap(), [4.5]);
+        assert_eq!(r.notes, ["C reaches Y = 4.5 once"]);
+        // The optional outputs, numbered on: direction, row (of the sheet within rows 7 to 11) and Y.
+        let mut req = request(&[ramp], Tool::LevelCrossing(LevelCrossingSpec { level: 8.0, details: true, ..spec }));
+        req.rows = RowRange::Rows(7, 11);
+        let r = p.analyze(&req).unwrap();
+        let names: Vec<&str> = r.new_columns.iter().map(|&id| p.column(id).unwrap().long_name.as_str()).collect();
+        assert_eq!(names, ["CrossingX2", "Directions2", "X Indices2", "Y Crossing Values2"]);
+        let values: Vec<&[f64]> = r.new_columns.iter().map(|&id| p.numeric(id).unwrap()).collect();
+        // 8 is the X of row 9, a point on the level: its own row, direction up.
+        assert_eq!(values, [&[8.0][..], &[1.0], &[9.0], &[8.0]]);
+        // No crossing: Origin still adds the empty column.
+        let r = p.analyze(&request(&[ramp], Tool::LevelCrossing(LevelCrossingSpec { level: -3.0, ..spec }))).unwrap();
+        assert_eq!(p.column(r.new_columns[0]).unwrap().long_name, "CrossingX3");
+        assert!(p.numeric(r.new_columns[0]).unwrap().is_empty());
+        // On a new sheet the crossings go as they are, without the X of the input.
+        let r = p.analyze_to(&request(&[ramp], Tool::LevelCrossing(spec)), &OutputTarget::NewSheet).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns.len(), 1);
+        assert_eq!(ws.columns[0].numeric().unwrap(), [4.5]);
     }
 
     fn ranges(list: &[(f64, f64)], end_point_baseline: bool) -> Tool {

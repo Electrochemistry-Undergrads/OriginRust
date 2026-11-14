@@ -84,6 +84,16 @@ enum Job {
     Math {
         op: MathKind,
         operand: OperandArgs,
+        /// Simple Column Math: row by row, no X.
+        column: bool,
+    },
+    /// Convolution or correlation; the second column is looked up once the project is loaded.
+    Signal {
+        conv: bool,
+        other: String,
+        circular: bool,
+        normalize: bool,
+        interval: Option<f64>,
     },
     Sort {
         by: String,
@@ -162,9 +172,25 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             if operand.reference.is_none() {
                 bail!("subtract-ref needs the reference curve: --ref COLUMN (use 'math --value' for a constant)");
             }
-            (target, Job::Math { op: MathKind::Subtract, operand })
+            (target, Job::Math { op: MathKind::Subtract, operand, column: false })
         }
-        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand }),
+        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
+        AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
+        AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
+        AnalyzeTool::LevelCrossing { target, level, row, min_gap, details } => {
+            let index = match row {
+                CrossingRow::Any => analysis::CrossingIndex::Nearest,
+                CrossingRow::Left => analysis::CrossingIndex::Left,
+                CrossingRow::Right => analysis::CrossingIndex::Right,
+            };
+            (target, Job::Tool(Tool::LevelCrossing(analysis::LevelCrossingSpec { level, index, min_gap, details })))
+        }
+        AnalyzeTool::Convolution { target, response, circular, normalize, interval } => {
+            (target, Job::Signal { conv: true, other: response, circular, normalize, interval })
+        }
+        AnalyzeTool::SignalCorrelation { target, other, circular, normalize, interval } => {
+            (target, Job::Signal { conv: false, other, circular, normalize, interval: Some(interval) })
+        }
         AnalyzeTool::Differentiate { target, order, smooth, poly, points } => {
             (target, Job::Tool(Tool::Differentiate(analysis::DiffOptions { order, smooth, poly, npts: points })))
         }
@@ -572,6 +598,59 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             let freq = analysis::FreqOptions { min, max, size, below, above };
             (target, Job::Tool(Tool::Histogram(analysis::HistogramSpec { freq, graph: !no_graph })))
         }
+        AnalyzeTool::Discfreq { target, relative, cumulative, percent, no_count, case_sensitive, sort } => {
+            let spec = analysis::DiscreteFreqSpec {
+                count: !no_count,
+                relative,
+                cumulative,
+                percent,
+                case_sensitive,
+                sort: analysis::DiscSort::from_code(&sort).expect("clap checks the value"),
+            };
+            (target, Job::Tool(Tool::DiscreteFrequency(spec)))
+        }
+        AnalyzeTool::Bin2d {
+            target,
+            stat,
+            x_inc,
+            x_bins,
+            x_min,
+            x_max,
+            x_centers,
+            x_below,
+            x_above,
+            y_inc,
+            y_bins,
+            y_min,
+            y_max,
+            y_centers,
+            y_below,
+            y_above,
+        } => {
+            let size = |inc: Option<f64>, bins: Option<usize>| match (inc, bins) {
+                (Some(w), _) => analysis::BinSize::Width(w),
+                (None, Some(n)) => analysis::BinSize::Count(n),
+                (None, None) => analysis::BinSize::Auto,
+            };
+            let x = analysis::AxisBins {
+                min: x_min,
+                max: x_max,
+                size: size(x_inc, x_bins),
+                centers: x_centers,
+                below: x_below,
+                above: x_above,
+            };
+            let y = analysis::AxisBins {
+                min: y_min,
+                max: y_max,
+                size: size(y_inc, y_bins),
+                centers: y_centers,
+                below: y_below,
+                above: y_above,
+            };
+            let stat = analysis::Bin2dStat::from_code(&stat).expect("clap checks the value");
+            (target, Job::Tool(Tool::Binning2D(analysis::Bin2dOptions { x, y, stat })))
+        }
         AnalyzeTool::Normality { target, alpha } => {
             (target, Job::Tool(Tool::Normality(analysis::NormalitySpec { alpha })))
         }
@@ -608,6 +687,7 @@ fn math_tool(
     sheet: usize,
     op: MathKind,
     operand: &OperandArgs,
+    column: bool,
     read: &ReadOptions,
 ) -> Result<Tool> {
     let op = match op {
@@ -651,6 +731,12 @@ fn math_tool(
             analysis::CurveOperand::Reference(named_columns(project, rb, rs, std::slice::from_ref(name))?[0])
         }
     };
+    if column {
+        if operand.common {
+            bail!("--common only applies to curve math; column math goes row by row");
+        }
+        return Ok(Tool::ColumnMath(analysis::ColumnMathSpec { op, operand: operand_value }));
+    }
     if operand.common && matches!(operand_value, analysis::CurveOperand::Constant(_)) {
         bail!("--common only applies to a reference curve");
     }
@@ -717,7 +803,18 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     let book = pick_book(&project, target.book.as_deref())?;
     let sheet = pick_sheet(&project, book, target.sheet.as_deref())?;
     let job = match job {
-        Job::Math { op, operand } => Job::Tool(math_tool(&mut project, book, sheet, op, &operand, &target.read)?),
+        Job::Math { op, operand, column } => {
+            Job::Tool(math_tool(&mut project, book, sheet, op, &operand, column, &target.read)?)
+        }
+        Job::Signal { conv, other, circular, normalize, interval } => {
+            let other = named_columns(&project, book, sheet, std::slice::from_ref(&other))?[0];
+            Job::Tool(if conv {
+                Tool::Convolution(analysis::ConvolutionSpec { response: other, circular, normalize, interval })
+            } else {
+                let interval = interval.unwrap_or(1.0);
+                Tool::SignalCorrelation(analysis::SignalCorrelationSpec { other, circular, normalize, interval })
+            })
+        }
         other => other,
     };
 
@@ -753,7 +850,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)
         }
-        Job::Math { .. } => unreachable!("curve math was turned into a tool above"),
+        Job::Math { .. } | Job::Signal { .. } => unreachable!("turned into a tool above"),
         Job::Sort { by, descending } => {
             let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;

@@ -292,25 +292,37 @@ impl GraphPropsDialog {
                     }
                 });
                 ui.separator();
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let dirty = this.baseline.as_ref().is_some_and(|b| *b != graph);
-                    // Right to left: Apply is drawn first so that the order reads OK, Cancel, Apply.
-                    if ui.add_enabled(dirty, egui::Button::new("Apply")).clicked() {
-                        button = Some(Button::Apply);
+                ui.horizontal(|ui| {
+                    // Origin's ">>" hides the tree of Plot Details and "<<" shows it again.
+                    if matches!(this.view, View::Details { .. }) {
+                        let id = graph_details::tree_hidden_id();
+                        let hidden = ui.data(|d| d.get_temp::<bool>(id).unwrap_or(false));
+                        let text = if hidden { "<<" } else { ">>" };
+                        let tip = if hidden { "Show the tree" } else { "Hide the tree" };
+                        if ui.button(text).on_hover_text(tip).clicked() {
+                            ui.data_mut(|d| d.insert_temp(id, !hidden));
+                        }
                     }
-                    if ui.button("Cancel").clicked() {
-                        button = Some(Button::Cancel);
-                    }
-                    if ui.button("OK").clicked() {
-                        button = Some(Button::Ok);
-                    }
-                    // Origin's Workbook button: the worksheet of the chosen plot.
-                    if let View::Details { node: Node::Plot(l, p), .. } = this.view
-                        && let Some(plot) = graph.layers.get(l).and_then(|layer| layer.plots.get(p))
-                        && ui.button("Workbook").on_hover_text("Show the worksheet of this plot").clicked()
-                    {
-                        this.show_workbook = Some(plot.y);
-                    }
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let dirty = this.baseline.as_ref().is_some_and(|b| *b != graph);
+                        // Right to left: Apply is drawn first so that the order reads OK, Cancel, Apply.
+                        if ui.add_enabled(dirty, egui::Button::new("Apply")).clicked() {
+                            button = Some(Button::Apply);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            button = Some(Button::Cancel);
+                        }
+                        if ui.button("OK").clicked() {
+                            button = Some(Button::Ok);
+                        }
+                        // Origin's Workbook button: the worksheet of the chosen plot.
+                        if let View::Details { node: Node::Plot(l, p), .. } = this.view
+                            && let Some(plot) = graph.layers.get(l).and_then(|layer| layer.plots.get(p))
+                            && ui.button("Workbook").on_hover_text("Show the worksheet of this plot").clicked()
+                        {
+                            this.show_workbook = Some(plot.y);
+                        }
+                    });
                 });
             });
 

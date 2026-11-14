@@ -11,14 +11,16 @@ use super::frame::{
 };
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AnovaSpec, BinSize, CorrelationSpec, FreqOptions, FriedmanSpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec,
-    MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, RowStatsSpec, SignTestSpec,
-    SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout,
+    AnovaSpec, BinSize, CorrelationSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec, HistogramSpec,
+    KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec,
+    RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail,
+    TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
-    AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
-    IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter,
-    PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
+    AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
+    CurveOperand, DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LevelCrossingSpec,
+    LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange,
+    SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
 use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
@@ -40,6 +42,16 @@ pub enum AnalysisKind {
     SubtractRef,
     /// Simple Math: add, subtract, multiply, divide or power with a constant or a reference.
     CurveMath,
+    /// Simple Column Math (Origin's `vmathtool`): a column with a constant or another column, row by row.
+    ColumnMath,
+    /// Signal Processing > Convolution (Origin's `conv`).
+    Convolution,
+    /// Signal Processing > Correlation (Origin's `corr1`).
+    SignalCorrelation,
+    /// Level Crossing (Origin's `levelcrossing` X-Function, which has no menu item there).
+    LevelCrossing,
+    /// Signal Processing > Hilbert Transform (Origin's `hilbert`).
+    Hilbert,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -49,6 +61,10 @@ pub enum AnalysisKind {
     TTest,
     Anova,
     Histogram,
+    /// Statistics > Descriptive Statistics > Discrete Frequency.
+    DiscreteFreq,
+    /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (options in `bin2d_options.rs`).
+    Binning2D,
     Normality,
     /// Statistics > ANOVA > Two-Way ANOVA.
     Anova2,
@@ -83,7 +99,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 12] = [
+    pub const ALL: [AnalysisKind; 17] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -92,6 +108,11 @@ impl AnalysisKind {
         AnalysisKind::Baseline,
         AnalysisKind::SubtractRef,
         AnalysisKind::CurveMath,
+        AnalysisKind::ColumnMath,
+        AnalysisKind::Convolution,
+        AnalysisKind::SignalCorrelation,
+        AnalysisKind::LevelCrossing,
+        AnalysisKind::Hilbert,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -109,6 +130,11 @@ impl AnalysisKind {
             AnalysisKind::Baseline => "Subtract Baseline...",
             AnalysisKind::SubtractRef => "Subtract Reference Data...",
             AnalysisKind::CurveMath => "Simple Math...",
+            AnalysisKind::ColumnMath => "Simple Column Math...",
+            AnalysisKind::Convolution => "Convolution...",
+            AnalysisKind::SignalCorrelation => "Correlation...",
+            AnalysisKind::LevelCrossing => "Level Crossing...",
+            AnalysisKind::Hilbert => "Hilbert Transform...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -116,6 +142,8 @@ impl AnalysisKind {
             AnalysisKind::TTest => "t-Test...",
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
+            AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
+            AnalysisKind::DiscreteFreq => "Discrete Frequency...",
             AnalysisKind::Normality => "Normality Test...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
             AnalysisKind::MannWhitney => "Mann-Whitney Test...",
@@ -157,6 +185,11 @@ impl AnalysisKind {
             "baseline" => AnalysisKind::Baseline,
             "subtract-ref" => AnalysisKind::SubtractRef,
             "math" => AnalysisKind::CurveMath,
+            "column-math" => AnalysisKind::ColumnMath,
+            "convolution" => AnalysisKind::Convolution,
+            "signal-correlation" => AnalysisKind::SignalCorrelation,
+            "level-crossing" => AnalysisKind::LevelCrossing,
+            "hilbert" => AnalysisKind::Hilbert,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -164,6 +197,8 @@ impl AnalysisKind {
             "ttest" => AnalysisKind::TTest,
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
+            "bin2d" => AnalysisKind::Binning2D,
+            "discfreq" => AnalysisKind::DiscreteFreq,
             "normality" => AnalysisKind::Normality,
             "anova2" => AnalysisKind::Anova2,
             "mannwhitney" => AnalysisKind::MannWhitney,
@@ -499,8 +534,16 @@ pub struct AnalysisDialog {
     reference_choices: Vec<(ColumnId, String)>,
     reference: usize,
     common_only: bool,
+    /// Convolution and Correlation: circular instead of linear, normalized, the X step (`None`:
+    /// Convolution's automatic step from the input's X).
+    signal_circular: bool,
+    signal_normalize: bool,
+    signal_interval: Option<f64>,
+    level_crossing: LevelCrossingSpec,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
+    bin2d: super::bin2d_options::Bin2dState,
+    discfreq: DiscreteFreqSpec,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
@@ -597,7 +640,9 @@ impl AnalysisDialog {
             None => (1.0, rows_in_sheet as f64),
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
-        let reference_choices = reference_choices(project, &columns);
+        // Convolution and Correlation may use an input itself (autocorrelation, as Origin).
+        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         let sheet_columns: Vec<(ColumnId, String)> = sheet
             .columns
             .iter()
@@ -636,11 +681,17 @@ impl AnalysisDialog {
             column_names: names.join(", "),
             ranges: vec![(x_lo, x_hi)],
             curve_op: CurveOp::Add,
-            use_reference: kind == AnalysisKind::SubtractRef || !reference_choices.is_empty(),
-            constant: 1.0,
+            // Origin's Simple Column Math starts on Constant 10.
+            use_reference: kind == AnalysisKind::SubtractRef
+                || (kind != AnalysisKind::ColumnMath && !reference_choices.is_empty()),
+            constant: if kind == AnalysisKind::ColumnMath { 10.0 } else { 1.0 },
             reference_choices,
             reference: 0,
             common_only: false,
+            signal_circular: false,
+            signal_normalize: false,
+            signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
+            level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1, details: false },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -682,6 +733,8 @@ impl AnalysisDialog {
             chain_fit_linear: true,
             stats,
             curves: Default::default(),
+            bin2d: Default::default(),
+            discfreq: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
@@ -691,7 +744,12 @@ impl AnalysisDialog {
             preview: None,
             preview_request: None,
             recalc: RecalcMode::Manual,
-            output_choice: OutputChoice::NextToInput,
+            // Origin writes Simple Column Math back into its input column.
+            output_choice: if kind == AnalysisKind::ColumnMath {
+                OutputChoice::Existing
+            } else {
+                OutputChoice::NextToInput
+            },
             output_existing: Vec::new(),
             auto_apply: false,
             applied: None,
@@ -924,6 +982,38 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
+            AnalysisKind::Hilbert => Tool::Hilbert,
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+                let other = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or("there is no other column with numbers to use as the second signal")?;
+                let (circular, normalize) = (self.signal_circular, self.signal_normalize);
+                if self.kind == AnalysisKind::Convolution {
+                    Tool::Convolution(ConvolutionSpec {
+                        response: other,
+                        circular,
+                        normalize,
+                        interval: self.signal_interval,
+                    })
+                } else {
+                    let interval = self.signal_interval.unwrap_or(1.0);
+                    Tool::SignalCorrelation(SignalCorrelationSpec { other, circular, normalize, interval })
+                }
+            }
+            AnalysisKind::ColumnMath => {
+                let operand = if self.use_reference {
+                    self.reference_choices
+                        .get(self.reference)
+                        .map(|(id, _)| CurveOperand::Reference(*id))
+                        .ok_or("there is no other column with numbers to use as the operand")?
+                } else {
+                    CurveOperand::Constant(self.constant)
+                };
+                Tool::ColumnMath(ColumnMathSpec { op: self.curve_op, operand })
+            }
             AnalysisKind::SubtractLine
             | AnalysisKind::ReduceDup
             | AnalysisKind::ReduceX
@@ -1033,6 +1123,8 @@ impl AnalysisDialog {
                 },
                 graph: self.stats.graph,
             }),
+            AnalysisKind::Binning2D => Tool::Binning2D(self.bin2d.options()),
+            AnalysisKind::DiscreteFreq => Tool::DiscreteFrequency(self.discfreq),
             AnalysisKind::Normality => Tool::Normality(NormalitySpec { alpha: self.stats.alpha }),
             AnalysisKind::Anova2 => {
                 let layout = if self.stats.two_way_raw {
@@ -1110,12 +1202,19 @@ impl AnalysisDialog {
 
     /// The reference list and the options that belong to it.
     fn reference_options(&mut self, ui: &mut egui::Ui) {
+        let column_math = self.kind == AnalysisKind::ColumnMath;
+        let label = match self.kind {
+            AnalysisKind::ColumnMath => "Column",
+            AnalysisKind::Convolution => "Response",
+            AnalysisKind::SignalCorrelation => "Second signal",
+            _ => "Reference",
+        };
         let text = match self.reference_choices.get(self.reference) {
             Some((_, label)) => label.as_str(),
             None => "(no other column with numbers)",
         };
         ui.horizontal(|ui| {
-            ui.label("Reference");
+            ui.label(label);
             let mut chosen = self.reference;
             egui::ComboBox::from_id_salt("reference_column").selected_text(text).width(300.0).show_ui(ui, |ui| {
                 for (i, (_, label)) in self.reference_choices.iter().enumerate() {
@@ -1124,6 +1223,13 @@ impl AnalysisDialog {
             });
             self.reference = chosen;
         });
+        if column_math {
+            ui.weak("Row by row, without X values; rows past the end of the column count as 0.");
+            return;
+        }
+        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation) {
+            return;
+        }
         ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
             "Only where data and reference both have X values; the result goes to a new sheet. Otherwise the \
              reference is continued as a straight line outside its range.",
@@ -1167,7 +1273,56 @@ impl AnalysisDialog {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
             }
-            AnalysisKind::CurveMath => {
+            AnalysisKind::Hilbert => {
+                ui.weak(
+                    "Writes the Hilbert transform of each input column. Origin also writes the analytic signal as a \
+                     complex column, whose real part is the input and whose imaginary part is this transform.",
+                );
+            }
+            AnalysisKind::LevelCrossing => {
+                let spec = &mut self.level_crossing;
+                ui.horizontal(|ui| {
+                    ui.label("Level");
+                    ui.add(DragValue::new(&mut spec.level).speed(0.01));
+                });
+                ui.checkbox(&mut spec.details, "Also output directions, X indices and Y crossing values");
+                ui.horizontal(|ui| {
+                    ui.label("Row of a crossing between rows");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Nearest, "Any");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Left, "Left");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Right, "Right");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Minimum rows between a pair");
+                    ui.add(DragValue::new(&mut spec.min_gap).range(1..=1_000_000));
+                })
+                .response
+                .on_hover_text("Both crossings of a pair closer than this are dropped (Origin's pts).");
+            }
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+                self.reference_options(ui);
+                ui.horizontal(|ui| {
+                    ui.label("Type");
+                    ui.radio_value(&mut self.signal_circular, false, "Linear");
+                    ui.radio_value(&mut self.signal_circular, true, "Circular");
+                });
+                ui.checkbox(&mut self.signal_normalize, "Normalize");
+                ui.horizontal(|ui| {
+                    ui.label("Sampling interval");
+                    if self.kind == AnalysisKind::Convolution {
+                        let mut auto = self.signal_interval.is_none();
+                        if ui.checkbox(&mut auto, "Auto").changed() {
+                            self.signal_interval = if auto { None } else { Some(1.0) };
+                        }
+                    }
+                    if let Some(d) = &mut self.signal_interval {
+                        ui.add(DragValue::new(d).speed(0.01).range(1e-300..=f64::MAX));
+                    } else {
+                        ui.weak("the X step of the input");
+                    }
+                });
+            }
+            AnalysisKind::CurveMath | AnalysisKind::ColumnMath => {
                 ui.horizontal(|ui| {
                     ui.label("Operator");
                     egui::ComboBox::from_id_salt("curve_op")
@@ -1697,6 +1852,39 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::DiscreteFreq => {
+                let d = &mut self.discfreq;
+                egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
+                    ui.checkbox(&mut d.count, "Count");
+                    ui.checkbox(&mut d.relative, "Relative Frequency");
+                    ui.checkbox(&mut d.cumulative, "Cumulative Frequency");
+                    ui.add_enabled_ui(d.relative || d.cumulative, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Frequency in");
+                            ui.radio_value(&mut d.percent, false, "Fraction");
+                            ui.radio_value(&mut d.percent, true, "Percent");
+                        });
+                    });
+                });
+                ui.checkbox(&mut d.case_sensitive, "Case Sensitive");
+                ui.horizontal(|ui| {
+                    ui.label("Sort Data by");
+                    egui::ComboBox::from_id_salt("discfreq-sort").selected_text(d.sort.label()).show_ui(ui, |ui| {
+                        for s in DiscSort::ALL {
+                            ui.selectable_value(&mut d.sort, s, s.label());
+                        }
+                    });
+                });
+            }
+            AnalysisKind::Binning2D => {
+                let mut names = self.column_names.split(", ");
+                let (x, y) = match (names.next(), names.next()) {
+                    (Some(a), Some(b)) if self.columns.len() >= 2 => (format!("{a}(X)"), format!("{b}(Y)")),
+                    (Some(a), _) => ("X".to_string(), format!("{a}(Y)")),
+                    _ => ("X".to_string(), "Y".to_string()),
+                };
+                self.bin2d.ui(ui, &x, &y);
+            }
             AnalysisKind::AverageCurves => self.curves.average_ui(ui, self.columns.len()),
             AnalysisKind::Intersect => self.curves.intersect_ui(ui),
             AnalysisKind::PolygonArea => {
@@ -1726,6 +1914,12 @@ impl AnalysisDialog {
         self.preview.as_ref()?.as_ref().ok().map(|d| (d.rx.clone(), d.ry.clone()))
     }
 
+    /// Sets the Level Crossing level as the dialog's field would (for tests).
+    #[cfg(test)]
+    pub fn set_crossing_level(&mut self, level: f64) {
+        self.level_crossing.level = level;
+    }
+
     /// Sets the Curve Translate shift as the dialog's field would (for tests).
     #[cfg(test)]
     pub fn set_translate_by(&mut self, by: f64) {
@@ -1748,6 +1942,11 @@ impl AnalysisDialog {
             AnalysisKind::Normalize => "normalize",
             AnalysisKind::Baseline => "baseline",
             AnalysisKind::SubtractRef | AnalysisKind::CurveMath => "curvemath",
+            AnalysisKind::ColumnMath => "vmathtool",
+            AnalysisKind::Convolution => "conv",
+            AnalysisKind::SignalCorrelation => "corr1",
+            AnalysisKind::LevelCrossing => "levelcrossing",
+            AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -1755,6 +1954,8 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "ttest",
             AnalysisKind::Anova => "anova1",
             AnalysisKind::Histogram => "freqcounts",
+            AnalysisKind::Binning2D => "twoDBinning",
+            AnalysisKind::DiscreteFreq => "discfreqs",
             AnalysisKind::Normality => "normtest",
             AnalysisKind::Anova2 => "anova2",
             AnalysisKind::MannWhitney => "mannwhitney",
@@ -1800,6 +2001,13 @@ impl AnalysisDialog {
             AnalysisKind::Baseline => "Subtract a baseline from the input curves",
             AnalysisKind::SubtractRef => "Subtract a reference curve from the input curves",
             AnalysisKind::CurveMath => "Add, subtract, multiply, divide or raise to a power with a constant or a curve",
+            AnalysisKind::ColumnMath => {
+                "Add, subtract, multiply, divide or raise to a power with a constant or a column, row by row"
+            }
+            AnalysisKind::Convolution => "Convolve the input signals with a response",
+            AnalysisKind::SignalCorrelation => "Correlate the input signals with a second signal",
+            AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
+            AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -1807,6 +2015,8 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "Test the means of one or two samples",
             AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
             AnalysisKind::Histogram => "Count the values of the input columns in bins",
+            AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
+            AnalysisKind::DiscreteFreq => "Count how often each distinct value, text or number, occurs",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
             AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
@@ -1845,7 +2055,12 @@ impl AnalysisDialog {
             | AnalysisKind::Baseline
             | AnalysisKind::Smooth
             | AnalysisKind::SubtractRef
-            | AnalysisKind::CurveMath => "New columns beside the input",
+            | AnalysisKind::CurveMath
+            | AnalysisKind::ColumnMath
+            | AnalysisKind::Hilbert => "New columns beside the input",
+            AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
+            AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
+            AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
@@ -1855,6 +2070,8 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
             AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
+            AnalysisKind::Binning2D => "One row per X bin and one column per Y bin in a new sheet",
+            AnalysisKind::DiscreteFreq => "The values and their counts and frequencies in a new sheet",
             AnalysisKind::Normality => {
                 "Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson in a new sheet"
             }
@@ -1904,6 +2121,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Interpolate
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::ColumnMath
         ) || super::manip_options::handles(self.kind)
     }
 
@@ -1918,9 +2136,10 @@ impl AnalysisDialog {
             return;
         }
         self.column_names = names.join(", ");
-        self.reference_choices = reference_choices(project, &columns);
+        let signal = matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
-        if self.kind == AnalysisKind::CurveMath {
+        if matches!(self.kind, AnalysisKind::CurveMath | AnalysisKind::ColumnMath) {
             self.use_reference = self.use_reference && !self.reference_choices.is_empty();
         }
         if self.kind == AnalysisKind::Anova2 {
@@ -1944,6 +2163,8 @@ impl AnalysisDialog {
                 | AnalysisKind::Smooth
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::ColumnMath
+                | AnalysisKind::Hilbert
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter
@@ -1969,9 +2190,13 @@ impl AnalysisDialog {
         })
     }
 
-    /// The column after the input column, as the first suggestion for an existing target.
+    /// The column after the input column, as the first suggestion for an existing target (the input
+    /// column itself for Simple Column Math, as Origin).
     fn default_existing(&self, input: usize) -> usize {
         let at = self.columns.get(input).and_then(|c| self.sheet_columns.iter().position(|(id, _)| id == c));
+        if self.kind == AnalysisKind::ColumnMath {
+            return at.unwrap_or(0);
+        }
         at.map_or(0, |a| (a + 1).min(self.sheet_columns.len().saturating_sub(1)))
     }
 

@@ -330,3 +330,77 @@ fn substituted_text_follows_both_source_and_occurrence_columns_and_undo() {
     assert_eq!(state(&d, c[2]), FormulaState::Current);
     assert_eq!(state(&d, c[3]), FormulaState::Current);
 }
+
+#[test]
+fn column_label_formulas_follow_header_edits_and_undo() {
+    let (mut d, _, c) = book();
+    d.apply("Headers", |p| {
+        let col = p.column_mut(c[0]).unwrap();
+        col.long_name = "Current".into();
+        col.units = "mA".into();
+        col.comments = "run 1".into();
+    });
+    set(&mut d, c[1], r#"col(A)[L]$+" ("+col(A)[U]$+") "+col(A)[C]$"#, RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], "len(col(B))", RecalcMode::Auto).unwrap();
+    let text = |d: &Document| d.project().column(c[1]).unwrap().cell_text(0);
+    assert_eq!(text(&d), "Current (mA) run 1");
+    d.apply("Edit headers", |p| {
+        let col = p.column_mut(c[0]).unwrap();
+        col.units = "µA".into();
+        col.comments = "run 2".into();
+    });
+    assert_eq!(text(&d), "Current (µA) run 2");
+    assert_eq!(values(&d, c[2]), [18.0; 4]);
+    d.undo();
+    assert_eq!(text(&d), "Current (mA) run 1");
+    d.redo();
+    assert_eq!(text(&d), "Current (µA) run 2");
+    assert_eq!(state(&d, c[1]), FormulaState::Current);
+}
+
+#[test]
+fn reading_own_column_labels_keeps_auto_recalculation() {
+    let (mut d, _, c) = book();
+    d.apply("Scale", |p| p.column_mut(c[0]).unwrap().units = "2".into());
+    set(&mut d, c[0], "col(A)[U]*i", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[0]).unwrap().recalc, RecalcMode::Auto);
+    assert_eq!(values(&d, c[0]), [2.0, 4.0, 6.0, 8.0]);
+    d.apply("Change scale", |p| p.column_mut(c[0]).unwrap().units = "3".into());
+    assert_eq!(values(&d, c[0]), [3.0, 6.0, 9.0, 12.0]);
+    d.undo();
+    assert_eq!(values(&d, c[0]), [2.0, 4.0, 6.0, 8.0]);
+}
+
+#[test]
+fn mutual_header_reads_do_not_make_a_data_cycle() {
+    let (mut d, _, c) = book();
+    d.apply("Names", |p| {
+        p.column_mut(c[1]).unwrap().long_name = "beta".into();
+        p.column_mut(c[2]).unwrap().long_name = "gamma".into();
+    });
+    set(&mut d, c[1], "col(C)[L]$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], "col(B)[L]$", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "gamma");
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "beta");
+    d.apply("Rename", |p| p.column_mut(c[1]).unwrap().long_name = "renamed".into());
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "renamed");
+    assert_eq!(state(&d, c[1]), FormulaState::Current);
+    assert_eq!(state(&d, c[2]), FormulaState::Current);
+}
+
+#[test]
+fn header_dependencies_mark_manual_results_pending_and_read_formula_text() {
+    let (mut d, _, c) = book();
+    d.apply("Units", |p| p.column_mut(c[0]).unwrap().units = "mA".into());
+    set(&mut d, c[1], "col(A)[U]$", RecalcMode::Manual).unwrap();
+    set(&mut d, c[2], "col(A)[O]$", RecalcMode::Auto).unwrap();
+    d.apply("Units", |p| p.column_mut(c[0]).unwrap().units = "µA".into());
+    assert_eq!(state(&d, c[1]), FormulaState::Pending);
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "mA");
+    d.apply("Recalculate", |p| p.recalculate(c[1]).unwrap());
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "µA");
+    set(&mut d, c[0], "i*2", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "i*2");
+    set(&mut d, c[0], "i*3", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "i*3");
+}

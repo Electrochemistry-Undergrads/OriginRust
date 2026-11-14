@@ -870,6 +870,79 @@ fn dollar_suffix_is_accepted_on_text_functions_only() {
     }
 }
 
+struct LabelHost;
+
+impl Host for LabelHost {
+    fn variable(&self, name: &str) -> Option<f64> {
+        (name == "L").then_some(2.0)
+    }
+    fn cell(&self, _col: &ColumnRef, row: usize) -> Option<f64> {
+        (row < 3).then_some((row + 1) as f64)
+    }
+    fn has_column(&self, col: &ColumnRef) -> bool {
+        matches!(col, ColumnRef::Short(n) if n == "A")
+            || matches!(col, ColumnRef::Index(1))
+            || matches!(col, ColumnRef::Long(n) if n == "Current µA")
+    }
+    fn column_label(&self, _col: &ColumnRef, label: crate::ColumnLabel) -> Option<String> {
+        use crate::ColumnLabel::*;
+        Some(
+            match label {
+                ShortName => "A",
+                LongName => "Current µA",
+                Units => "2.5",
+                Comments => "calibrated",
+                Formula => "i*2",
+            }
+            .into(),
+        )
+    }
+}
+
+#[test]
+fn column_label_rows_are_scalar_text_or_numeric_values() {
+    for (src, expected) in [
+        ("col(A)[G]$", "A"),
+        ("col(A)[L]$", "Current µA"),
+        ("col(A)[U]$", "2.5"),
+        ("col(A)[C]$", "calibrated"),
+        ("col(A)[O]$", "i*2"),
+        ("wcol(1)[L]$", "Current µA"),
+        (r#"col("Current µA")[L]$"#, "Current µA"),
+        ("upper(col(A)[L]$)$", "CURRENT ΜA"),
+    ] {
+        let e = Expr::parse(src).unwrap();
+        assert_eq!(e.eval_values(&LabelHost, 3).unwrap(), vec![Value::Text(expected.into()); 3], "{src}");
+        assert!(e.compile(&LabelHost).is_err(), "{src}");
+    }
+    let numeric = Expr::parse("col(A)[U]*col(A)").unwrap();
+    assert_eq!(numeric.eval_rows(&LabelHost, 3).unwrap(), [2.5, 5.0, 7.5]);
+    assert_eq!(numeric.compile(&LabelHost).unwrap().eval_row(1), 5.0);
+    assert!(Expr::parse("col(A)[L]").unwrap().eval(&LabelHost).unwrap().is_nan());
+}
+
+#[test]
+fn column_labels_have_separate_dependencies_and_take_precedence_over_variables() {
+    let e = Expr::parse(r#"col(A)[L]$+text(col(2))+col(A)[U]$"#).unwrap();
+    assert!(e.variables().is_empty());
+    assert_eq!(e.columns(), [ColumnRef::Short("A".into()), ColumnRef::Index(2)]);
+    assert_eq!(e.data_columns(), [ColumnRef::Index(2)]);
+    assert_eq!(e.label_columns(), [ColumnRef::Short("A".into())]);
+    // A standalone L names the header even when a variable L exists. An expression still
+    // indexes data rows, and i remains the ordinary per-row index.
+    assert_eq!(Expr::parse("col(A)[L+0]$").unwrap().eval_values(&LabelHost, 1).unwrap(), [Value::Text("2".into())]);
+    assert_eq!(
+        Expr::parse("col(A)[i]$").unwrap().eval_values(&LabelHost, 3).unwrap(),
+        ["1", "2", "3"].map(|s| Value::Text(s.into()))
+    );
+    let plain = SimpleHost::new().short("A", &[1.0]);
+    assert_eq!(Expr::parse("col(A)[L]$").unwrap().eval_values(&plain, 1).unwrap(), [Value::Text(String::new())]);
+    for src in ["col(Q)[L]$", "col(Q)[U]"] {
+        let error = Expr::parse(src).unwrap().eval_values(&LabelHost, 1).unwrap_err();
+        assert!(error.to_string().contains("unknown column col(Q)"), "{error}");
+    }
+}
+
 #[test]
 fn a_bare_column_is_text_only_where_text_is_wanted() {
     let h = probe_a();

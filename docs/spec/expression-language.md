@@ -18,6 +18,7 @@ Summary. One small expression language serves two jobs: worksheet column formula
 - Variables: any other name is a variable looked up in the host (fit parameters, `x`, and so on). The name `i` is the 1-based number of the row being calculated, unless the host defines a variable called `i` itself. **[choice: the host wins, so a fit function may use `i` as a parameter]**
 - The conditional `c ? a : b` evaluates only the branch it takes.
 - Text strings `"abc"` (no escape sequences; cannot contain a double quote) and `col(A)$` / `col(A)[i]$` (the text of a cell) are text values; see the text section below. `col("Long Name")` also takes a quoted name.
+- `col(A)[L]$` reads a column header rather than a data row; built-in header codes `G`, `L`, `U`, `C`, `O` are supported (see below).
 
 ## 2. Operators, tightest first
 
@@ -100,7 +101,23 @@ How a bare column read decides between number and text: the result of the whole 
 
 Sheaf uses literal, case-sensitive, non-overlapping matches, preserving Unicode text. An absent occurrence leaves the text unchanged. An empty search or an invalid occurrence (negative, fractional, missing or nonfinite) also leaves it unchanged; these are Sheaf's guard choices for cases the reference does not specify. The first three arguments accept text columns or numbers written as text; the occurrence is numeric, so formulas can read it from another column. Text-returning function calls accept an optional `$` suffix (`upper(substitute(col(A)$,"clean","raw")$)$`); numeric functions do not. Unsuffixed calls remain accepted. Set Column Values lists `substitute` under Function > Text, and Auto recalculation tracks every source column.
 
-Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `col(A)[L]$` label rows, `char`, `code`, `format` and `%()` substitution are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `char`, `code`, `format` and `%()` substitution are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+
+### Column label values
+
+The built-in header reads follow Origin's [Col reference](https://docs.originlab.com/labtalk/ref/col-func/) and [label-row table](https://docs.originlab.com/labtalk/ref/column-label-row-characters/). This support is based on the published reference, not a new installed-Origin probe.
+
+| Code | Field | Example |
+|---|---|---|
+| `G` | Short Name | `col(A)[G]$` |
+| `L` | Long Name | `col(A)[L]$` |
+| `U` | Units | `col(A)[U]$` |
+| `C` | Comments | `col(A)[C]$` |
+| `O` | F(x)= formula text | `col(A)[O]$` |
+
+The result is a scalar repeated across the requested output rows. Column short names, quoted long names, column numbers and `wcol(1)` work as for data reads. `$` returns the header text; without `$`, the header is parsed as a number (missing for empty or nonnumeric text). An empty Long Name stays empty rather than falling back to the short name. A standalone built-in label code takes precedence over a variable with that name; an expression such as `col(A)[L+0]$` still indexes data rows using the variable `L`. Parameter rows, sampling intervals, categories and filter headers are not implemented.
+
+`Host::column_label` supplies the metadata; its default is empty. An unknown column is still an error. `Expr::columns()` lists all sources; `data_columns()` and `label_columns()` separate reads of cells and headers. Only cell reads create calculation-order or cycle edges, so formulas reading their own headers remain Auto, and mutual header reads do not form a false cycle. Header edits (including units, comments and formula text) invalidate dependent Auto or Manual results within the same undo step. Header-only formulas use the current worksheet row count when recalculated; headers do not extend a formula's data-input range.
 
 ## 4. Calling it from the program
 
@@ -118,7 +135,7 @@ Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a 
 ## 6. Differences from Origin's LabTalk
 
 - Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution or user-defined functions. Those are separate features and are not part of this crate.
-- No `col(A)[L]$` label access, no cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
+- No parameter label rows or cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.

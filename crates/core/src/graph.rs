@@ -270,6 +270,27 @@ pub enum RadiusColumn {
     X,
 }
 
+/// The unit of the angle of a polar layer (Origin's Units of the angular axis).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AngleUnit {
+    /// A full turn is 360; the axis has a tick every 30 and plain number labels.
+    #[default]
+    Degrees,
+    /// A full turn is 2 pi; the axis has a tick every quarter of pi and labels like 0.25 and the pi sign.
+    Radians,
+}
+
+impl AngleUnit {
+    /// The angle of a full turn in this unit.
+    pub fn circle(self) -> f64 {
+        match self {
+            AngleUnit::Degrees => 360.0,
+            AngleUnit::Radians => std::f64::consts::TAU,
+        }
+    }
+}
+
 /// Settings of a polar layer (graphing spec section 14.18).
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolarCoords {
@@ -287,11 +308,24 @@ pub struct PolarCoords {
     /// polygons.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub radar: bool,
+    /// The unit the angle column is in (Origin's Units on the angular axis; degrees by default).
+    #[serde(default, skip_serializing_if = "is_default_angle_unit")]
+    pub angle_unit: AngleUnit,
+}
+
+fn is_default_angle_unit(u: &AngleUnit) -> bool {
+    *u == AngleUnit::Degrees
 }
 
 impl Default for PolarCoords {
     fn default() -> Self {
-        PolarCoords { radius: RadiusColumn::Y, zero_deg: 0.0, clockwise: false, radar: false }
+        PolarCoords {
+            radius: RadiusColumn::Y,
+            zero_deg: 0.0,
+            clockwise: false,
+            radar: false,
+            angle_unit: AngleUnit::Degrees,
+        }
     }
 }
 
@@ -954,6 +988,12 @@ impl PlotKind {
             self,
             PlotKind::StackedColumn | PlotKind::Stacked100Column | PlotKind::StackedBar | PlotKind::Stacked100Bar
         )
+    }
+
+    /// True for the floating column and floating bar kinds: every plot is a bar between two columns,
+    /// and all the plots of a layer stand in the same slot, on top of each other (measured, spec 14.12).
+    pub fn is_floating(&self) -> bool {
+        matches!(self, PlotKind::FloatingColumn | PlotKind::FloatingBar)
     }
 
     /// True for the piled area kinds.

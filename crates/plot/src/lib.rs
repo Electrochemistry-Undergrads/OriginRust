@@ -47,6 +47,7 @@ pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
 
+use sheaf_core::graph::ScaleKind;
 use sheaf_core::{Project, WindowId};
 use std::path::{Path, PathBuf};
 
@@ -229,11 +230,25 @@ pub struct LayerGeometry {
 }
 
 impl LayerGeometry {
+    /// The fraction of the circle's radius at which radius value `r` stands in a polar layer. With the
+    /// centre at zero (Origin's default for polar graphs) it is `|r|` over the upper limit, so the lower
+    /// limit leaves a hole round the centre; otherwise the lower limit is the centre.
+    pub(crate) fn radius_unit(&self, r: f64) -> f64 {
+        match &self.polar {
+            Some(map) if map.zero_centred && self.y.scale == ScaleKind::Linear && self.y.max > 0.0 => {
+                r.abs() / self.y.max
+            }
+            _ => self.y.to_unit(r),
+        }
+    }
+
     /// Page position (points) of a data point. Values that cannot be placed
     /// (non-positive on a log axis) give NaN.
     pub fn data_to_page(&self, x: f64, y: f64) -> (f64, f64) {
         if let Some(map) = &self.polar {
-            return map.point(x, self.y.to_unit(y));
+            // A negative radius of a polar graph is drawn on the opposite side of the centre.
+            let (theta, r) = if map.zero_centred && y < 0.0 { (x + map.circle / 2.0, -y) } else { (x, y) };
+            return map.point(theta, self.radius_unit(r));
         }
         if let Some(map) = &self.ternary {
             return map.point(x, y);
@@ -246,7 +261,12 @@ impl LayerGeometry {
     pub fn page_to_data(&self, px: f64, py: f64) -> (f64, f64) {
         if let Some(map) = &self.polar {
             let (theta, u) = map.angle_and_unit(px, py);
-            return (theta, self.y.from_unit(u));
+            let r = if map.zero_centred && self.y.scale == ScaleKind::Linear {
+                u * self.y.max
+            } else {
+                self.y.from_unit(u)
+            };
+            return (theta, r);
         }
         if let Some(map) = &self.ternary {
             return map.fractions(px, py);
@@ -259,10 +279,15 @@ impl LayerGeometry {
     /// finite or cannot be placed. Used to break lines at gaps.
     pub(crate) fn checked_data_to_page(&self, x: f64, y: f64) -> Option<(f64, f64)> {
         let p = self.data_to_page(x, y);
-        if self.polar.is_some() {
-            // A radius outside the axis range is not drawn (it would leave the circle or cross the centre).
-            let u = self.y.to_unit(y);
-            if !(-1e-9..=1.0 + 1e-9).contains(&u) {
+        if let Some(map) = &self.polar {
+            // A radius outside the axis range is not drawn (it would leave the circle or cross the
+            // centre; with the centre at zero the hole below the lower limit stays empty too).
+            let inside = if map.zero_centred && self.y.scale == ScaleKind::Linear {
+                (self.y.min - 1e-9..=self.y.max + 1e-9).contains(&y.abs())
+            } else {
+                (-1e-9..=1.0 + 1e-9).contains(&self.y.to_unit(y))
+            };
+            if !inside {
                 return None;
             }
         }

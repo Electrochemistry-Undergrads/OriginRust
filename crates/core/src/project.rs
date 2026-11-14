@@ -604,10 +604,19 @@ impl Project {
         }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
-        if matches!(template, Template::FloatingColumn | Template::FloatingBar | Template::FillArea) {
-            // Columns go in pairs: the first of a pair is the lower end of the bars (or the lower
-            // edge of the filled area), the second the upper end (and names the plot, as in
-            // Origin). A last odd column is left out.
+        if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
+            // Origin chains the columns: each plot is a bar from the column before it to its own
+            // column, which names it (measured: B, C, D, E gave the bars B-C, C-D and D-E).
+            for pair in ys.windows(2) {
+                self.add_plot(graph, 0, pair[1])?;
+                if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
+                    p.y_base = Some(pair[0]);
+                }
+            }
+        } else if template == Template::FillArea {
+            // Columns go in pairs: the first of a pair is the lower edge of the filled area, the
+            // second the upper edge (and names the plot, as in Origin). A last odd column is left
+            // out.
             for pair in ys.as_chunks::<2>().0 {
                 self.add_plot(graph, 0, pair[1])?;
                 if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {

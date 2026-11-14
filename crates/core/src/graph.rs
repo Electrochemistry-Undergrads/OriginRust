@@ -83,6 +83,41 @@ impl Graph {
         }
     }
 
+    /// Links layer `index` to `parent`, or unlinks it with `None` (Plot Details > Link Axes Scales).
+    /// The layer keeps its place on the page: its frame is converted between fractions of the page
+    /// and fractions of the parent's frame. A new link starts with both scales the layer's own, as
+    /// Origin's tab does (None and None); a change of parent keeps them. A parent that cannot be
+    /// followed (a later layer, or one linked itself) is refused, and so is a link for a layer that
+    /// other layers are linked to.
+    pub fn set_link(&mut self, index: usize, parent: Option<usize>) -> bool {
+        if index >= self.layers.len() {
+            return false;
+        }
+        if let Some(p) = parent
+            && (p >= index || self.layers[p].link.is_some() || self.has_children(index))
+        {
+            return false;
+        }
+        let on_page = match self.link_parent(index) {
+            Some(p) => self.layers[index].frame.within(self.layers[p].frame),
+            None => self.layers[index].frame,
+        };
+        let layer = &mut self.layers[index];
+        let (x, y) = layer.link.map_or((ScaleLink::None, ScaleLink::None), |k| (k.x, k.y));
+        layer.link = parent.map(|parent| LayerLink { parent, x, y });
+        let frame = match parent {
+            Some(p) => on_page.relative_to(self.layers[p].frame),
+            None => on_page,
+        };
+        self.layers[index].frame = frame;
+        true
+    }
+
+    /// Whether another layer is linked to layer `index`.
+    pub fn has_children(&self, index: usize) -> bool {
+        self.layers.iter().enumerate().any(|(i, l)| i != index && l.link.is_some_and(|k| k.parent == index))
+    }
+
     /// The layers of layer `index`'s group that are drawn in the same frame as it (the same
     /// [`Graph::place`]), in layer order: a layer and its right Y layer, but not the other panels
     /// of a stack. Empty when there is no such layer.
@@ -155,6 +190,32 @@ impl Frame {
     /// The whole rectangle it is measured in: the whole page, or the whole frame of the parent
     /// layer for a linked layer.
     pub const WHOLE: Frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
+
+    /// This frame, given as fractions of `outer`, as fractions of what `outer` is measured in.
+    pub fn within(self, outer: Frame) -> Frame {
+        Frame {
+            left: outer.left + self.left * outer.width,
+            top: outer.top + self.top * outer.height,
+            width: self.width * outer.width,
+            height: self.height * outer.height,
+        }
+    }
+
+    /// The inverse of [`Frame::within`]: this frame as fractions of `outer`. An empty `outer` side
+    /// leaves that side as it is.
+    pub fn relative_to(self, outer: Frame) -> Frame {
+        let (left, width) = if outer.width > 0.0 {
+            ((self.left - outer.left) / outer.width, self.width / outer.width)
+        } else {
+            (self.left, self.width)
+        };
+        let (top, height) = if outer.height > 0.0 {
+            ((self.top - outer.top) / outer.height, self.height / outer.height)
+        } else {
+            (self.top, self.height)
+        };
+        Frame { left, top, width, height }
+    }
 }
 
 /// One set of axes with the plots drawn in it.
@@ -1834,6 +1895,35 @@ mod tests {
             })
             .collect();
         Graph { id: WindowId(1), name: "G".into(), long_name: String::new(), page: Page::inches(6.4, 4.8), layers }
+    }
+
+    #[test]
+    fn set_link_keeps_the_layer_in_place_and_starts_with_unlinked_scales() {
+        let mut g = graph_of(&[None, None, None]);
+        g.layers[0].frame = Frame { left: 0.2, top: 0.1, width: 0.5, height: 0.8 };
+        g.layers[1].frame = Frame { left: 0.3, top: 0.3, width: 0.25, height: 0.4 };
+        let on_page = g.layers[1].frame;
+        assert!(g.set_link(1, Some(0)));
+        assert_eq!(g.layers[1].link, Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None }));
+        let f = g.layers[1].frame;
+        assert!((f.left - 0.2).abs() < 1e-12 && (f.width - 0.5).abs() < 1e-12, "{f:?}");
+        assert!((f.top - 0.25).abs() < 1e-12 && (f.height - 0.5).abs() < 1e-12, "{f:?}");
+        g.layers[1].link.as_mut().unwrap().x = ScaleLink::Straight;
+        // Unlinking a layer that is not linked changes nothing; layer 1 cannot follow a later layer,
+        // and nothing can follow layer 1 while it is linked itself.
+        assert!(g.set_link(0, None) && g.layers[0].link.is_none());
+        assert!(!g.set_link(1, Some(2)));
+        assert!(!g.set_link(2, Some(1)), "layer 1 is linked itself");
+        assert!(!g.set_link(0, Some(0)));
+        // Unlinked again, it is where it was on the page.
+        assert!(g.set_link(1, None));
+        assert_eq!(g.layers[1].link, None);
+        let f = g.layers[1].frame;
+        for (a, b) in
+            [(f.left, on_page.left), (f.top, on_page.top), (f.width, on_page.width), (f.height, on_page.height)]
+        {
+            assert!((a - b).abs() < 1e-12, "{f:?}");
+        }
     }
 
     #[test]

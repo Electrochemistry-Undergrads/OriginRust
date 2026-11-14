@@ -1809,3 +1809,23 @@ plot per ticked Y with the ticked X and error column) and Replace (the chosen pl
 the Plot List with Rescale, Range, a Show tick, Plot Type and Legend; Preview greyed, OK, Cancel, Apply. Edits
 are one undo step; Cancel takes them back. Not offered: groups in the list, drag to reorder, Sampling
 Interval, Position, `<autoX>`.
+
+### 18.4 Link Axes Scales (measured 2026-11-14)
+
+Measured with `tools/origin-ref/origin-dialog.ps1` on a graph whose second layer was made by `layer -n y`
+(a right Y layer); pictures and control lists in `re-workspace/scratch/t13link`:
+
+- The layer node's tabs are Background, Size/Speed, Display, Link Axes Scales and Stack for the second
+  layer; the first layer has no Link Axes Scales tab.
+- The tab: Link to (a list of None and the other layer, here None and Layer1), the line "Link Axes in Child
+  Layer to Parent", then two groups side by side, X Axis Link and Y Axis Link, each with the choices None,
+  Straight (1 to 1), Align (with an "X =" box) and Custom (with "X1 =" and "X2 =" boxes). The boxes are
+  greyed unless their choice is on. `layer -n y` gives X Straight and Y None.
+- Link to None turns both groups to None and greys all their choices; choosing Layer1 again leaves both on
+  None (a new link starts unlinked).
+
+Sheaf (`graph_details.rs` `link_tab`, `Graph::set_link`): the same tab for every layer after the first, with
+None and Straight; Align and Custom are drawn greyed with their boxes (Sheaf has no formula links). Link to
+lists None and the earlier layers that are not linked themselves (Sheaf follows one level of links); a layer
+that others are linked to cannot be linked. Changing the link keeps the layer where it is on the page: its
+frame is converted between fractions of the page and of the parent's frame.

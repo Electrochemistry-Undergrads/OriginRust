@@ -6,7 +6,7 @@
 use super::*;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{By, NodeT, Queryable};
-use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind};
+use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink};
 use sheaf_plot::scene::ObjectKind;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -512,6 +512,41 @@ fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
     click(&mut h, "Grid on Top of Data");
     click(&mut h, "OK");
     assert!(graph(&h).layers[0].display.grid_on_top);
+}
+
+/// Origin's Link Axes Scales tab: only for a layer after the first; Straight on the Y side links the
+/// Y scale too, and Link to None unlinks the layer without moving it.
+#[test]
+fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
+    let mut h = start(vec![data_file("link-tab")]);
+    let (_, g) = window_ids(&h);
+    h.state_mut().doc.apply("Double Y", |p| {
+        p.add_right_y_layer(g, 0).unwrap();
+    });
+    let before = graph(&h).layers[1].link.unwrap();
+    assert_eq!((before.x, before.y), (ScaleLink::Straight, ScaleLink::None));
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    assert!(!has_label(&h, "Link Axes Scales"), "the first layer has nothing to link to");
+    click(&mut h, "Layer 2");
+    click(&mut h, "Link Axes Scales");
+    for label in ["Link to", "Link Axes in Child Layer to Parent", "X Axis Link", "Y Axis Link", "Align", "Custom"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    h.query_all_by_label("Straight (1 to 1)").nth(1).expect("the Y side").click();
+    settle(&mut h);
+    click(&mut h, "Apply");
+    assert_eq!(graph(&h).layers[1].link.unwrap().y, ScaleLink::Straight);
+    // Link to None: unlinked, at the same place on the page.
+    let on_page = graph(&h).layers[1].frame.within(graph(&h).layers[0].frame);
+    h.get_by_value("Layer1").click();
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::Button).label("None")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    let after = &graph(&h).layers[1];
+    assert_eq!(after.link, None);
+    assert!((after.frame.left - on_page.left).abs() < 1e-12 && (after.frame.width - on_page.width).abs() < 1e-12);
 }
 
 #[test]

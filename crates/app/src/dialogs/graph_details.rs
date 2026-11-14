@@ -42,6 +42,8 @@ pub enum DetailTab {
     LayerContents,
     Background,
     Size,
+    /// Origin's Link Axes Scales tab, for every layer but the first.
+    Link,
     Stack,
     Legend,
     Page,
@@ -57,14 +59,21 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             (DetailTab::LegendsTitles, "Legends/Titles", true),
             (DetailTab::Text, "Text", true),
         ],
-        Node::Layer(_) => vec![
-            (DetailTab::LayerContents, "Layer Contents", true),
-            (DetailTab::Background, "Background", true),
-            (DetailTab::Size, "Size/Speed", true),
-            (DetailTab::Display, "Display", true),
-            (DetailTab::Stack, "Stack", true),
-            (DetailTab::Legend, "Legend", true),
-        ],
+        Node::Layer(l) => {
+            let mut tabs = vec![
+                (DetailTab::LayerContents, "Layer Contents", true),
+                (DetailTab::Background, "Background", true),
+                (DetailTab::Size, "Size/Speed", true),
+                (DetailTab::Display, "Display", true),
+            ];
+            // Origin has no Link Axes Scales tab for the first layer: it has nothing to link to.
+            if l > 0 {
+                tabs.push((DetailTab::Link, "Link Axes Scales", true));
+            }
+            tabs.push((DetailTab::Stack, "Stack", true));
+            tabs.push((DetailTab::Legend, "Legend", true));
+            tabs
+        }
         Node::Plot(l, p) => {
             let plot = &graph.layers[l].plots[p];
             let mut tabs = vec![(DetailTab::Group, "Group", true)];
@@ -780,6 +789,10 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
 // ----- layer --------------------------------------------------------------------------------
 
 fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sources: &[Source], add_from: &mut usize) {
+    if tab == DetailTab::Link {
+        link_tab(ui, graph, l);
+        return;
+    }
     let link = graph.layers[l].link.map(|k| k.parent);
     // The ids that `\l(n)` and `%(n)` in the legend text refer to.
     let legend_ids = graph.legend_ids(l, &|j| graph.layers[j].plots.iter().filter(|p| p.visible).count());
@@ -943,6 +956,75 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
         }
         layer.recolor_automatic();
     }
+}
+
+/// Origin's Link Axes Scales tab (measured, graphing spec 18.4): Link to (None or an earlier
+/// layer), then an X Axis Link and a Y Axis Link group with None, Straight (1 to 1), Align and
+/// Custom. Sheaf has None and Straight; Align and Custom are shown greyed with their boxes.
+fn link_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize) {
+    let current = graph.layers[l].link.map(|k| k.parent);
+    let name = |p: Option<usize>| p.map_or_else(|| "None".to_string(), |p| format!("Layer{}", p + 1));
+    let children = graph.has_children(l);
+    ui.horizontal(|ui| {
+        ui.label("Link to");
+        let mut chosen = current;
+        ui.add_enabled_ui(!children, |ui| {
+            egui::ComboBox::from_id_salt("link_to").selected_text(name(current)).width(105.0).show_ui(ui, |ui| {
+                ui.selectable_value(&mut chosen, None, "None");
+                // Sheaf follows one level of links: the parent must not be linked itself.
+                for p in (0..l).filter(|&p| graph.layers[p].link.is_none()) {
+                    ui.selectable_value(&mut chosen, Some(p), name(Some(p)));
+                }
+            });
+        });
+        if chosen != current {
+            graph.set_link(l, chosen);
+        }
+    });
+    if children {
+        ui.weak("Other layers are linked to this layer, so it cannot be linked itself.");
+    } else if current.is_some() && graph.link_parent(l).is_none() {
+        ui.weak("The layer it is linked to is linked itself, so this link is not followed.");
+    }
+    ui.add_space(6.0);
+    ui.label("Link Axes in Child Layer to Parent");
+    let linked = graph.layers[l].link.is_some();
+    let layer = &mut graph.layers[l];
+    ui.columns(2, |cols| {
+        for (col, axis) in cols.iter_mut().zip(["X", "Y"]) {
+            group_box(col, &format!("{axis} Axis Link"), |ui| {
+                ui.add_enabled_ui(linked, |ui| {
+                    let mut value = layer.link.map_or(ScaleLink::None, |k| if axis == "X" { k.x } else { k.y });
+                    ui.radio_value(&mut value, ScaleLink::None, "None");
+                    ui.radio_value(&mut value, ScaleLink::Straight, "Straight (1 to 1)");
+                    if let Some(k) = layer.link.as_mut() {
+                        if axis == "X" {
+                            k.x = value;
+                        } else {
+                            k.y = value;
+                        }
+                    }
+                    let not_yet = "Not in Sheaf yet: the scale is a formula of the parent's";
+                    ui.add_enabled(false, egui::RadioButton::new(false, "Align")).on_disabled_hover_text(not_yet);
+                    let boxes = |ui: &mut egui::Ui, labels: &[String]| {
+                        for label in labels {
+                            ui.horizontal(|ui| {
+                                ui.add_space(12.0);
+                                ui.add_enabled(false, egui::Label::new(format!("{label} =")));
+                                ui.add_enabled(
+                                    false,
+                                    egui::TextEdit::singleline(&mut String::new()).desired_width(80.0),
+                                );
+                            });
+                        }
+                    };
+                    boxes(ui, &[axis.to_string()]);
+                    ui.add_enabled(false, egui::RadioButton::new(false, "Custom")).on_disabled_hover_text(not_yet);
+                    boxes(ui, &[format!("{axis}1"), format!("{axis}2")]);
+                });
+            });
+        }
+    });
 }
 
 fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {

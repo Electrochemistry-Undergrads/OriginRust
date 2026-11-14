@@ -462,9 +462,12 @@ fn polar(id: WindowId, name: &str, radius: RadiusColumn) -> Graph {
 
 fn polar_of(id: WindowId, name: &str, radius: RadiusColumn, kind: PlotKind) -> Graph {
     let mut g = general(id, name, kind);
-    g.page = Page::inches(6.0, 6.0);
+    // Origin's polar page (measured, spec 14.18): 8.04 by 6.15 in with a square layer of 4.55 in, its
+    // left edge at 23.3 % of the page, and the legend above the layer's top right corner.
+    g.page = Page::inches(8.04, 6.15);
     let l = &mut g.layers[0];
-    l.frame = Frame { left: 0.2, top: 0.2, width: 0.6, height: 0.6 };
+    l.frame = Frame { left: 0.2326, top: 0.1174, width: 0.5665, height: 0.7402 };
+    l.legend.position = LegendPosition::Manual { x: 0.84, y: -0.108 };
     l.coords = Coords::Polar(PolarCoords { radius, ..PolarCoords::default() });
     let grid = LineStyle::solid(Color::rgb(204, 204, 204), 0.5);
     for a in [&mut l.x_axis, &mut l.y_axis] {
@@ -474,9 +477,6 @@ fn polar_of(id: WindowId, name: &str, radius: RadiusColumn, kind: PlotKind) -> G
         a.major_tick_len_pt = 6.0;
         a.minor_ticks = 0;
     }
-    // The measured probe (spec 14.17) ran the radius axis from the data's smallest to its largest
-    // radius: the centre is the smallest value and the circle's edge the largest, no margin.
-    l.y_axis.rescale_margin_pct = 0.0;
     g
 }
 
@@ -494,6 +494,7 @@ fn radar(id: WindowId, name: &str) -> Graph {
     l.legend.position = LegendPosition::Manual { x: 1.65, y: 0.12 };
     l.x_axis.major_tick = TickDirection::None;
     l.y_axis.major_tick_len_pt = 5.0;
+    l.y_axis.rescale_margin_pct = 0.0;
     g
 }
 

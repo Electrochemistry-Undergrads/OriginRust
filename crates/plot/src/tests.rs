@@ -2981,9 +2981,9 @@ fn a_polar_layer_labels_the_angles_every_30_degrees_and_the_radius_twice() {
         assert!(t.iter().any(|x| *x == a.to_string()), "angle {a} in {t:?}");
     }
     assert!(!t.iter().any(|x| x == "360"), "360 coincides with 0: {t:?}");
-    // The radius labels run up and down the vertical diameter: each one twice.
+    // The radius labels stand on two axes left of the circle, one above the other: each one twice.
     let geom = &crate::layout_geometry(&p, g).unwrap()[0];
-    for v in geom.y.major.iter().zip(&geom.y.labels).filter(|(v, _)| geom.y.to_unit(**v) > 1e-9).map(|(_, l)| l) {
+    for v in geom.y.major.iter().zip(&geom.y.labels).filter(|(v, _)| geom.radius_unit(**v) > 1e-9).map(|(_, l)| l) {
         assert!(t.iter().filter(|x| *x == v).count() >= 2, "{v} twice in {t:?}");
     }
     assert!(!t.iter().any(|x| x == "Row" || x.contains("Current")), "no axis titles: {t:?}");
@@ -3000,8 +3000,8 @@ fn polar_geometry_puts_angle_zero_on_the_right_and_counts_counter_clockwise() {
     assert!((x0 - (map.cx + map.radius)).abs() < 1e-6 && (y0 - map.cy).abs() < 1e-6, "0 degrees at 3 o'clock");
     let (x1, y1) = geom.data_to_page(90.0, rmax);
     assert!((x1 - map.cx).abs() < 1e-6 && (y1 - (map.cy - map.radius)).abs() < 1e-6, "90 degrees at 12 o'clock");
-    let (x2, y2) = geom.data_to_page(180.0, geom.y.min);
-    assert!((x2 - map.cx).abs() < 1e-6 && (y2 - map.cy).abs() < 1e-6, "the lowest radius is the centre");
+    let (x2, y2) = geom.data_to_page(180.0, 0.0);
+    assert!((x2 - map.cx).abs() < 1e-6 && (y2 - map.cy).abs() < 1e-6, "radius 0 is the centre");
 }
 
 #[test]
@@ -3035,16 +3035,103 @@ fn polar_data_to_page_and_page_to_data_invert_each_other() {
 
 #[test]
 fn the_radius_axis_of_a_polar_layer_follows_the_radius_values() {
+    // Measured in Origin: data 1 to 2 gave 0.75 to 2.25 (steps of 0.5), data 1.13 to 2.37 gave 1 to 2.5, data 3.2 to 87
+    // gave 0 to 100, and a negative lower end is cut at 0: the usual rule with its 8 % margin.
     let (p, g) = polar_probe(Template::Polar);
     let small = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
-    // No margin: the centre is the smallest radius and the edge the largest (spec 14.17 probe).
-    assert!((small.min - 1.0).abs() < 1e-9 && (small.max - 2.0).abs() < 1e-9, "radii 1 to 2: {small:?}");
+    assert!((small.min - 0.75).abs() < 1e-9 && (small.max - 2.25).abs() < 1e-9, "radii 1 to 2: {small:?}");
+    assert_eq!(small.major, vec![1.0, 1.5, 2.0]);
+    let radii = |lo: f64, hi: f64| {
+        let r: Vec<f64> =
+            (0..19).map(|i| lo + (hi - lo) * (0.5 + 0.5 * (f64::from(i) * 20.0).to_radians().cos())).collect();
+        let theta: Vec<f64> = (0..19).map(|i| f64::from(i) * 20.0).collect();
+        let (p, g) = project(Template::Polar, theta, vec![r]);
+        let y = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+        (y.min, y.max, y.step)
+    };
+    let close = |a: (f64, f64, f64), b: (f64, f64, f64)| {
+        assert!((a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9 && (a.2 - b.2).abs() < 1e-9, "{a:?} vs {b:?}")
+    };
+    close(radii(1.13, 2.37), (1.0, 2.5, 0.5));
+    close(radii(0.0, 2.37), (0.0, 3.0, 1.0));
+    close(radii(3.2, 87.0), (0.0, 100.0, 20.0));
+    // (Origin kept steps of 0.5 and a limit of 2.25 for data -1 to 2; Sheaf only cuts the lower limit at 0.)
+    assert_eq!(radii(-1.0, 2.0).0, 0.0);
+    close(radii(1.45, 2.05), (1.4, 2.1, 0.2));
+    // The angle axis ignores the data.
     let (p, g) = project(Template::Polar, vec![0.0, 90.0, 180.0, 270.0], vec![vec![10.0, 40.0, 25.0, 30.0]]);
     let geom = &crate::layout_geometry(&p, g).unwrap()[0];
-    assert!((geom.y.min - 10.0).abs() < 1e-9 && (geom.y.max - 40.0).abs() < 1e-9, "radii 10 to 40: {:?}", geom.y);
-    // The angle axis ignores the data.
     assert_eq!((geom.x.min, geom.x.max), (0.0, 360.0));
     assert_eq!(geom.x.major.len(), 12);
+}
+
+#[test]
+fn the_centre_of_a_polar_layer_is_radius_zero_and_the_lower_limit_leaves_a_hole() {
+    // Origin's "Center at Zero" (default): a radius is placed at |r| / upper limit of the circle's radius, and
+    // what lies below the lower limit is not drawn (measured: limits 1.5 to 2.5 left the ring 1.5 empty inside).
+    let (mut p, g) = polar_probe(Template::Polar);
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(1.5);
+    axis.max = Some(2.5);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(0.0, 2.0);
+    assert!((x - (map.cx + 0.8 * map.radius)).abs() < 1e-6 && (y - map.cy).abs() < 1e-6, "2 of 2.5 is 0.8 radii out");
+    let (t, r) = geom.page_to_data(x, y);
+    assert!(t.abs() < 1e-6 && (r - 2.0).abs() < 1e-9);
+    assert!(geom.checked_data_to_page(0.0, 1.0).is_none(), "inside the hole");
+    assert!(geom.checked_data_to_page(0.0, 1.5).is_some());
+    // A negative radius is drawn on the opposite side of the centre.
+    axis_free(&mut p, g);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let (x1, y1) = geom.data_to_page(0.0, 1.0);
+    let (x2, y2) = geom.data_to_page(180.0, -1.0);
+    assert!((x1 - x2).abs() < 1e-9 && (y1 - y2).abs() < 1e-9);
+}
+
+fn axis_free(p: &mut Project, g: WindowId) {
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(0.0);
+    axis.max = Some(2.5);
+}
+
+#[test]
+fn the_radius_axis_stands_left_of_the_circle_in_two_pieces_when_there_is_a_hole() {
+    let (p, g) = polar_probe(Template::Polar);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    // The labels of the radius axis are all left of the circle.
+    let left = map.cx - map.radius;
+    let radius_labels: Vec<_> = d
+        .descendants()
+        .filter(|n| n.has_tag_name("text") && n.text().is_some_and(|t| t == "1.5" || t == "2.0" || t == "1.0"))
+        .collect();
+    assert!(radius_labels.len() >= 6, "three labels twice");
+    for n in radius_labels {
+        let x: f64 = n.attribute("x").and_then(|v| v.parse().ok()).unwrap();
+        assert!(x < left, "label at x={x} left of the circle at {left}");
+    }
+}
+
+#[test]
+fn a_polar_layer_in_radians_has_eight_ticks_labelled_in_pi() {
+    let (mut p, g) = polar_probe(Template::Polar);
+    if let Some(sheaf_core::graph::Coords::Polar(c)) = p.graph_mut(g).map(|g| &mut g.layers[0].coords) {
+        c.angle_unit = sheaf_core::graph::AngleUnit::Radians;
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert_eq!((geom.x.min, geom.x.max), (0.0, std::f64::consts::TAU));
+    assert_eq!(geom.x.major.len(), 8);
+    assert_eq!(geom.x.labels[0], "0.00\u{3c0}");
+    assert_eq!(geom.x.labels[2], "0.50\u{3c0}");
+    // An angle of pi / 2 points straight up, and the cursor reads it back in radians.
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(std::f64::consts::FRAC_PI_2, geom.y.max);
+    assert!((x - map.cx).abs() < 1e-6 && y < map.cy);
+    let (t, _) = geom.page_to_data(x, y);
+    assert!((t - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
 }
 
 #[test]
@@ -3072,7 +3159,9 @@ fn a_radius_outside_the_axis_range_is_not_drawn() {
     let geom = &crate::layout_geometry(&p, g).unwrap()[0];
     assert!(geom.checked_data_to_page(0.0, 1.0).is_some());
     assert!(geom.checked_data_to_page(0.0, 2.0).is_none());
-    assert!(geom.checked_data_to_page(0.0, -0.5).is_none());
+    // A negative radius is drawn on the other side, so only its size has to be in range.
+    assert!(geom.checked_data_to_page(0.0, -0.5).is_some());
+    assert!(geom.checked_data_to_page(0.0, -2.0).is_none());
 }
 
 // ----- radar charts (graphing spec 14.19) ---------------------------------------------------------

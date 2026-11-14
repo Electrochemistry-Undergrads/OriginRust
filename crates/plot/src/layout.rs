@@ -220,7 +220,8 @@ fn group_geometry(
         Some(p) if p.radar => {
             polar::radar_axis(pds[i].plots.first().and_then(|pd| pd.spokes.as_deref()).unwrap_or(&[]))
         }
-        _ => polar::angle_axis(axis),
+        Some(p) => polar::angle_axis(axis, p.angle_unit),
+        None => polar::angle_axis(axis, sheaf_core::graph::AngleUnit::Degrees),
     };
     // The scale of the three axes of a ternary layer.
     let ternary_scale = |i: usize| {
@@ -229,8 +230,17 @@ fn group_geometry(
             (ternary::scale_axis(&g.layers[i].x_axis, percent), ternary::scale_axis(&g.layers[i].y_axis, percent))
         })
     };
+    // The radius axis of a polar graph cannot start below 0 (Origin refuses a negative lower limit).
+    let polar_floor = |i: usize, y: ResolvedAxis| {
+        let l = &g.layers[i];
+        if y.min >= 0.0 || l.y_axis.min.is_some() || !l.coords.polar().is_some_and(|p| !p.radar) {
+            return y;
+        }
+        // The rest of the range stays as the data made it (measured: -1 to 2 gave 0 to 2.25, steps of 0.5).
+        own(i, Dim::Y, &Axis { min: Some(0.0), max: Some(y.max), major_step: Some(y.step), ..l.y_axis.clone() })
+    };
     let (root_x, root_y) = if rl.coords.polar().is_some() {
-        (spoke_axis(root, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
+        (spoke_axis(root, &rl.x_axis), polar_floor(root, shared(Dim::Y, &rl.y_axis)))
     } else if let Some((x, y)) = ternary_scale(root) {
         (x, y)
     } else {

@@ -13,7 +13,9 @@ use crate::scene::{Anchor, Cap, Item, Stroke, line_to, move_to, push_num};
 use crate::text::{self, ASCENT, DESCENT};
 use crate::ticks::{ResolvedAxis, resolve_axis_edges};
 use crate::{LayerGeometry, Rect};
-use sheaf_core::graph::{Axis, AxisSide, Layer, LineStyle, PolarCoords, ScaleKind, TickDirection, TickLabelSource};
+use sheaf_core::graph::{
+    AngleUnit, Axis, AxisSide, Layer, LineStyle, PolarCoords, ScaleKind, TickDirection, TickLabelSource,
+};
 
 /// Where the circle of a polar layer is and how angles run on it.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -29,6 +31,12 @@ pub struct PolarMap {
     /// A radar chart: the first spoke points up, the spokes follow clockwise, and the rings and
     /// the outline are polygons (graphing spec section 14.19).
     pub radar: bool,
+    /// The angle of a full turn in the unit of the angle column (360, or 2 pi for radians).
+    pub circle: f64,
+    /// The centre stands for radius 0 and the radius axis' lower limit is a hole round it (Origin's
+    /// "Center at Zero", on by default for polar graphs, spec 14.18). A radar chart puts the lower
+    /// limit at the centre.
+    pub zero_centred: bool,
 }
 
 impl PolarMap {
@@ -47,34 +55,55 @@ impl PolarMap {
             },
             clockwise: p.clockwise || p.radar,
             radar: p.radar,
+            circle: if p.radar { 360.0 } else { p.angle_unit.circle() },
+            zero_centred: !p.radar,
         }
     }
 
     /// The direction, in radians counter-clockwise from the right, in which data angle `theta`
-    /// (degrees) points on the page.
-    pub fn direction(&self, theta_deg: f64) -> f64 {
-        let turn = if self.clockwise { -theta_deg } else { theta_deg };
+    /// (in the unit of the angle column) points on the page.
+    pub fn direction(&self, theta: f64) -> f64 {
+        let deg = theta * 360.0 / self.circle;
+        let turn = if self.clockwise { -deg } else { deg };
         (self.zero_deg + turn).to_radians()
     }
 
-    /// The page point at data angle `theta_deg` and `u` times the radius of the circle.
-    pub fn point(&self, theta_deg: f64, u: f64) -> (f64, f64) {
-        let (s, c) = self.direction(theta_deg).sin_cos();
+    /// The page point at data angle `theta` and `u` times the radius of the circle.
+    pub fn point(&self, theta: f64, u: f64) -> (f64, f64) {
+        let (s, c) = self.direction(theta).sin_cos();
         (self.cx + u * self.radius * c, self.cy - u * self.radius * s)
     }
 
-    /// The data angle in `[0, 360)` and the fraction of the radius at a page point.
+    /// The data angle in `[0, circle)` and the fraction of the radius at a page point.
     pub fn angle_and_unit(&self, px: f64, py: f64) -> (f64, f64) {
         let (dx, dy) = (px - self.cx, self.cy - py);
         let u = dx.hypot(dy) / self.radius;
         let a = dy.atan2(dx).to_degrees() - self.zero_deg;
-        (if self.clockwise { -a } else { a }.rem_euclid(360.0), u)
+        (if self.clockwise { -a } else { a }.rem_euclid(360.0) * self.circle / 360.0, u)
     }
 }
 
-/// The angle axis of a polar layer: 0 to 360 degrees in steps of 30, whatever the data hold. The
-/// end at 360 coincides with 0, so it carries no tick and no label of its own.
-pub(crate) fn angle_axis(axis: &Axis) -> ResolvedAxis {
+/// The angle axis of a polar layer: one full turn (0 to 360 degrees in steps of 30, or 0 to 2 pi in
+/// steps of a quarter of pi with labels such as `0.25` and the pi sign), whatever the data hold. The
+/// end of the turn coincides with 0, so it carries no tick and no label of its own.
+pub(crate) fn angle_axis(axis: &Axis, unit: AngleUnit) -> ResolvedAxis {
+    if unit == AngleUnit::Radians {
+        let quarter = std::f64::consts::FRAC_PI_4;
+        let major: Vec<f64> = (0..8).map(|k| f64::from(k) * quarter).collect();
+        let labels = (0..8).map(|k| format!("{:.2}\u{3c0}", f64::from(k) * 0.25)).collect();
+        return ResolvedAxis {
+            min: 0.0,
+            max: std::f64::consts::TAU,
+            step: quarter,
+            scale: ScaleKind::Linear,
+            major,
+            minor: Vec::new(),
+            labels,
+            reversed: false,
+            gap: None,
+            minor_labels: Vec::new(),
+        };
+    }
     let fixed = Axis {
         scale: ScaleKind::Linear,
         min: Some(0.0),
@@ -162,7 +191,7 @@ pub(crate) fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry
         let Some(style) = style else { return };
         let mut d = String::new();
         for &v in ticks {
-            let u = geom.y.to_unit(v);
+            let u = geom.radius_unit(v);
             if u.is_finite() && u > 1e-9 && u < 1.0 - 1e-9 {
                 if map.radar {
                     polygon(&mut d, &map, &geom.x.major, u);
@@ -179,10 +208,12 @@ pub(crate) fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry
     rings(out, &layer.y_axis.major_grid, &geom.y.major);
     if let Some(style) = &layer.x_axis.major_grid {
         let mut d = String::new();
+        // The spokes start at the hole round the centre, when the radius axis has one.
+        let hole = if map.zero_centred { geom.radius_unit(geom.y.min).clamp(0.0, 1.0) } else { 0.0 };
         for &v in &geom.x.major {
-            let p = map.point(v, 1.0);
-            move_to(&mut d, map.cx, map.cy);
-            line_to(&mut d, p.0, p.1);
+            let (p, q) = (map.point(v, hole), map.point(v, 1.0));
+            move_to(&mut d, p.0, p.1);
+            line_to(&mut d, q.0, q.1);
         }
         if !d.is_empty() {
             out.push(Item::Path { d, fill: None, stroke: Some(stroke(style)) });
@@ -267,9 +298,13 @@ pub(crate) fn draw_angle_axis(
     edges
 }
 
-/// Draws the radius axis along the vertical diameter: the line, and at every radius tick a tick
-/// and a label on the upper half and the same on the lower half, mirrored (measured, spec 14.17).
-/// The centre carries one label only.
+/// How far left of the circle's edge a polar layer's radius axis stands, in radii (measured, spec 14.18).
+const RADIUS_AXIS_OFFSET: f64 = 0.2;
+
+/// Draws the radius axis. A polar layer has it twice, left of the circle (0.2 radii off its edge): the
+/// upper one runs from the circle's top down to the hole (the radius axis' lower limit) and the lower
+/// one mirrors it, both labelled with the same numbers; with no hole they join at the centre, which
+/// is labelled once. A radar chart has it on its first spoke only, from the centre up.
 pub(crate) fn draw_radius_axis(
     out: &mut Vec<Item>,
     axis: &Axis,
@@ -281,10 +316,22 @@ pub(crate) fn draw_radius_axis(
     if axis.side == AxisSide::Hidden {
         return;
     }
+    let ax = if map.radar { map.cx } else { map.cx - (1.0 + RADIUS_AXIS_OFFSET) * map.radius };
+    let hole = if map.radar { 0.0 } else { geom.radius_unit(geom.y.min).clamp(0.0, 1.0) };
     let mut d = String::new();
-    // A radar chart has the axis on its first spoke only: from the centre up.
-    move_to(&mut d, map.cx, map.cy - map.radius);
-    line_to(&mut d, map.cx, if map.radar { map.cy } else { map.cy + map.radius });
+    if map.radar {
+        move_to(&mut d, ax, map.cy - map.radius);
+        line_to(&mut d, ax, map.cy);
+    } else {
+        move_to(&mut d, ax, map.cy - map.radius);
+        line_to(&mut d, ax, map.cy - hole * map.radius);
+        if hole < 1e-9 {
+            line_to(&mut d, ax, map.cy + map.radius);
+        } else {
+            move_to(&mut d, ax, map.cy + hole * map.radius);
+            line_to(&mut d, ax, map.cy + map.radius);
+        }
+    }
     out.push(Item::Path {
         d,
         fill: None,
@@ -303,13 +350,13 @@ pub(crate) fn draw_radius_axis(
     ] {
         let Some((a, b)) = tick_span(dir, len) else { continue };
         for &v in values {
-            let u = geom.y.to_unit(v);
+            let u = geom.radius_unit(v);
             if !u.is_finite() || !(-1e-9..=1.0 + 1e-9).contains(&u) {
                 continue;
             }
             for y in rows(u) {
-                move_to(&mut d, map.cx + a, y);
-                line_to(&mut d, map.cx + b, y);
+                move_to(&mut d, ax + a, y);
+                line_to(&mut d, ax + b, y);
             }
         }
     }
@@ -322,9 +369,9 @@ pub(crate) fn draw_radius_axis(
         return;
     }
     let size = axis.tick_font.size_pt;
-    let x = map.cx - outward(axis.major_tick, axis.major_tick_len_pt) - 0.35 * size;
+    let x = ax - outward(axis.major_tick, axis.major_tick_len_pt) - 0.35 * size;
     for (v, label) in geom.y.labelled() {
-        let u = geom.y.to_unit(v);
+        let u = geom.radius_unit(v);
         if !u.is_finite() || !(-1e-9..=1.0 + 1e-9).contains(&u) {
             continue;
         }

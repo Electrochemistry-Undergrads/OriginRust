@@ -4,7 +4,7 @@
 //! `docs/spec/statistics.md`.
 
 use super::*;
-use sheaf_calc::{TTest, anova_one_way, freq_counts};
+use sheaf_calc::{Category, TTest, anova_one_way, bin2d, freq_counts};
 
 /// What a statistics tool produces; `analyze` turns it into a sheet (and a graph).
 pub(super) struct Output {
@@ -20,6 +20,7 @@ pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
         Tool::TTest(spec) => ttest(spec, inputs),
         Tool::Anova(spec) => anova(spec, inputs),
         Tool::Histogram(spec) => histogram(spec, inputs),
+        Tool::Binning2D(spec) => binning_2d(spec, inputs),
         Tool::Normality(spec) => normality(spec, inputs),
         Tool::MannWhitney(spec) => mann_whitney(spec, inputs),
         Tool::SignedRank(spec) => signed_rank(spec, inputs),
@@ -35,7 +36,7 @@ pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
     }
 }
 
-fn check_alpha(alpha: f64) -> Result<(), AnalysisError> {
+pub(super) fn check_alpha(alpha: f64) -> Result<(), AnalysisError> {
     if alpha > 0.0 && alpha < 1.0 {
         Ok(())
     } else {
@@ -43,7 +44,7 @@ fn check_alpha(alpha: f64) -> Result<(), AnalysisError> {
     }
 }
 
-fn label_column(name: &str, values: Vec<String>) -> SheetColumn {
+pub(super) fn label_column(name: &str, values: Vec<String>) -> SheetColumn {
     SheetColumn {
         designation: Designation::Label,
         long_name: name.to_string(),
@@ -53,7 +54,7 @@ fn label_column(name: &str, values: Vec<String>) -> SheetColumn {
     }
 }
 
-fn number_column(name: &str, units: &str, values: Vec<f64>) -> SheetColumn {
+pub(super) fn number_column(name: &str, units: &str, values: Vec<f64>) -> SheetColumn {
     SheetColumn {
         designation: Designation::Y,
         long_name: name.to_string(),
@@ -333,10 +334,18 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         num(r.grand_mean)
     ));
     if let Some(method) = spec.comparison {
-        let comparisons = r.compare(method, spec.alpha);
+        if method == MeansComparison::Dunnett && spec.control >= inputs.len() {
+            return Err(AnalysisError::BadOption(format!(
+                "Dunnett's control group is number {}, but only {} columns were chosen",
+                spec.control + 1,
+                inputs.len()
+            )));
+        }
+        let comparisons = r.compare_with_control(method, spec.control, spec.alpha);
         let stat_name = match method {
             MeansComparison::Tukey => "q",
             MeansComparison::Scheffe => "F",
+            m if m.is_holm() => "t",
             _ => "|t|",
         };
         let c = |f: fn(&sheaf_calc::Comparison) -> f64| comparisons.iter().map(f).collect::<Vec<f64>>();
@@ -348,10 +357,25 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         on_sheet.push(number_column("SE", &units, c(|c| c.se)));
         on_sheet.push(number_column(&format!("Statistic ({stat_name})"), "", c(|c| c.stat)));
         on_sheet.push(number_column("Prob", "", c(|c| c.p)));
-        on_sheet.push(number_column("LCL", &units, c(|c| c.lcl)));
-        on_sheet.push(number_column("UCL", &units, c(|c| c.ucl)));
+        if method.is_holm() {
+            // The step-down methods give no interval, but the level each pair was judged at.
+            on_sheet.push(number_column("Alpha", "", c(|c| c.alpha)));
+        } else {
+            on_sheet.push(number_column("LCL", &units, c(|c| c.lcl)));
+            on_sheet.push(number_column("UCL", &units, c(|c| c.ucl)));
+        }
         on_sheet.push(number_column("Significant", "", c(|c| f64::from(u8::from(c.significant)))));
         notes.push(format!("{} means comparison at the {} level:", method.label(), num(spec.alpha)));
+        if method == MeansComparison::Dunnett {
+            notes.push(format!(
+                "  Every group against the control {}; the p-values are adjusted for all {} comparisons and the limits are simultaneous at level {}.",
+                inputs[spec.control].name,
+                comparisons.len(),
+                num(1.0 - spec.alpha)
+            ));
+        } else if method.is_holm() {
+            notes.push("  (sorted by p-value; each pair is judged at the level of its rank, and after the first pair that is not significant no later pair is)".to_string());
+        }
         for c in &comparisons {
             notes.push(format!(
                 "  {} - {}: difference {}, p = {}, {}",
@@ -431,6 +455,171 @@ fn histogram(spec: &HistogramSpec, inputs: &[Input<'_>]) -> Result<Output, Analy
     Ok(Output { table: Some(table), on_sheet, notes, plots })
 }
 
+// ----- 2D frequency counts and binning -----------------------------------------------------------------
+
+/// `Bin Ends of A`, or `Bin Ends of "Potential"` when the column has a long name (as Origin names the first
+/// result column).
+fn bin_label_name(centers: bool, short: &str, display: &str) -> String {
+    let what = if centers { "Bin Centers of" } else { "Bin Ends of" };
+    if display == short { format!("{what} {short}") } else { format!("{what} \"{display}\"") }
+}
+
+fn binning_2d(spec: &Bin2dOptions, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    let (x, y, x_short, x_name, y_name) = match inputs {
+        [one] => (one.xs(), one.ys(), one.x_short.as_str(), one.x_name.as_str(), one.name.as_str()),
+        [a, b, ..] => (a.ys(), b.ys(), a.short.as_str(), a.name.as_str(), b.name.as_str()),
+        [] => return Err(AnalysisError::NoColumns),
+    };
+    let r = bin2d(x, y, spec).ok_or_else(|| {
+        AnalysisError::BadOption(format!(
+            "no 2D frequency counts can be made of {y_name} against {x_name}: there are no points in the chosen              rows, or the bin range or size is not usable"
+        ))
+    })?;
+    let mut on_sheet = Vec::with_capacity(r.y.bins.len() + 1);
+    let mut first = number_column(
+        &bin_label_name(spec.x.centers, x_short, x_name),
+        "",
+        (0..r.x.bins.len()).map(|i| r.x.label(i)).collect(),
+    );
+    first.designation = Designation::X;
+    on_sheet.push(first);
+    let units = if spec.stat == Bin2dStat::PercentFrequency { "%" } else { "" };
+    for j in 0..r.y.bins.len() {
+        let mut c = number_column(spec.stat.label(), units, r.cells.iter().map(|row| row[j]).collect());
+        c.comments = r.y.range_text(j);
+        on_sheet.push(c);
+    }
+    let n = x.len().min(y.len());
+    let points = (0..n).filter(|&i| x[i].is_finite() && y[i].is_finite()).count();
+    let mut notes = vec![format!(
+        "{} points of {y_name} against {x_name} in {} X bins by {} Y bins ({}); {} outside the bins.",
+        points,
+        r.x.bins.len(),
+        r.y.bins.len(),
+        spec.stat.label().to_lowercase(),
+        points - r.binned
+    )];
+    if inputs.len() > 2 {
+        notes.push(format!(
+            "Only the first two columns are used (X and Y); {} is ignored, as in Origin.",
+            inputs[2..].iter().map(|i| i.short.as_str()).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+}
+
+// ----- discrete frequency -------------------------------------------------------------------------------
+
+/// The cells of a column as categories, from the first row to the last filled one (or the chosen rows).
+fn categories(c: &Column, rows: RowRange) -> Result<Vec<Category>, AnalysisError> {
+    let cell = |row: usize| match &c.data {
+        ColumnData::Text(v) => Category::Text(v.get(row).cloned().unwrap_or_default()),
+        ColumnData::Numeric(v) => Category::Number(v.get(row).copied().unwrap_or(f64::NAN)),
+        ColumnData::Mixed { numbers, .. } => match c.data.text_cell(row) {
+            Some(t) => Category::Text(t.to_string()),
+            None => Category::Number(numbers.get(row).copied().unwrap_or(f64::NAN)),
+        },
+    };
+    let empty = |v: &Category| match v {
+        Category::Missing => true,
+        Category::Number(x) => x.is_nan(),
+        Category::Text(s) => s.is_empty(),
+    };
+    let mut all: Vec<Category> = (0..c.data.len()).map(cell).collect();
+    while all.last().is_some_and(empty) {
+        all.pop();
+    }
+    if all.is_empty() {
+        return Err(AnalysisError::Empty(c.short_name.clone()));
+    }
+    match rows {
+        RowRange::All => Ok(all),
+        RowRange::Rows(..) => {
+            let (first, last) = resolve_rows(rows, &c.short_name, &[], all.len())?;
+            Ok(all[first..=last].to_vec())
+        }
+        RowRange::XBetween(..) => Err(AnalysisError::BadOption(
+            "the discrete frequency has no X range to limit; choose rows with a row range".into(),
+        )),
+    }
+}
+
+pub(super) fn discrete_frequency(
+    spec: &DiscreteFreqSpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    if !(spec.count || spec.relative || spec.cumulative) {
+        return Err(AnalysisError::BadOption("tick at least one of Count, Relative and Cumulative Frequency".into()));
+    }
+    let mut on_sheet = Vec::new();
+    let mut notes = Vec::new();
+    let (scale, unit) = if spec.percent { (100.0, "%") } else { (1.0, "") };
+    for id in columns {
+        let c = sheet.column(*id).ok_or(AnalysisError::NoSuchColumn(*id))?;
+        let f = sheaf_calc::discrete_frequency(&categories(c, rows)?, spec.case_sensitive, spec.sort);
+        let with = |mut col: SheetColumn, d: Designation| {
+            col.designation = d;
+            col.comments = c.short_name.clone();
+            col
+        };
+        let numeric = f.rows.iter().all(|r| !matches!(r.value, Category::Text(_)));
+        let data = if numeric {
+            number_column(
+                "Data",
+                "",
+                f.rows
+                    .iter()
+                    .map(|r| match r.value {
+                        Category::Number(x) => x,
+                        _ => f64::NAN,
+                    })
+                    .collect(),
+            )
+        } else {
+            let texts = f
+                .rows
+                .iter()
+                .map(|r| match &r.value {
+                    Category::Text(s) => s.clone(),
+                    Category::Number(x) => format!("{x}"),
+                    Category::Missing => String::new(),
+                })
+                .collect();
+            label_column("Data", texts)
+        };
+        on_sheet.push(with(data, Designation::X));
+        if spec.count {
+            on_sheet.push(with(
+                number_column("Count", "", f.rows.iter().map(|r| r.count as f64).collect()),
+                Designation::Y,
+            ));
+        }
+        if spec.relative {
+            on_sheet.push(with(
+                number_column("Relative Frequency", unit, f.relative().iter().map(|v| v * scale).collect()),
+                Designation::Y,
+            ));
+        }
+        if spec.cumulative {
+            on_sheet.push(with(
+                number_column("Cumulative Frequency", unit, f.cumulative().iter().map(|v| v * scale).collect()),
+                Designation::Y,
+            ));
+        }
+        notes.push(format!(
+            "{}: {} cells, {} distinct values ({}{}).",
+            c.display_name(),
+            f.total,
+            f.rows.len(),
+            spec.sort.label().to_lowercase(),
+            if spec.case_sensitive { ", case-sensitive" } else { "" }
+        ));
+    }
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+}
+
 // ----- normality tests -------------------------------------------------------------------------------
 
 fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -491,7 +680,7 @@ fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, Analy
 // ----- two-way ANOVA ---------------------------------------------------------------------------------
 
 /// A factor cell as text: the cell itself, or a number written without a trailing ".0". `None` when empty.
-fn level_text(col: &Column, row: usize) -> Option<String> {
+pub(super) fn level_text(col: &Column, row: usize) -> Option<String> {
     match &col.data {
         ColumnData::Text(v) => v.get(row).map(|s| s.trim()).filter(|s| !s.is_empty()).map(str::to_string),
         ColumnData::Mixed { .. } if col.data.text_cell(row).is_some() => {
@@ -520,6 +709,17 @@ pub(super) fn two_way_anova(
     rows: RowRange,
 ) -> Result<Output, AnalysisError> {
     check_alpha(spec.alpha)?;
+    if spec.comparison.is_some_and(MeansComparison::is_holm) {
+        return Err(AnalysisError::BadOption(
+            "the Holm comparisons are only available in the one-way ANOVA (Origin's two-way numbers for them were not checked)"
+                .into(),
+        ));
+    }
+    if spec.comparison == Some(MeansComparison::Dunnett) {
+        return Err(AnalysisError::BadOption(
+            "Dunnett's test needs one control group; it is available in the one-way ANOVA only".to_string(),
+        ));
+    }
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
     fn numeric(c: &Column) -> Result<&[f64], AnalysisError> {
         c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
@@ -1313,6 +1513,67 @@ mod tests {
         c.numeric().unwrap().to_vec()
     }
 
+    /// The points of Origin's `xy_count` reference run (`crates/calc/tests/fixtures/bin2d_origin.rs`).
+    fn binning_project() -> (Project, ColumnId, ColumnId) {
+        let x = vec![0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 1.2, 1.7, 2.2, 8.1, 8.8, 10.0, 0.0];
+        let y = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 2.2, 2.7, 9.1, 0.4, 3.3, 5.0, 0.0];
+        let mut p = Project::new();
+        let book = p.add_workbook("bins");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        (p, a, b)
+    }
+
+    fn grid() -> Bin2dOptions {
+        let axis = |w| AxisBins { min: Some(0.0), max: Some(10.0), size: BinSize::Width(w), ..Default::default() };
+        Bin2dOptions { x: axis(2.0), y: axis(5.0), stat: Bin2dStat::Count }
+    }
+
+    #[test]
+    fn two_d_binning_writes_origin_s_worksheet_form() {
+        let (mut p, a, b) = binning_project();
+        let r = run(&mut p, &[b], Tool::Binning2D(grid()));
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(ws.name.starts_with("Binning2D"), "{}", ws.name);
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Bin Ends of A", "Count", "Count"]);
+        assert_eq!(ws.columns[0].designation, Designation::X);
+        assert_eq!(ws.columns[0].numeric().unwrap(), [2.0, 4.0, 6.0, 8.0, 10.0]);
+        assert_eq!(ws.columns[1].comments, "0 - 5");
+        assert_eq!(ws.columns[2].comments, "5 - 10");
+        assert_eq!(ws.columns[1].numeric().unwrap(), [5.0, 2.0, 0.0, 0.0, 2.0]);
+        assert_eq!(ws.columns[2].numeric().unwrap(), [0.0, 1.0, 2.0, 2.0, 1.0]);
+        assert!(r.notes[0].contains("17 points") && r.notes[0].contains("2 outside"), "{:?}", r.notes);
+
+        // The X and the Y column chosen together give the same grid; a long name is quoted as in Origin,
+        // the mean leaves empty bins missing, and percentages are of the binned points with the unit %.
+        p.column_mut(a).unwrap().long_name = "Potential".to_string();
+        let mean = run(&mut p, &[a, b], Tool::Binning2D(Bin2dOptions { stat: Bin2dStat::Mean, ..grid() }));
+        let ws = &p.workbook(mean.book).unwrap().sheets[mean.new_sheet.unwrap()];
+        assert_eq!(ws.columns[0].long_name, "Bin Ends of \"Potential\"");
+        assert_eq!(ws.columns[1].long_name, "Mean");
+        let m = ws.columns[1].numeric().unwrap();
+        assert!((m[0] - 1.58).abs() < 1e-12 && m[2].is_nan(), "{m:?}");
+        let pct = run(&mut p, &[b], Tool::Binning2D(Bin2dOptions { stat: Bin2dStat::PercentFrequency, ..grid() }));
+        let ws = &p.workbook(pct.book).unwrap().sheets[pct.new_sheet.unwrap()];
+        assert_eq!(ws.columns[1].units, "%");
+        assert!((ws.columns[1].numeric().unwrap()[0] - 100.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn two_d_binning_with_centres_and_a_bad_range() {
+        let (mut p, _, b) = binning_project();
+        let mut spec = grid();
+        spec.x.centers = true;
+        let r = run(&mut p, &[b], Tool::Binning2D(spec));
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns[0].long_name, "Bin Centers of A");
+        assert_eq!(ws.columns[0].numeric().unwrap(), [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+        spec.x.max = Some(-1.0);
+        let err = p.analyze(&request(&[b], Tool::Binning2D(spec))).unwrap_err();
+        assert!(err.to_string().contains("no 2D frequency counts"), "{err}");
+    }
+
     #[test]
     fn two_sample_t_test_gives_the_origin_numbers_on_a_new_sheet() {
         let (mut p, _, ids) = project();
@@ -1358,6 +1619,33 @@ mod tests {
     }
 
     #[test]
+    fn anova_dunnett_comparison() {
+        let (mut p, _, ids) = project();
+        let dunnett = run(
+            &mut p,
+            &ids,
+            Tool::Anova(AnovaSpec { comparison: Some(MeansComparison::Dunnett), ..Default::default() }),
+        );
+        let ws = &p.workbook(dunnett.book).unwrap().sheets[dunnett.new_sheet.unwrap()];
+        let labels = ws.columns.iter().find(|c| c.long_name == "Dunnett comparison").unwrap().text().unwrap().to_vec();
+        assert_eq!(labels, ["B - A", "C - A"]);
+        let (lcl, ucl, d) = (cell(&p, &dunnett, "LCL"), cell(&p, &dunnett, "UCL"), cell(&p, &dunnett, "Difference"));
+        assert!(lcl[0] < d[0] && d[0] < ucl[0]);
+        assert!(dunnett.notes.iter().any(|n| n.contains("against the control A")), "{:?}", dunnett.notes);
+        // Another control group: C against A and B.
+        let c3 = run(
+            &mut p,
+            &ids,
+            Tool::Anova(AnovaSpec { comparison: Some(MeansComparison::Dunnett), control: 2, ..Default::default() }),
+        );
+        let ws = &p.workbook(c3.book).unwrap().sheets[c3.new_sheet.unwrap()];
+        let labels = ws.columns.iter().find(|c| c.long_name == "Dunnett comparison").unwrap().text().unwrap().to_vec();
+        assert_eq!(labels, ["A - C", "B - C"]);
+        let bad = AnovaSpec { comparison: Some(MeansComparison::Dunnett), control: 3, ..Default::default() };
+        assert!(p.analyze(&request(&ids, Tool::Anova(bad))).is_err());
+    }
+
+    #[test]
     fn anova_sheet_has_groups_table_and_tukey_comparisons() {
         let (mut p, _, ids) = project();
         let r = run(&mut p, &ids, Tool::Anova(AnovaSpec::default()));
@@ -1371,6 +1659,20 @@ mod tests {
         let ws = &p.workbook(none.book).unwrap().sheets[none.new_sheet.unwrap()];
         assert!(!ws.columns.iter().any(|c| c.long_name == "Significant"));
         assert!(p.analyze(&request(&ids[..1], Tool::Anova(AnovaSpec::default()))).is_err());
+    }
+
+    #[test]
+    fn holm_comparison_has_alpha_column_and_no_interval_and_is_refused_by_the_two_way_anova() {
+        let (mut p, _, ids) = project();
+        let spec = AnovaSpec { comparison: Some(MeansComparison::HolmBonferroni), ..Default::default() };
+        let r = run(&mut p, &ids, Tool::Anova(spec));
+        let alpha = cell(&p, &r, "Alpha");
+        assert!((alpha[0] - 0.05 / 3.0).abs() < 1e-12 && (alpha[2] - 0.05).abs() < 1e-12, "{alpha:?}");
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(!ws.columns.iter().any(|c| c.long_name == "LCL"));
+        let (mut p2, ids2) = two_way_project();
+        let bad = TwoWayAnovaSpec { comparison: Some(MeansComparison::HolmSidak), ..Default::default() };
+        assert!(p2.analyze(&request(&ids2, Tool::TwoWayAnova(bad))).is_err());
     }
 
     #[test]
@@ -1464,6 +1766,24 @@ mod tests {
         assert!(r.notes.iter().any(|n| n.contains("type III")), "{:?}", r.notes);
         // One undo step per run is the app's job (Document::edit); here the sheet is new and the input untouched.
         assert_eq!(p.workbook(r.book).unwrap().sheets[0].columns.len(), 3);
+    }
+
+    #[test]
+    fn two_way_anova_refuses_dunnett_and_an_x_range() {
+        let (mut p, ids) = two_way_project();
+        let err = p
+            .analyze(&request(
+                &ids,
+                Tool::TwoWayAnova(TwoWayAnovaSpec { comparison: Some(MeansComparison::Dunnett), ..Default::default() }),
+            ))
+            .unwrap_err();
+        assert!(err.to_string().contains("one-way ANOVA only"), "{err}");
+        let limited = Request {
+            columns: ids.clone(),
+            rows: RowRange::XBetween(0.0, 1.0),
+            tool: Tool::TwoWayAnova(TwoWayAnovaSpec::default()),
+        };
+        assert!(p.analyze(&limited).unwrap_err().to_string().contains("no X column to limit"));
     }
 
     #[test]
@@ -1735,5 +2055,42 @@ mod tests {
             Tool::Correlation(CorrelationSpec { kendall: true, spearman: true, ..Default::default() }),
         );
         assert!(f.table.unwrap().rows[0].1[1].is_nan());
+    }
+}
+
+#[cfg(test)]
+mod disc_tests {
+    use super::*;
+
+    #[test]
+    fn discrete_frequency_writes_origin_s_columns() {
+        let mut p = Project::new();
+        let book = p.add_workbook("cats");
+        let texts = ["b", "a", "B", "c", "a", "", "d", ""].iter().map(|s| s.to_string()).collect();
+        let t = p.add_column(book, 0, Designation::Y, ColumnData::text(texts)).unwrap();
+        let n = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, f64::NAN, 3.0, 1.5])).unwrap();
+        let spec = DiscreteFreqSpec { relative: true, cumulative: true, percent: true, ..Default::default() };
+        let r = p
+            .analyze(&Request { columns: vec![t, n], rows: RowRange::All, tool: Tool::DiscreteFrequency(spec) })
+            .unwrap();
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(ws.name.starts_with("DiscretFreq"), "{}", ws.name);
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Data", "Count", "Relative Frequency", "Cumulative Frequency"].repeat(2));
+        assert_eq!(ws.columns[0].designation, Designation::X);
+        assert_eq!(ws.columns[0].comments, "A");
+        assert_eq!(ws.columns[4].comments, "B");
+        assert_eq!(ws.columns[2].units, "%");
+        // The trailing empty cell is not counted, the inner one is; "B" counts with "b".
+        assert_eq!(ws.columns[0].text().unwrap(), ["a", "b", "", "c", "d"]);
+        assert_eq!(ws.columns[1].numeric().unwrap(), [2.0, 2.0, 1.0, 1.0, 1.0]);
+        assert!((ws.columns[2].numeric().unwrap()[0] - 2.0 / 7.0 * 100.0).abs() < 1e-12);
+        assert_eq!(*ws.columns[3].numeric().unwrap().last().unwrap(), 100.0);
+        let d = ws.columns[4].numeric().unwrap();
+        assert_eq!(d[0], 3.0);
+        assert!(d[1].is_nan() && d[2] == 1.5, "missing sorts before the numbers among equal counts: {d:?}");
+        let none = DiscreteFreqSpec { count: false, ..Default::default() };
+        let req = Request { columns: vec![t], rows: RowRange::All, tool: Tool::DiscreteFrequency(none) };
+        assert!(p.analyze(&req).is_err());
     }
 }

@@ -28,7 +28,7 @@ fn ternary_makes_a_triangle_with_three_titled_axes() {
         .expect("the program starts");
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let svg = std::fs::read_to_string(&svg).unwrap();
-    for label in ["Sand", "Silt", "Clay", ">0.0<", ">0.2<", ">1.0<"] {
+    for label in ["Sand", "Silt", "Clay", ">0.00<", ">0.25<", ">1.00<"] {
         assert!(svg.contains(label), "{label} missing");
     }
     let project = sheaf_io::project_file::load(&saved).unwrap();

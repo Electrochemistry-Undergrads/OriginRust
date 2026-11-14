@@ -6,7 +6,7 @@
 //! the user override any part through [`AsciiOptions`].
 
 use crate::error::IoError;
-use sheaf_core::column::default_short_name;
+use sheaf_core::column::{default_short_name, imported_short_name};
 use sheaf_core::datetime::{self, DateOrder};
 use sheaf_core::format::NumberFormat;
 use sheaf_core::{Column, ColumnData, ColumnId, Designation, WindowId, Workbook, Worksheet};
@@ -18,9 +18,6 @@ const DELIMITER_SAMPLE_LINES: usize = 200;
 const DATA_RUN: usize = 3;
 /// Longest worksheet name.
 const SHEET_NAME_MAX: usize = 31;
-/// Longest short name taken from a header cell.
-const SHORT_NAME_MAX: usize = 18;
-
 /// How the fields of a line are separated.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Delimiter {
@@ -33,6 +30,12 @@ pub enum Delimiter {
     Whitespace,
     /// Any other single character.
     Other(char),
+    /// Each character is a delimiter (Origin's Other Delimiters). Optionally collapse a run
+    /// of these characters to one separator. Quoted empty fields are still real fields.
+    AnyOf {
+        chars: String,
+        combine: bool,
+    },
     /// A string of two or more characters that separates the fields as a whole (`||`, `::`,
     /// `;;`). Origin's "Other" field accepts such a string (its option `MultipleDelimiters`).
     Multi(String),
@@ -107,6 +110,36 @@ pub enum Blocks {
     Sheets,
 }
 
+/// A 1-based input range, optionally taking `read` entries and skipping `skip`, repeatedly.
+/// A last position of zero means through the end. The pattern starts at `first`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportSelection {
+    pub first: usize,
+    pub last: usize,
+    pub read: usize,
+    pub skip: usize,
+}
+
+impl Default for ImportSelection {
+    fn default() -> Self {
+        Self { first: 1, last: 0, read: 1, skip: 0 }
+    }
+}
+
+impl ImportSelection {
+    fn contains(&self, index: usize) -> bool {
+        let Some(offset) = index.checked_sub(self.first.saturating_sub(1)) else { return false };
+        self.first > 0
+            && self.read > 0
+            && (self.last == 0 || index < self.last)
+            && offset % self.read.saturating_add(self.skip) < self.read
+    }
+
+    fn valid(&self) -> bool {
+        self.first > 0 && self.read > 0 && (self.last == 0 || self.last >= self.first)
+    }
+}
+
 /// Import settings. `None` means "detect"; for the line numbers, `Some(0)` means "there is none".
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AsciiOptions {
@@ -151,6 +184,10 @@ pub struct AsciiOptions {
     pub skip_rows: usize,
     /// Stop after this many data rows.
     pub max_rows: Option<usize>,
+    /// Data rows to import after the legacy skip/max window; positions are 1-based.
+    pub rows: ImportSelection,
+    /// Source columns to import. Their labels and parameter values follow the selected columns.
+    pub columns: ImportSelection,
     /// Whether date and time columns become numbers or stay text.
     pub dates: DateImport,
     /// Which order `11/12/2026` is read in when the file does not settle it
@@ -178,8 +215,24 @@ impl Default for AsciiOptions {
             first_column_x: true,
             skip_rows: 0,
             max_rows: None,
+            rows: ImportSelection::default(),
+            columns: ImportSelection::default(),
             dates: DateImport::Detect,
             date_order: DateOrder::Mdy,
+        }
+    }
+}
+
+impl AsciiOptions {
+    /// A copy that imports the full data range while retaining delimiters, labels, naming,
+    /// number/date settings and block handling. Used for the first file of a partial batch.
+    pub fn without_partial_import(&self) -> Self {
+        Self {
+            rows: ImportSelection::default(),
+            columns: ImportSelection::default(),
+            skip_rows: 0,
+            max_rows: None,
+            ..self.clone()
         }
     }
 }
@@ -223,10 +276,12 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
         return split_fixed(line, widths);
     }
     let whitespace = matches!(delim, Delimiter::Whitespace);
+    let combine = matches!(delim, Delimiter::AnyOf { combine: true, .. });
     let sep: Vec<char> = match delim {
         Delimiter::Comma => vec![','],
         Delimiter::Semicolon => vec![';'],
         Delimiter::Other(c) => vec![*c],
+        Delimiter::AnyOf { chars, .. } => chars.chars().collect(),
         Delimiter::Multi(s) if !s.is_empty() => s.chars().collect(),
         _ => vec!['\t'],
     };
@@ -235,6 +290,8 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
     let sep_at = |i: usize| -> Option<usize> {
         if whitespace {
             (chars[i] == ' ' || chars[i] == '\t').then_some(1)
+        } else if matches!(delim, Delimiter::AnyOf { .. }) {
+            sep.contains(&chars[i]).then_some(1)
         } else {
             chars[i..].starts_with(&sep).then_some(sep.len())
         }
@@ -254,7 +311,7 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
                 } else {
                     in_quotes = false;
                 }
-            } else {
+            } else if c != '\r' || chars.get(i + 1) != Some(&'\n') {
                 cur.push(c);
             }
         } else if c == '"' && !quoted && cur.is_empty() && !sep.contains(&'"') {
@@ -267,6 +324,11 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
             cur.clear();
             quoted = false;
             i += len - 1;
+            if combine {
+                while i + 1 < chars.len() && sep_at(i + 1).is_some() {
+                    i += 1;
+                }
+            }
         } else if c.is_whitespace() && (cur.is_empty() || quoted) {
             // leading space, or space after a closing quote: ignored
         } else {
@@ -516,7 +578,15 @@ fn is_numeric_row(fields: &[String], ns: NumStyle) -> bool {
 /// lines. A quote opens a quoted field only at the start of a field. If a
 /// quote is still open at the end of the text (a stray quote character), the
 /// text is split into plain lines instead.
-fn split_records(text: &str) -> Vec<&str> {
+fn split_records<'a>(text: &'a str, delimiter: &Delimiter) -> Vec<&'a str> {
+    if matches!(delimiter, Delimiter::Fixed(_)) {
+        return text.lines().collect();
+    }
+    let quote_is_delimiter = match delimiter {
+        Delimiter::Other(c) => *c == '"',
+        Delimiter::AnyOf { chars, .. } | Delimiter::Multi(chars) => chars.contains('"'),
+        _ => false,
+    };
     let mut records = Vec::new();
     let mut start = 0;
     let mut in_quotes = false;
@@ -536,18 +606,45 @@ fn split_records(text: &str) -> Vec<&str> {
             }
             continue;
         }
+        if let Delimiter::Multi(s) = delimiter
+            && !s.is_empty()
+            && !s.contains('\n')
+            && text[i..].starts_with(s)
+        {
+            // Consume a whole match, as split_fields does. Suffix matching would also see
+            // overlapping delimiters and could mistake a later quote for a new field.
+            for _ in 1..s.chars().count() {
+                chars.next();
+            }
+            field_start = true;
+            continue;
+        }
         match c {
             '\n' => {
                 records.push(cut(&text[start..i]));
                 start = i + 1;
                 field_start = true;
             }
-            '"' if field_start => {
+            '"' if field_start && !quote_is_delimiter => {
                 in_quotes = true;
                 field_start = false;
             }
-            ',' | ';' | '\t' | ' ' => field_start = true,
-            _ => field_start = false,
+            _ => {
+                let separator = match delimiter {
+                    Delimiter::Auto => matches!(c, ',' | ';' | '\t' | ' '),
+                    Delimiter::Comma => c == ',',
+                    Delimiter::Tab => c == '\t',
+                    Delimiter::Semicolon => c == ';',
+                    Delimiter::Whitespace => c == ' ' || c == '\t',
+                    Delimiter::Other(d) => c == *d,
+                    Delimiter::AnyOf { chars, .. } => chars.contains(c),
+                    Delimiter::Multi(_) => false,
+                    Delimiter::Fixed(_) => false,
+                };
+                // Space before a quoted field does not stop it being a field start; space
+                // inside an unquoted field does not start a new field.
+                field_start = separator || (field_start && c.is_whitespace());
+            }
         }
     }
     if in_quotes {
@@ -566,6 +663,8 @@ struct Analysis<'a> {
     detected: Detected,
     /// The data rows after `skip_rows` / `max_rows`, as raw fields.
     rows: Vec<Vec<String>>,
+    /// The original file-column positions of the imported columns (zero based).
+    source_columns: Vec<usize>,
     /// The digit-grouping character was found by looking at the numbers, not chosen.
     thousands_found: bool,
     ns: NumStyle,
@@ -709,7 +808,7 @@ fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usiz
 }
 
 fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
-    let lines: Vec<&str> = split_records(text);
+    let lines: Vec<&str> = split_records(text, &opts.delimiter);
     let delimiter = match opts.delimiter.clone() {
         Delimiter::Auto => {
             auto_delimiter(&lines, opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space))
@@ -750,10 +849,15 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
         .take(opts.max_rows.unwrap_or(usize::MAX))
         .collect();
     // Trailing empty columns (a delimiter at the end of every line) are not columns.
-    let columns =
+    let source_count =
         rows.iter().map(|r| r.iter().rposition(|c| !c.trim().is_empty()).map_or(0, |p| p + 1)).max().unwrap_or(0);
+    // Discover the source shape before selecting rows: a real column must not disappear
+    // merely because the selected rows happen to have missing values in it.
+    rows = rows.into_iter().enumerate().filter(|(i, _)| opts.rows.contains(*i)).map(|(_, row)| row).collect();
+    let source_columns: Vec<usize> = (0..source_count).filter(|&i| opts.columns.contains(i)).collect();
+    let columns = source_columns.len();
     for r in &mut rows {
-        r.truncate(columns.max(1));
+        *r = source_columns.iter().map(|&i| r.get(i).cloned().unwrap_or_default()).collect();
     }
     Analysis {
         lines,
@@ -768,6 +872,7 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
             thousands,
         },
         rows,
+        source_columns,
         thousands_found,
         ns,
     }
@@ -792,8 +897,17 @@ pub fn preview(text: &str, opts: &AsciiOptions, max_rows: usize) -> Vec<Vec<Stri
 /// Rows that consist only of empty fields are skipped. Quoted fields may span
 /// lines; line numbers in the options then count records, not physical lines.
 pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
+    for (name, selection) in [("row", &opts.rows), ("column", &opts.columns)] {
+        if !selection.valid() {
+            return Err(IoError::InvalidOption(format!(
+                "the {name} selection needs first and read counts above 0, and last must be 0 or at least first"
+            )));
+        }
+    }
     let comma_decimal = opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space);
-    if comma_decimal && matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(',')) {
+    let comma_delimiter = matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(','))
+        || matches!(&opts.delimiter, Delimiter::AnyOf { chars, .. } if chars.contains(','));
+    if comma_decimal && comma_delimiter {
         return Err(IoError::InvalidOption(
             "the decimal separator and the field delimiter cannot both be a comma".to_string(),
         ));
@@ -806,6 +920,9 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
     match &opts.delimiter {
         Delimiter::Multi(m) if m.is_empty() => {
             return Err(IoError::InvalidOption("the delimiter string is empty".to_string()));
+        }
+        Delimiter::AnyOf { chars, .. } if chars.is_empty() => {
+            return Err(IoError::InvalidOption("the delimiter character set is empty".to_string()));
         }
         Delimiter::Fixed(w) if w.is_empty() || w.contains(&0) => {
             return Err(IoError::InvalidOption(
@@ -827,7 +944,7 @@ fn split_blocks(text: &str, opts: &AsciiOptions) -> Vec<String> {
     let ns = whole.ns;
     let delimiter = whole.detected.delimiter.clone();
     let mut blocks: Vec<Vec<&str>> = vec![Vec::new()];
-    for rec in split_records(text) {
+    for rec in split_records(text, &opts.delimiter) {
         if rec.trim().is_empty() {
             if !blocks.last().is_some_and(Vec::is_empty) {
                 blocks.push(Vec::new());
@@ -893,14 +1010,21 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     }
     let d = a.detected.clone();
     let ncols = d.columns;
+    if ncols == 0 {
+        return Err(IoError::NoData {
+            source_name: file_stem.to_string(),
+            detail: "no source columns match the import selection".into(),
+        });
+    }
     let mut warnings = Vec::new();
 
     // Labels.
+    let raw_label_row = |n: usize| -> Vec<String> {
+        n.checked_sub(1).and_then(|i| a.lines.get(i)).map_or_else(Vec::new, |l| split_fields(l, &d.delimiter))
+    };
     let label_row = |n: usize| -> Vec<String> {
-        let mut f =
-            n.checked_sub(1).and_then(|i| a.lines.get(i)).map_or_else(Vec::new, |l| split_fields(l, &d.delimiter));
-        f.resize(ncols, String::new());
-        f
+        let cells = raw_label_row(n);
+        a.source_columns.iter().map(|&i| cells.get(i).cloned().unwrap_or_default()).collect()
     };
     let label_line = |n: usize| if opts.rename_columns { n } else { 0 };
     let mut long_names = label_row(label_line(d.long_name_line));
@@ -932,7 +1056,7 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
         .iter()
         .enumerate()
         .map(|(k, &line)| {
-            let cells = label_row(line);
+            let cells = raw_label_row(line);
             let generic = format!("Param{}", k + 1);
             if opts.param_name_from_first_cell {
                 let name = cells.first().map_or("", |c| c.trim().trim_end_matches(':').trim());
@@ -1019,8 +1143,9 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     }
     for (j, col) in sheet.columns.iter_mut().enumerate() {
         for (name, cells, from) in &params {
-            if j >= *from
-                && let Some(v) = cells.get(j).filter(|v| !v.trim().is_empty())
+            let source = a.source_columns[j];
+            if source >= *from
+                && let Some(v) = cells.get(source).filter(|v| !v.trim().is_empty())
             {
                 col.params.insert(name.clone(), v.trim().to_string());
             }
@@ -1093,18 +1218,15 @@ fn detect_date_column(cells: &[&str], prefer: DateOrder) -> Option<DateColumn> {
     Some(DateColumn { values, format, ambiguous, order })
 }
 
-/// The short name of every column: the cell of the short-name line made safe, or the automatic
-/// name when there is no such cell, it has no usable character, or another column has it already.
+/// The short name of every column, as Origin's importer makes them (measured 2026-11-13): the cell
+/// of the short-name line with everything but letters, digits and dots dropped, a first digit or
+/// dot made `A`, cut to 18 characters; the automatic name when the cell is missing, has nothing
+/// left, or another column has the name already (compared without regard to case).
 fn short_names_from(cells: &[String], ncols: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for j in 0..ncols {
-        let wanted: String = cells
-            .get(j)
-            .map(|c| c.chars().filter(|ch| ch.is_alphanumeric() || *ch == '_').take(SHORT_NAME_MAX).collect())
-            .unwrap_or_default();
-        let usable = !wanted.is_empty()
-            && !wanted.starts_with(|c: char| c.is_ascii_digit())
-            && !out.iter().any(|o| o.eq_ignore_ascii_case(&wanted));
+        let wanted = cells.get(j).map(|c| imported_short_name(c)).unwrap_or_default();
+        let usable = !wanted.is_empty() && !out.iter().any(|o| o.eq_ignore_ascii_case(&wanted));
         out.push(if usable { wanted } else { default_short_name(j) });
     }
     // An automatic name can clash with a header cell that an earlier column took (`B` in the
@@ -1600,8 +1722,8 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         // CRLF line ends, and a stray quote falls back to plain lines
         let imp = parse("a,b\r\n\"x\r\ny\",1\r\n\"z\",2\r\nw,3\r\n");
         assert_eq!(col(&imp, 1).numeric().unwrap(), &[1.0, 2.0, 3.0]);
-        assert_eq!(split_records("1,2\n5\" pipe,3\n7,8\n").len(), 3);
-        assert_eq!(split_records("a\n\"open\nb\n").len(), 3);
+        assert_eq!(split_records("1,2\n5\" pipe,3\n7,8\n", &Delimiter::Auto).len(), 3);
+        assert_eq!(split_records("a\n\"open\nb\n", &Delimiter::Auto).len(), 3);
     }
 
     #[test]
@@ -1790,6 +1912,251 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
     }
 
     #[test]
+    fn delimiter_character_sets_preserve_empty_fields_or_combine_runs() {
+        let separate = Delimiter::AnyOf { chars: "|;".into(), combine: false };
+        let combined = Delimiter::AnyOf { chars: "|;".into(), combine: true };
+        assert_eq!(split_fields("a|;b", &separate), ["a", "", "b"]);
+        assert_eq!(split_fields("a|;b", &combined), ["a", "b"]);
+        assert_eq!(split_fields(r#"a|"";b"#, &combined), ["a", "", "b"]);
+        assert_eq!(split_fields("|;a;;", &combined), ["", "a", ""]);
+        assert_eq!(split_fields(r#"a|"b;|c";d"#, &combined), ["a", "b;|c", "d"]);
+        let unicode = Delimiter::AnyOf { chars: "§界".into(), combine: true };
+        assert_eq!(split_fields("α§界β界γ", &unicode), ["α", "β", "γ"]);
+        // CSV still retains missing cells, including an explicitly quoted empty field.
+        assert_eq!(split_fields(r#"a,,"",b,"#, &Delimiter::Comma), ["a", "", "", "b", ""]);
+    }
+
+    #[test]
+    fn character_set_detection_preview_and_import_agree() {
+        let text = "t|;i\n1|;2\n2|;3\n3|;4\n4|;5\n";
+        for combine in [false, true] {
+            let opts =
+                AsciiOptions { delimiter: Delimiter::AnyOf { chars: "|;".into(), combine }, ..AsciiOptions::default() };
+            let imp = parse_with(text, &opts);
+            let count = if combine { 2 } else { 3 };
+            assert_eq!(detect(text, &opts).columns, count);
+            assert_eq!(preview(text, &opts, 1)[0].len(), count);
+            assert_eq!(imp.workbook.sheets[0].columns.len(), count);
+            assert_eq!(col(&imp, count - 1).long_name, "i");
+            assert_eq!(col(&imp, count - 1).numeric().unwrap(), [2.0, 3.0, 4.0, 5.0]);
+            if !combine {
+                assert_eq!(preview(text, &opts, 1)[0][1], "");
+            }
+        }
+    }
+
+    #[test]
+    fn custom_delimiters_keep_quoted_multiline_fields_and_unicode() {
+        let text = "t§message界value\r\n1§\"line1\r\nline2\"界2.5\r\n2§\"x§y\"界3.5\r\n";
+        let opts = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: "§界".into(), combine: false },
+            header_lines: Some(1),
+            long_name_line: Some(1),
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(col(&imp, 1).data.text_cell(0), Some("line1\nline2"));
+        assert_eq!(col(&imp, 1).data.text_cell(1), Some("x§y"));
+        assert_eq!(col(&imp, 2).numeric().unwrap(), [2.5, 3.5]);
+        assert_eq!(preview(text, &opts, 2)[0], ["1", "line1\nline2", "2.5"]);
+    }
+
+    #[test]
+    fn record_quotes_start_only_after_a_complete_nonoverlapping_delimiter() {
+        let multi = Delimiter::Multi("||".into());
+        assert_eq!(split_records("1||\"line1\nline2\"||3\n4||5||6\n", &multi).len(), 2);
+        assert_eq!(split_records("1|\"literal\nnext\"||2\n", &multi).len(), 2);
+        assert_eq!(split_records("xababa\"not\nquoted\"aba2\n", &Delimiter::Multi("aba".into())).len(), 2);
+        let fixed = Delimiter::Fixed(vec![4]);
+        assert_eq!(split_records("\"ab\ncd\"\n", &fixed), ["\"ab", "cd\""]);
+        let quote = Delimiter::AnyOf { chars: "\"".into(), combine: false };
+        assert_eq!(split_records("a\"b\nc\"d\n", &quote).len(), 2);
+        assert_eq!(split_fields("a\"b", &quote), ["a", "b"]);
+        assert_eq!(split_records("1||\"unclosed\n2||3\n", &multi).len(), 2);
+    }
+
+    #[test]
+    fn delimiter_sets_validate_empty_sets_and_decimal_comma_conflicts() {
+        let empty = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: String::new(), combine: false },
+            ..AsciiOptions::default()
+        };
+        assert!(parse_ascii("1|2\n", "x", &empty).is_err());
+        for (decimal_comma, thousands) in [(true, Thousands::Auto), (false, Thousands::Dot), (false, Thousands::Space)]
+        {
+            let opts = AsciiOptions {
+                delimiter: Delimiter::AnyOf { chars: ",;".into(), combine: true },
+                decimal_comma,
+                thousands,
+                ..AsciiOptions::default()
+            };
+            assert!(parse_ascii("1,5;2,5\n", "x", &opts).is_err());
+        }
+        let opts = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: "|;".into(), combine: false },
+            decimal_comma: true,
+            header_lines: Some(0),
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with("1,5|2,5\n3,5;4,5\n", &opts);
+        assert_eq!(col(&imp, 0).numeric().unwrap(), [1.5, 3.5]);
+    }
+
+    #[test]
+    fn delimiter_set_blocks_do_not_split_blank_lines_inside_quotes() {
+        let text = "1|\"a\n\nb\"\n2|3\n\n3|4\n4|5\n";
+        let opts = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: "|".into(), combine: false },
+            blocks: Blocks::Sheets,
+            header_lines: Some(0),
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(imp.workbook.sheets.len(), 2);
+        assert_eq!(imp.workbook.sheets[0].columns[1].data.text_cell(0), Some("a\n\nb"));
+        assert_eq!(imp.workbook.sheets[1].columns[0].numeric().unwrap(), [3.0, 4.0]);
+    }
+
+    #[test]
+    fn partial_import_ranges_and_patterns_select_source_rows_and_columns() {
+        let text =
+            "t,a,b,c,d\n1,11,21,31,41\n2,12,22,32,42\n3,13,23,33,43\n4,14,24,34,44\n5,15,25,35,45\n6,16,26,36,46\n";
+        let opts = AsciiOptions {
+            rows: ImportSelection { first: 2, last: 5, read: 1, skip: 1 },
+            columns: ImportSelection { first: 2, last: 5, read: 1, skip: 1 },
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(imp.detected.columns, 2);
+        assert_eq!(detect(text, &opts), imp.detected);
+        assert_eq!(preview(text, &opts, 10), [vec!["12", "32"], vec!["14", "34"]]);
+        assert_eq!(col(&imp, 0).long_name, "a");
+        assert_eq!(col(&imp, 1).long_name, "c");
+        assert_eq!(col(&imp, 0).short_name, "A");
+        assert_eq!(col(&imp, 0).designation, Designation::X);
+        assert_eq!(col(&imp, 0).numeric().unwrap(), [12.0, 14.0]);
+        assert_eq!(col(&imp, 1).numeric().unwrap(), [32.0, 34.0]);
+    }
+
+    #[test]
+    fn partial_import_keeps_selected_labels_parameter_values_and_column_types() {
+        let text = "Time,Signal,Sample,Date\ns,mA,name,day\nclock,measured,label,stamp\nWavelength,250,300,350\n1,2.5,alpha,2026-11-01\n2,3.5,beta,2026-11-02\n3,4.5,gamma,2026-11-03\n";
+        let opts = AsciiOptions {
+            header_lines: Some(4),
+            long_name_line: Some(1),
+            units_line: Some(2),
+            comments_line: Some(3),
+            param_lines: vec![4],
+            columns: ImportSelection { first: 2, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(col(&imp, 0).long_name, "Signal");
+        assert_eq!(col(&imp, 0).units, "mA");
+        assert_eq!(col(&imp, 0).comments, "measured");
+        assert_eq!(col(&imp, 0).params.get("Wavelength").map(String::as_str), Some("250"));
+        assert_eq!(col(&imp, 1).params.get("Wavelength").map(String::as_str), Some("300"));
+        assert_eq!(col(&imp, 1).data.text_cell(0), Some("alpha"));
+        assert!(matches!(col(&imp, 2).format, NumberFormat::Date(_)));
+        assert_eq!(col(&imp, 2).params.get("Wavelength").map(String::as_str), Some("350"));
+    }
+
+    #[test]
+    fn partial_import_boundaries_and_legacy_window_are_well_defined() {
+        let mut opts =
+            AsciiOptions { rows: ImportSelection { first: 2, last: 4, read: 2, skip: 1 }, ..AsciiOptions::default() };
+        assert_eq!(preview("1\n2\n3\n4\n5\n", &opts, 20), [vec!["2"], vec!["3"]]);
+        opts.skip_rows = 1;
+        opts.max_rows = Some(3);
+        assert_eq!(preview("1\n2\n3\n4\n5\n", &opts, 20), [vec!["3"], vec!["4"]]);
+        let huge = ImportSelection { first: 1, last: 0, read: usize::MAX, skip: usize::MAX };
+        assert!(huge.contains(3), "an overflowing read/skip sum is safe");
+        for selection in [
+            ImportSelection { first: 0, ..ImportSelection::default() },
+            ImportSelection { read: 0, ..ImportSelection::default() },
+            ImportSelection { first: 4, last: 2, ..ImportSelection::default() },
+        ] {
+            let opts = AsciiOptions { rows: selection.clone(), ..AsciiOptions::default() };
+            assert!(parse_ascii("1,2\n3,4\n", "bad", &opts).is_err());
+            let opts = AsciiOptions { columns: selection, ..AsciiOptions::default() };
+            assert!(parse_ascii("1,2\n3,4\n", "bad", &opts).is_err());
+        }
+        let opts = AsciiOptions {
+            columns: ImportSelection { first: 5, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        assert!(parse_ascii("1,2\n3,4\n", "empty", &opts).unwrap_err().to_string().contains("no source columns"));
+    }
+
+    #[test]
+    fn selecting_rows_does_not_drop_a_real_column_that_is_missing_in_those_rows() {
+        let opts = AsciiOptions {
+            rows: ImportSelection { last: 1, ..ImportSelection::default() },
+            columns: ImportSelection { first: 2, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let text = "x,y\n1,\n2,3\n3,4\n4,5\n";
+        assert_eq!(preview(text, &opts, 10), [vec![""]]);
+        let imp = parse_with(text, &opts);
+        assert_eq!(imp.workbook.sheets[0].columns.len(), 1);
+        assert_eq!(col(&imp, 0).long_name, "y");
+    }
+
+    #[test]
+    fn full_range_override_keeps_delimiters_numbers_and_labels() {
+        let opts = AsciiOptions {
+            delimiter: Delimiter::Semicolon,
+            decimal_comma: true,
+            header_lines: Some(1),
+            long_name_line: Some(1),
+            units_line: Some(0),
+            comments_line: Some(0),
+            skip_rows: 1,
+            max_rows: Some(2),
+            rows: ImportSelection { read: 1, skip: 1, ..ImportSelection::default() },
+            columns: ImportSelection { first: 2, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let text = "t;signal\n1,5;11,5\n2,5;12,5\n3,5;13,5\n4,5;14,5\n";
+        assert_eq!(parse_with(text, &opts).workbook.sheet().columns[0].numeric().unwrap(), [12.5]);
+        let full = parse_with(text, &opts.without_partial_import());
+        assert_eq!(full.workbook.sheet().columns.len(), 2);
+        assert_eq!(col(&full, 0).numeric().unwrap(), [1.5, 2.5, 3.5, 4.5]);
+        assert_eq!(col(&full, 1).long_name, "signal");
+    }
+
+    /// Origin's Import Wizard, Data Selection page (measured 2026-11-14, import-ascii.md 16): columns 2 to 4
+    /// and data rows 3 to 10, inclusive and counted after the header; then within that range read 2
+    /// skip 1 for rows and columns, starting with a read.
+    #[test]
+    fn partial_import_matches_origins_data_selection() {
+        let mut text = String::from("a,b,c,d,e\n");
+        for r in 1..=12 {
+            let cells: Vec<String> = (1..=5).map(|c| (r * 10 + c).to_string()).collect();
+            text.push_str(&cells.join(","));
+            text.push('\n');
+        }
+        let mut opts = AsciiOptions {
+            rows: ImportSelection { first: 3, last: 10, ..ImportSelection::default() },
+            columns: ImportSelection { first: 2, last: 4, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(&text, &opts);
+        let cols = &imp.workbook.sheet().columns;
+        assert_eq!(cols.len(), 3);
+        assert_eq!(cols[0].long_name, "b", "the header still names the columns");
+        assert_eq!(cols[0].numeric().unwrap(), [32.0, 42.0, 52.0, 62.0, 72.0, 82.0, 92.0, 102.0]);
+        opts.rows.read = 2;
+        opts.rows.skip = 1;
+        opts.columns.read = 2;
+        opts.columns.skip = 1;
+        let imp = parse_with(&text, &opts);
+        let cols = &imp.workbook.sheet().columns;
+        assert_eq!((cols.len(), cols[1].long_name.as_str()), (2, "c"));
+        assert_eq!(cols[0].numeric().unwrap(), [32.0, 42.0, 62.0, 72.0, 92.0, 102.0]);
+    }
+
+    #[test]
     fn fixed_width_columns_are_cut_by_the_widths_and_the_last_width_repeats() {
         let text = "  x   y   z\n 1.0 2.5 3.5\n 2.0 3.5 4.5\n 3.0 4.5 5.5\n 4.0 5.5 6.5\n";
         let opts = AsciiOptions { delimiter: Delimiter::Fixed(vec![4]), ..AsciiOptions::default() };
@@ -1820,9 +2187,9 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         let opts = AsciiOptions { short_name_line: 1, long_name_line: Some(2), ..AsciiOptions::default() };
         let imp = parse_with(text, &opts);
         let names: Vec<_> = imp.workbook.sheets[0].columns.iter().map(|c| c.short_name.as_str()).collect();
-        // `Pot (V)` loses its spaces and brackets, a repeated name and a name that starts with a
-        // digit fall back to the automatic one.
-        assert_eq!(names, ["PotV", "Current", "C", "D"]);
+        // `Pot (V)` loses its spaces and brackets, a repeated name falls back to the automatic one
+        // and a first digit becomes A.
+        assert_eq!(names, ["PotV", "Current", "C", "Ard"]);
         assert_eq!(imp.workbook.sheets[0].columns[0].long_name, "volt");
         assert!(imp.warnings.iter().all(|w| !w.contains("header")), "{:?}", imp.warnings);
     }

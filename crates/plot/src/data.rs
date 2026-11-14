@@ -37,6 +37,8 @@ pub(crate) struct PlotData<'a> {
     pub y: Cow<'a, [f64]>,
     /// Rows of the Y column that are masked: drawn red, as Origin does.
     pub mask: Option<&'a std::collections::BTreeSet<usize>>,
+    /// Active filters on the source worksheets. Indices remain original worksheet rows.
+    pub filters: Vec<&'a sheaf_core::rowfilter::RowFilter>,
     pub err: Option<&'a [f64]>,
     /// X error values, drawn as horizontal error bars.
     pub xerr: Option<&'a [f64]>,
@@ -64,9 +66,9 @@ pub(crate) struct PlotData<'a> {
     pub color_z: Option<&'a [f64]>,
     /// The spoke names of a plot of a radar layer (graphing spec 14.19); `None` elsewhere.
     pub spokes: Option<Vec<String>>,
-    /// The last row is the first point repeated to close a radar polygon: the line runs to it, but
-    /// no symbol or mask belongs to it.
-    pub closing: bool,
+    /// Source row repeated at the end to close a radar polygon. The line runs to the synthetic
+    /// point, but no extra symbol, label or mask belongs to it.
+    pub closing: Option<usize>,
 }
 
 /// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
@@ -137,6 +139,25 @@ fn histogram_points(values: &[f64], style: &sheaf_core::graph::HistogramStyle) -
 }
 
 impl PlotData<'_> {
+    pub fn row_shown(&self, row: usize) -> bool {
+        let row = if row == self.end.saturating_sub(1) { self.closing.unwrap_or(row) } else { row };
+        self.filters.iter().all(|f| f.passes(row))
+    }
+
+    /// Plotted source rows, skipping filtered rows without turning them into missing data.
+    /// A real missing value still breaks a line; a filtered row simply joins its neighbours.
+    pub fn rows(&self) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {
+        (self.start..self.end).filter(|&r| self.row_shown(r))
+    }
+
+    fn visible_values(&self) -> Cow<'_, [f64]> {
+        if self.filters.is_empty() {
+            Cow::Borrowed(&self.y[self.start..self.end])
+        } else {
+            Cow::Owned(self.rows().map(|r| self.y[r]).collect())
+        }
+    }
+
     /// True for horizontal bars: the horizontal axis shows the values and the vertical axis the
     /// bar positions.
     pub fn transposed(&self) -> bool {
@@ -236,6 +257,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             x_format,
             y: Cow::Borrowed(y),
             mask: project.column(plot.y).map(|c| &c.mask).filter(|m| !m.is_empty()),
+            filters: project.plot_row_filters(plot),
             err,
             xerr,
             base,
@@ -251,17 +273,19 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             size_z: plot.size_from.and_then(|id| project.numeric(id)),
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
             spokes: None,
-            closing: false,
+            closing: None,
         };
         match plot.kind {
             PlotKind::Histogram => {
                 // The plot shows the counts of the bins of its Y values: one point per bin.
-                let Some((centres, counts)) = histogram_points(&y[start..end], &plot.hist) else { continue };
+                let values = pd.visible_values();
+                let Some((centres, counts)) = histogram_points(&values, &plot.hist) else { continue };
                 pd.start = 0;
                 pd.end = counts.len();
                 pd.x = Some(Cow::Owned(centres));
                 pd.y = Cow::Owned(counts);
                 pd.mask = None;
+                pd.filters.clear();
                 pd.err = None;
                 pd.xerr = None;
                 pd.base = None;
@@ -269,7 +293,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             PlotKind::Pie | PlotKind::Pie3D | PlotKind::PieBw => {
                 let labels = plot.x.and_then(|id| project.column(id));
                 let rows: Vec<usize> =
-                    (start..end).filter(|&r| y.get(r).is_some_and(|v| v.is_finite() && *v > 0.0)).collect();
+                    pd.rows().filter(|&r| y.get(r).is_some_and(|v| v.is_finite() && *v > 0.0)).collect();
                 pd.pie = Some(PieData {
                     values: rows.iter().map(|&r| y[r]).collect(),
                     names: rows
@@ -290,7 +314,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             PlotKind::Box => {
                 boxes += 1;
                 let label = project.plot_label(plot);
-                let Some(stats) = box_stats(&y[start..end], boxes as f64, label) else {
+                let values = pd.visible_values();
+                let Some(stats) = box_stats(&values, boxes as f64, label) else {
                     continue;
                 };
                 // The plot is the one point at the middle of its box.
@@ -299,6 +324,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.start = 0;
                 pd.end = 1;
                 pd.mask = None;
+                pd.filters.clear();
                 pd.err = None;
                 pd.xerr = None;
                 pd.base = None;
@@ -340,7 +366,7 @@ fn polar_columns(pd: &mut PlotData, radius: sheaf_core::graph::RadiusColumn) {
 
 /// Reads the plots of a radar layer (graphing spec 14.19) as `(angle, value)` pairs: row `i` of `n`
 /// is the spoke at `360 i / n` degrees, `n` the number of rows of the longest plot, and every plot
-/// ends with its first point again at 360 degrees, which closes the polygon. The spokes are named
+/// ends with its first visible point again one turn later, which closes the polygon. The spokes are named
 /// by the cells of the first plot's X column, or by the row numbers.
 fn radar_columns(project: &Project, plots: &mut [PlotData]) {
     let n = plots.iter().map(|pd| pd.end.saturating_sub(pd.start)).max().unwrap_or(0);
@@ -359,19 +385,22 @@ fn radar_columns(project: &Project, plots: &mut [PlotData]) {
     let angle = |i: usize| 360.0 * i as f64 / n as f64;
     for pd in plots.iter_mut() {
         // Rows keep their place (the mask counts rows of the column); the first drawn row is
-        // repeated once after the last, at 360 degrees, to close the polygon.
+        // repeated once after the last, one turn later, to close the polygon.
         let (start, end) = (pd.start, pd.end.min(pd.y.len()));
         if start >= end {
             continue;
         }
         let mut ys: Vec<f64> = pd.y[..end].to_vec();
         let mut xs: Vec<f64> = (0..end).map(|r| angle(r.saturating_sub(start))).collect();
-        ys.push(ys[start]);
-        xs.push(360.0);
+        let first_visible = pd.rows().next();
+        if let Some(first) = first_visible {
+            ys.push(ys[first]);
+            xs.push(360.0 + angle(first - start));
+        }
         pd.end = ys.len();
         pd.x = Some(Cow::Owned(xs));
         pd.y = Cow::Owned(ys);
-        pd.closing = true;
+        pd.closing = first_visible;
         pd.err = None;
         pd.xerr = None;
         pd.x_format = None;
@@ -398,12 +427,12 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
         percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
     };
     let overlap = percent(bars.overlap_pct, -100.0, 100.0, 0.0) / 100.0;
-    // Stacked plots share one slot, which stands where the first of them stands.
+    // Stacked plots share one slot, which stands where the first of them stands; so do floating ones.
     let mut slot_of = vec![0usize; plots.len()];
     let mut slots = 0usize;
     let mut stacked_slot = None;
     for &i in &columns {
-        if plots[i].plot.kind.is_stacked_column() {
+        if plots[i].plot.kind.is_stacked_column() || plots[i].plot.kind.is_floating() {
             slot_of[i] = *stacked_slot.get_or_insert_with(|| {
                 slots += 1;
                 slots - 1
@@ -443,7 +472,9 @@ fn pile(plots: &mut [PlotData], idx: &[usize]) {
     }
     let rows = idx.iter().map(|&i| plots[i].y.len()).max().unwrap_or(0);
     let percent = idx.iter().any(|&i| plots[i].plot.kind.is_percent_stacked());
-    let value = |pd: &PlotData, r: usize| pd.y.get(r).copied().filter(|v| v.is_finite()).unwrap_or(0.0);
+    let value = |pd: &PlotData, r: usize| {
+        if pd.row_shown(r) { pd.y.get(r).copied().filter(|v| v.is_finite()).unwrap_or(0.0) } else { 0.0 }
+    };
     let totals: Vec<f64> = (0..rows).map(|r| idx.iter().map(|&i| value(&plots[i], r)).sum()).collect();
     let mut run = vec![0.0; rows];
     for &i in idx {
@@ -456,7 +487,7 @@ fn pile(plots: &mut [PlotData], idx: &[usize]) {
             } else {
                 0.0
             };
-            let shown = plots[i].y.get(r).is_some_and(|v| v.is_finite());
+            let shown = plots[i].row_shown(r) && plots[i].y.get(r).is_some_and(|v| v.is_finite());
             lo[r] = run[r] * scale;
             run[r] += value(&plots[i], r);
             if shown {
@@ -476,8 +507,8 @@ fn bar_spacing(pd: &PlotData) -> f64 {
     if pd.x.is_none() {
         return 1.0;
     }
-    let rows = (pd.start..pd.end).filter(|&i| pd.val_at(i).is_finite()).count();
-    let xs = (pd.start..pd.end).filter(|&i| pd.val_at(i).is_finite()).map(|i| pd.cat_at(i)).filter(|x| x.is_finite());
+    let rows = pd.rows().filter(|&i| pd.val_at(i).is_finite()).count();
+    let xs = pd.rows().filter(|&i| pd.val_at(i).is_finite()).map(|i| pd.cat_at(i)).filter(|x| x.is_finite());
     let (lo, hi) = xs.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)));
     let s = (hi - lo) / (rows as f64 - 1.0);
     if rows >= 2 && s.is_finite() && s > 0.0 { s } else { 1.0 }
@@ -563,7 +594,7 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         let dir = pd.plot.error.direction;
         let transposed = pd.transposed();
         let value_dim = if transposed { Dim::X } else { Dim::Y };
-        for i in pd.start..pd.end {
+        for i in pd.rows() {
             let (x, y) = (pd.x_at(i), pd.y_at(i));
             if !(x.is_finite() && y.is_finite()) {
                 continue;

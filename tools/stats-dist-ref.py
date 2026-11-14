@@ -1,5 +1,5 @@
 """Prints crates/calc/tests/fixtures/scipy_stats_dist.rs: reference numbers from scipy for the
-distribution fit, the probability plot and the power calculations of `sheaf-calc`.
+distribution fit and the probability plot of `sheaf-calc`.
 
 Usage: python3 tools/stats-dist-ref.py > crates/calc/tests/fixtures/scipy_stats_dist.rs
 Needs numpy and scipy (the numbers in the repository were made with scipy 1.18.1). All inputs are
@@ -14,8 +14,6 @@ What is taken from scipy, and how:
              The shapes of gamma and Weibull are also solved with scipy.optimize.brentq on the likelihood
              equation (xtol 1e-15), because scipy's own fit stops about 1e-8 from the maximum.
   probplot:  scipy.stats.probplot(x, sparams=..., dist=...) : quantiles, ordered data, slope, intercept, r.
-  nct, ncf:  scipy.stats.nct.cdf / .sf and scipy.stats.ncf.cdf / .sf.
-  power:     scipy.stats.t.ppf, nct.sf / cdf, f.ppf, ncf.sf; sample sizes by counting up from n = 2.
 """
 import numpy as np
 import scipy
@@ -175,131 +173,8 @@ def emit_probplot():
     return "pub const PROBPLOTS: &[ProbCase] = &[\n" + "\n".join(out) + "\n];\n"
 
 
-def consistent(cdf, sf):
-    """scipy's nct returns nan, or a cdf and sf that do not add up to 1 within 1e-8, for some arguments (negative t
-    with a large ncp); those are left out (nan: the test skips the number)."""
-    if cdf != cdf or sf != sf or abs(cdf + sf - 1) > 1e-8:
-        return float("nan"), float("nan")
-    return cdf, sf
-
-
-def emit_noncentral():
-    nct = []
-    for df in [1.0, 2.5, 5.0, 10.0, 30.0, 100.0, 1000.0]:
-        for ncp in [-3.0, -0.5, 0.0, 0.3, 1.0, 2.5, 5.0, 10.0, 25.0, 35.0]:
-            for t in [-4.0, -1.0, 0.0, 0.5, 2.0, 3.5, 7.0, 15.0, 40.0]:
-                cdf, sf = consistent(stats.nct.cdf(t, df, ncp), stats.nct.sf(t, df, ncp))
-                nct.append(f"    NctCase {{ t: {f(t)}, df: {f(df)}, ncp: {f(ncp)}, cdf: {f(cdf)}, sf: {f(sf)} }},")
-    # |ncp| above 37.62: the Poisson mixture summed from its largest weight (the series of AS 243 would underflow)
-    for df in [1.0, 2.0, 3.0, 10.0, 30.0, 200.0]:
-        for ncp in [-60.0, 38.0, 40.0, 60.0, 100.0, 300.0]:
-            for t in [-4.0, 0.5, 0.9 * ncp, ncp, 1.1 * ncp, 1.5 * ncp, 3.0 * ncp]:
-                cdf, sf = consistent(stats.nct.cdf(t, df, ncp), stats.nct.sf(t, df, ncp))
-                nct.append(f"    NctCase {{ t: {f(t)}, df: {f(df)}, ncp: {f(ncp)}, cdf: {f(cdf)}, sf: {f(sf)} }},")
-    ncf = []
-    for d1, d2 in [(1.0, 5.0), (2.0, 10.0), (3.0, 27.0), (5.0, 100.0), (4.0, 1000.0), (10.0, 20.0)]:
-        for ncp in [0.0, 0.5, 2.0, 8.0, 20.0, 60.0, 200.0]:
-            for x in [0.1, 0.7, 1.5, 3.0, 6.0, 12.0, 40.0]:
-                if ncp == 0:  # scipy's ncf.sf is wrong at ncp = 0; the central F distribution is the same thing
-                    cdf, sf = stats.f.cdf(x, d1, d2), stats.f.sf(x, d1, d2)
-                else:
-                    cdf, sf = consistent(stats.ncf.cdf(x, d1, d2, ncp), stats.ncf.sf(x, d1, d2, ncp))
-                ncf.append(f"    NcfCase {{ x: {f(x)}, df1: {f(d1)}, df2: {f(d2)}, ncp: {f(ncp)}, cdf: {f(cdf)}, sf: {f(sf)} }},")
-    return ("pub const NCT: &[NctCase] = &[\n" + "\n".join(nct) + "\n];\n\n"
-            + "pub const NCF: &[NcfCase] = &[\n" + "\n".join(ncf) + "\n];\n")
-
-
-def t_power(design, d, n1, alpha, tail, ratio=1.0):
-    if design == "two":
-        n2 = max(2, int(np.ceil(n1 * ratio)))
-        df = n1 + n2 - 2
-        ncp = d / np.sqrt(1 / n1 + 1 / n2)
-    else:
-        n2 = n1
-        df = n1 - 1
-        ncp = d * np.sqrt(n1)
-    if tail == 0:
-        c = stats.t.ppf(1 - alpha / 2, df)
-        lower = stats.nct.cdf(-c, df, ncp)
-        if lower != lower:  # scipy returns nan for some negative arguments; the mirrored tail is the same number
-            lower = stats.nct.sf(c, df, -ncp)
-        p = stats.nct.sf(c, df, ncp) + lower
-    else:
-        c = stats.t.ppf(1 - alpha, df)
-        p = stats.nct.sf(c, df, ncp)
-    return n2, df, ncp, c, p
-
-
-def emit_power():
-    rows = []
-    for design, code in [("one", 0), ("paired", 1), ("two", 2)]:
-        for d in [0.2, 0.5, 0.8, 1.3]:
-            for alpha in [0.05, 0.01]:
-                for tail in [0, 1]:
-                    ratio = 2.0 if (design == "two" and d == 0.8) else 1.0
-                    for n1 in [5, 12, 30, 64]:
-                        n2, df, ncp, c, p = t_power(design, d, n1, alpha, tail, ratio)
-                        rows.append(f"    TPowerCase {{ design: {code}, ratio: {f(ratio)}, effect: {f(d)}, n1: {n1}, alpha: {f(alpha)}, tail: {tail}, n2: {n2}, df: {f(df)}, ncp: {f(ncp)}, critical: {f(c)}, power: {f(p)} }},")
-    # large effects with few observations: the non-centrality passes 37.62 at one or two degrees of freedom
-    for design, code in [("one", 0), ("paired", 1), ("two", 2)]:
-        for d in [30.0, 60.0]:
-            for alpha in [0.05, 0.001]:
-                for tail in [0, 1]:
-                    for n1 in [2, 3, 5, 12]:
-                        n2, df, ncp, c, p = t_power(design, d, n1, alpha, tail)
-                        rows.append(f"    TPowerCase {{ design: {code}, ratio: 1.0, effect: {f(d)}, n1: {n1}, alpha: {f(alpha)}, tail: {tail}, n2: {n2}, df: {f(df)}, ncp: {f(ncp)}, critical: {f(c)}, power: {f(p)} }},")
-    sizes = []
-    # two samples with unequal group sizes: the size of the first group is counted up from 2
-    for ratio in [0.5, 2.0, 3.0]:
-        for d in [0.3, 0.6, 1.0]:
-            for target in [0.8, 0.9]:
-                for tail in [0, 1]:
-                    n = 2
-                    while t_power("two", d, n, 0.05, tail, ratio)[4] < target:
-                        n += 1
-                    n2, df, ncp, c, p = t_power("two", d, n, 0.05, tail, ratio)
-                    sizes.append(f"    TSizeCase {{ design: 2, ratio: {f(ratio)}, effect: {f(d)}, target: {f(target)}, alpha: 0.05, tail: {tail}, n: {n}, n2: {n2}, power: {f(p)} }},")
-    for design, code in [("one", 0), ("paired", 1), ("two", 2)]:
-        for d in [0.3, 0.5, 0.8, 1.5]:
-            for target in [0.8, 0.9, 0.95]:
-                for tail in [0, 1]:
-                    n = 2
-                    while t_power(design, d, n, 0.05, tail)[4] < target:
-                        n += 1
-                    n2, df, ncp, c, p = t_power(design, d, n, 0.05, tail)
-                    sizes.append(f"    TSizeCase {{ design: {code}, ratio: 1.0, effect: {f(d)}, target: {f(target)}, alpha: 0.05, tail: {tail}, n: {n}, n2: {n2}, power: {f(p)} }},")
-    an = []
-    for k in [2, 3, 4, 6]:
-        for fe in [0.1, 0.25, 0.4, 0.6]:
-            for alpha in [0.05, 0.01]:
-                for n in [4, 10, 25, 60]:
-                    N = k * n
-                    df1, df2, ncp = k - 1, N - k, fe * fe * N
-                    c = stats.f.ppf(1 - alpha, df1, df2)
-                    p = stats.ncf.sf(c, df1, df2, ncp)
-                    an.append(f"    AnovaPowerCase {{ groups: {k}, effect: {f(fe)}, n: {n}, alpha: {f(alpha)}, df1: {f(df1)}, df2: {f(df2)}, ncp: {f(ncp)}, critical: {f(c)}, power: {f(p)} }},")
-    ans = []
-    for k in [2, 3, 5]:
-        for fe in [0.15, 0.25, 0.4]:
-            for target in [0.8, 0.9]:
-                n = 2
-                while True:
-                    N = k * n
-                    c = stats.f.ppf(0.95, k - 1, N - k)
-                    p = stats.ncf.sf(c, k - 1, N - k, fe * fe * N)
-                    if p >= target:
-                        break
-                    n += 1
-                ans.append(f"    AnovaSizeCase {{ groups: {k}, effect: {f(fe)}, target: {f(target)}, alpha: 0.05, n: {n}, power: {f(p)} }},")
-    return ("pub const T_POWER: &[TPowerCase] = &[\n" + "\n".join(rows) + "\n];\n\n"
-            + "pub const T_SIZE: &[TSizeCase] = &[\n" + "\n".join(sizes) + "\n];\n\n"
-            + "pub const ANOVA_POWER: &[AnovaPowerCase] = &[\n" + "\n".join(an) + "\n];\n\n"
-            + "pub const ANOVA_SIZE: &[AnovaSizeCase] = &[\n" + "\n".join(ans) + "\n];\n")
-
-
-HEADER = '''//! Numbers from scipy {ver} for the distribution fit, the probability plot, the noncentral t and F distributions
-//! and the power calculations (made by tools/stats-dist-ref.py). Do not edit by hand. These numbers come from
-//! scipy, not from Origin.
+HEADER = '''//! Numbers from scipy {ver} for the distribution fit and the probability plot (made by
+//! tools/stats-dist-ref.py). Do not edit by hand. These numbers come from scipy, not from Origin.
 #![allow(clippy::excessive_precision, dead_code)]
 
 /// `family` is the index into norm, lognorm, expon, gamma, weibull_min. `params_scipy` is what scipy.stats.<dist>.fit
@@ -335,65 +210,6 @@ pub struct KsCase {{
     pub d: f64,
     pub p: f64,
 }}
-pub struct NctCase {{
-    pub t: f64,
-    pub df: f64,
-    pub ncp: f64,
-    pub cdf: f64,
-    pub sf: f64,
-}}
-pub struct NcfCase {{
-    pub x: f64,
-    pub df1: f64,
-    pub df2: f64,
-    pub ncp: f64,
-    pub cdf: f64,
-    pub sf: f64,
-}}
-/// design: 0 one sample, 1 paired, 2 two samples (`ratio` = n2 / n1); tail: 0 two-sided, 1 upper.
-pub struct TPowerCase {{
-    pub design: u8,
-    pub ratio: f64,
-    pub effect: f64,
-    pub n1: usize,
-    pub alpha: f64,
-    pub tail: u8,
-    pub n2: usize,
-    pub df: f64,
-    pub ncp: f64,
-    pub critical: f64,
-    pub power: f64,
-}}
-pub struct TSizeCase {{
-    pub design: u8,
-    pub ratio: f64,
-    pub effect: f64,
-    pub target: f64,
-    pub alpha: f64,
-    pub tail: u8,
-    pub n: usize,
-    pub n2: usize,
-    pub power: f64,
-}}
-pub struct AnovaPowerCase {{
-    pub groups: usize,
-    pub effect: f64,
-    pub n: usize,
-    pub alpha: f64,
-    pub df1: f64,
-    pub df2: f64,
-    pub ncp: f64,
-    pub critical: f64,
-    pub power: f64,
-}}
-pub struct AnovaSizeCase {{
-    pub groups: usize,
-    pub effect: f64,
-    pub target: f64,
-    pub alpha: f64,
-    pub n: usize,
-    pub power: f64,
-}}
 
 '''
 
@@ -403,5 +219,3 @@ if __name__ == "__main__":
     print(emit_fit())
     print(emit_ks())
     print(emit_probplot())
-    print(emit_noncentral())
-    print(emit_power())

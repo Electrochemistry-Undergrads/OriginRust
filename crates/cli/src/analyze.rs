@@ -84,6 +84,22 @@ enum Job {
     Math {
         op: MathKind,
         operand: OperandArgs,
+        /// Simple Column Math: row by row, no X.
+        column: bool,
+    },
+    /// Convolution or correlation; the second column is looked up once the project is loaded.
+    Signal {
+        conv: bool,
+        other: String,
+        circular: bool,
+        normalize: bool,
+        interval: Option<f64>,
+    },
+    /// Inverse FFT; the imaginary column is looked up once the project is loaded.
+    Ifft {
+        imaginary: Option<String>,
+        options: analysis::IfftOptions,
+        auto_interval: bool,
     },
     Sort {
         by: String,
@@ -122,6 +138,9 @@ fn comparison_of(comparison: ComparisonArg) -> Option<analysis::MeansComparison>
         ComparisonArg::Sidak => Some(M::Sidak),
         ComparisonArg::Lsd => Some(M::FisherLsd),
         ComparisonArg::Scheffe => Some(M::Scheffe),
+        ComparisonArg::HolmBonferroni => Some(M::HolmBonferroni),
+        ComparisonArg::HolmSidak => Some(M::HolmSidak),
+        ComparisonArg::Dunnett => Some(M::Dunnett),
         ComparisonArg::None => None,
     }
 }
@@ -171,9 +190,96 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             if operand.reference.is_none() {
                 bail!("subtract-ref needs the reference curve: --ref COLUMN (use 'math --value' for a constant)");
             }
-            (target, Job::Math { op: MathKind::Subtract, operand })
+            (target, Job::Math { op: MathKind::Subtract, operand, column: false })
         }
-        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand }),
+        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
+        AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
+        AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
+        AnalyzeTool::FftFilter { target, kind, cutoff, freq1, freq2, threshold, pass, stop, no_offset, interval } => {
+            let kind = match kind {
+                FftFilterArg::LowPass => analysis::FftFilterType::LowPass,
+                FftFilterArg::HighPass => analysis::FftFilterType::HighPass,
+                FftFilterArg::BandPass => analysis::FftFilterType::BandPass,
+                FftFilterArg::BandBlock => analysis::FftFilterType::BandBlock,
+                FftFilterArg::Threshold => analysis::FftFilterType::Threshold,
+                FftFilterArg::Parabolic => analysis::FftFilterType::LowPassParabolic,
+            };
+            let options = analysis::FftFilterOptions {
+                kind,
+                cutoff,
+                freq1,
+                freq2,
+                threshold,
+                pass,
+                stop,
+                keep_offset: !no_offset,
+            };
+            (target, Job::Tool(Tool::FftFilter(analysis::FftFilterSpec { options, interval })))
+        }
+        AnalyzeTool::Ifft { target, imaginary, interval, no_shift, no_unwrap, science } => {
+            let options = analysis::IfftOptions {
+                interval: interval.unwrap_or(1.0),
+                shift: !no_shift,
+                unwrap: !no_unwrap,
+                science,
+            };
+            (target, Job::Ifft { imaginary, options, auto_interval: interval.is_none() })
+        }
+        AnalyzeTool::Fft {
+            target,
+            interval,
+            window,
+            correction,
+            normalize,
+            two_sided,
+            no_shift,
+            no_unwrap,
+            science,
+            power,
+        } => {
+            let options = analysis::FftOptions {
+                interval: interval.unwrap_or(1.0),
+                window: match window {
+                    FftWindowArg::Rectangle => analysis::FftWindow::Rectangle,
+                    FftWindowArg::Welch => analysis::FftWindow::Welch,
+                    FftWindowArg::Triangular => analysis::FftWindow::Triangular,
+                    FftWindowArg::Bartlett => analysis::FftWindow::Bartlett,
+                    FftWindowArg::Hanning => analysis::FftWindow::Hanning,
+                    FftWindowArg::Hamming => analysis::FftWindow::Hamming,
+                    FftWindowArg::Blackman => analysis::FftWindow::Blackman,
+                },
+                correction: match correction {
+                    FftCorrectionArg::None => analysis::WindowCorrection::None,
+                    FftCorrectionArg::Amplitude => analysis::WindowCorrection::Amplitude,
+                    FftCorrectionArg::Power => analysis::WindowCorrection::Power,
+                },
+                normalize,
+                two_sided,
+                shift: !no_shift,
+                unwrap: !no_unwrap,
+                science,
+                power: match power {
+                    FftPowerArg::Msa => analysis::PowerNorm::Msa,
+                    FftPowerArg::Ssa => analysis::PowerNorm::Ssa,
+                    FftPowerArg::Tisa => analysis::PowerNorm::Tisa,
+                },
+            };
+            (target, Job::Tool(Tool::Fft(analysis::FftSpec { options, auto_interval: interval.is_none() })))
+        }
+        AnalyzeTool::LevelCrossing { target, level, row, min_gap, details } => {
+            let index = match row {
+                CrossingRow::Any => analysis::CrossingIndex::Nearest,
+                CrossingRow::Left => analysis::CrossingIndex::Left,
+                CrossingRow::Right => analysis::CrossingIndex::Right,
+            };
+            (target, Job::Tool(Tool::LevelCrossing(analysis::LevelCrossingSpec { level, index, min_gap, details })))
+        }
+        AnalyzeTool::Convolution { target, response, circular, normalize, interval } => {
+            (target, Job::Signal { conv: true, other: response, circular, normalize, interval })
+        }
+        AnalyzeTool::SignalCorrelation { target, other, circular, normalize, interval } => {
+            (target, Job::Signal { conv: false, other, circular, normalize, interval: Some(interval) })
+        }
         AnalyzeTool::Differentiate { target, order, smooth, poly, points } => {
             (target, Job::Tool(Tool::Differentiate(analysis::DiffOptions { order, smooth, poly, npts: points })))
         }
@@ -250,26 +356,26 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Average { target, points, reference_curve, range, method, no_sd, no_count } => {
-            let x = match (points, reference_curve) {
-                (Some(n), _) => analysis::CommonX::Evenly(n),
-                (None, Some(0)) => bail!("--reference-curve counts from 1"),
-                (None, Some(r)) => analysis::CommonX::Reference(r - 1),
-                (None, None) => analysis::CommonX::Points,
+        AnalyzeTool::Average { target, x: which, points, reference_curve, method, sd, se, count, min, max } => {
+            let evenly = points.map_or(analysis::CommonX::Auto, analysis::CommonX::Evenly);
+            let (x, range) = match (which, reference_curve) {
+                (_, Some(0)) => bail!("--reference-curve counts from 1"),
+                (_, Some(r)) => (analysis::CommonX::Reference(r - 1), analysis::XRange::Intersection),
+                (AverageX::Same, None) => (analysis::CommonX::Points, analysis::XRange::Intersection),
+                (AverageX::Common, None) => (evenly, analysis::XRange::Intersection),
+                (AverageX::Full, None) => (evenly, analysis::XRange::Full),
+                (AverageX::Any, None) => (evenly, analysis::XRange::Union),
             };
             let options = analysis::AverageOptions {
                 x,
-                range: match range {
-                    AverageRange::Intersection => analysis::XRange::Intersection,
-                    AverageRange::Union => analysis::XRange::Union,
-                },
+                range,
                 method: match method {
                     AverageInterp::Linear => analysis::AverageMethod::Linear,
                     AverageInterp::Spline => analysis::AverageMethod::CubicSpline,
                     AverageInterp::Akima => analysis::AverageMethod::Akima,
                 },
             };
-            (target, Job::Tool(Tool::AverageCurves(analysis::AverageSpec { options, sd: !no_sd, count: !no_count })))
+            (target, Job::Tool(Tool::AverageCurves(analysis::AverageSpec { options, sd, count, se, min, max })))
         }
         AnalyzeTool::Intersect { target, touching } => {
             (target, Job::Tool(Tool::Intersect(analysis::IntersectSpec { include_touching: touching })))
@@ -282,21 +388,38 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 p2: analysis::LinePoint { x: x2, y: y2 },
             })),
         ),
-        AnalyzeTool::ReduceX { target, step, points, method, x_min, x_max } => {
+        AnalyzeTool::ReduceDup { target, method, tol, count } => {
+            use analysis::DupMethod as M;
+            let method = match method {
+                DupKind::Mean => M::Mean,
+                DupKind::Median => M::Median,
+                DupKind::Min => M::Min,
+                DupKind::Max => M::Max,
+                DupKind::Sum => M::Sum,
+                DupKind::Sd => M::Sd,
+                DupKind::Se => M::Se,
+                DupKind::Rms => M::Rms,
+            };
+            (target, Job::Tool(Tool::ReduceDup(analysis::ReduceDupSpec { method, tol, count })))
+        }
+        AnalyzeTool::ReduceX { target, every, step, intervals, frequency, method, x_min, x_max, tolerance } => {
             let range = match (x_min, x_max) {
                 (None, None) => None,
                 (Some(lo), Some(hi)) => Some((lo, hi)),
                 _ => bail!("give both --x-min and --x-max, or neither"),
             };
-            let grid = match step {
-                Some(s) => analysis::EvenGrid::Step(s),
-                None => analysis::EvenGrid::Count(points.unwrap_or(100)),
+            let group = match (every, step, intervals, frequency) {
+                (_, Some(s), _, _) => analysis::ReduceGroup::Interval(s),
+                (_, _, Some(n), _) => analysis::ReduceGroup::Intervals(n),
+                (_, _, _, Some(f)) => analysis::ReduceGroup::Frequency(f),
+                (n, ..) => analysis::ReduceGroup::EveryN(n.unwrap_or(analysis::REDUCE_AUTO_FACTOR)),
             };
             let method = match method {
-                ReduceKind::Interpolate => analysis::ReduceMethod::Interpolate,
-                ReduceKind::Average => analysis::ReduceMethod::Average,
+                ReduceKind::Mean => analysis::ReduceMethod::Mean,
+                ReduceKind::First => analysis::ReduceMethod::First,
             };
-            (target, Job::Tool(Tool::ReduceX(analysis::ReduceOptions { grid, method, range })))
+            let opts = analysis::ReduceOptions { group, method, range, tolerance_pct: tolerance };
+            (target, Job::Tool(Tool::ReduceX(opts)))
         }
         AnalyzeTool::Translate { target, axis, by, at, to } => {
             let shift = match (by, at, to) {
@@ -383,6 +506,18 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     }
                     (Some(PeakBaselineKind::EndPoints), _) => analysis::ChainBaseline::EndPoints,
                     (Some(PeakBaselineKind::Minima), _) => analysis::ChainBaseline::AutoMinima(baseline_points),
+                    (Some(PeakBaselineKind::Minimum), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Minimum)
+                    }
+                    (Some(PeakBaselineKind::Maximum), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Maximum)
+                    }
+                    (Some(PeakBaselineKind::Mean), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Mean)
+                    }
+                    (Some(PeakBaselineKind::Median), _) => {
+                        analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Median)
+                    }
                     (Some(PeakBaselineKind::None) | None, None) => analysis::ChainBaseline::None,
                 };
                 let method = match method.unwrap_or(PeakMethodKind::LocalMax) {
@@ -449,10 +584,35 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::TTest(analysis::TTestSpec { kind, tail: tail_of(tail), alpha })))
         }
-        AnalyzeTool::Anova { target, comparison, alpha } => {
-            (target, Job::Tool(Tool::Anova(analysis::AnovaSpec { alpha, comparison: comparison_of(comparison) })))
+        AnalyzeTool::Anova { target, comparison, control, alpha } => {
+            if control == 0 {
+                bail!("--control counts the groups from 1");
+            }
+            (
+                target,
+                Job::Tool(Tool::Anova(analysis::AnovaSpec {
+                    alpha,
+                    comparison: comparison_of(comparison),
+                    control: control - 1,
+                })),
+            )
         }
+        AnalyzeTool::Crosstab { target, no_row_percent, no_column_percent, no_total_percent, no_expected, alpha } => {
+            no_x_range(&target, "the cross tabulation")?;
+            (
+                target,
+                Job::Tool(Tool::Crosstab(analysis::CrosstabSpec {
+                    row_percent: !no_row_percent,
+                    column_percent: !no_column_percent,
+                    total_percent: !no_total_percent,
+                    expected: !no_expected,
+                    alpha,
+                })),
+            )
+        }
+        AnalyzeTool::Power { .. } => unreachable!("handled before the data file is read"),
         AnalyzeTool::Anova2 { target, raw, levels_a, levels_b, no_interaction, comparison, alpha } => {
+            no_x_range(&target, "the two-way ANOVA")?;
             let layout = if raw {
                 if levels_a.len() != target.y.len() || levels_b.len() != target.y.len() {
                     bail!(
@@ -551,6 +711,59 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             let freq = analysis::FreqOptions { min, max, size, below, above };
             (target, Job::Tool(Tool::Histogram(analysis::HistogramSpec { freq, graph: !no_graph })))
         }
+        AnalyzeTool::Discfreq { target, relative, cumulative, percent, no_count, case_sensitive, sort } => {
+            let spec = analysis::DiscreteFreqSpec {
+                count: !no_count,
+                relative,
+                cumulative,
+                percent,
+                case_sensitive,
+                sort: analysis::DiscSort::from_code(&sort).expect("clap checks the value"),
+            };
+            (target, Job::Tool(Tool::DiscreteFrequency(spec)))
+        }
+        AnalyzeTool::Bin2d {
+            target,
+            stat,
+            x_inc,
+            x_bins,
+            x_min,
+            x_max,
+            x_centers,
+            x_below,
+            x_above,
+            y_inc,
+            y_bins,
+            y_min,
+            y_max,
+            y_centers,
+            y_below,
+            y_above,
+        } => {
+            let size = |inc: Option<f64>, bins: Option<usize>| match (inc, bins) {
+                (Some(w), _) => analysis::BinSize::Width(w),
+                (None, Some(n)) => analysis::BinSize::Count(n),
+                (None, None) => analysis::BinSize::Auto,
+            };
+            let x = analysis::AxisBins {
+                min: x_min,
+                max: x_max,
+                size: size(x_inc, x_bins),
+                centers: x_centers,
+                below: x_below,
+                above: x_above,
+            };
+            let y = analysis::AxisBins {
+                min: y_min,
+                max: y_max,
+                size: size(y_inc, y_bins),
+                centers: y_centers,
+                below: y_below,
+                above: y_above,
+            };
+            let stat = analysis::Bin2dStat::from_code(&stat).expect("clap checks the value");
+            (target, Job::Tool(Tool::Binning2D(analysis::Bin2dOptions { x, y, stat })))
+        }
         AnalyzeTool::Normality { target, alpha } => {
             (target, Job::Tool(Tool::Normality(analysis::NormalitySpec { alpha })))
         }
@@ -578,30 +791,6 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Power { target, test, effect, difference, means, sd, groups, ratio, n, power, tail, alpha } => {
-            let test = match test {
-                PowerTestArg::OneSample => analysis::PowerTest::OneSampleT,
-                PowerTestArg::TwoSample => analysis::PowerTest::TwoSampleT { ratio },
-                PowerTestArg::Paired => analysis::PowerTest::PairedT,
-                PowerTestArg::Anova => analysis::PowerTest::OneWayAnova { groups: groups.unwrap_or(0) },
-            };
-            let effect = match (effect, difference, means.is_empty()) {
-                (Some(e), None, true) => analysis::PowerEffect::Standardized(e),
-                (None, Some(difference), true) => {
-                    analysis::PowerEffect::Difference { difference, sd: sd.expect("clap requires --sd") }
-                }
-                (None, None, false) => analysis::PowerEffect::Means { means, sd: sd.expect("clap requires --sd") },
-                _ => bail!(
-                    "give the effect as --effect, or --difference with --sd (t-tests), or --means with --sd (ANOVA)"
-                ),
-            };
-            let solve = if n.is_empty() {
-                analysis::PowerSolve::SampleSize { powers: if power.is_empty() { vec![0.8] } else { power } }
-            } else {
-                analysis::PowerSolve::Power { sample_sizes: n }
-            };
-            (target, Job::Tool(Tool::Power(analysis::PowerSpec { test, effect, solve, tail: tail_of(tail), alpha })))
-        }
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })
@@ -611,6 +800,15 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             (target, Job::Filter { condition, in_place })
         }
     })
+}
+
+/// The tools that read factor columns have no X column to limit; say so before running instead of failing in
+/// the tool.
+fn no_x_range(target: &TargetArgs, tool: &str) -> Result<()> {
+    if target.x_range.is_some() {
+        bail!("{tool} has no X column to limit, so --x-range cannot be used with it; choose rows with --rows");
+    }
+    Ok(())
 }
 
 /// Sorting and filtering work on all rows and columns of a sheet; refuse the options that choose
@@ -635,6 +833,7 @@ fn math_tool(
     sheet: usize,
     op: MathKind,
     operand: &OperandArgs,
+    column: bool,
     read: &ReadOptions,
 ) -> Result<Tool> {
     let op = match op {
@@ -678,13 +877,67 @@ fn math_tool(
             analysis::CurveOperand::Reference(named_columns(project, rb, rs, std::slice::from_ref(name))?[0])
         }
     };
+    if column {
+        if operand.common {
+            bail!("--common only applies to curve math; column math goes row by row");
+        }
+        return Ok(Tool::ColumnMath(analysis::ColumnMathSpec { op, operand: operand_value }));
+    }
     if operand.common && matches!(operand_value, analysis::CurveOperand::Constant(_)) {
         bail!("--common only applies to a reference curve");
     }
     Ok(Tool::CurveMath(analysis::CurveMathSpec { op, operand: operand_value, common_only: operand.common }))
 }
 
+/// `analyze power`: no data file, the table goes to the terminal (and `--export`).
+fn power(a: AnalyzeTool) -> Result<()> {
+    let AnalyzeTool::Power { test, sizes, powers, mean1, mean2, sd, levels, css, alpha, one_sided, export } = a else {
+        unreachable!("called for the power tool only");
+    };
+    if sizes.is_empty() == powers.is_empty() {
+        bail!("give either --sizes (to find powers) or --powers (to find sample sizes)");
+    }
+    let spec = analysis::PowerSpec {
+        kind: match test {
+            PowerTestArg::OneSample => analysis::PowerKind::OneSampleT,
+            PowerTestArg::TwoSample => analysis::PowerKind::TwoSampleT,
+            PowerTestArg::Paired => analysis::PowerKind::PairedT,
+            PowerTestArg::Anova => analysis::PowerKind::Anova,
+        },
+        goal: if sizes.is_empty() {
+            analysis::PowerGoal::SampleSize(powers)
+        } else {
+            analysis::PowerGoal::Power(sizes)
+        },
+        alpha,
+        two_sided: !one_sided,
+        mean1,
+        mean2,
+        sd,
+        levels,
+        css,
+    };
+    let mut project = Project::new();
+    let report = project.power_analysis(&spec)?;
+    let ws = &project.workbook(report.book).expect("just added").sheets[0];
+    println!("{:>12}  {:>12}", "Sample Size", "Power");
+    let (size, power) = (ws.columns[0].numeric().unwrap_or(&[]), ws.columns[1].numeric().unwrap_or(&[]));
+    for (n, p) in size.iter().zip(power) {
+        println!("{:>12}  {:>12}", short_number(*n), short_number(*p));
+    }
+    for note in &report.notes {
+        println!("{note}");
+    }
+    if let Some(path) = export {
+        write_sheet(ws, &path)?;
+    }
+    Ok(())
+}
+
 pub fn analyze(a: AnalyzeArgs) -> Result<()> {
+    if matches!(a.tool, AnalyzeTool::Power { .. }) {
+        return power(a.tool);
+    }
     let (target, job) = job_from(a.tool)?;
     let mut project = if is_project(&target.input) {
         load_project(&target.input)?
@@ -696,20 +949,32 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     let book = pick_book(&project, target.book.as_deref())?;
     let sheet = pick_sheet(&project, book, target.sheet.as_deref())?;
     let job = match job {
-        Job::Math { op, operand } => Job::Tool(math_tool(&mut project, book, sheet, op, &operand, &target.read)?),
+        Job::Math { op, operand, column } => {
+            Job::Tool(math_tool(&mut project, book, sheet, op, &operand, column, &target.read)?)
+        }
+        Job::Ifft { imaginary, options, auto_interval } => {
+            let imaginary = match imaginary {
+                Some(name) => Some(named_columns(&project, book, sheet, std::slice::from_ref(&name))?[0]),
+                None => None,
+            };
+            Job::Tool(Tool::Ifft(analysis::IfftSpec { imaginary, options, auto_interval }))
+        }
+        Job::Signal { conv, other, circular, normalize, interval } => {
+            let other = named_columns(&project, book, sheet, std::slice::from_ref(&other))?[0];
+            Job::Tool(if conv {
+                Tool::Convolution(analysis::ConvolutionSpec { response: other, circular, normalize, interval })
+            } else {
+                let interval = interval.unwrap_or(1.0);
+                Tool::SignalCorrelation(analysis::SignalCorrelationSpec { other, circular, normalize, interval })
+            })
+        }
         other => other,
     };
 
     // The sheet that holds the results, for --export.
     let result_sheet = match job {
         Job::Tool(tool) => {
-            let columns = if matches!(tool, Tool::Power(_)) {
-                // Power and sample size read no data; one column names the workbook for the result sheet.
-                match project.workbook(book).expect("picked above").sheets[sheet].columns.first() {
-                    Some(c) => vec![c.id],
-                    None => bail!("the file has no column; a power calculation still needs a sheet for its result"),
-                }
-            } else if target.y.is_empty() {
+            let columns = if target.y.is_empty() {
                 project.default_plot_columns(book, sheet, Template::Line)
             } else {
                 named_columns(&project, book, sheet, &target.y)?
@@ -738,7 +1003,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)
         }
-        Job::Math { .. } => unreachable!("curve math was turned into a tool above"),
+        Job::Math { .. } | Job::Signal { .. } | Job::Ifft { .. } => unreachable!("turned into a tool above"),
         Job::Sort { by, descending } => {
             let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;

@@ -89,17 +89,44 @@ Projects save as `.sheaf` or Origin `.opj`; see the
 
 ## Get started
 
-Requires [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
+Requires Git and [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
+
+### First time: download, build, and run
+
+Run these commands in the folder where you want to keep Sheaf. The first launch downloads
+dependencies and builds the app, so it can take a few minutes.
 
 ```sh
 git clone https://github.com/Electrochemistry-Undergrads/OriginRust.git
 cd OriginRust
-cargo run --release -p sheaf-app   # the desktop app
-cargo test --workspace --locked   # the test suite
+cargo run --release -p sheaf-app
 ```
 
-Drop a data file onto the window, or open one with
-`cargo run --release -p sheaf-app -- run1.txt`.
+### Run again: use your existing copy
+
+Open a terminal in the `OriginRust` folder you downloaded earlier, then run:
+
+```sh
+cargo run --release -p sheaf-app
+```
+
+Cargo reuses the existing build when the code and dependencies have not changed.
+
+### Open a data file
+
+Drop a data file onto the window, or run this from your existing `OriginRust` folder:
+
+```sh
+cargo run --release -p sheaf-app -- run1.txt
+```
+
+### Optional: run the tests
+
+From the `OriginRust` folder:
+
+```sh
+cargo test --workspace --locked
+```
 
 New contributors: start with [`HANDOFF.md`](HANDOFF.md), then [`docs/`](docs/).
 

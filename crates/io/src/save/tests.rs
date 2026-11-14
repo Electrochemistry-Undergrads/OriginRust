@@ -288,3 +288,14 @@ fn a_ternary_layer_is_kept_by_the_companion_and_the_opj_warns() {
     assert!(layer.coords.ternary().is_some(), "the ternary layer comes back from the companion");
     assert!(layer.plots[0].size_from.is_some(), "with its Z column");
 }
+
+#[test]
+fn a_save_to_opju_is_refused_and_writes_nothing() {
+    let dir = scratch("opju-refused");
+    let path = dir.join("fig.opju");
+    let err = save_project(&workbook_project(), &path).unwrap_err();
+    assert!(matches!(err, IoError::OpjuWrite { .. }), "{err}");
+    assert!(err.to_string().contains(".opj"), "the message points to .opj: {err}");
+    assert!(!path.exists(), "no file is written");
+    assert!(!dir.join("fig.opju.sheaf").exists(), "and no companion");
+}

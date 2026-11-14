@@ -20,8 +20,8 @@ fn the_bar_templates_make_horizontal_plots_of_their_kind() {
     for (name, kind, plots) in [
         ("stacked-bar", PlotKind::StackedBar, 3),
         ("stacked-bar-100", PlotKind::Stacked100Bar, 3),
-        // Columns go in pairs for a floating bar: the first of a pair is the lower end.
-        ("floating-bar", PlotKind::FloatingBar, 1),
+        // A floating bar chains its columns as Origin does (graphing 14.12): A-B and B-C.
+        ("floating-bar", PlotKind::FloatingBar, 2),
     ] {
         let (svg, saved) = (dir.join(format!("{name}.svg")), dir.join(format!("{name}.sheaf")));
         let out = Command::new(env!("CARGO_BIN_EXE_sheaf"))

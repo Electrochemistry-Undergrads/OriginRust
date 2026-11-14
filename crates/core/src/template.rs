@@ -425,6 +425,9 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             plot_offsets: Vec::new(),
             bars: BarSpacing::default(),
             coords: Coords::Cartesian,
+            background: None,
+            group_style: GroupStyle::default(),
+            display: LayerDisplay::default(),
         }],
     }
 }
@@ -447,6 +450,9 @@ fn bubble(id: WindowId, name: &str, mapped: bool, sized: bool) -> Graph {
 fn pie(id: WindowId, name: &str, kind: PlotKind) -> Graph {
     let mut g = general(id, name, kind);
     let l = &mut g.layers[0];
+    // Origin's pie templates have a larger layer than the line template (measured on the 3D and
+    // the B&W pie: 7 % from the left, 86.5 % wide, 8 % from the top, 83 % high).
+    l.frame = Frame { left: 0.0695, top: 0.079, width: 0.865, height: 0.83 };
     l.x_axis.side = AxisSide::Hidden;
     l.y_axis.side = AxisSide::Hidden;
     l.legend.visible = false;
@@ -463,9 +469,12 @@ fn polar(id: WindowId, name: &str, radius: RadiusColumn) -> Graph {
 
 fn polar_of(id: WindowId, name: &str, radius: RadiusColumn, kind: PlotKind) -> Graph {
     let mut g = general(id, name, kind);
-    g.page = Page::inches(6.0, 6.0);
+    // Origin's polar page (measured, spec 14.18): 8.04 by 6.15 in with a square layer of 4.55 in, its
+    // left edge at 23.3 % of the page, and the legend above the layer's top right corner.
+    g.page = Page::inches(8.04, 6.15);
     let l = &mut g.layers[0];
-    l.frame = Frame { left: 0.2, top: 0.2, width: 0.6, height: 0.6 };
+    l.frame = Frame { left: 0.2326, top: 0.1174, width: 0.5665, height: 0.7402 };
+    l.legend.position = LegendPosition::Manual { x: 0.84, y: -0.108 };
     l.coords = Coords::Polar(PolarCoords { radius, ..PolarCoords::default() });
     let grid = LineStyle::solid(Color::rgb(204, 204, 204), 0.5);
     for a in [&mut l.x_axis, &mut l.y_axis] {
@@ -475,9 +484,6 @@ fn polar_of(id: WindowId, name: &str, radius: RadiusColumn, kind: PlotKind) -> G
         a.major_tick_len_pt = 6.0;
         a.minor_ticks = 0;
     }
-    // The measured probe (spec 14.17) ran the radius axis from the data's smallest to its largest
-    // radius: the centre is the smallest value and the circle's edge the largest, no margin.
-    l.y_axis.rescale_margin_pct = 0.0;
     g
 }
 
@@ -488,11 +494,12 @@ fn radar(id: WindowId, name: &str) -> Graph {
     let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
     let l = &mut g.layers[0];
     l.coords = Coords::Polar(PolarCoords { zero_deg: 90.0, clockwise: true, radar: true, ..PolarCoords::default() });
-    // Wider than the polar page: the legend stands to the right of the circle and the spoke names.
-    g.page = Page::inches(8.0, 6.0);
+    // Origin's radar page (measured, spec 14.19): 8 by 6.125 in, the layer 61 % wide and 75 % high from
+    // 11.7 % and 10.9 %, the legend at the top right corner of the layer.
+    g.page = Page::inches(8.0, 6.125);
     let l = &mut g.layers[0];
-    l.frame = Frame { left: 0.1, top: 0.2, width: 0.45, height: 0.6 };
-    l.legend.position = LegendPosition::Manual { x: 1.65, y: 0.12 };
+    l.frame = Frame { left: 0.1173, top: 0.1092, width: 0.612, height: 0.7535 };
+    l.legend.position = LegendPosition::Manual { x: 1.0116, y: -0.0208 };
     l.x_axis.major_tick = TickDirection::None;
     l.y_axis.major_tick_len_pt = 5.0;
     g
@@ -502,19 +509,24 @@ fn radar(id: WindowId, name: &str) -> Graph {
 /// on the page (the triangle is as wide as it fits), the grid lines parallel to the sides are on
 /// at the major ticks, minor ticks are off. The three axis titles are the column names.
 fn ternary(id: WindowId, name: &str) -> Graph {
+    // Origin's ternary graph keeps the usual page and layer frame (its picture is 10.72 by 8.205 in,
+    // measured); the triangle is the largest that fits in the frame.
     let mut g = general(id, name, PlotKind::Scatter);
-    g.page = Page::inches(6.0, 6.0);
     let l = &mut g.layers[0];
-    l.frame = Frame { left: 0.2, top: 0.2, width: 0.6, height: 0.6 };
     l.coords = Coords::Ternary(TernaryCoords::default());
-    // The one plot would be named after its Y column only, which says nothing about the rest.
-    l.legend.visible = false;
-    let grid = LineStyle::solid(Color::rgb(204, 204, 204), 0.5);
+    // Origin's default ternary graph (measured, graphing spec 14.20): a legend (the plot is named
+    // after its Z column), major grid lines in Gray, minor ones dashed in LT Gray, one minor tick.
+    l.legend.visible = true;
+    let grid = LineStyle::solid(Color::rgb(128, 128, 128), 0.5);
+    let minor = LineStyle { dash: Dash::Dash, ..LineStyle::solid(Color::rgb(192, 192, 192), 0.5) };
     for a in [&mut l.x_axis, &mut l.y_axis] {
         a.major_grid = Some(grid.clone());
+        a.minor_grid = Some(minor.clone());
         a.major_tick = TickDirection::Out;
+        a.minor_tick = TickDirection::Out;
         a.major_tick_len_pt = 6.0;
-        a.minor_ticks = 0;
+        a.minor_tick_len_pt = 3.0;
+        a.minor_ticks = 1;
     }
     g
 }
@@ -691,6 +703,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
             }
         }
         PaletteMode::Spread => colors.reverse(),
+        PaletteMode::Same => {}
     }
     l
 }
@@ -876,5 +889,35 @@ mod tests {
         assert_eq!(g.layers[0].palette.colors[0], Color::rgb(0, 0, 255));
         let c = Template::Column.new_graph(WindowId(0), "");
         assert_eq!(c.layers[0].palette.colors[0], Color::rgb(255, 0, 0), "plain columns still start at red");
+    }
+
+    /// Measured on the legends of 12 and 13 plots in Origin (spec 14.12).
+    #[test]
+    fn horizontal_stacked_and_floating_bars_use_the_colour_lists_of_their_vertical_forms() {
+        let colors = |t: Template| t.new_graph(WindowId(0), "").layers[0].palette.colors.clone();
+        let floating: Vec<Color> = [
+            (0, 0, 255),
+            (0, 255, 255),
+            (255, 0, 255),
+            (255, 255, 0),
+            (128, 128, 0),
+            (0, 0, 128),
+            (128, 0, 128),
+            (128, 0, 0),
+            (0, 128, 0),
+            (0, 128, 128),
+            (0, 0, 160),
+            (255, 128, 0),
+        ]
+        .map(|(r, g, b)| Color::rgb(r, g, b))
+        .to_vec();
+        for t in [Template::FloatingColumn, Template::FloatingBar] {
+            assert_eq!(colors(t)[..12], floating[..], "{t:?}");
+        }
+        for t in [Template::StackedBar, Template::Stacked100Bar] {
+            assert_eq!(colors(t), colors(Template::StackedColumn), "{t:?}");
+            assert_eq!(colors(t)[1], Color::rgb(255, 0, 0));
+            assert_eq!(colors(t)[2], Color::rgb(0, 0, 255), "black, red, blue, magenta, green, ...");
+        }
     }
 }

@@ -83,6 +83,41 @@ impl Graph {
         }
     }
 
+    /// Links layer `index` to `parent`, or unlinks it with `None` (Plot Details > Link Axes Scales).
+    /// The layer keeps its place on the page: its frame is converted between fractions of the page
+    /// and fractions of the parent's frame. A new link starts with both scales the layer's own, as
+    /// Origin's tab does (None and None); a change of parent keeps them. A parent that cannot be
+    /// followed (a later layer, or one linked itself) is refused, and so is a link for a layer that
+    /// other layers are linked to.
+    pub fn set_link(&mut self, index: usize, parent: Option<usize>) -> bool {
+        if index >= self.layers.len() {
+            return false;
+        }
+        if let Some(p) = parent
+            && (p >= index || self.layers[p].link.is_some() || self.has_children(index))
+        {
+            return false;
+        }
+        let on_page = match self.link_parent(index) {
+            Some(p) => self.layers[index].frame.within(self.layers[p].frame),
+            None => self.layers[index].frame,
+        };
+        let layer = &mut self.layers[index];
+        let (x, y) = layer.link.map_or((ScaleLink::None, ScaleLink::None), |k| (k.x, k.y));
+        layer.link = parent.map(|parent| LayerLink { parent, x, y });
+        let frame = match parent {
+            Some(p) => on_page.relative_to(self.layers[p].frame),
+            None => on_page,
+        };
+        self.layers[index].frame = frame;
+        true
+    }
+
+    /// Whether another layer is linked to layer `index`.
+    pub fn has_children(&self, index: usize) -> bool {
+        self.layers.iter().enumerate().any(|(i, l)| i != index && l.link.is_some_and(|k| k.parent == index))
+    }
+
     /// The layers of layer `index`'s group that are drawn in the same frame as it (the same
     /// [`Graph::place`]), in layer order: a layer and its right Y layer, but not the other panels
     /// of a stack. Empty when there is no such layer.
@@ -155,6 +190,32 @@ impl Frame {
     /// The whole rectangle it is measured in: the whole page, or the whole frame of the parent
     /// layer for a linked layer.
     pub const WHOLE: Frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
+
+    /// This frame, given as fractions of `outer`, as fractions of what `outer` is measured in.
+    pub fn within(self, outer: Frame) -> Frame {
+        Frame {
+            left: outer.left + self.left * outer.width,
+            top: outer.top + self.top * outer.height,
+            width: self.width * outer.width,
+            height: self.height * outer.height,
+        }
+    }
+
+    /// The inverse of [`Frame::within`]: this frame as fractions of `outer`. An empty `outer` side
+    /// leaves that side as it is.
+    pub fn relative_to(self, outer: Frame) -> Frame {
+        let (left, width) = if outer.width > 0.0 {
+            ((self.left - outer.left) / outer.width, self.width / outer.width)
+        } else {
+            (self.left, self.width)
+        };
+        let (top, height) = if outer.height > 0.0 {
+            ((self.top - outer.top) / outer.height, self.height / outer.height)
+        } else {
+            (self.top, self.height)
+        };
+        Frame { left, top, width, height }
+    }
 }
 
 /// One set of axes with the plots drawn in it.
@@ -199,6 +260,42 @@ pub struct Layer {
     /// angle and radius (graphing spec section 14.18).
     #[serde(default, skip_serializing_if = "Coords::is_cartesian")]
     pub coords: Coords,
+    /// The colour behind the plot area (the Background tab of Origin's layer Plot Details,
+    /// "Color", None by default); `None` leaves the page showing through.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<Color>,
+    /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
+    /// [`Layer::palette`]'s mode).
+    #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
+    pub group_style: GroupStyle,
+    /// The Display tab of Origin's layer Plot Details (graphing spec 18).
+    #[serde(default, skip_serializing_if = "LayerDisplay::is_default")]
+    pub display: LayerDisplay,
+}
+
+/// What a layer draws and how (Origin's Display tab; defaults measured: data shown, clipped to the
+/// frame, grid under the data).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayerDisplay {
+    /// Show Elements: Data.
+    pub show_data: bool,
+    /// Clip Data to Frame.
+    pub clip_data: bool,
+    /// Grid on Top of Data.
+    #[serde(default)]
+    pub grid_on_top: bool,
+}
+
+impl Default for LayerDisplay {
+    fn default() -> Self {
+        LayerDisplay { show_data: true, clip_data: true, grid_on_top: false }
+    }
+}
+
+impl LayerDisplay {
+    pub fn is_default(&self) -> bool {
+        *self == LayerDisplay::default()
+    }
 }
 
 /// The coordinate system of a layer.
@@ -270,6 +367,27 @@ pub enum RadiusColumn {
     X,
 }
 
+/// The unit of the angle of a polar layer (Origin's Units of the angular axis).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AngleUnit {
+    /// A full turn is 360; the axis has a tick every 30 and plain number labels.
+    #[default]
+    Degrees,
+    /// A full turn is 2 pi; the axis has a tick every quarter of pi and labels like 0.25 and the pi sign.
+    Radians,
+}
+
+impl AngleUnit {
+    /// The angle of a full turn in this unit.
+    pub fn circle(self) -> f64 {
+        match self {
+            AngleUnit::Degrees => 360.0,
+            AngleUnit::Radians => std::f64::consts::TAU,
+        }
+    }
+}
+
 /// Settings of a polar layer (graphing spec section 14.18).
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolarCoords {
@@ -287,11 +405,24 @@ pub struct PolarCoords {
     /// polygons.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub radar: bool,
+    /// The unit the angle column is in (Origin's Units on the angular axis; degrees by default).
+    #[serde(default, skip_serializing_if = "is_default_angle_unit")]
+    pub angle_unit: AngleUnit,
+}
+
+fn is_default_angle_unit(u: &AngleUnit) -> bool {
+    *u == AngleUnit::Degrees
 }
 
 impl Default for PolarCoords {
     fn default() -> Self {
-        PolarCoords { radius: RadiusColumn::Y, zero_deg: 0.0, clockwise: false, radar: false }
+        PolarCoords {
+            radius: RadiusColumn::Y,
+            zero_deg: 0.0,
+            clockwise: false,
+            radar: false,
+            angle_unit: AngleUnit::Degrees,
+        }
     }
 }
 
@@ -495,6 +626,63 @@ impl Layer {
             }
             p.symbol.color = c;
         }
+    }
+
+    /// Gives the plots their line styles, symbol shapes and interiors by the increments of
+    /// [`Layer::group_style`], starting from the first plot's, and their automatic colours.
+    pub fn apply_group_increments(&mut self) {
+        let Some(first) = self.plots.first() else { return };
+        let dash0 = Dash::ALL.iter().position(|d| *d == first.line.dash).unwrap_or(0);
+        let shape0 = SymbolShape::ALL.iter().position(|s| *s == first.symbol.shape).unwrap_or(0);
+        let filled0 = first.symbol.filled;
+        let g = self.group_style;
+        for (i, p) in self.plots.iter_mut().enumerate() {
+            if g.line_style == Increment::ByOne {
+                p.line.dash = Dash::ALL[(dash0 + i) % Dash::ALL.len()];
+            }
+            if g.symbol_type == Increment::ByOne {
+                p.symbol.shape = SymbolShape::ALL[(shape0 + i) % SymbolShape::ALL.len()];
+            }
+            if g.symbol_interior == Increment::ByOne {
+                p.symbol.filled = if i % 2 == 0 { filled0 } else { !filled0 };
+            }
+        }
+        self.recolor_automatic();
+    }
+
+    /// Origin's Dependent edit mode: the line, symbol and decorations of plot `leader` are given to
+    /// every plot of the layer, except the properties that are incremented (colours unless the
+    /// colour increment is None), then the increments are applied again from the first plot.
+    pub fn follow_leader(&mut self, leader: usize) {
+        let Some(src) = self.plots.get(leader).cloned() else { return };
+        let g = self.group_style;
+        let same_color = self.palette.mode == PaletteMode::Same;
+        for (i, q) in self.plots.iter_mut().enumerate() {
+            if i == leader {
+                continue;
+            }
+            q.line.width_pt = src.line.width_pt;
+            q.line.connect = src.line.connect;
+            if g.line_style == Increment::None {
+                q.line.dash = src.line.dash;
+            }
+            q.symbol.size_pt = src.symbol.size_pt;
+            if g.symbol_type == Increment::None {
+                q.symbol.shape = src.symbol.shape;
+            }
+            if g.symbol_interior == Increment::None {
+                q.symbol.filled = src.symbol.filled;
+            }
+            q.decor.drop = src.decor.drop.clone();
+            q.decor.labels = src.decor.labels.clone();
+            q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
+            if same_color {
+                q.line.color = src.line.color;
+                q.symbol.color = src.symbol.color;
+                q.auto_color = src.auto_color;
+            }
+        }
+        self.apply_group_increments();
     }
 
     /// Recolors all plots from the palette, in plot order, including colors chosen by hand
@@ -956,6 +1144,12 @@ impl PlotKind {
         )
     }
 
+    /// True for the floating column and floating bar kinds: every plot is a bar between two columns,
+    /// and all the plots of a layer stand in the same slot, on top of each other (measured, spec 14.12).
+    pub fn is_floating(&self) -> bool {
+        matches!(self, PlotKind::FloatingColumn | PlotKind::FloatingBar)
+    }
+
     /// True for the piled area kinds.
     pub fn is_stacked_area(&self) -> bool {
         matches!(self, PlotKind::StackedArea | PlotKind::Stacked100Area)
@@ -1045,6 +1239,123 @@ pub struct Plot {
     /// A colour mapped plot: the symbol of each point takes its colour from this column's value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_from: Option<ColumnId>,
+    /// Drop lines, the fill under the curve and data labels (the Drop Lines, Line and Label tabs
+    /// of Origin's Plot Details; graphing spec section 18).
+    #[serde(default, skip_serializing_if = "PlotDecor::is_default")]
+    pub decor: PlotDecor,
+}
+
+/// What a plot draws besides its line, symbols, bars and error bars.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct PlotDecor {
+    /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
+    #[serde(default, skip_serializing_if = "DropLines::is_default")]
+    pub drop: DropLines,
+    /// Origin's "Fill Area Under Curve" in its "Normal" mode: the area between the curve and the
+    /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_under: Option<Color>,
+    /// The text written next to each point.
+    #[serde(default, skip_serializing_if = "DataLabels::is_default")]
+    pub labels: DataLabels,
+}
+
+impl PlotDecor {
+    pub fn is_default(&self) -> bool {
+        *self == PlotDecor::default()
+    }
+}
+
+/// A drop line; drawn when `on`. Origin's defaults: off, solid, 0.5 pt, colour Auto (the plot's).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DropLine {
+    pub on: bool,
+    #[serde(default)]
+    pub dash: Dash,
+    pub width_pt: f64,
+    /// `None` is Origin's "Auto": the colour of the plot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+}
+
+impl Default for DropLine {
+    fn default() -> Self {
+        DropLine { on: false, dash: Dash::Solid, width_pt: 0.5, color: None }
+    }
+}
+
+/// The two drop lines of a plot.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct DropLines {
+    /// From the point across to the Y axis.
+    #[serde(default)]
+    pub horizontal: DropLine,
+    /// From the point down to the X axis.
+    #[serde(default)]
+    pub vertical: DropLine,
+}
+
+impl DropLines {
+    pub fn is_default(&self) -> bool {
+        *self == DropLines::default()
+    }
+}
+
+/// What a data label says (Origin's "Label Form"; Y by default).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelForm {
+    X,
+    #[default]
+    Y,
+    /// Origin's "Row Indices": the row number counting from 1.
+    Row,
+    /// "(X,Y)".
+    XY,
+}
+
+/// Where a data label stands against its point (Origin's "Position"; Right by default).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelPosition {
+    Center,
+    Left,
+    #[default]
+    Right,
+    Above,
+    Below,
+}
+
+/// The data labels of a plot (Origin's Label tab: off, Arial 22 black, form Y, position Right).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DataLabels {
+    pub enable: bool,
+    #[serde(default)]
+    pub form: LabelForm,
+    #[serde(default)]
+    pub position: LabelPosition,
+    pub font: Font,
+    /// Counter-clockwise rotation in degrees.
+    #[serde(default)]
+    pub rotate_deg: f64,
+}
+
+impl Default for DataLabels {
+    fn default() -> Self {
+        DataLabels {
+            enable: false,
+            form: LabelForm::Y,
+            position: LabelPosition::Right,
+            font: Font::new("Arial", 22.0),
+            rotate_deg: 0.0,
+        }
+    }
+}
+
+impl DataLabels {
+    pub fn is_default(&self) -> bool {
+        *self == DataLabels::default()
+    }
 }
 
 /// Which side of the point an error bar reaches.
@@ -1183,6 +1494,52 @@ pub enum PaletteMode {
     /// first color and the last plot the last color, whatever the number of
     /// plots. Good for a sequence of scans that should read as one family.
     Spread,
+    /// Every plot takes the first color (Origin's Line Color increment "None").
+    Same,
+}
+
+/// How a property of the plots of a group changes from one member to the next (the Increment
+/// column of Origin's Group tab).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Increment {
+    /// Every member keeps the same value.
+    #[default]
+    None,
+    /// Member k takes the k-th next entry of the list, from the first member's value.
+    ByOne,
+}
+
+/// The Group tab of a layer whose plots form one group (Origin's defaults for a group made by
+/// one plot command: Dependent, Line Color by one (the palette), the rest None; graphing spec 18).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupStyle {
+    /// Dependent: a change to one member's line, symbol or decorations is made to every member,
+    /// except for the incremented properties. Independent: each plot is edited alone.
+    pub dependent: bool,
+    #[serde(default)]
+    pub line_style: Increment,
+    #[serde(default)]
+    pub symbol_type: Increment,
+    #[serde(default)]
+    pub symbol_interior: Increment,
+}
+
+impl Default for GroupStyle {
+    fn default() -> Self {
+        GroupStyle {
+            dependent: true,
+            line_style: Increment::None,
+            symbol_type: Increment::None,
+            symbol_interior: Increment::None,
+        }
+    }
+}
+
+impl GroupStyle {
+    pub fn is_default(&self) -> bool {
+        *self == GroupStyle::default()
+    }
 }
 
 impl Palette {
@@ -1193,6 +1550,7 @@ impl Palette {
         }
         match self.mode {
             PaletteMode::Cycle => self.colors[index % self.colors.len()],
+            PaletteMode::Same => self.colors[0],
             PaletteMode::Spread => {
                 let k = self.colors.len();
                 if k == 1 || count <= 1 {
@@ -1454,6 +1812,7 @@ mod tests {
             hist: Default::default(),
             size_from: None,
             color_from: None,
+            decor: Default::default(),
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1469,6 +1828,54 @@ mod tests {
         layer.plots[0].line.color = Color::BLUE;
         layer.recolor_automatic();
         assert_eq!(layer.plots[0].line.color, Color::BLACK);
+    }
+
+    #[test]
+    fn group_increments_run_from_the_first_plot_and_dependent_edits_reach_every_plot() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE], mode: PaletteMode::Cycle };
+        let plot = Plot {
+            x: None,
+            y: ColumnId(1),
+            y_error: None,
+            rows: None,
+            kind: PlotKind::LineSymbol,
+            line: LineStyle::solid(Color::BLACK, 0.5),
+            symbol: layer.default_symbol.clone(),
+            label: None,
+            visible: true,
+            auto_color: true,
+            group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
+            decor: Default::default(),
+        };
+        layer.plots = vec![plot.clone(), plot.clone(), plot];
+        assert!(layer.group_style.dependent, "Origin's default edit mode");
+        layer.group_style.line_style = Increment::ByOne;
+        layer.group_style.symbol_type = Increment::ByOne;
+        layer.apply_group_increments();
+        let dashes: Vec<Dash> = layer.plots.iter().map(|q| q.line.dash).collect();
+        assert_eq!(dashes, Dash::ALL[..3]);
+        // The shapes run on from the first plot's (a circle here).
+        let shapes: Vec<SymbolShape> = layer.plots.iter().map(|q| q.symbol.shape).collect();
+        assert_eq!(shapes, SymbolShape::ALL[1..4]);
+        let colors: Vec<Color> = layer.plots.iter().map(|q| q.line.color).collect();
+        assert_eq!(colors, [Color::BLACK, Color::RED, Color::BLUE]);
+        // Dependent: plot 2's new width and drop line go to all; the increments stay.
+        layer.plots[1].line.width_pt = 3.0;
+        layer.plots[1].decor.drop.vertical.on = true;
+        layer.follow_leader(1);
+        assert!(layer.plots.iter().all(|q| q.line.width_pt == 3.0 && q.decor.drop.vertical.on));
+        assert_eq!(layer.plots.iter().map(|q| q.line.dash).collect::<Vec<_>>(), Dash::ALL[..3]);
+        // Colour increment None: every plot takes the first colour.
+        layer.palette.mode = PaletteMode::Same;
+        layer.apply_group_increments();
+        assert!(layer.plots.iter().all(|q| q.line.color == Color::BLACK));
     }
 
     #[test]
@@ -1488,6 +1895,35 @@ mod tests {
             })
             .collect();
         Graph { id: WindowId(1), name: "G".into(), long_name: String::new(), page: Page::inches(6.4, 4.8), layers }
+    }
+
+    #[test]
+    fn set_link_keeps_the_layer_in_place_and_starts_with_unlinked_scales() {
+        let mut g = graph_of(&[None, None, None]);
+        g.layers[0].frame = Frame { left: 0.2, top: 0.1, width: 0.5, height: 0.8 };
+        g.layers[1].frame = Frame { left: 0.3, top: 0.3, width: 0.25, height: 0.4 };
+        let on_page = g.layers[1].frame;
+        assert!(g.set_link(1, Some(0)));
+        assert_eq!(g.layers[1].link, Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None }));
+        let f = g.layers[1].frame;
+        assert!((f.left - 0.2).abs() < 1e-12 && (f.width - 0.5).abs() < 1e-12, "{f:?}");
+        assert!((f.top - 0.25).abs() < 1e-12 && (f.height - 0.5).abs() < 1e-12, "{f:?}");
+        g.layers[1].link.as_mut().unwrap().x = ScaleLink::Straight;
+        // Unlinking a layer that is not linked changes nothing; layer 1 cannot follow a later layer,
+        // and nothing can follow layer 1 while it is linked itself.
+        assert!(g.set_link(0, None) && g.layers[0].link.is_none());
+        assert!(!g.set_link(1, Some(2)));
+        assert!(!g.set_link(2, Some(1)), "layer 1 is linked itself");
+        assert!(!g.set_link(0, Some(0)));
+        // Unlinked again, it is where it was on the page.
+        assert!(g.set_link(1, None));
+        assert_eq!(g.layers[1].link, None);
+        let f = g.layers[1].frame;
+        for (a, b) in
+            [(f.left, on_page.left), (f.top, on_page.top), (f.width, on_page.width), (f.height, on_page.height)]
+        {
+            assert!((a - b).abs() < 1e-12, "{f:?}");
+        }
     }
 
     #[test]
@@ -1533,6 +1969,7 @@ mod tests {
             hist: Default::default(),
             size_from: None,
             color_from: None,
+            decor: Default::default(),
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);

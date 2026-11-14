@@ -24,7 +24,7 @@ mod lexer;
 mod parser;
 mod text;
 
-pub use ast::{CellReads, ColumnRef, Expr};
+pub use ast::{CellReads, ColumnLabel, ColumnRef, Expr};
 pub use error::ExprError;
 pub use eval::{Compiled, Host, SimpleHost};
 pub use text::Value;

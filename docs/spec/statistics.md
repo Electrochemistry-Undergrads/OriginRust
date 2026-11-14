@@ -12,7 +12,7 @@ the raw output of the runs (`stats2-*.out.txt`, `stats2-*.cases.json`).
 
 The numerics are in `crates/calc` (`hypothesis`, `anova`, `anova2`, `nonparam`, `correlation`, `freq`,
 `normality`), the operations in `crates/core/src/analysis.rs` and its `statistics` submodule, the command line
-is `sheaf analyze ttest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality`, and
+is `sheaf analyze ttest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality | crosstab | bin2d`, and
 the app has a Statistics menu with one window.
 
 ## 1 t-tests
@@ -171,7 +171,7 @@ the standard error `sqrt(MSE (1/n_i + 1/n_j))` with MSE and its degrees of freed
 marginal means are not adjusted for the other factor, which only matters in unbalanced designs). The statistic of
 the t methods keeps the sign of the difference, the Tukey q and the Scheffe F do not. Origin's library numbers
 the methods 1 Tukey, 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe, which differs from the order in its header comment.
-Holm methods and Dunnett are not built. For constant data Origin's 0/0 turns into p = 0 and "significant" for
+Holm methods (section 11) and Dunnett (section 15) are in the one-way ANOVA only. For constant data Origin's 0/0 turns into p = 0 and "significant" for
 equal means; Sheaf says p = 1.
 
 **Sheet.** `ANOVA2Way1`: one table of N, mean, SD and SEM for each level of A, each level of B, each cell (with the
@@ -341,32 +341,276 @@ Paired Sample Sign Test and Statistics > Descriptive Statistics > Statistics on 
 (labels from the X-Function descriptions). Not done: the indexed input forms, the outlier box plot (`box`),
 Origin's report layout, outlier tests that remove several points in turn.
 
-## 12 Distribution fit, probability plot and Q-Q plot, power and sample size
+## 11 Holm comparisons of the one-way ANOVA
 
-(Section number chosen on the `stats-dist` branch; the `stats-compare` branch adds section 11, so this one comes
-after it and may be renumbered at merge.)
+Origin's statistics library (the function the one-way ANOVA tool calls for its means comparisons) numbers the
+methods 1 Tukey, 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe, 6 Dunnett, 7 Bonferroni-Holm, 8 Sidak-Holm.
+Run from `tools/origin-ref/stats4/` (helper `stats4-ref.c`, generator `g1.py`, raw output `holm1.out.txt`, fixture
+`crates/calc/tests/fixtures/stats4_origin.rs` by `make-fixture1.py`, test `crates/calc/tests/origin_stats4_tests.rs`):
+28 inputs of ours (2 to 8 groups, unequal sizes, a group of one number, tied means, missing values, three
+significance levels, and four found by a search for the case below), each with both Holm methods: 54 comparison
+tables, 386 pairs.
+
+- Every pair gets the plain pairwise t statistic `(mean_j - mean_i) / sqrt(MSE (1/n_i + 1/n_j))` (**with its sign**,
+  unlike the other methods in the one-way table, which show the size) and its unadjusted two-sided p-value on
+  the error degrees of freedom.
+- The table is **sorted by that p-value**, smallest first (the pair index column shows where each came from; pairs
+  are numbered (1,2), (1,3), (2,3), (1,4), ... from 0). Exactly equal p-values (symmetric data) come in an order we
+  could not predict from the data; Sheaf keeps the pair order.
+- The pair of rank `r` (from 0, `m` pairs in all) is judged at `alpha / (m - r)` (Bonferroni-Holm) or
+  `1 - (1 - alpha)^(1 / (m - r))` (Sidak-Holm); these levels are returned in an extra column. The verdict is the
+  step-down rule: significant only if this pair and every pair before it in the list have `p < level`. (The four
+  searched inputs have a second p-value below its level after a first that is not; Origin says "not significant"
+  for both.)
+- No confidence limits (Sheaf shows the level column in their place); the degrees-of-freedom column is empty (0).
+- Constant data (error mean square 0): the statistic and p-value are blank and every pair is "significant"; Sheaf
+  says p = 1 and not significant, as for the other methods.
+- Agreement: mean differences and standard errors to 1e-12 relative; the statistic to 1e-12; p-values to 9.1e-6
+  relative (Origin's t tail); levels to 1e-9; all 386 verdicts equal.
+- The two-way ANOVA library call with the Holm numbers returns the sorted unadjusted statistics and p-values but
+  no levels and no verdicts (the field is always 0), so Sheaf offers Holm in the one-way ANOVA only (menu, `sheaf
+  analyze anova --comparison holm-bonferroni | holm-sidak`) and refuses it in the two-way ANOVA.
+- **Dunnett** (method 6): the same call returns the differences and standard errors but no statistic, p-value or
+  limits for any input, in the one-way and the two-way library functions, and the library has no way to name the
+  control group. The installed Origin gave nothing to copy; Sheaf's Dunnett is the textbook test checked against scipy (section 15).
+
+## 12 Power and sample size
+
+Origin's Statistics > Power and Sample Size tools (`PSS_tTest1`, `PSS_tTest2`, `PSS_tTestPair`, `PSS_ANOVA1`; also
+proportion and variance tests, not built). The X-Functions themselves refused every call from a script (all
+returned an error for any argument form we tried), so their report layout was not read; the numbers come from the
+statistics library functions they call (public functions `ocmath_tTest_powers1`, `ocmath_tTest_samplesize`,
+`ocmath_two_sample_tTest_powers1` and `_samplesize`, the `_pair` versions, `ocmath_anova_powers1` and
+`ocmath_anova_samplesize`), run from `tools/origin-ref/stats4/` (helper `stats4-pss.c`, generator `g2.py`, raw output
+`pss4.out.txt`, fixture `crates/calc/tests/fixtures/stats4_power_origin.rs` by `make-fixture2.py`, test
+`crates/calc/tests/origin_stats4_power.rs`). 91 runs of ours: 383 powers and 227 sample sizes compared, all four tests,
+both tails, significance levels from 1e-8 to 0.5, effects from 0.007 to 4 standard deviations.
+
+- **Power** is the textbook value: one-sample and paired `df = n - 1`, noncentrality `delta / sd sqrt(n)`; two samples
+  of `n` each `df = 2n - 2`, noncentrality `delta / sd sqrt(n / 2)`; the rejection region is `|t| > t(1 - alpha/2)`
+  (two-sided) or `t > t(1 - alpha)` (one-sided), power `P(T' in the region)` with `T'` noncentral t. The direction
+  of the difference does not matter (also one-sided: the power of the upper test for `|delta|`). ANOVA with `k` groups
+  of `n`: `F' ` noncentral F with `k - 1`, `k (n - 1)` degrees of freedom and noncentrality `n css / sd^2`, where `css`
+  is the sum of squared deviations of the group means from their mean and `sd` the root of the error mean square.
+  Sheaf computes the noncentral t with Lenth's algorithm AS 243 and the noncentral F as a Poisson mixture of incomplete
+  beta functions.
+- Origin's own powers are not exact: they differ from the exact value by up to 2.5e-5 (one sample, n = 5: 0.2113505, the
+  exact value is 0.2113345; equal means give 0.0500001). The test accepts 3e-5.
+- Equal means give a power just above alpha, not an error. The ANOVA with one observation per group has power 1.
+- **Sample size**: the smallest whole number of observations (per group) whose power reaches the wanted power, from
+  2 up. All 227 sizes agree; at 353 200 (effect 0.007 sd) Origin is 16 above the exact smallest size (353 184), so
+  sizes above 10 000 are compared to 1e-4. The result list also gives the **lowest power**, the power of 2
+  observations (not for the ANOVA, where Origin gives -1).
+- Errors (return codes): `-151` invalid input: a standard deviation not above 0, a significance level outside (0, 1),
+  a t-test sample size that is not a whole number (12.5) or any size in a list that is, fewer than 2 groups, a number of
+  groups that is not whole, `css` = 0; a sample size below 2 for a t test is not an error but leaves its cell
+  empty (return 0); `-187` the means are equal (no sample size exists); `-204` a wanted power of 0 or 1 or outside; `-186` a wanted power
+  that 2 observations already reach: the table is still filled for the other powers, the cell of that one holds 2 for the
+  two-sample test and is empty for the one-sample, paired and ANOVA tests. Sheaf reports the same cases in words
+  (`PowerError`, notes).
+- One unexplained case is not copied: a two-sample test with a difference of 45 standard deviations returned lowest power 1
+  and sample size 3 with return code 0 (all wanted powers), while 15 standard deviations gives -186 and size 2 as above;
+  Origin's noncentral t seems to fail there. Sheaf gives -186-style size 2.
+- Sheaf: `sheaf_calc::{t_power, t_powers, t_sample_sizes, anova_power, anova_powers, anova_sample_sizes, pnt, pnf}`;
+  `Project::power_analysis` (new workbook `Book<n>` with the columns Sample Size and Power) and
+  `analysis::power_analysis`; `sheaf analyze power --test one-sample|two-sample|paired|anova --sizes ... | --powers ...`
+  (no data file); Statistics > Power and Sample Size > the four tests (a small window; the report layout of Origin's tool
+  is not copied).
+
+## 13 2D frequency counts and binning
+
+Origin's Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (`twoDBinning`), measured on 2026-11-14 with
+76 runs of the X-Function on points we generated (`tools/origin-ref/stats4/g3.py`, `g4.py`, `g5.py`, parsed by
+`parse3.py`; `make-fixture3.py` writes `crates/calc/tests/fixtures/bin2d_origin.rs` and keeps Origin's answers in
+`bin2d-origin.compact.json`; test `crates/calc/tests/origin_bin2d.rs`). The worksheet output was read cell by cell; the
+matrix output was not used.
+
+- **Layout of the result sheet**: column 1 holds one row per X bin, long name `Bin Ends of A` (the X column's short
+  name) or `Bin Ends of "Potential"` when it has a long name (in double quotes), `Bin Centers of ...` with centres, no
+  units. Then one column per Y bin, long name the quantity (`Count`, `Percent Frequency`, `Sum`, `Mean`, `Minimum`,
+  `Maximum`, `Median`), its Comments the Y range of the bin, `0 - 5`, `< 0` and `>= 10` for the outlier bins, numbers
+  with up to five decimals (`3.33333 - 6.66667`, `20 - 36.66667`); the unit `%` for Percent Frequency only.
+- **Bins**: `[lo, hi)`, a point on the last edge of an axis is in no bin (also on the X axis). Empty bins are 0 for
+  Count and Percent Frequency and missing (`--`) for the other quantities. Percent Frequency is of the points that
+  fell into a bin (5 of 15 binned points gives 33.333), not of all points.
+- **The quantities are of Y**: Sum, Mean, Minimum, Maximum and Median are taken over the Y values of the points in the
+  bin. A third column in the input range (`(1,2,3)`), also one designated Z, is ignored, and `iz` is not an
+  argument. A point with a missing X or Y is left out; a missing third value changes nothing.
+- **Given range and size**: `n = round((max - min) / size)` bins from `min` (10 / 3 gives 3, 10 / 4 gives 3 ending
+  at 12). With a number of bins (Step by Number of Bins, `stepby:=1`) the size is the range divided by it. A number
+  of intervals without `stepby:=1` is ignored (the size stays automatic).
+- **Bin centres** (`bin:=0`): given limits are the centres of the first and the last bin (0 to 10 by 2 gives the six
+  bins -1 to 11 labelled 0 to 10; 4 bins from 0 to 10 are 3.333 wide). A limit found from the data is found as for
+  the ends and then taken as a centre (min 0, size 4, data to 16.84: centres 0 to 20). With both limits automatic the
+  bins are those of the ends, only labelled by their centres.
+- **Outlier bins** (`border.outleft`, `outright`): a bin `< min` labelled `min` (bin ends) and a bin `>= max`
+  labelled `max + size`.
+- **Automatic range, automatic size**: the size is the 1D one (section 3, `auto_bin_size` with the given limits where
+  there are) and the range the 1D automatic range (`auto_bin_range`). With a **given size**, the first edge is the
+  smallest value rounded down to a multiple of the size, one size lower when the value lies within a tenth of a size
+  above it (0 gives -2 for size 2; 21 stays 20 for sizes 10 and 5), and the bins then run to the largest value plus
+  half a bin (data to 69.3 with size 5 end at 75; from -3 with size 3 to 10 at 12; from a given 1 with size 2 to 10
+  at 13). That end differs from the 1D rule.
+- **Number of bins with an automatic range**: Origin picks a round range we could not pin down. Ours: the size is
+  the data range divided by the number of bins rounded up to one significant digit, the bins are centred on the data
+  and the first edge is rounded down to the unit of that digit. This gives 6 of the 8 measured axes (-2.84..16.84 in
+  4 or 5 bins: -3 to 17; 0..10 in 3 or 4: -1 to 11; 5.5..28.5 in 3: 5 to 29; 21..69.3 in 3: 10 to 70) and misses
+  21..69.3 in 6 (Origin 20 to 74, ours 18 to 72) and -3.1..41.67 in 4 (Origin -20 to 60, ours -30 to 50). With one
+  limit given, the other is the data's extreme rounded outwards to the automatic size: 3 of 4 (for data from -2.84
+  with the end at 20 in 4 bins Origin starts at -3, ours at -5).
+- Not built: Periodical (`periodical`, `period`), Output Binning Order Descending, Separately Count Minimum/Maximum,
+  Subtotal Count for Each Binned Y, the matrix output, Recalculate.
+- Origin's dialog (listed with `origin-dialog.ps1`): Recalculate, Input; for each of A(X) and B(Y): Specify Binning
+  Range by (Bin Centers, Bin Ends: the default), Minimum Bin Beginning and Maximum Bin End with Auto, Step by (Bin Size,
+  Number of Bins), Bin Size with Auto, Number of Bins, Periodical, Border Options (Include Outliers < Minimum, Include
+  Outliers >= Maximum, Separately Count Minimum, Separately Count Maximum), Output Binning Order (Ascending,
+  Descending); then Quantity to Compute (Minimum, Maximum, Mean, Median, Sum, Count: the default, Percent Frequency),
+  Output Worksheet (ticked), Subtotal Count for Each Binned Y, Output Matrix (not ticked).
+- Sheaf: `sheaf_calc::{bin2d, axis_layout, Bin2dOptions, AxisBins, Bin2dStat}`; `Tool::Binning2D` (one Y column
+  against its X column, or two chosen columns as X and Y; a third is ignored with a note) writing sheet `Binning2D<n>`
+  in the layout above; Statistics > Descriptive Statistics > 2D Frequency Counts/Binning... (the groups above, without
+  the parts not built); `sheaf analyze bin2d FILE --y COL` (or `--y X,Y`) with `--stat
+  count|freq|sum|mean|min|max|median`, `--x-inc`, `--x-bins`, `--x-min`, `--x-max`, `--x-centers`, `--x-below`,
+  `--x-above` and the same for Y.
+
+## 14 Discrete frequency
+
+Origin's Statistics > Descriptive Statistics > Discrete Frequency (`discfreqs`), measured on 2026-11-14 with 17 runs
+on columns we wrote (`tools/origin-ref/stats5/g1.py`, parsed by `parse1.py`; `make-fixture1.py` writes
+`crates/calc/tests/fixtures/discfreq_origin.rs` and keeps Origin's sheets in `discfreq-origin.compact.json`; test
+`crates/calc/tests/origin_discfreq.rs`). The argument names come from Origin's documentation of the X-Function.
+
+- **Result sheet** `DiscretFreq1` in the input's workbook: per input column a block `Data` (designated X; a text
+  column for text input, numbers for numbers), `Count`, `Relative Frequency`, `Cumulative Frequency` (designated Y,
+  only the ticked ones), each with the input column's short name as its Comments; the unit `%` on the relative and
+  cumulative columns with Frequency in Percent, none with Fraction (the default). Origin's dialog: Recalculate, Input
+  Data Form (Raw, Indexed), Input, Quantities to Compute (Count ticked, Relative Frequency, Cumulative Frequency,
+  Frequency in Fraction or Percent), Case Sensitive (not ticked), Sort Data by (Ascending Counts, Descending Counts:
+  the default, Ascending Values, Descending Values, Categorical Order), Output Results.
+- **What counts**: every cell from the first row to the last filled one. An empty text cell and a missing number
+  inside the data are categories of their own (`""` and `--`), so 14 cells with one empty give relative
+  frequencies of n / 14. The cumulative frequency is the running sum of the relative ones in the sorted order.
+- **Texts** are compared without regard to case unless Case Sensitive is ticked, and a category is shown with the
+  spelling of its first cell (`b, B` gives `b` with 2). In value order texts sort without regard to case (`c` before
+  `Cc` before `d`); among numbers the missing value comes first in ascending and last in descending order.
+- **Order among equal counts**: Origin's follows no rule we found (with descending counts `b` came before `a` but `''`
+  before `Cc` before `d`; with ascending counts the numbers 10 before 7, as texts). Sheaf puts them in ascending value
+  order; the counts, the frequencies of each category and the cumulative frequency at the end of each run of equal
+  counts agree.
+- Categorical Order gave the order of Descending Counts on the (not categorical) columns measured and is not offered.
+  The Indexed form (a group column and a data column: one block per group) and Show Zero Count Categories (an option
+  of later Origin versions) are not built.
+- Sheaf: `sheaf_calc::{discrete_frequency, Category, DiscSort}`; `Tool::DiscreteFrequency` (`DiscreteFreqSpec`);
+  Statistics > Descriptive Statistics > Discrete Frequency...; `sheaf analyze discfreq FILE --y COLS [--relative]
+  [--cumulative] [--percent] [--no-count] [--case-sensitive] [--sort cdesc|casc|vasc|vdesc]`.
+
+## 15 Dunnett comparisons and cross tabulation (scipy-checked, not Origin)
+
+Sources: textbook definitions and scipy 1.18.1 (`stats.dunnett`, `chi2_contingency`, `fisher_exact`). Nothing in
+this section was measured against Origin. The fixtures are named `scipy_stats_compare` and say scipy everywhere; the
+generator is `tools/scipy_stats_compare.py`, which prints `crates/calc/tests/fixtures/scipy_stats_compare.rs`; the
+tests are `crates/calc/tests/scipy_stats_compare.rs`. Every Origin detail below that is a guess is listed under "Not
+measured". (Holm comparisons, 2D frequency counts and discrete frequency are measured against Origin: sections 11,
+13 and 14.)
+
+### 15.1 Dunnett in One-Way ANOVA
+
+Dunnett is an option of "Means comparison" next to Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe and the two Holm
+methods of section 11 (menu: Statistics > ANOVA > One-Way ANOVA; `sheaf analyze anova --comparison dunnett
+[--control N]`). It is refused in the two-way ANOVA because it needs one control group. Origin's library has a
+method number for Dunnett (6) but the call gave only differences and standard errors, no statistic, p-value or interval (section 11), so what follows is the textbook
+definition checked against scipy.
+
+- **Dunnett** (`MeansComparison::Dunnett`, `calc::dunnett`, `compare_to_control`): each group other than the control is compared with the
+  control group (the first chosen column, or the one named by `--control` / "Control group"). Rows are listed in the
+  order of the groups, labelled "group - control"; `diff = mean(group) - mean(control)`, `SE = sqrt(MSE (1/n_g +
+  1/n_c))`, `t = diff / SE` (shown as `|t|`). The p-value is two-sided and adjusted for the whole family:
+  `P(max_j |T_j| >= |t|)` for the multivariate t with `df` error degrees of freedom whose correlations are
+  `corr(T_i, T_j) = l_i l_j`, `l_j = sqrt(n_j / (n_j + n_c))` (this holds for unequal group sizes too). The simultaneous
+  confidence limits are `diff -/+ d SE` where `d` solves `P(max_j |T_j| <= d) = 1 - alpha` (one `d` for all rows).
+  The family is the groups other than the control, so with one treatment Dunnett equals the two-sided t-test.
+- **The multivariate t integral** is evaluated by a double Gauss-Legendre integral, not by Monte Carlo. The
+  one-factor structure turns the `m`-dimensional integral into
+  `Int f_S(s) Int phi(x) Prod_j [Phi((c s - l_j x)/r_j) - Phi((-c s - l_j x)/r_j)] dx ds` with `r_j = sqrt(1 - l_j^2)`
+  and `f_S` the density of `sqrt(chi-square(df)/df)` (Dunnett 1955; Genz and Bretz 2009 for the same reduction). Above
+  5000 degrees of freedom `s = 1`. The error of the panels used is below 1e-12.
+- **Tolerances** (`scipy_stats_compare.rs`): scipy integrates the same distribution by quasi Monte Carlo, with an
+  error of about 1e-4 in the p-value (fixed by a seed, but not reproducible to more digits, and poor in relative
+  terms below 1e-5); our p-values are compared with scipy's to 5e-4 absolute and their confidence limits to 0.02. To pin
+  the integration to 1e-9 the generator also evaluates the same double integral with its own, much finer
+  vectorised rule (different nodes, 64-point panels) and the tests compare p-values and the critical value `d` with
+  that to 1e-9 absolute. That second reference checks our implementation of the formula; the formula itself is
+  validated by the agreement with scipy's independent Monte Carlo. Dunnett statistics agree with scipy to 1e-9.
+
+### 15.2 Cross tabulation
+
+Statistics > Descriptive Statistics > Cross Tabulation; `sheaf analyze crosstab --y ROW_COLUMN,COLUMN_COLUMN`. Two
+columns of any type (text or numbers); each distinct value is a level. Rows where one of the two cells is empty are
+left out (and counted in a note). Levels are listed sorted: numbers from small to large when all are numbers,
+otherwise text by character order ignoring case (A before a).
+
+The result sheet has three blocks next to each other: the table of counts with a "Total" row and column; one row per
+cell with Count, Expected (`row total * column total / N`), Row %, Column % and Total % (each can be switched off);
+and Statistic/Value pairs of the tests:
+
+| Test | Statistic | df | p |
+|---|---|---|---|
+| Pearson chi-square | `sum (O - E)^2 / E` | `(r - 1)(c - 1)` | upper tail of chi-square |
+| Likelihood ratio | `2 sum O ln(O / E)` (empty cells add 0) | same | same |
+| Yates (2 x 2 only) | Pearson with each count moved 0.5 (at most to E) towards E | 1 | same |
+| Fisher exact (2 x 2 only) | odds ratio `a d / (b c)` (infinite where `b c = 0`) | | two-sided, left (`P(X <= a)`), right (`P(X >= a)`) |
+
+Fisher's two-sided p-value adds the probabilities of all tables with the same margins that are no more likely than
+the observed one (relative tolerance 1e-9 on ties). A note warns when cells have an expected count below 5. A table
+with fewer than two levels in a variable is refused, and so is a variable with more than 200 distinct levels (a column
+of numbers or identifiers is not a category). Rows hidden by the sheet filter and masked cells are left out, as in the
+other tools; the cross tabulation has no X column, so the "X from ... to" row range is refused (the window does not
+offer it). Agreement with scipy `chi2_contingency` (`correction=False`,
+`lambda_="log-likelihood"`) and `fisher_exact`: 1e-9 relative on 9 tables, including zero cells.
+
+### 15.3 Not measured against Origin
+
+To check on the Windows machine with `tools/origin-ref` before these are called Origin behaviour:
+
+- Dunnett: whether Origin's one-way ANOVA tool offers it at all (the library call gave no statistic, p-value or interval),
+  the order and labelling of its rows, how it chooses the control group, its p-values and limits (Origin may use a
+  different integration accuracy, as it does for the t quantile), and the statistic column it shows.
+- The layout of Origin's cross tabulation report (we write three blocks in one sheet), the order of the levels,
+  the percentage definitions, whether it shows the expected counts, Yates' correction, Fisher's two-sided rule, the
+  odds ratio (sample ratio here), and which rows it leaves out for missing cells.
+- Whether Origin's cross tabulation leaves out filtered rows and masked cells as we do, and whether it limits the
+  number of levels of a variable (we refuse more than 200).
+- Origin's X-Function name for the cross tabulation window (the title shows the tool name alone).
+
+## 16 Distribution fit, probability plot and Q-Q plot (scipy-checked, not Origin)
 
 **Source of the numbers: scipy, not Origin.** Nothing in this section was measured against Origin (this was
 built on a machine without it). The reference numbers are from scipy 1.18 (`scipy.stats.<dist>.fit`, `probplot`,
-`kstest`, `nct`, `ncf`, `t`, `f`), written by `tools/stats-dist-ref.py` into
+`kstest`), written by `tools/stats-dist-ref.py` into
 `crates/calc/tests/fixtures/scipy_stats_dist.rs` and checked by `crates/calc/tests/scipy_stats_dist.rs`. Every
 rule below is the textbook one; where Origin may differ the item is listed under "Not measured".
 
-The numerics are in `crates/calc` (`distfit`, `noncentral`, `power`), the tools in
-`crates/core/src/analysis/dist.rs`, the command line is `sheaf analyze distfit | probplot | qqplot | power`, and
-the app has Statistics > Descriptive Statistics > Distribution Fit, Probability Plot, Q-Q Plot and the
-Statistics > Power and Sample Size submenu (one window per test; options in `dialogs/dist_options.rs`).
+The numerics are in `crates/calc` (`distfit`), the tools in `crates/core/src/analysis/dist.rs`, the command line is
+`sheaf analyze distfit | probplot | qqplot`, and the app has Statistics > Descriptive Statistics > Distribution
+Fit, Probability Plot and Q-Q Plot (options in `dialogs/dist_options.rs`). Power and sample size is section 12
+(measured against Origin's library); this branch's own scipy-only power code was dropped in its favour.
 
-### 12.1 Distribution fit
+### 16.1 Distribution fit
 
 Five families, each fitted to each chosen column by maximum likelihood (missing values are ignored; at least two
 numbers with some spread). Lognormal, exponential, gamma and Weibull have their threshold fixed at 0, as
 `scipy.stats.<dist>.fit(x, floc=0)` does, so they need positive numbers (the exponential accepts 0). A family that
 cannot take a column is left out for that column with a note; if none can, the run is refused.
 
+Data without spread are refused, not fitted: numbers that are all equal, or so close together that the estimate
+would not be a finite number (for the gamma, a shape above 1e10, a coefficient of variation below about 1e-5, is
+taken as no spread), give "no spread"; an estimate that is not finite or not above zero where it must be (numbers
+of the order of 1e300 or 1e-300) gives "cannot be fitted". The fit never panics and always terminates, and
+`cdf` of the fitted distribution returns NaN for parameters outside its domain.
+
 | Family | Parameters | Estimate |
 |---|---|---|
-| Normal | mean, SD | sample mean; SD with divisor n |
+| Normal | mean, SD | sample mean; SD with divisor n (computed scaled by the largest deviation, so that squares neither underflow nor overflow) |
 | Lognormal | mu, sigma of the logarithm | mean and SD (divisor n) of ln x |
 | Exponential | scale (the mean) | sample mean |
 | Gamma | shape k, scale | k solves `ln k - digamma(k) = ln(mean) - mean(ln x)` (Newton), scale = mean / k |
@@ -378,12 +622,17 @@ approximate p for normal and lognormal). The notes name the family with the lowe
 known in advance (as `scipy.stats.kstest`), so it is too large when the parameters were estimated from the same
 data; this is said in the note. A2 is `-n - (1/n) sum (2i-1) (ln F(x_i) + ln(1 - F(x_(n+1-i))))` against the fitted
 distribution. The A2 p-value uses the D'Agostino-Stephens formula for estimated mean and SD, applied to the
-normal and to the lognormal (on the logarithm); no p is given for the other families.
+normal and to the lognormal (on the logarithm). That formula is for A2 computed with the sample SD (divisor n - 1),
+as the Normality Test does, while the reported A2 uses the maximum likelihood SD (divisor n); the p-value is
+therefore taken from A2 recomputed with the n - 1 SD, so it equals the p-value the Normality Test gives for the
+same column (tested). No p is given for the other families. The KS p-value is exact (the matrix method) up to
+n = 1000 and, above that, the asymptotic series with Stephens' correction (off by under 0.0034 at n = 1000 and
+shrinking); for a p-value below 1e-7 the series is used from n = 140 on (accurate to 1e-9 there).
 
 Result sheet `DistFit1`: columns Data, Distribution, N, Parameter 1 (name), Value 1, Parameter 2 (name),
 Value 2 (empty for the exponential), Log-likelihood, AIC, BIC, KS D, KS Prob, Anderson-Darling A2 and Prob.
 
-### 12.2 Probability plot and Q-Q plot
+### 16.2 Probability plot and Q-Q plot
 
 Both use the plotting positions of `scipy.stats.probplot` (Filliben's medians of the uniform order statistics:
 `(i - 0.3175) / (n + 0.365)`, with `1 - 0.5^(1/n)` and `0.5^(1/n)` at the ends).
@@ -402,58 +651,32 @@ Both make a new graph (a scatter plot and a line plot per column, the line in th
 "Make a graph" is off, plus the result sheet with the plotted columns and a table (N, parameters or slope,
 intercept, r). One undo step removes sheet and graph.
 
-### 12.3 Power and sample size
-
-Equal variances, balanced designs, textbook formulas. With `d` = difference over standard deviation (the SD of the
-differences for pairs):
-
-| Test | df | Non-centrality |
-|---|---|---|
-| One sample, paired (n pairs) | n - 1 | `d sqrt(n)` |
-| Two sample, n1 and n2 = ceil(ratio n1) | n1 + n2 - 2 | `d / sqrt(1/n1 + 1/n2)` |
-| One-way ANOVA, k groups, n each, N = kn | k - 1, N - k | `f^2 N` |
-
-The t statistic then has a noncentral t distribution: two-tailed power = `P(T > c) + P(T < -c)` with `c` the
-`1 - alpha/2` quantile of the central t; one-tailed `P(T > c)` with the `1 - alpha` quantile (the effect is taken
-on the side of the alternative, so upper and lower give the same number). The ANOVA power is `P(F' > F_crit)` with
-a noncentral F. Cohen's `f` is the SD of the group means about their mean (divisor k) over the common SD; the window
-takes `f` or the means and the SD. The sample size is the smallest integer whose power reaches the wanted power
-(doubling and bisection; refused above 10 million). The one-sample test's sample size counts observations, the paired
-test's pairs, the two-sample test's the first sample (the second follows from the ratio), ANOVA's per group.
-Needs no data: any column of the active sheet only names the workbook that receives the sheet `Power1`.
-
-Noncentral t: Lenth's AS 243 series in the incomplete beta function; above |ncp| 37.62 a normal approximation (the
-answer is 1 to 1e-10 there). Noncentral F: the Poisson mixture of incomplete beta functions summed outward from
-the largest weight.
-
-### 12.4 Checked against scipy, tolerances
+### 16.3 Checked against scipy, tolerances
 
 Normal, lognormal and exponential estimates, log-likelihood, AIC, BIC, KS D, A2, probability plot quantiles, slope,
 intercept and r: 1e-9 relative. Gamma shape: 1e-9 against `scipy.stats.gamma.fit`. Weibull: scipy's general
 optimizer stops 1e-5 to 2.5e-5 short of the maximum, so against its fit the parameters agree to 1e-4; against the
 same equation solved with `scipy.optimize.brentq` to machine precision they agree to 1e-9, and the quantities
 computed from the parameters are compared with scipy's for those parameters. KS p: 1e-7 (Marsaglia-Tsang-Wang
-against scipy's exact algorithm). `nct` and `ncf` cdf and sf, power and sample size: 1e-9 absolute plus relative.
+against scipy's exact algorithm).
 
-### 12.5 Not measured (Origin), to check on the Windows machine with `tools/origin-ref`
+### 16.4 Not measured (Origin), to check on the Windows machine with `tools/origin-ref`
 
 - Whether Origin's Distribution Fit uses the same parameterizations and a free threshold (three-parameter
   lognormal, gamma, Weibull), its list of families (it has many more), and whether it reports AIC, BIC, KS and
   Anderson-Darling the same way (divisor of the normal SD, p-values with estimated parameters).
 - Origin's plotting positions for its probability plot, its axis scales and tick percentages, whether its Q-Q plot
   plots data or quantiles on X, and its reference line (through the quartiles or a fit).
-- Origin's power: its PSS functions (`PSS_tTest1`, `PSS_tTest2`, `PSS_tTestPair`, `PSS_ANOVA1`) input names,
-  effect-size conventions, one-tailed handling, how it rounds the sample size, and result layout.
-- The window titles, option labels and defaults of all seven new windows, the sheet and graph names (`DistFit1`,
-  `ProbPlot1`, `QQPlot1`, `Power1`), and the menu order of the new entries.
-- Not built: fitting a threshold, censored data, other families, tests of proportions and variances (`PSS_proportionTest*`,
-  `PSS_varTest*`), power curves, unequal variances, a probability plot of several families on one graph.
+- The window titles, option labels and defaults of the three windows, the sheet and graph names (`DistFit1`,
+  `ProbPlot1`, `QQPlot1`), and the menu order of the new entries.
+- Not built: fitting a threshold, censored data, other families, a probability plot of several families on one
+  graph.
 
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
 "One-way ANOVA", "Histogram", "Normality test", "Two-way ANOVA", "Mann-Whitney test", "One-sample Wilcoxon signed
-rank test", "Paired Wilcoxon signed rank test", "Kruskal-Wallis test", "Correlation coefficients"; section 12 adds "Distribution fit", "Probability plot", "Q-Q plot" and "Power and sample size of the ... test"). Results go to a new
+rank test", "Paired Wilcoxon signed rank test", "Kruskal-Wallis test", "Correlation coefficients"; section 16 adds "Distribution fit", "Probability plot" and "Q-Q plot"). Results go to a new
 sheet of the workbook of the input (`TTest1`, `ANOVA1`, `Histogram1`, `Normality1`, `ANOVA2Way1`, `MannWhitney1`,
 `SignedRank1`, `KruskalWallis1`, `Correlation1`); the histogram graph is a new graph window. The input
 columns must be in one sheet and are the Y columns chosen (for the two-sample and paired test exactly
@@ -487,7 +710,8 @@ Not verified or not done:
 - Origin's own sheet layout and graph (report sheets with several tables, histogram without gaps,
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
-- Three-way and repeated measures ANOVA, Holm and Dunnett comparisons and means plots of the
+- Power and sample size: only the t tests and the one-way ANOVA (section 12); no tests of proportions or variances, no power curve.
+- Three-way and repeated measures ANOVA and means plots of the
   ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).
@@ -499,3 +723,4 @@ Not verified or not done:
 - Several of the new Origin numbers were produced with a normal tail that returned 0 at 8.5 standard
   deviations; those are compared with an absolute tolerance.
 - The app window was checked with automated click tests, not looked at by the owner.
+- Section 15 (Dunnett, cross tabulation) is checked against scipy, not Origin.

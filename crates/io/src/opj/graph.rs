@@ -860,6 +860,7 @@ fn read_curve(
         hist: Default::default(),
         size_from: None,
         color_from: None,
+        decor: Default::default(),
     };
     // A plot group colours its members from a colour list by their place in the group. The list
     // is not always Origin's base palette (the owner's XRD figure draws black, red, blue, dark

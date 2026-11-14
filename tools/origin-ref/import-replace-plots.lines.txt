@@ -1,0 +1,43 @@
+newbook;
+wks.ncols=2;
+col(A)=data(1,5,1);
+col(B)=col(A)*2;
+plotxy iy:=[Book1]Sheet1!(1,2) plot:=202 ogl:=[<new> template:=origin];
+$page.name$
+get %C -b b1;
+?b1
+get %C -e e1;
+?e1
+win -a Book1;
+plotxy iy:=[Book1]Sheet1!(1,2)[2:4] plot:=202 ogl:=[<new> template:=origin];
+$page.name$
+get %C -b b1;
+?b1
+get %C -e e1;
+?e1
+win -a Book1;
+impasc fname:="%WORK%plot12.txt";
+?wks.maxrows
+win -a Graph1;
+get %C -b b2;
+?b2
+get %C -e e2;
+?e2
+win -a Graph2;
+get %C -b b2;
+?b2
+get %C -e e2;
+?e2
+win -a Book1;
+impasc fname:="%WORK%hdr.txt";
+?wks.maxrows
+win -a Graph1;
+get %C -b b2;
+?b2
+get %C -e e2;
+?e2
+win -a Graph2;
+get %C -b b2;
+?b2
+get %C -e e2;
+?e2

@@ -56,7 +56,7 @@ pub enum BandKind {
 
 #[derive(Args, Debug)]
 pub struct FitArgs {
-    /// A data file, a .sheaf project or an Origin .opj project. Not needed with --list.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project. Not needed with --list.
     #[arg(required_unless_present = "list")]
     pub input: Option<PathBuf>,
     /// List the built-in fit functions and exit.
@@ -151,11 +151,12 @@ pub struct FitArgs {
     /// negative limits as --x-range=-0.5:0.1).
     #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
     pub x_range: Option<String>,
-    /// Draw the data with the fitted curve and write the figure (.png, .svg, .pdf, .eps, .emf or .tif). With
+    /// Draw the data with the fitted curve and write the figure (.png, .tif, .jpg, .bmp, .gif, .tga,
+    /// .pcx, .psd, .svg, .pdf, .eps or .emf). With
     /// several columns, only the first one is drawn.
     #[arg(long, value_name = "FIGURE")]
     pub plot: Option<PathBuf>,
-    /// Resolution of a PNG figure in dots per inch.
+    /// Resolution of a raster figure in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
     /// Save the project with the results to this file: .opj (also when no extension is given, with a
@@ -211,6 +212,12 @@ pub struct ReadOptions {
     /// string of several characters that separates fields as a whole (for example "||").
     #[arg(long, value_name = "SEP")]
     pub delimiter: Option<String>,
+    /// Delimited text: each character is a separator (for example "|;").
+    #[arg(long, value_name = "CHARS", conflicts_with_all = ["delimiter", "fixed_width"])]
+    pub delimiter_chars: Option<String>,
+    /// Collapse runs of the characters supplied by --delimiter-chars to one separator.
+    #[arg(long, requires = "delimiter_chars")]
+    pub combine_delimiters: bool,
     /// Delimited text: fixed-width columns instead of a separator. The widths in characters, as a
     /// comma-separated list; the last width repeats for the remaining columns.
     #[arg(long, value_name = "W,W,...", value_delimiter = ',', conflicts_with = "delimiter")]
@@ -218,6 +225,30 @@ pub struct ReadOptions {
     /// Delimited text: number of lines before the first data row (default: detect).
     #[arg(long, value_name = "N")]
     pub header_lines: Option<usize>,
+    /// Delimited text: first data row to import, counted after the header.
+    #[arg(long, default_value_t = 1)]
+    pub first_row: usize,
+    /// Delimited text: last data row to import, inclusive (0: through the end).
+    #[arg(long, default_value_t = 0)]
+    pub last_row: usize,
+    /// Delimited text: rows to read per repeating read/skip pattern.
+    #[arg(long, default_value_t = 1)]
+    pub read_rows: usize,
+    /// Delimited text: rows to skip per repeating read/skip pattern.
+    #[arg(long, default_value_t = 0)]
+    pub skip_rows: usize,
+    /// Delimited text: first source column to import.
+    #[arg(long, default_value_t = 1)]
+    pub first_column: usize,
+    /// Delimited text: last source column to import, inclusive (0: through the end).
+    #[arg(long, default_value_t = 0)]
+    pub last_column: usize,
+    /// Delimited text: columns to read per repeating read/skip pattern.
+    #[arg(long, default_value_t = 1)]
+    pub read_columns: usize,
+    /// Delimited text: columns to skip per repeating read/skip pattern.
+    #[arg(long, default_value_t = 0)]
+    pub skip_columns: usize,
     /// Delimited text: numbers use a comma as the decimal separator.
     #[arg(long)]
     pub decimal_comma: bool,
@@ -263,7 +294,7 @@ pub struct ReadOptions {
 
 #[derive(Args, Debug)]
 pub struct InfoArgs {
-    /// A data file, a .sheaf project or an Origin .opj project.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project.
     pub path: PathBuf,
     #[command(flatten)]
     pub read: ReadOptions,
@@ -273,7 +304,7 @@ pub struct InfoArgs {
 pub struct ImportArgs {
     /// Data files, folders or patterns to import. A folder gives its data files (.txt, .csv, .tsv,
     /// .dat, .asc, .prn, .tab, .bin); a name with * or ? in it (for example "exports/icp_*.csv")
-    /// gives the matching files, in natural order (icp_2 before icp_10). An Origin .opj project adds
+    /// gives the matching files, in natural order (icp_2 before icp_10). An Origin .opj or .opju project adds
     /// all its workbooks.
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
@@ -299,6 +330,9 @@ pub struct ImportArgs {
     /// (always done with --mode columns).
     #[arg(long)]
     pub file_name_comments: bool,
+    /// Apply partial row/column selection to every data file except the first.
+    #[arg(long)]
+    pub partial_except_first: bool,
     #[command(flatten)]
     pub read: ReadOptions,
 }
@@ -476,13 +510,13 @@ pub struct MarginArgs {
 
 #[derive(Args, Debug)]
 pub struct PlotArgs {
-    /// A data file, a .sheaf project or an Origin .opj project. Several data files are overlaid in one figure.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project. Several data files are overlaid in one figure.
     #[arg(required = true)]
     pub inputs: Vec<PathBuf>,
-    /// The figure to write: .png, .svg, .pdf, .eps, .emf or .tif.
+    /// The figure to write: .png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps or .emf.
     #[arg(short, long)]
     pub output: PathBuf,
-    /// Resolution of PNG output in dots per inch.
+    /// Resolution of raster output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
     /// Width of the exported picture, with a unit: in, cm, mm, pt, px or % (for example 3.5in or
@@ -584,17 +618,18 @@ pub enum PanelLinkArg {
 
 #[derive(Args, Debug)]
 pub struct ExportArgs {
-    /// A .sheaf project or an Origin .opj project (its graphs are read). For an output ending in
+    /// A .sheaf project or an Origin .opj project (its graphs are read) or .opju project (only its workbooks are read). For an output ending in
     /// .opj a data file (CH Instruments text, CSV or other delimited text) is also accepted.
     pub project: PathBuf,
     /// Name of the graph (default: the only graph of the project). Not used for .opj output.
     #[arg(long)]
     pub graph: Option<String>,
-    /// What to write: a figure (.png, .svg, .pdf, .eps, .emf or .tif) or, with .opj, the whole project as an Origin
-    /// 2016 project file (workbooks and graphs; what the file cannot hold is listed as warnings).
+    /// What to write: a figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps or .emf)
+    /// or, with .opj, the whole project as an Origin project file (workbooks and graphs;
+    /// what the file cannot hold is listed as warnings).
     #[arg(short, long)]
     pub output: PathBuf,
-    /// Resolution of PNG output in dots per inch.
+    /// Resolution of raster output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
     /// Width of the exported picture, with a unit: in, cm, mm, pt, px or % (for example 3.5in or
@@ -638,7 +673,7 @@ pub struct AnalyzeArgs {
 /// Which data an analysis tool works on and where the results go.
 #[derive(Args, Debug, Clone)]
 pub struct TargetArgs {
-    /// A data file, a .sheaf project or an Origin .opj project.
+    /// A data file, a .sheaf project or an Origin .opj or .opju project.
     pub input: PathBuf,
     /// Y columns to work on, comma-separated short or long names (default: the columns a plot of
     /// the sheet would show).
@@ -708,13 +743,9 @@ pub enum FamilyArg {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum PowerTestArg {
-    /// One-sample t-test.
     OneSample,
-    /// Two-sample t-test (equal variances).
     TwoSample,
-    /// Paired t-test (the standard deviation is that of the differences).
     Paired,
-    /// One-way ANOVA (balanced).
     Anova,
 }
 
@@ -726,6 +757,13 @@ pub enum ComparisonArg {
     /// Fisher's least significant difference.
     Lsd,
     Scheffe,
+    /// Bonferroni-Holm step-down (one-way ANOVA only).
+    HolmBonferroni,
+    /// Sidak-Holm step-down (one-way ANOVA only).
+    HolmSidak,
+    /// Dunnett: every group against the control group (see --control); one-way ANOVA only. Checked against
+    /// scipy, not Origin.
+    Dunnett,
     /// No means comparison.
     None,
 }
@@ -760,10 +798,23 @@ pub enum BoundaryKind {
     Extrapolate,
 }
 
+/// Origin's `reducedup` methods.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum DupKind {
+    Mean,
+    Median,
+    Min,
+    Max,
+    Sum,
+    Sd,
+    Se,
+    Rms,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ReduceKind {
-    Interpolate,
-    Average,
+    Mean,
+    First,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -812,6 +863,54 @@ pub enum MathKind {
     Power,
 }
 
+/// FFT filter type (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftFilterArg {
+    LowPass,
+    HighPass,
+    BandPass,
+    BandBlock,
+    Threshold,
+    Parabolic,
+}
+
+/// FFT window (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftWindowArg {
+    Rectangle,
+    Welch,
+    Triangular,
+    Bartlett,
+    Hanning,
+    Hamming,
+    Blackman,
+}
+
+/// FFT window correction.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftCorrectionArg {
+    None,
+    Amplitude,
+    Power,
+}
+
+/// FFT power normalization: mean square, sum square or time-interval square amplitude.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftPowerArg {
+    Msa,
+    Ssa,
+    Tisa,
+}
+
+/// The row given for a level crossing between two rows (Origin's `type`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum CrossingRow {
+    /// The row whose X is nearest, the smaller X on a tie.
+    Any,
+    Left,
+    Right,
+}
+
 /// The second operand of curve math: a number, or a reference column.
 #[derive(Args, Debug, Clone)]
 pub struct OperandArgs {
@@ -849,12 +948,19 @@ pub enum InterpKind {
     BSpline,
 }
 
+/// Origin's Averaged X choices of Average Multiple Curves, and Sheaf's `any`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum AverageRange {
-    /// Only X values covered by every curve.
-    Intersection,
-    /// From the smallest start to the largest end; curves are not extrapolated.
-    Union,
+pub enum AverageX {
+    /// Same as Source X: curves that share an X column are averaged row by row (otherwise every X
+    /// value of the curves over the range they all cover).
+    Same,
+    /// Common X Range: evenly spaced X over the range every curve covers.
+    Common,
+    /// Full X Range (Origin's default): evenly spaced X from the smallest to the largest X, each
+    /// curve continued past its ends.
+    Full,
+    /// Evenly spaced X from the smallest to the largest X, each curve counted only where it has data.
+    Any,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -885,6 +991,11 @@ pub enum PeakBaselineKind {
     EndPoints,
     Minima,
     Anchors,
+    /// Origin's Constant baseline at the minimum (its default), maximum, mean or median of the data.
+    Minimum,
+    Maximum,
+    Mean,
+    Median,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -949,6 +1060,155 @@ pub enum AnalyzeTool {
         op: MathKind,
         #[command(flatten)]
         operand: OperandArgs,
+    },
+    /// Combine each column with a constant or another column row by row, without X values
+    /// (Origin's Simple Column Math): rows past the end of the operand column count as 0. The
+    /// results go into new columns beside the input.
+    ColumnMath {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = MathKind::Add)]
+        op: MathKind,
+        #[command(flatten)]
+        operand: OperandArgs,
+    },
+    /// Convolve each column with a response column (Origin's Signal Processing > Convolution):
+    /// the full linear convolution, or circular; X steps of the input's X spacing unless
+    /// --interval is given. The results go to a new sheet.
+    Convolution {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The response column (short or long name).
+        #[arg(long)]
+        response: String,
+        #[arg(long)]
+        circular: bool,
+        /// Divide the response by its Euclidean norm first.
+        #[arg(long)]
+        normalize: bool,
+        /// Sampling interval of the result.
+        #[arg(long)]
+        interval: Option<f64>,
+    },
+    /// Correlate each column with another column (Origin's Signal Processing > Correlation):
+    /// lags -(N-1) to N-1, or 0 to N-1 when circular. The results go to a new sheet.
+    SignalCorrelation {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The second signal (may be the same column for an autocorrelation).
+        #[arg(long = "with")]
+        other: String,
+        #[arg(long)]
+        circular: bool,
+        /// Divide by the square root of the product of the two sums of squares.
+        #[arg(long)]
+        normalize: bool,
+        /// Lag step of the result.
+        #[arg(long, default_value_t = 1.0)]
+        interval: f64,
+    },
+    /// The FFT of each column (Origin's Signal Processing > FFT > FFT): frequency, real,
+    /// imaginary, magnitude, amplitude, phase (degrees), power and dB in a new sheet.
+    Fft {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Sampling interval; by default the X step of the column (1 without an X column).
+        #[arg(long)]
+        interval: Option<f64>,
+        #[arg(long, value_enum, default_value_t = FftWindowArg::Rectangle)]
+        window: FftWindowArg,
+        #[arg(long, value_enum, default_value_t = FftCorrectionArg::Amplitude)]
+        correction: FftCorrectionArg,
+        /// Divide the real and imaginary parts and the magnitude by the number of points.
+        #[arg(long)]
+        normalize: bool,
+        /// All frequencies instead of 0 to the Nyquist frequency.
+        #[arg(long)]
+        two_sided: bool,
+        /// Two-sided: keep the FFT order instead of putting zero in the middle.
+        #[arg(long)]
+        no_shift: bool,
+        #[arg(long)]
+        no_unwrap: bool,
+        /// The +1 sign convention of the exponent.
+        #[arg(long)]
+        science: bool,
+        #[arg(long, value_enum, default_value_t = FftPowerArg::Msa)]
+        power: FftPowerArg,
+    },
+    /// The inverse FFT of each column as the real part of a spectrum (Origin's Signal Processing >
+    /// FFT > IFFT): time, real, imaginary, amplitude and phase in a new sheet.
+    Ifft {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The column with the imaginary part (0 without).
+        #[arg(long)]
+        imaginary: Option<String>,
+        /// Sampling interval of the spectrum; by default the X step of the column.
+        #[arg(long)]
+        interval: Option<f64>,
+        /// The input is in FFT order (zero frequency first), not shifted.
+        #[arg(long)]
+        no_shift: bool,
+        #[arg(long)]
+        no_unwrap: bool,
+        /// The +1 sign convention of the forward transform.
+        #[arg(long)]
+        science: bool,
+    },
+    /// Filter each column in the frequency domain (Origin's Signal Processing > FFT Filters), the
+    /// result beside it. Frequencies left out take Origin's automatic values.
+    FftFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = FftFilterArg::LowPass)]
+        kind: FftFilterArg,
+        /// Low and high pass.
+        #[arg(long)]
+        cutoff: Option<f64>,
+        /// Band pass and block: the lower and upper cutoff.
+        #[arg(long)]
+        freq1: Option<f64>,
+        #[arg(long)]
+        freq2: Option<f64>,
+        /// Threshold filter: the smallest magnitude kept.
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// Parabolic low pass: pass and stop frequencies.
+        #[arg(long)]
+        pass: Option<f64>,
+        #[arg(long)]
+        stop: Option<f64>,
+        /// High pass, band pass and block: remove the zero frequency (the mean) too.
+        #[arg(long)]
+        no_offset: bool,
+        /// Sampling interval; by default the X step of the column.
+        #[arg(long)]
+        interval: Option<f64>,
+    },
+    /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
+    /// new column beside it.
+    Hilbert {
+        #[command(flatten)]
+        target: TargetArgs,
+    },
+    /// Where each curve crosses a level (Origin's levelcrossing): the crossing X values in a column
+    /// CrossingX<n> beside the curve, as Origin; --details adds the direction, row and Y.
+    LevelCrossing {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        level: f64,
+        /// The row given for a crossing between two rows.
+        #[arg(long, value_enum, default_value_t = CrossingRow::Any)]
+        row: CrossingRow,
+        /// Drop both crossings of a pair whose rows are closer than this.
+        #[arg(long, default_value_t = 1)]
+        min_gap: usize,
+        /// Also write the direction of each crossing (1 up, -1 down, 0 on the level without
+        /// passing through), its row and its Y.
+        #[arg(long)]
+        details: bool,
     },
     /// Derivative of each curve with respect to its X column.
     Differentiate {
@@ -1041,22 +1301,33 @@ pub enum AnalyzeTool {
     Average {
         #[command(flatten)]
         target: TargetArgs,
-        /// Evaluate at this many evenly spaced X values (default: every X value of the curves).
+        /// Which X values (Origin's Averaged X; full by default).
+        #[arg(long, value_enum, default_value_t = AverageX::Full)]
+        x: AverageX,
+        /// Number of evenly spaced X values (default Origin's Auto: five times the mean number of
+        /// points per curve, at most 1000).
         #[arg(long, conflicts_with = "reference_curve")]
         points: Option<usize>,
         /// Evaluate at the X values of this curve, counted from 1 among the chosen columns.
         #[arg(long)]
         reference_curve: Option<usize>,
-        #[arg(long, value_enum, default_value_t = AverageRange::Intersection)]
-        range: AverageRange,
         #[arg(long, value_enum, default_value_t = AverageInterp::Linear)]
         method: AverageInterp,
-        /// Leave out the standard deviation column.
+        /// Add the standard deviation column (Origin's Std Dev).
         #[arg(long)]
-        no_sd: bool,
-        /// Leave out the count column.
+        sd: bool,
+        /// Add the standard error column.
         #[arg(long)]
-        no_count: bool,
+        se: bool,
+        /// Add the count column (Origin's N).
+        #[arg(long)]
+        count: bool,
+        /// Add the minimum column.
+        #[arg(long)]
+        min: bool,
+        /// Add the maximum column.
+        #[arg(long)]
+        max: bool,
     },
     /// Find where two curves meet; X and Y of each point go to a new sheet. Needs exactly two curves.
     Intersect {
@@ -1089,26 +1360,51 @@ pub enum AnalyzeTool {
         #[arg(long, allow_hyphen_values = true)]
         y2: Option<f64>,
     },
-    /// Reduce each curve to evenly spaced X (--step or --points); the result goes to a new sheet.
+    /// Reduce Duplicate X Data: points whose X values are within the tolerance of their neighbour
+    /// become one point; the result goes to a new sheet.
+    ReduceDup {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// What replaces the Y values of a group (Origin's rms gives the mean, as measured).
+        #[arg(long, value_enum, default_value_t = DupKind::Mean)]
+        method: DupKind,
+        /// Tolerance as a fraction of the X range (Origin's default 1e-8).
+        #[arg(long, default_value_t = 1e-8)]
+        tol: f64,
+        /// Also write the X values that had duplicates and how many points each had.
+        #[arg(long)]
+        count: bool,
+    },
+    /// Reduce to Evenly Spaced X as Origin's reduce_ex: every N points (--every, 5 by default),
+    /// or intervals of X (--step, --intervals or --frequency); the result goes to a new sheet.
     ReduceX {
         #[command(flatten)]
         target: TargetArgs,
-        /// Spacing of the new X values.
+        /// One point for every N points (Origin's Every N Points; 5 by default).
+        #[arg(long, group = "grid")]
+        every: Option<usize>,
+        /// Intervals of this width in X (By Sampling Interval).
         #[arg(long, group = "grid")]
         step: Option<f64>,
-        /// Number of new X values (default 100 when --step is not given).
+        /// This many intervals over the X range (By Number of Intervals).
         #[arg(long, group = "grid")]
-        points: Option<usize>,
-        /// interpolate (default) reads the curve between its points; average takes the mean of the
-        /// points in the bin around each new X.
-        #[arg(long, value_enum, default_value_t = ReduceKind::Interpolate)]
+        intervals: Option<usize>,
+        /// Intervals of width 1 / frequency (By Frequency).
+        #[arg(long, group = "grid")]
+        frequency: Option<f64>,
+        /// mean (default): the mean of each group; first: its first point.
+        #[arg(long, value_enum, default_value_t = ReduceKind::Mean)]
         method: ReduceKind,
-        /// First X of the result (default: the smallest X of the data).
+        /// X Start of the intervals (default: the smallest X of the data).
         #[arg(long, allow_hyphen_values = true)]
         x_min: Option<f64>,
-        /// Last X of the result (default: the largest X of the data).
+        /// X End of the intervals (default: the largest X of the data); a point there is left out.
         #[arg(long, allow_hyphen_values = true)]
         x_max: Option<f64>,
+        /// Every N points: X steps further than this (percent) from even make the data be
+        /// interpolated onto even X first.
+        #[arg(long, default_value_t = 5.0)]
+        tolerance: f64,
     },
     /// Translate each curve in X (a new sheet) or in Y (a new column): by --by, or so that the
     /// point at X = --at lands on --to.
@@ -1236,9 +1532,49 @@ pub enum AnalyzeTool {
         target: TargetArgs,
         #[arg(long, value_enum, default_value_t = ComparisonArg::Tukey)]
         comparison: ComparisonArg,
+        /// Dunnett's control group: its number among the --y columns, counted from 1.
+        #[arg(long, default_value_t = 1)]
+        control: usize,
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+    },
+    /// Power or sample size of a t test or the one-way ANOVA (Origin's Power and Sample Size tools). Needs no
+    /// data file: give --sizes to get the power of those sample sizes, or --powers to get the smallest sample
+    /// sizes (per group for two samples and the ANOVA) that reach those powers.
+    Power {
+        #[arg(long, value_enum, default_value_t = PowerTestArg::TwoSample)]
+        test: PowerTestArg,
+        /// Sample sizes to find the power of, comma-separated.
+        #[arg(long, value_delimiter = ',', conflicts_with = "powers")]
+        sizes: Vec<f64>,
+        /// Wanted powers (between 0 and 1) to find sample sizes for, comma-separated.
+        #[arg(long, value_delimiter = ',')]
+        powers: Vec<f64>,
+        /// t tests: the mean (first group), or the mean of the sample; with --mean2 the hypothesized or second
+        /// mean (paired: the mean difference with --mean2 0).
+        #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
+        mean1: f64,
+        #[arg(long, default_value_t = 1.0, allow_negative_numbers = true)]
+        mean2: f64,
+        /// Standard deviation (pooled; of the differences when paired; the root of the error mean square for the ANOVA).
+        #[arg(long, default_value_t = 1.0)]
+        sd: f64,
+        /// ANOVA: the number of groups.
+        #[arg(long, default_value_t = 3.0)]
+        levels: f64,
+        /// ANOVA: the corrected sum of squares of the group means.
+        #[arg(long, default_value_t = 1.0)]
+        css: f64,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// One-sided (upper) test instead of two-sided.
+        #[arg(long)]
+        one_sided: bool,
+        /// Write the table to this file (CSV or text, by extension).
+        #[arg(long)]
+        export: Option<std::path::PathBuf>,
     },
     /// Two-way ANOVA. Indexed data (default): --y FACTOR_A,FACTOR_B,DATA names three columns, the first two
     /// holding the levels (text or numbers) of each row. With --raw every --y column is one cell of the
@@ -1417,6 +1753,108 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Cross tabulation of two categorical columns (--y ROW_VARIABLE,COLUMN_VARIABLE; text or numbers):
+    /// counts with row, column and total percentages, expected counts, Pearson and likelihood ratio
+    /// chi-square and, for a 2 x 2 table, Fisher's exact test. The tables go to a new sheet.
+    Crosstab {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Leave out the percentages of the row totals.
+        #[arg(long)]
+        no_row_percent: bool,
+        /// Leave out the percentages of the column totals.
+        #[arg(long)]
+        no_column_percent: bool,
+        /// Leave out the percentages of the grand total.
+        #[arg(long)]
+        no_total_percent: bool,
+        /// Leave out the expected counts.
+        #[arg(long)]
+        no_expected: bool,
+        /// Level for the sentence about the tests.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Discrete frequency (Origin's discfreqs): how often each distinct value of each column occurs, text or
+    /// numbers; empty and missing cells count as values of their own. Writes Data and Count, and with the
+    /// options the relative and cumulative frequency, to a new sheet.
+    Discfreq {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Add the relative frequency.
+        #[arg(long)]
+        relative: bool,
+        /// Add the cumulative (relative) frequency.
+        #[arg(long)]
+        cumulative: bool,
+        /// Give the frequencies in percent instead of fractions.
+        #[arg(long)]
+        percent: bool,
+        /// Leave the Count column out.
+        #[arg(long)]
+        no_count: bool,
+        /// Tell "a" and "A" apart.
+        #[arg(long)]
+        case_sensitive: bool,
+        /// Order: cdesc (descending counts, the default), casc, vasc (ascending values), vdesc.
+        #[arg(long, default_value = "cdesc", value_parser = ["cdesc", "casc", "vasc", "vdesc"])]
+        sort: String,
+    },
+    /// 2D frequency counts and binning (Origin's twoDBinning): the points of one Y column against its X
+    /// column, or of two columns (--y X --y Y), counted in a grid of X and Y bins; one row per X bin and
+    /// one column per Y bin go to a new sheet. Each axis takes a bin size or a number of bins, and a
+    /// range; what is left out is chosen from the data as Origin does.
+    #[command(name = "bin2d")]
+    Bin2d {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// What each cell holds: count, freq (percent of the binned points), or sum, mean, min, max,
+        /// median of the Y values.
+        #[arg(long, default_value = "count", value_parser = ["count", "freq", "sum", "mean", "min", "max", "median"])]
+        stat: String,
+        /// Width of an X bin.
+        #[arg(long, conflicts_with = "x_bins")]
+        x_inc: Option<f64>,
+        /// Number of X bins.
+        #[arg(long)]
+        x_bins: Option<usize>,
+        /// First X edge (the first bin's centre with --x-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        x_min: Option<f64>,
+        /// Last X edge (the last bin's centre with --x-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        x_max: Option<f64>,
+        /// Label the X bins by their centres, and read --x-min and --x-max as centres.
+        #[arg(long)]
+        x_centers: bool,
+        /// Add an X bin for the values below the range.
+        #[arg(long)]
+        x_below: bool,
+        /// Add an X bin for the values at or above the range.
+        #[arg(long)]
+        x_above: bool,
+        /// Width of a Y bin.
+        #[arg(long, conflicts_with = "y_bins")]
+        y_inc: Option<f64>,
+        /// Number of Y bins.
+        #[arg(long)]
+        y_bins: Option<usize>,
+        /// First Y edge (the first bin's centre with --y-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        y_min: Option<f64>,
+        /// Last Y edge (the last bin's centre with --y-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        y_max: Option<f64>,
+        /// Read --y-min and --y-max as the centres of the first and last Y bin.
+        #[arg(long)]
+        y_centers: bool,
+        /// Add a Y bin for the values below the range.
+        #[arg(long)]
+        y_below: bool,
+        /// Add a Y bin for the values at or above the range.
+        #[arg(long)]
+        y_above: bool,
+    },
     /// Normality tests (Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson)
     /// of each column; the result goes to a new sheet.
     Normality {
@@ -1456,44 +1894,6 @@ pub enum AnalyzeTool {
         /// Do not make a graph.
         #[arg(long)]
         no_graph: bool,
-    },
-    /// Power of a test for given sample sizes (--n), or the sample size for wanted powers (--power), of the
-    /// t-tests and the one-way ANOVA. Needs no data: the file only names the workbook for the result sheet.
-    Power {
-        #[command(flatten)]
-        target: TargetArgs,
-        #[arg(long, value_enum)]
-        test: PowerTestArg,
-        /// The standardized effect size: d of the t-tests (difference over standard deviation), f of the ANOVA.
-        #[arg(long, conflicts_with_all = ["difference", "means"])]
-        effect: Option<f64>,
-        /// t-tests: the difference to detect (with --sd).
-        #[arg(long, allow_hyphen_values = true, requires = "sd")]
-        difference: Option<f64>,
-        /// ANOVA: the group means, comma separated (with --sd).
-        #[arg(long, value_delimiter = ',', allow_hyphen_values = true, requires = "sd")]
-        means: Vec<f64>,
-        /// The standard deviation (inside the groups; of the differences for the paired test).
-        #[arg(long)]
-        sd: Option<f64>,
-        /// ANOVA with --effect: the number of groups.
-        #[arg(long)]
-        groups: Option<usize>,
-        /// Two-sample t-test: the ratio n2 / n1 of the sample sizes.
-        #[arg(long, default_value_t = 1.0)]
-        ratio: f64,
-        /// Sample sizes to compute the power for (pairs, observations per group), comma separated.
-        #[arg(long, value_delimiter = ',', conflicts_with = "power")]
-        n: Vec<usize>,
-        /// Wanted powers to compute the sample size for, comma separated (default 0.8 when --n is not given).
-        #[arg(long, value_delimiter = ',')]
-        power: Vec<f64>,
-        /// The alternative of the t-tests.
-        #[arg(long, value_enum, default_value_t = TailArg::Two)]
-        tail: TailArg,
-        /// Significance level.
-        #[arg(long, default_value_t = 0.05)]
-        alpha: f64,
     },
     /// Sort the rows of the sheet by one column.
     Sort {

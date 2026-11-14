@@ -81,9 +81,13 @@ fn auto(extents: &[Option<(f64, f64)>], gap_percent: f64) -> Vec<(f64, f64)> {
 fn extent(project: &Project, plot: &Plot) -> Option<(f64, f64)> {
     let y = project.numeric(plot.y)?;
     let x = plot.x.and_then(|id| project.numeric(id));
+    let filters = project.plot_row_filters(plot);
     let (start, end) = row_range(plot, y.len());
     let mut r: Option<(f64, f64)> = None;
     for (i, &v) in y.iter().enumerate().take(end).skip(start) {
+        if !filters.iter().all(|f| f.passes(i)) {
+            continue;
+        }
         let xv = x.map_or((i + 1) as f64, |x| x.get(i).copied().unwrap_or(f64::NAN));
         if xv.is_finite() && v.is_finite() {
             r = Some(r.map_or((v, v), |(lo, hi)| (lo.min(v), hi.max(v))));

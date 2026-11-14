@@ -803,6 +803,269 @@ fn string_functions_match_origin() {
 }
 
 #[test]
+fn substitute_uses_origins_replacement_then_search_argument_order() {
+    // Origin's documented example and signature (replacement before search):
+    // https://docs.originlab.com/labtalk/ref/substitute-func/
+    for (src, expected) in [
+        (r#"Substitute("abcdefabcdef",12,"bcd",0)$"#, "a12efa12ef"),
+        (r#"substitute("raw/raw/raw","clean","raw")"#, "clean/clean/clean"),
+        (r#"substitute("raw/raw/raw","clean","raw",1)$"#, "clean/raw/raw"),
+        (r#"substitute("raw/raw/raw","clean","raw",2)$"#, "raw/clean/raw"),
+        (r#"substitute("raw/raw/raw","clean","raw",3)$"#, "raw/raw/clean"),
+        (r#"substitute("raw/raw/raw","clean","raw",4)$"#, "raw/raw/raw"),
+        (r#"substitute("raw","","raw")$"#, ""),
+        (r#"substitute("raw","raw/raw","raw")$"#, "raw/raw"),
+        (r#"substitute("RAW/raw","clean","raw")$"#, "RAW/clean"),
+        (r#"substitute("é.µ.é","界","é",2)$"#, "é.µ.界"),
+        (r#"substitute("a.b.[c]","/",".")$"#, "a/b/[c]"),
+        (r#"substitute("aaaaa","X","aa")$"#, "XXa"),
+    ] {
+        let values = Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap();
+        assert_eq!(values, [Value::Text(expected.into())], "{src}");
+    }
+}
+
+#[test]
+fn substitute_handles_empty_search_and_invalid_occurrences_without_changing_text() {
+    // Guard cases not specified by Origin's documentation: Sheaf leaves the text unchanged.
+    for src in [
+        r#"substitute("raw","clean","")$"#,
+        r#"substitute("raw","clean","raw",-1)$"#,
+        r#"substitute("raw","clean","raw",1.5)$"#,
+        r#"substitute("raw","clean","raw",na())$"#,
+        r#"substitute("raw","clean","raw",1e308*1e308)$"#,
+        r#"substitute("raw","clean","raw",1e100)$"#,
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text("raw".into())],
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn substitute_reads_text_arguments_and_numeric_occurrences_from_columns() {
+    let host = TextHost {
+        cols: vec![
+            ("A", vec![Cell::S("raw/raw"), Cell::S("raw/raw"), Cell::S("")]),
+            ("B", vec![Cell::S("clean"), Cell::S("é"), Cell::S("x")]),
+            ("C", vec![Cell::S("raw"), Cell::S("raw"), Cell::S("raw")]),
+            ("D", vec![Cell::N(1.0), Cell::N(2.0), Cell::N(0.0)]),
+        ],
+    };
+    let expr = Expr::parse("substitute(col(A),col(B),col(C),col(D))$").unwrap();
+    assert_eq!(expr.columns(), ["A", "B", "C", "D"].map(|n| ColumnRef::Short(n.into())));
+    assert_eq!(texts(&host, "substitute(col(A),col(B),col(C),col(D))$"), ["clean/raw", "raw/é", ""]);
+    assert!(expr.eval_rows(&host, 3).unwrap().iter().all(|x| x.is_nan()));
+    assert!(expr.compile(&host).is_err(), "compiled numeric expressions still reject text");
+}
+
+#[test]
+fn dollar_suffix_is_accepted_on_text_functions_only() {
+    let src = r#"upper(substitute("raw","clean","raw")$)$+left("-tail",1)$"#;
+    assert_eq!(Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(), [Value::Text("CLEAN-".into())]);
+    for src in ["2$", "sin(1)$", r#"len("raw")$"#, r#"substitute("a","b")$"#, r#"substitute("a","b","c",1,2)$"#] {
+        assert!(Expr::parse(src).is_err(), "{src}");
+    }
+}
+
+struct LabelHost;
+
+#[test]
+fn char_and_code_follow_documented_codes_and_empty_text_rule() {
+    for (src, expected) in [
+        ("char(65)$", "A"),
+        ("char(97)", "a"),
+        ("char(181)$", "µ"),
+        ("char(956)$", "μ"),
+        ("char(30028)$", "界"),
+        ("char(10)$", "\n"),
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text(expected.into())],
+            "{src}"
+        );
+    }
+    for (src, expected) in [
+        (r#"code("abc")"#, 97.0),
+        (r#"code("ABC")"#, 65.0),
+        (r#"code("")"#, 0.0),
+        (r#"code("µA")"#, 181.0),
+        (r#"code("界面")"#, 30028.0),
+        ("code(char(65535)$)", 65535.0),
+    ] {
+        assert_eq!(Expr::parse(src).unwrap().eval_rows(&SimpleHost::new(), 1).unwrap(), [expected], "{src}");
+    }
+}
+
+#[test]
+fn char_rejects_invalid_codes_without_invalid_unicode_or_panics() {
+    for n in ["0", "-1", "65536", "55296", "57343", "65.5", "na()", "1e308*1e308"] {
+        let src = format!("char({n})$");
+        assert_eq!(
+            Expr::parse(&src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text(String::new())],
+            "{src}"
+        );
+    }
+    for src in ["char()", "code()", "char(1,2)", r#"code("a")$"#] {
+        assert!(Expr::parse(src).is_err(), "{src}");
+    }
+}
+
+#[test]
+fn char_reads_numeric_columns_and_code_reads_text_columns() {
+    let h = SimpleHost::new().short("A", &[65.0, 181.0, 0.0, f64::NAN]);
+    assert_eq!(
+        Expr::parse("char(col(A))$").unwrap().eval_values(&h, 4).unwrap(),
+        ["A", "µ", "", ""].map(|s| Value::Text(s.into()))
+    );
+    let h = TextHost { cols: vec![("A", vec![Cell::S("alpha"), Cell::S("µA"), Cell::S("")])] };
+    assert_eq!(texts(&h, "code(col(A))"), ["97", "181", "0"]);
+    assert_eq!(texts(&h, "char(code(col(A)))$"), ["a", "µ", ""]);
+}
+
+#[test]
+fn format_accepts_texts_explicit_formats_and_its_documented_example() {
+    for (src, expected) in [
+        (r#"Format(123000,"E*3")$"#, "123k"),
+        (r#"format(2.01232,"*3")$"#, "2.01"),
+        (r#"format(12.5,".0")$"#, "13"),
+        (r#"format(1.25,".2")$"#, "1.25"),
+        (r#"format(na(),".2")$"#, "--"),
+        ("format(1234.5678)$", "1234.5678"),
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text(expected.into())],
+            "{src}"
+        );
+    }
+    for src in ["format()", r#"format(1,"*3",2)"#] {
+        let err = Expr::parse(src).unwrap_err();
+        assert!(err.to_string().contains("function 'format'"), "{err}");
+    }
+}
+
+#[test]
+fn text_and_format_read_numeric_values_and_text_format_columns() {
+    let h = TextHost {
+        cols: vec![
+            ("A", vec![Cell::N(12.5), Cell::N(123000.0), Cell::S("sample"), Cell::N(f64::NAN)]),
+            ("B", vec![Cell::S(".2"), Cell::S("E*3"), Cell::S("*3"), Cell::S(".1")]),
+        ],
+    };
+    for name in ["text", "format"] {
+        assert_eq!(texts(&h, &format!("{name}(col(A),col(B))$")), ["12.50", "123k", "--", "--"]);
+    }
+    let e = Expr::parse("format(col(A),col(B))$").unwrap();
+    assert_eq!(e.data_columns(), [ColumnRef::Short("A".into()), ColumnRef::Short("B".into())]);
+}
+
+#[test]
+fn text_uses_the_hosts_display_hook_only_for_a_direct_cell_without_an_explicit_format() {
+    struct DisplayHost;
+    impl Host for DisplayHost {
+        fn variable(&self, _name: &str) -> Option<f64> {
+            None
+        }
+        fn cell(&self, _col: &ColumnRef, row: usize) -> Option<f64> {
+            [12.345, 6.789].get(row).copied()
+        }
+        fn formatted_numeric_cell(&self, _col: &ColumnRef, row: usize) -> Option<String> {
+            ["12.35", "6.79"].get(row).map(|s| (*s).into())
+        }
+    }
+    for (src, expected) in [
+        ("text(col(A))$", ["12.35", "6.79"]),
+        ("text(col(A)[2])$", ["6.79", "6.79"]),
+        ("text(col(A)+0)$", ["12.345", "6.789"]),
+        ("format(col(A))$", ["12.345", "6.789"]),
+        (r#"text(col(A),"*")$"#, ["12.345", "6.789"]),
+        (r#"text(col(A),"")$"#, ["12.345", "6.789"]),
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&DisplayHost, 2).unwrap(),
+            expected.map(|s| Value::Text(s.into())),
+            "{src}"
+        );
+    }
+}
+
+impl Host for LabelHost {
+    fn variable(&self, name: &str) -> Option<f64> {
+        (name == "L").then_some(2.0)
+    }
+    fn cell(&self, _col: &ColumnRef, row: usize) -> Option<f64> {
+        (row < 3).then_some((row + 1) as f64)
+    }
+    fn has_column(&self, col: &ColumnRef) -> bool {
+        matches!(col, ColumnRef::Short(n) if n == "A")
+            || matches!(col, ColumnRef::Index(1))
+            || matches!(col, ColumnRef::Long(n) if n == "Current µA")
+    }
+    fn column_label(&self, _col: &ColumnRef, label: crate::ColumnLabel) -> Option<String> {
+        use crate::ColumnLabel::*;
+        Some(
+            match label {
+                ShortName => "A",
+                LongName => "Current µA",
+                Units => "2.5",
+                Comments => "calibrated",
+                Formula => "i*2",
+            }
+            .into(),
+        )
+    }
+}
+
+#[test]
+fn column_label_rows_are_scalar_text_or_numeric_values() {
+    for (src, expected) in [
+        ("col(A)[G]$", "A"),
+        ("col(A)[L]$", "Current µA"),
+        ("col(A)[U]$", "2.5"),
+        ("col(A)[C]$", "calibrated"),
+        ("col(A)[O]$", "i*2"),
+        ("wcol(1)[L]$", "Current µA"),
+        (r#"col("Current µA")[L]$"#, "Current µA"),
+        ("upper(col(A)[L]$)$", "CURRENT ΜA"),
+    ] {
+        let e = Expr::parse(src).unwrap();
+        assert_eq!(e.eval_values(&LabelHost, 3).unwrap(), vec![Value::Text(expected.into()); 3], "{src}");
+        assert!(e.compile(&LabelHost).is_err(), "{src}");
+    }
+    let numeric = Expr::parse("col(A)[U]*col(A)").unwrap();
+    assert_eq!(numeric.eval_rows(&LabelHost, 3).unwrap(), [2.5, 5.0, 7.5]);
+    assert_eq!(numeric.compile(&LabelHost).unwrap().eval_row(1), 5.0);
+    assert!(Expr::parse("col(A)[L]").unwrap().eval(&LabelHost).unwrap().is_nan());
+}
+
+#[test]
+fn column_labels_have_separate_dependencies_and_take_precedence_over_variables() {
+    let e = Expr::parse(r#"col(A)[L]$+text(col(2))+col(A)[U]$"#).unwrap();
+    assert!(e.variables().is_empty());
+    assert_eq!(e.columns(), [ColumnRef::Short("A".into()), ColumnRef::Index(2)]);
+    assert_eq!(e.data_columns(), [ColumnRef::Index(2)]);
+    assert_eq!(e.label_columns(), [ColumnRef::Short("A".into())]);
+    // A standalone L names the header even when a variable L exists. An expression still
+    // indexes data rows, and i remains the ordinary per-row index.
+    assert_eq!(Expr::parse("col(A)[L+0]$").unwrap().eval_values(&LabelHost, 1).unwrap(), [Value::Text("2".into())]);
+    assert_eq!(
+        Expr::parse("col(A)[i]$").unwrap().eval_values(&LabelHost, 3).unwrap(),
+        ["1", "2", "3"].map(|s| Value::Text(s.into()))
+    );
+    let plain = SimpleHost::new().short("A", &[1.0]);
+    assert_eq!(Expr::parse("col(A)[L]$").unwrap().eval_values(&plain, 1).unwrap(), [Value::Text(String::new())]);
+    for src in ["col(Q)[L]$", "col(Q)[U]"] {
+        let error = Expr::parse(src).unwrap().eval_values(&LabelHost, 1).unwrap_err();
+        assert!(error.to_string().contains("unknown column col(Q)"), "{error}");
+    }
+}
+
+#[test]
 fn a_bare_column_is_text_only_where_text_is_wanted() {
     let h = probe_a();
     // Origin: col(O)=col(A) copies the text cells; arithmetic sees text as missing.
@@ -914,8 +1177,6 @@ fn text_formulas_in_a_numeric_context() {
     assert_eq!(v, [Value::Text("--".into())]);
     assert!(Expr::parse("left(col(A)$)").is_err());
     assert!(Expr::parse("2$").is_err());
-    // Origin's substitute() returned its text unchanged in the probe, so it is not offered.
-    assert!(Expr::parse("substitute(col(A)$,\"a\",\"b\")").is_err());
     // compile() has no text values.
     assert!(Expr::parse("col(A)$").unwrap().compile(&plain).is_err());
 }

@@ -54,6 +54,10 @@ fn integration_figures_match_integ1_over_the_same_rows() {
             assert!((p.fwhm - dx).abs() < 1e-9, "fwhm {} vs {}", p.fwhm, dx);
         }
     }
+    // Area % is the share of the whole corrected curve's area (Origin's AreaIntgP), the same
+    // whole for every peak, so the peaks together hold less than 100 %.
+    let whole: Vec<f64> = r.peaks.iter().map(|p| 100.0 * p.area / p.area_percent).collect();
+    assert!(whole.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-9), "{whole:?}");
     let total: f64 = r.peaks.iter().map(|p| p.area_percent).sum();
-    assert!((total - 100.0).abs() < 1e-9);
+    assert!(total < 100.0, "{total}");
 }

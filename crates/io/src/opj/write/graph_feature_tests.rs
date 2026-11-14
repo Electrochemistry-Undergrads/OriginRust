@@ -623,3 +623,15 @@ fn a_ternary_layer_is_written_as_a_scatter_plot_and_named() {
     assert!(out.warnings.iter().any(|w| w.contains("ternary")), "{:?}", out.warnings);
     assert!(imp.graphs[0].layers[0].coords.is_cartesian());
 }
+
+#[test]
+fn plot_decorations_and_a_layer_background_are_named_in_the_save_warnings() {
+    let mut p = source();
+    line_graph(&mut p, |l| {
+        l.background = Some(sheaf_core::Color::WHITE);
+        l.plots[0].decor.drop.vertical.on = true;
+    });
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("layer background")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("drop lines")), "{:?}", out.warnings);
+}

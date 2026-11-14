@@ -151,6 +151,12 @@ pub enum Action {
     ImportWizard,
     /// Edit > Go to... (Ctrl+G) in a workbook.
     GoToCell(WindowId),
+    /// Statistics > Power and Sample Size > a test.
+    Power(sheaf_core::analysis::PowerKind),
+    /// Edit > Find in Sheets... in this workbook.
+    FindInSheets(WindowId),
+    /// Edit > Replace... in this workbook.
+    ReplaceInSheets(WindowId),
     Undo,
     Redo,
     NewWorkbook,
@@ -203,6 +209,18 @@ pub enum Action {
     Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
     /// for the columns a plot of the active sheet would show.
+    /// The Interpolate window with this method chosen (Mathematics > Linear, Spline or B-Spline
+    /// Interpolation).
+    /// The Interpolate window taking its X values from a column (Interpolate/Extrapolate Y from X).
+    InterpolateFromColumn {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    InterpolateWith {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        method: sheaf_core::analysis::InterpMethod,
+    },
     Analyze {
         book: WindowId,
         columns: Vec<ColumnId>,
@@ -296,6 +314,16 @@ pub enum Action {
     /// Window > Refresh (F5): recalculates the columns of the active workbook that are waiting
     /// for it; a graph is redrawn every frame anyway.
     Refresh(Option<WindowId>),
+    /// Opens Plot Setup (Origin's window for the data of the plots) for one layer.
+    PlotSetup {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Opens Layer Contents (Origin's add, remove, group and order window) for one layer.
+    LayerContents {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {
         graph: WindowId,
@@ -384,6 +412,11 @@ pub enum Action {
     Focus(WindowId),
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
+    /// Window > Duplicate: copy this workbook or graph into a new window.
+    DuplicateWindow(WindowId),
+    /// File > Append: bring the windows of another project file into this one (the file, or `None`
+    /// to ask for it).
+    AppendProject(Option<std::path::PathBuf>),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).
@@ -428,5 +461,7 @@ pub enum Action {
     About,
     /// Open the window of View > Toolbars.
     Toolbars,
+    /// View > Status Bar: show or hide the status bar.
+    ToggleStatusBar,
     Quit,
 }

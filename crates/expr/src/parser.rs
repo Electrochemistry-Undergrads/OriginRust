@@ -9,11 +9,12 @@
 //! multiplicative := unary ( ('*'|'/'|'%') unary )*
 //! unary    := ('-'|'+'|'!') unary | power
 //! power    := postfix ( '^' unary )?          -- right associative, exponent may be signed
-//! postfix  := primary ( '[' ternary ( ':' ternary )? ']' )? '$'?   -- only after a column reference
+//! postfix  := primary ( '[' ternary ( ':' ternary )? ']' )? '$'?
+//!             -- subscripts only on columns; '$' on a column/cell or text-returning function
 //! primary  := number | "text" | name | name '(' args ')' | col-reference | '(' ternary ')'
 //! ```
 
-use crate::ast::{ColumnRef, Kind, Node, UnOp};
+use crate::ast::{ColumnLabel, ColumnRef, Kind, Node, UnOp};
 use crate::error::ExprError;
 use crate::funcs::{Agg, BinOp, Func, Resolved, resolve};
 use crate::lexer::{Tok, Token, lex};
@@ -196,6 +197,11 @@ impl Parser {
             let pos = self.advance().pos;
             return Node::new(Kind::Text(Box::new(node)), pos);
         }
+        if matches!(&node.kind, Kind::Call { func: Func::Str(f), .. } if f.returns_text()) && self.eat(&Tok::Dollar) {
+            // The call already produces text; accept Origin's string-result suffix without
+            // converting a numeric function or changing the existing unsuffixed syntax.
+            return Ok(node);
+        }
         if !matches!(self.peek_tok(), Tok::LBracket) {
             return Ok(node);
         }
@@ -205,6 +211,17 @@ impl Parser {
                 pos,
                 "only a column reference such as col(A) can be followed by a [row] subscript",
             ));
+        }
+        if let Tok::Ident(code) = self.peek_tok()
+            && let Some(label) = ColumnLabel::from_code(code)
+            && self.toks.get(self.at + 1).is_some_and(|t| t.tok == Tok::RBracket)
+        {
+            // A standalone label-row character takes precedence over a variable of that name.
+            self.advance();
+            self.advance();
+            let text = self.eat(&Tok::Dollar);
+            let Kind::Col { r, .. } = node.kind else { unreachable!("checked above") };
+            return Node::new(Kind::Label { r, label, text }, pos);
         }
         let first = self.ternary()?;
         if self.eat(&Tok::Colon) {

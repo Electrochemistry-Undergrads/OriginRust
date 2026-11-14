@@ -1,6 +1,7 @@
 //! The Import Wizard (File > Import > Import Wizard, Ctrl+3): the same import options as the
-//! import window, taken one page at a time. Pages: Source, Header Lines, Column Names, File Name
-//! Options, Data Columns and Save Filters (greyed: Sheaf has no saved import filters). The
+//! import window, taken one page at a time. Pages, as Origin's ASCII wizard (measured,
+//! import-ascii.md): Source, Header Lines, Variable Extraction (greyed), File Name Options, Data
+//! Columns, Data Selection and Save Filters (greyed: Sheaf has no saved import filters). The
 //! buttons are Cancel at the left and "<< Back", "Next >>", "Finish" at the right, as in Origin's
 //! first page. Finish imports the file with the chosen options, exactly as OK does in the import
 //! window.
@@ -22,19 +23,21 @@ const RAW_LINES: usize = 14;
 pub enum WizardPage {
     Source,
     HeaderLines,
-    ColumnNames,
+    VariableExtraction,
     FileNameOptions,
     DataColumns,
+    DataSelection,
     SaveFilters,
 }
 
 impl WizardPage {
-    const ALL: [WizardPage; 6] = [
+    const ALL: [WizardPage; 7] = [
         WizardPage::Source,
         WizardPage::HeaderLines,
-        WizardPage::ColumnNames,
+        WizardPage::VariableExtraction,
         WizardPage::FileNameOptions,
         WizardPage::DataColumns,
+        WizardPage::DataSelection,
         WizardPage::SaveFilters,
     ];
 
@@ -42,9 +45,10 @@ impl WizardPage {
         match self {
             WizardPage::Source => "Source",
             WizardPage::HeaderLines => "Header Lines",
-            WizardPage::ColumnNames => "Column Names",
+            WizardPage::VariableExtraction => "Variable Extraction",
             WizardPage::FileNameOptions => "File Name Options",
             WizardPage::DataColumns => "Data Columns",
+            WizardPage::DataSelection => "Data Selection",
             WizardPage::SaveFilters => "Save Filters",
         }
     }
@@ -162,7 +166,13 @@ impl ImportWizard {
                 self.dlg.preview = Some(self.dlg.read(self.dlg.current));
             }
         }
-        let before = (self.dlg.current, self.dlg.kind, self.dlg.chi.clone(), self.dlg.ascii.clone());
+        let before = (
+            self.dlg.current,
+            self.dlg.kind,
+            self.dlg.chi.clone(),
+            self.dlg.ascii.clone(),
+            self.dlg.partial_except_first,
+        );
 
         let avail = ctx.available_rect();
         let size = egui::vec2(620.0, 595.0);
@@ -184,9 +194,10 @@ impl ImportWizard {
                     .show(ui, |ui| match self.page {
                         WizardPage::Source => self.source_page(ui),
                         WizardPage::HeaderLines => self.header_lines_page(ui),
-                        WizardPage::ColumnNames => self.column_names_page(ui),
+                        WizardPage::VariableExtraction => variable_extraction_page(ui),
                         WizardPage::FileNameOptions => self.file_name_page(ui),
                         WizardPage::DataColumns => self.data_columns_page(ui),
+                        WizardPage::DataSelection => self.data_selection_page(ui),
                         WizardPage::SaveFilters => self.save_filters_page(ui),
                     });
                 ui.separator();
@@ -211,7 +222,15 @@ impl ImportWizard {
                 });
             });
 
-        if before != (self.dlg.current, self.dlg.kind, self.dlg.chi.clone(), self.dlg.ascii.clone()) {
+        if before
+            != (
+                self.dlg.current,
+                self.dlg.kind,
+                self.dlg.chi.clone(),
+                self.dlg.ascii.clone(),
+                self.dlg.partial_except_first,
+            )
+        {
             self.dlg.preview = None;
             ctx.request_repaint();
         }
@@ -447,10 +466,26 @@ impl ImportWizard {
         if self.needs_ascii(ui) {
             let detected = self.dlg.detected();
             let found = detected.as_ref().map(|d| d.header_lines);
+            // Origin's Header Lines page also says which header line gives which column label.
             group_box(ui, "Header Lines", |ui| {
                 egui::Grid::new("wizard_header_lines").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
-                    ui.label("Lines before the data");
+                    ui.label("Number of main header lines");
                     optional_line(ui, &mut self.dlg.ascii.header_lines, found, "none");
+                    ui.end_row();
+                    let o = &mut self.dlg.ascii;
+                    ui.label("Long Names");
+                    optional_line(ui, &mut o.long_name_line, detected.as_ref().map(|d| d.long_name_line), "none");
+                    ui.end_row();
+                    ui.label("Units");
+                    optional_line(ui, &mut o.units_line, detected.as_ref().map(|d| d.units_line), "none");
+                    ui.end_row();
+                    ui.label("Comments");
+                    optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
+                    ui.end_row();
+                    ui.label("Short Names");
+                    let mut short = (o.short_name_line > 0).then_some(o.short_name_line);
+                    optional_line(ui, &mut short, None, "<None>");
+                    o.short_name_line = short.unwrap_or(0);
                     ui.end_row();
                 });
             });
@@ -461,26 +496,18 @@ impl ImportWizard {
         }
     }
 
-    fn column_names_page(&mut self, ui: &mut egui::Ui) {
-        if self.needs_ascii(ui) {
-            let detected = self.dlg.detected();
-            group_box(ui, "Column Names", |ui| {
-                let o = &mut self.dlg.ascii;
-                egui::Grid::new("wizard_column_names").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
-                    ui.label("Line with the names");
-                    optional_line(ui, &mut o.long_name_line, detected.as_ref().map(|d| d.long_name_line), "none");
-                    ui.end_row();
-                    ui.label("Line with the units");
-                    optional_line(ui, &mut o.units_line, detected.as_ref().map(|d| d.units_line), "none");
-                    ui.end_row();
-                    ui.label("Line with comments");
-                    optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
-                    ui.end_row();
-                });
-            });
+    /// Origin's Data Selection page: which rows to import (Partial Import).
+    fn data_selection_page(&mut self, ui: &mut egui::Ui) {
+        if self.dlg.shown_format() == "chi" {
+            ui.weak("CH Instruments files are imported whole.");
+            return;
         }
-        let shown = self.dlg.ascii.header_lines.or_else(|| self.dlg.detected().map(|d| d.header_lines));
-        self.raw_view(ui, shown);
+        group_box(ui, "Partial Import", |ui| {
+            self.dlg.page = ImportPage::PartialImport;
+            self.dlg.ascii_page(ui);
+        });
+        ui.add_space(4.0);
+        ui.allocate_ui(egui::vec2(ui.available_width(), 170.0), |ui| self.dlg.preview_ui(ui));
     }
 
     fn file_name_page(&mut self, ui: &mut egui::Ui) {
@@ -518,7 +545,6 @@ impl ImportWizard {
             for (title, page) in [
                 ("Delimiter", ImportPage::Options),
                 ("Column Designation", ImportPage::ColumnDesignation),
-                ("Partial Import", ImportPage::PartialImport),
                 ("Numbers and Dates", ImportPage::Miscellaneous),
             ] {
                 group_box(ui, title, |ui| {
@@ -550,6 +576,20 @@ impl ImportWizard {
         });
         ui.weak("Saved import filters are not available in this version. Press Finish to import.");
     }
+}
+
+/// Origin's Variable Extraction page (variables from file names and headers), which Sheaf does not
+/// offer: shown greyed.
+fn variable_extraction_page(ui: &mut egui::Ui) {
+    group_box(ui, "Variable Extraction", |ui| {
+        ui.add_enabled_ui(false, |ui| {
+            let mut off = false;
+            ui.checkbox(&mut off, "Extract variables from file names and file headers");
+            ui.checkbox(&mut off, "Add variables to page info");
+            ui.checkbox(&mut off, "Create User Parameter rows for each variable");
+        });
+    });
+    ui.weak("Not available in this version: header lines can become parameter rows on the Header Lines page.");
 }
 
 /// The first `count` lines of a text file (the first 64 KB are read at most).

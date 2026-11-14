@@ -418,6 +418,62 @@ fn colour_depth_changes_png_bmp_and_tiff() {
 }
 
 #[test]
+fn indexed_tiff_preserves_palette_indices_resolution_and_each_compression() {
+    use std::io::Cursor;
+    use tiff::tags::Tag;
+
+    // Odd width and transparency expose row-padding and white-compositing mistakes.
+    let raster = Raster {
+        width: 3,
+        height: 2,
+        rgba: vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 0, 0, 255, 0, 0, 128, 40, 50, 60, 255],
+    };
+    let options = RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() };
+    let png = raster::encode_raster(&raster, "png", 150.5, &options).unwrap();
+    let mut png = png::Decoder::new(Cursor::new(png)).read_info().unwrap();
+    let expected_palette = png.info().palette.as_ref().unwrap().to_vec();
+    let mut expected_indices = vec![0; png.output_buffer_size().unwrap()];
+    let frame = png.next_frame(&mut expected_indices).unwrap();
+    expected_indices.truncate(frame.buffer_size());
+    for (compression, tag) in
+        [(TiffCompression::None, 1), (TiffCompression::PackBits, 32773), (TiffCompression::Lzw, 5)]
+    {
+        let options = RasterOptions { tiff_compression: compression, ..options };
+        let bytes = raster::encode_raster(&raster, "tif", 150.5, &options).unwrap();
+        let mut decoder = tiff::decoder::Decoder::new(Cursor::new(&bytes)).unwrap();
+        assert_eq!(decoder.dimensions().unwrap(), (3, 2));
+        assert_eq!(decoder.get_tag_u32(Tag::PhotometricInterpretation).unwrap(), 3);
+        assert_eq!(decoder.get_tag_u32(Tag::SamplesPerPixel).unwrap(), 1);
+        assert_eq!(decoder.get_tag_u16_vec(Tag::BitsPerSample).unwrap(), [8]);
+        assert_eq!(decoder.get_tag_u32(Tag::Compression).unwrap(), tag);
+        assert_eq!(decoder.get_tag_u32(Tag::ResolutionUnit).unwrap(), 2);
+        for tag in [Tag::XResolution, Tag::YResolution] {
+            assert_eq!(decoder.get_tag_u32_vec(tag).unwrap(), [15050, 100]);
+        }
+        let palette = decoder.get_tag_u16_vec(Tag::ColorMap).unwrap();
+        assert_eq!(palette.len(), 768);
+        for channel in 0..3 {
+            for index in 0..256 {
+                assert_eq!(palette[channel * 256 + index], u16::from(expected_palette[index * 3 + channel]) * 257);
+            }
+        }
+        // This tiff crate can decompress 8-bit samples but cannot expand a palette. In a
+        // test-only copy, interpret the samples as gray to read the original index plane.
+        let mut indices_only = bytes;
+        let ifd = u32::from_le_bytes(indices_only[4..8].try_into().unwrap()) as usize;
+        let count = u16::from_le_bytes(indices_only[ifd..ifd + 2].try_into().unwrap()) as usize;
+        let entry = (0..count)
+            .map(|i| ifd + 2 + 12 * i)
+            .find(|&at| u16::from_le_bytes(indices_only[at..at + 2].try_into().unwrap()) == 262)
+            .unwrap();
+        indices_only[entry + 8..entry + 10].copy_from_slice(&1u16.to_le_bytes());
+        let mut decoder = tiff::decoder::Decoder::new(Cursor::new(indices_only)).unwrap();
+        let tiff::decoder::DecodingResult::U8(indices) = decoder.read_image().unwrap() else { panic!("8-bit indices") };
+        assert_eq!(indices, expected_indices, "{compression:?}");
+    }
+}
+
+#[test]
 fn tiff_compression_choice_is_written_in_the_file() {
     // The compression tag (259) of the first image file directory.
     fn compression(b: &[u8]) -> u16 {

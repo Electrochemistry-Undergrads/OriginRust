@@ -26,6 +26,7 @@ use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
     PeakFitSpec, PeakShape,
 };
+use sheaf_core::analysis::{FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection};
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
@@ -52,6 +53,10 @@ pub enum AnalysisKind {
     LevelCrossing,
     /// Signal Processing > Hilbert Transform (Origin's `hilbert`).
     Hilbert,
+    /// Signal Processing > FFT > FFT (Origin's `fft1`).
+    Fft,
+    /// Signal Processing > FFT > IFFT (Origin's `ifft1`).
+    Ifft,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -99,7 +104,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 17] = [
+    pub const ALL: [AnalysisKind; 19] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -113,6 +118,8 @@ impl AnalysisKind {
         AnalysisKind::SignalCorrelation,
         AnalysisKind::LevelCrossing,
         AnalysisKind::Hilbert,
+        AnalysisKind::Fft,
+        AnalysisKind::Ifft,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -135,6 +142,8 @@ impl AnalysisKind {
             AnalysisKind::SignalCorrelation => "Correlation...",
             AnalysisKind::LevelCrossing => "Level Crossing...",
             AnalysisKind::Hilbert => "Hilbert Transform...",
+            AnalysisKind::Fft => "FFT...",
+            AnalysisKind::Ifft => "IFFT...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -190,6 +199,8 @@ impl AnalysisKind {
             "signal-correlation" => AnalysisKind::SignalCorrelation,
             "level-crossing" => AnalysisKind::LevelCrossing,
             "hilbert" => AnalysisKind::Hilbert,
+            "fft" => AnalysisKind::Fft,
+            "ifft" => AnalysisKind::Ifft,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -540,6 +551,8 @@ pub struct AnalysisDialog {
     signal_normalize: bool,
     signal_interval: Option<f64>,
     level_crossing: LevelCrossingSpec,
+    fft: FftSpec,
+    ifft: IfftSpec,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
@@ -583,6 +596,63 @@ const CURVE_OPS: [(&str, CurveOp); 5] = [
 ];
 
 /// Every numeric Y column outside `exclude`, for the reference list.
+/// The options of Signal Processing > FFT > FFT, with Origin's names.
+fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
+    let o = &mut spec.options;
+    ui.horizontal(|ui| {
+        ui.label("Sampling interval");
+        ui.checkbox(&mut spec.auto_interval, "Auto")
+            .on_hover_text("The X step of the input column; 1 without an X column.");
+        ui.add_enabled(!spec.auto_interval, DragValue::new(&mut o.interval).speed(0.01).range(1e-300..=f64::MAX));
+    });
+    const WINDOWS: [(&str, FftWindow); 7] = [
+        ("Rectangle", FftWindow::Rectangle),
+        ("Welch", FftWindow::Welch),
+        ("Triangular", FftWindow::Triangular),
+        ("Bartlett", FftWindow::Bartlett),
+        ("Hanning", FftWindow::Hanning),
+        ("Hamming", FftWindow::Hamming),
+        ("Blackman", FftWindow::Blackman),
+    ];
+    ui.horizontal(|ui| {
+        ui.label("Window");
+        egui::ComboBox::from_id_salt("fft_window")
+            .selected_text(WINDOWS.iter().find(|w| w.1 == o.window).map_or("", |w| w.0))
+            .show_ui(ui, |ui| {
+                for (label, w) in WINDOWS {
+                    ui.selectable_value(&mut o.window, w, label);
+                }
+            });
+    });
+    ui.horizontal(|ui| {
+        ui.label("Window Correction");
+        ui.radio_value(&mut o.correction, WindowCorrection::None, "None");
+        ui.radio_value(&mut o.correction, WindowCorrection::Amplitude, "Amplitude");
+        ui.radio_value(&mut o.correction, WindowCorrection::Power, "Power");
+    });
+    ui.checkbox(&mut o.normalize, "Normalize Real, Imaginary and Magnitude");
+    ui.horizontal(|ui| {
+        ui.label("Spectrum Type");
+        ui.radio_value(&mut o.two_sided, false, "One-sided");
+        ui.radio_value(&mut o.two_sided, true, "Two-sided");
+    });
+    ui.add_enabled(o.two_sided, egui::Checkbox::new(&mut o.shift, "Shift (zero frequency in the middle)"));
+    ui.checkbox(&mut o.unwrap, "Unwrap Phase");
+    ui.horizontal(|ui| {
+        ui.label("Factor");
+        ui.radio_value(&mut o.science, false, "-1 (Electrical Engineering)");
+        ui.radio_value(&mut o.science, true, "+1 (Science)");
+    });
+    ui.horizontal(|ui| {
+        ui.label("Power");
+        ui.radio_value(&mut o.power, PowerNorm::Msa, "MSA");
+        ui.radio_value(&mut o.power, PowerNorm::Ssa, "SSA");
+        ui.radio_value(&mut o.power, PowerNorm::Tisa, "TISA");
+    })
+    .response
+    .on_hover_text("Mean square, sum square or time-interval square amplitude");
+}
+
 fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, String)> {
     let mut out = Vec::new();
     for book in project.workbooks() {
@@ -641,8 +711,18 @@ impl AnalysisDialog {
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
         // Convolution and Correlation may use an input itself (autocorrelation, as Origin).
-        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
         let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
+        // IFFT: the column right after the (first) input is the imaginary part, as an FFT sheet has it.
+        let next_column = columns.first().and_then(|c| {
+            let (_, sheet, _) = project.locate(*c)?;
+            let at = sheet.column_index(*c)?;
+            sheet.columns.get(at + 1).map(|n| n.id)
+        });
+        let first_reference = match (kind, next_column) {
+            (AnalysisKind::Ifft, Some(id)) => reference_choices.iter().position(|(c, _)| *c == id).unwrap_or(0),
+            _ => 0,
+        };
         let sheet_columns: Vec<(ColumnId, String)> = sheet
             .columns
             .iter()
@@ -686,12 +766,14 @@ impl AnalysisDialog {
                 || (kind != AnalysisKind::ColumnMath && !reference_choices.is_empty()),
             constant: if kind == AnalysisKind::ColumnMath { 10.0 } else { 1.0 },
             reference_choices,
-            reference: 0,
+            reference: first_reference,
             common_only: false,
             signal_circular: false,
             signal_normalize: false,
             signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
             level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1, details: false },
+            fft: FftSpec { auto_interval: true, ..Default::default() },
+            ifft: IfftSpec { auto_interval: true, ..Default::default() },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -984,6 +1066,20 @@ impl AnalysisDialog {
             }
             AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
             AnalysisKind::Hilbert => Tool::Hilbert,
+            AnalysisKind::Fft => Tool::Fft(self.fft),
+            AnalysisKind::Ifft => {
+                let imaginary = if self.use_reference {
+                    Some(
+                        self.reference_choices
+                            .get(self.reference)
+                            .map(|(id, _)| *id)
+                            .ok_or("there is no other column with numbers to use as the imaginary part")?,
+                    )
+                } else {
+                    None
+                };
+                Tool::Ifft(IfftSpec { imaginary, ..self.ifft })
+            }
             AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
                 let other = self
                     .reference_choices
@@ -1207,6 +1303,7 @@ impl AnalysisDialog {
             AnalysisKind::ColumnMath => "Column",
             AnalysisKind::Convolution => "Response",
             AnalysisKind::SignalCorrelation => "Second signal",
+            AnalysisKind::Ifft => "Imaginary",
             _ => "Reference",
         };
         let text = match self.reference_choices.get(self.reference) {
@@ -1227,7 +1324,7 @@ impl AnalysisDialog {
             ui.weak("Row by row, without X values; rows past the end of the column count as 0.");
             return;
         }
-        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation) {
+        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft) {
             return;
         }
         ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
@@ -1272,6 +1369,30 @@ impl AnalysisDialog {
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
+            }
+            AnalysisKind::Fft => fft_options(ui, &mut self.fft),
+            AnalysisKind::Ifft => {
+                ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
+                    ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
+                });
+                ui.add_enabled_ui(self.use_reference, |ui| self.reference_options(ui));
+                let spec = &mut self.ifft;
+                ui.horizontal(|ui| {
+                    ui.label("Sampling interval");
+                    ui.checkbox(&mut spec.auto_interval, "Auto")
+                        .on_hover_text("The X step of the input column (its frequency step); 1 without an X column.");
+                    ui.add_enabled(
+                        !spec.auto_interval,
+                        DragValue::new(&mut spec.options.interval).speed(0.01).range(1e-300..=f64::MAX),
+                    );
+                });
+                ui.checkbox(&mut spec.options.shift, "Shift (the input has the zero frequency in the middle)");
+                ui.checkbox(&mut spec.options.unwrap, "Unwrap Phase");
+                ui.horizontal(|ui| {
+                    ui.label("Factor");
+                    ui.radio_value(&mut spec.options.science, false, "-1 (Electrical Engineering)");
+                    ui.radio_value(&mut spec.options.science, true, "+1 (Science)");
+                });
             }
             AnalysisKind::Hilbert => {
                 ui.weak(
@@ -1947,6 +2068,8 @@ impl AnalysisDialog {
             AnalysisKind::SignalCorrelation => "corr1",
             AnalysisKind::LevelCrossing => "levelcrossing",
             AnalysisKind::Hilbert => "hilbert",
+            AnalysisKind::Fft => "fft1",
+            AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -2008,6 +2131,8 @@ impl AnalysisDialog {
             AnalysisKind::SignalCorrelation => "Correlate the input signals with a second signal",
             AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
+            AnalysisKind::Fft => "The frequency spectrum of the input signals",
+            AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -2061,6 +2186,8 @@ impl AnalysisDialog {
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
+            AnalysisKind::Fft => "Eight spectrum columns per input in a new sheet",
+            AnalysisKind::Ifft => "Time, real, imaginary, amplitude and phase in a new sheet",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
@@ -2136,7 +2263,8 @@ impl AnalysisDialog {
             return;
         }
         self.column_names = names.join(", ");
-        let signal = matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        let signal =
+            matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
         self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
         if matches!(self.kind, AnalysisKind::CurveMath | AnalysisKind::ColumnMath) {

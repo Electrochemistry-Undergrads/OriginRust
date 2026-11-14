@@ -851,6 +851,34 @@ pub enum MathKind {
     Power,
 }
 
+/// FFT window (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftWindowArg {
+    Rectangle,
+    Welch,
+    Triangular,
+    Bartlett,
+    Hanning,
+    Hamming,
+    Blackman,
+}
+
+/// FFT window correction.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftCorrectionArg {
+    None,
+    Amplitude,
+    Power,
+}
+
+/// FFT power normalization: mean square, sum square or time-interval square amplitude.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftPowerArg {
+    Msa,
+    Ssa,
+    Tisa,
+}
+
 /// The row given for a level crossing between two rows (Origin's `type`).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CrossingRow {
@@ -1055,6 +1083,55 @@ pub enum AnalyzeTool {
         /// Lag step of the result.
         #[arg(long, default_value_t = 1.0)]
         interval: f64,
+    },
+    /// The FFT of each column (Origin's Signal Processing > FFT > FFT): frequency, real,
+    /// imaginary, magnitude, amplitude, phase (degrees), power and dB in a new sheet.
+    Fft {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Sampling interval; by default the X step of the column (1 without an X column).
+        #[arg(long)]
+        interval: Option<f64>,
+        #[arg(long, value_enum, default_value_t = FftWindowArg::Rectangle)]
+        window: FftWindowArg,
+        #[arg(long, value_enum, default_value_t = FftCorrectionArg::Amplitude)]
+        correction: FftCorrectionArg,
+        /// Divide the real and imaginary parts and the magnitude by the number of points.
+        #[arg(long)]
+        normalize: bool,
+        /// All frequencies instead of 0 to the Nyquist frequency.
+        #[arg(long)]
+        two_sided: bool,
+        /// Two-sided: keep the FFT order instead of putting zero in the middle.
+        #[arg(long)]
+        no_shift: bool,
+        #[arg(long)]
+        no_unwrap: bool,
+        /// The +1 sign convention of the exponent.
+        #[arg(long)]
+        science: bool,
+        #[arg(long, value_enum, default_value_t = FftPowerArg::Msa)]
+        power: FftPowerArg,
+    },
+    /// The inverse FFT of each column as the real part of a spectrum (Origin's Signal Processing >
+    /// FFT > IFFT): time, real, imaginary, amplitude and phase in a new sheet.
+    Ifft {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The column with the imaginary part (0 without).
+        #[arg(long)]
+        imaginary: Option<String>,
+        /// Sampling interval of the spectrum; by default the X step of the column.
+        #[arg(long)]
+        interval: Option<f64>,
+        /// The input is in FFT order (zero frequency first), not shifted.
+        #[arg(long)]
+        no_shift: bool,
+        #[arg(long)]
+        no_unwrap: bool,
+        /// The +1 sign convention of the forward transform.
+        #[arg(long)]
+        science: bool,
     },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.

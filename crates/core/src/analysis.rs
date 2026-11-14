@@ -38,6 +38,7 @@ pub use sheaf_calc::{
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
+pub use sheaf_calc::{FftOptions, FftWindow, IfftOptions, PowerNorm, WindowCorrection};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -232,6 +233,27 @@ fn next_crossing_number(sheet: &Worksheet) -> usize {
         .filter_map(|c| c.long_name.strip_prefix("CrossingX")?.parse::<usize>().ok())
         .max()
         .map_or(1, |n| n + 1)
+}
+
+/// What [`Tool::Fft`] does (Origin's Signal Processing > FFT > FFT, `fft1`, measured;
+/// analysis-tools.md 15).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FftSpec {
+    pub options: FftOptions,
+    /// Take the sampling interval from the input's X column (its mean step; 1 without X) instead of
+    /// `options.interval`.
+    pub auto_interval: bool,
+}
+
+/// What [`Tool::Ifft`] does (Origin's Signal Processing > FFT > IFFT, `ifft1`, measured;
+/// analysis-tools.md 15.1): the input columns are real parts of a spectrum.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct IfftSpec {
+    /// The imaginary part, row by row with the input; none: 0.
+    pub imaginary: Option<ColumnId>,
+    pub options: IfftOptions,
+    /// Take the sampling interval (the frequency step) from the input's X column.
+    pub auto_interval: bool,
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -593,6 +615,8 @@ pub enum Tool {
     LevelCrossing(LevelCrossingSpec),
     /// Signal Processing > Hilbert Transform (Origin's `hilbert`, measured; analysis-tools.md 13).
     Hilbert,
+    Fft(FftSpec),
+    Ifft(IfftSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -653,6 +677,8 @@ impl Tool {
             Tool::SignalCorrelation(_) => "Signal correlation",
             Tool::LevelCrossing(_) => "Level crossing",
             Tool::Hilbert => "Hilbert transform",
+            Tool::Fft(_) => "FFT",
+            Tool::Ifft(_) => "IFFT",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -708,6 +734,8 @@ impl Tool {
             Tool::SignalCorrelation(_) => "Correlation",
             Tool::LevelCrossing(_) => "LevelCrossing",
             Tool::Hilbert => "Hilbert",
+            Tool::Fft(_) => "FFT",
+            Tool::Ifft(_) => "IFFT",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1675,6 +1703,87 @@ impl Project {
                         ),
                         data: ColumnData::numeric(v),
                     });
+                }
+            }
+            Tool::Fft(spec) => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let mut o = spec.options;
+                    if spec.auto_interval {
+                        o.interval = auto_interval(inp.xs());
+                    }
+                    if !(o.interval.is_finite() && o.interval > 0.0) {
+                        return Err(AnalysisError::BadOption(format!("{} is not a usable interval", o.interval)));
+                    }
+                    let r = calc::fft_spectrum(&y, &o);
+                    let note = format!("FFT of {}{}", inp.short, inp.range_note());
+                    let mut col = |designation, name: &str, units: &str, data: Vec<f64>| {
+                        on_sheet.push(SheetColumn {
+                            designation,
+                            long_name: name.into(),
+                            units: units.into(),
+                            comments: note.clone(),
+                            data: ColumnData::numeric(data),
+                        })
+                    };
+                    col(Designation::X, "Frequency", "", r.frequency);
+                    col(Designation::Y, "Real", "", r.real);
+                    col(Designation::Y, "Imaginary", "", r.imaginary);
+                    col(Designation::Y, "Magnitude", "", r.magnitude);
+                    col(Designation::Y, "Amplitude", &inp.units, r.amplitude);
+                    col(Designation::Y, "Phase", "Degrees", r.phase);
+                    col(Designation::Y, "Power", "", r.power);
+                    col(Designation::Y, "dB", "dB", r.db);
+                }
+            }
+            Tool::Ifft(spec) => {
+                let imaginary = match spec.imaginary {
+                    Some(id) => {
+                        let (_, _, c) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+                        let v = c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
+                        Some((c.short_name.clone(), v.to_vec()))
+                    }
+                    None => None,
+                };
+                for inp in &inputs {
+                    let re = signal_values(inp.ys(), &inp.short)?;
+                    let im: Option<Vec<f64>> = match &imaginary {
+                        Some((name, v)) => {
+                            let rows = v.get(inp.first..).unwrap_or(&[]);
+                            let part: Vec<f64> = (0..re.len()).map(|i| rows.get(i).copied().unwrap_or(0.0)).collect();
+                            if part.iter().any(|x| !x.is_finite()) {
+                                return Err(AnalysisError::BadOption(format!("column {name} has missing values")));
+                            }
+                            Some(part)
+                        }
+                        None => None,
+                    };
+                    let mut o = spec.options;
+                    if spec.auto_interval {
+                        o.interval = auto_interval(inp.xs());
+                    }
+                    if !(o.interval.is_finite() && o.interval > 0.0) {
+                        return Err(AnalysisError::BadOption(format!("{} is not a usable interval", o.interval)));
+                    }
+                    let r = calc::ifft_spectrum(&re, im.as_deref(), &o);
+                    let note = match &imaginary {
+                        Some((name, _)) => format!("IFFT of {} + i {name}{}", inp.short, inp.range_note()),
+                        None => format!("IFFT of {}{}", inp.short, inp.range_note()),
+                    };
+                    let mut col = |designation, name: &str, units: &str, data: Vec<f64>| {
+                        on_sheet.push(SheetColumn {
+                            designation,
+                            long_name: name.into(),
+                            units: units.into(),
+                            comments: note.clone(),
+                            data: ColumnData::numeric(data),
+                        })
+                    };
+                    col(Designation::X, "Time", "", r.time);
+                    col(Designation::Y, "Real", "", r.real);
+                    col(Designation::Y, "Imaginary", "", r.imaginary);
+                    col(Designation::Y, "Amplitude", "", r.amplitude);
+                    col(Designation::Y, "Phase", "Degrees", r.phase);
                 }
             }
             Tool::Hilbert => {
@@ -3028,6 +3137,46 @@ mod tests {
             p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))),
             Err(AnalysisError::BadOption(_))
         ));
+    }
+
+    #[test]
+    fn the_fft_writes_origins_eight_columns_with_frequencies_from_the_x_step() {
+        let (mut p, book, _, ramp) = sample();
+        let r = p.analyze(&request(&[ramp], Tool::Fft(FftSpec { auto_interval: true, ..Default::default() }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("FFT"), "{}", rs.name);
+        let names: Vec<&str> = rs.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Frequency", "Real", "Imaginary", "Magnitude", "Amplitude", "Phase", "Power", "dB"]);
+        // 11 points one second apart: frequencies k / 11 up to 5 / 11.
+        let f = rs.columns[0].numeric().unwrap();
+        assert_eq!(f.len(), 6);
+        assert!((f[5] - 5.0 / 11.0).abs() < 1e-12);
+        // The mean of 0..10 is 5.
+        assert!((rs.columns[4].numeric().unwrap()[0] - 5.0).abs() < 1e-12);
+        let bad = FftSpec { options: FftOptions { interval: 0.0, ..Default::default() }, auto_interval: false };
+        assert!(matches!(p.analyze(&request(&[ramp], Tool::Fft(bad))), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn the_inverse_fft_of_an_fft_gives_the_signal_back() {
+        let (mut p, book, _, ramp) = sample();
+        let two_sided = FftOptions { two_sided: true, ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Fft(FftSpec { options: two_sided, auto_interval: true }))).unwrap();
+        let sheet = r.new_sheet.unwrap();
+        let (real, imag) = {
+            let rs = &p.workbook(book).unwrap().sheets[sheet];
+            (rs.columns[1].id, rs.columns[2].id)
+        };
+        let spec = IfftSpec { imaginary: Some(imag), options: IfftOptions::default(), auto_interval: true };
+        let r = p.analyze(&request(&[real], Tool::Ifft(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let names: Vec<&str> = rs.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Time", "Real", "Imaginary", "Amplitude", "Phase"]);
+        // The frequency step 1/11 Hz gives back the time step of 1 s and the ramp.
+        for (i, (t, v)) in rs.columns[0].numeric().unwrap().iter().zip(rs.columns[1].numeric().unwrap()).enumerate() {
+            assert!((t - i as f64).abs() < 1e-9 && (v - i as f64).abs() < 1e-9, "row {i}: {t} {v}");
+        }
+        assert!(r.message.starts_with("IFFT"), "{}", r.message);
     }
 
     #[test]

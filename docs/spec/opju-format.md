@@ -290,5 +290,9 @@ Not known, and each of these decides whether Origin accepts a file:
    [inferred, not tried].
 6. The folder tree and the XML settings after the body.
 
+Until then Sheaf does not write `.opju`: a save to a `.opju` name is refused with a message that points to
+`.opj` (which Origin 2018 and later open), and nothing is written (`IoError::OpjuWrite`, `save_project`).
+Before 2026-11-13 such a save silently wrote a `.sheaf` project under the `.opju` name.
+
 A writer can produce files that Sheaf's own reader reads (the tests do this); whether Origin 2018 and
 later opens them cannot be checked without such an Origin. Do not claim it does.

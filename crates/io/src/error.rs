@@ -83,6 +83,13 @@ pub enum IoError {
     #[error("'{}' is not a readable Origin Unicode project (.opju): {reason}", path.display())]
     OpjuFormat { path: PathBuf, reason: String },
 
+    /// A save was asked for in the Origin Unicode format, which Sheaf reads but cannot write.
+    #[error(
+        "'{}' was not saved: Sheaf reads Origin Unicode projects (.opju) but cannot write them; save as .opj, which Origin 2018 and later open as well",
+        path.display()
+    )]
+    OpjuWrite { path: PathBuf },
+
     /// The project holds something that an Origin project cannot store, or a name Origin would refuse.
     #[error("cannot write an Origin project (.opj): {reason}")]
     OpjWrite { reason: String },

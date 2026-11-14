@@ -2677,11 +2677,12 @@ impl SheafApp {
                     let files = if arg.is_empty() { Vec::new() } else { vec![PathBuf::from(arg)] };
                     self.import_wizard = Some(ImportWizard::new(files));
                 }
-                // import-wizard-page:header, names, file, data or save (after import-wizard).
+                // import-wizard-page:header, variables, file, data, selection or save (after import-wizard).
                 "import-wizard-page" => {
                     let page = match arg {
                         "header" => WizardPage::HeaderLines,
-                        "names" => WizardPage::ColumnNames,
+                        "variables" => WizardPage::VariableExtraction,
+                        "selection" => WizardPage::DataSelection,
                         "file" => WizardPage::FileNameOptions,
                         "data" => WizardPage::DataColumns,
                         "save" => WizardPage::SaveFilters,

@@ -420,3 +420,44 @@ What Sheaf does (`ColumnData::Mixed`, `crates/core/src/column.rs`):
 - Sort uses the numbers (text cells sort as missing, last). Set Column Values on a Text & Numeric column stays Text & Numeric and keeps the text cells outside the filled rows.
 
 Not done: file name trimming for sheet and book names (`FNameToShtFrom/To`), per-file modes (`FirstMode` against `Mode`), parameter and block options in the import window, joining several comment lines.
+
+## 16. Import Wizard pages (measured 2026-11-13)
+
+Origin's Import Wizard (File > Import > Import Wizard..., Ctrl+3; opened with `origin-dialog.ps1
+-MenuClicks "300,300;K:^3"`, control lists in `re-workspace/scratch/t19wiz/w4`, `w5`) titles its window
+"Import Wizard - <page>". For an ASCII file the pages are, in order:
+
+1. Source: Data Type ASCII, Binary, User Defined; Data Source File (with a browse button) or Clipboard;
+   Import Filter (List filters applicable to both Data Type and file name, on; Import Filters for current
+   Data Type `<None>` and the filters of Origin's folder; Description); Target Window Worksheet, Matrix,
+   None; Template `<default>`, `<clone>`, `excel.otw`; Import Mode Replace Existing Data (default), Start
+   New Books, Start New Sheets, Start New Columns, Start New Rows.
+2. Header Lines: Number of main header lines (exclude subheader lines) and Number of subheader lines (0 to
+   10), Auto determine header lines, Line number start from bottom, Long Names, Units, Short Names,
+   Comments (from one line to another), System Parameters and User Parameters (line ranges), Extract Long
+   Names and Units from Same Line, Column Label Assignment from Subheader Lines (prefixes S, L, U, P, C, MH,
+   SH), Characters to skip on each line, Preview Lines (10 to 500), Preview Font.
+3. Variable Extraction: Extract variables from file names and file headers, by delimiters, by character
+   positions, by a scanned delimiter or by an Origin C function; Add variables to page info; Create User
+   Parameter rows for each variable; File Info: Save file info. in workbook (on).
+4. File Name Options: Rename worksheet with filename (on), workbook with file name (on), Include path when
+   rename workbook, file name to workbook comments (on), file name to column comments, Include path when
+   appending file name (on), worksheet or workbook with a variable, Rename Long Name for Book only, and
+   Rename, Append or Auto for multiple files.
+5. Data Columns: Delimiter (Tab/Space, Tab, Comma, Semicolon, Space, Other) or Fixed Width, Treat
+   consecutive delimiters as one, Number of columns, Text Qualifier `<None>`, `"` or `'` with Remove,
+   Column Designations (`<Unchanged>`, 2Y, X2Y, (XY), (X2Y), (X3Y), (XYE), XY2Z, (XYZ)), Custom Date Format
+   and Custom Time Format lists, Keep target column format, Remove leading zeroes from numbers (on), Force
+   Rows to same size, Numeric Separator (1,000.00 and three others), Add Sparklines (Yes if less than 50
+   columns), a column preview with Add Column, Delete Column and Column Separator.
+6. Data Selection: Partial Import From Column / To, From Row / To with Skip Rows and Read Rows, Non-numeric
+   data in a numeric field (Read as text by default; Terminate import, Start new (hidden) book, Start new
+   worksheet, Start new column), and for several files None, All Files or From 2nd File On.
+7. Save Filters: Save filter in the data file folder, the User Files folder (default) or the window; filter
+   file name; data file names to associate; description; Show Filter in File:Open List; Specify advanced
+   filter options.
+
+Sheaf's wizard has these seven pages with these titles (`import_wizard.rs`): Header Lines holds the header
+line count and the Long Names, Units, Comments and Short Names lines; Variable Extraction and Save Filters
+are shown greyed; Data Selection holds Sheaf's partial import (rows to skip and to read); Data Columns the
+delimiter, designations and number and date settings. The other controls listed above are not offered.

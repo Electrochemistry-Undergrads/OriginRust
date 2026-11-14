@@ -4757,11 +4757,13 @@ fn typing_a_path_enables_the_wizard_buttons_and_the_pages_follow_next_and_back()
     type_into_box(&mut h, 0, &file.display().to_string());
     assert!(!is_disabled(&h, "Next >>"), "a file that exists enables Next");
     assert!(!is_disabled(&h, "Finish"));
+    // Origin's seven pages of the ASCII wizard, in its order.
     for page in [
         WizardPage::HeaderLines,
-        WizardPage::ColumnNames,
+        WizardPage::VariableExtraction,
         WizardPage::FileNameOptions,
         WizardPage::DataColumns,
+        WizardPage::DataSelection,
         WizardPage::SaveFilters,
     ] {
         click(&mut h, "Next >>");
@@ -4769,7 +4771,7 @@ fn typing_a_path_enables_the_wizard_buttons_and_the_pages_follow_next_and_back()
     }
     assert!(is_disabled(&h, "Next >>"), "the last page has no next one");
     click(&mut h, "<< Back");
-    assert_eq!(h.state().import_wizard.as_ref().unwrap().page(), WizardPage::DataColumns);
+    assert_eq!(h.state().import_wizard.as_ref().unwrap().page(), WizardPage::DataSelection);
     // Cancel at the left; Back, Next and Finish at the right.
     assert!(button_x(&h, "Cancel") < button_x(&h, "<< Back"));
     assert!(button_x(&h, "<< Back") < button_x(&h, "Next >>") && button_x(&h, "Next >>") < button_x(&h, "Finish"));
@@ -4785,13 +4787,14 @@ fn the_wizard_pages_drive_the_import_options_and_finish_imports() {
     std::fs::write(&file, "t,i\ns,mA\n1,2.5\n2,4.5\n3,6.5\n").unwrap();
     h.state_mut().import_wizard = Some(ImportWizard::new(vec![file]));
     settle(&mut h);
-    // Header Lines and Column Names pages: the option boxes, and the lines of the file.
+    // Header Lines page (Origin's): the header line count and the lines of the column labels.
     click(&mut h, "Next >>");
-    h.get_by_label("Lines before the data");
+    for label in ["Number of main header lines", "Long Names", "Units", "Comments", "Short Names"] {
+        h.get_by_label(label);
+    }
+    // Variable Extraction: shown grey.
     click(&mut h, "Next >>");
-    h.get_by_label("Line with the names");
-    h.get_by_label("Line with the units");
-    h.get_by_label("Line with comments");
+    assert!(is_disabled(&h, "Extract variables from file names and file headers"));
     // File Name Options: the file name becomes the sheet name.
     click(&mut h, "Next >>");
     click(&mut h, "Use the file name as the name of the sheet");
@@ -4799,6 +4802,9 @@ fn the_wizard_pages_drive_the_import_options_and_finish_imports() {
     click(&mut h, "Next >>");
     assert!(has_label(&h, "Delimiter"));
     click(&mut h, "The first column is X");
+    // Data Selection: the partial import.
+    click(&mut h, "Next >>");
+    assert!(has_label(&h, "Partial Import"));
     // Save Filters: shown grey.
     click(&mut h, "Next >>");
     assert!(is_disabled(&h, "Save the settings as an import filter"));

@@ -109,7 +109,8 @@ $out = (Resolve-Path $OutDir).Path
 function Find-Dialog {
   foreach ($h in [DlgWin]::Tops([uint32]$OriginPid)) {
     $t = [DlgWin]::Text($h); $c = [DlgWin]::Cls($h)
-    if ($t -ne '' -and $t -notlike 'Origin*' -and $c -ne 'ORIGIN_MAINFRAME') { return $h }
+    # Origin's tips ("Hint Message") open beside dialogs and are not the dialog wanted.
+    if ($t -ne '' -and $t -notlike 'Origin*' -and $t -ne 'Hint Message' -and $c -ne 'ORIGIN_MAINFRAME') { return $h }
   }
   return [IntPtr]::Zero
 }
@@ -158,6 +159,8 @@ $nextClick = (Get-Date).AddSeconds(4)
 if ($MenuClicks -ne '') {
   Start-Sleep -Milliseconds 4000
   foreach ($p in ($MenuClicks -split ';')) {
+    # "K:keys" sends keys (SendKeys notation, for example K:^3 for Ctrl+3) instead of a click.
+    if ($p.StartsWith('K:')) { [System.Windows.Forms.SendKeys]::SendWait($p.Substring(2)); Start-Sleep -Milliseconds 700; continue }
     $xy = $p -split ','
     [void][DlgWin]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 300
     [DlgWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [DlgWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)

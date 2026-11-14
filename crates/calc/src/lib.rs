@@ -43,8 +43,8 @@ pub mod signal;
 pub mod smooth;
 pub mod stats;
 pub mod trace;
-pub mod vartest;
 mod util;
+pub mod vartest;
 
 pub use anova::{
     Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, compare_to_control, ptukey,

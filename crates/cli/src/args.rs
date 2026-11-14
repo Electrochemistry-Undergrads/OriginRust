@@ -1631,6 +1631,60 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },
+    /// Test of variance: each column against a hypothesized variance (chi-square, --variance) or two columns
+    /// as a ratio of variances (F test, --ratio, first over second). Two --y columns, or --ratio, make the
+    /// two-sample test. --levels (percent, comma-separated) adds the confidence intervals.
+    Vartest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// One-sample test: the hypothesized variance (default 1).
+        #[arg(long, conflicts_with = "ratio")]
+        variance: Option<f64>,
+        /// Two-sample test: the hypothesized ratio of the variances (default 1).
+        #[arg(long)]
+        ratio: Option<f64>,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// Confidence levels in percent, for example 90,95,99; none means no intervals.
+        #[arg(long, value_delimiter = ',')]
+        levels: Vec<f64>,
+    },
+    /// Test of a proportion from counts (Origin's Summarized input): --successes and --size once for the
+    /// one-sample test against --proportion, twice (or comma-separated) for the two-sample test of the
+    /// difference against --difference. The data file only names the workbook that receives the result sheet.
+    Proptest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of successes of each sample.
+        #[arg(long, value_delimiter = ',', required = true)]
+        successes: Vec<u64>,
+        /// Sample size of each sample.
+        #[arg(long, value_delimiter = ',', required = true)]
+        size: Vec<u64>,
+        /// One-sample test: the test proportion.
+        #[arg(long, default_value_t = 0.5)]
+        proportion: f64,
+        /// Two-sample test: the hypothesized difference of the proportions (first minus second).
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        difference: f64,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// Also the exact test (binomial; Fisher's for two samples).
+        #[arg(long)]
+        exact: bool,
+        /// Only the exact test, not the normal approximation.
+        #[arg(long, requires = "exact")]
+        exact_only: bool,
+        /// Confidence levels in percent, for example 90,95,99; none means no intervals.
+        #[arg(long, value_delimiter = ',')]
+        levels: Vec<f64>,
+    },
     /// One-way ANOVA: every chosen column is a group. The result (group statistics, ANOVA table,
     /// means comparison of all pairs) goes to a new sheet.
     Anova {

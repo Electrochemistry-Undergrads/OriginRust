@@ -293,7 +293,9 @@ fn ttest(spec: &TTestSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
 /// (a one-tailed test gives the interval of level `1 - 2 alpha`).
 fn alpha_for_level(percent: f64, tail: Tail) -> Result<f64, AnalysisError> {
     if !(percent > 0.0 && percent < 100.0) {
-        return Err(AnalysisError::BadOption(format!("a confidence level must lie between 0 and 100 %, not {percent}")));
+        return Err(AnalysisError::BadOption(format!(
+            "a confidence level must lie between 0 and 100 %, not {percent}"
+        )));
     }
     let miss = 1.0 - percent / 100.0;
     Ok(if tail == Tail::Two { miss } else { miss / 2.0 })
@@ -340,19 +342,10 @@ fn var_test(spec: &VarTestSpec, inputs: &[Input<'_>]) -> Result<Output, Analysis
     };
     let table = match spec.kind {
         VarTestKind::OneSample { variance } => {
-            let mut headers: Vec<String> = [
-                "N",
-                "Mean",
-                "SD",
-                "Variance",
-                "Hypothesized variance",
-                "Chi-Square",
-                "DF",
-                "Prob",
-                "Reject",
-            ]
-            .map(str::to_string)
-            .to_vec();
+            let mut headers: Vec<String> =
+                ["N", "Mean", "SD", "Variance", "Hypothesized variance", "Chi-Square", "DF", "Prob", "Reject"]
+                    .map(str::to_string)
+                    .to_vec();
             interval_headers(&mut headers);
             let mut table = ResultTable::new(&headers.iter().map(String::as_str).collect::<Vec<_>>());
             for inp in inputs {
@@ -1837,9 +1830,9 @@ mod tests {
         let r = run(&mut p, &ids[..1], Tool::VarTest(one.clone()));
         assert!(r.message.contains("One-sample test for variance") && r.message.contains("VarTest1"), "{}", r.message);
         let close = |got: Vec<f64>, want: f64| assert!((got[0] - want).abs() <= 1e-7 * want.abs(), "{got:?} {want}");
-        close(cell(&p, &r, "Chi-Square"), 6.3788381990149663);
-        close(cell(&p, &r, "Prob"), 0.99254933044912774);
-        close(cell(&p, &r, "LCL(95%)"), 0.79671917636177081);
+        close(cell(&p, &r, "Chi-Square"), 6.378_838_199_014_966);
+        close(cell(&p, &r, "Prob"), 0.992_549_330_449_127_7);
+        close(cell(&p, &r, "LCL(95%)"), 0.796_719_176_361_770_8);
         close(cell(&p, &r, "UCL(95%)"), 7.54950463751445);
         assert!(cell(&p, &r, "UCL(99%)")[0] > cell(&p, &r, "UCL(95%)")[0]);
         let plain = run(&mut p, &ids[..1], Tool::VarTest(VarTestSpec { intervals: false, ..one }));
@@ -1848,8 +1841,8 @@ mod tests {
 
         let two = VarTestSpec { kind: VarTestKind::TwoSample { ratio: 1.0 }, ..Default::default() };
         let r = run(&mut p, &ids[..2], Tool::VarTest(two.clone()));
-        close(cell(&p, &r, "F"), 0.45323022914345851);
-        close(cell(&p, &r, "Prob"), 0.30934827784074181);
+        close(cell(&p, &r, "F"), 0.453_230_229_143_458_5);
+        close(cell(&p, &r, "Prob"), 0.309_348_277_840_741_8);
         assert!(p.analyze(&request(&ids, Tool::VarTest(two))).is_err());
         let bad = VarTestSpec { levels: vec![150.0], intervals: true, ..Default::default() };
         assert!(p.analyze(&request(&ids[..1], Tool::VarTest(bad))).is_err());

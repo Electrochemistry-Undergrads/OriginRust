@@ -750,6 +750,34 @@ fn groups_file(dir: &Path) -> PathBuf {
 }
 
 #[test]
+fn variance_and_proportion_tests_run_from_the_command_line() {
+    let dir = scratch("vartest");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) =
+        sheaf(&["analyze", "vartest", file, "--y", "untreated", "--variance", "0.1", "--levels", "95"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("one-sample test for variance") && out.contains("LCL(95%)"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated,treated", "--tail", "upper"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("two-sample test for variance") && out.contains("upper-tailed"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated", "--ratio", "1"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+
+    let (ok, out, err) = sheaf(&["analyze", "proptest", file, "--successes", "7", "--size", "10", "--exact"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-sample proportion test") && out.contains("exact p = 0.3438"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "proptest", file, "--successes", "15,9", "--size", "40,35", "--levels", "90,95"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Two-sample proportion test"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "11", "--size", "10"]);
+    assert!(!ok && err.contains("no more successes"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "1,2,3", "--size", "10,10,10"]);
+    assert!(!ok && err.contains("one --successes"), "{err}");
+}
+
+#[test]
 fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
     let dir = scratch("stats");
     let data = groups_file(&dir);

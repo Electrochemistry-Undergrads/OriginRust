@@ -1616,7 +1616,10 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::PropTest(_));
+        let own_columns = matches!(
+            request.tool,
+            Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::PropTest(_)
+        );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {

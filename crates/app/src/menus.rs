@@ -1073,8 +1073,13 @@ fn statistics_menu() -> Vec<Entry> {
             "&Hypothesis Testing",
             vec![
                 item("One-Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
+                item("Pair-Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
                 item("Two-Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
-                item("Paired Sample t-Test...", Cmd::Analyze(AnalysisKind::TTest)),
+                item("One-Sample Test for Variance...", Cmd::Analyze(AnalysisKind::VarTestOne)),
+                item("Two-Sample Test for Variance...", Cmd::Analyze(AnalysisKind::VarTestTwo)),
+                sep(),
+                item("One-Sample Proportion Test...", Cmd::Analyze(AnalysisKind::PropTestOne)),
+                item("Two-Sample Proportion Test...", Cmd::Analyze(AnalysisKind::PropTestTwo)),
             ],
         ),
         sub(

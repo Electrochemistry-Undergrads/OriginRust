@@ -3917,6 +3917,34 @@ fn the_statistics_menu_runs_a_t_test_and_undoes_in_one_step() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
 }
 
+/// The four variance and proportion tests of Statistics > Hypothesis Testing open from the menu, run on OK and
+/// add a result sheet; the proportion windows ask for counts and have no Input node.
+#[test]
+fn the_hypothesis_testing_menu_runs_the_variance_and_proportion_tests() {
+    let cases = [
+        ("One-Sample Test for Variance...", "VarTest", "Chi-Square", true),
+        ("Two-Sample Test for Variance...", "VarTest", "F", true),
+        ("One-Sample Proportion Test...", "PropTest", "Z", false),
+        ("Two-Sample Proportion Test...", "PropTest", "Z", false),
+    ];
+    for (item, sheet, column, has_input) in cases {
+        let mut h = start(vec![data_file("vartest-menu")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Statistics", "Hypothesis Testing", item]);
+        assert!(h.state().analysis.is_some(), "{item} opens its window");
+        assert_eq!(has_label(&h, "Input"), has_input, "{item}");
+        assert!(has_label(&h, "Alternate Hypothesis"), "{item}");
+        click(&mut h, "OK");
+        assert!(h.state().analysis.is_none(), "OK closes the window of {item}");
+        let b = project(&h).workbooks().next().unwrap();
+        assert_eq!(b.sheets.len(), 2, "{item}");
+        let ws = &b.sheets[1];
+        assert!(ws.name.starts_with(sheet), "{}", ws.name);
+        let col = ws.columns.iter().find(|c| c.long_name == column).unwrap_or_else(|| panic!("{item}: no {column}"));
+        assert!(col.numeric().unwrap().iter().all(|v| v.is_finite()), "{item}");
+    }
+}
+
 /// Statistics > Histogram... adds the counts sheet and a graph with a column plot.
 #[test]
 fn the_statistics_menu_makes_a_histogram_graph() {

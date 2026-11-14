@@ -13,8 +13,8 @@ use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
     HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec,
-    OutlierSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec,
-    Tail, TwoWayAnovaSpec, TwoWayLayout,
+    OutlierSpec, PropTestKind, PropTestSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec,
+    StatisticsSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout, VarTestKind, VarTestSpec,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
@@ -78,6 +78,14 @@ pub enum AnalysisKind {
     Statistics,
     /// The Statistics menu: t-tests, one-way ANOVA, histogram and normality tests.
     TTest,
+    /// Statistics > Hypothesis Testing > One-Sample Test for Variance.
+    VarTestOne,
+    /// Statistics > Hypothesis Testing > Two-Sample Test for Variance.
+    VarTestTwo,
+    /// Statistics > Hypothesis Testing > One-Sample Proportion Test (counts typed in, no data).
+    PropTestOne,
+    /// Statistics > Hypothesis Testing > Two-Sample Proportion Test.
+    PropTestTwo,
     Anova,
     Histogram,
     /// Statistics > Descriptive Statistics > Discrete Frequency.
@@ -180,6 +188,10 @@ impl AnalysisKind {
             AnalysisKind::PeakChain => "Peak Analyzer...",
             AnalysisKind::Statistics => "Statistics on Columns...",
             AnalysisKind::TTest => "t-Test...",
+            AnalysisKind::VarTestOne => "One-Sample Test for Variance...",
+            AnalysisKind::VarTestTwo => "Two-Sample Test for Variance...",
+            AnalysisKind::PropTestOne => "One-Sample Proportion Test...",
+            AnalysisKind::PropTestTwo => "Two-Sample Proportion Test...",
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
             AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
@@ -246,6 +258,10 @@ impl AnalysisKind {
             "peak-chain" => AnalysisKind::PeakChain,
             "statistics" => AnalysisKind::Statistics,
             "ttest" => AnalysisKind::TTest,
+            "vartest1" => AnalysisKind::VarTestOne,
+            "vartest2" => AnalysisKind::VarTestTwo,
+            "proptest1" => AnalysisKind::PropTestOne,
+            "proptest2" => AnalysisKind::PropTestTwo,
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
             "bin2d" => AnalysisKind::Binning2D,
@@ -386,6 +402,39 @@ const NORMALIZE_CHOICES: [(&str, NormalizeMethod); 12] = [
     ("Divide by a value", NormalizeMethod::Divide(1.0)),
 ];
 
+/// Confidence levels in percent typed as numbers separated by spaces or commas.
+fn parse_levels(text: &str) -> Result<Vec<f64>, String> {
+    text.split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|w| !w.is_empty())
+        .map(|w| w.parse::<f64>().map_err(|_| format!("\"{w}\" is not a confidence level")))
+        .collect()
+}
+
+/// The Alternate Hypothesis radios of the variance and proportion tests: `Variance <> 1`, `> 1`, `< 1`.
+fn alternative_radios(ui: &mut egui::Ui, tail: &mut Tail, what: &str, value: &str) {
+    ui.horizontal(|ui| {
+        ui.label("Alternate Hypothesis");
+        ui.radio_value(tail, Tail::Two, format!("{what} <> {value}"));
+        ui.radio_value(tail, Tail::Upper, format!("{what} > {value}"));
+        ui.radio_value(tail, Tail::Lower, format!("{what} < {value}"));
+    });
+}
+
+/// Significance Level, the Confidence Interval(s) tick and the Confidence Level(s) box.
+fn significance_and_intervals(ui: &mut egui::Ui, st: &mut StatsOptions) {
+    ui.horizontal(|ui| {
+        ui.label("Significance Level");
+        ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.4999));
+    });
+    ui.checkbox(&mut st.intervals, "Confidence Interval(s)");
+    ui.add_enabled_ui(st.intervals, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Confidence Level(s) in %");
+            ui.add(egui::TextEdit::singleline(&mut st.levels_text).desired_width(120.0));
+        });
+    });
+}
+
 /// The options of the Statistics menu windows.
 struct StatsOptions {
     /// 0 one-sample, 1 two-sample, 2 paired.
@@ -393,6 +442,19 @@ struct StatsOptions {
     mean: f64,
     difference: f64,
     equal_variance: bool,
+    /// Test of variance: the hypothesized variance or ratio of variances.
+    var_hyp: f64,
+    /// Proportion tests: counts of each sample, the test proportion and difference.
+    successes: [u64; 2],
+    sample_size: [u64; 2],
+    prop_hyp: f64,
+    prop_diff: f64,
+    /// Proportion tests: normal approximation and exact (binomial) test.
+    normal_method: bool,
+    binomial_method: bool,
+    /// Confidence intervals of the variance and proportion tests, and their levels in percent as typed.
+    intervals: bool,
+    levels_text: String,
     tail: Tail,
     alpha: f64,
     comparison: Option<MeansComparison>,
@@ -441,6 +503,15 @@ impl Default for StatsOptions {
             mean: 0.0,
             difference: 0.0,
             equal_variance: true,
+            var_hyp: 1.0,
+            successes: [5, 5],
+            sample_size: [10, 10],
+            prop_hyp: 0.5,
+            prop_diff: 0.0,
+            normal_method: true,
+            binomial_method: false,
+            intervals: false,
+            levels_text: "90 95 99".to_string(),
             tail: Tail::Two,
             alpha: 0.05,
             comparison: Some(MeansComparison::Tukey),
@@ -1511,6 +1582,45 @@ impl AnalysisDialog {
                 tail: self.stats.tail,
                 alpha: self.stats.alpha,
             }),
+            AnalysisKind::VarTestOne | AnalysisKind::VarTestTwo => {
+                let st = &self.stats;
+                Tool::VarTest(VarTestSpec {
+                    kind: if self.kind == AnalysisKind::VarTestOne {
+                        VarTestKind::OneSample { variance: st.var_hyp }
+                    } else {
+                        VarTestKind::TwoSample { ratio: st.var_hyp }
+                    },
+                    tail: st.tail,
+                    alpha: st.alpha,
+                    intervals: st.intervals,
+                    levels: parse_levels(&st.levels_text)?,
+                })
+            }
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo => {
+                let st = &self.stats;
+                Tool::PropTest(PropTestSpec {
+                    kind: if self.kind == AnalysisKind::PropTestOne {
+                        PropTestKind::OneSample {
+                            successes: st.successes[0],
+                            size: st.sample_size[0],
+                            proportion: st.prop_hyp,
+                        }
+                    } else {
+                        PropTestKind::TwoSample {
+                            first: (st.successes[0], st.sample_size[0]),
+                            second: (st.successes[1], st.sample_size[1]),
+                            difference: st.prop_diff,
+                        }
+                    },
+                    tail: st.tail,
+                    alpha: st.alpha,
+                    intervals: st.intervals,
+                    levels: parse_levels(&st.levels_text)?,
+                    normal: st.normal_method,
+                    exact: st.binomial_method,
+                    pooled: true,
+                })
+            }
             AnalysisKind::Anova => Tool::Anova(AnovaSpec {
                 alpha: self.stats.alpha,
                 comparison: self.stats.comparison,
@@ -2099,6 +2209,62 @@ impl AnalysisDialog {
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
             }
+            AnalysisKind::VarTestOne | AnalysisKind::VarTestTwo => {
+                let one = self.kind == AnalysisKind::VarTestOne;
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.label(if one { "Test Variance" } else { "Test Ratio of Variances" });
+                    ui.add(DragValue::new(&mut st.var_hyp).speed(0.01).range(1e-12..=f64::MAX));
+                });
+                let what = if one { "Variance" } else { "Ratio" };
+                let shown = format!("{}", st.var_hyp);
+                ui.horizontal(|ui| {
+                    ui.label("Null Hypothesis");
+                    read_only_box(ui, &format!("{what} = {shown}"), 140.0);
+                });
+                alternative_radios(ui, &mut st.tail, what, &shown);
+                if !one {
+                    ui.label("Needs exactly two columns; the first over the second.");
+                }
+                significance_and_intervals(ui, st);
+            }
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo => {
+                let one = self.kind == AnalysisKind::PropTestOne;
+                let st = &mut self.stats;
+                let samples = if one { 1 } else { 2 };
+                for i in 0..samples {
+                    let tag = if one { String::new() } else { format!(" (sample {})", i + 1) };
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Number of Success{tag}"));
+                        ui.add(DragValue::new(&mut st.successes[i]).range(0..=u64::from(u32::MAX)));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Sample Size{tag}"));
+                        ui.add(DragValue::new(&mut st.sample_size[i]).range(1..=u64::from(u32::MAX)));
+                    });
+                }
+                let (what, value) = if one {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Proportion");
+                        ui.add(DragValue::new(&mut st.prop_hyp).speed(0.01).range(0.0001..=0.9999));
+                    });
+                    ("Proportion", st.prop_hyp)
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Difference (first minus second)");
+                        ui.add(DragValue::new(&mut st.prop_diff).speed(0.01).range(-0.9999..=0.9999));
+                    });
+                    ("Difference", st.prop_diff)
+                };
+                let shown = format!("{value}");
+                alternative_radios(ui, &mut st.tail, what, &shown);
+                significance_and_intervals(ui, st);
+                ui.horizontal(|ui| {
+                    ui.label("Test Method");
+                    ui.checkbox(&mut st.normal_method, "Normal Approximation");
+                    ui.checkbox(&mut st.binomial_method, if one { "Binomial Test" } else { "Exact Test (Fisher)" });
+                });
+            }
             AnalysisKind::Anova => {
                 let st = &mut self.stats;
                 ui.label("Every chosen column is a group.");
@@ -2456,6 +2622,10 @@ impl AnalysisDialog {
             AnalysisKind::PeakChain => "",
             AnalysisKind::Statistics => "DescStats",
             AnalysisKind::TTest => "ttest",
+            AnalysisKind::VarTestOne => "OneSampleTestVar",
+            AnalysisKind::VarTestTwo => "TwoSampleTestVar",
+            AnalysisKind::PropTestOne => "OneSampleProportionTest",
+            AnalysisKind::PropTestTwo => "TwoSampleProportionTest",
             AnalysisKind::Anova => "anova1",
             AnalysisKind::Histogram => "freqcounts",
             AnalysisKind::Binning2D => "twoDBinning",
@@ -2530,6 +2700,10 @@ impl AnalysisDialog {
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
             AnalysisKind::Statistics => "Descriptive statistics of the input columns",
             AnalysisKind::TTest => "Test the means of one or two samples",
+            AnalysisKind::VarTestOne => "Test the variance of a sample against a value (chi-square test)",
+            AnalysisKind::VarTestTwo => "Test the ratio of the variances of two samples (F test)",
+            AnalysisKind::PropTestOne => "Test a proportion of successes against a value, from counts you type in",
+            AnalysisKind::PropTestTwo => "Compare the proportions of two samples, from counts you type in",
             AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
             AnalysisKind::Histogram => "Count the values of the input columns in bins",
             AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
@@ -2598,6 +2772,12 @@ impl AnalysisDialog {
                 "The chosen quantities (count, mean, SD, SEM, quartiles, variance, skewness, confidence limits, ...)                  in a new sheet"
             }
             AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
+            AnalysisKind::VarTestOne | AnalysisKind::VarTestTwo => {
+                "The statistic, p-value and the confidence intervals asked for, in a new sheet"
+            }
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo => {
+                "The z statistic, the p-values of the ticked methods and the intervals, in a new sheet"
+            }
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
             AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
             AnalysisKind::Binning2D => "One row per X bin and one column per Y bin in a new sheet",
@@ -3033,7 +3213,9 @@ impl AnalysisDialog {
                             .max_height(380.0)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
-                                tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
+                                if !matches!(self.kind, AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo) {
+                                    tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
+                                }
                                 let title = self.kind.title();
                                 tree_node(ui, "analysis_options", title, |ui| self.options(ui));
                                 tree_node(ui, "analysis_output", "Output", |ui| self.output_node(ui));

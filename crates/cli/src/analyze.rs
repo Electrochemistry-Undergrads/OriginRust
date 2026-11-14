@@ -586,6 +586,55 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::TTest(analysis::TTestSpec { kind, tail: tail_of(tail), alpha })))
         }
+        AnalyzeTool::Vartest { target, variance, ratio, tail, alpha, levels } => {
+            let two = ratio.is_some() || (variance.is_none() && target.y.len() == 2);
+            let kind = if two {
+                analysis::VarTestKind::TwoSample { ratio: ratio.unwrap_or(1.0) }
+            } else {
+                analysis::VarTestKind::OneSample { variance: variance.unwrap_or(1.0) }
+            };
+            let spec =
+                analysis::VarTestSpec { kind, tail: tail_of(tail), alpha, intervals: !levels.is_empty(), levels };
+            (target, Job::Tool(Tool::VarTest(spec)))
+        }
+        AnalyzeTool::Proptest {
+            target,
+            successes,
+            size,
+            proportion,
+            difference,
+            tail,
+            alpha,
+            exact,
+            exact_only,
+            levels,
+        } => {
+            if successes.len() != size.len() || !(1..=2).contains(&successes.len()) {
+                bail!(
+                    "give one --successes and one --size for the one-sample test, two of each for the two-sample test"
+                );
+            }
+            let kind = if successes.len() == 1 {
+                analysis::PropTestKind::OneSample { successes: successes[0], size: size[0], proportion }
+            } else {
+                analysis::PropTestKind::TwoSample {
+                    first: (successes[0], size[0]),
+                    second: (successes[1], size[1]),
+                    difference,
+                }
+            };
+            let spec = analysis::PropTestSpec {
+                kind,
+                tail: tail_of(tail),
+                alpha,
+                intervals: !levels.is_empty(),
+                levels,
+                normal: !exact_only,
+                exact,
+                pooled: true,
+            };
+            (target, Job::Tool(Tool::PropTest(spec)))
+        }
         AnalyzeTool::Anova { target, comparison, control, alpha } => {
             if control == 0 {
                 bail!("--control counts the groups from 1");

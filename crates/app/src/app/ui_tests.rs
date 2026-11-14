@@ -3622,6 +3622,77 @@ fn the_descriptive_menu_runs_the_outlier_tests() {
     }
 }
 
+/// Statistics > Descriptive Statistics > Distribution Fit...: five families for each of the chosen columns.
+#[test]
+fn the_descriptive_menu_fits_distributions() {
+    let mut h = start(vec![data_file("distfit")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Distribution Fit..."]);
+    assert!(h.state().analysis.is_some(), "the distribution fit window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, aic) = result_column(&h, "AIC");
+    assert!(sheet.starts_with("DistFit"), "{sheet}");
+    assert_eq!(aic.len(), 10, "five families for each of the two columns (t is not chosen)");
+    assert!(aic.iter().all(|v| v.is_finite()), "{aic:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Distribution fit"));
+}
+
+/// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
+/// points and a reference line; one undo removes both.
+#[test]
+fn the_descriptive_menu_makes_probability_and_qq_plot_graphs() {
+    for (label, sheet_prefix, y_scale, undo) in [
+        ("Probability Plot...", "ProbPlot", ScaleKind::Probability, "Probability plot"),
+        ("Q-Q Plot...", "QQPlot", ScaleKind::Linear, "Q-Q plot"),
+    ] {
+        let mut h = start(vec![data_file("probplot")]);
+        show_window(&mut h, "Book1 - sample");
+        let graphs_before = project(&h).graphs().count();
+        menu_path(&mut h, &["Statistics", "Descriptive Statistics", label]);
+        assert!(h.state().analysis.is_some(), "the window of {label} is open");
+        click(&mut h, "OK");
+        let (sheet, _) = result_column(&h, "Data (ordered)");
+        assert!(sheet.starts_with(sheet_prefix), "{label}: {sheet}");
+        let p = project(&h);
+        assert_eq!(p.graphs().count(), graphs_before + 1, "{label}");
+        let l = &p.graphs().last().unwrap().layers[0];
+        assert_eq!(l.plots.len(), 4, "{label}: points and a line for each of the two columns");
+        assert_eq!(l.plots[0].kind, PlotKind::Scatter);
+        assert_eq!(l.plots[1].kind, PlotKind::Line);
+        assert_eq!(l.y_axis.scale, y_scale, "{label}");
+        assert_eq!(h.state().doc.undo_label(), Some(undo));
+        let ctx = h.ctx.clone();
+        h.state_mut().apply(Action::Undo, &ctx);
+        settle(&mut h);
+        assert_eq!(project(&h).graphs().count(), graphs_before, "{label}: undo removes the graph");
+    }
+}
+
+/// Statistics > Power and Sample Size: each of the four windows runs without any data being chosen. The defaults
+/// ask for the sample size at powers 0.8 and 0.9.
+#[test]
+fn the_power_menu_computes_sample_sizes_for_each_test() {
+    for (label, undo) in [
+        ("One-Sample t-Test...", "Power and sample size of the one-sample t-test"),
+        ("Two-Sample t-Test...", "Power and sample size of the two-sample t-test"),
+        ("Paired t-Test...", "Power and sample size of the paired t-test"),
+        ("One-Way ANOVA...", "Power and sample size of the one-way ANOVA"),
+    ] {
+        let mut h = start(vec![data_file("power")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Statistics", "Power and Sample Size", label]);
+        assert!(h.state().analysis.is_some(), "the window of {label} is open");
+        click(&mut h, "OK");
+        assert!(h.state().analysis.is_none(), "{label}");
+        let (sheet, power) = result_column(&h, "Power");
+        assert!(sheet.starts_with("Power"), "{label}: {sheet}");
+        assert_eq!(power.len(), 2, "{label}: one row for each wanted power");
+        assert!(power[0] >= 0.8 && power[1] >= 0.9 && power[1] < 1.0, "{label}: {power:?}");
+        assert_eq!(h.state().doc.undo_label(), Some(undo));
+    }
+}
+
 /// Statistics > Descriptive Statistics > Statistics on Rows...: mean and SD columns appear behind the last column.
 #[test]
 fn the_descriptive_menu_adds_row_statistics_columns() {

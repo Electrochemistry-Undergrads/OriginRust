@@ -41,6 +41,8 @@ pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, Limit
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
+pub use dist::{DistFitSpec, PowerEffect, PowerSolve, PowerSpec, PowerTest, ProbPlotKind, ProbPlotSpec};
+pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
@@ -524,6 +526,13 @@ pub enum Tool {
     Friedman(FriedmanSpec),
     Grubbs(OutlierSpec),
     Dixon(OutlierSpec),
+    /// Statistics > Descriptive Statistics > Distribution Fit (T14, `docs/spec/statistics.md` section 12).
+    DistFit(DistFitSpec),
+    /// Probability plot and Q-Q plot against a distribution family; makes a graph.
+    ProbPlot(ProbPlotSpec),
+    /// Power and sample size of the t-tests and one-way ANOVA; needs no data (the first chosen column only
+    /// names the workbook that receives the result sheet).
+    Power(PowerSpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -577,6 +586,12 @@ impl Tool {
             Tool::Friedman(_) => "Friedman ANOVA",
             Tool::Grubbs(_) => "Grubbs test",
             Tool::Dixon(_) => "Dixon's Q test",
+            Tool::DistFit(_) => "Distribution fit",
+            Tool::ProbPlot(spec) => match spec.kind {
+                ProbPlotKind::Probability => "Probability plot",
+                ProbPlotKind::QQ => "Q-Q plot",
+            },
+            Tool::Power(spec) => spec.test.title(),
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -608,6 +623,12 @@ impl Tool {
             Tool::Friedman(_) => "Friedman",
             Tool::Grubbs(_) => "Grubbs",
             Tool::Dixon(_) => "Dixon",
+            Tool::DistFit(_) => "DistFit",
+            Tool::ProbPlot(spec) => match spec.kind {
+                ProbPlotKind::Probability => "ProbPlot",
+                ProbPlotKind::QQ => "QQPlot",
+            },
+            Tool::Power(_) => "Power",
             Tool::AverageCurves(_) => "Average",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1123,6 +1144,7 @@ fn run_peak_chain(
 }
 
 mod curves;
+mod dist;
 mod manip;
 mod statistics;
 pub use manip::{MedianFilterSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec};
@@ -1154,6 +1176,42 @@ impl Project {
         graph
     }
 
+    /// A new graph with the scatter and line plots of a probability plot; the plan names columns of the
+    /// new result sheet by position.
+    fn xy_graph(&mut self, ids: &[ColumnId], plan: &dist::XyGraph) -> WindowId {
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let graph = self.add_graph(crate::template::Template::Scatter);
+        for p in &plan.plots {
+            self.add_plot_xy(graph, 0, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                for (plot, spec) in l.plots.iter_mut().zip(&plan.plots) {
+                    plot.kind = spec.kind;
+                    plot.label = Some(spec.label.clone());
+                }
+                l.apply_palette();
+                // A reference line takes the colour of the points it belongs to.
+                for (i, spec) in plan.plots.iter().enumerate() {
+                    if let Some(of) = spec.line_of {
+                        let colour = l.plots[of].symbol.color;
+                        l.plots[i].line.color = colour;
+                        l.plots[i].symbol.color = colour;
+                        l.plots[i].auto_color = false;
+                    }
+                }
+                l.x_axis.scale = plan.x_scale;
+                l.y_axis.scale = plan.y_scale;
+                l.x_axis.title = Some(plan.x_title.clone());
+                l.y_axis.title = Some(plan.y_title.clone());
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        graph
+    }
+
     /// Runs an analysis tool on worksheet columns. See the module text for
     /// where the results go. On error nothing is changed.
     pub fn analyze(&mut self, request: &Request) -> Result<Report, AnalysisError> {
@@ -1173,8 +1231,9 @@ impl Project {
         let sheet = &book.sheets[sheet_index];
 
         let mut inputs = Vec::with_capacity(request.columns.len());
-        // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_));
+        // The two-way ANOVA reads its columns itself: the factor columns may hold text. A power calculation
+        // reads no data at all.
+        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Power(_));
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1215,6 +1274,8 @@ impl Project {
         let mut notes: Vec<String> = Vec::new();
         // Plots of a new graph: indices into `on_sheet` of the X and the Y column.
         let mut graph_plots: Vec<(usize, usize)> = Vec::new();
+        // A graph of scatter and line plots (probability plots).
+        let mut xy_graph: Option<dist::XyGraph> = None;
 
         match &request.tool {
             Tool::TwoWayAnova(spec) => {
@@ -1242,6 +1303,13 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+            }
+            Tool::DistFit(_) | Tool::ProbPlot(_) | Tool::Power(_) => {
+                let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
             }
             Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
                 let out = curves::run(&request.tool, &inputs)?;
@@ -1826,7 +1894,16 @@ impl Project {
         if !graph_plots.is_empty() {
             new_graph = Some(self.histogram_graph(&sheet_column_ids, &graph_plots));
         }
-        let columns = if count == 1 { "1 column".to_string() } else { format!("{count} columns") };
+        if let Some(plan) = &xy_graph {
+            new_graph = Some(self.xy_graph(&sheet_column_ids, plan));
+        }
+        let columns = if matches!(request.tool, Tool::Power(_)) {
+            "no data needed".to_string()
+        } else if count == 1 {
+            "1 column".to_string()
+        } else {
+            format!("{count} columns")
+        };
         // Name the added columns, so that the result can be found without opening the sheet.
         const SHOWN: usize = 6;
         let mut added = added_names.iter().take(SHOWN).cloned().collect::<Vec<_>>().join(", ");

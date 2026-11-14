@@ -688,3 +688,55 @@ fn rank_tests_and_correlation_run_from_the_command_line() {
     let (ok, _, err) = sheaf(&["analyze", "corr", file, "--y", "a,b", "--no-pearson"]);
     assert!(!ok && err.contains("at least one of Pearson"), "{err}");
 }
+
+/// Distribution fit, probability plots and power calculations (spec `statistics.md` section 12). The numbers of
+/// the calc crate are checked against scipy in `crates/calc/tests/scipy_stats_dist.rs`; here the wiring.
+#[test]
+fn distribution_fit_probability_plots_and_power_run_from_the_command_line() {
+    let dir = scratch("distfit");
+    let path = dir.join("sample.csv");
+    std::fs::write(&path, "x\n1.2\n2.3\n2.9\n3.1\n4.4\n5.0\n6.8\n7.7\n9.1\n12.5\n").unwrap();
+    let file = path.to_str().unwrap();
+
+    let (ok, out, err) = sheaf(&["analyze", "distfit", file, "--y", "x"]);
+    assert!(ok, "{err}");
+    for name in ["Normal", "Lognormal", "Exponential", "Gamma", "Weibull", "Log-likelihood", "AIC", "BIC"] {
+        assert!(out.contains(name), "{name}: {out}");
+    }
+    assert!(out.contains("DistFit1") && out.contains("lowest AIC"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "distfit", file, "--y", "x", "--family", "gamma,weibull"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Gamma") && out.contains("Weibull") && !out.contains("Lognormal"), "{out}");
+
+    let project = dir.join("pp.sheaf");
+    let (ok, out, err) = sheaf(&["analyze", "probplot", file, "--y", "x", "--save", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Probability plot") && out.contains("ProbPlot1"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Data (ordered)") && info.contains("Percent"), "{info}");
+    let (ok, out, err) = sheaf(&["analyze", "qqplot", file, "--y", "x", "--family", "weibull", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Q-Q plot") && out.contains("Slope"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "qqplot", file, "--y", "x", "--family", "bogus"]);
+    assert!(!ok && err.contains("bogus"), "{err}");
+
+    // Two-sample t-test, d = 0.5, power 0.8: 64 per group (a well known table value).
+    let (ok, out, err) =
+        sheaf(&["analyze", "power", file, "--test", "two-sample", "--effect", "0.5", "--power", "0.8"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("takes 64 and 64 observations"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "power", file, "--test", "two-sample", "--effect", "0.5", "--n", "64"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("the power is 0.80"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "power", file, "--test", "anova", "--means", "4,5,6", "--sd", "2", "--n", "10,20"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-way ANOVA of 3 groups"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "power", file, "--test", "one-sample", "--difference=-5", "--sd", "10", "--tail", "upper"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("upper-tailed"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "power", file, "--test", "anova", "--effect", "0.25"]);
+    assert!(!ok && err.contains("at least two groups"), "{err}");
+}

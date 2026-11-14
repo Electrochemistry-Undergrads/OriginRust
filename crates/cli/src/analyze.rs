@@ -103,6 +103,17 @@ fn tail_of(tail: TailArg) -> analysis::Tail {
     }
 }
 
+fn family_of(family: FamilyArg) -> analysis::DistFamily {
+    use analysis::DistFamily as F;
+    match family {
+        FamilyArg::Normal => F::Normal,
+        FamilyArg::Lognormal => F::Lognormal,
+        FamilyArg::Exponential => F::Exponential,
+        FamilyArg::Gamma => F::Gamma,
+        FamilyArg::Weibull => F::Weibull,
+    }
+}
+
 fn comparison_of(comparison: ComparisonArg) -> Option<analysis::MeansComparison> {
     use analysis::MeansComparison as M;
     match comparison {
@@ -543,6 +554,54 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Normality { target, alpha } => {
             (target, Job::Tool(Tool::Normality(analysis::NormalitySpec { alpha })))
         }
+        AnalyzeTool::Distfit { target, family } => {
+            let families = if family.is_empty() {
+                analysis::DistFamily::ALL.to_vec()
+            } else {
+                family.into_iter().map(family_of).collect()
+            };
+            (target, Job::Tool(Tool::DistFit(analysis::DistFitSpec { families })))
+        }
+        AnalyzeTool::Probplot { target, family, no_graph } => (
+            target,
+            Job::Tool(Tool::ProbPlot(analysis::ProbPlotSpec {
+                kind: analysis::ProbPlotKind::Probability,
+                family: family_of(family),
+                graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Qqplot { target, family, no_graph } => (
+            target,
+            Job::Tool(Tool::ProbPlot(analysis::ProbPlotSpec {
+                kind: analysis::ProbPlotKind::QQ,
+                family: family_of(family),
+                graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::Power { target, test, effect, difference, means, sd, groups, ratio, n, power, tail, alpha } => {
+            let test = match test {
+                PowerTestArg::OneSample => analysis::PowerTest::OneSampleT,
+                PowerTestArg::TwoSample => analysis::PowerTest::TwoSampleT { ratio },
+                PowerTestArg::Paired => analysis::PowerTest::PairedT,
+                PowerTestArg::Anova => analysis::PowerTest::OneWayAnova { groups: groups.unwrap_or(0) },
+            };
+            let effect = match (effect, difference, means.is_empty()) {
+                (Some(e), None, true) => analysis::PowerEffect::Standardized(e),
+                (None, Some(difference), true) => {
+                    analysis::PowerEffect::Difference { difference, sd: sd.expect("clap requires --sd") }
+                }
+                (None, None, false) => analysis::PowerEffect::Means { means, sd: sd.expect("clap requires --sd") },
+                _ => bail!(
+                    "give the effect as --effect, or --difference with --sd (t-tests), or --means with --sd (ANOVA)"
+                ),
+            };
+            let solve = if n.is_empty() {
+                analysis::PowerSolve::SampleSize { powers: if power.is_empty() { vec![0.8] } else { power } }
+            } else {
+                analysis::PowerSolve::Power { sample_sizes: n }
+            };
+            (target, Job::Tool(Tool::Power(analysis::PowerSpec { test, effect, solve, tail: tail_of(tail), alpha })))
+        }
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })
@@ -644,7 +703,13 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     // The sheet that holds the results, for --export.
     let result_sheet = match job {
         Job::Tool(tool) => {
-            let columns = if target.y.is_empty() {
+            let columns = if matches!(tool, Tool::Power(_)) {
+                // Power and sample size read no data; one column names the workbook for the result sheet.
+                match project.workbook(book).expect("picked above").sheets[sheet].columns.first() {
+                    Some(c) => vec![c.id],
+                    None => bail!("the file has no column; a power calculation still needs a sheet for its result"),
+                }
+            } else if target.y.is_empty() {
                 project.default_plot_columns(book, sheet, Template::Line)
             } else {
                 named_columns(&project, book, sheet, &target.y)?

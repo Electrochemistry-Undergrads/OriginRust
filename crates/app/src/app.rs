@@ -1598,7 +1598,12 @@ impl SheafApp {
     /// plot of the active sheet would show; columns that hold text are left out.
     fn open_analysis(&mut self, book: WindowId, columns: Vec<ColumnId>, kind: AnalysisKind) {
         let project = self.doc.project();
-        let columns: Vec<ColumnId> = if columns.is_empty() {
+        let columns: Vec<ColumnId> = if crate::dialogs::dist_options::is_power(kind) {
+            // A power calculation reads no data: any column of the sheet names the workbook for the result.
+            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+            let first = project.workbook(book).and_then(|b| b.sheets.get(sheet)).and_then(|s| s.columns.first());
+            first.map(|c| vec![c.id]).unwrap_or_default()
+        } else if columns.is_empty() {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
             project.default_plot_columns(book, sheet, Template::Line)
         } else {

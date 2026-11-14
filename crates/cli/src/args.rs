@@ -698,6 +698,27 @@ pub enum SignRankKindArg {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FamilyArg {
+    Normal,
+    Lognormal,
+    Exponential,
+    Gamma,
+    Weibull,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PowerTestArg {
+    /// One-sample t-test.
+    OneSample,
+    /// Two-sample t-test (equal variances).
+    TwoSample,
+    /// Paired t-test (the standard deviation is that of the differences).
+    Paired,
+    /// One-way ANOVA (balanced).
+    Anova,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ComparisonArg {
     Tukey,
     Bonferroni,
@@ -1401,6 +1422,75 @@ pub enum AnalyzeTool {
     Normality {
         #[command(flatten)]
         target: TargetArgs,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// Fit normal, lognormal, exponential, gamma and Weibull distributions to each column by maximum
+    /// likelihood: parameters, log-likelihood, AIC, BIC, Kolmogorov-Smirnov and Anderson-Darling statistics.
+    Distfit {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The families to fit, comma separated (default: all five).
+        #[arg(long, value_enum, value_delimiter = ',')]
+        family: Vec<FamilyArg>,
+    },
+    /// Probability plot: the data against the plotting position in percent on a probability axis, with the
+    /// fitted distribution function; makes a graph.
+    Probplot {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = FamilyArg::Normal)]
+        family: FamilyArg,
+        /// Do not make a graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Q-Q plot: the quantiles of a distribution against the ordered data, with the least-squares line; makes
+    /// a graph.
+    Qqplot {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = FamilyArg::Normal)]
+        family: FamilyArg,
+        /// Do not make a graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Power of a test for given sample sizes (--n), or the sample size for wanted powers (--power), of the
+    /// t-tests and the one-way ANOVA. Needs no data: the file only names the workbook for the result sheet.
+    Power {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum)]
+        test: PowerTestArg,
+        /// The standardized effect size: d of the t-tests (difference over standard deviation), f of the ANOVA.
+        #[arg(long, conflicts_with_all = ["difference", "means"])]
+        effect: Option<f64>,
+        /// t-tests: the difference to detect (with --sd).
+        #[arg(long, allow_hyphen_values = true, requires = "sd")]
+        difference: Option<f64>,
+        /// ANOVA: the group means, comma separated (with --sd).
+        #[arg(long, value_delimiter = ',', allow_hyphen_values = true, requires = "sd")]
+        means: Vec<f64>,
+        /// The standard deviation (inside the groups; of the differences for the paired test).
+        #[arg(long)]
+        sd: Option<f64>,
+        /// ANOVA with --effect: the number of groups.
+        #[arg(long)]
+        groups: Option<usize>,
+        /// Two-sample t-test: the ratio n2 / n1 of the sample sizes.
+        #[arg(long, default_value_t = 1.0)]
+        ratio: f64,
+        /// Sample sizes to compute the power for (pairs, observations per group), comma separated.
+        #[arg(long, value_delimiter = ',', conflicts_with = "power")]
+        n: Vec<usize>,
+        /// Wanted powers to compute the sample size for, comma separated (default 0.8 when --n is not given).
+        #[arg(long, value_delimiter = ',')]
+        power: Vec<f64>,
+        /// The alternative of the t-tests.
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,

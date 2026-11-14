@@ -3,6 +3,7 @@
 
 pub mod analysis;
 pub mod column_props;
+pub mod dist_options;
 pub mod export;
 pub mod export_sheet;
 pub mod fit;

@@ -68,6 +68,16 @@ pub enum AnalysisKind {
     KsTwoSample,
     MedianTest,
     Friedman,
+    /// Statistics > Descriptive Statistics > Distribution Fit, Probability Plot and Q-Q Plot
+    /// (options in `dist_options.rs`).
+    DistFit,
+    ProbPlot,
+    QQPlot,
+    /// Statistics > Power and Sample Size.
+    PowerOneSampleT,
+    PowerTwoSampleT,
+    PowerPairedT,
+    PowerAnova,
     /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
     AverageCurves,
     Intersect,
@@ -128,6 +138,13 @@ impl AnalysisKind {
             AnalysisKind::KsTwoSample => "Two Sample Kolmogorov-Smirnov Test...",
             AnalysisKind::MedianTest => "Mood's Median Test...",
             AnalysisKind::Friedman => "Friedman ANOVA...",
+            AnalysisKind::DistFit => "Distribution Fit...",
+            AnalysisKind::ProbPlot => "Probability Plot...",
+            AnalysisKind::QQPlot => "Q-Q Plot...",
+            AnalysisKind::PowerOneSampleT => "One-Sample t-Test...",
+            AnalysisKind::PowerTwoSampleT => "Two-Sample t-Test...",
+            AnalysisKind::PowerPairedT => "Paired t-Test...",
+            AnalysisKind::PowerAnova => "One-Way ANOVA...",
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
@@ -140,7 +157,14 @@ impl AnalysisKind {
     }
 
     fn title(self) -> &'static str {
-        self.menu_label().trim_end_matches("...")
+        match self {
+            // The four power windows are told apart by their test; Origin's titles for them were not looked up.
+            AnalysisKind::PowerOneSampleT => "Power and Sample Size: One-Sample t-Test",
+            AnalysisKind::PowerTwoSampleT => "Power and Sample Size: Two-Sample t-Test",
+            AnalysisKind::PowerPairedT => "Power and Sample Size: Paired t-Test",
+            AnalysisKind::PowerAnova => "Power and Sample Size: One-Way ANOVA",
+            _ => self.menu_label().trim_end_matches("..."),
+        }
     }
 
     /// The name used on the command line with `--show analysis:NAME`.
@@ -175,6 +199,13 @@ impl AnalysisKind {
             "ks2" => AnalysisKind::KsTwoSample,
             "mediantest" => AnalysisKind::MedianTest,
             "friedman" => AnalysisKind::Friedman,
+            "distfit" => AnalysisKind::DistFit,
+            "probplot" => AnalysisKind::ProbPlot,
+            "qqplot" => AnalysisKind::QQPlot,
+            "power-t1" => AnalysisKind::PowerOneSampleT,
+            "power-t2" => AnalysisKind::PowerTwoSampleT,
+            "power-paired" => AnalysisKind::PowerPairedT,
+            "power-anova" => AnalysisKind::PowerAnova,
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
@@ -419,6 +450,7 @@ pub struct AnalysisDialog {
     reference: usize,
     common_only: bool,
     stats: StatsOptions,
+    dist: super::dist_options::DistOptions,
     curves: super::math_curves::CurveOptions,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
@@ -567,6 +599,7 @@ impl AnalysisDialog {
             chain_fit: None,
             chain_fit_linear: true,
             stats,
+            dist: Default::default(),
             curves: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
@@ -617,6 +650,13 @@ impl AnalysisDialog {
             | AnalysisKind::TranslateY
             | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
+            AnalysisKind::DistFit
+            | AnalysisKind::ProbPlot
+            | AnalysisKind::QQPlot
+            | AnalysisKind::PowerOneSampleT
+            | AnalysisKind::PowerTwoSampleT
+            | AnalysisKind::PowerPairedT
+            | AnalysisKind::PowerAnova => self.dist.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
             AnalysisKind::PolygonArea => Tool::PolygonArea,
@@ -1422,6 +1462,13 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::DistFit
+            | AnalysisKind::ProbPlot
+            | AnalysisKind::QQPlot
+            | AnalysisKind::PowerOneSampleT
+            | AnalysisKind::PowerTwoSampleT
+            | AnalysisKind::PowerPairedT
+            | AnalysisKind::PowerAnova => self.dist.options(ui, self.kind),
             AnalysisKind::AverageCurves => self.curves.average_ui(ui, self.columns.len()),
             AnalysisKind::Intersect => self.curves.intersect_ui(ui),
             AnalysisKind::PolygonArea => {
@@ -1501,7 +1548,14 @@ impl AnalysisDialog {
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
-            | AnalysisKind::MedianFilter => "",
+            | AnalysisKind::MedianFilter
+            | AnalysisKind::DistFit
+            | AnalysisKind::ProbPlot
+            | AnalysisKind::QQPlot
+            | AnalysisKind::PowerOneSampleT
+            | AnalysisKind::PowerTwoSampleT
+            | AnalysisKind::PowerPairedT
+            | AnalysisKind::PowerAnova => "",
         }
     }
 
@@ -1544,6 +1598,13 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "Compare two samples by their distribution functions",
             AnalysisKind::MedianTest => "Compare the medians of several samples (Mood's median test)",
             AnalysisKind::Friedman => "Compare treatments in repeated blocks by ranks within each row",
+            AnalysisKind::DistFit => "Fit distributions to the input columns by maximum likelihood and test the fit",
+            AnalysisKind::ProbPlot => "Plot the data against the plotting positions on a probability axis",
+            AnalysisKind::QQPlot => "Plot the quantiles of a distribution against the ordered data",
+            AnalysisKind::PowerOneSampleT => "Power or sample size of a one-sample t-test",
+            AnalysisKind::PowerTwoSampleT => "Power or sample size of a two-sample t-test",
+            AnalysisKind::PowerPairedT => "Power or sample size of a paired t-test",
+            AnalysisKind::PowerAnova => "Power or sample size of a one-way ANOVA",
             AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
             AnalysisKind::Intersect => "Find the points where two curves meet",
             AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
@@ -1599,6 +1660,18 @@ impl AnalysisDialog {
                 "Counts around the median, the chi-square statistic and its p-value in a new sheet"
             }
             AnalysisKind::Friedman => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
+            AnalysisKind::DistFit => {
+                "Parameters, log-likelihood, AIC, BIC and the Kolmogorov-Smirnov and Anderson-Darling statistics in a new sheet"
+            }
+            AnalysisKind::ProbPlot | AnalysisKind::QQPlot => {
+                "The plotted points and the reference line in a new sheet, and a graph"
+            }
+            AnalysisKind::PowerOneSampleT
+            | AnalysisKind::PowerTwoSampleT
+            | AnalysisKind::PowerPairedT
+            | AnalysisKind::PowerAnova => {
+                "Sample sizes, degrees of freedom, non-centrality, critical value and power in a new sheet"
+            }
             AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
             AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
             AnalysisKind::PolygonArea => {
@@ -1756,7 +1829,11 @@ impl AnalysisDialog {
         let output = self.output_target()?;
         let mode = if Project::can_link(&request.tool) { self.recalc } else { RecalcMode::None };
         // A histogram makes a graph that plots the new columns, which must stay.
-        let previous = if self.kind == AnalysisKind::Histogram { None } else { self.applied.clone() };
+        let previous = if matches!(self.kind, AnalysisKind::Histogram | AnalysisKind::ProbPlot | AnalysisKind::QQPlot) {
+            None
+        } else {
+            self.applied.clone()
+        };
         let key = (request.clone(), output.clone(), mode);
         let label = request.tool.name();
         let result = doc.apply_merging(label, self.undo_token, |p| {
@@ -1967,7 +2044,9 @@ impl AnalysisDialog {
                             .max_height(380.0)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
-                                tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
+                                if !super::dist_options::is_power(self.kind) {
+                                    tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
+                                }
                                 let title = self.kind.title();
                                 tree_node(ui, "analysis_options", title, |ui| self.options(ui));
                                 tree_node(ui, "analysis_output", "Output", |ui| self.output_node(ui));

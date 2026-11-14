@@ -72,7 +72,7 @@ fn shared_units(inputs: &[Input<'_>]) -> String {
 }
 
 /// A number for the plain-English lines: four significant digits, no exponent unless needed.
-fn num(v: f64) -> String {
+pub(super) fn num(v: f64) -> String {
     if v.is_nan() {
         return "--".into();
     }

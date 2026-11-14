@@ -364,6 +364,9 @@ pub struct BatchOptions {
     /// Write the file name into the comment of every column that has none, and into the
     /// `SourceFile` parameter row. Always done for `Columns`.
     pub file_name_in_comments: bool,
+    /// Import the first supplied file in full; apply ASCII row/column selection only to later
+    /// files (Origin's partial-import scope). A failed first file does not shift this boundary.
+    pub partial_except_first: bool,
 }
 
 impl Default for BatchOptions {
@@ -375,6 +378,7 @@ impl Default for BatchOptions {
             ascii: ascii::AsciiOptions::default(),
             book_name: String::new(),
             file_name_in_comments: false,
+            partial_except_first: false,
         }
     }
 }
@@ -404,8 +408,13 @@ pub struct BatchResult {
 pub fn import_batch(project: &mut Project, files: &[PathBuf], opts: &BatchOptions) -> BatchResult {
     let mut result = BatchResult::default();
     let mut shared: Option<WindowId> = None;
-    for path in files {
-        let imported = match import_file(path, opts.kind, &opts.chi, &opts.ascii) {
+    for (index, path) in files.iter().enumerate() {
+        let ascii = if index == 0 && opts.partial_except_first {
+            opts.ascii.without_partial_import()
+        } else {
+            opts.ascii.clone()
+        };
+        let imported = match import_file(path, opts.kind, &opts.chi, &ascii) {
             Ok(i) => i,
             Err(e) => {
                 result.errors.push(e.to_string());
@@ -836,6 +845,41 @@ mod tests {
         // The text cells are kept, so there is nothing to report.
         assert!(r.items.iter().all(|i| i.warnings.iter().all(|w| !w.contains("no-value marker"))));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn partial_selection_can_skip_only_the_first_supplied_file() {
+        use crate::ascii::{Delimiter, ImportSelection};
+        let dir = temp("partial-except-first");
+        let text = "t|signal|other\n1|11|21\n2|12|22\n3|13|23\n4|14|24\n5|15|25\n";
+        let first = dir.join("first.txt");
+        let second = dir.join("second.txt");
+        std::fs::write(&first, text).unwrap();
+        std::fs::write(&second, text).unwrap();
+        let opts = BatchOptions {
+            partial_except_first: true,
+            ascii: ascii::AsciiOptions {
+                delimiter: Delimiter::Other('|'),
+                rows: ImportSelection { first: 2, last: 5, read: 1, skip: 1 },
+                columns: ImportSelection { first: 2, last: 2, ..ImportSelection::default() },
+                ..ascii::AsciiOptions::default()
+            },
+            ..BatchOptions::default()
+        };
+        let mut p = Project::new();
+        let result = import_batch(&mut p, &[first, second.clone()], &opts);
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        let books: Vec<_> = p.workbooks().collect();
+        assert_eq!(books[0].sheet().columns.len(), 3);
+        assert_eq!(books[0].sheet().row_count(), 5);
+        assert_eq!(books[1].sheet().columns.len(), 1);
+        assert_eq!(books[1].sheet().columns[0].long_name, "signal");
+        assert_eq!(books[1].sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+        // Failure does not promote the next file to "first": scope follows input order.
+        let mut p = Project::new();
+        let result = import_batch(&mut p, &[dir.join("missing.txt"), second], &opts);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(p.workbooks().next().unwrap().sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
     }
 
     #[test]

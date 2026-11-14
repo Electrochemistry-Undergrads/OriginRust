@@ -166,7 +166,13 @@ impl ImportWizard {
                 self.dlg.preview = Some(self.dlg.read(self.dlg.current));
             }
         }
-        let before = (self.dlg.current, self.dlg.kind, self.dlg.chi.clone(), self.dlg.ascii.clone());
+        let before = (
+            self.dlg.current,
+            self.dlg.kind,
+            self.dlg.chi.clone(),
+            self.dlg.ascii.clone(),
+            self.dlg.partial_except_first,
+        );
 
         let avail = ctx.available_rect();
         let size = egui::vec2(620.0, 595.0);
@@ -216,7 +222,15 @@ impl ImportWizard {
                 });
             });
 
-        if before != (self.dlg.current, self.dlg.kind, self.dlg.chi.clone(), self.dlg.ascii.clone()) {
+        if before
+            != (
+                self.dlg.current,
+                self.dlg.kind,
+                self.dlg.chi.clone(),
+                self.dlg.ascii.clone(),
+                self.dlg.partial_except_first,
+            )
+        {
             self.dlg.preview = None;
             ctx.request_repaint();
         }

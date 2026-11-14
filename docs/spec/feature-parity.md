@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 124 | 64 | 231 |
+| All rows | 43 | 129 | 59 | 231 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 55 | 64 | 130 |
+| P1 and P2 together | 11 | 60 | 59 | 130 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -51,7 +51,7 @@ Cross-cutting findings:
 | Keyboard shortcuts | Ctrl+K import, Ctrl+Q set values, Ctrl+D, Ctrl+R, F-keys, Alt+n | Ctrl+N, O, S, Shift+S; Ctrl+K import; Ctrl+Q Set Column Values; Ctrl+D Add New Columns; Ctrl+Y Nonlinear Curve Fit; Ctrl+R Rescale; Ctrl+J Copy Page; Ctrl+T Toolbars; Ctrl+Z, Shift+Ctrl+Z; Ctrl+C, X, V; Delete; F2 Page Properties; F12 Layer Contents; Alt+1, 2, 6, 8 panels; Alt+Enter Properties. Worksheet keys taken from spreadsheet programs, none bound in Origin's worksheet: Ctrl+A select the sheet, Ctrl+Space the columns and Shift+Space the rows of the selection, Backspace empty the cell and edit it, Ctrl+Enter store the typed value in the whole block, Ctrl+Plus insert and Ctrl+Minus delete at the selection, Ctrl+Page Up/Down previous/next sheet (Excel's Ctrl+D, Ctrl+R and Ctrl+Y stay Origin's Add New Columns, Rescale and Nonlinear Curve Fit) | ◐ | many Origin keys are listed in the menus but grey and do nothing (F5, F7 to F11, Ctrl+U, Ctrl+3, Ctrl+4, Ctrl+I and Ctrl+M zoom, view keys, Alt+3, 4, 5, 7) | P0 |
 | New window kinds | File > New: Worksheet, Matrix, Graph, Image, Excel, Layout, Notes, Function Plot, from Template | File > New > Project and Worksheet; the Plot menu makes a graph from the selected columns | ◐ | no empty graph, matrix, image, layout, notes, function plot, new-from-template (grey in File > New) | P1 |
 | Append project | File > Append | CLI `import --append` (workbooks only) | ◐ | none in the app; graphs not merged | P1 |
-| Open Excel, sample project, Close | File menu | none | ✗ | Close of active window missing; Explorer Delete only | P1 |
+| Open Excel, sample project, Close | File menu | File > Close (closes the active window, its data stays, as the title bar's close button) | ◐ | no Excel or sample projects | P1 |
 | Save Window As, Save Template As, analysis template | File menu | none | ✗ | no .otp/.otw-style files; only 4 built-in figure templates | P1 |
 | Print, Print Preview, Page Setup | File > Print, Ctrl+P | none | ✗ | graphs can only be exported to files | P1 |
 | Recent projects, books, graphs, imports | File > Recent | none | ✗ | | P1 |
@@ -161,9 +161,9 @@ Cross-cutting findings:
 | Normalize | 12 methods | `calc/normalize.rs`, checked | ◐ | no reference column or cell methods; no row normalize | P0 |
 | Interpolate and resample | interp1xy | linear, spline, Akima, B-spline | ◐ | extrapolation option not exposed; B-spline default does not match; new sheet only | P0 |
 | Interpolate onto given X, trace | interp1, interp1trace | library function only | ✗ | no app or CLI route | P1 |
-| Translate X or Y | cxt, vshift | none | ✗ | | P1 |
+| Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |
 | Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); level crossing none | ◐ | not measured in Origin, `analysis-curve-math.md`; no level crossing | P1 |
-| Data reduction | reducerows, reducedup | none | ✗ | | P1 |
+| Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (T23) | ◐ | reducedup (duplicate X) missing | P1 |
 | Sampling interval check | vinc | internal use only | ✗ | | P1 |
 | Average multiple curves | avecurves | Average Multiple Curves window and `analyze average`: mean, SD, count; Recalculate Auto/Manual | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
@@ -324,7 +324,7 @@ Cross-cutting findings:
 | One scene renderer for screen and exports | | `layout.rs` to `scene.rs` | ✓ | | P0 |
 | Other image types | EMF, WMF, TIF, JPG, EPS, BMP, GIF, AI and more | TIFF (none, PackBits or LZW), JPEG, BMP, GIF, TGA and PCX (24-bit, grey or 256 colours where the format allows), EPS (level 2, vector, standard PostScript fonts re-encoded to Latin-1, Greek from Symbol) and EMF (vector, text as text, written from the public format description) in the app (export window), the CLI (`-o fig.eps`, `-o fig.tga` and so on) and `export_file`; sizes scale as for SVG and PDF | ◐ | transparency is blended onto the page background in EPS and EMF; characters outside Latin-1, Greek and a few signs are replaced and reported (EPS); EMF was checked by loading it with GDI+, EPS only by structure (no PostScript interpreter was available); TGA and PCX were read back by an independent decoder (Pillow); WMF, PSD and AI are missing | P1 |
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
-| Export preview | Preview button | none | ✗ | | P1 |
+| Export preview | Preview button | Export Graphs preview pane with Auto Preview (T05) | ◐ | no Graph tab in the preview | P1 |
 | Send to PowerPoint or Word | Graph menu | none | ✗ | | P2 |
 
 ## 14 Dialog details
@@ -334,7 +334,7 @@ Cross-cutting findings:
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None, Manual, Auto for Smooth, Integrate and Find Peaks), Auto Apply, a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, Recalculate links only Smooth, Integrate and Find Peaks, the output can be a new sheet or existing columns for the column-writing tools only, the preview is a small own drawing, not drawn on the source graph | P0 |
 | Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name (18 characters), Long Name, Units, Comments, Options (Plot Designation, Format with Text, Text & Numeric, Month and Day of Week, Display, Column Width greyed, Apply to all columns to the right), OK, Cancel, Apply | ◐ | Column Width is greyed (the grid has one width) | P0 |
 | Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
-| Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |
+| Set Column Values dialog extras | function list, descriptions | Function menu with every sheaf-expr function, its description and example (T09) | ◐ | scripts box read-only, Set Multiple Columns Values missing | P1 |
 
 ## Order of work
 

@@ -5265,12 +5265,67 @@ fn sort_range_moves_the_selected_columns_together_and_sort_columns_sorts_each_al
     assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "column A is not in the range");
     assert_eq!(h.state().doc.undo_label(), Some("Sort range"));
     // Each column on its own: B ascending again, C stays as it is.
-    menu_path(&mut h, &["Worksheet", "Sort Columns", "Ascending"]);
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Each Column Ascending"]);
     assert_eq!(project(&h).numeric(b).unwrap(), [2.5, 4.5, 6.5, 8.5]);
     assert_eq!(project(&h).numeric(c).unwrap(), [0.5, 10.5, 20.5, 30.5]);
     assert_eq!(h.state().doc.undo_label(), Some("Sort columns"));
-    menu_path(&mut h, &["Worksheet", "Sort Columns", "Descending"]);
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Each Column Descending"]);
     assert_eq!(project(&h).numeric(c).unwrap(), [30.5, 20.5, 10.5, 0.5]);
+}
+
+#[test]
+fn selected_cell_rows_are_preserved_by_simple_and_custom_sort_menus() {
+    for custom in [false, true] {
+        let mut h = start(vec![data_file(if custom { "partial-nested-sort" } else { "partial-simple-sort" })]);
+        show_window(&mut h, "Book1 - sample");
+        select_block(&mut h, "4.5", "10.5");
+        if custom {
+            menu_path(&mut h, &["Worksheet", "Sort Columns", "Custom..."]);
+            assert!(h.state().sort.is_some(), "the existing nested-sort window is enabled");
+            click(&mut h, "Descending");
+            click(&mut h, "OK");
+        } else {
+            menu_path(&mut h, &["Worksheet", "Sort Range", "Descending"]);
+        }
+        assert_eq!(column(&h, "B"), [2.5, 6.5, 4.5, 8.5], "only rows 2 and 3, custom={custom}");
+        assert_eq!(column(&h, "C"), [30.5, 10.5, 20.5, 0.5], "selected rows move together");
+        assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "unselected column stays");
+        menu(&mut h, "Edit", "Undo");
+        assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+        menu(&mut h, "Edit", "Redo");
+        assert_eq!(column(&h, "B"), [2.5, 6.5, 4.5, 8.5]);
+    }
+}
+
+#[test]
+fn sort_columns_preserves_row_pairs_unless_each_column_is_requested() {
+    let mut h = start(vec![data_file("sort-column-modes")]);
+    show_window(&mut h, "Book1 - sample");
+    select_block(&mut h, "4.5", "10.5");
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Ascending"]);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "row pairs stay together");
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Each Column Ascending"]);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 10.5, 20.5, 0.5], "each-column mode sorts independently inside the selection");
+}
+
+#[test]
+fn row_header_selection_can_sort_a_range_and_labels_cannot_sort_data() {
+    let mut h = start(vec![data_file("row-selection-sort")]);
+    show_window(&mut h, "Book1 - sample");
+    let row_x = text_pos(&h, "Long Name").x;
+    let a = egui::pos2(row_x, text_pos(&h, "4.5").y);
+    let b = egui::pos2(row_x, text_pos(&h, "6.5").y);
+    drag(&mut h, a, b);
+    assert!(matches!(cells(&h), Sel::Rows { .. }));
+    menu_path(&mut h, &["Worksheet", "Sort Range", "Descending"]);
+    assert_eq!(column(&h, "A"), [1.0, 3.0, 2.0, 4.0]);
+    assert_eq!(column(&h, "B"), [2.5, 6.5, 4.5, 8.5]);
+    click(&mut h, "B Units");
+    menu_path(&mut h, &["Worksheet", "Sort Range"]);
+    assert!(is_disabled(&h, "Ascending"), "metadata selections do not sort data below them");
+    close_menus(&mut h);
 }
 
 #[test]

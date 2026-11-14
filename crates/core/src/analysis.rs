@@ -1909,13 +1909,26 @@ impl Project {
         columns: &[ColumnId],
         descending: bool,
     ) -> Result<(), AnalysisError> {
+        self.sort_range_in_rows(book, sheet, key, columns, descending, 0..usize::MAX)
+    }
+
+    /// Sorts only the selected rows, keeping all other rows and unlisted columns in place.
+    pub fn sort_range_in_rows(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        key: ColumnId,
+        columns: &[ColumnId],
+        descending: bool,
+        rows: std::ops::Range<usize>,
+    ) -> Result<(), AnalysisError> {
         let ws = self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or(AnalysisError::NoSuchSheet)?;
         let key_col = ws.column(key).ok_or(AnalysisError::NoSuchColumn(key))?;
         for c in columns {
             ws.column(*c).ok_or(AnalysisError::NoSuchColumn(*c))?;
         }
         let n = ws.row_count();
-        let order = sort_order(&key_col.data, n, descending);
+        let order = sort_order_in_rows(&key_col.data, n, descending, rows);
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
         for c in &mut ws.columns {
             if columns.is_empty() || columns.contains(&c.id) {
@@ -1936,6 +1949,18 @@ impl Project {
         columns: &[ColumnId],
         descending: bool,
     ) -> Result<(), AnalysisError> {
+        self.sort_columns_in_rows(book, sheet, columns, descending, 0..usize::MAX)
+    }
+
+    /// Sorts each listed column independently, restricted to the selected rows.
+    pub fn sort_columns_in_rows(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        columns: &[ColumnId],
+        descending: bool,
+        rows: std::ops::Range<usize>,
+    ) -> Result<(), AnalysisError> {
         let ws = self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or(AnalysisError::NoSuchSheet)?;
         for c in columns {
             ws.column(*c).ok_or(AnalysisError::NoSuchColumn(*c))?;
@@ -1944,7 +1969,7 @@ impl Project {
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
         for c in &mut ws.columns {
             if columns.contains(&c.id) {
-                let order = sort_order(&c.data, n, descending);
+                let order = sort_order_in_rows(&c.data, n, descending, rows.clone());
                 c.reorder_rows(&order, n);
             }
         }
@@ -2037,12 +2062,13 @@ pub(crate) fn row_comparator(
     }
 }
 
-/// The row order that sorts `n` rows by one column. Equal keys keep their order (Origin's own
-/// order of equal keys is not stable, so it cannot be copied).
-pub(crate) fn sort_order(key: &ColumnData, n: usize, descending: bool) -> Vec<usize> {
+/// Equal keys keep their order; entries outside the selected interval keep their positions.
+fn sort_order_in_rows(key: &ColumnData, n: usize, descending: bool, rows: std::ops::Range<usize>) -> Vec<usize> {
     let mut order: Vec<usize> = (0..n).collect();
     let cmp = row_comparator(key, n, descending);
-    order.sort_by(|a, b| cmp(*a, *b));
+    let end = rows.end.min(n);
+    let start = rows.start.min(end);
+    order[start..end].sort_by(|a, b| cmp(*a, *b));
     order
 }
 

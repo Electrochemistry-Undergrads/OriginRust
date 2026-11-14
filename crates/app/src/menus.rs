@@ -276,6 +276,8 @@ pub struct MenuContext<'a> {
     pub graph: Option<WindowId>,
     pub active: Option<WindowId>,
     pub selected: &'a [ColumnId],
+    /// Data columns within the sorting selection, including whole-row selections.
+    pub sorting_columns: Vec<ColumnId>,
     /// True when the active workbook has selected cells, columns or rows (Copy, Cut, Paste and
     /// Clear act on them).
     pub cells: bool,
@@ -894,9 +896,11 @@ fn worksheet_menu() -> Vec<Entry> {
         sub(
             "Sort &Columns",
             vec![
-                item("Ascending", Cmd::SortColumns { descending: false }),
-                item("Descending", Cmd::SortColumns { descending: true }),
-                grey("Custom..."),
+                item("Ascending", Cmd::SortRange { descending: false }),
+                item("Descending", Cmd::SortRange { descending: true }),
+                item("Each Column Ascending", Cmd::SortColumns { descending: false }),
+                item("Each Column Descending", Cmd::SortColumns { descending: true }),
+                item("Custom...", Cmd::SortCustom { range: true }),
             ],
         ),
         sub(
@@ -1379,7 +1383,7 @@ pub fn column_header_menu() -> Vec<Entry> {
         vec![
             item(order[0], Cmd::SortColumns { descending: false }),
             item(order[1], Cmd::SortColumns { descending: true }),
-            grey(order[2]),
+            item(order[2], Cmd::SortCustom { range: true }),
         ],
     ));
     v.push(sub(
@@ -1844,6 +1848,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         _ => Err(NEED_ONE_COLUMN),
     };
     let some = || if c.selected.is_empty() { Err(NEED_COLUMNS) } else { Ok(c.selected.to_vec()) };
+    let sorting = || if c.sorting_columns.is_empty() { Err(NEED_COLUMNS) } else { Ok(c.sorting_columns.clone()) };
     Ok(match cmd {
         Cmd::NewProject => Action::NewProject,
         Cmd::NewWorkbook => Action::NewWorkbook,
@@ -1925,15 +1930,15 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SortRange { descending } => {
             book?;
-            Action::SortRange { columns: some()?, descending: *descending }
+            Action::SortRange { columns: sorting()?, descending: *descending }
         }
         Cmd::SortColumns { descending } => {
             book?;
-            Action::SortColumns { columns: some()?, descending: *descending }
+            Action::SortColumns { columns: sorting()?, descending: *descending }
         }
         Cmd::SortCustom { range } => {
             let book = book?;
-            let columns = if *range { some()? } else { Vec::new() };
+            let columns = if *range { sorting()? } else { Vec::new() };
             Action::SortCustom { book, columns }
         }
         Cmd::SortByLabel => Action::SortByLabel(book?),
@@ -2409,6 +2414,7 @@ mod tests {
             graph: Some(WindowId(2)),
             active: Some(WindowId(2)),
             selected: &[],
+            sorting_columns: Vec::new(),
             cells: false,
             undo: None,
             redo: None,

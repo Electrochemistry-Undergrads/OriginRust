@@ -6,6 +6,7 @@ use super::frame::{DialogButton, button_row};
 use eframe::egui;
 use sheaf_core::sheetops::{ColumnLabel, SortKey};
 use sheaf_core::{ColumnId, Project, WindowId};
+use std::ops::Range;
 
 /// What a sort window sorts.
 pub enum SortKind {
@@ -22,12 +23,13 @@ pub struct SortDialog {
     levels: Vec<SortKey>,
     label: ColumnLabel,
     descending: bool,
+    rows: Option<Range<usize>>,
 }
 
 pub enum SortOutcome {
     Open,
     Closed,
-    Nested { book: WindowId, columns: Vec<ColumnId>, keys: Vec<SortKey> },
+    Nested { book: WindowId, columns: Vec<ColumnId>, keys: Vec<SortKey>, rows: Option<Range<usize>> },
     ByLabel { book: WindowId, label: ColumnLabel, descending: bool },
 }
 
@@ -43,7 +45,12 @@ fn label_name(l: ColumnLabel) -> &'static str {
 impl SortDialog {
     /// A nested sort; `columns` empty sorts the whole sheet. The first key is the first column
     /// that is part of the sort.
-    pub fn nested(project: &Project, book: WindowId, columns: Vec<ColumnId>) -> Option<Self> {
+    pub fn nested_in_rows(
+        project: &Project,
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        rows: Option<Range<usize>>,
+    ) -> Option<Self> {
         let sheet = project.workbook(book)?.sheet();
         let first = columns.first().copied().or_else(|| sheet.columns.first().map(|c| c.id))?;
         Some(SortDialog {
@@ -52,6 +59,7 @@ impl SortDialog {
             levels: vec![SortKey { column: first, descending: false }],
             label: ColumnLabel::LongName,
             descending: false,
+            rows,
         })
     }
 
@@ -62,6 +70,7 @@ impl SortDialog {
             levels: Vec::new(),
             label: ColumnLabel::LongName,
             descending: false,
+            rows: None,
         }
     }
 
@@ -167,9 +176,12 @@ impl SortDialog {
             });
         match pressed {
             Some(DialogButton::Ok) => match &self.kind {
-                SortKind::Nested { columns } => {
-                    SortOutcome::Nested { book: self.book, columns: columns.clone(), keys: self.levels.clone() }
-                }
+                SortKind::Nested { columns } => SortOutcome::Nested {
+                    book: self.book,
+                    columns: columns.clone(),
+                    keys: self.levels.clone(),
+                    rows: self.rows.clone(),
+                },
                 SortKind::ByLabel => {
                     SortOutcome::ByLabel { book: self.book, label: self.label, descending: self.descending }
                 }

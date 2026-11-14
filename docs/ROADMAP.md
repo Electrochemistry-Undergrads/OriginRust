@@ -208,7 +208,7 @@ the default project format.
         ASCII import supports delimiter sets with consecutive-run combining, multi-character and fixed-width delimiters, row/column range-pattern selection with batch scope, and Data Import Options
         (T19; some format defaults still need measurement)
   - [x] Worksheet operations (T10): insert/delete rows, columns and cells; move/hide/resize columns;
-        column/range/nested sort; masks excluded from analysis; non-destructive row filter;
+        column/range/nested sorts restricted to selected rows; masks excluded from analysis; non-destructive row filter;
         transpose, stack/unstack, split/reduce; categorical columns and Group/Subject designations.
         Remaining mask/filter options, plot filtering and file codes are listed in the brief
   - [x] Formula functions (T08): running/statistical, date/time, random and string functions,

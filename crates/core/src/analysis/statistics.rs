@@ -4,7 +4,7 @@
 //! `docs/spec/statistics.md`.
 
 use super::*;
-use sheaf_calc::{TTest, anova_one_way, freq_counts};
+use sheaf_calc::{TTest, anova_one_way, bin2d, freq_counts};
 
 /// What a statistics tool produces; `analyze` turns it into a sheet (and a graph).
 pub(super) struct Output {
@@ -20,6 +20,7 @@ pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
         Tool::TTest(spec) => ttest(spec, inputs),
         Tool::Anova(spec) => anova(spec, inputs),
         Tool::Histogram(spec) => histogram(spec, inputs),
+        Tool::Binning2D(spec) => binning_2d(spec, inputs),
         Tool::Normality(spec) => normality(spec, inputs),
         Tool::MannWhitney(spec) => mann_whitney(spec, inputs),
         Tool::SignedRank(spec) => signed_rank(spec, inputs),
@@ -438,6 +439,59 @@ fn histogram(spec: &HistogramSpec, inputs: &[Input<'_>]) -> Result<Output, Analy
         plots.clear();
     }
     Ok(Output { table: Some(table), on_sheet, notes, plots })
+}
+
+// ----- 2D frequency counts and binning -----------------------------------------------------------------
+
+/// `Bin Ends of A`, or `Bin Ends of "Potential"` when the column has a long name (as Origin names the first
+/// result column).
+fn bin_label_name(centers: bool, short: &str, display: &str) -> String {
+    let what = if centers { "Bin Centers of" } else { "Bin Ends of" };
+    if display == short { format!("{what} {short}") } else { format!("{what} \"{display}\"") }
+}
+
+fn binning_2d(spec: &Bin2dOptions, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    let (x, y, x_short, x_name, y_name) = match inputs {
+        [one] => (one.xs(), one.ys(), one.x_short.as_str(), one.x_name.as_str(), one.name.as_str()),
+        [a, b, ..] => (a.ys(), b.ys(), a.short.as_str(), a.name.as_str(), b.name.as_str()),
+        [] => return Err(AnalysisError::NoColumns),
+    };
+    let r = bin2d(x, y, spec).ok_or_else(|| {
+        AnalysisError::BadOption(format!(
+            "no 2D frequency counts can be made of {y_name} against {x_name}: there are no points in the chosen              rows, or the bin range or size is not usable"
+        ))
+    })?;
+    let mut on_sheet = Vec::with_capacity(r.y.bins.len() + 1);
+    let mut first = number_column(
+        &bin_label_name(spec.x.centers, x_short, x_name),
+        "",
+        (0..r.x.bins.len()).map(|i| r.x.label(i)).collect(),
+    );
+    first.designation = Designation::X;
+    on_sheet.push(first);
+    let units = if spec.stat == Bin2dStat::PercentFrequency { "%" } else { "" };
+    for j in 0..r.y.bins.len() {
+        let mut c = number_column(spec.stat.label(), units, r.cells.iter().map(|row| row[j]).collect());
+        c.comments = r.y.range_text(j);
+        on_sheet.push(c);
+    }
+    let n = x.len().min(y.len());
+    let points = (0..n).filter(|&i| x[i].is_finite() && y[i].is_finite()).count();
+    let mut notes = vec![format!(
+        "{} points of {y_name} against {x_name} in {} X bins by {} Y bins ({}); {} outside the bins.",
+        points,
+        r.x.bins.len(),
+        r.y.bins.len(),
+        spec.stat.label().to_lowercase(),
+        points - r.binned
+    )];
+    if inputs.len() > 2 {
+        notes.push(format!(
+            "Only the first two columns are used (X and Y); {} is ignored, as in Origin.",
+            inputs[2..].iter().map(|i| i.short.as_str()).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
 }
 
 // ----- normality tests -------------------------------------------------------------------------------
@@ -1326,6 +1380,67 @@ mod tests {
         let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
         let c = ws.columns.iter().find(|c| c.long_name == name).unwrap_or_else(|| panic!("no column {name}"));
         c.numeric().unwrap().to_vec()
+    }
+
+    /// The points of Origin's `xy_count` reference run (`crates/calc/tests/fixtures/bin2d_origin.rs`).
+    fn binning_project() -> (Project, ColumnId, ColumnId) {
+        let x = vec![0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 1.2, 1.7, 2.2, 8.1, 8.8, 10.0, 0.0];
+        let y = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 2.2, 2.7, 9.1, 0.4, 3.3, 5.0, 0.0];
+        let mut p = Project::new();
+        let book = p.add_workbook("bins");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        (p, a, b)
+    }
+
+    fn grid() -> Bin2dOptions {
+        let axis = |w| AxisBins { min: Some(0.0), max: Some(10.0), size: BinSize::Width(w), ..Default::default() };
+        Bin2dOptions { x: axis(2.0), y: axis(5.0), stat: Bin2dStat::Count }
+    }
+
+    #[test]
+    fn two_d_binning_writes_origin_s_worksheet_form() {
+        let (mut p, a, b) = binning_project();
+        let r = run(&mut p, &[b], Tool::Binning2D(grid()));
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(ws.name.starts_with("Binning2D"), "{}", ws.name);
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Bin Ends of A", "Count", "Count"]);
+        assert_eq!(ws.columns[0].designation, Designation::X);
+        assert_eq!(ws.columns[0].numeric().unwrap(), [2.0, 4.0, 6.0, 8.0, 10.0]);
+        assert_eq!(ws.columns[1].comments, "0 - 5");
+        assert_eq!(ws.columns[2].comments, "5 - 10");
+        assert_eq!(ws.columns[1].numeric().unwrap(), [5.0, 2.0, 0.0, 0.0, 2.0]);
+        assert_eq!(ws.columns[2].numeric().unwrap(), [0.0, 1.0, 2.0, 2.0, 1.0]);
+        assert!(r.notes[0].contains("17 points") && r.notes[0].contains("2 outside"), "{:?}", r.notes);
+
+        // The X and the Y column chosen together give the same grid; a long name is quoted as in Origin,
+        // the mean leaves empty bins missing, and percentages are of the binned points with the unit %.
+        p.column_mut(a).unwrap().long_name = "Potential".to_string();
+        let mean = run(&mut p, &[a, b], Tool::Binning2D(Bin2dOptions { stat: Bin2dStat::Mean, ..grid() }));
+        let ws = &p.workbook(mean.book).unwrap().sheets[mean.new_sheet.unwrap()];
+        assert_eq!(ws.columns[0].long_name, "Bin Ends of \"Potential\"");
+        assert_eq!(ws.columns[1].long_name, "Mean");
+        let m = ws.columns[1].numeric().unwrap();
+        assert!((m[0] - 1.58).abs() < 1e-12 && m[2].is_nan(), "{m:?}");
+        let pct = run(&mut p, &[b], Tool::Binning2D(Bin2dOptions { stat: Bin2dStat::PercentFrequency, ..grid() }));
+        let ws = &p.workbook(pct.book).unwrap().sheets[pct.new_sheet.unwrap()];
+        assert_eq!(ws.columns[1].units, "%");
+        assert!((ws.columns[1].numeric().unwrap()[0] - 100.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn two_d_binning_with_centres_and_a_bad_range() {
+        let (mut p, _, b) = binning_project();
+        let mut spec = grid();
+        spec.x.centers = true;
+        let r = run(&mut p, &[b], Tool::Binning2D(spec));
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns[0].long_name, "Bin Centers of A");
+        assert_eq!(ws.columns[0].numeric().unwrap(), [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+        spec.x.max = Some(-1.0);
+        let err = p.analyze(&request(&[b], Tool::Binning2D(spec))).unwrap_err();
+        assert!(err.to_string().contains("no 2D frequency counts"), "{err}");
     }
 
     #[test]

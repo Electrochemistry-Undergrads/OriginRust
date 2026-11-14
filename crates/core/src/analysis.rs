@@ -36,8 +36,8 @@ pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
     PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
+pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
-pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -522,6 +522,10 @@ pub enum Tool {
     TTest(TTestSpec),
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
+    /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (Origin's `twoDBinning`): the
+    /// points of a Y column against its X column, or of two chosen columns (X, then Y), counted in a grid
+    /// of bins. A third chosen column is ignored, as in Origin.
+    Binning2D(Bin2dOptions),
     Normality(NormalitySpec),
     TwoWayAnova(TwoWayAnovaSpec),
     MannWhitney(MannWhitneySpec),
@@ -573,6 +577,7 @@ impl Tool {
             },
             Tool::Anova(_) => "One-way ANOVA",
             Tool::Histogram(_) => "Histogram",
+            Tool::Binning2D(_) => "2D frequency counts",
             Tool::Normality(_) => "Normality test",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
             Tool::MannWhitney(_) => "Mann-Whitney test",
@@ -609,6 +614,7 @@ impl Tool {
             Tool::TTest(_) => "TTest",
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
+            Tool::Binning2D(_) => "Binning2D",
             Tool::Normality(_) => "Normality",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
             Tool::MannWhitney(_) => "MannWhitney",
@@ -782,6 +788,8 @@ struct Input<'a> {
     name: String,
     units: String,
     x_name: String,
+    /// Short name of the X column ("Row" without one).
+    x_short: String,
     x_units: String,
     /// X values, as long as `y` (row numbers when the sheet has no X column).
     x: Vec<f64>,
@@ -1220,6 +1228,7 @@ impl Project {
                 name: c.display_name().to_string(),
                 units: c.units.clone(),
                 x_name: x_col.map_or_else(|| "Row".to_string(), |x| x.display_name().to_string()),
+                x_short: x_col.map_or_else(|| "Row".to_string(), |x| x.short_name.clone()),
                 x_units: x_col.map_or_else(String::new, |x| x.units.clone()),
                 x,
                 y,
@@ -1245,6 +1254,7 @@ impl Project {
             Tool::TTest(_)
             | Tool::Anova(_)
             | Tool::Histogram(_)
+            | Tool::Binning2D(_)
             | Tool::Normality(_)
             | Tool::MannWhitney(_)
             | Tool::SignedRank(_)

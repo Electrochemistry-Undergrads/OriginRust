@@ -1565,6 +1565,21 @@ fn envelope_opens_from_signal_processing_and_puts_its_curves_in_a_new_sheet() {
 }
 
 #[test]
+fn coherence_opens_from_signal_processing_and_writes_a_new_sheet() {
+    let mut h = start(vec![data_file("coherence")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Coherence..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("Coherence")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 4, "frequency and coherence for each of the two inputs");
+    // Origin's defaults: FFT length 256, so 129 frequencies; the 4 points are one segment.
+    assert_eq!(sheet.columns[1].numeric().unwrap().len(), 129);
+    assert_eq!(h.state().doc.undo_label(), Some("Coherence"));
+}
+
+#[test]
 fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("hilbert")]);
     show_window(&mut h, "Book1 - sample");

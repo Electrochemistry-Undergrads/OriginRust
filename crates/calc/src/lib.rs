@@ -12,6 +12,7 @@ pub mod anova;
 pub mod anova2;
 pub mod baseline;
 pub mod bin2d;
+pub mod coherence;
 pub mod correlation;
 pub mod crosstab;
 pub mod curvemath;
@@ -49,6 +50,7 @@ pub use anova::{
 pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
+pub use coherence::{CoherenceOptions, CoherenceResult, CoherenceWindow, coherence, coherence_window};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
 pub use crosstab::{ChiSquareTest, Crosstab, CrosstabError, Fisher};
 pub use curvemath::{CurveMathResult, CurveOp, column_math, curve_math_const, curve_math_ref};

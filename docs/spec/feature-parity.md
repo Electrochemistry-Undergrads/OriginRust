@@ -186,6 +186,7 @@ Cross-cutting findings:
 | FFT and inverse FFT | fft1, ifft1 | FFT window, `analyze fft`, `Tool::Fft`: Origin's columns, windows, corrections, one- and two-sided, shift, unwrap, MSA/SSA/TISA (analysis-tools 15); IFFT window, `analyze ifft` (15.1) | ◐ | no complex input column, no windows in IFFT, no result graphs | P1 |
 | FFT filters | low, high, band pass, block, notch | FFT Filters window, `analyze fft-filter`, `Tool::FftFilter`: the six types with Origin's automatic values (analysis-tools 15.2) | ✓ | checked against Origin | P1 |
 | Envelope | envelope | Envelope window, `analyze envelope`, `Tool::Envelope`: upper, lower or both, natural spline through the extremes found with `npts` points on each side, Origin's report columns (analysis-tools 13.2) | ✓ | checked against Origin | P2 |
+| Coherence | cohere | Coherence window, `analyze coherence`, `Tool::Coherence`: Welch-style segment averaging with nine windows, FFT and window length, overlap and interval; each input against a second signal (analysis-tools 13.3) | ✓ | checked against Origin; no result graph | P2 |
 | Correlation, wavelets, decimation, Hilbert, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
 
 ## 7 Peaks and baseline

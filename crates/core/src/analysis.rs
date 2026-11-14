@@ -38,10 +38,11 @@ pub use sheaf_calc::{
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
-pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
 pub use sheaf_calc::{
-    FftFilterOptions, FftFilterType, FftOptions, FftWindow, IfftOptions, PowerNorm, WindowCorrection,
+    CoherenceOptions, CoherenceWindow, FftFilterOptions, FftFilterType, FftOptions, FftWindow, IfftOptions, PowerNorm,
+    WindowCorrection,
 };
+pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -275,6 +276,18 @@ pub struct FftFilterSpec {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct EnvelopeSpec {
     pub options: EnvelopeOptions,
+}
+
+/// What [`Tool::Coherence`] does (Origin's Signal Processing > Coherence, `cohere`, measured;
+/// analysis-tools.md 13.3): the magnitude-squared coherence of each input column with the other
+/// column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CoherenceSpec {
+    /// The second signal.
+    pub other: ColumnId,
+    /// Window, segment and FFT lengths, overlap and the sampling interval (Origin: 1 unless given,
+    /// not taken from the X column).
+    pub options: CoherenceOptions,
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -663,6 +676,7 @@ pub enum Tool {
     Ifft(IfftSpec),
     FftFilter(FftFilterSpec),
     Envelope(EnvelopeSpec),
+    Coherence(CoherenceSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -732,6 +746,7 @@ impl Tool {
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFT filter",
             Tool::Envelope(_) => "Envelope",
+            Tool::Coherence(_) => "Coherence",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -797,6 +812,7 @@ impl Tool {
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFTFilter",
             Tool::Envelope(_) => "Envelope",
+            Tool::Coherence(_) => "Coherence",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1916,6 +1932,41 @@ impl Project {
                             data: ColumnData::numeric(values),
                         });
                     }
+                }
+            }
+            Tool::Coherence(spec) => {
+                let (_, _, ocol) = self.locate(spec.other).ok_or(AnalysisError::NoSuchColumn(spec.other))?;
+                let oshort = ocol.short_name.clone();
+                let ovalues = ocol.numeric().ok_or_else(|| AnalysisError::NotNumeric(oshort.clone()))?;
+                for inp in &inputs {
+                    // Origin: the shorter signal is padded with zeros and a missing value is 0.
+                    let trim = |v: &[f64]| {
+                        let end = v.iter().rposition(|a| !a.is_nan()).map_or(0, |i| i + 1);
+                        v[..end].to_vec()
+                    };
+                    let x = trim(inp.ys());
+                    let y = trim(ovalues.get(inp.first..).unwrap_or(&[]));
+                    if x.is_empty() {
+                        return Err(AnalysisError::TooFewPoints(inp.short.clone()));
+                    }
+                    if y.is_empty() {
+                        return Err(AnalysisError::TooFewPoints(oshort.clone()));
+                    }
+                    let r = calc::coherence(&x, &y, &spec.options).map_err(AnalysisError::BadOption)?;
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: "Frequency".into(),
+                        units: String::new(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(r.frequency),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("{} coherence with {}", inp.name, ocol.display_name()),
+                        units: String::new(),
+                        comments: format!("Coherence of {} and {oshort}{}", inp.short, inp.range_note()),
+                        data: ColumnData::numeric(r.coherence),
+                    });
                 }
             }
             Tool::Ifft(spec) => {
@@ -3320,6 +3371,26 @@ mod tests {
         let spec = SignalCorrelationSpec { other: gappy, circular: true, normalize: true, interval: 1.0 };
         assert!(matches!(
             p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))),
+            Err(AnalysisError::BadOption(_))
+        ));
+    }
+
+    #[test]
+    fn coherence_writes_frequency_and_coherence_to_a_new_sheet() {
+        let (mut p, book, flat, ramp) = sample();
+        let options = CoherenceOptions { fft_len: 8, win_len: 8, overlap: 4, interval: 0.5, ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Coherence(CoherenceSpec { other: flat, options }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("Coherence"), "{}", rs.name);
+        assert_eq!(rs.columns.len(), 2);
+        let f = rs.columns[0].numeric().unwrap();
+        assert_eq!((f.len(), f[1], f[4]), (5, 0.25, 1.0));
+        assert_eq!(rs.columns[1].comments, "Coherence of C and B");
+        assert_eq!(r.message.split(':').next(), Some("Coherence"));
+        // A window longer than the FFT is refused.
+        let options = CoherenceOptions { win_len: 16, ..options };
+        assert!(matches!(
+            p.analyze(&request(&[ramp], Tool::Coherence(CoherenceSpec { other: flat, options }))),
             Err(AnalysisError::BadOption(_))
         ));
     }

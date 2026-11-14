@@ -504,6 +504,58 @@ fn envelope_writes_both_curves_to_a_new_sheet() {
 }
 
 #[test]
+fn coherence_writes_frequency_and_coherence() {
+    let dir = scratch("coherence");
+    let data = data_file(&dir);
+    let out = dir.join("coherence.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "coherence",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--with",
+        "ramp",
+        "--fft-len",
+        "8",
+        "--win-len",
+        "8",
+        "--overlap",
+        "4",
+        "--window",
+        "hanning",
+        "--interval",
+        "0.5",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Coherence"), "{stdout}");
+    // A signal with itself has coherence 1 at every frequency: 0 to 1 in steps of 0.25.
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows: Vec<&str> =
+        text.lines().filter(|l| l.contains(',') && l.starts_with(|c: char| c.is_ascii_digit())).collect();
+    assert_eq!(rows.len(), 5, "{text}");
+    assert_eq!(rows[0], "0,1", "{text}");
+    assert_eq!(rows[4], "1,1", "{text}");
+    // A window longer than the FFT is refused.
+    let (ok, _, _) = sheaf(&[
+        "analyze",
+        "coherence",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--with",
+        "flat",
+        "--fft-len",
+        "8",
+        "--win-len",
+        "16",
+    ]);
+    assert!(!ok);
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);

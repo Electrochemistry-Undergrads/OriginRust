@@ -27,8 +27,8 @@ use sheaf_core::analysis::{
     PeakFitSpec, PeakShape,
 };
 use sheaf_core::analysis::{
-    EnvelopeOptions, EnvelopeSpec, EnvelopeType, FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow,
-    IfftSpec, PowerNorm, WindowCorrection,
+    CoherenceOptions, CoherenceSpec, CoherenceWindow, EnvelopeOptions, EnvelopeSpec, EnvelopeType, FftFilterOptions,
+    FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection,
 };
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
@@ -64,6 +64,8 @@ pub enum AnalysisKind {
     FftFilter,
     /// Signal Processing > Envelope (Origin's `envelope`).
     Envelope,
+    /// Signal Processing > Coherence (Origin's `cohere`).
+    Coherence,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -118,7 +120,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 21] = [
+    pub const ALL: [AnalysisKind; 22] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -136,6 +138,7 @@ impl AnalysisKind {
         AnalysisKind::Ifft,
         AnalysisKind::FftFilter,
         AnalysisKind::Envelope,
+        AnalysisKind::Coherence,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -162,6 +165,7 @@ impl AnalysisKind {
             AnalysisKind::Ifft => "IFFT...",
             AnalysisKind::FftFilter => "FFT Filters...",
             AnalysisKind::Envelope => "Envelope...",
+            AnalysisKind::Coherence => "Coherence...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -225,6 +229,7 @@ impl AnalysisKind {
             "ifft" => AnalysisKind::Ifft,
             "fft-filter" => AnalysisKind::FftFilter,
             "envelope" => AnalysisKind::Envelope,
+            "coherence" => AnalysisKind::Coherence,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -592,6 +597,8 @@ pub struct AnalysisDialog {
     ifft: IfftSpec,
     fft_filter: FftFilterSpec,
     envelope: EnvelopeSpec,
+    /// Coherence: window, lengths, overlap and interval of Origin's `cohere`.
+    coherence: CoherenceOptions,
     stats: StatsOptions,
     dist: super::dist_options::DistOptions,
     curves: super::math_curves::CurveOptions,
@@ -718,6 +725,88 @@ fn envelope_options(ui: &mut egui::Ui, spec: &mut EnvelopeSpec) {
     ui.weak("An extreme is the first largest (smallest) value among this many points on each side; a natural cubic spline goes through the extremes.");
 }
 
+/// The options of Signal Processing > Coherence, with Origin's names.
+fn coherence_options(ui: &mut egui::Ui, o: &mut CoherenceOptions) {
+    ui.horizontal(|ui| {
+        ui.label("Sampling interval");
+        ui.add(DragValue::new(&mut o.interval).speed(0.01).range(1e-300..=f64::MAX));
+    })
+    .response
+    .on_hover_text("The frequency step is 1 / (FFT length * interval). Origin does not take it from the X column.");
+    ui.horizontal(|ui| {
+        ui.label("FFT Length");
+        egui::ComboBox::from_id_salt("coherence_fftlen").selected_text(o.fft_len.to_string()).show_ui(ui, |ui| {
+            for n in [256, 512, 1024] {
+                ui.selectable_value(&mut o.fft_len, n, n.to_string());
+            }
+        });
+        ui.add(DragValue::new(&mut o.fft_len).speed(1).range(2..=1 << 24));
+    });
+    o.win_len = o.win_len.clamp(2, o.fft_len);
+    ui.horizontal(|ui| {
+        ui.label("Window Length");
+        ui.add(DragValue::new(&mut o.win_len).speed(1).range(2..=o.fft_len))
+            .on_hover_text("Each segment is zero padded to the FFT length; it cannot be longer.");
+    });
+    o.overlap = o.overlap.min(o.win_len - 1);
+    ui.horizontal(|ui| {
+        ui.label("Overlap");
+        ui.add(DragValue::new(&mut o.overlap).speed(1).range(0..=o.win_len - 1))
+            .on_hover_text("Points shared by neighbouring segments; less than the window length.");
+    });
+    let name = |w: CoherenceWindow| match w {
+        CoherenceWindow::Rectangle => "Rectangle",
+        CoherenceWindow::Welch => "Welch",
+        CoherenceWindow::Triangular => "Triangular",
+        CoherenceWindow::Bartlett => "Bartlett",
+        CoherenceWindow::Hanning => "Hanning",
+        CoherenceWindow::Hamming => "Hamming",
+        CoherenceWindow::Blackman => "Blackman",
+        CoherenceWindow::Gaussian { .. } => "Gaussian",
+        CoherenceWindow::Kaiser { .. } => "Kaiser",
+    };
+    let choices = [
+        CoherenceWindow::Rectangle,
+        CoherenceWindow::Welch,
+        CoherenceWindow::Triangular,
+        CoherenceWindow::Bartlett,
+        CoherenceWindow::Hanning,
+        CoherenceWindow::Hamming,
+        CoherenceWindow::Blackman,
+        CoherenceWindow::Gaussian { alpha: 0.0 },
+        CoherenceWindow::Kaiser { beta: 0.0 },
+    ];
+    ui.horizontal(|ui| {
+        ui.label("Window");
+        egui::ComboBox::from_id_salt("coherence_window").selected_text(name(o.window)).show_ui(ui, |ui| {
+            for w in choices {
+                let same = std::mem::discriminant(&w) == std::mem::discriminant(&o.window);
+                if ui.selectable_label(same, name(w)).clicked() && !same {
+                    o.window = w;
+                }
+            }
+        });
+    });
+    match &mut o.window {
+        CoherenceWindow::Gaussian { alpha } => {
+            ui.horizontal(|ui| {
+                ui.label("Alpha");
+                ui.add(DragValue::new(alpha).speed(0.01).range(0.0..=f64::MAX));
+            });
+        }
+        CoherenceWindow::Kaiser { beta } => {
+            ui.horizontal(|ui| {
+                ui.label("Beta");
+                ui.add(DragValue::new(beta).speed(0.01).range(0.0..=f64::MAX));
+            });
+        }
+        _ => {}
+    }
+    ui.weak(
+        "Segments of the window length, no detrending; missing values and the end of the shorter signal count as 0.",
+    );
+}
+
 /// The options of Signal Processing > FFT > FFT, with Origin's names.
 fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
     let o = &mut spec.options;
@@ -833,7 +922,10 @@ impl AnalysisDialog {
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
         // Convolution and Correlation may use an input itself (autocorrelation, as Origin).
-        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
+        let signal = matches!(
+            kind,
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft | AnalysisKind::Coherence
+        );
         let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         // IFFT: the column right after the (first) input is the imaginary part, as an FFT sheet has it.
         let next_column = columns.first().and_then(|c| {
@@ -907,6 +999,7 @@ impl AnalysisDialog {
                 interval: None,
             },
             envelope: EnvelopeSpec::default(),
+            coherence: CoherenceOptions::default(),
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -1203,6 +1296,14 @@ impl AnalysisDialog {
             AnalysisKind::Fft => Tool::Fft(self.fft),
             AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
             AnalysisKind::Envelope => Tool::Envelope(self.envelope),
+            AnalysisKind::Coherence => {
+                let other = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or("there is no other column with numbers to use as the second signal")?;
+                Tool::Coherence(CoherenceSpec { other, options: self.coherence })
+            }
             AnalysisKind::Ifft => {
                 let imaginary = if self.use_reference {
                     Some(
@@ -1449,7 +1550,7 @@ impl AnalysisDialog {
         let label = match self.kind {
             AnalysisKind::ColumnMath => "Column",
             AnalysisKind::Convolution => "Response",
-            AnalysisKind::SignalCorrelation => "Second signal",
+            AnalysisKind::SignalCorrelation | AnalysisKind::Coherence => "Second signal",
             AnalysisKind::Ifft => "Imaginary",
             _ => "Reference",
         };
@@ -1471,7 +1572,10 @@ impl AnalysisDialog {
             ui.weak("Row by row, without X values; rows past the end of the column count as 0.");
             return;
         }
-        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft) {
+        if matches!(
+            self.kind,
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft | AnalysisKind::Coherence
+        ) {
             return;
         }
         ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
@@ -1520,6 +1624,10 @@ impl AnalysisDialog {
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
             AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
             AnalysisKind::Envelope => envelope_options(ui, &mut self.envelope),
+            AnalysisKind::Coherence => {
+                self.reference_options(ui);
+                coherence_options(ui, &mut self.coherence);
+            }
             AnalysisKind::Ifft => {
                 ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
                     ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
@@ -2266,6 +2374,7 @@ impl AnalysisDialog {
             AnalysisKind::Fft => "fft1",
             AnalysisKind::FftFilter => "fft_filters",
             AnalysisKind::Envelope => "envelope",
+            AnalysisKind::Coherence => "cohere",
             AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
@@ -2335,6 +2444,7 @@ impl AnalysisDialog {
             AnalysisKind::Fft => "The frequency spectrum of the input signals",
             AnalysisKind::FftFilter => "Remove frequencies from the input signals",
             AnalysisKind::Envelope => "The upper and lower envelope of the input curves",
+            AnalysisKind::Coherence => "The magnitude-squared coherence of the input signals with a second signal",
             AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
@@ -2398,6 +2508,7 @@ impl AnalysisDialog {
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
             AnalysisKind::Fft => "Eight spectrum columns per input in a new sheet",
+            AnalysisKind::Coherence => "The coherence of each input against the frequency in a new sheet",
             AnalysisKind::Ifft => "Time, real, imaginary, amplitude and phase in a new sheet",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
@@ -2483,8 +2594,10 @@ impl AnalysisDialog {
             return;
         }
         self.column_names = names.join(", ");
-        let signal =
-            matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
+        let signal = matches!(
+            self.kind,
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft | AnalysisKind::Coherence
+        );
         self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
         if matches!(self.kind, AnalysisKind::CurveMath | AnalysisKind::ColumnMath) {

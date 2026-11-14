@@ -863,6 +863,20 @@ pub enum MathKind {
     Power,
 }
 
+/// Coherence window (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum CoherenceWindowArg {
+    Rectangle,
+    Welch,
+    Triangular,
+    Bartlett,
+    Hanning,
+    Hamming,
+    Blackman,
+    Gaussian,
+    Kaiser,
+}
+
 /// FFT filter type (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftFilterArg {
@@ -1204,6 +1218,35 @@ pub enum AnalyzeTool {
         /// Points on each side of an extreme point (cut to a whole number, at least 1).
         #[arg(long, default_value_t = 2.0)]
         npts: f64,
+    },
+    /// The magnitude-squared coherence of each column with a second one (Origin's Signal
+    /// Processing > Coherence): frequency and coherence in a new sheet.
+    Coherence {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The second signal (may be the same column).
+        #[arg(long = "with")]
+        other: String,
+        /// FFT length: each segment is zero padded to it.
+        #[arg(long, default_value_t = 256)]
+        fft_len: usize,
+        /// Segment length, at most the FFT length.
+        #[arg(long, default_value_t = 256)]
+        win_len: usize,
+        /// Points shared by neighbouring segments, less than the window length.
+        #[arg(long, default_value_t = 128)]
+        overlap: usize,
+        #[arg(long, value_enum, default_value_t = CoherenceWindowArg::Rectangle)]
+        window: CoherenceWindowArg,
+        /// Gaussian window: the reciprocal of the standard deviation.
+        #[arg(long, default_value_t = 0.0)]
+        alpha: f64,
+        /// Kaiser window: the beta parameter.
+        #[arg(long, default_value_t = 0.0)]
+        beta: f64,
+        /// Sampling interval (Origin: 1 unless given, not taken from the X column).
+        #[arg(long, default_value_t = 1.0)]
+        interval: f64,
     },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.

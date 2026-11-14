@@ -80,6 +80,11 @@ fn print_table(t: &analysis::ResultTable) {
 /// works on Y columns.
 enum Job {
     Tool(Tool),
+    /// Coherence; the second signal is looked up once the project is loaded.
+    Coherence {
+        other: String,
+        options: analysis::CoherenceOptions,
+    },
     /// Curve math; the reference column is looked up once the project is loaded.
     Math {
         op: MathKind,
@@ -204,6 +209,21 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             (target, Job::Tool(Tool::Envelope(analysis::EnvelopeSpec { options })))
         }
         AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
+        AnalyzeTool::Coherence { target, other, fft_len, win_len, overlap, window, alpha, beta, interval } => {
+            let window = match window {
+                CoherenceWindowArg::Rectangle => analysis::CoherenceWindow::Rectangle,
+                CoherenceWindowArg::Welch => analysis::CoherenceWindow::Welch,
+                CoherenceWindowArg::Triangular => analysis::CoherenceWindow::Triangular,
+                CoherenceWindowArg::Bartlett => analysis::CoherenceWindow::Bartlett,
+                CoherenceWindowArg::Hanning => analysis::CoherenceWindow::Hanning,
+                CoherenceWindowArg::Hamming => analysis::CoherenceWindow::Hamming,
+                CoherenceWindowArg::Blackman => analysis::CoherenceWindow::Blackman,
+                CoherenceWindowArg::Gaussian => analysis::CoherenceWindow::Gaussian { alpha },
+                CoherenceWindowArg::Kaiser => analysis::CoherenceWindow::Kaiser { beta },
+            };
+            let options = analysis::CoherenceOptions { fft_len, win_len, overlap, window, interval };
+            (target, Job::Coherence { other, options })
+        }
         AnalyzeTool::FftFilter { target, kind, cutoff, freq1, freq2, threshold, pass, stop, no_offset, interval } => {
             let kind = match kind {
                 FftFilterArg::LowPass => analysis::FftFilterType::LowPass,
@@ -961,6 +981,10 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         Job::Math { op, operand, column } => {
             Job::Tool(math_tool(&mut project, book, sheet, op, &operand, column, &target.read)?)
         }
+        Job::Coherence { other, options } => {
+            let other = named_columns(&project, book, sheet, std::slice::from_ref(&other))?[0];
+            Job::Tool(Tool::Coherence(analysis::CoherenceSpec { other, options }))
+        }
         Job::Ifft { imaginary, options, auto_interval } => {
             let imaginary = match imaginary {
                 Some(name) => Some(named_columns(&project, book, sheet, std::slice::from_ref(&name))?[0]),
@@ -1012,7 +1036,9 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)
         }
-        Job::Math { .. } | Job::Signal { .. } | Job::Ifft { .. } => unreachable!("turned into a tool above"),
+        Job::Math { .. } | Job::Signal { .. } | Job::Ifft { .. } | Job::Coherence { .. } => {
+            unreachable!("turned into a tool above")
+        }
         Job::Sort { by, descending } => {
             let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;

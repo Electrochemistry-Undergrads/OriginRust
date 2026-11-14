@@ -203,6 +203,8 @@ pub enum Cmd {
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
+    /// View > Status Bar: show or hide the status bar.
+    ToggleStatusBar,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -560,7 +562,12 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
 }
 
 fn view_menu(kind: WindowKind) -> Vec<Entry> {
-    let mut v = vec![grey("Menu"), keyed("&Toolbars...", ctrl(Key::T), Cmd::Toolbars), grey("Status Bar"), sep()];
+    let mut v = vec![
+        grey("Menu"),
+        keyed("&Toolbars...", ctrl(Key::T), Cmd::Toolbars),
+        item("Status Bar", Cmd::ToggleStatusBar),
+        sep(),
+    ];
     v.push(grey_keyed("Command Window", alt(Key::Num3)));
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
@@ -1989,6 +1996,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
+        Cmd::ToggleStatusBar => Action::ToggleStatusBar,
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,

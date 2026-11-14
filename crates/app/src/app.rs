@@ -120,6 +120,8 @@ pub struct SheafApp {
     about: bool,
     /// Which toolbars are shown.
     toolbars: Toolbars,
+    /// View > Status Bar turned the status bar off.
+    status_bar_hidden: bool,
     /// The side panels: Project Explorer, Object Manager and the logs.
     panels: Panels,
     /// What the status bar and the message boxes said, and the reports of the tools.
@@ -177,6 +179,7 @@ impl SheafApp {
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
+            status_bar_hidden: false,
             panels: Panels::default(),
             logs: Logs::default(),
             logged_message: None,
@@ -1132,6 +1135,7 @@ impl SheafApp {
             Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
             Action::Toolbars => self.toolbars.dialog = true,
+            Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
             Action::Quit => {
                 if self.doc.dirty {
                     self.pending = Some(Pending::Quit);
@@ -2667,7 +2671,9 @@ impl eframe::App for SheafApp {
                     .frame(bar_frame())
                     .show(ctx, |ui| toolbar::show_row(ui, &second, tb, &c, &mut actions));
             }
-            egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));
+            if !self.status_bar_hidden {
+                egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));
+            }
             if tb.shown(Bar::Graphs2D) {
                 egui::TopBottomPanel::bottom("toolbar_2d_graphs")
                     .frame(bar_frame())

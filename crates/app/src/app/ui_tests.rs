@@ -6010,3 +6010,13 @@ fn the_interpolation_items_open_the_interpolate_window_with_their_method() {
         settle(&mut h);
     }
 }
+
+#[test]
+fn view_status_bar_hides_and_shows_the_status_bar() {
+    let mut h = start(vec![data_file("statusbar")]);
+    assert!(h.query_by_label("AU : ON").is_some(), "the status bar is shown at first");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_none(), "hidden");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_some(), "shown again");
+}

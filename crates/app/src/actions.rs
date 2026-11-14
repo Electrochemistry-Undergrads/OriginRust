@@ -435,5 +435,7 @@ pub enum Action {
     About,
     /// Open the window of View > Toolbars.
     Toolbars,
+    /// View > Status Bar: show or hide the status bar.
+    ToggleStatusBar,
     Quit,
 }

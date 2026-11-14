@@ -568,6 +568,19 @@ fn the_stack_tab_has_origins_offset_choices_and_auto_gap() {
     assert_eq!(graph(&h).layers[0].stack, Stack::Auto { gap_percent: 8.0 });
 }
 
+/// Origin's ">>" button hides the Plot Details tree and "<<" brings it back.
+#[test]
+fn plot_details_hides_and_shows_its_tree_as_origin() {
+    let mut h = start(vec![data_file("details-more")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    assert!(has_label(&h, "Layer 1"));
+    click(&mut h, ">>");
+    assert!(!has_label(&h, "Layer 1"), "the tree is hidden");
+    assert!(has_label(&h, "Size/Speed"), "the tabs stay");
+    click(&mut h, "<<");
+    assert!(has_label(&h, "Layer 1"));
+}
+
 #[test]
 fn the_page_node_has_origins_tabs() {
     let mut h = start(vec![data_file("page-tabs")]);

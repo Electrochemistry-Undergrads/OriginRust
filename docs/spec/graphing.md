@@ -1851,3 +1851,9 @@ None and Straight; Align and Custom are drawn greyed with their boxes (Sheaf has
 lists None and the earlier layers that are not linked themselves (Sheaf follows one level of links); a layer
 that others are linked to cannot be linked. Changing the link keeps the layer where it is on the page: its
 frame is converted between fractions of the page and of the parent's frame.
+
+### 18.5 The ">>" button (measured 2026-11-14)
+
+Origin's Plot Details has a ">>" button at the bottom left. It hides the tree: the window shrinks to the tabs of
+the chosen node and the button becomes "<<", which brings the tree back (`re-workspace/scratch/t13link/open5`).
+Sheaf: the same button; the window keeps its size and the tabs take the room; the choice lasts while Sheaf runs.

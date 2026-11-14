@@ -136,6 +136,11 @@ fn kind_name(k: PlotKind) -> &'static str {
     }
 }
 
+/// Whether Origin's ">>" button has hidden the tree (kept in egui's memory while the app runs).
+pub fn tree_hidden_id() -> egui::Id {
+    egui::Id::new("plot_details_tree_hidden")
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn dialog_body(
     ui: &mut egui::Ui,
@@ -155,65 +160,69 @@ pub fn dialog_body(
         n => n,
     };
     let before = *node;
+    let tree_hidden = ui.data(|d| d.get_temp::<bool>(tree_hidden_id()).unwrap_or(false));
 
     ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width(300.0);
-            let tree_h = (ui.available_height() - 40.0).max(120.0);
-            egui::ScrollArea::vertical()
-                .id_salt("details_tree")
-                .max_height(tree_h)
-                .auto_shrink([false, false])
-                .show(ui, |ui| tree(ui, node, graph, names));
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.label("Plot Type");
-                if let Node::Plot(l, p) = *node {
-                    let polar = graph.layers[l].coords.polar().is_some();
-                    let radar = graph.layers[l].coords.polar().is_some_and(|p| p.radar);
-                    let ternary = graph.layers[l].coords.ternary().is_some();
-                    let plot = &mut graph.layers[l].plots[p];
-                    // A plot of a polar or ternary layer is an ordinary line or symbol plot.
-                    let shown = if radar {
-                        format!("Radar {}", kind_name(plot.kind))
-                    } else if ternary {
-                        format!("Ternary {}", kind_name(plot.kind))
-                    } else if polar {
-                        format!("Polar {}", kind_name(plot.kind))
+        // Origin's ">>" leaves only the tabs of the chosen node.
+        if !tree_hidden {
+            ui.vertical(|ui| {
+                ui.set_width(300.0);
+                let tree_h = (ui.available_height() - 40.0).max(120.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("details_tree")
+                    .max_height(tree_h)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| tree(ui, node, graph, names));
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label("Plot Type");
+                    if let Node::Plot(l, p) = *node {
+                        let polar = graph.layers[l].coords.polar().is_some();
+                        let radar = graph.layers[l].coords.polar().is_some_and(|p| p.radar);
+                        let ternary = graph.layers[l].coords.ternary().is_some();
+                        let plot = &mut graph.layers[l].plots[p];
+                        // A plot of a polar or ternary layer is an ordinary line or symbol plot.
+                        let shown = if radar {
+                            format!("Radar {}", kind_name(plot.kind))
+                        } else if ternary {
+                            format!("Ternary {}", kind_name(plot.kind))
+                        } else if polar {
+                            format!("Polar {}", kind_name(plot.kind))
+                        } else {
+                            kind_name(plot.kind).to_string()
+                        };
+                        egui::ComboBox::from_id_salt("plot_type").selected_text(shown).show_ui(ui, |ui| {
+                            for k in [
+                                PlotKind::Line,
+                                PlotKind::Scatter,
+                                PlotKind::LineSymbol,
+                                PlotKind::Column,
+                                PlotKind::StackedColumn,
+                                PlotKind::Stacked100Column,
+                                PlotKind::Bar,
+                                PlotKind::FloatingColumn,
+                                PlotKind::StackedBar,
+                                PlotKind::Stacked100Bar,
+                                PlotKind::FloatingBar,
+                                PlotKind::Area,
+                                PlotKind::StackedArea,
+                                PlotKind::Stacked100Area,
+                                PlotKind::Histogram,
+                                PlotKind::Box,
+                                PlotKind::Pie,
+                                PlotKind::Pie3D,
+                                PlotKind::PieBw,
+                            ] {
+                                ui.selectable_value(&mut plot.kind, k, kind_name(k));
+                            }
+                        });
                     } else {
-                        kind_name(plot.kind).to_string()
-                    };
-                    egui::ComboBox::from_id_salt("plot_type").selected_text(shown).show_ui(ui, |ui| {
-                        for k in [
-                            PlotKind::Line,
-                            PlotKind::Scatter,
-                            PlotKind::LineSymbol,
-                            PlotKind::Column,
-                            PlotKind::StackedColumn,
-                            PlotKind::Stacked100Column,
-                            PlotKind::Bar,
-                            PlotKind::FloatingColumn,
-                            PlotKind::StackedBar,
-                            PlotKind::Stacked100Bar,
-                            PlotKind::FloatingBar,
-                            PlotKind::Area,
-                            PlotKind::StackedArea,
-                            PlotKind::Stacked100Area,
-                            PlotKind::Histogram,
-                            PlotKind::Box,
-                            PlotKind::Pie,
-                            PlotKind::Pie3D,
-                            PlotKind::PieBw,
-                        ] {
-                            ui.selectable_value(&mut plot.kind, k, kind_name(k));
-                        }
-                    });
-                } else {
-                    ui.add_enabled(false, egui::Button::new("-"));
-                }
+                        ui.add_enabled(false, egui::Button::new("-"));
+                    }
+                });
             });
-        });
-        ui.separator();
+            ui.separator();
+        }
         ui.vertical(|ui| {
             let tabs = tabs_for(*node, graph);
             if *node != before || !tabs.iter().any(|(t, _, on)| t == tab && *on) {

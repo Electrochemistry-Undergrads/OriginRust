@@ -1,6 +1,6 @@
 # T25: MCP server so Claude and other AI tools can use Sheaf
 
-**Status:** phase 1 done on branch `mcp-server` (not merged); phase 2 (`--attach` to the open desktop app) left. Owner's request, 2026-11-14. **Size:** L. **Model:** Sonnet.
+**Status:** phase 1 done and merged (2026-11-14, Windows): `sheaf-mcp` over stdio, the CLI's work in `sheaf-ops`, ADR 0011, `docs/spec/mcp.md`, 16 tools, resources, root confinement, paged reads, PNG image blocks. Left: phase 2 (`--attach` to the open desktop app); one shared analysis-option registry (today `crates/mcp/src/analysis_tools.rs` maps options itself and a parity test in `crates/cli/src/analyze.rs` checks 16 tools against the CLI); the analysis tools not yet exposed (tests, ANOVA, peak chains, FFT filter, coherence, IFFT, convolution, correlation, distribution fit and others) and `output: new_sheet`; tests for CHI import through MCP, the `.bak` when saving over an Origin `.opj`, the 8 MB line cap and Windows junctions under a root. Owner's request, 2026-11-14. **Size:** L. **Model:** Sonnet.
 
 ## Goal
 

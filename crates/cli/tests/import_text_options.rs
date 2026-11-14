@@ -70,6 +70,40 @@ fn delimiter_character_sets_and_combined_runs_are_imported() {
 }
 
 #[test]
+fn partial_row_and_column_ranges_keep_the_selected_headers() {
+    let dir = scratch("partial");
+    let text = "t,a,b,c\n1,11,21,31\n2,12,22,32\n3,13,23,33\n4,14,24,34\n5,15,25,35\n";
+    let flags = [
+        "--first-row",
+        "2",
+        "--last-row",
+        "5",
+        "--read-rows",
+        "1",
+        "--skip-rows",
+        "1",
+        "--first-column",
+        "2",
+        "--skip-columns",
+        "1",
+    ];
+    let (ok, err, p) = import(&dir, "partial.csv", text, &flags);
+    assert!(ok, "{err}");
+    let sheet = &p.workbooks().next().unwrap().sheets[0];
+    assert_eq!(sheet.columns.len(), 2);
+    assert_eq!(sheet.columns[0].long_name, "a");
+    assert_eq!(sheet.columns[1].long_name, "c");
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [12.0, 14.0]);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [32.0, 34.0]);
+    for flags in
+        [vec!["--first-row", "0"], vec!["--read-columns", "0"], vec!["--first-column", "4", "--last-column", "2"]]
+    {
+        let (ok, err, _) = import(&dir, "partial.csv", text, &flags);
+        assert!(!ok && err.contains("selection"), "{flags:?}: {err}");
+    }
+}
+
+#[test]
 fn the_data_import_options_change_names_and_labels() {
     let dir = scratch("names");
     let text = "Time,Current\ns,A\n1,2\n2,3\n3,4\n4,5\n";

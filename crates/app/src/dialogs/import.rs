@@ -612,6 +612,18 @@ impl ImportDialog {
                 ui.label("Skip data rows");
                 ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
                 ui.end_row();
+                for (axis, selection) in [("row", &mut o.rows), ("column", &mut o.columns)] {
+                    for (label, value, min) in [
+                        (format!("First {axis}"), &mut selection.first, 1),
+                        (format!("Last {axis} (0 = end)"), &mut selection.last, 0),
+                        (format!("Read {axis}s"), &mut selection.read, 1),
+                        (format!("Skip {axis}s in pattern"), &mut selection.skip, 0),
+                    ] {
+                        let name = ui.label(label);
+                        ui.add(DragValue::new(value).range(min..=usize::MAX)).labelled_by(name.id);
+                        ui.end_row();
+                    }
+                }
             }
             if page == ImportPage::Miscellaneous {
                 ui.label("Numbers");

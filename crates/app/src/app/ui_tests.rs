@@ -6042,6 +6042,50 @@ fn the_import_window_distinguishes_character_sets_and_whole_strings() {
 }
 
 #[test]
+fn partial_import_controls_select_rows_columns_and_keep_their_headers() {
+    use crate::actions::ImportPick;
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-partial-import-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("partial.csv");
+    std::fs::write(&file, "t,a,b,c\n1,11,21,31\n2,12,22,32\n3,13,23,33\n4,14,24,34\n5,15,25,35\n").unwrap();
+    for wizard in [false, true] {
+        let mut h = start_auto_hide(vec![]);
+        if wizard {
+            h.state_mut().import_wizard = Some(ImportWizard::new(vec![file.clone()]));
+            settle(&mut h);
+            for _ in 0..5 {
+                click(&mut h, "Next >>");
+            }
+        } else {
+            h.state_mut().start_import(Some(vec![file.clone()]), ImportPick::Multiple);
+            settle(&mut h);
+            click(&mut h, "Partial Import");
+        }
+        for (label, value) in [
+            ("First row", "2"),
+            ("Last row (0 = end)", "5"),
+            ("Skip rows in pattern", "1"),
+            ("First column", "2"),
+            ("Skip columns in pattern", "1"),
+        ] {
+            click(&mut h, label);
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+            h.event(egui::Event::Text(value.into()));
+            settle(&mut h);
+            key(&mut h, egui::Key::Enter);
+        }
+        click(&mut h, if wizard { "Finish" } else { "OK" });
+        assert!(h.state().import.is_none() && h.state().import_wizard.is_none());
+        let book = project(&h).workbooks().next().unwrap();
+        assert_eq!(book.sheet().columns.len(), 2);
+        assert_eq!(book.sheet().columns[0].long_name, "a");
+        assert_eq!(book.sheet().columns[1].long_name, "c");
+        assert_eq!(column(&h, "A"), [12.0, 14.0]);
+        assert_eq!(column(&h, "B"), [32.0, 34.0]);
+    }
+}
+
+#[test]
 fn the_naming_page_and_the_short_name_line_control_the_names() {
     use crate::actions::ImportPick;
     let mut h = start_auto_hide(vec![]);

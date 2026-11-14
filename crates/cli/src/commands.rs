@@ -87,6 +87,14 @@ pub(crate) fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
     o.rename_sheet = !r.no_rename_sheet;
     o.rename_book = !r.no_rename_book;
     o.header_lines = r.header_lines;
+    o.rows =
+        sheaf_io::ascii::ImportSelection { first: r.first_row, last: r.last_row, read: r.read_rows, skip: r.skip_rows };
+    o.columns = sheaf_io::ascii::ImportSelection {
+        first: r.first_column,
+        last: r.last_column,
+        read: r.read_columns,
+        skip: r.skip_columns,
+    };
     o.decimal_comma = r.decimal_comma;
     o.thousands = match r.thousands {
         ThousandsArg::Auto => Thousands::Auto,

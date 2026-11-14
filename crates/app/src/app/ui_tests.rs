@@ -3550,6 +3550,69 @@ fn the_descriptive_menu_runs_a_cross_tabulation_of_text_columns() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
 }
 
+const CROSSTAB_DATA: &str = "x,u,p\ny,v,q\nx,u,r\ny,v,p\nx,v,q\ny,u,r\n";
+
+/// The "..." picker of the Cross Tabulation window sets the row and column variable, so what the Input box
+/// shows is what OK runs on; the window offers no "X from" row range (the table has no X column).
+#[test]
+fn the_cross_tabulation_input_picker_sets_the_variables_and_offers_no_x_range() {
+    let mut h = start(vec![csv_file("crosstab-picker", "survey", CROSSTAB_DATA)]);
+    show_window(&mut h, "Book1 - survey");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
+    assert!(has_label(&h, "From row") && !has_label(&h, "X from"), "no X range for a table of factors");
+    click(&mut h, "...");
+    h.get_by_label("Select Input Columns");
+    // The columns A and B are ticked: untick B, tick C (the picker is drawn last).
+    h.query_all_by_label("B").last().expect("B in the picker").click();
+    settle(&mut h);
+    h.query_all_by_label("C").last().expect("C in the picker").click();
+    settle(&mut h);
+    h.query_all_by_label("OK").last().expect("the picker's OK").click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    // Rows x, y by columns p, q, r: the third variable was used, not g2.
+    let (_, p) = result_column(&h, "p");
+    assert_eq!(p, vec![1.0, 1.0, 2.0], "x and y once each with p, then the total");
+    let (_, r) = result_column(&h, "r");
+    assert_eq!(r, vec![1.0, 1.0, 2.0]);
+}
+
+/// Apply again after the row variable changes to one with more levels: the result sheet is replaced, not added
+/// to.
+#[test]
+fn applying_a_cross_tabulation_again_with_more_levels_replaces_its_sheet() {
+    let mut h = start(vec![csv_file("crosstab-again", "survey", CROSSTAB_DATA)]);
+    show_window(&mut h, "Book1 - survey");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
+    let sheets = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheets.len();
+    click(&mut h, "Apply");
+    assert_eq!(sheets(&h), 2);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("B")).click();
+    settle(&mut h);
+    h.query_all_by_label("C").last().expect("C in the list").click();
+    settle(&mut h);
+    click(&mut h, "Apply");
+    assert_eq!(sheets(&h), 2, "the earlier table is gone, the new one stays");
+    let (_, q) = result_column(&h, "q");
+    assert_eq!(q.len(), 3);
+    click(&mut h, "OK");
+    assert_eq!(sheets(&h), 2);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(sheets(&h), 1, "one undo removes every run of the window");
+}
+
+/// The two-way ANOVA window has no "X from" row range either.
+#[test]
+fn the_two_way_anova_window_offers_no_x_range() {
+    let mut h = start(vec![csv_file("anova2-xrange", "design", "a,b,y\nl,1,1\nl,2,2\nh,1,3\nh,2,5\n")]);
+    show_window(&mut h, "Book1 - design");
+    menu_path(&mut h, &["Statistics", "ANOVA", "Two-Way ANOVA..."]);
+    assert!(has_label(&h, "From row") && !has_label(&h, "X from"));
+}
+
 /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning...: the two Y columns are X and Y.
 #[test]
 fn the_descriptive_menu_runs_a_2d_frequency_count() {

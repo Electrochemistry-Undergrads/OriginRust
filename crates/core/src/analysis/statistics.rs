@@ -1533,6 +1533,43 @@ mod tests {
     }
 
     #[test]
+    fn two_way_anova_offers_holm_per_family_and_refuses_dunnett_and_an_x_range() {
+        let (mut p, ids) = two_way_project();
+        let with = |p: &mut Project, m: MeansComparison| {
+            run(p, &ids, Tool::TwoWayAnova(TwoWayAnovaSpec { comparison: Some(m), ..Default::default() }))
+        };
+        let holm = with(&mut p, MeansComparison::Holm);
+        let lsd = with(&mut p, MeansComparison::FisherLsd);
+        let (ph, pr) = (cell(&p, &holm, "Prob"), cell(&p, &lsd, "Prob"));
+        // Factor A (2 levels), factor B (3 levels) and the 6 cells: 1 + 3 + 15 pairs.
+        assert_eq!((ph.len(), pr.len()), (19, 19));
+        assert!(ph.iter().zip(&pr).all(|(h, r)| *h >= *r - 1e-15 && *h <= 1.0));
+        // Each factor and the cell list are separate families of the step-down.
+        for (from, to) in [(0, 1), (1, 4), (4, 19)] {
+            let want = sheaf_calc::holm_adjust(&pr[from..to]);
+            for (g, w) in ph[from..to].iter().zip(&want) {
+                assert!((g - w).abs() < 1e-12, "family {from}..{to}: {g} vs {w}");
+            }
+        }
+        assert!(cell(&p, &holm, "LCL").iter().chain(&cell(&p, &holm, "UCL")).all(|v| v.is_nan()));
+        assert_eq!(text_cells(&p, &holm, "Holm-Bonferroni comparison").len(), 19);
+
+        let err = p
+            .analyze(&request(
+                &ids,
+                Tool::TwoWayAnova(TwoWayAnovaSpec { comparison: Some(MeansComparison::Dunnett), ..Default::default() }),
+            ))
+            .unwrap_err();
+        assert!(err.to_string().contains("one-way ANOVA only"), "{err}");
+        let limited = Request {
+            columns: ids.clone(),
+            rows: RowRange::XBetween(0.0, 1.0),
+            tool: Tool::TwoWayAnova(TwoWayAnovaSpec::default()),
+        };
+        assert!(p.analyze(&limited).unwrap_err().to_string().contains("no X column to limit"));
+    }
+
+    #[test]
     fn two_way_anova_without_interaction_and_with_raw_layout() {
         let (mut p, ids) = two_way_project();
         let spec = TwoWayAnovaSpec { interaction: false, comparison: None, ..Default::default() };

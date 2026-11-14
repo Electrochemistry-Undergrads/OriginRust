@@ -404,13 +404,16 @@ and Statistic/Value pairs of the tests:
 
 Fisher's two-sided p-value adds the probabilities of all tables with the same margins that are no more likely than
 the observed one (relative tolerance 1e-9 on ties). A note warns when cells have an expected count below 5. A table
-with fewer than two levels in a variable is refused. Agreement with scipy `chi2_contingency` (`correction=False`,
+with fewer than two levels in a variable is refused, and so is a variable with more than 200 distinct levels (a column
+of numbers or identifiers is not a category). Rows hidden by the sheet filter and masked cells are left out, as in the
+other tools; the cross tabulation has no X column, so the "X from ... to" row range is refused (the window does not
+offer it). Agreement with scipy `chi2_contingency` (`correction=False`,
 `lambda_="log-likelihood"`) and `fisher_exact`: 1e-9 relative on 9 tables, including zero cells.
 
 ### 11.3 2D frequency count (2D binning)
 
 Statistics > Descriptive Statistics > 2D Frequency Counts/Binning; `sheaf analyze bin2d --y X_COLUMN,Y_COLUMN`.
-The first chosen column is X, the second Y; rows where either is missing are dropped. Each axis is binned with
+The first chosen column is X, the second Y; rows where either is missing, or infinite, are dropped (noted in the result). Each axis is binned with
 the rules of the frequency count (section 3): automatic size and range, a bin width, or a number of bins over the data
 range (or over a given range `[min, max]`). A bin holds its lower edge and not its upper one; only when the range
 is the data range cut into a number of bins is the very last edge counted too (as in numpy and scipy; against
@@ -436,6 +439,9 @@ To check on the Windows machine with `tools/origin-ref` before these are called 
   odds ratio (sample ratio here), and which rows it leaves out for missing cells.
 - Origin's 2D binning: which edge each bin includes, the automatic bin range and size (we use the 1D rules of
   section 3), the layout of the result (Origin may write a matrix object, or XYZ columns), and its limit on bins.
+- Whether Origin's cross tabulation leaves out filtered rows and masked cells as we do, and whether it limits the
+  number of levels of a variable (we refuse more than 200); how its 2D binning treats infinite values (we leave
+  such rows out and say so).
 - Origin's X-Function names for these windows (the window titles show the tool name alone).
 
 ## 5 Where results go (ADR 0005)

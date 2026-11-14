@@ -453,16 +453,19 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Crosstab { target, no_row_percent, no_column_percent, no_total_percent, no_expected, alpha } => (
-            target,
-            Job::Tool(Tool::Crosstab(analysis::CrosstabSpec {
-                row_percent: !no_row_percent,
-                column_percent: !no_column_percent,
-                total_percent: !no_total_percent,
-                expected: !no_expected,
-                alpha,
-            })),
-        ),
+        AnalyzeTool::Crosstab { target, no_row_percent, no_column_percent, no_total_percent, no_expected, alpha } => {
+            no_x_range(&target, "the cross tabulation")?;
+            (
+                target,
+                Job::Tool(Tool::Crosstab(analysis::CrosstabSpec {
+                    row_percent: !no_row_percent,
+                    column_percent: !no_column_percent,
+                    total_percent: !no_total_percent,
+                    expected: !no_expected,
+                    alpha,
+                })),
+            )
+        }
         AnalyzeTool::Bin2d { target, x_bin_size, x_bins, x_min, x_max, y_bin_size, y_bins, y_min, y_max } => {
             let axis = |w: Option<f64>, n: Option<usize>, min, max| analysis::AxisBins {
                 min,
@@ -480,6 +483,7 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             (target, Job::Tool(Tool::Bin2d(analysis::Bin2dSpec { bins })))
         }
         AnalyzeTool::Anova2 { target, raw, levels_a, levels_b, no_interaction, comparison, alpha } => {
+            no_x_range(&target, "the two-way ANOVA")?;
             let layout = if raw {
                 if levels_a.len() != target.y.len() || levels_b.len() != target.y.len() {
                     bail!(
@@ -590,6 +594,15 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             (target, Job::Filter { condition, in_place })
         }
     })
+}
+
+/// The tools that read factor columns have no X column to limit; say so before running instead of failing in
+/// the tool.
+fn no_x_range(target: &TargetArgs, tool: &str) -> Result<()> {
+    if target.x_range.is_some() {
+        bail!("{tool} has no X column to limit, so --x-range cannot be used with it; choose rows with --rows");
+    }
+    Ok(())
 }
 
 /// Sorting and filtering work on all rows and columns of a sheet; refuse the options that choose

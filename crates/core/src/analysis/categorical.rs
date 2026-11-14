@@ -18,6 +18,10 @@ fn ordered_levels(mut levels: Vec<String>) -> Vec<String> {
     levels
 }
 
+/// Most distinct levels one variable of a cross tabulation may have. A column of numbers or identifiers
+/// would otherwise make a table with millions of cells.
+const MAX_LEVELS: usize = 200;
+
 pub(super) fn crosstab(
     spec: &CrosstabSpec,
     sheet: &Worksheet,
@@ -49,7 +53,12 @@ pub(super) fn crosstab(
     let mut pairs: Vec<(String, String)> = Vec::new();
     let mut left_out = 0usize;
     for row in first..=last.min(len - 1) {
-        match (level_text(cr, row), level_text(cc, row)) {
+        // Rows hidden by the sheet filter and masked cells are excluded, as in every other tool.
+        if !sheet.row_shown(row) {
+            continue;
+        }
+        let level = |c: &Column| if c.mask.contains(&row) { None } else { level_text(c, row) };
+        match (level(cr), level(cc)) {
             (Some(a), Some(b)) => pairs.push((a, b)),
             (None, None) => {}
             _ => left_out += 1,
@@ -64,6 +73,16 @@ pub(super) fn crosstab(
     let levels_c = ordered_levels(
         pairs.iter().map(|p| p.1.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect(),
     );
+    for (levels, c) in [(&levels_r, cr), (&levels_c, cc)] {
+        if levels.len() > MAX_LEVELS {
+            return Err(AnalysisError::BadOption(format!(
+                "column {} has {} distinct levels, too many for a categorical variable (at most {MAX_LEVELS}); \
+                 choose a column of categories",
+                c.display_name(),
+                levels.len()
+            )));
+        }
+    }
     let mut counts = vec![vec![0usize; levels_c.len()]; levels_r.len()];
     for (a, b) in &pairs {
         let i = levels_r.iter().position(|l| l == a).expect("collected above");
@@ -277,6 +296,9 @@ pub(super) fn bin_2d_tool(spec: &Bin2dSpec, inputs: &[Input<'_>]) -> Result<Outp
             r.pairs
         ));
     }
+    if r.infinite > 0 {
+        notes.push(format!("{} rows with an infinite value were left out.", r.infinite));
+    }
     Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
 }
 
@@ -354,6 +376,48 @@ mod tests {
         let (mut p, ids) = project(vec![text(&["a", "a"]), text(&["x", "y"])]);
         let err = p.analyze(&request(&ids, Tool::Crosstab(CrosstabSpec::default()))).unwrap_err();
         assert!(err.to_string().contains("at least two levels"), "{err}");
+    }
+
+    #[test]
+    fn crosstab_leaves_out_filtered_rows_and_masked_cells() {
+        let mut p = Project::new();
+        let book = p.add_workbook("tab");
+        let a = ["x", "x", "y", "y", "x", "y"];
+        let b = ["u", "v", "u", "v", "u", "u"];
+        let ca = p.add_column(book, 0, Designation::Y, text(&a)).unwrap();
+        let cb = p.add_column(book, 0, Designation::Y, text(&b)).unwrap();
+        let keep =
+            p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 1.0, 1.0, 1.0, 0.0, 0.0])).unwrap();
+        let n = |p: &mut Project| {
+            let r = p.analyze(&request(&[ca, cb], Tool::Crosstab(CrosstabSpec::default()))).unwrap();
+            let t = r.table.unwrap();
+            let at = t.headers.iter().position(|h| h == "N").unwrap();
+            t.rows[0].1[at]
+        };
+        assert_eq!(n(&mut p), 6.0);
+        // Rows 4 and 5 are hidden by the filter.
+        let short = p.column(keep).unwrap().short_name.clone();
+        assert_eq!(p.set_row_filter(book, 0, &format!("col({short}) > 0.5")).unwrap(), 4);
+        assert_eq!(n(&mut p), 4.0);
+        // A masked cell takes its row out of the table as well.
+        p.column_mut(cb).unwrap().mask.insert(0);
+        let r = p.analyze(&request(&[ca, cb], Tool::Crosstab(CrosstabSpec::default()))).unwrap();
+        assert_eq!(r.table.unwrap().rows[0].1[0], 3.0);
+        assert!(r.notes.iter().any(|n| n.contains("1 rows with a level in only one")), "{:?}", r.notes);
+    }
+
+    #[test]
+    fn crosstab_refuses_a_column_with_too_many_levels() {
+        let ids: Vec<f64> = (0..(MAX_LEVELS + 1) as u32).map(f64::from).collect();
+        let few: Vec<&str> = (0..=MAX_LEVELS).map(|i| if i % 2 == 0 { "a" } else { "b" }).collect();
+        let (mut p, cols) = project(vec![ColumnData::numeric(ids), text(&few)]);
+        let err = p.analyze(&request(&cols, Tool::Crosstab(CrosstabSpec::default()))).unwrap_err();
+        assert!(err.to_string().contains("too many for a categorical variable"), "{err}");
+        // Exactly the limit is accepted.
+        let ids: Vec<f64> = (0..MAX_LEVELS as u32).map(f64::from).collect();
+        let few: Vec<&str> = (0..MAX_LEVELS).map(|i| if i % 2 == 0 { "a" } else { "b" }).collect();
+        let (mut p, cols) = project(vec![ColumnData::numeric(ids), text(&few)]);
+        assert!(p.analyze(&request(&cols, Tool::Crosstab(CrosstabSpec::default()))).is_ok());
     }
 
     #[test]

@@ -747,6 +747,39 @@ fn crosstab_counts_percents_and_tests() {
     );
     let (ok, _, err) = sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A"]);
     assert!(!ok && err.contains("exactly two columns"), "{err}");
+    // There is no X column to limit: refused before anything runs.
+    let (ok, _, err) = sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A,B", "--x-range", "1:3"]);
+    assert!(!ok && err.contains("no X column to limit") && err.contains("--rows"), "{err}");
+    let (ok, out, err) = sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A,B", "--rows", "1:6"]);
+    assert!(ok && out.contains("Crosstab1"), "{err}");
+}
+
+#[test]
+fn anova2_offers_holm_and_refuses_dunnett_and_an_x_range() {
+    let dir = scratch("anova2-holm");
+    let data = design_file(&dir);
+    let file = data.to_str().unwrap();
+    let export = dir.join("holm.csv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "anova2",
+        file,
+        "--y",
+        "dose,batch,response",
+        "--comparison",
+        "holm",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Holm"), "{out}");
+    let holm = std::fs::read_to_string(&export).unwrap();
+    assert!(holm.contains("Holm-Bonferroni comparison") && holm.contains("dose: low"), "{holm}");
+
+    let (ok, _, err) = sheaf(&["analyze", "anova2", file, "--y", "dose,batch,response", "--comparison", "dunnett"]);
+    assert!(!ok && err.contains("one-way ANOVA only"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova2", file, "--y", "dose,batch,response", "--x-range", "1:3"]);
+    assert!(!ok && err.contains("no X column to limit"), "{err}");
 }
 
 #[test]

@@ -1808,6 +1808,17 @@ impl AnalysisDialog {
         if self.kind == AnalysisKind::Anova2 {
             self.stats.two_way_levels.resize(columns.len(), (String::new(), String::new()));
         }
+        // These tools run on the columns of their own boxes, not on the Input range: the picker sets the boxes.
+        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2) {
+            let chosen: Vec<usize> =
+                columns.iter().filter_map(|id| self.sheet_columns.iter().position(|(c, _)| c == id)).collect();
+            if self.kind == AnalysisKind::Crosstab && chosen.len() >= 2 {
+                self.stats.pair_columns = [chosen[0], chosen[1]];
+            }
+            if self.kind == AnalysisKind::Anova2 && chosen.len() >= 3 {
+                self.stats.two_way_columns = [chosen[0], chosen[1], chosen[2]];
+            }
+        }
         self.columns = columns;
         self.preview_request = None;
         // A new choice of input starts a new set of results.
@@ -2017,6 +2028,10 @@ impl AnalysisDialog {
                 ui.add(DragValue::new(&mut self.to).range(1..=self.rows_in_sheet));
             });
         });
+        // The tools that take their variables from factor boxes have no X column to limit.
+        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2) {
+            return;
+        }
         ui.horizontal(|ui| {
             ui.label("    ");
             ui.radio_value(&mut self.row_mode, RowMode::XRange, "X from")

@@ -12,8 +12,8 @@ the seed given to it.
 What each block checks:
   DUNNETT  scipy.stats.dunnett: statistic (exact), p-values and confidence intervals (scipy integrates the
            multivariate t by quasi Monte Carlo, absolute error about 1e-4, much worse relative to p below
-           1e-5), plus an independent deterministic evaluation of the same integral with nested
-           scipy.integrate.quad (error below 1e-11), which pins our Gauss-Legendre integral to 1e-9.
+           1e-5), plus an independent deterministic evaluation of the same integral with a composite 64-point
+           Gauss-Legendre rule written out here (`dunnett_ref_cdf`), which pins our integral to 1e-9.
   HOLM     scipy has no Holm adjustment. The raw p-values are scipy.stats.t.sf of the pairwise t statistics
            with the ANOVA mean square, the step-down adjustment is written out here from its definition.
   CROSSTAB scipy.stats.chi2_contingency (Pearson, with correction=False; Yates with correction=True;
@@ -21,11 +21,10 @@ What each block checks:
   BIN2D    scipy.stats.binned_statistic_2d(statistic="count"); the edges are scipy's for bins given as a
            number, and written out here (start + width * i) for bins given as a width.
 """
-import itertools
 import math
 
 import numpy as np
-from scipy import integrate, optimize, stats
+from scipy import optimize, stats
 
 assert stats.__name__  # scipy is required
 

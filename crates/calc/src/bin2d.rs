@@ -5,7 +5,7 @@
 //! given as a width, or given as a number of equal bins. A cell holds the pairs whose x is at or above the
 //! lower edge of its x bin and below the upper one, and likewise for y; as in the one-dimensional counts, the
 //! last bin of an axis whose range is the data range cut into a number of bins also holds its upper edge.
-//! Pairs outside the grid are not counted. Rows where either value is NaN are left out.
+//! Pairs outside the grid are not counted. Rows where either value is NaN or infinite are left out.
 
 use crate::freq::{BinLayout, BinSize, bin_layout};
 
@@ -41,8 +41,10 @@ pub struct Bin2d {
     pub y_edges: Vec<f64>,
     /// `counts[ix][iy]`: the pairs in x bin `ix` and y bin `iy`.
     pub counts: Vec<Vec<usize>>,
-    /// Rows where both values are numbers.
+    /// Rows where both values are finite numbers.
     pub pairs: usize,
+    /// Rows left out because a value is infinite (rows with a NaN are not counted anywhere).
+    pub infinite: usize,
     /// Pairs that fell inside the grid (the sum of the counts).
     pub counted: usize,
 }
@@ -112,8 +114,21 @@ fn locate(v: f64, l: &BinLayout, e: &[f64]) -> Option<usize> {
 /// Counts the pairs `(x[i], y[i])` in the cells of the grid. The slices should have the same length; the
 /// shorter one decides.
 pub fn bin_2d(x: &[f64], y: &[f64], opts: &Bin2dOptions) -> Result<Bin2d, Bin2dError> {
-    let (xs, ys): (Vec<f64>, Vec<f64>) =
-        x.iter().zip(y).filter(|(a, b)| !a.is_nan() && !b.is_nan()).map(|(a, b)| (*a, *b)).unzip();
+    let mut infinite = 0;
+    let (xs, ys): (Vec<f64>, Vec<f64>) = x
+        .iter()
+        .zip(y)
+        .filter(|(a, b)| {
+            if a.is_nan() || b.is_nan() {
+                return false;
+            }
+            // An infinite value would make the bin layout meaningless; the layout is of the finite values.
+            let finite = a.is_finite() && b.is_finite();
+            infinite += usize::from(!finite);
+            finite
+        })
+        .map(|(a, b)| (*a, *b))
+        .unzip();
     if xs.is_empty() {
         return Err(Bin2dError::NoPairs);
     }
@@ -131,7 +146,7 @@ pub fn bin_2d(x: &[f64], y: &[f64], opts: &Bin2dOptions) -> Result<Bin2d, Bin2dE
             counted += 1;
         }
     }
-    Ok(Bin2d { x_edges: ex, y_edges: ey, counts, pairs: xs.len(), counted })
+    Ok(Bin2d { x_edges: ex, y_edges: ey, counts, pairs: xs.len(), infinite, counted })
 }
 
 #[cfg(test)]
@@ -167,6 +182,22 @@ mod tests {
         let r = bin_2d(&x, &y, &o).unwrap();
         assert_eq!(r.counts, vec![vec![1], vec![1], vec![1]]);
         assert_eq!((r.pairs, r.counted), (4, 3));
+    }
+
+    #[test]
+    fn infinite_values_are_left_out_not_miscounted() {
+        let x = [1.0, 2.0, f64::INFINITY, 4.0, 5.0];
+        let y = [1.0, 2.0, 3.0, f64::NEG_INFINITY, 5.0];
+        let o = Bin2dOptions {
+            x: AxisBins { size: BinSize::Count(3), ..Default::default() },
+            y: AxisBins { size: BinSize::Count(3), ..Default::default() },
+        };
+        let r = bin_2d(&x, &y, &o).unwrap();
+        assert_eq!((r.pairs, r.infinite, r.counted), (3, 2, 3));
+        assert!(r.x_edges.iter().chain(&r.y_edges).all(|e| e.is_finite()), "{:?}", r.x_edges);
+        // Automatic bins on the same data no longer fail.
+        assert!(bin_2d(&x, &y, &Bin2dOptions::default()).is_ok());
+        assert_eq!(bin_2d(&[f64::INFINITY], &[1.0], &Bin2dOptions::default()), Err(Bin2dError::NoPairs));
     }
 
     #[test]

@@ -5181,6 +5181,31 @@ fn sort_range_moves_the_selected_columns_together_and_sort_columns_sorts_each_al
 }
 
 #[test]
+fn set_values_substitute_picker_and_formula_fill_text_cells() {
+    let mut h = start(vec![data_file("substitute")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    click(&mut h, "Function");
+    menu_entry(&h, "Text").click();
+    settle(&mut h);
+    click(&mut h, "substitute");
+    let formula = r#"substitute(text(col(B)),",",".")$"#;
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text(formula.into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "a valid substitute formula closes the dialog");
+    let book = project(&h).workbooks().next().unwrap();
+    let col = book.sheet().column_by_name("C").unwrap();
+    assert_eq!(col.formula.as_deref(), Some(formula));
+    assert!(col.data.is_mixed());
+    for (row, expected) in ["2,5", "4,5", "6,5", "8,5"].iter().enumerate() {
+        assert_eq!(col.data.text_cell(row), Some(*expected));
+    }
+}
+
+#[test]
 fn set_values_apply_waits_for_a_change_and_recalculate_defaults_to_manual() {
     let mut h = start(vec![data_file("setvals")]);
     show_window(&mut h, "Book1 - sample");

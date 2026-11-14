@@ -59,7 +59,7 @@ publication figures), P1 is common Origin use, P2 is later.
 ## Milestone 3: analysis, part 1
 
 - [x] Column formulas ("set column values" style expressions): `sheaf-expr`, `Project::set_column_values`,
-      dialog in the app
+      dialog in the app; text substitution of all or a chosen occurrence, including text-function `$` suffixes (T08)
 - [x] Sort and filter worksheets (`Project::sort_sheet`, `filter_sheet`; app and `sheaf analyze`)
 - [x] Normalize, interpolate, differentiate. Cubic B-spline: with a smoothing factor above 0 it
       matches Origin (about 1e-14); with Origin's default factor 0 it does not, because Origin's

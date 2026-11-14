@@ -155,6 +155,12 @@ pub const FUNCTIONS: &[(&str, &[FuncInfo])] = &[
             f("search", "s, part, start", "Like find, ignoring case.", "search(col(A)$, \"1\")"),
             f("replace", "s, pos, n, new", "Replaces n characters from pos by new.", "replace(col(A)$, 1, 1, \"x\")"),
             f(
+                "substitute",
+                "s, new, find, occurrence",
+                "Replace matching text; omit occurrence or use 0 for all, 1 for the first, 2 for the second.",
+                "substitute(col(A)$, \",\", \".\")$",
+            ),
+            f(
                 "compare",
                 "s, t, case",
                 "1 when the texts are equal, else 0; case 0 ignores case.",

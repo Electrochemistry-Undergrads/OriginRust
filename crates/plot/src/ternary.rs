@@ -114,7 +114,8 @@ pub(crate) fn is_percent(project: &Project, layer: &Layer, settings: &TernaryCoo
             };
             let Some(z) = p.size_from.and_then(|c| project.numeric(c)) else { return false };
             let (a, b) = row_range(p, y.len());
-            (a..b).any(|r| {
+            let filters = project.plot_row_filters(p);
+            (a..b).filter(|r| filters.iter().all(|f| f.passes(*r))).any(|r| {
                 let sum = x.get(r).copied().unwrap_or(f64::NAN) + y[r] + z.get(r).copied().unwrap_or(f64::NAN);
                 normalise(x.get(r).copied().unwrap_or(f64::NAN), y[r], z.get(r).copied().unwrap_or(f64::NAN)).is_some()
                     && (99.0..=101.0).contains(&sum)

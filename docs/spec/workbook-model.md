@@ -317,10 +317,38 @@ Sort Columns > Custom and the column-header context menu now open the existing n
 - Edit > Insert and Delete (also the cell and row-number menus): with whole columns selected, Insert adds one new Y column before each selected column's block (as many as are selected) and Delete removes the columns; with rows or a block of cells selected, Insert adds blank cells above the selection and Delete removes the selected cells, moving the cells below, in the columns the selection covers (all columns for whole rows). Columns that recalculate from a formula are left alone. This follows how Origin documents the commands; the GUI result was not measured.
 - Column > Move Columns (To First, Left, Right, To Last) keeps the selected columns in their order; Hide Selected / Unhide All set `Column::hidden`; the grid skips hidden columns and the cursor keys jump over them. Column Width (Column Properties, characters, default 8) is `Column::width`.
 - Column > Reverse Order reverses each selected column on its own (`colreverse`). Worksheet > Sort Columns by Label orders the columns by Long Name, Units, Comments or Short Name.
-- Column > Filter (Add or Remove Filter, Enable/Disable Filter, Reapply Filter): `Worksheet::filter` holds a condition in the column-formula language and the rows that passed when it was applied. Hidden rows stay in the data; the grid shows only the rows that pass, with their own row numbers; analysis and fits read the sheet through `Worksheet::values_of`, which turns hidden rows (and masked cells) into missing values. Sorts and row inserts and deletes apply the filter again; editing a cell does not (as the spec above says, Origin re-runs a filter on demand). Presets: above average, below average, within 3 sigma of the mean, not missing. Not done: one filter per column, date/text filters, plots ignoring hidden rows, and the Origin measurement of the filter itself. The old destructive Worksheet Query stays.
+- Column > Filter (Add or Remove Filter, Enable/Disable Filter, Reapply Filter): `Worksheet::filter` holds a condition in the column-formula language and the rows that passed when it was applied. Hidden rows stay in the data; the grid shows only the rows that pass, with their own row numbers; analysis and fits read the sheet through `Worksheet::values_of`, which turns hidden rows (and masked cells) into missing values. Sorts and row inserts and deletes apply the filter again; editing a cell does not (as the spec above says, Origin re-runs a filter on demand). Presets: above average, below average, within 3 sigma of the mean, not missing. Not done: one filter per column, date/text filters, and the installed-Origin measurement of the filter itself. The old destructive Worksheet Query stays.
 - Worksheet > Transpose, Stack Columns, Unstack Columns, Split Columns, Reduce Rows (`reshape.rs`, one window each) write a **new sheet** of the workbook, so the source stays and one undo removes the result. Measured with `wtranspose iw:=<range>`: three columns of two rows become two columns of three rows (new column j is old row j), the columns are named A, B, ... and the label rows (long name, unit) of the first columns stay in place; Origin's default output replaces the sheet, and `ow:=<new>` makes a new sheet named after the function. Sheaf always makes a new sheet. Stack (a `Source` text column and a `Value` column), Unstack (key column and value column, one column per key), Split (pieces of n rows) and Reduce (every n rows by average, sum, minimum, maximum, median or first) are Sheaf's reading of the Origin commands; their option names could not be found by scripting, so their exact output layout was not compared.
 - Column > Set as Categorical (`Column::categorical`, a toggle) and the designations Group (G) and Subject (S) in Set As and Column Properties. Origin accepts the column type codes 7, 8 and 9 in `wks.colN.type` (set through scripting; which code is which was not read back as a name), so the codes of Group and Subject in a file are not known: the `.opj` writer stores them as unused and names them in the save warnings. Categorical columns are offered first as the key of Unstack Columns; no analysis tool reads Group or Subject yet.
 - The `.opj` writer does not store hidden columns or column widths: `Writer::finish` names them in the save warnings, so the `.sheaf` companion keeps them.
+
+### 13.2a Plots follow worksheet filters (T10, 2026-11-14)
+
+The published [Data Filter reference](https://docs.originlab.com/origin-help/wks-datafilter/)
+says filter-hidden rows are excluded from plotting by default and that edited data requires
+Reapply Filter. Sheaf now follows the stored filter for plotting as it already did for the
+worksheet and analysis. This change uses the public reference, not a new installed-Origin probe.
+
+`Project::plot_row_filters` collects active filters on a plot's X, Y and auxiliary source columns;
+when sources come from different worksheets, Sheaf requires a row to pass each source filter.
+That intersection is Sheaf's explicit rule; the cross-sheet case was not measured in Origin.
+`PlotData::rows` skips hidden rows without compacting or renumbering the underlying data. Lines
+and filled areas join the remaining points, while real missing values still break them. Labels,
+error bars and masks retain their original source-row references. Hidden masked cells disappear;
+visible masked cells keep the existing red drawing. Automatic axis ranges and automatic stack
+offsets ignore hidden values. Histogram, box and pie summaries use only visible source values;
+stacked totals and bubble/color scales do likewise. Radar polygons close to the first visible
+source point even when their first worksheet row is hidden. The Data Reader cannot pick or step
+to filtered rows and stays within the plot's row range.
+
+Disabling/removing a filter restores the full graph; filter edits undo/redo with the worksheet.
+The same plot data feeds the graph window and image/vector figure exports. The `.opj` writer
+still warns that it cannot store worksheet filters; the `.sheaf` companion retains them. Numeric data, formula evaluation, filter
+persistence and the existing explicit Reapply behavior are unchanged. Sheaf still has one filter
+per worksheet, lacks the Ignore Hidden Rows override, and retains original category tick/radar
+spoke positions rather than compressing their labels. Date/text filters and independently hidden
+rows remain separate work. Graph gadgets retain their existing input behavior; only the Data
+Reader was updated here.
 
 ### 13.3 Cell selection and editing (owner-requested behavior, 2026-11-13)
 

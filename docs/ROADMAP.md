@@ -210,7 +210,7 @@ the default project format.
   - [x] Worksheet operations (T10): insert/delete rows, columns and cells; move/hide/resize columns;
         column/range/nested sorts restricted to selected rows; masks excluded from analysis; non-destructive row filter;
         transpose, stack/unstack, split/reduce; categorical columns and Group/Subject designations.
-        Remaining mask/filter options, plot filtering and file codes are listed in the brief
+        Plots and automatic ranges skip filtered rows; remaining mask/filter options and file codes are listed in the brief
   - [x] Formula functions (T08): running/statistical, date/time, random and string functions,
         text results and `col(A)$`, `cell(r,c)` dependency tracking; `sum`/missing-cell `count`
         aligned with measured Origin behaviour. Cross-sheet/book references, label-row access

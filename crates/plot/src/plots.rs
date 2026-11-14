@@ -104,7 +104,7 @@ fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, col
         }
         run.clear();
     };
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => run.push(p),
             None => close(&mut run, &mut d),
@@ -131,7 +131,7 @@ fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let drops = &pd.plot.decor.drop;
     let (mut h, mut v) = (String::new(), String::new());
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         if let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             if drops.horizontal.on {
                 move_to(&mut h, f.x, y);
@@ -165,8 +165,8 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let gap = size * 0.25;
     // From the baseline to the middle of a line of digits.
     let mid = size * 0.35;
-    let last = if pd.closing { pd.end.saturating_sub(1) } else { pd.end };
-    for i in pd.start..last {
+    let last = if pd.closing.is_some() { pd.end.saturating_sub(1) } else { pd.end };
+    for i in pd.rows().take_while(|&i| i < last) {
         let Some((px, py)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         let (xv, yv) = (pd.cat_at(i) - pd.ox, pd.y.get(i).copied().unwrap_or(f64::NAN));
         let text = match labels.form {
@@ -203,19 +203,21 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     use sheaf_core::Color;
     let Some(mask) = pd.mask else { return };
     let page = |i: usize| -> Option<(f64, f64)> {
-        if i < pd.start || i >= pd.end {
+        if i < pd.start || i >= pd.end || !pd.row_shown(i) {
             return None;
         }
         geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))
     };
     let mut lines = String::new();
     let mut symbols = String::new();
-    for &i in mask.range(pd.start..pd.end - usize::from(pd.closing)) {
+    for &i in mask.range(pd.start..pd.end - usize::from(pd.closing.is_some())) {
         let Some(p) = page(i) else { continue };
         // The first point of a radar polygon is also the end of the closing segment.
-        let wrap = (pd.closing && i == pd.start).then_some(pd.end - 1);
+        let wrap = (pd.closing == Some(i)).then_some(pd.end - 1);
         if pd.plot.kind.has_line() && pd.plot.line.width_pt > 0.0 {
-            for j in [i.checked_sub(1), Some(i + 1)].into_iter().flatten().chain(wrap) {
+            let previous = (pd.start..i).rev().find(|&r| pd.row_shown(r));
+            let next = (i + 1..pd.end).find(|&r| pd.row_shown(r));
+            for j in [previous, next].into_iter().flatten().chain(wrap) {
                 if let Some(q) = page(j) {
                     move_to(&mut lines, q.0, q.1);
                     line_to(&mut lines, p.0, p.1);
@@ -297,7 +299,7 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let f = geom.frame;
     let zero = geom.data_to_page(0.0, if pd.oy == 0.0 { 0.0 } else { pd.oy }).1;
     let flat = if zero.is_finite() { zero.clamp(f.y, f.y + f.h) } else { f.y + f.h };
-    let step = ((pd.end - pd.start) / 20_000).max(1);
+    let step = (pd.rows().count() / 20_000).max(1);
     let mut d = String::new();
     // Upper points, and the lower point under each.
     let mut run: Vec<((f64, f64), f64)> = Vec::new();
@@ -314,8 +316,13 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
         run.clear();
     };
-    let mut i = pd.start;
-    while i < pd.end {
+    let mut previous = None;
+    let last = pd.rows().next_back();
+    for i in pd.rows().step_by(step).chain(last) {
+        if previous == Some(i) {
+            continue;
+        }
+        previous = Some(i);
         let upper = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i));
         // The lower edge of this row; a row without one breaks the shape.
         let lower = match pd.base_at(i) {
@@ -326,7 +333,6 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             Some((p, low)) => run.push((p, low)),
             None => close(&mut run, &mut d),
         }
-        i = if i + step < pd.end || i + 1 == pd.end { i + step } else { pd.end - 1 };
     }
     close(&mut run, &mut d);
     if !d.is_empty() {
@@ -367,7 +373,7 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
     };
     let mut run: Option<Run> = None;
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => {
                 let strip = (p.0 / STRIP_PT).floor() as i64;
@@ -447,11 +453,11 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
 /// True when Origin draws this plot as a spline: at most 900 points and X strictly increasing
 /// (a plot that fails either test is drawn with straight segments).
 fn spline_applies(pd: &PlotData) -> bool {
-    if pd.end - pd.start > SPLINE_MAX_POINTS {
+    if pd.rows().take(SPLINE_MAX_POINTS + 1).count() > SPLINE_MAX_POINTS {
         return false;
     }
     let mut last = f64::NEG_INFINITY;
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         let x = pd.x_at(i);
         if !x.is_finite() {
             continue;
@@ -600,7 +606,7 @@ fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let place = |cat: f64, val: f64| {
         if transposed { geom.checked_data_to_page(val, cat) } else { geom.checked_data_to_page(cat, val) }
     };
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         let (cat, top) = (pd.cat_at(i), pd.val_at(i));
         let base = pd.base_at(i).unwrap_or(default_base);
         let left = cat + slot.left;
@@ -808,7 +814,7 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let cap_low = dir != ErrorDirection::Plus;
     let cap_high = dir != ErrorDirection::Minus;
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         if let Some((below, above)) = pd.reach(pd.err_at(i), dir) {
             let (cat, val) = (pd.cat_at(i) + shift, pd.val_at(i));
             let place = |v: f64| {
@@ -857,11 +863,14 @@ fn map_color(t: f64) -> sheaf_core::Color {
 
 /// The position of `v` between the smallest and largest finite value of `z[from..to]`, 0..1; 0.5
 /// when all values are equal.
-fn z_fraction(z: &[f64], from: usize, to: usize, v: f64) -> f64 {
-    let (lo, hi) = z[from.min(z.len())..to.min(z.len())]
-        .iter()
+fn z_range(z: &[f64], pd: &PlotData) -> (f64, f64) {
+    pd.rows()
+        .filter_map(|r| z.get(r))
         .filter(|x| x.is_finite())
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)));
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)))
+}
+
+fn z_fraction((lo, hi): (f64, f64), v: f64) -> f64 {
     if hi > lo { ((v - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.5 }
 }
 
@@ -869,22 +878,24 @@ fn z_fraction(z: &[f64], from: usize, to: usize, v: f64) -> f64 {
 /// per symbol.
 fn draw_varied_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let sym = &pd.plot.symbol;
-    for i in pd.start..pd.end {
+    let size_range = pd.size_z.map(|z| z_range(z, pd));
+    let color_range = pd.color_z.map(|z| z_range(z, pd));
+    for i in pd.rows() {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         let mut style = sym.clone();
-        if let Some(z) = pd.size_z {
+        if let (Some(z), Some(range)) = (pd.size_z, size_range) {
             let v = z.get(i).copied().unwrap_or(f64::NAN);
             if !v.is_finite() {
                 continue;
             }
-            style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction(z, pd.start, pd.end, v);
+            style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction(range, v);
         }
-        if let Some(z) = pd.color_z {
+        if let (Some(z), Some(range)) = (pd.color_z, color_range) {
             let v = z.get(i).copied().unwrap_or(f64::NAN);
             if !v.is_finite() {
                 continue;
             }
-            style.color = map_color(z_fraction(z, pd.start, pd.end, v));
+            style.color = map_color(z_fraction(range, v));
         }
         if !near_frame(geom, p, style.size_pt + style.edge_width_pt) {
             continue;
@@ -904,10 +915,10 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let mut d = String::new();
     // With very many points, symbols that would sit on top of an already drawn
     // one (same small cell of the page) are left out; the picture is the same.
-    let end = pd.end - usize::from(pd.closing);
+    let end = pd.end - usize::from(pd.closing.is_some());
     let thin = (end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
-    for i in (pd.start..end).step_by(every) {
+    for i in pd.rows().take_while(|&i| i < end).step_by(every) {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
             continue;

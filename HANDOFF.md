@@ -29,7 +29,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1706 passed (one ignored) on Windows with FFT, IFFT and FFT Filters on top of the clipboard and TIFF palette changes (2026-11-14); formatting and strict all-target Clippy passed. Previous macOS run: 1690 including clipboard text preservation. Parity: 46 done, 134 partial, 54 missing of 234 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1718 passed (one ignored) on macOS with filtered plots, the FFT phase-boundary repair and latest FFT Filters (2026-11-14); formatting and strict all-target Clippy passed. Previous Windows run: 1706 with FFT/IFFT and FFT Filters. Parity: 46 done, 134 partial, 54 missing of 234 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- FFT/IFFT CI portability: phase unwrapping treats half-turn roundoff consistently across FFT backends; the original Origin fixtures remain unchanged (analysis-tools.md 15.1). The Linux-only failure is covered by an adjacent-representable-value regression.
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
@@ -62,6 +63,11 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
   Ascending/Descending move selected rows together; Each Column modes sort independently.
   Sort Columns and column-header Custom now use the existing nested-sort dialog. Masks,
   outside rows/columns and Undo/Redo are covered; see workbook-model.md 13.1.
+
+- T10 filtered plots: graphs, exports, automatic axes/offsets and histogram/box/pie summaries
+  skip worksheet-filtered rows. Masks, labels and error bars retain source-row references;
+  the Data Reader skips hidden points. Filter Disable/Remove and Undo/Redo restore the view.
+  Category/spoke compression, filter overrides and graph gadgets remain open (workbook-model 13.2a).
 
 - T07 clipboard: quoted table fields keep commas within one cell and preserve tabs, line breaks
   and quotes through Copy/Cut/Paste. Both new and imported-table UI paths cover Undo/Redo.

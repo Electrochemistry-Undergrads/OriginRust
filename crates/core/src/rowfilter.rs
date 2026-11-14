@@ -5,6 +5,7 @@
 
 use crate::analysis::AnalysisError;
 use crate::column::Column;
+use crate::graph::Plot;
 use crate::ids::WindowId;
 use crate::project::Project;
 use crate::worksheet::Worksheet;
@@ -59,6 +60,26 @@ impl Worksheet {
 }
 
 impl Project {
+    /// Active worksheet filters on a plot's source columns. A row must pass all of them;
+    /// repeated references to the same sheet share one filter. Masks are deliberately separate:
+    /// the graph still draws a visible masked point in red.
+    pub fn plot_row_filters(&self, plot: &Plot) -> Vec<&RowFilter> {
+        let mut filters: Vec<&RowFilter> = Vec::new();
+        for id in [Some(plot.y), plot.x, plot.y_error, plot.x_error, plot.y_base, plot.size_from, plot.color_from]
+            .into_iter()
+            .flatten()
+        {
+            if let Some(filter) = self.locate(id).and_then(|(_, s, _)| s.filter.as_ref())
+                && filter.enabled
+                && filter.keep.iter().any(|keep| !keep)
+                && !filters.iter().any(|f| std::ptr::eq(*f, filter))
+            {
+                filters.push(filter);
+            }
+        }
+        filters
+    }
+
     /// Sets the filter of a sheet to a condition and applies it. Returns the number of rows that
     /// pass. An existing filter keeps its enabled state turned on.
     pub fn set_row_filter(&mut self, book: WindowId, sheet: usize, condition: &str) -> Result<usize, AnalysisError> {
@@ -129,5 +150,32 @@ mod tests {
         let book = p.add_workbook("");
         p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 10.0])).unwrap();
         assert_eq!(p.set_row_filter(book, 0, "col(A) > mean(col(A))").unwrap(), 1);
+    }
+
+    #[test]
+    fn plot_filters_intersect_source_sheets_and_deduplicate_shared_sources() {
+        let mut p = Project::new();
+        let a = p.add_workbook("first");
+        let y = p.add_column(a, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let err = p.add_column(a, 0, Designation::YError, ColumnData::numeric(vec![0.1; 3])).unwrap();
+        let b = p.add_workbook("second");
+        let x = p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let g = p.add_graph(crate::template::Template::Line);
+        p.add_plot(g, 0, y).unwrap();
+        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+        plot.x = Some(x);
+        plot.y_error = Some(err);
+        p.set_row_filter(a, 0, "col(A) > 1").unwrap();
+        p.set_row_filter(b, 0, "col(A) < 3").unwrap();
+        let plot = p.graph(g).unwrap().layers[0].plots[0].clone();
+        let filters = p.plot_row_filters(&plot);
+        assert_eq!(filters.len(), 2, "Y and its error share one sheet filter");
+        assert_eq!((0..4).map(|r| filters.iter().all(|f| f.passes(r))).collect::<Vec<_>>(), [false, true, false, true]);
+        p.workbook_mut(b).unwrap().sheet_mut().filter.as_mut().unwrap().enabled = false;
+        assert_eq!(p.plot_row_filters(&plot).len(), 1);
+        p.column_mut(y).unwrap().mask.insert(1);
+        assert!(p.plot_row_filters(&plot).iter().all(|f| f.passes(1)), "masks stay separate");
+        p.remove_row_filter(a, 0);
+        assert!(p.plot_row_filters(&plot).is_empty());
     }
 }

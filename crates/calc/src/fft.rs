@@ -184,16 +184,25 @@ pub fn fft_spectrum(y: &[f64], o: &FftOptions) -> FftResult {
 /// Origin's phase unwrapping in row order: a step above 180 degrees loses 360, a step of -180 or
 /// less gains 360 (measured: 0, 180, 0 becomes 0, 180, 360).
 fn unwrap_degrees(phase: &mut [f64]) {
+    // SIMD FFT backends and atan2 can place a half-turn a few ULPs on either side of
+    // 180. Treat that roundoff as the measured positive half-turn tie, without changing
+    // genuinely nearby phases. Reduction also avoids repeated loops for accumulated turns.
+    const HALF_TURN_ROUNDOFF: f64 = 8.0 * f64::EPSILON * 180.0;
     for i in 1..phase.len() {
         let prev = phase[i - 1];
-        let mut p = phase[i];
-        while p - prev > 180.0 {
-            p -= 360.0;
+        let p = phase[i];
+        if !prev.is_finite() || !p.is_finite() {
+            continue;
         }
-        while p - prev <= -180.0 {
-            p += 360.0;
-        }
-        phase[i] = p;
+        let delta = (p - prev).rem_euclid(360.0);
+        let step = if (delta - 180.0).abs() <= HALF_TURN_ROUNDOFF {
+            180.0
+        } else if delta > 180.0 {
+            delta - 360.0
+        } else {
+            delta
+        };
+        phase[i] = prev + step;
     }
 }
 
@@ -662,6 +671,23 @@ mod tests {
         let block = FftFilterOptions { kind: FftFilterType::BandBlock, freq1: Some(0.12), freq2: Some(0.32), ..base };
         close(&run20(block), &BLOCK_012_032);
         close(&run20(FftFilterOptions { kind: FftFilterType::Threshold, ..base }), &THRESHOLD_AUTO_20);
+    }
+
+    #[test]
+    fn phase_unwrap_is_consistent_at_half_turn_roundoff_boundaries() {
+        // The science IFFT on Linux produces -179.99999999999997 instead of -180.
+        // A one-ULP difference must not change every subsequent phase by a full turn.
+        for half in [-180.0_f64, (-180.0_f64).next_up(), (-180.0_f64).next_down(), 180.0_f64.next_up()] {
+            let mut phase = [0.0, half, 0.0, 3.4215324074876726e-15, 0.0, 3.674471194299201e-15, 180.0, 0.0];
+            unwrap_degrees(&mut phase);
+            close(&phase, &[0.0, 180.0, 360.0, 360.0, 360.0, 360.0, 540.0, 720.0]);
+        }
+        let mut below = [0.0, -180.0 + 1e-8];
+        unwrap_degrees(&mut below);
+        assert!(below[1] < 0.0, "a real step below the tie threshold is not snapped");
+        let mut above = [0.0, 180.0 + 1e-8];
+        unwrap_degrees(&mut above);
+        assert!(above[1] < 0.0, "a real step past the positive boundary wraps down");
     }
 
     #[test]

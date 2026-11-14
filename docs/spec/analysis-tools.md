@@ -849,7 +849,12 @@ test `inverse_fft_matches_origin`):
 - Only the real part given: the imaginary part is 0.
 - The default window gave the same numbers as Rectangle; windows are not offered in Sheaf's IFFT.
 - Unwrap: a step of exactly -180 degrees gains 360 (0, 180, 0 became 0, 180, 360) but +180 is kept;
-  Sheaf's FFT uses the same rule.
+  Sheaf's FFT uses the same rule. A portability regression (2026-11-14) showed Linux
+  returning -179.99999999999997 for a half-turn. The shared unwrap routine reduces steps
+  modulo 360 and treats values within `8 * f64::EPSILON * 180` degrees of a half-turn as
+  the positive tie. This is a floating-point guard, not an altered Origin fixture: the
+  existing FFT/IFFT expectations stay unchanged, and adjacent representable values plus
+  genuinely distinct nearby steps are regression-tested.
 
 Sheaf: `sheaf_calc::ifft_spectrum`, `Tool::Ifft(IfftSpec)`; the input columns are real parts, the
 imaginary part a chosen column read row by row (the window suggests the column right after the

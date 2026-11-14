@@ -151,6 +151,8 @@ pub enum Action {
     ImportWizard,
     /// Edit > Go to... (Ctrl+G) in a workbook.
     GoToCell(WindowId),
+    /// Edit > Find in Sheets... in this workbook.
+    FindInSheets(WindowId),
     Undo,
     Redo,
     NewWorkbook,

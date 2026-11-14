@@ -7,6 +7,7 @@ use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, Fi
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_sheet::SheetExportDialog;
+use crate::dialogs::find::{FindDialog, FindOutcome};
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::fit_more::{FitMoreDialog, FitMoreKind, FitMoreOutcome};
 use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
@@ -111,6 +112,7 @@ pub struct SheafApp {
     export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
+    find: Option<FindDialog>,
     sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
@@ -173,6 +175,7 @@ impl SheafApp {
             export_sheet: None,
             rename: None,
             go_to: None,
+            find: None,
             sort: None,
             sheet_name: None,
             copied: String::new(),
@@ -292,6 +295,7 @@ impl SheafApp {
         self.export_sheet = None;
         self.rename = None;
         self.go_to = None;
+        self.find = None;
         self.row_filter = None;
         self.reshape = None;
         self.sort = None;
@@ -687,6 +691,7 @@ impl SheafApp {
             }
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
+            Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -1828,6 +1833,7 @@ impl SheafApp {
             || self.export_sheet.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
+            || self.find.is_some()
             || self.sort.is_some()
             || self.sheet_name.is_some()
             || self.about
@@ -2169,6 +2175,22 @@ impl SheafApp {
                         state.go_to(sheet, column, row);
                     }
                     self.go_to = None;
+                }
+            }
+        }
+        if let Some(d) = &mut self.find {
+            let book = d.book;
+            match d.show(ctx) {
+                FindOutcome::Open => {}
+                FindOutcome::Closed => self.find = None,
+                FindOutcome::Next => {
+                    if let (Some(sheet), Some(state)) = (
+                        self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
+                        self.books.get_mut(&book),
+                    ) && let Some((column, row)) = d.search(sheet, state.active_cell())
+                    {
+                        state.go_to(sheet, column, row);
+                    }
                 }
             }
         }

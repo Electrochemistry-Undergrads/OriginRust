@@ -6020,3 +6020,23 @@ fn view_status_bar_hides_and_shows_the_status_bar() {
     menu(&mut h, "View", "Status Bar");
     assert!(h.query_by_label("AU : ON").is_some(), "shown again");
 }
+
+#[test]
+fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
+    let mut h = start(vec![data_file("findsheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Find in Sheets...");
+    assert!(h.state().find.is_some(), "the window opens");
+    h.state_mut().find.as_mut().unwrap().set_text("4.5");
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)), "column B, row 2");
+    // No cell of B after B2 holds "0.5" (6.5, 8.5); the search goes on from the cursor, column by
+    // column, to C1 (30.5).
+    h.state_mut().find.as_mut().unwrap().set_text("0.5");
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((2, 0)), "column C, row 1 (30.5)");
+    click(&mut h, "Close");
+    assert!(h.state().find.is_none());
+}

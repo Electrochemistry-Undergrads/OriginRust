@@ -1,29 +1,334 @@
-//! Layer Contents and Plot Setup, the two dialogs behind F12 and the layer icon.
-//!
-//! * **Layer Contents**: the columns of the project that can be added (a sheet at a time) at the left,
-//!   the plots of the layer at the right, buttons to move a selection across (add, remove), to
-//!   reorder, and to Group (the plots follow the layer's increment rules) or Ungroup (they keep
-//!   their style).
-//! * **Plot Setup**: one row per plot of the layer with the X, Y and error columns it draws and its
-//!   plot type, each a drop-down.
-//!
-//! Both edit the graph; the buttons OK, Cancel and Apply belong to the window that holds them.
+//! Graph > Layer Contents... (F12) as Origin's own window "Layer Contents: Add, Remove, Group, Order
+//! Plots - Layer1" (measured, graphing spec 18.2): the worksheet columns at the left, the plots of the
+//! layer at the right, a plot type and the arrows between them, Group, Ungroup, Up, Down, Rescale on
+//! Apply, and Layer Properties..., Plot Setup... (greyed), Apply, Close and Cancel. The edits are made
+//! to the graph at once and form one undo step; Cancel takes them back.
 
-use std::collections::BTreeSet;
-
-use eframe::egui;
-use sheaf_core::ColumnId;
+use eframe::egui::{self, RichText};
 use sheaf_core::graph::*;
+use sheaf_core::{ColumnId, Document, Project, WindowId};
 
-use super::graph_details::{Info, KINDS, kind_name};
-use super::graph_props::{Addable, Source, section};
+const LABEL: &str = "Change layer contents";
 
-/// A plot of the layer drawing this column, in the layer's default look.
-pub fn new_plot(layer: &Layer, a: &Addable) -> Plot {
+/// One numeric Y column the left list offers.
+struct Available {
+    y: ColumnId,
+    x: Option<ColumnId>,
+    y_error: Option<ColumnId>,
+    book: String,
+    sheet: String,
+    long_name: String,
+    short_name: String,
+}
+
+/// The kinds the plot type button offers (Origin's list starts with these).
+const KINDS: [(PlotKind, &str); 4] = [
+    (PlotKind::Line, "Line"),
+    (PlotKind::Scatter, "Scatter"),
+    (PlotKind::LineSymbol, "Line + Symbol"),
+    (PlotKind::Column, "Column"),
+];
+
+fn kind_name(k: PlotKind) -> String {
+    KINDS.iter().find(|(x, _)| *x == k).map_or_else(|| format!("{k:?}"), |(_, n)| (*n).to_string())
+}
+
+/// What the app should do after a frame of the window.
+pub enum Outcome {
+    Open,
+    Closed,
+    /// Layer Properties...: open Plot Details on this layer.
+    LayerProperties(WindowId, usize),
+    /// Plot Setup...: Origin closes Layer Contents and opens Plot Setup on the layer.
+    PlotSetup(WindowId, usize),
+}
+
+pub struct LayerContentsDialog {
+    pub graph: WindowId,
+    pub layer: usize,
+    token: u64,
+    baseline: Option<Graph>,
+    touched: bool,
+    left: Vec<usize>,
+    right: Vec<usize>,
+    kind: PlotKind,
+    rescale: bool,
+}
+
+impl LayerContentsDialog {
+    pub fn new(graph: WindowId, layer: usize, token: u64) -> Self {
+        LayerContentsDialog {
+            graph,
+            layer,
+            token,
+            baseline: None,
+            touched: false,
+            left: Vec::new(),
+            right: Vec::new(),
+            kind: PlotKind::Line,
+            rescale: false,
+        }
+    }
+
+    fn available(project: &Project) -> Vec<Available> {
+        let mut out = Vec::new();
+        for book in project.workbooks() {
+            for sheet in &book.sheets {
+                for i in sheet.y_columns() {
+                    let c = &sheet.columns[i];
+                    if !c.data.is_numeric() {
+                        continue;
+                    }
+                    let x = sheet.x_for(i).map(|c| c.id);
+                    let y_error = sheet.y_error_for(i).map(|c| c.id);
+                    out.push(Available {
+                        y: c.id,
+                        x,
+                        y_error,
+                        book: book.name.clone(),
+                        sheet: sheet.name.clone(),
+                        long_name: c.long_name.clone(),
+                        short_name: format!("{}(Y)", c.short_name),
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// Draws the window; the app keeps it while this returns [`Outcome::Open`].
+    pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> Outcome {
+        let Some(original) = doc.project().graph(self.graph).cloned() else {
+            return Outcome::Closed;
+        };
+        if original.layers.is_empty() {
+            return Outcome::Closed;
+        }
+        self.layer = self.layer.min(original.layers.len() - 1);
+        if self.baseline.is_none() {
+            self.baseline = Some(original.clone());
+        }
+        let available = Self::available(doc.project());
+        let short = |id: ColumnId| doc.project().column(id).map(|c| c.short_name.clone()).unwrap_or_default();
+        let long = |id: ColumnId| doc.project().column(id).map(|c| c.long_name.clone()).unwrap_or_default();
+        let mut graph = original.clone();
+        let li = self.layer;
+        let mut outcome = Outcome::Open;
+        let mut cancel = false;
+        let mut open = true;
+        let title = format!("Layer Contents: Add, Remove, Group, Order Plots - Layer{}", li + 1);
+        egui::Window::new(title)
+            .id(egui::Id::new("layer_contents"))
+            .open(&mut open)
+            .default_size([700.0, 320.0])
+            .collapsible(false)
+            .show(ctx, |ui| {
+                ui.horizontal_top(|ui| {
+                    // Left: the columns that can be plotted.
+                    ui.vertical(|ui| {
+                        egui::ComboBox::from_id_salt("lc_source").selected_text("Worksheets in Project").show_ui(
+                            ui,
+                            |ui| {
+                                let _ = ui.selectable_label(true, "Worksheets in Project");
+                            },
+                        );
+                        egui::ScrollArea::vertical().id_salt("lc_left").max_height(200.0).show(ui, |ui| {
+                            egui::Grid::new("lc_left_grid").striped(true).num_columns(4).show(ui, |ui| {
+                                for h in ["Book Name", "Sheet", "Long Name", "Short Name"] {
+                                    ui.label(RichText::new(h).strong());
+                                }
+                                ui.end_row();
+                                for (i, a) in available.iter().enumerate() {
+                                    ui.label(&a.book);
+                                    ui.label(&a.sheet);
+                                    ui.label(&a.long_name);
+                                    let sel = self.left.contains(&i);
+                                    if ui.selectable_label(sel, &a.short_name).clicked() {
+                                        toggle(&mut self.left, i, ui.input(|s| s.modifiers.command));
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                        });
+                    });
+                    // Middle: the plot type and the arrows.
+                    ui.vertical(|ui| {
+                        ui.add_space(30.0);
+                        egui::ComboBox::from_id_salt("lc_kind").selected_text(kind_name(self.kind)).show_ui(ui, |ui| {
+                            for (k, n) in KINDS {
+                                ui.selectable_value(&mut self.kind, k, n);
+                            }
+                        });
+                        if ui.button("=>").on_hover_text("Add the chosen columns to the layer").clicked() {
+                            let layer = &mut graph.layers[li];
+                            for &i in &self.left {
+                                let a = &available[i];
+                                if layer.plots.iter().any(|p| p.y == a.y) {
+                                    continue;
+                                }
+                                let mut plot = new_plot(layer, a.x, a.y, a.y_error);
+                                plot.kind = self.kind;
+                                layer.plots.push(plot);
+                            }
+                            layer.recolor_automatic();
+                            self.left.clear();
+                        }
+                        if ui.button("<=").on_hover_text("Remove the chosen plots from the layer").clicked() {
+                            let layer = &mut graph.layers[li];
+                            let mut keep = 0;
+                            layer.plots.retain(|_| {
+                                keep += 1;
+                                !self.right.contains(&(keep - 1))
+                            });
+                            self.right.clear();
+                        }
+                    });
+                    // Right: the plots of the layer.
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            let _ = ui.button(format!("Layer ({})", li + 1));
+                            let count = graph.layers[li].plots.len();
+                            let chosen = self.right.len();
+                            if ui.add_enabled(chosen >= 2, egui::Button::new("Group")).clicked() {
+                                let layer = &mut graph.layers[li];
+                                let id = layer.plots.iter().filter_map(|p| p.group).max().map_or(1, |g| g + 1);
+                                for &k in &self.right {
+                                    layer.plots[k].group = Some(id);
+                                }
+                            }
+                            let grouped = self.right.iter().any(|&k| graph.layers[li].plots[k].group.is_some());
+                            if ui.add_enabled(grouped, egui::Button::new("Ungroup")).clicked() {
+                                for &k in &self.right {
+                                    graph.layers[li].plots[k].group = None;
+                                }
+                            }
+                            let one = (self.right.len() == 1).then(|| self.right[0]);
+                            if ui.add_enabled(one.is_some_and(|k| k > 0), egui::Button::new("Up")).clicked() {
+                                let k = one.unwrap_or(0);
+                                graph.layers[li].plots.swap(k, k - 1);
+                                self.right = vec![k - 1];
+                            }
+                            if ui.add_enabled(one.is_some_and(|k| k + 1 < count), egui::Button::new("Down")).clicked() {
+                                let k = one.unwrap_or(0);
+                                graph.layers[li].plots.swap(k, k + 1);
+                                self.right = vec![k + 1];
+                            }
+                            ui.checkbox(&mut self.rescale, "Rescale on Apply");
+                        });
+                        egui::ScrollArea::vertical().id_salt("lc_right").max_height(200.0).show(ui, |ui| {
+                            egui::Grid::new("lc_right_grid").striped(true).num_columns(5).show(ui, |ui| {
+                                for h in ["", "Short Name", "Long Name", "Legend", "Plot Type"] {
+                                    ui.label(RichText::new(h).strong());
+                                }
+                                ui.end_row();
+                                for (k, p) in graph.layers[li].plots.iter().enumerate() {
+                                    ui.label(p.group.map(|g| format!("g{g}")).unwrap_or_default());
+                                    let sel = self.right.contains(&k);
+                                    if ui.selectable_label(sel, format!("{}(Y)", short(p.y))).clicked() {
+                                        toggle(&mut self.right, k, ui.input(|s| s.modifiers.command));
+                                    }
+                                    ui.label(long(p.y));
+                                    ui.label(doc.project().plot_label(p));
+                                    ui.label(kind_name(p.kind));
+                                    ui.end_row();
+                                }
+                            });
+                        });
+                    });
+                });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Layer Properties...").clicked() {
+                        outcome = Outcome::LayerProperties(self.graph, li);
+                    }
+                    if ui.button("Plot Setup...").clicked() {
+                        outcome = Outcome::PlotSetup(self.graph, li);
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Cancel").clicked() {
+                            outcome = Outcome::Closed;
+                            cancel = true;
+                        }
+                        if ui.button("Close").clicked() {
+                            outcome = Outcome::Closed;
+                        }
+                        let dirty = self.baseline.as_ref().is_some_and(|b| *b != graph);
+                        if ui.add_enabled(dirty || self.rescale, egui::Button::new("Apply")).clicked() {
+                            if self.rescale {
+                                graph.layers[li].x_axis.min = None;
+                                graph.layers[li].x_axis.max = None;
+                                graph.layers[li].y_axis.min = None;
+                                graph.layers[li].y_axis.max = None;
+                            }
+                            self.baseline = None;
+                            self.token = self.token.wrapping_add(1 << 40);
+                            self.touched = false;
+                        }
+                    });
+                });
+            });
+        if cancel {
+            self.cancel(doc);
+            return Outcome::Closed;
+        }
+        if graph != original {
+            let id = self.graph;
+            let edited = graph;
+            doc.apply_merging(LABEL, self.token, move |p| {
+                if let Some(g) = p.graph_mut(id) {
+                    *g = edited;
+                }
+            });
+            self.touched = true;
+        }
+        if !open {
+            return Outcome::Closed;
+        }
+        outcome
+    }
+
+    /// Takes the graph back to how it was at the opening (or the last Apply).
+    fn cancel(&mut self, doc: &mut Document) {
+        let Some(base) = self.baseline.take() else {
+            return;
+        };
+        if !self.touched {
+            return;
+        }
+        if doc.undo_label() == Some(LABEL) {
+            doc.undo();
+        }
+        if doc.project().graph(self.graph) != Some(&base) {
+            let id = self.graph;
+            doc.apply("Restore layer contents", move |p| {
+                if let Some(g) = p.graph_mut(id) {
+                    *g = base;
+                }
+            });
+        }
+    }
+}
+
+/// Adds `i` to the choice, or with Ctrl toggles it among the others; without Ctrl it is the only one.
+fn toggle(chosen: &mut Vec<usize>, i: usize, ctrl: bool) {
+    if ctrl {
+        if let Some(k) = chosen.iter().position(|&c| c == i) {
+            chosen.remove(k);
+        } else {
+            chosen.push(i);
+            chosen.sort_unstable();
+        }
+    } else {
+        *chosen = vec![i];
+    }
+}
+
+/// A plot of `y` with the layer's defaults.
+fn new_plot(layer: &Layer, x: Option<ColumnId>, y: ColumnId, y_error: Option<ColumnId>) -> Plot {
     Plot {
-        x: a.x,
-        y: a.y,
-        y_error: a.y_error,
+        x,
+        y,
+        y_error,
         rows: None,
         kind: layer.default_kind,
         line: layer.default_line.clone(),
@@ -38,278 +343,6 @@ pub fn new_plot(layer: &Layer, a: &Addable) -> Plot {
         hist: Default::default(),
         size_from: None,
         color_from: None,
-        details: Default::default(),
+        decor: Default::default(),
     }
-}
-
-/// What the two lists have selected, and the sheet chosen at the left.
-#[derive(Default)]
-pub struct ContentsUi {
-    pub add_from: usize,
-    available: BTreeSet<usize>,
-    plots: BTreeSet<usize>,
-}
-
-/// Where the user wants to go from Layer Contents or Plot Setup.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Goto {
-    Contents,
-    Setup,
-    Details,
-}
-
-fn toggle(set: &mut BTreeSet<usize>, i: usize, multi: bool) {
-    if multi {
-        if !set.remove(&i) {
-            set.insert(i);
-        }
-    } else {
-        *set = BTreeSet::from([i]);
-    }
-}
-
-pub fn contents_body(
-    ui: &mut egui::Ui,
-    graph: &mut Graph,
-    l: usize,
-    info: &Info,
-    sources: &[Source],
-    st: &mut ContentsUi,
-) -> Option<Goto> {
-    let mut go = None;
-    let layer = &mut graph.layers[l];
-    st.plots.retain(|&i| i < layer.plots.len());
-    let multi = ui.input(|i| i.modifiers.command || i.modifiers.shift);
-    let texts: &[String] = info.texts.get(l).map(Vec::as_slice).unwrap_or(&[]);
-    let mut add: Vec<usize> = Vec::new();
-    let mut remove = false;
-    let mut move_by = 0_i32;
-    let mut group: Option<bool> = None;
-
-    ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width(300.0);
-            section(ui, "Available Data");
-            if sources.is_empty() {
-                ui.weak("The project has no numeric Y columns.");
-                return;
-            }
-            st.add_from = st.add_from.min(sources.len() - 1);
-            let before = st.add_from;
-            egui::ComboBox::from_id_salt("contents_source")
-                .selected_text(&sources[st.add_from].title)
-                .width(290.0)
-                .show_ui(ui, |ui| {
-                    for (i, s) in sources.iter().enumerate() {
-                        ui.selectable_value(&mut st.add_from, i, &s.title);
-                    }
-                });
-            if st.add_from != before {
-                st.available.clear();
-            }
-            egui::ScrollArea::vertical()
-                .id_salt("contents_available")
-                .max_height(300.0)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    for (i, a) in sources[st.add_from].columns.iter().enumerate() {
-                        let shown = st.available.contains(&i);
-                        let r = ui.selectable_label(shown, &a.label);
-                        if r.clicked() {
-                            toggle(&mut st.available, i, multi);
-                        }
-                        if r.double_clicked() {
-                            add = vec![i];
-                        }
-                    }
-                });
-            ui.weak("Ctrl or Shift: select several");
-        });
-        ui.vertical(|ui| {
-            ui.add_space(80.0);
-            if ui
-                .add_enabled(!st.available.is_empty(), egui::Button::new("=>").min_size(egui::vec2(36.0, 0.0)))
-                .on_hover_text("Add to the layer")
-                .clicked()
-            {
-                add = st.available.iter().copied().collect();
-            }
-            if ui
-                .add_enabled(!st.plots.is_empty(), egui::Button::new("<=").min_size(egui::vec2(36.0, 0.0)))
-                .on_hover_text("Remove from the layer")
-                .clicked()
-            {
-                remove = true;
-            }
-            ui.add_space(8.0);
-            let one = st.plots.len() == 1;
-            let first = st.plots.iter().next().copied().unwrap_or(0);
-            if ui.add_enabled(one && first > 0, egui::Button::new("Up")).clicked() {
-                move_by = -1;
-            }
-            if ui.add_enabled(one && first + 1 < layer.plots.len(), egui::Button::new("Down")).clicked() {
-                move_by = 1;
-            }
-        });
-        ui.vertical(|ui| {
-            section(ui, "Layer Contents");
-            egui::ScrollArea::both().id_salt("contents_plots").max_height(300.0).auto_shrink([false, false]).show(
-                ui,
-                |ui| {
-                    for (i, plot) in layer.plots.iter().enumerate() {
-                        ui.horizontal(|ui| {
-                            crate::grid::color_swatch(ui, plot.line.color);
-                            let text = texts.get(i).cloned().unwrap_or_else(|| format!("Plot {}", i + 1));
-                            let text = if plot.auto_color { text } else { format!("{text}  (ungrouped)") };
-                            if ui.selectable_label(st.plots.contains(&i), text).clicked() {
-                                toggle(&mut st.plots, i, multi);
-                            }
-                        });
-                    }
-                    if layer.plots.is_empty() {
-                        ui.weak("The layer has no plots.");
-                    }
-                },
-            );
-            ui.horizontal(|ui| {
-                let some = !st.plots.is_empty();
-                if ui
-                    .add_enabled(some, egui::Button::new("Group"))
-                    .on_hover_text("The plots follow the layer's increment rules")
-                    .clicked()
-                {
-                    group = Some(true);
-                }
-                if ui
-                    .add_enabled(some, egui::Button::new("Ungroup"))
-                    .on_hover_text("The plots keep the style they have")
-                    .clicked()
-                {
-                    group = Some(false);
-                }
-            });
-        });
-    });
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        if ui.button("Plot Setup...").clicked() {
-            go = Some(Goto::Setup);
-        }
-        if ui.button("Plot Details...").clicked() {
-            go = Some(Goto::Details);
-        }
-    });
-
-    if !add.is_empty() {
-        for &i in &add {
-            if let Some(a) = sources[st.add_from].columns.get(i) {
-                let plot = new_plot(layer, a);
-                layer.plots.push(plot);
-            }
-        }
-        layer.recolor_automatic();
-        st.available.clear();
-    }
-    if remove {
-        for &i in st.plots.iter().rev() {
-            layer.plots.remove(i);
-        }
-        st.plots.clear();
-        layer.recolor_automatic();
-    }
-    if move_by != 0
-        && let Some(&i) = st.plots.iter().next()
-    {
-        let j = (i as i32 + move_by) as usize;
-        layer.plots.swap(i, j);
-        st.plots = BTreeSet::from([j]);
-        layer.recolor_automatic();
-    }
-    if let Some(on) = group {
-        for &i in &st.plots {
-            layer.plots[i].auto_color = on;
-        }
-        if on {
-            layer.recolor_automatic();
-        }
-    }
-    go
-}
-
-fn column_name(columns: &[(ColumnId, String)], id: ColumnId) -> String {
-    columns.iter().find(|(c, _)| *c == id).map(|(_, n)| n.clone()).unwrap_or_else(|| "(missing)".into())
-}
-
-/// A drop-down over the columns of the project; `none` is the text of "no column", if one is allowed.
-fn column_combo(
-    ui: &mut egui::Ui,
-    id: impl std::hash::Hash,
-    value: &mut Option<ColumnId>,
-    columns: &[(ColumnId, String)],
-    none: Option<&str>,
-) {
-    let shown = match (*value, none) {
-        (Some(c), _) => column_name(columns, c),
-        (None, Some(n)) => n.to_string(),
-        (None, None) => String::new(),
-    };
-    egui::ComboBox::from_id_salt(id).selected_text(shown).width(170.0).show_ui(ui, |ui| {
-        if let Some(n) = none {
-            ui.selectable_value(value, None, n);
-        }
-        for (c, n) in columns {
-            ui.selectable_value(value, Some(*c), n);
-        }
-    });
-}
-
-pub fn setup_body(ui: &mut egui::Ui, graph: &mut Graph, l: usize, info: &Info) -> Option<Goto> {
-    let mut go = None;
-    let layer = &mut graph.layers[l];
-    ui.label("The columns each plot of the layer draws. Rows of data and looks are in Plot Details.");
-    ui.add_space(6.0);
-    egui::ScrollArea::both()
-        .id_salt("setup_table")
-        .max_height((ui.available_height() - 40.0).max(120.0))
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            egui::Grid::new("setup_grid").num_columns(5).striped(true).spacing([10.0, 6.0]).show(ui, |ui| {
-                for h in ["Plot", "X", "Y", "Y Error", "Type"] {
-                    ui.label(egui::RichText::new(h).strong());
-                }
-                ui.end_row();
-                for (i, plot) in layer.plots.iter_mut().enumerate() {
-                    ui.label(format!("{}", i + 1));
-                    column_combo(ui, ("setup_x", i), &mut plot.x, info.columns, Some("(row number)"));
-                    let mut y = Some(plot.y);
-                    column_combo(ui, ("setup_y", i), &mut y, info.columns, None);
-                    if let Some(y) = y {
-                        plot.y = y;
-                    }
-                    column_combo(ui, ("setup_e", i), &mut plot.y_error, info.columns, Some("(none)"));
-                    egui::ComboBox::from_id_salt(("setup_kind", i)).selected_text(kind_name(plot.kind)).show_ui(
-                        ui,
-                        |ui| {
-                            for k in KINDS {
-                                ui.selectable_value(&mut plot.kind, k, kind_name(k));
-                            }
-                        },
-                    );
-                    ui.end_row();
-                }
-            });
-            if layer.plots.is_empty() {
-                ui.weak("The layer has no plots. Add data in Layer Contents.");
-            }
-        });
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        if ui.button("Layer Contents...").clicked() {
-            go = Some(Goto::Contents);
-        }
-        if ui.button("Plot Details...").clicked() {
-            go = Some(Goto::Details);
-        }
-    });
-    go
 }

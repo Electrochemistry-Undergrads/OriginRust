@@ -30,10 +30,19 @@ fn average_writes_the_mean_sheet() {
     let dir = scratch("average");
     let data = file(&dir, "x,a,b\nV,A,A\n0,0,2\n1,1,3\n2,2,4\n");
     let export = dir.join("mean.csv");
-    let (ok, stdout, stderr) =
-        sheaf(&["analyze", "average", data.to_str().unwrap(), "--export", export.to_str().unwrap()]);
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "average",
+        data.to_str().unwrap(),
+        "--x",
+        "same",
+        "--sd",
+        "--count",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
     assert!(ok, "stderr: {stderr}");
-    assert!(stdout.contains("Average1"), "{stdout}");
+    assert!(stdout.contains("AverageResult1"), "{stdout}");
     let rows: Vec<String> = std::fs::read_to_string(&export).unwrap().lines().map(str::to_string).collect();
     assert!(rows.iter().any(|r| r.starts_with("1,2,")), "{rows:?}");
     // The mean of 0..2 and 2..4 is 1..3, the SD is sqrt(2) everywhere, n = 2.
@@ -75,7 +84,7 @@ fn average_on_a_cycle_is_refused_unless_the_curves_share_their_x() {
     assert!(!ok && stderr.contains("turn back"), "{stderr}");
     // The same scans on a shared X are averaged row by row, turning included.
     let shared = file(&dir, "x,a,b\n,,\n0,0,2\n1,1,3\n0,2,4\n");
-    let (ok, stdout, stderr) = sheaf(&["analyze", "average", shared.to_str().unwrap()]);
+    let (ok, stdout, stderr) = sheaf(&["analyze", "average", shared.to_str().unwrap(), "--x", "same"]);
     assert!(ok && stdout.contains("3 X values"), "{stdout} {stderr}");
 }
 

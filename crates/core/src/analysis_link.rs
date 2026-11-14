@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
-    AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, Report, Request,
-    RowRange, SubtractLineSpec, Tool, TranslateSpec,
+    AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, ReduceDupSpec, Report,
+    Request, RowRange, SubtractLineSpec, Tool, TranslateSpec,
 };
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
@@ -31,6 +31,7 @@ pub enum LinkTool {
     PolygonArea,
     SubtractLine(SubtractLineSpec),
     ReduceX(ReduceOptions),
+    ReduceDup(ReduceDupSpec),
     Translate(TranslateSpec),
     MedianFilter(MedianFilterSpec),
 }
@@ -46,6 +47,7 @@ impl LinkTool {
             Tool::PolygonArea => Some(LinkTool::PolygonArea),
             Tool::SubtractLine(s) => Some(LinkTool::SubtractLine(*s)),
             Tool::ReduceX(o) => Some(LinkTool::ReduceX(*o)),
+            Tool::ReduceDup(s) => Some(LinkTool::ReduceDup(*s)),
             Tool::Translate(s) => Some(LinkTool::Translate(*s)),
             Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
             _ => None,
@@ -62,6 +64,7 @@ impl LinkTool {
             LinkTool::PolygonArea => Tool::PolygonArea,
             LinkTool::SubtractLine(s) => Tool::SubtractLine(*s),
             LinkTool::ReduceX(o) => Tool::ReduceX(*o),
+            LinkTool::ReduceDup(s) => Tool::ReduceDup(*s),
             LinkTool::Translate(s) => Tool::Translate(*s),
             LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
         }

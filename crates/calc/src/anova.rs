@@ -46,9 +46,14 @@ pub enum MeansComparison {
     /// Fisher's least significant difference: no adjustment for the number of comparisons.
     FisherLsd,
     Scheffe,
+    /// Holm's step-down procedure with the Bonferroni thresholds `alpha / (m - rank)`.
+    HolmBonferroni,
+    /// Holm's step-down procedure with the Sidak thresholds `1 - (1 - alpha)^(1 / (m - rank))`.
+    HolmSidak,
 }
 
 impl MeansComparison {
+    /// The five single-step methods; the Holm methods are listed apart in [`MeansComparison::WITH_HOLM`].
     pub const ALL: [MeansComparison; 5] = [
         MeansComparison::Tukey,
         MeansComparison::Bonferroni,
@@ -57,8 +62,26 @@ impl MeansComparison {
         MeansComparison::Scheffe,
     ];
 
+    /// Every method of the one-way ANOVA, Origin's order.
+    pub const WITH_HOLM: [MeansComparison; 7] = [
+        MeansComparison::Tukey,
+        MeansComparison::Bonferroni,
+        MeansComparison::Sidak,
+        MeansComparison::FisherLsd,
+        MeansComparison::Scheffe,
+        MeansComparison::HolmBonferroni,
+        MeansComparison::HolmSidak,
+    ];
+
+    /// True for the step-down methods: their table is sorted by p-value and has no confidence limits.
+    pub fn is_holm(self) -> bool {
+        matches!(self, MeansComparison::HolmBonferroni | MeansComparison::HolmSidak)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
+            MeansComparison::HolmBonferroni => "Bonferroni-Holm",
+            MeansComparison::HolmSidak => "Sidak-Holm",
             MeansComparison::Tukey => "Tukey",
             MeansComparison::Bonferroni => "Bonferroni",
             MeansComparison::Sidak => "Sidak",
@@ -80,9 +103,13 @@ pub struct Comparison {
     /// The statistic the p-value comes from: the studentized range q for Tukey, F for Scheffe, |t| for the others.
     pub stat: f64,
     pub p: f64,
+    /// Lower and upper limit of the confidence interval (NaN for the Holm methods, which have none).
     pub lcl: f64,
     pub ucl: f64,
-    /// True where `p < alpha`.
+    /// The significance level this comparison was judged at: the nominal level, or for the Holm methods the
+    /// threshold of its rank in the sorted list.
+    pub alpha: f64,
+    /// True where `p < alpha` (for the Holm methods: where this and every smaller p-value are below their thresholds).
     pub significant: bool,
 }
 
@@ -159,8 +186,10 @@ impl Anova {
         let levels: Vec<(usize, f64)> = self.groups.iter().map(|g| (g.n, g.mean)).collect();
         let mut out = compare_means(&levels, self.error.mean_sq, self.error.df, method, alpha);
         // The one-way table reports the size of the statistic; the two-way table keeps the sign.
-        for c in &mut out {
-            c.stat = c.stat.abs();
+        if !method.is_holm() {
+            for c in &mut out {
+                c.stat = c.stat.abs();
+            }
         }
         out
     }
@@ -200,6 +229,7 @@ pub fn compare_means(
             let t = if se == 0.0 { if diff == 0.0 { 0.0 } else { f64::INFINITY.copysign(diff) } } else { diff / se };
             let p_lsd = if t.is_infinite() { 0.0 } else { 2.0 * t_dist.cdf(-t.abs()) };
             let (stat, p, half) = match method {
+                MeansComparison::HolmBonferroni | MeansComparison::HolmSidak => (t, p_lsd, f64::NAN),
                 MeansComparison::FisherLsd => (t, p_lsd, t_crit(alpha) * se),
                 MeansComparison::Bonferroni => (t, (m * p_lsd).min(1.0), t_crit(alpha / m) * se),
                 MeansComparison::Sidak => {
@@ -226,11 +256,32 @@ pub fn compare_means(
                 p,
                 lcl: diff - half,
                 ucl: diff + half,
+                alpha,
                 significant: p < alpha,
             });
         }
     }
+    if method.is_holm() {
+        holm_step_down(&mut out, method, alpha);
+    }
     out
+}
+
+/// Holm's step-down procedure on the plain pairwise comparisons: sort by p-value (equal p-values keep their
+/// pair order), the pair of rank `r` (from 0, `m` pairs) is tested at `alpha / (m - r)` (Bonferroni) or
+/// `1 - (1 - alpha)^(1 / (m - r))` (Sidak), and once one pair is not significant no later one is either.
+fn holm_step_down(list: &mut [Comparison], method: MeansComparison, alpha: f64) {
+    let m = list.len();
+    // NaN p-values (impossible with finite data) sort last.
+    list.sort_by(|a, b| a.p.partial_cmp(&b.p).unwrap_or(std::cmp::Ordering::Equal));
+    let mut still = true;
+    for (r, c) in list.iter_mut().enumerate() {
+        let left = (m - r) as f64;
+        c.alpha =
+            if method == MeansComparison::HolmSidak { 1.0 - (1.0 - alpha).powf(1.0 / left) } else { alpha / left };
+        still = still && c.p < c.alpha;
+        c.significant = still;
+    }
 }
 
 // ----- studentized range distribution ----------------------------------------------------------

@@ -370,6 +370,31 @@ book or sheet is named; a file named with `--ref-file` is added to the project a
 so appears in `--save`). Window: Analysis > Subtract Reference Data... and Simple Math..., with a
 list of all other numeric Y columns of the project as references.
 
+### 9.1 Simple Column Math (`vmathtool`)
+
+Analysis > Mathematics > Simple Column Math combines a column with a constant or another column row
+by row, with no X values. Inputs (from its X-Function file): `ix1`, `operator` (add, sub, div, mul,
+pow; default add), `operand` (Constant or Reference Data; Constant first), `ix2`, `constant`
+(default 10) and the output `ox`, whose default is the input column itself.
+
+Observed (Origin, `re-workspace/scratch/vmath/vmath.out.txt`; the Rust test is
+`column_math_matches_origin_vmathtool` in `crates/calc/src/curvemath.rs`):
+
+- Without an output range the result replaces the values of the input column.
+- Row `i` of the data goes with row `i` of the operand column. Rows past the end of the operand
+  column count as 0: with a five-row operand, row 6 of `A - B` is `A`, of `A ^ B` is 1 and of
+  `A / B` missing.
+- A missing operand inside its length, or division by 0, gives a missing value; so does a
+  negative number to the power 0.5.
+- The result has one row per data row (a longer operand adds nothing).
+- Division by the constant 0 is refused (the X-Function fails and nothing changes).
+
+Sheaf: `sheaf_calc::column_math`, `Tool::ColumnMath(ColumnMathSpec)` (undo step "Column math").
+The window starts on Add with the constant 10 and its Output on the input columns themselves
+(Existing columns), as Origin; new columns beside the input or a new sheet can be chosen instead.
+Command line: `sheaf analyze column-math FILE --y B [--op ...] (--value N | --ref COLUMN)`, results
+beside the input. Not compared: a missing value in the data raised to the power 0.
+
 ## 10. Integrating several ranges at once (`integ1` per range)
 
 Origin's Integrate reports for one curve and one range: `area`, `x0`/`y0` (position and signed
@@ -479,9 +504,70 @@ Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivat
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
 
-## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured)
+### 11.1 Origin's Peak Analyzer wizard (measured 2026-11-13)
 
-Analysis > Data Manipulation has Subtract Straight Line, Reduce to Evenly Spaced X and Curve
+Opened through Analysis > Peaks and Baseline > Peak Analyzer > Open Dialog... on a graph
+(`tools/origin-ref/origin-dialog.ps1 -MenuClicks`, pictures and control lists in
+`re-workspace/scratch/t04/d2..d4`). The menu Peaks and Baseline holds Multiple Peak Fit..., Peak Analyzer
+(a submenu: `<Last used>`, `QuickPeaks (System)`, Open Dialog...) and Batch Peak Analysis Using Theme....
+
+The window "Peak Analyzer" (about 400 x 600) has Dialog Theme, a page tree on black, Prev, Next, Finish
+and Cancel, the X-Function name of the page with a one-line description, and the page's settings. The
+page list follows the Goal:
+
+| Goal | Pages after Goal |
+|---|---|
+| Integrate Peaks (default) | Baseline Mode, Baseline Treatment, Find Peaks, Integrate Peaks, Finish |
+| Find Peaks | Baseline Mode, Baseline Treatment, Find Peaks, Finish |
+| Fit Peaks (Pro) | Baseline Mode, Baseline Treatment, Find Peaks, Fit Peaks (Pro), Finish |
+| Create Baseline | Baseline Mode, Create Baseline, Finish |
+| Subtract Baseline | Baseline Mode, Subtract Baseline, Finish |
+
+Next is greyed on the last page before Finish.
+
+- Goal (`pa_goal`, "Select spectrum data and Goal"): Recalculate (Manual), Goal, Input.
+- Baseline Mode (`pa_basemode`): Constant (default; Y = the Minimum (default), Maximum, Mean or Median of
+  the data, or Custom), User Defined (anchor points found by 2nd Derivative (default), 1st and 2nd
+  Derivative, a script or an existing dataset; smoothing window Auto; Number of Points to Find; Snap to
+  Spectrum), Use Existing Dataset, XPS, None (Y=0), End Points Weighted, Straight Line, Asymmetric Least
+  Squares Smoothing.
+- Baseline Treatment (`pa_basetreat`): Auto Subtract Baseline (off), Auto Rescale (off), Subtract Now,
+  Undo, Rescale.
+- Find Peaks (`pa_peaks`): Current Number of Peaks, Enable Auto Find (on), Find, Add, Modify/Del, Clear
+  All, Save..., Load..., Peaks Info..., Snap to Spectrum (off); Peak Finding Settings: Direction Both
+  (Positive, Negative), Method Local Maximum (Window Search, 1st Derivative, 2nd Derivative (search Hidden
+  peaks), Residual after 1st Derivative (search Hidden peaks)), Smooth Derivative None or Savitzky-Golay,
+  smoothing None (FFT Filter, Adjacent-Averaging, Savitzky-Golay, Quadratic Savitzky-Golay), Local Points
+  and Size Option (Percent of Raw Data); Peak Filtering: Method By Height (None, By Number), Threshold
+  Height (%) 20 with Auto; Labels and Markers: center label X of Peaks (Y, Indices, (X,Y)), rotated, Above,
+  with a center marker.
+- Integrate Peaks (`pa_int`, "Calculate the peak area"): Number of Ranges to Integrate (All Peaks),
+  Integration Window Width Auto (Adjust on Preview Graph, Fix Width For All Peaks; left and right half
+  width), Integrate From Baseline (or Y=0), Show Integrated Area (on), Quantities: Peak Area, Percent
+  Area, Row Index, Beginning X, Ending X, Peak Center, Peak Height, FWHM (on), Curve Area, Left Half
+  Width, Right Half Width, Peak Centroid (off).
+
+Results of Integrate Peaks with every default (`re-workspace/scratch/t04/r-*.out`, d10): a sheet
+`Integration_Result1` with Index, Area, AreaIntgP(%) (comment "Integral Result of B"), Row Index, Beginning X,
+Ending X, FWHM, Center, Height. On 0.2 + 0.01 x + exp(-(x-5)^2/0.5) + 0.6 exp(-(x-12)^2/0.8), x = 0..20 step
+0.05: the Constant baseline is the minimum 0.2; peak 1 row 101, X 0.3 to 6.8, area 1.48386, 35.292 %,
+FWHM 1.220641, height 1.05; peak 2 row 241, X 6.8 to 14.15, area 1.72099, 40.932 %, FWHM 1.713769, height 0.72.
+AreaIntgP is the share of the area of the whole baseline-corrected curve (4.2045 here), not of the sum of
+the peaks. The Auto integration window of a lone Gaussian exp(-(x-10)^2/(2 s^2)) on the same X ran from
+10 - d to 10 + d with d = 1.75, 3.75 and 8 for s = 0.5, 1 and 2 (3.5 s, 3.75 s and 4 s; no rule found yet).
+
+Sheaf (2026-11-13): the Peak Analyzer window shows Origin's page tree for the goal, Prev and Next, and the
+pages Goal (Integrate, Find and Fit Peaks; Create and Subtract Baseline greyed), Baseline Mode (Constant with
+Minimum by default, Maximum, Mean, Median or Custom; User Defined with Sheaf's anchors; None (Y=0); Straight
+Line through the end points; the other modes greyed), Baseline Treatment (greyed: the baseline is always
+measured from, never subtracted from the data), Find Peaks, Integrate Peaks and Fit Peaks; OK is Finish.
+Center, Row, Height and FWHM match Origin to 1e-9 on the data above, Area % follows Origin's definition,
+and the limit between two peaks (the valley, 6.8) matches; the outer limits do not (Sheaf integrates to
+where the corrected curve meets the baseline or the end of the data: 0 and 20 here, Origin 0.3 and 14.15).
+
+## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
+
+Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve
 Translate X; Analysis > Mathematics has Median Filter. Nothing in this section was run in Origin:
 there was no Origin on the machine where it was written. What is known comes from Origin's public
 documentation (paraphrased: what each item is for) and from two earlier measurements that the
@@ -512,12 +598,7 @@ link mechanism):
   own value at that X (straight lines between data points) unless a Y is given. Equal X values, an X
   outside the data without a given Y, and a curve with fewer than two valid points are refused with
   nothing changed. The result is a new Y column behind each input named "<name> minus line".
-- Reduce to Evenly Spaced X: new X values from the lowest to the highest X of the data (or a chosen
-  range), either by number of points (first and last included, at least 2) or by step (the last value
-  is kept when the range is a whole number of steps within rounding). Y is interpolated by straight
-  lines (new X outside the data are missing) or averaged: each new X owns the bin one step wide
-  centred on it, the lower edge belongs to the bin, an empty bin is missing. The result is a new sheet
-  with an X column and a Y column per input. Points with a missing X or Y are ignored.
+- Reduce to Evenly Spaced X: Origin's `reduce_ex`, measured (12.2).
 - Curve Translate X: adds a constant to X, or moves the point at X = `at` to X = `to` (shift
   `to - at`); the result is a new sheet with the shifted X and the unchanged Y. Curve Translate Y
   (Sheaf's own item, next to X): adds a constant to Y, or shifts so that the curve's value at X = `at`
@@ -530,14 +611,17 @@ link mechanism):
 
 Not measured (to be measured in Origin; nothing here may be quoted as Origin's behaviour):
 
-1. Origin's X-Function names and options for the four items (the window title shows the tool alone).
+1. X-Function names, read from the interface lists of Origin's X-Function files with
+   `tools/origin-ref/xf-args.py` (names, labels, defaults and choices only): Subtract Straight Line is
+   `subtract_line` (no arguments: an interactive tool on the graph), Curve Translate is `curve translate`
+   (interactive: `ntype` Vertical Translate (default) or Horizontal Translate, a line to move the curve
+   to and a marker on the curve), Reduce to Evenly Spaced X is `reduce_ex` (12.2). Origin's
+   Mathematics menu has no median filter for curves: `medianflt2` filters matrices; a 1D median is a
+   method of Smooth.
 2. Subtract Straight Line: how Origin picks the two points (on a graph, by data cursor, or by
    typed values), whether a point's Y is the data value or the cursor's, and whether the result
    replaces the data or goes to a new column.
-3. Reduce to Evenly Spaced X: which interpolation and averaging choices Origin offers, its bin
-   definition and edge rule for averaging, how it chooses the number of points or the step by
-   default, what a new X outside the data gets (missing or extrapolated), whether the last grid
-   point is kept when the range is not a whole number of steps, and the output layout.
+3. Reduce to Evenly Spaced X: measured, see 12.2.
 4. Curve Translate: whether Origin moves data in place or writes a copy, how its "move a point to
    a value" mode reads a Y at an X between data points, and whether it works on the graph
    interactively. Curve Translate Y is not an Origin item as far as we know; its numbers are Sheaf's.
@@ -547,11 +631,268 @@ Not measured (to be measured in Origin; nothing here may be quoted as Origin's b
 6. The Recalculate behaviour of these items in Origin (which of None, Manual, Auto they offer),
    the long names, units and comments of the output columns, and the row-range handling.
 
+### 12.1 Reduce Duplicate X Data (measured in Origin)
+
+Analysis > Data Manipulation > Reduce Duplicate X Data is Origin's X-Function `reducedup` (method,
+`tol`, `oy`, `xcount`). Measured on 2026-11-13 with `tools/origin-ref/run-labtalk-lines.ps1`
+(scripts and outputs `re-workspace/scratch/reducedup/reducedup*.lines.txt` and `.out.txt`):
+
+- Pairs with a missing X or Y are left out; the rest are sorted by X.
+- Neighbours whose X values differ by no more than `tol` times the X range form one group, as a
+  chain: 0, 0.3, 0.6, 0.9 with `tol` 0.035 of a range of 10 (limit 0.35) are one group although 0.9
+  is 0.9 from the first. The default `tol` groups X values 1e-8 apart in a range of 1 and not 9e-8
+  apart; Sheaf uses 1e-8. The comparison is plain floating point (10.3 - 10.1 is just above 0.2 and
+  does not group at a limit of 0.2).
+- A group's X is its lower middle X after sorting (the median of an odd group, the lower of the two
+  middle values of an even one); a point alone keeps its own Y.
+- Methods mean (default), median, min, max, sum, sd (n - 1 divisor), se (sd / sqrt n) and rms; rms
+  gives the mean of the group, not the root mean square.
+- Output by default: two new columns at the end of the input sheet, long names `ReduceDupX1` and
+  `ReduceDupY1` (the number counts up with each run), the Y column's comment "Duplicates replaced
+  with Mean of B" (the method's word: Mean, Median, Min, Max, Sum, SD, SE, RMS). `xcount:=<new>` adds
+  `DupX1` (the X of each group of two or more points) and `DupXCount1` (its count), no comments.
+
+Sheaf (`Tool::ReduceDup`, undo step "Reduce duplicate X data", `calc::reduce_duplicates`) copies
+all of this, except that the columns go to a new sheet named "ReduceDup" (the analysis framework
+adds X and Y pairs only as a result sheet). The window offers the method, the tolerance and "Output
+the duplicate X values and their counts". Recalculate works as for the other tools of this section.
+
+### 12.2 Reduce to Evenly Spaced X (measured in Origin)
+
+Origin's `reduce_ex` (dialog and runs on 2026-11-13, `re-workspace/scratch/needs7/reduce_ex/` and
+`reduceex1..4.lines.txt`/`.out.txt`). The dialog has Recalculate (Manual), Input, SubGroup (Every N
+Points, By Sampling Interval, By Number of Intervals, By Frequency), Resample Factor (5 with Auto
+ticked; Auto gave 5 for 5 to 10000 points), Sampling Interval (0.25), Interval Number (10), Resample
+Frequency (8), X Start and X End (auto), Sampling Method (First Point, Y Mean (default), Random Y (X
+Average)), Even Sampling Interval Tolerance (5 %), Plot FFT for Preview, and Output `(<autoX>,<new>)`.
+
+- Every N Points: each run of N points gives one point. Y Mean gives the mean X and mean Y of the
+  run, First Point the run's first point. A shorter last run keeps the place of a full run: 12 points
+  0..11 every 5 gave X 2, 7, 12 (the last run is 10 and 11). When the X steps are not even (10 % off
+  was; 4 % off was not), the curve is first interpolated by straight lines onto as many evenly spaced
+  X values from the first to the last X; a missing value counts as a gap and does the same (the
+  row is left out and the 11 other points regridded).
+- The interval modes use the raw points. There are round((X End - X Start) / interval) intervals
+  `[start + k dx, start + (k + 1) dx)` (11 / 2 gave 6, 11 / 2.5 gave 4); a point at X End or beyond
+  is in none, even inside the last interval. By Number of Intervals uses (End - Start) / n, By
+  Frequency an interval of 1 / f. Y Mean gives the interval centre and the mean Y, First Point the
+  lower edge and the Y of the first point in it; an empty interval keeps its X with a missing Y.
+- The output columns are named `ReduceEXX1` and `ReduceEXY1`; the Y comment is "Y Mean(X Average)
+  Stats Reduction of B" or "Y First(X First) Stats Reduction of B".
+
+Sheaf (`calc::reduce_evenly`, `Tool::ReduceX`) copies these rules, names and comments, with three
+differences: Random Y is not offered; the columns go to a new sheet (as for every curve result of this
+section) and always include X, where Origin's default writes only a Y column with an implicit even X;
+in a run whose steps are uneven but within the tolerance, Origin's X of the short last run is not the
+rule above (0, 1.03, ... 10 every 3 gave 10.103 for the run 9, 10; Sheaf gives 10).
+Command line: `sheaf analyze reduce-x FILE --y B [--every N | --step DX | --intervals N | --frequency F]
+[--method mean|first] [--x-min X] [--x-max X] [--tolerance PCT]`.
+
+Command line: `sheaf analyze reduce-dup FILE --y B [--method mean|median|min|max|sum|sd|se|rms]
+[--tol T] [--count]`; window `--show analysis:reduce-dup`.
+
 Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--y2 V]`,
-`sheaf analyze reduce-x FILE --y B [--step S | --points N] [--method interpolate|average]
-[--x-min X] [--x-max X]`, `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
+`sheaf analyze reduce-x` (12.2), `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
 and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
 `--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
+
+## 13. Convolution and Correlation (`conv`, `corr1`)
+
+Analysis > Signal Processing > Convolution and Correlation. Inputs (from the X-Function files):
+`conv`: the signal `ix`, the `response`, `interval` (`<auto>`), `norm` (off), `wrap` (off),
+`circular` (Linear or Circular) and the output `oy` (X and Y); `corr1`: `ix1`, `ix2` (the same
+column for an autocorrelation), `interval`, `type` (Linear or Circular), `norm` (off), `oy`.
+
+Observed (Origin, `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`; Rust tests
+`convolution_matches_origin_conv` and `correlation_matches_origin_corr1` in
+`crates/calc/src/signal.rs`, 1e-12). Origin computes by FFT, so its numbers carry noise of about
+1e-15 (`2.4999999999999996`, values like `2e-16` where the exact result is 0); Sheaf sums directly.
+
+- Convolution, linear: the full convolution of the signal (n points) and the response (m), n + m - 1
+  values. X is `k * interval`, k from 0. With `<auto>` the interval is the X step of the signal's
+  sheet (X 0, 0.1, 0.2, 0.3 gave 0, 0.1, ..., 0.4); without X it is 1. Checked with a longer
+  response than signal too.
+- Convolution, circular: both padded with zeros to N = max(n, m); N values,
+  `c[k] = sum_j s[j] r[(k - j) mod N]`.
+- Normalize: the response is divided by its Euclidean norm (1 / sqrt(1.3125) = 0.8729 for
+  1, 0.5, 0.25).
+- Wrap response: no difference found with a three-point response, linear or circular; not
+  offered in Sheaf.
+- Correlation, linear: both padded with zeros to N = max(n, m); lags -(N-1) to N-1 (2N - 1 values,
+  so a leading 0 when the lengths differ), value `sum_j a[j + k] b[j]`; lag 0 is the dot product.
+  The X is the lag times the interval, 1 by default (the X spacing of the sheet is not used).
+- Correlation, circular: N values at lags 0 to N-1, but in Origin's order value k is
+  `sum_j a[(j - k - 1) mod N] b[j]`, that is the plain circular correlation read from the far end.
+  Checked on two data sets and both argument orders.
+- Normalize (correlation): divided by sqrt(sum a^2 * sum b^2).
+- Decimation (`decimate`) was probed as well, but Origin refused factors 3, 4 and 5 on 11 and 12
+  points and its moving-average filter gave values not explained yet; not built.
+
+Sheaf: `sheaf_calc::convolve`, `correlate`; `Tool::Convolution(ConvolutionSpec)` and
+`Tool::SignalCorrelation(SignalCorrelationSpec)`. The results go to a new sheet `Convolution<n>`
+or `Correlation<n>` with an X (the input's X name and unit, or "Lag") and a Y column per input.
+Trailing missing values are dropped; a missing value inside a signal is refused. The windows list
+every numeric Y column of the project, the inputs included, as the response or second signal.
+Command line: `sheaf analyze convolution FILE --y B --response C [--circular] [--normalize]
+[--interval D]` and `sheaf analyze signal-correlation FILE --y B --with C [--circular] [--normalize]
+[--interval D]`.
+
+### 13.1 Hilbert Transform (`hilbert`)
+
+Analysis > Signal Processing > Hilbert Transform. Inputs: `ix`, `hil` (output the transform, on),
+`ansig` (output the analytic signal; on in the X-Function file although its help says off) and the
+report sheet `rd` (a new sheet of the input book). Observed (`re-workspace/scratch/hilbert/hb.out.txt`,
+eight and seven points; Rust test `hilbert_matches_origin`, 1e-12): the transform is the standard
+discrete one, the imaginary part of the analytic signal made by FFT (positive frequencies doubled,
+negative removed, zero and, for an even length, the middle frequency kept); the analytic signal is a
+complex column whose real part is the input. Sheaf writes the transform only, in a new column beside
+each input (no complex columns); `Tool::Hilbert`, `sheaf analyze hilbert FILE --y B`.
+
+## 14. Level crossing (`levelcrossing`)
+
+Origin has the `levelcrossing` X-Function (Data Manipulation) but no menu item for it; Sheaf puts it
+under Analysis > Mathematics > Level Crossing. Inputs (from its X-Function file): the curve `iy`,
+`level` (0), `type` (Any, Left, Right: the row given for a crossing between two rows), `pts` (1: both
+crossings of a pair closer than this many rows are dropped) and the outputs: X of each crossing
+(`oy`, an X column), `direction` (1 up, -1 down, 0 "derivative zero"), `xindex` (a Label column)
+and `yval` (the level).
+
+Observed (Origin, `re-workspace/scratch/levelx/lx.out.txt` and `re-workspace/scratch/lcross/lc2.out.txt`,
+`lc3.out.txt`, `lc4.out.txt`; Rust tests `level_crossings_match_origin` and `more_cases_match_origin` in
+`crates/calc/src/levelcross.rs`):
+
+- A data point exactly on the level is a crossing at its own X and row. Its direction is the sign
+  of the steps before and after it when they agree, else 0: a touch (1, 0, 1 at level 0) and each
+  point of a run on the level (-1, 0, 0, 3) have direction 0. At the first and the last point the one
+  step there decides (0, 1, ... gives 1; ..., 0, 1 at level 1 gives 1).
+- Between two points on opposite sides the crossing is interpolated linearly, direction of the step
+  in row order (also with falling X: X 10, 8, 7, 3, 0 and Y 0, 2, 0, 2, 0 at level 1 give 9, 7.5, 5, 1.5
+  with 1, -1, 1, -1).
+- A missing Y is skipped and its neighbours are joined: 0, 2, missing, 0, 2 at level 1 gives 0.5, 2 and
+  3.5 (the crossing at 2 is not lost).
+- The row (1-based) for an interpolated crossing: Left the row before, Right the row after, Any the
+  row whose X is nearest, counting rows whose Y is missing (the crossing at 2 above is row 3, the
+  missing row), and on a tie the one with the smaller X (0.5 between X 0 and 1 is row 1; 9 between
+  X 10 and 8 is row 2).
+- `pts`: with indices 2, 4, 8, 9 and `pts` 3 all four were dropped; with 1, 2, 3, 4, 7 and `pts` 2
+  only 7 was left. Sheaf takes the crossings in pairs in order (first with second, third with
+  fourth); a sliding comparison would fit these two cases as well.
+- No crossing: empty outputs (Origin still wrote the level once into `yval`; Sheaf writes nothing).
+- Default output (no output columns named): only the X values, in a new column at the end of the input
+  sheet with long name `CrossingX1` (then `CrossingX2`, ... for later runs on that sheet), the comment
+  `X values of Y= 1.5 Level Crossing of B` (the level as typed: 1, 0.25, -3) and no units. The column
+  is added even when the curve never reaches the level. Origin writes the direction, index and Y values
+  only into columns that the script names.
+
+Sheaf: `sheaf_calc::level_crossings`, `Tool::LevelCrossing(LevelCrossingSpec)`; the `CrossingX<n>`
+column as Origin, beside its input (ADR 0005) instead of at the end of the sheet. The switch "Also output
+directions, X indices and Y crossing values" (`details`) adds `Directions<n>`, `X Indices<n>` (rows of
+the sheet) and `Y Crossing Values<n>` (with the input's units) beside it; these names are Sheaf's, from
+the labels of Origin's outputs. Origin's index for a row range that does not start at row 1 was not
+measured. Command line: `sheaf analyze level-crossing FILE --y B [--level L] [--row any|left|right]
+[--min-gap N] [--details]`.
+
+## 15. FFT (`fft1`)
+
+Analysis > Signal Processing > FFT > FFT. Options (from the X-Function file): `interval` (`<Auto>`),
+`win` (Rectangle, Welch, Triangular, Bartlett, Hanning, Hamming, Blackman), `correct` (None,
+Amplitude, Power; Amplitude by default), `norma` (normalize, off), `shift` (on), `unwrap` (on),
+`factor` (-1 Electrical Engineering, +1 Science), `st` (auto, one-sided, two-sided), `norm` (MSA,
+SSA, TISA) and the report sheet. Origin's result sheet has Frequency, Complex, Real, Imaginary,
+Magnitude, Amplitude, Phase, Power and dB; Sheaf writes the same without the complex column.
+
+Observed (Origin, `re-workspace/scratch/fft/f1..f4.out.txt`, 5, 7, 8 and 9 points; Rust tests in
+`crates/calc/src/fft.rs`, relative 1e-9):
+
+- Real and imaginary parts are the plain DFT `X_k = sum x_n e^(-2 pi i k n / N)` (Science: the
+  imaginary part and the phase change sign). Magnitude `|X|`; Normalize divides real, imaginary and
+  magnitude (only) by N.
+- One-sided (the default for real data): rows k = 0 to N/2 (integer division), frequency
+  `k / (N * interval)`. Amplitude `2|X|/N`, except `|X|/N` in the first and the last row (also for an
+  odd N, where the last row is not the Nyquist frequency). Power (MSA) `2|X|^2/N^2`, except
+  `|X|^2/N^2` in the first row and `4|X|^2/N^2` in the last row for an odd N (5, 7 and 9 points).
+- Two-sided: all N rows, amplitude `|X|/N` and power `|X|^2/N^2` everywhere; with Shift the rows
+  run from `-(N/2 - 1)` (even N) to the Nyquist frequency, else from 0 to `(N-1)/(N*interval)`.
+- SSA is MSA times N, TISA is SSA times the interval. dB is `20 log10(amplitude)`.
+- Phase in degrees from atan2, unwrapped in row order (after the shift): a step of more than 180
+  degrees is corrected by multiples of 360, so 0 can become 360 in a shifted two-sided result.
+- Windows, symmetric over N points (c = (N-1)/2): Welch `1 - ((n-c)/((N+1)/2))^2`, Triangular
+  `1 - |n-c|/(N/2)`, Bartlett `1 - |n-c|/c`, Hanning `0.5 - 0.5 cos(2 pi n/(N-1))`, Hamming
+  `0.54 - 0.46 cos(...)`, Blackman `0.42 - 0.5 cos(...) + 0.08 cos(4 pi n/(N-1))`. Correction
+  Amplitude multiplies by `N / sum w`, Power by `sqrt(N / sum w^2)`.
+- `<Auto>` interval: called from LabTalk with a column (`col(B)`, a range `[Book]Sheet!B`) Origin
+  used 1 although the sheet has an X column with step 0.5; an XY range `(1,2)` is read as real and
+  imaginary parts, not as X and Y. Sheaf's Auto takes the mean X step of the input's X column (1
+  without one), as Convolution's measured `<auto>` does; the dialog's own behaviour is not measured.
+
+Sheaf: `sheaf_calc::fft_spectrum`, `Tool::Fft(FftSpec)`; a new sheet `FFT<n>` with the eight columns
+per input (Amplitude in the input's unit, Phase in degrees). Trailing missing values are dropped, a
+missing value inside is refused. Command line: `sheaf analyze fft FILE --y B [--interval D]
+[--window ...] [--correction none|amplitude|power] [--normalize] [--two-sided] [--no-shift]
+[--no-unwrap] [--science] [--power msa|ssa|tisa]`. Not built: complex input, IFFT, 2D FFT, the
+graphs Origin makes with the result.
+
+### 15.1 IFFT (`ifft1`)
+
+Analysis > Signal Processing > FFT > IFFT. Options: the input `ix` (real and imaginary parts in
+two columns, or one), `interval` (`<Auto>`), `shift` (on), `win`, `correct`, `factor`, `unwrap`.
+Observed (`re-workspace/scratch/fft/i1.out.txt`, the two-sided unshifted FFT of eight points; Rust
+test `inverse_fft_matches_origin`):
+
+- The result sheet has Time, Real, Imaginary, Amplitude (`|x|`) and Phase (degrees, unwrapped).
+  `x_n = (1/N) sum X_k e^(2 pi i k n/N)`; Science uses the other sign (the signal comes out in
+  reverse order after the first point).
+- The interval is the step of the spectrum; the time step is `1 / (N * interval)` (interval 1
+  gave 0.125 for eight points, 0.25 gave 0.5).
+- Shift on (the default) treats the input as shifted the way FFT writes it and puts it back in FFT
+  order first; on an unshifted spectrum this gives a rotated (complex) result, as Origin's does.
+- Only the real part given: the imaginary part is 0.
+- The default window gave the same numbers as Rectangle; windows are not offered in Sheaf's IFFT.
+- Unwrap: a step of exactly -180 degrees gains 360 (0, 180, 0 became 0, 180, 360) but +180 is kept;
+  Sheaf's FFT uses the same rule. A portability regression (2026-11-14) showed Linux
+  returning -179.99999999999997 for a half-turn. The shared unwrap routine reduces steps
+  modulo 360 and treats values within `8 * f64::EPSILON * 180` degrees of a half-turn as
+  the positive tie. This is a floating-point guard, not an altered Origin fixture: the
+  existing FFT/IFFT expectations stay unchanged, and adjacent representable values plus
+  genuinely distinct nearby steps are regression-tested.
+
+Sheaf: `sheaf_calc::ifft_spectrum`, `Tool::Ifft(IfftSpec)`; the input columns are real parts, the
+imaginary part a chosen column read row by row (the window suggests the column right after the
+input, as in an FFT result sheet). Auto takes the X step of the input (the frequency step of an FFT
+result). Command line: `sheaf analyze ifft FILE --y Real [--imaginary Imag] [--interval D]
+[--no-shift] [--no-unwrap] [--science]`.
+
+### 15.2 FFT Filters (`fft_filters`)
+
+Analysis > Signal Processing > FFT Filters. Options (from the X-Function file): `filter` (0 Low
+Pass, 1 High Pass, 2 Band Pass, 3 Band Block, 4 Threshold, 5 Low Pass Parabolic), `cutoff`, `freq1`,
+`freq2`, `threshold`, `pass`, `stop` (all automatic by default) and `offset` (keep the DC offset, on;
+high pass, band pass and band block). Observed (`re-workspace/scratch/fftfilt/ff1..ff4.out.txt`, 10,
+16, 20, 32 and 40 points; the gain of every frequency was read off by dividing the FFTs; Rust test
+`fft_filters_match_origin` on nine of the cases):
+
+- Each frequency `f = k * step` (both signs, `step = 1 / (N * interval)`, the interval from the X
+  column: X step 0.5 doubled the frequencies) is kept or removed, and the real part of the inverse
+  transform is the result. Low pass keeps `f <= cutoff`; high pass `f >= cutoff`; band pass
+  `freq1 <= f <= freq2` (`6 * 0.05` lies just above 0.3 in floating point and was removed, so `f`
+  is the product, not `k / (N * interval)`).
+- Band block removes `freq1 <= f < freq2 + step`: one frequency more than band pass keeps whenever
+  freq2 is not itself a frequency (0.12 to 0.28 removed 0.15 to 0.30 of 20 points; 0.1 to 0.3 of 16
+  points removed up to 0.3125).
+- Keep DC offset: the zero frequency stays in high pass, band pass and band block; off, it is removed
+  too.
+- Threshold keeps the frequencies whose magnitude `|X|` (unscaled FFT) is at least the threshold.
+- Low Pass Parabolic weights `1` up to `pass`, `1 - ((f - pass) / (stop - pass))^2` up to `stop`, 0
+  above. In two cases the one frequency at a quarter of the sampling rate came out a little
+  different from this (0.31 and 0.434 instead of 0.4375, with a small imaginary part); not copied.
+- Automatic values: cutoff (low and high pass), freq1, pass = a quarter of the Nyquist frequency;
+  freq2, stop = three quarters; threshold = a tenth of the largest `|X|`, zero frequency included
+  (designed spectra: largest 100 removed up to 9 and kept 10; largest 50 removed up to 4).
+
+Sheaf: `sheaf_calc::fft_filter`, `Tool::FftFilter(FftFilterSpec)`, a new column beside each input
+(or a new sheet or existing columns, the Output node). Command line: `sheaf analyze fft-filter FILE
+--y B [--type low-pass|high-pass|band-pass|band-block|threshold|parabolic] [--cutoff F] [--freq1 F
+--freq2 F] [--threshold T] [--pass F --stop F] [--no-offset] [--interval D]`.
 
 ## Files
 

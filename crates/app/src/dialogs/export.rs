@@ -17,6 +17,7 @@ pub enum ExportFormat {
     Gif,
     Tga,
     Pcx,
+    Psd,
     Svg,
     Pdf,
     Eps,
@@ -24,7 +25,7 @@ pub enum ExportFormat {
 }
 
 impl ExportFormat {
-    const ALL: [ExportFormat; 11] = [
+    const ALL: [ExportFormat; 12] = [
         ExportFormat::Png,
         ExportFormat::Tiff,
         ExportFormat::Jpeg,
@@ -32,6 +33,7 @@ impl ExportFormat {
         ExportFormat::Gif,
         ExportFormat::Tga,
         ExportFormat::Pcx,
+        ExportFormat::Psd,
         ExportFormat::Svg,
         ExportFormat::Pdf,
         ExportFormat::Eps,
@@ -47,6 +49,7 @@ impl ExportFormat {
             ExportFormat::Gif => "gif",
             ExportFormat::Tga => "tga",
             ExportFormat::Pcx => "pcx",
+            ExportFormat::Psd => "psd",
             ExportFormat::Svg => "svg",
             ExportFormat::Pdf => "pdf",
             ExportFormat::Eps => "eps",
@@ -63,6 +66,7 @@ impl ExportFormat {
             ExportFormat::Gif => "Graphics Interchange Format",
             ExportFormat::Tga => "Truevision Targa",
             ExportFormat::Pcx => "ZSoft PC Paintbrush",
+            ExportFormat::Psd => "Photoshop Document",
             ExportFormat::Svg => "Scalable Vector Graphics",
             ExportFormat::Pdf => "Portable Document Format",
             ExportFormat::Eps => "Encapsulated PostScript",
@@ -81,16 +85,20 @@ impl ExportFormat {
                 | ExportFormat::Gif
                 | ExportFormat::Tga
                 | ExportFormat::Pcx
+                | ExportFormat::Psd
         )
     }
 
     /// The colour depths the format can store.
     fn depths(self) -> &'static [ColorDepth] {
         match self {
-            ExportFormat::Png | ExportFormat::Bmp | ExportFormat::Tga | ExportFormat::Pcx => {
-                &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8]
-            }
-            ExportFormat::Tiff | ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Png
+            | ExportFormat::Bmp
+            | ExportFormat::Tga
+            | ExportFormat::Pcx
+            | ExportFormat::Psd
+            | ExportFormat::Tiff => &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
             ExportFormat::Gif => &[ColorDepth::Colors256],
             _ => &[],
         }
@@ -634,6 +642,9 @@ impl ExportDialog {
                                     ui.end_row();
                                 }
                             });
+                            if self.format == ExportFormat::Psd {
+                                ui.small("Exports a flattened image, without editable graph layers.");
+                            }
                         });
                     });
                     if self.show_preview {

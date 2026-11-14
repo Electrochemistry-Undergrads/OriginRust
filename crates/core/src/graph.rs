@@ -7,7 +7,6 @@
 //! physical proportions on screen and in every export format.
 
 use crate::color::Color;
-pub use crate::graph_style::*;
 use crate::ids::{ColumnId, WindowId};
 use serde::{Deserialize, Serialize};
 
@@ -24,14 +23,7 @@ pub struct Graph {
 
 impl Graph {
     pub fn title(&self) -> String {
-        if self.long_name.is_empty() {
-            return self.name.clone();
-        }
-        match self.page.style.title_display {
-            TitleDisplay::Both => format!("{} - {}", self.name, self.long_name),
-            TitleDisplay::Name => self.name.clone(),
-            TitleDisplay::LongName => self.long_name.clone(),
-        }
+        if self.long_name.is_empty() { self.name.clone() } else { format!("{} - {}", self.name, self.long_name) }
     }
 
     /// Every column this graph reads.
@@ -42,9 +34,6 @@ impl Graph {
                 out.extend(p.x);
                 out.push(p.y);
                 out.extend(p.y_error);
-                if let LabelForm::Column { column } = p.details.labels.form {
-                    out.push(column);
-                }
             }
             for axis in [&layer.x_axis, &layer.y_axis] {
                 if let TickLabelSource::Column { column } = axis.tick_label_source {
@@ -94,6 +83,41 @@ impl Graph {
         }
     }
 
+    /// Links layer `index` to `parent`, or unlinks it with `None` (Plot Details > Link Axes Scales).
+    /// The layer keeps its place on the page: its frame is converted between fractions of the page
+    /// and fractions of the parent's frame. A new link starts with both scales the layer's own, as
+    /// Origin's tab does (None and None); a change of parent keeps them. A parent that cannot be
+    /// followed (a later layer, or one linked itself) is refused, and so is a link for a layer that
+    /// other layers are linked to.
+    pub fn set_link(&mut self, index: usize, parent: Option<usize>) -> bool {
+        if index >= self.layers.len() {
+            return false;
+        }
+        if let Some(p) = parent
+            && (p >= index || self.layers[p].link.is_some() || self.has_children(index))
+        {
+            return false;
+        }
+        let on_page = match self.link_parent(index) {
+            Some(p) => self.layers[index].frame.within(self.layers[p].frame),
+            None => self.layers[index].frame,
+        };
+        let layer = &mut self.layers[index];
+        let (x, y) = layer.link.map_or((ScaleLink::None, ScaleLink::None), |k| (k.x, k.y));
+        layer.link = parent.map(|parent| LayerLink { parent, x, y });
+        let frame = match parent {
+            Some(p) => on_page.relative_to(self.layers[p].frame),
+            None => on_page,
+        };
+        self.layers[index].frame = frame;
+        true
+    }
+
+    /// Whether another layer is linked to layer `index`.
+    pub fn has_children(&self, index: usize) -> bool {
+        self.layers.iter().enumerate().any(|(i, l)| i != index && l.link.is_some_and(|k| k.parent == index))
+    }
+
     /// The layers of layer `index`'s group that are drawn in the same frame as it (the same
     /// [`Graph::place`]), in layer order: a layer and its right Y layer, but not the other panels
     /// of a stack. Empty when there is no such layer.
@@ -121,75 +145,6 @@ impl Graph {
         (1..=plots_in(index)).map(|k| k.to_string()).collect()
     }
 
-    /// The layers that layer `index` may follow (Plot Details > Link Axes Scales): the earlier layers
-    /// that do not follow another layer themselves. Empty when another layer follows layer `index`,
-    /// since a chain of links is not followed (see [`Graph::link_parent`]).
-    pub fn linkable_parents(&self, index: usize) -> Vec<usize> {
-        let followed =
-            self.layers.iter().enumerate().any(|(j, l)| j != index && l.link.is_some_and(|k| k.parent == index));
-        if index >= self.layers.len() || followed {
-            return Vec::new();
-        }
-        (0..index).filter(|&p| self.layers[p].link.is_none()).collect()
-    }
-
-    /// Makes layer `index` follow layer `parent`, or stand alone with `None`. A layer that starts to
-    /// follow keeps its X and Y scales of its own (change them with the `x` and `y` of the link) and
-    /// covers the whole frame of its parent; a layer that stops following keeps the place it had on
-    /// the page. Returns false, changing nothing, when the link is not allowed (see
-    /// [`Graph::linkable_parents`]).
-    pub fn set_layer_link(&mut self, index: usize, parent: Option<usize>) -> bool {
-        let Some(parent) = parent else {
-            if self.layers.get(index).is_some_and(|l| l.link.is_some()) {
-                let place = self.link_parent(index).map(|p| {
-                    let (outer, f) = (self.layers[p].frame, self.layers[index].frame);
-                    Frame {
-                        left: outer.left + f.left * outer.width,
-                        top: outer.top + f.top * outer.height,
-                        width: f.width * outer.width,
-                        height: f.height * outer.height,
-                    }
-                });
-                let layer = &mut self.layers[index];
-                layer.link = None;
-                if let Some(place) = place {
-                    layer.frame = place;
-                }
-            }
-            return true;
-        };
-        if !self.linkable_parents(index).contains(&parent) {
-            return false;
-        }
-        let layer = &mut self.layers[index];
-        match &mut layer.link {
-            Some(link) => link.parent = parent,
-            None => {
-                layer.link = Some(LayerLink { parent, x: ScaleLink::None, y: ScaleLink::None });
-                layer.frame = Frame::WHOLE;
-            }
-        }
-        true
-    }
-
-    /// Gives the page a new size. With `keep_layer_size` the layers that stand on the page keep their
-    /// size and distance from the top left corner in points (their frames are fractions of the page,
-    /// so these are scaled back); without it they grow and shrink with the page. Layers that follow
-    /// another layer are fractions of it and need no change.
-    pub fn resize_page(&mut self, width_pt: f64, height_pt: f64, keep_layer_size: bool) {
-        if keep_layer_size && width_pt > 0.0 && height_pt > 0.0 {
-            let (kx, ky) = (self.page.width_pt / width_pt, self.page.height_pt / height_pt);
-            for layer in self.layers.iter_mut().filter(|l| l.link.is_none()) {
-                layer.frame.left *= kx;
-                layer.frame.width *= kx;
-                layer.frame.top *= ky;
-                layer.frame.height *= ky;
-            }
-        }
-        self.page.width_pt = width_pt;
-        self.page.height_pt = height_pt;
-    }
-
     /// The panels of the graph, in layer order: every layer except those drawn in the frame of an
     /// earlier layer of their group (a right Y layer is part of the panel it lies over). A graph
     /// with one layer, or a double-Y graph, has one panel.
@@ -212,14 +167,11 @@ pub struct Page {
     pub width_pt: f64,
     pub height_pt: f64,
     pub background: Color,
-    /// Units, border, window title and notes of the page (Plot Details > graph node).
-    #[serde(default, skip_serializing_if = "PageStyle::is_default")]
-    pub style: PageStyle,
 }
 
 impl Page {
     pub fn inches(width: f64, height: f64) -> Self {
-        Page { width_pt: width * 72.0, height_pt: height * 72.0, background: Color::WHITE, style: PageStyle::default() }
+        Page { width_pt: width * 72.0, height_pt: height * 72.0, background: Color::WHITE }
     }
 }
 
@@ -238,6 +190,32 @@ impl Frame {
     /// The whole rectangle it is measured in: the whole page, or the whole frame of the parent
     /// layer for a linked layer.
     pub const WHOLE: Frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
+
+    /// This frame, given as fractions of `outer`, as fractions of what `outer` is measured in.
+    pub fn within(self, outer: Frame) -> Frame {
+        Frame {
+            left: outer.left + self.left * outer.width,
+            top: outer.top + self.top * outer.height,
+            width: self.width * outer.width,
+            height: self.height * outer.height,
+        }
+    }
+
+    /// The inverse of [`Frame::within`]: this frame as fractions of `outer`. An empty `outer` side
+    /// leaves that side as it is.
+    pub fn relative_to(self, outer: Frame) -> Frame {
+        let (left, width) = if outer.width > 0.0 {
+            ((self.left - outer.left) / outer.width, self.width / outer.width)
+        } else {
+            (self.left, self.width)
+        };
+        let (top, height) = if outer.height > 0.0 {
+            ((self.top - outer.top) / outer.height, self.height / outer.height)
+        } else {
+            (self.top, self.height)
+        };
+        Frame { left, top, width, height }
+    }
 }
 
 /// One set of axes with the plots drawn in it.
@@ -282,15 +260,42 @@ pub struct Layer {
     /// angle and radius (graphing spec section 14.18).
     #[serde(default, skip_serializing_if = "Coords::is_cartesian")]
     pub coords: Coords,
-    /// The increment rules of the plots that follow the palette (Plot Details > Group).
-    #[serde(default, skip_serializing_if = "GroupRules::is_default")]
-    pub groups: GroupRules,
-    /// What the layer shows (Plot Details > layer > Display).
+    /// The colour behind the plot area (the Background tab of Origin's layer Plot Details,
+    /// "Color", None by default); `None` leaves the page showing through.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<Color>,
+    /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
+    /// [`Layer::palette`]'s mode).
+    #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
+    pub group_style: GroupStyle,
+    /// The Display tab of Origin's layer Plot Details (graphing spec 18).
     #[serde(default, skip_serializing_if = "LayerDisplay::is_default")]
     pub display: LayerDisplay,
-    /// The colour and border behind the plots (Plot Details > layer > Background).
-    #[serde(default, skip_serializing_if = "LayerBackground::is_default")]
-    pub background: LayerBackground,
+}
+
+/// What a layer draws and how (Origin's Display tab; defaults measured: data shown, clipped to the
+/// frame, grid under the data).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayerDisplay {
+    /// Show Elements: Data.
+    pub show_data: bool,
+    /// Clip Data to Frame.
+    pub clip_data: bool,
+    /// Grid on Top of Data.
+    #[serde(default)]
+    pub grid_on_top: bool,
+}
+
+impl Default for LayerDisplay {
+    fn default() -> Self {
+        LayerDisplay { show_data: true, clip_data: true, grid_on_top: false }
+    }
+}
+
+impl LayerDisplay {
+    pub fn is_default(&self) -> bool {
+        *self == LayerDisplay::default()
+    }
 }
 
 /// The coordinate system of a layer.
@@ -362,6 +367,27 @@ pub enum RadiusColumn {
     X,
 }
 
+/// The unit of the angle of a polar layer (Origin's Units of the angular axis).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AngleUnit {
+    /// A full turn is 360; the axis has a tick every 30 and plain number labels.
+    #[default]
+    Degrees,
+    /// A full turn is 2 pi; the axis has a tick every quarter of pi and labels like 0.25 and the pi sign.
+    Radians,
+}
+
+impl AngleUnit {
+    /// The angle of a full turn in this unit.
+    pub fn circle(self) -> f64 {
+        match self {
+            AngleUnit::Degrees => 360.0,
+            AngleUnit::Radians => std::f64::consts::TAU,
+        }
+    }
+}
+
 /// Settings of a polar layer (graphing spec section 14.18).
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolarCoords {
@@ -379,11 +405,24 @@ pub struct PolarCoords {
     /// polygons.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub radar: bool,
+    /// The unit the angle column is in (Origin's Units on the angular axis; degrees by default).
+    #[serde(default, skip_serializing_if = "is_default_angle_unit")]
+    pub angle_unit: AngleUnit,
+}
+
+fn is_default_angle_unit(u: &AngleUnit) -> bool {
+    *u == AngleUnit::Degrees
 }
 
 impl Default for PolarCoords {
     fn default() -> Self {
-        PolarCoords { radius: RadiusColumn::Y, zero_deg: 0.0, clockwise: false, radar: false }
+        PolarCoords {
+            radius: RadiusColumn::Y,
+            zero_deg: 0.0,
+            clockwise: false,
+            radar: false,
+            angle_unit: AngleUnit::Degrees,
+        }
     }
 }
 
@@ -399,10 +438,6 @@ pub struct BarSpacing {
     /// (-100 to 100). Negative values leave a gap between them; 100 puts them on top of each other.
     #[serde(default)]
     pub overlap_pct: f64,
-    /// Plot Details > Spacing > Width (in %): the bars at one X position together take this share of the
-    /// X spacing, which is the same as a gap of `100 - width`; it overrides `gap_pct` while set.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub width_pct: Option<f64>,
 }
 
 /// Origin's default gap between bars, in percent.
@@ -414,7 +449,7 @@ fn default_gap_pct() -> f64 {
 
 impl Default for BarSpacing {
     fn default() -> Self {
-        BarSpacing { gap_pct: DEFAULT_BAR_GAP_PCT, overlap_pct: 0.0, width_pct: None }
+        BarSpacing { gap_pct: DEFAULT_BAR_GAP_PCT, overlap_pct: 0.0 }
     }
 }
 
@@ -576,23 +611,78 @@ fn is_false(b: &bool) -> bool {
 }
 
 impl Layer {
-    /// The plots that follow the palette and the increment rules, in plot order: the members of the
-    /// layer's plot group (Plot Details > Group).
-    pub fn group_members(&self) -> Vec<usize> {
-        (0..self.plots.len()).filter(|&i| self.plots[i].auto_color).collect()
-    }
-
-    /// Styles the members of the group again from the layer's rules, unless the edit mode is
-    /// independent. Used when plots are added or removed: with a palette that spreads its colors over
-    /// the number of plots, every automatic color moves along. Colors chosen by hand are left alone.
+    /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
+    /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
+    /// spreads its colors over the number of plots, every automatic color moves along.
     ///
     /// A column plot gets the color as its fill only; its outline keeps its own color (black in
     /// the column template, as in Origin).
     pub fn recolor_automatic(&mut self) {
-        if self.groups.edit_mode == EditMode::Independent {
-            return;
+        let n = self.plots.len();
+        for (i, p) in self.plots.iter_mut().enumerate().filter(|(_, p)| p.auto_color) {
+            let c = self.palette.color(i, n);
+            if !p.kind.is_bar() {
+                p.line.color = c;
+            }
+            p.symbol.color = c;
         }
-        self.restyle_members();
+    }
+
+    /// Gives the plots their line styles, symbol shapes and interiors by the increments of
+    /// [`Layer::group_style`], starting from the first plot's, and their automatic colours.
+    pub fn apply_group_increments(&mut self) {
+        let Some(first) = self.plots.first() else { return };
+        let dash0 = Dash::ALL.iter().position(|d| *d == first.line.dash).unwrap_or(0);
+        let shape0 = SymbolShape::ALL.iter().position(|s| *s == first.symbol.shape).unwrap_or(0);
+        let filled0 = first.symbol.filled;
+        let g = self.group_style;
+        for (i, p) in self.plots.iter_mut().enumerate() {
+            if g.line_style == Increment::ByOne {
+                p.line.dash = Dash::ALL[(dash0 + i) % Dash::ALL.len()];
+            }
+            if g.symbol_type == Increment::ByOne {
+                p.symbol.shape = SymbolShape::ALL[(shape0 + i) % SymbolShape::ALL.len()];
+            }
+            if g.symbol_interior == Increment::ByOne {
+                p.symbol.filled = if i % 2 == 0 { filled0 } else { !filled0 };
+            }
+        }
+        self.recolor_automatic();
+    }
+
+    /// Origin's Dependent edit mode: the line, symbol and decorations of plot `leader` are given to
+    /// every plot of the layer, except the properties that are incremented (colours unless the
+    /// colour increment is None), then the increments are applied again from the first plot.
+    pub fn follow_leader(&mut self, leader: usize) {
+        let Some(src) = self.plots.get(leader).cloned() else { return };
+        let g = self.group_style;
+        let same_color = self.palette.mode == PaletteMode::Same;
+        for (i, q) in self.plots.iter_mut().enumerate() {
+            if i == leader {
+                continue;
+            }
+            q.line.width_pt = src.line.width_pt;
+            q.line.connect = src.line.connect;
+            if g.line_style == Increment::None {
+                q.line.dash = src.line.dash;
+            }
+            q.symbol.size_pt = src.symbol.size_pt;
+            if g.symbol_type == Increment::None {
+                q.symbol.shape = src.symbol.shape;
+            }
+            if g.symbol_interior == Increment::None {
+                q.symbol.filled = src.symbol.filled;
+            }
+            q.decor.drop = src.decor.drop.clone();
+            q.decor.labels = src.decor.labels.clone();
+            q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
+            if same_color {
+                q.line.color = src.line.color;
+                q.symbol.color = src.symbol.color;
+                q.auto_color = src.auto_color;
+            }
+        }
+        self.apply_group_increments();
     }
 
     /// Recolors all plots from the palette, in plot order, including colors chosen by hand
@@ -601,74 +691,7 @@ impl Layer {
         for p in &mut self.plots {
             p.auto_color = true;
         }
-        self.restyle_members();
-    }
-
-    /// Gives every member of the group its colour, line style and symbol shape from the rules. The
-    /// first member keeps its own line style and symbol shape (they are where the lists start).
-    fn restyle_members(&mut self) {
-        let members = self.group_members();
-        let n = members.len();
-        let Some(&first) = members.first() else { return };
-        let (base_dash, base_shape) = (self.plots[first].line.dash, self.plots[first].symbol.shape);
-        let rules = self.groups;
-        for (k, &i) in members.iter().enumerate() {
-            let ((c, cn), line_step, shape_step) = rules.steps(k, n);
-            let color = self.palette.color(c, cn);
-            let p = &mut self.plots[i];
-            if !p.kind.is_bar() {
-                p.line.color = color;
-                if rules.line_style == Increment::ByOne {
-                    p.line.dash = rules.dash_at(base_dash, line_step);
-                }
-            }
-            p.symbol.color = color;
-            if rules.symbol_shape == Increment::ByOne {
-                p.symbol.shape = rules.shape_at(base_shape, shape_step);
-            }
-        }
-    }
-
-    /// Sets the line style of plot `index`. In a dependent group whose rule for the line style is
-    /// "By One" and where the plot is a member, the other members move with it: the list is shifted
-    /// so that this plot has the chosen style and the others follow by their steps. With any other
-    /// rule only this plot changes.
-    pub fn set_line_dash(&mut self, index: usize, dash: Dash) {
-        let members = self.group_members();
-        let k = members.iter().position(|&i| i == index);
-        let (Some(k), true) = (k, self.dependent() && self.groups.line_style == Increment::ByOne) else {
-            if let Some(p) = self.plots.get_mut(index) {
-                p.line.dash = dash;
-            }
-            return;
-        };
-        let (_, step, _) = self.groups.steps(k, members.len());
-        let n = Dash::ALL.len();
-        let at = Dash::ALL.iter().position(|d| *d == dash).unwrap_or(0);
-        self.plots[members[0]].line.dash = Dash::ALL[(at + n - step % n) % n];
-        self.restyle_members();
-    }
-
-    /// Sets the symbol shape of plot `index`, moving the other members of a dependent group with it
-    /// (see [`Layer::set_line_dash`]).
-    pub fn set_symbol_shape(&mut self, index: usize, shape: SymbolShape) {
-        let members = self.group_members();
-        let k = members.iter().position(|&i| i == index);
-        let (Some(k), true) = (k, self.dependent() && self.groups.symbol_shape == Increment::ByOne) else {
-            if let Some(p) = self.plots.get_mut(index) {
-                p.symbol.shape = shape;
-            }
-            return;
-        };
-        let (_, _, step) = self.groups.steps(k, members.len());
-        let n = SymbolShape::ALL.len();
-        let at = SymbolShape::ALL.iter().position(|d| *d == shape).unwrap_or(0);
-        self.plots[members[0]].symbol.shape = SymbolShape::ALL[(at + n - step % n) % n];
-        self.restyle_members();
-    }
-
-    fn dependent(&self) -> bool {
-        self.groups.edit_mode == EditMode::Dependent
+        self.recolor_automatic();
     }
 
     /// The stack settings of the curves of Y column `column`, if any were stored.
@@ -1121,6 +1144,12 @@ impl PlotKind {
         )
     }
 
+    /// True for the floating column and floating bar kinds: every plot is a bar between two columns,
+    /// and all the plots of a layer stand in the same slot, on top of each other (measured, spec 14.12).
+    pub fn is_floating(&self) -> bool {
+        matches!(self, PlotKind::FloatingColumn | PlotKind::FloatingBar)
+    }
+
     /// True for the piled area kinds.
     pub fn is_stacked_area(&self) -> bool {
         matches!(self, PlotKind::StackedArea | PlotKind::Stacked100Area)
@@ -1210,9 +1239,123 @@ pub struct Plot {
     /// A colour mapped plot: the symbol of each point takes its colour from this column's value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_from: Option<ColumnId>,
-    /// Transparency, fills, drop lines and data labels (Plot Details tabs).
-    #[serde(default, skip_serializing_if = "PlotDetails::is_default")]
-    pub details: PlotDetails,
+    /// Drop lines, the fill under the curve and data labels (the Drop Lines, Line and Label tabs
+    /// of Origin's Plot Details; graphing spec section 18).
+    #[serde(default, skip_serializing_if = "PlotDecor::is_default")]
+    pub decor: PlotDecor,
+}
+
+/// What a plot draws besides its line, symbols, bars and error bars.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct PlotDecor {
+    /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
+    #[serde(default, skip_serializing_if = "DropLines::is_default")]
+    pub drop: DropLines,
+    /// Origin's "Fill Area Under Curve" in its "Normal" mode: the area between the curve and the
+    /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_under: Option<Color>,
+    /// The text written next to each point.
+    #[serde(default, skip_serializing_if = "DataLabels::is_default")]
+    pub labels: DataLabels,
+}
+
+impl PlotDecor {
+    pub fn is_default(&self) -> bool {
+        *self == PlotDecor::default()
+    }
+}
+
+/// A drop line; drawn when `on`. Origin's defaults: off, solid, 0.5 pt, colour Auto (the plot's).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DropLine {
+    pub on: bool,
+    #[serde(default)]
+    pub dash: Dash,
+    pub width_pt: f64,
+    /// `None` is Origin's "Auto": the colour of the plot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+}
+
+impl Default for DropLine {
+    fn default() -> Self {
+        DropLine { on: false, dash: Dash::Solid, width_pt: 0.5, color: None }
+    }
+}
+
+/// The two drop lines of a plot.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct DropLines {
+    /// From the point across to the Y axis.
+    #[serde(default)]
+    pub horizontal: DropLine,
+    /// From the point down to the X axis.
+    #[serde(default)]
+    pub vertical: DropLine,
+}
+
+impl DropLines {
+    pub fn is_default(&self) -> bool {
+        *self == DropLines::default()
+    }
+}
+
+/// What a data label says (Origin's "Label Form"; Y by default).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelForm {
+    X,
+    #[default]
+    Y,
+    /// Origin's "Row Indices": the row number counting from 1.
+    Row,
+    /// "(X,Y)".
+    XY,
+}
+
+/// Where a data label stands against its point (Origin's "Position"; Right by default).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelPosition {
+    Center,
+    Left,
+    #[default]
+    Right,
+    Above,
+    Below,
+}
+
+/// The data labels of a plot (Origin's Label tab: off, Arial 22 black, form Y, position Right).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DataLabels {
+    pub enable: bool,
+    #[serde(default)]
+    pub form: LabelForm,
+    #[serde(default)]
+    pub position: LabelPosition,
+    pub font: Font,
+    /// Counter-clockwise rotation in degrees.
+    #[serde(default)]
+    pub rotate_deg: f64,
+}
+
+impl Default for DataLabels {
+    fn default() -> Self {
+        DataLabels {
+            enable: false,
+            form: LabelForm::Y,
+            position: LabelPosition::Right,
+            font: Font::new("Arial", 22.0),
+            rotate_deg: 0.0,
+        }
+    }
+}
+
+impl DataLabels {
+    pub fn is_default(&self) -> bool {
+        *self == DataLabels::default()
+    }
 }
 
 /// Which side of the point an error bar reaches.
@@ -1345,14 +1488,58 @@ pub struct Palette {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaletteMode {
-    /// Every plot takes the first color (Origin's colour increment "None").
-    Fixed,
     /// Plot `i` takes color `i`, wrapping around at the end of the list.
     Cycle,
     /// Colors run as a gradient through the list: the first plot takes the
     /// first color and the last plot the last color, whatever the number of
     /// plots. Good for a sequence of scans that should read as one family.
     Spread,
+    /// Every plot takes the first color (Origin's Line Color increment "None").
+    Same,
+}
+
+/// How a property of the plots of a group changes from one member to the next (the Increment
+/// column of Origin's Group tab).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Increment {
+    /// Every member keeps the same value.
+    #[default]
+    None,
+    /// Member k takes the k-th next entry of the list, from the first member's value.
+    ByOne,
+}
+
+/// The Group tab of a layer whose plots form one group (Origin's defaults for a group made by
+/// one plot command: Dependent, Line Color by one (the palette), the rest None; graphing spec 18).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupStyle {
+    /// Dependent: a change to one member's line, symbol or decorations is made to every member,
+    /// except for the incremented properties. Independent: each plot is edited alone.
+    pub dependent: bool,
+    #[serde(default)]
+    pub line_style: Increment,
+    #[serde(default)]
+    pub symbol_type: Increment,
+    #[serde(default)]
+    pub symbol_interior: Increment,
+}
+
+impl Default for GroupStyle {
+    fn default() -> Self {
+        GroupStyle {
+            dependent: true,
+            line_style: Increment::None,
+            symbol_type: Increment::None,
+            symbol_interior: Increment::None,
+        }
+    }
+}
+
+impl GroupStyle {
+    pub fn is_default(&self) -> bool {
+        *self == GroupStyle::default()
+    }
 }
 
 impl Palette {
@@ -1362,8 +1549,8 @@ impl Palette {
             return Color::BLACK;
         }
         match self.mode {
-            PaletteMode::Fixed => self.colors[0],
             PaletteMode::Cycle => self.colors[index % self.colors.len()],
+            PaletteMode::Same => self.colors[0],
             PaletteMode::Spread => {
                 let k = self.colors.len();
                 if k == 1 || count <= 1 {
@@ -1538,7 +1725,7 @@ mod tests {
             assert_eq!(axis.tick_label_source, TickLabelSource::Auto);
             assert_eq!(axis.tick_label_angle_deg, 0.0);
         }
-        assert_eq!(layer.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0, width_pct: None });
+        assert_eq!(layer.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
         // Saved again, none of the new keys is written, and it reads back equal.
         let json = serde_json::to_string(&layer).unwrap();
         for key in ["tick_label_source", "tick_label_angle_deg", "\"bars\""] {
@@ -1562,7 +1749,7 @@ mod tests {
         assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), layer);
         // A bar entry with only one of its numbers takes the default for the other.
         let bars: BarSpacing = serde_json::from_str(r#"{"overlap_pct":-50.0}"#).unwrap();
-        assert_eq!(bars, BarSpacing { gap_pct: 20.0, overlap_pct: -50.0, width_pct: None });
+        assert_eq!(bars, BarSpacing { gap_pct: 20.0, overlap_pct: -50.0 });
         assert_eq!(serde_json::from_str::<TickLabelSource>(r#"{"kind":"auto"}"#).unwrap(), TickLabelSource::Auto);
     }
 
@@ -1625,7 +1812,7 @@ mod tests {
             hist: Default::default(),
             size_from: None,
             color_from: None,
-            details: PlotDetails::default(),
+            decor: Default::default(),
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1641,6 +1828,54 @@ mod tests {
         layer.plots[0].line.color = Color::BLUE;
         layer.recolor_automatic();
         assert_eq!(layer.plots[0].line.color, Color::BLACK);
+    }
+
+    #[test]
+    fn group_increments_run_from_the_first_plot_and_dependent_edits_reach_every_plot() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE], mode: PaletteMode::Cycle };
+        let plot = Plot {
+            x: None,
+            y: ColumnId(1),
+            y_error: None,
+            rows: None,
+            kind: PlotKind::LineSymbol,
+            line: LineStyle::solid(Color::BLACK, 0.5),
+            symbol: layer.default_symbol.clone(),
+            label: None,
+            visible: true,
+            auto_color: true,
+            group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
+            decor: Default::default(),
+        };
+        layer.plots = vec![plot.clone(), plot.clone(), plot];
+        assert!(layer.group_style.dependent, "Origin's default edit mode");
+        layer.group_style.line_style = Increment::ByOne;
+        layer.group_style.symbol_type = Increment::ByOne;
+        layer.apply_group_increments();
+        let dashes: Vec<Dash> = layer.plots.iter().map(|q| q.line.dash).collect();
+        assert_eq!(dashes, Dash::ALL[..3]);
+        // The shapes run on from the first plot's (a circle here).
+        let shapes: Vec<SymbolShape> = layer.plots.iter().map(|q| q.symbol.shape).collect();
+        assert_eq!(shapes, SymbolShape::ALL[1..4]);
+        let colors: Vec<Color> = layer.plots.iter().map(|q| q.line.color).collect();
+        assert_eq!(colors, [Color::BLACK, Color::RED, Color::BLUE]);
+        // Dependent: plot 2's new width and drop line go to all; the increments stay.
+        layer.plots[1].line.width_pt = 3.0;
+        layer.plots[1].decor.drop.vertical.on = true;
+        layer.follow_leader(1);
+        assert!(layer.plots.iter().all(|q| q.line.width_pt == 3.0 && q.decor.drop.vertical.on));
+        assert_eq!(layer.plots.iter().map(|q| q.line.dash).collect::<Vec<_>>(), Dash::ALL[..3]);
+        // Colour increment None: every plot takes the first colour.
+        layer.palette.mode = PaletteMode::Same;
+        layer.apply_group_increments();
+        assert!(layer.plots.iter().all(|q| q.line.color == Color::BLACK));
     }
 
     #[test]
@@ -1660,6 +1895,35 @@ mod tests {
             })
             .collect();
         Graph { id: WindowId(1), name: "G".into(), long_name: String::new(), page: Page::inches(6.4, 4.8), layers }
+    }
+
+    #[test]
+    fn set_link_keeps_the_layer_in_place_and_starts_with_unlinked_scales() {
+        let mut g = graph_of(&[None, None, None]);
+        g.layers[0].frame = Frame { left: 0.2, top: 0.1, width: 0.5, height: 0.8 };
+        g.layers[1].frame = Frame { left: 0.3, top: 0.3, width: 0.25, height: 0.4 };
+        let on_page = g.layers[1].frame;
+        assert!(g.set_link(1, Some(0)));
+        assert_eq!(g.layers[1].link, Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None }));
+        let f = g.layers[1].frame;
+        assert!((f.left - 0.2).abs() < 1e-12 && (f.width - 0.5).abs() < 1e-12, "{f:?}");
+        assert!((f.top - 0.25).abs() < 1e-12 && (f.height - 0.5).abs() < 1e-12, "{f:?}");
+        g.layers[1].link.as_mut().unwrap().x = ScaleLink::Straight;
+        // Unlinking a layer that is not linked changes nothing; layer 1 cannot follow a later layer,
+        // and nothing can follow layer 1 while it is linked itself.
+        assert!(g.set_link(0, None) && g.layers[0].link.is_none());
+        assert!(!g.set_link(1, Some(2)));
+        assert!(!g.set_link(2, Some(1)), "layer 1 is linked itself");
+        assert!(!g.set_link(0, Some(0)));
+        // Unlinked again, it is where it was on the page.
+        assert!(g.set_link(1, None));
+        assert_eq!(g.layers[1].link, None);
+        let f = g.layers[1].frame;
+        for (a, b) in
+            [(f.left, on_page.left), (f.top, on_page.top), (f.width, on_page.width), (f.height, on_page.height)]
+        {
+            assert!((a - b).abs() < 1e-12, "{f:?}");
+        }
     }
 
     #[test]
@@ -1705,7 +1969,7 @@ mod tests {
             hist: Default::default(),
             size_from: None,
             color_from: None,
-            details: PlotDetails::default(),
+            decor: Default::default(),
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);
@@ -1776,239 +2040,5 @@ mod ternary_tests {
         assert_eq!(&back, layer);
         assert!(back.coords.polar().is_none());
         assert_eq!(Template::from_name("ternary"), Some(Template::Ternary));
-    }
-}
-
-#[cfg(test)]
-mod detail_tests {
-    use super::*;
-    use crate::template::Template;
-
-    fn plot(y: u64) -> Plot {
-        Plot {
-            x: None,
-            y: ColumnId(y),
-            y_error: None,
-            rows: None,
-            kind: PlotKind::LineSymbol,
-            line: LineStyle::solid(Color::BLACK, 1.0),
-            symbol: SymbolStyle {
-                shape: SymbolShape::Square,
-                size_pt: 5.0,
-                color: Color::BLACK,
-                filled: true,
-                edge_width_pt: 0.5,
-                every: 1,
-            },
-            label: None,
-            visible: true,
-            auto_color: true,
-            group: None,
-            x_error: None,
-            y_base: None,
-            error: ErrorStyle::default(),
-            hist: Default::default(),
-            size_from: None,
-            color_from: None,
-            details: PlotDetails::default(),
-        }
-    }
-
-    fn layer_of(n: u64) -> Layer {
-        let mut layer = Template::Line.new_graph(WindowId(1), "G").layers.remove(0);
-        layer.palette =
-            Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE, Color::WHITE], mode: PaletteMode::Cycle };
-        layer.plots = (1..=n).map(plot).collect();
-        layer
-    }
-
-    #[test]
-    fn a_bar_width_is_written_only_when_set() {
-        let mut g = Template::Line.new_graph(WindowId(1), "G");
-        assert!(!serde_json::to_string(&g).unwrap().contains("width_pct"));
-        g.layers[0].bars.width_pct = Some(70.0);
-        let json = serde_json::to_string(&g).unwrap();
-        assert!(json.contains(r#""width_pct":70.0"#), "{json}");
-        assert_eq!(serde_json::from_str::<Graph>(&json).unwrap(), g);
-    }
-
-    #[test]
-    fn a_data_label_column_is_a_referenced_column() {
-        let mut g = Template::Line.new_graph(WindowId(1), "G");
-        g.layers[0].plots.push(plot(1));
-        g.layers[0].plots[0].details.labels.form = LabelForm::Column { column: ColumnId(77) };
-        assert_eq!(g.referenced_columns(), vec![ColumnId(1), ColumnId(77)]);
-    }
-
-    #[test]
-    fn a_graph_without_the_new_settings_is_written_as_before() {
-        let g = Template::Line.new_graph(WindowId(1), "G");
-        let json = serde_json::to_string(&g).unwrap();
-        for key in ["groups", "display", "\"background\":{", "details", "\"style\""] {
-            assert!(!json.contains(key), "{key} in {json}");
-        }
-        assert_eq!(serde_json::from_str::<Graph>(&json).unwrap(), g);
-    }
-
-    #[test]
-    fn the_new_settings_are_written_when_set_and_read_back() {
-        let mut g = Template::Line.new_graph(WindowId(1), "G");
-        let l = &mut g.layers[0];
-        l.plots.push(plot(1));
-        l.plots[0].details.line_transparency_pct = 30;
-        l.plots[0].details.fill_under = true;
-        l.groups.line_style = Increment::ByOne;
-        l.groups.subgrouping = Subgrouping::BySize { size: 3 };
-        l.display.show_axes = false;
-        l.background = LayerBackground {
-            color: Some(Color::rgb(240, 240, 255)),
-            transparency_pct: 10,
-            gradient: Some(Gradient::new(Color::WHITE)),
-            border: Some(BorderStyle::solid(Color::BLACK, 1.0)),
-        };
-        g.page.style.units = LengthUnit::Centimetre;
-        g.page.style.border = Some(BorderStyle::solid(Color::BLACK, 0.5));
-        g.page.style.comments = "notes".into();
-        let json = serde_json::to_string(&g).unwrap();
-        assert_eq!(serde_json::from_str::<Graph>(&json).unwrap(), g);
-        assert!(json.contains(r#""line_transparency_pct":30"#) && json.contains(r#""units":"centimetre""#), "{json}");
-    }
-
-    #[test]
-    fn a_page_written_without_a_style_loads_with_the_defaults() {
-        let page: Page =
-            serde_json::from_str(r##"{"width_pt": 450.0, "height_pt": 300.0, "background": "#FFFFFF"}"##).unwrap();
-        assert_eq!(page.style, PageStyle::default());
-        assert!(page.style.layer_icons);
-    }
-
-    #[test]
-    fn the_title_follows_the_display_choice() {
-        let mut g = Template::Line.new_graph(WindowId(1), "Graph1");
-        assert_eq!(g.title(), "Graph1");
-        g.long_name = "Scan".into();
-        assert_eq!(g.title(), "Graph1 - Scan");
-        g.page.style.title_display = TitleDisplay::LongName;
-        assert_eq!(g.title(), "Scan");
-        g.page.style.title_display = TitleDisplay::Name;
-        assert_eq!(g.title(), "Graph1");
-    }
-
-    #[test]
-    fn by_one_line_styles_start_at_the_first_member_and_follow_it() {
-        let mut l = layer_of(4);
-        l.groups.line_style = Increment::ByOne;
-        l.plots[0].line.dash = Dash::Dash;
-        l.apply_palette();
-        let dashes: Vec<Dash> = l.plots.iter().map(|p| p.line.dash).collect();
-        assert_eq!(dashes, [Dash::Dash, Dash::Dot, Dash::DashDot, Dash::DashDotDot]);
-        // Changing the third plot in a dependent group moves the whole list.
-        l.set_line_dash(2, Dash::Solid);
-        let dashes: Vec<Dash> = l.plots.iter().map(|p| p.line.dash).collect();
-        assert_eq!(dashes, [Dash::ShortDot, Dash::ShortDashDot, Dash::Solid, Dash::Dash]);
-    }
-
-    #[test]
-    fn without_a_line_style_rule_only_the_chosen_plot_changes() {
-        let mut l = layer_of(3);
-        l.set_line_dash(1, Dash::Dot);
-        let dashes: Vec<Dash> = l.plots.iter().map(|p| p.line.dash).collect();
-        assert_eq!(dashes, [Dash::Solid, Dash::Dot, Dash::Solid]);
-        l.apply_palette();
-        assert_eq!(l.plots[1].line.dash, Dash::Dot, "no rule: recolouring leaves the line style");
-    }
-
-    #[test]
-    fn symbol_shapes_step_and_an_independent_group_is_not_restyled_by_adding_plots() {
-        let mut l = layer_of(3);
-        l.groups.symbol_shape = Increment::ByOne;
-        l.apply_palette();
-        let shapes: Vec<SymbolShape> = l.plots.iter().map(|p| p.symbol.shape).collect();
-        assert_eq!(shapes, [SymbolShape::Square, SymbolShape::Circle, SymbolShape::TriangleUp]);
-        l.set_symbol_shape(1, SymbolShape::Star);
-        assert_eq!(l.plots[0].symbol.shape, SymbolShape::Cross);
-        assert_eq!(l.plots[2].symbol.shape, SymbolShape::Square);
-        // Independent: a plot added later keeps what it has; "Recolor plots" still styles all.
-        l.groups.edit_mode = EditMode::Independent;
-        l.plots.push(plot(9));
-        l.recolor_automatic();
-        assert_eq!(l.plots[3].symbol.color, Color::BLACK);
-        l.apply_palette();
-        assert_eq!(l.plots[3].symbol.color, Color::WHITE, "palette index 3 of 4 colours");
-        l.set_symbol_shape(0, SymbolShape::Diamond);
-        assert_eq!(l.plots[1].symbol.shape, SymbolShape::Star, "independent: only plot 0 changes");
-    }
-
-    #[test]
-    fn the_palette_modes_include_no_step() {
-        let mut l = layer_of(3);
-        l.palette.mode = PaletteMode::Fixed;
-        l.apply_palette();
-        assert!(l.plots.iter().all(|p| p.line.color == Color::BLACK));
-        l.palette.mode = PaletteMode::Spread;
-        l.apply_palette();
-        assert_eq!(l.plots[2].line.color, Color::WHITE);
-    }
-
-    #[test]
-    fn subgroups_step_one_property_across_them_and_the_others_inside() {
-        let mut l = layer_of(4);
-        l.groups.line_style = Increment::ByOne;
-        l.groups.subgrouping = Subgrouping::BySize { size: 2 };
-        l.groups.subgroup_on = SubgroupOn::LineStyle;
-        l.apply_palette();
-        // Colours restart in each subgroup (palette of two steps: black, red ... blue by Cycle).
-        let colors: Vec<Color> = l.plots.iter().map(|p| p.line.color).collect();
-        assert_eq!(colors, [Color::BLACK, Color::RED, Color::BLACK, Color::RED]);
-        let dashes: Vec<Dash> = l.plots.iter().map(|p| p.line.dash).collect();
-        assert_eq!(dashes, [Dash::Solid, Dash::Solid, Dash::Dash, Dash::Dash]);
-    }
-
-    #[test]
-    fn group_members_are_the_plots_that_follow_the_palette() {
-        let mut l = layer_of(3);
-        l.plots[1].auto_color = false;
-        assert_eq!(l.group_members(), vec![0, 2]);
-    }
-
-    #[test]
-    fn a_layer_follows_an_earlier_unlinked_layer_and_leaves_it_in_place() {
-        let mut g = Template::Line.new_graph(WindowId(1), "G");
-        for _ in 0..2 {
-            let l = g.layers[0].clone();
-            g.layers.push(l);
-        }
-        g.layers[1].frame = Frame { left: 0.2, top: 0.1, width: 0.5, height: 0.6 };
-        assert_eq!(g.linkable_parents(0), Vec::<usize>::new());
-        assert_eq!(g.linkable_parents(2), vec![0, 1]);
-        assert!(g.set_layer_link(1, Some(0)));
-        assert_eq!(g.layers[1].link, Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None }));
-        assert_eq!(g.layers[1].frame, Frame::WHOLE);
-        assert_eq!(g.linkable_parents(2), vec![0], "layer 1 follows layer 0 now");
-        assert_eq!(g.linkable_parents(0), Vec::<usize>::new(), "layer 0 is followed");
-        assert!(!g.set_layer_link(2, Some(1)), "a chain is not allowed");
-        assert!(!g.set_layer_link(0, Some(2)), "only earlier layers");
-        // Unlinking keeps the place on the page.
-        let root = g.layers[0].frame;
-        g.layers[1].frame = Frame { left: 0.0, top: 0.5, width: 1.0, height: 0.5 };
-        assert!(g.set_layer_link(1, None));
-        assert_eq!(g.layers[1].link, None);
-        let f = g.layers[1].frame;
-        assert!((f.top - (root.top + 0.5 * root.height)).abs() < 1e-12 && (f.height - 0.5 * root.height).abs() < 1e-12);
-    }
-
-    #[test]
-    fn resizing_the_page_can_keep_the_layers_the_same_size() {
-        let mut g = Template::Line.new_graph(WindowId(1), "G");
-        let (w, h) = (g.page.width_pt, g.page.height_pt);
-        let f = g.layers[0].frame;
-        let mut scaled = g.clone();
-        scaled.resize_page(w * 2.0, h, false);
-        assert_eq!(scaled.layers[0].frame, f, "fractions stay: the layer grows with the page");
-        g.resize_page(w * 2.0, h, true);
-        let kept = g.layers[0].frame;
-        assert!((kept.width * g.page.width_pt - f.width * w).abs() < 1e-9, "the layer keeps its width in points");
-        assert!((kept.left * g.page.width_pt - f.left * w).abs() < 1e-9);
-        assert_eq!((kept.top, kept.height), (f.top, f.height));
     }
 }

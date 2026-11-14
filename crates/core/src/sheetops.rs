@@ -242,6 +242,18 @@ impl Project {
         keys: &[SortKey],
         columns: &[ColumnId],
     ) -> Result<(), AnalysisError> {
+        self.sort_nested_in_rows(book, sheet, keys, columns, 0..usize::MAX)
+    }
+
+    /// Nested sort restricted to a row interval. Rows outside it keep their values and masks.
+    pub fn sort_nested_in_rows(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        keys: &[SortKey],
+        columns: &[ColumnId],
+        rows: Range<usize>,
+    ) -> Result<(), AnalysisError> {
         let ws = self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or(AnalysisError::NoSuchSheet)?;
         let mut levels = Vec::new();
         for k in keys {
@@ -253,7 +265,9 @@ impl Project {
         let n = ws.row_count();
         let comparators: Vec<_> = levels.iter().map(|(c, d)| row_comparator(&c.data, n, *d)).collect();
         let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by(|a, b| {
+        let end = rows.end.min(n);
+        let start = rows.start.min(end);
+        order[start..end].sort_by(|a, b| {
             comparators.iter().map(|cmp| cmp(*a, *b)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)
         });
         drop(comparators);

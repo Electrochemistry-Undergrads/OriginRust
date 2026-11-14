@@ -590,17 +590,6 @@ disabled controls are grey; blue bold text marks a hint or a state message.
     "Scaling Factor" (grey).
   - Label: like the line plot's, but Position is Center, Margin 10 and an extra tick "Hide Label
     if Column/Bar Height Less than (%)" (3).
-- **Sheaf's Plot Details, Layer Contents and Plot Setup, T13** (from the list above and the brief; not
-  compared with Origin side by side, to be done on the Windows machine). Plot Details has the tabs
-  of the two Origin pages above plus Symbol (when the plot has symbols) and Error Bar; line plots: Group,
-  Line, Symbol, Drop Lines, Label, Offset; columns: Group, Pattern, Spacing, Label; layer node: Background,
-  Size, Display, Stack, Link Axes Scales, Legend (Legend is Sheaf's own place for the legend text); page
-  node: Print/Dimensions, Legends/Titles, Miscellaneous, Display, Text (Text is Sheaf's own). Under the
-  tree: Plot Type, ">>" (side panel with the rows of the plot) and Workbook, then OK, Cancel, Apply. Sheaf's
-  extra Left/Right Y choice stays on the Group tab. Layer Contents and Plot Setup are separate windows
-  (F12 and the layer icon). The window is 900 x 560 (Origin about 1005 x 650); Layer Contents 780 x 470,
-  Plot Setup 820 x 420 (sizes not measured). Not measured: the exact rows and order of every tab, the
-  window size, what ">>" shows, the button rows of Layer Contents and Plot Setup.
 - **Axis dialog**, double-click on the left axis [seen, `gdlg-axis.png`; seen 2, `ax-*.png`]. Title
   "Y Axis - Layer 1", "?" and close X, about 605 x 610 px, centred on the main window. A narrow
   list at the left (about 75 px) holds one big icon button per target, selected one in blue, and
@@ -669,7 +658,7 @@ the old tabbed app and is in git history). Element by element gaps are listed in
 | Two rows of toolbars, a Tools toolbar at the left, 2D Graphs toolbar at the bottom, Object Edit at the right | Standard, Edit, Format (all greyed), Graph, 2D Graphs and Tools bars with fewer buttons; no separate Column, Worksheet Data, Style and other bars |
 | Column label rows Long Name, Units, Comments, F(x)= (and Sparklines) over the data; label "A(X1)" | Long Name, Units, Comments and F(x)= rows; "A(X1)" with group numbers; values with 5 decimals (General). Sparklines and Parameters rows missing; label rows cannot be hidden |
 | Status bar with data statistics, AU, angle unit, active object | Average/Sum/Count, AU : ON, reference and Radian boxes; reference lacks Origin's `1: ` prefix and `col[r1:r2]` range |
-| Plot Details dialog with layer/plot tree on the left, tabs; axis dialog with Horizontal/Vertical list | Same layout with OK/Cancel/Apply, Workbook and ">>"; the tabs of audit B are in place (T13, not measured against Origin, see graphing.md 18), separate Layer Contents and Plot Setup windows |
+| Plot Details dialog with layer/plot tree on the left, tabs; axis dialog with Horizontal/Vertical list | Same layout with OK/Cancel/Apply; several tabs and controls missing (audit B) |
 | Light, small, flat Windows controls (9 pt Segoe UI), grey workspace | Light theme, Segoe UI from the Windows font folder when present, grey workspace |
 
 

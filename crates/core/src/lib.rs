@@ -18,7 +18,6 @@ pub mod fitting;
 pub mod format;
 pub mod formula;
 pub mod graph;
-pub mod graph_style;
 pub mod history;
 pub mod ids;
 pub mod localtime;

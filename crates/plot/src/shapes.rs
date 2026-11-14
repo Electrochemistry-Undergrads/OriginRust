@@ -153,7 +153,7 @@ mod tests {
         let s = Shape::new(ShapeKind::Rectangle, (0.75, 0.5), (0.25, 0.1));
         let Item::Path { d, fill, .. } = &shape_items(&s, F)[0] else { panic!() };
         assert_eq!(d, "M200 70L400 70L400 150L200 150Z");
-        assert!(fill.is_none());
+        assert_eq!(*fill, Some(Shape::DEFAULT_RECT_FILL), "Origin's Rectangle tool fills LT Gray");
         let e = Shape::new(ShapeKind::Ellipse, (0.25, 0.1), (0.75, 0.5));
         let Item::Path { d, .. } = &shape_items(&e, F)[0] else { panic!() };
         let pts = hit::path_points(d);

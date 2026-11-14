@@ -1,20 +1,6 @@
 # T13: Missing Plot Details tabs and controls
 
-**Status:** done on `plot-details`, not merged (2026-11-14, macOS, no Origin: nothing was measured;
-every Origin detail is listed as "not measured" in `docs/spec/graphing.md` section 18, to be checked
-on the Windows machine with `tools/origin-ref`). All seven items are in: plot tabs (Drop Lines, Label,
-Offset, line transparency, Fill Area Under Curve, pattern colour/transparency/gradient, bar Width in %),
-Group tab (Edit Mode, increments for colour, line style and symbol shape, members, subgrouping by size),
-layer tabs (Background, Size, Display, Link Axes Scales), page tabs (Print/Dimensions, Legends/Titles,
-Miscellaneous, Display), the tree text, separate Layer Contents and Plot Setup dialogs, the Workbook
-button and the ">>" side panel (rows and row range). Each control writes the model, is drawn by the
-renderer and round-trips in the project file with serde defaults.
-**Left out because it cannot be made real here (no dead controls):** the speed part of Size/Speed;
-Drop Lines "Skip Points"; Label "White Out", frame, margin, attach-to, automatic overlap avoidance and
-leader line; Offset multipliers; subgrouping by column label; the Pattern preview box; print margins
-of Print/Dimensions; writing the new settings to `.opj` (the writer names them in its save warnings).
-**Open:** compare layout, tab rows and window sizes with Origin on the Windows machine. **Size:** M.
-**Branch:** `plot-details`. **Model:** Sonnet.
+**Status:** item 1 mostly done (Drop Lines and Label tabs, line Transparency, Fill Area Under Curve in the Normal mode, measured, graphing spec 18) and the layer Background colour (item 3); item 2 in part (Group tab with Edit Mode, increments and members for the layer as one group, measured, spec 18.1), item 4 in part (Print/Dimensions, Display, Legends/Titles page tabs, spec 18), item 5 done (the tree names plots `[Book1]Sheet1! A(X), B(Y) [1*:11*]`, `Project::plot_data_name`); left: the Offset tab's Multiplier, the other fill modes and Pattern tab for fills, several groups per layer and subgrouping, item 3 (Display tab done except X/Y Axes and Data on Top of Axes; Size/Speed with Origin's units; its X:Y ratio, caching and speed mode left; Link Axes Scales done 2026-11-14 with None and Straight, Align and Custom greyed, spec 18.4; Stack tab in Origin's layout, spec 13.14), item 4 (Miscellaneous not offered), item 6 done (Layer Contents and Plot Setup windows, spec 18.2, 18.3), item 7 done (the Workbook button and the ">>" button, spec 18.5). Origin's tab lists and defaults are measured (spec 18), on `main`. **Size:** M. **Model:** Sonnet.
 **Detail:** audit B "Plot Details", "Layer Contents (F12) and Plot Setup".
 **Spec:** `docs/spec/gui-look.md` (Plot Details), `docs/spec/ui-command-map.md` D1/D3.
 

@@ -281,6 +281,101 @@ impl Project {
         id
     }
 
+    /// File > Append: brings every window of `other` into this project, in a new folder named
+    /// `folder` that holds `other`'s folder tree. Window and column ids of `other` are moved past
+    /// this project's ids (graphs keep plotting their own columns); window names that are taken
+    /// here get free names. `other`'s analysis results that recalculate are kept as plain values.
+    /// Returns the new windows' ids and how many recalculation links were dropped.
+    pub fn append(&mut self, mut other: Project, folder: &str) -> (Vec<WindowId>, usize) {
+        let shift = self.next_id;
+        let w = |id: WindowId| WindowId(id.0 + shift);
+        let c = |id: ColumnId| ColumnId(id.0 + shift);
+        let dropped_links = other.analysis_links.len();
+        let mut new_ids = Vec::new();
+        for window in &mut other.windows {
+            match window {
+                Window::Workbook(book) => {
+                    book.id = w(book.id);
+                    for col in book.sheets.iter_mut().flat_map(|s| s.columns.iter_mut()) {
+                        col.id = c(col.id);
+                        col.analysis = None;
+                    }
+                }
+                Window::Graph(graph) => {
+                    graph.id = w(graph.id);
+                    for layer in &mut graph.layers {
+                        for p in &mut layer.plots {
+                            p.y = c(p.y);
+                            for id in [
+                                &mut p.x,
+                                &mut p.y_error,
+                                &mut p.x_error,
+                                &mut p.y_base,
+                                &mut p.size_from,
+                                &mut p.color_from,
+                            ] {
+                                *id = id.map(c);
+                            }
+                        }
+                        for o in &mut layer.plot_offsets {
+                            o.column = c(o.column);
+                            o.follows = o.follows.map(c);
+                        }
+                        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+                            if let crate::graph::TickLabelSource::Column { column } = &mut axis.tick_label_source {
+                                *column = c(*column);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        fn shift_folder(f: &mut Folder, w: &dyn Fn(WindowId) -> WindowId) {
+            for id in &mut f.windows {
+                *id = w(*id);
+            }
+            for sub in &mut f.folders {
+                shift_folder(sub, w);
+            }
+        }
+        shift_folder(&mut other.root, &w);
+        self.next_id = shift + other.next_id;
+        for window in other.windows {
+            let wanted = window.name().to_string();
+            let taken = self.windows.iter().any(|x| x.name().eq_ignore_ascii_case(&wanted));
+            let mut window = window;
+            if taken {
+                let prefix = if matches!(window, Window::Graph(_)) { "Graph" } else { "Book" };
+                let name = self.unique_name(prefix);
+                match &mut window {
+                    Window::Workbook(b) => b.name = name,
+                    Window::Graph(g) => g.name = name,
+                }
+            }
+            new_ids.push(window.id());
+            self.windows.push(window);
+        }
+        let mut sub = other.root;
+        sub.name = folder.to_string();
+        self.root.folders.push(sub);
+        (new_ids, dropped_links)
+    }
+
+    /// Window > Duplicate: a copy of a workbook or graph as a new window with a free name. A
+    /// workbook's copy has its own columns (fresh ids; a copied analysis result is plain data, no
+    /// longer linked to its source); a graph's copy plots the same columns. Returns the new id.
+    pub fn duplicate_window(&mut self, id: WindowId) -> Option<WindowId> {
+        match self.window(id)?.clone() {
+            Window::Workbook(mut book) => {
+                for col in book.sheets.iter_mut().flat_map(|s| s.columns.iter_mut()) {
+                    col.analysis = None;
+                }
+                Some(self.adopt_workbook(book))
+            }
+            Window::Graph(graph) => Some(self.adopt_graph(graph)),
+        }
+    }
+
     /// Adds an empty graph in the style of `template` and returns its id.
     pub fn add_graph(&mut self, template: Template) -> WindowId {
         let id = WindowId(self.fresh_id());
@@ -419,7 +514,7 @@ impl Project {
             hist: Default::default(),
             size_from: None,
             color_from: None,
-            details: Default::default(),
+            decor: Default::default(),
         });
         l.recolor_automatic();
         Ok(())
@@ -438,36 +533,27 @@ impl Project {
         }
     }
 
-    /// The text Plot Details writes for a plot in its tree: the data it draws, in the notation
-    /// `[Book1]Sheet1! "Conc"(X), "Signal"(Y) [1*:10*]`: the book and sheet, the column names (long
-    /// name, else short name) with their role, and the rows. A star after a row number says that the end
-    /// follows the data; a row range chosen for the plot is written without stars. The Y error
-    /// column is added as `"Err"(yEr)`, the X error as `"Err"(xEr)`. A plot whose column is gone
-    /// reads `(missing column)`.
-    pub fn plot_tree_text(&self, plot: &Plot) -> String {
-        let Some((book, sheet, y)) = self.locate(plot.y) else { return "(missing column)".to_string() };
-        let name = |c: &Column| format!("\"{}\"", c.display_name());
-        let mut parts: Vec<String> = Vec::new();
-        if let Some(x) = plot.x.and_then(|id| self.column(id)) {
-            parts.push(format!("{}(X)", name(x)));
+    /// The plot as Origin's Plot Details tree names it (measured, graphing spec 18):
+    /// `[Book1]Sheet1! A(X), B(Y) [1*:11*]`: the short names of the book, sheet and columns and the
+    /// rows, where a star marks an end that follows the data; a set row range is shown without
+    /// stars. An error column is listed as `C(yEr±)` (not measured).
+    pub fn plot_data_name(&self, plot: &Plot) -> String {
+        let Some((book, sheet, y)) = self.locate(plot.y) else {
+            return self.plot_label(plot);
+        };
+        let mut cols = Vec::new();
+        if let Some(x) = plot.x.and_then(|x| self.column(x)) {
+            cols.push(format!("{}(X)", x.short_name));
         }
-        parts.push(format!("{}(Y)", name(y)));
-        if let Some(e) = plot.y_error.and_then(|id| self.column(id)) {
-            parts.push(format!("{}(yEr)", name(e)));
-        }
-        if let Some(e) = plot.x_error.and_then(|id| self.column(id)) {
-            parts.push(format!("{}(xEr)", name(e)));
+        cols.push(format!("{}(Y)", y.short_name));
+        if let Some(e) = plot.y_error.and_then(|e| self.column(e)) {
+            cols.push(format!("{}(yEr±)", e.short_name));
         }
         let rows = match plot.rows {
             Some((a, b)) => format!("[{}:{}]", a + 1, b),
             None => format!("[1*:{}*]", y.len()),
         };
-        format!("[{}]{}! {} {}", book.name, sheet.name, parts.join(", "), rows)
-    }
-
-    /// The workbook that holds the Y column of a plot (what Plot Details' Workbook button shows).
-    pub fn plot_book(&self, plot: &Plot) -> Option<WindowId> {
-        self.locate(plot.y).map(|(b, _, _)| b.id)
+        format!("[{}]{}! {} {rows}", book.name, sheet.name, cols.join(", "))
     }
 
     /// The Y columns a new graph of `template` should show for a sheet.
@@ -542,10 +628,19 @@ impl Project {
         }
         let long_name = ys.first().and_then(|y| self.locate(*y)).map(|(b, _, _)| b.long_name.clone());
         let graph = self.add_graph(template);
-        if matches!(template, Template::FloatingColumn | Template::FloatingBar | Template::FillArea) {
-            // Columns go in pairs: the first of a pair is the lower end of the bars (or the lower
-            // edge of the filled area), the second the upper end (and names the plot, as in
-            // Origin). A last odd column is left out.
+        if matches!(template, Template::FloatingColumn | Template::FloatingBar) {
+            // Origin chains the columns: each plot is a bar from the column before it to its own
+            // column, which names it (measured: B, C, D, E gave the bars B-C, C-D and D-E).
+            for pair in ys.windows(2) {
+                self.add_plot(graph, 0, pair[1])?;
+                if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
+                    p.y_base = Some(pair[0]);
+                }
+            }
+        } else if template == Template::FillArea {
+            // Columns go in pairs: the first of a pair is the lower edge of the filled area, the
+            // second the upper edge (and names the plot, as in Origin). A last odd column is left
+            // out.
             for pair in ys.as_chunks::<2>().0 {
                 self.add_plot(graph, 0, pair[1])?;
                 if let Some(p) = self.graph_mut(graph).and_then(|g| g.layers[0].plots.last_mut()) {
@@ -558,6 +653,7 @@ impl Project {
                 // Bubble and colour mapped plots take their third variable from the Z column.
                 let z = self.z_column_for(*y);
                 let ternary_z = if template == Template::Ternary { self.ternary_z_for(*y) } else { None };
+                let z_name = ternary_z.and_then(|z| self.column(z)).map(|c| c.display_name().to_string());
                 let (size, color) = match template {
                     Template::Bubble => (true, false),
                     Template::ColorMapped => (false, true),
@@ -568,8 +664,10 @@ impl Project {
                     p.size_from = z.filter(|_| size);
                     p.color_from = z.filter(|_| color);
                     if template == Template::Ternary {
-                        // The Z column of a ternary plot, the third part of each row.
+                        // The Z column of a ternary plot, the third part of each row; Origin's
+                        // legend names the plot after it (measured).
                         p.size_from = ternary_z;
+                        p.label = z_name;
                     }
                 }
             }
@@ -797,20 +895,16 @@ mod tests {
     }
 
     #[test]
-    fn the_plot_tree_text_names_book_sheet_columns_and_rows() {
+    fn a_plot_is_named_as_in_origins_plot_details_tree() {
         let (mut p, book, x, y) = sample();
-        let g = p.add_graph(Template::Line);
-        p.add_plot_xy(g, 0, Some(x), y, None).unwrap();
-        p.column_mut(y).unwrap().long_name = "Signal".into();
-        let plot = p.graph(g).unwrap().layers[0].plots[0].clone();
+        let g = p.plot_columns(crate::template::Template::Line, &[y]).unwrap();
         let sheet = p.workbook(book).unwrap().sheets[0].name.clone();
-        assert_eq!(p.plot_tree_text(&plot), format!("[Book1]{sheet}! \"A\"(X), \"Signal\"(Y) [1*:3*]"));
-        let ranged = Plot { rows: Some((1, 3)), ..plot.clone() };
-        assert!(p.plot_tree_text(&ranged).ends_with("[2:3]"));
-        assert_eq!(p.plot_book(&plot), Some(book));
-        let gone = Plot { y: ColumnId(999), ..plot };
-        assert_eq!(p.plot_tree_text(&gone), "(missing column)");
-        assert_eq!(p.plot_book(&gone), None);
+        let plot = p.graph(g).unwrap().layers[0].plots[0].clone();
+        assert_eq!(plot.x, Some(x));
+        assert_eq!(p.plot_data_name(&plot), format!("[Book1]{sheet}! A(X), B(Y) [1*:3*]"));
+        let mut part = plot;
+        part.rows = Some((1, 3));
+        assert_eq!(p.plot_data_name(&part), format!("[Book1]{sheet}! A(X), B(Y) [2:3]"));
     }
 
     #[test]
@@ -1203,5 +1297,35 @@ mod tests {
         let back: Project = serde_json::from_str(&json).unwrap();
         assert_eq!(back.graph(g), p.graph(g));
         assert_eq!(back.graph(g).unwrap().right_y_member(0), Some(1));
+    }
+
+    #[test]
+    fn append_brings_the_windows_over_with_fresh_ids_and_graphs_keep_their_data() {
+        let mut here = Project::new();
+        let b = here.add_workbook("");
+        here.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+        let mine = here.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![5.0, 6.0])).unwrap();
+        here.plot_columns(Template::Line, &[mine]).unwrap();
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("XRD");
+        other.add_column(ob, 0, Designation::X, ColumnData::numeric(vec![10.0, 20.0, 30.0])).unwrap();
+        let theirs = other.add_column(ob, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        other.plot_columns(Template::Line, &[theirs]).unwrap();
+
+        let before = here.windows.len();
+        let (new, dropped) = here.append(other, "XRD project");
+        assert_eq!((new.len(), dropped), (2, 0));
+        assert_eq!(here.windows.len(), before + 2);
+        let names: Vec<&str> = here.windows.iter().map(|w| w.name()).collect();
+        let unique: std::collections::HashSet<String> = names.iter().map(|n| n.to_lowercase()).collect();
+        assert_eq!(unique.len(), names.len(), "names stay unique: {names:?}");
+        let graph = here.graph(new[1]).unwrap();
+        let y = graph.layers[0].plots[0].y;
+        assert_eq!(here.numeric(y).unwrap(), [1.0, 2.0, 3.0], "the appended graph plots its own column");
+        assert_eq!(here.numeric(mine).unwrap(), [5.0, 6.0], "this project's data is untouched");
+        assert_eq!(here.root.folders.last().unwrap().name, "XRD project");
+        let fresh = here.new_column_id();
+        assert!(fresh.0 > y.0, "new ids come after the appended ones");
     }
 }

@@ -144,6 +144,8 @@ pub const FUNCTIONS: &[(&str, &[FuncInfo])] = &[
                 "text(col(A), \"*3\")",
             ),
             f("value", "s", "Number written in a text; missing when there is none.", "value(col(A)$)"),
+            f("char", "n", "Character from a Unicode code number (1 to 65535).", "char(181)$"),
+            f("code", "s", "Code number of the first character; 0 for empty text.", "code(col(A)$)"),
             f("len", "s", "Number of characters. col(A)$ is the text of a cell.", "len(col(A)$)"),
             f("left", "s, n", "First n characters.", "left(col(A)$, 3)"),
             f("right", "s, n", "Last n characters.", "right(col(A)$, 2)"),
@@ -154,6 +156,12 @@ pub const FUNCTIONS: &[(&str, &[FuncInfo])] = &[
             f("find", "s, part, start", "Position of part in s, -1 if absent; case matters.", "find(col(A)$, \"1\")"),
             f("search", "s, part, start", "Like find, ignoring case.", "search(col(A)$, \"1\")"),
             f("replace", "s, pos, n, new", "Replaces n characters from pos by new.", "replace(col(A)$, 1, 1, \"x\")"),
+            f(
+                "substitute",
+                "s, new, find, occurrence",
+                "Replace matching text; omit occurrence or use 0 for all, 1 for the first, 2 for the second.",
+                "substitute(col(A)$, \",\", \".\")$",
+            ),
             f(
                 "compare",
                 "s, t, case",

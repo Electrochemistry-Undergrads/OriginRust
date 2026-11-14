@@ -273,9 +273,6 @@ impl Writer {
         if graph.page.background != Color::WHITE {
             notes.push("the page background colour was not written (Origin's page is white)".into());
         }
-        if !graph.page.style.is_default() {
-            notes.push("the page's units, border, window title choice and comments were not written".into());
-        }
         let spec = WindowSpec {
             name: &name,
             label: &label,
@@ -329,6 +326,12 @@ impl Writer {
         if let Stack::Waterfall { dx_percent, dy_percent } = layer.stack {
             waterfall_places(project, layer, dx_percent, dy_percent, &mut places, notes);
         }
+        if layer.background.is_some() {
+            notes.push("a layer background colour was not written (the companion file keeps it)".into());
+        }
+        if !layer.display.is_default() {
+            notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
+        }
         let mut plots: Vec<Resolved> = Vec::new();
         for (plot_index, p) in layer.plots.iter().enumerate() {
             if !p.visible {
@@ -364,7 +367,12 @@ impl Writer {
             if p.symbol.every != 1 && p.kind.has_symbols() {
                 notes.push("symbols on every n-th point only were not written; every point has a symbol".into());
             }
-            plot_detail_notes(p, notes);
+            if !p.decor.is_default() {
+                notes.push(
+                    "drop lines, fills under curves and data labels were not written (the companion file keeps them)"
+                        .into(),
+                );
+            }
             let place = places[plot_index];
             plots.push(Resolved { plot: p, y, x, err, place });
         }
@@ -1039,18 +1047,6 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if layer.bars.overlap_pct != 0.0 {
         notes.push("the overlap of column bars was not written; bars stand side by side".into());
     }
-    if layer.bars.width_pct.is_some() {
-        notes.push("the width of column bars (in percent) was not written; the gap between bars was".into());
-    }
-    if !layer.groups.is_default() {
-        notes.push("the increment rules of the plot group (edit mode, line style and symbol steps, subgroups) were not written".into());
-    }
-    if !layer.display.is_default() {
-        notes.push("the layer's display switches (hidden layer, plots, axes, labels) were not written".into());
-    }
-    if !layer.background.is_default() {
-        notes.push("the layer's background colour, gradient and border were not written".into());
-    }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());
     }
@@ -1269,25 +1265,4 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
 /// The three pie kinds (flat colour, 3D colour, black and white), which the writer cannot store.
 fn is_pie(k: PlotKind) -> bool {
     matches!(k, PlotKind::Pie | PlotKind::Pie3D | PlotKind::PieBw)
-}
-
-/// Notes for what Plot Details added to a plot (transparency, fills, drop lines, data labels): none
-/// of it is written to the project file; the `.opj.sheaf` companion keeps it.
-fn plot_detail_notes(p: &Plot, notes: &mut Vec<String>) {
-    let d = &p.details;
-    if d.line_transparency_pct != 0 {
-        notes.push("the transparency of a plot's line was not written".into());
-    }
-    if d.fill_under {
-        notes.push("the fill under a line plot's curve was not written".into());
-    }
-    if !d.fill.is_plain() || d.fill.pattern_color != sheaf_core::Color::BLACK {
-        notes.push("the transparency, pattern and gradient of a fill were not written".into());
-    }
-    if d.drop_lines != Default::default() {
-        notes.push("drop lines were not written".into());
-    }
-    if d.labels.enabled {
-        notes.push("data labels were not written".into());
-    }
 }

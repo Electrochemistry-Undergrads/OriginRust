@@ -583,8 +583,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // Layer icons: after the page, so that they get the clicks on them.
     let mut icon_menu = None;
-    let shown_icons = if doc.project().graph(graph_id).is_some_and(|g| g.page.style.layer_icons) { layers } else { 0 };
-    for i in 0..shown_icons {
+    for i in 0..layers {
         let r = Rect::from_min_size(image_rect.min + egui::vec2(2.0 + i as f32 * (ICON + 2.0), 2.0), Vec2::splat(ICON));
         let id = ui.id().with(("layer_icon", graph_id.0, i));
         let resp = ui.interact(r, id, Sense::click()).on_hover_text(format!("Layer {}", i + 1));
@@ -603,7 +602,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             actions.push(Action::ActivateLayer { graph: graph_id, layer: i });
         }
         if resp.double_clicked() {
-            actions.push(Action::GraphProperties { graph: graph_id, layer: i, tab: PropsTab::Setup, plot: None });
+            actions.push(Action::GraphProperties { graph: graph_id, layer: i, tab: PropsTab::Plots, plot: None });
         }
         if resp.secondary_clicked() {
             state.active_layer = i;
@@ -643,6 +642,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         graph: Some(graph_id),
         active: Some(graph_id),
         selected: &[],
+        sorting_columns: Vec::new(),
         cells: false,
         undo: None,
         redo: None,

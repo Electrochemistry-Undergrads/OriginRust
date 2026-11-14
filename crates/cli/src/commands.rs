@@ -76,11 +76,25 @@ pub(crate) fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
         }
         o.delimiter = Delimiter::Fixed(r.fixed_width.clone());
     }
+    if let Some(chars) = &r.delimiter_chars {
+        if chars.is_empty() {
+            bail!("--delimiter-chars must not be empty");
+        }
+        o.delimiter = Delimiter::AnyOf { chars: chars.clone(), combine: r.combine_delimiters };
+    }
     o.short_name_line = r.short_name_line.unwrap_or(0);
     o.rename_columns = !r.no_rename_columns;
     o.rename_sheet = !r.no_rename_sheet;
     o.rename_book = !r.no_rename_book;
     o.header_lines = r.header_lines;
+    o.rows =
+        sheaf_io::ascii::ImportSelection { first: r.first_row, last: r.last_row, read: r.read_rows, skip: r.skip_rows };
+    o.columns = sheaf_io::ascii::ImportSelection {
+        first: r.first_column,
+        last: r.last_column,
+        read: r.read_columns,
+        skip: r.skip_columns,
+    };
     o.decimal_comma = r.decimal_comma;
     o.thousands = match r.thousands {
         ThousandsArg::Auto => Thousands::Auto,
@@ -242,6 +256,7 @@ fn import(mut a: ImportArgs) -> Result<()> {
         ascii: ascii_options(&a.read)?,
         book_name: a.book_name.clone().unwrap_or_default(),
         file_name_in_comments: a.file_name_comments,
+        partial_except_first: a.partial_except_first,
     };
     let result = sheaf_io::batch::import_batch(&mut project, &data_files, &opts);
     let mut plotted = std::collections::HashSet::new();

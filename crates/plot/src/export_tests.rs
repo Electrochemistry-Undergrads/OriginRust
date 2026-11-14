@@ -363,6 +363,47 @@ fn pcx_is_written_with_its_header_and_palette() {
 }
 
 #[test]
+fn psd_graph_exports_have_the_requested_colour_mode_and_complete_pixels() {
+    for (depth, mode, channels, palette_len) in
+        [(ColorDepth::Bit24, 3, 3, 0), (ColorDepth::Grey8, 1, 1, 0), (ColorDepth::Colors256, 2, 1, 768)]
+    {
+        let psd = raster_bytes("psd", &RasterOptions { depth, ..RasterOptions::default() });
+        let word = |at| u16::from_be_bytes(psd[at..at + 2].try_into().unwrap());
+        let long = |at| u32::from_be_bytes(psd[at..at + 4].try_into().unwrap());
+        assert_eq!(&psd[..4], b"8BPS");
+        assert_eq!((word(4), word(12), word(22), word(24)), (1, channels, 8, mode));
+        assert!(long(14) > 0 && long(18) > 0);
+        assert_eq!(long(26), palette_len);
+        assert_eq!(psd.len(), 68 + palette_len as usize + long(14) as usize * long(18) as usize * channels as usize);
+        assert!(psd[68 + palette_len as usize..].iter().any(|&b| b < 200), "graph pixels, not a blank image");
+    }
+}
+
+#[test]
+fn psd_composites_transparency_on_white_before_rgb_or_grey_encoding() {
+    let raster = Raster { width: 2, height: 1, rgba: vec![255, 0, 0, 128, 0, 0, 255, 0] };
+    let rgb = raster::encode_raster(&raster, "psd", 150.5, &RasterOptions::default()).unwrap();
+    assert_eq!(&rgb[68..], &[255, 255, 127, 255, 127, 255], "planar RGB, composited on white");
+    let grey = raster::encode_raster(
+        &raster,
+        "psd",
+        150.5,
+        &RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() },
+    )
+    .unwrap();
+    assert_eq!(&grey[68..], &[165, 255]);
+}
+
+#[test]
+fn oversized_psd_exports_are_refused_before_allocating_the_image() {
+    let (p, g) = project();
+    let size = ExportSize { width_in: Some(30_001.0 / 72.0), ..ExportSize::default() };
+    let error = export_bytes(&p, g, "psd", 72.0, size).unwrap_err();
+    assert!(matches!(error, PlotError::Image(_)), "{error}");
+    assert!(error.to_string().contains("30000 pixels per dimension"), "{error}");
+}
+
+#[test]
 fn colour_depth_changes_png_bmp_and_tiff() {
     let colours = RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() };
     let png = raster_bytes("png", &colours);
@@ -374,6 +415,62 @@ fn colour_depth_changes_png_bmp_and_tiff() {
     assert_eq!(u32::from_le_bytes(bmp[2..6].try_into().unwrap()) as usize, bmp.len());
     let grey = RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() };
     assert_eq!(raster_bytes("png", &grey)[25], 0, "PNG colour type 0 is grey");
+}
+
+#[test]
+fn indexed_tiff_preserves_palette_indices_resolution_and_each_compression() {
+    use std::io::Cursor;
+    use tiff::tags::Tag;
+
+    // Odd width and transparency expose row-padding and white-compositing mistakes.
+    let raster = Raster {
+        width: 3,
+        height: 2,
+        rgba: vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 0, 0, 255, 0, 0, 128, 40, 50, 60, 255],
+    };
+    let options = RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() };
+    let png = raster::encode_raster(&raster, "png", 150.5, &options).unwrap();
+    let mut png = png::Decoder::new(Cursor::new(png)).read_info().unwrap();
+    let expected_palette = png.info().palette.as_ref().unwrap().to_vec();
+    let mut expected_indices = vec![0; png.output_buffer_size().unwrap()];
+    let frame = png.next_frame(&mut expected_indices).unwrap();
+    expected_indices.truncate(frame.buffer_size());
+    for (compression, tag) in
+        [(TiffCompression::None, 1), (TiffCompression::PackBits, 32773), (TiffCompression::Lzw, 5)]
+    {
+        let options = RasterOptions { tiff_compression: compression, ..options };
+        let bytes = raster::encode_raster(&raster, "tif", 150.5, &options).unwrap();
+        let mut decoder = tiff::decoder::Decoder::new(Cursor::new(&bytes)).unwrap();
+        assert_eq!(decoder.dimensions().unwrap(), (3, 2));
+        assert_eq!(decoder.get_tag_u32(Tag::PhotometricInterpretation).unwrap(), 3);
+        assert_eq!(decoder.get_tag_u32(Tag::SamplesPerPixel).unwrap(), 1);
+        assert_eq!(decoder.get_tag_u16_vec(Tag::BitsPerSample).unwrap(), [8]);
+        assert_eq!(decoder.get_tag_u32(Tag::Compression).unwrap(), tag);
+        assert_eq!(decoder.get_tag_u32(Tag::ResolutionUnit).unwrap(), 2);
+        for tag in [Tag::XResolution, Tag::YResolution] {
+            assert_eq!(decoder.get_tag_u32_vec(tag).unwrap(), [15050, 100]);
+        }
+        let palette = decoder.get_tag_u16_vec(Tag::ColorMap).unwrap();
+        assert_eq!(palette.len(), 768);
+        for channel in 0..3 {
+            for index in 0..256 {
+                assert_eq!(palette[channel * 256 + index], u16::from(expected_palette[index * 3 + channel]) * 257);
+            }
+        }
+        // This tiff crate can decompress 8-bit samples but cannot expand a palette. In a
+        // test-only copy, interpret the samples as gray to read the original index plane.
+        let mut indices_only = bytes;
+        let ifd = u32::from_le_bytes(indices_only[4..8].try_into().unwrap()) as usize;
+        let count = u16::from_le_bytes(indices_only[ifd..ifd + 2].try_into().unwrap()) as usize;
+        let entry = (0..count)
+            .map(|i| ifd + 2 + 12 * i)
+            .find(|&at| u16::from_le_bytes(indices_only[at..at + 2].try_into().unwrap()) == 262)
+            .unwrap();
+        indices_only[entry + 8..entry + 10].copy_from_slice(&1u16.to_le_bytes());
+        let mut decoder = tiff::decoder::Decoder::new(Cursor::new(indices_only)).unwrap();
+        let tiff::decoder::DecodingResult::U8(indices) = decoder.read_image().unwrap() else { panic!("8-bit indices") };
+        assert_eq!(indices, expected_indices, "{compression:?}");
+    }
 }
 
 #[test]

@@ -37,10 +37,7 @@ pub fn show(ui: &mut egui::Ui, st: &mut ObjectsState, data: &PanelData, actions:
             ui.set_height(ROW_H);
             let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, ROW_H), Sense::hover());
             paint_folder(ui.painter(), Rect::from_center_size(r.center(), Vec2::splat(12.0)));
-            let mut r = ui.selectable_label(st.selected.is_none(), graph.name.as_str());
-            if !graph.page.style.comments.is_empty() {
-                r = r.on_hover_text(graph.page.style.comments.as_str());
-            }
+            let r = ui.selectable_label(st.selected.is_none(), graph.name.as_str());
             if r.clicked() {
                 st.selected = None;
             }

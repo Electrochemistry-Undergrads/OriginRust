@@ -22,6 +22,16 @@ fn pixels(pt: f64, scale: f64) -> u32 {
 
 /// Rasterises an SVG at `pixels_per_point`.
 pub(crate) fn rasterise(svg: &str, pixels_per_point: f64, fonts: &SystemFonts) -> Result<Raster, PlotError> {
+    rasterise_with_limit(svg, pixels_per_point, fonts, None)
+}
+
+/// Rasterises with an optional format-specific dimension limit, checked before allocating pixels.
+pub(crate) fn rasterise_with_limit(
+    svg: &str,
+    pixels_per_point: f64,
+    fonts: &SystemFonts,
+    max_side: Option<u32>,
+) -> Result<Raster, PlotError> {
     if !(pixels_per_point.is_finite() && pixels_per_point > 0.0) {
         return Err(PlotError::Png(format!("the resolution must be a positive number, not {pixels_per_point}")));
     }
@@ -29,6 +39,13 @@ pub(crate) fn rasterise(svg: &str, pixels_per_point: f64, fonts: &SystemFonts) -
     let size = tree.size();
     let (w, h) =
         (pixels(f64::from(size.width()), pixels_per_point), pixels(f64::from(size.height()), pixels_per_point));
+    if let Some(max) = max_side
+        && (w > max || h > max)
+    {
+        return Err(PlotError::Image(format!(
+            "an image of {w} x {h} pixels exceeds this format's limit of {max} pixels per dimension; lower the resolution or image size"
+        )));
+    }
     if u64::from(w) * u64::from(h) > MAX_PIXELS {
         return Err(PlotError::Png(format!("an image of {w} x {h} pixels is too large; lower the resolution")));
     }
@@ -110,7 +127,7 @@ impl Default for RasterOptions {
 
 /// The raster formats that can be written, by file extension.
 pub(crate) fn is_raster_ext(ext: &str) -> bool {
-    matches!(ext, "png" | "tif" | "tiff" | "jpg" | "jpeg" | "bmp" | "gif" | "tga" | "pcx")
+    matches!(ext, "png" | "tif" | "tiff" | "jpg" | "jpeg" | "bmp" | "gif" | "tga" | "pcx" | "psd")
 }
 
 /// Straight RGBA laid on white, as RGB. Many programs mishandle an alpha channel in these formats.
@@ -182,7 +199,7 @@ pub(crate) fn encode_png_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Result
     Ok(out)
 }
 
-/// Encodes the picture as a TIFF with the resolution recorded (24-bit RGB or 8-bit grey).
+/// Encodes a TIFF with resolution recorded: 24-bit RGB, indexed 256 colors or 8-bit grey.
 pub(crate) fn encode_tiff_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
     use tiff::encoder::{Compression, colortype};
     let err = |e: tiff::TiffError| PlotError::Tiff(e.to_string());
@@ -201,6 +218,23 @@ pub(crate) fn encode_tiff_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Resul
             let mut image = enc.new_image::<colortype::Gray8>(r.width, r.height).map_err(err)?;
             image.resolution(tiff::tags::ResolutionUnit::Inch, res);
             image.write_data(&luma(&rgb)).map_err(err)?;
+        } else if o.depth == ColorDepth::Colors256 {
+            let ix = quantise(&rgb);
+            // Palette images store one 8-bit index per pixel, like Gray8's sample layout.
+            // Override its interpretation and attach TIFF's planar 16-bit RGB color table.
+            let mut image = enc.new_image::<colortype::Gray8>(r.width, r.height).map_err(err)?;
+            image.resolution(tiff::tags::ResolutionUnit::Inch, res);
+            image
+                .encoder()
+                .write_tag(
+                    tiff::tags::Tag::PhotometricInterpretation,
+                    tiff::tags::PhotometricInterpretation::RGBPalette.to_u16(),
+                )
+                .map_err(err)?;
+            let map: Vec<u16> =
+                (0..3).flat_map(|channel| ix.palette.iter().map(move |rgb| u16::from(rgb[channel]) * 257)).collect();
+            image.encoder().write_tag(tiff::tags::Tag::ColorMap, map.as_slice()).map_err(err)?;
+            image.write_data(&ix.indices).map_err(err)?;
         } else {
             let mut image = enc.new_image::<colortype::RGB8>(r.width, r.height).map_err(err)?;
             image.resolution(tiff::tags::ResolutionUnit::Inch, res);
@@ -414,6 +448,28 @@ pub(crate) fn encode_raster(r: &Raster, ext: &str, dpi: f64, o: &RasterOptions) 
         "gif" => encode_gif(r),
         "tga" => encode_tga(r, o),
         "pcx" => encode_pcx(r, dpi, o),
+        "psd" => encode_psd(r, dpi, o),
         _ => Err(PlotError::UnknownFormat(ext.to_string())),
+    }
+}
+
+/// A flattened PSD; transparency is composited on white like the other opaque raster exports.
+fn encode_psd(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
+    let rgb = flatten_rgb(r);
+    match o.depth {
+        ColorDepth::Bit24 => crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Rgb(&rgb)),
+        ColorDepth::Grey8 => {
+            let grey = luma(&rgb);
+            crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Grey(&grey))
+        }
+        ColorDepth::Colors256 => {
+            let ix = quantise(&rgb);
+            crate::psd::encode(
+                r.width,
+                r.height,
+                dpi,
+                crate::psd::Pixels::Indexed { palette: &ix.palette, indices: &ix.indices },
+            )
+        }
     }
 }

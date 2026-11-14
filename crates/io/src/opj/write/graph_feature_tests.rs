@@ -203,7 +203,7 @@ fn the_gap_of_the_bars_comes_back_and_the_overlap_is_named() {
         for y in [5, 6] {
             p.add_plot_xy(id, 0, None, c[y], None).unwrap();
         }
-        p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: gap, overlap_pct: 0.0, width_pct: None };
+        p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: gap, overlap_pct: 0.0 };
         let (imp, out) = round_trip(&p);
         assert!(out.warnings.is_empty(), "gap {gap}: {:?}", out.warnings);
         assert!((imp.graphs[0].layers[0].bars.gap_pct - gap).abs() < 0.02, "gap {gap}");
@@ -212,7 +212,7 @@ fn the_gap_of_the_bars_comes_back_and_the_overlap_is_named() {
     let c = ids(&p);
     let id = p.add_graph(Template::Column);
     p.add_plot_xy(id, 0, None, c[5], None).unwrap();
-    p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: 30.0, overlap_pct: 40.0, width_pct: None };
+    p.graph_mut(id).unwrap().layers[0].bars = BarSpacing { gap_pct: 30.0, overlap_pct: 40.0 };
     let (imp, out) = round_trip(&p);
     assert!(out.warnings.iter().any(|w| w.contains("overlap")), "{:?}", out.warnings);
     assert!(!out.warnings.iter().any(|w| w.contains("gap")), "{:?}", out.warnings);
@@ -625,40 +625,13 @@ fn a_ternary_layer_is_written_as_a_scatter_plot_and_named() {
 }
 
 #[test]
-fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings() {
-    use sheaf_core::graph::{BorderStyle, DropLines, FillPattern, Increment, LabelForm};
-    let p = one_layer(|l| {
-        l.bars.width_pct = Some(70.0);
-        l.groups.line_style = Increment::ByOne;
-        l.display.show_axes = false;
-        l.background.color = Some(sheaf_core::Color::rgb(9, 9, 9));
-        let d = &mut l.plots[0].details;
-        d.line_transparency_pct = 50;
-        d.fill_under = true;
-        d.fill.pattern = FillPattern::Cross;
-        d.drop_lines.vertical = Some(DropLines::starting_style(sheaf_core::Color::RED));
-        d.labels.enabled = true;
-        d.labels.form = LabelForm::Y;
+fn plot_decorations_and_a_layer_background_are_named_in_the_save_warnings() {
+    let mut p = source();
+    line_graph(&mut p, |l| {
+        l.background = Some(sheaf_core::Color::WHITE);
+        l.plots[0].decor.drop.vertical.on = true;
     });
-    let mut p = p;
-    let id = p.graphs().next().unwrap().id;
-    p.graph_mut(id).unwrap().page.style.border = Some(BorderStyle::solid(sheaf_core::Color::BLACK, 1.0));
     let (_, out) = round_trip(&p);
-    for word in [
-        "line was not written",
-        "fill under",
-        "pattern and gradient",
-        "drop lines",
-        "data labels",
-        "width of column bars",
-        "increment rules",
-        "display switches",
-        "background colour",
-        "page's units, border",
-    ] {
-        assert!(out.warnings.iter().any(|w| w.contains(word)), "{word}: {:?}", out.warnings);
-    }
-    // A graph without them warns about none of it.
-    let (_, out) = round_trip(&one_layer(|_| {}));
-    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("layer background")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("drop lines")), "{:?}", out.warnings);
 }

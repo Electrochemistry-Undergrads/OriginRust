@@ -10,9 +10,6 @@ use sheaf_core::column::Storage;
 use sheaf_core::format::{NameStyle, NumberFormat};
 use sheaf_core::{ColumnId, Designation, Document, Project};
 
-/// The longest column short name Origin accepts.
-pub const MAX_SHORT_NAME: usize = 18;
-
 pub struct ColumnPropsDialog {
     column: ColumnId,
     short_name: String,
@@ -210,14 +207,12 @@ impl ColumnPropsDialog {
     /// Writes the fields to the column (and, when asked, the options to the columns to its
     /// right). Returns `false` when the short name is not usable.
     fn apply(&mut self, doc: &mut Document) -> bool {
-        let name = self.short_name.trim().to_string();
-        // Origin's limit for a column short name (public documentation, not measured).
-        if name.chars().count() > MAX_SHORT_NAME {
-            self.problem = Some(format!("The short name may have at most {MAX_SHORT_NAME} characters."));
-            return false;
-        }
-        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            self.problem = Some("The short name may only have letters, digits and underscores.".to_string());
+        // As in Origin, the box keeps letters, digits and dots, drops every other character and cuts
+        // the name to 18 characters; the cleaned name is shown again in the box.
+        let name = sheaf_core::column::clean_short_name(&self.short_name);
+        self.short_name = name.clone();
+        if name.is_empty() {
+            self.problem = Some("The short name needs at least one letter or digit.".to_string());
             return false;
         }
         let taken = doc.project().locate(self.column).is_some_and(|(_, sheet, _)| {
@@ -321,8 +316,8 @@ fn choose_kind(storage: &mut Storage, format: &mut NumberFormat, kind: usize) {
 
 /// The two rows "Format" (what the cells hold: Numeric, Text, Text & Numeric, Time, Date, Month,
 /// Day of Week) and "Display" (how they are shown). Numbers have the display choices Automatic,
-/// Decimal places, Scientific, Significant digits, Engineering (with or without an SI prefix) and
-/// Decimal:1000 (thousands separators); dates and times have their patterns, months and weekdays
+/// Decimal places, Scientific, Significant digits, Engineering (default digits, decimal places or
+/// significant digits) and Decimal:1,000 (thousands separators); dates and times have their patterns, months and weekdays
 /// their name styles.
 fn format_rows(ui: &mut egui::Ui, storage: &mut Storage, format: &mut NumberFormat) {
     use sheaf_core::datetime::{DatePattern, TimePattern};
@@ -377,9 +372,11 @@ fn format_rows(ui: &mut egui::Ui, storage: &mut Storage, format: &mut NumberForm
         }
         NumberFormat::Month(style) | NumberFormat::Weekday(style) => {
             let mut style = style;
-            egui::ComboBox::from_id_salt("column_name_style").selected_text(style.label()).show_ui(ui, |ui| {
+            // Origin's list shows samples: Jan, January, J (months) and Mon, Monday, M (weekdays).
+            let month = kind == 5;
+            egui::ComboBox::from_id_salt("column_name_style").selected_text(style.sample(month)).show_ui(ui, |ui| {
                 for n in NameStyle::ALL {
-                    ui.selectable_value(&mut style, n, n.label());
+                    ui.selectable_value(&mut style, n, n.sample(month));
                 }
             });
             *format = if kind == 5 { NumberFormat::Month(style) } else { NumberFormat::Weekday(style) };
@@ -398,19 +395,24 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
         NumberFormat::Decimal(d) => (1, d),
         NumberFormat::Scientific(d) => (2, d),
         NumberFormat::Significant(d) => (3, d),
-        NumberFormat::Engineering(d) => (4, d),
-        NumberFormat::EngineeringSi(d) => (5, d),
-        NumberFormat::DecimalGrouped(d) => (6, d),
+        NumberFormat::EngineeringAuto => (4, 3),
+        NumberFormat::Engineering(d) | NumberFormat::EngineeringSi(d) => (5, d),
+        NumberFormat::EngineeringSig(n) => (6, n),
+        NumberFormat::DecimalGrouped(d) => (7, d),
         _ => (0, 3),
     };
+    // Origin's Display list is Decimal:1000, Scientific:1E3, Engineering:1K, Decimal:1,000 and its
+    // Digits list Default Decimal Digits, Set Decimal Places=, Significant Digits=; Sheaf folds the
+    // two lists into one.
     let styles = [
         "Automatic",
         "Decimal places",
         "Scientific",
         "Significant digits",
-        "Engineering",
-        "Engineering (SI prefix)",
-        "Decimal:1000",
+        "Engineering:1K (default digits)",
+        "Engineering:1K (decimal places)",
+        "Engineering:1K (significant digits)",
+        "Decimal:1,000",
     ];
     let mut d = digits;
     ui.horizontal(|ui| {
@@ -419,7 +421,7 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
                 ui.selectable_value(&mut style, i, *n);
             }
         });
-        if style != 0 {
+        if style != 0 && style != 4 {
             ui.add(DragValue::new(&mut d).range(0..=15));
         }
     });
@@ -427,9 +429,10 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
         1 => NumberFormat::Decimal(d),
         2 => NumberFormat::Scientific(d),
         3 => NumberFormat::Significant(d.max(1)),
-        4 => NumberFormat::Engineering(d),
+        4 => NumberFormat::EngineeringAuto,
         5 => NumberFormat::EngineeringSi(d),
-        6 => NumberFormat::DecimalGrouped(d),
+        6 => NumberFormat::EngineeringSig(d.max(1)),
+        7 => NumberFormat::DecimalGrouped(d),
         _ => NumberFormat::General,
     };
 }

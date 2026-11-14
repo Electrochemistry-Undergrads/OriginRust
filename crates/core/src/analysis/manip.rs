@@ -1,16 +1,47 @@
 //! The data manipulation tools of `Project::analyze` (Analysis > Data Manipulation) and the median
-//! filter (Analysis > Mathematics): Subtract Straight Line, Reduce to Evenly Spaced X, Curve
-//! Translate X and Y, Median Filter. The numerics are in `sheaf_calc::manip`; what is known about
+//! filter (Analysis > Mathematics): Subtract Straight Line, Reduce Duplicate X Data, Reduce to
+//! Evenly Spaced X, Curve Translate X and Y, Median Filter. The numerics are in `sheaf_calc::manip`; what is known about
 //! Origin's behaviour is in `docs/spec/analysis-tools.md` section 12.
 
 use super::*;
-use sheaf_calc::{LinePoint, MedianEdge, ReduceMethod};
+use sheaf_calc::{DUP_TOL, DupMethod, LinePoint, MedianEdge, ReduceMethod};
 
 /// What [`Tool::SubtractLine`] does: subtract the straight line through two points from each curve.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SubtractLineSpec {
     pub p1: LinePoint,
     pub p2: LinePoint,
+}
+
+/// What [`Tool::ReduceDup`] does (Origin's `reducedup`, measured; analysis-tools.md section 12).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ReduceDupSpec {
+    pub method: DupMethod,
+    /// Neighbouring X values this close, as a fraction of the X range, are one X.
+    pub tol: f64,
+    /// Also write the X values that had duplicates and how many points each had (Origin's
+    /// `xcount`, off by default).
+    pub count: bool,
+}
+
+impl Default for ReduceDupSpec {
+    fn default() -> Self {
+        ReduceDupSpec { method: DupMethod::Mean, tol: DUP_TOL, count: false }
+    }
+}
+
+/// Origin's word for a method, as in the comment of its result column.
+pub fn dup_method_name(m: DupMethod) -> &'static str {
+    match m {
+        DupMethod::Mean => "Mean",
+        DupMethod::Median => "Median",
+        DupMethod::Min => "Min",
+        DupMethod::Max => "Max",
+        DupMethod::Sum => "Sum",
+        DupMethod::Sd => "SD",
+        DupMethod::Se => "SE",
+        DupMethod::Rms => "RMS",
+    }
 }
 
 /// The direction of a [`Tool::Translate`].
@@ -88,32 +119,78 @@ pub(super) fn run(
                 });
             }
         }
+        Tool::ReduceDup(spec) => {
+            if !(spec.tol.is_finite() && spec.tol >= 0.0) {
+                return Err(AnalysisError::BadOption(format!("{} is not a usable tolerance", spec.tol)));
+            }
+            for (k, inp) in inputs.iter().enumerate() {
+                let r = calc::reduce_duplicates(inp.xs(), inp.ys(), spec.method, spec.tol)
+                    .ok_or_else(|| AnalysisError::TooFewPoints(inp.short.clone()))?;
+                let n = k + 1;
+                on_sheet.push(SheetColumn {
+                    designation: Designation::X,
+                    long_name: format!("ReduceDupX{n}"),
+                    units: inp.x_units.clone(),
+                    comments: String::new(),
+                    data: ColumnData::numeric(r.x),
+                });
+                on_sheet.push(SheetColumn {
+                    designation: Designation::Y,
+                    long_name: format!("ReduceDupY{n}"),
+                    units: inp.units.clone(),
+                    comments: format!(
+                        "Duplicates replaced with {} of {}{}",
+                        dup_method_name(spec.method),
+                        inp.short,
+                        inp.range_note()
+                    ),
+                    data: ColumnData::numeric(r.y),
+                });
+                if spec.count {
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: format!("DupX{n}"),
+                        units: inp.x_units.clone(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(r.dup_x),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("DupXCount{n}"),
+                        units: String::new(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(r.dup_count),
+                    });
+                }
+            }
+        }
         Tool::ReduceX(opts) => {
             for inp in inputs {
                 let (gx, gy) = calc::reduce_evenly(inp.xs(), inp.ys(), opts).ok_or_else(|| {
                     AnalysisError::BadOption(format!(
                         "column {} cannot be reduced: it needs two points with different X values, and the \
-                         spacing or number of points must be valid for the X range",
+                         number of points, interval, number of intervals or frequency must be valid for its X range",
                         inp.short
                     ))
                 })?;
+                // Origin's comment names the sampling method (measured).
                 let how = match opts.method {
-                    ReduceMethod::Interpolate => "interpolated",
-                    ReduceMethod::Average => "averaged in bins",
+                    ReduceMethod::First => "Y First(X First)",
+                    ReduceMethod::Mean => "Y Mean(X Average)",
                 };
-                let n = gx.len();
+                let n = on_sheet.len() / 2 + 1;
                 on_sheet.push(SheetColumn {
                     designation: Designation::X,
-                    long_name: inp.x_name.clone(),
+                    long_name: format!("ReduceEXX{n}"),
                     units: inp.x_units.clone(),
                     comments: String::new(),
                     data: ColumnData::numeric(gx),
                 });
                 on_sheet.push(SheetColumn {
                     designation: Designation::Y,
-                    long_name: inp.name.clone(),
+                    long_name: format!("ReduceEXY{n}"),
                     units: inp.units.clone(),
-                    comments: format!("{} reduced to {n} evenly spaced X values, {how}{}", inp.label, inp.range_note()),
+                    comments: format!("{how} Stats Reduction of {}{}", inp.short, inp.range_note()),
                     data: ColumnData::numeric(gy),
                 });
             }
@@ -230,13 +307,52 @@ mod tests {
     }
 
     #[test]
+    fn reduce_duplicates_writes_origins_columns_on_a_new_sheet() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![3.0, 1.0, 2.0, 3.0, 2.0])).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0])).unwrap();
+        // reducedup4/5 in Origin: X 1 2 3, Mean 2 4 2.5, SD 2 1.414 2.121 (a lone point keeps its Y).
+        let r = p.analyze(&req(y, Tool::ReduceDup(ReduceDupSpec::default()))).unwrap();
+        let sheet = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(sheet.columns.len(), 2);
+        assert_eq!(sheet.columns[0].numeric().unwrap(), [1.0, 2.0, 3.0]);
+        assert_eq!(sheet.columns[1].numeric().unwrap(), [2.0, 4.0, 2.5]);
+        assert_eq!(sheet.columns[0].long_name, "ReduceDupX1");
+        assert_eq!(sheet.columns[1].long_name, "ReduceDupY1");
+        assert_eq!(sheet.columns[1].comments, "Duplicates replaced with Mean of B");
+        let spec = ReduceDupSpec { method: DupMethod::Sd, count: true, ..ReduceDupSpec::default() };
+        let r = p.analyze(&req(y, Tool::ReduceDup(spec))).unwrap();
+        let sheet = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["ReduceDupX1", "ReduceDupY1", "DupX1", "DupXCount1"]);
+        let sd = sheet.columns[1].numeric().unwrap();
+        assert_eq!(sd[0], 2.0);
+        assert!(
+            (sd[1] - std::f64::consts::SQRT_2).abs() < 1e-12 && (sd[2] - 2.1213203435596424).abs() < 1e-12,
+            "{sd:?}"
+        );
+        assert_eq!(sheet.columns[2].numeric().unwrap(), [2.0, 3.0]);
+        assert_eq!(sheet.columns[3].numeric().unwrap(), [2.0, 2.0]);
+        let bad = ReduceDupSpec { tol: f64::NAN, ..ReduceDupSpec::default() };
+        assert!(p.analyze(&req(y, Tool::ReduceDup(bad))).is_err());
+        assert!(Project::can_link(&Tool::ReduceDup(ReduceDupSpec::default())));
+    }
+
+    #[test]
     fn reduce_writes_a_new_sheet_with_even_x() {
         let (mut p, y, book) = setup();
-        let opts = ReduceOptions { grid: calc::EvenGrid::Count(3), ..ReduceOptions::default() };
+        // Every 2 points: (0, 1), (2, 3) and the short run (4) at the place of a full one.
+        let opts = ReduceOptions { group: calc::ReduceGroup::EveryN(2), ..ReduceOptions::default() };
         let r = p.analyze(&req(y, Tool::ReduceX(opts))).unwrap();
         let sheet = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(sheet.columns[0].numeric().unwrap(), [0.0, 2.0, 4.0]);
-        assert_eq!(sheet.columns[1].numeric().unwrap(), [1.0, 8.0, 9.0]);
+        assert_eq!(sheet.columns[0].numeric().unwrap(), [0.5, 2.5, 4.5]);
+        assert_eq!(sheet.columns[1].numeric().unwrap(), [2.0, 7.5, 9.0]);
+        assert_eq!(
+            (sheet.columns[0].long_name.as_str(), sheet.columns[1].long_name.as_str()),
+            ("ReduceEXX1", "ReduceEXY1")
+        );
+        assert_eq!(sheet.columns[1].comments, "Y Mean(X Average) Stats Reduction of B");
     }
 
     #[test]
@@ -319,12 +435,12 @@ mod tests {
         assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
 
         let (mut p, y, book) = setup();
-        let opts = ReduceOptions { grid: calc::EvenGrid::Count(3), ..ReduceOptions::default() };
+        let opts = ReduceOptions { group: calc::ReduceGroup::EveryN(2), ..ReduceOptions::default() };
         assert!(Project::can_link(&Tool::ReduceX(opts)));
         let r = p.analyze_linked(&req(y, Tool::ReduceX(opts)), &OutputTarget::NextToInput, RecalcMode::Auto);
         let out = r.unwrap().new_columns[1];
         edit_y(&mut p, y, new_y);
-        assert_eq!(p.numeric(out).unwrap(), [0.0, 4.0, 9.0]);
+        assert_eq!(p.numeric(out).unwrap(), [1.0, 5.0, 9.0]);
         assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
     }
 

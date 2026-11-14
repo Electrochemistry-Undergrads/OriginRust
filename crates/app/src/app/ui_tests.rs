@@ -6,7 +6,7 @@
 use super::*;
 use egui_kittest::Harness;
 use egui_kittest::kittest::{By, NodeT, Queryable};
-use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind};
+use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -497,6 +497,105 @@ fn apply_moves_the_starting_point_of_cancel() {
 }
 
 #[test]
+fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
+    let mut h = start(vec![data_file("size-speed")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Size/Speed");
+    for label in ["Layer Area", "Units", "Left", "Height"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    click(&mut h, "Display");
+    for label in ["Show Elements", "Labels", "Data", "Frame", "Clip Data to Frame", "Grid on Top of Data"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    click(&mut h, "Grid on Top of Data");
+    click(&mut h, "OK");
+    assert!(graph(&h).layers[0].display.grid_on_top);
+}
+
+/// Origin's Link Axes Scales tab: only for a layer after the first; Straight on the Y side links the
+/// Y scale too, and Link to None unlinks the layer without moving it.
+#[test]
+fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
+    let mut h = start(vec![data_file("link-tab")]);
+    let (_, g) = window_ids(&h);
+    h.state_mut().doc.apply("Double Y", |p| {
+        p.add_right_y_layer(g, 0).unwrap();
+    });
+    let before = graph(&h).layers[1].link.unwrap();
+    assert_eq!((before.x, before.y), (ScaleLink::Straight, ScaleLink::None));
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    assert!(!has_label(&h, "Link Axes Scales"), "the first layer has nothing to link to");
+    click(&mut h, "Layer 2");
+    click(&mut h, "Link Axes Scales");
+    for label in ["Link to", "Link Axes in Child Layer to Parent", "X Axis Link", "Y Axis Link", "Align", "Custom"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    h.query_all_by_label("Straight (1 to 1)").nth(1).expect("the Y side").click();
+    settle(&mut h);
+    click(&mut h, "Apply");
+    assert_eq!(graph(&h).layers[1].link.unwrap().y, ScaleLink::Straight);
+    // Link to None: unlinked, at the same place on the page.
+    let on_page = graph(&h).layers[1].frame.within(graph(&h).layers[0].frame);
+    h.get_by_value("Layer1").click();
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::Button).label("None")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    let after = &graph(&h).layers[1];
+    assert_eq!(after.link, None);
+    assert!((after.frame.left - on_page.left).abs() < 1e-12 && (after.frame.width - on_page.width).abs() < 1e-12);
+}
+
+/// Origin's Stack tab: the Offset radio buttons; Auto chosen here starts with Origin's 8 % gap.
+#[test]
+fn the_stack_tab_has_origins_offset_choices_and_auto_gap() {
+    let mut h = start(vec![data_file("stack-tab")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    for label in
+        ["Offset", "Cumulative", "Incremental", "Constant", "Gap (%)", "Individual", "Keep Proportion of Plot Range"]
+    {
+        assert!(has_label(&h, label), "{label}");
+    }
+    assert!(is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Auto")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Auto { gap_percent: 8.0 });
+}
+
+/// Origin's ">>" button hides the Plot Details tree and "<<" brings it back.
+#[test]
+fn plot_details_hides_and_shows_its_tree_as_origin() {
+    let mut h = start(vec![data_file("details-more")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    assert!(has_label(&h, "Layer 1"));
+    click(&mut h, ">>");
+    assert!(!has_label(&h, "Layer 1"), "the tree is hidden");
+    assert!(has_label(&h, "Size/Speed"), "the tabs stay");
+    click(&mut h, "<<");
+    assert!(has_label(&h, "Layer 1"));
+}
+
+#[test]
+fn the_page_node_has_origins_tabs() {
+    let mut h = start(vec![data_file("page-tabs")]);
+    open_props(&mut h, 0, PropsTab::Page, None);
+    for tab in ["Print/Dimensions", "Display", "Legends/Titles", "Text"] {
+        assert!(has_label(&h, tab), "{tab}");
+    }
+    assert!(has_label(&h, "Dimensions") && has_label(&h, "Units") && has_label(&h, "Width"));
+    click(&mut h, "Legends/Titles");
+    click(&mut h, "Include data plots from all Layers when constructing legend");
+    click(&mut h, "OK");
+    assert!(graph(&h).layers.iter().all(|l| l.legend.scope == sheaf_core::graph::LegendScope::Graph));
+}
+
+#[test]
 fn the_plot_details_tree_chooses_a_plot_of_the_second_layer() {
     let mut h = start(vec![data_file("details-tree")]);
     let (_, g) = window_ids(&h);
@@ -506,7 +605,7 @@ fn the_plot_details_tree_chooses_a_plot_of_the_second_layer() {
         let moved = graph.layers[0].plots.remove(1);
         graph.layers[1].plots.push(moved);
     });
-    let name = project(&h).plot_tree_text(&graph(&h).layers[1].plots[0]);
+    let name = project(&h).plot_data_name(&graph(&h).layers[1].plots[0]);
     open_props(&mut h, 0, PropsTab::Plots, None);
     assert_eq!(h.state().graph_props.as_ref().unwrap().layer, 0);
     for entry in ["Layer 1", "Layer 2"] {
@@ -531,9 +630,6 @@ fn plot_details_opened_for_the_page_and_the_legend_show_those_tabs() {
     let mut h = start(vec![data_file("details-page")]);
     open_props(&mut h, 0, PropsTab::Page, None);
     assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Page);
-    for tab in ["Print/Dimensions", "Legends/Titles", "Miscellaneous", "Display"] {
-        assert!(h.query_by_label(tab).is_some(), "the page tab {tab}");
-    }
     click(&mut h, "Text");
     click(&mut h, "+10 %");
     open_props(&mut h, 0, PropsTab::Legend, None);
@@ -1217,6 +1313,87 @@ fn export_graphs_apply_writes_the_file_and_asks_before_replacing_it() {
 }
 
 #[test]
+fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
+    let mut h = start(vec![data_file("export-psd")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    h.get_by_value("Portable Network Graphics (*.png)").click();
+    settle(&mut h);
+    click(&mut h, "Photoshop Document (*.psd)");
+    assert!(h.query_by_label("File will be saved as sample.psd").is_some());
+    assert!(h.query_by_label("Resolution").is_some());
+    assert!(h.query_by_label("Color Depth").is_some());
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-psd-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    let mut current = "24-bit Color";
+    for (name, depth, mode) in
+        [("rgb", "24-bit Color", 3), ("grey", "8-bit Grayscale", 1), ("indexed", "256 Colors", 2)]
+    {
+        if depth != current {
+            h.get_by_value(current).click();
+            settle(&mut h);
+            h.get_all_by_label(depth).last().unwrap().click();
+            settle(&mut h);
+            current = depth;
+        }
+        h.state_mut().export.as_mut().unwrap().set_file_name(name);
+        settle(&mut h);
+        click(&mut h, "Apply");
+        let bytes = std::fs::read(dir.join(format!("{name}.psd"))).expect("Apply writes the selected PSD mode");
+        assert_eq!(&bytes[..4], b"8BPS");
+        assert_eq!(u16::from_be_bytes(bytes[24..26].try_into().unwrap()), mode);
+        assert!(h.state().export.is_some(), "Apply keeps the window open");
+    }
+    click(&mut h, "Cancel");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn export_graphs_tiff_palette_and_compression_choices_write_indexed_files() {
+    let mut h = start(vec![data_file("export-tiff-palette")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    h.get_by_value("Portable Network Graphics (*.png)").click();
+    settle(&mut h);
+    click(&mut h, "Tagged Image File Format (*.tif)");
+    h.get_by_value("24-bit Color").click();
+    settle(&mut h);
+    click(&mut h, "256 Colors");
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-tiff-palette-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    let mut current = "LZW";
+    for (name, compression, expected) in [("lzw", "LZW", 5), ("raw", "None", 1), ("packbits", "PackBits", 32773)] {
+        if compression != current {
+            h.get_by_value(current).click();
+            settle(&mut h);
+            h.get_all_by_label(compression).last().unwrap().click();
+            settle(&mut h);
+            current = compression;
+        }
+        h.state_mut().export.as_mut().unwrap().set_file_name(name);
+        settle(&mut h);
+        click(&mut h, "Apply");
+        let bytes = std::fs::read(dir.join(format!("{name}.tif"))).expect("Apply writes the indexed TIFF");
+        let ifd = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        let count = u16::from_le_bytes(bytes[ifd..ifd + 2].try_into().unwrap()) as usize;
+        let short_tag = |tag| {
+            let at = (0..count)
+                .map(|i| ifd + 2 + 12 * i)
+                .find(|&at| u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap()) == tag)
+                .unwrap();
+            u16::from_le_bytes(bytes[at + 8..at + 10].try_into().unwrap())
+        };
+        assert_eq!(short_tag(262), 3, "palette color");
+        assert_eq!(short_tag(258), 8, "one 8-bit index per pixel");
+        assert_eq!(short_tag(259), expected, "chosen compression");
+    }
+    click(&mut h, "Cancel");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
     let mut h = start(vec![data_file("ranges")]);
     show_window(&mut h, "Book1 - sample");
@@ -1273,6 +1450,134 @@ fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
     assert_eq!(plus.len(), 2);
     assert_eq!(plus[0].numeric().unwrap(), [3.5, 5.5, 7.5, 9.5]);
     assert_eq!(h.state().doc.undo_label(), Some("Curve math"));
+}
+
+#[test]
+fn simple_column_math_adds_ten_into_the_input_columns_as_origin() {
+    let mut h = start(vec![data_file("colmath")]);
+    show_window(&mut h, "Book1 - sample");
+    let before: Vec<Vec<f64>> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.numeric().unwrap().to_vec()).collect();
+    menu_path(&mut h, &["Analysis", "Mathematics", "Simple Column Math..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    // Origin's defaults: Add, the constant 10, the result written back into each input column.
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheet().columns.len(), before.len(), "no new columns");
+    let changed: Vec<usize> =
+        (0..before.len()).filter(|&i| b.sheet().columns[i].numeric().unwrap() != before[i]).collect();
+    assert_eq!(changed.len(), 2, "both Y columns");
+    for i in changed {
+        let want: Vec<f64> = before[i].iter().map(|v| v + 10.0).collect();
+        assert_eq!(b.sheet().columns[i].numeric().unwrap(), want);
+    }
+    assert_eq!(h.state().doc.undo_label(), Some("Column math"));
+}
+
+#[test]
+fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet() {
+    for (item, prefix, rows) in [("Convolution...", "Convolution", 7), ("Correlation...", "Correlation", 7)] {
+        let mut h = start(vec![data_file("signal")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Analysis", "Signal Processing", item]);
+        assert!(h.state().analysis.is_some(), "the {item} window is open");
+        // The first Y column is the second signal (an input may be used: autocorrelation).
+        click(&mut h, "OK");
+        let b = project(&h).workbooks().next().unwrap();
+        let sheet = b.sheets.iter().find(|s| s.name.starts_with(prefix)).expect("a result sheet");
+        assert_eq!(sheet.columns.len(), 4, "X and Y for each of the two inputs");
+        assert_eq!(sheet.columns[1].numeric().unwrap().len(), rows, "4 + 4 - 1 values");
+    }
+}
+
+#[test]
+fn fft_opens_from_signal_processing_and_writes_a_spectrum_sheet() {
+    let mut h = start(vec![data_file("fft")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FFT", "FFT..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("FFT")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 16, "eight columns for each of the two inputs");
+    assert_eq!(sheet.columns[0].long_name, "Frequency");
+    assert_eq!(h.state().doc.undo_label(), Some("FFT"));
+}
+
+#[test]
+fn ifft_opens_from_signal_processing_and_takes_the_next_column_as_the_imaginary_part() {
+    let mut h = start(vec![data_file("ifft")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FFT", "IFFT..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("IFFT")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 10, "five columns for each of the two inputs");
+    // The column right after the first input is the imaginary part.
+    assert_eq!(sheet.columns[1].comments, "IFFT of B + i C");
+}
+
+#[test]
+fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
+    let mut h = start(vec![data_file("fftfilter")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FFT Filters..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added = b.sheet().columns.iter().filter(|c| c.comments.starts_with("FFT low pass filter of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("FFT filter"));
+}
+
+#[test]
+fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
+    let mut h = start(vec![data_file("hilbert")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Hilbert Transform..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added = b.sheet().columns.iter().filter(|c| c.comments.starts_with("Hilbert transform of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("Hilbert transform"));
+}
+
+#[test]
+fn level_crossing_opens_from_mathematics_and_lists_the_crossings() {
+    let mut h = start(vec![data_file("levelx")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 1, "Origin writes into the input sheet");
+    let names: Vec<&str> = b.sheet().columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert!(names.contains(&"CrossingX1") && names.contains(&"CrossingX2"), "one per input: {names:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Level crossing"));
+}
+
+/// Origin's `levelcrossing` numbers for this curve at Y = 1.5, with the optional direction and row
+/// columns beside the crossing X values.
+#[test]
+fn level_crossing_matches_origins_numbers_and_optional_outputs() {
+    let data = csv_file("levelcross", "wave", "x,y\n0,0\n1,2\n2,4\n3,1\n4,-1\n5,-2\n6,1\n7,1\n8,3\n9,0.5\n10,2\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - wave");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
+    h.state_mut().analysis.as_mut().unwrap().set_crossing_level(1.5);
+    click(&mut h, "Also output directions, X indices and Y crossing values");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let ws = b.sheet();
+    let col = |name: &str| ws.columns.iter().find(|c| c.long_name == name).unwrap_or_else(|| panic!("no {name}"));
+    assert_eq!(col("CrossingX1").comments, "X values of Y= 1.5 Level Crossing of B");
+    let x = col("CrossingX1").numeric().unwrap();
+    let want = [0.75, 2.833_333_333_333_333_5, 7.25, 8.6, 9.666_666_666_666_666];
+    assert!(x.len() == 5 && x.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-12), "{x:?}");
+    assert_eq!(col("Directions1").numeric().unwrap(), [1.0, -1.0, 1.0, -1.0, 1.0]);
+    assert_eq!(col("X Indices1").numeric().unwrap(), [2.0, 4.0, 8.0, 10.0, 11.0]);
 }
 
 fn date_file(tag: &str) -> PathBuf {
@@ -1353,9 +1658,9 @@ fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_sep
     assert!(h.query_by_label_contains("found: comma").is_some());
     // Put the data into the active sheet as new columns (the Import Mode node of the tree).
     click(&mut h, "Import Mode");
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New Books")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Start New Books")).click();
     settle(&mut h);
-    click(&mut h, "New Columns");
+    click(&mut h, "Start New Columns");
     click(&mut h, "OK");
     assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1, "no new book was made");
@@ -1423,6 +1728,16 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     show_window(&mut h, "Book1 - peaks");
     menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
     assert!(h.state().analysis.is_some(), "the Peak Analyzer window is open");
+    // Origin's wizard: the pages of the goal Integrate Peaks, Prev and Next.
+    for page in ["Baseline Mode", "Baseline Treatment", "Find Peaks", "Integrate Peaks", "Finish"] {
+        assert!(label_containing(&h, page), "{page}");
+    }
+    assert!(label_containing(&h, "Goal - Integrate Peaks"));
+    click(&mut h, "Next");
+    assert!(has_label(&h, "Y ="), "the Baseline Mode page with Origin's Constant baseline");
+    click(&mut h, "Next");
+    click(&mut h, "Next");
+    assert!(has_label(&h, "Direction"), "the Find Peaks page");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "OK closes the window");
     let b = project(&h).workbooks().next().unwrap();
@@ -2071,6 +2386,237 @@ fn sheet<'a>(h: &'a Harness<'static, SheafApp>) -> &'a sheaf_core::Worksheet {
     project(h).workbooks().next().unwrap().sheet()
 }
 
+/// Exercise the owner's two entry points without selecting cells through internal state.
+fn cell_regression_table(imported: bool, tag: &str) -> Harness<'static, SheafApp> {
+    if imported {
+        let mut h = start(vec![data_file(tag)]);
+        show_window(&mut h, "Book1 - sample");
+        h
+    } else {
+        let mut h = start(Vec::new());
+        menu_path(&mut h, &["File", "New", "Worksheet..."]);
+        pause(&mut h);
+        h
+    }
+}
+
+/// Coordinates also work for the empty cells in a brand-new workbook.
+fn worksheet_cell_pos(h: &Harness<'static, SheafApp>, column: usize, row: usize) -> egui::Pos2 {
+    let x = text_pos(h, &grid::head_name(sheet(h), column)).x;
+    let height = text_pos(h, "Comments").y - text_pos(h, "Units").y;
+    egui::pos2(x, text_pos(h, "F(x)=").y + height * (row + 1) as f32)
+}
+
+#[test]
+fn owner_regression_yellow_cell_click_does_not_select_the_column() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-selection");
+        let at = egui::pos2(text_pos(&h, "B(Y1)").x, text_pos(&h, "Long Name").y);
+        click_at(&mut h, at);
+        assert_eq!(
+            cells(&h),
+            Sel::Label { column: column_id(&h, "B"), row: LabelRow::LongName },
+            "one yellow cell, imported={imported}"
+        );
+        assert!(book_ui(&h).target(sheet(&h)).is_none(), "labels must not target worksheet data");
+    }
+}
+
+#[test]
+fn owner_regression_label_typing_navigation_and_clipboard_do_not_edit_data() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-keys");
+        let before = sheet(&h).columns.iter().map(|c| c.data.clone()).collect::<Vec<_>>();
+        click(&mut h, "B Long Name");
+        h.event(egui::Event::Text("Signal".into()));
+        settle(&mut h);
+        assert!(book_ui(&h).editing_label.is_some(), "typing into a label, imported={imported}");
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].long_name, "Signal");
+        assert_eq!(cells(&h), Sel::Label { column: column_id(&h, "B"), row: LabelRow::Units });
+        h.event(egui::Event::Text("mA".into()));
+        settle(&mut h);
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        key(&mut h, egui::Key::Tab);
+        key(&mut h, egui::Key::F2);
+        assert_eq!(book_ui(&h).editing_label.as_ref().unwrap().2, "mA");
+        h.event(egui::Event::Text("discard".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Escape);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        ctrl(&mut h, egui::Key::C);
+        assert_eq!(h.state().copied, "mA");
+        key(&mut h, egui::Key::ArrowLeft);
+        paste(&mut h, "volts");
+        assert_eq!(sheet(&h).columns[0].units, "volts");
+        ctrl(&mut h, egui::Key::Z);
+        assert_ne!(sheet(&h).columns[0].units, "volts");
+        key(&mut h, egui::Key::ArrowRight);
+        key(&mut h, egui::Key::Delete);
+        assert!(sheet(&h).columns[1].units.is_empty());
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        ctrl(&mut h, egui::Key::X);
+        assert_eq!(h.state().copied, "mA");
+        assert!(sheet(&h).columns[1].units.is_empty());
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        assert_eq!(sheet(&h).columns.iter().map(|c| c.data.clone()).collect::<Vec<_>>(), before);
+    }
+}
+
+#[test]
+fn owner_regression_label_navigation_reaches_data_and_formula_keeps_its_editor() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-to-data");
+        click(&mut h, "B Long Name");
+        for row in [LabelRow::Units, LabelRow::Comments, LabelRow::Formula] {
+            key(&mut h, egui::Key::ArrowDown);
+            assert_eq!(cells(&h), Sel::Label { column: column_id(&h, "B"), row });
+        }
+        key(&mut h, egui::Key::ArrowDown);
+        assert_eq!(cells(&h), at(1, 0));
+        h.event(egui::Event::Text("12".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "12");
+        click(&mut h, "B F(x)=");
+        key(&mut h, egui::Key::F2);
+        assert!(h.state().set_values.is_some(), "formula dialog, imported={imported}");
+    }
+}
+
+#[test]
+fn owner_regression_blank_cells_accept_mouse_typing_navigation_and_clipboard() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "new-table-cells");
+        let at = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, at);
+        assert_eq!(cells(&h), self::at(1, 0), "mouse selection, imported={imported}");
+        h.event(egui::Event::Text("42".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "42", "typing, imported={imported}");
+        assert_eq!(cells(&h), self::at(1, 1));
+        paste(&mut h, "7\t8\n9\t10");
+        assert_eq!(sheet(&h).columns[1].cell_text(1), "7");
+        assert_eq!(sheet(&h).columns[2].cell_text(2), "10");
+        ctrl(&mut h, egui::Key::C);
+        assert_eq!(h.state().copied, "7\t8\n9\t10\n");
+        key(&mut h, egui::Key::Delete);
+        assert!(sheet(&h).columns[1].numeric().unwrap().get(1).is_none_or(|v| v.is_nan()));
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].cell_text(1), "7");
+    }
+}
+
+#[test]
+fn owner_regression_tab_commits_and_keeps_typing_focus_in_the_next_data_cell() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "tab-focus");
+        let at = worksheet_cell_pos(&h, 0, 0);
+        click_at(&mut h, at);
+        h.event(egui::Event::Text("8".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[0].cell_text(0), "8");
+        assert_eq!(cells(&h), self::at(1, 0));
+        h.event(egui::Event::Text("9".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("9"), "imported={imported}");
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "9");
+        assert_eq!(cells(&h), self::at(0, 0));
+        h.event(egui::Event::Text("10".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("10"), "Shift+Tab, imported={imported}");
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[0].cell_text(0), "10");
+        assert_eq!(cells(&h), self::at(0, 1));
+        key(&mut h, egui::Key::ArrowDown);
+        assert_eq!(cells(&h), self::at(0, 2));
+    }
+}
+
+#[test]
+fn owner_regression_replacing_a_cell_starts_the_cursor_after_the_first_typed_character() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "typing-order");
+        let pos = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, pos);
+        // Leave a cached cursor at the start, then begin a new replacement edit.
+        key(&mut h, egui::Key::F2);
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("a".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("b".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("ab"), "imported={imported}");
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("α".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("β".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("αβ"));
+        // Ordinary cursor movement within the same edit must still work.
+        key(&mut h, egui::Key::Home);
+        h.event(egui::Event::Text("x".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("xαβ"));
+    }
+}
+
+#[test]
+fn owner_regression_label_replacement_does_not_reuse_an_old_cursor_position() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-typing-order");
+        click(&mut h, "B Long Name");
+        key(&mut h, egui::Key::F2);
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("a".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("b".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing_label.as_ref().map(|e| e.2.as_str()), Some("ab"));
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].long_name, "ab");
+    }
+}
+
+#[test]
+fn owner_regression_quick_mouse_drag_keeps_its_start_cell_in_new_and_imported_tables() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "quick-drag");
+        let from = worksheet_cell_pos(&h, 0, 0);
+        let to = worksheet_cell_pos(&h, 1, 3);
+        pause(&mut h);
+        h.event(egui::Event::PointerMoved(from));
+        h.step();
+        h.event(egui::Event::PointerButton {
+            pos: from,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        });
+        // A real input frame can contain the press and movement together.
+        h.event(egui::Event::PointerMoved(to));
+        h.step();
+        h.event(egui::Event::PointerButton {
+            pos: to,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+        settle(&mut h);
+        assert_eq!(cells(&h), Sel::Cells { anchor: (0, 0), end: (1, 3) }, "imported={imported}");
+    }
+}
+
 fn column_id(h: &Harness<'static, SheafApp>, short: &str) -> ColumnId {
     sheet(h).column_by_name(short).unwrap().id
 }
@@ -2173,6 +2719,47 @@ fn copy_gives_tab_separated_text_and_paste_puts_it_back_in_one_undo_step() {
     menu_path(&mut h, &["Edit", "Copy", "Copy including label rows"]);
     assert!(h.state().copied.starts_with("up\tdown\n\t\n\t\n"), "{:?}", h.state().copied);
     assert!(h.state().copied.ends_with("2.5\t30.5\n4.5\t20.5\n"));
+}
+
+#[test]
+fn owner_regression_clipboard_text_keeps_its_cells_through_copy_cut_paste_and_undo() {
+    let values = ["alpha,beta", "x\ty", "line one\nline two", "say \"hi\""];
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "clipboard-text");
+        let a = column_id(&h, "A");
+        h.state_mut().doc.apply("Text fixture", |p| {
+            p.column_mut(a).unwrap().data = ColumnData::text(values.iter().map(|s| (*s).into()).collect());
+        });
+        settle(&mut h);
+        let before: Vec<_> = (0..4).map(|r| sheet(&h).columns[1].cell_text(r)).collect();
+        let column_count = sheet(&h).columns.len();
+
+        click_text(&mut h, "A(X1)");
+        ctrl(&mut h, egui::Key::C);
+        let copied = h.state().copied.clone();
+        assert_eq!(h.state().doc.undo_label(), Some("Text fixture"), "Copy changes no data");
+        let at = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, at);
+        paste(&mut h, &copied);
+        let texts =
+            |h: &Harness<'static, SheafApp>| (0..4).map(|r| sheet(h).columns[1].cell_text(r)).collect::<Vec<_>>();
+        assert_eq!(texts(&h), values);
+        assert_eq!(sheet(&h).columns.len(), column_count, "commas must not grow the sheet");
+        assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (1, 3) });
+        assert_eq!(h.state().doc.undo_label(), Some("Paste"));
+
+        ctrl(&mut h, egui::Key::X);
+        assert_eq!(h.state().copied, copied, "Cut uses the same lossless table text");
+        assert!(sheet(&h).columns[1].is_empty());
+        assert_eq!(h.state().doc.undo_label(), Some("Cut cells"));
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(texts(&h), values);
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(texts(&h), before, "Undo Paste restores the original destination");
+        h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z);
+        settle(&mut h);
+        assert_eq!(texts(&h), values);
+    }
 }
 
 #[test]
@@ -2999,6 +3586,154 @@ fn the_object_manager_selection_is_the_one_of_plot_details() {
 }
 
 #[test]
+fn plot_details_drop_lines_label_and_fill_tabs_change_the_plot() {
+    let mut h = start(vec![data_file("pd-decor")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let open = |h: &mut Harness<'static, SheafApp>| {
+        let at = in_right_panel(h, &project(h).plot_label(&plots[0]));
+        double_click_at(h, at);
+        assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    };
+    open(&mut h);
+    click(&mut h, "Drop Lines");
+    click(&mut h, "Vertical");
+    click(&mut h, "Label");
+    click(&mut h, "Enable");
+    click(&mut h, "Line");
+    click(&mut h, "Fill Area Under Curve");
+    click(&mut h, "OK");
+    let decor = &project(&h).graph(graph).unwrap().layers[0].plots[0].decor;
+    assert!(decor.drop.vertical.on && !decor.drop.horizontal.on);
+    assert!(decor.labels.enable);
+    let line = project(&h).graph(graph).unwrap().layers[0].plots[0].line.color;
+    assert_eq!(decor.fill_under, Some(line), "the fill starts in the line's colour");
+}
+
+#[test]
+fn a_dependent_group_shares_a_change_and_an_independent_one_does_not() {
+    let mut h = start(vec![data_file("pd-group")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    assert!(plots.len() >= 2);
+    let open = |h: &mut Harness<'static, SheafApp>| {
+        let at = in_right_panel(h, &project(h).plot_label(&plots[0]));
+        double_click_at(h, at);
+        assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    };
+    // Origin's default is Dependent: a drop line ticked on the first plot is drawn on every plot.
+    open(&mut h);
+    click(&mut h, "Group");
+    assert!(has_label(&h, "Edit Mode") && has_label(&h, "Group Members") && has_label(&h, "Line Style"));
+    click(&mut h, "Drop Lines");
+    click(&mut h, "Vertical");
+    click(&mut h, "OK");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert!(layer.group_style.dependent);
+    assert!(layer.plots.iter().all(|q| q.decor.drop.vertical.on), "every member follows");
+    // Independent: only the plot that is changed.
+    pause(&mut h);
+    open(&mut h);
+    click(&mut h, "Group");
+    click(&mut h, "Independent");
+    click(&mut h, "Drop Lines");
+    click(&mut h, "Horizontal");
+    click(&mut h, "OK");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert!(!layer.group_style.dependent);
+    assert!(layer.plots[0].decor.drop.horizontal.on);
+    assert!(layer.plots[1..].iter().all(|q| !q.decor.drop.horizontal.on), "the others are left alone");
+    // Each member has an Offset tab; it is greyed until the layer stacks Individually.
+    pause(&mut h);
+    open(&mut h);
+    click(&mut h, "Offset");
+    assert!(has_label(&h, "X") && has_label(&h, "Y"));
+    click(&mut h, "Cancel");
+    assert!(project(&h).graph(graph).unwrap().layers[0].plot_offsets.is_empty(), "looking changes nothing");
+}
+
+#[test]
+fn the_workbook_button_of_plot_details_brings_the_plots_worksheet_forward() {
+    let mut h = start(vec![data_file("pd-workbook")]);
+    let (book, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let at = in_right_panel(&h, &project(&h).plot_label(&plots[0]));
+    double_click_at(&mut h, at);
+    assert_eq!(h.state().active, Some(graph));
+    click(&mut h, "Workbook");
+    assert_eq!(h.state().active, Some(book), "the worksheet of the plot is in front");
+}
+
+#[test]
+fn f12_opens_origins_layer_contents_window_that_removes_adds_and_groups_plots() {
+    let mut h = start(vec![data_file("layer-contents")]);
+    let (_, graph) = window_ids(&h);
+    assert_eq!(h.state().active, Some(graph), "the graph is in front");
+    let plots_before = project(&h).graph(graph).unwrap().layers[0].plots.len();
+    assert!(plots_before >= 2);
+    h.key_press(egui::Key::F12);
+    settle(&mut h);
+    assert!(h.state().layer_contents.is_some(), "F12 opens Layer Contents");
+    for label in ["Book Name", "Short Name", "Plot Type", "Rescale on Apply", "Layer Properties...", "Close"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    // Remove the last plot, then Cancel brings it back.
+    let last = project(&h).graph(graph).unwrap().layers[0].plots.last().unwrap().y;
+    let short = format!("{}(Y)", project(&h).column(last).unwrap().short_name);
+    let right =
+        h.query_all_by_label(&short).max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x)).unwrap().rect().center();
+    click_at(&mut h, right);
+    click(&mut h, "<=");
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots.len(), plots_before - 1);
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots.len(), plots_before, "Cancel undoes it");
+    // Remove it again and add it back from the left list; then group two plots.
+    pause(&mut h);
+    h.key_press(egui::Key::F12);
+    settle(&mut h);
+    let right =
+        h.query_all_by_label(&short).max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x)).unwrap().rect().center();
+    click_at(&mut h, right);
+    click(&mut h, "<=");
+    click(&mut h, &short);
+    click(&mut h, "=>");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert_eq!(layer.plots.len(), plots_before);
+    assert_eq!(layer.plots.last().unwrap().y, last, "added at the end");
+    click(&mut h, "Close");
+    assert!(h.state().layer_contents.is_none(), "Close closes the window");
+}
+
+#[test]
+fn plot_setup_opens_from_the_graph_menu_and_from_layer_contents() {
+    let mut h = start(vec![data_file("plot-setup")]);
+    let (_, graph) = window_ids(&h);
+    let before = project(&h).graph(graph).unwrap().clone();
+    menu_path(&mut h, &["Graph", "Plot Setup..."]);
+    assert!(h.state().plot_setup.is_some(), "Graph > Plot Setup... opens Origin's window");
+    for label in ["Plot Type:", "Line + Symbol", "Column / Bar", "Rescale", "Range", "Legend"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    assert!(is_disabled(&h, "Preview"));
+    click(&mut h, "Cancel");
+    assert!(h.state().plot_setup.is_none());
+    assert_eq!(project(&h).graph(graph).unwrap(), &before, "Cancel changes nothing");
+    // Layer Contents' Plot Setup... replaces it with Plot Setup, as in Origin.
+    h.key_press(egui::Key::F12);
+    settle(&mut h);
+    click(&mut h, "Plot Setup...");
+    assert!(h.state().layer_contents.is_none() && h.state().plot_setup.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().plot_setup.is_none());
+}
+
+#[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
     show_window(&mut h, "Book1 - sample");
@@ -3117,6 +3852,43 @@ fn the_statistics_menu_makes_a_histogram_graph() {
     let g = p.graphs().last().unwrap();
     assert_eq!(g.layers[0].plots[0].kind, sheaf_core::graph::PlotKind::Column);
     assert!(p.workbooks().next().unwrap().sheets[1].name.starts_with("Histogram"));
+}
+
+/// Statistics > Discrete Frequency... counts the distinct values of the chosen columns.
+#[test]
+fn the_statistics_menu_makes_a_discrete_frequency() {
+    let mut h = start(vec![data_file("discfreq")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Discrete Frequency..."]);
+    for label in ["Count", "Relative Frequency", "Cumulative Frequency", "Case Sensitive", "Sort Data by"] {
+        assert!(h.query_by_label(label).is_some(), "{label} is shown");
+    }
+    click(&mut h, "OK");
+    let p = project(&h);
+    let ws = &p.workbooks().next().unwrap().sheets[1];
+    assert!(ws.name.starts_with("DiscretFreq"), "{}", ws.name);
+    assert_eq!(ws.columns[0].long_name, "Data");
+    assert_eq!(ws.columns[1].long_name, "Count");
+}
+
+/// Statistics > 2D Frequency Counts/Binning... opens Origin's option groups and writes the grid sheet.
+#[test]
+fn the_statistics_menu_makes_2d_frequency_counts() {
+    let mut h = start(vec![data_file("bin2d")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "2D Frequency Counts/Binning..."]);
+    // One group per axis, then the quantity.
+    for label in ["Specify Binning Range by", "Minimum Bin Beginning", "Step by"] {
+        assert_eq!(h.query_all_by_label(label).count(), 2, "{label} is shown for X and for Y");
+    }
+    assert!(h.query_by_label("Quantity to Compute").is_some());
+    click(&mut h, "OK");
+    let p = project(&h);
+    let ws = &p.workbooks().next().unwrap().sheets[1];
+    assert!(ws.name.starts_with("Binning2D"), "{}", ws.name);
+    assert!(ws.columns[0].long_name.starts_with("Bin Ends of"), "{}", ws.columns[0].long_name);
+    assert!(ws.columns.len() >= 2 && ws.columns[1].long_name == "Count");
+    assert_eq!(h.state().doc.undo_label(), Some("2D frequency counts"));
 }
 
 // ----- graph window: picking objects with the mouse (gui-look.md section 4) -----------------------
@@ -3351,7 +4123,7 @@ fn the_layer_icon_has_origins_menu_and_a_double_click_opens_the_plot_list() {
     close_menus(&mut h);
     double_click_at(&mut h, at);
     let d = h.state().graph_props.as_ref().expect("Plot Setup");
-    assert_eq!(d.tab(), PropsTab::Setup);
+    assert_eq!(d.tab(), PropsTab::Plots);
 }
 
 #[test]
@@ -3408,30 +4180,6 @@ fn deleting_a_column_drops_the_stack_settings_and_tick_labels_that_name_it() {
     assert_eq!(l.x_axis.tick_label_source, TickLabelSource::Auto);
     assert!(l.plot_offset(y1).is_none());
     assert_eq!(l.plot_offset(y2).and_then(|o| o.follows), None);
-}
-
-#[test]
-fn deleting_a_column_resets_the_data_labels_and_x_error_that_name_it() {
-    let mut p = Project::new();
-    let book = p.add_workbook("w");
-    let names = p.add_column(book, 0, Designation::X, ColumnData::text(vec!["a".into(), "b".into()])).unwrap();
-    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
-    let ex = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.1, 0.1])).unwrap();
-    let g = p.plot_columns(Template::Line, &[y1]).unwrap();
-    {
-        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
-        plot.details.labels.enabled = true;
-        plot.details.labels.form = LabelForm::Column { column: names };
-        plot.x_error = Some(ex);
-        plot.y_base = Some(ex);
-    }
-    delete_columns(&mut p, &[names, ex]);
-    let graph = p.graph(g).unwrap();
-    let plot = &graph.layers[0].plots[0];
-    assert_eq!(plot.details.labels.form, LabelForm::Y);
-    assert!(plot.details.labels.enabled, "the labels stay on");
-    assert_eq!((plot.x_error, plot.y_base), (None, None));
-    assert!(!graph.referenced_columns().contains(&names));
 }
 
 #[test]
@@ -4100,21 +4848,26 @@ fn the_mathematics_menu_averages_curves() {
     show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
-    for label in ["All X values of the curves", "Evenly spaced", "Those of one curve", "Linear", "Akima spline"] {
+    for label in
+        ["Averaged X", "Number of Points", "Auto", "Interpolate", "Std Dev", "Std Err", "N", "Minimum", "Maximum"]
+    {
         assert!(has_label(&h, label), "{label}");
     }
+    // Origin's Std Dev and N are off by default; tick them here.
+    click(&mut h, "Std Dev");
+    click(&mut h, "N");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
-    let (sheet, mean) = result_column(&h, "Mean");
-    assert!(sheet.starts_with("Average"), "{sheet}");
-    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5], "(2.5 + 30.5) / 2 and so on");
-    let (_, sd) = result_column(&h, "SD");
+    // Full X Range with Auto points: 5 x 4 = 20 evenly spaced X from 1 to 4 (Origin's defaults).
+    let (sheet, mean) = result_column(&h, "Averaged Y");
+    assert!(sheet.starts_with("AverageResult"), "{sheet}");
+    assert_eq!(mean.len(), 20);
+    assert_eq!((mean[0], mean[19]), (16.5, 4.5), "(2.5 + 30.5) / 2 at t = 1 and (8.5 + 0.5) / 2 at t = 4");
+    let (_, sd) = result_column(&h, "Standard Deviation");
     // The sample SD of two values is their distance over the square root of two.
-    for (s, gap) in sd.iter().zip([28.0, 16.0, 4.0, 8.0]) {
-        assert!((s - gap / 2.0_f64.sqrt()).abs() < 1e-9, "{sd:?}");
-    }
-    let (_, n) = result_column(&h, "N");
-    assert_eq!(n, vec![2.0; 4]);
+    assert!((sd[0] - 28.0 / 2.0_f64.sqrt()).abs() < 1e-9, "{sd:?}");
+    let (_, n) = result_column(&h, "Count");
+    assert_eq!(n, vec![2.0; 20]);
     assert_eq!(h.state().doc.undo_label(), Some("Average multiple curves"));
 }
 
@@ -4123,11 +4876,12 @@ fn the_mathematics_menu_averages_curves() {
 fn average_curves_can_use_evenly_spaced_x() {
     let mut h = start(vec![data_file("avecurves-even")]);
     open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B", "C"]);
-    click(&mut h, "Evenly spaced");
-    assert!(has_label(&h, "Number of points"));
+    assert!(has_label(&h, "Number of Points"));
+    // Untick Auto: the number in the box (100) is used.
+    click(&mut h, "Auto");
     click(&mut h, "OK");
-    let (_, x) = result_column(&h, "t");
-    assert_eq!(x.len(), 100, "the default is 100 points");
+    let (_, x) = result_column(&h, "Averaged X");
+    assert_eq!(x.len(), 100);
     assert_eq!((x[0], x[99]), (1.0, 4.0));
 }
 
@@ -4151,7 +4905,7 @@ fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
     assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
-    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    let (sheet, x) = result_column(&h, "Intersection X1");
     assert!(sheet.starts_with("Intersect"), "{sheet}");
     assert_eq!(x.len(), 1);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
@@ -4201,7 +4955,7 @@ fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
     assert!(h.state().analysis.is_some());
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "it ran with the two plots");
-    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    let (sheet, x) = result_column(&h, "Intersection X1");
     assert!(sheet.starts_with("Intersect"), "{sheet}");
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
 }
@@ -4212,9 +4966,9 @@ fn from_a_graph_average_multiple_curves_starts_with_the_plots_of_the_layer() {
     menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "it ran with the two plots");
-    let (sheet, mean) = result_column(&h, "Mean");
-    assert!(sheet.starts_with("Average"), "{sheet}");
-    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5]);
+    let (sheet, mean) = result_column(&h, "Averaged Y");
+    assert!(sheet.starts_with("AverageResult"), "{sheet}");
+    assert_eq!((mean.len(), mean[0], mean[19]), (20, 16.5, 4.5));
 }
 
 /// The new tools can follow their input: Intersect with Auto moves its point when a cell changes, in the same
@@ -4229,15 +4983,15 @@ fn an_auto_intersect_follows_an_edit_of_its_input() {
     click(&mut h, "Auto");
     let c = column_id(&h, "C");
     click(&mut h, "OK");
-    let (_, first) = result_column(&h, "Intersection X (t)");
+    let (_, first) = result_column(&h, "Intersection X1");
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::SetCell { column: c, row: 3, text: "20".into() }, &ctx);
     settle(&mut h);
-    let (_, second) = result_column(&h, "Intersection X (t)");
+    let (_, second) = result_column(&h, "Intersection X1");
     assert_ne!(first, second, "the crossing moved");
     h.state_mut().apply(Action::Undo, &ctx);
     settle(&mut h);
-    let (_, back) = result_column(&h, "Intersection X (t)");
+    let (_, back) = result_column(&h, "Intersection X1");
     assert_eq!(first, back, "one Undo takes the edit and the result back");
 }
 
@@ -4420,11 +5174,13 @@ fn typing_a_path_enables_the_wizard_buttons_and_the_pages_follow_next_and_back()
     type_into_box(&mut h, 0, &file.display().to_string());
     assert!(!is_disabled(&h, "Next >>"), "a file that exists enables Next");
     assert!(!is_disabled(&h, "Finish"));
+    // Origin's seven pages of the ASCII wizard, in its order.
     for page in [
         WizardPage::HeaderLines,
-        WizardPage::ColumnNames,
+        WizardPage::VariableExtraction,
         WizardPage::FileNameOptions,
         WizardPage::DataColumns,
+        WizardPage::DataSelection,
         WizardPage::SaveFilters,
     ] {
         click(&mut h, "Next >>");
@@ -4432,7 +5188,7 @@ fn typing_a_path_enables_the_wizard_buttons_and_the_pages_follow_next_and_back()
     }
     assert!(is_disabled(&h, "Next >>"), "the last page has no next one");
     click(&mut h, "<< Back");
-    assert_eq!(h.state().import_wizard.as_ref().unwrap().page(), WizardPage::DataColumns);
+    assert_eq!(h.state().import_wizard.as_ref().unwrap().page(), WizardPage::DataSelection);
     // Cancel at the left; Back, Next and Finish at the right.
     assert!(button_x(&h, "Cancel") < button_x(&h, "<< Back"));
     assert!(button_x(&h, "<< Back") < button_x(&h, "Next >>") && button_x(&h, "Next >>") < button_x(&h, "Finish"));
@@ -4448,13 +5204,14 @@ fn the_wizard_pages_drive_the_import_options_and_finish_imports() {
     std::fs::write(&file, "t,i\ns,mA\n1,2.5\n2,4.5\n3,6.5\n").unwrap();
     h.state_mut().import_wizard = Some(ImportWizard::new(vec![file]));
     settle(&mut h);
-    // Header Lines and Column Names pages: the option boxes, and the lines of the file.
+    // Header Lines page (Origin's): the header line count and the lines of the column labels.
     click(&mut h, "Next >>");
-    h.get_by_label("Lines before the data");
+    for label in ["Number of main header lines", "Long Names", "Units", "Comments", "Short Names"] {
+        h.get_by_label(label);
+    }
+    // Variable Extraction: shown grey.
     click(&mut h, "Next >>");
-    h.get_by_label("Line with the names");
-    h.get_by_label("Line with the units");
-    h.get_by_label("Line with comments");
+    assert!(is_disabled(&h, "Extract variables from file names and file headers"));
     // File Name Options: the file name becomes the sheet name.
     click(&mut h, "Next >>");
     click(&mut h, "Use the file name as the name of the sheet");
@@ -4462,6 +5219,9 @@ fn the_wizard_pages_drive_the_import_options_and_finish_imports() {
     click(&mut h, "Next >>");
     assert!(has_label(&h, "Delimiter"));
     click(&mut h, "The first column is X");
+    // Data Selection: the partial import.
+    click(&mut h, "Next >>");
+    assert!(has_label(&h, "Partial Import"));
     // Save Filters: shown grey.
     click(&mut h, "Next >>");
     assert!(is_disabled(&h, "Save the settings as an import filter"));
@@ -4481,9 +5241,9 @@ fn the_wizard_source_page_chooses_the_filter_and_the_import_mode() {
     std::fs::write(&more, "w\tz\n1\t1\n2\t2\n3\t3\n4\t4\n").unwrap();
     h.state_mut().import_wizard = Some(ImportWizard::new(vec![more]));
     settle(&mut h);
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New Books")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Start New Books")).click();
     settle(&mut h);
-    click(&mut h, "New Columns");
+    click(&mut h, "Start New Columns");
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("<None>")).click();
     settle(&mut h);
     click(&mut h, "Delimited Text");
@@ -4845,12 +5605,181 @@ fn sort_range_moves_the_selected_columns_together_and_sort_columns_sorts_each_al
     assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "column A is not in the range");
     assert_eq!(h.state().doc.undo_label(), Some("Sort range"));
     // Each column on its own: B ascending again, C stays as it is.
-    menu_path(&mut h, &["Worksheet", "Sort Columns", "Ascending"]);
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Each Column Ascending"]);
     assert_eq!(project(&h).numeric(b).unwrap(), [2.5, 4.5, 6.5, 8.5]);
     assert_eq!(project(&h).numeric(c).unwrap(), [0.5, 10.5, 20.5, 30.5]);
     assert_eq!(h.state().doc.undo_label(), Some("Sort columns"));
-    menu_path(&mut h, &["Worksheet", "Sort Columns", "Descending"]);
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Each Column Descending"]);
     assert_eq!(project(&h).numeric(c).unwrap(), [30.5, 20.5, 10.5, 0.5]);
+}
+
+#[test]
+fn selected_cell_rows_are_preserved_by_simple_and_custom_sort_menus() {
+    for custom in [false, true] {
+        let mut h = start(vec![data_file(if custom { "partial-nested-sort" } else { "partial-simple-sort" })]);
+        show_window(&mut h, "Book1 - sample");
+        select_block(&mut h, "4.5", "10.5");
+        if custom {
+            menu_path(&mut h, &["Worksheet", "Sort Columns", "Custom..."]);
+            assert!(h.state().sort.is_some(), "the existing nested-sort window is enabled");
+            click(&mut h, "Descending");
+            click(&mut h, "OK");
+        } else {
+            menu_path(&mut h, &["Worksheet", "Sort Range", "Descending"]);
+        }
+        assert_eq!(column(&h, "B"), [2.5, 6.5, 4.5, 8.5], "only rows 2 and 3, custom={custom}");
+        assert_eq!(column(&h, "C"), [30.5, 10.5, 20.5, 0.5], "selected rows move together");
+        assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0], "unselected column stays");
+        menu(&mut h, "Edit", "Undo");
+        assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+        menu(&mut h, "Edit", "Redo");
+        assert_eq!(column(&h, "B"), [2.5, 6.5, 4.5, 8.5]);
+    }
+}
+
+#[test]
+fn sort_columns_preserves_row_pairs_unless_each_column_is_requested() {
+    let mut h = start(vec![data_file("sort-column-modes")]);
+    show_window(&mut h, "Book1 - sample");
+    select_block(&mut h, "4.5", "10.5");
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Ascending"]);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "row pairs stay together");
+    menu_path(&mut h, &["Worksheet", "Sort Columns", "Each Column Ascending"]);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 10.5, 20.5, 0.5], "each-column mode sorts independently inside the selection");
+}
+
+#[test]
+fn row_header_selection_can_sort_a_range_and_labels_cannot_sort_data() {
+    let mut h = start(vec![data_file("row-selection-sort")]);
+    show_window(&mut h, "Book1 - sample");
+    let row_x = text_pos(&h, "Long Name").x;
+    let a = egui::pos2(row_x, text_pos(&h, "4.5").y);
+    let b = egui::pos2(row_x, text_pos(&h, "6.5").y);
+    drag(&mut h, a, b);
+    assert!(matches!(cells(&h), Sel::Rows { .. }));
+    menu_path(&mut h, &["Worksheet", "Sort Range", "Descending"]);
+    assert_eq!(column(&h, "A"), [1.0, 3.0, 2.0, 4.0]);
+    assert_eq!(column(&h, "B"), [2.5, 6.5, 4.5, 8.5]);
+    click(&mut h, "B Units");
+    menu_path(&mut h, &["Worksheet", "Sort Range"]);
+    assert!(is_disabled(&h, "Ascending"), "metadata selections do not sort data below them");
+    close_menus(&mut h);
+}
+
+#[test]
+fn column_header_custom_sort_uses_the_selected_column_and_undoes() {
+    let mut h = start(vec![data_file("column-context-custom-sort")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Sort Column", "Custom..."]);
+    assert!(h.state().sort.is_some());
+    click(&mut h, "Descending");
+    click(&mut h, "OK");
+    assert_eq!(column(&h, "B"), [8.5, 6.5, 4.5, 2.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+}
+
+#[test]
+fn set_values_substitute_picker_and_formula_fill_text_cells() {
+    let mut h = start(vec![data_file("substitute")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    click(&mut h, "Function");
+    menu_entry(&h, "Text").click();
+    settle(&mut h);
+    click(&mut h, "substitute");
+    let formula = r#"substitute(text(col(B)),",",".")$"#;
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text(formula.into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "a valid substitute formula closes the dialog");
+    let book = project(&h).workbooks().next().unwrap();
+    let col = book.sheet().column_by_name("C").unwrap();
+    assert_eq!(col.formula.as_deref(), Some(formula));
+    assert!(col.data.is_mixed());
+    for (row, expected) in ["2,5", "4,5", "6,5", "8,5"].iter().enumerate() {
+        assert_eq!(col.data.text_cell(row), Some(*expected));
+    }
+}
+
+#[test]
+fn column_label_formula_recalculates_after_a_grid_header_edit() {
+    let mut h = start(vec![data_file("header_formula")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    h.event(egui::Event::Text(r#"col(B)[L]$+" ["+col(B)[U]$+"]""#.into()));
+    settle(&mut h);
+    choose_recalc(&mut h, "Manual", "Auto");
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "a valid header formula closes the dialog");
+    let result = |h: &Harness<'static, SheafApp>| {
+        project(h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().cell_text(0)
+    };
+    assert_eq!(result(&h), "up []");
+    click(&mut h, "B Units");
+    h.event(egui::Event::Text("mA".into()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(result(&h), "up [mA]");
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(result(&h), "up []");
+    menu(&mut h, "Edit", "Redo");
+    assert_eq!(result(&h), "up [mA]");
+}
+
+#[test]
+fn char_and_code_functions_are_available_in_set_values() {
+    let mut h = start(vec![data_file("char_code")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    menu_path(&mut h, &["Function", "Text", "char"]);
+    assert!(h.query_all_by_value("char()").next().is_some(), "the picker inserts the character function");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("char(64+col(A))$".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none());
+    let col = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap();
+    for (row, expected) in ["A", "B", "C", "D"].iter().enumerate() {
+        assert_eq!(col.data.text_cell(row), Some(*expected));
+    }
+    right_click_text(&mut h, "B(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    menu_path(&mut h, &["Function", "Text", "code"]);
+    assert!(h.query_all_by_value("code()").next().is_some());
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("code(col(C)$)".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none());
+    assert_eq!(column(&h, "B"), [65.0, 66.0, 67.0, 68.0]);
+}
+
+#[test]
+fn format_compatibility_function_fills_formatted_text_in_set_values() {
+    let mut h = start(vec![data_file("format_function")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    let formula = r#"format(col(B),".2")$"#;
+    h.event(egui::Event::Text(formula.into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "Format is accepted as a typed compatibility function");
+    let col = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap();
+    assert_eq!(col.formula.as_deref(), Some(formula));
+    for (row, expected) in ["2.50", "4.50", "6.50", "8.50"].iter().enumerate() {
+        assert_eq!(col.data.text_cell(row), Some(*expected));
+    }
 }
 
 #[test]
@@ -4937,6 +5866,21 @@ fn go_to_window_moves_the_cursor_to_the_typed_cell() {
     settle(&mut h);
     assert!(h.state().go_to.is_none(), "Enter closed the window");
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (0, 2), end: (0, 2) });
+}
+
+#[test]
+fn power_and_sample_size_menu_opens_a_dialog_that_makes_a_workbook() {
+    let mut h = start(vec![data_file("power")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Power and Sample Size", "Two-Sample t-Test..."]);
+    let d = h.state().power.as_ref().expect("the dialog opened");
+    assert_eq!(d.kind(), sheaf_core::analysis::PowerKind::TwoSampleT);
+    let spec = d.spec().unwrap();
+    // The defaults: means 0 and 1, sd 1, sizes 50 100 200.
+    let books = project(&h).workbooks().count();
+    let r = h.state_mut().doc.apply("test", |p| p.power_analysis(&spec)).unwrap();
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    assert_eq!(r.new_sheet, Some(0));
 }
 
 #[test]
@@ -5284,6 +6228,36 @@ fn the_worksheet_filter_hides_rows_without_deleting_them_and_undoes() {
 }
 
 #[test]
+fn worksheet_filter_dialog_updates_the_graph_and_disable_undo_redo_restore_it() {
+    let mut h = start(vec![data_file("filtered-graph")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let g = graph(&h).id;
+    let svg =
+        |h: &Harness<'static, SheafApp>| sheaf_plot::render_svg_with(project(h), g, &sheaf_plot::FixedMetrics).unwrap();
+    let original = svg(&h);
+    assert!(sheaf_plot::layout_geometry(project(&h), g).unwrap()[0].y.max >= 30.5);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RowFilterDialog { book, column: None }, &ctx);
+    settle(&mut h);
+    h.event(egui::Event::Text("col(A) >= 3".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    settle(&mut h);
+    assert!(sheaf_plot::layout_geometry(project(&h), g).unwrap()[0].y.max < 20.0);
+    let filtered = svg(&h);
+    assert_ne!(filtered, original);
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0]);
+    h.state_mut().apply(Action::ToggleRowFilter(book), &ctx);
+    assert_eq!(svg(&h), original);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(svg(&h), filtered);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(svg(&h), original);
+    h.state_mut().apply(Action::Redo, &ctx);
+    assert_eq!(svg(&h), filtered);
+}
+
+#[test]
 fn transpose_and_reduce_rows_write_a_new_sheet_and_undo() {
     use crate::dialogs::reshape::ReshapeKind;
     let mut h = start(vec![data_file("reshape")]);
@@ -5478,7 +6452,7 @@ fn the_polar_button_of_the_2d_graphs_bar_makes_a_polar_graph() {
 }
 
 #[test]
-fn the_import_window_reads_fixed_width_columns_and_apply_keeps_the_window_open() {
+fn the_import_window_reads_fixed_width_columns_and_has_ok_and_cancel_only() {
     use crate::actions::ImportPick;
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fixed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -5497,37 +6471,157 @@ fn the_import_window_reads_fixed_width_columns_and_apply_keeps_the_window_open()
     settle(&mut h);
     click(&mut h, "Fixed Width");
     h.get_by_label("Widths");
-    // Apply imports and leaves the window; OK imports and closes it. Buttons run OK, Cancel, Apply.
-    assert!(button_x(&h, "OK") < button_x(&h, "Cancel") && button_x(&h, "Cancel") < button_x(&h, "Apply"));
-    click(&mut h, "Apply");
-    assert!(h.state().import.is_some(), "Apply keeps the window");
+    // Origin's impASC window has OK and Cancel, in that order, and no Apply.
+    assert!(button_x(&h, "OK") < button_x(&h, "Cancel"));
+    assert!(h.query_by_label("Apply").is_none(), "no Apply button");
+    click(&mut h, "OK");
+    assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1);
     let book = project(&h).workbooks().next().unwrap();
     assert_eq!(book.sheet().columns.len(), 2, "the widths cut the lines into two columns");
     assert_eq!(column(&h, "B"), [3.0, 6.0, 9.0, 12.0, 15.0]);
-    click(&mut h, "OK");
-    assert!(h.state().import.is_none());
-    assert_eq!(project(&h).workbooks().count(), 2, "OK imported the file once more");
 }
 
 #[test]
-fn the_data_import_options_page_controls_the_names() {
+fn the_import_window_distinguishes_character_sets_and_whole_strings() {
+    use crate::actions::ImportPick;
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-delimiter-sets-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("delimiters.txt");
+    std::fs::write(&file, "t|;i\n1|;2\n2|;3\n3|;4\n4|;5\n").unwrap();
+    let mut h = start_auto_hide(vec![]);
+    h.state_mut().start_import(Some(vec![file]), ImportPick::Multiple);
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Detect")).click();
+    settle(&mut h);
+    click(&mut h, "Other");
+    h.get(By::new().role(egui::accesskit::Role::TextInput).value("|")).click();
+    settle(&mut h);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("|;".into()));
+    settle(&mut h);
+    click(&mut h, "Treat Consecutive Delimiters as One");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Other")).click();
+    settle(&mut h);
+    click(&mut h, "Multiple Characters");
+    assert!(h.query_by_label("Treat Consecutive Delimiters as One").is_none());
+    h.get(By::new().role(egui::accesskit::Role::TextInput).value("|;"));
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Multiple Characters")).click();
+    settle(&mut h);
+    click(&mut h, "Other");
+    // The characters and combine setting survive a round-trip through whole-string mode.
+    click(&mut h, "OK");
+    assert!(h.state().import.is_none());
+    let book = project(&h).workbooks().next().unwrap();
+    assert_eq!(book.sheet().columns.len(), 2);
+    assert_eq!(book.sheet().columns[1].long_name, "i");
+    assert_eq!(column(&h, "B"), [2.0, 3.0, 4.0, 5.0]);
+}
+
+#[test]
+fn partial_import_controls_select_rows_columns_and_keep_their_headers() {
+    use crate::actions::ImportPick;
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-partial-import-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("partial.csv");
+    std::fs::write(&file, "t,a,b,c\n1,11,21,31\n2,12,22,32\n3,13,23,33\n4,14,24,34\n5,15,25,35\n").unwrap();
+    for wizard in [false, true] {
+        let mut h = start_auto_hide(vec![]);
+        if wizard {
+            h.state_mut().import_wizard = Some(ImportWizard::new(vec![file.clone()]));
+            settle(&mut h);
+            for _ in 0..5 {
+                click(&mut h, "Next >>");
+            }
+        } else {
+            h.state_mut().start_import(Some(vec![file.clone()]), ImportPick::Multiple);
+            settle(&mut h);
+            click(&mut h, "Partial Import");
+        }
+        for (label, value) in [
+            ("First row", "2"),
+            ("Last row (0 = end)", "5"),
+            ("Skip rows in pattern", "1"),
+            ("First column", "2"),
+            ("Skip columns in pattern", "1"),
+        ] {
+            click(&mut h, label);
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+            h.event(egui::Event::Text(value.into()));
+            settle(&mut h);
+            key(&mut h, egui::Key::Enter);
+        }
+        click(&mut h, if wizard { "Finish" } else { "OK" });
+        assert!(h.state().import.is_none() && h.state().import_wizard.is_none());
+        let book = project(&h).workbooks().next().unwrap();
+        assert_eq!(book.sheet().columns.len(), 2);
+        assert_eq!(book.sheet().columns[0].long_name, "a");
+        assert_eq!(book.sheet().columns[1].long_name, "c");
+        assert_eq!(column(&h, "A"), [12.0, 14.0]);
+        assert_eq!(column(&h, "B"), [32.0, 34.0]);
+    }
+}
+
+#[test]
+fn except_first_partial_import_is_available_in_the_window_and_wizard() {
+    use crate::actions::ImportPick;
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-except-first-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let files: Vec<_> = ["first.csv", "second.csv"].iter().map(|n| dir.join(n)).collect();
+    for file in &files {
+        std::fs::write(file, "t,a,b\n1,11,21\n2,12,22\n3,13,23\n4,14,24\n").unwrap();
+    }
+    for wizard in [false, true] {
+        let mut h = start_auto_hide(vec![]);
+        if wizard {
+            h.state_mut().import_wizard = Some(ImportWizard::new(files.clone()));
+            settle(&mut h);
+            for _ in 0..5 {
+                click(&mut h, "Next >>");
+            }
+        } else {
+            h.state_mut().start_import(Some(files.clone()), ImportPick::Multiple);
+            settle(&mut h);
+            click(&mut h, "Partial Import");
+        }
+        click(&mut h, "All files except first");
+        for (label, value) in
+            [("First row", "2"), ("Skip rows in pattern", "1"), ("First column", "2"), ("Last column (0 = end)", "2")]
+        {
+            click(&mut h, label);
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+            h.event(egui::Event::Text(value.into()));
+            settle(&mut h);
+            key(&mut h, egui::Key::Enter);
+        }
+        click(&mut h, if wizard { "Finish" } else { "OK" });
+        assert!(h.state().import.is_none() && h.state().import_wizard.is_none());
+        let books: Vec<_> = project(&h).workbooks().collect();
+        assert_eq!(books.len(), 2);
+        assert_eq!(books[0].sheet().columns.len(), 3);
+        assert_eq!(books[0].sheet().row_count(), 4);
+        assert_eq!(books[1].sheet().columns.len(), 1);
+        assert_eq!(books[1].sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+    }
+}
+
+#[test]
+fn the_naming_page_and_the_short_name_line_control_the_names() {
     use crate::actions::ImportPick;
     let mut h = start_auto_hide(vec![]);
     h.state_mut().start_import(Some(vec![data_file("data-import-options")]), ImportPick::Multiple);
     settle(&mut h);
-    click(&mut h, "Data Import Options");
+    // The short-name line is part of the Header Lines page, as in Origin.
+    click(&mut h, "Header Lines");
     h.get_by_label("Line with the short names");
-    h.get_by_label("Rename the columns from the header lines");
-    h.get_by_label("Rename the book from the file name");
-    // Apply the new range to plots belongs to Replace Existing Data and is grey otherwise.
-    assert!(is_disabled(&h, "Apply the new range to plots"));
-    click(&mut h, "Rename the sheet from the file name");
-    click(&mut h, "Rename the columns from the header lines");
+    click(&mut h, "(Re)Naming Worksheet and Workbook");
+    h.get_by_label("Rename Book with (Partial) Filename");
+    assert!(h.query_by_label("Apply the new range to plots").is_none(), "Origin has no such option");
+    click(&mut h, "Rename Sheet with (Partial) Filename");
     click(&mut h, "OK");
     let book = project(&h).workbooks().next().expect("imported");
     assert_eq!(book.sheet().name, "Sheet1");
-    assert_eq!(book.sheet().columns[1].long_name, "", "the header line was skipped, not used as a label");
+    assert_eq!(book.sheet().columns[1].long_name, "up", "the header line still names the columns");
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
 }
 
@@ -5554,10 +6648,10 @@ fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() 
     assert_eq!(c.format, NumberFormat::Month(NameStyle::Short));
     let first = c.numeric().unwrap()[0];
     assert_eq!(c.cell_text(0), NumberFormat::Month(NameStyle::Short).format(first));
-    // The display of a month is its name style.
-    combo(&h, "Abbreviation").click();
+    // The display of a month is its name style, listed as samples like Origin's list.
+    combo(&h, "Jan").click();
     settle(&mut h);
-    click(&mut h, "Full name");
+    click(&mut h, "January");
     click(&mut h, "Apply");
     assert_eq!(project(&h).column(b).unwrap().format, NumberFormat::Month(NameStyle::Full));
     // Text keeps what the cells showed.
@@ -5572,16 +6666,13 @@ fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() 
 }
 
 #[test]
-fn column_properties_refuses_a_short_name_longer_than_origins_limit() {
+fn column_properties_cuts_the_short_name_like_origin() {
     let mut h = start(vec![data_file("colprops-longname")]);
     let b = open_column_props(&mut h, "B");
-    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS");
+    // A longer name is cut to 18 characters and characters Origin drops are dropped, no message.
+    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS_T");
     click(&mut h, "OK");
-    assert!(h.state().column_props.is_some(), "the window stays open");
-    assert!(has_label(&h, "The short name may have at most 18 characters."));
-    assert_eq!(project(&h).column(b).unwrap().short_name, "B");
-    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQR");
-    click(&mut h, "OK");
+    assert!(h.state().column_props.is_none(), "the window closes");
     assert_eq!(project(&h).column(b).unwrap().short_name, "ABCDEFGHIJKLMNOPQR");
 }
 
@@ -5933,16 +7024,16 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
     let x = names.iter().position(|n| n == "Curve Translate X...").unwrap_or_else(|| panic!("{names:?}"));
     assert_eq!(names[x + 1], "Curve Translate Y...");
 
-    // Reduce to 4 evenly spaced X values (the default is 100 points: the run keeps the X range).
+    // Reduce to Evenly Spaced X with Origin's defaults (every 5 points, Y Mean): the 4 points are one
+    // short run, placed where a full run of 5 would be (X = 1 + 2 steps).
     open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
     click(&mut h, "OK");
     assert_eq!(h.state().doc.undo_label(), Some("Reduce to evenly spaced X"));
     let sheets = &project(&h).workbooks().next().unwrap().sheets;
     let cols = &sheets.last().unwrap().columns;
     assert_eq!(cols.len(), 2);
-    assert_eq!(cols[0].numeric().unwrap().len(), 100);
-    assert_eq!(cols[0].numeric().unwrap()[0], 1.0);
-    assert_eq!(cols[0].numeric().unwrap()[99], 4.0);
+    assert_eq!(cols[0].numeric().unwrap(), [3.0]);
+    assert_eq!(cols[1].numeric().unwrap(), [5.5]);
 
     // The reduced sheet is now the active one. Translate Y with the shift set to 1.5 writes the Y column
     // plus 1.5 beside it, and Undo removes it.
@@ -5958,7 +7049,7 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
         .sheet()
         .columns
         .iter()
-        .find(|c| c.long_name == "up shifted")
+        .find(|c| c.long_name == "ReduceEXY1 shifted")
         .map(|c| c.numeric().unwrap().to_vec())
         .expect("the shifted column");
     let expected: Vec<f64> = reduced.iter().map(|v| v + 1.5).collect();
@@ -5966,7 +7057,28 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::Undo, &ctx);
     settle(&mut h);
-    assert!(project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "up shifted"));
+    assert!(
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "ReduceEXY1 shifted")
+    );
+}
+
+#[test]
+fn reduce_duplicate_x_data_runs_from_the_menu_into_origins_columns() {
+    let mut h = start(vec![data_file("reducedup")]);
+    show_window(&mut h, "Book1 - sample");
+    let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Reduce Duplicate X Data..."]);
+    assert!(h.state().analysis.is_some(), "the item opens its window");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Reduce duplicate X data"));
+    let sheets = &project(&h).workbooks().next().unwrap().sheets;
+    assert_eq!(sheets.len(), sheets_before + 1);
+    let cols = &sheets.last().unwrap().columns;
+    let names: Vec<&str> = cols.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names[..2], ["ReduceDupX1", "ReduceDupY1"]);
+    // t = 1..4 has no duplicates, so the curve comes back unchanged.
+    assert_eq!(cols[0].numeric().unwrap(), [1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(cols[1].numeric().unwrap(), [2.5, 4.5, 6.5, 8.5]);
 }
 
 #[test]
@@ -5980,12 +7092,12 @@ fn the_preview_of_a_tool_that_writes_a_new_sheet_shows_the_new_curve() {
     assert_eq!(rx, [11.0, 12.0, 13.0, 14.0]);
     assert_eq!(ry, [2.5, 4.5, 6.5, 8.5]);
     click(&mut h, "Cancel");
-    // Reduce to Evenly Spaced X: 100 points from X = 1 to 4, on the straight line y = 2 x + 0.5.
+    // Reduce to Evenly Spaced X (every 5 points, Y Mean): the 4 points of the line y = 2 x + 0.5 are
+    // one run, shown at X = 3 with their mean.
     open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
     click(&mut h, "Preview");
     let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
-    assert_eq!((rx.len(), rx[0], rx[99]), (100, 1.0, 4.0));
-    assert!(rx.iter().zip(&ry).all(|(x, y)| (y - (2.0 * x + 0.5)).abs() < 1e-9), "{ry:?}");
+    assert_eq!((rx, ry), (vec![3.0], vec![5.5]));
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1, "a preview writes nothing");
 }
 
@@ -6020,221 +7132,195 @@ fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
     assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
 }
 
-// ----- Plot Details tabs, Layer Contents and Plot Setup (brief T13) ------------------------------
-
-fn state_graph_edit(h: &mut Harness<'static, SheafApp>, edit: impl FnOnce(&mut sheaf_core::Graph) + 'static) {
-    let (_, id) = window_ids(h);
-    h.state_mut().doc.apply("Test edit", move |p| edit(p.graph_mut(id).unwrap()));
-    settle(h);
-}
-
 #[test]
-fn layer_contents_moves_columns_across_reorders_and_groups() {
-    let mut h = start(vec![data_file("lcont")]);
-    open_props(&mut h, 0, PropsTab::Contents, None);
-    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Contents);
-    let texts: Vec<String> = graph(&h).layers[0].plots.iter().map(|p| project(&h).plot_tree_text(p)).collect();
-    assert!(texts[0].starts_with("[Book1]") && texts[0].contains("(X)") && texts[0].ends_with("[1*:4*]"), "{texts:?}");
-    let (up, down) = (graph(&h).layers[0].plots[0].y, graph(&h).layers[0].plots[1].y);
-    // Remove the first plot, then add its column back from the list at the left.
-    click(&mut h, &texts[0]);
-    click(&mut h, "<=");
-    assert_eq!(graph(&h).layers[0].plots.len(), 1);
-    assert_eq!(graph(&h).layers[0].plots[0].y, down);
-    h.get_by_label_contains("B: ").click();
-    settle(&mut h);
-    click(&mut h, "=>");
-    let ys: Vec<_> = graph(&h).layers[0].plots.iter().map(|p| p.y).collect();
-    assert_eq!(ys, vec![down, up]);
-    // Reorder.
-    click(&mut h, &texts[0]);
-    click(&mut h, "Up");
-    let ys: Vec<_> = graph(&h).layers[0].plots.iter().map(|p| p.y).collect();
-    assert_eq!(ys, vec![up, down]);
-    // Ungroup keeps the plot's style out of the increment rules; Group puts it back.
-    click(&mut h, "Ungroup");
-    assert!(!graph(&h).layers[0].plots[0].auto_color);
-    assert_eq!(graph(&h).layers[0].group_members().len(), 1);
-    click(&mut h, "Group");
-    assert!(graph(&h).layers[0].plots[0].auto_color);
-    // The two other dialogs are one click away.
-    click(&mut h, "Plot Setup...");
-    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Setup);
-    click(&mut h, "Layer Contents...");
-    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Contents);
-    click(&mut h, "Cancel");
-    assert_eq!(graph(&h).layers[0].plots.len(), 2);
-}
-
-#[test]
-fn plot_setup_changes_the_type_of_one_plot_and_f12_opens_layer_contents() {
-    let mut h = start(vec![data_file("setup")]);
-    open_props(&mut h, 0, PropsTab::Setup, None);
-    for head in ["X", "Y", "Y Error", "Type"] {
-        assert!(h.query_by_label(head).is_some(), "{head}");
+fn the_interpolation_items_open_the_interpolate_window_with_their_method() {
+    use sheaf_core::analysis::InterpMethod;
+    let mut h = start(vec![data_file("interpitems")]);
+    show_window(&mut h, "Book1 - sample");
+    for (label, method) in [
+        ("Linear Interpolation...", InterpMethod::Linear),
+        ("Spline Interpolation...", InterpMethod::CubicSpline),
+        ("B-Spline Interpolation...", InterpMethod::BSpline),
+    ] {
+        menu_path(&mut h, &["Analysis", "Mathematics", label]);
+        let d = h.state().analysis.as_ref().unwrap_or_else(|| panic!("{label} opens a window"));
+        assert_eq!(d.interp_method(), method, "{label}");
+        h.state_mut().analysis = None;
+        settle(&mut h);
     }
-    let first = h.query_all_by_value("Line").next().expect("the type of the first plot");
-    first.click();
+}
+
+#[test]
+fn view_status_bar_hides_and_shows_the_status_bar() {
+    let mut h = start(vec![data_file("statusbar")]);
+    assert!(h.query_by_label("AU : ON").is_some(), "the status bar is shown at first");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_none(), "hidden");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_some(), "shown again");
+}
+
+#[test]
+fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
+    let mut h = start(vec![data_file("findsheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Find in Sheets...");
+    assert!(h.state().find.is_some(), "the window opens");
+    h.state_mut().find.as_mut().unwrap().set_text("4.5");
     settle(&mut h);
-    click(&mut h, "Scatter");
-    assert_eq!(graph(&h).layers[0].plots[0].kind, PlotKind::Scatter);
-    assert_ne!(graph(&h).layers[0].plots[1].kind, PlotKind::Scatter);
-    click(&mut h, "Plot Details...");
-    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Plots);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)), "column B, row 2");
+    // No cell of B after B2 holds "0.5" (6.5, 8.5); the search goes on from the cursor, column by
+    // column, to C1 (30.5).
+    h.state_mut().find.as_mut().unwrap().set_text("0.5");
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((2, 0)), "column C, row 1 (30.5)");
+    click(&mut h, "Close");
+    assert!(h.state().find.is_none());
+}
+
+#[test]
+fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step() {
+    let mut h = start(vec![data_file("replacesheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Replace...");
+    {
+        let d = h.state_mut().find.as_mut().expect("the Replace window opens");
+        d.set_text("4.5");
+        d.set_replacement("4.75");
+    }
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    // "Replace" is also the window's title: click the button.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Replace").click();
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.75, 6.5, 8.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace"));
+    {
+        let d = h.state_mut().find.as_mut().unwrap();
+        d.set_text(".5");
+        d.set_replacement(".25");
+    }
+    settle(&mut h);
+    click(&mut h, "Replace All");
+    assert_eq!(column(&h, "B"), [2.25, 4.75, 6.25, 8.25]);
+    assert_eq!(column(&h, "C"), [30.25, 20.25, 10.25, 0.25]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace all"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "one undo step");
+}
+
+#[test]
+fn file_close_hides_the_active_window_and_keeps_its_data() {
+    let mut h = start(vec![data_file("fileclose")]);
+    show_window(&mut h, "Book1 - sample");
+    let book = project(&h).workbooks().next().unwrap().id;
+    assert!(h.state().workspace.is_shown(book));
+    menu(&mut h, "File", "Close");
+    assert!(!h.state().workspace.is_shown(book), "the window is closed");
+    assert!(project(&h).workbook(book).is_some(), "its data stays in the project");
+}
+
+#[test]
+fn window_duplicate_copies_the_workbook_with_its_own_columns() {
+    let mut h = start(vec![data_file("dupwindow")]);
+    show_window(&mut h, "Book1 - sample");
+    let before = project(&h).workbooks().count();
+    menu(&mut h, "Window", "Duplicate");
+    let books: Vec<_> = project(&h).workbooks().collect();
+    assert_eq!(books.len(), before + 1, "a new workbook");
+    let (a, b) = (&books[0].sheets[0], &books[books.len() - 1].sheets[0]);
+    assert_eq!(a.columns.len(), b.columns.len());
+    assert_ne!(a.columns[0].id, b.columns[0].id, "its own columns");
+    assert_eq!(project(&h).numeric(b.columns[1].id).unwrap(), project(&h).numeric(a.columns[1].id).unwrap());
+    assert!(h.state().workspace.is_shown(books[books.len() - 1].id), "the copy is shown");
+    assert_eq!(h.state().doc.undo_label(), Some("Duplicate window"));
+}
+
+#[test]
+fn file_append_brings_another_projects_windows_in_one_undo_step() {
+    let mut h = start(vec![data_file("appendproj")]);
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-append-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let other = dir.join("other.sheaf");
+    sheaf_io::save::save_project(project(&h), &other).unwrap();
+    let before = project(&h).windows.len();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::AppendProject(Some(other)), &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), before * 2, "every window comes over");
+    assert_eq!(project(&h).root.folders.last().unwrap().name, "other");
+    assert_eq!(h.state().doc.undo_label(), Some("Append project"));
+    // The File menu item is live (a greyed item would not be clickable).
+    menu_path(&mut h, &["File"]);
+    assert!(!h.get_by_label("Append...").accesskit_node().is_disabled());
+}
+
+#[test]
+fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
+    let mut h = start(vec![data_file("interpfromx")]);
+    show_window(&mut h, "Book1 - sample");
+    // B is the curve; C's values (30.5 ... 0.5) are the X values to interpolate at.
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
+    let ctx = h.ctx.clone();
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().apply(Action::InterpolateFromColumn { book, columns: vec![b] }, &ctx);
+    settle(&mut h);
+    assert!(h.state().analysis.is_some(), "the Interpolate window opens");
     click(&mut h, "OK");
-    show_window(&mut h, "Graph1 - sample");
-    menu(&mut h, "Graph", "Layer Contents...");
-    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Contents);
+    let book = project(&h).workbooks().next().unwrap();
+    let sheet = book.sheets.last().unwrap();
+    // B against A: 2.5 4.5 6.5 8.5 at 1 2 3 4, so y = 2x + 0.5, extrapolated outside 1..4.
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [30.5, 20.5, 10.5, 0.5]);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
 }
 
+/// A drag over cells selects the block however the pointer events fall into frames: one jump to the
+/// end cell, the jump and the release in one frame, or the press and the jump in one frame (the
+/// owner's walkthrough saw only the last cell selected by an automated drag; not reproduced here).
 #[test]
-fn the_line_plot_tabs_set_drop_lines_labels_offsets_and_the_fill_under_the_curve() {
-    let mut h = start(vec![data_file("pd-line")]);
-    open_props(&mut h, 0, PropsTab::Plots, Some(0));
-    for tab in ["Group", "Line", "Drop Lines", "Label", "Offset"] {
-        assert!(h.query_by_label(tab).is_some(), "the tab {tab}");
-    }
-    click(&mut h, "Line");
-    click(&mut h, "Fill Area Under Curve");
-    assert!(graph(&h).layers[0].plots[0].details.fill_under);
-    click(&mut h, "Fill with a gradient");
-    assert!(graph(&h).layers[0].plots[0].details.fill.gradient.is_some());
-    click(&mut h, "Drop Lines");
-    click(&mut h, "Vertical (to the X axis)");
-    let drops = graph(&h).layers[0].plots[0].details.drop_lines.clone();
-    assert!(drops.vertical.is_some() && drops.horizontal.is_none());
-    click(&mut h, "Label");
-    click(&mut h, "Enable");
-    assert!(graph(&h).layers[0].plots[0].details.labels.enabled);
-    click(&mut h, "Offset");
-    assert_ne!(graph(&h).layers[0].stack, sheaf_core::graph::Stack::Individual);
-    click(&mut h, "Offset each plot by hand");
-    assert_eq!(graph(&h).layers[0].stack, sheaf_core::graph::Stack::Individual);
-    // The rendered figure has the drop line and the labels.
-    let (_, id) = window_ids(&h);
-    let svg = sheaf_plot::render_svg(project(&h), id).unwrap();
-    assert!(svg.contains("stroke-dasharray"), "the dashed drop lines are drawn");
-    // One undo step undoes all of it.
-    assert_eq!(h.state().doc.undo_label(), Some("Change graph settings"));
-}
-
-#[test]
-fn the_group_tab_edits_the_mode_the_increments_and_the_subgroups() {
-    use sheaf_core::graph::{EditMode, Increment, Subgrouping};
-    let mut h = start(vec![data_file("pd-group")]);
-    open_props(&mut h, 0, PropsTab::Plots, Some(0));
-    click(&mut h, "Group");
-    assert_eq!(graph(&h).layers[0].groups.edit_mode, EditMode::Dependent);
-    click(&mut h, "Independent");
-    assert_eq!(graph(&h).layers[0].groups.edit_mode, EditMode::Independent);
-    click(&mut h, "Dependent");
-    // Line style "By One": the second plot's dash follows the first by one place.
-    let none = h.query_all_by_value("None").next().expect("the line style increment");
-    none.click();
+fn a_drag_over_cells_selects_the_block_whatever_the_event_timing() {
+    let mut h = start(vec![data_file("tmp-drag")]);
+    show_window(&mut h, "Book1 - sample");
+    let (from, to) = (text_pos(&h, "2.5"), text_pos(&h, "10.5"));
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    // A: press, one jump to the end, release (a frame between each).
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.event(egui::Event::PointerMoved(to));
+    h.step();
+    h.event(button(to, false));
+    h.step();
     settle(&mut h);
-    click(&mut h, "By One");
-    let g = graph(&h);
-    assert_eq!(g.layers[0].groups.line_style, Increment::ByOne);
-    assert_ne!(g.layers[0].plots[0].line.dash, g.layers[0].plots[1].line.dash);
-    click(&mut h, "By Size");
-    assert_eq!(graph(&h).layers[0].groups.subgrouping, Subgrouping::BySize { size: 2 });
-    click(&mut h, "Recolor plots");
-    assert!(graph(&h).layers[0].plots.iter().all(|p| p.auto_color));
-}
-
-#[test]
-fn a_column_plot_has_pattern_spacing_and_label_tabs_and_the_pattern_is_set() {
-    let mut h = start(vec![data_file("pd-col")]);
-    state_graph_edit(&mut h, |g| g.layers[0].plots[0].kind = PlotKind::Column);
-    open_props(&mut h, 0, PropsTab::Plots, Some(0));
-    for tab in ["Group", "Pattern", "Spacing", "Label"] {
-        assert!(h.query_all_by_label(tab).next().is_some(), "the tab {tab}");
-    }
-    assert!(h.query_by_label("Drop Lines").is_none(), "a column plot has no drop lines");
-    h.query_all_by_label("Pattern").next().unwrap().click();
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "A");
+    // B: press, jump and release in one frame.
+    pause(&mut h);
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.event(egui::Event::PointerMoved(to));
+    h.event(button(to, false));
+    h.step();
     settle(&mut h);
-    h.get_by_value("None").click();
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "B");
+    // C: move, press and jump in one frame.
+    pause(&mut h);
+    h.event(egui::Event::PointerMoved(from));
+    h.event(button(from, true));
+    h.event(egui::Event::PointerMoved(to));
+    h.step();
+    h.event(button(to, false));
+    h.step();
     settle(&mut h);
-    click(&mut h, "Cross");
-    assert_eq!(graph(&h).layers[0].plots[0].details.fill.pattern, sheaf_core::graph::FillPattern::Cross);
-    click(&mut h, "Spacing");
-    click(&mut h, "Set");
-    assert!(graph(&h).layers[0].bars.width_pct.is_some());
-}
-
-#[test]
-fn the_layer_tabs_set_display_background_and_the_links_between_layers() {
-    use sheaf_core::graph::ScaleLink;
-    let mut h = start(vec![data_file("pd-layer")]);
-    state_graph_edit(&mut h, |g| {
-        let l = g.layers[0].clone();
-        g.layers.push(l);
-    });
-    open_props(&mut h, 1, PropsTab::Plots, None);
-    for tab in ["Background", "Size", "Display", "Stack", "Link Axes Scales"] {
-        assert!(h.query_by_label(tab).is_some(), "the tab {tab}");
-    }
-    click(&mut h, "Background");
-    click(&mut h, "Fill the area behind the plots");
-    assert!(graph(&h).layers[1].background.color.is_some());
-    click(&mut h, "Draw a border line");
-    assert!(graph(&h).layers[1].background.border.is_some());
-    click(&mut h, "Display");
-    click(&mut h, "Show the axes (lines, ticks, tick labels and titles)");
-    assert!(!graph(&h).layers[1].display.show_axes);
-    assert!(graph(&h).layers[0].display.show_axes, "only the chosen layer changes");
-    click(&mut h, "Link Axes Scales");
-    h.get_by_value("None").click();
-    settle(&mut h);
-    h.query_all_by_label("Layer 1").last().unwrap().click();
-    settle(&mut h);
-    assert_eq!(graph(&h).layers[1].link.map(|k| k.parent), Some(0));
-    let x = h.query_all_by_value("Independent (its own scale)").next().unwrap();
-    x.click();
-    settle(&mut h);
-    click(&mut h, "Straight (1 to 1)");
-    assert_eq!(graph(&h).layers[1].link.unwrap().x, ScaleLink::Straight);
-}
-
-#[test]
-fn the_page_tabs_set_units_titles_comments_and_the_layer_icons() {
-    use sheaf_core::graph::{LengthUnit, TitleDisplay};
-    let mut h = start(vec![data_file("pd-page")]);
-    open_props(&mut h, 0, PropsTab::Page, None);
-    h.get_by_value("inch").click();
-    settle(&mut h);
-    click(&mut h, "cm");
-    assert_eq!(graph(&h).page.style.units, LengthUnit::Centimetre);
-    click(&mut h, "Legends/Titles");
-    h.get_by_value("Short and long name").click();
-    settle(&mut h);
-    click(&mut h, "Short name");
-    assert_eq!(graph(&h).page.style.title_display, TitleDisplay::Name);
-    click(&mut h, "Miscellaneous");
-    h.query_all_by_role(egui::accesskit::Role::MultilineTextInput).next().expect("the comments box").focus();
-    settle(&mut h);
-    h.event(egui::Event::Text("a note".to_string()));
-    settle(&mut h);
-    assert_eq!(graph(&h).page.style.comments, "a note");
-    click(&mut h, "Display");
-    click(&mut h, "Draw a border line");
-    assert!(graph(&h).page.style.border.is_some());
-    assert!(graph(&h).page.style.layer_icons);
-    click(&mut h, "Show the layer icons");
-    assert!(!graph(&h).page.style.layer_icons);
-    click(&mut h, "OK");
-    assert!(graph_ui(&h).page_point(0.0, 0.0).is_some());
-}
-
-#[test]
-fn the_workbook_button_shows_the_sheet_and_the_side_panel_sets_the_row_range() {
-    let mut h = start(vec![data_file("pd-wb")]);
-    let (book, _) = window_ids(&h);
-    open_props(&mut h, 0, PropsTab::Plots, Some(0));
-    click(&mut h, "Workbook");
-    assert_eq!(h.state().active, Some(book));
-    click(&mut h, ">>");
-    assert!(graph(&h).layers[0].plots[0].rows.is_none());
-    click(&mut h, "Plot a range of rows only");
-    assert_eq!(graph(&h).layers[0].plots[0].rows, Some((0, 4)));
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "C");
 }

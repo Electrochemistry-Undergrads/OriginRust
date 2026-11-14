@@ -503,6 +503,8 @@ pub enum Tool {
     CurveMath(CurveMathSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
+    /// Data Manipulation: reduce duplicate X data.
+    ReduceDup(ReduceDupSpec),
     /// Data Manipulation: reduce to evenly spaced X.
     ReduceX(ReduceOptions),
     /// Data Manipulation: curve translate X or Y.
@@ -549,6 +551,7 @@ impl Tool {
                 _ => "Curve math",
             },
             Tool::SubtractLine(_) => "Subtract straight line",
+            Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
             Tool::Translate(spec) => match spec.axis {
                 TranslateAxis::X => "Translate X",
@@ -597,6 +600,7 @@ impl Tool {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
             Tool::CurveMath(_) => "Math",
             Tool::ReduceX(_) => "Reduced",
+            Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Peaks",
@@ -1134,8 +1138,10 @@ fn run_peak_chain(
 mod curves;
 mod manip;
 mod statistics;
-pub use manip::{MedianFilterSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec};
-pub use sheaf_calc::{EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions};
+pub use manip::{
+    MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
+};
+pub use sheaf_calc::{DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions};
 
 impl Project {
     /// A new graph with a column plot of each (bin centre, count) pair of columns.
@@ -1258,7 +1264,11 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }
-            Tool::SubtractLine(_) | Tool::ReduceX(_) | Tool::Translate(_) | Tool::MedianFilter(_) => {
+            Tool::SubtractLine(_)
+            | Tool::ReduceDup(_)
+            | Tool::ReduceX(_)
+            | Tool::Translate(_)
+            | Tool::MedianFilter(_) => {
                 manip::run(&request.tool, &inputs, &mut beside, &mut on_sheet)?;
             }
             Tool::PeakChain(spec) => {

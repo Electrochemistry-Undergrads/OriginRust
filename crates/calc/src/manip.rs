@@ -247,6 +247,91 @@ pub fn median_filter(y: &[f64], npts: usize, edge: MedianEdge) -> Option<Vec<f64
     Some(y.iter().map(|v| if v.is_finite() { next.next().unwrap_or(f64::NAN) } else { f64::NAN }).collect())
 }
 
+/// What Reduce Duplicate X Data puts in place of the Y values of points that share an X (Origin's
+/// `reducedup` method).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum DupMethod {
+    #[default]
+    Mean,
+    Median,
+    Min,
+    Max,
+    Sum,
+    /// Standard deviation with the n - 1 divisor.
+    Sd,
+    /// Standard error of the mean, SD / sqrt(n).
+    Se,
+    /// Origin's "RMS" gives the mean of the group (measured), not the root mean square.
+    Rms,
+}
+
+/// The result of [`reduce_duplicates`].
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Reduced {
+    /// One X per group, sorted.
+    pub x: Vec<f64>,
+    /// The group's value by the method; a point alone in its group keeps its own Y.
+    pub y: Vec<f64>,
+    /// The X of every group of two or more points, and how many points it has.
+    pub dup_x: Vec<f64>,
+    pub dup_count: Vec<f64>,
+}
+
+/// Origin's default tolerance of Reduce Duplicate X Data, relative to the X range (measured: X
+/// values 1e-8 apart in a range of 1 are one group, 9e-8 apart are not).
+pub const DUP_TOL: f64 = 1e-8;
+
+/// Reduce Duplicate X Data, as Origin's `reducedup` was measured (analysis-tools.md section 12):
+/// pairs with a missing value are left out, the points are sorted by X, and neighbours whose X
+/// values differ by no more than `tol` times the X range of the data form one group (a chain: each
+/// point is compared with the one before it, not with the first of the group). A group's X
+/// is its lower middle X (the median of an odd group, the lower of the two middle values of an even
+/// one); its Y is the method's value of the group's Y values. `None` when no pair is left.
+pub fn reduce_duplicates(x: &[f64], y: &[f64], method: DupMethod, tol: f64) -> Option<Reduced> {
+    let mut pts: Vec<(f64, f64)> =
+        x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).map(|(&a, &b)| (a, b)).collect();
+    if pts.is_empty() {
+        return None;
+    }
+    pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let range = pts[pts.len() - 1].0 - pts[0].0;
+    let limit = tol.max(0.0) * range;
+    let mut out = Reduced::default();
+    let mut start = 0;
+    while start < pts.len() {
+        let mut end = start + 1;
+        while end < pts.len() && pts[end].0 - pts[end - 1].0 <= limit {
+            end += 1;
+        }
+        let group = &pts[start..end];
+        let n = group.len();
+        out.x.push(group[(n - 1) / 2].0);
+        let ys: Vec<f64> = group.iter().map(|p| p.1).collect();
+        out.y.push(if n == 1 { ys[0] } else { group_value(&ys, method) });
+        if n > 1 {
+            out.dup_x.push(group[(n - 1) / 2].0);
+            out.dup_count.push(n as f64);
+        }
+        start = end;
+    }
+    Some(out)
+}
+
+fn group_value(ys: &[f64], method: DupMethod) -> f64 {
+    let n = ys.len() as f64;
+    let mean = ys.iter().sum::<f64>() / n;
+    let sd = || (ys.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
+    match method {
+        DupMethod::Mean | DupMethod::Rms => mean,
+        DupMethod::Median => median_of(ys.to_vec()),
+        DupMethod::Min => ys.iter().copied().fold(f64::INFINITY, f64::min),
+        DupMethod::Max => ys.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        DupMethod::Sum => ys.iter().sum(),
+        DupMethod::Sd => sd(),
+        DupMethod::Se => sd() / n.sqrt(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,5 +523,49 @@ mod tests {
     #[test]
     fn median_of_an_even_count_is_the_mean_of_the_middle_two() {
         assert_eq!(median_of(vec![4.0, 1.0, 3.0, 2.0]), 2.5);
+    }
+
+    /// Numbers measured with Origin's `reducedup` (`re-workspace/scratch/reducedup/reducedup*.out.txt`).
+    #[test]
+    #[allow(clippy::excessive_precision)] // the digits as Origin printed them
+    fn reduce_duplicates_matches_origin() {
+        let x = [3.0, 1.0, 2.0, 3.0, 2.0, 3.0, 5.0, 2.000000001, 7.0];
+        let y = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let run = |m| reduce_duplicates(&x, &y, m, 1e-8).unwrap();
+        let r = run(DupMethod::Mean);
+        assert_eq!(r.x, [1.0, 2.0, 3.0, 5.0, 7.0]);
+        let close = |a: &[f64], b: &[f64]| a.iter().zip(b).all(|(p, q)| (p - q).abs() < 1e-12);
+        assert!(close(&r.y, &[2.0, 5.333333333333333, 3.6666666666666665, 7.0, 9.0]), "{:?}", r.y);
+        assert_eq!((r.dup_x.clone(), r.dup_count.clone()), (vec![2.0, 3.0], vec![3.0, 3.0]));
+        for (m, two, three) in [
+            (DupMethod::Median, 5.0, 4.0),
+            (DupMethod::Min, 3.0, 1.0),
+            (DupMethod::Max, 8.0, 6.0),
+            (DupMethod::Sum, 16.0, 11.0),
+            (DupMethod::Sd, 2.5166114784235836, 2.5166114784235831),
+            (DupMethod::Se, 1.4529663145135581, 1.4529663145135578),
+            (DupMethod::Rms, 5.333333333333333, 3.6666666666666665),
+        ] {
+            let r = run(m);
+            assert!(close(&r.y, &[2.0, two, three, 7.0, 9.0]), "{m:?}: {:?}", r.y);
+        }
+        // The tolerance is relative to the X range, and a group's X is its lower middle X.
+        let r = reduce_duplicates(&[100.0, 102.0, 1000.0], &[1.0, 2.0, 3.0], DupMethod::Mean, 0.01).unwrap();
+        assert_eq!((r.x, r.y), (vec![100.0, 1000.0], vec![1.5, 3.0]));
+        let r = reduce_duplicates(&[10.0, 10.2, 10.3, 50.0], &[1.0, 2.0, 3.0, 4.0], DupMethod::Mean, 0.01).unwrap();
+        assert_eq!((r.x, r.y), (vec![10.2, 50.0], vec![2.0, 4.0]));
+        let r = reduce_duplicates(&x, &y, DupMethod::Mean, 0.5).unwrap();
+        assert_eq!((r.x, r.y), (vec![3.0], vec![5.0]));
+        // reducedup3: the default tolerance, chained groups, pairs with a missing value left out.
+        let r = reduce_duplicates(&[0.0, 1e-8, 1e-7, 1.0], &[1.0, 2.0, 3.0, 4.0], DupMethod::Mean, DUP_TOL).unwrap();
+        assert_eq!((r.x, r.y), (vec![0.0, 1e-7, 1.0], vec![1.5, 3.0, 4.0]));
+        let r = reduce_duplicates(&[0.0, 1e-10, 1e-9, 1.0], &[1.0, 2.0, 3.0, 4.0], DupMethod::Mean, DUP_TOL).unwrap();
+        assert_eq!((r.x, r.y), (vec![1e-10, 1.0], vec![2.0, 4.0]));
+        let r = reduce_duplicates(&[0.0, 0.3, 0.6, 0.9, 10.0], &[1.0, 2.0, 3.0, 4.0, 5.0], DupMethod::Mean, 0.035);
+        assert_eq!(r.map(|r| (r.x, r.y)), Some((vec![0.3, 10.0], vec![2.5, 5.0])));
+        let nan = f64::NAN;
+        let r = reduce_duplicates(&[1.0, 2.0, nan, 3.0, 10.0], &[1.0, nan, 3.0, 4.0, 5.0], DupMethod::Mean, DUP_TOL);
+        assert_eq!(r.map(|r| (r.x, r.y)), Some((vec![1.0, 3.0, 10.0], vec![1.0, 4.0, 5.0])));
+        assert!(reduce_duplicates(&[nan], &[1.0], DupMethod::Mean, DUP_TOL).is_none());
     }
 }

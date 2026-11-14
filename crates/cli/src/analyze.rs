@@ -271,6 +271,20 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 p2: analysis::LinePoint { x: x2, y: y2 },
             })),
         ),
+        AnalyzeTool::ReduceDup { target, method, tol, count } => {
+            use analysis::DupMethod as M;
+            let method = match method {
+                DupKind::Mean => M::Mean,
+                DupKind::Median => M::Median,
+                DupKind::Min => M::Min,
+                DupKind::Max => M::Max,
+                DupKind::Sum => M::Sum,
+                DupKind::Sd => M::Sd,
+                DupKind::Se => M::Se,
+                DupKind::Rms => M::Rms,
+            };
+            (target, Job::Tool(Tool::ReduceDup(analysis::ReduceDupSpec { method, tol, count })))
+        }
         AnalyzeTool::ReduceX { target, step, points, method, x_min, x_max } => {
             let range = match (x_min, x_max) {
                 (None, None) => None,

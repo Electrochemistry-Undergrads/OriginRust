@@ -6174,6 +6174,25 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
 }
 
 #[test]
+fn reduce_duplicate_x_data_runs_from_the_menu_into_origins_columns() {
+    let mut h = start(vec![data_file("reducedup")]);
+    show_window(&mut h, "Book1 - sample");
+    let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Reduce Duplicate X Data..."]);
+    assert!(h.state().analysis.is_some(), "the item opens its window");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Reduce duplicate X data"));
+    let sheets = &project(&h).workbooks().next().unwrap().sheets;
+    assert_eq!(sheets.len(), sheets_before + 1);
+    let cols = &sheets.last().unwrap().columns;
+    let names: Vec<&str> = cols.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names[..2], ["ReduceDupX1", "ReduceDupY1"]);
+    // t = 1..4 has no duplicates, so the curve comes back unchanged.
+    assert_eq!(cols[0].numeric().unwrap(), [1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(cols[1].numeric().unwrap(), [2.5, 4.5, 6.5, 8.5]);
+}
+
+#[test]
 fn the_preview_of_a_tool_that_writes_a_new_sheet_shows_the_new_curve() {
     let mut h = start(vec![data_file("manip-preview")]);
     // The input is t = 1..4, up = 2.5, 4.5, 6.5, 8.5. Translate X by 10 keeps Y and moves X.

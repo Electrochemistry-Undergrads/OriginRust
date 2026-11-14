@@ -955,6 +955,7 @@ fn analysis_menu() -> Vec<Entry> {
             vec![
                 item("Subtract Reference Data...", Cmd::Analyze(AnalysisKind::SubtractRef)),
                 item("Subtract Straight Line...", Cmd::Analyze(AnalysisKind::SubtractLine)),
+                item("Reduce Duplicate X Data...", Cmd::Analyze(AnalysisKind::ReduceDup)),
                 item("Reduce to Evenly Spaced X...", Cmd::Analyze(AnalysisKind::ReduceX)),
                 item("Curve Translate X...", Cmd::Analyze(AnalysisKind::TranslateX)),
                 // Sheaf's own: the same window along Y.

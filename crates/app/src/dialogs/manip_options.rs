@@ -1,12 +1,13 @@
-//! Options of the Data Manipulation windows (Subtract Straight Line, Reduce to Evenly Spaced X, Curve
-//! Translate X and Y) and of Mathematics > Median Filter, for the shared analysis window in
-//! `analysis.rs`. The tools themselves are `Tool::SubtractLine`, `ReduceX`, `Translate` and
-//! `MedianFilter` of `sheaf_core::analysis` (spec: `docs/spec/analysis-tools.md` section 12).
+//! Options of the Data Manipulation windows (Subtract Straight Line, Reduce Duplicate X Data, Reduce
+//! to Evenly Spaced X, Curve Translate X and Y) and of Mathematics > Median Filter, for the shared
+//! analysis window in `analysis.rs`. The tools themselves are `Tool::SubtractLine`, `ReduceDup`,
+//! `ReduceX`, `Translate` and `MedianFilter` of `sheaf_core::analysis` (spec:
+//! `docs/spec/analysis-tools.md` section 12).
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::analysis::{
-    EvenGrid, LinePoint, MedianEdge, MedianFilterSpec, ReduceMethod, ReduceOptions, Shift, SubtractLineSpec, Tool,
-    TranslateAxis, TranslateSpec,
+    DupMethod, EvenGrid, LinePoint, MedianEdge, MedianFilterSpec, ReduceDupSpec, ReduceMethod, ReduceOptions, Shift,
+    SubtractLineSpec, Tool, TranslateAxis, TranslateSpec, dup_method_name,
 };
 
 use super::analysis::AnalysisKind;
@@ -16,6 +17,7 @@ pub fn handles(kind: AnalysisKind) -> bool {
     matches!(
         kind,
         AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceDup
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
@@ -37,6 +39,8 @@ pub struct ManipOptions {
     y1: f64,
     y2: f64,
     give_y: bool,
+    /// Reduce Duplicate X Data.
+    dup: ReduceDupSpec,
     /// Reduce to Evenly Spaced X.
     grid: GridChoice,
     step: f64,
@@ -63,6 +67,7 @@ impl ManipOptions {
             y1: 0.0,
             y2: 0.0,
             give_y: false,
+            dup: ReduceDupSpec::default(),
             grid: GridChoice::Count,
             step: if span > 0.0 { span / 100.0 } else { 1.0 },
             count: 100,
@@ -90,6 +95,7 @@ impl ManipOptions {
                 p1: LinePoint { x: self.x1, y: self.give_y.then_some(self.y1) },
                 p2: LinePoint { x: self.x2, y: self.give_y.then_some(self.y2) },
             }),
+            AnalysisKind::ReduceDup => Tool::ReduceDup(self.dup),
             AnalysisKind::ReduceX => Tool::ReduceX(ReduceOptions {
                 grid: match self.grid {
                     GridChoice::Step => EvenGrid::Step(self.step),
@@ -128,6 +134,33 @@ impl ManipOptions {
                 });
                 ui.checkbox(&mut self.give_y, "Give the Y values (otherwise they are read from each curve)");
                 ui.weak("Read from the curve, a point between two data points is found by a straight line.");
+            }
+            AnalysisKind::ReduceDup => {
+                ui.horizontal(|ui| {
+                    ui.label("Replace duplicates with");
+                    egui::ComboBox::from_id_salt("reducedup-method")
+                        .selected_text(dup_method_name(self.dup.method))
+                        .show_ui(ui, |ui| {
+                            for m in [
+                                DupMethod::Mean,
+                                DupMethod::Median,
+                                DupMethod::Min,
+                                DupMethod::Max,
+                                DupMethod::Sum,
+                                DupMethod::Sd,
+                                DupMethod::Se,
+                                DupMethod::Rms,
+                            ] {
+                                ui.selectable_value(&mut self.dup.method, m, dup_method_name(m));
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Tolerance (fraction of the X range)");
+                    ui.add(DragValue::new(&mut self.dup.tol).speed(1e-9).range(0.0..=1.0));
+                });
+                ui.checkbox(&mut self.dup.count, "Output the duplicate X values and their counts");
+                ui.weak("X values closer than the tolerance to their neighbour count as one X.");
             }
             AnalysisKind::ReduceX => {
                 ui.horizontal(|ui| {

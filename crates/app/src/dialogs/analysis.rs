@@ -74,6 +74,7 @@ pub enum AnalysisKind {
     PolygonArea,
     /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
     SubtractLine,
+    ReduceDup,
     ReduceX,
     TranslateX,
     TranslateY,
@@ -132,6 +133,7 @@ impl AnalysisKind {
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
             AnalysisKind::SubtractLine => "Subtract Straight Line...",
+            AnalysisKind::ReduceDup => "Reduce Duplicate X Data...",
             AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
             AnalysisKind::TranslateX => "Curve Translate X...",
             AnalysisKind::TranslateY => "Curve Translate Y...",
@@ -179,6 +181,7 @@ impl AnalysisKind {
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
             "subtract-line" => AnalysisKind::SubtractLine,
+            "reduce-dup" => AnalysisKind::ReduceDup,
             "reduce-x" => AnalysisKind::ReduceX,
             "translate-x" => AnalysisKind::TranslateX,
             "translate-y" => AnalysisKind::TranslateY,
@@ -646,6 +649,7 @@ impl AnalysisDialog {
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
             AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceDup
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
@@ -874,6 +878,7 @@ impl AnalysisDialog {
                 );
             }
             AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceDup
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
@@ -1559,6 +1564,7 @@ impl AnalysisDialog {
             AnalysisKind::AverageCurves => "avecurves",
             AnalysisKind::Intersect => "intersect",
             AnalysisKind::PolygonArea => "polyarea",
+            AnalysisKind::ReduceDup => "reducedup",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
             AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
@@ -1612,6 +1618,7 @@ impl AnalysisDialog {
             AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
             AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
+            AnalysisKind::ReduceDup => "Replace the points that share an X value by one point",
             AnalysisKind::ReduceX => "Reduce the input curves to evenly spaced X values",
             AnalysisKind::TranslateX => "Shift the input curves horizontally",
             AnalysisKind::TranslateY => "Shift the input curves vertically",
@@ -1671,7 +1678,9 @@ impl AnalysisDialog {
             AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
                 "New columns beside the input"
             }
-            AnalysisKind::ReduceX | AnalysisKind::TranslateX => "The curves in a new sheet with their own X column",
+            AnalysisKind::ReduceDup | AnalysisKind::ReduceX | AnalysisKind::TranslateX => {
+                "The curves in a new sheet with their own X column"
+            }
         }
     }
 

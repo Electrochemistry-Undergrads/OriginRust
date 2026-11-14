@@ -739,6 +739,19 @@ pub enum BoundaryKind {
     Extrapolate,
 }
 
+/// Origin's `reducedup` methods.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum DupKind {
+    Mean,
+    Median,
+    Min,
+    Max,
+    Sum,
+    Sd,
+    Se,
+    Rms,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ReduceKind {
     Interpolate,
@@ -1067,6 +1080,21 @@ pub enum AnalyzeTool {
         /// Y of the second point (default: the curve's value at --x2).
         #[arg(long, allow_hyphen_values = true)]
         y2: Option<f64>,
+    },
+    /// Reduce Duplicate X Data: points whose X values are within the tolerance of their neighbour
+    /// become one point; the result goes to a new sheet.
+    ReduceDup {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// What replaces the Y values of a group (Origin's rms gives the mean, as measured).
+        #[arg(long, value_enum, default_value_t = DupKind::Mean)]
+        method: DupKind,
+        /// Tolerance as a fraction of the X range (Origin's default 1e-8).
+        #[arg(long, default_value_t = 1e-8)]
+        tol: f64,
+        /// Also write the X values that had duplicates and how many points each had.
+        #[arg(long)]
+        count: bool,
     },
     /// Reduce each curve to evenly spaced X (--step or --points); the result goes to a new sheet.
     ReduceX {

@@ -479,9 +479,9 @@ Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivat
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
 
-## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured)
+## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
 
-Analysis > Data Manipulation has Subtract Straight Line, Reduce to Evenly Spaced X and Curve
+Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve
 Translate X; Analysis > Mathematics has Median Filter. Nothing in this section was run in Origin:
 there was no Origin on the machine where it was written. What is known comes from Origin's public
 documentation (paraphrased: what each item is for) and from two earlier measurements that the
@@ -546,6 +546,35 @@ Not measured (to be measured in Origin; nothing here may be quoted as Origin's b
    the smoothing rule), and the default window size.
 6. The Recalculate behaviour of these items in Origin (which of None, Manual, Auto they offer),
    the long names, units and comments of the output columns, and the row-range handling.
+
+### 12.1 Reduce Duplicate X Data (measured in Origin)
+
+Analysis > Data Manipulation > Reduce Duplicate X Data is Origin's X-Function `reducedup` (method,
+`tol`, `oy`, `xcount`). Measured on 2026-11-13 with `tools/origin-ref/run-labtalk-lines.ps1`
+(scripts and outputs `re-workspace/scratch/reducedup/reducedup*.lines.txt` and `.out.txt`):
+
+- Pairs with a missing X or Y are left out; the rest are sorted by X.
+- Neighbours whose X values differ by no more than `tol` times the X range form one group, as a
+  chain: 0, 0.3, 0.6, 0.9 with `tol` 0.035 of a range of 10 (limit 0.35) are one group although 0.9
+  is 0.9 from the first. The default `tol` groups X values 1e-8 apart in a range of 1 and not 9e-8
+  apart; Sheaf uses 1e-8. The comparison is plain floating point (10.3 - 10.1 is just above 0.2 and
+  does not group at a limit of 0.2).
+- A group's X is its lower middle X after sorting (the median of an odd group, the lower of the two
+  middle values of an even one); a point alone keeps its own Y.
+- Methods mean (default), median, min, max, sum, sd (n - 1 divisor), se (sd / sqrt n) and rms; rms
+  gives the mean of the group, not the root mean square.
+- Output by default: two new columns at the end of the input sheet, long names `ReduceDupX1` and
+  `ReduceDupY1` (the number counts up with each run), the Y column's comment "Duplicates replaced
+  with Mean of B" (the method's word: Mean, Median, Min, Max, Sum, SD, SE, RMS). `xcount:=<new>` adds
+  `DupX1` (the X of each group of two or more points) and `DupXCount1` (its count), no comments.
+
+Sheaf (`Tool::ReduceDup`, undo step "Reduce duplicate X data", `calc::reduce_duplicates`) copies
+all of this, except that the columns go to a new sheet named "ReduceDup" (the analysis framework
+adds X and Y pairs only as a result sheet). The window offers the method, the tolerance and "Output
+the duplicate X values and their counts". Recalculate works as for the other tools of this section.
+
+Command line: `sheaf analyze reduce-dup FILE --y B [--method mean|median|min|max|sum|sd|se|rms]
+[--tol T] [--count]`; window `--show analysis:reduce-dup`.
 
 Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--y2 V]`,
 `sheaf analyze reduce-x FILE --y B [--step S | --points N] [--method interpolate|average]

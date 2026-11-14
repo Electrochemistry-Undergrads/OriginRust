@@ -234,7 +234,11 @@ pub fn format_engineering(v: f64, digits: EngineeringDigits) -> String {
         };
     }
     let exp3 = exponent_rounded(x, 6).div_euclid(3) * 3;
-    let m = x / 10f64.powi(exp3);
+    // Parse the decimal scale instead of computing it with powi, whose rounding can differ
+    // from the input literal: 1e-24 / 10f64.powi(-24) can be just below 1 and incorrectly
+    // gain an extra significant digit ("1.0e-24" instead of "1e-24").
+    let scale: f64 = format!("1e{exp3}").parse().expect("decimal power of ten");
+    let m = x / scale;
     let body = match digits {
         EngineeringDigits::Decimals(d) => fixed_half_up(m, d),
         EngineeringDigits::Auto => trim_zeros(&fixed_half_up(m, 5)).to_string(),
@@ -537,6 +541,23 @@ mod tests {
         assert_eq!(sig(2, 123456789012.0), "1.2E+02G");
         assert_eq!(sig(1, 1e-24), "1e-24");
         assert_eq!(sig(2, 1e-24), "1.0e-24");
+    }
+
+    #[test]
+    fn engineering_powers_of_ten_keep_the_requested_significant_digits() {
+        for (value, one, two) in [
+            (1e-24, "1e-24", "1.0e-24"),
+            (-1e-24, "-1e-24", "-1.0e-24"),
+            (1e-18, "1a", "1.0a"),
+            (1e-3, "1m", "1.0m"),
+            (1.0, "1", "1.0"),
+            (1e3, "1k", "1.0k"),
+            (1e18, "1E", "1.0E"),
+            (1e24, "1e24", "1.0e24"),
+        ] {
+            assert_eq!(NumberFormat::EngineeringSig(1).format(value), one, "{value:e}");
+            assert_eq!(NumberFormat::EngineeringSig(2).format(value), two, "{value:e}");
+        }
     }
 
     #[test]

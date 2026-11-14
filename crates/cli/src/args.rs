@@ -1012,6 +1012,41 @@ pub enum AnalyzeTool {
         #[command(flatten)]
         operand: OperandArgs,
     },
+    /// Convolve each column with a response column (Origin's Signal Processing > Convolution):
+    /// the full linear convolution, or circular; X steps of the input's X spacing unless
+    /// --interval is given. The results go to a new sheet.
+    Convolution {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The response column (short or long name).
+        #[arg(long)]
+        response: String,
+        #[arg(long)]
+        circular: bool,
+        /// Divide the response by its Euclidean norm first.
+        #[arg(long)]
+        normalize: bool,
+        /// Sampling interval of the result.
+        #[arg(long)]
+        interval: Option<f64>,
+    },
+    /// Correlate each column with another column (Origin's Signal Processing > Correlation):
+    /// lags -(N-1) to N-1, or 0 to N-1 when circular. The results go to a new sheet.
+    SignalCorrelation {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The second signal (may be the same column for an autocorrelation).
+        #[arg(long = "with")]
+        other: String,
+        #[arg(long)]
+        circular: bool,
+        /// Divide by the square root of the product of the two sums of squares.
+        #[arg(long)]
+        normalize: bool,
+        /// Lag step of the result.
+        #[arg(long, default_value_t = 1.0)]
+        interval: f64,
+    },
     /// Derivative of each curve with respect to its X column.
     Differentiate {
         #[command(flatten)]

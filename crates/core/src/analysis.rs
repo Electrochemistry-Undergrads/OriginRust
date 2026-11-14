@@ -184,6 +184,31 @@ pub struct ColumnMathSpec {
     pub operand: CurveOperand,
 }
 
+/// What [`Tool::Convolution`] does (Origin's Signal Processing > Convolution, `conv`, measured;
+/// analysis-tools.md 13): each input column convolved with the response column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ConvolutionSpec {
+    pub response: ColumnId,
+    /// Circular instead of linear (Origin's `circular`).
+    pub circular: bool,
+    /// Divide the response by its Euclidean norm first (Origin's `norm`).
+    pub normalize: bool,
+    /// Sampling interval of the result's X; `None` is Origin's `<auto>`, the X step of the input.
+    pub interval: Option<f64>,
+}
+
+/// What [`Tool::SignalCorrelation`] does (Origin's Signal Processing > Correlation, `corr1`,
+/// measured; analysis-tools.md 13): each input column correlated with the other column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SignalCorrelationSpec {
+    pub other: ColumnId,
+    pub circular: bool,
+    /// Divide by the square root of the product of the two sums of squares.
+    pub normalize: bool,
+    /// The lag step of the result's X (Origin: 1 unless given).
+    pub interval: f64,
+}
+
 /// Which t-test [`TTestSpec`] runs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TTestKind {
@@ -538,6 +563,8 @@ pub enum Tool {
     IntegrateRanges(IntegrateRangesSpec),
     CurveMath(CurveMathSpec),
     ColumnMath(ColumnMathSpec),
+    Convolution(ConvolutionSpec),
+    SignalCorrelation(SignalCorrelationSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -594,6 +621,8 @@ impl Tool {
                 _ => "Curve math",
             },
             Tool::ColumnMath(_) => "Column math",
+            Tool::Convolution(_) => "Convolution",
+            Tool::SignalCorrelation(_) => "Signal correlation",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -645,6 +674,8 @@ impl Tool {
         match self {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
             Tool::CurveMath(_) | Tool::ColumnMath(_) => "Math",
+            Tool::Convolution(_) => "Convolution",
+            Tool::SignalCorrelation(_) => "Correlation",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -820,6 +851,33 @@ struct SheetColumn {
 }
 
 /// The data one input column contributes to a tool run.
+/// The values of a signal for Convolution and Correlation: trailing missing values dropped, a
+/// missing value inside refused.
+fn signal_values(v: &[f64], name: &str) -> Result<Vec<f64>, AnalysisError> {
+    let end = v.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1);
+    let v = &v[..end];
+    if v.is_empty() {
+        return Err(AnalysisError::TooFewPoints(name.to_string()));
+    }
+    if v.iter().any(|x| !x.is_finite()) {
+        return Err(AnalysisError::BadOption(format!("column {name} has missing values")));
+    }
+    Ok(v.to_vec())
+}
+
+/// Origin's `<auto>` sampling interval: the mean X step of the input, 1 without a usable X.
+fn auto_interval(x: &[f64]) -> f64 {
+    let first = x.iter().position(|v| v.is_finite());
+    let last = x.iter().rposition(|v| v.is_finite());
+    match (first, last) {
+        (Some(a), Some(b)) if b > a => {
+            let d = (x[b] - x[a]) / (b - a) as f64;
+            if d.is_finite() && d > 0.0 { d } else { 1.0 }
+        }
+        _ => 1.0,
+    }
+}
+
 struct Input<'a> {
     id: ColumnId,
     /// Short name, for error messages.
@@ -1533,6 +1591,58 @@ impl Project {
                         }
                         (None, CurveOperand::Reference(_)) => unreachable!("the reference was read above"),
                     }
+                }
+            }
+            Tool::Convolution(ConvolutionSpec { response: other, circular, normalize, interval: _ })
+            | Tool::SignalCorrelation(SignalCorrelationSpec { other, circular, normalize, interval: _ }) => {
+                let conv = matches!(request.tool, Tool::Convolution(_));
+                let (_, _, ocol) = self.locate(*other).ok_or(AnalysisError::NoSuchColumn(*other))?;
+                let oshort = ocol.short_name.clone();
+                let ovalues =
+                    signal_values(ocol.numeric().ok_or_else(|| AnalysisError::NotNumeric(oshort.clone()))?, &oshort)?;
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let (x, v, x_name, what) = if conv {
+                        let Tool::Convolution(spec) = &request.tool else { unreachable!() };
+                        let step = match spec.interval {
+                            Some(d) if d.is_finite() && d > 0.0 => d,
+                            Some(d) => return Err(AnalysisError::BadOption(format!("{d} is not a usable interval"))),
+                            None => auto_interval(inp.xs()),
+                        };
+                        let v = calc::convolve(&y, &ovalues, *circular, *normalize);
+                        let x = (0..v.len()).map(|k| k as f64 * step).collect();
+                        (x, v, inp.x_name.clone(), "convolved with")
+                    } else {
+                        let Tool::SignalCorrelation(spec) = &request.tool else { unreachable!() };
+                        if !(spec.interval.is_finite() && spec.interval > 0.0) {
+                            return Err(AnalysisError::BadOption(format!(
+                                "{} is not a usable interval",
+                                spec.interval
+                            )));
+                        }
+                        let (lags, v) = calc::correlate(&y, &ovalues, *circular, *normalize);
+                        (lags.iter().map(|l| l * spec.interval).collect(), v, "Lag".to_string(), "correlated with")
+                    };
+                    let x_units = if conv { inp.x_units.clone() } else { String::new() };
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: x_name,
+                        units: x_units,
+                        comments: String::new(),
+                        data: ColumnData::numeric(x),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("{} {what} {}", inp.name, ocol.display_name()),
+                        units: String::new(),
+                        comments: format!(
+                            "{} {what} {oshort}{}{}",
+                            inp.short,
+                            if *circular { ", circular" } else { "" },
+                            if *normalize { ", normalized" } else { "" }
+                        ),
+                        data: ColumnData::numeric(v),
+                    });
                 }
             }
             Tool::ColumnMath(spec) => {
@@ -2776,6 +2886,39 @@ mod tests {
         assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), before);
         let zero = Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Divide, operand: CurveOperand::Constant(0.0) });
         assert!(matches!(p.analyze(&request(&[ramp], zero)), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn convolution_and_correlation_write_x_and_y_to_a_new_sheet() {
+        let (mut p, book, flat, ramp) = sample();
+        let response = add_reference(&mut p);
+        let spec = ConvolutionSpec { response, circular: false, normalize: false, interval: None };
+        let r = p.analyze(&request(&[ramp], Tool::Convolution(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("Convolution"), "{}", rs.name);
+        // 11 + 3 - 1 values at the X step of the input (1 s).
+        let x = rs.columns[0].numeric().unwrap();
+        assert_eq!(x.len(), 13);
+        assert_eq!((x[12], rs.columns[0].units.as_str()), (12.0, "s"));
+        assert_eq!(rs.columns[1].numeric().unwrap()[..3], [0.0, 1.0, 4.0]);
+        assert_eq!(rs.columns[1].comments, "C convolved with B");
+        let spec = SignalCorrelationSpec { other: flat, circular: false, normalize: false, interval: 0.5 };
+        let r = p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let lags = rs.columns[0].numeric().unwrap();
+        assert_eq!((lags.len(), lags[0], lags[20]), (21, -5.0, 5.0));
+        // Lag 0: the dot product of 0..10 with 2.
+        assert_eq!(rs.columns[1].numeric().unwrap()[10], 110.0);
+        assert_eq!(r.message.split(':').next(), Some("Signal correlation"));
+        // A missing value inside a signal is refused.
+        let mut holes = vec![1.0; 5];
+        holes[2] = f64::NAN;
+        let gappy = p.add_column(book, 0, Designation::Y, ColumnData::numeric(holes)).unwrap();
+        let spec = SignalCorrelationSpec { other: gappy, circular: true, normalize: true, interval: 1.0 };
+        assert!(matches!(
+            p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))),
+            Err(AnalysisError::BadOption(_))
+        ));
     }
 
     fn ranges(list: &[(f64, f64)], end_point_baseline: bool) -> Tool {

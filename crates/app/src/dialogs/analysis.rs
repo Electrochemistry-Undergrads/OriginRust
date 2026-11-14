@@ -17,10 +17,10 @@ use sheaf_core::analysis::{
     TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
-    AreaType, BaselineSpec, Boundary, ColumnMathSpec, CurveMathSpec, CurveOp, CurveOperand, DiffOptions,
-    IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod, OutputTarget,
-    PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary,
-    Tool,
+    AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CurveMathSpec, CurveOp, CurveOperand,
+    DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod,
+    OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange, SignalCorrelationSpec,
+    SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
 use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
@@ -44,6 +44,10 @@ pub enum AnalysisKind {
     CurveMath,
     /// Simple Column Math (Origin's `vmathtool`): a column with a constant or another column, row by row.
     ColumnMath,
+    /// Signal Processing > Convolution (Origin's `conv`).
+    Convolution,
+    /// Signal Processing > Correlation (Origin's `corr1`).
+    SignalCorrelation,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -91,7 +95,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 13] = [
+    pub const ALL: [AnalysisKind; 15] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -101,6 +105,8 @@ impl AnalysisKind {
         AnalysisKind::SubtractRef,
         AnalysisKind::CurveMath,
         AnalysisKind::ColumnMath,
+        AnalysisKind::Convolution,
+        AnalysisKind::SignalCorrelation,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -119,6 +125,8 @@ impl AnalysisKind {
             AnalysisKind::SubtractRef => "Subtract Reference Data...",
             AnalysisKind::CurveMath => "Simple Math...",
             AnalysisKind::ColumnMath => "Simple Column Math...",
+            AnalysisKind::Convolution => "Convolution...",
+            AnalysisKind::SignalCorrelation => "Correlation...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -170,6 +178,8 @@ impl AnalysisKind {
             "subtract-ref" => AnalysisKind::SubtractRef,
             "math" => AnalysisKind::CurveMath,
             "column-math" => AnalysisKind::ColumnMath,
+            "convolution" => AnalysisKind::Convolution,
+            "signal-correlation" => AnalysisKind::SignalCorrelation,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -514,6 +524,11 @@ pub struct AnalysisDialog {
     reference_choices: Vec<(ColumnId, String)>,
     reference: usize,
     common_only: bool,
+    /// Convolution and Correlation: circular instead of linear, normalized, the X step (`None`:
+    /// Convolution's automatic step from the input's X).
+    signal_circular: bool,
+    signal_normalize: bool,
+    signal_interval: Option<f64>,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
@@ -614,7 +629,9 @@ impl AnalysisDialog {
             None => (1.0, rows_in_sheet as f64),
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
-        let reference_choices = reference_choices(project, &columns);
+        // Convolution and Correlation may use an input itself (autocorrelation, as Origin).
+        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         let sheet_columns: Vec<(ColumnId, String)> = sheet
             .columns
             .iter()
@@ -660,6 +677,9 @@ impl AnalysisDialog {
             reference_choices,
             reference: 0,
             common_only: false,
+            signal_circular: false,
+            signal_normalize: false,
+            signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -950,6 +970,25 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+                let other = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or("there is no other column with numbers to use as the second signal")?;
+                let (circular, normalize) = (self.signal_circular, self.signal_normalize);
+                if self.kind == AnalysisKind::Convolution {
+                    Tool::Convolution(ConvolutionSpec {
+                        response: other,
+                        circular,
+                        normalize,
+                        interval: self.signal_interval,
+                    })
+                } else {
+                    let interval = self.signal_interval.unwrap_or(1.0);
+                    Tool::SignalCorrelation(SignalCorrelationSpec { other, circular, normalize, interval })
+                }
+            }
             AnalysisKind::ColumnMath => {
                 let operand = if self.use_reference {
                     self.reference_choices
@@ -1150,12 +1189,18 @@ impl AnalysisDialog {
     /// The reference list and the options that belong to it.
     fn reference_options(&mut self, ui: &mut egui::Ui) {
         let column_math = self.kind == AnalysisKind::ColumnMath;
+        let label = match self.kind {
+            AnalysisKind::ColumnMath => "Column",
+            AnalysisKind::Convolution => "Response",
+            AnalysisKind::SignalCorrelation => "Second signal",
+            _ => "Reference",
+        };
         let text = match self.reference_choices.get(self.reference) {
             Some((_, label)) => label.as_str(),
             None => "(no other column with numbers)",
         };
         ui.horizontal(|ui| {
-            ui.label(if column_math { "Column" } else { "Reference" });
+            ui.label(label);
             let mut chosen = self.reference;
             egui::ComboBox::from_id_salt("reference_column").selected_text(text).width(300.0).show_ui(ui, |ui| {
                 for (i, (_, label)) in self.reference_choices.iter().enumerate() {
@@ -1166,6 +1211,9 @@ impl AnalysisDialog {
         });
         if column_math {
             ui.weak("Row by row, without X values; rows past the end of the column count as 0.");
+            return;
+        }
+        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation) {
             return;
         }
         ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
@@ -1210,6 +1258,29 @@ impl AnalysisDialog {
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
+            }
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+                self.reference_options(ui);
+                ui.horizontal(|ui| {
+                    ui.label("Type");
+                    ui.radio_value(&mut self.signal_circular, false, "Linear");
+                    ui.radio_value(&mut self.signal_circular, true, "Circular");
+                });
+                ui.checkbox(&mut self.signal_normalize, "Normalize");
+                ui.horizontal(|ui| {
+                    ui.label("Sampling interval");
+                    if self.kind == AnalysisKind::Convolution {
+                        let mut auto = self.signal_interval.is_none();
+                        if ui.checkbox(&mut auto, "Auto").changed() {
+                            self.signal_interval = if auto { None } else { Some(1.0) };
+                        }
+                    }
+                    if let Some(d) = &mut self.signal_interval {
+                        ui.add(DragValue::new(d).speed(0.01).range(1e-300..=f64::MAX));
+                    } else {
+                        ui.weak("the X step of the input");
+                    }
+                });
             }
             AnalysisKind::CurveMath | AnalysisKind::ColumnMath => {
                 ui.horizontal(|ui| {
@@ -1826,6 +1897,8 @@ impl AnalysisDialog {
             AnalysisKind::Baseline => "baseline",
             AnalysisKind::SubtractRef | AnalysisKind::CurveMath => "curvemath",
             AnalysisKind::ColumnMath => "vmathtool",
+            AnalysisKind::Convolution => "conv",
+            AnalysisKind::SignalCorrelation => "corr1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -1883,6 +1956,8 @@ impl AnalysisDialog {
             AnalysisKind::ColumnMath => {
                 "Add, subtract, multiply, divide or raise to a power with a constant or a column, row by row"
             }
+            AnalysisKind::Convolution => "Convolve the input signals with a response",
+            AnalysisKind::SignalCorrelation => "Correlate the input signals with a second signal",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -1932,6 +2007,8 @@ impl AnalysisDialog {
             | AnalysisKind::SubtractRef
             | AnalysisKind::CurveMath
             | AnalysisKind::ColumnMath => "New columns beside the input",
+            AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
+            AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
@@ -2007,7 +2084,8 @@ impl AnalysisDialog {
             return;
         }
         self.column_names = names.join(", ");
-        self.reference_choices = reference_choices(project, &columns);
+        let signal = matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
         if matches!(self.kind, AnalysisKind::CurveMath | AnalysisKind::ColumnMath) {
             self.use_reference = self.use_reference && !self.reference_choices.is_empty();

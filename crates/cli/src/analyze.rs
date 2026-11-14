@@ -87,6 +87,14 @@ enum Job {
         /// Simple Column Math: row by row, no X.
         column: bool,
     },
+    /// Convolution or correlation; the second column is looked up once the project is loaded.
+    Signal {
+        conv: bool,
+        other: String,
+        circular: bool,
+        normalize: bool,
+        interval: Option<f64>,
+    },
     Sort {
         by: String,
         descending: bool,
@@ -168,6 +176,12 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         }
         AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
         AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
+        AnalyzeTool::Convolution { target, response, circular, normalize, interval } => {
+            (target, Job::Signal { conv: true, other: response, circular, normalize, interval })
+        }
+        AnalyzeTool::SignalCorrelation { target, other, circular, normalize, interval } => {
+            (target, Job::Signal { conv: false, other, circular, normalize, interval: Some(interval) })
+        }
         AnalyzeTool::Differentiate { target, order, smooth, poly, points } => {
             (target, Job::Tool(Tool::Differentiate(analysis::DiffOptions { order, smooth, poly, npts: points })))
         }
@@ -783,6 +797,15 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         Job::Math { op, operand, column } => {
             Job::Tool(math_tool(&mut project, book, sheet, op, &operand, column, &target.read)?)
         }
+        Job::Signal { conv, other, circular, normalize, interval } => {
+            let other = named_columns(&project, book, sheet, std::slice::from_ref(&other))?[0];
+            Job::Tool(if conv {
+                Tool::Convolution(analysis::ConvolutionSpec { response: other, circular, normalize, interval })
+            } else {
+                let interval = interval.unwrap_or(1.0);
+                Tool::SignalCorrelation(analysis::SignalCorrelationSpec { other, circular, normalize, interval })
+            })
+        }
         other => other,
     };
 
@@ -818,7 +841,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)
         }
-        Job::Math { .. } => unreachable!("curve math was turned into a tool above"),
+        Job::Math { .. } | Job::Signal { .. } => unreachable!("turned into a tool above"),
         Job::Sort { by, descending } => {
             let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;

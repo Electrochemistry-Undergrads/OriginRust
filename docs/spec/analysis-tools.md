@@ -696,6 +696,47 @@ Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--
 and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
 `--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
 
+## 13. Convolution and Correlation (`conv`, `corr1`)
+
+Analysis > Signal Processing > Convolution and Correlation. Inputs (from the X-Function files):
+`conv`: the signal `ix`, the `response`, `interval` (`<auto>`), `norm` (off), `wrap` (off),
+`circular` (Linear or Circular) and the output `oy` (X and Y); `corr1`: `ix1`, `ix2` (the same
+column for an autocorrelation), `interval`, `type` (Linear or Circular), `norm` (off), `oy`.
+
+Observed (Origin, `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`; Rust tests
+`convolution_matches_origin_conv` and `correlation_matches_origin_corr1` in
+`crates/calc/src/signal.rs`, 1e-12). Origin computes by FFT, so its numbers carry noise of about
+1e-15 (`2.4999999999999996`, values like `2e-16` where the exact result is 0); Sheaf sums directly.
+
+- Convolution, linear: the full convolution of the signal (n points) and the response (m), n + m - 1
+  values. X is `k * interval`, k from 0. With `<auto>` the interval is the X step of the signal's
+  sheet (X 0, 0.1, 0.2, 0.3 gave 0, 0.1, ..., 0.4); without X it is 1. Checked with a longer
+  response than signal too.
+- Convolution, circular: both padded with zeros to N = max(n, m); N values,
+  `c[k] = sum_j s[j] r[(k - j) mod N]`.
+- Normalize: the response is divided by its Euclidean norm (1 / sqrt(1.3125) = 0.8729 for
+  1, 0.5, 0.25).
+- Wrap response: no difference found with a three-point response, linear or circular; not
+  offered in Sheaf.
+- Correlation, linear: both padded with zeros to N = max(n, m); lags -(N-1) to N-1 (2N - 1 values,
+  so a leading 0 when the lengths differ), value `sum_j a[j + k] b[j]`; lag 0 is the dot product.
+  The X is the lag times the interval, 1 by default (the X spacing of the sheet is not used).
+- Correlation, circular: N values at lags 0 to N-1, but in Origin's order value k is
+  `sum_j a[(j - k - 1) mod N] b[j]`, that is the plain circular correlation read from the far end.
+  Checked on two data sets and both argument orders.
+- Normalize (correlation): divided by sqrt(sum a^2 * sum b^2).
+- Decimation (`decimate`) was probed as well, but Origin refused factors 3, 4 and 5 on 11 and 12
+  points and its moving-average filter gave values not explained yet; not built.
+
+Sheaf: `sheaf_calc::convolve`, `correlate`; `Tool::Convolution(ConvolutionSpec)` and
+`Tool::SignalCorrelation(SignalCorrelationSpec)`. The results go to a new sheet `Convolution<n>`
+or `Correlation<n>` with an X (the input's X name and unit, or "Lag") and a Y column per input.
+Trailing missing values are dropped; a missing value inside a signal is refused. The windows list
+every numeric Y column of the project, the inputs included, as the response or second signal.
+Command line: `sheaf analyze convolution FILE --y B --response C [--circular] [--normalize]
+[--interval D]` and `sheaf analyze signal-correlation FILE --y B --with C [--circular] [--normalize]
+[--interval D]`.
+
 ## Files
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with

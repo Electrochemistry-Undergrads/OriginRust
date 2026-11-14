@@ -1363,6 +1363,22 @@ fn simple_column_math_adds_ten_into_the_input_columns_as_origin() {
     assert_eq!(h.state().doc.undo_label(), Some("Column math"));
 }
 
+#[test]
+fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet() {
+    for (item, prefix, rows) in [("Convolution...", "Convolution", 7), ("Correlation...", "Correlation", 7)] {
+        let mut h = start(vec![data_file("signal")]);
+        show_window(&mut h, "Book1 - sample");
+        menu_path(&mut h, &["Analysis", "Signal Processing", item]);
+        assert!(h.state().analysis.is_some(), "the {item} window is open");
+        // The first Y column is the second signal (an input may be used: autocorrelation).
+        click(&mut h, "OK");
+        let b = project(&h).workbooks().next().unwrap();
+        let sheet = b.sheets.iter().find(|s| s.name.starts_with(prefix)).expect("a result sheet");
+        assert_eq!(sheet.columns.len(), 4, "X and Y for each of the two inputs");
+        assert_eq!(sheet.columns[1].numeric().unwrap().len(), rows, "4 + 4 - 1 values");
+    }
+}
+
 fn date_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

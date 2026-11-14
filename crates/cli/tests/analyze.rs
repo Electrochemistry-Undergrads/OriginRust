@@ -347,6 +347,49 @@ fn column_math_goes_row_by_row() {
 }
 
 #[test]
+fn convolution_and_signal_correlation_write_a_new_sheet() {
+    let dir = scratch("signal");
+    let data = data_file(&dir);
+    let out = dir.join("conv.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "convolution",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--response",
+        "flat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Convolution"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows.len(), 21, "11 + 11 - 1");
+    // 0..10 convolved with eleven 2s: 0, 2, 6, ...
+    assert_eq!(rows[..3], ["0,0", "1,2", "2,6"]);
+    let out = dir.join("corr.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "signal-correlation",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--with",
+        "ramp",
+        "--circular",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    // Names and comments (no units row: lags and correlations have none), then the values.
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(2).map(str::to_string).collect();
+    assert_eq!(rows.len(), 11, "circular: lags 0 to 10");
+    // Origin's circular order starts from the far end: lag 0 holds sum a[j - 1] a[j] = 330.
+    assert_eq!(rows[0], "0,330");
+}
+
+#[test]
 fn curve_math_and_range_mistakes_are_explained() {
     let dir = scratch("math-errors");
     let data = data_file(&dir);

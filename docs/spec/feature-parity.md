@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 44 | 131 | 57 | 232 |
+| All rows | 45 | 132 | 56 | 233 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 12 | 62 | 57 | 131 |
+| P1 and P2 together | 13 | 63 | 56 | 132 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -169,7 +169,8 @@ Cross-cutting findings:
 | Average multiple curves | avecurves | Average Multiple Curves window and `analyze average` with Origin's defaults (Full X Range, Auto points, curves continued past their ends), Same as Source X and Common X Range, Std Dev, Std Err, N, Minimum, Maximum; Recalculate Auto/Manual; measured (`analysis-curve-math.md` 4) | ◐ | no Custom X, Follow Curve Trace or Concatenate; Origin sorts a turning X, Sheaf refuses it | P1 |
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Cumulative sum | Mathematics | running integral only | ✗ | | P1 |
-| Convolution, deconvolution | Signal Processing | none | ✗ | | P2 |
+| Convolution, deconvolution | Signal Processing | Convolution window, `analyze convolution`, `Tool::Convolution`: linear and circular, normalized, Origin's automatic interval | ◐ | checked against Origin (analysis-tools 13); deconvolution and wrap response missing | P2 |
+| Correlation of two signals | Signal Processing > Correlation (corr1) | Correlation window, `analyze signal-correlation`, `Tool::SignalCorrelation`: linear and circular in Origin's lag order, normalized, autocorrelation | ✓ | checked against Origin (analysis-tools 13) | P2 |
 | XYZ gridding, matrix conversion | Convert to Matrix | none | ✗ | no matrix window | P2 |
 | Rank, remove duplicates | wdeldup | none | ✗ | | P2 |
 | Rise time, polygon area, roots, 2D integration | gadgets and Mathematics | none | ✗ | | P2 |

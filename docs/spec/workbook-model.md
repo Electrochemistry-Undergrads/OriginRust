@@ -341,6 +341,22 @@ typed text, including Unicode; stale cursor positions must not turn typing `a`, 
 `ba`. Navigation within an ongoing edit retains its normal cursor/selection state.
 This selection behavior follows the owner's report, not a new measurement of Origin.
 
+### 13.4 Clipboard text preservation (T07, 2026-11-14)
+
+Worksheet Copy and Cut encode tab-separated fields. Text containing a comma, tab, line break,
+carriage return or double quote is quoted, with embedded quotes doubled. This keeps a single
+column's commas from becoming extra columns on Paste and preserves embedded whitespace instead
+of replacing it with spaces. Copy including label rows uses the same field encoding; those rows
+remain plain table rows when pasted into data cells. Direct label-cell copy/paste stays plain text.
+
+Paste accepts tab-separated or comma-separated external text, choosing tabs outside quoted fields
+first. Quoted single fields and multiline fields are supported; quotes within ordinary text or
+without a complete quoted field stay literal. Numeric precision, missing-value handling and type
+inference are unchanged. Core round-trip tests and UI tests on both new and imported tables cover
+field boundaries, Unicode, Copy/Cut, Paste, and Undo/Redo. These are Sheaf data-preservation rules;
+Origin's clipboard quoting and precision defaults have not been measured, and cross-application
+clipboard behavior remains unverified.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

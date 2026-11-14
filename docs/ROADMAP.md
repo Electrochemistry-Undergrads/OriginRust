@@ -216,7 +216,8 @@ the default project format.
         aligned with measured Origin behaviour. Cross-sheet/book references, label-row access
         and some string functions remain
   - [x] Worksheet export (T07): displayed numeric formats, missing markers and label-row options;
-        clipboard full-precision copying covered by UI tests (Origin clipboard parity remains open)
+        clipboard full-precision copying and text-field round trips covered by UI tests
+        (Origin clipboard parity remains open)
 
 ## Milestone 6: breadth
 

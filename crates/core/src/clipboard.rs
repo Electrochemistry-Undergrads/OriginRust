@@ -14,7 +14,9 @@ use crate::column::{Column, ColumnData, Designation};
 use crate::ids::WindowId;
 use crate::project::{Project, ProjectError};
 use crate::worksheet::Worksheet;
+use std::iter::Peekable;
 use std::ops::Range;
+use std::str::Chars;
 use std::sync::Arc;
 
 /// What Copy writes.
@@ -48,7 +50,6 @@ fn full_text(x: f64) -> String {
 
 /// The text of one cell as Copy writes it.
 fn copy_cell(column: &Column, row: usize, full_precision: bool) -> String {
-    let clean = |s: &str| s.replace(['\t', '\r', '\n'], " ");
     match &column.data {
         ColumnData::Numeric(v) => match v.get(row) {
             Some(x) if x.is_nan() => String::new(),
@@ -56,15 +57,21 @@ fn copy_cell(column: &Column, row: usize, full_precision: bool) -> String {
             Some(_) => column.shown_text(row),
             None => String::new(),
         },
-        ColumnData::Text(v) => v.get(row).map(|s| clean(s)).unwrap_or_default(),
+        ColumnData::Text(v) => v.get(row).cloned().unwrap_or_default(),
         ColumnData::Mixed { numbers, .. } => match (column.data.text_cell(row), numbers.get(row)) {
-            (Some(t), _) => clean(t),
+            (Some(t), _) => t.to_string(),
             (None, Some(x)) if x.is_nan() => String::new(),
             (None, Some(x)) if full_precision && !column.format.is_date_time() && x.is_finite() => full_text(*x),
             (None, Some(_)) => column.shown_text(row),
             (None, None) => String::new(),
         },
     }
+}
+
+/// Quote fields that could otherwise be mistaken for table structure when pasted, including
+/// commas in a single-column copy (Paste also accepts comma-separated external text).
+fn quote_field(text: String) -> String {
+    if text.contains(['\t', ',', '\r', '\n', '"']) { format!("\"{}\"", text.replace('"', "\"\"")) } else { text }
 }
 
 impl Worksheet {
@@ -74,20 +81,19 @@ impl Worksheet {
         let cols: Vec<&Column> = columns.iter().filter_map(|i| self.columns.get(*i)).collect();
         let mut out = String::new();
         let mut line = |cells: Vec<String>| {
-            out.push_str(&cells.join("\t"));
+            out.push_str(&cells.into_iter().map(quote_field).collect::<Vec<_>>().join("\t"));
             out.push('\n');
         };
         if options.label_rows {
-            let clean = |s: &str| s.replace(['\t', '\r', '\n'], " ");
-            line(cols.iter().map(|c| clean(&c.long_name)).collect());
-            line(cols.iter().map(|c| clean(&c.units)).collect());
-            line(cols.iter().map(|c| clean(&c.comments)).collect());
+            line(cols.iter().map(|c| c.long_name.clone()).collect());
+            line(cols.iter().map(|c| c.units.clone()).collect());
+            line(cols.iter().map(|c| c.comments.clone()).collect());
             if cols.iter().any(|c| c.formula.is_some()) {
-                line(cols.iter().map(|c| clean(c.formula.as_deref().unwrap_or_default())).collect());
+                line(cols.iter().map(|c| c.formula.clone().unwrap_or_default()).collect());
             }
             for name in self.parameter_names() {
                 if cols.iter().any(|c| c.params.contains_key(&name)) {
-                    line(cols.iter().map(|c| clean(c.params.get(&name).map_or("", String::as_str))).collect());
+                    line(cols.iter().map(|c| c.params.get(&name).cloned().unwrap_or_default()).collect());
                 }
             }
         }
@@ -184,45 +190,89 @@ fn is_missing(text: &str) -> bool {
     t.is_empty() || t == "--"
 }
 
-/// Splits pasted text into rows and fields. The delimiter is a tab when the text has any, else a
-/// comma when the text has any, else every line is one field. A field in double quotes may hold
-/// the delimiter; two quotes in a row stand for one. One line break at the very end is ignored.
+/// Splits pasted text into rows and fields. Tabs outside quoted fields take precedence over
+/// commas outside quoted fields; otherwise every line is one field. Double-quoted fields may
+/// contain separators and line breaks; doubled quotes stand for one. Unclosed or non-field
+/// quotes stay literal. One line break at the very end is ignored.
 pub fn parse_table(text: &str) -> Vec<Vec<String>> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let text = text.strip_suffix("\r\n").or_else(|| text.strip_suffix('\n')).unwrap_or(text);
     if text.is_empty() {
         return Vec::new();
     }
-    let delimiter = if text.contains('\t') {
-        Some('\t')
-    } else if text.contains(',') {
-        Some(',')
-    } else {
-        None
-    };
+    let mut rows = parse_fields(text, table_delimiter(text));
+    let width = rows.iter().map(Vec::len).max().unwrap_or(0);
+    for r in &mut rows {
+        r.resize(width, String::new());
+    }
+    rows
+}
+
+fn table_delimiter(text: &str) -> char {
+    let mut chars = text.chars().peekable();
+    let mut field_start = true;
+    let mut comma = false;
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' if field_start => {
+                // Quotes after either candidate separator protect their contents, including
+                // CSV fields after the first one that contain a tab.
+                let _ = quoted_field(&mut chars);
+                field_start = false;
+            }
+            '\t' => return '\t',
+            ',' => {
+                comma = true;
+                field_start = true;
+            }
+            '\r' | '\n' => field_start = true,
+            _ => field_start = false,
+        }
+    }
+    if comma { ',' } else { '\t' }
+}
+
+/// Read a complete quoted field without consuming anything if its quote is literal/malformed.
+fn quoted_field(chars: &mut Peekable<Chars<'_>>) -> Option<String> {
+    let mut scan = chars.clone();
+    let mut field = String::new();
+    while let Some(ch) = scan.next() {
+        if ch != '"' {
+            field.push(ch);
+        } else if scan.peek() == Some(&'"') {
+            scan.next();
+            field.push('"');
+        } else {
+            let mut after = scan.clone();
+            let boundary = match after.next() {
+                None | Some('\n' | '\t' | ',') => true,
+                Some('\r') => after.next() == Some('\n'),
+                Some(_) => false,
+            };
+            if boundary {
+                *chars = scan;
+                return Some(field);
+            }
+            return None;
+        }
+    }
+    None
+}
+
+fn parse_fields(text: &str, delimiter: char) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let mut field = String::new();
-    let mut quoted = false;
     let mut chars = text.chars().peekable();
     let mut field_start = true;
     while let Some(ch) = chars.next() {
-        if quoted {
-            if ch == '"' {
-                if chars.peek() == Some(&'"') {
-                    chars.next();
-                    field.push('"');
-                } else {
-                    quoted = false;
-                }
-            } else {
-                field.push(ch);
-            }
-            continue;
-        }
         match ch {
-            '"' if field_start && delimiter.is_some() => {
-                quoted = true;
+            '"' if field_start => {
+                if let Some(value) = quoted_field(&mut chars) {
+                    field.push_str(&value);
+                } else {
+                    field.push('"');
+                }
                 field_start = false;
             }
             '\r' if chars.peek() == Some(&'\n') => {}
@@ -231,7 +281,7 @@ pub fn parse_table(text: &str) -> Vec<Vec<String>> {
                 rows.push(std::mem::take(&mut row));
                 field_start = true;
             }
-            c if Some(c) == delimiter => {
+            c if c == delimiter => {
                 row.push(std::mem::take(&mut field));
                 field_start = true;
             }
@@ -243,10 +293,6 @@ pub fn parse_table(text: &str) -> Vec<Vec<String>> {
     }
     row.push(field);
     rows.push(row);
-    let width = rows.iter().map(Vec::len).max().unwrap_or(0);
-    for r in &mut rows {
-        r.resize(width, String::new());
-    }
     rows
 }
 
@@ -374,7 +420,7 @@ mod tests {
         p.workbook_mut(b).unwrap().sheets[0].columns[0].format = crate::format::NumberFormat::Decimal(2);
         let ws = &p.workbook(b).unwrap().sheets[0];
         let shown = ws.copy_text(&[0, 1], 0..3, CopyOptions::default());
-        assert_eq!(shown, "0.30\ta b\n\tx y\n2.00\t\n");
+        assert_eq!(shown, "0.30\ta b\n\t\"x\ty\"\n2.00\t\n");
         let full = ws.copy_text(&[0], 0..3, CopyOptions { full_precision: true, ..Default::default() });
         assert_eq!(full, "0.30000000000000004\n\n2\n", "a whole number has no useless .0");
     }
@@ -428,6 +474,50 @@ mod tests {
         assert_eq!(parse_table("1\t\n\t2"), vec![vec!["1", ""], vec!["", "2"]]);
         assert!(parse_table("").is_empty());
         assert!(parse_table("\n").is_empty());
+    }
+
+    #[test]
+    fn copy_and_paste_preserve_text_separators_quotes_and_line_breaks() {
+        let values = ["alpha,beta", "x\ty", "line one\nline two", "CR\r\nLF", "say \"hi\"", "\"", "µ,λ"];
+        let (mut p, b) = book_with(vec![ColumnData::text(values.iter().map(|s| (*s).into()).collect())]);
+        let copied = p.workbook(b).unwrap().sheets[0].copy_text(&[0], 0..values.len(), CopyOptions::default());
+        assert_eq!(parse_table(&copied), values.map(|s| vec![s.to_string()]));
+        p.paste_text(b, 0, 1, 0, &copied).unwrap();
+        let ws = &p.workbook(b).unwrap().sheets[0];
+        assert_eq!(ws.columns.len(), 2, "a comma within a cell must not add a column");
+        for (row, value) in values.iter().enumerate() {
+            assert_eq!(ws.columns[1].cell_text(row), *value);
+        }
+    }
+
+    #[test]
+    fn paste_detects_delimiters_outside_quoted_fields_and_preserves_literal_quotes() {
+        assert_eq!(parse_table("1,\"x\ty\"\r\n2,\"a,b\""), vec![vec!["1", "x\ty"], vec!["2", "a,b"]]);
+        assert_eq!(parse_table("\"x\ty\",2\r\n\"a,b\",3"), vec![vec!["x\ty", "2"], vec!["a,b", "3"]]);
+        assert_eq!(parse_table("\"a,b\"\t2\n\"x\ty\"\t3"), vec![vec!["a,b", "2"], vec!["x\ty", "3"]]);
+        assert_eq!(parse_table("\"a,b\""), vec![vec!["a,b"]]);
+        assert_eq!(parse_table("\"say \"\"hi\"\"\""), vec![vec!["say \"hi\""]]);
+        assert_eq!(parse_table("\"unfinished"), vec![vec!["\"unfinished"]]);
+        assert_eq!(parse_table("inch\"\t\"unfinished"), vec![vec!["inch\"", "\"unfinished"]]);
+    }
+
+    #[test]
+    fn copied_label_rows_preserve_their_text_as_fields() {
+        let (mut p, b) = book_with(vec![ColumnData::numeric(vec![1.0])]);
+        let c = &mut p.workbook_mut(b).unwrap().sheets[0].columns[0];
+        c.long_name = "Current, corrected".into();
+        c.units = "mA\tcm-2".into();
+        c.comments = "run 1\nrun 2".into();
+        c.params.insert("Sample".into(), "\"A\"".into());
+        let text = p.workbook(b).unwrap().sheets[0].copy_text(
+            &[0],
+            0..1,
+            CopyOptions { label_rows: true, ..Default::default() },
+        );
+        assert_eq!(
+            parse_table(&text),
+            vec![vec!["Current, corrected"], vec!["mA\tcm-2"], vec!["run 1\nrun 2"], vec!["\"A\""], vec!["1"]]
+        );
     }
 
     #[test]

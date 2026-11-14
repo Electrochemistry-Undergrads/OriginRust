@@ -29,7 +29,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1646 passed (one ignored) on macOS after the formula, import and selected-range sorting updates (2026-11-14); formatting and strict all-target Clippy passed. Previous Windows run: 1582 at `2441c53` (2026-11-13 late). Parity: 43 done, 131 partial, 57 missing of 231 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1650 passed (one ignored) on macOS after the formula, import, selected-range sorting and clipboard text updates (2026-11-14); formatting and strict all-target Clippy passed. Previous Windows run: 1582 at `2441c53` (2026-11-13 late). Parity: 43 done, 131 partial, 57 missing of 231 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
@@ -62,6 +62,11 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
   Ascending/Descending move selected rows together; Each Column modes sort independently.
   Sort Columns and column-header Custom now use the existing nested-sort dialog. Masks,
   outside rows/columns and Undo/Redo are covered; see workbook-model.md 13.1.
+
+- T07 clipboard: quoted table fields keep commas within one cell and preserve tabs, line breaks
+  and quotes through Copy/Cut/Paste. Both new and imported-table UI paths cover Undo/Redo.
+  External CSV/TSV paste detects separators outside quotes; Origin Copy defaults and pasting
+  into other applications remain unmeasured (workbook-model.md 13.4).
 
 - T05 PSD graph export: Export Graphs > Photoshop Document and CLI/API `.psd` output support
   RGB, grayscale and 256 colors with DPI metadata. The image is flattened onto white, without

@@ -101,7 +101,13 @@ How a bare column read decides between number and text: the result of the whole 
 
 Sheaf uses literal, case-sensitive, non-overlapping matches, preserving Unicode text. An absent occurrence leaves the text unchanged. An empty search or an invalid occurrence (negative, fractional, missing or nonfinite) also leaves it unchanged; these are Sheaf's guard choices for cases the reference does not specify. The first three arguments accept text columns or numbers written as text; the occurrence is numeric, so formulas can read it from another column. Text-returning function calls accept an optional `$` suffix (`upper(substitute(col(A)$,"clean","raw")$)$`); numeric functions do not. Unsuffixed calls remain accepted. Set Column Values lists `substitute` under Function > Text, and Auto recalculation tracks every source column.
 
-Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `format` and `%()` substitution are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `%()` substitution and Origin-specific default-format settings are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+
+### Format compatibility name
+
+`format(x[,fmt])$` uses the existing Text formatter for the explicit formats `*`, `*n`, `.n` and `E*n`. The [Origin Text/Format reference](https://docs.originlab.com/labtalk/ref/text-format-func/) documents equivalent explicit formatting; its `format(123000,"E*3")$` example gives `123k` and is a regression fixture. The first argument is numeric; the format argument can be a literal or a text column, including a different format in each row. Both `text` and `format` track that formatting column as a data dependency.
+
+Compatibility limit: without a format, or with an empty one, both functions currently use Sheaf's general format. Origin instead uses the column format for omitted Text format, global Numeric Format for omitted Format format, and `@SD` for an empty format. Those separate settings are not implemented by this alias. Format is accepted when typed into Set Column Values; the picker keeps the recommended Text name rather than adding a duplicate alias.
 
 ### Character codes
 

@@ -79,7 +79,8 @@ impl StrFn {
     /// `text(col(A), fmt)` formats the number of the cell, as Origin does.
     pub(crate) fn text_arg(self, i: usize) -> bool {
         match self {
-            StrFn::Text | StrFn::Char => false,
+            StrFn::Text => i > 0,
+            StrFn::Char => false,
             StrFn::Left | StrFn::Right | StrFn::Mid => i == 0,
             StrFn::Replace => i == 0 || i == 3,
             StrFn::Substitute => i < 3,

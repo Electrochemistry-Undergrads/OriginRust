@@ -1,7 +1,9 @@
 //! Tests of the whole pipeline: project -> scene -> SVG / PNG / PDF.
 
 use super::*;
-use sheaf_core::graph::{Connect, PlotKind, ScaleKind, SymbolShape, TickDirection, TickLabelSource};
+use sheaf_core::graph::{
+    Connect, DropLine, LabelForm, LabelPosition, PlotKind, ScaleKind, SymbolShape, TickDirection, TickLabelSource,
+};
 use sheaf_core::panels::{PanelLayout, PanelOrder};
 use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnData, Designation};
@@ -3568,4 +3570,108 @@ fn a_thick_line_is_picked_on_its_visible_width() {
     // The selection box (the recorded bounds) holds the stroke.
     let o = scene.layers[0].objects.iter().find(|o| o.kind == ObjectKind::Shape(0)).unwrap();
     assert!(o.bounds.h >= 10.0 - 1e-9, "{:?}", o.bounds);
+}
+
+// ----- Plot Details: fill under the curve, drop lines, data labels, layer background (spec 18) ----
+
+/// A line plot of (0, -1), (1, 3), (2, 1) with a fixed Y range of -2 to 4.
+fn decor_graph() -> (Project, WindowId) {
+    let (mut p, g) = project(Template::Line, vec![0.0, 1.0, 2.0], vec![vec![-1.0, 3.0, 1.0]]);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.y_axis.min = Some(-2.0);
+    layer.y_axis.max = Some(4.0);
+    (p, g)
+}
+
+fn path_items(items: &[scene::Item]) -> Vec<(&str, Option<Color>, Option<&scene::Stroke>)> {
+    items
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Path { d, fill, stroke } => Some((d.as_str(), *fill, stroke.as_ref())),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn fill_under_the_curve_reaches_the_bottom_of_the_layer_not_zero() {
+    let (mut p, g) = decor_graph();
+    let red = Color { r: 255, g: 0, b: 0, a: 255 };
+    p.graph_mut(g).unwrap().layers[0].plots[0].decor.fill_under = Some(red);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let frame = scene.layers[0].clip;
+    let paths = path_items(&scene.layers[0].plots);
+    let (d, _, _) = paths.iter().find(|(_, fill, _)| *fill == Some(red)).expect("a filled area");
+    // The area starts and ends on the bottom edge of the frame (Origin, measured), drawn before the line.
+    let bottom = frame.y + frame.h;
+    let nums: Vec<f64> =
+        d.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-')).filter_map(|s| s.parse().ok()).collect();
+    assert!((nums[1] - bottom).abs() < 0.01, "{d} starts at the bottom {bottom}");
+    assert!((nums[nums.len() - 1] - bottom).abs() < 0.01, "{d} ends at the bottom {bottom}");
+    let fill_at = paths.iter().position(|(_, f, _)| *f == Some(red)).unwrap();
+    let line_at = paths.iter().position(|(_, f, s)| f.is_none() && s.is_some()).unwrap();
+    assert!(fill_at < line_at, "the fill is under the line");
+    // The legend shows a filled box for the plot.
+    let legend_fill =
+        scene.layers[0].overlay.iter().any(|it| matches!(it, scene::Item::Rect { fill: Some(c), .. } if *c == red));
+    assert!(legend_fill, "the legend sample is a filled box");
+}
+
+#[test]
+fn drop_lines_run_to_the_left_and_bottom_edges_in_the_plot_colour_by_default() {
+    let (mut p, g) = decor_graph();
+    let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+    plot.decor.drop.vertical.on = true;
+    let blue = Color { r: 0, g: 0, b: 255, a: 255 };
+    plot.decor.drop.horizontal =
+        DropLine { on: true, dash: sheaf_core::graph::Dash::Dash, width_pt: 2.0, color: Some(blue) };
+    let line_color = plot.line.color;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let paths = path_items(&scene.layers[0].plots);
+    let vertical = paths.iter().find(|(_, _, s)| s.is_some_and(|s| s.width == 0.5)).expect("vertical drops, 0.5 pt");
+    assert_eq!(vertical.2.unwrap().color, line_color, "Auto is the plot's colour");
+    assert_eq!(vertical.0.matches('M').count(), 3, "one per point");
+    let bottom = format!("{}", ((f.y + f.h) * 1000.0).round() / 1000.0);
+    assert!(vertical.0.contains(&bottom), "{} reaches the bottom {bottom}", vertical.0);
+    let horizontal = paths.iter().find(|(_, _, s)| s.is_some_and(|s| s.color == blue)).expect("horizontal drops");
+    assert!(!horizontal.2.unwrap().dash.is_empty() && horizontal.2.unwrap().width == 2.0);
+    let left = format!("M{}", (f.x * 1000.0).round() / 1000.0);
+    assert!(horizontal.0.starts_with(&left), "{} starts on the left edge {left}", horizontal.0);
+}
+
+#[test]
+fn data_labels_write_the_chosen_form_beside_each_point() {
+    let (mut p, g) = decor_graph();
+    let labels = &mut p.graph_mut(g).unwrap().layers[0].plots[0].decor.labels;
+    assert_eq!((labels.font.size_pt, labels.font.family.as_str()), (22.0, "Arial"), "Origin's default");
+    labels.enable = true;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let t: Vec<&str> = texts_of(&scene.layers[0].plots).iter().map(|t| t.text.as_str()).collect();
+    assert_eq!(t, ["-1", "3", "1"]);
+    assert!(texts_of(&scene.layers[0].plots).iter().all(|t| t.anchor == scene::Anchor::Start), "Right of the point");
+    for (form, want) in [(LabelForm::X, ["0", "1", "2"]), (LabelForm::Row, ["1", "2", "3"])] {
+        p.graph_mut(g).unwrap().layers[0].plots[0].decor.labels.form = form;
+        let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+        let t: Vec<String> = texts_of(&scene.layers[0].plots).iter().map(|t| t.text.clone()).collect();
+        assert_eq!(t, want, "{form:?}");
+    }
+    p.graph_mut(g).unwrap().layers[0].plots[0].decor.labels.form = LabelForm::XY;
+    p.graph_mut(g).unwrap().layers[0].plots[0].decor.labels.position = LabelPosition::Above;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let items = texts_of(&scene.layers[0].plots);
+    assert_eq!(items[1].text, "(1, 3)");
+    assert_eq!(items[1].anchor, scene::Anchor::Middle);
+}
+
+#[test]
+fn a_layer_background_fills_the_frame_behind_the_grid() {
+    let (mut p, g) = decor_graph();
+    let grey = Color { r: 230, g: 230, b: 230, a: 255 };
+    p.graph_mut(g).unwrap().layers[0].background = Some(grey);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let first = scene.layers[0].grid.first().expect("the background");
+    assert!(
+        matches!(first, scene::Item::Rect { fill: Some(c), stroke: None, rect } if *c == grey && *rect == scene.layers[0].clip)
+    );
 }

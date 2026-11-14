@@ -1642,3 +1642,40 @@ An `.opj` file written here does not hold drawn objects. The writer says so in a
 ### 17.5 Not done
 
 Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
+
+## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
+
+Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,
+a double-click on the graph; pictures and control lists in `re-workspace/scratch/t13/open1`..`open4`):
+
+- A line plot's node has the tabs Line, Drop Lines and Label; ticking "Fill Area Under Curve" on the
+  Line tab adds a Pattern tab. The tree names the plot `[Book]Sheet! A(X), B(Y) [1*:11*]`.
+- Line tab: Connect, Style, Width, Color, Transparency (slider, 0 %), "Fill Area Under Curve" with the
+  modes Normal (default), Inclusive and Exclusive broken by missing values, Sidelines only, Span
+  vertically broken by missing values, Sidelines and Base, Fill to Base, Fill to next data plot (one
+  colour, or above/below colours).
+- Normal fills the area between the curve and the bottom of the layer, not down to Y = 0 (a curve from
+  -1 up to 3 and back on a -2 to 4 axis was filled down to -2). The fill starts in the line's colour,
+  "Follow line transparency" is ticked, and the legend sample becomes a filled box.
+- Drop Lines tab: Horizontal and Vertical check boxes (both off), each with Style (Solid), Width (0.5)
+  and Color (Auto, the plot's colour); Skip Points.
+- Label tab: Enable (off), Font "Default: Arial", Size 22, Color Black, White Out, bold/italic/
+  underline, Frame (None, Box, Shadow), Margin, Rotate 0, Horizontal and Vertical Offset 0, Position
+  Right (Center, Left, Right, Above, Below), Label Form Y (X, Y, Row Indices, (X,Y), Custom, a
+  column), Numeric Display Format, Attach to Data, leader lines.
+- Layer node: tabs Background (Color None, Border Style None, gradient fill), Size/Speed (layer area
+  in % of page, link axis length, image caching, speed mode 3000 points), Display (scale elements,
+  show X/Y axes, labels, data, frame, clip data to frame, data on top of axes, grid on top of data,
+  clipping margins), Stack.
+
+Sheaf (`Plot::decor`, `Layer::background`, drawn in `crates/plot/src/plots.rs` and `layout.rs`):
+Fill Area Under Curve in the Normal mode only, with its own colour (Origin puts the colour on the
+Pattern tab; Sheaf shows it under the check box) and the alpha of that colour as transparency; the
+line's Transparency slider sets the alpha of the line colour; both drop lines with style, width and
+an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame;
+data labels with font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y),
+written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
+significant digits); the layer Background colour fills the frame behind the grid. Not done: the
+other fill modes, gradient and pattern fills, label frames, offsets, white out, custom forms and
+display formats, leader lines, skip points, Size/Speed and Display tabs. The `.opj` writer does not
+store any of these; the save names them and the companion file keeps them.

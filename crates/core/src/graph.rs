@@ -199,6 +199,10 @@ pub struct Layer {
     /// angle and radius (graphing spec section 14.18).
     #[serde(default, skip_serializing_if = "Coords::is_cartesian")]
     pub coords: Coords,
+    /// The colour behind the plot area (the Background tab of Origin's layer Plot Details,
+    /// "Color", None by default); `None` leaves the page showing through.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<Color>,
 }
 
 /// The coordinate system of a layer.
@@ -1085,6 +1089,123 @@ pub struct Plot {
     /// A colour mapped plot: the symbol of each point takes its colour from this column's value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_from: Option<ColumnId>,
+    /// Drop lines, the fill under the curve and data labels (the Drop Lines, Line and Label tabs
+    /// of Origin's Plot Details; graphing spec section 18).
+    #[serde(default, skip_serializing_if = "PlotDecor::is_default")]
+    pub decor: PlotDecor,
+}
+
+/// What a plot draws besides its line, symbols, bars and error bars.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct PlotDecor {
+    /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
+    #[serde(default, skip_serializing_if = "DropLines::is_default")]
+    pub drop: DropLines,
+    /// Origin's "Fill Area Under Curve" in its "Normal" mode: the area between the curve and the
+    /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_under: Option<Color>,
+    /// The text written next to each point.
+    #[serde(default, skip_serializing_if = "DataLabels::is_default")]
+    pub labels: DataLabels,
+}
+
+impl PlotDecor {
+    pub fn is_default(&self) -> bool {
+        *self == PlotDecor::default()
+    }
+}
+
+/// A drop line; drawn when `on`. Origin's defaults: off, solid, 0.5 pt, colour Auto (the plot's).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DropLine {
+    pub on: bool,
+    #[serde(default)]
+    pub dash: Dash,
+    pub width_pt: f64,
+    /// `None` is Origin's "Auto": the colour of the plot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+}
+
+impl Default for DropLine {
+    fn default() -> Self {
+        DropLine { on: false, dash: Dash::Solid, width_pt: 0.5, color: None }
+    }
+}
+
+/// The two drop lines of a plot.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct DropLines {
+    /// From the point across to the Y axis.
+    #[serde(default)]
+    pub horizontal: DropLine,
+    /// From the point down to the X axis.
+    #[serde(default)]
+    pub vertical: DropLine,
+}
+
+impl DropLines {
+    pub fn is_default(&self) -> bool {
+        *self == DropLines::default()
+    }
+}
+
+/// What a data label says (Origin's "Label Form"; Y by default).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelForm {
+    X,
+    #[default]
+    Y,
+    /// Origin's "Row Indices": the row number counting from 1.
+    Row,
+    /// "(X,Y)".
+    XY,
+}
+
+/// Where a data label stands against its point (Origin's "Position"; Right by default).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelPosition {
+    Center,
+    Left,
+    #[default]
+    Right,
+    Above,
+    Below,
+}
+
+/// The data labels of a plot (Origin's Label tab: off, Arial 22 black, form Y, position Right).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DataLabels {
+    pub enable: bool,
+    #[serde(default)]
+    pub form: LabelForm,
+    #[serde(default)]
+    pub position: LabelPosition,
+    pub font: Font,
+    /// Counter-clockwise rotation in degrees.
+    #[serde(default)]
+    pub rotate_deg: f64,
+}
+
+impl Default for DataLabels {
+    fn default() -> Self {
+        DataLabels {
+            enable: false,
+            form: LabelForm::Y,
+            position: LabelPosition::Right,
+            font: Font::new("Arial", 22.0),
+            rotate_deg: 0.0,
+        }
+    }
+}
+
+impl DataLabels {
+    pub fn is_default(&self) -> bool {
+        *self == DataLabels::default()
+    }
 }
 
 /// Which side of the point an error bar reaches.
@@ -1494,6 +1615,7 @@ mod tests {
             hist: Default::default(),
             size_from: None,
             color_from: None,
+            decor: Default::default(),
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1573,6 +1695,7 @@ mod tests {
             hist: Default::default(),
             size_from: None,
             color_from: None,
+            decor: Default::default(),
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);

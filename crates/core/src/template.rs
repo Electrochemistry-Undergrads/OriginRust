@@ -425,6 +425,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             plot_offsets: Vec::new(),
             bars: BarSpacing::default(),
             coords: Coords::Cartesian,
+            background: None,
         }],
     }
 }

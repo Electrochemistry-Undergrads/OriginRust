@@ -3227,6 +3227,33 @@ fn the_object_manager_selection_is_the_one_of_plot_details() {
 }
 
 #[test]
+fn plot_details_drop_lines_label_and_fill_tabs_change_the_plot() {
+    let mut h = start(vec![data_file("pd-decor")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let open = |h: &mut Harness<'static, SheafApp>| {
+        let at = in_right_panel(h, &project(h).plot_label(&plots[0]));
+        double_click_at(h, at);
+        assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    };
+    open(&mut h);
+    click(&mut h, "Drop Lines");
+    click(&mut h, "Vertical");
+    click(&mut h, "Label");
+    click(&mut h, "Enable");
+    click(&mut h, "Line");
+    click(&mut h, "Fill Area Under Curve");
+    click(&mut h, "OK");
+    let decor = &project(&h).graph(graph).unwrap().layers[0].plots[0].decor;
+    assert!(decor.drop.vertical.on && !decor.drop.horizontal.on);
+    assert!(decor.labels.enable);
+    let line = project(&h).graph(graph).unwrap().layers[0].plots[0].line.color;
+    assert_eq!(decor.fill_under, Some(line), "the fill starts in the line's colour");
+}
+
+#[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
     show_window(&mut h, "Book1 - sample");

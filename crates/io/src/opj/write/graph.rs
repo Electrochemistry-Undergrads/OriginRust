@@ -326,6 +326,9 @@ impl Writer {
         if let Stack::Waterfall { dx_percent, dy_percent } = layer.stack {
             waterfall_places(project, layer, dx_percent, dy_percent, &mut places, notes);
         }
+        if layer.background.is_some() {
+            notes.push("a layer background colour was not written (the companion file keeps it)".into());
+        }
         let mut plots: Vec<Resolved> = Vec::new();
         for (plot_index, p) in layer.plots.iter().enumerate() {
             if !p.visible {
@@ -360,6 +363,12 @@ impl Writer {
             }
             if p.symbol.every != 1 && p.kind.has_symbols() {
                 notes.push("symbols on every n-th point only were not written; every point has a symbol".into());
+            }
+            if !p.decor.is_default() {
+                notes.push(
+                    "drop lines, fills under curves and data labels were not written (the companion file keeps them)"
+                        .into(),
+                );
             }
             let place = places[plot_index];
             plots.push(Resolved { plot: p, y, x, err, place });

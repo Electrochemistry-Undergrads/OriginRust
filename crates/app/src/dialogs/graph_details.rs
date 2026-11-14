@@ -2,10 +2,11 @@
 //! type under it, and at the right the tabs of what is chosen.
 //!
 //! * graph: Page, Text
-//! * layer: Layer Contents (the plots and "Add data to this graph"), Background (grey: layers have
-//!   no background of their own yet), Size, Stack, Legend
-//! * plot: Group, Line, Symbol, Pattern (columns), Spacing (columns), Error Bar (when the plot has
-//!   error bars)
+//! * layer: Layer Contents (the plots and "Add data to this graph"), Background (the colour behind
+//!   the frame), Size, Stack, Legend
+//! * plot: Group, Line (with Origin's Transparency and Fill Area Under Curve), Symbol, Drop Lines,
+//!   Label, Pattern (columns), Spacing (columns), Error Bar (when the plot has error bars); the
+//!   tabs, controls and defaults of Origin's are in graphing spec section 18
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
@@ -32,6 +33,8 @@ pub enum DetailTab {
     Pattern,
     Spacing,
     ErrorBar,
+    DropLines,
+    Label,
     LayerContents,
     Background,
     Size,
@@ -46,7 +49,7 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
         Node::Graph => vec![(DetailTab::Page, "Page", true), (DetailTab::Text, "Text", true)],
         Node::Layer(_) => vec![
             (DetailTab::LayerContents, "Layer Contents", true),
-            (DetailTab::Background, "Background", false),
+            (DetailTab::Background, "Background", true),
             (DetailTab::Size, "Size", true),
             (DetailTab::Stack, "Stack", true),
             (DetailTab::Legend, "Legend", true),
@@ -59,6 +62,13 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             }
             if plot.kind.has_symbols() {
                 tabs.push((DetailTab::Symbol, "Symbol", true));
+            }
+            let curve = plot.kind.has_line() || plot.kind.has_symbols();
+            if curve && !plot.kind.is_bar() && !plot.kind.is_area() {
+                tabs.push((DetailTab::DropLines, "Drop Lines", true));
+            }
+            if curve || plot.kind.is_bar() {
+                tabs.push((DetailTab::Label, "Label", true));
             }
             if plot.kind.is_bar() {
                 tabs.push((DetailTab::Pattern, "Pattern", true));
@@ -278,6 +288,93 @@ fn plot_tab(
                     plot.auto_color = false;
                 }
                 ui.end_row();
+                ui.label("Transparency");
+                let mut pct = (100.0 - f64::from(plot.line.color.a) / 2.55).round();
+                if ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %")).changed() {
+                    plot.line.color.a = ((100.0 - pct) * 2.55).round() as u8;
+                    plot.auto_color = false;
+                }
+                ui.end_row();
+            });
+            if !plot.kind.is_area() {
+                let mut fill = plot.decor.fill_under.is_some();
+                if ui.checkbox(&mut fill, "Fill Area Under Curve").changed() {
+                    // Origin starts the fill in the line's colour.
+                    plot.decor.fill_under = fill.then_some(plot.line.color);
+                }
+                if let Some(color) = plot.decor.fill_under.as_mut() {
+                    ui.horizontal(|ui| {
+                        ui.label("Fill color");
+                        color_button(ui, color);
+                    });
+                    ui.weak("Normal: the area between the curve and the bottom of the layer.");
+                }
+            }
+        }
+        DetailTab::DropLines => {
+            let drop = &mut graph.layers[l].plots[p].decor.drop;
+            grid(ui, "plot_drop", |ui| {
+                ui.label("");
+                ui.checkbox(&mut drop.horizontal.on, "Horizontal");
+                ui.checkbox(&mut drop.vertical.on, "Vertical");
+                ui.end_row();
+                ui.label("Style");
+                for (id, d) in [("drop_h_dash", &mut drop.horizontal), ("drop_v_dash", &mut drop.vertical)] {
+                    ui.add_enabled_ui(d.on, |ui| dash_ui(ui, id, &mut d.dash));
+                }
+                ui.end_row();
+                ui.label("Width");
+                for d in [&mut drop.horizontal, &mut drop.vertical] {
+                    ui.add_enabled(d.on, DragValue::new(&mut d.width_pt).range(0.1..=20.0).speed(0.05).suffix(" pt"));
+                }
+                ui.end_row();
+                ui.label("Color");
+                for d in [&mut drop.horizontal, &mut drop.vertical] {
+                    ui.add_enabled_ui(d.on, |ui| auto_color_ui(ui, &mut d.color));
+                }
+                ui.end_row();
+            });
+        }
+        DetailTab::Label => {
+            let labels = &mut graph.layers[l].plots[p].decor.labels;
+            ui.checkbox(&mut labels.enable, "Enable");
+            ui.add_enabled_ui(labels.enable, |ui| {
+                grid(ui, "plot_label", |ui| {
+                    ui.label("Font");
+                    ui.text_edit_singleline(&mut labels.font.family);
+                    ui.end_row();
+                    ui.label("Size, style, color");
+                    font_ui(ui, &mut labels.font);
+                    ui.end_row();
+                    ui.label("Rotate (deg)");
+                    ui.add(DragValue::new(&mut labels.rotate_deg).range(-360.0..=360.0).speed(1.0));
+                    ui.end_row();
+                    ui.label("Position");
+                    egui::ComboBox::from_id_salt("label_position")
+                        .selected_text(position_name(labels.position))
+                        .show_ui(ui, |ui| {
+                            for p in [
+                                LabelPosition::Center,
+                                LabelPosition::Left,
+                                LabelPosition::Right,
+                                LabelPosition::Above,
+                                LabelPosition::Below,
+                            ] {
+                                ui.selectable_value(&mut labels.position, p, position_name(p));
+                            }
+                        });
+                    ui.end_row();
+                    ui.label("Label Form");
+                    egui::ComboBox::from_id_salt("label_form").selected_text(form_name(labels.form)).show_ui(
+                        ui,
+                        |ui| {
+                            for f in [LabelForm::X, LabelForm::Y, LabelForm::Row, LabelForm::XY] {
+                                ui.selectable_value(&mut labels.form, f, form_name(f));
+                            }
+                        },
+                    );
+                    ui.end_row();
+                });
             });
         }
         DetailTab::Symbol => {
@@ -400,6 +497,40 @@ fn plot_tab(
             }
         }
         _ => group_tab(ui, graph, l, p, labels, node),
+    }
+}
+
+/// A colour that can follow the plot's ("Auto", Origin's default for drop lines) or be set.
+fn auto_color_ui(ui: &mut egui::Ui, color: &mut Option<Color>) {
+    ui.horizontal(|ui| {
+        let mut auto = color.is_none();
+        if ui.checkbox(&mut auto, "Auto").changed() {
+            *color = if auto { None } else { Some(Color::BLACK) };
+        }
+        if let Some(c) = color.as_mut() {
+            color_button(ui, c);
+        }
+    });
+}
+
+/// Origin's names of the label positions.
+fn position_name(p: LabelPosition) -> &'static str {
+    match p {
+        LabelPosition::Center => "Center",
+        LabelPosition::Left => "Left",
+        LabelPosition::Right => "Right",
+        LabelPosition::Above => "Above",
+        LabelPosition::Below => "Below",
+    }
+}
+
+/// Origin's names of the label forms.
+fn form_name(f: LabelForm) -> &'static str {
+    match f {
+        LabelForm::X => "X",
+        LabelForm::Y => "Y",
+        LabelForm::Row => "Row Indices",
+        LabelForm::XY => "(X,Y)",
     }
 }
 
@@ -538,6 +669,24 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
             });
         }
         DetailTab::Stack => stack_tab(ui, layer),
+        DetailTab::Background => {
+            grid(ui, "layer_background", |ui| {
+                ui.label("Color");
+                ui.horizontal(|ui| {
+                    let mut on = layer.background.is_some();
+                    if ui.checkbox(&mut on, "").changed() {
+                        layer.background = on.then_some(Color::WHITE);
+                    }
+                    match layer.background.as_mut() {
+                        Some(c) => color_button(ui, c),
+                        None => {
+                            ui.weak("None");
+                        }
+                    }
+                });
+                ui.end_row();
+            });
+        }
         DetailTab::Legend => legend_ui(ui, &mut layer.legend, &legend_ids),
         _ => {
             ui.label(format!(
@@ -597,6 +746,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 hist: Default::default(),
                 size_from: None,
                 color_from: None,
+                decor: Default::default(),
             });
         }
         layer.recolor_automatic();

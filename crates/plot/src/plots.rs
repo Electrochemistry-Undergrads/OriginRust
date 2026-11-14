@@ -3,8 +3,11 @@
 use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
-use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
-use sheaf_core::graph::{Connect, ErrorDirection, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
+use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
+use sheaf_core::graph::{
+    Connect, DropLine, ErrorDirection, LabelForm, LabelPosition, LineStyle, PlotKind, ScaleKind, SymbolShape,
+    SymbolStyle,
+};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
@@ -51,6 +54,16 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if plot.kind.is_area() {
         draw_area(out, pd, geom);
     }
+    let decor = &plot.decor;
+    if let Some(color) = decor.fill_under
+        && plot.kind.has_line()
+        && !plot.kind.is_area()
+    {
+        draw_fill_under(out, pd, geom, color);
+    }
+    if decor.drop.horizontal.on || decor.drop.vertical.on {
+        draw_drop_lines(out, pd, geom);
+    }
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
     }
@@ -67,6 +80,120 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     }
     if pd.mask.is_some() && !plot.kind.is_bar() {
         draw_masked(out, pd, geom);
+    }
+    if decor.labels.enable {
+        draw_data_labels(out, pd, geom);
+    }
+}
+
+/// Origin's "Fill Area Under Curve" in its Normal mode: the area between the curve and the bottom
+/// of the layer frame (measured: the fill reaches the bottom axis, not Y = 0). A missing point
+/// breaks the area, as it breaks the line.
+fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, color: sheaf_core::Color) {
+    let bottom = geom.frame.y + geom.frame.h;
+    let mut d = String::new();
+    let mut run: Vec<(f64, f64)> = Vec::new();
+    let close = |run: &mut Vec<(f64, f64)>, d: &mut String| {
+        if run.len() >= 2 {
+            move_to(d, run[0].0, bottom);
+            for &(x, y) in run.iter() {
+                line_to(d, x, y);
+            }
+            line_to(d, run[run.len() - 1].0, bottom);
+            d.push('Z');
+        }
+        run.clear();
+    };
+    for i in pd.start..pd.end {
+        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
+            Some(p) => run.push(p),
+            None => close(&mut run, &mut d),
+        }
+    }
+    close(&mut run, &mut d);
+    if !d.is_empty() {
+        out.push(Item::Path { d, fill: Some(color), stroke: None });
+    }
+}
+
+/// Drop lines: from each point across to the left edge of the frame (the Y axis, "Horizontal")
+/// and down to its bottom edge (the X axis, "Vertical").
+fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let f = geom.frame;
+    let auto = pd.plot.line.color;
+    let stroke = |l: &DropLine| {
+        line_stroke(&LineStyle {
+            color: l.color.unwrap_or(auto),
+            width_pt: l.width_pt,
+            dash: l.dash,
+            connect: Connect::Straight,
+        })
+    };
+    let drops = &pd.plot.decor.drop;
+    let (mut h, mut v) = (String::new(), String::new());
+    for i in pd.start..pd.end {
+        if let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
+            if drops.horizontal.on {
+                move_to(&mut h, f.x, y);
+                line_to(&mut h, x, y);
+            }
+            if drops.vertical.on {
+                move_to(&mut v, x, y);
+                line_to(&mut v, x, f.y + f.h);
+            }
+        }
+    }
+    if !h.is_empty() {
+        out.push(Item::Path { d: h, fill: None, stroke: Some(stroke(&drops.horizontal)) });
+    }
+    if !v.is_empty() {
+        out.push(Item::Path { d: v, fill: None, stroke: Some(stroke(&drops.vertical)) });
+    }
+}
+
+/// The text of a data label: the value as the worksheet shows it by default (up to 15
+/// significant digits, scientific beyond).
+fn label_number(v: f64) -> String {
+    sheaf_core::format::format_general(v, 15)
+}
+
+/// Data labels (Origin's Label tab): the label form's text next to each point, a quarter of the
+/// font size away on the chosen side.
+fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let labels = &pd.plot.decor.labels;
+    let size = labels.font.size_pt;
+    let gap = size * 0.25;
+    // From the baseline to the middle of a line of digits.
+    let mid = size * 0.35;
+    let last = if pd.closing { pd.end.saturating_sub(1) } else { pd.end };
+    for i in pd.start..last {
+        let Some((px, py)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
+        let (xv, yv) = (pd.cat_at(i) - pd.ox, pd.y.get(i).copied().unwrap_or(f64::NAN));
+        let text = match labels.form {
+            LabelForm::X => label_number(xv),
+            LabelForm::Y => label_number(yv),
+            LabelForm::Row => (i + 1).to_string(),
+            LabelForm::XY => format!("({}, {})", label_number(xv), label_number(yv)),
+        };
+        let (x, y, anchor) = match labels.position {
+            LabelPosition::Right => (px + gap, py + mid, Anchor::Start),
+            LabelPosition::Left => (px - gap, py + mid, Anchor::End),
+            LabelPosition::Above => (px, py - gap, Anchor::Middle),
+            LabelPosition::Below => (px, py + gap + 2.0 * mid, Anchor::Middle),
+            LabelPosition::Center => (px, py + mid, Anchor::Middle),
+        };
+        out.push(Item::Text(TextItem {
+            x,
+            y,
+            text,
+            family: labels.font.family.clone(),
+            size,
+            bold: labels.font.bold,
+            italic: labels.font.italic,
+            color: labels.font.color,
+            anchor,
+            rotate_ccw: labels.rotate_deg,
+        }));
     }
 }
 

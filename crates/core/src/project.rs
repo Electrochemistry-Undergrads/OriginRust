@@ -514,6 +514,7 @@ impl Project {
             hist: Default::default(),
             size_from: None,
             color_from: None,
+            decor: Default::default(),
         });
         l.recolor_automatic();
         Ok(())

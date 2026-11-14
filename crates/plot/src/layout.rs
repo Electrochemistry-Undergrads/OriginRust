@@ -552,6 +552,10 @@ fn layer_scene(
     let layer = &g.layers[index];
     let mut scene =
         LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
+    // The layer's Background colour fills the frame behind the grid and the data.
+    if let Some(fill) = layer.background {
+        scene.grid.push(Item::Rect { rect: geom.frame, fill: Some(fill), stroke: None });
+    }
     let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
     let waterfall = stack::waterfall(g, index);
     // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
@@ -1304,7 +1308,16 @@ fn draw_legend(
                 Cell::Sample(k) => {
                     let (sx0, sx1) = (x, x + sample);
                     let plot = entries[*k].plot;
-                    if plot.kind.has_line() && plot.line.width_pt > 0.0 {
+                    // A line plot filled under its curve shows a filled box, as Origin's legend does.
+                    let filled = plot.decor.fill_under.filter(|_| plot.kind.has_line() && !plot.kind.is_area());
+                    if let Some(fill) = filled {
+                        out.push(Item::Rect {
+                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            fill: Some(fill),
+                            stroke: (plot.line.width_pt > 0.0)
+                                .then(|| Stroke::solid(plot.line.color, plot.line.width_pt.min(fs / 4.0))),
+                        });
+                    } else if plot.kind.has_line() && plot.line.width_pt > 0.0 {
                         let mut d = String::new();
                         move_to(&mut d, sx0, cy);
                         line_to(&mut d, sx1, cy);

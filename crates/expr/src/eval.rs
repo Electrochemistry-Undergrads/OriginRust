@@ -79,6 +79,13 @@ pub trait Host {
         None
     }
 
+    /// The numeric cell written in its column's display format, for `text(col(A))` without
+    /// an explicit format. Return `None` to use the general number formatter. This does not
+    /// expose text cells: numeric conversion still treats them as missing.
+    fn formatted_numeric_cell(&self, _col: &ColumnRef, _row: usize) -> Option<String> {
+        None
+    }
+
     /// The 0-based row that [`Expr::eval`] evaluates. The variable `i` is this row plus one.
     fn row(&self) -> usize {
         0
@@ -661,6 +668,8 @@ enum V<'h> {
     Cell(ColumnRef, Option<Box<V<'h>>>),
     /// `col(A)$`.
     TextOf(ColumnRef, Option<Box<V<'h>>>),
+    /// A numeric cell formatted according to its column (`text(col(A))`).
+    Displayed(ColumnRef, Option<Box<V<'h>>>),
     Unary(UnOp, Box<V<'h>>),
     Bin(BinOp, Box<V<'h>>, Box<V<'h>>),
     Cond(Box<V<'h>>, Box<V<'h>>, Box<V<'h>>),
@@ -721,12 +730,18 @@ fn build_v_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool
         Kind::Cond(c, x, y) => V::Cond(b(c, false)?, b(x, free)?, b(y, free)?),
         Kind::Call { func, args } => match *func {
             Func::Str(f) => {
-                let list = args
-                    .iter()
-                    .enumerate()
-                    .map(|(i, a)| build_v(host, seeds, a, f.text_arg(i)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                V::Str1(f, list)
+                if f == StrFn::Text && args.len() == 1 && matches!(args[0].kind, Kind::Col { .. } | Kind::Index { .. })
+                {
+                    let (r, idx) = cell_ref(host, &args[0])?;
+                    V::Displayed(r, idx.map(|i| b(&i, false)).transpose()?)
+                } else {
+                    let list = args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, a)| build_v(host, seeds, a, f.text_arg(i)))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    V::Str1(f, list)
+                }
             }
             Func::U(f) => V::U(f, b(&args[0], false)?),
             Func::B(f) => V::B(f, b(&args[0], false)?, b(&args[1], false)?),
@@ -776,6 +791,13 @@ fn ev_v_inner(host: &dyn Host, v: &V<'_>, row: usize) -> Value {
                 Some(t) => t,
                 None => host.cell(r, k).map_or_else(String::new, text::format_general),
             })
+        }
+        V::Displayed(r, idx) => {
+            let Some(k) = subscript(host, idx, row) else { return Value::Text("--".into()) };
+            Value::Text(
+                host.formatted_numeric_cell(r, k)
+                    .unwrap_or_else(|| text::format_general(host.cell(r, k).unwrap_or(NA))),
+            )
         }
         V::Unary(op, a) => {
             let x = num(a);

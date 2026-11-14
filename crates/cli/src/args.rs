@@ -1541,6 +1541,31 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Discrete frequency (Origin's discfreqs): how often each distinct value of each column occurs, text or
+    /// numbers; empty and missing cells count as values of their own. Writes Data and Count, and with the
+    /// options the relative and cumulative frequency, to a new sheet.
+    Discfreq {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Add the relative frequency.
+        #[arg(long)]
+        relative: bool,
+        /// Add the cumulative (relative) frequency.
+        #[arg(long)]
+        cumulative: bool,
+        /// Give the frequencies in percent instead of fractions.
+        #[arg(long)]
+        percent: bool,
+        /// Leave the Count column out.
+        #[arg(long)]
+        no_count: bool,
+        /// Tell "a" and "A" apart.
+        #[arg(long)]
+        case_sensitive: bool,
+        /// Order: cdesc (descending counts, the default), casc, vasc (ascending values), vdesc.
+        #[arg(long, default_value = "cdesc", value_parser = ["cdesc", "casc", "vasc", "vdesc"])]
+        sort: String,
+    },
     /// 2D frequency counts and binning (Origin's twoDBinning): the points of one Y column against its X
     /// column, or of two columns (--y X --y Y), counted in a grid of X and Y bins; one row per X bin and
     /// one column per Y bin go to a new sheet. Each axis takes a bin size or a number of bins, and a

@@ -1043,7 +1043,7 @@ fn statistics_menu() -> Vec<Entry> {
                 sep(),
                 grey("Cross Tabulation..."),
                 sep(),
-                grey("Discrete Frequency..."),
+                item("Discrete Frequency...", Cmd::Analyze(AnalysisKind::DiscreteFreq)),
                 item("Frequency Counts...", Cmd::Analyze(AnalysisKind::Histogram)),
                 item("2D Frequency Counts/Binning...", Cmd::Analyze(AnalysisKind::Binning2D)),
                 sep(),

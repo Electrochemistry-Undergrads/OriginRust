@@ -11,9 +11,10 @@ use super::frame::{
 };
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AnovaSpec, BinSize, CorrelationSpec, FreqOptions, FriedmanSpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec,
-    MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, RowStatsSpec, SignTestSpec,
-    SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout,
+    AnovaSpec, BinSize, CorrelationSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec, HistogramSpec,
+    KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec,
+    RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail,
+    TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
@@ -49,6 +50,8 @@ pub enum AnalysisKind {
     TTest,
     Anova,
     Histogram,
+    /// Statistics > Descriptive Statistics > Discrete Frequency.
+    DiscreteFreq,
     /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (options in `bin2d_options.rs`).
     Binning2D,
     Normality,
@@ -119,6 +122,7 @@ impl AnalysisKind {
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
             AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
+            AnalysisKind::DiscreteFreq => "Discrete Frequency...",
             AnalysisKind::Normality => "Normality Test...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
             AnalysisKind::MannWhitney => "Mann-Whitney Test...",
@@ -168,6 +172,7 @@ impl AnalysisKind {
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
             "bin2d" => AnalysisKind::Binning2D,
+            "discfreq" => AnalysisKind::DiscreteFreq,
             "normality" => AnalysisKind::Normality,
             "anova2" => AnalysisKind::Anova2,
             "mannwhitney" => AnalysisKind::MannWhitney,
@@ -506,6 +511,7 @@ pub struct AnalysisDialog {
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
+    discfreq: DiscreteFreqSpec,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
@@ -688,6 +694,7 @@ impl AnalysisDialog {
             stats,
             curves: Default::default(),
             bin2d: Default::default(),
+            discfreq: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
@@ -1040,6 +1047,7 @@ impl AnalysisDialog {
                 graph: self.stats.graph,
             }),
             AnalysisKind::Binning2D => Tool::Binning2D(self.bin2d.options()),
+            AnalysisKind::DiscreteFreq => Tool::DiscreteFrequency(self.discfreq),
             AnalysisKind::Normality => Tool::Normality(NormalitySpec { alpha: self.stats.alpha }),
             AnalysisKind::Anova2 => {
                 let layout = if self.stats.two_way_raw {
@@ -1704,6 +1712,30 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::DiscreteFreq => {
+                let d = &mut self.discfreq;
+                egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
+                    ui.checkbox(&mut d.count, "Count");
+                    ui.checkbox(&mut d.relative, "Relative Frequency");
+                    ui.checkbox(&mut d.cumulative, "Cumulative Frequency");
+                    ui.add_enabled_ui(d.relative || d.cumulative, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Frequency in");
+                            ui.radio_value(&mut d.percent, false, "Fraction");
+                            ui.radio_value(&mut d.percent, true, "Percent");
+                        });
+                    });
+                });
+                ui.checkbox(&mut d.case_sensitive, "Case Sensitive");
+                ui.horizontal(|ui| {
+                    ui.label("Sort Data by");
+                    egui::ComboBox::from_id_salt("discfreq-sort").selected_text(d.sort.label()).show_ui(ui, |ui| {
+                        for s in DiscSort::ALL {
+                            ui.selectable_value(&mut d.sort, s, s.label());
+                        }
+                    });
+                });
+            }
             AnalysisKind::Binning2D => {
                 let mut names = self.column_names.split(", ");
                 let (x, y) = match (names.next(), names.next()) {
@@ -1772,6 +1804,7 @@ impl AnalysisDialog {
             AnalysisKind::Anova => "anova1",
             AnalysisKind::Histogram => "freqcounts",
             AnalysisKind::Binning2D => "twoDBinning",
+            AnalysisKind::DiscreteFreq => "discfreqs",
             AnalysisKind::Normality => "normtest",
             AnalysisKind::Anova2 => "anova2",
             AnalysisKind::MannWhitney => "mannwhitney",
@@ -1825,6 +1858,7 @@ impl AnalysisDialog {
             AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
             AnalysisKind::Histogram => "Count the values of the input columns in bins",
             AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
+            AnalysisKind::DiscreteFreq => "Count how often each distinct value, text or number, occurs",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
             AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
@@ -1874,6 +1908,7 @@ impl AnalysisDialog {
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
             AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
             AnalysisKind::Binning2D => "One row per X bin and one column per Y bin in a new sheet",
+            AnalysisKind::DiscreteFreq => "The values and their counts and frequencies in a new sheet",
             AnalysisKind::Normality => {
                 "Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson in a new sheet"
             }

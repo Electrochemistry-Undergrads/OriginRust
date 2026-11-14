@@ -572,6 +572,17 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             let freq = analysis::FreqOptions { min, max, size, below, above };
             (target, Job::Tool(Tool::Histogram(analysis::HistogramSpec { freq, graph: !no_graph })))
         }
+        AnalyzeTool::Discfreq { target, relative, cumulative, percent, no_count, case_sensitive, sort } => {
+            let spec = analysis::DiscreteFreqSpec {
+                count: !no_count,
+                relative,
+                cumulative,
+                percent,
+                case_sensitive,
+                sort: analysis::DiscSort::from_code(&sort).expect("clap checks the value"),
+            };
+            (target, Job::Tool(Tool::DiscreteFrequency(spec)))
+        }
         AnalyzeTool::Bin2d {
             target,
             stat,

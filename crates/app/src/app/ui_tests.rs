@@ -3574,6 +3574,23 @@ fn the_statistics_menu_makes_a_histogram_graph() {
     assert!(p.workbooks().next().unwrap().sheets[1].name.starts_with("Histogram"));
 }
 
+/// Statistics > Discrete Frequency... counts the distinct values of the chosen columns.
+#[test]
+fn the_statistics_menu_makes_a_discrete_frequency() {
+    let mut h = start(vec![data_file("discfreq")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Discrete Frequency..."]);
+    for label in ["Count", "Relative Frequency", "Cumulative Frequency", "Case Sensitive", "Sort Data by"] {
+        assert!(h.query_by_label(label).is_some(), "{label} is shown");
+    }
+    click(&mut h, "OK");
+    let p = project(&h);
+    let ws = &p.workbooks().next().unwrap().sheets[1];
+    assert!(ws.name.starts_with("DiscretFreq"), "{}", ws.name);
+    assert_eq!(ws.columns[0].long_name, "Data");
+    assert_eq!(ws.columns[1].long_name, "Count");
+}
+
 /// Statistics > 2D Frequency Counts/Binning... opens Origin's option groups and writes the grid sheet.
 #[test]
 fn the_statistics_menu_makes_2d_frequency_counts() {

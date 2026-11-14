@@ -755,3 +755,16 @@ fn bin2d_counts_points_in_a_grid() {
     let (ok, _, err) = sheaf(&["analyze", "bin2d", file, "--y", "y", "--stat", "mode"]);
     assert!(!ok && err.contains("mode"), "{err}");
 }
+
+#[test]
+fn discfreq_counts_the_distinct_values() {
+    let dir = scratch("discfreq");
+    let file = dir.join("cats.csv");
+    std::fs::write(&file, "kind,n\nb,3\na,1\nB,3\nc,2\na,3\n").unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind,n", "--relative", "--percent"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("DiscretFreq1") && out.contains("5 cells, 3 distinct values"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind", "--no-count"]);
+    assert!(!ok && err.contains("at least one"), "{err}");
+}

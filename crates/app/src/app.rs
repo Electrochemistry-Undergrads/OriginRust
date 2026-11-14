@@ -99,6 +99,7 @@ pub struct SheafApp {
     import: Option<ImportDialog>,
     import_wizard: Option<ImportWizard>,
     graph_props: Option<GraphPropsDialog>,
+    layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
@@ -163,6 +164,7 @@ impl SheafApp {
             import: None,
             import_wizard: None,
             graph_props: None,
+            layer_contents: None,
             column_props: None,
             text_dialog: None,
             shape_dialog: None,
@@ -983,6 +985,13 @@ impl SheafApp {
             }
             Action::FilterRows(book) => {
                 self.filter = FilterDialog::new(self.doc.project(), book);
+            }
+            Action::LayerContents { graph, layer } => {
+                let token = self.token();
+                self.layer_contents =
+                    Some(crate::dialogs::layer_contents::LayerContentsDialog::new(graph, layer, token));
+                self.focus(graph);
+                self.graphs.entry(graph).or_default().active_layer = layer;
             }
             Action::GraphProperties { graph, layer, tab, plot } => {
                 let token = self.token();
@@ -1909,6 +1918,7 @@ impl SheafApp {
         self.import.is_some()
             || self.import_wizard.is_some()
             || self.graph_props.is_some()
+            || self.layer_contents.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
@@ -2080,6 +2090,17 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.graph_props = None;
+        }
+        if let Some(d) = &mut self.layer_contents {
+            use crate::dialogs::layer_contents::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.layer_contents = None,
+                Outcome::LayerProperties(graph, layer) => {
+                    let token = self.token();
+                    self.graph_props = Some(GraphPropsDialog::new(graph, layer, PropsTab::Plots, token));
+                }
+            }
         }
         if let Some(column) = self.graph_props.as_mut().and_then(|d| d.take_show_workbook())
             && let Some((book, _, _)) = self.doc.project().locate(column)
@@ -2604,6 +2625,13 @@ impl SheafApp {
                 "integrate" => {
                     if let Some(id) = first_graph {
                         self.start_integrate(id);
+                    }
+                }
+                "layer-contents" => {
+                    if let Some(id) = first_graph {
+                        self.layer_contents =
+                            Some(crate::dialogs::layer_contents::LayerContentsDialog::new(id, 0, 1_000_000));
+                        self.focus(id);
                     }
                 }
                 "graph-settings" => {

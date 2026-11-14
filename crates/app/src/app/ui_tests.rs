@@ -3354,6 +3354,46 @@ fn the_workbook_button_of_plot_details_brings_the_plots_worksheet_forward() {
 }
 
 #[test]
+fn f12_opens_origins_layer_contents_window_that_removes_adds_and_groups_plots() {
+    let mut h = start(vec![data_file("layer-contents")]);
+    let (_, graph) = window_ids(&h);
+    assert_eq!(h.state().active, Some(graph), "the graph is in front");
+    let plots_before = project(&h).graph(graph).unwrap().layers[0].plots.len();
+    assert!(plots_before >= 2);
+    h.key_press(egui::Key::F12);
+    settle(&mut h);
+    assert!(h.state().layer_contents.is_some(), "F12 opens Layer Contents");
+    for label in ["Book Name", "Short Name", "Plot Type", "Rescale on Apply", "Layer Properties...", "Close"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    // Remove the last plot, then Cancel brings it back.
+    let last = project(&h).graph(graph).unwrap().layers[0].plots.last().unwrap().y;
+    let short = format!("{}(Y)", project(&h).column(last).unwrap().short_name);
+    let right =
+        h.query_all_by_label(&short).max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x)).unwrap().rect().center();
+    click_at(&mut h, right);
+    click(&mut h, "<=");
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots.len(), plots_before - 1);
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots.len(), plots_before, "Cancel undoes it");
+    // Remove it again and add it back from the left list; then group two plots.
+    pause(&mut h);
+    h.key_press(egui::Key::F12);
+    settle(&mut h);
+    let right =
+        h.query_all_by_label(&short).max_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x)).unwrap().rect().center();
+    click_at(&mut h, right);
+    click(&mut h, "<=");
+    click(&mut h, &short);
+    click(&mut h, "=>");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert_eq!(layer.plots.len(), plots_before);
+    assert_eq!(layer.plots.last().unwrap().y, last, "added at the end");
+    click(&mut h, "Close");
+    assert!(h.state().layer_contents.is_none(), "Close closes the window");
+}
+
+#[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
     show_window(&mut h, "Book1 - sample");

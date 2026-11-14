@@ -1737,3 +1737,23 @@ its own Text tab; Miscellaneous and the other controls are not offered.
 Buttons (measured): Origin's Plot Details has `>>` (left of the buttons), Workbook (on a plot node), OK,
 Cancel and Apply. Sheaf has OK, Cancel and Apply, and Workbook on a plot node, which brings the
 worksheet of the plot's Y column to the front while the dialog stays open; `>>` is not offered.
+
+### 18.2 Layer Contents (measured 2026-11-13)
+
+Origin's Graph > Layer Contents... (F12; `origin-dialog.ps1 -MenuClicks "700,500;K:{F12}"`,
+`re-workspace/scratch/t13lc/lc1`) is its own window, "Layer Contents: Add, Remove, Group, Order Plots -
+Layer1" (about 680 x 300): at the left a source list (Worksheets in Folder by default; also recursive,
+project, favourites, matrices and others) with Include Shortcuts (on) over a table Book Name, Sheet, Long
+Name, Short Name (`B(Y)`); in the middle a plot type button and `=>`, `<=`; at the right Layer (1),
+Group, Ungroup, up and down arrows, Rescale on Apply (off), and the table of the layer's plots: group
+(`g1`), Short Name, Long Name, Legend, Plot Type; at the bottom `>>`, Layer Properties..., Plot Setup...,
+Apply, Close, Cancel.
+
+Sheaf (`dialogs/layer_contents.rs`, F12 and the layer's right-click menu): the same window and title; the
+left list holds the numeric Y columns of the whole project (the only source offered); the plot type is
+Line, Scatter, Line + Symbol or Column; `=>` adds the chosen columns with their X and error columns at
+the end, `<=` removes the chosen plots; Group gives the chosen plots one group number, Ungroup clears it;
+Up and Down move one plot; Rescale on Apply makes the axes automatic again; Layer Properties... opens Plot
+Details on the layer; Plot Setup... and `>>` are greyed. Edits show at once and are one undo step; Cancel
+takes them back, Close keeps them. Plot Setup... in the Graph menu still opens Plot Details' Layer
+Contents tab.

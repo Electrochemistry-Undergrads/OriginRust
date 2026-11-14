@@ -3,8 +3,11 @@
 use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
-use crate::scene::{Cap, Item, Join, Stroke, line_to, move_to, push_num};
-use sheaf_core::graph::{Connect, ErrorDirection, LineStyle, PlotKind, ScaleKind, SymbolShape, SymbolStyle};
+use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
+use sheaf_core::graph::{
+    Connect, DropLine, ErrorDirection, LabelForm, LabelPosition, LineStyle, PlotKind, ScaleKind, SymbolShape,
+    SymbolStyle,
+};
 
 /// Points closer than this (in pt) to the last kept point are dropped.
 const DECIMATE_PT: f64 = 0.05;
@@ -51,6 +54,16 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if plot.kind.is_area() {
         draw_area(out, pd, geom);
     }
+    let decor = &plot.decor;
+    if let Some(color) = decor.fill_under
+        && plot.kind.has_line()
+        && !plot.kind.is_area()
+    {
+        draw_fill_under(out, pd, geom, color);
+    }
+    if decor.drop.horizontal.on || decor.drop.vertical.on {
+        draw_drop_lines(out, pd, geom);
+    }
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
     }
@@ -68,6 +81,120 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if pd.mask.is_some() && !plot.kind.is_bar() {
         draw_masked(out, pd, geom);
     }
+    if decor.labels.enable {
+        draw_data_labels(out, pd, geom);
+    }
+}
+
+/// Origin's "Fill Area Under Curve" in its Normal mode: the area between the curve and the bottom
+/// of the layer frame (measured: the fill reaches the bottom axis, not Y = 0). A missing point
+/// breaks the area, as it breaks the line.
+fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, color: sheaf_core::Color) {
+    let bottom = geom.frame.y + geom.frame.h;
+    let mut d = String::new();
+    let mut run: Vec<(f64, f64)> = Vec::new();
+    let close = |run: &mut Vec<(f64, f64)>, d: &mut String| {
+        if run.len() >= 2 {
+            move_to(d, run[0].0, bottom);
+            for &(x, y) in run.iter() {
+                line_to(d, x, y);
+            }
+            line_to(d, run[run.len() - 1].0, bottom);
+            d.push('Z');
+        }
+        run.clear();
+    };
+    for i in pd.rows() {
+        match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
+            Some(p) => run.push(p),
+            None => close(&mut run, &mut d),
+        }
+    }
+    close(&mut run, &mut d);
+    if !d.is_empty() {
+        out.push(Item::Path { d, fill: Some(color), stroke: None });
+    }
+}
+
+/// Drop lines: from each point across to the left edge of the frame (the Y axis, "Horizontal")
+/// and down to its bottom edge (the X axis, "Vertical").
+fn draw_drop_lines(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let f = geom.frame;
+    let auto = pd.plot.line.color;
+    let stroke = |l: &DropLine| {
+        line_stroke(&LineStyle {
+            color: l.color.unwrap_or(auto),
+            width_pt: l.width_pt,
+            dash: l.dash,
+            connect: Connect::Straight,
+        })
+    };
+    let drops = &pd.plot.decor.drop;
+    let (mut h, mut v) = (String::new(), String::new());
+    for i in pd.rows() {
+        if let Some((x, y)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
+            if drops.horizontal.on {
+                move_to(&mut h, f.x, y);
+                line_to(&mut h, x, y);
+            }
+            if drops.vertical.on {
+                move_to(&mut v, x, y);
+                line_to(&mut v, x, f.y + f.h);
+            }
+        }
+    }
+    if !h.is_empty() {
+        out.push(Item::Path { d: h, fill: None, stroke: Some(stroke(&drops.horizontal)) });
+    }
+    if !v.is_empty() {
+        out.push(Item::Path { d: v, fill: None, stroke: Some(stroke(&drops.vertical)) });
+    }
+}
+
+/// The text of a data label: the value as the worksheet shows it by default (up to 15
+/// significant digits, scientific beyond).
+fn label_number(v: f64) -> String {
+    sheaf_core::format::format_general(v, 15)
+}
+
+/// Data labels (Origin's Label tab): the label form's text next to each point, a quarter of the
+/// font size away on the chosen side.
+fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let labels = &pd.plot.decor.labels;
+    let size = labels.font.size_pt;
+    let gap = size * 0.25;
+    // From the baseline to the middle of a line of digits.
+    let mid = size * 0.35;
+    let last = if pd.closing.is_some() { pd.end.saturating_sub(1) } else { pd.end };
+    for i in pd.rows().take_while(|&i| i < last) {
+        let Some((px, py)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
+        let (xv, yv) = (pd.cat_at(i) - pd.ox, pd.y.get(i).copied().unwrap_or(f64::NAN));
+        let text = match labels.form {
+            LabelForm::X => label_number(xv),
+            LabelForm::Y => label_number(yv),
+            LabelForm::Row => (i + 1).to_string(),
+            LabelForm::XY => format!("({}, {})", label_number(xv), label_number(yv)),
+        };
+        let (x, y, anchor) = match labels.position {
+            LabelPosition::Right => (px + gap, py + mid, Anchor::Start),
+            LabelPosition::Left => (px - gap, py + mid, Anchor::End),
+            LabelPosition::Above => (px, py - gap, Anchor::Middle),
+            LabelPosition::Below => (px, py + gap + 2.0 * mid, Anchor::Middle),
+            LabelPosition::Center => (px, py + mid, Anchor::Middle),
+        };
+        out.push(Item::Text(TextItem {
+            x,
+            y,
+            text,
+            family: labels.font.family.clone(),
+            size,
+            bold: labels.font.bold,
+            italic: labels.font.italic,
+            color: labels.font.color,
+            anchor,
+            rotate_ccw: labels.rotate_deg,
+        }));
+    }
 }
 
 /// Origin draws a masked point red: its symbol, and the two line segments that meet at it
@@ -76,19 +203,21 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     use sheaf_core::Color;
     let Some(mask) = pd.mask else { return };
     let page = |i: usize| -> Option<(f64, f64)> {
-        if i < pd.start || i >= pd.end {
+        if i < pd.start || i >= pd.end || !pd.row_shown(i) {
             return None;
         }
         geom.checked_data_to_page(pd.x_at(i), pd.y_at(i))
     };
     let mut lines = String::new();
     let mut symbols = String::new();
-    for &i in mask.range(pd.start..pd.end - usize::from(pd.closing)) {
+    for &i in mask.range(pd.start..pd.end - usize::from(pd.closing.is_some())) {
         let Some(p) = page(i) else { continue };
         // The first point of a radar polygon is also the end of the closing segment.
-        let wrap = (pd.closing && i == pd.start).then_some(pd.end - 1);
+        let wrap = (pd.closing == Some(i)).then_some(pd.end - 1);
         if pd.plot.kind.has_line() && pd.plot.line.width_pt > 0.0 {
-            for j in [i.checked_sub(1), Some(i + 1)].into_iter().flatten().chain(wrap) {
+            let previous = (pd.start..i).rev().find(|&r| pd.row_shown(r));
+            let next = (i + 1..pd.end).find(|&r| pd.row_shown(r));
+            for j in [previous, next].into_iter().flatten().chain(wrap) {
                 if let Some(q) = page(j) {
                     move_to(&mut lines, q.0, q.1);
                     line_to(&mut lines, p.0, p.1);
@@ -170,7 +299,7 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let f = geom.frame;
     let zero = geom.data_to_page(0.0, if pd.oy == 0.0 { 0.0 } else { pd.oy }).1;
     let flat = if zero.is_finite() { zero.clamp(f.y, f.y + f.h) } else { f.y + f.h };
-    let step = ((pd.end - pd.start) / 20_000).max(1);
+    let step = (pd.rows().count() / 20_000).max(1);
     let mut d = String::new();
     // Upper points, and the lower point under each.
     let mut run: Vec<((f64, f64), f64)> = Vec::new();
@@ -187,8 +316,13 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
         run.clear();
     };
-    let mut i = pd.start;
-    while i < pd.end {
+    let mut previous = None;
+    let last = pd.rows().next_back();
+    for i in pd.rows().step_by(step).chain(last) {
+        if previous == Some(i) {
+            continue;
+        }
+        previous = Some(i);
         let upper = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i));
         // The lower edge of this row; a row without one breaks the shape.
         let lower = match pd.base_at(i) {
@@ -199,7 +333,6 @@ fn draw_area(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             Some((p, low)) => run.push((p, low)),
             None => close(&mut run, &mut d),
         }
-        i = if i + step < pd.end || i + 1 == pd.end { i + step } else { pd.end - 1 };
     }
     close(&mut run, &mut d);
     if !d.is_empty() {
@@ -240,7 +373,7 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
     };
     let mut run: Option<Run> = None;
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => {
                 let strip = (p.0 / STRIP_PT).floor() as i64;
@@ -320,11 +453,11 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
 /// True when Origin draws this plot as a spline: at most 900 points and X strictly increasing
 /// (a plot that fails either test is drawn with straight segments).
 fn spline_applies(pd: &PlotData) -> bool {
-    if pd.end - pd.start > SPLINE_MAX_POINTS {
+    if pd.rows().take(SPLINE_MAX_POINTS + 1).count() > SPLINE_MAX_POINTS {
         return false;
     }
     let mut last = f64::NEG_INFINITY;
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         let x = pd.x_at(i);
         if !x.is_finite() {
             continue;
@@ -473,7 +606,7 @@ fn draw_columns(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let place = |cat: f64, val: f64| {
         if transposed { geom.checked_data_to_page(val, cat) } else { geom.checked_data_to_page(cat, val) }
     };
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         let (cat, top) = (pd.cat_at(i), pd.val_at(i));
         let base = pd.base_at(i).unwrap_or(default_base);
         let left = cat + slot.left;
@@ -559,7 +692,7 @@ fn draw_pie(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         out.push(Item::Text(TextItem {
             x,
             y: y + 0.35 * size,
-            text: format!("{:.2}%", share * 100.0),
+            text: crate::pie::share_text(share * 100.0),
             family: pie.label_font.family.clone(),
             size,
             bold: pie.label_font.bold,
@@ -681,7 +814,7 @@ fn draw_error_bars(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     };
     let cap_low = dir != ErrorDirection::Plus;
     let cap_high = dir != ErrorDirection::Minus;
-    for i in pd.start..pd.end {
+    for i in pd.rows() {
         if let Some((below, above)) = pd.reach(pd.err_at(i), dir) {
             let (cat, val) = (pd.cat_at(i) + shift, pd.val_at(i));
             let place = |v: f64| {
@@ -730,11 +863,14 @@ fn map_color(t: f64) -> sheaf_core::Color {
 
 /// The position of `v` between the smallest and largest finite value of `z[from..to]`, 0..1; 0.5
 /// when all values are equal.
-fn z_fraction(z: &[f64], from: usize, to: usize, v: f64) -> f64 {
-    let (lo, hi) = z[from.min(z.len())..to.min(z.len())]
-        .iter()
+fn z_range(z: &[f64], pd: &PlotData) -> (f64, f64) {
+    pd.rows()
+        .filter_map(|r| z.get(r))
         .filter(|x| x.is_finite())
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)));
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(*x), b.max(*x)))
+}
+
+fn z_fraction((lo, hi): (f64, f64), v: f64) -> f64 {
     if hi > lo { ((v - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.5 }
 }
 
@@ -742,22 +878,24 @@ fn z_fraction(z: &[f64], from: usize, to: usize, v: f64) -> f64 {
 /// per symbol.
 fn draw_varied_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let sym = &pd.plot.symbol;
-    for i in pd.start..pd.end {
+    let size_range = pd.size_z.map(|z| z_range(z, pd));
+    let color_range = pd.color_z.map(|z| z_range(z, pd));
+    for i in pd.rows() {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         let mut style = sym.clone();
-        if let Some(z) = pd.size_z {
+        if let (Some(z), Some(range)) = (pd.size_z, size_range) {
             let v = z.get(i).copied().unwrap_or(f64::NAN);
             if !v.is_finite() {
                 continue;
             }
-            style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction(z, pd.start, pd.end, v);
+            style.size_pt = BUBBLE_MIN_PT + (BUBBLE_MAX_PT - BUBBLE_MIN_PT) * z_fraction(range, v);
         }
-        if let Some(z) = pd.color_z {
+        if let (Some(z), Some(range)) = (pd.color_z, color_range) {
             let v = z.get(i).copied().unwrap_or(f64::NAN);
             if !v.is_finite() {
                 continue;
             }
-            style.color = map_color(z_fraction(z, pd.start, pd.end, v));
+            style.color = map_color(z_fraction(range, v));
         }
         if !near_frame(geom, p, style.size_pt + style.edge_width_pt) {
             continue;
@@ -777,10 +915,10 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let mut d = String::new();
     // With very many points, symbols that would sit on top of an already drawn
     // one (same small cell of the page) are left out; the picture is the same.
-    let end = pd.end - usize::from(pd.closing);
+    let end = pd.end - usize::from(pd.closing.is_some());
     let thin = (end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
-    for i in (pd.start..end).step_by(every) {
+    for i in pd.rows().take_while(|&i| i < end).step_by(every) {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
             continue;

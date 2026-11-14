@@ -11,18 +11,23 @@ use super::frame::{
 };
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AnovaSpec, AxisBins, Bin2dOptions, Bin2dSpec, BinSize, CorrelationSpec, CrosstabSpec, FreqOptions, FriedmanSpec,
+    AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
     HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec,
     OutlierSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec,
     Tail, TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
-    AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
-    IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter,
-    PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
+    AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
+    CurveOperand, DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LevelCrossingSpec,
+    LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange,
+    SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
 use sheaf_core::analysis::{
-    ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec, PeakFitSpec, PeakShape,
+    BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
+    PeakFitSpec, PeakShape,
+};
+use sheaf_core::analysis::{
+    FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection,
 };
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
@@ -40,6 +45,22 @@ pub enum AnalysisKind {
     SubtractRef,
     /// Simple Math: add, subtract, multiply, divide or power with a constant or a reference.
     CurveMath,
+    /// Simple Column Math (Origin's `vmathtool`): a column with a constant or another column, row by row.
+    ColumnMath,
+    /// Signal Processing > Convolution (Origin's `conv`).
+    Convolution,
+    /// Signal Processing > Correlation (Origin's `corr1`).
+    SignalCorrelation,
+    /// Level Crossing (Origin's `levelcrossing` X-Function, which has no menu item there).
+    LevelCrossing,
+    /// Signal Processing > Hilbert Transform (Origin's `hilbert`).
+    Hilbert,
+    /// Signal Processing > FFT > FFT (Origin's `fft1`).
+    Fft,
+    /// Signal Processing > FFT > IFFT (Origin's `ifft1`).
+    Ifft,
+    /// Signal Processing > FFT Filters (Origin's `fft_filters`).
+    FftFilter,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -49,6 +70,10 @@ pub enum AnalysisKind {
     TTest,
     Anova,
     Histogram,
+    /// Statistics > Descriptive Statistics > Discrete Frequency.
+    DiscreteFreq,
+    /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (options in `bin2d_options.rs`).
+    Binning2D,
     Normality,
     /// Statistics > ANOVA > Two-Way ANOVA.
     Anova2,
@@ -69,15 +94,15 @@ pub enum AnalysisKind {
     KsTwoSample,
     MedianTest,
     Friedman,
-    /// Statistics > Descriptive Statistics > Cross Tabulation and 2D Frequency Counts/Binning.
+    /// Statistics > Descriptive Statistics > Cross Tabulation.
     Crosstab,
-    Bin2d,
     /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
     AverageCurves,
     Intersect,
     PolygonArea,
     /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
     SubtractLine,
+    ReduceDup,
     ReduceX,
     TranslateX,
     TranslateY,
@@ -85,7 +110,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 12] = [
+    pub const ALL: [AnalysisKind; 20] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -94,6 +119,14 @@ impl AnalysisKind {
         AnalysisKind::Baseline,
         AnalysisKind::SubtractRef,
         AnalysisKind::CurveMath,
+        AnalysisKind::ColumnMath,
+        AnalysisKind::Convolution,
+        AnalysisKind::SignalCorrelation,
+        AnalysisKind::LevelCrossing,
+        AnalysisKind::Hilbert,
+        AnalysisKind::Fft,
+        AnalysisKind::Ifft,
+        AnalysisKind::FftFilter,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -111,6 +144,14 @@ impl AnalysisKind {
             AnalysisKind::Baseline => "Subtract Baseline...",
             AnalysisKind::SubtractRef => "Subtract Reference Data...",
             AnalysisKind::CurveMath => "Simple Math...",
+            AnalysisKind::ColumnMath => "Simple Column Math...",
+            AnalysisKind::Convolution => "Convolution...",
+            AnalysisKind::SignalCorrelation => "Correlation...",
+            AnalysisKind::LevelCrossing => "Level Crossing...",
+            AnalysisKind::Hilbert => "Hilbert Transform...",
+            AnalysisKind::Fft => "FFT...",
+            AnalysisKind::Ifft => "IFFT...",
+            AnalysisKind::FftFilter => "FFT Filters...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -118,6 +159,8 @@ impl AnalysisKind {
             AnalysisKind::TTest => "t-Test...",
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
+            AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
+            AnalysisKind::DiscreteFreq => "Discrete Frequency...",
             AnalysisKind::Normality => "Normality Test...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
             AnalysisKind::MannWhitney => "Mann-Whitney Test...",
@@ -133,11 +176,11 @@ impl AnalysisKind {
             AnalysisKind::MedianTest => "Mood's Median Test...",
             AnalysisKind::Friedman => "Friedman ANOVA...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
-            AnalysisKind::Bin2d => "2D Frequency Counts/Binning...",
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
             AnalysisKind::SubtractLine => "Subtract Straight Line...",
+            AnalysisKind::ReduceDup => "Reduce Duplicate X Data...",
             AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
             AnalysisKind::TranslateX => "Curve Translate X...",
             AnalysisKind::TranslateY => "Curve Translate Y...",
@@ -160,6 +203,14 @@ impl AnalysisKind {
             "baseline" => AnalysisKind::Baseline,
             "subtract-ref" => AnalysisKind::SubtractRef,
             "math" => AnalysisKind::CurveMath,
+            "column-math" => AnalysisKind::ColumnMath,
+            "convolution" => AnalysisKind::Convolution,
+            "signal-correlation" => AnalysisKind::SignalCorrelation,
+            "level-crossing" => AnalysisKind::LevelCrossing,
+            "hilbert" => AnalysisKind::Hilbert,
+            "fft" => AnalysisKind::Fft,
+            "ifft" => AnalysisKind::Ifft,
+            "fft-filter" => AnalysisKind::FftFilter,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -167,6 +218,8 @@ impl AnalysisKind {
             "ttest" => AnalysisKind::TTest,
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
+            "bin2d" => AnalysisKind::Binning2D,
+            "discfreq" => AnalysisKind::DiscreteFreq,
             "normality" => AnalysisKind::Normality,
             "anova2" => AnalysisKind::Anova2,
             "mannwhitney" => AnalysisKind::MannWhitney,
@@ -182,11 +235,11 @@ impl AnalysisKind {
             "mediantest" => AnalysisKind::MedianTest,
             "friedman" => AnalysisKind::Friedman,
             "crosstab" => AnalysisKind::Crosstab,
-            "bin2d" => AnalysisKind::Bin2d,
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
             "subtract-line" => AnalysisKind::SubtractLine,
+            "reduce-dup" => AnalysisKind::ReduceDup,
             "reduce-x" => AnalysisKind::ReduceX,
             "translate-x" => AnalysisKind::TranslateX,
             "translate-y" => AnalysisKind::TranslateY,
@@ -223,11 +276,50 @@ enum BaselineKind {
     Line,
 }
 
+/// Origin's Baseline Modes of the Peak Analyzer that Sheaf offers (the others are listed greyed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChainBaselineKind {
+    /// Origin's default: Y is a value of the data (minimum by default) or a custom number.
+    Constant,
+    /// None (Y=0).
     None,
+    /// Straight Line: through the first and the last point (Sheaf's reading of the mode).
     EndPoints,
+    /// User Defined, with Sheaf's anchors: the lowest points of n stretches.
     Minima,
+}
+
+/// The Goal page of Origin's Peak Analyzer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChainGoal {
+    Integrate,
+    CreateBaseline,
+    SubtractBaseline,
+    Find,
+    Fit,
+}
+
+impl ChainGoal {
+    fn name(self) -> &'static str {
+        match self {
+            ChainGoal::Integrate => "Integrate Peaks",
+            ChainGoal::CreateBaseline => "Create Baseline",
+            ChainGoal::SubtractBaseline => "Subtract Baseline",
+            ChainGoal::Find => "Find Peaks",
+            ChainGoal::Fit => "Fit Peaks",
+        }
+    }
+
+    /// Origin's pages after Goal for this goal (measured, analysis-tools.md 11.1).
+    fn pages(self) -> &'static [&'static str] {
+        match self {
+            ChainGoal::Integrate => &["Baseline Mode", "Baseline Treatment", "Find Peaks", "Integrate Peaks", "Finish"],
+            ChainGoal::Find => &["Baseline Mode", "Baseline Treatment", "Find Peaks", "Finish"],
+            ChainGoal::Fit => &["Baseline Mode", "Baseline Treatment", "Find Peaks", "Fit Peaks", "Finish"],
+            ChainGoal::CreateBaseline => &["Baseline Mode", "Create Baseline", "Finish"],
+            ChainGoal::SubtractBaseline => &["Baseline Mode", "Subtract Baseline", "Finish"],
+        }
+    }
 }
 
 const FIND_METHODS: [(&str, FindMethod); 4] = [
@@ -270,15 +362,12 @@ struct StatsOptions {
     equal_variance: bool,
     tail: Tail,
     alpha: f64,
-    /// Index into `COMPARISONS`.
-    comparison: usize,
+    comparison: Option<MeansComparison>,
     /// Dunnett's control group: index among the chosen columns.
     control: usize,
     /// Cross tabulation: indexes into the sheet's columns, row variable and column variable.
     pair_columns: [usize; 2],
     cross: CrosstabSpec,
-    /// 2D binning: how the X axis and the Y axis are binned.
-    axes: [AxisState; 2],
     /// 0 automatic, 1 bin size, 2 number of bins.
     bins: usize,
     bin_size: f64,
@@ -321,11 +410,10 @@ impl Default for StatsOptions {
             equal_variance: true,
             tail: Tail::Two,
             alpha: 0.05,
-            comparison: 0,
+            comparison: Some(MeansComparison::Tukey),
             control: 0,
             pair_columns: [0, 1],
             cross: CrosstabSpec::default(),
-            axes: [AxisState::default(), AxisState::default()],
             bins: 0,
             bin_size: 1.0,
             bin_count: 10,
@@ -351,68 +439,45 @@ impl Default for StatsOptions {
     }
 }
 
-/// The binning of one axis of the 2D frequency count.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct AxisState {
-    /// 0 automatic, 1 bin size, 2 number of bins.
-    bins: usize,
-    size: f64,
-    count: usize,
-    own_range: bool,
-    min: f64,
-    max: f64,
-}
-
-impl Default for AxisState {
-    fn default() -> Self {
-        AxisState { bins: 2, size: 1.0, count: 10, own_range: false, min: 0.0, max: 10.0 }
-    }
-}
-
-impl AxisState {
-    fn axis(&self) -> AxisBins {
-        AxisBins {
-            min: self.own_range.then_some(self.min),
-            max: self.own_range.then_some(self.max),
-            size: match self.bins {
-                1 => BinSize::Width(self.size),
-                2 => BinSize::Count(self.count),
-                _ => BinSize::Auto,
-            },
-        }
-    }
-
-    fn ui(&mut self, ui: &mut egui::Ui, name: &str) {
-        ui.horizontal(|ui| {
-            ui.label(format!("{name} bins"));
-            ui.radio_value(&mut self.bins, 0, "Automatic");
-            ui.radio_value(&mut self.bins, 1, "Bin size");
-            ui.add_enabled(self.bins == 1, DragValue::new(&mut self.size).speed(0.01).range(1e-12..=1e12));
-            ui.radio_value(&mut self.bins, 2, "Number of bins");
-            ui.add_enabled(self.bins == 2, DragValue::new(&mut self.count).range(1..=1000));
-        });
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.own_range, format!("Set the {name} range"));
-            ui.add_enabled_ui(self.own_range, |ui| {
-                ui.label("from");
-                ui.add(DragValue::new(&mut self.min).speed(0.01));
-                ui.label("to");
-                ui.add(DragValue::new(&mut self.max).speed(0.01));
-            });
-        });
-    }
-}
-
-const COMPARISONS: [(&str, Option<MeansComparison>); 8] = [
-    ("Tukey", Some(MeansComparison::Tukey)),
-    ("Bonferroni", Some(MeansComparison::Bonferroni)),
-    ("Sidak", Some(MeansComparison::Sidak)),
-    ("Fisher LSD", Some(MeansComparison::FisherLsd)),
-    ("Scheffe", Some(MeansComparison::Scheffe)),
-    ("Holm-Bonferroni", Some(MeansComparison::Holm)),
-    ("Dunnett", Some(MeansComparison::Dunnett)),
-    ("None", None),
+/// The means comparisons of the one-way ANOVA (Dunnett's is checked against scipy, not Origin), then "None".
+const COMPARISONS_ONE_WAY: [Option<MeansComparison>; 9] = [
+    Some(MeansComparison::Tukey),
+    Some(MeansComparison::Bonferroni),
+    Some(MeansComparison::Sidak),
+    Some(MeansComparison::FisherLsd),
+    Some(MeansComparison::Scheffe),
+    Some(MeansComparison::HolmBonferroni),
+    Some(MeansComparison::HolmSidak),
+    Some(MeansComparison::Dunnett),
+    None,
 ];
+
+/// The means comparisons of the two-way ANOVA (no Holm methods there), then "None".
+const COMPARISONS_TWO_WAY: [Option<MeansComparison>; 6] = [
+    Some(MeansComparison::Tukey),
+    Some(MeansComparison::Bonferroni),
+    Some(MeansComparison::Sidak),
+    Some(MeansComparison::FisherLsd),
+    Some(MeansComparison::Scheffe),
+    None,
+];
+
+fn comparison_label(c: Option<MeansComparison>) -> &'static str {
+    c.map_or("None", MeansComparison::label)
+}
+
+fn comparison_combo(
+    ui: &mut egui::Ui,
+    id: &str,
+    current: &mut Option<MeansComparison>,
+    list: &[Option<MeansComparison>],
+) {
+    egui::ComboBox::from_id_salt(id).selected_text(comparison_label(*current)).show_ui(ui, |ui| {
+        for c in list {
+            ui.selectable_value(current, *c, comparison_label(*c));
+        }
+    });
+}
 
 pub enum AnalysisOutcome {
     Open,
@@ -434,7 +499,7 @@ enum OutputChoice {
 }
 
 /// Undo steps made by one window share a token, so one Undo reverts all its Apply runs.
-fn next_undo_token() -> u64 {
+pub(crate) fn next_undo_token() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)
@@ -469,16 +534,25 @@ pub struct AnalysisDialog {
     line: [f64; 4],
     interp: InterpSpec,
     interp_own_range: bool,
+    /// Interpolate onto the values of this column (index into `sheet_columns`) instead of a grid.
+    interp_at: Option<usize>,
+    /// The column that `interp_at` starts at when the X values are taken from a column.
+    interp_at_default: usize,
     peaks: PeakOptions,
     peak_keep: PeakKeep,
     peak_height: f64,
     peak_count: usize,
     chain_baseline: ChainBaselineKind,
     chain_minima: usize,
+    /// Constant baseline: a value of the data, or `None` for the custom number.
+    chain_const: Option<BaselineStat>,
+    chain_custom_y: f64,
     find_method: usize,
     chain_half_height: bool,
-    chain_integrate: bool,
-    chain_fit: Option<PeakShape>,
+    chain_goal: ChainGoal,
+    /// The wizard page shown: 0 is Goal, then the pages of the goal.
+    chain_page: usize,
+    chain_fit: PeakShape,
     chain_fit_linear: bool,
     /// X intervals of "Integrate Ranges".
     ranges: Vec<(f64, f64)>,
@@ -491,8 +565,19 @@ pub struct AnalysisDialog {
     reference_choices: Vec<(ColumnId, String)>,
     reference: usize,
     common_only: bool,
+    /// Convolution and Correlation: circular instead of linear, normalized, the X step (`None`:
+    /// Convolution's automatic step from the input's X).
+    signal_circular: bool,
+    signal_normalize: bool,
+    signal_interval: Option<f64>,
+    level_crossing: LevelCrossingSpec,
+    fft: FftSpec,
+    ifft: IfftSpec,
+    fft_filter: FftFilterSpec,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
+    bin2d: super::bin2d_options::Bin2dState,
+    discfreq: DiscreteFreqSpec,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
@@ -532,6 +617,116 @@ const CURVE_OPS: [(&str, CurveOp); 5] = [
 ];
 
 /// Every numeric Y column outside `exclude`, for the reference list.
+/// A frequency or threshold that is Origin's automatic value until "Auto" is unticked.
+fn auto_value(ui: &mut egui::Ui, label: &str, value: &mut Option<f64>, start: f64) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        let mut auto = value.is_none();
+        if ui.checkbox(&mut auto, "Auto").changed() {
+            *value = if auto { None } else { Some(start) };
+        }
+        if let Some(v) = value {
+            ui.add(DragValue::new(v).speed(0.001).range(0.0..=f64::MAX));
+        }
+    });
+}
+
+/// The options of Signal Processing > FFT Filters, with Origin's names.
+fn fft_filter_options(ui: &mut egui::Ui, spec: &mut FftFilterSpec) {
+    const KINDS: [(&str, FftFilterType); 6] = [
+        ("Low Pass", FftFilterType::LowPass),
+        ("High Pass", FftFilterType::HighPass),
+        ("Band Pass", FftFilterType::BandPass),
+        ("Band Block", FftFilterType::BandBlock),
+        ("Threshold", FftFilterType::Threshold),
+        ("Low Pass Parabolic", FftFilterType::LowPassParabolic),
+    ];
+    let o = &mut spec.options;
+    ui.horizontal(|ui| {
+        ui.label("Filter Type");
+        egui::ComboBox::from_id_salt("fft_filter_type")
+            .selected_text(KINDS.iter().find(|k| k.1 == o.kind).map_or("", |k| k.0))
+            .show_ui(ui, |ui| {
+                for (label, k) in KINDS {
+                    ui.selectable_value(&mut o.kind, k, label);
+                }
+            });
+    });
+    auto_value(ui, "Sampling interval", &mut spec.interval, 1.0);
+    match o.kind {
+        FftFilterType::LowPass | FftFilterType::HighPass => auto_value(ui, "Cutoff Frequency", &mut o.cutoff, 0.1),
+        FftFilterType::BandPass | FftFilterType::BandBlock => {
+            auto_value(ui, "Lower Cutoff Frequency", &mut o.freq1, 0.1);
+            auto_value(ui, "Upper Cutoff Frequency", &mut o.freq2, 0.3);
+        }
+        FftFilterType::Threshold => auto_value(ui, "Threshold", &mut o.threshold, 1.0),
+        FftFilterType::LowPassParabolic => {
+            auto_value(ui, "Pass Frequency", &mut o.pass, 0.1);
+            auto_value(ui, "Stop Frequency", &mut o.stop, 0.3);
+        }
+    }
+    let offset = matches!(o.kind, FftFilterType::HighPass | FftFilterType::BandPass | FftFilterType::BandBlock);
+    ui.add_enabled(offset, egui::Checkbox::new(&mut o.keep_offset, "Keep DC offset"));
+    ui.weak("Auto: cutoffs at a quarter and three quarters of the Nyquist frequency, the threshold at a tenth of the largest magnitude.");
+}
+
+/// The options of Signal Processing > FFT > FFT, with Origin's names.
+fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
+    let o = &mut spec.options;
+    ui.horizontal(|ui| {
+        ui.label("Sampling interval");
+        ui.checkbox(&mut spec.auto_interval, "Auto")
+            .on_hover_text("The X step of the input column; 1 without an X column.");
+        ui.add_enabled(!spec.auto_interval, DragValue::new(&mut o.interval).speed(0.01).range(1e-300..=f64::MAX));
+    });
+    const WINDOWS: [(&str, FftWindow); 7] = [
+        ("Rectangle", FftWindow::Rectangle),
+        ("Welch", FftWindow::Welch),
+        ("Triangular", FftWindow::Triangular),
+        ("Bartlett", FftWindow::Bartlett),
+        ("Hanning", FftWindow::Hanning),
+        ("Hamming", FftWindow::Hamming),
+        ("Blackman", FftWindow::Blackman),
+    ];
+    ui.horizontal(|ui| {
+        ui.label("Window");
+        egui::ComboBox::from_id_salt("fft_window")
+            .selected_text(WINDOWS.iter().find(|w| w.1 == o.window).map_or("", |w| w.0))
+            .show_ui(ui, |ui| {
+                for (label, w) in WINDOWS {
+                    ui.selectable_value(&mut o.window, w, label);
+                }
+            });
+    });
+    ui.horizontal(|ui| {
+        ui.label("Window Correction");
+        ui.radio_value(&mut o.correction, WindowCorrection::None, "None");
+        ui.radio_value(&mut o.correction, WindowCorrection::Amplitude, "Amplitude");
+        ui.radio_value(&mut o.correction, WindowCorrection::Power, "Power");
+    });
+    ui.checkbox(&mut o.normalize, "Normalize Real, Imaginary and Magnitude");
+    ui.horizontal(|ui| {
+        ui.label("Spectrum Type");
+        ui.radio_value(&mut o.two_sided, false, "One-sided");
+        ui.radio_value(&mut o.two_sided, true, "Two-sided");
+    });
+    ui.add_enabled(o.two_sided, egui::Checkbox::new(&mut o.shift, "Shift (zero frequency in the middle)"));
+    ui.checkbox(&mut o.unwrap, "Unwrap Phase");
+    ui.horizontal(|ui| {
+        ui.label("Factor");
+        ui.radio_value(&mut o.science, false, "-1 (Electrical Engineering)");
+        ui.radio_value(&mut o.science, true, "+1 (Science)");
+    });
+    ui.horizontal(|ui| {
+        ui.label("Power");
+        ui.radio_value(&mut o.power, PowerNorm::Msa, "MSA");
+        ui.radio_value(&mut o.power, PowerNorm::Ssa, "SSA");
+        ui.radio_value(&mut o.power, PowerNorm::Tisa, "TISA");
+    })
+    .response
+    .on_hover_text("Mean square, sum square or time-interval square amplitude");
+}
+
 fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, String)> {
     let mut out = Vec::new();
     for book in project.workbooks() {
@@ -555,6 +750,22 @@ impl AnalysisDialog {
     }
 
     /// A window for running `kind` on `columns`. `None` when a column no longer exists.
+    /// Chooses the interpolation method (the Mathematics menu's Linear, Spline and B-Spline items).
+    pub fn set_interp_method(&mut self, method: InterpMethod) {
+        self.interp.method = method;
+    }
+
+    /// Mathematics > Interpolate/Extrapolate Y from X: the X values come from a column, at first the
+    /// first column of the sheet that is neither an input nor an input's X column.
+    pub fn set_interp_from_column(&mut self) {
+        self.interp_at = Some(self.interp_at_default);
+    }
+
+    #[cfg(test)]
+    pub fn interp_method(&self) -> InterpMethod {
+        self.interp.method
+    }
+
     pub fn new(project: &Project, kind: AnalysisKind, columns: Vec<ColumnId>) -> Option<Self> {
         let (_, sheet, _) = project.locate(*columns.first()?)?;
         let names: Vec<&str> =
@@ -573,7 +784,19 @@ impl AnalysisDialog {
             None => (1.0, rows_in_sheet as f64),
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
-        let reference_choices = reference_choices(project, &columns);
+        // Convolution and Correlation may use an input itself (autocorrelation, as Origin).
+        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
+        let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
+        // IFFT: the column right after the (first) input is the imaginary part, as an FFT sheet has it.
+        let next_column = columns.first().and_then(|c| {
+            let (_, sheet, _) = project.locate(*c)?;
+            let at = sheet.column_index(*c)?;
+            sheet.columns.get(at + 1).map(|n| n.id)
+        });
+        let first_reference = match (kind, next_column) {
+            (AnalysisKind::Ifft, Some(id)) => reference_choices.iter().position(|(c, _)| *c == id).unwrap_or(0),
+            _ => 0,
+        };
         let sheet_columns: Vec<(ColumnId, String)> = sheet
             .columns
             .iter()
@@ -582,6 +805,18 @@ impl AnalysisDialog {
                 (c.id, format!("{}{detail}", c.short_name))
             })
             .collect();
+        // Interpolate/Extrapolate Y from X: the X values come at first from the first column that is
+        // neither an input nor the X column of an input (that would give the data back).
+        let input_xs: Vec<ColumnId> = columns
+            .iter()
+            .filter_map(|id| sheet.column_index(*id).and_then(|i| sheet.x_for(i)).map(|c| c.id))
+            .collect();
+        let interp_at_default = sheet
+            .columns
+            .iter()
+            .position(|c| !columns.contains(&c.id) && !input_xs.contains(&c.id))
+            .or_else(|| sheet.columns.iter().position(|c| !columns.contains(&c.id)))
+            .unwrap_or(0);
         // The two-way ANOVA starts with the chosen columns as factor A, factor B and data, in this order.
         let mut stats = StatsOptions { paired: kind == AnalysisKind::SignedRankPaired, ..StatsOptions::default() };
         if kind == AnalysisKind::Crosstab {
@@ -606,11 +841,23 @@ impl AnalysisDialog {
             column_names: names.join(", "),
             ranges: vec![(x_lo, x_hi)],
             curve_op: CurveOp::Add,
-            use_reference: kind == AnalysisKind::SubtractRef || !reference_choices.is_empty(),
-            constant: 1.0,
+            // Origin's Simple Column Math starts on Constant 10.
+            use_reference: kind == AnalysisKind::SubtractRef
+                || (kind != AnalysisKind::ColumnMath && !reference_choices.is_empty()),
+            constant: if kind == AnalysisKind::ColumnMath { 10.0 } else { 1.0 },
             reference_choices,
-            reference: 0,
+            reference: first_reference,
             common_only: false,
+            signal_circular: false,
+            signal_normalize: false,
+            signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
+            level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1, details: false },
+            fft: FftSpec { auto_interval: true, ..Default::default() },
+            ifft: IfftSpec { auto_interval: true, ..Default::default() },
+            fft_filter: FftFilterSpec {
+                options: FftFilterOptions { keep_offset: true, ..Default::default() },
+                interval: None,
+            },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -634,19 +881,26 @@ impl AnalysisDialog {
             line: [x_lo, 0.0, x_hi, 0.0],
             interp: InterpSpec { range: Some((x_lo, x_hi)), ..InterpSpec::default() },
             interp_own_range: false,
+            interp_at: None,
+            interp_at_default,
             peaks: PeakOptions::default(),
             peak_keep: PeakKeep::Default,
             peak_height: 0.0,
             peak_count: 1,
-            chain_baseline: ChainBaselineKind::Minima,
+            chain_baseline: ChainBaselineKind::Constant,
             chain_minima: 5,
+            chain_const: Some(BaselineStat::Minimum),
+            chain_custom_y: 0.0,
             find_method: 0,
             chain_half_height: false,
-            chain_integrate: true,
-            chain_fit: None,
+            chain_goal: ChainGoal::Integrate,
+            chain_page: 0,
+            chain_fit: PeakShape::Gauss,
             chain_fit_linear: true,
             stats,
             curves: Default::default(),
+            bin2d: Default::default(),
+            discfreq: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
@@ -656,7 +910,12 @@ impl AnalysisDialog {
             preview: None,
             preview_request: None,
             recalc: RecalcMode::Manual,
-            output_choice: OutputChoice::NextToInput,
+            // Origin writes Simple Column Math back into its input column.
+            output_choice: if kind == AnalysisKind::ColumnMath {
+                OutputChoice::Existing
+            } else {
+                OutputChoice::NextToInput
+            },
             output_existing: Vec::new(),
             auto_apply: false,
             applied: None,
@@ -665,6 +924,205 @@ impl AnalysisDialog {
             failed_key: None,
             undo_token: next_undo_token(),
         })
+    }
+
+    /// The peak search controls of Find Peaks and of the Peak Analyzer's Find Peaks page.
+    fn peak_search_controls(&mut self, ui: &mut egui::Ui, chain: bool) {
+        if chain {
+            ui.horizontal(|ui| {
+                ui.label("Method");
+                egui::ComboBox::from_id_salt("peak_find_method")
+                    .selected_text(FIND_METHODS[self.find_method].0)
+                    .show_ui(ui, |ui| {
+                        for (i, (name, _)) in FIND_METHODS.iter().enumerate() {
+                            ui.selectable_value(&mut self.find_method, i, *name);
+                        }
+                    });
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.label("Direction");
+            ui.radio_value(&mut self.peaks.direction, PeakDirection::Both, "Both");
+            ui.radio_value(&mut self.peaks.direction, PeakDirection::Positive, "Positive");
+            ui.radio_value(&mut self.peaks.direction, PeakDirection::Negative, "Negative");
+        });
+        ui.horizontal(|ui| {
+            ui.label("Neighbours compared on each side");
+            ui.add(DragValue::new(&mut self.peaks.npts).range(1..=10_000));
+        });
+        ui.radio_value(&mut self.peak_keep, PeakKeep::Default, "Keep peaks of at least 20 % of the largest");
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.peak_keep, PeakKeep::Height, "Keep peaks of at least this height");
+            ui.add_enabled(self.peak_keep == PeakKeep::Height, DragValue::new(&mut self.peak_height).speed(0.01));
+        });
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.peak_keep, PeakKeep::Count, "Keep only the highest");
+            ui.add_enabled(self.peak_keep == PeakKeep::Count, DragValue::new(&mut self.peak_count).range(1..=10_000));
+        });
+        ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+    }
+
+    /// Origin's Peak Analyzer as a wizard: the page list of the goal, Prev and Next, and the page
+    /// (analysis-tools.md 11.1). OK runs it (Origin's Finish).
+    fn peak_wizard(&mut self, ui: &mut egui::Ui) {
+        let pages = self.chain_goal.pages();
+        self.chain_page = self.chain_page.min(pages.len());
+        let current = if self.chain_page == 0 { "Goal" } else { pages[self.chain_page - 1] };
+        egui::Frame::new().fill(egui::Color32::BLACK).inner_margin(6.0).show(ui, |ui| {
+            ui.set_min_width(260.0);
+            ui.vertical(|ui| {
+                let mut go = None;
+                let goal = format!("Goal - {}", self.chain_goal.name());
+                let items = std::iter::once(goal.as_str()).chain(pages.iter().copied());
+                for (k, name) in items.enumerate() {
+                    let here = k == self.chain_page;
+                    let marker = if here {
+                        "\u{25A0}"
+                    } else if k < self.chain_page {
+                        "\u{25A3}"
+                    } else {
+                        "\u{25A1}"
+                    };
+                    let indent = if k == 0 { "" } else { "    " };
+                    let color = if here { egui::Color32::WHITE } else { egui::Color32::YELLOW };
+                    let mut text = egui::RichText::new(format!("{indent}{marker} {name}")).color(color);
+                    if here {
+                        text = text.strong();
+                    }
+                    if ui.add(egui::Label::new(text).sense(egui::Sense::click())).clicked() {
+                        go = Some(k);
+                    }
+                }
+                if let Some(k) = go {
+                    self.chain_page = k;
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            if ui.add_enabled(self.chain_page > 0, egui::Button::new("Prev")).clicked() {
+                self.chain_page -= 1;
+            }
+            // Next stops on the last page before Finish, as in Origin.
+            if ui.add_enabled(self.chain_page + 1 < pages.len(), egui::Button::new("Next")).clicked() {
+                self.chain_page += 1;
+            }
+            ui.weak("OK runs the analysis (Origin's Finish).");
+        });
+        ui.separator();
+        match current {
+            "Goal" => {
+                ui.label(egui::RichText::new("Define a baseline, find and integrate peaks").strong());
+                ui.horizontal(|ui| {
+                    ui.label("Goal");
+                    ui.vertical(|ui| {
+                        for g in [
+                            ChainGoal::Integrate,
+                            ChainGoal::CreateBaseline,
+                            ChainGoal::SubtractBaseline,
+                            ChainGoal::Find,
+                            ChainGoal::Fit,
+                        ] {
+                            let offered = !matches!(g, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline);
+                            let r = ui.add_enabled_ui(offered, |ui| ui.radio_value(&mut self.chain_goal, g, g.name()));
+                            if !offered {
+                                r.response.on_disabled_hover_text(
+                                    "Not offered yet: use Analysis > Peaks and Baseline > Baseline",
+                                );
+                            }
+                        }
+                    });
+                });
+            }
+            "Baseline Mode" => {
+                const MODES: [(&str, Option<ChainBaselineKind>); 8] = [
+                    ("Constant", Some(ChainBaselineKind::Constant)),
+                    ("User Defined", Some(ChainBaselineKind::Minima)),
+                    ("Use Existing Dataset", None),
+                    ("XPS", None),
+                    ("None (Y=0)", Some(ChainBaselineKind::None)),
+                    ("End Points Weighted", None),
+                    ("Straight Line", Some(ChainBaselineKind::EndPoints)),
+                    ("Asymmetric Least Squares Smoothing", None),
+                ];
+                let name = MODES.iter().find(|m| m.1 == Some(self.chain_baseline)).map_or("", |m| m.0);
+                ui.horizontal(|ui| {
+                    ui.label("Baseline Mode");
+                    egui::ComboBox::from_id_salt("pa_basemode").selected_text(name).width(240.0).show_ui(ui, |ui| {
+                        for (label, kind) in MODES {
+                            match kind {
+                                Some(k) => {
+                                    ui.selectable_value(&mut self.chain_baseline, k, label);
+                                }
+                                None => {
+                                    ui.add_enabled(false, egui::Button::selectable(false, label));
+                                }
+                            }
+                        }
+                    });
+                });
+                match self.chain_baseline {
+                    ChainBaselineKind::Constant => {
+                        ui.horizontal(|ui| {
+                            ui.label("Y =");
+                            for (label, stat) in [
+                                ("Minimum", Some(BaselineStat::Minimum)),
+                                ("Maximum", Some(BaselineStat::Maximum)),
+                                ("Mean", Some(BaselineStat::Mean)),
+                                ("Median", Some(BaselineStat::Median)),
+                                ("Custom", None),
+                            ] {
+                                ui.radio_value(&mut self.chain_const, stat, label);
+                            }
+                            ui.add_enabled(
+                                self.chain_const.is_none(),
+                                DragValue::new(&mut self.chain_custom_y).speed(0.01),
+                            );
+                        });
+                    }
+                    ChainBaselineKind::Minima => {
+                        ui.horizontal(|ui| {
+                            ui.label("Anchor points: the lowest point of each of");
+                            ui.add(DragValue::new(&mut self.chain_minima).range(2..=1000));
+                            ui.label("stretches (Sheaf's way of finding them)");
+                        });
+                    }
+                    ChainBaselineKind::EndPoints => {
+                        ui.weak("The line through the first and the last point.");
+                    }
+                    ChainBaselineKind::None => {}
+                }
+            }
+            "Baseline Treatment" => {
+                ui.add_enabled(false, egui::Checkbox::new(&mut false, "Auto Subtract Baseline"));
+                ui.add_enabled(false, egui::Checkbox::new(&mut false, "Auto Rescale"));
+                ui.weak(
+                    "The peaks are measured from the baseline; a column with the baseline is written beside the data.",
+                );
+            }
+            "Find Peaks" => self.peak_search_controls(ui, true),
+            "Integrate Peaks" => {
+                ui.horizontal(|ui| {
+                    ui.label("Integrate From");
+                    ui.add_enabled(false, egui::Button::selectable(true, "Baseline"));
+                });
+                ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak (Sheaf's own)");
+                ui.weak(
+                    "Quantities: Peak Area, Percent Area (of the whole curve's area), Row Index, Beginning X, \
+                     Ending X, Peak Center, Peak Height, FWHM.",
+                );
+            }
+            "Fit Peaks" => {
+                ui.horizontal(|ui| {
+                    ui.label("Function");
+                    ui.radio_value(&mut self.chain_fit, PeakShape::Gauss, "Gauss");
+                    ui.radio_value(&mut self.chain_fit, PeakShape::Lorentz, "Lorentz");
+                });
+                ui.checkbox(&mut self.chain_fit_linear, "Sloped baseline in the fit");
+            }
+            _ => {
+                ui.label(format!("{}: press OK to run it.", self.chain_goal.name()));
+            }
+        }
     }
 
     fn tool(&self) -> Result<Tool, String> {
@@ -690,7 +1148,55 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
+            AnalysisKind::Hilbert => Tool::Hilbert,
+            AnalysisKind::Fft => Tool::Fft(self.fft),
+            AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
+            AnalysisKind::Ifft => {
+                let imaginary = if self.use_reference {
+                    Some(
+                        self.reference_choices
+                            .get(self.reference)
+                            .map(|(id, _)| *id)
+                            .ok_or("there is no other column with numbers to use as the imaginary part")?,
+                    )
+                } else {
+                    None
+                };
+                Tool::Ifft(IfftSpec { imaginary, ..self.ifft })
+            }
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+                let other = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or("there is no other column with numbers to use as the second signal")?;
+                let (circular, normalize) = (self.signal_circular, self.signal_normalize);
+                if self.kind == AnalysisKind::Convolution {
+                    Tool::Convolution(ConvolutionSpec {
+                        response: other,
+                        circular,
+                        normalize,
+                        interval: self.signal_interval,
+                    })
+                } else {
+                    let interval = self.signal_interval.unwrap_or(1.0);
+                    Tool::SignalCorrelation(SignalCorrelationSpec { other, circular, normalize, interval })
+                }
+            }
+            AnalysisKind::ColumnMath => {
+                let operand = if self.use_reference {
+                    self.reference_choices
+                        .get(self.reference)
+                        .map(|(id, _)| CurveOperand::Reference(*id))
+                        .ok_or("there is no other column with numbers to use as the operand")?
+                } else {
+                    CurveOperand::Constant(self.constant)
+                };
+                Tool::ColumnMath(ColumnMathSpec { op: self.curve_op, operand })
+            }
             AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceDup
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
@@ -725,6 +1231,7 @@ impl AnalysisDialog {
             }),
             AnalysisKind::Interpolate => Tool::Interpolate(InterpSpec {
                 range: if self.interp_own_range { self.interp.range } else { None },
+                at: self.interp_at.and_then(|i| self.sheet_columns.get(i)).map(|(id, _)| *id),
                 ..self.interp
             }),
             AnalysisKind::Peaks => Tool::FindPeaks(PeakOptions {
@@ -739,6 +1246,10 @@ impl AnalysisDialog {
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
                 chain: ChainOptions {
                     baseline: match self.chain_baseline {
+                        ChainBaselineKind::Constant => match self.chain_const {
+                            Some(stat) => ChainBaseline::ConstantStat(stat),
+                            None => ChainBaseline::Constant(self.chain_custom_y),
+                        },
                         ChainBaselineKind::None => ChainBaseline::None,
                         ChainBaselineKind::EndPoints => ChainBaseline::EndPoints,
                         ChainBaselineKind::Minima => ChainBaseline::AutoMinima(self.chain_minima),
@@ -757,9 +1268,9 @@ impl AnalysisDialog {
                     },
                     limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
                 },
-                integrate: self.chain_integrate,
-                fit: self.chain_fit.map(|shape| PeakFitSpec {
-                    shape,
+                integrate: self.chain_goal == ChainGoal::Integrate,
+                fit: (self.chain_goal == ChainGoal::Fit).then_some(PeakFitSpec {
+                    shape: self.chain_fit,
                     baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
                 }),
             }),
@@ -778,13 +1289,10 @@ impl AnalysisDialog {
             }),
             AnalysisKind::Anova => Tool::Anova(AnovaSpec {
                 alpha: self.stats.alpha,
-                comparison: COMPARISONS[self.stats.comparison].1,
+                comparison: self.stats.comparison,
                 control: self.stats.control,
             }),
             AnalysisKind::Crosstab => Tool::Crosstab(CrosstabSpec { alpha: self.stats.alpha, ..self.stats.cross }),
-            AnalysisKind::Bin2d => Tool::Bin2d(Bin2dSpec {
-                bins: Bin2dOptions { x: self.stats.axes[0].axis(), y: self.stats.axes[1].axis() },
-            }),
             AnalysisKind::Histogram => Tool::Histogram(HistogramSpec {
                 freq: FreqOptions {
                     min: self.stats.own_range.then_some(self.stats.bin_min),
@@ -799,6 +1307,8 @@ impl AnalysisDialog {
                 },
                 graph: self.stats.graph,
             }),
+            AnalysisKind::Binning2D => Tool::Binning2D(self.bin2d.options()),
+            AnalysisKind::DiscreteFreq => Tool::DiscreteFrequency(self.discfreq),
             AnalysisKind::Normality => Tool::Normality(NormalitySpec { alpha: self.stats.alpha }),
             AnalysisKind::Anova2 => {
                 let layout = if self.stats.two_way_raw {
@@ -815,7 +1325,7 @@ impl AnalysisDialog {
                 Tool::TwoWayAnova(TwoWayAnovaSpec {
                     layout,
                     interaction: self.stats.two_way_interaction,
-                    comparison: COMPARISONS[self.stats.comparison].1,
+                    comparison: self.stats.comparison,
                     alpha: self.stats.alpha,
                 })
             }
@@ -883,12 +1393,20 @@ impl AnalysisDialog {
 
     /// The reference list and the options that belong to it.
     fn reference_options(&mut self, ui: &mut egui::Ui) {
+        let column_math = self.kind == AnalysisKind::ColumnMath;
+        let label = match self.kind {
+            AnalysisKind::ColumnMath => "Column",
+            AnalysisKind::Convolution => "Response",
+            AnalysisKind::SignalCorrelation => "Second signal",
+            AnalysisKind::Ifft => "Imaginary",
+            _ => "Reference",
+        };
         let text = match self.reference_choices.get(self.reference) {
             Some((_, label)) => label.as_str(),
             None => "(no other column with numbers)",
         };
         ui.horizontal(|ui| {
-            ui.label("Reference");
+            ui.label(label);
             let mut chosen = self.reference;
             egui::ComboBox::from_id_salt("reference_column").selected_text(text).width(300.0).show_ui(ui, |ui| {
                 for (i, (_, label)) in self.reference_choices.iter().enumerate() {
@@ -897,6 +1415,13 @@ impl AnalysisDialog {
             });
             self.reference = chosen;
         });
+        if column_math {
+            ui.weak("Row by row, without X values; rows past the end of the column count as 0.");
+            return;
+        }
+        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft) {
+            return;
+        }
         ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
             "Only where data and reference both have X values; the result goes to a new sheet. Otherwise the \
              reference is continued as a straight line outside its range.",
@@ -931,6 +1456,7 @@ impl AnalysisDialog {
                 );
             }
             AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceDup
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
@@ -939,7 +1465,81 @@ impl AnalysisDialog {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
             }
-            AnalysisKind::CurveMath => {
+            AnalysisKind::Fft => fft_options(ui, &mut self.fft),
+            AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
+            AnalysisKind::Ifft => {
+                ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
+                    ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
+                });
+                ui.add_enabled_ui(self.use_reference, |ui| self.reference_options(ui));
+                let spec = &mut self.ifft;
+                ui.horizontal(|ui| {
+                    ui.label("Sampling interval");
+                    ui.checkbox(&mut spec.auto_interval, "Auto")
+                        .on_hover_text("The X step of the input column (its frequency step); 1 without an X column.");
+                    ui.add_enabled(
+                        !spec.auto_interval,
+                        DragValue::new(&mut spec.options.interval).speed(0.01).range(1e-300..=f64::MAX),
+                    );
+                });
+                ui.checkbox(&mut spec.options.shift, "Shift (the input has the zero frequency in the middle)");
+                ui.checkbox(&mut spec.options.unwrap, "Unwrap Phase");
+                ui.horizontal(|ui| {
+                    ui.label("Factor");
+                    ui.radio_value(&mut spec.options.science, false, "-1 (Electrical Engineering)");
+                    ui.radio_value(&mut spec.options.science, true, "+1 (Science)");
+                });
+            }
+            AnalysisKind::Hilbert => {
+                ui.weak(
+                    "Writes the Hilbert transform of each input column. Origin also writes the analytic signal as a \
+                     complex column, whose real part is the input and whose imaginary part is this transform.",
+                );
+            }
+            AnalysisKind::LevelCrossing => {
+                let spec = &mut self.level_crossing;
+                ui.horizontal(|ui| {
+                    ui.label("Level");
+                    ui.add(DragValue::new(&mut spec.level).speed(0.01));
+                });
+                ui.checkbox(&mut spec.details, "Also output directions, X indices and Y crossing values");
+                ui.horizontal(|ui| {
+                    ui.label("Row of a crossing between rows");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Nearest, "Any");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Left, "Left");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Right, "Right");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Minimum rows between a pair");
+                    ui.add(DragValue::new(&mut spec.min_gap).range(1..=1_000_000));
+                })
+                .response
+                .on_hover_text("Both crossings of a pair closer than this are dropped (Origin's pts).");
+            }
+            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+                self.reference_options(ui);
+                ui.horizontal(|ui| {
+                    ui.label("Type");
+                    ui.radio_value(&mut self.signal_circular, false, "Linear");
+                    ui.radio_value(&mut self.signal_circular, true, "Circular");
+                });
+                ui.checkbox(&mut self.signal_normalize, "Normalize");
+                ui.horizontal(|ui| {
+                    ui.label("Sampling interval");
+                    if self.kind == AnalysisKind::Convolution {
+                        let mut auto = self.signal_interval.is_none();
+                        if ui.checkbox(&mut auto, "Auto").changed() {
+                            self.signal_interval = if auto { None } else { Some(1.0) };
+                        }
+                    }
+                    if let Some(d) = &mut self.signal_interval {
+                        ui.add(DragValue::new(d).speed(0.01).range(1e-300..=f64::MAX));
+                    } else {
+                        ui.weak("the X step of the input");
+                    }
+                });
+            }
+            AnalysisKind::CurveMath | AnalysisKind::ColumnMath => {
                 ui.horizontal(|ui| {
                     ui.label("Operator");
                     egui::ComboBox::from_id_salt("curve_op")
@@ -1138,11 +1738,39 @@ impl AnalysisDialog {
                     });
                 }
                 ui.horizontal(|ui| {
-                    ui.label("Number of points");
-                    ui.add(DragValue::new(&mut self.interp.npts).range(2..=10_000_000));
+                    ui.label("Outside the data");
+                    use sheaf_core::analysis::Extrapolation as E;
+                    ui.radio_value(&mut self.interp.extrapolation, E::Extrapolate, "Extrapolate");
+                    ui.radio_value(&mut self.interp.extrapolation, E::Missing, "Missing value");
+                    ui.radio_value(&mut self.interp.extrapolation, E::Repeat, "Repeat the end value");
                 });
-                ui.checkbox(&mut self.interp_own_range, "Choose the X range of the result");
-                ui.add_enabled_ui(self.interp_own_range, |ui| {
+                let mut from_column = self.interp_at.is_some();
+                if ui.checkbox(&mut from_column, "Interpolate at the X values of a column").changed() {
+                    if from_column {
+                        self.set_interp_from_column();
+                    } else {
+                        self.interp_at = None;
+                    }
+                }
+                if let Some(at) = &mut self.interp_at {
+                    let names = &self.sheet_columns;
+                    egui::ComboBox::from_id_salt("interp_at_column")
+                        .selected_text(names.get(*at).map_or("", |(_, n)| n.as_str()))
+                        .show_ui(ui, |ui| {
+                            for (k, (_, name)) in names.iter().enumerate() {
+                                ui.selectable_value(at, k, name);
+                            }
+                        });
+                }
+                let grid = self.interp_at.is_none();
+                ui.add_enabled_ui(grid, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Number of points");
+                        ui.add(DragValue::new(&mut self.interp.npts).range(2..=10_000_000));
+                    });
+                    ui.checkbox(&mut self.interp_own_range, "Choose the X range of the result");
+                });
+                ui.add_enabled_ui(grid && self.interp_own_range, |ui| {
                     let (mut lo, mut hi) = self.interp.range.unwrap_or((0.0, 1.0));
                     ui.horizontal(|ui| {
                         ui.label("X from");
@@ -1153,88 +1781,24 @@ impl AnalysisDialog {
                     self.interp.range = Some((lo, hi));
                 });
             }
-            AnalysisKind::Peaks | AnalysisKind::PeakChain => {
-                let chain = self.kind == AnalysisKind::PeakChain;
-                if chain {
-                    ui.horizontal(|ui| {
-                        ui.label("Baseline");
-                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::None, "None");
-                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::EndPoints, "End points");
-                        ui.radio_value(&mut self.chain_baseline, ChainBaselineKind::Minima, "Lowest points of");
-                        ui.add_enabled(
-                            self.chain_baseline == ChainBaselineKind::Minima,
-                            DragValue::new(&mut self.chain_minima).range(2..=1000),
-                        );
-                        ui.label("stretches");
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Search method");
-                        egui::ComboBox::from_id_salt("peak_find_method")
-                            .selected_text(FIND_METHODS[self.find_method].0)
-                            .show_ui(ui, |ui| {
-                                for (i, (name, _)) in FIND_METHODS.iter().enumerate() {
-                                    ui.selectable_value(&mut self.find_method, i, *name);
-                                }
-                            });
-                    });
-                }
+            AnalysisKind::PeakChain => self.peak_wizard(ui),
+            AnalysisKind::Peaks => {
+                self.peak_search_controls(ui, false);
                 ui.horizontal(|ui| {
-                    ui.label("Direction");
-                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Both, "Both");
-                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Positive, "Positive");
-                    ui.radio_value(&mut self.peaks.direction, PeakDirection::Negative, "Negative");
+                    ui.label("Smoothing points before the search");
+                    ui.add(DragValue::new(&mut self.peaks.smooth_points).range(0..=1001));
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Neighbours compared on each side");
-                    ui.add(DragValue::new(&mut self.peaks.npts).range(1..=10_000));
-                });
-                ui.radio_value(&mut self.peak_keep, PeakKeep::Default, "Keep peaks of at least 20 % of the largest");
-                ui.horizontal(|ui| {
-                    ui.radio_value(&mut self.peak_keep, PeakKeep::Height, "Keep peaks of at least this height");
-                    ui.add_enabled(
-                        self.peak_keep == PeakKeep::Height,
-                        DragValue::new(&mut self.peak_height).speed(0.01),
-                    );
+                    ui.label("Foot height");
+                    ui.add(DragValue::new(&mut self.peaks.foot_height).speed(0.01).range(0.0..=f64::MAX));
                 });
                 ui.horizontal(|ui| {
-                    ui.radio_value(&mut self.peak_keep, PeakKeep::Count, "Keep only the highest");
-                    ui.add_enabled(
-                        self.peak_keep == PeakKeep::Count,
-                        DragValue::new(&mut self.peak_count).range(1..=10_000),
-                    );
+                    let mut limited = self.peaks.max_half_width.is_some();
+                    ui.checkbox(&mut limited, "Limit the distance of the feet from the peak");
+                    let mut w = self.peaks.max_half_width.unwrap_or(1.0);
+                    ui.add_enabled(limited, DragValue::new(&mut w).speed(0.01).range(0.0..=f64::MAX));
+                    self.peaks.max_half_width = limited.then_some(w);
                 });
-                ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
-                if !chain {
-                    ui.horizontal(|ui| {
-                        ui.label("Smoothing points before the search");
-                        ui.add(DragValue::new(&mut self.peaks.smooth_points).range(0..=1001));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Foot height");
-                        ui.add(DragValue::new(&mut self.peaks.foot_height).speed(0.01).range(0.0..=f64::MAX));
-                    });
-                    ui.horizontal(|ui| {
-                        let mut limited = self.peaks.max_half_width.is_some();
-                        ui.checkbox(&mut limited, "Limit the distance of the feet from the peak");
-                        let mut w = self.peaks.max_half_width.unwrap_or(1.0);
-                        ui.add_enabled(limited, DragValue::new(&mut w).speed(0.01).range(0.0..=f64::MAX));
-                        self.peaks.max_half_width = limited.then_some(w);
-                    });
-                }
-                if chain {
-                    ui.checkbox(&mut self.chain_half_height, "Integrate only the upper half of each peak");
-                    ui.checkbox(&mut self.chain_integrate, "Integrate every peak (area, area %, FWHM, limits)");
-                    ui.horizontal(|ui| {
-                        ui.label("Fit all peaks together");
-                        ui.radio_value(&mut self.chain_fit, None, "No fit");
-                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Gauss), "Gauss");
-                        ui.radio_value(&mut self.chain_fit, Some(PeakShape::Lorentz), "Lorentz");
-                    });
-                    ui.add_enabled(
-                        self.chain_fit.is_some(),
-                        egui::Checkbox::new(&mut self.chain_fit_linear, "Sloped baseline in the fit"),
-                    );
-                }
             }
             AnalysisKind::Statistics => {
                 let d = &mut self.stats.desc;
@@ -1306,15 +1870,9 @@ impl AnalysisDialog {
                 ui.label("Every chosen column is a group.");
                 ui.horizontal(|ui| {
                     ui.label("Means comparison");
-                    egui::ComboBox::from_id_salt("anova_comparison")
-                        .selected_text(COMPARISONS[st.comparison].0)
-                        .show_ui(ui, |ui| {
-                            for (i, (label, _)) in COMPARISONS.iter().enumerate() {
-                                ui.selectable_value(&mut st.comparison, i, *label);
-                            }
-                        });
+                    comparison_combo(ui, "anova_comparison", &mut st.comparison, &COMPARISONS_ONE_WAY);
                 });
-                if COMPARISONS[st.comparison].1 == Some(MeansComparison::Dunnett) {
+                if st.comparison == Some(MeansComparison::Dunnett) {
                     let names: Vec<&str> = self.column_names.split(", ").collect();
                     st.control = st.control.min(names.len().saturating_sub(1));
                     ui.horizontal(|ui| {
@@ -1328,8 +1886,8 @@ impl AnalysisDialog {
                             });
                     });
                     ui.weak("Every other group is compared with the control; p-values and limits are adjusted for all of them.");
-                } else if COMPARISONS[st.comparison].1 == Some(MeansComparison::Holm) {
-                    ui.weak("Holm's step-down adjustment of all pairs; it gives adjusted p-values but no confidence limits.");
+                } else if st.comparison.is_some_and(MeansComparison::is_holm) {
+                    ui.weak("Step-down adjustment of all pairs; it gives adjusted p-values but no confidence limits.");
                 }
                 ui.horizontal(|ui| {
                     ui.label("Significance level");
@@ -1378,18 +1936,12 @@ impl AnalysisDialog {
                     ui.weak("The factor columns may hold text or numbers; one row of the sheet is one observation.");
                 }
                 ui.checkbox(&mut st.two_way_interaction, "Interaction of the two factors");
+                if st.comparison.is_some_and(MeansComparison::is_holm) {
+                    st.comparison = Some(MeansComparison::Tukey);
+                }
                 ui.horizontal(|ui| {
                     ui.label("Means comparison");
-                    egui::ComboBox::from_id_salt("anova2_comparison")
-                        .selected_text(COMPARISONS[st.comparison].0)
-                        .show_ui(ui, |ui| {
-                            // Dunnett's test needs one control group: one-way ANOVA only.
-                            for (i, (label, m)) in COMPARISONS.iter().enumerate() {
-                                if *m != Some(MeansComparison::Dunnett) {
-                                    ui.selectable_value(&mut st.comparison, i, *label);
-                                }
-                            }
-                        });
+                    comparison_combo(ui, "anova2_comparison", &mut st.comparison, &COMPARISONS_TWO_WAY);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Significance level");
@@ -1423,17 +1975,6 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
-            }
-            AnalysisKind::Bin2d => {
-                let st = &mut self.stats;
-                let names: Vec<&str> = self.column_names.split(", ").collect();
-                ui.label(format!(
-                    "X: {}    Y: {}    (the first chosen column is X, the second Y)",
-                    names.first().copied().unwrap_or("-"),
-                    names.get(1).copied().unwrap_or("choose a second column")
-                ));
-                st.axes[0].ui(ui, "X");
-                st.axes[1].ui(ui, "Y");
             }
             AnalysisKind::MannWhitney => {
                 let st = &mut self.stats;
@@ -1573,6 +2114,39 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::DiscreteFreq => {
+                let d = &mut self.discfreq;
+                egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
+                    ui.checkbox(&mut d.count, "Count");
+                    ui.checkbox(&mut d.relative, "Relative Frequency");
+                    ui.checkbox(&mut d.cumulative, "Cumulative Frequency");
+                    ui.add_enabled_ui(d.relative || d.cumulative, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Frequency in");
+                            ui.radio_value(&mut d.percent, false, "Fraction");
+                            ui.radio_value(&mut d.percent, true, "Percent");
+                        });
+                    });
+                });
+                ui.checkbox(&mut d.case_sensitive, "Case Sensitive");
+                ui.horizontal(|ui| {
+                    ui.label("Sort Data by");
+                    egui::ComboBox::from_id_salt("discfreq-sort").selected_text(d.sort.label()).show_ui(ui, |ui| {
+                        for s in DiscSort::ALL {
+                            ui.selectable_value(&mut d.sort, s, s.label());
+                        }
+                    });
+                });
+            }
+            AnalysisKind::Binning2D => {
+                let mut names = self.column_names.split(", ");
+                let (x, y) = match (names.next(), names.next()) {
+                    (Some(a), Some(b)) if self.columns.len() >= 2 => (format!("{a}(X)"), format!("{b}(Y)")),
+                    (Some(a), _) => ("X".to_string(), format!("{a}(Y)")),
+                    _ => ("X".to_string(), "Y".to_string()),
+                };
+                self.bin2d.ui(ui, &x, &y);
+            }
             AnalysisKind::AverageCurves => self.curves.average_ui(ui, self.columns.len()),
             AnalysisKind::Intersect => self.curves.intersect_ui(ui),
             AnalysisKind::PolygonArea => {
@@ -1602,6 +2176,12 @@ impl AnalysisDialog {
         self.preview.as_ref()?.as_ref().ok().map(|d| (d.rx.clone(), d.ry.clone()))
     }
 
+    /// Sets the Level Crossing level as the dialog's field would (for tests).
+    #[cfg(test)]
+    pub fn set_crossing_level(&mut self, level: f64) {
+        self.level_crossing.level = level;
+    }
+
     /// Sets the Curve Translate shift as the dialog's field would (for tests).
     #[cfg(test)]
     pub fn set_translate_by(&mut self, by: f64) {
@@ -1624,6 +2204,14 @@ impl AnalysisDialog {
             AnalysisKind::Normalize => "normalize",
             AnalysisKind::Baseline => "baseline",
             AnalysisKind::SubtractRef | AnalysisKind::CurveMath => "curvemath",
+            AnalysisKind::ColumnMath => "vmathtool",
+            AnalysisKind::Convolution => "conv",
+            AnalysisKind::SignalCorrelation => "corr1",
+            AnalysisKind::LevelCrossing => "levelcrossing",
+            AnalysisKind::Hilbert => "hilbert",
+            AnalysisKind::Fft => "fft1",
+            AnalysisKind::FftFilter => "fft_filters",
+            AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -1631,6 +2219,8 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "ttest",
             AnalysisKind::Anova => "anova1",
             AnalysisKind::Histogram => "freqcounts",
+            AnalysisKind::Binning2D => "twoDBinning",
+            AnalysisKind::DiscreteFreq => "discfreqs",
             AnalysisKind::Normality => "normtest",
             AnalysisKind::Anova2 => "anova2",
             AnalysisKind::MannWhitney => "mannwhitney",
@@ -1647,9 +2237,9 @@ impl AnalysisDialog {
             AnalysisKind::AverageCurves => "avecurves",
             AnalysisKind::Intersect => "intersect",
             AnalysisKind::PolygonArea => "polyarea",
+            AnalysisKind::ReduceDup => "reducedup",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
             AnalysisKind::Crosstab
-            | AnalysisKind::Bin2d
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -1677,6 +2267,16 @@ impl AnalysisDialog {
             AnalysisKind::Baseline => "Subtract a baseline from the input curves",
             AnalysisKind::SubtractRef => "Subtract a reference curve from the input curves",
             AnalysisKind::CurveMath => "Add, subtract, multiply, divide or raise to a power with a constant or a curve",
+            AnalysisKind::ColumnMath => {
+                "Add, subtract, multiply, divide or raise to a power with a constant or a column, row by row"
+            }
+            AnalysisKind::Convolution => "Convolve the input signals with a response",
+            AnalysisKind::SignalCorrelation => "Correlate the input signals with a second signal",
+            AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
+            AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
+            AnalysisKind::Fft => "The frequency spectrum of the input signals",
+            AnalysisKind::FftFilter => "Remove frequencies from the input signals",
+            AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -1684,6 +2284,8 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "Test the means of one or two samples",
             AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
             AnalysisKind::Histogram => "Count the values of the input columns in bins",
+            AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
+            AnalysisKind::DiscreteFreq => "Count how often each distinct value, text or number, occurs",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
             AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
@@ -1700,12 +2302,12 @@ impl AnalysisDialog {
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
             }
-            AnalysisKind::Bin2d => "Count the (X, Y) pairs in a grid of bins",
             AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
             AnalysisKind::Intersect => "Find the points where two curves meet",
             AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
             AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
+            AnalysisKind::ReduceDup => "Replace the points that share an X value by one point",
             AnalysisKind::ReduceX => "Reduce the input curves to evenly spaced X values",
             AnalysisKind::TranslateX => "Shift the input curves horizontally",
             AnalysisKind::TranslateY => "Shift the input curves vertically",
@@ -1725,7 +2327,15 @@ impl AnalysisDialog {
             | AnalysisKind::Baseline
             | AnalysisKind::Smooth
             | AnalysisKind::SubtractRef
-            | AnalysisKind::CurveMath => "New columns beside the input",
+            | AnalysisKind::CurveMath
+            | AnalysisKind::ColumnMath
+            | AnalysisKind::Hilbert
+            | AnalysisKind::FftFilter => "New columns beside the input",
+            AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
+            AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
+            AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
+            AnalysisKind::Fft => "Eight spectrum columns per input in a new sheet",
+            AnalysisKind::Ifft => "Time, real, imaginary, amplitude and phase in a new sheet",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
@@ -1735,6 +2345,8 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
             AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
+            AnalysisKind::Binning2D => "One row per X bin and one column per Y bin in a new sheet",
+            AnalysisKind::DiscreteFreq => "The values and their counts and frequencies in a new sheet",
             AnalysisKind::Normality => {
                 "Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson in a new sheet"
             }
@@ -1759,7 +2371,6 @@ impl AnalysisDialog {
             AnalysisKind::Crosstab => {
                 "Counts, percentages, expected counts and the chi-square and Fisher tests in a new sheet"
             }
-            AnalysisKind::Bin2d => "The matrix of counts (X bins down, Y bins across) in a new sheet",
             AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
             AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
             AnalysisKind::PolygonArea => {
@@ -1769,7 +2380,9 @@ impl AnalysisDialog {
             AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
                 "New columns beside the input"
             }
-            AnalysisKind::ReduceX | AnalysisKind::TranslateX => "The curves in a new sheet with their own X column",
+            AnalysisKind::ReduceDup | AnalysisKind::ReduceX | AnalysisKind::TranslateX => {
+                "The curves in a new sheet with their own X column"
+            }
         }
     }
 
@@ -1786,6 +2399,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Interpolate
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::ColumnMath
         ) || super::manip_options::handles(self.kind)
     }
 
@@ -1800,9 +2414,11 @@ impl AnalysisDialog {
             return;
         }
         self.column_names = names.join(", ");
-        self.reference_choices = reference_choices(project, &columns);
+        let signal =
+            matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
+        self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
-        if self.kind == AnalysisKind::CurveMath {
+        if matches!(self.kind, AnalysisKind::CurveMath | AnalysisKind::ColumnMath) {
             self.use_reference = self.use_reference && !self.reference_choices.is_empty();
         }
         if self.kind == AnalysisKind::Anova2 {
@@ -1837,6 +2453,9 @@ impl AnalysisDialog {
                 | AnalysisKind::Smooth
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::ColumnMath
+                | AnalysisKind::Hilbert
+                | AnalysisKind::FftFilter
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter
@@ -1862,9 +2481,13 @@ impl AnalysisDialog {
         })
     }
 
-    /// The column after the input column, as the first suggestion for an existing target.
+    /// The column after the input column, as the first suggestion for an existing target (the input
+    /// column itself for Simple Column Math, as Origin).
     fn default_existing(&self, input: usize) -> usize {
         let at = self.columns.get(input).and_then(|c| self.sheet_columns.iter().position(|(id, _)| id == c));
+        if self.kind == AnalysisKind::ColumnMath {
+            return at.unwrap_or(0);
+        }
         at.map_or(0, |a| (a + 1).min(self.sheet_columns.len().saturating_sub(1)))
     }
 

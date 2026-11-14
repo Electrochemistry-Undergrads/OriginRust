@@ -1,24 +1,28 @@
 //! The curve mathematics tools of `Project::analyze`: Average Multiple Curves, Intersect and Polygon
 //! Area. The numerics are in `sheaf_calc::curves`; this module reads the chosen curves and writes the
-//! result sheets. The rules are in `docs/spec/analysis-curve-math.md`; none was measured in Origin.
+//! result sheets. The rules are in `docs/spec/analysis-curve-math.md`; the defaults, output names and
+//! Polygon Area were measured in Origin (section 4).
 
 use super::*;
 use sheaf_calc::{AverageOptions, MeetKind};
 
-/// What [`Tool::AverageCurves`] does: the mean of all chosen curves on a common X.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// What [`Tool::AverageCurves`] does: the mean of all chosen curves on a common X. The extra
+/// columns are Origin's (Std Dev, Std Err, N, Minimum, Maximum), all off by default as in Origin.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct AverageSpec {
     pub options: AverageOptions,
     /// Add the sample standard deviation as an error column of the mean.
     pub sd: bool,
     /// Add the number of curves that contributed at each X.
     pub count: bool,
-}
-
-impl Default for AverageSpec {
-    fn default() -> Self {
-        AverageSpec { options: AverageOptions::default(), sd: true, count: true }
-    }
+    /// Add the standard error of the mean.
+    #[serde(default)]
+    pub se: bool,
+    /// Add the smallest and the largest value of the curves.
+    #[serde(default)]
+    pub min: bool,
+    #[serde(default)]
+    pub max: bool,
 }
 
 /// What [`Tool::Intersect`] does: the points where the two chosen curves meet.
@@ -67,23 +71,28 @@ fn average(spec: &AverageSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
     let curves: Vec<(&[f64], &[f64])> = inputs.iter().map(|i| (i.xs(), i.ys())).collect();
     let r = calc::average_curves(&curves, &spec.options).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     let first = &inputs[0];
-    let comment = format!("mean of {}", names(inputs));
+    // Origin's names and comment (measured).
+    let comment = format!("Average of {}", names(inputs));
     let points = r.x.len();
+    let se: Vec<f64> = r.sd.iter().zip(&r.n).map(|(s, &n)| s / (n as f64).sqrt()).collect();
     let mut on_sheet = vec![
-        numeric(Designation::X, &first.x_name, &first.x_units, String::new(), r.x),
-        numeric(Designation::Y, "Mean", &first.units, comment.clone(), r.mean),
+        numeric(Designation::X, "Averaged X", &first.x_units, String::new(), r.x),
+        numeric(Designation::Y, "Averaged Y", &first.units, comment, r.mean),
     ];
     if spec.sd {
-        on_sheet.push(numeric(Designation::YError, "SD", &first.units, comment, r.sd));
+        on_sheet.push(numeric(Designation::YError, "Standard Deviation", &first.units, String::new(), r.sd));
+    }
+    if spec.se {
+        on_sheet.push(numeric(Designation::Y, "Standard Error", &first.units, String::new(), se));
     }
     if spec.count {
-        on_sheet.push(numeric(
-            Designation::Disregard,
-            "N",
-            "",
-            "number of curves at this X".to_string(),
-            r.n.iter().map(|&n| n as f64).collect(),
-        ));
+        on_sheet.push(numeric(Designation::Y, "Count", "", String::new(), r.n.iter().map(|&n| n as f64).collect()));
+    }
+    if spec.min {
+        on_sheet.push(numeric(Designation::Y, "Minimum", &first.units, String::new(), r.min));
+    }
+    if spec.max {
+        on_sheet.push(numeric(Designation::Y, "Maximum", &first.units, String::new(), r.max));
     }
     let notes = vec![format!("{} curves averaged at {points} X values", inputs.len())];
     Ok(Output { table: None, on_sheet, notes })
@@ -99,20 +108,8 @@ fn intersect(spec: &IntersectSpec, inputs: &[Input<'_>]) -> Result<Output, Analy
     let found = calc::intersections(a.xs(), a.ys(), b.xs(), b.ys(), spec.include_touching);
     let comment = format!("{} and {}", a.short, b.short);
     let mut on_sheet = vec![
-        numeric(
-            Designation::X,
-            &format!("Intersection X ({})", a.x_name),
-            &a.x_units,
-            comment.clone(),
-            found.iter().map(|h| h.x).collect(),
-        ),
-        numeric(
-            Designation::Y,
-            &format!("Intersection Y ({})", a.name),
-            &a.units,
-            comment.clone(),
-            found.iter().map(|h| h.y).collect(),
-        ),
+        numeric(Designation::X, "Intersection X1", &a.x_units, comment.clone(), found.iter().map(|h| h.x).collect()),
+        numeric(Designation::Y, "Intersection Y1", &a.units, comment.clone(), found.iter().map(|h| h.y).collect()),
     ];
     if spec.include_touching {
         let kinds = found
@@ -182,6 +179,35 @@ fn polygon_area(inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Row by row for scans that share an X column (Origin's Same as Source X), with the standard
+    /// deviation and count columns.
+    fn rows() -> AverageSpec {
+        let options = sheaf_calc::AverageOptions {
+            x: sheaf_calc::CommonX::Points,
+            range: sheaf_calc::XRange::Intersection,
+            method: sheaf_calc::AverageMethod::Linear,
+        };
+        AverageSpec { options, sd: true, count: true, ..AverageSpec::default() }
+    }
+
+    #[test]
+    fn average_with_origins_defaults_names_its_columns_as_origin() {
+        let (mut p, book, ys) = scans();
+        let spec = AverageSpec { se: true, min: true, max: true, sd: true, count: true, ..AverageSpec::default() };
+        let r = p.analyze(&req(&ys, Tool::AverageCurves(spec))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Averaged X", "Averaged Y", "Standard Deviation", "Standard Error", "Count", "Minimum", "Maximum"]
+        );
+        assert_eq!(ws.columns[1].comments, "Average of B, C");
+        // Auto: 5 x 4 points, evenly from 0 to 3.
+        assert_eq!(ws.columns[0].numeric().unwrap().len(), 20);
+        let plain = p.analyze(&req(&ys, Tool::AverageCurves(AverageSpec::default()))).unwrap();
+        assert_eq!(plain.new_columns.len(), 2, "Origin writes only X and the mean by default");
+    }
     use crate::analysis_link::LinkTool;
     use crate::column::{FormulaState, RecalcMode};
 
@@ -202,9 +228,9 @@ mod tests {
     #[test]
     fn average_writes_mean_sd_and_count_to_a_new_sheet() {
         let (mut p, book, ys) = scans();
-        let r = p.analyze(&req(&ys, Tool::AverageCurves(AverageSpec::default()))).unwrap();
+        let r = p.analyze(&req(&ys, Tool::AverageCurves(rows()))).unwrap();
         let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(ws.name, "Average1");
+        assert_eq!(ws.name, "AverageResult1");
         let cols: Vec<_> = ws.columns.iter().map(|c| (c.designation, c.numeric().unwrap().to_vec())).collect();
         assert_eq!(cols[0], (Designation::X, vec![0.0, 1.0, 2.0, 3.0]));
         assert_eq!(cols[1], (Designation::Y, vec![1.0, 2.0, 3.0, 4.0]));
@@ -212,7 +238,7 @@ mod tests {
         assert!(cols[2].1.iter().all(|s| (s - 2.0_f64.sqrt()).abs() < 1e-12));
         assert_eq!(cols[3].1, vec![2.0; 4]);
         // Without the optional columns only X and the mean are written.
-        let spec = AverageSpec { sd: false, count: false, ..AverageSpec::default() };
+        let spec = AverageSpec { sd: false, count: false, ..rows() };
         let r = p.analyze(&req(&ys, Tool::AverageCurves(spec))).unwrap();
         assert_eq!(r.new_columns.len(), 2);
     }
@@ -220,14 +246,14 @@ mod tests {
     #[test]
     fn average_needs_two_curves_and_refuses_a_turning_x() {
         let (mut p, _, ys) = scans();
-        assert!(p.analyze(&req(&ys[..1], Tool::AverageCurves(AverageSpec::default()))).is_err());
+        assert!(p.analyze(&req(&ys[..1], Tool::AverageCurves(rows()))).is_err());
         // Two curves, each with its own X, one of them a full cycle.
         let book = p.add_workbook("Cycle");
         p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 0.0])).unwrap();
         let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
         p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 0.5, 1.0])).unwrap();
         let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
-        let e = p.analyze(&req(&[a, b], Tool::AverageCurves(AverageSpec::default()))).unwrap_err();
+        let e = p.analyze(&req(&[a, b], Tool::AverageCurves(rows()))).unwrap_err();
         assert!(e.to_string().contains("turn back"), "{e}");
     }
 
@@ -268,7 +294,7 @@ mod tests {
     #[test]
     fn linked_average_follows_its_input() {
         let (mut p, _, ys) = scans();
-        let request = req(&ys, Tool::AverageCurves(AverageSpec::default()));
+        let request = req(&ys, Tool::AverageCurves(rows()));
         assert!(Project::can_link(&request.tool));
         let r = p.analyze_linked(&request, &OutputTarget::NextToInput, RecalcMode::Auto).unwrap();
         let mean = r.new_columns[1];
@@ -353,12 +379,8 @@ mod tests {
             RecalcMode::Manual,
         )
         .unwrap();
-        p.analyze_linked(
-            &req(&[a, b], Tool::AverageCurves(AverageSpec::default())),
-            &OutputTarget::NewSheet,
-            RecalcMode::Auto,
-        )
-        .unwrap();
+        p.analyze_linked(&req(&[a, b], Tool::AverageCurves(rows())), &OutputTarget::NewSheet, RecalcMode::Auto)
+            .unwrap();
         // A closed curve (the 2 x 3 rectangle) so the Polygon Area link really exists.
         p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 2.0, 2.0, 0.0])).unwrap();
         let loop_y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.0, 3.0, 3.0])).unwrap();
@@ -373,12 +395,12 @@ mod tests {
     #[test]
     fn changing_the_column_count_of_a_linked_result_leaves_no_stale_sheet() {
         let (mut p, book, ys) = scans();
-        let full = req(&ys, Tool::AverageCurves(AverageSpec::default()));
+        let full = req(&ys, Tool::AverageCurves(rows()));
         let (r, outputs) = p.analyze_linked_into(None, &full, &OutputTarget::NewSheet, RecalcMode::Auto).unwrap();
         assert_eq!(outputs.len(), 4);
         let sheets = p.workbook(book).unwrap().sheets.len();
         // Untick SD and Count: two columns instead of four.
-        let slim = req(&ys, Tool::AverageCurves(AverageSpec { sd: false, count: false, ..AverageSpec::default() }));
+        let slim = req(&ys, Tool::AverageCurves(AverageSpec { sd: false, count: false, ..rows() }));
         let (r2, now) =
             p.analyze_linked_into(Some(&outputs), &slim, &OutputTarget::NewSheet, RecalcMode::Auto).unwrap();
         assert_eq!(now.len(), 2);

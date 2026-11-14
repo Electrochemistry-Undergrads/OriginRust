@@ -1,6 +1,13 @@
 # T08: Missing Set Column Values functions in `sheaf-expr`
 
-**Status:** groups 1, 2, 3 and 5 done, merged (`04a8a80`). Merged (`d8d1416`): `sum` is the running sum and `count` counts missing cells as Origin measured (probes a1-a3), `now()`/`today()` in local time (`SheetHost::now`), group 4 (text values, `col(A)$`, string functions left/right/mid/len/upper/lower/trim/find/search/replace/compare/exact/text/value; a text result makes a Text & Numeric column), `cell(r,c)` dependency tracking. Left: group 6 (cross-sheet refs; needs core dependency tracking), `substitute`/`char`/`code`/`format`, `col(A)[L]$` label rows, `%()` substitution. **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
+**Status:** groups 1–5 implemented (`04a8a80`, `d8d1416`), including text-valued formulas,
+local `now()`/`today()`, measured running `sum` and row-counting `count`, and `cell()` dependencies.
+Further completed: `substitute(s,new,find[,n])$`, optional `$` on text functions, built-in column
+headers `G/L/U/C/O` with separate metadata dependencies, `char`/`code`, explicit `format`
+compatibility, formatting columns, and direct-column Text defaults that follow format edits.
+Reference sources, unmeasured edge choices and regressions are in expression-language.md section 3.
+**Left:** cross-sheet/book references (group 6), parameter label rows, `%()` substitution,
+and Origin global/`@SD` formatting defaults. **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
 **Detail:** audit E "Missing" (formula functions). **Spec:** `docs/spec/expression-language.md`.
 
 ## Where

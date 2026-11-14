@@ -18,6 +18,7 @@ Summary. One small expression language serves two jobs: worksheet column formula
 - Variables: any other name is a variable looked up in the host (fit parameters, `x`, and so on). The name `i` is the 1-based number of the row being calculated, unless the host defines a variable called `i` itself. **[choice: the host wins, so a fit function may use `i` as a parameter]**
 - The conditional `c ? a : b` evaluates only the branch it takes.
 - Text strings `"abc"` (no escape sequences; cannot contain a double quote) and `col(A)$` / `col(A)[i]$` (the text of a cell) are text values; see the text section below. `col("Long Name")` also takes a quoted name.
+- `col(A)[L]$` reads a column header rather than a data row; built-in header codes `G`, `L`, `U`, `C`, `O` are supported (see below).
 
 ## 2. Operators, tightest first
 
@@ -90,13 +91,47 @@ Origin measured with `tools/origin-ref/run-labtalk-lines.ps1` (probes `re-worksp
 | `compare(s,t[,case])` | **1 when equal**, else 0 (not an ordering); case matters unless `case` is 0 | same |
 | `exact(s,t)` | 1 when equal with case | same |
 | `value(s)` | the number in a text, missing for `Hello` | same (missing when there is no number) |
-| `text(x)`, `text(x,fmt)` | `fmt` `*` or none: general; `*n`: n significant digits; `.n`: n decimals; `E*n`: engineering with a unit prefix; a missing value is `--` | same for these four forms; other format codes give the general form (Origin returned the code itself or an odd number) |
+| `text(x)`, `text(x,fmt)` | in measured General columns, `fmt` `*` or none: general; `*n`: n significant digits; `.n`: n decimals; `E*n`: engineering with a unit prefix; a missing value is `--` | same for these four forms; an omitted format on a direct numeric column/cell uses its column format; other format codes give the general form (Origin returned the code itself or an odd number) |
 
-How `text(x)` writes numbers (the general form, no format given or `*`): up to five decimals with trailing zeros dropped (`3.14159`, `1234.5678`, `0.00123`), `E` form from the exponent -4 downward and for seven or more integer digits that do not round-trip (`1.23456E-4`, `1.23457E6`, `1E15`; 1000000 stays `1000000`). `*3`: `3.14`, `1.23E+03`, `-42.0`, `1.00E+10`, `0.00`. `.2`: `1234.57`, `1.23E-04`, `-42.00`. `E*3`: `1.23k`, `12.3k`, `1.23m`, `-500m`, `10.0G`. Halves round away from zero. Where the exponent thresholds between the measured points are unknown they were chosen to reproduce every measured value (`crates/expr/src/text.rs`, test `text_of_numbers_matches_origin_formats`).
+How general-format `text(x)` writes numbers (General source column, literal/arithmetic default, or explicit `*`): up to five decimals with trailing zeros dropped (`3.14159`, `1234.5678`, `0.00123`), `E` form from the exponent -4 downward and for seven or more integer digits that do not round-trip (`1.23456E-4`, `1.23457E6`, `1E15`; 1000000 stays `1000000`). `*3`: `3.14`, `1.23E+03`, `-42.0`, `1.00E+10`, `0.00`. `.2`: `1234.57`, `1.23E-04`, `-42.00`. `E*3`: `1.23k`, `12.3k`, `1.23m`, `-500m`, `10.0G`. Halves round away from zero. Where the exponent thresholds between the measured points are unknown they were chosen to reproduce every measured value (`crates/expr/src/text.rs`, test `text_of_numbers_matches_origin_formats`).
 
 How a bare column read decides between number and text: the result of the whole formula, a branch of `?:` or `ifelse`, an argument that a string function reads as text, and the operand next to a string in `+`, `==` and `!=` are read as text when the cell is a text cell; every other read of a column is the number, and a text cell is then missing. This reproduces `len(col(A))` (counts the text), `text(col(A),"*")` (formats the number of the cell, `--` for text) and `col(A)+1` (missing) as measured. A formula with text in it gives a Text & Numeric column when any row comes out as text (`Expr::eval_values`, `Value::Text`); the rows that come out as numbers stay numbers, and an empty text is a missing cell. `Expr::eval_rows` of such a formula gives numbers only, with text as missing. `compile()` and `Expr::eval` do not return text.
 
-Not copied: `substitute(s,old,new[,n])` returned its text unchanged in every probe, so it is not offered. Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `col(A)[L]$` label rows, `char`, `code`, `format` and `%()` substitution are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+`substitute(s,new,find[,n])$` follows [Origin's documented signature](https://docs.originlab.com/labtalk/ref/substitute-func/): the replacement is the second argument and the search text is the third. With no `n`, or `n = 0`, it replaces all matches; a positive integer chooses the 1-based occurrence. The documented example `substitute("abcdefabcdef",12,"bcd",0)$` gives `a12efa12ef` and is a regression fixture. This addition is based on the reference documentation, not a new installed-Origin probe.
+
+Sheaf uses literal, case-sensitive, non-overlapping matches, preserving Unicode text. An absent occurrence leaves the text unchanged. An empty search or an invalid occurrence (negative, fractional, missing or nonfinite) also leaves it unchanged; these are Sheaf's guard choices for cases the reference does not specify. The first three arguments accept text columns or numbers written as text; the occurrence is numeric, so formulas can read it from another column. Text-returning function calls accept an optional `$` suffix (`upper(substitute(col(A)$,"clean","raw")$)$`); numeric functions do not. Unsuffixed calls remain accepted. Set Column Values lists `substitute` under Function > Text, and Auto recalculation tracks every source column.
+
+Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `%()` substitution and Origin global/`@SD` format settings are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+
+### Format compatibility name
+
+`format(x[,fmt])$` uses the existing Text formatter for the explicit formats `*`, `*n`, `.n` and `E*n`. The [Origin Text/Format reference](https://docs.originlab.com/labtalk/ref/text-format-func/) documents equivalent explicit formatting; its `format(123000,"E*3")$` example gives `123k` and is a regression fixture. The first argument is numeric; the format argument can be a literal or a text column, including a different format in each row. Both `text` and `format` track that formatting column as a data dependency.
+
+With no explicit format, `text(col(A))$` (or an indexed cell such as `text(col(A)[2])$`) uses the numeric source column's format. Decimal places, scientific/engineering, date/time, Month and Day of Week formats are available through `Host::formatted_numeric_cell`; General retains the existing expression formatter. Format-only edits invalidate Auto/Manual dependents in the same undo step as the edit. Text cells remain numeric missing values (`--`), and an explicit format still overrides the column.
+
+Compatibility limit: omitted `format` formats, omitted `text` formats on literals/arithmetic, and explicit empty formats use Sheaf's general formatter. Origin uses global Numeric Format for omitted Format format, and `@SD` for an empty format; those settings remain unsupported. Format is accepted when typed into Set Column Values; the picker keeps the recommended Text name rather than adding a duplicate alias.
+
+### Character codes
+
+`char(n)$` and `code(s)` follow the published [Char](https://docs.originlab.com/labtalk/ref/char-func/) and [Code](https://docs.originlab.com/labtalk/ref/code-func/) references. `char(65)$` gives `A`; `code("abc")` is 97 and `code("")` is 0. Char accepts integer code points from 1 through 65535, including `char(181)$` = `µ` and `char(956)$` = `μ`. Numeric source columns work with Char; Code reads text cells and returns a number. Both appear in Set Column Values > Function > Text.
+
+Sheaf returns empty text for invalid Char input (zero, negative, fractional, nonfinite, missing, above 65535, or a surrogate code point); these are explicit guard choices where the reference does not define a usable character. Code reads the first Unicode scalar value, not the first UTF-8 byte, consistently with Sheaf's other text functions. Supplementary characters can therefore produce a code above 65535, although Char retains its documented upper bound. The Unicode behavior and guard cases have unit coverage; no new installed-Origin probe is claimed.
+
+### Column label values
+
+The built-in header reads follow Origin's [Col reference](https://docs.originlab.com/labtalk/ref/col-func/) and [label-row table](https://docs.originlab.com/labtalk/ref/column-label-row-characters/). This support is based on the published reference, not a new installed-Origin probe.
+
+| Code | Field | Example |
+|---|---|---|
+| `G` | Short Name | `col(A)[G]$` |
+| `L` | Long Name | `col(A)[L]$` |
+| `U` | Units | `col(A)[U]$` |
+| `C` | Comments | `col(A)[C]$` |
+| `O` | F(x)= formula text | `col(A)[O]$` |
+
+The result is a scalar repeated across the requested output rows. Column short names, quoted long names, column numbers and `wcol(1)` work as for data reads. `$` returns the header text; without `$`, the header is parsed as a number (missing for empty or nonnumeric text). An empty Long Name stays empty rather than falling back to the short name. A standalone built-in label code takes precedence over a variable with that name; an expression such as `col(A)[L+0]$` still indexes data rows using the variable `L`. Parameter rows, sampling intervals, categories and filter headers are not implemented.
+
+`Host::column_label` supplies the metadata; its default is empty. An unknown column is still an error. `Expr::columns()` lists all sources; `data_columns()` and `label_columns()` separate reads of cells and headers. Only cell reads create calculation-order or cycle edges, so formulas reading their own headers remain Auto, and mutual header reads do not form a false cycle. Header edits (including units, comments and formula text) invalidate dependent Auto or Manual results within the same undo step. Header-only formulas use the current worksheet row count when recalculated; headers do not extend a formula's data-input range.
 
 ## 4. Calling it from the program
 
@@ -114,7 +149,7 @@ Not copied: `substitute(s,old,new[,n])` returned its text unchanged in every pro
 ## 6. Differences from Origin's LabTalk
 
 - Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution or user-defined functions. Those are separate features and are not part of this crate.
-- No `col(A)[L]$` label access, no cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
+- No parameter label rows or cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.

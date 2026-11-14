@@ -51,8 +51,11 @@ Behavior notes:
 
 What Sheaf does (`Delimiter` in `crates/io/src/ascii.rs`, CLI `--delimiter`, `--fixed-width`, import window "Delimiter"):
 
-- **Multi-character delimiter** (`Delimiter::Multi`): the "Other" field takes a string; one character is the old single-character delimiter, two or more separate the fields as a whole string (`||`, `::`), as Origin's `MultipleDelimiters` (DataStruct 2). A quoted field may hold the string; a lone character of it is not a separator. Origin's other reading of the "Other" field, a set of characters that each separate fields (DataStruct 1 with `OtherDelimiter`), is not implemented, nor is "combine consecutive delimiters". An empty string is an error.
+- **Character set** (`Delimiter::AnyOf { chars, combine }`, import window **Other**, CLI `--delimiter-chars '|;'`): every listed character separates fields. With the default `combine = false`, `a|;b` has an empty middle field. **Treat Consecutive Delimiters as One** (CLI `--combine-delimiters`) collapses each adjacent run, so the same input has two fields. Explicit quoted empty fields stay empty fields even with combining. A leading/trailing run creates one empty field at that edge; this is a Sheaf choice for an edge case not measured in Origin. Unicode separator characters are supported. An empty set is rejected; a set containing comma is rejected when decimal comma is in use.
+- **Multi-character delimiter** (`Delimiter::Multi`, import window **Multiple Characters**, CLI `--delimiter '||'`): fields split only at a complete, non-overlapping occurrence of the string (`||`, `::`). A lone character of the sequence is ordinary text. `Delimiter::from_text` and the existing CLI `--delimiter` keep their whole-string behavior. The import window now distinguishes this mode from **Other**, which uses a set. These options follow the published [FileStruct reference](https://docs.originlab.com/x-function/ref/details-of-treenodes-in-import-ascii/); no new installed-Origin probe is claimed. An empty delimiter string is rejected.
 - **Fixed width** (`Delimiter::Fixed(widths)`, CLI `--fixed-width 8,12,10`, window "Fixed Width" with a "Widths" field): the line is cut every `w` characters (Unicode characters, not display columns, so wide CJK text counts one each), the last width repeats for the rest of the line (so one width applies to every column), fields are trimmed, quotes mean nothing, a shorter line has fewer fields. Header detection then works on the cut fields as for any delimiter. A width of 0 or an empty list is an error. Origin's ruler-style click-to-place column breaks are not offered; widths are typed. Widths are taken from Origin's public documentation (`ColWidths`), not measured; measure on the Windows machine with tools/origin-ref.
+
+Quoted fields in explicit delimiter modes use the selected delimiter for record boundaries too, so a custom separator can precede quoted multiline text. A partial or overlapping match of a whole-string delimiter does not open a new quoted field. CRLF inside quotes is normalized to LF. Quotes used as a separator are literal separators, and Fixed Width never groups physical lines by quotes. Detection, preview, block splitting, and final import use the same record rules. Auto mode retains its earlier generic quote-boundary bootstrap before choosing among built-in separators; explicit selection is available for ambiguous files.
 
 ## 3. Header handling (P0)
 
@@ -85,7 +88,9 @@ Important note: the defaults above are the documented defaults of the import tre
 
 Fields that appear in the legacy `ASCII.oif`: `iHeaderLines=0`, `iSubHeaderLines=0`, `iAutoSubHeaderLines=1`, `iAutoColTypes=1`, `iTestLines=4`, `iMaxTestLines=50`. **[F]** These match the tree defaults (4 and 50).
 
-Data Import Options in Sheaf (`AsciiOptions`, import window node "Data Import Options", CLI flags; the option names and defaults are from Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref): `rename_columns` (default on; off leaves long name, units and comments empty and still skips the header lines; CLI `--no-rename-columns`); `short_name_line` (0 = none; a header line whose cells become the short names, keeping letters, digits and underscores, at most 18 characters, not starting with a digit, unique; an unusable cell keeps the automatic `A`, `B`, ...; CLI `--short-name-line N`); the 18-character limit is unverified (T19 item 3).
+Header and naming options in Sheaf (`AsciiOptions`; the window nodes are described, as measured, at the end of section 10): `rename_columns` (default on; off leaves long name, units and comments empty and still skips the header lines; only the CLI flag `--no-rename-columns` sets it, the window has no such tick because Origin's window has none: setting Long Names, Units and Comments to `<none>` does the same); `short_name_line` (0 = none; a header line whose cells become the short names by the rules measured below; CLI `--short-name-line N`).
+
+**Short names from a header line, measured in Origin (2026-11-13, `impasc ... options.Hdr.SNames:=n`, files `tools/origin-ref/import-inputs/shortn*.txt`).** The option of the Header Lines group is `SNames` (dialog label "Short Names", default `<none>`; `LNames` is the long-name line). For each cell: every character that is not a letter, digit or dot is dropped (`my_name_1` gives `myname1`, `Second Col` gives `SecondCol`, `3rd-col` gives `3rdcol`, `(paren)` gives `paren`); a first character that is a digit or a dot becomes `A` (`3rd-col` gives `Ardcol`, `9lives` `Alives`, `12x` `A2x`, `1.5` `A.5`, `.5x` `A5x`, `..a` `A.a`); the result is cut to **18 characters** (a 26-letter cell gives its first 18, so the limit is confirmed); an empty cell, a cell with nothing left and a name that another column has already (letters compared without regard to case: `Q1` then `q1`; after the cut too: a 19-letter cell whose first 18 letters repeat an earlier name) get the automatic name of their column (`F`, `G`, `O`, ...). A cell that equals the automatic name of another column (`B` in the 16th column) is accepted when no column has it. Typing a name in the Column Properties box or setting `wks.col1.name$` gives the same drops and the same cut to 18 (a longer name is cut without a message) but allows a first digit (`9abc` stays), and a name that another column of the sheet has is not taken: the name stays as it was.
 
 Where the header text goes in the workbook:
 
@@ -216,6 +221,14 @@ Origin groups these under `Partials`; rows and columns each have: first, last, r
 
 Legacy ASCII.oif: `iPartialC1=0`, `iPartialC2=-1`, `iPartialR1=0`, `iPartialR2=-1` (zero-based, -1 = to the end). [F]
 
+### Implemented range and repeating-pattern selection
+
+`AsciiOptions::rows` and `columns` use `ImportSelection { first, last, read, skip }`, following the documented [Partial_rows / Partial_cols options](https://docs.originlab.com/x-function/ref/details-of-treenodes-in-import-ascii/). Positions are 1-based and inclusive; `last = 0` means through the end. Starting at `first`, take `read` entries, skip `skip`, and repeat until `last`. The default `{ first: 1, last: 0, read: 1, skip: 0 }` imports everything. For example, first 2 / last 5 / read 1 / skip 1 imports positions 2 and 4. First and read must be positive; a nonzero last must be at least first. An out-of-range selection that imports nothing is reported as no data.
+
+The Import window's Partial Import page and the wizard's shared Data Selection controls expose both axes. CLI flags are `--first-row`, `--last-row`, `--read-rows`, `--skip-rows`, `--first-column`, `--last-column`, `--read-columns`, and `--skip-columns`. Data-row positions exclude header records and blank records (the existing importer skips blank data records). Legacy API `skip_rows` and `max_rows` still define an initial window; the new row selection then applies within it. These legacy settings default to zero/no limit and are distinct from the CLI repeating `--skip-rows` flag.
+
+Selected columns keep their source Long Name, Units, Comments, short-name header values, and parameter values. Parameter names still come from the original first field even when that column is excluded. Automatic short names are assigned consecutively to the imported columns; the first imported column is X when that option is enabled. These naming/designation choices preserve existing output conventions and have not been newly measured in installed Origin. Preview, detection, and final import agree on the selected data. Selections apply to every file by default and reset per block when importing blocks as sheets. The **All files except first** scope (CLI `sheaf import --partial-except-first`, API `BatchOptions::partial_except_first`) leaves the first supplied data file's rows and columns intact while selecting later files. Delimiters, header labels, number/date settings, and naming choices still apply to the first file. The first-file boundary follows input order after file-pattern expansion, even if that file cannot be read; a later file is not promoted to first. Import-window detection and preview use the same effective per-file options as the final import, and the wizard shares the scope control. `AsciiOptions::without_partial_import` clears both the new ranges/patterns and the legacy skip/max window. Custom range-list strings remain unimplemented.
+
 ## 10. Import mode and naming (P0)
 
 Modes (option `FirstMode` for the first file, `Mode` for later files in a multi-file import):
@@ -249,11 +262,23 @@ Name derivation from file name (group `Names`):
 | FNameToUDL | write file name to a user parameter row named `SourceFile` | 0 | [W] |
 | FPathToComm | include path and extension in appended names | 0 | [W] |
 
-Sheaf's Data Import Options for names (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on as `FNameToSht` and `FNameToBk`; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. File name trimming (`FNameToShtFrom/To`) is not done.
+Sheaf's naming options (`rename_sheet`, `rename_book` in `AsciiOptions`, both default on like Origin's "Rename Sheet with (Partial) Filename" and "Rename Book with (Partial) Filename"; CLI `--no-rename-sheet`, `--no-rename-book`): off gives the sheet the name `Sheet1` (`Sheet<n>` for a new sheet or a later block; a replaced sheet keeps its own name) and the book an empty long name. File name trimming (`Trim Filename From/To`), "Rename Long Name for Book only", "Include File Path when Renaming Book", "Auto Rename Using Filename" and the three "Append Filename to ... Comment" options are not offered.
 
-**Apply the new range to plots** (`batch::PlaceOptions::apply_range_to_plots`, window tick, grey unless the mode is Replace Existing Data; default on, unmeasured). A plot stores a fixed half-open row range (`Plot::rows`, `None` = all rows), so it does not follow new data by itself. Replacing the data of a sheet now keeps the identifiers of the columns by position, so graphs of the sheet keep plotting them (before, the new columns got new identifiers and the plots lost their data). With the option on, plots of those columns that had a row range are set to all rows of the new data; with it off the old range stays.
+### The impASC window, measured in Origin (2026-11-13)
 
-Mode names in Sheaf's window and `ImportMode::label`: Replace Existing Data, New Books, New Sheets, New Columns, New Rows, in that order (the order of the task brief; the spec table above lists the codes 0 to 4). The window also has an Apply button (order OK, Cancel, Apply): it imports with the current settings and keeps the window open. That the impASC window has Apply is from the general X-Function dialog layout (gui-look.md section 5), not seen on this dialog; check on the Windows machine.
+Read with `tools/origin-ref/origin-dialog.ps1` from `impasc fname:=... -d;` (control list, combo box items, pictures kept locally).
+
+- **Buttons: OK and Cancel only. There is no Apply** (the earlier guess, from the general X-Function layout, was wrong). Title `ASCII: impASC`; at the top the Dialog Theme row and the description `Import ASCII file/files`; a tick `Results Log Output` (off); `File Name` with a browse button; at the bottom `Output` (`[Book1]Sheet1`).
+- Tree of groups: `File Info`, then `Import Options` holding `Add Sparklines` (No, Yes, Yes(if less than 50 columns); default the last), `Import Mode` (list `Replace Existing Data`, `Start New Books`, `Start New Sheets`, `Start New Columns`, `Start New Rows`; default Replace Existing Data), `Template Name` (`<default>`, `<clone>`, ...), and the groups `File Structure`, `Columns`, `Header Lines`, `(Re)Naming Worksheet and Workbook`, `Partial Import`, `Miscellaneous`, `Script`. **There is no page called Data Import Options**, no tick "rename columns from the header" and no "apply new range to plots".
+- File Structure: Data Structure (`Fixed column widths`, `Delimited - Single Character` (default), `Delimited - Multiple Characters`), Delimiter (`Unknown` (default), `Tab/Space`, `Tab`, `Comma(,)`, `Semicolon`, `Space`, `Other`), Delimiters (text), Numeric Separators (`1,000.00` (default), `1.000,00`, `1 000,00`, `1'000.00`), Custom Date Format (`<none>` and 12 patterns such as `yyyy-MM-dd HH:mm:ss`, `dd/MM/yyyy`, `yyyyMMdd`), Custom Time Format (`<none>`, `hh:mm:ss T`, `hh mm ss.##`), tick Transpose Data (off).
+- Columns: Number of Columns (0), tick Auto Determine Column Types (on), Min Number of Consistent Lines to Determine Data Structure (4), Max Number ... (50), Column Designations (`<Unchanged>`, `None`, `2Y`, `X2Y`, `(XY)`, `(X2Y)`, `(X3Y)`, `(XYE)`, `XY2Z`, `(XYZ)`).
+- Header Lines: Number of Main Header Lines (grey, 0), tick Auto Determine Subheader Lines (on), tick Line Number Start from Bottom (off), Number of Subheader Lines (grey, 0), tick Extract Long Names and Units from Same Line (off), **Short Names `<none>`**, Long Names `1`, Units `2`, Comments From `3`, Comments To `15`, System Parameters From `<none>`, To (grey 0), User Parameters From `<none>`, To (grey 0). The line lists are `<none>` and 1 to 10. Setting Long Names, Units and Comments to `<none>` is how the labels are left alone.
+- **(Re)Naming Worksheet and Workbook** (all defaults): `Auto Rename Using Filename` off; `Rename Sheet with (Partial) Filename` **on** with `Trim Filename From` 1 and `To` 0; `Rename Book with (Partial) Filename` **on** with Trim From 1 and To 0; `Rename Long Name for Book only` off; `Include File Path when Renaming Book` off; `Append Filename to Workbook Comment` on; `Append Filename to Worksheet Comment` off; `Append Filename to Column Comment` off; `Include File Path when Appending Filename` on.
+- Partial Import: `Partial Import` (`None` default, with From/Read/Skip/To Column and Row boxes grey until it is chosen). Miscellaneous: Text Qualifier (`NONE`, `"`, `'`), tick Remove Text Qualifier from Quoted Data (grey, ticked), tick Remove Leading Zeros from Numbers (on), When Non-numeric is Found in Numeric Field (`Terminate Import`, `Read as Text` (default), `Start New hidden Workbook`, `Start New Worksheet`, `Start New Column`), ticks Allow Import All Text Data (on), Keep Target Column Format (off), Save File Info. in Workbook (on). Script: two text boxes (after each file, after all files).
+
+**Apply the new range to plots.** Origin has no such option; what it does when the data of a sheet is replaced (`impasc` into the active sheet that holds the data of two graphs, measured through `get %C -b` and `-e`): a plot of all rows follows the new data (5 rows replaced by 12: the plot's range goes from 1..5 to 1..12), and a plot that was limited to a row range keeps its range (2..4 stayed 2..4). Sheaf now does the same: `PlaceOptions` has no range option any more; replacing the data keeps the identifiers of the columns by position so that graphs keep plotting them, a plot with `rows: None` shows all new rows and a plot with a row range keeps it (this replaces the earlier option that reset the ranges, default on).
+
+Sheaf's window follows this: OK and Cancel (the Apply button and `ImportOutcome::Apply` are gone); the mode list reads `Replace Existing Data`, `Start New Books`, `Start New Sheets`, `Start New Columns`, `Start New Rows` (`ImportMode::label`); the node that used to be called "Data Import Options" is `(Re)Naming Worksheet and Workbook` with `Rename Sheet with (Partial) Filename` and `Rename Book with (Partial) Filename`, both on; the short-name line is on the Header Lines node (`Line with the short names`, none by default).
 
 Name limits apply after derivation (book short name max 13 chars of letters/digits; sheet name 64 per the limits page; see workbook-model.md). When a book is made from a file name with spaces, punctuation or length over the limit, the short name is auto-generated and the file name goes into the long name. **[I]**
 
@@ -406,3 +431,61 @@ What Sheaf does (`ColumnData::Mixed`, `crates/core/src/column.rs`):
 - Sort uses the numbers (text cells sort as missing, last). Set Column Values on a Text & Numeric column stays Text & Numeric and keeps the text cells outside the filled rows.
 
 Not done: file name trimming for sheet and book names (`FNameToShtFrom/To`), per-file modes (`FirstMode` against `Mode`), parameter and block options in the import window, joining several comment lines.
+
+## 16. Import Wizard pages (measured 2026-11-13)
+
+Origin's Import Wizard (File > Import > Import Wizard..., Ctrl+3; opened with `origin-dialog.ps1
+-MenuClicks "300,300;K:^3"`, control lists in `re-workspace/scratch/t19wiz/w4`, `w5`) titles its window
+"Import Wizard - <page>". For an ASCII file the pages are, in order:
+
+1. Source: Data Type ASCII, Binary, User Defined; Data Source File (with a browse button) or Clipboard;
+   Import Filter (List filters applicable to both Data Type and file name, on; Import Filters for current
+   Data Type `<None>` and the filters of Origin's folder; Description); Target Window Worksheet, Matrix,
+   None; Template `<default>`, `<clone>`, `excel.otw`; Import Mode Replace Existing Data (default), Start
+   New Books, Start New Sheets, Start New Columns, Start New Rows.
+2. Header Lines: Number of main header lines (exclude subheader lines) and Number of subheader lines (0 to
+   10), Auto determine header lines, Line number start from bottom, Long Names, Units, Short Names,
+   Comments (from one line to another), System Parameters and User Parameters (line ranges), Extract Long
+   Names and Units from Same Line, Column Label Assignment from Subheader Lines (prefixes S, L, U, P, C, MH,
+   SH), Characters to skip on each line, Preview Lines (10 to 500), Preview Font.
+3. Variable Extraction: Extract variables from file names and file headers, by delimiters, by character
+   positions, by a scanned delimiter or by an Origin C function; Add variables to page info; Create User
+   Parameter rows for each variable; File Info: Save file info. in workbook (on).
+4. File Name Options: Rename worksheet with filename (on), workbook with file name (on), Include path when
+   rename workbook, file name to workbook comments (on), file name to column comments, Include path when
+   appending file name (on), worksheet or workbook with a variable, Rename Long Name for Book only, and
+   Rename, Append or Auto for multiple files.
+5. Data Columns: Delimiter (Tab/Space, Tab, Comma, Semicolon, Space, Other) or Fixed Width, Treat
+   consecutive delimiters as one, Number of columns, Text Qualifier `<None>`, `"` or `'` with Remove,
+   Column Designations (`<Unchanged>`, 2Y, X2Y, (XY), (X2Y), (X3Y), (XYE), XY2Z, (XYZ)), Custom Date Format
+   and Custom Time Format lists, Keep target column format, Remove leading zeroes from numbers (on), Force
+   Rows to same size, Numeric Separator (1,000.00 and three others), Add Sparklines (Yes if less than 50
+   columns), a column preview with Add Column, Delete Column and Column Separator.
+6. Data Selection: Partial Import From Column / To, From Row / To with Skip Rows and Read Rows, Non-numeric
+   data in a numeric field (Read as text by default; Terminate import, Start new (hidden) book, Start new
+   worksheet, Start new column), and for several files None, All Files or From 2nd File On.
+7. Save Filters: Save filter in the data file folder, the User Files folder (default) or the window; filter
+   file name; data file names to associate; description; Show Filter in File:Open List; Specify advanced
+   filter options.
+
+Data Selection rules, measured through the wizard on a 5 column by 12 row file (`re-workspace/scratch/t19wiz/ps2`,
+`ps3`): From Column 2 To 4 imports columns b, c, d; From Row 3 To 10 imports data rows 3 to 10 (counted after
+the header, both ends included), the header still naming the columns; Read Rows 2 and Skip Rows 1 inside that
+range keep rows 3, 4, 6, 7, 9, 10, and the same for columns keeps b, c (the pattern starts with a read). The
+wizard remembers these settings for the next import. Sheaf's `ImportSelection` gives the same rows and columns
+(test `partial_import_matches_origins_data_selection`).
+
+Sheaf's wizard has these seven pages with these titles (`import_wizard.rs`): Header Lines holds the header
+line count and the Long Names, Units, Comments and Short Names lines; Variable Extraction and Save Filters
+are shown greyed; Data Selection holds Sheaf's partial import (rows to skip and to read); Data Columns the
+delimiter, designations and number and date settings. The other controls listed above are not offered.
+
+### 16.1 Quoted fields and the CSV import (measured 2026-11-14)
+
+On a file with quoted fields (`"Smith, J",1.5,"a ""quoted"" word"` and `'single, quote'`,
+`re-workspace/scratch/partimp`): `impASC` (File > Import > Single ASCII) has no text qualifier by default and
+splits inside the quotes; `impCSV` (File > Import > Comma Delimited (CSV)) treats `"` as the qualifier, removes
+it and reads `""` as one quote, but not `'`. Run from a script with no options, `impCSV` keeps every header line
+as data (Text & Numeric columns, no long names), while `impASC` makes the header into long names and units.
+Sheaf splits fields like `impCSV` (double quotes are a qualifier) and finds header lines like `impASC`; no change
+was made.

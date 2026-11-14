@@ -299,3 +299,163 @@ fn text_columns_can_be_read_and_copied() {
     set(&mut d, c[4], "len(col(B))", RecalcMode::None).unwrap();
     assert_eq!(values(&d, c[4]), [5.0, 5.0, 0.0, 3.0]);
 }
+
+#[test]
+fn substituted_text_follows_both_source_and_occurrence_columns_and_undo() {
+    let (mut d, _, c) = book();
+    d.apply("Text", |p| {
+        p.column_mut(c[1]).unwrap().data =
+            ColumnData::text(vec!["raw raw".into(), "raw raw".into(), "raw raw raw".into(), String::new()]);
+    });
+    set(&mut d, c[2], r#"substitute(col(B),"clean","raw")$"#, RecalcMode::Auto).unwrap();
+    set(&mut d, c[3], r#"substitute(col(B),"clean","raw",col(A))$"#, RecalcMode::Auto).unwrap();
+    let cell = |d: &Document, col, row| d.project().column(col).unwrap().cell_text(row);
+    assert!(d.project().column(c[2]).unwrap().data.is_mixed());
+    // An empty text result remains a missing worksheet cell, displayed as --.
+    for (row, expected) in ["clean clean", "clean clean", "clean clean clean", "--"].iter().enumerate() {
+        assert_eq!(cell(&d, c[2], row), *expected);
+    }
+    for (row, expected) in ["clean raw", "raw clean", "raw raw clean", "--"].iter().enumerate() {
+        assert_eq!(cell(&d, c[3], row), *expected);
+    }
+    edit_cell(&mut d, c[1], 0, "raw/éraw");
+    assert_eq!(cell(&d, c[2], 0), "clean/éclean");
+    assert_eq!(cell(&d, c[3], 0), "clean/éraw");
+    edit_cell(&mut d, c[0], 0, "2");
+    assert_eq!(cell(&d, c[3], 0), "raw/éclean");
+    d.undo();
+    assert_eq!(cell(&d, c[3], 0), "clean/éraw");
+    d.redo();
+    assert_eq!(cell(&d, c[3], 0), "raw/éclean");
+    assert_eq!(state(&d, c[2]), FormulaState::Current);
+    assert_eq!(state(&d, c[3]), FormulaState::Current);
+}
+
+#[test]
+fn column_label_formulas_follow_header_edits_and_undo() {
+    let (mut d, _, c) = book();
+    d.apply("Headers", |p| {
+        let col = p.column_mut(c[0]).unwrap();
+        col.long_name = "Current".into();
+        col.units = "mA".into();
+        col.comments = "run 1".into();
+    });
+    set(&mut d, c[1], r#"col(A)[L]$+" ("+col(A)[U]$+") "+col(A)[C]$"#, RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], "len(col(B))", RecalcMode::Auto).unwrap();
+    let text = |d: &Document| d.project().column(c[1]).unwrap().cell_text(0);
+    assert_eq!(text(&d), "Current (mA) run 1");
+    d.apply("Edit headers", |p| {
+        let col = p.column_mut(c[0]).unwrap();
+        col.units = "µA".into();
+        col.comments = "run 2".into();
+    });
+    assert_eq!(text(&d), "Current (µA) run 2");
+    assert_eq!(values(&d, c[2]), [18.0; 4]);
+    d.undo();
+    assert_eq!(text(&d), "Current (mA) run 1");
+    d.redo();
+    assert_eq!(text(&d), "Current (µA) run 2");
+    assert_eq!(state(&d, c[1]), FormulaState::Current);
+}
+
+#[test]
+fn reading_own_column_labels_keeps_auto_recalculation() {
+    let (mut d, _, c) = book();
+    d.apply("Scale", |p| p.column_mut(c[0]).unwrap().units = "2".into());
+    set(&mut d, c[0], "col(A)[U]*i", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[0]).unwrap().recalc, RecalcMode::Auto);
+    assert_eq!(values(&d, c[0]), [2.0, 4.0, 6.0, 8.0]);
+    d.apply("Change scale", |p| p.column_mut(c[0]).unwrap().units = "3".into());
+    assert_eq!(values(&d, c[0]), [3.0, 6.0, 9.0, 12.0]);
+    d.undo();
+    assert_eq!(values(&d, c[0]), [2.0, 4.0, 6.0, 8.0]);
+}
+
+#[test]
+fn mutual_header_reads_do_not_make_a_data_cycle() {
+    let (mut d, _, c) = book();
+    d.apply("Names", |p| {
+        p.column_mut(c[1]).unwrap().long_name = "beta".into();
+        p.column_mut(c[2]).unwrap().long_name = "gamma".into();
+    });
+    set(&mut d, c[1], "col(C)[L]$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], "col(B)[L]$", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "gamma");
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "beta");
+    d.apply("Rename", |p| p.column_mut(c[1]).unwrap().long_name = "renamed".into());
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "renamed");
+    assert_eq!(state(&d, c[1]), FormulaState::Current);
+    assert_eq!(state(&d, c[2]), FormulaState::Current);
+}
+
+#[test]
+fn header_dependencies_mark_manual_results_pending_and_read_formula_text() {
+    let (mut d, _, c) = book();
+    d.apply("Units", |p| p.column_mut(c[0]).unwrap().units = "mA".into());
+    set(&mut d, c[1], "col(A)[U]$", RecalcMode::Manual).unwrap();
+    set(&mut d, c[2], "col(A)[O]$", RecalcMode::Auto).unwrap();
+    d.apply("Units", |p| p.column_mut(c[0]).unwrap().units = "µA".into());
+    assert_eq!(state(&d, c[1]), FormulaState::Pending);
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "mA");
+    d.apply("Recalculate", |p| p.recalculate(c[1]).unwrap());
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "µA");
+    set(&mut d, c[0], "i*2", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "i*2");
+    set(&mut d, c[0], "i*3", RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "i*3");
+}
+
+#[test]
+fn text_without_a_format_tracks_its_numeric_columns_display_format() {
+    use sheaf_core::format::NumberFormat;
+    let (mut d, _, c) = book();
+    d.apply("Decimal places", |p| p.column_mut(c[0]).unwrap().format = NumberFormat::Decimal(2));
+    set(&mut d, c[1], "text(col(A))$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], "format(col(A))$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[3], r#"text(col(A),".1")$"#, RecalcMode::Auto).unwrap();
+    set(&mut d, c[4], "text(col(A)[2])$", RecalcMode::Auto).unwrap();
+    let text = |d: &Document, col, row| d.project().column(col).unwrap().cell_text(row);
+    assert_eq!(text(&d, c[1], 0), "1.00");
+    assert_eq!(text(&d, c[2], 0), "1");
+    assert_eq!(text(&d, c[3], 0), "1.0");
+    assert_eq!(text(&d, c[4], 0), "2.00");
+    d.apply("Decimal places", |p| p.column_mut(c[0]).unwrap().format = NumberFormat::Decimal(3));
+    assert_eq!(text(&d, c[1], 0), "1.000");
+    assert_eq!(text(&d, c[2], 0), "1");
+    assert_eq!(text(&d, c[3], 0), "1.0");
+    assert_eq!(text(&d, c[4], 3), "2.000");
+    d.undo();
+    assert_eq!(text(&d, c[1], 0), "1.00");
+    d.redo();
+    assert_eq!(text(&d, c[1], 0), "1.000");
+    edit_cell(&mut d, c[0], 1, "missing text");
+    assert_eq!(text(&d, c[1], 1), "--", "Text still reads a numeric value, not a text cell");
+    assert_eq!(text(&d, c[4], 0), "--");
+    set(&mut d, c[4], "text(col(A))$", RecalcMode::Manual).unwrap();
+    d.apply("Decimal places", |p| p.column_mut(c[0]).unwrap().format = NumberFormat::Decimal(4));
+    assert_eq!(state(&d, c[4]), FormulaState::Pending);
+}
+
+#[test]
+fn text_uses_engineering_and_month_column_formats_but_explicit_general_overrides_them() {
+    use sheaf_core::format::{NameStyle, NumberFormat};
+    let (mut d, _, c) = book();
+    d.apply("Engineering", |p| {
+        let a = p.column_mut(c[0]).unwrap();
+        a.data = ColumnData::numeric(vec![1000.0, 2500.0]);
+        a.format = NumberFormat::EngineeringSi(1);
+    });
+    set(&mut d, c[1], "text(col(A))$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], r#"text(col(A),"*")$"#, RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "1.0k");
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(1), "2.5k");
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "1000");
+    d.apply("Month", |p| {
+        let a = p.column_mut(c[0]).unwrap();
+        a.data = ColumnData::numeric(vec![1.0, 2.0]);
+        a.format = NumberFormat::Month(NameStyle::Short);
+    });
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "Jan");
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(1), "Feb");
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "1");
+}

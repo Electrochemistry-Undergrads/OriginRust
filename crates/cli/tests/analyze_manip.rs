@@ -63,16 +63,18 @@ fn subtract_line_outside_the_data_is_explained() {
 }
 
 #[test]
-fn reduce_x_by_step_and_by_average() {
+fn reduce_x_by_intervals_and_every_n_points_as_origin() {
     let dir = scratch("reduce");
+    // t = 0..4, y = 1 3 8 7 9. Intervals 2 wide: [0, 2) and [2, 4); the point at X End (4) is left out.
     let text = run_export(&dir, "reduce", &["reduce-x", "y", "--step", "2"]);
-    assert!(text.lines().any(|l| l == "2,8"), "{text}");
-    assert!(text.lines().any(|l| l == "4,9"), "{text}");
-    let text = run_export(&dir, "reduce2", &["reduce-x", "y", "--step", "2", "--method", "average"]);
-    // Bins [-1, 1) holds t = 0; [1, 3) holds t = 1, 2 (mean of 3 and 8); [3, 5) holds t = 3, 4 (mean of 7 and 9).
-    assert!(text.lines().any(|l| l == "0,1"), "{text}");
-    assert!(text.lines().any(|l| l == "2,5.5"), "{text}");
-    assert!(text.lines().any(|l| l == "4,8"), "{text}");
+    assert!(text.lines().any(|l| l == "1,2"), "{text}");
+    assert!(text.lines().any(|l| l == "3,7.5"), "{text}");
+    assert!(!text.lines().any(|l| l.starts_with("5,")), "{text}");
+    // The first point of every 2.
+    let text = run_export(&dir, "reduce2", &["reduce-x", "y", "--every", "2", "--method", "first"]);
+    for line in ["0,1", "2,8", "4,9"] {
+        assert!(text.lines().any(|l| l == line), "{line} in {text}");
+    }
 }
 
 #[test]

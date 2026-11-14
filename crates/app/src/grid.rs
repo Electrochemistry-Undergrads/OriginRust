@@ -23,6 +23,8 @@ pub enum Sel {
     Rows { anchor: usize, end: usize },
     /// A block of cells; each corner is (column position, row), 0-based.
     Cells { anchor: (usize, usize), end: (usize, usize) },
+    /// One metadata cell above the data; it never targets the values underneath it.
+    Label { column: ColumnId, row: LabelRow },
     /// The whole sheet.
     All,
 }
@@ -147,7 +149,7 @@ impl BookUi {
     pub fn target(&self, sheet: &Worksheet) -> Option<Target> {
         let all: Vec<usize> = (0..sheet.columns.len()).collect();
         match &self.sel {
-            Sel::None => None,
+            Sel::None | Sel::Label { .. } => None,
             Sel::Columns => {
                 let mut columns: Vec<usize> = self.selected.iter().filter_map(|id| sheet.column_index(*id)).collect();
                 columns.sort_unstable();
@@ -186,6 +188,22 @@ impl BookUi {
         self.active = None;
         let (lo, hi) = (anchor.0.min(end.0), anchor.0.max(end.0));
         self.selected = sheet.columns.iter().skip(lo).take(hi + 1 - lo).map(|c| c.id).collect();
+    }
+
+    fn select_label(&mut self, column: ColumnId, row: LabelRow) {
+        self.sel = Sel::Label { column, row };
+        self.selected = vec![column];
+        self.active = None;
+        self.dragging = false;
+        self.head_drag = None;
+        self.row_drag = false;
+    }
+
+    fn focus(&mut self, ctx: &egui::Context) {
+        self.focus_grid = true;
+        if let Some(grid) = self.grid {
+            ctx.memory_mut(|m| m.request_focus(grid));
+        }
     }
 
     /// The corner of the selection that moves with Shift+arrow keys: (column position, row).
@@ -239,6 +257,9 @@ impl BookUi {
     fn repair(&mut self, sheet: &Worksheet) {
         self.selected.retain(|id| sheet.column(*id).is_some());
         match self.sel.clone() {
+            Sel::Label { column, row } if sheet.column(column).is_none() || !label_rows(sheet).contains(&row) => {
+                self.clear_selection();
+            }
             Sel::Columns if self.selected.is_empty() => self.sel = Sel::None,
             Sel::Cells { anchor, end } => {
                 let last = sheet.columns.len().saturating_sub(1);
@@ -278,6 +299,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         graph: None,
         active: Some(book),
         selected: &state.selected,
+        sorting_columns: if matches!(state.sel, Sel::Label { .. }) { Vec::new() } else { state.selected.clone() },
         cells: state.sel != Sel::None,
         undo: None,
         redo: None,
@@ -422,7 +444,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     });
     state.reveal_rect = None;
     state.grid = Some(grid);
-    if state.focus_grid && state.editing.is_none() {
+    if state.focus_grid && state.editing.is_none() && state.editing_label.is_none() {
         match ui.memory(|m| m.focused()) {
             None => ui.memory_mut(|m| m.request_focus(grid)),
             Some(id) if id != grid => state.focus_grid = false,
@@ -753,6 +775,7 @@ fn corner_and_titles(
     let response = ui.interact(corner, ui.id().with("corner"), Sense::CLICK);
     if response.clicked() {
         state.select_all(sheet);
+        state.focus(ui.ctx());
     }
     response.context_menu(|ui| menus::show_context(ui, &menus::corner_menu(), &book_ctx(book_id, state), actions));
     for (i, row) in label_rows.iter().enumerate() {
@@ -806,7 +829,7 @@ fn column_head(
     if head_response.clicked() {
         let modifiers = click_modifiers(ui);
         select_column(state, sheet, column.id, modifiers);
-        state.focus_grid = true;
+        state.focus(ui.ctx());
     }
     head_drag(ui, state, sheet, position, &head_response, head);
     if head_response.double_clicked() {
@@ -855,16 +878,33 @@ fn label_cell(
     state: &mut BookUi,
     actions: &mut Vec<Action>,
 ) {
+    let selected = matches!(&state.sel, Sel::Label { column: c, row: r } if *c == column.id && r == row);
+    if selected {
+        state.reveal_rect = Some(cell);
+    }
     let fill = if column_selected { BLOCK_BLACK } else { LABEL_YELLOW };
     ui.painter().rect_filled(cell, 0.0, fill);
+    if selected {
+        ui.painter().rect_stroke(cell.shrink(0.5), 0.0, Stroke::new(1.5_f32, Color32::BLACK), egui::StrokeKind::Inside);
+    }
     let editing_here = matches!(&state.editing_label, Some((c, r, _)) if *c == column.id && r == row);
     if editing_here {
+        let step = take_edit_step(ui);
         let Some((_, _, text)) = &mut state.editing_label else {
             return;
         };
+        let editor = ui.id().with(("label_editor", column.id.0, row_title(row)));
+        if state.focus_label {
+            fresh_editor_state(ui.ctx(), editor, text);
+        }
         let response = ui.put(
             cell.shrink2(vec2(1.0, 0.0)),
-            egui::TextEdit::singleline(text).frame(false).desired_width(f32::INFINITY).margin(vec2(2.0, 0.0)),
+            egui::TextEdit::singleline(text)
+                .id(editor)
+                .lock_focus(true)
+                .frame(false)
+                .desired_width(f32::INFINITY)
+                .margin(vec2(2.0, 0.0)),
         );
         if state.focus_label {
             response.request_focus();
@@ -873,17 +913,31 @@ fn label_cell(
         let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
         if cancel {
             state.editing_label = None;
-        } else if response.lost_focus() {
+        } else if response.lost_focus() || step.is_some() {
             if *text != state.editing_label_original {
                 actions.push(Action::SetLabel { column: column.id, row: row.clone(), text: text.clone() });
             }
             state.editing_label = None;
+        }
+        if state.editing_label.is_none() {
+            if let Some((dx, dy)) = step {
+                move_label(state, sheet, column.id, row, dx, dy);
+            }
+            state.focus(ui.ctx());
         }
         return;
     }
     let text = label_text(column, row);
     let color = if column_selected { Color32::WHITE } else { TEXT };
     let response = ui.interact(cell, ui.id().with(("label", column.id.0, row_title(row))), Sense::CLICK);
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            true,
+            selected,
+            format!("{} {}", column.short_name, row_title(row)),
+        )
+    });
     // The formula row starts with the lock mark of a column that recalculates.
     let mut left = 3.0;
     // An analysis result that recalculates shows the same lock.
@@ -908,34 +962,53 @@ fn label_cell(
         ui.label(RichText::new(text).color(color));
     });
     if response.clicked() {
-        // A click in a label cell selects its column, like a click on the name.
-        let modifiers = click_modifiers(ui);
-        select_column(state, sheet, column.id, modifiers);
+        state.select_label(column.id, row.clone());
+        state.focus(ui.ctx());
     }
-    if response.secondary_clicked() && !state.selected.contains(&column.id) {
-        select_column(state, sheet, column.id, egui::Modifiers::NONE);
+    if response.secondary_clicked() {
+        state.select_label(column.id, row.clone());
+        state.focus(ui.ctx());
     }
     if response.double_clicked() {
         match row {
             LabelRow::Formula => actions.push(Action::SetColumnValues(column.id)),
             _ => {
-                let original = label_text_full(column, row);
-                state.editing_label_original = original.clone();
-                state.editing_label = Some((column.id, row.clone(), original));
-                state.focus_label = true;
+                start_editing_label(state, column, row, None);
             }
         }
     }
-    response
-        .context_menu(|ui| menus::show_context(ui, &menus::column_header_menu(), &book_ctx(book_id, state), actions));
+    response.context_menu(|ui| menus::show_context(ui, &menus::label_cell_menu(), &book_ctx(book_id, state), actions));
 }
 
 /// The text a label cell is edited with (the whole comment, not just its first line).
-fn label_text_full(column: &Column, row: &LabelRow) -> String {
+pub fn label_text_full(column: &Column, row: &LabelRow) -> String {
     match row {
         LabelRow::Comments => column.comments.clone(),
         _ => label_text(column, row),
     }
+}
+
+fn start_editing_label(state: &mut BookUi, column: &Column, row: &LabelRow, replacement: Option<String>) {
+    let original = label_text_full(column, row);
+    state.editing_label_original = original.clone();
+    state.editing_label = Some((column.id, row.clone(), replacement.unwrap_or(original)));
+    state.focus_label = true;
+}
+
+/// Move among the metadata cells, entering the first data row after the last label.
+fn move_label(state: &mut BookUi, sheet: &Worksheet, column: ColumnId, row: &LabelRow, dx: isize, dy: isize) {
+    let Some(position) = sheet.column_index(column) else { return };
+    let rows = label_rows(sheet);
+    let Some(r) = rows.iter().position(|r| r == row) else { return };
+    let c = skip_hidden(sheet, position, position.saturating_add_signed(dx).min(sheet.columns.len() - 1));
+    let r = r.saturating_add_signed(dy);
+    if r >= rows.len() {
+        state.select_cells(sheet, (c, 0), (c, 0));
+        state.reveal = 4;
+    } else {
+        state.select_label(sheet.columns[c].id, rows[r].clone());
+    }
+    state.reveal = 4;
 }
 
 /// The small lock in the head of a column whose formula keeps running, drawn from simple shapes:
@@ -1227,7 +1300,7 @@ fn body_cell(
     }
     if pressed && response.hovered() {
         state.dragging = true;
-        state.focus_grid = true;
+        state.focus(ui.ctx());
         match (&state.sel, shift) {
             (Sel::Cells { anchor, .. }, true) => {
                 let anchor = *anchor;
@@ -1292,13 +1365,17 @@ fn start_editing(state: &mut BookUi, column: &Column, row: usize) {
     state.focus_editor = true;
 }
 
-fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, book_id: WindowId, actions: &mut Vec<Action>) {
-    // Ctrl+Enter stores the text in every cell of the selected block and keeps the block, as in
-    // a spreadsheet.
-    let fill = ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
-    // Enter, Tab and Up/Down leave the cell and move on; Left/Right stay in the text. They are
-    // taken before the text field sees them.
-    let step = ui.input_mut(|i| {
+/// A replacement edit already holds its first typed characters. Reusing an earlier caret
+/// (often at zero after Escape/Home) would insert the next character before them. Reset only
+/// when opening an editor; cursor movement and text selection remain intact while editing.
+fn fresh_editor_state(ctx: &egui::Context, id: egui::Id, text: &str) {
+    let mut editor = egui::text_edit::TextEditState::default();
+    editor.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(text.chars().count()))));
+    editor.store(ctx, id);
+}
+
+fn take_edit_step(ui: &mut egui::Ui) -> Option<(isize, isize)> {
+    ui.input_mut(|i| {
         let mut step = None;
         for (key, shift, delta) in [
             (egui::Key::Tab, true, (-1, 0)),
@@ -1323,12 +1400,33 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, book_id: 
             });
         }
         step
-    });
+    })
+}
+
+fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, book_id: WindowId, actions: &mut Vec<Action>) {
+    // Ctrl+Enter stores the text in every cell of the selected block and keeps the block, as in
+    // a spreadsheet.
+    let fill = ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
+    // Enter, Tab and Up/Down leave the cell and move on; Left/Right stay in the text. They are
+    // taken before the text field sees them.
+    let step = take_edit_step(ui);
     let Some((column, row, text)) = &mut state.editing else {
         return;
     };
-    let response =
-        ui.add(egui::TextEdit::singleline(text).frame(false).desired_width(f32::INFINITY).margin(vec2(2.0, 0.0)));
+    let editor = ui.id().with(("cell_editor", column.0, *row));
+    if state.focus_editor {
+        fresh_editor_state(ui.ctx(), editor, text);
+    }
+    // Keep egui's Tab focus traversal out of the editor. We commit and return focus to the
+    // grid ourselves; otherwise a later widget can steal that focus during the same frame.
+    let response = ui.add(
+        egui::TextEdit::singleline(text)
+            .id(editor)
+            .lock_focus(true)
+            .frame(false)
+            .desired_width(f32::INFINITY)
+            .margin(vec2(2.0, 0.0)),
+    );
     if state.focus_editor {
         response.request_focus();
         state.focus_editor = false;
@@ -1490,7 +1588,7 @@ fn sel_span(state: &BookUi, sheet: &Worksheet) -> Option<((usize, usize), (usize
     let last_col = sheet.columns.len().checked_sub(1)?;
     let last_row = sheet.row_count().saturating_sub(1);
     Some(match &state.sel {
-        Sel::None => return None,
+        Sel::None | Sel::Label { .. } => return None,
         Sel::Cells { anchor, end } => {
             ((anchor.0.min(end.0), anchor.0.max(end.0)), (anchor.1.min(end.1), anchor.1.max(end.1)))
         }
@@ -1522,6 +1620,9 @@ pub fn handle_keys(
     };
     if state.editing.is_some() || state.editing_label.is_some() {
         return false;
+    }
+    if matches!(state.sel, Sel::Label { .. }) {
+        return handle_label_keys(ctx, sheet, book_id, sheet_index, sheet_count, state, actions);
     }
     // An empty sheet has no cells to move through, but Ctrl+Page Up and Down still leave it.
     if sheet.columns.is_empty() {
@@ -1626,7 +1727,7 @@ pub fn handle_keys(
                         }
                         Sel::Rows { end, .. } => (0, *end),
                         Sel::All => (0, 0),
-                        Sel::None => return None,
+                        Sel::None | Sel::Label { .. } => return None,
                     })
                 };
                 let (target, extend): (Option<(usize, usize)>, bool) = if let Some(nav) = NavKey::of(*key) {
@@ -1704,6 +1805,95 @@ pub fn handle_keys(
             i.events.retain(|e| match e {
                 egui::Event::Key { key, .. } => !consumed.contains(key),
                 egui::Event::Text(_) => typed.is_empty() && !space_taken,
+                _ => true,
+            })
+        });
+        ctx.request_repaint();
+    }
+    taken
+}
+
+fn handle_label_keys(
+    ctx: &egui::Context,
+    sheet: &Worksheet,
+    book: WindowId,
+    sheet_index: usize,
+    sheet_count: usize,
+    state: &mut BookUi,
+    actions: &mut Vec<Action>,
+) -> bool {
+    let events = ctx.input(|i| i.events.clone());
+    let mut consumed = Vec::new();
+    let mut text = String::new();
+    let mut edit = false;
+    let mut clear = false;
+    for event in &events {
+        match event {
+            egui::Event::Text(t) => text.push_str(t),
+            egui::Event::Key { key, pressed: true, modifiers, .. } if !modifiers.alt => {
+                if modifiers.command {
+                    match SheetKey::of(*key, *modifiers) {
+                        Some(SheetKey::SelectAll) => state.select_all(sheet),
+                        Some(SheetKey::SelectColumns) => {
+                            state.sel = Sel::Columns;
+                            text.clear();
+                        }
+                        Some(SheetKey::PrevSheet | SheetKey::NextSheet) => {
+                            let to = if *key == egui::Key::PageUp {
+                                sheet_index.checked_sub(1)
+                            } else {
+                                Some(sheet_index + 1).filter(|i| *i < sheet_count)
+                            };
+                            if let Some(sheet) = to {
+                                actions.push(Action::SelectSheet { book, sheet });
+                            }
+                        }
+                        _ => continue,
+                    }
+                } else {
+                    let delta = match key {
+                        egui::Key::ArrowLeft => Some((-1, 0)),
+                        egui::Key::ArrowRight => Some((1, 0)),
+                        egui::Key::ArrowUp => Some((0, -1)),
+                        egui::Key::ArrowDown => Some((0, 1)),
+                        egui::Key::Tab => Some((if modifiers.shift { -1 } else { 1 }, 0)),
+                        egui::Key::Enter => Some((0, if modifiers.shift { -1 } else { 1 })),
+                        egui::Key::F2 => {
+                            edit = true;
+                            None
+                        }
+                        egui::Key::Backspace => {
+                            clear = true;
+                            None
+                        }
+                        _ => continue,
+                    };
+                    if let (Some((dx, dy)), Sel::Label { column, row }) = (delta, state.sel.clone()) {
+                        move_label(state, sheet, column, &row, dx, dy);
+                    }
+                }
+                consumed.push(*key);
+            }
+            _ => {}
+        }
+    }
+    let text: String = text.chars().filter(|c| !c.is_control()).collect();
+    if (edit || clear || !text.is_empty())
+        && let Sel::Label { column, row } = &state.sel
+        && let Some(column) = sheet.column(*column)
+    {
+        if *row == LabelRow::Formula {
+            actions.push(Action::SetColumnValues(column.id));
+        } else {
+            start_editing_label(state, column, &row.clone(), if edit { None } else { Some(text.clone()) });
+        }
+    }
+    let taken = !consumed.is_empty() || !text.is_empty();
+    if taken {
+        ctx.input_mut(|i| {
+            i.events.retain(|e| match e {
+                egui::Event::Key { key, .. } => !consumed.contains(key),
+                egui::Event::Text(_) => text.is_empty(),
                 _ => true,
             })
         });

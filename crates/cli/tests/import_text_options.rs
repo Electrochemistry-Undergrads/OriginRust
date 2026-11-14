@@ -47,6 +47,100 @@ fn a_string_delimiter_and_fixed_widths_are_read() {
 }
 
 #[test]
+fn delimiter_character_sets_and_combined_runs_are_imported() {
+    let dir = scratch("delimiter-sets");
+    let text = "t|;i\n1|;2\n2|;3\n3|;4\n4|;5\n";
+    let (ok, err, p) = import(&dir, "sets.txt", text, &["--delimiter-chars", "|;", "--combine-delimiters"]);
+    assert!(ok, "{err}");
+    let sheet = &p.workbooks().next().unwrap().sheets[0];
+    assert_eq!(sheet.columns.len(), 2);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [2.0, 3.0, 4.0, 5.0]);
+    let (ok, err, p) = import(&dir, "sets.txt", text, &["--delimiter-chars", "|;"]);
+    assert!(ok, "{err}");
+    assert_eq!(p.workbooks().next().unwrap().sheets[0].columns.len(), 3, "empty middle cells remain by default");
+    for flags in [
+        vec!["--delimiter-chars", ""],
+        vec!["--delimiter-chars", "|;", "--delimiter", "comma"],
+        vec!["--delimiter-chars", "|;", "--fixed-width", "3"],
+        vec!["--combine-delimiters"],
+    ] {
+        let (ok, _, _) = import(&dir, "sets.txt", text, &flags);
+        assert!(!ok, "invalid flags: {flags:?}");
+    }
+}
+
+#[test]
+fn partial_row_and_column_ranges_keep_the_selected_headers() {
+    let dir = scratch("partial");
+    let text = "t,a,b,c\n1,11,21,31\n2,12,22,32\n3,13,23,33\n4,14,24,34\n5,15,25,35\n";
+    let flags = [
+        "--first-row",
+        "2",
+        "--last-row",
+        "5",
+        "--read-rows",
+        "1",
+        "--skip-rows",
+        "1",
+        "--first-column",
+        "2",
+        "--skip-columns",
+        "1",
+    ];
+    let (ok, err, p) = import(&dir, "partial.csv", text, &flags);
+    assert!(ok, "{err}");
+    let sheet = &p.workbooks().next().unwrap().sheets[0];
+    assert_eq!(sheet.columns.len(), 2);
+    assert_eq!(sheet.columns[0].long_name, "a");
+    assert_eq!(sheet.columns[1].long_name, "c");
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [12.0, 14.0]);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [32.0, 34.0]);
+    for flags in
+        [vec!["--first-row", "0"], vec!["--read-columns", "0"], vec!["--first-column", "4", "--last-column", "2"]]
+    {
+        let (ok, err, _) = import(&dir, "partial.csv", text, &flags);
+        assert!(!ok && err.contains("selection"), "{flags:?}: {err}");
+    }
+}
+
+#[test]
+fn partial_except_first_applies_to_later_files_in_a_batch() {
+    let dir = scratch("except-first");
+    let text = "t,a,b\n1,11,21\n2,12,22\n3,13,23\n4,14,24\n";
+    let first = dir.join("first.csv");
+    let second = dir.join("second.csv");
+    std::fs::write(&first, text).unwrap();
+    std::fs::write(&second, text).unwrap();
+    let output = dir.join("output.sheaf");
+    let result = Command::new(env!("CARGO_BIN_EXE_sheaf"))
+        .arg("import")
+        .arg(&first)
+        .arg(&second)
+        .arg("--into")
+        .arg(&output)
+        .args([
+            "--first-row",
+            "2",
+            "--skip-rows",
+            "1",
+            "--first-column",
+            "2",
+            "--last-column",
+            "2",
+            "--partial-except-first",
+        ])
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    let p = sheaf_io::project_file::load(&output).unwrap();
+    let books: Vec<_> = p.workbooks().collect();
+    assert_eq!(books[0].sheet().columns.len(), 3);
+    assert_eq!(books[0].sheet().row_count(), 4);
+    assert_eq!(books[1].sheet().columns.len(), 1);
+    assert_eq!(books[1].sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+}
+
+#[test]
 fn the_data_import_options_change_names_and_labels() {
     let dir = scratch("names");
     let text = "Time,Current\ns,A\n1,2\n2,3\n3,4\n4,5\n";

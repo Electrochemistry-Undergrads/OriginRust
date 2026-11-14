@@ -577,6 +577,28 @@ impl Column {
     }
 }
 
+/// The longest column short name; Origin cuts a longer one to this length without a message.
+pub const MAX_SHORT_NAME: usize = 18;
+
+/// A column short name as Origin keeps it when it is typed in Column Properties or set from a
+/// script (measured 2026-11-13): letters, digits and dots stay, every other character (space,
+/// underscore, hyphen, brackets, slash, ...) is dropped, and at most [`MAX_SHORT_NAME`] characters
+/// are kept. A name may start with a digit there. The result can be empty.
+pub fn clean_short_name(text: &str) -> String {
+    text.chars().filter(|c| c.is_alphanumeric() || *c == '.').take(MAX_SHORT_NAME).collect()
+}
+
+/// A short name from a header cell of an imported text file: [`clean_short_name`], and a first
+/// character that is a digit or a dot becomes `A` (`3rd-col` gives `Ardcol`, `9lives` gives
+/// `Alives`, `1.5` gives `A.5`). The result can be empty.
+pub fn imported_short_name(text: &str) -> String {
+    let mut name = clean_short_name(text);
+    if name.starts_with(|c: char| c.is_ascii_digit() || c == '.') {
+        name.replace_range(..1, "A");
+    }
+    name
+}
+
 /// Default short names in worksheet order: `A`..`Z`, then `AA`, `AB`, ...
 pub fn default_short_name(index: usize) -> String {
     let mut n = index;
@@ -626,6 +648,28 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn short_names_are_cleaned_like_origin() {
+        // Measured in Origin: the Column Properties box and `wks.col1.name$` give the same results.
+        assert_eq!(clean_short_name("a b_c-d.e"), "abcd.e");
+        assert_eq!(clean_short_name("my_name_1"), "myname1");
+        assert_eq!(clean_short_name("9abc"), "9abc");
+        assert_eq!(clean_short_name("a/b(c)+d%e,f:g#h"), "abcdefgh");
+        assert_eq!(clean_short_name("abcdefghijklmnopqrstuvwxyz"), "abcdefghijklmnopqr");
+        assert_eq!(clean_short_name("_ ."), ".");
+        assert_eq!(clean_short_name("__"), "");
+        // From an imported header cell a first digit or dot becomes A.
+        assert_eq!(imported_short_name("3rd-col"), "Ardcol");
+        assert_eq!(imported_short_name("9lives"), "Alives");
+        assert_eq!(imported_short_name("12x"), "A2x");
+        assert_eq!(imported_short_name("1.5"), "A.5");
+        assert_eq!(imported_short_name(".5x"), "A5x");
+        assert_eq!(imported_short_name("..a"), "A.a");
+        assert_eq!(imported_short_name("x1"), "x1");
+        assert_eq!(imported_short_name("Second Col"), "SecondCol");
+        assert_eq!(imported_short_name("---"), "");
+    }
 
     #[test]
     fn short_names_follow_spreadsheet_order() {

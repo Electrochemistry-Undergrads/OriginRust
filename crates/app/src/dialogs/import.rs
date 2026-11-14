@@ -24,11 +24,12 @@ pub struct ImportDialog {
     pub(super) kind: ImportKind,
     pub(super) chi: ChiOptions,
     pub(super) ascii: AsciiOptions,
+    pub(super) partial_except_first: bool,
     pub(super) other_delimiter: String,
+    /// Remember this choice while switching between a delimiter set and a whole string.
+    pub(super) combine_delimiters: bool,
     /// The column widths typed for the Fixed Width delimiter.
     pub(super) fixed_widths: String,
-    /// When the data of a sheet is replaced, plots of its columns follow the new row range.
-    pub(super) apply_range: bool,
     /// Make a graph of every imported file.
     pub(super) plot: bool,
     /// The graph template; `None` uses what the importer suggests for each file.
@@ -80,7 +81,7 @@ impl ImportPage {
             ImportPage::ColumnDesignation => "Column Designation",
             ImportPage::PartialImport => "Partial Import",
             ImportPage::Miscellaneous => "Miscellaneous",
-            ImportPage::DataImportOptions => "Data Import Options",
+            ImportPage::DataImportOptions => "(Re)Naming Worksheet and Workbook",
             ImportPage::FileInfo => "File Info and Parameters",
         }
     }
@@ -130,8 +131,6 @@ pub enum ImportOutcome {
     Cancelled,
     /// The user pressed OK: import and close.
     Done(ImportRequest),
-    /// The user pressed Apply: import and keep the dialog open.
-    Apply(ImportRequest),
 }
 
 impl ImportDialog {
@@ -142,9 +141,10 @@ impl ImportDialog {
             kind: ImportKind::Auto,
             chi: ChiOptions::default(),
             ascii: AsciiOptions::default(),
+            partial_except_first: false,
             other_delimiter: "|".to_string(),
+            combine_delimiters: false,
             fixed_widths: "10".to_string(),
-            apply_range: true,
             plot: true,
             mode: ImportMode::NewBook,
             target: None,
@@ -173,7 +173,12 @@ impl ImportDialog {
     }
 
     pub(super) fn read(&self, index: usize) -> Result<Imported, String> {
-        sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii).map_err(|e| e.to_string())
+        sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii_for_file(index))
+            .map_err(|e| e.to_string())
+    }
+
+    fn ascii_for_file(&self, index: usize) -> AsciiOptions {
+        if index == 0 && self.partial_except_first { self.ascii.without_partial_import() } else { self.ascii.clone() }
     }
 
     pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {
@@ -188,7 +193,7 @@ impl ImportDialog {
         if self.preview.is_none() {
             self.preview = Some(self.read(self.current));
         }
-        let before = (self.current, self.kind, self.chi.clone(), self.ascii.clone());
+        let before = (self.current, self.kind, self.chi.clone(), self.ascii.clone(), self.partial_except_first);
 
         let mut open = true;
         let mut outcome = ImportOutcome::Open;
@@ -203,12 +208,7 @@ impl ImportDialog {
                 egui::TopBottomPanel::bottom("import_buttons").show_inside(ui, |ui| {
                     ui.add_space(6.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Origin's order is OK, Cancel, Apply; the layout runs right to left.
-                        if ui.button("Apply").on_hover_text("Import with these settings and keep this window open. Applying again repeats the import in the same mode (New Books makes another book).").clicked()
-                            && let ImportOutcome::Done(request) = self.run()
-                        {
-                            outcome = ImportOutcome::Apply(request);
-                        }
+                        // Origin's impASC window has OK and Cancel only (no Apply); the layout runs right to left.
                         if ui.button("Cancel").clicked() {
                             outcome = ImportOutcome::Cancelled;
                         }
@@ -247,7 +247,7 @@ impl ImportDialog {
                 });
             });
 
-        if before != (self.current, self.kind, self.chi.clone(), self.ascii.clone()) {
+        if before != (self.current, self.kind, self.chi.clone(), self.ascii.clone(), self.partial_except_first) {
             self.preview = None;
             ctx.request_repaint();
         }
@@ -279,7 +279,6 @@ impl ImportDialog {
             place: PlaceOptions {
                 // The sheet names of other formats (CH Instruments) are not the file name's business.
                 rename_sheet: self.ascii.rename_sheet || self.shown_format() != "ascii",
-                apply_range_to_plots: self.apply_range,
             },
         }
     }
@@ -316,15 +315,13 @@ impl ImportDialog {
     /// The detected settings of the current file, recomputed only when the file or the options
     /// have changed since the last call.
     pub(super) fn detected(&mut self) -> Option<sheaf_io::ascii::Detected> {
+        let options = self.ascii_for_file(self.current);
         let file = self.files.get(self.current)?;
-        let fresh = matches!(&self.detection, Some(c) if c.file == *file && c.options == self.ascii);
+        let fresh = matches!(&self.detection, Some(c) if c.file == *file && c.options == options);
         if !fresh {
             self.detect_runs += 1;
-            self.detection = Some(DetectionCache {
-                file: file.clone(),
-                options: self.ascii.clone(),
-                detected: detect_in_prefix(file, &self.ascii),
-            });
+            self.detection =
+                Some(DetectionCache { file: file.clone(), detected: detect_in_prefix(file, &options), options });
         }
         self.detection.as_ref().and_then(|c| c.detected.clone())
     }
@@ -429,41 +426,18 @@ impl ImportDialog {
         });
     }
 
-    /// Data Import Options: what the imported data is named, and what happens to graphs when the
-    /// data of a sheet is replaced.
+    /// (Re)Naming Worksheet and Workbook: whether the imported sheet and book are named from the
+    /// file name (both on in Origin).
     fn data_import_page(&mut self, ui: &mut egui::Ui) {
         let ascii = self.shown_format() == "ascii";
         ui.add_enabled_ui(ascii, |ui| {
             let o = &mut self.ascii;
-            ui.checkbox(&mut o.rename_columns, "Rename the columns from the header lines")
-                .on_hover_text("The long name, units and comments of each column come from the header lines");
-            ui.horizontal(|ui| {
-                ui.label("Line with the short names");
-                let mut line = o.short_name_line;
-                if ui
-                    .add(
-                        DragValue::new(&mut line)
-                            .range(0..=100_000)
-                            .custom_formatter(|v, _| if v == 0.0 { "none".to_string() } else { format!("{v}") }),
-                    )
-                    .changed()
-                {
-                    o.short_name_line = line;
-                }
-            });
-            ui.checkbox(&mut o.rename_sheet, "Rename the sheet from the file name");
-            ui.checkbox(&mut o.rename_book, "Rename the book from the file name");
+            ui.checkbox(&mut o.rename_sheet, "Rename Sheet with (Partial) Filename");
+            ui.checkbox(&mut o.rename_book, "Rename Book with (Partial) Filename");
         });
         if !ascii {
             ui.weak("The naming options apply to delimited text files.");
         }
-        ui.add_space(6.0);
-        ui.add_enabled_ui(self.mode == ImportMode::ReplaceSheet, |ui| {
-            ui.checkbox(&mut self.apply_range, "Apply the new range to plots").on_hover_text(
-                "When the data of a sheet is replaced, graphs of its columns plot all rows of the new data \
-                 instead of keeping the row range they had",
-            );
-        });
     }
 
     /// File Info and Parameters: the header entries the importer found in the current file.
@@ -520,6 +494,9 @@ impl ImportDialog {
         let o = &mut self.ascii;
         egui::Grid::new(("ascii_options", page as u8)).num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
             if matches!(page, ImportPage::Options) {
+                if let Delimiter::AnyOf { combine, .. } = &o.delimiter {
+                    self.combine_delimiters = *combine;
+                }
                 ui.label("Delimiter");
                 ui.horizontal(|ui| {
                     let name = |d: &Delimiter| match d {
@@ -528,7 +505,8 @@ impl ImportDialog {
                         Delimiter::Tab => "Tab",
                         Delimiter::Semicolon => "Semicolon",
                         Delimiter::Whitespace => "Spaces",
-                        Delimiter::Other(_) | Delimiter::Multi(_) => "Other",
+                        Delimiter::Other(_) | Delimiter::AnyOf { .. } => "Other",
+                        Delimiter::Multi(_) => "Multiple Characters",
                         Delimiter::Fixed(_) => "Fixed Width",
                     };
                     egui::ComboBox::from_id_salt("ascii_delimiter").selected_text(name(&o.delimiter)).show_ui(
@@ -544,10 +522,15 @@ impl ImportDialog {
                                 let label = name(&d);
                                 ui.selectable_value(&mut o.delimiter, d, label);
                             }
-                            let is_other = matches!(o.delimiter, Delimiter::Other(_) | Delimiter::Multi(_));
+                            let is_other = matches!(o.delimiter, Delimiter::Other(_) | Delimiter::AnyOf { .. });
                             if ui.selectable_label(is_other, "Other").clicked() && !is_other {
-                                o.delimiter = Delimiter::from_text(&self.other_delimiter)
-                                    .unwrap_or(Delimiter::Other('|'));
+                                o.delimiter = Delimiter::AnyOf {
+                                    chars: if self.other_delimiter.is_empty() { "|".into() } else { self.other_delimiter.clone() },
+                                    combine: self.combine_delimiters,
+                                };
+                            }
+                            if ui.selectable_label(matches!(o.delimiter, Delimiter::Multi(_)), "Multiple Characters").clicked() {
+                                o.delimiter = Delimiter::Multi(if self.other_delimiter.is_empty() { "|".into() } else { self.other_delimiter.clone() });
                             }
                             let is_fixed = matches!(o.delimiter, Delimiter::Fixed(_));
                             if ui.selectable_label(is_fixed, "Fixed Width").clicked() && !is_fixed {
@@ -556,14 +539,19 @@ impl ImportDialog {
                         },
                     );
                     match &o.delimiter {
-                        Delimiter::Other(_) | Delimiter::Multi(_) => {
+                        Delimiter::Other(_) | Delimiter::AnyOf { .. } => {
                             ui.add(egui::TextEdit::singleline(&mut self.other_delimiter).desired_width(48.0))
-                                .on_hover_text(
-                                    "One character, or a string of characters that separates the fields as a whole",
-                                );
+                                .on_hover_text("Each character is a separate delimiter");
                             // An empty field keeps the last delimiter that was typed.
-                            if let Some(typed) = Delimiter::from_text(&self.other_delimiter) {
-                                o.delimiter = typed;
+                            if !self.other_delimiter.is_empty() {
+                                o.delimiter = Delimiter::AnyOf { chars: self.other_delimiter.clone(), combine: self.combine_delimiters };
+                            }
+                        }
+                        Delimiter::Multi(_) => {
+                            ui.add(egui::TextEdit::singleline(&mut self.other_delimiter).desired_width(64.0))
+                                .on_hover_text("The exact sequence that separates fields");
+                            if !self.other_delimiter.is_empty() {
+                                o.delimiter = Delimiter::Multi(self.other_delimiter.clone());
                             }
                         }
                         Delimiter::Fixed(_) => {
@@ -586,6 +574,12 @@ impl ImportDialog {
                     }
                 });
                 ui.end_row();
+                if let Delimiter::AnyOf { combine, .. } = &mut o.delimiter {
+                    ui.label("");
+                    ui.checkbox(&mut self.combine_delimiters, "Treat Consecutive Delimiters as One");
+                    *combine = self.combine_delimiters;
+                    ui.end_row();
+                }
             }
             if page == ImportPage::HeaderLines {
                 ui.label("Lines before the data");
@@ -600,6 +594,19 @@ impl ImportDialog {
                 ui.label("Line with comments");
                 optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
                 ui.end_row();
+                ui.label("Line with the short names");
+                let mut line = o.short_name_line;
+                if ui
+                    .add(
+                        DragValue::new(&mut line)
+                            .range(0..=100_000)
+                            .custom_formatter(|v, _| if v == 0.0 { "none".to_string() } else { format!("{v}") }),
+                    )
+                    .changed()
+                {
+                    o.short_name_line = line;
+                }
+                ui.end_row();
             }
             if page == ImportPage::ColumnDesignation {
                 ui.label("Columns");
@@ -607,9 +614,24 @@ impl ImportDialog {
                 ui.end_row();
             }
             if page == ImportPage::PartialImport {
+                ui.label("Apply selection");
+                ui.checkbox(&mut self.partial_except_first, "All files except first");
+                ui.end_row();
                 ui.label("Skip data rows");
                 ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
                 ui.end_row();
+                for (axis, selection) in [("row", &mut o.rows), ("column", &mut o.columns)] {
+                    for (label, value, min) in [
+                        (format!("First {axis}"), &mut selection.first, 1),
+                        (format!("Last {axis} (0 = end)"), &mut selection.last, 0),
+                        (format!("Read {axis}s"), &mut selection.read, 1),
+                        (format!("Skip {axis}s in pattern"), &mut selection.skip, 0),
+                    ] {
+                        let name = ui.label(label);
+                        ui.add(DragValue::new(value).range(min..=usize::MAX)).labelled_by(name.id);
+                        ui.end_row();
+                    }
+                }
             }
             if page == ImportPage::Miscellaneous {
                 ui.label("Numbers");
@@ -748,6 +770,28 @@ pub(super) fn optional_line(ui: &mut egui::Ui, value: &mut Option<usize>, detect
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn except_first_preview_detection_and_import_use_the_same_options() {
+        use sheaf_io::ascii::ImportSelection;
+        let dir = std::env::temp_dir().join(format!("sheaf-import-except-first-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let files: Vec<_> = ["first.csv", "second.csv"].iter().map(|n| dir.join(n)).collect();
+        for file in &files {
+            std::fs::write(file, "t,i\n1,11\n2,12\n3,13\n4,14\n").unwrap();
+        }
+        let mut dlg = ImportDialog::new(files);
+        dlg.ascii.rows = ImportSelection { first: 2, last: 4, read: 1, skip: 1 };
+        dlg.ascii.columns.first = 2;
+        assert_eq!(dlg.detected().unwrap().columns, 1);
+        assert_eq!(dlg.read(0).unwrap().workbook.sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+        dlg.partial_except_first = true;
+        assert_eq!(dlg.detected().unwrap().columns, 2, "scope invalidates the detection cache");
+        assert_eq!(dlg.read(0).unwrap().workbook.sheet().row_count(), 4);
+        dlg.current = 1;
+        assert_eq!(dlg.detected().unwrap().columns, 1);
+        assert_eq!(dlg.read(1).unwrap().workbook.sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+    }
 
     #[test]
     fn detection_reads_a_bounded_prefix_once_per_file_and_options() {

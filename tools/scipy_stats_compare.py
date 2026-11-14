@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prints crates/calc/tests/fixtures/scipy_stats_compare.rs: reference numbers from scipy for the
-means comparisons Holm and Dunnett, the cross tabulation and the 2D binning.
+Dunnett means comparison and the cross tabulation. (Holm and 2D binning are checked against Origin on main,
+so they are not here.)
 
     python3 tools/scipy_stats_compare.py > crates/calc/tests/fixtures/scipy_stats_compare.rs
 
@@ -14,12 +15,8 @@ What each block checks:
            multivariate t by quasi Monte Carlo, absolute error about 1e-4, much worse relative to p below
            1e-5), plus an independent deterministic evaluation of the same integral with a composite 64-point
            Gauss-Legendre rule written out here (`dunnett_ref_cdf`), which pins our integral to 1e-9.
-  HOLM     scipy has no Holm adjustment. The raw p-values are scipy.stats.t.sf of the pairwise t statistics
-           with the ANOVA mean square, the step-down adjustment is written out here from its definition.
   CROSSTAB scipy.stats.chi2_contingency (Pearson, with correction=False; Yates with correction=True;
            lambda_="log-likelihood" for the likelihood ratio) and scipy.stats.fisher_exact.
-  BIN2D    scipy.stats.binned_statistic_2d(statistic="count"); the edges are scipy's for bins given as a
-           number, and written out here (start + width * i) for bins given as a width.
 """
 import math
 
@@ -118,50 +115,6 @@ dunnett_cases = [
 ]
 
 # ---------------------------------------------------------------------------------------------------------
-# Holm
-# ---------------------------------------------------------------------------------------------------------
-def holm(p):
-    m = len(p)
-    order = sorted(range(m), key=lambda i: p[i])
-    out = [0.0] * m
-    run = 0.0
-    for rank, i in enumerate(order):
-        run = max(run, min(1.0, (m - rank) * p[i]))
-        out[i] = run
-    return out
-
-
-def holm_case(name, groups):
-    k = len(groups)
-    ns = [len(g) for g in groups]
-    means = [float(np.mean(g)) for g in groups]
-    sse = sum(float(np.sum((np.asarray(g) - m) ** 2)) for g, m in zip(groups, means))
-    df = sum(ns) - k
-    mse = sse / df
-    # the order of Origin's pairs: (1,2), (1,3), (2,3), (1,4), ...
-    pairs = [(i, j) for j in range(1, k) for i in range(j)]
-    diffs, raw = [], []
-    for i, j in pairs:
-        se = math.sqrt(mse * (1 / ns[i] + 1 / ns[j]))
-        t = (means[j] - means[i]) / se
-        diffs.append(means[j] - means[i])
-        raw.append(float(2 * stats.t.sf(abs(t), df)))
-    return (
-        f'    HolmCase {{ name: "{name}", groups: &[{", ".join(arr(g) for g in groups)}],\n'
-        f"        diff: {arr(diffs)}, raw_p: {arr(raw)}, holm_p: {arr(holm(raw))} }},"
-    )
-
-
-holm_cases = [
-    holm_case("four_groups", [sample(10, 2, 6), sample(12, 2, 7), sample(10.5, 2, 5), sample(15, 2, 6)]),
-    holm_case("three_groups_one_clear", [sample(0, 1, 8), sample(0.2, 1, 8), sample(3, 1, 8)]),
-    holm_case("two_groups", [sample(4, 1, 5), sample(5, 1, 6)]),
-    holm_case("five_groups_ties_in_order", [sample(1, 1, 4), sample(1, 1, 4), sample(2, 1, 4), sample(2, 1, 4), sample(3, 1, 4)]),
-]
-holm_lists = [[0.01, 0.04, 0.03, 0.005], [0.5, 0.2, 0.9], [0.001], [0.2, 0.2, 0.01, 0.04, 0.5]]
-holm_lists_out = [(p, holm(p)) for p in holm_lists]
-
-# ---------------------------------------------------------------------------------------------------------
 # Cross tabulation
 # ---------------------------------------------------------------------------------------------------------
 def crosstab_case(name, table):
@@ -199,48 +152,6 @@ crosstab_cases = [
     crosstab_case("large_counts", [[1200, 800, 450], [900, 1100, 600]]),
 ]
 
-# ---------------------------------------------------------------------------------------------------------
-# 2D binning
-# ---------------------------------------------------------------------------------------------------------
-def bin_case(name, x, y, xspec, yspec):
-    """spec: ('count', n) or ('width', min, max, w)"""
-    bins = []
-    for spec, v in ((xspec, x), (yspec, y)):
-        if spec[0] == "count":
-            bins.append(spec[1])
-        else:
-            _, lo, hi, w = spec
-            n = int(round((hi - lo) / w))
-            bins.append(np.array([lo + w * i for i in range(n + 1)]))
-    r = stats.binned_statistic_2d(x, y, None, "count", bins=bins)
-
-    def spec_code(spec):
-        if spec[0] == "count":
-            return f"Axis::Count({spec[1]})"
-        return f"Axis::Width({f(spec[1])}, {f(spec[2])}, {f(spec[3])})"
-
-    return (
-        f'    BinCase {{ name: "{name}", x: {arr(x)}, y: {arr(y)},\n'
-        f"        xaxis: {spec_code(xspec)}, yaxis: {spec_code(yspec)},\n"
-        f"        x_edges: {arr(r.x_edge)}, y_edges: {arr(r.y_edge)},\n"
-        f"        counts: {iarr2(r.statistic.astype(int))} }},"
-    )
-
-
-bx = list(np.round(rng.normal(5, 2, 60), 2))
-by = list(np.round(0.5 * np.array(bx) + rng.normal(0, 1.5, 60), 2))
-ix = [float(v) for v in rng.integers(0, 10, 50)]
-iy = [float(v) for v in rng.integers(0, 6, 50)]
-bin_cases = [
-    bin_case("count_4x3", bx, by, ("count", 4), ("count", 3)),
-    bin_case("count_10x10", bx, by, ("count", 10), ("count", 10)),
-    bin_case("count_1x5", bx, by, ("count", 1), ("count", 5)),
-    bin_case("width_range_with_outside", bx, by, ("width", 2.0, 8.0, 1.0), ("width", 0.0, 6.0, 1.5)),
-    # integer data sit on the bin edges: lower edges are inclusive, the range ends beyond the data
-    bin_case("width_integers_on_edges", ix, iy, ("width", 0.0, 10.0, 2.0), ("width", 0.0, 6.0, 1.0)),
-    bin_case("count_integers_last_edge_closed", ix, iy, ("count", 3), ("count", 5)),
-]
-
 print("// Made by tools/scipy_stats_compare.py (scipy 1.18.1). Reference numbers are scipy's, NOT Origin's.")
 print("#![allow(dead_code)]")
 print()
@@ -256,14 +167,6 @@ print("    pub p_ref: &'static [f64],")
 print("    pub critical_ref: f64,")
 print("}")
 print()
-print("pub struct HolmCase {")
-print("    pub name: &'static str,")
-print("    pub groups: &'static [&'static [f64]],")
-print("    pub diff: &'static [f64],")
-print("    pub raw_p: &'static [f64],")
-print("    pub holm_p: &'static [f64],")
-print("}")
-print()
 print("pub struct CrosstabCase {")
 print("    pub name: &'static str,")
 print("    pub counts: &'static [&'static [usize]],")
@@ -274,41 +177,10 @@ print("    pub yates: Option<(f64, f64)>,")
 print("    pub fisher: Option<(f64, f64, f64, f64)>,")
 print("}")
 print()
-print("pub enum Axis {")
-print("    Count(usize),")
-print("    /// min, max, width")
-print("    Width(f64, f64, f64),")
-print("}")
-print()
-print("pub struct BinCase {")
-print("    pub name: &'static str,")
-print("    pub x: &'static [f64],")
-print("    pub y: &'static [f64],")
-print("    pub xaxis: Axis,")
-print("    pub yaxis: Axis,")
-print("    pub x_edges: &'static [f64],")
-print("    pub y_edges: &'static [f64],")
-print("    pub counts: &'static [&'static [usize]],")
-print("}")
-print()
 print("pub const DUNNETT: &[DunnettCase] = &[")
 print("\n".join(dunnett_cases))
 print("];")
 print()
-print("pub const HOLM: &[HolmCase] = &[")
-print("\n".join(holm_cases))
-print("];")
-print()
-print("/// Raw p-values and their Holm adjustment.")
-print("pub const HOLM_LISTS: &[(&[f64], &[f64])] = &[")
-for p, a in holm_lists_out:
-    print(f"    ({arr(p)}, {arr(a)}),")
-print("];")
-print()
 print("pub const CROSSTAB: &[CrosstabCase] = &[")
 print("\n".join(crosstab_cases))
-print("];")
-print()
-print("pub const BIN2D: &[BinCase] = &[")
-print("\n".join(bin_cases))
 print("];")

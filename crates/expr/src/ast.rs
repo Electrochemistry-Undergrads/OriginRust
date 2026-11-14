@@ -21,6 +21,29 @@ pub enum ColumnRef {
     Index(usize),
 }
 
+/// A built-in column header row, using Origin's label-row characters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ColumnLabel {
+    ShortName,
+    LongName,
+    Units,
+    Comments,
+    Formula,
+}
+
+impl ColumnLabel {
+    pub(crate) fn from_code(code: &str) -> Option<Self> {
+        match code.to_ascii_uppercase().as_str() {
+            "G" => Some(Self::ShortName),
+            "L" => Some(Self::LongName),
+            "U" => Some(Self::Units),
+            "C" => Some(Self::Comments),
+            "O" => Some(Self::Formula),
+            _ => None,
+        }
+    }
+}
+
 impl std::fmt::Display for ColumnRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -60,6 +83,12 @@ pub(crate) enum Kind {
         r: ColumnRef,
         pos: usize,
     },
+    /// A header read, e.g. `col(A)[L]$` (text) or `col(A)[L]` (numeric).
+    Label {
+        r: ColumnRef,
+        label: ColumnLabel,
+        text: bool,
+    },
     Unary(UnOp, Box<Node>),
     Binary(BinOp, Box<Node>, Box<Node>),
     Cond(Box<Node>, Box<Node>, Box<Node>),
@@ -90,7 +119,7 @@ impl Node {
     /// Builds a node, rejecting trees that are nested too deeply.
     pub(crate) fn new(kind: Kind, pos: usize) -> Result<Node, ExprError> {
         let child_depth = match &kind {
-            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } => 0,
+            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } | Kind::Label { .. } => 0,
             Kind::Unary(_, a) | Kind::Text(a) => a.depth,
             Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => a.depth.max(b.depth),
             Kind::Cond(a, b, c) | Kind::Range { base: a, from: b, to: c, .. } => a.depth.max(b.depth).max(c.depth),
@@ -106,7 +135,7 @@ impl Node {
     pub(crate) fn walk(&self, f: &mut impl FnMut(&Node)) {
         f(self);
         match &self.kind {
-            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } => {}
+            Kind::Num(_) | Kind::Str(_) | Kind::Var { .. } | Kind::Col { .. } | Kind::Label { .. } => {}
             Kind::Unary(_, a) | Kind::Text(a) => a.walk(f),
             Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => {
                 a.walk(f);
@@ -208,9 +237,30 @@ impl Expr {
     /// Every column the expression reads through `col()` or `wcol()`, in order of first use,
     /// without duplicates. Use this to know which columns a formula column depends on.
     pub fn columns(&self) -> Vec<ColumnRef> {
+        self.column_refs(true, true)
+    }
+
+    /// Columns whose cell data is read, excluding header-only reads. These edges determine
+    /// evaluation order and circular data dependencies; a header is independent of its cells.
+    pub fn data_columns(&self) -> Vec<ColumnRef> {
+        self.column_refs(true, false)
+    }
+
+    /// Columns whose headers are read. Changes to their metadata invalidate the result without
+    /// creating a data dependency (a formula can read its own column's units, for example).
+    pub fn label_columns(&self) -> Vec<ColumnRef> {
+        self.column_refs(false, true)
+    }
+
+    fn column_refs(&self, data: bool, labels: bool) -> Vec<ColumnRef> {
         let mut out: Vec<ColumnRef> = Vec::new();
         self.root.walk(&mut |n| {
-            if let Kind::Col { r, .. } = &n.kind
+            let r = match &n.kind {
+                Kind::Col { r, .. } if data => Some(r),
+                Kind::Label { r, .. } if labels => Some(r),
+                _ => None,
+            };
+            if let Some(r) = r
                 && !out.contains(r)
             {
                 out.push(r.clone());

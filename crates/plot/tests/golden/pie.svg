@@ -1,29 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="771.84pt" height="590.76pt" viewBox="0 0 771.84 590.76">
 <rect x="0" y="0" width="771.84" height="590.76" fill="#FFFFFF"/>
 <g id="layer0">
-<clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
+<clipPath id="clip0"><rect x="53.643" y="46.67" width="667.642" height="490.331"/></clipPath>
 <g class="plots" clip-path="url(#clip0)">
-<rect x="138.237" y="68.41" width="526.086" height="424.343" fill="none" stroke="#000000" stroke-width="1"/>
-<path d="M359.193 280.581L359.193 132.061A148.52 148.52 0 0 1 475.31 187.981Z" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<text x="431.366" y="137.012" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">14.29%</text>
-<path d="M359.193 280.581L475.31 187.981A148.52 148.52 0 0 1 460.212 389.454Z" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<text x="525.07" y="299.312" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">23.81%</text>
-<path d="M359.193 280.581L460.212 389.454A148.52 148.52 0 0 1 381.328 427.443Z" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<text x="431.366" y="436.751" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">9.52%</text>
-<path d="M359.193 280.581L381.328 427.443A148.52 148.52 0 0 1 220.939 226.321Z" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
-<text x="229.141" y="390.594" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">33.33%</text>
-<path d="M359.193 280.581L220.939 226.321A148.52 148.52 0 0 1 359.193 132.061Z" fill="#00FFFF" stroke="#000000" stroke-width="0.5"/>
-<text x="265.489" y="149.443" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">19.05%</text>
-<rect x="588.423" y="79.41" width="22" height="22" fill="#000000" stroke="#000000" stroke-width="0.5"/>
-<text x="619.223" y="97.01" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">1</text>
-<rect x="588.423" y="108.01" width="22" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<text x="619.223" y="125.61" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">2</text>
-<rect x="588.423" y="136.61" width="22" height="22" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
-<text x="619.223" y="154.21" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">3</text>
-<rect x="588.423" y="165.21" width="22" height="22" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
-<text x="619.223" y="182.81" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">4</text>
-<rect x="588.423" y="193.81" width="22" height="22" fill="#00FFFF" stroke="#000000" stroke-width="0.5"/>
-<text x="619.223" y="211.41" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">5</text>
+<rect x="53.643" y="46.67" width="667.642" height="490.331" fill="none" stroke="#000000" stroke-width="1"/>
+<path d="M334.052 291.835L334.052 120.22A171.616 171.616 0 0 1 468.227 184.835Z" fill="#000000" stroke="#000000" stroke-width="0.5"/>
+<text x="417.449" y="124.961" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">14.29%</text>
+<path d="M334.052 291.835L468.227 184.835A171.616 171.616 0 0 1 450.781 417.639Z" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<text x="525.725" y="312.499" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">23.81%</text>
+<path d="M334.052 291.835L450.781 417.639A171.616 171.616 0 0 1 359.63 461.534Z" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<text x="417.449" y="471.31" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">9.52%</text>
+<path d="M334.052 291.835L359.63 461.534A171.616 171.616 0 0 1 174.3 229.137Z" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<text x="183.777" y="417.976" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">33.33%</text>
+<path d="M334.052 291.835L174.3 229.137A171.616 171.616 0 0 1 334.052 120.22Z" fill="#00FFFF" stroke="#000000" stroke-width="0.5"/>
+<text x="225.777" y="139.324" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">19.05%</text>
+<rect x="645.384" y="57.67" width="22" height="22" fill="#000000" stroke="#000000" stroke-width="0.5"/>
+<text x="676.184" y="75.27" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">1</text>
+<rect x="645.384" y="86.27" width="22" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<text x="676.184" y="103.87" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">2</text>
+<rect x="645.384" y="114.87" width="22" height="22" fill="#00FF00" stroke="#000000" stroke-width="0.5"/>
+<text x="676.184" y="132.47" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">3</text>
+<rect x="645.384" y="143.47" width="22" height="22" fill="#0000FF" stroke="#000000" stroke-width="0.5"/>
+<text x="676.184" y="161.07" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">4</text>
+<rect x="645.384" y="172.07" width="22" height="22" fill="#00FFFF" stroke="#000000" stroke-width="0.5"/>
+<text x="676.184" y="189.67" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">5</text>
 </g>
 <g class="overlay">
 </g>

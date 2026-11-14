@@ -1,10 +1,10 @@
-//! Cross tabulation and 2D binning: the two statistics tools that work on a pair of columns. The numerics
-//! are in `sheaf_calc` (`Crosstab`, `bin_2d`); this module reads the columns and writes the result sheet.
-//! What the tools report is described in `docs/spec/statistics.md`, section 11.
+//! Cross tabulation: a statistics tool that works on a pair of columns. The numerics are in `sheaf_calc`
+//! (`Crosstab`); this module reads the columns and writes the result sheet. What the tool reports is
+//! described in `docs/spec/statistics.md`, section 15.
 
 use super::statistics::{Output, check_alpha, label_column, level_text, num, number_column};
 use super::*;
-use sheaf_calc::{Crosstab, bin_2d};
+use sheaf_calc::Crosstab;
 
 /// Levels in the order a table lists them: numbers from small to large when every level is a number,
 /// otherwise text in character order ignoring case (A before a).
@@ -210,98 +210,6 @@ pub(super) fn crosstab(
     Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
 }
 
-/// Edge of a bin as text: no binary noise, no trailing zeros.
-fn edge_text(v: f64) -> String {
-    let text = format!("{v:.10}");
-    let text = text.trim_end_matches('0').trim_end_matches('.');
-    if text == "-0" { "0".to_string() } else { text.to_string() }
-}
-
-pub(super) fn bin_2d_tool(spec: &Bin2dSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
-    if inputs.len() != 2 {
-        return Err(AnalysisError::BadOption(format!(
-            "the 2D frequency count needs exactly two columns (X and Y), {} were chosen",
-            inputs.len()
-        )));
-    }
-    let (xi, yi) = (&inputs[0], &inputs[1]);
-    let r = bin_2d(xi.ys(), yi.ys(), &spec.bins).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
-    let (nx, ny) = (r.counts.len(), r.y_edges.len() - 1);
-    let range = |edges: &[f64]| (edges[0], edges[1] - edges[0]);
-    let (xs, xw) = range(&r.x_edges);
-    let (ys, yw) = range(&r.y_edges);
-    let largest = r.counts.iter().flatten().copied().max().unwrap_or(0);
-    let mut table = ResultTable::new(&[
-        "N",
-        "Counted",
-        "X bins",
-        "X first edge",
-        "X bin size",
-        "Y bins",
-        "Y first edge",
-        "Y bin size",
-        "Largest count",
-    ]);
-    table.push_row(
-        format!("{} vs {}", yi.label, xi.label),
-        vec![r.pairs as f64, r.counted as f64, nx as f64, xs, xw, ny as f64, ys, yw, largest as f64],
-        ["", "", "", &xi.units, &xi.units, "", &yi.units, &yi.units, ""].map(str::to_string).to_vec(),
-    );
-
-    let x_end = |i: usize| r.x_edges[i + 1];
-    let mut on_sheet = vec![
-        {
-            let mut c = number_column("X bin start", &xi.units, r.x_edges[..nx].to_vec());
-            c.designation = Designation::Disregard;
-            c
-        },
-        {
-            let mut c = number_column("X bin end", &xi.units, (0..nx).map(x_end).collect());
-            c.designation = Designation::Disregard;
-            c
-        },
-        {
-            let mut c = number_column("X bin center", &xi.units, r.x_centers());
-            c.designation = Designation::X;
-            c
-        },
-    ];
-    let y_centers = r.y_centers();
-    for j in 0..ny {
-        let last = j + 1 == ny;
-        let mut col = number_column(
-            &format!("[{}, {}{}", edge_text(r.y_edges[j]), edge_text(r.y_edges[j + 1]), if last { "]" } else { ")" }),
-            "",
-            (0..nx).map(|i| r.counts[i][j] as f64).collect(),
-        );
-        col.comments = format!("{} bin, center {}", yi.name, edge_text(y_centers[j]));
-        on_sheet.push(col);
-    }
-    on_sheet.push(number_column("Total", "", r.x_totals().iter().map(|&c| c as f64).collect()));
-
-    let mut notes = vec![format!(
-        "2D frequency count of {} against {}: {} pairs in a grid of {nx} x {ny} bins (X bins of width {} from {}, Y bins of width {} from {}); largest count {largest}.",
-        yi.name,
-        xi.name,
-        r.counted,
-        num(xw),
-        num(xs),
-        num(yw),
-        num(ys)
-    )];
-    if r.counted < r.pairs {
-        notes.push(format!(
-            "{} of the {} pairs lie outside the grid and are not counted.",
-            r.pairs - r.counted,
-            r.pairs
-        ));
-    }
-    if r.infinite > 0 {
-        notes.push(format!("{} rows with an infinite value were left out.", r.infinite));
-    }
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,28 +326,5 @@ mod tests {
         let few: Vec<&str> = (0..MAX_LEVELS).map(|i| if i % 2 == 0 { "a" } else { "b" }).collect();
         let (mut p, cols) = project(vec![ColumnData::numeric(ids), text(&few)]);
         assert!(p.analyze(&request(&cols, Tool::Crosstab(CrosstabSpec::default()))).is_ok());
-    }
-
-    #[test]
-    fn bin_2d_writes_a_matrix_sheet() {
-        let x = ColumnData::numeric(vec![0.0, 1.0, 2.0, 3.0, 4.0, f64::NAN]);
-        let y = ColumnData::numeric(vec![0.0, 0.0, 5.0, 10.0, 10.0, 3.0]);
-        let (mut p, ids) = project(vec![x, y]);
-        let size = BinSize::Count(2);
-        let spec = Bin2dSpec {
-            bins: Bin2dOptions {
-                x: AxisBins { size, ..Default::default() },
-                y: AxisBins { size, ..Default::default() },
-            },
-        };
-        let r = p.analyze(&request(&ids, Tool::Bin2d(spec))).unwrap();
-        assert!(r.message.contains("2D frequency count") && r.message.contains("Bin2D1"), "{}", r.message);
-        assert_eq!(column(&p, &r, "[0, 5)").numeric().unwrap(), [2.0, 0.0]);
-        assert_eq!(column(&p, &r, "[5, 10]").numeric().unwrap(), [0.0, 3.0]);
-        assert_eq!(column(&p, &r, "Total").numeric().unwrap(), [2.0, 3.0]);
-        assert_eq!(column(&p, &r, "X bin center").numeric().unwrap(), [1.0, 3.0]);
-        let t = r.table.unwrap();
-        assert_eq!(t.rows[0].1[0], 5.0);
-        assert!(p.analyze(&request(&ids[..1], Tool::Bin2d(spec))).is_err());
     }
 }

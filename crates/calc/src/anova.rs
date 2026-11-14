@@ -2,8 +2,7 @@
 //!
 //! The summary table, the descriptive statistics of the groups and the means comparisons (Tukey,
 //! Bonferroni, Sidak, Fisher's least significant difference, Scheffe) follow what Origin
-//! reports for "One-Way ANOVA" (see `docs/spec/statistics.md`). Holm-Bonferroni (step-down) and Dunnett
-//! (every group against a control) are added after scipy and the textbook definitions, not after Origin.
+//! reports for "One-Way ANOVA" (see `docs/spec/statistics.md`).
 
 use crate::hypothesis::SampleStats;
 use statrs::distribution::{ContinuousCDF, FisherSnedecor, Normal, StudentsT};
@@ -47,34 +46,63 @@ pub enum MeansComparison {
     /// Fisher's least significant difference: no adjustment for the number of comparisons.
     FisherLsd,
     Scheffe,
-    /// Holm-Bonferroni: the step-down version of Bonferroni, all pairs. It has adjusted p-values but no
-    /// confidence intervals (the limits are NaN).
-    Holm,
+    /// Holm's step-down procedure with the Bonferroni thresholds `alpha / (m - rank)`.
+    HolmBonferroni,
+    /// Holm's step-down procedure with the Sidak thresholds `1 - (1 - alpha)^(1 / (m - rank))`.
+    HolmSidak,
     /// Dunnett: every group against one control group (the first group unless the caller says otherwise),
-    /// with simultaneous confidence intervals. See [`crate::dunnett`].
+    /// with simultaneous confidence intervals. See [`crate::dunnett`]. Checked against scipy, not Origin.
     Dunnett,
 }
 
 impl MeansComparison {
-    pub const ALL: [MeansComparison; 7] = [
+    /// The five single-step methods; the Holm methods are listed apart in [`MeansComparison::WITH_HOLM`].
+    pub const ALL: [MeansComparison; 5] = [
         MeansComparison::Tukey,
         MeansComparison::Bonferroni,
         MeansComparison::Sidak,
         MeansComparison::FisherLsd,
         MeansComparison::Scheffe,
-        MeansComparison::Holm,
+    ];
+
+    /// Every method of the one-way ANOVA, Origin's order.
+    pub const WITH_HOLM: [MeansComparison; 7] = [
+        MeansComparison::Tukey,
+        MeansComparison::Bonferroni,
+        MeansComparison::Sidak,
+        MeansComparison::FisherLsd,
+        MeansComparison::Scheffe,
+        MeansComparison::HolmBonferroni,
+        MeansComparison::HolmSidak,
+    ];
+
+    /// [`MeansComparison::WITH_HOLM`] and Dunnett's many-to-one test (scipy-checked, not Origin).
+    pub const WITH_DUNNETT: [MeansComparison; 8] = [
+        MeansComparison::Tukey,
+        MeansComparison::Bonferroni,
+        MeansComparison::Sidak,
+        MeansComparison::FisherLsd,
+        MeansComparison::Scheffe,
+        MeansComparison::HolmBonferroni,
+        MeansComparison::HolmSidak,
         MeansComparison::Dunnett,
     ];
 
+    /// True for the step-down methods: their table is sorted by p-value and has no confidence limits.
+    pub fn is_holm(self) -> bool {
+        matches!(self, MeansComparison::HolmBonferroni | MeansComparison::HolmSidak)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
+            MeansComparison::HolmBonferroni => "Bonferroni-Holm",
+            MeansComparison::HolmSidak => "Sidak-Holm",
+            MeansComparison::Dunnett => "Dunnett",
             MeansComparison::Tukey => "Tukey",
             MeansComparison::Bonferroni => "Bonferroni",
             MeansComparison::Sidak => "Sidak",
             MeansComparison::FisherLsd => "Fisher LSD",
             MeansComparison::Scheffe => "Scheffe",
-            MeansComparison::Holm => "Holm-Bonferroni",
-            MeansComparison::Dunnett => "Dunnett",
         }
     }
 }
@@ -91,9 +119,13 @@ pub struct Comparison {
     /// The statistic the p-value comes from: the studentized range q for Tukey, F for Scheffe, |t| for the others.
     pub stat: f64,
     pub p: f64,
+    /// Lower and upper limit of the confidence interval (NaN for the Holm methods, which have none).
     pub lcl: f64,
     pub ucl: f64,
-    /// True where `p < alpha`.
+    /// The significance level this comparison was judged at: the nominal level, or for the Holm methods the
+    /// threshold of its rank in the sorted list.
+    pub alpha: f64,
+    /// True where `p < alpha` (for the Holm methods: where this and every smaller p-value are below their thresholds).
     pub significant: bool,
 }
 
@@ -180,8 +212,10 @@ impl Anova {
             compare_means(&levels, self.error.mean_sq, self.error.df, method, alpha)
         };
         // The one-way table reports the size of the statistic; the two-way table keeps the sign.
-        for c in &mut out {
-            c.stat = c.stat.abs();
+        if !method.is_holm() {
+            for c in &mut out {
+                c.stat = c.stat.abs();
+            }
         }
         out
     }
@@ -224,11 +258,10 @@ pub fn compare_means(
             let t = if se == 0.0 { if diff == 0.0 { 0.0 } else { f64::INFINITY.copysign(diff) } } else { diff / se };
             let p_lsd = if t.is_infinite() { 0.0 } else { 2.0 * t_dist.cdf(-t.abs()) };
             let (stat, p, half) = match method {
+                MeansComparison::HolmBonferroni | MeansComparison::HolmSidak => (t, p_lsd, f64::NAN),
+                MeansComparison::Dunnett => unreachable!("handled above"),
                 MeansComparison::FisherLsd => (t, p_lsd, t_crit(alpha) * se),
                 MeansComparison::Bonferroni => (t, (m * p_lsd).min(1.0), t_crit(alpha / m) * se),
-                // The adjusted p-value is found below, from all the p-values together.
-                MeansComparison::Holm => (t, p_lsd, f64::NAN),
-                MeansComparison::Dunnett => unreachable!("handled above"),
                 MeansComparison::Sidak => {
                     (t, 1.0 - (1.0 - p_lsd).powf(m), t_crit(1.0 - (1.0 - alpha).powf(1.0 / m)) * se)
                 }
@@ -253,35 +286,32 @@ pub fn compare_means(
                 p,
                 lcl: diff - half,
                 ucl: diff + half,
+                alpha,
                 significant: p < alpha,
             });
         }
     }
-    if method == MeansComparison::Holm {
-        let raw: Vec<f64> = out.iter().map(|c| c.p).collect();
-        for (c, p) in out.iter_mut().zip(holm_adjust(&raw)) {
-            c.p = p;
-            c.significant = p < alpha;
-        }
+    if method.is_holm() {
+        holm_step_down(&mut out, method, alpha);
     }
     out
 }
 
-/// Holm's step-down adjustment of p-values: the smallest of `m` is multiplied by `m`, the next by `m - 1`, and
-/// so on, and no adjusted value is smaller than one before it (in the order of the raw values); all are
-/// capped at 1. The adjusted values come back in the order of the input; NaN stays NaN.
-pub fn holm_adjust(p: &[f64]) -> Vec<f64> {
-    let m = p.len();
-    let mut order: Vec<usize> = (0..m).filter(|&i| !p[i].is_nan()).collect();
-    order.sort_by(|&a, &b| p[a].total_cmp(&p[b]));
-    let count = order.len();
-    let mut out = vec![f64::NAN; m];
-    let mut running = 0.0_f64;
-    for (rank, &i) in order.iter().enumerate() {
-        running = running.max(((count - rank) as f64 * p[i]).min(1.0));
-        out[i] = running;
+/// Holm's step-down procedure on the plain pairwise comparisons: sort by p-value (equal p-values keep their
+/// pair order), the pair of rank `r` (from 0, `m` pairs) is tested at `alpha / (m - r)` (Bonferroni) or
+/// `1 - (1 - alpha)^(1 / (m - r))` (Sidak), and once one pair is not significant no later one is either.
+fn holm_step_down(list: &mut [Comparison], method: MeansComparison, alpha: f64) {
+    let m = list.len();
+    // NaN p-values (impossible with finite data) sort last.
+    list.sort_by(|a, b| a.p.partial_cmp(&b.p).unwrap_or(std::cmp::Ordering::Equal));
+    let mut still = true;
+    for (r, c) in list.iter_mut().enumerate() {
+        let left = (m - r) as f64;
+        c.alpha =
+            if method == MeansComparison::HolmSidak { 1.0 - (1.0 - alpha).powf(1.0 / left) } else { alpha / left };
+        still = still && c.p < c.alpha;
+        c.significant = still;
     }
-    out
 }
 
 /// Dunnett's comparison of every level with level `control` (counted from 0), the way [`compare_means`] takes its
@@ -313,6 +343,7 @@ pub fn compare_to_control(levels: &[(usize, f64)], control: usize, mse: f64, dfe
                 p,
                 lcl: diff - d * se,
                 ucl: diff + d * se,
+                alpha,
                 significant: p < alpha,
             }
         })

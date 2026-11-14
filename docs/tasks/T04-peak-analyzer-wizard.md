@@ -1,6 +1,6 @@
 # T04: Peak Analyzer as Origin's multi-page wizard
 
-**Status:** open; blocked in part on seeing Origin's pages. **Size:** L. **Branch:** `peak-wizard`.
+**Status:** pages measured and the window rebuilt as Origin's wizard (2026-11-13, analysis-tools.md 11.1); Constant baseline and Origin's Area % added. Left: Origin's Auto integration window rule (measured, not understood), Create/Subtract Baseline goals, Auto Subtract Baseline, the other baseline modes, anchor editing, Voigt, per-peak functions. **Size:** L. **Branch:** `peak-wizard`.
 **Detail:** audit B "Analysis X-Function dialogs" and its re-check note; D "Partial" (baseline).
 **Spec:** `docs/spec/analysis-tools.md` (peak chain), `docs/spec/gui-look.md`.
 

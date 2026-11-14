@@ -318,6 +318,192 @@ fn subtract_ref_and_math_use_a_reference_from_another_file() {
 }
 
 #[test]
+fn column_math_goes_row_by_row() {
+    let dir = scratch("column-math");
+    let data = data_file(&dir);
+    let out = dir.join("colmath.csv");
+    // ramp minus flat (2), row by row; Add is the default operator as in Origin.
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "column-math",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--op",
+        "subtract",
+        "--ref",
+        "flat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Column math"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows[0], "0,2,0,-2");
+    assert_eq!(rows[10], "10,2,10,8");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "column-math", data.to_str().unwrap(), "--y", "ramp", "--value", "1", "--common"]);
+    assert!(!ok && stderr.contains("row by row"), "{stderr}");
+}
+
+#[test]
+fn convolution_and_signal_correlation_write_a_new_sheet() {
+    let dir = scratch("signal");
+    let data = data_file(&dir);
+    let out = dir.join("conv.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "convolution",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--response",
+        "flat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Convolution"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows.len(), 21, "11 + 11 - 1");
+    // 0..10 convolved with eleven 2s: 0, 2, 6, ...
+    assert_eq!(rows[..3], ["0,0", "1,2", "2,6"]);
+    let out = dir.join("corr.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "signal-correlation",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--with",
+        "ramp",
+        "--circular",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    // Names and comments (no units row: lags and correlations have none), then the values.
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(2).map(str::to_string).collect();
+    assert_eq!(rows.len(), 11, "circular: lags 0 to 10");
+    // Origin's circular order starts from the far end: lag 0 holds sum a[j - 1] a[j] = 330.
+    assert_eq!(rows[0], "0,330");
+}
+
+#[test]
+fn fft_writes_a_spectrum() {
+    let dir = scratch("fft");
+    let data = data_file(&dir);
+    let out = dir.join("fft.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "fft",
+        data.to_str().unwrap(),
+        "--y",
+        "flat",
+        "--window",
+        "hanning",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("FFT"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.starts_with("Frequency,Real,Imaginary,Magnitude,Amplitude,Phase,Power,dB"), "{text}");
+    // A constant 2 with the amplitude-corrected window: amplitude 2 at frequency 0.
+    let first = text.lines().find(|l| l.starts_with("0,")).unwrap();
+    assert_eq!(first.split(',').nth(4), Some("2"), "{text}");
+}
+
+#[test]
+fn ifft_of_two_columns() {
+    let dir = scratch("ifft");
+    let data = data_file(&dir);
+    let out = dir.join("ifft.csv");
+    // ramp as the real part and flat (2) as the imaginary part, in FFT order.
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "ifft",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--imaginary",
+        "flat",
+        "--no-shift",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("IFFT"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.starts_with("Time,Real,Imaginary,Amplitude,Phase"), "{text}");
+    // Row 0 is the mean of each part: 5 + 2i.
+    let row0 = text.lines().find(|l| l.starts_with("0,")).unwrap();
+    assert!(row0.starts_with("0,5,2,"), "{row0}");
+}
+
+#[test]
+fn fft_filter_adds_a_column() {
+    let dir = scratch("fft-filter");
+    let data = data_file(&dir);
+    let out = dir.join("filtered.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "fft-filter",
+        data.to_str().unwrap(),
+        "--y",
+        "flat",
+        "--type",
+        "high-pass",
+        "--cutoff",
+        "0.1",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("FFT filter"), "{stdout}");
+    // The high pass keeps the offset of a constant: still 2 beside the input.
+    let text = std::fs::read_to_string(&out).unwrap();
+    let row = text.lines().find(|l| l.starts_with("0,")).unwrap();
+    assert!(row.starts_with("0,2,2,"), "{text}");
+}
+
+#[test]
+fn hilbert_adds_a_column() {
+    let dir = scratch("hilbert");
+    let data = data_file(&dir);
+    let (ok, stdout, stderr) = sheaf(&["analyze", "hilbert", data.to_str().unwrap(), "--y", "ramp"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Hilbert transform"), "{stdout}");
+}
+
+#[test]
+fn level_crossing_lists_the_crossings() {
+    let dir = scratch("level-crossing");
+    let data = data_file(&dir);
+    let out = dir.join("lx.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "level-crossing",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--level",
+        "2.5",
+        "--row",
+        "right",
+        "--details",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Level crossing") && stdout.contains("C reaches Y = 2.5 once"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.lines().next().unwrap().contains("CrossingX1"), "{text}");
+    // t, flat, ramp, then X, direction, the right-hand row (X 2.5 lies between rows 3 and 4) and Y.
+    assert!(text.lines().any(|l| l == "0,2,0,2.5,1,4,2.5"), "{text}");
+}
+
+#[test]
 fn curve_math_and_range_mistakes_are_explained() {
     let dir = scratch("math-errors");
     let data = data_file(&dir);
@@ -438,6 +624,11 @@ fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
     ]);
     assert!(ok, "{err}");
     assert!(out.contains("Model") && out.contains("Tukey means comparison") && out.contains("ANOVA1"), "{out}");
+
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova", file, "--y", "untreated,treated,third", "--comparison", "holm-bonferroni"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Bonferroni-Holm means comparison") && out.contains("sorted by p-value"), "{out}");
 
     let (ok, out, err) = sheaf(&["analyze", "normality", file, "--y", "untreated,treated"]);
     assert!(ok, "{err}");
@@ -706,13 +897,10 @@ fn dunnett_groups_file(dir: &Path) -> PathBuf {
 }
 
 #[test]
-fn anova_with_holm_and_dunnett_comparisons() {
+fn anova_with_dunnett_comparison() {
     let dir = scratch("holm-dunnett");
     let data = dunnett_groups_file(&dir);
     let file = data.to_str().unwrap();
-    let (ok, out, err) = sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "holm"]);
-    assert!(ok, "{err}");
-    assert!(out.contains("Holm-Bonferroni means comparison") && out.contains("no confidence limits"), "{out}");
     let (ok, out, err) = sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett"]);
     assert!(ok, "{err}");
     assert!(out.contains("Dunnett means comparison") && out.contains("against the control ctrl"), "{out}");
@@ -755,27 +943,10 @@ fn crosstab_counts_percents_and_tests() {
 }
 
 #[test]
-fn anova2_offers_holm_and_refuses_dunnett_and_an_x_range() {
-    let dir = scratch("anova2-holm");
+fn anova2_refuses_dunnett_and_an_x_range() {
+    let dir = scratch("anova2-dunnett");
     let data = design_file(&dir);
     let file = data.to_str().unwrap();
-    let export = dir.join("holm.csv");
-    let (ok, out, err) = sheaf(&[
-        "analyze",
-        "anova2",
-        file,
-        "--y",
-        "dose,batch,response",
-        "--comparison",
-        "holm",
-        "--export",
-        export.to_str().unwrap(),
-    ]);
-    assert!(ok, "{err}");
-    assert!(out.contains("Holm"), "{out}");
-    let holm = std::fs::read_to_string(&export).unwrap();
-    assert!(holm.contains("Holm-Bonferroni comparison") && holm.contains("dose: low"), "{holm}");
-
     let (ok, _, err) = sheaf(&["analyze", "anova2", file, "--y", "dose,batch,response", "--comparison", "dunnett"]);
     assert!(!ok && err.contains("one-way ANOVA only"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "anova2", file, "--y", "dose,batch,response", "--x-range", "1:3"]);
@@ -783,34 +954,76 @@ fn anova2_offers_holm_and_refuses_dunnett_and_an_x_range() {
 }
 
 #[test]
-fn bin2d_counts_pairs_into_a_grid() {
-    let dir = scratch("bin2d");
-    let path = dir.join("xy.csv");
-    std::fs::write(&path, "x,y\n0,0\n1,0\n2,5\n3,10\n4,10\n").unwrap();
-    let export = dir.join("bins.csv");
+fn power_needs_no_file_and_prints_origins_numbers() {
+    // Two samples, means 5 and 6, sd 1.5, n = 10 per group: Origin gives 0.2921101.
     let (ok, out, err) = sheaf(&[
         "analyze",
-        "bin2d",
-        path.to_str().unwrap(),
-        "--y",
-        "A,B",
-        "--x-bins",
-        "2",
-        "--y-bins",
-        "2",
-        "--export",
-        export.to_str().unwrap(),
+        "power",
+        "--test",
+        "two-sample",
+        "--mean1",
+        "5",
+        "--mean2",
+        "6",
+        "--sd",
+        "1.5",
+        "--sizes",
+        "10,30",
     ]);
     assert!(ok, "{err}");
-    assert!(out.contains("2D frequency count") && out.contains("Bin2D1") && out.contains("5 pairs"), "{out}");
-    let exported = std::fs::read_to_string(&export).unwrap();
-    let rows: Vec<&str> = exported.lines().collect();
-    assert!(
-        rows[0].contains("X bin center") && rows[0].contains("[0, 5)") && rows[0].contains("[5, 10]"),
-        "{}",
-        rows[0]
-    );
-    assert!(rows[2].contains(",2,0,2") && rows[3].contains(",0,3,3"), "{exported}");
-    let (ok, _, err) = sheaf(&["analyze", "bin2d", path.to_str().unwrap(), "--y", "A"]);
-    assert!(!ok && err.contains("exactly two columns"), "{err}");
+    assert!(out.contains("0.29211") && out.contains("0.71873"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "power",
+        "--test",
+        "two-sample",
+        "--mean1",
+        "5",
+        "--mean2",
+        "6",
+        "--sd",
+        "1.5",
+        "--powers",
+        "0.8,0.9",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("37") && out.contains("49"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "power", "--test", "anova"]);
+    assert!(!ok && err.contains("either --sizes"), "{err}");
+}
+
+#[test]
+fn bin2d_counts_points_in_a_grid() {
+    let dir = scratch("bin2d");
+    let file = dir.join("points.csv");
+    let x = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 1.2, 1.7, 2.2, 8.1, 8.8, 10.0, 0.0];
+    let y = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 2.2, 2.7, 9.1, 0.4, 3.3, 5.0, 0.0];
+    let text: String =
+        std::iter::once("x,y\n".to_string()).chain(x.iter().zip(y).map(|(a, b)| format!("{a},{b}\n"))).collect();
+    std::fs::write(&file, text).unwrap();
+    let file = file.to_str().unwrap();
+    let grid = ["--x-min", "0", "--x-max", "10", "--x-inc", "2", "--y-min", "0", "--y-max", "10", "--y-inc", "5"];
+    let args: Vec<&str> = ["analyze", "bin2d", file, "--y", "y"].into_iter().chain(grid).collect();
+    let (ok, out, err) = sheaf(&args);
+    assert!(ok, "{err}");
+    assert!(out.contains("Binning2D1") && out.contains("17 points") && out.contains("5 X bins by 2 Y bins"), "{out}");
+    let args: Vec<&str> = ["analyze", "bin2d", file, "--y", "x,y", "--stat", "mean"].into_iter().chain(grid).collect();
+    let (ok, out, err) = sheaf(&args);
+    assert!(ok, "{err}");
+    assert!(out.contains("(mean)"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "bin2d", file, "--y", "y", "--stat", "mode"]);
+    assert!(!ok && err.contains("mode"), "{err}");
+}
+
+#[test]
+fn discfreq_counts_the_distinct_values() {
+    let dir = scratch("discfreq");
+    let file = dir.join("cats.csv");
+    std::fs::write(&file, "kind,n\nb,3\na,1\nB,3\nc,2\na,3\n").unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind,n", "--relative", "--percent"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("DiscretFreq1") && out.contains("5 cells, 3 distinct values"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind", "--no-count"]);
+    assert!(!ok && err.contains("at least one"), "{err}");
 }

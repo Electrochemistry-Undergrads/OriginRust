@@ -173,13 +173,26 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
         if dim == Dim::Y
             && linear
             && let Some((lo, hi)) = range
-            && lo >= 0.0
             && axis.min.is_none()
+            && axis.max.is_none()
+            && axis.major_step.is_none()
             && sources.iter().any(|pd| pd.spokes.is_some())
         {
-            // A radar chart starts at the centre with 0 (graphing spec 14.19); all zeros give 0..1.
-            range = Some((0.0, if hi > 0.0 { hi } else { 1.0 }));
-            free.0 = false;
+            // A radar chart's centre is the axis' lower limit, which can be anything (graphing spec 14.19). The
+            // step is half of the usual table's, and both limits are rounded outwards to whole steps after
+            // the margin (measured: 2.1..5.2 gave 1.5..5.5 in steps of 0.5, 0..4 gave -1..5 in steps of 1).
+            let span = if hi > lo {
+                hi - lo
+            } else if hi != 0.0 {
+                hi.abs() * 0.2
+            } else {
+                1.0
+            };
+            let step = sheaf_core::autorange::linear_step(span) / 2.0;
+            let margin = axis.rescale_margin_pct / 100.0 * span;
+            let from = ((lo - margin) / step + 1e-9).floor() * step;
+            let to = ((hi.max(lo + span) + margin) / step - 1e-9).ceil() * step;
+            drawn = Some(Axis { min: Some(from), max: Some(to), major_step: Some(step), ..axis.clone() });
         }
         if dim == Dim::Y && linear && sources.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Area) {
             // Piles of 100: the axis ends exactly at 0 and 100.
@@ -220,7 +233,8 @@ fn group_geometry(
         Some(p) if p.radar => {
             polar::radar_axis(pds[i].plots.first().and_then(|pd| pd.spokes.as_deref()).unwrap_or(&[]))
         }
-        _ => polar::angle_axis(axis),
+        Some(p) => polar::angle_axis(axis, p.angle_unit),
+        None => polar::angle_axis(axis, sheaf_core::graph::AngleUnit::Degrees),
     };
     // The scale of the three axes of a ternary layer.
     let ternary_scale = |i: usize| {
@@ -229,8 +243,17 @@ fn group_geometry(
             (ternary::scale_axis(&g.layers[i].x_axis, percent), ternary::scale_axis(&g.layers[i].y_axis, percent))
         })
     };
+    // The radius axis of a polar graph cannot start below 0 (Origin refuses a negative lower limit).
+    let polar_floor = |i: usize, y: ResolvedAxis| {
+        let l = &g.layers[i];
+        if y.min >= 0.0 || l.y_axis.min.is_some() || !l.coords.polar().is_some_and(|p| !p.radar) {
+            return y;
+        }
+        // The rest of the range stays as the data made it (measured: -1 to 2 gave 0 to 2.25, steps of 0.5).
+        own(i, Dim::Y, &Axis { min: Some(0.0), max: Some(y.max), major_step: Some(y.step), ..l.y_axis.clone() })
+    };
     let (root_x, root_y) = if rl.coords.polar().is_some() {
-        (spoke_axis(root, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
+        (spoke_axis(root, &rl.x_axis), polar_floor(root, shared(Dim::Y, &rl.y_axis)))
     } else if let Some((x, y)) = ternary_scale(root) {
         (x, y)
     } else {
@@ -529,6 +552,10 @@ fn layer_scene(
     let layer = &g.layers[index];
     let mut scene =
         LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
+    // The layer's Background colour fills the frame behind the grid and the data.
+    if let Some(fill) = layer.background {
+        scene.grid.push(Item::Rect { rect: geom.frame, fill: Some(fill), stroke: None });
+    }
     let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
     let waterfall = stack::waterfall(g, index);
     // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
@@ -548,9 +575,11 @@ fn layer_scene(
         }
         (&layer.x_axis, &layer.y_axis)
     };
+    // Display tab: Show Elements Data off draws no plot.
+    let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
     match waterfall {
         None => {
-            for pd in pds {
+            for pd in drawn {
                 let start = scene.plots.len();
                 draw_plot(&mut scene.plots, pd, geom);
                 let kind = ObjectKind::Plot(plot_index(pd));
@@ -559,7 +588,7 @@ fn layer_scene(
         }
         Some((sx, sy)) => {
             // Back to front, so that the first curve is on top; member k moves by k shifts.
-            for pd in pds.iter().rev() {
+            for pd in drawn.iter().rev() {
                 let k = pd.member.unwrap_or(0) as f64;
                 let mut moved = geom.clone();
                 moved.frame.x += k * sx * geom.frame.w;
@@ -570,6 +599,16 @@ fn layer_scene(
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
         }
+    }
+    // Grid on Top of Data: the grid lines (not the background) are drawn after the plots.
+    if layer.display.grid_on_top {
+        let keep = usize::from(layer.background.is_some()).min(scene.grid.len());
+        let lines = scene.grid.split_off(keep);
+        scene.plots.extend(lines);
+    }
+    // Clip Data to Frame off: the data may run over the whole page.
+    if !layer.display.clip_data {
+        scene.clip = Rect { x: 0.0, y: 0.0, w: g.page.width_pt, h: g.page.height_pt };
     }
     let objects = &mut scene.objects;
     let out = &mut scene.overlay;
@@ -1181,8 +1220,10 @@ fn draw_legend(
     let row_h = 1.3 * fs;
     let col_gap = fs;
 
-    // Piled and lying bars list the last plot first, as they appear on the page.
-    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked_column() || pd.plot.kind == PlotKind::Bar);
+    // Piled, floating and lying bars list the last plot first (measured, spec 14.12).
+    let reversed = entries.first().is_some_and(|pd| {
+        pd.plot.kind.is_stacked_column() || pd.plot.kind.is_floating() || pd.plot.kind == PlotKind::Bar
+    });
     let text = lg.text.clone().unwrap_or_else(|| {
         if reversed {
             let rev: Vec<String> = ids.iter().rev().cloned().collect();
@@ -1279,7 +1320,16 @@ fn draw_legend(
                 Cell::Sample(k) => {
                     let (sx0, sx1) = (x, x + sample);
                     let plot = entries[*k].plot;
-                    if plot.kind.has_line() && plot.line.width_pt > 0.0 {
+                    // A line plot filled under its curve shows a filled box, as Origin's legend does.
+                    let filled = plot.decor.fill_under.filter(|_| plot.kind.has_line() && !plot.kind.is_area());
+                    if let Some(fill) = filled {
+                        out.push(Item::Rect {
+                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            fill: Some(fill),
+                            stroke: (plot.line.width_pt > 0.0)
+                                .then(|| Stroke::solid(plot.line.color, plot.line.width_pt.min(fs / 4.0))),
+                        });
+                    } else if plot.kind.has_line() && plot.line.width_pt > 0.0 {
                         let mut d = String::new();
                         move_to(&mut d, sx0, cy);
                         line_to(&mut d, sx1, cy);

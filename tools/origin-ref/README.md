@@ -61,9 +61,49 @@ kept here), the case lists `cases2..5.json` and `stats3-make-fixture.py`, which 
 explicitly. Report sheets are read cell by cell (`wcol(c)[r]`) because `GetWorksheet` does not return them.
 What the runs showed is in `docs/spec/statistics.md`, section 10.
 
-## Still to measure (stats-compare)
+## Still to measure (cross tabulation, Dunnett)
 
-`docs/spec/statistics.md` section 11.4 lists what Holm, Dunnett, cross tabulation and 2D binning take from scipy and
-the textbooks and what Origin has not been asked yet (`anova1` means-comparison options, the cross tabulation and 2D
-binning X-Functions). Run those here on the Windows machine and write fixtures next to
+`docs/spec/statistics.md` section 15.3 lists what the cross tabulation and Dunnett's comparison take from scipy and the
+textbooks and what Origin has not been asked yet (the cross tabulation X-Function and report, whether the one-way ANOVA
+tool offers Dunnett at all). Run those here on the Windows machine and write fixtures next to
 `crates/calc/tests/fixtures/scipy_stats_compare.rs`.
+
+## 2D frequency counts and binning
+
+`stats4/g3.py`, `g4.py` and `g5.py` write the line scripts of the `twoDBinning` runs (worksheet output, each cell read
+with `wcol(c)[r]`; run with `run-labtalk-safe.ps1`), `parse3.py` reads their raw output and `make-fixture3.py` turns
+the three outputs into `crates/calc/tests/fixtures/bin2d_origin.rs` and `stats4/bin2d-origin.compact.json`. What they
+showed is in `docs/spec/statistics.md`, section 13.
+
+## Discrete frequency
+
+`stats5/g1.py` writes the line script of the `discfreqs` runs (output sheet read cell by cell as shown), `parse1.py`
+reads the raw output and `make-fixture1.py` writes `crates/calc/tests/fixtures/discfreq_origin.rs` and
+`stats5/discfreq-origin.compact.json`. Findings: `docs/spec/statistics.md`, section 14.
+
+## Origin's own dialogs (lists of controls, defaults, combo box items)
+
+`origin-dialog.ps1` opens one of Origin's dialogs in a temporary visible Origin (same lock) and writes, per step, a picture
+of the dialog, a list of its controls (class, text, position, tick state) and the items of every combo box. Either a
+LabTalk command that opens the dialog (`-Command 'impasc fname:="%WORK%file.txt" -d;'`, which blocks, so the helper
+`origin-dialog-watch.ps1` does the looking and closes the dialog with Escape) or a double-click on the main window
+(`-DoubleClick x,y`, for example on a column header to open Column Properties). `-StepsFile` lists steps as
+`name=actions`; actions are `@L:x,y` click, `@D:x,y` double click, `@S:x,y,n` mouse wheel, `@C:i,j` pick item j of the
+i-th combo box (and tell the dialog), `@T:i,text` set the i-th edit box, `@B:text` click a button, `@W:ms` wait, or
+SendKeys text; positions are pixels from the top-left corner of the dialog. `-After` runs LabTalk after the dialog closed
+(`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin. `-MenuClicks "x,y;x,y"` opens a dialog through a menu path instead (screen positions of the Origin window placed at 0,0; the Peak Analyzer: `258,43;311,175;492,205;735,257`), `-AfterFile` reads the after-lines from a file, and an after-line `#[Book]Sheet` prints that sheet's cells.
+
+## Column format reference runs
+
+`colfmt-*.lines.txt` are line scripts (run with `run-labtalk-lines.ps1`, which prints strings as raw bytes in the console
+encoding, so micro signs come out wrong; run them through a copy that sets `[Console]::OutputEncoding` to UTF-8) that set a
+column's `format`, `subformat`, `digitMode` and `digits` and print `cell(r,1)$`, the text Origin shows: Month and Day of
+Week numbers (`colfmt-weekday-month`), Engineering digits and letters (`colfmt-engineering-digits`,
+`colfmt-engineering-carry`, `colfmt-significant-digits`). The findings are in `docs/spec/workbook-model.md`.
+
+`import-shortnames*.lines.txt` import `import-inputs/shortn2.txt` and `shortn3.txt` with the short-name line option
+(`options.Hdr.SNames`) and print the column names; the rules are in `docs/spec/import-ascii.md`, section 3.
+
+`import-replace-plots.lines.txt` replaces the data of a sheet by `impasc` while two graphs plot it (one of all rows, one
+with a row range) and prints each plot's begin and end row before and after (`get %C -b`, `get %C -e`); run it with
+`import-inputs` as the work folder. See `docs/spec/import-ascii.md`, section 10.

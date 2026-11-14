@@ -101,6 +101,10 @@ pub fn default_extension(path: &Path) -> PathBuf {
 /// an Origin project plus, when needed, the companion; any other path gets a `.sheaf` project.
 pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoError> {
     let path = default_extension(path);
+    if extension_is(&path, "opju") {
+        // Nothing is written: the .opju writer does not exist (opju-format.md section 10).
+        return Err(IoError::OpjuWrite { path });
+    }
     let mut outcome = SaveOutcome { path: path.clone(), ..SaveOutcome::default() };
     if !extension_is(&path, "opj") {
         project_file::save(project, &path)?;

@@ -91,6 +91,9 @@ running release build; its exact commit was not verified and it was not rebuilt 
       dragging from A1 to B3, then from A1 to B5, left only B3 or B5 selected rather than the
       rectangular range. Observed in two automated drag attempts; confirm with a manual drag
       before treating it as an application defect, since input timing could be involved.
+      2026-11-13: the UI harness selects the block with every event timing tried (one jump, jump and
+      release in one frame, press and jump in one frame; `a_drag_over_cells_selects_the_block_whatever_the_event_timing`),
+      so the automated drags were most likely the cause; still worth one manual drag by the owner.
       Fast press-and-move frames select the correct block in new/imported-table UI regressions;
       the original release-build observation was not reproduced as an application defect.
 - [x] With grid focus, Shift+arrow keys select a rectangular block in the imported table.

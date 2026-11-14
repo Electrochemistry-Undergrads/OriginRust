@@ -6431,3 +6431,51 @@ fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
     assert_eq!(sheet.columns[0].numeric().unwrap(), [30.5, 20.5, 10.5, 0.5]);
     assert_eq!(sheet.columns[1].numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
 }
+
+/// A drag over cells selects the block however the pointer events fall into frames: one jump to the
+/// end cell, the jump and the release in one frame, or the press and the jump in one frame (the
+/// owner's walkthrough saw only the last cell selected by an automated drag; not reproduced here).
+#[test]
+fn a_drag_over_cells_selects_the_block_whatever_the_event_timing() {
+    let mut h = start(vec![data_file("tmp-drag")]);
+    show_window(&mut h, "Book1 - sample");
+    let (from, to) = (text_pos(&h, "2.5"), text_pos(&h, "10.5"));
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    // A: press, one jump to the end, release (a frame between each).
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.event(egui::Event::PointerMoved(to));
+    h.step();
+    h.event(button(to, false));
+    h.step();
+    settle(&mut h);
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "A");
+    // B: press, jump and release in one frame.
+    pause(&mut h);
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.event(egui::Event::PointerMoved(to));
+    h.event(button(to, false));
+    h.step();
+    settle(&mut h);
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "B");
+    // C: move, press and jump in one frame.
+    pause(&mut h);
+    h.event(egui::Event::PointerMoved(from));
+    h.event(button(from, true));
+    h.event(egui::Event::PointerMoved(to));
+    h.step();
+    h.event(button(to, false));
+    h.step();
+    settle(&mut h);
+    assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "C");
+}

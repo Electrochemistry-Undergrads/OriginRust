@@ -1679,3 +1679,21 @@ significant digits); the layer Background colour fills the frame behind the grid
 other fill modes, gradient and pattern fills, label frames, offsets, white out, custom forms and
 display formats, leader lines, skip points, Size/Speed and Display tabs. The `.opj` writer does not
 store any of these; the save names them and the companion file keeps them.
+
+### 18.1 Group tab (measured 2026-11-13)
+
+Origin's Plot Details for one plot of a group made by one plot command (`plotxy iy:=(1,2:4)`,
+`re-workspace/scratch/t13/group1..3`) opens on the Group tab: Edit Mode Independent or Dependent
+(default Dependent); an increment table with a row per property and the choices None, By One, Stretch and
+Binned for colours (None and By One for the others): a line plot has Line Color (By One, Origin's colour
+list) and Line Style (None); a line + symbol plot has Line Color (By One), Symbol Edge Color (By One),
+Line Style, Symbol Type and Symbol Interior (None); a Group Members list; Subgrouping None, By Size or By
+Column Label. Grouped plots also get an Offset tab.
+
+Sheaf treats the plots of a layer as one group (`Layer::group_style`): Edit Mode (Dependent by
+default: a change on the Line, Symbol, Drop Lines or Label tab of one plot is made to every plot of
+the layer except the incremented properties, `Layer::follow_leader`); Line Color with None, By One and
+Stretch (the palette modes Same, Cycle and Spread over the layer's colour list), and Line Style, Symbol
+Type and Symbol Interior with None and By One, running on from the first plot (`apply_group_increments`;
+Symbol Interior alternates filled and open); Group Members lists the plots. Not done: Binned, several
+groups in one layer, subgrouping, the Offset tab.

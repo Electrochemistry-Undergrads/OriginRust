@@ -426,6 +426,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             bars: BarSpacing::default(),
             coords: Coords::Cartesian,
             background: None,
+            group_style: GroupStyle::default(),
         }],
     }
 }
@@ -693,6 +694,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
             }
         }
         PaletteMode::Spread => colors.reverse(),
+        PaletteMode::Same => {}
     }
     l
 }

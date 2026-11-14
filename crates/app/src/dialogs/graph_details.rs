@@ -254,6 +254,31 @@ fn plot_tab(
     columns: &[(ColumnId, String)],
     node: &mut Node,
 ) {
+    // In Origin's Dependent edit mode a change to one plot's look is made to the whole group.
+    let before = graph.layers[l].plots[p].clone();
+    plot_tab_body(ui, tab, graph, l, p, labels, columns, node);
+    let follows = matches!(tab, DetailTab::Line | DetailTab::Symbol | DetailTab::DropLines | DetailTab::Label);
+    if let Node::Plot(l2, p2) = *node
+        && (l2, p2) == (l, p)
+        && follows
+        && graph.layers[l].group_style.dependent
+        && graph.layers[l].plots.get(p).is_some_and(|now| *now != before)
+    {
+        graph.layers[l].follow_leader(p);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn plot_tab_body(
+    ui: &mut egui::Ui,
+    tab: DetailTab,
+    graph: &mut Graph,
+    l: usize,
+    p: usize,
+    labels: &[Vec<String>],
+    columns: &[(ColumnId, String)],
+    node: &mut Node,
+) {
     match tab {
         DetailTab::Line => {
             let plot = &mut graph.layers[l].plots[p];
@@ -618,27 +643,76 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
         *node = if layer.plots.is_empty() { Node::Layer(l) } else { Node::Plot(l, p.saturating_sub(1)) };
     }
 
-    section(ui, "Colors of this layer");
+    // Origin's Group tab: the plots of the layer form one group (graphing spec 18).
+    section(ui, "Edit Mode");
     ui.horizontal(|ui| {
-        for c in &mut layer.palette.colors {
-            color_button(ui, c);
-        }
-        if ui.small_button("+").clicked() {
-            layer.palette.colors.push(Color::BLACK);
-        }
-        if layer.palette.colors.len() > 1 && ui.small_button("-").clicked() {
-            layer.palette.colors.pop();
+        ui.radio_value(&mut layer.group_style.dependent, false, "Independent");
+        ui.radio_value(&mut layer.group_style.dependent, true, "Dependent");
+    });
+    let before = (layer.palette.mode, layer.group_style);
+    let has_symbols = layer.plots.iter().any(|q| q.kind.has_symbols());
+    egui::Grid::new("group_increments").num_columns(3).striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
+        ui.label("");
+        ui.strong("Increment");
+        ui.strong("Details");
+        ui.end_row();
+        ui.label(if has_symbols { "Line Color / Symbol Edge Color" } else { "Line Color" });
+        egui::ComboBox::from_id_salt("inc_color")
+            .selected_text(match layer.palette.mode {
+                PaletteMode::Same => "None",
+                PaletteMode::Cycle => "By One",
+                PaletteMode::Spread => "Stretch",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut layer.palette.mode, PaletteMode::Same, "None");
+                ui.selectable_value(&mut layer.palette.mode, PaletteMode::Cycle, "By One");
+                ui.selectable_value(&mut layer.palette.mode, PaletteMode::Spread, "Stretch");
+            });
+        ui.horizontal(|ui| {
+            for c in &mut layer.palette.colors {
+                color_button(ui, c);
+            }
+            if ui.small_button("+").clicked() {
+                layer.palette.colors.push(Color::BLACK);
+            }
+            if layer.palette.colors.len() > 1 && ui.small_button("-").clicked() {
+                layer.palette.colors.pop();
+            }
+        });
+        ui.end_row();
+        let row = |ui: &mut egui::Ui, name: &str, id: &str, inc: &mut Increment, details: &str| {
+            ui.label(name);
+            egui::ComboBox::from_id_salt(id)
+                .selected_text(if *inc == Increment::ByOne { "By One" } else { "None" })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(inc, Increment::None, "None");
+                    ui.selectable_value(inc, Increment::ByOne, "By One");
+                });
+            ui.weak(details);
+            ui.end_row();
+        };
+        row(ui, "Line Style", "inc_dash", &mut layer.group_style.line_style, "Solid, Dash, Dot, Dash Dot, ...");
+        if has_symbols {
+            row(ui, "Symbol Type", "inc_shape", &mut layer.group_style.symbol_type, "Square, Circle, Up Triangle, ...");
+            row(ui, "Symbol Interior", "inc_fill", &mut layer.group_style.symbol_interior, "Solid, Open, ...");
         }
     });
-    ui.horizontal(|ui| {
-        ui.selectable_value(&mut layer.palette.mode, PaletteMode::Cycle, "One color per plot")
-            .on_hover_text("Plot 1 takes color 1, plot 2 color 2, and so on");
-        ui.selectable_value(&mut layer.palette.mode, PaletteMode::Spread, "Gradient")
-            .on_hover_text("Colors run from the first to the last color over all plots");
-        if ui.button("Recolor plots").clicked() {
-            layer.apply_palette();
-        }
-    });
+    if (layer.palette.mode, layer.group_style) != before || ui.button("Recolor plots").clicked() {
+        layer.apply_palette();
+        layer.apply_group_increments();
+    }
+    section(ui, "Group Members");
+    for (i, q) in layer.plots.iter().enumerate() {
+        ui.horizontal(|ui| {
+            crate::grid::color_swatch(ui, q.line.color);
+            let name = labels[l].get(i).cloned().unwrap_or_else(|| format!("Plot {}", i + 1));
+            if i == p {
+                ui.strong(name)
+            } else {
+                ui.label(name)
+            };
+        });
+    }
 }
 
 // ----- layer --------------------------------------------------------------------------------

@@ -203,6 +203,10 @@ pub struct Layer {
     /// "Color", None by default); `None` leaves the page showing through.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<Color>,
+    /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
+    /// [`Layer::palette`]'s mode).
+    #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
+    pub group_style: GroupStyle,
 }
 
 /// The coordinate system of a layer.
@@ -533,6 +537,63 @@ impl Layer {
             }
             p.symbol.color = c;
         }
+    }
+
+    /// Gives the plots their line styles, symbol shapes and interiors by the increments of
+    /// [`Layer::group_style`], starting from the first plot's, and their automatic colours.
+    pub fn apply_group_increments(&mut self) {
+        let Some(first) = self.plots.first() else { return };
+        let dash0 = Dash::ALL.iter().position(|d| *d == first.line.dash).unwrap_or(0);
+        let shape0 = SymbolShape::ALL.iter().position(|s| *s == first.symbol.shape).unwrap_or(0);
+        let filled0 = first.symbol.filled;
+        let g = self.group_style;
+        for (i, p) in self.plots.iter_mut().enumerate() {
+            if g.line_style == Increment::ByOne {
+                p.line.dash = Dash::ALL[(dash0 + i) % Dash::ALL.len()];
+            }
+            if g.symbol_type == Increment::ByOne {
+                p.symbol.shape = SymbolShape::ALL[(shape0 + i) % SymbolShape::ALL.len()];
+            }
+            if g.symbol_interior == Increment::ByOne {
+                p.symbol.filled = if i % 2 == 0 { filled0 } else { !filled0 };
+            }
+        }
+        self.recolor_automatic();
+    }
+
+    /// Origin's Dependent edit mode: the line, symbol and decorations of plot `leader` are given to
+    /// every plot of the layer, except the properties that are incremented (colours unless the
+    /// colour increment is None), then the increments are applied again from the first plot.
+    pub fn follow_leader(&mut self, leader: usize) {
+        let Some(src) = self.plots.get(leader).cloned() else { return };
+        let g = self.group_style;
+        let same_color = self.palette.mode == PaletteMode::Same;
+        for (i, q) in self.plots.iter_mut().enumerate() {
+            if i == leader {
+                continue;
+            }
+            q.line.width_pt = src.line.width_pt;
+            q.line.connect = src.line.connect;
+            if g.line_style == Increment::None {
+                q.line.dash = src.line.dash;
+            }
+            q.symbol.size_pt = src.symbol.size_pt;
+            if g.symbol_type == Increment::None {
+                q.symbol.shape = src.symbol.shape;
+            }
+            if g.symbol_interior == Increment::None {
+                q.symbol.filled = src.symbol.filled;
+            }
+            q.decor.drop = src.decor.drop.clone();
+            q.decor.labels = src.decor.labels.clone();
+            q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
+            if same_color {
+                q.line.color = src.line.color;
+                q.symbol.color = src.symbol.color;
+                q.auto_color = src.auto_color;
+            }
+        }
+        self.apply_group_increments();
     }
 
     /// Recolors all plots from the palette, in plot order, including colors chosen by hand
@@ -1344,6 +1405,52 @@ pub enum PaletteMode {
     /// first color and the last plot the last color, whatever the number of
     /// plots. Good for a sequence of scans that should read as one family.
     Spread,
+    /// Every plot takes the first color (Origin's Line Color increment "None").
+    Same,
+}
+
+/// How a property of the plots of a group changes from one member to the next (the Increment
+/// column of Origin's Group tab).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Increment {
+    /// Every member keeps the same value.
+    #[default]
+    None,
+    /// Member k takes the k-th next entry of the list, from the first member's value.
+    ByOne,
+}
+
+/// The Group tab of a layer whose plots form one group (Origin's defaults for a group made by
+/// one plot command: Dependent, Line Color by one (the palette), the rest None; graphing spec 18).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupStyle {
+    /// Dependent: a change to one member's line, symbol or decorations is made to every member,
+    /// except for the incremented properties. Independent: each plot is edited alone.
+    pub dependent: bool,
+    #[serde(default)]
+    pub line_style: Increment,
+    #[serde(default)]
+    pub symbol_type: Increment,
+    #[serde(default)]
+    pub symbol_interior: Increment,
+}
+
+impl Default for GroupStyle {
+    fn default() -> Self {
+        GroupStyle {
+            dependent: true,
+            line_style: Increment::None,
+            symbol_type: Increment::None,
+            symbol_interior: Increment::None,
+        }
+    }
+}
+
+impl GroupStyle {
+    pub fn is_default(&self) -> bool {
+        *self == GroupStyle::default()
+    }
 }
 
 impl Palette {
@@ -1354,6 +1461,7 @@ impl Palette {
         }
         match self.mode {
             PaletteMode::Cycle => self.colors[index % self.colors.len()],
+            PaletteMode::Same => self.colors[0],
             PaletteMode::Spread => {
                 let k = self.colors.len();
                 if k == 1 || count <= 1 {
@@ -1631,6 +1739,54 @@ mod tests {
         layer.plots[0].line.color = Color::BLUE;
         layer.recolor_automatic();
         assert_eq!(layer.plots[0].line.color, Color::BLACK);
+    }
+
+    #[test]
+    fn group_increments_run_from_the_first_plot_and_dependent_edits_reach_every_plot() {
+        let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
+        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE], mode: PaletteMode::Cycle };
+        let plot = Plot {
+            x: None,
+            y: ColumnId(1),
+            y_error: None,
+            rows: None,
+            kind: PlotKind::LineSymbol,
+            line: LineStyle::solid(Color::BLACK, 0.5),
+            symbol: layer.default_symbol.clone(),
+            label: None,
+            visible: true,
+            auto_color: true,
+            group: None,
+            x_error: None,
+            y_base: None,
+            error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
+            decor: Default::default(),
+        };
+        layer.plots = vec![plot.clone(), plot.clone(), plot];
+        assert!(layer.group_style.dependent, "Origin's default edit mode");
+        layer.group_style.line_style = Increment::ByOne;
+        layer.group_style.symbol_type = Increment::ByOne;
+        layer.apply_group_increments();
+        let dashes: Vec<Dash> = layer.plots.iter().map(|q| q.line.dash).collect();
+        assert_eq!(dashes, Dash::ALL[..3]);
+        // The shapes run on from the first plot's (a circle here).
+        let shapes: Vec<SymbolShape> = layer.plots.iter().map(|q| q.symbol.shape).collect();
+        assert_eq!(shapes, SymbolShape::ALL[1..4]);
+        let colors: Vec<Color> = layer.plots.iter().map(|q| q.line.color).collect();
+        assert_eq!(colors, [Color::BLACK, Color::RED, Color::BLUE]);
+        // Dependent: plot 2's new width and drop line go to all; the increments stay.
+        layer.plots[1].line.width_pt = 3.0;
+        layer.plots[1].decor.drop.vertical.on = true;
+        layer.follow_leader(1);
+        assert!(layer.plots.iter().all(|q| q.line.width_pt == 3.0 && q.decor.drop.vertical.on));
+        assert_eq!(layer.plots.iter().map(|q| q.line.dash).collect::<Vec<_>>(), Dash::ALL[..3]);
+        // Colour increment None: every plot takes the first colour.
+        layer.palette.mode = PaletteMode::Same;
+        layer.apply_group_increments();
+        assert!(layer.plots.iter().all(|q| q.line.color == Color::BLACK));
     }
 
     #[test]

@@ -3254,6 +3254,43 @@ fn plot_details_drop_lines_label_and_fill_tabs_change_the_plot() {
 }
 
 #[test]
+fn a_dependent_group_shares_a_change_and_an_independent_one_does_not() {
+    let mut h = start(vec![data_file("pd-group")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    assert!(plots.len() >= 2);
+    let open = |h: &mut Harness<'static, SheafApp>| {
+        let at = in_right_panel(h, &project(h).plot_label(&plots[0]));
+        double_click_at(h, at);
+        assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    };
+    // Origin's default is Dependent: a drop line ticked on the first plot is drawn on every plot.
+    open(&mut h);
+    click(&mut h, "Group");
+    assert!(has_label(&h, "Edit Mode") && has_label(&h, "Group Members") && has_label(&h, "Line Style"));
+    click(&mut h, "Drop Lines");
+    click(&mut h, "Vertical");
+    click(&mut h, "OK");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert!(layer.group_style.dependent);
+    assert!(layer.plots.iter().all(|q| q.decor.drop.vertical.on), "every member follows");
+    // Independent: only the plot that is changed.
+    pause(&mut h);
+    open(&mut h);
+    click(&mut h, "Group");
+    click(&mut h, "Independent");
+    click(&mut h, "Drop Lines");
+    click(&mut h, "Horizontal");
+    click(&mut h, "OK");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert!(!layer.group_style.dependent);
+    assert!(layer.plots[0].decor.drop.horizontal.on);
+    assert!(layer.plots[1..].iter().all(|q| !q.decor.drop.horizontal.on), "the others are left alone");
+}
+
+#[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
     show_window(&mut h, "Book1 - sample");

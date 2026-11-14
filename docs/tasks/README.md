@@ -72,6 +72,7 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T22](T22-curve-mathematics.md) | Mathematics: Average Multiple Curves, Intersect, Polygon Area | M | done, merged (`734a1ff`); Origin details unmeasured (spec `analysis-curve-math.md`) |
 | [T23](T23-data-manipulation-tools.md) | Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate X/Y, Median Filter | M | done, merged (`f66dbea`); Origin details unmeasured (spec section 12) |
 | [T24](T24-drawn-graph-objects.md) | Drawn objects on graphs: line, arrow, rectangle, ellipse | M | done, merged (`542fef7`) |
+| [T25](T25-mcp-server.md) | MCP server (`sheaf-mcp`) so Claude and other AI tools can drive Sheaf | L | open (owner's request, 2026-11-14) |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

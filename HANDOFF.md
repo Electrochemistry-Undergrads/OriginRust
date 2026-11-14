@@ -75,6 +75,25 @@ owner's bronze S (`docs/brand/sheaf.png`) into `crates/app/assets/icon/` (PNG, `
 needs a Windows session to add and test a `build.rs`), a Start Menu shortcut, and opening files double-clicked in
 Finder (Apple open-document events; the bundle declares no document types until then).
 
+**Owner's request (2026-11-14): an MCP server so Claude or any AI tool can use Sheaf.** Brief
+[T25](docs/tasks/T25-mcp-server.md). Plan in short:
+1. ADR 0011: stdio transport, the Rust SDK `rmcp` (or a small JSON-RPC loop with `serde_json`), one
+   `Project` per server session.
+2. Move the CLI's command bodies into a shared library path so `sheaf-cli` and the new `sheaf-mcp` give
+   identical results (no second copy of import, plot, analysis or fit logic).
+3. New crate `crates/mcp` (binary `sheaf-mcp`, no egui): tools `new_project`/`open_project`/`save_project`,
+   `import_files`, `list_contents`, `read_columns`/`set_column_values`, `plot`, `export_graph` (PNG returned
+   as an image the assistant can see), `list_analysis_tools`/`analyze` (the serializable `Tool`/`Request`),
+   `list_fit_models`/`fit`; resources for the project tree, columns as CSV and graph images.
+4. Safety: file access only under `--root` folders, no script or shell execution, paged data, stdout kept
+   for protocol messages only.
+5. Tests: start the server, run import -> plot -> analyze -> fit -> export -> save over the protocol and
+   compare with the CLI on synthetic data. Docs: `docs/spec/mcp.md`, README setup for Claude Code
+   (`claude mcp add sheaf -- <path>/sheaf-mcp --root <folder>`), Claude Desktop and other clients;
+   bundle `sheaf-mcp` inside Sheaf.app.
+6. Phase 2 (separate merge, ADR first): the desktop app listens on a local socket (off by default);
+   `sheaf-mcp --attach` drives the open project, every change one undo step, so the owner sees and can undo it.
+
 ## Known issues and table UI verification
 
 - T01 sorting: Sort Range and range Custom respect selected cell/row bounds. Sort Columns
@@ -169,7 +188,7 @@ running release build; its exact commit was not verified and it was not rebuilt 
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
-analysis: T13 leftovers (other fill modes, Offset multiplier, Data on Top of Axes, several groups per layer, Binned increments, X:Y ratio and speed mode, `.opj` writing of the 18.6 settings), T14 item 6 (2D binning, discrete frequency, cross tabulation, Dunnett, distribution fit, probability and Q-Q plot are done; left: the Windows Origin measurements of cross tabulation and Dunnett in statistics.md 15.3 and of the distribution fit and plots in 16.4, since all are scipy-checked, not Origin), T16 item 6, T18 backlog items that need no Origin
+analysis: T25 (MCP server, owner's request; phase 1 needs no Origin), T13 leftovers (other fill modes, Offset multiplier, Data on Top of Axes, several groups per layer, Binned increments, X:Y ratio and speed mode, `.opj` writing of the 18.6 settings), T14 item 6 (2D binning, discrete frequency, cross tabulation, Dunnett, distribution fit, probability and Q-Q plot are done; left: the Windows Origin measurements of cross tabulation and Dunnett in statistics.md 15.3 and of the distribution fit and plots in 16.4, since all are scipy-checked, not Origin), T16 item 6, T18 backlog items that need no Origin
 (briefs first), merging the matrix branch (asks the owner first: it is another session's unpushed work), T19 item 2 and T04 (wizards, need Origin pages), then
 the leftovers named in each brief's Status (T22-T24 leftovers: level crossing done 2026-11-14, analysis-tools 14, and cumulative sum dropped, Origin has none; drawn
 objects read from `.opj`, page/scale attachment, copy/paste, ordering, resize handles). All earlier "open

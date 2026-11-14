@@ -6143,6 +6143,36 @@ fn the_worksheet_filter_hides_rows_without_deleting_them_and_undoes() {
 }
 
 #[test]
+fn worksheet_filter_dialog_updates_the_graph_and_disable_undo_redo_restore_it() {
+    let mut h = start(vec![data_file("filtered-graph")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let g = graph(&h).id;
+    let svg =
+        |h: &Harness<'static, SheafApp>| sheaf_plot::render_svg_with(project(h), g, &sheaf_plot::FixedMetrics).unwrap();
+    let original = svg(&h);
+    assert!(sheaf_plot::layout_geometry(project(&h), g).unwrap()[0].y.max >= 30.5);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RowFilterDialog { book, column: None }, &ctx);
+    settle(&mut h);
+    h.event(egui::Event::Text("col(A) >= 3".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    settle(&mut h);
+    assert!(sheaf_plot::layout_geometry(project(&h), g).unwrap()[0].y.max < 20.0);
+    let filtered = svg(&h);
+    assert_ne!(filtered, original);
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0]);
+    h.state_mut().apply(Action::ToggleRowFilter(book), &ctx);
+    assert_eq!(svg(&h), original);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(svg(&h), filtered);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(svg(&h), original);
+    h.state_mut().apply(Action::Redo, &ctx);
+    assert_eq!(svg(&h), filtered);
+}
+
+#[test]
 fn transpose_and_reduce_rows_write_a_new_sheet_and_undo() {
     use crate::dialogs::reshape::ReshapeKind;
     let mut h = start(vec![data_file("reshape")]);

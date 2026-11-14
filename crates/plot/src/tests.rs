@@ -2623,6 +2623,175 @@ fn a_masked_point_is_drawn_red_with_its_two_line_segments() {
     assert_eq!(svg.matches("#FF0000").count(), 2, "one red line path and one red symbol path");
 }
 
+#[test]
+fn worksheet_filtered_rows_leave_the_line_and_automatic_range_without_changing_the_data() {
+    let (mut p, g) = project(Template::Line, vec![1.0, 1000.0, 3.0], vec![vec![10.0, 5000.0, 30.0]]);
+    let book = p.workbooks().next().unwrap().id;
+    let original = svg_of(&p, g);
+    p.set_row_filter(book, 0, "col(A) < 10").unwrap();
+    assert_eq!(y_range(&p, g), Some((10.0, 30.0)), "hidden outliers must not stretch the axis");
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let plot_paths = paths_in(with_class(&d, "plots")[0]);
+    assert_eq!(plot_paths.len(), 1, "the line joins the visible rows across filtered rows");
+    let path = plot_paths[0].attribute("d").unwrap();
+    assert_eq!(crate::hit::path_points(path).len(), 2);
+    assert_eq!(p.numeric(plot_column(&p, g, 0)).unwrap(), [10.0, 5000.0, 30.0]);
+    p.workbook_mut(book).unwrap().sheet_mut().filter.as_mut().unwrap().enabled = false;
+    assert_eq!(svg_of(&p, g), original, "disabling the filter restores the complete graph");
+    p.remove_row_filter(book, 0);
+    assert_eq!(svg_of(&p, g), original);
+}
+
+#[test]
+fn worksheet_filters_preserve_error_label_and_mask_source_rows() {
+    let (mut p, g) = project(Template::LineSymbol, vec![1.0, 2.0, 3.0], vec![vec![10.0, 5000.0, 30.0]]);
+    let book = p.workbooks().next().unwrap().id;
+    let error = p.add_column(book, 0, Designation::YError, ColumnData::numeric(vec![1.0, 10000.0, 3.0])).unwrap();
+    let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+    plot.y_error = Some(error);
+    plot.decor.labels.enable = true;
+    plot.decor.labels.form = LabelForm::Row;
+    let y = plot.y;
+    p.column_mut(y).unwrap().mask.insert(1);
+    p.set_row_filter(book, 0, "col(A) != 2").unwrap();
+    assert_eq!(y_range(&p, g), Some((9.0, 33.0)), "hidden error bars do not affect the range");
+    let svg = svg_of(&p, g);
+    assert!(!svg.contains("#FF0000"), "a hidden mask does not draw red");
+    let d = doc(&svg);
+    let labels: Vec<_> = with_class(&d, "plots")[0]
+        .descendants()
+        .filter(|n| n.has_tag_name("text"))
+        .map(|n| n.text().unwrap())
+        .collect();
+    assert_eq!(labels, ["1", "3"], "labels keep worksheet row numbers");
+    p.column_mut(y).unwrap().mask.insert(2);
+    assert_eq!(svg_of(&p, g).matches("#FF0000").count(), 2, "a visible masked point and connecting segment remain red");
+}
+
+#[test]
+fn worksheet_filters_exclude_hidden_values_from_histograms_boxes_and_pies() {
+    for kind in [PlotKind::Histogram, PlotKind::Box, PlotKind::Pie, PlotKind::Pie3D, PlotKind::PieBw] {
+        let (mut p, g) = project(Template::Line, vec![1.0, 2.0, 3.0], vec![vec![1.0, 1000.0, 3.0]]);
+        let book = p.workbooks().next().unwrap().id;
+        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+        plot.kind = kind;
+        plot.hist.begin = Some(0.0);
+        plot.hist.end = Some(2000.0);
+        plot.hist.bin_size = Some(100.0);
+        p.set_row_filter(book, 0, "col(A) != 2").unwrap();
+        let layer = layer_data(&p, g);
+        let pd = &layer.plots[0];
+        match kind {
+            PlotKind::Histogram => assert_eq!(pd.y.iter().sum::<f64>(), 2.0),
+            PlotKind::Box => {
+                let stats = pd.boxed.as_ref().unwrap();
+                assert_eq!((stats.mean, stats.median), (2.0, 2.0));
+                assert!(stats.outliers.is_empty());
+            }
+            _ => {
+                let pie = pd.pie.as_ref().unwrap();
+                assert_eq!(pie.values, [1.0, 3.0]);
+                assert_eq!(pie.names, ["1", "3"]);
+            }
+        }
+        svg_of(&p, g);
+    }
+}
+
+#[test]
+fn worksheet_filters_control_automatic_offsets_and_percent_stacked_totals() {
+    let (mut p, g) =
+        project(Template::Line, vec![1.0, 2.0, 3.0], vec![vec![1.0, 10000.0, 3.0], vec![10.0, 20000.0, 30.0]]);
+    let book = p.workbooks().next().unwrap().id;
+    p.graph_mut(g).unwrap().layers[0].stack = AUTO10;
+    p.set_row_filter(book, 0, "col(A) != 2").unwrap();
+    assert_offsets(&p, g, &[0.0, -5.0]);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.stack = Stack::None;
+    for plot in &mut layer.plots {
+        plot.kind = PlotKind::Stacked100Column;
+    }
+    let layer = layer_data(&p, g);
+    assert!(layer.plots[0].val_at(1).is_nan() && layer.plots[1].val_at(1).is_nan());
+    assert!((layer.plots[0].val_at(0) - 100.0 / 11.0).abs() < 1e-12);
+    assert_eq!(layer.plots[1].val_at(2), 100.0);
+}
+
+#[test]
+fn a_filtered_first_radar_spoke_closes_to_the_first_visible_source_row() {
+    let (mut p, g) = project(Template::Radar, vec![1.0, 2.0, 3.0, 4.0], vec![vec![1000.0, 2.0, 3.0, 4.0]]);
+    let book = p.workbooks().next().unwrap().id;
+    p.set_row_filter(book, 0, "col(A) > 1").unwrap();
+    let layer = layer_data(&p, g);
+    let pd = &layer.plots[0];
+    assert_eq!(pd.closing, Some(1));
+    assert_eq!(pd.rows().collect::<Vec<_>>(), [1, 2, 3, 4]);
+    assert_eq!(pd.y[4], pd.y[1]);
+    assert_eq!(pd.x.as_ref().unwrap()[4], 450.0);
+    assert_eq!(y_range(&p, g), Some((2.0, 4.0)));
+    svg_of(&p, g);
+    p.set_row_filter(book, 0, "0").unwrap();
+    assert!(layer_data(&p, g).plots[0].rows().next().is_none());
+    svg_of(&p, g);
+}
+
+#[test]
+fn filtered_fills_and_bars_match_the_same_visible_data_without_the_hidden_row() {
+    for template in [Template::Area, Template::Column, Template::Bar, Template::StackedArea, Template::StackedColumn] {
+        let (mut p, g) = project(template, vec![1.0, 2.0, 3.0], vec![vec![2.0, 500.0, 6.0]]);
+        let book = p.workbooks().next().unwrap().id;
+        p.set_row_filter(book, 0, "col(A) != 2").unwrap();
+        let (expected, eg) = project(template, vec![1.0, 3.0], vec![vec![2.0, 6.0]]);
+        assert_eq!(svg_of(&p, g), svg_of(&expected, eg), "{}", template.name());
+    }
+}
+
+#[test]
+fn hidden_bubble_and_colour_extremes_do_not_set_visible_symbol_scales() {
+    for template in [Template::Bubble, Template::ColorMapped, Template::BubbleColorMapped] {
+        let build = |hidden| {
+            let mut p = Project::new();
+            let book = p.add_workbook("data");
+            let (x, y, z) = if hidden {
+                (vec![1.0, 2.0, 3.0], vec![1.0, 1000.0, 3.0], vec![10.0, 10000.0, 30.0])
+            } else {
+                (vec![1.0, 3.0], vec![1.0, 3.0], vec![10.0, 30.0])
+            };
+            p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+            let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+            p.add_column(book, 0, Designation::Z, ColumnData::numeric(z)).unwrap();
+            let graph = p.plot_columns(template, &[y]).unwrap();
+            if hidden {
+                p.set_row_filter(book, 0, "col(A) != 2").unwrap();
+            }
+            (p, graph)
+        };
+        let (p, g) = build(true);
+        let (expected, eg) = build(false);
+        assert_eq!(svg_of(&p, g), svg_of(&expected, eg), "{}", template.name());
+    }
+}
+
+#[test]
+fn hidden_percent_rows_do_not_force_the_ternary_percent_scale() {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.2, 20.0, 0.3])).unwrap();
+    let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.3, 30.0, 0.3])).unwrap();
+    p.add_column(book, 0, Designation::Z, ColumnData::numeric(vec![0.5, 50.0, 0.4])).unwrap();
+    let g = p.plot_columns(Template::Ternary, &[y]).unwrap();
+    let percent = |p: &Project| {
+        let layer = &p.graph(g).unwrap().layers[0];
+        crate::ternary::is_percent(p, layer, layer.coords.ternary().unwrap())
+    };
+    assert!(percent(&p));
+    p.set_row_filter(book, 0, "col(A) < 1").unwrap();
+    assert!(!percent(&p));
+    assert_eq!(layer_data(&p, g).plots[0].rows().collect::<Vec<_>>(), [0, 2]);
+    svg_of(&p, g);
+}
+
 // ----- stacked area and fill area (graphing spec 14.13) ------------------------------------------
 
 /// The data of the Origin probe of the stacked area: X 1..8 and three Y columns.

@@ -6245,6 +6245,59 @@ fn worksheet_filter_dialog_updates_the_graph_and_disable_undo_redo_restore_it() 
 }
 
 #[test]
+fn filtered_worksheet_keys_and_edit_commits_visit_only_visible_cells() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "filtered-navigation");
+        let book = project(&h).workbooks().next().unwrap().id;
+        h.state_mut().doc.apply("Filter fixture", |p| {
+            let ws = p.workbook_mut(book).unwrap().sheet_mut();
+            ws.columns[0].data = ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0]);
+            ws.columns[1].data = ColumnData::numeric(vec![10.125, 20.125, 30.125, 40.125]);
+            p.set_row_filter(book, 0, "mod(col(A), 2) == 1").unwrap();
+        });
+        settle(&mut h);
+        click_text(&mut h, "10.125");
+        h.key_press(egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "Down skips the hidden second row");
+        h.key_press(egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 4)), "spare rows remain reachable");
+        h.key_press(egui::Key::ArrowUp);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)));
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Home);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((0, 0)));
+        h.key_press(egui::Key::ArrowRight);
+        settle(&mut h);
+        h.event(egui::Event::Text("11".into()));
+        settle(&mut h);
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "committing the edit skips hidden rows");
+        h.event(egui::Event::Text("33".into()));
+        settle(&mut h);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 0)));
+        assert_eq!(column(&h, "B"), [11.0, 20.125, 33.0, 40.125], "hidden values were not edited");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::ArrowDown);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "jumping to data end stops on visible data");
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::ArrowUp);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 2), end: (1, 0) });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 0)), "Enter wraps through the visible block cells");
+        h.key_press(egui::Key::Tab);
+        settle(&mut h);
+        assert_eq!(book_ui(&h).active_cell(), Some((1, 2)), "Tab also skips filtered cells within a block");
+    }
+}
+
+#[test]
 fn transpose_and_reduce_rows_write_a_new_sheet_and_undo() {
     use crate::dialogs::reshape::ReshapeKind;
     let mut h = start(vec![data_file("reshape")]);

@@ -367,6 +367,17 @@ The cell editors retain Tab themselves so egui's widget-focus traversal cannot s
 focus after committing. Each new edit uses a fresh editor state with the cursor after the initial
 typed text, including Unicode; stale cursor positions must not turn typing `a`, then `b`, into
 `ba`. Navigation within an ongoing edit retains its normal cursor/selection state.
+Filtered-table keyboard follow-up (2026-11-14): arrows, Home/End, Page Up/Down,
+Enter/Tab and leaving an edit skip filter-hidden rows and hidden columns. Ctrl+Down/End
+search within the target column's data before falling back to the current visible cell;
+spare entry rows remain reachable. Enter/Tab and their Shift versions walk only visible
+cells within a selected block, retaining source row numbers and wrapping in the existing
+row/column order. Go to and leaving the last label row also land on visible cells. A filter
+that hides the active cell moves it to a visible cell within the selection or to the next
+visible entry row; an editor that becomes hidden is cancelled. New/imported-table UI
+regressions verify movement, edit commits, block traversal and unchanged hidden values.
+This is Sheaf keyboard consistency, not a new Origin shortcut/default measurement.
+
 This selection behavior follows the owner's report, not a new measurement of Origin.
 
 ### 13.4 Clipboard text preservation (T07, 2026-11-14)

@@ -5,6 +5,7 @@ pub mod analysis;
 pub mod column_props;
 pub mod export;
 pub mod export_sheet;
+pub mod find;
 pub mod fit;
 pub mod fit_more;
 pub mod frame;

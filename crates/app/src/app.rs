@@ -7,6 +7,7 @@ use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, Fi
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_sheet::SheetExportDialog;
+use crate::dialogs::find::{FindDialog, FindOutcome};
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::fit_more::{FitMoreDialog, FitMoreKind, FitMoreOutcome};
 use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
@@ -111,6 +112,7 @@ pub struct SheafApp {
     export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
+    find: Option<FindDialog>,
     sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
@@ -120,6 +122,8 @@ pub struct SheafApp {
     about: bool,
     /// Which toolbars are shown.
     toolbars: Toolbars,
+    /// View > Status Bar turned the status bar off.
+    status_bar_hidden: bool,
     /// The side panels: Project Explorer, Object Manager and the logs.
     panels: Panels,
     /// What the status bar and the message boxes said, and the reports of the tools.
@@ -171,12 +175,14 @@ impl SheafApp {
             export_sheet: None,
             rename: None,
             go_to: None,
+            find: None,
             sort: None,
             sheet_name: None,
             copied: String::new(),
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
+            status_bar_hidden: false,
             panels: Panels::default(),
             logs: Logs::default(),
             logged_message: None,
@@ -289,6 +295,7 @@ impl SheafApp {
         self.export_sheet = None;
         self.rename = None;
         self.go_to = None;
+        self.find = None;
         self.row_filter = None;
         self.reshape = None;
         self.sort = None;
@@ -684,6 +691,8 @@ impl SheafApp {
             }
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
+            Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
+            Action::ReplaceInSheets(book) => self.find = Some(FindDialog::replace(book)),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -864,6 +873,12 @@ impl SheafApp {
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
+            Action::InterpolateWith { book, columns, method } => {
+                self.open_analysis(book, columns, AnalysisKind::Interpolate);
+                if let Some(d) = &mut self.analysis {
+                    d.set_interp_method(method);
+                }
+            }
             Action::Fit { book, column, kind } => {
                 let column = column.filter(|c| self.doc.project().column(*c).is_some_and(|c| c.data.is_numeric()));
                 self.fit = FitDialog::new(self.doc.project(), book, column, kind);
@@ -1020,6 +1035,13 @@ impl SheafApp {
             Action::ExportData(book) => self.export_data(book),
             Action::Focus(id) => self.focus(id),
             Action::HideWindow(id) => self.workspace.hide(id),
+            Action::DuplicateWindow(id) => {
+                let mut new = None;
+                self.doc.apply("Duplicate window", |p| new = p.duplicate_window(id));
+                if let Some(new) = new {
+                    self.focus(new);
+                }
+            }
             Action::MoveWindow { window, folder } => {
                 if explorer::home(&self.doc.project().root, window) != folder
                     && explorer::folder_at(&self.doc.project().root, &folder).is_some()
@@ -1126,6 +1148,7 @@ impl SheafApp {
             Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
             Action::Toolbars => self.toolbars.dialog = true,
+            Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
             Action::Quit => {
                 if self.doc.dirty {
                     self.pending = Some(Pending::Quit);
@@ -1819,6 +1842,7 @@ impl SheafApp {
             || self.export_sheet.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
+            || self.find.is_some()
             || self.sort.is_some()
             || self.sheet_name.is_some()
             || self.about
@@ -2160,6 +2184,66 @@ impl SheafApp {
                         state.go_to(sheet, column, row);
                     }
                     self.go_to = None;
+                }
+            }
+        }
+        if let Some(d) = &mut self.find {
+            let book = d.book;
+            match d.show(ctx) {
+                FindOutcome::Open => {}
+                FindOutcome::Closed => self.find = None,
+                FindOutcome::Next => {
+                    if let (Some(sheet), Some(state)) = (
+                        self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
+                        self.books.get_mut(&book),
+                    ) && let Some((column, row)) = d.search(sheet, state.active_cell())
+                    {
+                        state.go_to(sheet, column, row);
+                    }
+                }
+                outcome @ (FindOutcome::Replace | FindOutcome::ReplaceAll) => {
+                    let project = self.doc.project();
+                    if let Some(sheet) = project.workbook(book).and_then(|b| b.sheets.get(b.active_sheet)) {
+                        let cursor = self.books.get(&book).and_then(|s| s.active_cell());
+                        let edits: Vec<(usize, usize, String)> = match outcome {
+                            FindOutcome::ReplaceAll => d.replace_all(sheet),
+                            _ => cursor
+                                .and_then(|(c, r)| d.replaced(sheet, (c, r)).map(|t| (c, r, t)))
+                                .into_iter()
+                                .collect(),
+                        };
+                        // Columns kept up to date by a formula are left alone, as when typing.
+                        let (edits, locked): (Vec<_>, Vec<_>) =
+                            edits.into_iter().partition(|(c, _, _)| !sheet.columns[*c].is_locked());
+                        let edits: Vec<(sheaf_core::ColumnId, usize, String)> =
+                            edits.into_iter().map(|(c, r, t)| (sheet.columns[c].id, r, t)).collect();
+                        if !edits.is_empty() {
+                            let label = if edits.len() == 1 { "Replace" } else { "Replace all" };
+                            self.doc.apply(label, |p| {
+                                for (id, row, text) in &edits {
+                                    if let Some(c) = p.column_mut(*id) {
+                                        c.set_cell_text(*row, text);
+                                    }
+                                }
+                            });
+                        }
+                        if !locked.is_empty() {
+                            self.warn(format!(
+                                "{} cell(s) in columns calculated from a formula were left alone",
+                                locked.len()
+                            ));
+                        }
+                    }
+                    if matches!(outcome, FindOutcome::Replace)
+                        && let Some(d) = &mut self.find
+                        && let (Some(sheet), Some(state)) = (
+                            self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
+                            self.books.get_mut(&book),
+                        )
+                        && let Some((column, row)) = d.search(sheet, state.active_cell())
+                    {
+                        state.go_to(sheet, column, row);
+                    }
                 }
             }
         }
@@ -2662,7 +2746,9 @@ impl eframe::App for SheafApp {
                     .frame(bar_frame())
                     .show(ctx, |ui| toolbar::show_row(ui, &second, tb, &c, &mut actions));
             }
-            egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));
+            if !self.status_bar_hidden {
+                egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));
+            }
             if tb.shown(Bar::Graphs2D) {
                 egui::TopBottomPanel::bottom("toolbar_2d_graphs")
                     .frame(bar_frame())

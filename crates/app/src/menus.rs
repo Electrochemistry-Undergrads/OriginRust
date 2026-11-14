@@ -71,6 +71,10 @@ pub enum Cmd {
     ImportWizard,
     /// Edit > Go to... (Ctrl+G, in a workbook; in a graph the same keys export).
     GoToCell,
+    /// Edit > Find in Sheets... (Ctrl+F) in a workbook.
+    FindInSheets,
+    /// Edit > Replace... (Ctrl+H) in a workbook.
+    ReplaceInSheets,
     ExportGraph,
     ExportWorksheet,
     Exit,
@@ -145,6 +149,9 @@ pub enum Cmd {
     ReverseOrder,
     FilterRows,
     Analyze(AnalysisKind),
+    /// Mathematics > Linear, Spline or B-Spline Interpolation: the Interpolate window with that
+    /// method chosen.
+    InterpolateWith(sheaf_core::analysis::InterpMethod),
     Fit(FitKind),
     FitMore(FitMoreKind),
     /// The graph settings of the active layer on a tab.
@@ -200,6 +207,12 @@ pub enum Cmd {
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
+    /// View > Status Bar: show or hide the status bar.
+    ToggleStatusBar,
+    /// File > Close: close (hide) the active window, as its title bar's close button does.
+    CloseWindow,
+    /// Window > Duplicate: a copy of the active workbook or graph.
+    DuplicateWindow,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -414,7 +427,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         grey_keyed("Open &Excel...", ctrl(Key::E)),
         grey("Open Sample Projects"),
         grey("Appen&d..."),
-        grey("&Close"),
+        item("&Close", Cmd::CloseWindow),
         sep(),
         keyed("&Save Project", ctrl(Key::S), Cmd::SaveProject),
         keyed("Save Project &As...", ctrl_shift(Key::S), Cmd::SaveProjectAs),
@@ -517,8 +530,8 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(item("&Delete", Cmd::DeleteCells));
         v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
-        v.push(grey_keyed("Find in Sheets...", ctrl(Key::F)));
-        v.push(grey_keyed("Replace...", ctrl(Key::H)));
+        v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
+        v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
         v.extend(greys(&["-", "Button Edit Mode"]));
     } else {
@@ -557,7 +570,12 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
 }
 
 fn view_menu(kind: WindowKind) -> Vec<Entry> {
-    let mut v = vec![grey("Menu"), keyed("&Toolbars...", ctrl(Key::T), Cmd::Toolbars), grey("Status Bar"), sep()];
+    let mut v = vec![
+        grey("Menu"),
+        keyed("&Toolbars...", ctrl(Key::T), Cmd::Toolbars),
+        item("Status Bar", Cmd::ToggleStatusBar),
+        sep(),
+    ];
     v.push(grey_keyed("Command Window", alt(Key::Num3)));
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
@@ -914,9 +932,9 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Interpolate/Extrapolate...", Cmd::Analyze(AnalysisKind::Interpolate)),
                 grey("Interpolate/Extrapolate Y from X..."),
                 grey("Trace Interpolation..."),
-                grey("Linear Interpolation..."),
-                grey("Spline Interpolation..."),
-                grey("B-Spline Interpolation..."),
+                item("Linear Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::Linear)),
+                item("Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::CubicSpline)),
+                item("B-Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::BSpline)),
                 sep(),
                 item("Intersect...", Cmd::Analyze(AnalysisKind::Intersect)),
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
@@ -1232,7 +1250,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         sep(),
         keyed("&Refresh", plain_key(Key::F5), Cmd::Refresh),
         sep(),
-        grey("&Duplicate"),
+        item("&Duplicate", Cmd::DuplicateWindow),
     ];
     match kind {
         WindowKind::Graph => {
@@ -1809,6 +1827,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
         Cmd::ImportWizard => Action::ImportWizard,
         Cmd::GoToCell => Action::GoToCell(book?),
+        Cmd::FindInSheets => Action::FindInSheets(book?),
+        Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::Exit => Action::Quit,
@@ -1927,6 +1947,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),
         },
+        Cmd::InterpolateWith(method) => match (c.book, c.curve) {
+            (Some(book), _) => Action::InterpolateWith { book, columns: c.selected.to_vec(), method: *method },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::InterpolateWith { book, columns: vec![y], method: *method }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
         Cmd::Fit(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::Fit { book, column: c.selected.first().copied(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
@@ -1978,6 +2006,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
+        Cmd::ToggleStatusBar => Action::ToggleStatusBar,
+        Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,

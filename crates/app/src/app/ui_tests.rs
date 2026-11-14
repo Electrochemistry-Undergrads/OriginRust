@@ -5992,3 +5992,110 @@ fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
     assert_eq!(project(&h).numeric(out).unwrap(), [100.0, 6.5, 6.5, 8.5], "the same column was updated");
     assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
 }
+
+#[test]
+fn the_interpolation_items_open_the_interpolate_window_with_their_method() {
+    use sheaf_core::analysis::InterpMethod;
+    let mut h = start(vec![data_file("interpitems")]);
+    show_window(&mut h, "Book1 - sample");
+    for (label, method) in [
+        ("Linear Interpolation...", InterpMethod::Linear),
+        ("Spline Interpolation...", InterpMethod::CubicSpline),
+        ("B-Spline Interpolation...", InterpMethod::BSpline),
+    ] {
+        menu_path(&mut h, &["Analysis", "Mathematics", label]);
+        let d = h.state().analysis.as_ref().unwrap_or_else(|| panic!("{label} opens a window"));
+        assert_eq!(d.interp_method(), method, "{label}");
+        h.state_mut().analysis = None;
+        settle(&mut h);
+    }
+}
+
+#[test]
+fn view_status_bar_hides_and_shows_the_status_bar() {
+    let mut h = start(vec![data_file("statusbar")]);
+    assert!(h.query_by_label("AU : ON").is_some(), "the status bar is shown at first");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_none(), "hidden");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_some(), "shown again");
+}
+
+#[test]
+fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
+    let mut h = start(vec![data_file("findsheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Find in Sheets...");
+    assert!(h.state().find.is_some(), "the window opens");
+    h.state_mut().find.as_mut().unwrap().set_text("4.5");
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)), "column B, row 2");
+    // No cell of B after B2 holds "0.5" (6.5, 8.5); the search goes on from the cursor, column by
+    // column, to C1 (30.5).
+    h.state_mut().find.as_mut().unwrap().set_text("0.5");
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((2, 0)), "column C, row 1 (30.5)");
+    click(&mut h, "Close");
+    assert!(h.state().find.is_none());
+}
+
+#[test]
+fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step() {
+    let mut h = start(vec![data_file("replacesheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Replace...");
+    {
+        let d = h.state_mut().find.as_mut().expect("the Replace window opens");
+        d.set_text("4.5");
+        d.set_replacement("4.75");
+    }
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    // "Replace" is also the window's title: click the button.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Replace").click();
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.75, 6.5, 8.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace"));
+    {
+        let d = h.state_mut().find.as_mut().unwrap();
+        d.set_text(".5");
+        d.set_replacement(".25");
+    }
+    settle(&mut h);
+    click(&mut h, "Replace All");
+    assert_eq!(column(&h, "B"), [2.25, 4.75, 6.25, 8.25]);
+    assert_eq!(column(&h, "C"), [30.25, 20.25, 10.25, 0.25]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace all"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "one undo step");
+}
+
+#[test]
+fn file_close_hides_the_active_window_and_keeps_its_data() {
+    let mut h = start(vec![data_file("fileclose")]);
+    show_window(&mut h, "Book1 - sample");
+    let book = project(&h).workbooks().next().unwrap().id;
+    assert!(h.state().workspace.is_shown(book));
+    menu(&mut h, "File", "Close");
+    assert!(!h.state().workspace.is_shown(book), "the window is closed");
+    assert!(project(&h).workbook(book).is_some(), "its data stays in the project");
+}
+
+#[test]
+fn window_duplicate_copies_the_workbook_with_its_own_columns() {
+    let mut h = start(vec![data_file("dupwindow")]);
+    show_window(&mut h, "Book1 - sample");
+    let before = project(&h).workbooks().count();
+    menu(&mut h, "Window", "Duplicate");
+    let books: Vec<_> = project(&h).workbooks().collect();
+    assert_eq!(books.len(), before + 1, "a new workbook");
+    let (a, b) = (&books[0].sheets[0], &books[books.len() - 1].sheets[0]);
+    assert_eq!(a.columns.len(), b.columns.len());
+    assert_ne!(a.columns[0].id, b.columns[0].id, "its own columns");
+    assert_eq!(project(&h).numeric(b.columns[1].id).unwrap(), project(&h).numeric(a.columns[1].id).unwrap());
+    assert!(h.state().workspace.is_shown(books[books.len() - 1].id), "the copy is shown");
+    assert_eq!(h.state().doc.undo_label(), Some("Duplicate window"));
+}

@@ -151,6 +151,10 @@ pub enum Action {
     ImportWizard,
     /// Edit > Go to... (Ctrl+G) in a workbook.
     GoToCell(WindowId),
+    /// Edit > Find in Sheets... in this workbook.
+    FindInSheets(WindowId),
+    /// Edit > Replace... in this workbook.
+    ReplaceInSheets(WindowId),
     Undo,
     Redo,
     NewWorkbook,
@@ -203,6 +207,13 @@ pub enum Action {
     Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
     /// for the columns a plot of the active sheet would show.
+    /// The Interpolate window with this method chosen (Mathematics > Linear, Spline or B-Spline
+    /// Interpolation).
+    InterpolateWith {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        method: sheaf_core::analysis::InterpMethod,
+    },
     Analyze {
         book: WindowId,
         columns: Vec<ColumnId>,
@@ -384,6 +395,8 @@ pub enum Action {
     Focus(WindowId),
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
+    /// Window > Duplicate: copy this workbook or graph into a new window.
+    DuplicateWindow(WindowId),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).
@@ -428,5 +441,7 @@ pub enum Action {
     About,
     /// Open the window of View > Toolbars.
     Toolbars,
+    /// View > Status Bar: show or hide the status bar.
+    ToggleStatusBar,
     Quit,
 }

@@ -42,6 +42,14 @@ fn texts(items: &[scene::Item]) -> Vec<&scene::TextItem> {
 }
 
 /// The y values of the numbers in path data "M x y L x y ...".
+fn xs(d: &str) -> Vec<f64> {
+    d.trim_end_matches('Z')
+        .split(['M', 'L'])
+        .skip(1)
+        .map(|p| p.split_whitespace().next().unwrap().parse().unwrap())
+        .collect()
+}
+
 fn ys(d: &str) -> Vec<f64> {
     d.trim_end_matches('Z')
         .split(['M', 'L'])
@@ -100,10 +108,41 @@ fn a_hatched_column_gets_pattern_lines_and_the_outline_on_top() {
     assert!(matches!(&items[0], scene::Item::Path { fill: Some(_), stroke: None, .. }));
     assert!(matches!(&items[1], scene::Item::Path { fill: None, stroke: Some(st), .. } if st.color == Color::BLUE));
     assert!(matches!(&items[2], scene::Item::Rect { fill: None, stroke: Some(_), .. }));
-    // The hatch stays inside the bar: no hatch line above the frame's top or below its bottom.
+    // The hatch is cut to the bar: every line of the first bar lies inside the bar's own
+    // rectangle (the outline item), in x as well as in y, and the bar is shorter than the frame.
     let frame = s.layers[0].clip;
+    let scene::Item::Rect { rect: bar, .. } = &items[2] else { unreachable!() };
+    assert!(bar.h < frame.h - 1.0, "the first bar is shorter than the frame: {bar:?} in {frame:?}");
     let scene::Item::Path { d, .. } = &items[1] else { unreachable!() };
-    assert!(ys(d).iter().all(|y| *y >= frame.y - 1e-3 && *y <= frame.y + frame.h + 1e-3), "{d} in {frame:?}");
+    let eps = 1e-3;
+    let (xs, ys) = (xs(d), ys(d));
+    assert!(!xs.is_empty());
+    assert!(ys.iter().all(|y| *y >= bar.y - eps && *y <= bar.y + bar.h + eps), "{d} in {bar:?}");
+    assert!(xs.iter().all(|x| *x >= bar.x - eps && *x <= bar.x + bar.w + eps), "{d} in {bar:?}");
+    // And it reaches both sides of the bar and its top and bottom, not a part of it.
+    assert!(xs.iter().any(|x| (*x - bar.x).abs() < 1.0) && xs.iter().any(|x| (*x - bar.x - bar.w).abs() < 1.0));
+}
+
+#[test]
+fn a_bar_far_outside_the_axis_range_hatches_in_bounded_time_and_size() {
+    // A bar of 1e9 on a Y axis fixed to 0..10 is a rectangle about 3e9 points tall; its hatch must
+    // not run a line for every spacing across all of it.
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let x = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0])).unwrap();
+    let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1e9, 1.0, 1.0, 1.0])).unwrap();
+    let g = p.add_graph(Template::Column);
+    p.add_plot_xy(g, 0, Some(x), y, None).unwrap();
+    layer_mut(&mut p, g).y_axis.min = Some(0.0);
+    layer_mut(&mut p, g).y_axis.max = Some(10.0);
+    plot_mut(&mut p, g).decor.fill.pattern = FillPattern::Cross;
+    plot_mut(&mut p, g).decor.fill.pattern_spacing_pt = 0.5;
+    let t = std::time::Instant::now();
+    let s = scene(&p, g);
+    assert!(t.elapsed().as_secs() < 10, "{:?}", t.elapsed());
+    let size: usize =
+        s.layers[0].plots.iter().map(|i| if let scene::Item::Path { d, .. } = i { d.len() } else { 0 }).sum();
+    assert!(size < 20_000_000, "{size} bytes of paths");
 }
 
 #[test]
@@ -263,6 +302,45 @@ fn the_x_and_y_axes_switches_hide_one_axis_each() {
     layer_mut(&mut p, g).display.show_x_axes = true;
     layer_mut(&mut p, g).display.show_y_axes = true;
     assert_eq!(count(&p), full);
+}
+
+/// The overlay items (line, ticks, labels, title) that one axis has drawn, and its objects' items.
+fn axis_items(s: &scene::Scene, kinds: &[scene::ObjectKind]) -> Vec<scene::Item> {
+    let l = &s.layers[0];
+    l.objects
+        .iter()
+        .filter(|o| kinds.contains(&o.kind) && o.list == scene::ItemList::Overlay)
+        .flat_map(|o| l.overlay[o.items.clone()].to_vec())
+        .collect()
+}
+
+#[test]
+fn an_axes_switch_takes_the_line_ticks_labels_and_title_of_that_axis_and_leaves_the_grid_and_the_other_axis() {
+    use scene::ObjectKind::{XAxis, XTitle, YAxis, YTitle};
+    let (mut p, g) = project(Template::LineSymbol);
+    layer_mut(&mut p, g).x_axis.major_grid = Some(LineStyle::solid(Color::BLACK, 0.5));
+    layer_mut(&mut p, g).y_axis.major_grid = Some(LineStyle::solid(Color::BLACK, 0.5));
+    let full = scene(&p, g);
+    let x_kinds = [XAxis, XTitle];
+    let y_kinds = [YAxis, YTitle];
+    let (x_full, y_full) = (axis_items(&full, &x_kinds), axis_items(&full, &y_kinds));
+    let paths = |items: &[scene::Item]| items.iter().filter(|i| matches!(i, scene::Item::Path { .. })).count();
+    assert!(paths(&x_full) > 0 && paths(&y_full) > 0, "the axis line and the ticks are paths");
+    assert!(!full.layers[0].grid.is_empty(), "the grid is drawn");
+
+    layer_mut(&mut p, g).display.show_x_axes = false;
+    let no_x = scene(&p, g);
+    assert!(axis_items(&no_x, &x_kinds).is_empty(), "no X line, ticks, labels or title");
+    assert_eq!(axis_items(&no_x, &y_kinds), y_full, "the Y axis is untouched");
+    assert_eq!(no_x.layers[0].grid, full.layers[0].grid, "the grid stays");
+    assert_eq!(no_x.layers[0].plots, full.layers[0].plots, "and the data");
+
+    layer_mut(&mut p, g).display.show_x_axes = true;
+    layer_mut(&mut p, g).display.show_y_axes = false;
+    let no_y = scene(&p, g);
+    assert!(axis_items(&no_y, &y_kinds).is_empty(), "no Y line, ticks, labels or title");
+    assert_eq!(axis_items(&no_y, &x_kinds), x_full, "the X axis is untouched");
+    assert_eq!(no_y.layers[0].grid, full.layers[0].grid, "the grid stays");
 }
 
 #[test]

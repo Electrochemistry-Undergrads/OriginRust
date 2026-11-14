@@ -16,6 +16,12 @@ use sheaf_core::graph::{BackgroundStyle, BorderStyle, FillStyle, Gradient, opaci
 const MIN_BANDS: usize = 4;
 const BAND_PT: f64 = 2.0;
 const MAX_BANDS: usize = 64;
+/// A hatch is only drawn within this many points of the page origin, in x and y. A page is a few
+/// hundred points across, and the writers clip every layer to its frame, so nothing past this is
+/// seen; but a bar or area far outside a fixed axis range (or a zoom deep into one) is a polygon
+/// millions of points long, and one scan line per spacing across it would hang the render. The
+/// lines stay at multiples of the spacing from the origin, so the part inside is unchanged.
+const HATCH_LIMIT_PT: f64 = 5000.0;
 /// A band of an opaque fill reaches this far over the next one, so that no seam of the page shows
 /// between them. A see-through fill has no overlap: the strip would be painted twice and show as a
 /// darker line at every band.
@@ -120,9 +126,17 @@ pub(crate) fn fill_polygon(out: &mut Vec<Item>, poly: &[(f64, f64)], color: Colo
 /// The hatch of `style` inside `poly` (nothing for the pattern "None").
 pub(crate) fn hatch_polygon(out: &mut Vec<Item>, poly: &[(f64, f64)], style: &FillStyle) {
     let spacing = style.pattern_spacing_pt.max(0.5);
+    if style.pattern.angles().is_empty() || poly.iter().any(|p| !(p.0.is_finite() && p.1.is_finite())) {
+        return;
+    }
+    let near = clip_slab(poly, 0, -HATCH_LIMIT_PT, HATCH_LIMIT_PT);
+    let near = if near.is_empty() { near } else { clip_slab(&near, 1, -HATCH_LIMIT_PT, HATCH_LIMIT_PT) };
+    if near.len() < 3 {
+        return;
+    }
     let mut d = String::new();
     for &angle in style.pattern.angles() {
-        for (p, q) in hatch(poly, angle.to_radians(), spacing) {
+        for (p, q) in hatch(&near, angle.to_radians(), spacing) {
             move_to(&mut d, p.0, p.1);
             line_to(&mut d, q.0, q.1);
         }
@@ -241,6 +255,34 @@ mod tests {
             assert!((lo - (30.0 - half)).abs() < 2e-3 && (hi - (30.0 + half)).abs() < 2e-3, "{l:?}");
         }
         assert!(lines.iter().any(|l| l[1] == 25.0 && l[0].min(l[2]) > 26.0), "short near the apex");
+    }
+
+    #[test]
+    fn a_polygon_far_off_the_page_is_hatched_only_near_it_and_in_bounded_size() {
+        let style = FillStyle { pattern: FillPattern::Cross, pattern_spacing_pt: 0.5, ..FillStyle::default() };
+        let hatch_d = |poly: &[(f64, f64)]| {
+            let mut out = Vec::new();
+            hatch_polygon(&mut out, poly, &style);
+            out.into_iter().find_map(|i| if let Item::Path { d, .. } = i { Some(d) } else { None })
+        };
+        // A bar 1e9 tall (and one beyond where `k += 1.0` still counts) neither hangs nor grows
+        // without limit.
+        for h in [1e9, 1e17, 1e300] {
+            let d = hatch_d(&rect_poly(Rect { x: 10.0, y: 0.0, w: 20.0, h })).unwrap();
+            assert!(d.len() < 20_000_000, "{h}: {} bytes", d.len());
+            // Nothing is drawn past the limit, and for a bar of ordinary size the lines inside are
+            // those of a bar that ends at the limit (a far larger one only adds rounding noise).
+            let ys = segments(&d).iter().flat_map(|l| [l[1], l[3]]).collect::<Vec<_>>();
+            assert!(ys.iter().all(|y| (-1e-3..=HATCH_LIMIT_PT + 1e-3).contains(y)), "{h}");
+            if h == 1e9 {
+                let near = hatch_d(&rect_poly(Rect { x: 10.0, y: 0.0, w: 20.0, h: HATCH_LIMIT_PT })).unwrap();
+                assert_eq!(d, near);
+            }
+        }
+        // A polygon that never comes near the page has no hatch, and neither has a non-finite one.
+        assert!(hatch_d(&rect_poly(Rect { x: 1e9, y: 1e9, w: 10.0, h: 10.0 })).is_none());
+        assert!(hatch_d(&rect_poly(Rect { x: 0.0, y: 0.0, w: f64::INFINITY, h: 10.0 })).is_none());
+        assert!(hatch_d(&rect_poly(Rect { x: 0.0, y: 0.0, w: f64::NAN, h: 10.0 })).is_none());
     }
 
     #[test]

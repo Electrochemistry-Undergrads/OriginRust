@@ -662,6 +662,13 @@ fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings
     ] {
         assert!(out.warnings.iter().any(|w| w.contains(word)), "{word}: {:?}", out.warnings);
     }
+    // The notes say only what is true: the Group tab is not written at all (the colours of grouped
+    // plots have a warning of their own), and a column width reopens with the gap setting, not
+    // with the spacing the width gave on screen.
+    let note = |word: &str| out.warnings.iter().find(|w| w.contains(word)).cloned().unwrap();
+    assert!(!note("Group tab").contains("colours were"), "{}", note("Group tab"));
+    assert!(!note("width of column bars").contains("gap between bars was"), "{}", note("width of column bars"));
+    assert!(note("width of column bars").contains("gap setting"));
     // A graph without them warns about none of it.
     let (_, out) = round_trip(&one_layer(|_| {}));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);

@@ -336,9 +336,7 @@ impl Writer {
             notes.push("the gradient and border of a layer's background were not written".into());
         }
         if !layer.group_style.is_default() {
-            notes.push(
-                "the Group tab of a layer (edit mode, increments, subgroups) was not written; the colours were".into(),
-            );
+            notes.push("the Group tab of a layer (edit mode, increments, subgroups) was not written".into());
         }
         if !layer.display.is_default() {
             notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
@@ -1059,7 +1057,7 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         notes.push("the overlap of column bars was not written; bars stand side by side".into());
     }
     if layer.bars.width_pct.is_some() {
-        notes.push("the width of column bars (in percent) was not written; the gap between bars was".into());
+        notes.push("the width of column bars (in percent) was not written; the bars reopen with the layer's gap setting instead".into());
     }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());

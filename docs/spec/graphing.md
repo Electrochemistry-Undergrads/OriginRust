@@ -1878,7 +1878,8 @@ project file only when they differ from the default (a file written before loads
 - **Fill style** (`PlotDecor::fill`): the Pattern tab of columns, bars, histograms and areas, and the
   fill under a curve on the Line tab. Transparency (on top of the alpha of the colour), a hatch (forward or
   backward diagonal, horizontal, vertical, cross, diagonal cross; colour, line width 0.5 pt and spacing
-  3 pt by default) cut to the shape, and a linear gradient from the fill colour to a second colour in one
+  3 pt by default) cut to the shape (and drawn only within 5000 pt of the page origin, so that a bar far
+  outside a fixed axis range does not build millions of lines), and a linear gradient from the fill colour to a second colour in one
   of four directions, drawn as bands that meet edge to edge when the fill is see-through. Not measured:
   Origin's list of patterns, its default hatch width and spacing, how a gradient and a pattern combine.
 - **Drop lines** are drawn only for the kinds whose tab offers them (line and symbol plots, not bars and
@@ -1891,7 +1892,7 @@ project file only when they differ from the default (a file written before loads
   points. Deleting the column puts the form back to Y.
 - **Group**: Subgrouping None or By Size (n plots per subgroup, in plot order); "Subgroup on Increment" names the
   property that steps from one subgroup to the next (colour, line style or symbol type) while the others step
-  inside the subgroup. The dash and symbol lists are Origin's default lists (section 3, "Default line style
+  inside the subgroup. The dash and symbol lists are Origin's default lists (section 1.5, "Default line style
   list": 8 dash styles; the first 8 of the 16 default symbol shapes).
 - **Layer Background**: a gradient from the colour and a border line (colour, style, width) around the frame.
   The right Y layer made by Double-Y draws no background of its own.

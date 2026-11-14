@@ -404,3 +404,58 @@ fn header_dependencies_mark_manual_results_pending_and_read_formula_text() {
     set(&mut d, c[0], "i*3", RecalcMode::Auto).unwrap();
     assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "i*3");
 }
+
+#[test]
+fn text_without_a_format_tracks_its_numeric_columns_display_format() {
+    use sheaf_core::format::NumberFormat;
+    let (mut d, _, c) = book();
+    d.apply("Decimal places", |p| p.column_mut(c[0]).unwrap().format = NumberFormat::Decimal(2));
+    set(&mut d, c[1], "text(col(A))$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], "format(col(A))$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[3], r#"text(col(A),".1")$"#, RecalcMode::Auto).unwrap();
+    set(&mut d, c[4], "text(col(A)[2])$", RecalcMode::Auto).unwrap();
+    let text = |d: &Document, col, row| d.project().column(col).unwrap().cell_text(row);
+    assert_eq!(text(&d, c[1], 0), "1.00");
+    assert_eq!(text(&d, c[2], 0), "1");
+    assert_eq!(text(&d, c[3], 0), "1.0");
+    assert_eq!(text(&d, c[4], 0), "2.00");
+    d.apply("Decimal places", |p| p.column_mut(c[0]).unwrap().format = NumberFormat::Decimal(3));
+    assert_eq!(text(&d, c[1], 0), "1.000");
+    assert_eq!(text(&d, c[2], 0), "1");
+    assert_eq!(text(&d, c[3], 0), "1.0");
+    assert_eq!(text(&d, c[4], 3), "2.000");
+    d.undo();
+    assert_eq!(text(&d, c[1], 0), "1.00");
+    d.redo();
+    assert_eq!(text(&d, c[1], 0), "1.000");
+    edit_cell(&mut d, c[0], 1, "missing text");
+    assert_eq!(text(&d, c[1], 1), "--", "Text still reads a numeric value, not a text cell");
+    assert_eq!(text(&d, c[4], 0), "--");
+    set(&mut d, c[4], "text(col(A))$", RecalcMode::Manual).unwrap();
+    d.apply("Decimal places", |p| p.column_mut(c[0]).unwrap().format = NumberFormat::Decimal(4));
+    assert_eq!(state(&d, c[4]), FormulaState::Pending);
+}
+
+#[test]
+fn text_uses_engineering_and_month_column_formats_but_explicit_general_overrides_them() {
+    use sheaf_core::format::{NameStyle, NumberFormat};
+    let (mut d, _, c) = book();
+    d.apply("Engineering", |p| {
+        let a = p.column_mut(c[0]).unwrap();
+        a.data = ColumnData::numeric(vec![1000.0, 2500.0]);
+        a.format = NumberFormat::EngineeringSi(1);
+    });
+    set(&mut d, c[1], "text(col(A))$", RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], r#"text(col(A),"*")$"#, RecalcMode::Auto).unwrap();
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "1.0k");
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(1), "2.5k");
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "1000");
+    d.apply("Month", |p| {
+        let a = p.column_mut(c[0]).unwrap();
+        a.data = ColumnData::numeric(vec![1.0, 2.0]);
+        a.format = NumberFormat::Month(NameStyle::Short);
+    });
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(0), "Jan");
+    assert_eq!(d.project().column(c[1]).unwrap().cell_text(1), "Feb");
+    assert_eq!(d.project().column(c[2]).unwrap().cell_text(0), "1");
+}

@@ -49,6 +49,7 @@ pub(crate) enum StrFn {
     Compare,
     Exact,
     Text,
+    Format,
     Value,
 }
 
@@ -61,7 +62,7 @@ impl StrFn {
             StrFn::Len | StrFn::Upper | StrFn::Lower | StrFn::Trim | StrFn::Value | StrFn::Char | StrFn::Code => (1, 1),
             StrFn::Replace => (4, 4),
             StrFn::Substitute => (3, 4),
-            StrFn::Text => (1, 2),
+            StrFn::Text | StrFn::Format => (1, 2),
         }
     }
 }
@@ -79,7 +80,7 @@ impl StrFn {
     /// `text(col(A), fmt)` formats the number of the cell, as Origin does.
     pub(crate) fn text_arg(self, i: usize) -> bool {
         match self {
-            StrFn::Text => i > 0,
+            StrFn::Text | StrFn::Format => i > 0,
             StrFn::Char => false,
             StrFn::Left | StrFn::Right | StrFn::Mid => i == 0,
             StrFn::Replace => i == 0 || i == 3,
@@ -119,7 +120,7 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
             };
             Value::Text(ch.map_or_else(String::new, |c| c.to_string()))
         }
-        StrFn::Text => {
+        StrFn::Text | StrFn::Format => {
             let fmt = args.get(1).map(|v| v.clone().into_text());
             match &args[0] {
                 Value::Text(s) => Value::Text(s.clone()),
@@ -208,7 +209,7 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
                     Value::Num(f64::from(if case { s == other } else { s.to_lowercase() == other.to_lowercase() }))
                 }
                 StrFn::Exact => Value::Num(f64::from(s == text_arg(0))),
-                StrFn::Text | StrFn::Value | StrFn::Char => unreachable!("handled above"),
+                StrFn::Text | StrFn::Format | StrFn::Value | StrFn::Char => unreachable!("handled above"),
             }
         }
     }

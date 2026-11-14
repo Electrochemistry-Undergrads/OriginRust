@@ -65,6 +65,16 @@ impl<'a> SheetHost<'a> {
 }
 
 impl Host for SheetHost<'_> {
+    fn formatted_numeric_cell(&self, col: &ColumnRef, row: usize) -> Option<String> {
+        let c = self.find(col)?;
+        let value = c.numeric().and_then(|v| v.get(row)).copied().unwrap_or(f64::NAN);
+        if value.is_nan() {
+            return Some("--".into());
+        }
+        // General keeps the expression formatter's measured general-number behavior.
+        (c.format != crate::format::NumberFormat::General).then(|| c.format.format(value))
+    }
+
     fn column_label(&self, col: &ColumnRef, label: ColumnLabel) -> Option<String> {
         let c = self.find(col)?;
         Some(match label {
@@ -591,7 +601,7 @@ impl Project {
     }
 
     /// Brings recalculating columns up to date after an edit that turned `before` into `self`:
-    /// columns whose data, names or label metadata differ are the changes. Does nothing when no column in the
+    /// columns whose data, names, label metadata or formats differ are the changes. Does nothing when no column in the
     /// project recalculates. Used by [`crate::Document`], which calls it inside the undo step of
     /// the edit.
     pub fn recalculate_since(&mut self, before: &Project) -> Vec<RecalcProblem> {
@@ -623,6 +633,7 @@ impl Project {
                                     || o.units != c.units
                                     || o.comments != c.comments
                                     || o.formula != c.formula
+                                    || o.format != c.format
                             })
                         })
                         .map(|c| c.id)

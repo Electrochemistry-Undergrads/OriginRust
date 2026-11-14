@@ -964,6 +964,36 @@ fn text_and_format_read_numeric_values_and_text_format_columns() {
     assert_eq!(e.data_columns(), [ColumnRef::Short("A".into()), ColumnRef::Short("B".into())]);
 }
 
+#[test]
+fn text_uses_the_hosts_display_hook_only_for_a_direct_cell_without_an_explicit_format() {
+    struct DisplayHost;
+    impl Host for DisplayHost {
+        fn variable(&self, _name: &str) -> Option<f64> {
+            None
+        }
+        fn cell(&self, _col: &ColumnRef, row: usize) -> Option<f64> {
+            [12.345, 6.789].get(row).copied()
+        }
+        fn formatted_numeric_cell(&self, _col: &ColumnRef, row: usize) -> Option<String> {
+            ["12.35", "6.79"].get(row).map(|s| (*s).into())
+        }
+    }
+    for (src, expected) in [
+        ("text(col(A))$", ["12.35", "6.79"]),
+        ("text(col(A)[2])$", ["6.79", "6.79"]),
+        ("text(col(A)+0)$", ["12.345", "6.789"]),
+        ("format(col(A))$", ["12.345", "6.789"]),
+        (r#"text(col(A),"*")$"#, ["12.345", "6.789"]),
+        (r#"text(col(A),"")$"#, ["12.345", "6.789"]),
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&DisplayHost, 2).unwrap(),
+            expected.map(|s| Value::Text(s.into())),
+            "{src}"
+        );
+    }
+}
+
 impl Host for LabelHost {
     fn variable(&self, name: &str) -> Option<f64> {
         (name == "L").then_some(2.0)

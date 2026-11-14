@@ -8,7 +8,7 @@
 //! wildcard pattern into the list of files.
 
 use crate::{ImportKind, ascii, chi, import_file};
-use sheaf_core::{Column, ColumnData, ColumnId, Project, WindowId, Workbook, Worksheet};
+use sheaf_core::{Column, ColumnData, Project, WindowId, Workbook, Worksheet};
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
@@ -42,29 +42,26 @@ impl ImportMode {
 
     pub fn label(self) -> &'static str {
         match self {
-            ImportMode::NewBook => "New Books",
-            ImportMode::NewSheet => "New Sheets",
+            ImportMode::NewBook => "Start New Books",
+            ImportMode::NewSheet => "Start New Sheets",
             ImportMode::ReplaceSheet => "Replace Existing Data",
-            ImportMode::NewColumns => "New Columns",
-            ImportMode::NewRows => "New Rows",
+            ImportMode::NewColumns => "Start New Columns",
+            ImportMode::NewRows => "Start New Rows",
         }
     }
 }
 
-/// Options of [`place_workbook_with`] (Origin's "Data Import Options").
+/// Options of [`place_workbook_with`] (Origin's "(Re)Naming Worksheet and Workbook" group).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PlaceOptions {
     /// The sheet takes the name that the importer gave it (the file name). When false, a replaced
     /// sheet keeps its name and a new sheet gets the next free `Sheet<n>`.
     pub rename_sheet: bool,
-    /// When data is replaced, graphs that plot the sheet's columns follow the new data: a plot
-    /// that was limited to a row range plots the whole new column. When false the old range stays.
-    pub apply_range_to_plots: bool,
 }
 
 impl Default for PlaceOptions {
     fn default() -> Self {
-        PlaceOptions { rename_sheet: true, apply_range_to_plots: true }
+        PlaceOptions { rename_sheet: true }
     }
 }
 
@@ -91,11 +88,12 @@ pub fn place_workbook(project: &mut Project, book: Workbook, mode: ImportMode, t
     place_workbook_with(project, book, mode, target, PlaceOptions::default())
 }
 
-/// [`place_workbook`] with the Data Import Options.
+/// [`place_workbook`] with the naming options.
 ///
 /// Replacing the data of a sheet keeps the identity of its columns by position: the first new
 /// column takes over the identifier of the first old column, and so on. A graph that plots those
-/// columns therefore keeps plotting them, now with the new data.
+/// columns therefore keeps plotting them, now with the new data. As in Origin (measured, import-ascii.md
+/// section 10) a plot of all rows follows the new length and a plot with a row range keeps its range.
 pub fn place_workbook_with(
     project: &mut Project,
     book: Workbook,
@@ -120,7 +118,6 @@ pub fn place_workbook_with(
         unreachable!("the target was checked above");
     };
     let mut first = t.sheet;
-    let mut kept_ids: Vec<ColumnId> = Vec::new();
     if !options.rename_sheet {
         for sheet in &mut sheets {
             sheet.name = String::new();
@@ -147,7 +144,6 @@ pub fn place_workbook_with(
                 let mut columns = new.columns;
                 for (old, col) in dest.sheets[t.sheet].columns.iter().zip(columns.iter_mut()) {
                     col.id = old.id;
-                    kept_ids.push(old.id);
                 }
                 dest.sheets[t.sheet] = Worksheet { name, columns, filter: None };
             }
@@ -180,24 +176,7 @@ pub fn place_workbook_with(
             }
         }
     }
-    if options.apply_range_to_plots && !kept_ids.is_empty() {
-        free_plot_ranges(project, &kept_ids);
-    }
     Placed { book: t.book, sheet: first, warnings }
-}
-
-/// Lets every plot of the given columns use all rows of its column: a plot keeps its row range
-/// only while the data it was set for is there.
-fn free_plot_ranges(project: &mut Project, columns: &[ColumnId]) {
-    for window in &mut project.windows {
-        if let sheaf_core::Window::Graph(g) = window {
-            for plot in g.layers.iter_mut().flat_map(|l| l.plots.iter_mut()) {
-                if plot.rows.is_some() && (columns.contains(&plot.y) || plot.x.is_some_and(|x| columns.contains(&x))) {
-                    plot.rows = None;
-                }
-            }
-        }
-    }
 }
 
 /// The name of a sheet that is added to `book`: the wanted name made unique, or, when there is
@@ -662,27 +641,25 @@ mod tests {
     }
 
     #[test]
-    fn replacing_data_keeps_the_plots_and_applies_the_new_range_when_asked() {
+    fn replacing_data_keeps_the_plots_and_their_row_ranges_like_origin() {
         use sheaf_core::template::Template;
-        for apply in [true, false] {
-            let (mut p, t) = project_with(book(
-                "old",
-                vec![num("A", "x", &[1.0, 2.0, 3.0, 4.0]), num("B", "y", &[3.0, 4.0, 5.0, 6.0])],
-            ));
-            let ids: Vec<ColumnId> = p.workbook(t.book).unwrap().sheets[0].columns.iter().map(|c| c.id).collect();
-            let g = p.plot_columns(Template::Line, &[ids[1]]).unwrap();
-            p.graph_mut(g).unwrap().layers[0].plots[0].rows = Some((0, 4));
-            let new =
-                book("new", vec![num("A", "x", &(1..=9).map(f64::from).collect::<Vec<_>>()), num("B", "y", &[1.0; 9])]);
-            let options = PlaceOptions { apply_range_to_plots: apply, ..PlaceOptions::default() };
-            place_workbook_with(&mut p, new, ImportMode::ReplaceSheet, Some(t), options);
-            let sheet = &p.workbook(t.book).unwrap().sheets[0];
-            assert_eq!(sheet.columns[1].id, ids[1], "the plot still finds its column");
-            let plot = &p.graphs().next().unwrap().layers[0].plots[0];
-            assert_eq!(plot.y, ids[1]);
-            assert_eq!(plot.rows, if apply { None } else { Some((0, 4)) }, "apply = {apply}");
-            assert_eq!(p.numeric(plot.y).unwrap().len(), 9);
-        }
+        let (mut p, t) =
+            project_with(book("old", vec![num("A", "x", &[1.0, 2.0, 3.0, 4.0]), num("B", "y", &[3.0, 4.0, 5.0, 6.0])]));
+        let ids: Vec<ColumnId> = p.workbook(t.book).unwrap().sheets[0].columns.iter().map(|c| c.id).collect();
+        // One plot of all rows and one limited to rows 1 to 4 (Origin: plot range 2..4 of 5).
+        let all = p.plot_columns(Template::Line, &[ids[1]]).unwrap();
+        let limited = p.plot_columns(Template::Line, &[ids[1]]).unwrap();
+        p.graph_mut(limited).unwrap().layers[0].plots[0].rows = Some((0, 4));
+        let new =
+            book("new", vec![num("A", "x", &(1..=9).map(f64::from).collect::<Vec<_>>()), num("B", "y", &[1.0; 9])]);
+        place_workbook(&mut p, new, ImportMode::ReplaceSheet, Some(t));
+        let sheet = &p.workbook(t.book).unwrap().sheets[0];
+        assert_eq!(sheet.columns[1].id, ids[1], "the plot still finds its column");
+        let plot = &p.graph(all).unwrap().layers[0].plots[0];
+        assert_eq!((plot.y, plot.rows), (ids[1], None), "a plot of all rows follows the new data");
+        assert_eq!(p.numeric(plot.y).unwrap().len(), 9);
+        let plot = &p.graph(limited).unwrap().layers[0].plots[0];
+        assert_eq!(plot.rows, Some((0, 4)), "a plot with a row range keeps it");
     }
 
     #[test]
@@ -700,7 +677,10 @@ mod tests {
     #[test]
     fn the_modes_carry_origins_names_in_origins_order() {
         let labels: Vec<_> = ImportMode::ALL.iter().map(|m| m.label()).collect();
-        assert_eq!(labels, ["Replace Existing Data", "New Books", "New Sheets", "New Columns", "New Rows"]);
+        assert_eq!(
+            labels,
+            ["Replace Existing Data", "Start New Books", "Start New Sheets", "Start New Columns", "Start New Rows"]
+        );
     }
 
     #[test]

@@ -10,8 +10,6 @@ use sheaf_core::column::Storage;
 use sheaf_core::format::{NameStyle, NumberFormat};
 use sheaf_core::{ColumnId, Designation, Document, Project};
 
-pub use sheaf_core::column::MAX_SHORT_NAME;
-
 pub struct ColumnPropsDialog {
     column: ColumnId,
     short_name: String,

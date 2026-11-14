@@ -128,7 +128,7 @@ function Dump-Controls([IntPtr]$dlg, [string]$file) {
     $cls = [DlgWin]::Cls($c)
     $chk = ''
     if ($cls -eq 'Button') { $chk = ' check=' + [DlgWin]::SendMessage($c, 0x00F0, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() }
-    if ($cls -eq 'ComboBox' -and $vis) { $chk = ' items=' + [DlgWin]::ComboItems($c) }
+    if ($cls -eq 'ComboBox') { $chk = ' items=' + [DlgWin]::ComboItems($c) }
     $lines += ("{0} vis={1} [{2},{3},{4},{5}]{6} text='{7}'" -f $cls, $vis, ($r.Left - $d.Left), ($r.Top - $d.Top), ($r.Right - $d.Left), ($r.Bottom - $d.Top), $chk, [DlgWin]::Text($c))
   }
   $lines | Set-Content -LiteralPath $file -Encoding UTF8

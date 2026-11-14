@@ -1876,14 +1876,13 @@ impl SheafApp {
                     self.import = None;
                     self.finish_import(request);
                 }
-                ImportOutcome::Apply(request) => self.finish_import(request),
             }
         }
         if let Some(d) = &mut self.import_wizard {
             match d.show(ctx, import_target.as_ref().map(|t| t.1.as_str())) {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import_wizard = None,
-                ImportOutcome::Done(request) | ImportOutcome::Apply(request) => {
+                ImportOutcome::Done(request) => {
                     self.import_wizard = None;
                     self.finish_import(request);
                 }

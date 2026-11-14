@@ -83,3 +83,7 @@ Week numbers (`colfmt-weekday-month`), Engineering digits and letters (`colfmt-e
 
 `import-shortnames*.lines.txt` import `import-inputs/shortn2.txt` and `shortn3.txt` with the short-name line option
 (`options.Hdr.SNames`) and print the column names; the rules are in `docs/spec/import-ascii.md`, section 3.
+
+`import-replace-plots.lines.txt` replaces the data of a sheet by `impasc` while two graphs plot it (one of all rows, one
+with a row range) and prints each plot's begin and end row before and after (`get %C -b`, `get %C -e`); run it with
+`import-inputs` as the work folder. See `docs/spec/import-ascii.md`, section 10.

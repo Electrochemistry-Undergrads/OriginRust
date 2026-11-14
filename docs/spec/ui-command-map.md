@@ -312,6 +312,7 @@ Re-Import Directly [Ctrl+4].
   column labels. Other: action when non-numeric text is met in a numeric field; support numbers
   with leading zeros; "Import Into Worksheet as" (new book, new sheets, replace existing,
   new columns, etc.). A second page "Data Import Options": rename columns if first line holds
+  (Measured 2026-11-13 in the 2016 `impASC` window: it has no "Data Import Options" page; see import-ascii.md section 10.)
   labels; rename worksheet to the file name; apply new range to associated plots; create column
   labels from the header.
 - `impCSV` parameters: `fname`, `trfiles`, `options`, `orng` (destination range, default active

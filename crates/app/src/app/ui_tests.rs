@@ -3411,6 +3411,30 @@ fn deleting_a_column_drops_the_stack_settings_and_tick_labels_that_name_it() {
 }
 
 #[test]
+fn deleting_a_column_resets_the_data_labels_and_x_error_that_name_it() {
+    let mut p = Project::new();
+    let book = p.add_workbook("w");
+    let names = p.add_column(book, 0, Designation::X, ColumnData::text(vec!["a".into(), "b".into()])).unwrap();
+    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let ex = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.1, 0.1])).unwrap();
+    let g = p.plot_columns(Template::Line, &[y1]).unwrap();
+    {
+        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+        plot.details.labels.enabled = true;
+        plot.details.labels.form = LabelForm::Column { column: names };
+        plot.x_error = Some(ex);
+        plot.y_base = Some(ex);
+    }
+    delete_columns(&mut p, &[names, ex]);
+    let graph = p.graph(g).unwrap();
+    let plot = &graph.layers[0].plots[0];
+    assert_eq!(plot.details.labels.form, LabelForm::Y);
+    assert!(plot.details.labels.enabled, "the labels stay on");
+    assert_eq!((plot.x_error, plot.y_base), (None, None));
+    assert!(!graph.referenced_columns().contains(&names));
+}
+
+#[test]
 fn the_integrate_gadget_shows_a_range_and_new_output_writes_the_area_to_a_sheet() {
     let mut h = start(vec![data_file("gadget")]);
     menu(&mut h, "Gadgets", "Integrate...");

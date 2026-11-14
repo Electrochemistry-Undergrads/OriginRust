@@ -88,6 +88,21 @@ fn drop_lines_run_from_each_point_to_the_axes() {
     assert_eq!(plot_lines(&svg(&p, g)).len(), n + 2);
 }
 
+#[test]
+fn drop_lines_are_only_drawn_for_kinds_that_offer_them() {
+    let (mut p, g) = project(Template::Line);
+    let drops = DropLines { horizontal: Some(DropLines::starting_style(Color::BLUE)), vertical: None };
+    plot_mut(&mut p, g).details.drop_lines = drops;
+    let with_line = plot_lines(&svg(&p, g)).len();
+    // The plot becomes a column plot: its Drop Lines tab is gone, so no line may stay behind.
+    plot_mut(&mut p, g).kind = PlotKind::Column;
+    let column = plot_lines(&svg(&p, g));
+    assert!(!column.iter().any(|l| l.contains("stroke=\"#0000FF\"")), "{column:?}");
+    // The settings are kept: back to a line, the drop lines are drawn again.
+    plot_mut(&mut p, g).kind = PlotKind::Line;
+    assert_eq!(plot_lines(&svg(&p, g)).len(), with_line);
+}
+
 fn label_texts(svg: &str) -> Vec<String> {
     plot_lines(svg)
         .iter()

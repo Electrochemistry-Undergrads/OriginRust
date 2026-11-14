@@ -64,7 +64,8 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
     if plot.kind.has_line() && plot.line.width_pt > 0.0 {
         draw_line(out, pd, geom);
     }
-    if plot.details.drop_lines != Default::default() {
+    // The Drop Lines tab is only offered for kinds with a line or symbols; the others draw none.
+    if (plot.kind.has_line() || plot.kind.has_symbols()) && plot.details.drop_lines != Default::default() {
         draw_drop_lines(out, pd, geom);
     }
     if plot.kind == PlotKind::Box {

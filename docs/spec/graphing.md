@@ -1708,3 +1708,9 @@ Display tab (measured, section 18 list): Sheaf offers Labels (the tick labels of
 data may run over the whole page) and Grid on Top of Data (the grid lines are drawn after the plots);
 X Axes, Y Axes and Data on Top of Axes are shown greyed, and Scale Elements and Clipping Margins are
 not offered. The `.opj` writer names a changed Display tab in its save warnings.
+
+Size/Speed tab (measured): Layer Area Left, Top, Width, Height with Units % of Page (default), inch, cm,
+mm, pixel and point; Link Axis Length to Scale with X:Y Ratio; Graphic Image Caching None or Raster;
+Speed Mode with worksheet data at most 3000 points per curve and matrix data 32 per dimension. Sheaf's
+tab (named Size/Speed) has the Layer Area in every unit but pixel (the unit is only how the numbers are
+shown; the frame stays fractions of the page, and a linked layer shows % only); the rest is not offered.

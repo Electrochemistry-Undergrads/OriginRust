@@ -52,7 +52,7 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
         Node::Layer(_) => vec![
             (DetailTab::LayerContents, "Layer Contents", true),
             (DetailTab::Background, "Background", true),
-            (DetailTab::Size, "Size", true),
+            (DetailTab::Size, "Size/Speed", true),
             (DetailTab::Display, "Display", true),
             (DetailTab::Stack, "Stack", true),
             (DetailTab::Legend, "Legend", true),
@@ -756,6 +756,7 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
     let link = graph.layers[l].link.map(|k| k.parent);
     // The ids that `\l(n)` and `%(n)` in the legend text refer to.
     let legend_ids = graph.legend_ids(l, &|j| graph.layers[j].plots.iter().filter(|p| p.visible).count());
+    let page = (graph.page.width_pt, graph.page.height_pt);
     let layer = &mut graph.layers[l];
     match tab {
         DetailTab::Size => {
@@ -765,19 +766,49 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
                     parent + 1
                 ));
             }
+            // Origin's Layer Area units (% of Page by default; pixel is not offered). The choice is
+            // only how the numbers are shown: the frame is kept as fractions of the page.
+            const UNITS: [(&str, f64); 5] =
+                [("% of Page", 0.0), ("inch", 72.0), ("cm", 72.0 / 2.54), ("mm", 72.0 / 25.4), ("point", 1.0)];
+            let unit_id = ui.id().with("layer_area_unit");
+            let mut unit: usize = ui.data(|d| d.get_temp(unit_id)).unwrap_or(0);
+            if link.is_some() {
+                unit = 0;
+            }
+            section(ui, "Layer Area");
             grid(ui, "frame_props", |ui| {
-                let pct = |ui: &mut egui::Ui, label: &str, v: &mut f64| {
-                    let mut p = *v * 100.0;
+                ui.label("Units");
+                ui.add_enabled_ui(link.is_none(), |ui| {
+                    egui::ComboBox::from_id_salt("layer_area_units").selected_text(UNITS[unit].0).show_ui(ui, |ui| {
+                        for (k, (name, _)) in UNITS.iter().enumerate() {
+                            ui.selectable_value(&mut unit, k, *name);
+                        }
+                    });
+                });
+                ui.end_row();
+                let per_unit = UNITS[unit].1;
+                let edit = |ui: &mut egui::Ui, label: &str, v: &mut f64, side_pt: f64| {
                     ui.label(label);
-                    ui.add(DragValue::new(&mut p).range(0.0..=100.0).speed(0.2).suffix(" %"));
+                    if per_unit == 0.0 {
+                        let mut p = *v * 100.0;
+                        ui.add(DragValue::new(&mut p).range(0.0..=100.0).speed(0.2).suffix(" %"));
+                        *v = p / 100.0;
+                    } else {
+                        let mut a = *v * side_pt / per_unit;
+                        let max = side_pt / per_unit;
+                        if ui.add(DragValue::new(&mut a).range(0.0..=max).speed(max / 500.0).max_decimals(3)).changed()
+                        {
+                            *v = a * per_unit / side_pt;
+                        }
+                    }
                     ui.end_row();
-                    *v = p / 100.0;
                 };
-                pct(ui, "Left", &mut layer.frame.left);
-                pct(ui, "Top", &mut layer.frame.top);
-                pct(ui, "Width", &mut layer.frame.width);
-                pct(ui, "Height", &mut layer.frame.height);
+                edit(ui, "Left", &mut layer.frame.left, page.0);
+                edit(ui, "Top", &mut layer.frame.top, page.1);
+                edit(ui, "Width", &mut layer.frame.width, page.0);
+                edit(ui, "Height", &mut layer.frame.height, page.1);
             });
+            ui.data_mut(|d| d.insert_temp(unit_id, unit));
         }
         DetailTab::Stack => stack_tab(ui, layer),
         DetailTab::Display => {

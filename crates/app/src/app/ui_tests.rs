@@ -497,6 +497,24 @@ fn apply_moves_the_starting_point_of_cancel() {
 }
 
 #[test]
+fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
+    let mut h = start(vec![data_file("size-speed")]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Size/Speed");
+    for label in ["Layer Area", "Units", "Left", "Height"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    click(&mut h, "Display");
+    for label in ["Show Elements", "Labels", "Data", "Frame", "Clip Data to Frame", "Grid on Top of Data"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    click(&mut h, "Grid on Top of Data");
+    click(&mut h, "OK");
+    assert!(graph(&h).layers[0].display.grid_on_top);
+}
+
+#[test]
 fn the_plot_details_tree_chooses_a_plot_of_the_second_layer() {
     let mut h = start(vec![data_file("details-tree")]);
     let (_, g) = window_ids(&h);

@@ -211,6 +211,12 @@ pub struct ReadOptions {
     /// string of several characters that separates fields as a whole (for example "||").
     #[arg(long, value_name = "SEP")]
     pub delimiter: Option<String>,
+    /// Delimited text: each character is a separator (for example "|;").
+    #[arg(long, value_name = "CHARS", conflicts_with_all = ["delimiter", "fixed_width"])]
+    pub delimiter_chars: Option<String>,
+    /// Collapse runs of the characters supplied by --delimiter-chars to one separator.
+    #[arg(long, requires = "delimiter_chars")]
+    pub combine_delimiters: bool,
     /// Delimited text: fixed-width columns instead of a separator. The widths in characters, as a
     /// comma-separated list; the last width repeats for the remaining columns.
     #[arg(long, value_name = "W,W,...", value_delimiter = ',', conflicts_with = "delimiter")]

@@ -30,6 +30,12 @@ pub enum Delimiter {
     Whitespace,
     /// Any other single character.
     Other(char),
+    /// Each character is a delimiter (Origin's Other Delimiters). Optionally collapse a run
+    /// of these characters to one separator. Quoted empty fields are still real fields.
+    AnyOf {
+        chars: String,
+        combine: bool,
+    },
     /// A string of two or more characters that separates the fields as a whole (`||`, `::`,
     /// `;;`). Origin's "Other" field accepts such a string (its option `MultipleDelimiters`).
     Multi(String),
@@ -220,10 +226,12 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
         return split_fixed(line, widths);
     }
     let whitespace = matches!(delim, Delimiter::Whitespace);
+    let combine = matches!(delim, Delimiter::AnyOf { combine: true, .. });
     let sep: Vec<char> = match delim {
         Delimiter::Comma => vec![','],
         Delimiter::Semicolon => vec![';'],
         Delimiter::Other(c) => vec![*c],
+        Delimiter::AnyOf { chars, .. } => chars.chars().collect(),
         Delimiter::Multi(s) if !s.is_empty() => s.chars().collect(),
         _ => vec!['\t'],
     };
@@ -232,6 +240,8 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
     let sep_at = |i: usize| -> Option<usize> {
         if whitespace {
             (chars[i] == ' ' || chars[i] == '\t').then_some(1)
+        } else if matches!(delim, Delimiter::AnyOf { .. }) {
+            sep.contains(&chars[i]).then_some(1)
         } else {
             chars[i..].starts_with(&sep).then_some(sep.len())
         }
@@ -251,7 +261,7 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
                 } else {
                     in_quotes = false;
                 }
-            } else {
+            } else if c != '\r' || chars.get(i + 1) != Some(&'\n') {
                 cur.push(c);
             }
         } else if c == '"' && !quoted && cur.is_empty() && !sep.contains(&'"') {
@@ -264,6 +274,11 @@ fn split_fields(line: &str, delim: &Delimiter) -> Vec<String> {
             cur.clear();
             quoted = false;
             i += len - 1;
+            if combine {
+                while i + 1 < chars.len() && sep_at(i + 1).is_some() {
+                    i += 1;
+                }
+            }
         } else if c.is_whitespace() && (cur.is_empty() || quoted) {
             // leading space, or space after a closing quote: ignored
         } else {
@@ -513,7 +528,15 @@ fn is_numeric_row(fields: &[String], ns: NumStyle) -> bool {
 /// lines. A quote opens a quoted field only at the start of a field. If a
 /// quote is still open at the end of the text (a stray quote character), the
 /// text is split into plain lines instead.
-fn split_records(text: &str) -> Vec<&str> {
+fn split_records<'a>(text: &'a str, delimiter: &Delimiter) -> Vec<&'a str> {
+    if matches!(delimiter, Delimiter::Fixed(_)) {
+        return text.lines().collect();
+    }
+    let quote_is_delimiter = match delimiter {
+        Delimiter::Other(c) => *c == '"',
+        Delimiter::AnyOf { chars, .. } | Delimiter::Multi(chars) => chars.contains('"'),
+        _ => false,
+    };
     let mut records = Vec::new();
     let mut start = 0;
     let mut in_quotes = false;
@@ -533,18 +556,45 @@ fn split_records(text: &str) -> Vec<&str> {
             }
             continue;
         }
+        if let Delimiter::Multi(s) = delimiter
+            && !s.is_empty()
+            && !s.contains('\n')
+            && text[i..].starts_with(s)
+        {
+            // Consume a whole match, as split_fields does. Suffix matching would also see
+            // overlapping delimiters and could mistake a later quote for a new field.
+            for _ in 1..s.chars().count() {
+                chars.next();
+            }
+            field_start = true;
+            continue;
+        }
         match c {
             '\n' => {
                 records.push(cut(&text[start..i]));
                 start = i + 1;
                 field_start = true;
             }
-            '"' if field_start => {
+            '"' if field_start && !quote_is_delimiter => {
                 in_quotes = true;
                 field_start = false;
             }
-            ',' | ';' | '\t' | ' ' => field_start = true,
-            _ => field_start = false,
+            _ => {
+                let separator = match delimiter {
+                    Delimiter::Auto => matches!(c, ',' | ';' | '\t' | ' '),
+                    Delimiter::Comma => c == ',',
+                    Delimiter::Tab => c == '\t',
+                    Delimiter::Semicolon => c == ';',
+                    Delimiter::Whitespace => c == ' ' || c == '\t',
+                    Delimiter::Other(d) => c == *d,
+                    Delimiter::AnyOf { chars, .. } => chars.contains(c),
+                    Delimiter::Multi(_) => false,
+                    Delimiter::Fixed(_) => false,
+                };
+                // Space before a quoted field does not stop it being a field start; space
+                // inside an unquoted field does not start a new field.
+                field_start = separator || (field_start && c.is_whitespace());
+            }
         }
     }
     if in_quotes {
@@ -706,7 +756,7 @@ fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usiz
 }
 
 fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
-    let lines: Vec<&str> = split_records(text);
+    let lines: Vec<&str> = split_records(text, &opts.delimiter);
     let delimiter = match opts.delimiter.clone() {
         Delimiter::Auto => {
             auto_delimiter(&lines, opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space))
@@ -790,7 +840,9 @@ pub fn preview(text: &str, opts: &AsciiOptions, max_rows: usize) -> Vec<Vec<Stri
 /// lines; line numbers in the options then count records, not physical lines.
 pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
     let comma_decimal = opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space);
-    if comma_decimal && matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(',')) {
+    let comma_delimiter = matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(','))
+        || matches!(&opts.delimiter, Delimiter::AnyOf { chars, .. } if chars.contains(','));
+    if comma_decimal && comma_delimiter {
         return Err(IoError::InvalidOption(
             "the decimal separator and the field delimiter cannot both be a comma".to_string(),
         ));
@@ -803,6 +855,9 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
     match &opts.delimiter {
         Delimiter::Multi(m) if m.is_empty() => {
             return Err(IoError::InvalidOption("the delimiter string is empty".to_string()));
+        }
+        Delimiter::AnyOf { chars, .. } if chars.is_empty() => {
+            return Err(IoError::InvalidOption("the delimiter character set is empty".to_string()));
         }
         Delimiter::Fixed(w) if w.is_empty() || w.contains(&0) => {
             return Err(IoError::InvalidOption(
@@ -824,7 +879,7 @@ fn split_blocks(text: &str, opts: &AsciiOptions) -> Vec<String> {
     let ns = whole.ns;
     let delimiter = whole.detected.delimiter.clone();
     let mut blocks: Vec<Vec<&str>> = vec![Vec::new()];
-    for rec in split_records(text) {
+    for rec in split_records(text, &opts.delimiter) {
         if rec.trim().is_empty() {
             if !blocks.last().is_some_and(Vec::is_empty) {
                 blocks.push(Vec::new());
@@ -1594,8 +1649,8 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         // CRLF line ends, and a stray quote falls back to plain lines
         let imp = parse("a,b\r\n\"x\r\ny\",1\r\n\"z\",2\r\nw,3\r\n");
         assert_eq!(col(&imp, 1).numeric().unwrap(), &[1.0, 2.0, 3.0]);
-        assert_eq!(split_records("1,2\n5\" pipe,3\n7,8\n").len(), 3);
-        assert_eq!(split_records("a\n\"open\nb\n").len(), 3);
+        assert_eq!(split_records("1,2\n5\" pipe,3\n7,8\n", &Delimiter::Auto).len(), 3);
+        assert_eq!(split_records("a\n\"open\nb\n", &Delimiter::Auto).len(), 3);
     }
 
     #[test]
@@ -1781,6 +1836,112 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert_eq!(Delimiter::from_text(""), None);
         let empty = AsciiOptions { delimiter: Delimiter::Multi(String::new()), ..AsciiOptions::default() };
         assert!(parse_ascii(text, "x", &empty).is_err());
+    }
+
+    #[test]
+    fn delimiter_character_sets_preserve_empty_fields_or_combine_runs() {
+        let separate = Delimiter::AnyOf { chars: "|;".into(), combine: false };
+        let combined = Delimiter::AnyOf { chars: "|;".into(), combine: true };
+        assert_eq!(split_fields("a|;b", &separate), ["a", "", "b"]);
+        assert_eq!(split_fields("a|;b", &combined), ["a", "b"]);
+        assert_eq!(split_fields(r#"a|"";b"#, &combined), ["a", "", "b"]);
+        assert_eq!(split_fields("|;a;;", &combined), ["", "a", ""]);
+        assert_eq!(split_fields(r#"a|"b;|c";d"#, &combined), ["a", "b;|c", "d"]);
+        let unicode = Delimiter::AnyOf { chars: "§界".into(), combine: true };
+        assert_eq!(split_fields("α§界β界γ", &unicode), ["α", "β", "γ"]);
+        // CSV still retains missing cells, including an explicitly quoted empty field.
+        assert_eq!(split_fields(r#"a,,"",b,"#, &Delimiter::Comma), ["a", "", "", "b", ""]);
+    }
+
+    #[test]
+    fn character_set_detection_preview_and_import_agree() {
+        let text = "t|;i\n1|;2\n2|;3\n3|;4\n4|;5\n";
+        for combine in [false, true] {
+            let opts =
+                AsciiOptions { delimiter: Delimiter::AnyOf { chars: "|;".into(), combine }, ..AsciiOptions::default() };
+            let imp = parse_with(text, &opts);
+            let count = if combine { 2 } else { 3 };
+            assert_eq!(detect(text, &opts).columns, count);
+            assert_eq!(preview(text, &opts, 1)[0].len(), count);
+            assert_eq!(imp.workbook.sheets[0].columns.len(), count);
+            assert_eq!(col(&imp, count - 1).long_name, "i");
+            assert_eq!(col(&imp, count - 1).numeric().unwrap(), [2.0, 3.0, 4.0, 5.0]);
+            if !combine {
+                assert_eq!(preview(text, &opts, 1)[0][1], "");
+            }
+        }
+    }
+
+    #[test]
+    fn custom_delimiters_keep_quoted_multiline_fields_and_unicode() {
+        let text = "t§message界value\r\n1§\"line1\r\nline2\"界2.5\r\n2§\"x§y\"界3.5\r\n";
+        let opts = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: "§界".into(), combine: false },
+            header_lines: Some(1),
+            long_name_line: Some(1),
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(col(&imp, 1).data.text_cell(0), Some("line1\nline2"));
+        assert_eq!(col(&imp, 1).data.text_cell(1), Some("x§y"));
+        assert_eq!(col(&imp, 2).numeric().unwrap(), [2.5, 3.5]);
+        assert_eq!(preview(text, &opts, 2)[0], ["1", "line1\nline2", "2.5"]);
+    }
+
+    #[test]
+    fn record_quotes_start_only_after_a_complete_nonoverlapping_delimiter() {
+        let multi = Delimiter::Multi("||".into());
+        assert_eq!(split_records("1||\"line1\nline2\"||3\n4||5||6\n", &multi).len(), 2);
+        assert_eq!(split_records("1|\"literal\nnext\"||2\n", &multi).len(), 2);
+        assert_eq!(split_records("xababa\"not\nquoted\"aba2\n", &Delimiter::Multi("aba".into())).len(), 2);
+        let fixed = Delimiter::Fixed(vec![4]);
+        assert_eq!(split_records("\"ab\ncd\"\n", &fixed), ["\"ab", "cd\""]);
+        let quote = Delimiter::AnyOf { chars: "\"".into(), combine: false };
+        assert_eq!(split_records("a\"b\nc\"d\n", &quote).len(), 2);
+        assert_eq!(split_fields("a\"b", &quote), ["a", "b"]);
+        assert_eq!(split_records("1||\"unclosed\n2||3\n", &multi).len(), 2);
+    }
+
+    #[test]
+    fn delimiter_sets_validate_empty_sets_and_decimal_comma_conflicts() {
+        let empty = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: String::new(), combine: false },
+            ..AsciiOptions::default()
+        };
+        assert!(parse_ascii("1|2\n", "x", &empty).is_err());
+        for (decimal_comma, thousands) in [(true, Thousands::Auto), (false, Thousands::Dot), (false, Thousands::Space)]
+        {
+            let opts = AsciiOptions {
+                delimiter: Delimiter::AnyOf { chars: ",;".into(), combine: true },
+                decimal_comma,
+                thousands,
+                ..AsciiOptions::default()
+            };
+            assert!(parse_ascii("1,5;2,5\n", "x", &opts).is_err());
+        }
+        let opts = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: "|;".into(), combine: false },
+            decimal_comma: true,
+            header_lines: Some(0),
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with("1,5|2,5\n3,5;4,5\n", &opts);
+        assert_eq!(col(&imp, 0).numeric().unwrap(), [1.5, 3.5]);
+    }
+
+    #[test]
+    fn delimiter_set_blocks_do_not_split_blank_lines_inside_quotes() {
+        let text = "1|\"a\n\nb\"\n2|3\n\n3|4\n4|5\n";
+        let opts = AsciiOptions {
+            delimiter: Delimiter::AnyOf { chars: "|".into(), combine: false },
+            blocks: Blocks::Sheets,
+            header_lines: Some(0),
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(imp.workbook.sheets.len(), 2);
+        assert_eq!(imp.workbook.sheets[0].columns[1].data.text_cell(0), Some("a\n\nb"));
+        assert_eq!(imp.workbook.sheets[1].columns[0].numeric().unwrap(), [3.0, 4.0]);
     }
 
     #[test]

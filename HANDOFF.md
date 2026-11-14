@@ -58,6 +58,12 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
 
 ## Known issues and table UI verification
 
+- T19 import separators: **Other** reads a set of delimiter characters, with optional
+  **Treat Consecutive Delimiters as One**; **Multiple Characters** reads a whole sequence.
+  CLI equivalents: `--delimiter-chars` / `--combine-delimiters` and `--delimiter` respectively.
+  Explicit modes handle custom-delimiter quoted multiline fields; quoting, empty-field choices
+  and the remaining Auto-detection bootstrap limitation are in import-ascii.md section 2.
+
 - T08 text substitution: `substitute(s,new,find[,n])$` follows Origin's documented argument order;
   omitted/zero occurrence replaces all, a positive integer chooses one. Function > Text exposes it.
   Text-returning functions accept `$`; worksheet regressions cover Auto recalculation and undo.

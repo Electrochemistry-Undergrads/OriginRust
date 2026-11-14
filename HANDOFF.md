@@ -62,6 +62,13 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
       Expected: selecting one cell highlights only that cell. Not yet reproduced or diagnosed;
       investigate the worksheet selection behaviour and verify the fix before closing this issue.
 
+- [ ] **Cell shortcuts and interaction logic across all tables** (reported 2026-11-13):
+      the owner reports that cell shortcuts and interaction logic work in imported tables but
+      behave incorrectly in newly created tables. Apply the same cell selection, navigation,
+      editing and shortcut behaviour to every table, regardless of how it was created.
+      Reproduce on both a new table and an imported table, and cover both paths when verifying
+      the fix. Not yet reproduced or diagnosed.
+
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and

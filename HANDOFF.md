@@ -167,8 +167,8 @@ about 88 % full, check `df -h /c` before parallel builds.
    (`analysis-curve-math.md` 4, measured 2026-11-13; left: avecurves spline ends and a turning
    X); data manipulation (analysis-tools.md 12; X-Function names and Reduce to Evenly Spaced X measured
    2026-11-13, left: how the interactive Subtract Straight Line and Curve Translate behave on the graph);
-   drawn objects (graphing.md 17: one object per drag, Shift snapping, attachment default, properties
-   tabs, default width/colour/head size).
+   drawn objects (graphing.md 17: defaults, properties tabs and attachment measured 2026-11-13; left: Shift
+   snapping, the ellipse tool, Sheaf's lack of scale attachment).
 
 ## Local-only resources
 

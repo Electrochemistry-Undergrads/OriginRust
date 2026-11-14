@@ -161,6 +161,23 @@ if ($MenuClicks -ne '') {
   foreach ($p in ($MenuClicks -split ';')) {
     # "K:keys" sends keys (SendKeys notation, for example K:^3 for Ctrl+3) instead of a click.
     if ($p.StartsWith('K:')) { [System.Windows.Forms.SendKeys]::SendWait($p.Substring(2)); Start-Sleep -Milliseconds 700; continue }
+    # "G:x1,y1,x2,y2" drags with the left button held; "DC:x,y" double-clicks.
+    if ($p.StartsWith('G:')) {
+      $g = $p.Substring(2) -split ','
+      [void][DlgWin]::SetCursorPos([int]$g[0], [int]$g[1]); Start-Sleep -Milliseconds 300
+      [DlgWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 200
+      for ($k = 1; $k -le 10; $k++) {
+        $mx = [int]([int]$g[0] + ([int]$g[2] - [int]$g[0]) * $k / 10); $my = [int]([int]$g[1] + ([int]$g[3] - [int]$g[1]) * $k / 10)
+        [void][DlgWin]::SetCursorPos($mx, $my); Start-Sleep -Milliseconds 40
+      }
+      [DlgWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 700; continue
+    }
+    if ($p.StartsWith('DC:')) {
+      $d2 = $p.Substring(3) -split ','
+      [void][DlgWin]::SetCursorPos([int]$d2[0], [int]$d2[1]); Start-Sleep -Milliseconds 300
+      for ($k = 0; $k -lt 2; $k++) { [DlgWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [DlgWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 80 }
+      Start-Sleep -Milliseconds 700; continue
+    }
     $xy = $p -split ','
     [void][DlgWin]::SetCursorPos([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 300
     [DlgWin]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [DlgWin]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)

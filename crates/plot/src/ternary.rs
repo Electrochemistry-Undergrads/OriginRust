@@ -123,16 +123,16 @@ pub(crate) fn is_percent(project: &Project, layer: &Layer, settings: &TernaryCoo
     }
 }
 
-/// The scale shared by the three axes: 0 to 1 in steps of 0.2, or 0 to 100 in steps of 20, with
-/// the tick settings of `axis`.
+/// The scale shared by the three axes: 0 to 1 in steps of 0.25, or 0 to 100 in steps of 25
+/// (Origin, measured: labels 0.00 to 1.00, or 0 to 100), with the tick settings of `axis`.
 pub(crate) fn scale_axis(axis: &Axis, percent: bool) -> ResolvedAxis {
     let top = if percent { 100.0 } else { 1.0 };
     let fixed = Axis {
         scale: ScaleKind::Linear,
         min: Some(0.0),
         max: Some(top),
-        major_step: Some(top / 5.0),
-        minor_ticks: 0,
+        major_step: Some(top / 4.0),
+        minor_ticks: axis.minor_ticks,
         first_tick: None,
         axis_break: None,
         special_ticks: Vec::new(),
@@ -168,18 +168,25 @@ fn grid_path(d: &mut String, map: &TernaryMap, a: (f64, f64), b: (f64, f64)) {
 pub(crate) fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
     let Some(map) = geom.ternary else { return };
     let top = if map.percent { 100.0 } else { 1.0 };
-    let ticks: Vec<f64> = geom.x.major.iter().map(|v| v / top).filter(|v| *v > 1e-9 && *v < 1.0 - 1e-9).collect();
+    let inner = |values: &[f64]| -> Vec<f64> {
+        values.iter().map(|v| v / top).filter(|v| *v > 1e-9 && *v < 1.0 - 1e-9).collect()
+    };
+    let (ticks, minor) = (inner(&geom.x.major), inner(&geom.x.minor));
     let stroke = |style: &LineStyle| {
         let mut s = line_stroke(style);
         s.cap = Cap::Butt;
         s
     };
-    let families: [(&Option<LineStyle>, Vec<((f64, f64), (f64, f64))>); 2] = [
-        (
-            &layer.x_axis.major_grid,
-            ticks.iter().flat_map(|&v| [((v, 0.0), (v, 1.0 - v)), ((1.0 - v, 0.0), (0.0, 1.0 - v))]).collect(),
-        ),
-        (&layer.y_axis.major_grid, ticks.iter().map(|&v| ((0.0, v), (1.0 - v, v))).collect()),
+    let xz = |t: &[f64]| -> Vec<((f64, f64), (f64, f64))> {
+        t.iter().flat_map(|&v| [((v, 0.0), (v, 1.0 - v)), ((1.0 - v, 0.0), (0.0, 1.0 - v))]).collect()
+    };
+    let y = |t: &[f64]| -> Vec<((f64, f64), (f64, f64))> { t.iter().map(|&v| ((0.0, v), (1.0 - v, v))).collect() };
+    // Minor lines first (Origin draws them dashed in light grey), the major lines over them.
+    let families: [(&Option<LineStyle>, Vec<((f64, f64), (f64, f64))>); 4] = [
+        (&layer.x_axis.minor_grid, xz(&minor)),
+        (&layer.y_axis.minor_grid, y(&minor)),
+        (&layer.x_axis.major_grid, xz(&ticks)),
+        (&layer.y_axis.major_grid, y(&ticks)),
     ];
     for (style, lines) in families {
         let Some(style) = style else { continue };
@@ -285,6 +292,28 @@ pub(crate) fn draw_axes(
         } {
             let mut d = String::new();
             for &v in &geom.x.major {
+                let p = (side.at)(v / top);
+                move_to(&mut d, p.0 + side.tick.0 * a, p.1 + side.tick.1 * a);
+                line_to(&mut d, p.0 + side.tick.0 * b, p.1 + side.tick.1 * b);
+            }
+            if !d.is_empty() {
+                let stroke = Stroke::solid(
+                    axis.tick_color.unwrap_or(paint.line),
+                    axis.tick_width_pt.unwrap_or(axis.line_width_pt),
+                );
+                out.push(Item::Path { d, fill: None, stroke: Some(stroke) });
+            }
+        }
+        // Minor ticks the same way, shorter (Origin shows one between the major ticks).
+        let minor_len = axis.minor_tick_len_pt;
+        if let Some((a, b)) = match axis.minor_tick {
+            TickDirection::In => Some((0.0, -minor_len)),
+            TickDirection::Out => Some((0.0, minor_len)),
+            TickDirection::Both => Some((-minor_len, minor_len)),
+            TickDirection::None => None,
+        } {
+            let mut d = String::new();
+            for &v in &geom.x.minor {
                 let p = (side.at)(v / top);
                 move_to(&mut d, p.0 + side.tick.0 * a, p.1 + side.tick.1 * a);
                 line_to(&mut d, p.0 + side.tick.0 * b, p.1 + side.tick.1 * b);

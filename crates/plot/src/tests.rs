@@ -3397,19 +3397,20 @@ fn rows_that_do_not_sum_to_one_are_normalised_and_unusable_rows_are_skipped() {
 }
 
 #[test]
-fn a_ternary_layer_labels_three_axes_with_the_column_names_and_steps_of_a_fifth() {
+fn a_ternary_layer_labels_three_axes_with_the_column_names_and_origins_quarter_steps() {
     let (p, g) = ternary_project(&ternary_rows());
     let t = texts(&doc(&svg_of(&p, g)));
     for name in ["Sand", "Silt", "Clay"] {
         assert!(t.iter().any(|x| x == name), "{name} in {t:?}");
     }
-    for v in ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"] {
+    // Origin's steps (measured): 0.00, 0.25, ... 1.00, the same decimals on every label.
+    for v in ["0.00", "0.25", "0.50", "0.75", "1.00"] {
         assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
     }
-    // Percentages: the ticks count to 100.
+    // Percentages: the ticks count to 100 in steps of 25.
     let (p, g) = ternary_project(&[[60.0, 30.0, 10.0], [20.0, 20.0, 60.0]]);
     let t = texts(&doc(&svg_of(&p, g)));
-    for v in ["0", "20", "40", "60", "80", "100"] {
+    for v in ["0", "25", "50", "75", "100"] {
         assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
     }
 }

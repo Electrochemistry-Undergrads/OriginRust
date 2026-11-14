@@ -482,6 +482,16 @@ impl AnalysisDialog {
     }
 
     /// A window for running `kind` on `columns`. `None` when a column no longer exists.
+    /// Chooses the interpolation method (the Mathematics menu's Linear, Spline and B-Spline items).
+    pub fn set_interp_method(&mut self, method: InterpMethod) {
+        self.interp.method = method;
+    }
+
+    #[cfg(test)]
+    pub fn interp_method(&self) -> InterpMethod {
+        self.interp.method
+    }
+
     pub fn new(project: &Project, kind: AnalysisKind, columns: Vec<ColumnId>) -> Option<Self> {
         let (_, sheet, _) = project.locate(*columns.first()?)?;
         let names: Vec<&str> =

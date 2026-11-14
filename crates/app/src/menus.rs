@@ -145,6 +145,9 @@ pub enum Cmd {
     ReverseOrder,
     FilterRows,
     Analyze(AnalysisKind),
+    /// Mathematics > Linear, Spline or B-Spline Interpolation: the Interpolate window with that
+    /// method chosen.
+    InterpolateWith(sheaf_core::analysis::InterpMethod),
     Fit(FitKind),
     FitMore(FitMoreKind),
     /// The graph settings of the active layer on a tab.
@@ -914,9 +917,9 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Interpolate/Extrapolate...", Cmd::Analyze(AnalysisKind::Interpolate)),
                 grey("Interpolate/Extrapolate Y from X..."),
                 grey("Trace Interpolation..."),
-                grey("Linear Interpolation..."),
-                grey("Spline Interpolation..."),
-                grey("B-Spline Interpolation..."),
+                item("Linear Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::Linear)),
+                item("Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::CubicSpline)),
+                item("B-Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::BSpline)),
                 sep(),
                 item("Intersect...", Cmd::Analyze(AnalysisKind::Intersect)),
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
@@ -1923,6 +1926,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                     _ => vec![y],
                 };
                 Action::Analyze { book, columns, kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
+        Cmd::InterpolateWith(method) => match (c.book, c.curve) {
+            (Some(book), _) => Action::InterpolateWith { book, columns: c.selected.to_vec(), method: *method },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::InterpolateWith { book, columns: vec![y], method: *method }
             }
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),

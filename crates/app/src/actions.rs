@@ -203,6 +203,13 @@ pub enum Action {
     Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
     /// for the columns a plot of the active sheet would show.
+    /// The Interpolate window with this method chosen (Mathematics > Linear, Spline or B-Spline
+    /// Interpolation).
+    InterpolateWith {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        method: sheaf_core::analysis::InterpMethod,
+    },
     Analyze {
         book: WindowId,
         columns: Vec<ColumnId>,

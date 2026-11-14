@@ -5992,3 +5992,21 @@ fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
     assert_eq!(project(&h).numeric(out).unwrap(), [100.0, 6.5, 6.5, 8.5], "the same column was updated");
     assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
 }
+
+#[test]
+fn the_interpolation_items_open_the_interpolate_window_with_their_method() {
+    use sheaf_core::analysis::InterpMethod;
+    let mut h = start(vec![data_file("interpitems")]);
+    show_window(&mut h, "Book1 - sample");
+    for (label, method) in [
+        ("Linear Interpolation...", InterpMethod::Linear),
+        ("Spline Interpolation...", InterpMethod::CubicSpline),
+        ("B-Spline Interpolation...", InterpMethod::BSpline),
+    ] {
+        menu_path(&mut h, &["Analysis", "Mathematics", label]);
+        let d = h.state().analysis.as_ref().unwrap_or_else(|| panic!("{label} opens a window"));
+        assert_eq!(d.interp_method(), method, "{label}");
+        h.state_mut().analysis = None;
+        settle(&mut h);
+    }
+}

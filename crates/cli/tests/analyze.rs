@@ -468,6 +468,42 @@ fn fft_filter_adds_a_column() {
 }
 
 #[test]
+fn envelope_writes_both_curves_to_a_new_sheet() {
+    let dir = scratch("envelope");
+    let y = [0.0, 2.0, 1.0, 3.0, 0.5, 4.0, 0.2, 2.0, 1.0, 5.0, 4.0, 3.0];
+    let mut text = String::from("t,y\n");
+    for (i, v) in y.iter().enumerate() {
+        text.push_str(&format!("{i},{v}\n"));
+    }
+    let data = dir.join("peaks.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("env.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "envelope",
+        data.to_str().unwrap(),
+        "--y",
+        "y",
+        "--type",
+        "both",
+        "--npts",
+        "1",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Envelope"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows: Vec<&str> = text.lines().filter(|l| l.starts_with("0,") || l.starts_with("9,")).collect();
+    // Origin: the upper curve starts at 1.6138392857142858 and passes through the peak 5 at row 9.
+    assert!(rows[0].starts_with("0,1.61383928571429,0,1.5"), "{text}");
+    assert!(rows[1].starts_with("9,5,9,"), "{text}");
+    // Too few extremes: refused.
+    let (ok, _, stderr) = sheaf(&["analyze", "envelope", data.to_str().unwrap(), "--y", "y", "--npts", "10"]);
+    assert!(!ok && stderr.contains("extreme"), "{stderr}");
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);

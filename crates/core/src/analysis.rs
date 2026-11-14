@@ -38,6 +38,7 @@ pub use sheaf_calc::{
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
+pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
 pub use sheaf_calc::{
     FftFilterOptions, FftFilterType, FftOptions, FftWindow, IfftOptions, PowerNorm, WindowCorrection,
 };
@@ -267,6 +268,13 @@ pub struct FftFilterSpec {
     pub options: FftFilterOptions,
     /// Sampling interval; `None`: the X step of the input (1 without an X column).
     pub interval: Option<f64>,
+}
+
+/// What [`Tool::Envelope`] does (Origin's Signal Processing > Envelope, `envelope`, measured;
+/// analysis-tools.md 13.2).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct EnvelopeSpec {
+    pub options: EnvelopeOptions,
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -654,6 +662,7 @@ pub enum Tool {
     Fft(FftSpec),
     Ifft(IfftSpec),
     FftFilter(FftFilterSpec),
+    Envelope(EnvelopeSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -722,6 +731,7 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFT filter",
+            Tool::Envelope(_) => "Envelope",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -786,6 +796,7 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFTFilter",
+            Tool::Envelope(_) => "Envelope",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1867,6 +1878,44 @@ impl Project {
                         comments: format!("FFT {word} filter of {}{}", inp.short, inp.range_note()),
                         data: inp.aligned(&calc::fft_filter(&y, dt, &spec.options)),
                     });
+                }
+            }
+            Tool::Envelope(spec) => {
+                for inp in &inputs {
+                    // Rows without an X or a Y value drop out before the extremes are searched.
+                    let (x, y): (Vec<f64>, Vec<f64>) =
+                        inp.xs().iter().zip(inp.ys()).filter(|(x, y)| x.is_finite() && y.is_finite()).unzip();
+                    let env = calc::envelope(&x, &y, &spec.options).map_err(|e| {
+                        AnalysisError::BadOption(match e {
+                            calc::EnvelopeError::BadNpts => "Points on each side cannot be negative".to_string(),
+                            calc::EnvelopeError::TooFewExtremes => format!(
+                                "column {} has fewer than two upper or two lower extreme points for {} points on each side",
+                                inp.short, spec.options.npts
+                            ),
+                            calc::EnvelopeError::RepeatedX => {
+                                format!("column {} has extreme points with the same X", inp.short)
+                            }
+                        })
+                    })?;
+                    let quoted = if inp.name == inp.short { inp.short.clone() } else { format!("\"{}\"", inp.name) };
+                    for (k, (word, values)) in [("Upper", env.upper), ("Lower", env.lower)].into_iter().enumerate() {
+                        let Some(values) = values else { continue };
+                        let comments = format!("{word} Envelope of {quoted}{}", inp.range_note());
+                        on_sheet.push(SheetColumn {
+                            designation: Designation::X,
+                            long_name: format!("Envelope X {}", k + 1),
+                            units: String::new(),
+                            comments: comments.clone(),
+                            data: ColumnData::numeric(x.clone()),
+                        });
+                        on_sheet.push(SheetColumn {
+                            designation: Designation::Y,
+                            long_name: format!("Envelope Y {}", k + 1),
+                            units: String::new(),
+                            comments,
+                            data: ColumnData::numeric(values),
+                        });
+                    }
                 }
             }
             Tool::Ifft(spec) => {
@@ -3330,6 +3379,36 @@ mod tests {
         let r = p.analyze(&request(&[flat], Tool::FftFilter(FftFilterSpec { options, interval: None }))).unwrap();
         assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.abs() < 1e-12));
         assert!(r.message.starts_with("FFT filter"), "{}", r.message);
+    }
+
+    #[test]
+    fn an_envelope_goes_to_a_new_sheet_with_its_own_x() {
+        let (mut p, book, _, _) = sample();
+        let y = [0.0, 2.0, 1.0, 3.0, 0.5, 4.0, 0.2, 2.0, 1.0, 5.0, 4.0, 3.0];
+        let x: Vec<f64> = (0..y.len()).map(|i| i as f64).collect();
+        let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y.to_vec())).unwrap();
+        let options = EnvelopeOptions { kind: EnvelopeType::Both, npts: 1.0 };
+        let r = p.analyze(&request(&[yc], Tool::Envelope(EnvelopeSpec { options }))).unwrap();
+        assert!(r.message.starts_with("Envelope"), "{}", r.message);
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let names: Vec<_> = rs.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Envelope X 1", "Envelope Y 1", "Envelope X 2", "Envelope Y 2"]);
+        assert_eq!(rs.columns[1].comments, "Upper Envelope of E");
+        let upper = rs.columns[1].numeric().unwrap();
+        // Origin printed 1.6138392857142858 at the first row and passes through the extremes.
+        assert!((upper[0] - 1.6138392857142858).abs() < 1e-12 && (upper[9] - 5.0).abs() < 1e-12, "{upper:?}");
+        let _ = xc;
+        // A missing value drops its row (Origin: 11 rows, extremes searched without it).
+        let mut with_gap = y.to_vec();
+        with_gap[5] = f64::NAN;
+        let gc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(with_gap)).unwrap();
+        let r = p.analyze(&request(&[gc], Tool::Envelope(EnvelopeSpec { options }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.columns[1].numeric().unwrap().len(), 11);
+        // Too few extremes are refused with a message.
+        let tiny = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        assert!(p.analyze(&request(&[tiny], Tool::Envelope(EnvelopeSpec { options }))).is_err());
     }
 
     #[test]

@@ -874,6 +874,14 @@ pub enum FftFilterArg {
     Parabolic,
 }
 
+/// Envelope type (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum EnvelopeArg {
+    Upper,
+    Lower,
+    Both,
+}
+
 /// FFT window (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftWindowArg {
@@ -1185,6 +1193,17 @@ pub enum AnalyzeTool {
         /// Sampling interval; by default the X step of the column.
         #[arg(long)]
         interval: Option<f64>,
+    },
+    /// The upper and/or lower envelope of each column (Origin's Signal Processing > Envelope): the
+    /// natural cubic spline through the extreme points, each envelope with its X in a new sheet.
+    Envelope {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = EnvelopeArg::Upper)]
+        kind: EnvelopeArg,
+        /// Points on each side of an extreme point (cut to a whole number, at least 1).
+        #[arg(long, default_value_t = 2.0)]
+        npts: f64,
     },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.

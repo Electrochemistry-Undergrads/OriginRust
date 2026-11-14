@@ -748,6 +748,51 @@ negative removed, zero and, for an even length, the middle frequency kept); the 
 complex column whose real part is the input. Sheaf writes the transform only, in a new column beside
 each input (no complex columns); `Tool::Hilbert`, `sheaf analyze hilbert FILE --y B`.
 
+### 13.2 Envelope (`envelope`)
+
+Analysis > Signal Processing > Envelope. Options (from the X-Function file): `iy` (the input XY
+range), `type` (`upper` Upper Envelope, the default, `lower`, `both`), `method` (one choice, By Spline
+of Extreme Pts; giving `method:=spline` or `0` made Origin refuse the call, so it is left out),
+`npts` (default 2) and the report sheet `rd` (without it Origin makes a new workbook named after the
+input). Observed (`re-workspace/scratch/envelope/p1..p11.out.txt`, 12 to 30 points; Rust tests
+`origin_smooth_curve`, `origin_shuffled_x`, `origin_up_then_down_x`, `origin_falling_x` in
+`calc/src/envelope.rs`, 1e-9, and `an_envelope_goes_to_a_new_sheet_with_its_own_x` in core):
+
+- Extreme points: a point is an upper extreme when it is the first largest value of the window of
+  `npts` points on each side of it (itself included): the values on its left are strictly smaller,
+  those on its right smaller or equal, so a flat top counts once, at its first point; the lower
+  extreme is the same with the smallest value (p2, p3: flat tops and flat bottoms of two and three
+  points). A point whose window does not fit in the data is never an extreme, so the first and last
+  `npts` points are not (p2: `npts` 5 left out a peak at row 5 that `npts` 3 kept). `npts` is cut to its
+  integer part and 0 acts as 1 (p4, p5: 0, 1.2 and 1.7 gave the output of 1); a negative value is
+  refused; `npts` so large that nothing is an extreme is refused.
+- The envelope is the natural cubic spline through the extremes, evaluated at every X of the
+  input; before the first and after the last extreme the end pieces of the spline continue (p1:
+  three upper extremes at 4, 12, 23 gave 0.6758 at X 0 and 2.7439 at X 29; with two extremes the
+  spline is the straight line through them). At least two extremes of each kind asked for are
+  needed: with `both`, a single lower extreme refuses the call even though the upper envelope would
+  be fine; `upper` alone needs only two upper extremes, whatever the lower ones are (p2, p3).
+- Rows with a missing X or Y are dropped before anything else: the report has fewer rows and the
+  extremes are searched in the shortened data, so the neighbours of the gap become neighbours (p11:
+  a missing Y at row 6 gave 11 rows; a missing X likewise; missing first and last Y gave 10).
+- X order: data whose X rises or falls monotonically are used as they are (a falling X gave the
+  same curve per row as the rising one, p8). For any other order the extremes are still searched
+  in the row order of the data, but the spline goes through the points of the X-sorted data at those
+  positions, so one position swapped between rows (X 5 before 4) swaps the point used (p3, p9: three
+  shuffles matched this to 1e-14). The report keeps the input row order.
+- Report sheet: for `both`, four columns `Envelope X 1`, `Envelope Y 1` (upper), `Envelope X 2`,
+  `Envelope Y 2` (lower); with `upper` or `lower` alone only that pair, and the lower pair keeps the
+  numbers 2 (p6). The X columns repeat the input X. The comments read `Upper Envelope of "Name"`,
+  `Lower Envelope of "Name"` with the long name of the input in quotes, or the short name without
+  quotes when it has no long name (p5, p6). No units.
+
+Sheaf: `sheaf_calc::envelope` (`extreme_points`, `natural_spline`), `Tool::Envelope(EnvelopeSpec)`, the
+curves of each input (X and Y of each envelope) in a new sheet named `Envelope...`; the Envelope
+window has Type, Method (fixed) and the points on each side. Command line: `sheaf analyze envelope
+FILE --y B [--type upper|lower|both] [--npts N]`. Not measured or not built: other methods (Origin has
+only the spline one in this version), repeated X values at two extremes (refused by Sheaf, not
+tried in Origin), the default workbook name of a call without `rd`, non-numeric input.
+
 ## 14. Level crossing (`levelcrossing`)
 
 Origin has the `levelcrossing` X-Function (Data Manipulation) but no menu item for it; Sheaf puts it

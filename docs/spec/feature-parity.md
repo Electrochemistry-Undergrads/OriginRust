@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 46 | 135 | 54 | 235 |
+| All rows | 47 | 135 | 54 | 236 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 14 | 66 | 54 | 134 |
+| P1 and P2 together | 15 | 66 | 54 | 135 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 47 are P2.
 
@@ -185,6 +185,7 @@ Cross-cutting findings:
 | Smooth: LOWESS, LOESS, binomial | Smooth dialog | Lowess, Loess (span or points) and binomial (order) as measured in Origin, dialog and CLI | ✓ | | P1 |
 | FFT and inverse FFT | fft1, ifft1 | FFT window, `analyze fft`, `Tool::Fft`: Origin's columns, windows, corrections, one- and two-sided, shift, unwrap, MSA/SSA/TISA (analysis-tools 15); IFFT window, `analyze ifft` (15.1) | ◐ | no complex input column, no windows in IFFT, no result graphs | P1 |
 | FFT filters | low, high, band pass, block, notch | FFT Filters window, `analyze fft-filter`, `Tool::FftFilter`: the six types with Origin's automatic values (analysis-tools 15.2) | ✓ | checked against Origin | P1 |
+| Envelope | envelope | Envelope window, `analyze envelope`, `Tool::Envelope`: upper, lower or both, natural spline through the extremes found with `npts` points on each side, Origin's report columns (analysis-tools 13.2) | ✓ | checked against Origin | P2 |
 | Correlation, wavelets, decimation, Hilbert, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
 
 ## 7 Peaks and baseline

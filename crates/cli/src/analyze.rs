@@ -194,6 +194,15 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         }
         AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
         AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
+        AnalyzeTool::Envelope { target, kind, npts } => {
+            let kind = match kind {
+                EnvelopeArg::Upper => analysis::EnvelopeType::Upper,
+                EnvelopeArg::Lower => analysis::EnvelopeType::Lower,
+                EnvelopeArg::Both => analysis::EnvelopeType::Both,
+            };
+            let options = analysis::EnvelopeOptions { kind, npts };
+            (target, Job::Tool(Tool::Envelope(analysis::EnvelopeSpec { options })))
+        }
         AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
         AnalyzeTool::FftFilter { target, kind, cutoff, freq1, freq2, threshold, pass, stop, no_offset, interval } => {
             let kind = match kind {

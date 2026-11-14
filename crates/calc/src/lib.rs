@@ -21,6 +21,7 @@ pub mod differentiate;
 pub mod discfreq;
 pub mod distfit;
 pub mod dunnett;
+pub mod envelope;
 pub mod fft;
 pub mod freq;
 pub mod hypothesis;
@@ -62,6 +63,7 @@ pub use distfit::{
     log_likelihood as dist_log_likelihood, plotting_positions, probplot, standard_quantile,
 };
 pub use dunnett::{dunnett_cdf, dunnett_critical, dunnett_loadings, dunnett_p};
+pub use envelope::{Envelope, EnvelopeError, EnvelopeOptions, EnvelopeType, envelope, extreme_points, natural_spline};
 pub use fft::{
     FftFilterOptions, FftFilterType, FftOptions, FftResult, FftWindow, IfftOptions, IfftResult, PowerNorm,
     WindowCorrection, fft_filter, fft_spectrum, fft_window, ifft_spectrum,

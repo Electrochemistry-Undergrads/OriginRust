@@ -27,7 +27,8 @@ use sheaf_core::analysis::{
     PeakFitSpec, PeakShape,
 };
 use sheaf_core::analysis::{
-    FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection,
+    EnvelopeOptions, EnvelopeSpec, EnvelopeType, FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow,
+    IfftSpec, PowerNorm, WindowCorrection,
 };
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
@@ -61,6 +62,8 @@ pub enum AnalysisKind {
     Ifft,
     /// Signal Processing > FFT Filters (Origin's `fft_filters`).
     FftFilter,
+    /// Signal Processing > Envelope (Origin's `envelope`).
+    Envelope,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -115,7 +118,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 20] = [
+    pub const ALL: [AnalysisKind; 21] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -132,6 +135,7 @@ impl AnalysisKind {
         AnalysisKind::Fft,
         AnalysisKind::Ifft,
         AnalysisKind::FftFilter,
+        AnalysisKind::Envelope,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -157,6 +161,7 @@ impl AnalysisKind {
             AnalysisKind::Fft => "FFT...",
             AnalysisKind::Ifft => "IFFT...",
             AnalysisKind::FftFilter => "FFT Filters...",
+            AnalysisKind::Envelope => "Envelope...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -219,6 +224,7 @@ impl AnalysisKind {
             "fft" => AnalysisKind::Fft,
             "ifft" => AnalysisKind::Ifft,
             "fft-filter" => AnalysisKind::FftFilter,
+            "envelope" => AnalysisKind::Envelope,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -585,6 +591,7 @@ pub struct AnalysisDialog {
     fft: FftSpec,
     ifft: IfftSpec,
     fft_filter: FftFilterSpec,
+    envelope: EnvelopeSpec,
     stats: StatsOptions,
     dist: super::dist_options::DistOptions,
     curves: super::math_curves::CurveOptions,
@@ -680,6 +687,35 @@ fn fft_filter_options(ui: &mut egui::Ui, spec: &mut FftFilterSpec) {
     let offset = matches!(o.kind, FftFilterType::HighPass | FftFilterType::BandPass | FftFilterType::BandBlock);
     ui.add_enabled(offset, egui::Checkbox::new(&mut o.keep_offset, "Keep DC offset"));
     ui.weak("Auto: cutoffs at a quarter and three quarters of the Nyquist frequency, the threshold at a tenth of the largest magnitude.");
+}
+
+/// The options of Signal Processing > Envelope, with Origin's names.
+fn envelope_options(ui: &mut egui::Ui, spec: &mut EnvelopeSpec) {
+    const KINDS: [(&str, EnvelopeType); 3] = [
+        ("Upper Envelope", EnvelopeType::Upper),
+        ("Lower Envelope", EnvelopeType::Lower),
+        ("Both Envelopes", EnvelopeType::Both),
+    ];
+    let o: &mut EnvelopeOptions = &mut spec.options;
+    ui.horizontal(|ui| {
+        ui.label("Type");
+        egui::ComboBox::from_id_salt("envelope_type")
+            .selected_text(KINDS.iter().find(|k| k.1 == o.kind).map_or("", |k| k.0))
+            .show_ui(ui, |ui| {
+                for (label, k) in KINDS {
+                    ui.selectable_value(&mut o.kind, k, label);
+                }
+            });
+    });
+    ui.horizontal(|ui| {
+        ui.label("Method");
+        ui.add_enabled(false, egui::Label::new("By Spline of Extreme Pts"));
+    });
+    ui.horizontal(|ui| {
+        ui.label("Points on each side");
+        ui.add(DragValue::new(&mut o.npts).speed(0.1).range(0.0..=1.0e6));
+    });
+    ui.weak("An extreme is the first largest (smallest) value among this many points on each side; a natural cubic spline goes through the extremes.");
 }
 
 /// The options of Signal Processing > FFT > FFT, with Origin's names.
@@ -870,6 +906,7 @@ impl AnalysisDialog {
                 options: FftFilterOptions { keep_offset: true, ..Default::default() },
                 interval: None,
             },
+            envelope: EnvelopeSpec::default(),
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -1165,6 +1202,7 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Fft => Tool::Fft(self.fft),
             AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
+            AnalysisKind::Envelope => Tool::Envelope(self.envelope),
             AnalysisKind::Ifft => {
                 let imaginary = if self.use_reference {
                     Some(
@@ -1481,6 +1519,7 @@ impl AnalysisDialog {
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
             AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
+            AnalysisKind::Envelope => envelope_options(ui, &mut self.envelope),
             AnalysisKind::Ifft => {
                 ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
                     ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
@@ -2226,6 +2265,7 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Fft => "fft1",
             AnalysisKind::FftFilter => "fft_filters",
+            AnalysisKind::Envelope => "envelope",
             AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
@@ -2294,6 +2334,7 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Fft => "The frequency spectrum of the input signals",
             AnalysisKind::FftFilter => "Remove frequencies from the input signals",
+            AnalysisKind::Envelope => "The upper and lower envelope of the input curves",
             AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
@@ -2352,6 +2393,7 @@ impl AnalysisDialog {
             | AnalysisKind::ColumnMath
             | AnalysisKind::Hilbert
             | AnalysisKind::FftFilter => "New columns beside the input",
+            AnalysisKind::Envelope => "The envelopes of each input, each with its X, in a new sheet",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",

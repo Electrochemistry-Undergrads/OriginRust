@@ -1018,7 +1018,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Correlation...", Cmd::Analyze(AnalysisKind::SignalCorrelation)),
                 grey("Coherence..."),
                 grey("Decimation..."),
-                grey("Envelope..."),
+                item("Envelope...", Cmd::Analyze(AnalysisKind::Envelope)),
                 item("Hilbert Transform...", Cmd::Analyze(AnalysisKind::Hilbert)),
                 grey("IIR Filter..."),
                 grey("STFT..."),

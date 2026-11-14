@@ -1532,6 +1532,39 @@ fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
 }
 
 #[test]
+fn envelope_opens_from_signal_processing_and_puts_its_curves_in_a_new_sheet() {
+    // Two peaks and two troughs with the default two points on each side.
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-envelope-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sample.csv");
+    let mut text = String::from(
+        "t,up,down
+",
+    );
+    for i in 0..30 {
+        let t = f64::from(i);
+        text += &format!(
+            "{t},{},{}
+",
+            (t * 0.7).sin() + t * 0.05,
+            (t * 0.7).cos()
+        );
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Envelope..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 2, "the envelopes are in a new sheet");
+    let names: Vec<_> = b.sheets[1].columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names, ["Envelope X 1", "Envelope Y 1", "Envelope X 1", "Envelope Y 1"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Envelope"));
+}
+
+#[test]
 fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("hilbert")]);
     show_window(&mut h, "Book1 - sample");

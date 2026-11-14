@@ -55,6 +55,13 @@ optimization", free for reuse with their build folders `target/wt-axis` and `tar
 `merge-05b`, an unfinished merge of branches that are all on `main` already (abort it, do not push it).
 The disk is about 96 % full; reuse a worktree and its build folder instead of making new ones.
 
+## Known issues reported by the owner
+
+- [ ] **Single yellow-cell selection** (reported 2026-11-13): clicking a single yellow cell
+      automatically highlights the whole column, so the owner cannot select that cell alone.
+      Expected: selecting one cell highlights only that cell. Not yet reproduced or diagnosed;
+      investigate the worksheet selection behaviour and verify the fix before closing this issue.
+
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and

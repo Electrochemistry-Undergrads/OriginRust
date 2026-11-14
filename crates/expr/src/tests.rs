@@ -872,6 +872,61 @@ fn dollar_suffix_is_accepted_on_text_functions_only() {
 
 struct LabelHost;
 
+#[test]
+fn char_and_code_follow_documented_codes_and_empty_text_rule() {
+    for (src, expected) in [
+        ("char(65)$", "A"),
+        ("char(97)", "a"),
+        ("char(181)$", "µ"),
+        ("char(956)$", "μ"),
+        ("char(30028)$", "界"),
+        ("char(10)$", "\n"),
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text(expected.into())],
+            "{src}"
+        );
+    }
+    for (src, expected) in [
+        (r#"code("abc")"#, 97.0),
+        (r#"code("ABC")"#, 65.0),
+        (r#"code("")"#, 0.0),
+        (r#"code("µA")"#, 181.0),
+        (r#"code("界面")"#, 30028.0),
+        ("code(char(65535)$)", 65535.0),
+    ] {
+        assert_eq!(Expr::parse(src).unwrap().eval_rows(&SimpleHost::new(), 1).unwrap(), [expected], "{src}");
+    }
+}
+
+#[test]
+fn char_rejects_invalid_codes_without_invalid_unicode_or_panics() {
+    for n in ["0", "-1", "65536", "55296", "57343", "65.5", "na()", "1e308*1e308"] {
+        let src = format!("char({n})$");
+        assert_eq!(
+            Expr::parse(&src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text(String::new())],
+            "{src}"
+        );
+    }
+    for src in ["char()", "code()", "char(1,2)", r#"code("a")$"#] {
+        assert!(Expr::parse(src).is_err(), "{src}");
+    }
+}
+
+#[test]
+fn char_reads_numeric_columns_and_code_reads_text_columns() {
+    let h = SimpleHost::new().short("A", &[65.0, 181.0, 0.0, f64::NAN]);
+    assert_eq!(
+        Expr::parse("char(col(A))$").unwrap().eval_values(&h, 4).unwrap(),
+        ["A", "µ", "", ""].map(|s| Value::Text(s.into()))
+    );
+    let h = TextHost { cols: vec![("A", vec![Cell::S("alpha"), Cell::S("µA"), Cell::S("")])] };
+    assert_eq!(texts(&h, "code(col(A))"), ["97", "181", "0"]);
+    assert_eq!(texts(&h, "char(code(col(A)))$"), ["a", "µ", ""]);
+}
+
 impl Host for LabelHost {
     fn variable(&self, name: &str) -> Option<f64> {
         (name == "L").then_some(2.0)

@@ -19,7 +19,7 @@
 
 use crate::normality::{ad_normal_p, kolmogorov_cdf};
 use statrs::distribution::{ContinuousCDF, Gamma, Normal};
-use statrs::function::gamma::{digamma, ln_gamma};
+use statrs::function::gamma::{checked_gamma_lr, digamma, ln_gamma};
 
 /// A family of distributions that [`fit`] can estimate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,8 +71,12 @@ pub enum FitError {
     },
     /// The family needs positive numbers and the data contain a number that is not.
     NotPositive(Family),
-    /// All numbers are equal (no spread to fit).
+    /// All numbers are equal, or so close together that the estimate would not be a finite number (no spread
+    /// to fit).
     NoSpread,
+    /// An estimate is not a finite number, or not above zero where it must be (numbers too large or too
+    /// small for double precision).
+    Degenerate(Family),
 }
 
 impl std::fmt::Display for FitError {
@@ -88,6 +92,11 @@ impl std::fmt::Display for FitError {
                 if *fam == Family::Exponential { " or equal to zero, with a positive mean" } else { "" }
             ),
             FitError::NoSpread => write!(f, "all numbers are equal, there is no distribution to fit"),
+            FitError::Degenerate(fam) => write!(
+                f,
+                "the {} distribution cannot be fitted: an estimate is not a finite number (the numbers are too large, too small or too close together)",
+                fam.name().to_lowercase()
+            ),
         }
     }
 }
@@ -113,7 +122,9 @@ pub struct DistFit {
     /// Anderson-Darling statistic `A2` against the fitted distribution.
     pub ad: f64,
     /// Approximate p-value of `A2`; only for the normal and the lognormal family (the formula of D'Agostino
-    /// and Stephens for estimated mean and standard deviation), NaN for the others.
+    /// and Stephens for estimated mean and standard deviation, applied to A2 computed with the sample
+    /// standard deviation, divisor `n - 1`, so that it equals the p-value of the Normality Test), NaN for
+    /// the others.
     pub ad_p: f64,
 }
 
@@ -128,6 +139,9 @@ fn mean(v: &[f64]) -> f64 {
 
 /// Trigamma function (derivative of digamma) by the recurrence up to 8 and the asymptotic series.
 fn trigamma(mut x: f64) -> f64 {
+    if x.is_nan() || x <= 0.0 {
+        return f64::NAN;
+    }
     let mut acc = 0.0;
     while x < 8.0 {
         acc += 1.0 / (x * x);
@@ -145,6 +159,9 @@ fn gamma_shape(s: f64) -> f64 {
     // Minka's starting value, then Newton on a function that is convex and decreasing in k.
     let mut k = (3.0 - s + ((s - 3.0).powi(2) + 24.0 * s).sqrt()) / (12.0 * s);
     for _ in 0..100 {
+        if !(k.is_finite() && k > 0.0) {
+            return f64::NAN;
+        }
         let f = k.ln() - digamma(k) - s;
         let df = 1.0 / k - trigamma(k);
         let next = (k - f / df).max(k / 4.0);
@@ -211,6 +228,30 @@ fn prepared(family: Family, data: &[f64]) -> Result<Vec<f64>, FitError> {
     Ok(x)
 }
 
+/// Largest gamma shape that [`estimate`] returns; above it the data are taken to have no spread.
+const GAMMA_SHAPE_LIMIT: f64 = 1e10;
+
+/// Standard deviation about `m` with divisor `n`, scaled by the largest deviation so that squares neither
+/// underflow nor overflow.
+fn spread(v: &[f64], m: f64) -> f64 {
+    let big = v.iter().map(|a| (a - m).abs()).fold(0.0_f64, f64::max);
+    if big == 0.0 || !big.is_finite() {
+        return big;
+    }
+    big * (v.iter().map(|a| ((a - m) / big).powi(2)).sum::<f64>() / v.len() as f64).sqrt()
+}
+
+/// The estimates if every one is finite and (except the mean of the normal and the log mean of the
+/// lognormal) above zero, as the distribution needs them to be.
+fn valid(family: Family, params: Vec<f64>) -> Result<Vec<f64>, FitError> {
+    let free = match family {
+        Family::Normal | Family::Lognormal => 1,
+        _ => 0,
+    };
+    let ok = params.iter().enumerate().all(|(i, p)| p.is_finite() && (i < free || *p > 0.0));
+    if ok { Ok(params) } else { Err(FitError::Degenerate(family)) }
+}
+
 /// The maximum likelihood estimates of `family` for the numbers of `data` (missing values are ignored).
 pub fn estimate(family: Family, data: &[f64]) -> Result<Vec<f64>, FitError> {
     let x = prepared(family, data)?;
@@ -222,7 +263,7 @@ pub fn estimate(family: Family, data: &[f64]) -> Result<Vec<f64>, FitError> {
                 return Err(FitError::NoSpread);
             }
             let m = mean(&x);
-            Ok(vec![m, (x.iter().map(|v| (v - m).powi(2)).sum::<f64>() / n).sqrt()])
+            valid(family, vec![m, spread(&x, m)])
         }
         Family::Lognormal => {
             let l: Vec<f64> = x.iter().map(|v| v.ln()).collect();
@@ -230,11 +271,11 @@ pub fn estimate(family: Family, data: &[f64]) -> Result<Vec<f64>, FitError> {
                 return Err(FitError::NoSpread);
             }
             let m = mean(&l);
-            Ok(vec![m, (l.iter().map(|v| (v - m).powi(2)).sum::<f64>() / n).sqrt()])
+            valid(family, vec![m, spread(&l, m)])
         }
         Family::Exponential => {
             let m = mean(&x);
-            if m > 0.0 { Ok(vec![m]) } else { Err(FitError::NotPositive(family)) }
+            if m > 0.0 { valid(family, vec![m]) } else { Err(FitError::NotPositive(family)) }
         }
         Family::Gamma => {
             if flat(&x) {
@@ -242,21 +283,52 @@ pub fn estimate(family: Family, data: &[f64]) -> Result<Vec<f64>, FitError> {
             }
             let m = mean(&x);
             let s = m.ln() - x.iter().map(|v| v.ln()).sum::<f64>() / n;
+            if s.is_nan() {
+                return Err(FitError::Degenerate(family));
+            }
+            // `s` is zero for numbers that differ by rounding only (it can come out slightly negative), and
+            // a shape above `GAMMA_SHAPE_LIMIT` (a coefficient of variation below about 1e-5) is no
+            // estimate worth the name: both are data without spread.
+            // (the shape is about 1 / (2 s) for a small `s`).
+            if s <= 0.5 / GAMMA_SHAPE_LIMIT {
+                return Err(FitError::NoSpread);
+            }
             let k = gamma_shape(s);
-            Ok(vec![k, m / k])
+            if k.is_nan() || k > GAMMA_SHAPE_LIMIT {
+                return Err(if k.is_nan() { FitError::Degenerate(family) } else { FitError::NoSpread });
+            }
+            valid(family, vec![k, m / k])
         }
         Family::Weibull => {
             if flat(&x) {
                 return Err(FitError::NoSpread);
             }
             let (c, scale) = weibull_estimates(&x);
-            Ok(vec![c, scale])
+            valid(family, vec![c, scale])
         }
     }
 }
 
-fn gamma_dist(shape: f64, scale: f64) -> Gamma {
-    Gamma::new(shape, 1.0 / scale).expect("positive shape and scale")
+/// `(F(x), 1 - F(x))` of the gamma distribution; NaN for parameters outside the domain (never a panic).
+fn gamma_cdf_sf(shape: f64, scale: f64, x: f64) -> (f64, f64) {
+    let z = x / scale;
+    if z.is_nan() || shape.is_nan() || shape <= 0.0 || !shape.is_finite() || scale.is_nan() || scale <= 0.0 {
+        return (f64::NAN, f64::NAN);
+    }
+    if z <= 0.0 {
+        return (0.0, 1.0);
+    }
+    if z == f64::INFINITY {
+        return (1.0, 0.0);
+    }
+    match checked_gamma_lr(shape, z) {
+        Ok(p) => (p, 1.0 - p),
+        Err(_) => (f64::NAN, f64::NAN),
+    }
+}
+
+fn std_normal() -> Normal {
+    Normal::new(0.0, 1.0).expect("standard normal")
 }
 
 /// `(ln F(x), ln (1 - F(x)))` of the distribution, kept away from `ln 0`.
@@ -266,7 +338,7 @@ fn ln_cdf_sf(family: Family, p: &[f64], x: f64) -> (f64, f64) {
     match family {
         Family::Normal | Family::Lognormal => {
             let z = if family == Family::Normal { (x - p[0]) / p[1] } else { (x.ln() - p[0]) / p[1] };
-            let n = Normal::new(0.0, 1.0).expect("standard normal");
+            let n = std_normal();
             (ln(n.cdf(z)), ln(n.cdf(-z)))
         }
         Family::Exponential => {
@@ -278,21 +350,23 @@ fn ln_cdf_sf(family: Family, p: &[f64], x: f64) -> (f64, f64) {
             (ln(-(-u).exp_m1()), -u)
         }
         Family::Gamma => {
-            let g = gamma_dist(p[0], p[1]);
-            (ln(g.cdf(x)), ln(g.sf(x)))
+            let (c, sf) = gamma_cdf_sf(p[0], p[1], x);
+            (ln(c), ln(sf))
         }
     }
 }
 
 /// Distribution function of the fitted distribution.
 pub fn cdf(family: Family, params: &[f64], x: f64) -> f64 {
+    // The standard normal at the standardized value; NaN (not a panic) for a SD that is not above zero.
+    let normal = |mu: f64, sigma: f64, v: f64| if sigma > 0.0 { std_normal().cdf((v - mu) / sigma) } else { f64::NAN };
     match family {
-        Family::Normal => Normal::new(params[0], params[1]).expect("positive SD").cdf(x),
+        Family::Normal => normal(params[0], params[1], x),
         Family::Lognormal => {
             if x <= 0.0 {
                 0.0
             } else {
-                Normal::new(params[0], params[1]).expect("positive SD").cdf(x.ln())
+                normal(params[0], params[1], x.ln())
             }
         }
         Family::Exponential => {
@@ -313,7 +387,7 @@ pub fn cdf(family: Family, params: &[f64], x: f64) -> f64 {
             if x <= 0.0 {
                 0.0
             } else {
-                gamma_dist(params[0], params[1]).cdf(x)
+                gamma_cdf_sf(params[0], params[1], x).0
             }
         }
     }
@@ -325,9 +399,9 @@ pub fn log_likelihood(family: Family, params: &[f64], data: &[f64]) -> f64 {
     data.iter()
         .filter(|x| !x.is_nan())
         .map(|&x| match family {
-            Family::Normal => -params[1].ln() - half_ln_2pi - (x - params[0]).powi(2) / (2.0 * params[1] * params[1]),
+            Family::Normal => -params[1].ln() - half_ln_2pi - 0.5 * ((x - params[0]) / params[1]).powi(2),
             Family::Lognormal => {
-                -x.ln() - params[1].ln() - half_ln_2pi - (x.ln() - params[0]).powi(2) / (2.0 * params[1] * params[1])
+                -x.ln() - params[1].ln() - half_ln_2pi - 0.5 * ((x.ln() - params[0]) / params[1]).powi(2)
             }
             Family::Exponential => -params[0].ln() - x / params[0],
             Family::Gamma => {
@@ -351,17 +425,33 @@ pub fn fit(family: Family, data: &[f64]) -> Result<DistFit, FitError> {
     let ll = log_likelihood(family, &params, &x);
     let k = params.len() as f64;
     let mut ks_d: f64 = 0.0;
-    let mut a_sum = 0.0;
-    for i in 0..n {
-        let f = cdf(family, &params, x[i]);
+    for (i, v) in x.iter().enumerate() {
+        let f = cdf(family, &params, *v);
         ks_d = ks_d.max((i as f64 + 1.0) / nf - f).max(f - i as f64 / nf);
-        let (ln_f, _) = ln_cdf_sf(family, &params, x[i]);
-        let (_, ln_s) = ln_cdf_sf(family, &params, x[n - 1 - i]);
-        a_sum += (2.0 * i as f64 + 1.0) * (ln_f + ln_s);
     }
-    let ad = -nf - a_sum / nf;
+    // A2 of the sorted numbers against the distribution with the given parameters.
+    let a_squared = |p: &[f64]| {
+        let mut a_sum = 0.0;
+        for i in 0..n {
+            let (ln_f, _) = ln_cdf_sf(family, p, x[i]);
+            let (_, ln_s) = ln_cdf_sf(family, p, x[n - 1 - i]);
+            a_sum += (2.0 * i as f64 + 1.0) * (ln_f + ln_s);
+        }
+        -nf - a_sum / nf
+    };
+    let ad = a_squared(&params);
+    if !(ll.is_finite() && ad.is_finite() && ks_d.is_finite()) {
+        return Err(FitError::Degenerate(family));
+    }
+    // The formula of D'Agostino and Stephens is for A2 computed with the sample standard deviation (divisor
+    // n - 1), as the Normality Test does; the fit's own A2 uses the maximum likelihood value (divisor n).
+    // The p-value is therefore taken from A2 recomputed with the n - 1 value, so that it is the p-value
+    // the Normality Test gives for the same column.
     let ad_p = match family {
-        Family::Normal | Family::Lognormal => ad_normal_p(ad * (1.0 + 0.75 / nf + 2.25 / (nf * nf))),
+        Family::Normal | Family::Lognormal => {
+            let ad_sample = a_squared(&[params[0], params[1] * (nf / (nf - 1.0)).sqrt()]);
+            ad_normal_p(ad_sample * (1.0 + 0.75 / nf + 2.25 / (nf * nf)))
+        }
         _ => f64::NAN,
     };
     Ok(DistFit {

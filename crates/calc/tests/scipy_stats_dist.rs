@@ -58,6 +58,25 @@ fn fits_match_scipy() {
 }
 
 #[test]
+fn kolmogorov_p_above_140_matches_scipy() {
+    assert!(KS_P.len() >= 60);
+    for c in KS_P {
+        let got = 1.0 - kolmogorov_cdf(c.n, c.d);
+        if c.n <= KS_EXACT_MAX_N {
+            // exact (or below 1e-7, where the series is used). scipy itself uses the Pelz-Good approximation
+            // in part of this range (about five digits), hence 1e-5.
+            near(&format!("KS p (n={}, d={})", c.n, c.d), got, c.p, 1e-5, 1e-5);
+        } else {
+            // the asymptotic series: off by 0.0034 at most just above 1000, 0.0011 at 10000
+            assert!((got - c.p).abs() < 0.0025, "KS p (n={}, d={}): got {got}, scipy gave {}", c.n, c.d, c.p);
+        }
+    }
+    // the case of the review: n = 141, D = 0.05 (the old series gave 0.864 against scipy's 0.855)
+    near("n=141, d=0.05", 1.0 - kolmogorov_cdf(141, 0.05), 0.854845693009663, 1e-5, 1e-5);
+    near("n=200, d=0.05", 1.0 - kolmogorov_cdf(200, 0.05), 0.6802625495871704, 1e-5, 1e-5);
+}
+
+#[test]
 fn the_estimates_solve_the_likelihood_equations() {
     // The maximum: the score of both parameters is zero, and no neighbouring shape has a higher likelihood.
     for c in FITS.iter().filter(|c| matches!(family(c.family), Family::Gamma | Family::Weibull)) {
@@ -162,6 +181,8 @@ fn tail(code: u8) -> Tail {
 #[test]
 fn t_test_power_matches_scipy() {
     assert!(T_POWER.len() > 150);
+    // large effects at few observations reach a non-centrality above 37.62
+    assert!(T_POWER.iter().filter(|c| c.ncp.abs() > sheaf_calc::NCT_SERIES_LIMIT && c.df <= 3.0).count() >= 20);
     for c in T_POWER {
         let r = t_power(design(c.design, c.ratio), c.effect, c.n1, c.alpha, tail(c.tail)).unwrap();
         let what = format!("design {} d={} n={} alpha={} tail {}", c.design, c.effect, c.n1, c.alpha, c.tail);
@@ -175,11 +196,13 @@ fn t_test_power_matches_scipy() {
 
 #[test]
 fn t_test_sample_sizes_match_scipy() {
-    assert!(T_SIZE.len() > 60);
+    assert!(T_SIZE.len() > 100);
+    assert!(T_SIZE.iter().any(|c| c.ratio == 0.5) && T_SIZE.iter().any(|c| c.ratio == 2.0));
     for c in T_SIZE {
-        let r = t_sample_size(design(c.design, 1.0), c.effect, c.target, c.alpha, tail(c.tail)).unwrap();
-        let what = format!("design {} d={} power={} tail {}", c.design, c.effect, c.target, c.tail);
+        let r = t_sample_size(design(c.design, c.ratio), c.effect, c.target, c.alpha, tail(c.tail)).unwrap();
+        let what = format!("design {} ratio {} d={} power={} tail {}", c.design, c.ratio, c.effect, c.target, c.tail);
         assert_eq!(r.n1, c.n, "{what}");
+        assert_eq!(r.n2, c.n2, "{what}");
         near(&format!("{what} power"), r.power, c.power, 1e-9, 1e-9);
         assert!(r.power >= c.target);
     }
@@ -243,4 +266,88 @@ fn fits_refuse_data_the_family_cannot_take() {
     // Missing values are ignored.
     let r = dist_fit(Family::Normal, &[1.0, f64::NAN, 3.0, 5.0]).unwrap();
     assert_eq!(r.n, 3);
+}
+
+/// Runs `fit` on a thread and fails (instead of hanging the test run) if it does not return in 20 seconds.
+fn fit_with_timeout(fam: Family, data: Vec<f64>) -> Result<DistFit, FitError> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(dist_fit(fam, &data));
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(20)).expect("the fit did not return")
+}
+
+#[test]
+fn numbers_that_differ_by_rounding_only_have_no_spread() {
+    // The gamma statistic ln(mean) - mean(ln x) is zero or slightly negative here; the shape equation used to
+    // loop for ever (first two) or the fit panicked in statrs (third).
+    let cases: [Vec<f64>; 4] = [
+        vec![1.0, 1.0000000000000002, 1.0],
+        vec![0.1 + 0.2, 0.3, 0.3],
+        vec![1.0, 1.0 + 1e-12, 1.0, 1.0 + 2e-12],
+        vec![5.0, 5.0 + 1e-9, 5.0, 5.0 + 3e-9, 5.0],
+    ];
+    for data in cases {
+        assert_eq!(fit_with_timeout(Family::Gamma, data.clone()), Err(FitError::NoSpread), "{data:?}");
+        // the other families neither hang nor panic
+        for fam in Family::ALL {
+            let _ = fit_with_timeout(fam, data.clone());
+        }
+    }
+    assert!(dist_estimate(Family::Gamma, &[1.0, 1.0000000000000002, 1.0]).is_err());
+}
+
+#[test]
+fn a_gamma_with_a_modest_spread_is_still_fitted() {
+    // A coefficient of variation of 1e-3: shape about 1e6, well inside the accepted range.
+    let data: Vec<f64> = (0..20).map(|i| 100.0 * (1.0 + 1e-3 * ((i % 5) as f64 - 2.0))).collect();
+    let r = fit_with_timeout(Family::Gamma, data).unwrap();
+    assert!(r.params[0] > 1e5 && r.params[0] < 1e8, "{:?}", r.params);
+    assert!(r.log_likelihood.is_finite() && r.ks_d.is_finite());
+}
+
+#[test]
+fn extreme_magnitudes_give_a_result_or_an_error_never_a_panic() {
+    let cases: [Vec<f64>; 6] = [
+        vec![0.0, 1e-200],
+        vec![1e-200, 2e-200, 3e-200],
+        vec![1e300, 1e-300, 5.0],
+        vec![1e200, 2e200, 3e200],
+        vec![1e308, 1.7e308, 1.2e308],
+        vec![f64::MIN_POSITIVE, 2.0 * f64::MIN_POSITIVE, 5e-324],
+    ];
+    for data in cases {
+        for fam in Family::ALL {
+            // an error is fine (no spread, degenerate); a fit must be finite
+            if let Ok(r) = fit_with_timeout(fam, data.clone()) {
+                assert!(r.params.iter().all(|p| p.is_finite()), "{} {data:?}: {:?}", fam.name(), r.params);
+                assert!(r.log_likelihood.is_finite() && r.ks_d.is_finite() && r.ad.is_finite());
+            }
+        }
+    }
+    // The ones with a sensible answer are fitted: the normal SD no longer underflows or overflows.
+    let r = dist_fit(Family::Normal, &[1e-200, 2e-200, 3e-200]).unwrap();
+    assert!((r.params[1] / 1e-200 - (2.0_f64 / 3.0).sqrt()).abs() < 1e-12, "{:?}", r.params);
+    let r = dist_fit(Family::Normal, &[1e200, 2e200, 3e200]).unwrap();
+    assert!((r.params[1] / 1e200 - (2.0_f64 / 3.0).sqrt()).abs() < 1e-12, "{:?}", r.params);
+    // cdf with a bad SD is NaN, not a panic
+    assert!(dist_cdf(Family::Normal, &[0.0, 0.0], 1.0).is_nan());
+    assert!(dist_cdf(Family::Gamma, &[2.0, 0.0], 1.0).is_nan());
+}
+
+#[test]
+fn the_anderson_darling_p_is_the_p_of_the_normality_test() {
+    // The fit's A2 uses the maximum likelihood SD (divisor n); the formula for the p-value is for the sample SD
+    // (divisor n - 1), so the p-value is taken from A2 with that SD and equals the Normality Test's.
+    for c in FITS.iter().filter(|c| matches!(family(c.family), Family::Normal | Family::Lognormal) && c.data.len() >= 8)
+    {
+        let fam = family(c.family);
+        let r = dist_fit(fam, c.data).unwrap();
+        let x: Vec<f64> =
+            if fam == Family::Lognormal { c.data.iter().map(|v| v.ln()).collect() } else { c.data.to_vec() };
+        let t = anderson_darling(&x).unwrap();
+        near(&format!("{} {} AD p", c.name, fam.name()), r.ad_p, t.p, 1e-9, 1e-12);
+        // while the reported A2 is the one against the maximum likelihood fit (scipy-checked above)
+        assert!((r.ad - t.statistic).abs() > 1e-6 * t.statistic, "{}: A2 should be the ML one", c.name);
+    }
 }

@@ -65,8 +65,8 @@ pub use nonparam::{
     mann_whitney, midranks, signed_rank, signed_rank_one, signed_rank_paired,
 };
 pub use normality::{
-    DAgostino, TestResult, anderson_darling, dagostino, kolmogorov_cdf, kolmogorov_smirnov, ks_distance, lilliefors,
-    shapiro_wilk,
+    DAgostino, KS_EXACT_MAX_N, TestResult, anderson_darling, dagostino, kolmogorov_cdf, kolmogorov_smirnov,
+    ks_distance, lilliefors, shapiro_wilk,
 };
 pub use normalize::{NormalizeMethod, normalize};
 pub use nptests::{

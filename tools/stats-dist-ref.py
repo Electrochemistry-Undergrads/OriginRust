@@ -136,6 +136,17 @@ def emit_fit():
     return "pub const FITS: &[FitCase] = &[\n" + "\n".join(out) + "\n];\n"
 
 
+def emit_ks():
+    """P(D_n >= d) from scipy.stats.kstwo.sf, for samples above 140 (below it the matrix method is the same
+    algorithm as scipy's and the fit fixtures cover it)."""
+    rows = []
+    for n in [141, 200, 300, 500, 1000, 2000, 10000]:
+        for lam in [0.4, 0.8, 1.0, 1.3, 1.7, 2.1, 2.5, 2.9, 3.1, 3.5]:
+            d = round(lam / np.sqrt(n), 6)
+            rows.append(f"    KsCase {{ n: {n}, d: {f(d)}, p: {f(stats.kstwo.sf(d, n))} }},")
+    return "pub const KS_P: &[KsCase] = &[\n" + "\n".join(rows) + "\n];\n"
+
+
 def emit_probplot():
     out = []
     seed = 500
@@ -177,6 +188,12 @@ def emit_noncentral():
     for df in [1.0, 2.5, 5.0, 10.0, 30.0, 100.0, 1000.0]:
         for ncp in [-3.0, -0.5, 0.0, 0.3, 1.0, 2.5, 5.0, 10.0, 25.0, 35.0]:
             for t in [-4.0, -1.0, 0.0, 0.5, 2.0, 3.5, 7.0, 15.0, 40.0]:
+                cdf, sf = consistent(stats.nct.cdf(t, df, ncp), stats.nct.sf(t, df, ncp))
+                nct.append(f"    NctCase {{ t: {f(t)}, df: {f(df)}, ncp: {f(ncp)}, cdf: {f(cdf)}, sf: {f(sf)} }},")
+    # |ncp| above 37.62: the Poisson mixture summed from its largest weight (the series of AS 243 would underflow)
+    for df in [1.0, 2.0, 3.0, 10.0, 30.0, 200.0]:
+        for ncp in [-60.0, 38.0, 40.0, 60.0, 100.0, 300.0]:
+            for t in [-4.0, 0.5, 0.9 * ncp, ncp, 1.1 * ncp, 1.5 * ncp, 3.0 * ncp]:
                 cdf, sf = consistent(stats.nct.cdf(t, df, ncp), stats.nct.sf(t, df, ncp))
                 nct.append(f"    NctCase {{ t: {f(t)}, df: {f(df)}, ncp: {f(ncp)}, cdf: {f(cdf)}, sf: {f(sf)} }},")
     ncf = []
@@ -223,7 +240,25 @@ def emit_power():
                     for n1 in [5, 12, 30, 64]:
                         n2, df, ncp, c, p = t_power(design, d, n1, alpha, tail, ratio)
                         rows.append(f"    TPowerCase {{ design: {code}, ratio: {f(ratio)}, effect: {f(d)}, n1: {n1}, alpha: {f(alpha)}, tail: {tail}, n2: {n2}, df: {f(df)}, ncp: {f(ncp)}, critical: {f(c)}, power: {f(p)} }},")
+    # large effects with few observations: the non-centrality passes 37.62 at one or two degrees of freedom
+    for design, code in [("one", 0), ("paired", 1), ("two", 2)]:
+        for d in [30.0, 60.0]:
+            for alpha in [0.05, 0.001]:
+                for tail in [0, 1]:
+                    for n1 in [2, 3, 5, 12]:
+                        n2, df, ncp, c, p = t_power(design, d, n1, alpha, tail)
+                        rows.append(f"    TPowerCase {{ design: {code}, ratio: 1.0, effect: {f(d)}, n1: {n1}, alpha: {f(alpha)}, tail: {tail}, n2: {n2}, df: {f(df)}, ncp: {f(ncp)}, critical: {f(c)}, power: {f(p)} }},")
     sizes = []
+    # two samples with unequal group sizes: the size of the first group is counted up from 2
+    for ratio in [0.5, 2.0, 3.0]:
+        for d in [0.3, 0.6, 1.0]:
+            for target in [0.8, 0.9]:
+                for tail in [0, 1]:
+                    n = 2
+                    while t_power("two", d, n, 0.05, tail, ratio)[4] < target:
+                        n += 1
+                    n2, df, ncp, c, p = t_power("two", d, n, 0.05, tail, ratio)
+                    sizes.append(f"    TSizeCase {{ design: 2, ratio: {f(ratio)}, effect: {f(d)}, target: {f(target)}, alpha: 0.05, tail: {tail}, n: {n}, n2: {n2}, power: {f(p)} }},")
     for design, code in [("one", 0), ("paired", 1), ("two", 2)]:
         for d in [0.3, 0.5, 0.8, 1.5]:
             for target in [0.8, 0.9, 0.95]:
@@ -232,7 +267,7 @@ def emit_power():
                     while t_power(design, d, n, 0.05, tail)[4] < target:
                         n += 1
                     n2, df, ncp, c, p = t_power(design, d, n, 0.05, tail)
-                    sizes.append(f"    TSizeCase {{ design: {code}, effect: {f(d)}, target: {f(target)}, alpha: 0.05, tail: {tail}, n: {n}, power: {f(p)} }},")
+                    sizes.append(f"    TSizeCase {{ design: {code}, ratio: 1.0, effect: {f(d)}, target: {f(target)}, alpha: 0.05, tail: {tail}, n: {n}, n2: {n2}, power: {f(p)} }},")
     an = []
     for k in [2, 3, 4, 6]:
         for fe in [0.1, 0.25, 0.4, 0.6]:
@@ -294,6 +329,12 @@ pub struct ProbCase {{
     pub intercept: f64,
     pub r: f64,
 }}
+/// `p` is P(D_n >= d) of the two-sided Kolmogorov statistic, `scipy.stats.kstwo.sf(d, n)`.
+pub struct KsCase {{
+    pub n: usize,
+    pub d: f64,
+    pub p: f64,
+}}
 pub struct NctCase {{
     pub t: f64,
     pub df: f64,
@@ -325,11 +366,13 @@ pub struct TPowerCase {{
 }}
 pub struct TSizeCase {{
     pub design: u8,
+    pub ratio: f64,
     pub effect: f64,
     pub target: f64,
     pub alpha: f64,
     pub tail: u8,
     pub n: usize,
+    pub n2: usize,
     pub power: f64,
 }}
 pub struct AnovaPowerCase {{
@@ -358,6 +401,7 @@ pub struct AnovaSizeCase {{
 if __name__ == "__main__":
     print(HEADER.format(ver=scipy.__version__), end="")
     print(emit_fit())
+    print(emit_ks())
     print(emit_probplot())
     print(emit_noncentral())
     print(emit_power())

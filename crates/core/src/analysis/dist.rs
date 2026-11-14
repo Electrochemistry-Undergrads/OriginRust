@@ -733,6 +733,34 @@ mod tests {
     }
 
     #[test]
+    fn an_exponential_plot_has_a_log_x_axis_only_when_every_number_is_positive() {
+        let (mut p, ids) = project();
+        let spec = ProbPlotSpec { kind: ProbPlotKind::Probability, family: Family::Exponential, graph: true };
+        // all positive: log X and the Weibull percent scale
+        let r = run(&mut p, &ids[..1], Tool::ProbPlot(spec));
+        let l = &p.graph(r.new_graph.unwrap()).unwrap().layers[0];
+        assert_eq!((l.x_axis.scale, l.y_axis.scale), (ScaleKind::Log10, ScaleKind::Weibull));
+        // a zero (allowed for the exponential): linear X, a log axis cannot show it
+        let mut q = Project::new();
+        let book = q.add_workbook("with zero");
+        let mut v: Vec<f64> = (1..=15).map(|i| f64::from(i) * 0.7).collect();
+        let w = q.add_column(book, 0, Designation::Y, ColumnData::numeric(v.clone())).unwrap();
+        v[0] = 0.0;
+        let z = q.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap();
+        let r = run(&mut q, &[w], Tool::ProbPlot(spec));
+        let l = &q.graph(r.new_graph.unwrap()).unwrap().layers[0];
+        assert_eq!(l.x_axis.scale, ScaleKind::Log10);
+        // a zero (allowed for the exponential): linear X, a log axis cannot show it
+        let r = run(&mut q, &[z], Tool::ProbPlot(spec));
+        let l = &q.graph(r.new_graph.unwrap()).unwrap().layers[0];
+        assert_eq!((l.x_axis.scale, l.y_axis.scale), (ScaleKind::Linear, ScaleKind::Weibull));
+        // a zero in any of several columns makes the axis linear (one axis for the graph)
+        let r = run(&mut q, &[w, z], Tool::ProbPlot(spec));
+        let l = &q.graph(r.new_graph.unwrap()).unwrap().layers[0];
+        assert_eq!(l.x_axis.scale, ScaleKind::Linear);
+    }
+
+    #[test]
     fn a_qq_plot_has_the_quantiles_the_ordered_data_and_the_least_squares_line() {
         let (mut p, ids) = project();
         let spec = ProbPlotSpec { kind: ProbPlotKind::QQ, family: Family::Normal, graph: true };

@@ -123,8 +123,17 @@ pub fn ks_distance(data: &[f64]) -> Option<f64> {
     Some(d)
 }
 
+/// Largest sample size for which [`kolmogorov_cdf`] uses the exact matrix method; above it the asymptotic
+/// series is used, which is off by up to 0.0034 (absolute, in the p-value) at n = 1000 and by 0.0011 at n = 10000.
+pub const KS_EXACT_MAX_N: usize = 1000;
+
+/// Above this `sqrt(n) d` the p-value is below 1e-7 and the asymptotic series (accurate to better than 1e-9
+/// there) is used instead of a matrix that would grow with `n d`.
+const KS_SERIES_LAMBDA: f64 = 3.0;
+
 /// P(D_n < d) for the two-sided Kolmogorov statistic with a fully specified distribution
-/// (Marsaglia, Tsang and Wang's matrix method; the asymptotic series for large samples).
+/// (Marsaglia, Tsang and Wang's matrix method, exact for `n` up to [`KS_EXACT_MAX_N`] unless the p-value is
+/// below 1e-7; the asymptotic series with Stephens' correction beyond).
 pub fn kolmogorov_cdf(n: usize, d: f64) -> f64 {
     if d <= 0.0 {
         return 0.0;
@@ -133,7 +142,7 @@ pub fn kolmogorov_cdf(n: usize, d: f64) -> f64 {
         return 1.0;
     }
     let nf = n as f64;
-    if n > 140 {
+    if n > KS_EXACT_MAX_N || (n > 140 && nf.sqrt() * d > KS_SERIES_LAMBDA) {
         let lambda = (nf.sqrt() + 0.12 + 0.11 / nf.sqrt()) * d;
         let mut q = 0.0;
         for k in 1..=100 {

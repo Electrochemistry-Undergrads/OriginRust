@@ -29,7 +29,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1537 passed on `main` at `e8d0051` (2026-11-13, Windows). Parity table: 43 done, 124 partial, 64 missing of 231 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1545 passed after the worksheet cell fixes (2026-11-13, macOS), including eight owner-regression UI tests covering new and imported tables. Formatting and Clippy also passed. Previous Windows run: 1537 at `e8d0051`. Parity table: 43 done, 124 partial, 64 missing of 231 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 
@@ -57,32 +57,42 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
 
 ## Known issues and table UI verification
 
-- [ ] **Single yellow-cell selection** (reported and reproduced 2026-11-13): a single click
-      in a yellow Long Name cell selects the whole column, including its data cells, instead
-      of that label cell alone. Double-clicking enters label editing and is a workaround.
-      Reproduced through the desktop UI in a new workbook; cause not yet diagnosed.
+- [x] **Single yellow-cell selection** (fixed 2026-11-13): labels have their own `Sel::Label`
+      selection, with a border around just that cell; column letters still select columns.
+      Typing/F2, navigation, clipboard/clear, Escape, and undo work without targeting data beneath
+      the label. Formula cells keep Set Column Values. See workbook-model 13.3 and `owner_regression_*`.
 
-- [ ] **Cell shortcuts and interaction logic across all tables** (reported 2026-11-13):
-      the owner reports inconsistent behaviour in newly created tables versus imported tables.
-      Apply the same selection, navigation, editing and shortcuts to every table. The Tab
-      focus failure below was reproduced in both kinds; it does not explain every reported
-      difference. Cover both creation paths when verifying fixes.
+- [x] **Cell shortcuts and interaction logic across all tables** (fixed 2026-11-13):
+      shared label/data selection and focus handling is covered through both File > New and CSV
+      import. Regressions exercise empty-cell mouse selection, typing, Enter/Tab/Shift+Tab,
+      navigation, clipboard/paste growth, clear, and undo on both paths. Specific newly reported
+      interactions can be added to this coverage; the unconfirmed drag observation stays below.
+
+- [x] **Reversed typing (`a` then `b` became `ba`)** (reported/reproduced/fixed 2026-11-13):
+      a replacement edit reused an old caret at zero. Each new data/label edit now has a fresh,
+      cell-specific editor state with the caret after the initial text. Tests cover both table
+      creation paths, stale carets after Home/Escape, Unicode input, and cursor movement during an edit.
 
 ### Table UI walkthrough (2026-11-13)
 
 Scope: table interactions only, using synthetic data in a separate Sheaf instance. Checked the
 running release build; its exact commit was not verified and it was not rebuilt for this pass.
 
-- [ ] **Confirmed: Tab after editing loses worksheet keyboard focus.** Reproduction: click A1
+- [x] **Fixed: Tab after editing loses worksheet keyboard focus.** Reproduction: click A1
       in a new table, type `8`, press Tab, then type `9`. A1 commits as 8 and the selection
       outline moves to B1, but the next digit is ignored. Shift+Tab and arrow navigation also
       stop controlling the table until a cell is clicked again. Reproduced twice in the new
       table and also in an imported CSV table (click A1, type `6`, Tab, then `9`). Expected:
       committing with Tab leaves keyboard focus in the next cell so entry and navigation continue.
+      Reproduced in the UI harness and fixed: both editors retain Tab instead of letting egui's
+      widget traversal steal focus. Regression checks successive typing after Tab and Shift+Tab
+      on new and imported tables.
 - [ ] **Needs confirmation: mouse drag selects only the final cell.** In an imported table,
       dragging from A1 to B3, then from A1 to B5, left only B3 or B5 selected rather than the
       rectangular range. Observed in two automated drag attempts; confirm with a manual drag
       before treating it as an application defect, since input timing could be involved.
+      Fast press-and-move frames select the correct block in new/imported-table UI regressions;
+      the original release-build observation was not reproduced as an application defect.
 - [x] With grid focus, Shift+arrow keys select a rectangular block in the imported table.
       Ctrl+C/Ctrl+V copied and pasted a 2-by-2 block; Ctrl+Z removed the paste in one step
       and Ctrl+Shift+Z restored it. Typing in a new-table data cell and committing with Tab

@@ -1401,7 +1401,17 @@ pub fn column_header_menu() -> Vec<Entry> {
     v
 }
 
-/// The menu of a cell.
+/// Metadata cells have clipboard commands, without structural operations on worksheet data.
+pub fn label_cell_menu() -> Vec<Entry> {
+    vec![
+        keyed("Cut", ctrl(Key::X), Cmd::Cut),
+        sub("Copy", copy_entries()),
+        keyed("Paste", ctrl(Key::V), Cmd::Paste),
+        keyed("Clear", plain_key(Key::Delete), Cmd::Clear),
+    ]
+}
+
+/// The menu of a data cell.
 pub fn cell_menu() -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());

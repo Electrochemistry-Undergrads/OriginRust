@@ -1243,6 +1243,35 @@ impl SheafApp {
     /// Copy, cut, paste and clear on the selected cells of a workbook. Cut, paste and clear
     /// are one undo step each.
     fn cell_op(&mut self, book: WindowId, op: CellOp, ctx: &egui::Context) {
+        if let Some(Sel::Label { column, row }) = self.books.get(&book).map(|s| s.sel.clone()) {
+            let Some(c) = self.doc.project().column(column) else { return };
+            let original = grid::label_text_full(c, &row);
+            let replacement = match op {
+                CellOp::Copy(_) | CellOp::Cut => {
+                    ctx.copy_text(original.clone());
+                    self.copied = original;
+                    if op == CellOp::Cut { Some(String::new()) } else { None }
+                }
+                CellOp::Clear => Some(String::new()),
+                CellOp::Paste => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                    None
+                }
+                CellOp::PasteText(text) | CellOp::Fill(text) => Some(text),
+                _ => {
+                    self.warn("Select data cells to insert, delete, or mask worksheet data");
+                    None
+                }
+            };
+            if let Some(text) = replacement {
+                if row == LabelRow::Formula {
+                    self.warn("Change the formula in Set Column Values");
+                } else {
+                    self.apply(Action::SetLabel { column, row, text }, ctx);
+                }
+            }
+            return;
+        }
         let Some(b) = self.doc.project().workbook(book) else {
             return;
         };

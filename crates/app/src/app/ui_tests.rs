@@ -2068,6 +2068,237 @@ fn sheet<'a>(h: &'a Harness<'static, SheafApp>) -> &'a sheaf_core::Worksheet {
     project(h).workbooks().next().unwrap().sheet()
 }
 
+/// Exercise the owner's two entry points without selecting cells through internal state.
+fn cell_regression_table(imported: bool, tag: &str) -> Harness<'static, SheafApp> {
+    if imported {
+        let mut h = start(vec![data_file(tag)]);
+        show_window(&mut h, "Book1 - sample");
+        h
+    } else {
+        let mut h = start(Vec::new());
+        menu_path(&mut h, &["File", "New", "Worksheet..."]);
+        pause(&mut h);
+        h
+    }
+}
+
+/// Coordinates also work for the empty cells in a brand-new workbook.
+fn worksheet_cell_pos(h: &Harness<'static, SheafApp>, column: usize, row: usize) -> egui::Pos2 {
+    let x = text_pos(h, &grid::head_name(sheet(h), column)).x;
+    let height = text_pos(h, "Comments").y - text_pos(h, "Units").y;
+    egui::pos2(x, text_pos(h, "F(x)=").y + height * (row + 1) as f32)
+}
+
+#[test]
+fn owner_regression_yellow_cell_click_does_not_select_the_column() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-selection");
+        let at = egui::pos2(text_pos(&h, "B(Y1)").x, text_pos(&h, "Long Name").y);
+        click_at(&mut h, at);
+        assert_eq!(
+            cells(&h),
+            Sel::Label { column: column_id(&h, "B"), row: LabelRow::LongName },
+            "one yellow cell, imported={imported}"
+        );
+        assert!(book_ui(&h).target(sheet(&h)).is_none(), "labels must not target worksheet data");
+    }
+}
+
+#[test]
+fn owner_regression_label_typing_navigation_and_clipboard_do_not_edit_data() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-keys");
+        let before = sheet(&h).columns.iter().map(|c| c.data.clone()).collect::<Vec<_>>();
+        click(&mut h, "B Long Name");
+        h.event(egui::Event::Text("Signal".into()));
+        settle(&mut h);
+        assert!(book_ui(&h).editing_label.is_some(), "typing into a label, imported={imported}");
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].long_name, "Signal");
+        assert_eq!(cells(&h), Sel::Label { column: column_id(&h, "B"), row: LabelRow::Units });
+        h.event(egui::Event::Text("mA".into()));
+        settle(&mut h);
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        key(&mut h, egui::Key::Tab);
+        key(&mut h, egui::Key::F2);
+        assert_eq!(book_ui(&h).editing_label.as_ref().unwrap().2, "mA");
+        h.event(egui::Event::Text("discard".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Escape);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        ctrl(&mut h, egui::Key::C);
+        assert_eq!(h.state().copied, "mA");
+        key(&mut h, egui::Key::ArrowLeft);
+        paste(&mut h, "volts");
+        assert_eq!(sheet(&h).columns[0].units, "volts");
+        ctrl(&mut h, egui::Key::Z);
+        assert_ne!(sheet(&h).columns[0].units, "volts");
+        key(&mut h, egui::Key::ArrowRight);
+        key(&mut h, egui::Key::Delete);
+        assert!(sheet(&h).columns[1].units.is_empty());
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        ctrl(&mut h, egui::Key::X);
+        assert_eq!(h.state().copied, "mA");
+        assert!(sheet(&h).columns[1].units.is_empty());
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        assert_eq!(sheet(&h).columns.iter().map(|c| c.data.clone()).collect::<Vec<_>>(), before);
+    }
+}
+
+#[test]
+fn owner_regression_label_navigation_reaches_data_and_formula_keeps_its_editor() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-to-data");
+        click(&mut h, "B Long Name");
+        for row in [LabelRow::Units, LabelRow::Comments, LabelRow::Formula] {
+            key(&mut h, egui::Key::ArrowDown);
+            assert_eq!(cells(&h), Sel::Label { column: column_id(&h, "B"), row });
+        }
+        key(&mut h, egui::Key::ArrowDown);
+        assert_eq!(cells(&h), at(1, 0));
+        h.event(egui::Event::Text("12".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "12");
+        click(&mut h, "B F(x)=");
+        key(&mut h, egui::Key::F2);
+        assert!(h.state().set_values.is_some(), "formula dialog, imported={imported}");
+    }
+}
+
+#[test]
+fn owner_regression_blank_cells_accept_mouse_typing_navigation_and_clipboard() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "new-table-cells");
+        let at = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, at);
+        assert_eq!(cells(&h), self::at(1, 0), "mouse selection, imported={imported}");
+        h.event(egui::Event::Text("42".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "42", "typing, imported={imported}");
+        assert_eq!(cells(&h), self::at(1, 1));
+        paste(&mut h, "7\t8\n9\t10");
+        assert_eq!(sheet(&h).columns[1].cell_text(1), "7");
+        assert_eq!(sheet(&h).columns[2].cell_text(2), "10");
+        ctrl(&mut h, egui::Key::C);
+        assert_eq!(h.state().copied, "7\t8\n9\t10\n");
+        key(&mut h, egui::Key::Delete);
+        assert!(sheet(&h).columns[1].numeric().unwrap().get(1).is_none_or(|v| v.is_nan()));
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].cell_text(1), "7");
+    }
+}
+
+#[test]
+fn owner_regression_tab_commits_and_keeps_typing_focus_in_the_next_data_cell() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "tab-focus");
+        let at = worksheet_cell_pos(&h, 0, 0);
+        click_at(&mut h, at);
+        h.event(egui::Event::Text("8".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[0].cell_text(0), "8");
+        assert_eq!(cells(&h), self::at(1, 0));
+        h.event(egui::Event::Text("9".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("9"), "imported={imported}");
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "9");
+        assert_eq!(cells(&h), self::at(0, 0));
+        h.event(egui::Event::Text("10".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("10"), "Shift+Tab, imported={imported}");
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[0].cell_text(0), "10");
+        assert_eq!(cells(&h), self::at(0, 1));
+        key(&mut h, egui::Key::ArrowDown);
+        assert_eq!(cells(&h), self::at(0, 2));
+    }
+}
+
+#[test]
+fn owner_regression_replacing_a_cell_starts_the_cursor_after_the_first_typed_character() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "typing-order");
+        let pos = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, pos);
+        // Leave a cached cursor at the start, then begin a new replacement edit.
+        key(&mut h, egui::Key::F2);
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("a".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("b".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("ab"), "imported={imported}");
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("α".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("β".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("αβ"));
+        // Ordinary cursor movement within the same edit must still work.
+        key(&mut h, egui::Key::Home);
+        h.event(egui::Event::Text("x".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("xαβ"));
+    }
+}
+
+#[test]
+fn owner_regression_label_replacement_does_not_reuse_an_old_cursor_position() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-typing-order");
+        click(&mut h, "B Long Name");
+        key(&mut h, egui::Key::F2);
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("a".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("b".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing_label.as_ref().map(|e| e.2.as_str()), Some("ab"));
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].long_name, "ab");
+    }
+}
+
+#[test]
+fn owner_regression_quick_mouse_drag_keeps_its_start_cell_in_new_and_imported_tables() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "quick-drag");
+        let from = worksheet_cell_pos(&h, 0, 0);
+        let to = worksheet_cell_pos(&h, 1, 3);
+        pause(&mut h);
+        h.event(egui::Event::PointerMoved(from));
+        h.step();
+        h.event(egui::Event::PointerButton {
+            pos: from,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        });
+        // A real input frame can contain the press and movement together.
+        h.event(egui::Event::PointerMoved(to));
+        h.step();
+        h.event(egui::Event::PointerButton {
+            pos: to,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+        settle(&mut h);
+        assert_eq!(cells(&h), Sel::Cells { anchor: (0, 0), end: (1, 3) }, "imported={imported}");
+    }
+}
+
 fn column_id(h: &Harness<'static, SheafApp>, short: &str) -> ColumnId {
     sheet(h).column_by_name(short).unwrap().id
 }

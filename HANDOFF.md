@@ -30,6 +30,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
 - Tests: 1545 passed after the worksheet cell fixes (2026-11-13, macOS), including eight owner-regression UI tests covering new and imported tables. Formatting and Clippy also passed. Previous Windows run: 1537 at `e8d0051`. Parity table: 43 done, 124 partial, 64 missing of 231 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
 

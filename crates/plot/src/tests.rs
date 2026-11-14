@@ -1794,6 +1794,54 @@ fn several_column_plots_stand_side_by_side() {
 }
 
 #[test]
+fn the_bar_width_in_percent_sets_the_share_of_the_spacing_the_bars_take() {
+    let ys = vec![five_values(), vec![0.5, 0.9, 1.4, 0.7, 1.1]];
+    let (mut p, g) = names_project(Template::Column, &FIVE, ys);
+    // The first row of each plot, in data units (the spacing between rows is 1).
+    let row1 = |p: &Project| -> Vec<(f64, f64)> {
+        let geom = fixed_geometry(p, g)[0].clone();
+        let bars = bars_of(p, g);
+        let per_plot = bars.len() / 2;
+        bars.iter().step_by(per_plot).map(|(r, _, _)| bar_in_data(&geom, *r)).map(|(l, r, _, _)| (l, r)).collect()
+    };
+    let set = |p: &mut Project, gap: f64, width: Option<f64>| {
+        let bars = &mut p.graph_mut(g).unwrap().layers[0].bars;
+        bars.gap_pct = gap;
+        bars.width_pct = width;
+    };
+    let near_all = |got: &[(f64, f64)], want: &[(f64, f64)]| {
+        got.len() == want.len() && got.iter().zip(want).all(|(a, b)| close9(a.0, b.0) && close9(a.1, b.1))
+    };
+    // 70 %: the two bars together are 0.7 wide, centred on the row: 0.35 each.
+    set(&mut p, 20.0, Some(70.0));
+    let got = row1(&p);
+    assert!(near_all(&got, &[(0.65, 1.0), (1.0, 1.35)]), "{got:?}");
+    // It wins over the gap while set; with it cleared the gap rules again (gap 50 = width 50).
+    set(&mut p, 50.0, Some(70.0));
+    assert!(near_all(&row1(&p), &[(0.65, 1.0), (1.0, 1.35)]));
+    set(&mut p, 50.0, None);
+    assert!(near_all(&row1(&p), &[(0.75, 1.0), (1.0, 1.25)]));
+    // 100 %: no gap between the groups.
+    set(&mut p, 50.0, Some(100.0));
+    assert!(near_all(&row1(&p), &[(0.5, 1.0), (1.0, 1.5)]));
+    // 0 % and out-of-range values are clamped: bars without width, and 250 is 100.
+    set(&mut p, 50.0, Some(0.0));
+    assert!(near_all(&row1(&p), &[(1.0, 1.0), (1.0, 1.0)]));
+    set(&mut p, 50.0, Some(250.0));
+    assert!(near_all(&row1(&p), &[(0.5, 1.0), (1.0, 1.5)]));
+    set(&mut p, 50.0, Some(-30.0));
+    assert!(near_all(&row1(&p), &[(1.0, 1.0), (1.0, 1.0)]));
+    // A value that is not a number falls back to Origin's default width (100 - 20 = 80 %).
+    set(&mut p, 50.0, Some(f64::NAN));
+    assert!(near_all(&row1(&p), &[(0.6, 1.0), (1.0, 1.4)]));
+    // Histogram bars always touch, whatever the width.
+    let (mut p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    p.graph_mut(g).unwrap().layers[0].bars.width_pct = Some(30.0);
+    let bar = layer_data(&p, g).plots[0].bar.unwrap();
+    assert!((bar.width - 7.0).abs() < 1e-9, "{}", bar.width);
+}
+
+#[test]
 fn column_plots_reach_down_to_zero_or_to_the_bottom_of_a_log_axis() {
     let (mut p, g) = project(Template::Line, vec![1.0, 2.0, 3.0, 4.0], vec![vec![5.0, 6.0, 7.0, 8.0]]);
     let geom = &fixed_geometry(&p, g)[0];

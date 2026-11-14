@@ -404,6 +404,45 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_keeps_the_plot_details_layer_and_page_settings() {
+        use sheaf_core::Color;
+        use sheaf_core::graph::*;
+        let dir = TempDir::new("details");
+        let path = dir.file("details.sheaf");
+        let mut p = sample();
+        let book = p.workbooks().next().unwrap();
+        let (y, names) = (book.sheets[0].columns[1].id, book.sheets[0].columns[2].id);
+        let g = p.plot_columns(Template::Column, &[y]).unwrap();
+        {
+            let graph = p.graph_mut(g).unwrap();
+            graph.page.style.border = Some(BorderStyle::solid(Color::BLACK, 1.0));
+            graph.page.style.comments = "a note".into();
+            graph.page.style.layer_icons = false;
+            graph.page.style.title_display = TitleDisplay::LongName;
+            let layer = &mut graph.layers[0];
+            layer.bars.width_pct = Some(60.0);
+            layer.group_style.subgrouping = Subgrouping::BySize { size: 2 };
+            layer.group_style.subgroup_on = SubgroupOn::LineStyle;
+            layer.display.show_y_axes = false;
+            layer.background = Some(Color::rgb(1, 2, 3));
+            layer.background_style.gradient = Some(Gradient::new(Color::WHITE));
+            layer.background_style.border = Some(BorderStyle::solid(Color::RED, 0.5));
+            let d = &mut layer.plots[0].decor;
+            d.fill.pattern = FillPattern::DiagonalCross;
+            d.fill.transparency_pct = 20;
+            d.labels.enable = true;
+            d.labels.form = LabelForm::Column { column: names };
+            d.labels.only_rows = "1-2".into();
+            d.labels.decimals = Some(2);
+            d.labels.dx_pt = 3.0;
+        }
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        assert_eq!(back.graph(g), p.graph(g));
+        assert!(back.graph(g).unwrap().referenced_columns().contains(&names));
+    }
+
+    #[test]
     fn round_trip_keeps_tick_label_sources_and_bar_spacing() {
         use sheaf_core::graph::{BarSpacing, TickLabelSource};
         let dir = TempDir::new("column");
@@ -416,7 +455,7 @@ mod tests {
             let layer = &mut p.graph_mut(g).unwrap().layers[0];
             layer.x_axis.tick_label_source = TickLabelSource::Column { column: names };
             layer.x_axis.tick_label_angle_deg = -30.0;
-            layer.bars = BarSpacing { gap_pct: 40.0, overlap_pct: -10.0 };
+            layer.bars = BarSpacing { gap_pct: 40.0, overlap_pct: -10.0, width_pct: None };
         }
         save(&p, &path).unwrap();
         let back = load(&path).unwrap();
@@ -424,7 +463,7 @@ mod tests {
         let layer = &back.graph(g).unwrap().layers[0];
         assert_eq!(layer.x_axis.tick_label_source, TickLabelSource::Column { column: names });
         assert_eq!(layer.x_axis.tick_label_angle_deg, -30.0);
-        assert_eq!(layer.bars, BarSpacing { gap_pct: 40.0, overlap_pct: -10.0 });
+        assert_eq!(layer.bars, BarSpacing { gap_pct: 40.0, overlap_pct: -10.0, width_pct: None });
         assert!(back.graph(g).unwrap().referenced_columns().contains(&names));
     }
 

@@ -5233,6 +5233,35 @@ fn column_label_formula_recalculates_after_a_grid_header_edit() {
 }
 
 #[test]
+fn char_and_code_functions_are_available_in_set_values() {
+    let mut h = start(vec![data_file("char_code")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    menu_path(&mut h, &["Function", "Text", "char"]);
+    assert!(h.query_all_by_value("char()").next().is_some(), "the picker inserts the character function");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("char(64+col(A))$".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none());
+    let col = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap();
+    for (row, expected) in ["A", "B", "C", "D"].iter().enumerate() {
+        assert_eq!(col.data.text_cell(row), Some(*expected));
+    }
+    right_click_text(&mut h, "B(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    menu_path(&mut h, &["Function", "Text", "code"]);
+    assert!(h.query_all_by_value("code()").next().is_some());
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("code(col(C)$)".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none());
+    assert_eq!(column(&h, "B"), [65.0, 66.0, 67.0, 68.0]);
+}
+
+#[test]
 fn set_values_apply_waits_for_a_change_and_recalculate_defaults_to_manual() {
     let mut h = start(vec![data_file("setvals")]);
     show_window(&mut h, "Book1 - sample");

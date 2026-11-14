@@ -44,6 +44,8 @@ pub(crate) enum StrFn {
     Search,
     Replace,
     Substitute,
+    Char,
+    Code,
     Compare,
     Exact,
     Text,
@@ -56,7 +58,7 @@ impl StrFn {
         match self {
             StrFn::Left | StrFn::Right | StrFn::Exact => (2, 2),
             StrFn::Mid | StrFn::Find | StrFn::Search | StrFn::Compare => (2, 3),
-            StrFn::Len | StrFn::Upper | StrFn::Lower | StrFn::Trim | StrFn::Value => (1, 1),
+            StrFn::Len | StrFn::Upper | StrFn::Lower | StrFn::Trim | StrFn::Value | StrFn::Char | StrFn::Code => (1, 1),
             StrFn::Replace => (4, 4),
             StrFn::Substitute => (3, 4),
             StrFn::Text => (1, 2),
@@ -67,14 +69,17 @@ impl StrFn {
 impl StrFn {
     /// Whether the result is a text (else a number).
     pub(crate) fn returns_text(self) -> bool {
-        !matches!(self, StrFn::Len | StrFn::Find | StrFn::Search | StrFn::Compare | StrFn::Exact | StrFn::Value)
+        !matches!(
+            self,
+            StrFn::Len | StrFn::Find | StrFn::Search | StrFn::Compare | StrFn::Exact | StrFn::Value | StrFn::Code
+        )
     }
 
     /// Whether argument `i` is read as text (a bare column is its text) rather than as a number.
     /// `text(col(A), fmt)` formats the number of the cell, as Origin does.
     pub(crate) fn text_arg(self, i: usize) -> bool {
         match self {
-            StrFn::Text => false,
+            StrFn::Text | StrFn::Char => false,
             StrFn::Left | StrFn::Right | StrFn::Mid => i == 0,
             StrFn::Replace => i == 0 || i == 3,
             StrFn::Substitute => i < 3,
@@ -102,6 +107,17 @@ fn start_of(n: f64) -> usize {
 pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
     let flag = |v: Option<&Value>, default: bool| v.map_or(default, |v| v.number() != 0.0 && !v.number().is_nan());
     match f {
+        StrFn::Char => {
+            let n = args[0].number();
+            // The documented range is 1..65535. Invalid numbers and lone surrogate code
+            // points give empty text; Rust strings always remain valid Unicode.
+            let ch = if n.is_finite() && n.fract() == 0.0 && (1.0..=65535.0).contains(&n) {
+                char::from_u32(n as u32)
+            } else {
+                None
+            };
+            Value::Text(ch.map_or_else(String::new, |c| c.to_string()))
+        }
         StrFn::Text => {
             let fmt = args.get(1).map(|v| v.clone().into_text());
             match &args[0] {
@@ -135,6 +151,7 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
                     })
                 }
                 StrFn::Len => Value::Num(s.chars().count() as f64),
+                StrFn::Code => Value::Num(s.chars().next().map_or(0, u32::from) as f64),
                 StrFn::Upper => Value::Text(s.to_uppercase()),
                 StrFn::Lower => Value::Text(s.to_lowercase()),
                 StrFn::Trim => Value::Text(s.trim().to_string()),
@@ -190,7 +207,7 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
                     Value::Num(f64::from(if case { s == other } else { s.to_lowercase() == other.to_lowercase() }))
                 }
                 StrFn::Exact => Value::Num(f64::from(s == text_arg(0))),
-                StrFn::Text | StrFn::Value => unreachable!("handled above"),
+                StrFn::Text | StrFn::Value | StrFn::Char => unreachable!("handled above"),
             }
         }
     }

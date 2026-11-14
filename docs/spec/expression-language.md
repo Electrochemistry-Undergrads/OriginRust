@@ -101,7 +101,13 @@ How a bare column read decides between number and text: the result of the whole 
 
 Sheaf uses literal, case-sensitive, non-overlapping matches, preserving Unicode text. An absent occurrence leaves the text unchanged. An empty search or an invalid occurrence (negative, fractional, missing or nonfinite) also leaves it unchanged; these are Sheaf's guard choices for cases the reference does not specify. The first three arguments accept text columns or numbers written as text; the occurrence is numeric, so formulas can read it from another column. Text-returning function calls accept an optional `$` suffix (`upper(substitute(col(A)$,"clean","raw")$)$`); numeric functions do not. Unsuffixed calls remain accepted. Set Column Values lists `substitute` under Function > Text, and Auto recalculation tracks every source column.
 
-Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `char`, `code`, `format` and `%()` substitution are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `format` and `%()` substitution are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+
+### Character codes
+
+`char(n)$` and `code(s)` follow the published [Char](https://docs.originlab.com/labtalk/ref/char-func/) and [Code](https://docs.originlab.com/labtalk/ref/code-func/) references. `char(65)$` gives `A`; `code("abc")` is 97 and `code("")` is 0. Char accepts integer code points from 1 through 65535, including `char(181)$` = `µ` and `char(956)$` = `μ`. Numeric source columns work with Char; Code reads text cells and returns a number. Both appear in Set Column Values > Function > Text.
+
+Sheaf returns empty text for invalid Char input (zero, negative, fractional, nonfinite, missing, above 65535, or a surrogate code point); these are explicit guard choices where the reference does not define a usable character. Code reads the first Unicode scalar value, not the first UTF-8 byte, consistently with Sheaf's other text functions. Supplementary characters can therefore produce a code above 65535, although Char retains its documented upper bound. The Unicode behavior and guard cases have unit coverage; no new installed-Origin probe is claimed.
 
 ### Column label values
 

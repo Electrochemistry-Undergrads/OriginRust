@@ -37,6 +37,8 @@ pub enum DetailTab {
     Label,
     Offset,
     Display,
+    PageDisplay,
+    LegendsTitles,
     LayerContents,
     Background,
     Size,
@@ -48,7 +50,13 @@ pub enum DetailTab {
 
 fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
     match node {
-        Node::Graph => vec![(DetailTab::Page, "Page", true), (DetailTab::Text, "Text", true)],
+        // Origin's page tabs (Miscellaneous is not offered) and Sheaf's Text tab.
+        Node::Graph => vec![
+            (DetailTab::Page, "Print/Dimensions", true),
+            (DetailTab::PageDisplay, "Display", true),
+            (DetailTab::LegendsTitles, "Legends/Titles", true),
+            (DetailTab::Text, "Text", true),
+        ],
         Node::Layer(_) => vec![
             (DetailTab::LayerContents, "Layer Contents", true),
             (DetailTab::Background, "Background", true),
@@ -209,6 +217,25 @@ pub fn dialog_body(
                 |ui| match *node {
                     Node::Graph => match *tab {
                         DetailTab::Text => text_tab(ui, graph),
+                        DetailTab::PageDisplay => {
+                            grid(ui, "page_display", |ui| {
+                                ui.label("Color");
+                                color_button(ui, &mut graph.page.background);
+                                ui.end_row();
+                            });
+                        }
+                        DetailTab::LegendsTitles => {
+                            section(ui, "Auto Legend");
+                            let mut all = graph.layers.iter().all(|l| l.legend.scope == LegendScope::Graph);
+                            if ui
+                                .checkbox(&mut all, "Include data plots from all Layers when constructing legend")
+                                .changed()
+                            {
+                                for l in &mut graph.layers {
+                                    l.legend.scope = if all { LegendScope::Graph } else { LegendScope::Layer };
+                                }
+                            }
+                        }
                         _ => page_tab(ui, graph),
                     },
                     Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from),
@@ -1082,25 +1109,38 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
 
 // ----- graph --------------------------------------------------------------------------------
 
+/// Origin's Print/Dimensions tab: the page size in a chosen unit (inch by default; pixel is not
+/// offered), and Sheaf's page title.
 fn page_tab(ui: &mut egui::Ui, graph: &mut Graph) {
+    const UNITS: [(&str, f64); 4] = [("inch", 72.0), ("cm", 72.0 / 2.54), ("mm", 72.0 / 25.4), ("point", 1.0)];
+    let unit_id = ui.id().with("page_unit");
+    let mut unit: usize = ui.data(|d| d.get_temp(unit_id)).unwrap_or(0);
+    section(ui, "Dimensions");
     grid(ui, "page_props", |ui| {
-        let mut w = graph.page.width_pt / 72.0;
-        let mut h = graph.page.height_pt / 72.0;
-        ui.label("Width");
-        ui.add(DragValue::new(&mut w).range(1.0..=40.0).speed(0.02).suffix(" in"));
+        ui.label("Units");
+        egui::ComboBox::from_id_salt("page_units").selected_text(UNITS[unit].0).show_ui(ui, |ui| {
+            for (k, (name, _)) in UNITS.iter().enumerate() {
+                ui.selectable_value(&mut unit, k, *name);
+            }
+        });
         ui.end_row();
-        ui.label("Height");
-        ui.add(DragValue::new(&mut h).range(1.0..=40.0).speed(0.02).suffix(" in"));
-        ui.end_row();
-        graph.page.width_pt = w * 72.0;
-        graph.page.height_pt = h * 72.0;
-        ui.label("Background");
-        color_button(ui, &mut graph.page.background);
-        ui.end_row();
+        let per = UNITS[unit].1;
+        for (label, v) in [("Width", &mut graph.page.width_pt), ("Height", &mut graph.page.height_pt)] {
+            let mut a = *v / per;
+            ui.label(label);
+            if ui
+                .add(DragValue::new(&mut a).range(72.0 / per..=2880.0 / per).speed(1.44 / per).max_decimals(3))
+                .changed()
+            {
+                *v = a * per;
+            }
+            ui.end_row();
+        }
         ui.label("Title");
         ui.add(egui::TextEdit::singleline(&mut graph.long_name).desired_width(220.0));
         ui.end_row();
     });
+    ui.data_mut(|d| d.insert_temp(unit_id, unit));
 }
 
 /// The text settings of the whole graph: one font family and one size factor for every text.

@@ -1714,3 +1714,14 @@ mm, pixel and point; Link Axis Length to Scale with X:Y Ratio; Graphic Image Cac
 Speed Mode with worksheet data at most 3000 points per curve and matrix data 32 per dimension. Sheaf's
 tab (named Size/Speed) has the Layer Area in every unit but pixel (the unit is only how the numbers are
 shown; the frame stays fractions of the page, and a linked layer shows % only); the rest is not offered.
+
+Page node (measured, `re-workspace/scratch/t13/page1..2`): tabs Print/Dimensions (Width 10.72 and Height
+8.205 in Units Windows(inch), also inch, cm, mm, pixel, point; printer default dimensions; Print Cropmarks;
+Keep Aspect Ratio in Full Screen View), Miscellaneous (View Mode, redraw, drawing order, layer icon, gap
+across layers, label colour follows symbol, independent layer control, modifiers), Display (page Color,
+Gradient Fill, connect lines across axis breaks and missing data, Master Items) and Legends/Titles (the
+%(n) translation mode @LM by default, units in auto axis titles, data plot index, Legend Update Mode
+Update when Adding, Include data plots from all Layers (off), Legend Symbol Width, Indicate Active Dataset).
+Sheaf shows Print/Dimensions (size in inch, cm, mm or point, and Sheaf's page title), Display (page
+colour), Legends/Titles (Include data plots from all Layers, which sets every layer's legend scope) and
+its own Text tab; Miscellaneous and the other controls are not offered.

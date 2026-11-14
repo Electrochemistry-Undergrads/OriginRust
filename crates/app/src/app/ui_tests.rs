@@ -515,6 +515,20 @@ fn the_layer_size_speed_and_display_tabs_show_origins_controls() {
 }
 
 #[test]
+fn the_page_node_has_origins_tabs() {
+    let mut h = start(vec![data_file("page-tabs")]);
+    open_props(&mut h, 0, PropsTab::Page, None);
+    for tab in ["Print/Dimensions", "Display", "Legends/Titles", "Text"] {
+        assert!(has_label(&h, tab), "{tab}");
+    }
+    assert!(has_label(&h, "Dimensions") && has_label(&h, "Units") && has_label(&h, "Width"));
+    click(&mut h, "Legends/Titles");
+    click(&mut h, "Include data plots from all Layers when constructing legend");
+    click(&mut h, "OK");
+    assert!(graph(&h).layers.iter().all(|l| l.legend.scope == sheaf_core::graph::LegendScope::Graph));
+}
+
+#[test]
 fn the_plot_details_tree_chooses_a_plot_of_the_second_layer() {
     let mut h = start(vec![data_file("details-tree")]);
     let (_, g) = window_ids(&h);

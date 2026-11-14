@@ -9,7 +9,8 @@
 //! multiplicative := unary ( ('*'|'/'|'%') unary )*
 //! unary    := ('-'|'+'|'!') unary | power
 //! power    := postfix ( '^' unary )?          -- right associative, exponent may be signed
-//! postfix  := primary ( '[' ternary ( ':' ternary )? ']' )? '$'?   -- only after a column reference
+//! postfix  := primary ( '[' ternary ( ':' ternary )? ']' )? '$'?
+//!             -- subscripts only on columns; '$' on a column/cell or text-returning function
 //! primary  := number | "text" | name | name '(' args ')' | col-reference | '(' ternary ')'
 //! ```
 
@@ -195,6 +196,11 @@ impl Parser {
         if matches!(node.kind, Kind::Col { .. }) && matches!(self.peek_tok(), Tok::Dollar) {
             let pos = self.advance().pos;
             return Node::new(Kind::Text(Box::new(node)), pos);
+        }
+        if matches!(&node.kind, Kind::Call { func: Func::Str(f), .. } if f.returns_text()) && self.eat(&Tok::Dollar) {
+            // The call already produces text; accept Origin's string-result suffix without
+            // converting a numeric function or changing the existing unsuffixed syntax.
+            return Ok(node);
         }
         if !matches!(self.peek_tok(), Tok::LBracket) {
             return Ok(node);

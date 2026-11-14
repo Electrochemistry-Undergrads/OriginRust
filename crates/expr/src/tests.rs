@@ -803,6 +803,74 @@ fn string_functions_match_origin() {
 }
 
 #[test]
+fn substitute_uses_origins_replacement_then_search_argument_order() {
+    // Origin's documented example and signature (replacement before search):
+    // https://docs.originlab.com/labtalk/ref/substitute-func/
+    for (src, expected) in [
+        (r#"Substitute("abcdefabcdef",12,"bcd",0)$"#, "a12efa12ef"),
+        (r#"substitute("raw/raw/raw","clean","raw")"#, "clean/clean/clean"),
+        (r#"substitute("raw/raw/raw","clean","raw",1)$"#, "clean/raw/raw"),
+        (r#"substitute("raw/raw/raw","clean","raw",2)$"#, "raw/clean/raw"),
+        (r#"substitute("raw/raw/raw","clean","raw",3)$"#, "raw/raw/clean"),
+        (r#"substitute("raw/raw/raw","clean","raw",4)$"#, "raw/raw/raw"),
+        (r#"substitute("raw","","raw")$"#, ""),
+        (r#"substitute("raw","raw/raw","raw")$"#, "raw/raw"),
+        (r#"substitute("RAW/raw","clean","raw")$"#, "RAW/clean"),
+        (r#"substitute("é.µ.é","界","é",2)$"#, "é.µ.界"),
+        (r#"substitute("a.b.[c]","/",".")$"#, "a/b/[c]"),
+        (r#"substitute("aaaaa","X","aa")$"#, "XXa"),
+    ] {
+        let values = Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap();
+        assert_eq!(values, [Value::Text(expected.into())], "{src}");
+    }
+}
+
+#[test]
+fn substitute_handles_empty_search_and_invalid_occurrences_without_changing_text() {
+    // Guard cases not specified by Origin's documentation: Sheaf leaves the text unchanged.
+    for src in [
+        r#"substitute("raw","clean","")$"#,
+        r#"substitute("raw","clean","raw",-1)$"#,
+        r#"substitute("raw","clean","raw",1.5)$"#,
+        r#"substitute("raw","clean","raw",na())$"#,
+        r#"substitute("raw","clean","raw",1e308*1e308)$"#,
+        r#"substitute("raw","clean","raw",1e100)$"#,
+    ] {
+        assert_eq!(
+            Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(),
+            [Value::Text("raw".into())],
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn substitute_reads_text_arguments_and_numeric_occurrences_from_columns() {
+    let host = TextHost {
+        cols: vec![
+            ("A", vec![Cell::S("raw/raw"), Cell::S("raw/raw"), Cell::S("")]),
+            ("B", vec![Cell::S("clean"), Cell::S("é"), Cell::S("x")]),
+            ("C", vec![Cell::S("raw"), Cell::S("raw"), Cell::S("raw")]),
+            ("D", vec![Cell::N(1.0), Cell::N(2.0), Cell::N(0.0)]),
+        ],
+    };
+    let expr = Expr::parse("substitute(col(A),col(B),col(C),col(D))$").unwrap();
+    assert_eq!(expr.columns(), ["A", "B", "C", "D"].map(|n| ColumnRef::Short(n.into())));
+    assert_eq!(texts(&host, "substitute(col(A),col(B),col(C),col(D))$"), ["clean/raw", "raw/é", ""]);
+    assert!(expr.eval_rows(&host, 3).unwrap().iter().all(|x| x.is_nan()));
+    assert!(expr.compile(&host).is_err(), "compiled numeric expressions still reject text");
+}
+
+#[test]
+fn dollar_suffix_is_accepted_on_text_functions_only() {
+    let src = r#"upper(substitute("raw","clean","raw")$)$+left("-tail",1)$"#;
+    assert_eq!(Expr::parse(src).unwrap().eval_values(&SimpleHost::new(), 1).unwrap(), [Value::Text("CLEAN-".into())]);
+    for src in ["2$", "sin(1)$", r#"len("raw")$"#, r#"substitute("a","b")$"#, r#"substitute("a","b","c",1,2)$"#] {
+        assert!(Expr::parse(src).is_err(), "{src}");
+    }
+}
+
+#[test]
 fn a_bare_column_is_text_only_where_text_is_wanted() {
     let h = probe_a();
     // Origin: col(O)=col(A) copies the text cells; arithmetic sees text as missing.
@@ -914,8 +982,6 @@ fn text_formulas_in_a_numeric_context() {
     assert_eq!(v, [Value::Text("--".into())]);
     assert!(Expr::parse("left(col(A)$)").is_err());
     assert!(Expr::parse("2$").is_err());
-    // Origin's substitute() returned its text unchanged in the probe, so it is not offered.
-    assert!(Expr::parse("substitute(col(A)$,\"a\",\"b\")").is_err());
     // compile() has no text values.
     assert!(Expr::parse("col(A)$").unwrap().compile(&plain).is_err());
 }

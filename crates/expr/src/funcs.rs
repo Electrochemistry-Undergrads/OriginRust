@@ -182,6 +182,7 @@ static TABLE: &[(&str, Func)] = &[
     ("find", Func::Str(StrFn::Find)),
     ("search", Func::Str(StrFn::Search)),
     ("replace", Func::Str(StrFn::Replace)),
+    ("substitute", Func::Str(StrFn::Substitute)),
     ("compare", Func::Str(StrFn::Compare)),
     ("exact", Func::Str(StrFn::Exact)),
     ("text", Func::Str(StrFn::Text)),

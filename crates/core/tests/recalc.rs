@@ -299,3 +299,34 @@ fn text_columns_can_be_read_and_copied() {
     set(&mut d, c[4], "len(col(B))", RecalcMode::None).unwrap();
     assert_eq!(values(&d, c[4]), [5.0, 5.0, 0.0, 3.0]);
 }
+
+#[test]
+fn substituted_text_follows_both_source_and_occurrence_columns_and_undo() {
+    let (mut d, _, c) = book();
+    d.apply("Text", |p| {
+        p.column_mut(c[1]).unwrap().data =
+            ColumnData::text(vec!["raw raw".into(), "raw raw".into(), "raw raw raw".into(), String::new()]);
+    });
+    set(&mut d, c[2], r#"substitute(col(B),"clean","raw")$"#, RecalcMode::Auto).unwrap();
+    set(&mut d, c[3], r#"substitute(col(B),"clean","raw",col(A))$"#, RecalcMode::Auto).unwrap();
+    let cell = |d: &Document, col, row| d.project().column(col).unwrap().cell_text(row);
+    assert!(d.project().column(c[2]).unwrap().data.is_mixed());
+    // An empty text result remains a missing worksheet cell, displayed as --.
+    for (row, expected) in ["clean clean", "clean clean", "clean clean clean", "--"].iter().enumerate() {
+        assert_eq!(cell(&d, c[2], row), *expected);
+    }
+    for (row, expected) in ["clean raw", "raw clean", "raw raw clean", "--"].iter().enumerate() {
+        assert_eq!(cell(&d, c[3], row), *expected);
+    }
+    edit_cell(&mut d, c[1], 0, "raw/éraw");
+    assert_eq!(cell(&d, c[2], 0), "clean/éclean");
+    assert_eq!(cell(&d, c[3], 0), "clean/éraw");
+    edit_cell(&mut d, c[0], 0, "2");
+    assert_eq!(cell(&d, c[3], 0), "raw/éclean");
+    d.undo();
+    assert_eq!(cell(&d, c[3], 0), "clean/éraw");
+    d.redo();
+    assert_eq!(cell(&d, c[3], 0), "raw/éclean");
+    assert_eq!(state(&d, c[2]), FormulaState::Current);
+    assert_eq!(state(&d, c[3]), FormulaState::Current);
+}

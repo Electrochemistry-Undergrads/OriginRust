@@ -43,6 +43,7 @@ pub(crate) enum StrFn {
     Find,
     Search,
     Replace,
+    Substitute,
     Compare,
     Exact,
     Text,
@@ -57,6 +58,7 @@ impl StrFn {
             StrFn::Mid | StrFn::Find | StrFn::Search | StrFn::Compare => (2, 3),
             StrFn::Len | StrFn::Upper | StrFn::Lower | StrFn::Trim | StrFn::Value => (1, 1),
             StrFn::Replace => (4, 4),
+            StrFn::Substitute => (3, 4),
             StrFn::Text => (1, 2),
         }
     }
@@ -75,6 +77,7 @@ impl StrFn {
             StrFn::Text => false,
             StrFn::Left | StrFn::Right | StrFn::Mid => i == 0,
             StrFn::Replace => i == 0 || i == 3,
+            StrFn::Substitute => i < 3,
             StrFn::Find | StrFn::Search | StrFn::Compare => i <= 1,
             _ => true,
         }
@@ -157,6 +160,27 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
                     let head: String = s.chars().take(pos - 1).collect();
                     let tail: String = s.chars().skip(pos - 1 + len).collect();
                     Value::Text(format!("{head}{new}{tail}"))
+                }
+                StrFn::Substitute => {
+                    // Origin's order is (within, replacement, search, occurrence), not
+                    // (within, search, replacement). Zero or no occurrence replaces all.
+                    let new = text_arg(0);
+                    let find = text_arg(1);
+                    let n = rest.get(2).map_or(0.0, Value::number);
+                    // These cases are not specified by Origin's docs. Leave the text intact
+                    // rather than inserting between characters or coercing an invalid index.
+                    if find.is_empty() || !n.is_finite() || n < 0.0 || n.fract() != 0.0 {
+                        return Value::Text(s);
+                    }
+                    if n == 0.0 {
+                        return Value::Text(s.replace(&find, &new));
+                    }
+                    let at = s.match_indices(&find).nth(n as usize - 1).map(|(at, _)| at);
+                    let mut s = s;
+                    if let Some(at) = at {
+                        s.replace_range(at..at + find.len(), &new);
+                    }
+                    Value::Text(s)
                 }
                 // Origin: 1 when the texts are equal, else 0; the third argument says whether the
                 // case matters (default: it does).

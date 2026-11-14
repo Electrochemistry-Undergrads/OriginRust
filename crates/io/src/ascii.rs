@@ -18,8 +18,6 @@ const DELIMITER_SAMPLE_LINES: usize = 200;
 const DATA_RUN: usize = 3;
 /// Longest worksheet name.
 const SHEET_NAME_MAX: usize = 31;
-/// Longest short name taken from a header cell.
-
 /// How the fields of a line are separated.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Delimiter {

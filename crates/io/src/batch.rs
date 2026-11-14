@@ -665,7 +665,7 @@ mod tests {
     #[test]
     fn not_renaming_the_sheet_keeps_a_replaced_name_and_numbers_new_sheets() {
         let (mut p, t) = project_with(book("old", vec![num("A", "x", &[1.0])]));
-        let keep = PlaceOptions { rename_sheet: false, ..PlaceOptions::default() };
+        let keep = PlaceOptions { rename_sheet: false };
         place_workbook_with(&mut p, book("new", vec![num("A", "x", &[2.0])]), ImportMode::ReplaceSheet, Some(t), keep);
         assert_eq!(p.workbook(t.book).unwrap().sheets[0].name, "old");
         place_workbook_with(&mut p, book("new", vec![num("A", "x", &[2.0])]), ImportMode::NewSheet, Some(t), keep);

@@ -35,6 +35,7 @@ pub enum DetailTab {
     ErrorBar,
     DropLines,
     Label,
+    Offset,
     LayerContents,
     Background,
     Size,
@@ -76,6 +77,10 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             }
             if plot.y_error.is_some() || plot.x_error.is_some() {
                 tabs.push((DetailTab::ErrorBar, "Error Bar", true));
+            }
+            // Origin shows Offset for the members of a group (here: a layer of several plots).
+            if graph.layers[l].plots.len() > 1 {
+                tabs.push((DetailTab::Offset, "Offset", true));
             }
             tabs
         }
@@ -336,6 +341,34 @@ fn plot_tab_body(
                     });
                     ui.weak("Normal: the area between the curve and the bottom of the layer.");
                 }
+            }
+        }
+        DetailTab::Offset => {
+            let layer = &mut graph.layers[l];
+            let individual = layer.stack == Stack::Individual;
+            let column = layer.plots[p].y;
+            // Read without adding an entry, so that looking at the tab changes nothing.
+            let (mut x, mut y) = layer.plot_offset(column).map_or((0.0, 0.0), |o| (o.x, o.y));
+            let before = (x, y);
+            ui.add_enabled_ui(individual, |ui| {
+                grid(ui, "plot_offset", |ui| {
+                    ui.label("");
+                    ui.strong("Offset");
+                    ui.end_row();
+                    ui.label("X");
+                    ui.add(DragValue::new(&mut x).speed(0.01));
+                    ui.end_row();
+                    ui.label("Y");
+                    ui.add(DragValue::new(&mut y).speed(0.01));
+                    ui.end_row();
+                });
+            });
+            if (x, y) != before {
+                let o = layer.plot_offset_mut(column);
+                (o.x, o.y) = (x, y);
+            }
+            if !individual {
+                ui.weak("Offsets of single plots are used when the layer's Stack tab is set to Individual.");
             }
         }
         DetailTab::DropLines => {

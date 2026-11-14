@@ -1696,4 +1696,9 @@ the layer except the incremented properties, `Layer::follow_leader`); Line Color
 Stretch (the palette modes Same, Cycle and Spread over the layer's colour list), and Line Style, Symbol
 Type and Symbol Interior with None and By One, running on from the first plot (`apply_group_increments`;
 Symbol Interior alternates filled and open); Group Members lists the plots. Not done: Binned, several
-groups in one layer, subgrouping, the Offset tab.
+groups in one layer, subgrouping.
+
+Offset tab (measured): rows X and Y with Multiplier and Offset boxes, and a note that offsets take effect
+when the layer's Stack tab is set to Individual with X and/or Y enabled. Sheaf shows the tab on each
+plot of a layer with several plots: the X and Y offsets of that curve (`Layer::plot_offsets`), greyed
+unless the layer stacks Individually; Multiplier is not offered.

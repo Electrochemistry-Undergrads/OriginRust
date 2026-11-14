@@ -3288,6 +3288,13 @@ fn a_dependent_group_shares_a_change_and_an_independent_one_does_not() {
     assert!(!layer.group_style.dependent);
     assert!(layer.plots[0].decor.drop.horizontal.on);
     assert!(layer.plots[1..].iter().all(|q| !q.decor.drop.horizontal.on), "the others are left alone");
+    // Each member has an Offset tab; it is greyed until the layer stacks Individually.
+    pause(&mut h);
+    open(&mut h);
+    click(&mut h, "Offset");
+    assert!(has_label(&h, "X") && has_label(&h, "Y"));
+    click(&mut h, "Cancel");
+    assert!(project(&h).graph(graph).unwrap().layers[0].plot_offsets.is_empty(), "looking changes nothing");
 }
 
 #[test]

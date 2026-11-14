@@ -71,6 +71,8 @@ pub enum Cmd {
     ImportWizard,
     /// Edit > Go to... (Ctrl+G, in a workbook; in a graph the same keys export).
     GoToCell,
+    /// Statistics > Power and Sample Size > one of the tests.
+    Power(sheaf_core::analysis::PowerKind),
     /// Edit > Find in Sheets... (Ctrl+F) in a workbook.
     FindInSheets,
     /// Edit > Replace... (Ctrl+H) in a workbook.
@@ -1078,7 +1080,15 @@ fn statistics_menu() -> Vec<Entry> {
         ),
         grey_sub("&Survival Analysis", &["Kaplan-Meier Estimator..."]),
         grey_sub("&Multivariate Analysis", &["Principal Component Analysis...", "K-Means Cluster Analysis..."]),
-        grey_sub("&Power and Sample Size", &["Power and Sample Size..."]),
+        sub(
+            "&Power and Sample Size",
+            vec![
+                item("One-Sample t-Test...", Cmd::Power(sheaf_core::analysis::PowerKind::OneSampleT)),
+                item("Two-Sample t-Test...", Cmd::Power(sheaf_core::analysis::PowerKind::TwoSampleT)),
+                item("Paired Sample t-Test...", Cmd::Power(sheaf_core::analysis::PowerKind::PairedT)),
+                item("One-Way ANOVA...", Cmd::Power(sheaf_core::analysis::PowerKind::Anova)),
+            ],
+        ),
         sep(),
         grey("&ROC Curve..."),
         sep(),
@@ -1842,6 +1852,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
         Cmd::ImportWizard => Action::ImportWizard,
         Cmd::GoToCell => Action::GoToCell(book?),
+        Cmd::Power(kind) => Action::Power(*kind),
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),

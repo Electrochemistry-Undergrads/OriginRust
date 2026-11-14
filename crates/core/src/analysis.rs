@@ -1137,10 +1137,12 @@ fn run_peak_chain(
 
 mod curves;
 mod manip;
+mod power;
 mod statistics;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };
+pub use power::{PowerGoal, PowerKind, PowerOutput, PowerSpec, power_analysis};
 pub use sheaf_calc::{DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions};
 
 impl Project {

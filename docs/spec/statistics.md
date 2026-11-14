@@ -171,7 +171,7 @@ the standard error `sqrt(MSE (1/n_i + 1/n_j))` with MSE and its degrees of freed
 marginal means are not adjusted for the other factor, which only matters in unbalanced designs). The statistic of
 the t methods keeps the sign of the difference, the Tukey q and the Scheffe F do not. Origin's library numbers
 the methods 1 Tukey, 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe, which differs from the order in its header comment.
-Holm methods and Dunnett are not built. For constant data Origin's 0/0 turns into p = 0 and "significant" for
+Holm methods are in the one-way ANOVA only (section 11); Dunnett is not built. For constant data Origin's 0/0 turns into p = 0 and "significant" for
 equal means; Sheaf says p = 1.
 
 **Sheet.** `ANOVA2Way1`: one table of N, mean, SD and SEM for each level of A, each level of B, each cell (with the
@@ -341,6 +341,82 @@ Paired Sample Sign Test and Statistics > Descriptive Statistics > Statistics on 
 (labels from the X-Function descriptions). Not done: the indexed input forms, the outlier box plot (`box`),
 Origin's report layout, outlier tests that remove several points in turn.
 
+## 11 Holm comparisons of the one-way ANOVA
+
+Origin's statistics library (the function the one-way ANOVA tool calls for its means comparisons) numbers the
+methods 1 Tukey, 2 Bonferroni, 3 Sidak, 4 Fisher, 5 Scheffe, 6 Dunnett, 7 Bonferroni-Holm, 8 Sidak-Holm.
+Run from `tools/origin-ref/stats4/` (helper `stats4-ref.c`, generator `g1.py`, raw output `holm1.out.txt`, fixture
+`crates/calc/tests/fixtures/stats4_origin.rs` by `make-fixture1.py`, test `crates/calc/tests/origin_stats4_tests.rs`):
+28 inputs of ours (2 to 8 groups, unequal sizes, a group of one number, tied means, missing values, three
+significance levels, and four found by a search for the case below), each with both Holm methods: 54 comparison
+tables, 386 pairs.
+
+- Every pair gets the plain pairwise t statistic `(mean_j - mean_i) / sqrt(MSE (1/n_i + 1/n_j))` (**with its sign**,
+  unlike the other methods in the one-way table, which show the size) and its unadjusted two-sided p-value on
+  the error degrees of freedom.
+- The table is **sorted by that p-value**, smallest first (the pair index column shows where each came from; pairs
+  are numbered (1,2), (1,3), (2,3), (1,4), ... from 0). Exactly equal p-values (symmetric data) come in an order we
+  could not predict from the data; Sheaf keeps the pair order.
+- The pair of rank `r` (from 0, `m` pairs in all) is judged at `alpha / (m - r)` (Bonferroni-Holm) or
+  `1 - (1 - alpha)^(1 / (m - r))` (Sidak-Holm); these levels are returned in an extra column. The verdict is the
+  step-down rule: significant only if this pair and every pair before it in the list have `p < level`. (The four
+  searched inputs have a second p-value below its level after a first that is not; Origin says "not significant"
+  for both.)
+- No confidence limits (Sheaf shows the level column in their place); the degrees-of-freedom column is empty (0).
+- Constant data (error mean square 0): the statistic and p-value are blank and every pair is "significant"; Sheaf
+  says p = 1 and not significant, as for the other methods.
+- Agreement: mean differences and standard errors to 1e-12 relative; the statistic to 1e-12; p-values to 9.1e-6
+  relative (Origin's t tail); levels to 1e-9; all 386 verdicts equal.
+- The two-way ANOVA library call with the Holm numbers returns the sorted unadjusted statistics and p-values but
+  no levels and no verdicts (the field is always 0), so Sheaf offers Holm in the one-way ANOVA only (menu, `sheaf
+  analyze anova --comparison holm-bonferroni | holm-sidak`) and refuses it in the two-way ANOVA.
+- **Dunnett** (method 6): the same call returns the differences and standard errors but no statistic, p-value or
+  limits for any input, in the one-way and the two-way library functions, and the library has no way to name the
+  control group. The installed Origin gave nothing to copy, so Dunnett is not built.
+
+## 12 Power and sample size
+
+Origin's Statistics > Power and Sample Size tools (`PSS_tTest1`, `PSS_tTest2`, `PSS_tTestPair`, `PSS_ANOVA1`; also
+proportion and variance tests, not built). The X-Functions themselves refused every call from a script (all
+returned an error for any argument form we tried), so their report layout was not read; the numbers come from the
+statistics library functions they call (public functions `ocmath_tTest_powers1`, `ocmath_tTest_samplesize`,
+`ocmath_two_sample_tTest_powers1` and `_samplesize`, the `_pair` versions, `ocmath_anova_powers1` and
+`ocmath_anova_samplesize`), run from `tools/origin-ref/stats4/` (helper `stats4-pss.c`, generator `g2.py`, raw output
+`pss4.out.txt`, fixture `crates/calc/tests/fixtures/stats4_power_origin.rs` by `make-fixture2.py`, test
+`crates/calc/tests/origin_stats4_power.rs`). 91 runs of ours: 383 powers and 227 sample sizes compared, all four tests,
+both tails, significance levels from 1e-8 to 0.5, effects from 0.007 to 4 standard deviations.
+
+- **Power** is the textbook value: one-sample and paired `df = n - 1`, noncentrality `delta / sd sqrt(n)`; two samples
+  of `n` each `df = 2n - 2`, noncentrality `delta / sd sqrt(n / 2)`; the rejection region is `|t| > t(1 - alpha/2)`
+  (two-sided) or `t > t(1 - alpha)` (one-sided), power `P(T' in the region)` with `T'` noncentral t. The direction
+  of the difference does not matter (also one-sided: the power of the upper test for `|delta|`). ANOVA with `k` groups
+  of `n`: `F' ` noncentral F with `k - 1`, `k (n - 1)` degrees of freedom and noncentrality `n css / sd^2`, where `css`
+  is the sum of squared deviations of the group means from their mean and `sd` the root of the error mean square.
+  Sheaf computes the noncentral t with Lenth's algorithm AS 243 and the noncentral F as a Poisson mixture of incomplete
+  beta functions.
+- Origin's own powers are not exact: they differ from the exact value by up to 2.5e-5 (one sample, n = 5: 0.2113505, the
+  exact value is 0.2113345; equal means give 0.0500001). The test accepts 3e-5.
+- Equal means give a power just above alpha, not an error. The ANOVA with one observation per group has power 1.
+- **Sample size**: the smallest whole number of observations (per group) whose power reaches the wanted power, from
+  2 up. All 227 sizes agree; at 353 200 (effect 0.007 sd) Origin is 16 above the exact smallest size (353 184), so
+  sizes above 10 000 are compared to 1e-4. The result list also gives the **lowest power**, the power of 2
+  observations (not for the ANOVA, where Origin gives -1).
+- Errors (return codes): `-151` invalid input: a standard deviation not above 0, a significance level outside (0, 1),
+  a t-test sample size that is not a whole number (12.5) or any size in a list that is, fewer than 2 groups, a number of
+  groups that is not whole, `css` = 0; a sample size below 2 for a t test is not an error but leaves its cell
+  empty (return 0); `-187` the means are equal (no sample size exists); `-204` a wanted power of 0 or 1 or outside; `-186` a wanted power
+  that 2 observations already reach: the table is still filled for the other powers, the cell of that one holds 2 for the
+  two-sample test and is empty for the one-sample, paired and ANOVA tests. Sheaf reports the same cases in words
+  (`PowerError`, notes).
+- One unexplained case is not copied: a two-sample test with a difference of 45 standard deviations returned lowest power 1
+  and sample size 3 with return code 0 (all wanted powers), while 15 standard deviations gives -186 and size 2 as above;
+  Origin's noncentral t seems to fail there. Sheaf gives -186-style size 2.
+- Sheaf: `sheaf_calc::{t_power, t_powers, t_sample_sizes, anova_power, anova_powers, anova_sample_sizes, pnt, pnf}`;
+  `Project::power_analysis` (new workbook `Book<n>` with the columns Sample Size and Power) and
+  `analysis::power_analysis`; `sheaf analyze power --test one-sample|two-sample|paired|anova --sizes ... | --powers ...`
+  (no data file); Statistics > Power and Sample Size > the four tests (a small window; the report layout of Origin's tool
+  is not copied).
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
@@ -378,9 +454,9 @@ Not verified or not done:
 - The automatic bin size is a rule fitted to 600 measured cases (593 agree).
 - Origin's own sheet layout and graph (report sheets with several tables, histogram without gaps,
   distribution curve on the histogram, normal probability plot) are not copied.
-- No test of equal variance (Levene, F test) next to the two-sample t-test, no sample size or power
-  analysis, no t-test from summary data, no row-wise t-tests.
-- Three-way and repeated measures ANOVA, Holm and Dunnett comparisons, power analysis and means plots of the
+- No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
+- Power and sample size: only the t tests and the one-way ANOVA (section 12); no tests of proportions or variances, no power curve.
+- Three-way and repeated measures ANOVA, Dunnett comparisons and means plots of the
   ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).

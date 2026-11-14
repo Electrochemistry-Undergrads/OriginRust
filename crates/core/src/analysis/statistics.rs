@@ -337,6 +337,7 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         let stat_name = match method {
             MeansComparison::Tukey => "q",
             MeansComparison::Scheffe => "F",
+            m if m.is_holm() => "t",
             _ => "|t|",
         };
         let c = |f: fn(&sheaf_calc::Comparison) -> f64| comparisons.iter().map(f).collect::<Vec<f64>>();
@@ -348,10 +349,18 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
         on_sheet.push(number_column("SE", &units, c(|c| c.se)));
         on_sheet.push(number_column(&format!("Statistic ({stat_name})"), "", c(|c| c.stat)));
         on_sheet.push(number_column("Prob", "", c(|c| c.p)));
-        on_sheet.push(number_column("LCL", &units, c(|c| c.lcl)));
-        on_sheet.push(number_column("UCL", &units, c(|c| c.ucl)));
+        if method.is_holm() {
+            // The step-down methods give no interval, but the level each pair was judged at.
+            on_sheet.push(number_column("Alpha", "", c(|c| c.alpha)));
+        } else {
+            on_sheet.push(number_column("LCL", &units, c(|c| c.lcl)));
+            on_sheet.push(number_column("UCL", &units, c(|c| c.ucl)));
+        }
         on_sheet.push(number_column("Significant", "", c(|c| f64::from(u8::from(c.significant)))));
         notes.push(format!("{} means comparison at the {} level:", method.label(), num(spec.alpha)));
+        if method.is_holm() {
+            notes.push("  (sorted by p-value; each pair is judged at the level of its rank, and after the first pair that is not significant no later pair is)".to_string());
+        }
         for c in &comparisons {
             notes.push(format!(
                 "  {} - {}: difference {}, p = {}, {}",
@@ -520,6 +529,12 @@ pub(super) fn two_way_anova(
     rows: RowRange,
 ) -> Result<Output, AnalysisError> {
     check_alpha(spec.alpha)?;
+    if spec.comparison.is_some_and(MeansComparison::is_holm) {
+        return Err(AnalysisError::BadOption(
+            "the Holm comparisons are only available in the one-way ANOVA (Origin's two-way numbers for them were not checked)"
+                .into(),
+        ));
+    }
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
     fn numeric(c: &Column) -> Result<&[f64], AnalysisError> {
         c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
@@ -1371,6 +1386,20 @@ mod tests {
         let ws = &p.workbook(none.book).unwrap().sheets[none.new_sheet.unwrap()];
         assert!(!ws.columns.iter().any(|c| c.long_name == "Significant"));
         assert!(p.analyze(&request(&ids[..1], Tool::Anova(AnovaSpec::default()))).is_err());
+    }
+
+    #[test]
+    fn holm_comparison_has_alpha_column_and_no_interval_and_is_refused_by_the_two_way_anova() {
+        let (mut p, _, ids) = project();
+        let spec = AnovaSpec { comparison: Some(MeansComparison::HolmBonferroni), ..Default::default() };
+        let r = run(&mut p, &ids, Tool::Anova(spec));
+        let alpha = cell(&p, &r, "Alpha");
+        assert!((alpha[0] - 0.05 / 3.0).abs() < 1e-12 && (alpha[2] - 0.05).abs() < 1e-12, "{alpha:?}");
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(!ws.columns.iter().any(|c| c.long_name == "LCL"));
+        let (mut p2, ids2) = two_way_project();
+        let bad = TwoWayAnovaSpec { comparison: Some(MeansComparison::HolmSidak), ..Default::default() };
+        assert!(p2.analyze(&request(&ids2, Tool::TwoWayAnova(bad))).is_err());
     }
 
     #[test]

@@ -265,8 +265,7 @@ struct StatsOptions {
     equal_variance: bool,
     tail: Tail,
     alpha: f64,
-    /// Index into `COMPARISONS`.
-    comparison: usize,
+    comparison: Option<MeansComparison>,
     /// 0 automatic, 1 bin size, 2 number of bins.
     bins: usize,
     bin_size: f64,
@@ -309,7 +308,7 @@ impl Default for StatsOptions {
             equal_variance: true,
             tail: Tail::Two,
             alpha: 0.05,
-            comparison: 0,
+            comparison: Some(MeansComparison::Tukey),
             bins: 0,
             bin_size: 1.0,
             bin_count: 10,
@@ -335,14 +334,44 @@ impl Default for StatsOptions {
     }
 }
 
-const COMPARISONS: [(&str, Option<MeansComparison>); 6] = [
-    ("Tukey", Some(MeansComparison::Tukey)),
-    ("Bonferroni", Some(MeansComparison::Bonferroni)),
-    ("Sidak", Some(MeansComparison::Sidak)),
-    ("Fisher LSD", Some(MeansComparison::FisherLsd)),
-    ("Scheffe", Some(MeansComparison::Scheffe)),
-    ("None", None),
+/// The means comparisons of the one-way ANOVA, then "None".
+const COMPARISONS_ONE_WAY: [Option<MeansComparison>; 8] = [
+    Some(MeansComparison::Tukey),
+    Some(MeansComparison::Bonferroni),
+    Some(MeansComparison::Sidak),
+    Some(MeansComparison::FisherLsd),
+    Some(MeansComparison::Scheffe),
+    Some(MeansComparison::HolmBonferroni),
+    Some(MeansComparison::HolmSidak),
+    None,
 ];
+
+/// The means comparisons of the two-way ANOVA (no Holm methods there), then "None".
+const COMPARISONS_TWO_WAY: [Option<MeansComparison>; 6] = [
+    Some(MeansComparison::Tukey),
+    Some(MeansComparison::Bonferroni),
+    Some(MeansComparison::Sidak),
+    Some(MeansComparison::FisherLsd),
+    Some(MeansComparison::Scheffe),
+    None,
+];
+
+fn comparison_label(c: Option<MeansComparison>) -> &'static str {
+    c.map_or("None", MeansComparison::label)
+}
+
+fn comparison_combo(
+    ui: &mut egui::Ui,
+    id: &str,
+    current: &mut Option<MeansComparison>,
+    list: &[Option<MeansComparison>],
+) {
+    egui::ComboBox::from_id_salt(id).selected_text(comparison_label(*current)).show_ui(ui, |ui| {
+        for c in list {
+            ui.selectable_value(current, *c, comparison_label(*c));
+        }
+    });
+}
 
 pub enum AnalysisOutcome {
     Open,
@@ -364,7 +393,7 @@ enum OutputChoice {
 }
 
 /// Undo steps made by one window share a token, so one Undo reverts all its Apply runs.
-fn next_undo_token() -> u64 {
+pub(crate) fn next_undo_token() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)
@@ -737,7 +766,7 @@ impl AnalysisDialog {
                 alpha: self.stats.alpha,
             }),
             AnalysisKind::Anova => {
-                Tool::Anova(AnovaSpec { alpha: self.stats.alpha, comparison: COMPARISONS[self.stats.comparison].1 })
+                Tool::Anova(AnovaSpec { alpha: self.stats.alpha, comparison: self.stats.comparison })
             }
             AnalysisKind::Histogram => Tool::Histogram(HistogramSpec {
                 freq: FreqOptions {
@@ -769,7 +798,7 @@ impl AnalysisDialog {
                 Tool::TwoWayAnova(TwoWayAnovaSpec {
                     layout,
                     interaction: self.stats.two_way_interaction,
-                    comparison: COMPARISONS[self.stats.comparison].1,
+                    comparison: self.stats.comparison,
                     alpha: self.stats.alpha,
                 })
             }
@@ -1282,13 +1311,7 @@ impl AnalysisDialog {
                 ui.label("Every chosen column is a group.");
                 ui.horizontal(|ui| {
                     ui.label("Means comparison");
-                    egui::ComboBox::from_id_salt("anova_comparison")
-                        .selected_text(COMPARISONS[st.comparison].0)
-                        .show_ui(ui, |ui| {
-                            for (i, (label, _)) in COMPARISONS.iter().enumerate() {
-                                ui.selectable_value(&mut st.comparison, i, *label);
-                            }
-                        });
+                    comparison_combo(ui, "anova_comparison", &mut st.comparison, &COMPARISONS_ONE_WAY);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Significance level");
@@ -1337,15 +1360,12 @@ impl AnalysisDialog {
                     ui.weak("The factor columns may hold text or numbers; one row of the sheet is one observation.");
                 }
                 ui.checkbox(&mut st.two_way_interaction, "Interaction of the two factors");
+                if st.comparison.is_some_and(MeansComparison::is_holm) {
+                    st.comparison = Some(MeansComparison::Tukey);
+                }
                 ui.horizontal(|ui| {
                     ui.label("Means comparison");
-                    egui::ComboBox::from_id_salt("anova2_comparison")
-                        .selected_text(COMPARISONS[st.comparison].0)
-                        .show_ui(ui, |ui| {
-                            for (i, (label, _)) in COMPARISONS.iter().enumerate() {
-                                ui.selectable_value(&mut st.comparison, i, *label);
-                            }
-                        });
+                    comparison_combo(ui, "anova2_comparison", &mut st.comparison, &COMPARISONS_TWO_WAY);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Significance level");

@@ -698,6 +698,14 @@ pub enum SignRankKindArg {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PowerTestArg {
+    OneSample,
+    TwoSample,
+    Paired,
+    Anova,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ComparisonArg {
     Tukey,
     Bonferroni,
@@ -705,6 +713,10 @@ pub enum ComparisonArg {
     /// Fisher's least significant difference.
     Lsd,
     Scheffe,
+    /// Bonferroni-Holm step-down (one-way ANOVA only).
+    HolmBonferroni,
+    /// Sidak-Holm step-down (one-way ANOVA only).
+    HolmSidak,
     /// No means comparison.
     None,
 }
@@ -1246,6 +1258,43 @@ pub enum AnalyzeTool {
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
+    },
+    /// Power or sample size of a t test or the one-way ANOVA (Origin's Power and Sample Size tools). Needs no
+    /// data file: give --sizes to get the power of those sample sizes, or --powers to get the smallest sample
+    /// sizes (per group for two samples and the ANOVA) that reach those powers.
+    Power {
+        #[arg(long, value_enum, default_value_t = PowerTestArg::TwoSample)]
+        test: PowerTestArg,
+        /// Sample sizes to find the power of, comma-separated.
+        #[arg(long, value_delimiter = ',', conflicts_with = "powers")]
+        sizes: Vec<f64>,
+        /// Wanted powers (between 0 and 1) to find sample sizes for, comma-separated.
+        #[arg(long, value_delimiter = ',')]
+        powers: Vec<f64>,
+        /// t tests: the mean (first group), or the mean of the sample; with --mean2 the hypothesized or second
+        /// mean (paired: the mean difference with --mean2 0).
+        #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
+        mean1: f64,
+        #[arg(long, default_value_t = 1.0, allow_negative_numbers = true)]
+        mean2: f64,
+        /// Standard deviation (pooled; of the differences when paired; the root of the error mean square for the ANOVA).
+        #[arg(long, default_value_t = 1.0)]
+        sd: f64,
+        /// ANOVA: the number of groups.
+        #[arg(long, default_value_t = 3.0)]
+        levels: f64,
+        /// ANOVA: the corrected sum of squares of the group means.
+        #[arg(long, default_value_t = 1.0)]
+        css: f64,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// One-sided (upper) test instead of two-sided.
+        #[arg(long)]
+        one_sided: bool,
+        /// Write the table to this file (CSV or text, by extension).
+        #[arg(long)]
+        export: Option<std::path::PathBuf>,
     },
     /// Two-way ANOVA. Indexed data (default): --y FACTOR_A,FACTOR_B,DATA names three columns, the first two
     /// holding the levels (text or numbers) of each row. With --raw every --y column is one cell of the

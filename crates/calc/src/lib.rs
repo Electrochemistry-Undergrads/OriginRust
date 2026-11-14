@@ -28,6 +28,7 @@ pub mod nptests;
 pub mod outlier;
 pub mod peakchain;
 pub mod peaks;
+pub mod power;
 pub mod smooth;
 pub mod stats;
 mod util;
@@ -71,5 +72,9 @@ pub use peakchain::{
     auto_minima_anchors, find_peak_indices, integrate_peaks,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
+pub use power::{
+    PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
+    t_sample_sizes,
+};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

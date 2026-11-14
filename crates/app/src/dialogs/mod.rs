@@ -17,6 +17,7 @@ pub mod import;
 pub mod import_wizard;
 pub mod manip_options;
 pub mod math_curves;
+pub mod power;
 pub mod reshape;
 pub mod row_filter;
 pub mod set_values;

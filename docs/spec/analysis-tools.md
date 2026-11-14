@@ -838,7 +838,7 @@ cross spectrum.
 ### 13.4 Decimation (`decimate`)
 
 Analysis > Signal Processing > Decimation. Options (from the X-Function file): `iy` (X and Y
-range), `d` (Resample Factor, default 2; the dialog slider runs 5 to 205 but smaller factors work),
+range), `d` (Resample Factor, default 2; smaller factors work),
 `filter` (`none` No Filter, `ave` Moving Average Filter, `fir` FIR Filter; default none), `order`
 (FIR order, default 30), `plot` (preview, no data), `oy` (new X and Y columns, "Decimated X1" and
 "Decimated Y1" by default) and `newsize` (an output value: assigning it from LabTalk is refused).
@@ -869,6 +869,17 @@ fixture; earlier `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`; 
   and end rule. Checked against Origin for orders 8 to 12, 50, 58 to 60 and the default 30 on up to
   100 points. The name FIR is Origin's; the filter it computes is this triangle, there is no
   designed low pass in the numbers.
+- `fir` with `d` times the X step at 0.5 or below (probes p12 to p18; fresh books, the first call,
+  default order and `order:=30`, and an output sheet made beforehand all agree, so the earlier p4
+  values were not a leftover): Origin does not return the triangle. For 60 points at X step 0.5,
+  `d = 1`, the values start 3.8274402148869662, 5.6599095268221635, 7.2131135270130722 (the
+  triangle: 4.999, 5.297, 5.570). The kernel is symmetric over the same 61 rows, sums to 1, has a
+  non-negative frequency response above 1 in places, and a centre weight of 5/31 at step 0.5, 13/31
+  at 0.25, 33/31 at 0.1 (31/961 = 1/31 at step 1 and above); it depends on `d` times the step (`d = 2`
+  at 0.25 gives the same values as `d = 1` at 0.5 at every other row). Above 0.5 (0.501, 0.51, up to
+  2, `d` 1 to 3) the result is the triangle exactly. The moving average has no such case. The
+  oscillating kernel is not worked out, so Sheaf refuses FIR there (an error, no values) instead of
+  returning the triangle; the dialog and command line show the same message.
 - Not measured: missing values inside the input (the probes could not make a blank cell through
   LabTalk; Sheaf refuses them, as in section 13), and `plot`.
 

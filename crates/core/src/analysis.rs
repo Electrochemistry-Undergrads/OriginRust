@@ -1996,6 +1996,9 @@ impl Project {
                 for inp in &inputs {
                     let y = signal_values(inp.ys(), &inp.short)?;
                     let x = &inp.xs()[..y.len()];
+                    if x.iter().step_by(spec.options.factor.max(1)).any(|v| !v.is_finite()) {
+                        return Err(AnalysisError::BadOption(format!("column {}: X has missing values", inp.short)));
+                    }
                     let (dx, dy) = calc::decimate(x, &y, &spec.options)
                         .map_err(|e| AnalysisError::BadOption(format!("column {}: {e}", inp.short)))?;
                     let o = &spec.options;
@@ -3524,6 +3527,23 @@ mod tests {
             p.analyze(&request(&[ramp], Tool::Decimate(DecimateSpec { options: big }))),
             Err(AnalysisError::BadOption(_))
         ));
+    }
+
+    #[test]
+    fn decimation_refuses_a_missing_x_in_a_kept_row_only() {
+        let mut p = Project::new();
+        let book = p.add_workbook("gaps");
+        let mut x: Vec<f64> = (0..40).map(f64::from).collect();
+        x[4] = f64::NAN;
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 40])).unwrap();
+        let run = |p: &mut Project, factor| {
+            let options = DecimateOptions { factor, ..Default::default() };
+            p.analyze(&request(&[y], Tool::Decimate(DecimateSpec { options })))
+        };
+        // Row 4 is kept by a factor of 2 but skipped by a factor of 3.
+        assert!(matches!(run(&mut p, 2), Err(AnalysisError::BadOption(_))));
+        assert!(run(&mut p, 3).is_ok());
     }
 
     #[test]

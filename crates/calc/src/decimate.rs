@@ -13,6 +13,11 @@
 //!   row, missing rows before the start counted as 0.
 //! * `fir` is the same triangle with a half width of `order` (default 30), whatever the factor.
 //!   Origin takes an order from 8 to 60.
+//! * The triangle is what Origin computes for the FIR filter only while `d` times the X step
+//!   is above 0.5 (checked from 0.501 up to steps of 2, and `d` from 1 to 3). At 0.5 or below
+//!   (60 points, `d = 1` at step 0.5, 0.25 and 0.1; `d = 2` at step 0.25) Origin's FIR result
+//!   is another, oscillating filter that depends on that product and is not reproduced here:
+//!   Sheaf refuses it instead of returning the triangle. The moving average is not affected.
 //! * At the end the second pass reads the first pass only up to the last row, so the kept row
 //!   whose window reaches past the end (the last one, when `n` is a multiple of `d`) loses the
 //!   weight of the rows past the end: the filtered value of row `i` is the mean of
@@ -54,6 +59,8 @@ pub const ORDER_RANGE: (usize, usize) = (8, 60);
 /// From this factor on Origin wants `MIN_POINTS_PER_FACTOR * d` points.
 pub const BIG_FACTOR: usize = 3;
 pub const MIN_POINTS_PER_FACTOR: usize = 10;
+/// Origin's FIR is the plain triangle only above this `d` times the X step.
+pub const FIR_MIN_SPAN: f64 = 0.5;
 
 /// What Origin's `decimate` refuses.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +72,8 @@ pub enum DecimateError {
     FactorTooBig(usize, usize),
     /// The FIR order is outside 8 to 60.
     BadOrder(usize),
+    /// FIR with `d` times the X step at 0.5 or below, which Origin filters differently.
+    FirStepTooSmall,
 }
 
 impl std::fmt::Display for DecimateError {
@@ -74,6 +83,9 @@ impl std::fmt::Display for DecimateError {
             DecimateError::ZeroFactor => write!(f, "the factor must be at least 1"),
             DecimateError::FactorTooBig(d, need) => {
                 write!(f, "a factor of {d} needs at least {need} points")
+            }
+            DecimateError::FirStepTooSmall => {
+                write!(f, "the FIR filter is not reproduced when the factor times the X step is {FIR_MIN_SPAN} or less")
             }
             DecimateError::BadOrder(o) => {
                 write!(f, "the FIR order {o} is outside {} to {}", ORDER_RANGE.0, ORDER_RANGE.1)
@@ -87,7 +99,7 @@ impl std::error::Error for DecimateError {}
 /// The smoothed value at the `kept` rows of `y` for the triangle of half width `h`.
 fn triangle(y: &[f64], h: usize, kept: impl Iterator<Item = usize>) -> Vec<f64> {
     let n = y.len();
-    let b = (h + 1) as f64;
+    let b = h.saturating_add(1) as f64;
     // a[t]: mean of rows t-h..=t, rows before the start 0, defined for t < n only.
     let mut a = vec![0.0; n];
     let mut run = 0.0;
@@ -99,7 +111,7 @@ fn triangle(y: &[f64], h: usize, kept: impl Iterator<Item = usize>) -> Vec<f64> 
         a[t] = run / b;
     }
     kept.map(|i| {
-        let end = (i + h).min(n - 1);
+        let end = i.saturating_add(h).min(n - 1);
         a[i..=end].iter().sum::<f64>() / b
     })
     .collect()
@@ -116,8 +128,9 @@ pub fn decimate(x: &[f64], y: &[f64], options: &DecimateOptions) -> Result<(Vec<
     if n < 2 {
         return Err(DecimateError::TooFewPoints);
     }
-    if d >= BIG_FACTOR && n < MIN_POINTS_PER_FACTOR * d {
-        return Err(DecimateError::FactorTooBig(d, MIN_POINTS_PER_FACTOR * d));
+    // `n < 10 * d` without the product, which overflows for a huge factor.
+    if d >= BIG_FACTOR && (d > n || n / MIN_POINTS_PER_FACTOR < d) {
+        return Err(DecimateError::FactorTooBig(d, d.saturating_mul(MIN_POINTS_PER_FACTOR)));
     }
     let rows = || (0..n).step_by(d);
     let ys = match options.filter {
@@ -126,6 +139,10 @@ pub fn decimate(x: &[f64], y: &[f64], options: &DecimateOptions) -> Result<(Vec<
         DecimateFilter::Fir => {
             if !(ORDER_RANGE.0..=ORDER_RANGE.1).contains(&options.order) {
                 return Err(DecimateError::BadOrder(options.order));
+            }
+            let step = (x[n - 1] - x[0]).abs() / (n - 1) as f64;
+            if step * (d as f64) <= FIR_MIN_SPAN * (1.0 + 1e-9) {
+                return Err(DecimateError::FirStepTooSmall);
             }
             triangle(&y[..n], options.order, rows())
         }
@@ -227,7 +244,10 @@ mod tests {
     fn what_origin_refuses_is_refused() {
         let o = |factor, filter, order| DecimateOptions { factor, filter, order };
         let none = DecimateFilter::None;
-        let ok = |n: usize, o: DecimateOptions| decimate(&vec![0.0; n], &vec![0.0; n], &o);
+        let ok = |n: usize, o: DecimateOptions| {
+            let x: Vec<f64> = (0..n).map(|i| i as f64).collect();
+            decimate(&x, &vec![0.0; n], &o)
+        };
         assert_eq!(ok(1, o(2, none, 30)), Err(DecimateError::TooFewPoints));
         assert!(ok(2, o(2, none, 30)).is_ok());
         assert_eq!(ok(12, o(0, none, 30)), Err(DecimateError::ZeroFactor));
@@ -239,5 +259,47 @@ mod tests {
         assert_eq!(ok(60, o(2, DecimateFilter::Fir, 7)), Err(DecimateError::BadOrder(7)));
         // The order does not matter without the FIR filter.
         assert!(ok(60, o(2, none, 1)).is_ok());
+    }
+
+    #[test]
+    fn a_huge_factor_is_refused_not_overflowed() {
+        let o = DecimateOptions { factor: usize::MAX, filter: DecimateFilter::MovingAverage, order: 30 };
+        let x: Vec<f64> = (0..100).map(f64::from).collect();
+        assert_eq!(decimate(&x, &x, &o), Err(DecimateError::FactorTooBig(usize::MAX, usize::MAX)));
+        let o = DecimateOptions { factor: usize::MAX / 5, ..o };
+        assert!(matches!(decimate(&x, &x, &o), Err(DecimateError::FactorTooBig(..))));
+    }
+
+    // Probe p14 (re-workspace scratch): 60 points at X = 1, 2, .. 60, `d = 1`, default order.
+    const P4: [f64; 60] = [
+        4.0, 18.0, 2.0, 8.0, 3.0, 15.0, 14.0, 15.0, 20.0, 12.0, 6.0, 3.0, 15.0, 0.0, 12.0, 13.0, 19.0, 0.0, 14.0, 8.0,
+        7.0, 18.0, 3.0, 10.0, 0.0, 0.0, 0.0, 20.0, 17.0, 0.0, 12.0, 6.0, 13.0, 0.0, 16.0, 7.0, 14.0, 15.0, 17.0, 7.0,
+        11.0, 7.0, 7.0, 14.0, 9.0, 0.0, 13.0, 17.0, 20.0, 3.0, 5.0, 20.0, 9.0, 3.0, 10.0, 16.0, 13.0, 16.0, 6.0, 9.0,
+    ];
+
+    #[test]
+    fn fir_with_factor_one_is_the_order_30_triangle() {
+        let x: Vec<f64> = (1..=60).map(f64::from).collect();
+        let o = DecimateOptions { factor: 1, filter: DecimateFilter::Fir, order: 30 };
+        let (_, y) = decimate(&x, &P4, &o).unwrap();
+        assert_eq!(y.len(), 60);
+        close(&y[..3], &[4.9989594172736727, 5.2965660770031215, 5.5702393340270548]);
+        close(&y[28..32], &[9.4578563995837648, 9.4984391259105063, 9.2112382934443264, 8.9115504682622237]);
+        close(&y[57..], &[1.0145681581685744, 0.66389177939646193, 0.327783558792924]);
+    }
+
+    #[test]
+    fn fir_is_refused_where_origin_filters_differently() {
+        let fir = |factor| DecimateOptions { factor, filter: DecimateFilter::Fir, order: 30 };
+        let at = |step: f64, factor| {
+            let x: Vec<f64> = (0..60).map(|i| 1.0 + step * i as f64).collect();
+            decimate(&x, &P4, &fir(factor))
+        };
+        // Origin's own result at step 0.5 starts 3.8274402148869662, 5.6599095268221635, not the triangle.
+        assert_eq!(at(0.5, 1), Err(DecimateError::FirStepTooSmall));
+        assert_eq!(at(0.25, 2), Err(DecimateError::FirStepTooSmall));
+        assert!(at(0.501, 1).is_ok());
+        assert!(at(0.2, 3).is_ok());
+        assert!(at(2.0, 1).is_ok());
     }
 }

@@ -342,6 +342,84 @@ impl Default for TTestSpec {
     }
 }
 
+/// Which test of variance [`VarTestSpec`] runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VarTestKind {
+    /// Each chosen column is tested on its own against a hypothesized variance (chi-square test).
+    OneSample { variance: f64 },
+    /// Exactly two chosen columns; the ratio of their variances (first over second) against `ratio` (F test).
+    TwoSample { ratio: f64 },
+}
+
+/// What [`Tool::VarTest`] does (Origin's One-Sample and Two-Sample Test for Variance).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarTestSpec {
+    pub kind: VarTestKind,
+    pub tail: Tail,
+    /// Significance level, 0 to 1 (default 0.05).
+    pub alpha: f64,
+    /// Report the confidence intervals of `levels` (Origin's "Confidence Interval(s)", off by default).
+    pub intervals: bool,
+    /// Confidence levels in percent (Origin's default "90 95 99").
+    pub levels: Vec<f64>,
+}
+
+impl Default for VarTestSpec {
+    fn default() -> Self {
+        VarTestSpec {
+            kind: VarTestKind::OneSample { variance: 1.0 },
+            tail: Tail::Two,
+            alpha: 0.05,
+            intervals: false,
+            levels: vec![90.0, 95.0, 99.0],
+        }
+    }
+}
+
+/// Which test of proportions [`PropTestSpec`] runs. The counts are typed in (Origin's "Summarized" input).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PropTestKind {
+    /// `successes` of `size` against the proportion `proportion`.
+    OneSample { successes: u64, size: u64, proportion: f64 },
+    /// `(successes, size)` of each sample; the difference of the proportions (first minus second) against
+    /// `difference`.
+    TwoSample { first: (u64, u64), second: (u64, u64), difference: f64 },
+}
+
+/// What [`Tool::PropTest`] does (Origin's One-Sample and Two-Sample Proportion Test). It reads no data: the
+/// chosen column only says which workbook the result sheet goes to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropTestSpec {
+    pub kind: PropTestKind,
+    pub tail: Tail,
+    pub alpha: f64,
+    /// Report confidence intervals of `levels` percent.
+    pub intervals: bool,
+    pub levels: Vec<f64>,
+    /// Normal approximation (default on).
+    pub normal: bool,
+    /// Exact (binomial; Fisher for two samples) test (default off).
+    pub exact: bool,
+    /// Two samples: the standard error of the z statistic from the pooled proportion (when the hypothesized
+    /// difference is 0).
+    pub pooled: bool,
+}
+
+impl Default for PropTestSpec {
+    fn default() -> Self {
+        PropTestSpec {
+            kind: PropTestKind::OneSample { successes: 0, size: 0, proportion: 0.5 },
+            tail: Tail::Two,
+            alpha: 0.05,
+            intervals: false,
+            levels: vec![90.0, 95.0, 99.0],
+            normal: true,
+            exact: false,
+            pooled: true,
+        }
+    }
+}
+
 /// What [`Tool::Anova`] does: one-way ANOVA with each chosen column as a group.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnovaSpec {
@@ -724,6 +802,8 @@ pub enum Tool {
     PeakChain(PeakChainSpec),
     Statistics(StatisticsSpec),
     TTest(TTestSpec),
+    VarTest(VarTestSpec),
+    PropTest(PropTestSpec),
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
     /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (Origin's `twoDBinning`): the
@@ -819,6 +899,14 @@ impl Tool {
             Tool::Friedman(_) => "Friedman ANOVA",
             Tool::Grubbs(_) => "Grubbs test",
             Tool::Dixon(_) => "Dixon's Q test",
+            Tool::VarTest(spec) => match spec.kind {
+                VarTestKind::OneSample { .. } => "One-sample test for variance",
+                VarTestKind::TwoSample { .. } => "Two-sample test for variance",
+            },
+            Tool::PropTest(spec) => match spec.kind {
+                PropTestKind::OneSample { .. } => "One-sample proportion test",
+                PropTestKind::TwoSample { .. } => "Two-sample proportion test",
+            },
             Tool::DistFit(_) => "Distribution fit",
             Tool::ProbPlot(spec) => match spec.kind {
                 ProbPlotKind::Probability => "Probability plot",
@@ -853,6 +941,8 @@ impl Tool {
             Tool::PeakChain(_) => "PeakAnalysis",
             Tool::Statistics(_) => "Statistics",
             Tool::TTest(_) => "TTest",
+            Tool::VarTest(_) => "VarTest",
+            Tool::PropTest(_) => "PropTest",
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Binning2D(_) => "Binning2D",
@@ -1526,7 +1616,7 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_));
+        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_) | Tool::PropTest(_));
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1589,7 +1679,14 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }
+            Tool::PropTest(spec) => {
+                let out = statistics::prop_test(spec)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
             Tool::TTest(_)
+            | Tool::VarTest(_)
             | Tool::Anova(_)
             | Tool::Histogram(_)
             | Tool::Binning2D(_)

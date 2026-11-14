@@ -1,6 +1,6 @@
 //! The distribution tools of `Project::analyze`: distribution fit, probability plot and Q-Q plot. The numerics
 //! are in `sheaf_calc` (`distfit`); what the tools compute and report is written down in
-//! `docs/spec/statistics.md`, section 12.
+//! `docs/spec/statistics.md`, section 16.
 
 use super::statistics::num;
 use super::*;

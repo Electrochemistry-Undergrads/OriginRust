@@ -15,7 +15,7 @@
 //! Normal, lognormal and exponential have closed-form estimates; the gamma shape and the Weibull shape
 //! solve one equation in one unknown (Newton's method and bisection, to machine precision). The
 //! quantile pairs of [`probplot`] are those of `scipy.stats.probplot` (Filliben's estimate of the
-//! uniform order statistic medians). The rules are written down in `docs/spec/statistics.md`, section 12.
+//! uniform order statistic medians). The rules are written down in `docs/spec/statistics.md`, section 16.
 
 use crate::normality::{ad_normal_p, kolmogorov_cdf};
 use statrs::distribution::{ContinuousCDF, Gamma, Normal};
@@ -116,10 +116,12 @@ pub struct DistFit {
     /// Kolmogorov-Smirnov distance between the sample and the fitted distribution function.
     pub ks_d: f64,
     /// P-value of that distance for a distribution known in advance (as `scipy.stats.kstest` gives it);
-    /// parameters estimated from the same data make the true p-value smaller. For samples above 140 the
-    /// asymptotic series is used.
+    /// parameters estimated from the same data make the true p-value smaller. Exact up to 1000 numbers
+    /// (the matrix method); above that, and for a p-value below 1e-7 from 141 numbers on, the asymptotic
+    /// series is used (see `normality::kolmogorov_cdf`).
     pub ks_p: f64,
-    /// Anderson-Darling statistic `A2` against the fitted distribution.
+    /// Anderson-Darling statistic `A2` against the fitted distribution. Infinite for an exponential fit to
+    /// data that contain 0, because the fitted distribution function is 0 there.
     pub ad: f64,
     /// Approximate p-value of `A2`; only for the normal and the lognormal family (the formula of D'Agostino
     /// and Stephens for estimated mean and standard deviation, applied to A2 computed with the sample
@@ -439,8 +441,11 @@ pub fn fit(family: Family, data: &[f64]) -> Result<DistFit, FitError> {
         }
         -nf - a_sum / nf
     };
-    let ad = a_squared(&params);
-    if !(ll.is_finite() && ad.is_finite() && ks_d.is_finite()) {
+    // F(0) = 0 under the fitted exponential, so a 0 in the data makes A2 infinite (the log floor would turn
+    // it into a large but meaningless finite number).
+    let zero_in_exponential = family == Family::Exponential && x[0] == 0.0;
+    let ad = if zero_in_exponential { f64::INFINITY } else { a_squared(&params) };
+    if !(ll.is_finite() && (ad.is_finite() || zero_in_exponential) && ks_d.is_finite()) {
         return Err(FitError::Degenerate(family));
     }
     // The formula of D'Agostino and Stephens is for A2 computed with the sample standard deviation (divisor
@@ -477,9 +482,42 @@ pub fn standard_quantile(family: Family, shape: f64, p: f64) -> f64 {
         Family::Normal => Normal::new(0.0, 1.0).expect("standard normal").inverse_cdf(p),
         Family::Lognormal => (shape * Normal::new(0.0, 1.0).expect("standard normal").inverse_cdf(p)).exp(),
         Family::Exponential => -(-p).ln_1p(),
-        Family::Gamma => Gamma::new(shape, 1.0).expect("positive shape").inverse_cdf(p),
+        Family::Gamma => gamma_quantile(shape, p),
         Family::Weibull => (-(-p).ln_1p()).powf(1.0 / shape),
     }
+}
+
+/// Quantile of the standard gamma distribution (scale 1). statrs' `inverse_cdf` cannot go below about 9e-10, so
+/// for a small shape and a small `p` the answer is found here by bisection on `ln x`, with the lower-tail
+/// series `p ~ x^a / Gamma(a + 1)` as the starting bracket.
+fn gamma_quantile(shape: f64, p: f64) -> f64 {
+    let dist = Gamma::new(shape, 1.0).expect("positive shape");
+    let x0 = dist.inverse_cdf(p);
+    let accurate = |x: f64| {
+        let f = gamma_cdf_sf(shape, 1.0, x).0;
+        (f - p).abs() <= 1e-9 * p
+    };
+    if !(p > 0.0 && p < 1.0) || (x0.is_finite() && x0 > 1e-6 && accurate(x0)) {
+        return x0;
+    }
+    // Bisection on t = ln x: F is increasing in t. The lower bound is the smallest normal number.
+    let (mut lo, mut hi) = (-745.0_f64, 5.0 + (1.0 / shape).max(1.0) * 50.0);
+    if gamma_cdf_sf(shape, 1.0, lo.exp()).0 >= p {
+        // below the range of f64 numbers: the tail series, which underflows to 0
+        return ((p.ln() + ln_gamma(shape + 1.0)) / shape).exp();
+    }
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if gamma_cdf_sf(shape, 1.0, mid.exp()).0 < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+        if hi - lo < 1e-14 {
+            break;
+        }
+    }
+    (0.5 * (lo + hi)).exp()
 }
 
 /// Filliben's estimate of the medians of the uniform order statistics, as `scipy.stats.probplot` uses

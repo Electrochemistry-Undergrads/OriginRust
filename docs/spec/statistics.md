@@ -533,7 +533,9 @@ definition checked against scipy.
   one-factor structure turns the `m`-dimensional integral into
   `Int f_S(s) Int phi(x) Prod_j [Phi((c s - l_j x)/r_j) - Phi((-c s - l_j x)/r_j)] dx ds` with `r_j = sqrt(1 - l_j^2)`
   and `f_S` the density of `sqrt(chi-square(df)/df)` (Dunnett 1955; Genz and Bretz 2009 for the same reduction). Above
-  5000 degrees of freedom `s = 1`. The error of the panels used is below 1e-12.
+  5000 degrees of freedom `s = 1` (the density of `s` is then a spike at 1; the test
+  `large_degrees_of_freedom_use_the_normal_limit` bounds the jump across 5000 degrees of freedom by 1e-4, and no
+  scipy fixture reaches that range: the largest has 156). The error of the panels used is below 1e-12.
 - **Tolerances** (`scipy_stats_compare.rs`): scipy integrates the same distribution by quasi Monte Carlo, with an
   error of about 1e-4 in the p-value (fixed by a seed, but not reproducible to more digits, and poor in relative
   terms below 1e-5); our p-values are compared with scipy's to 5e-4 absolute and their confidence limits to 0.02. To pin
@@ -621,13 +623,15 @@ of fitted parameters, the fixed threshold not counted), Kolmogorov-Smirnov D and
 approximate p for normal and lognormal). The notes name the family with the lowest AIC. KS p is for a distribution
 known in advance (as `scipy.stats.kstest`), so it is too large when the parameters were estimated from the same
 data; this is said in the note. A2 is `-n - (1/n) sum (2i-1) (ln F(x_i) + ln(1 - F(x_(n+1-i))))` against the fitted
-distribution. The A2 p-value uses the D'Agostino-Stephens formula for estimated mean and SD, applied to the
+distribution; for an exponential fit to data that contain 0 it is infinite (F(0) = 0 under the fit), not a finite number
+from a floor. The A2 p-value uses the D'Agostino-Stephens formula for estimated mean and SD, applied to the
 normal and to the lognormal (on the logarithm). That formula is for A2 computed with the sample SD (divisor n - 1),
 as the Normality Test does, while the reported A2 uses the maximum likelihood SD (divisor n); the p-value is
 therefore taken from A2 recomputed with the n - 1 SD, so it equals the p-value the Normality Test gives for the
 same column (tested). No p is given for the other families. The KS p-value is exact (the matrix method) up to
-n = 1000 and, above that, the asymptotic series with Stephens' correction (off by under 0.0034 at n = 1000 and
-shrinking); for a p-value below 1e-7 the series is used from n = 140 on (accurate to 1e-9 there).
+n = 1000 and, above that, the asymptotic series with Stephens' correction (measured against scipy's `kstwo.sf`: off by up to 0.0042
+at n = 1001, 0.0030 at n = 2000 and 0.0014 at n = 10000, worst near `sqrt(n) d` = 0.67); for a p-value below 1e-7
+the series is used from n = 140 on (accurate to 1e-9 there).
 
 Result sheet `DistFit1`: columns Data, Distribution, N, Parameter 1 (name), Value 1, Parameter 2 (name),
 Value 2 (empty for the exponential), Log-likelihood, AIC, BIC, KS D, KS Prob, Anderson-Darling A2 and Prob.
@@ -640,7 +644,7 @@ Both use the plotting positions of `scipy.stats.probplot` (Filliben's medians of
 - **Q-Q plot** (`QQPlot1`): X is the theoretical quantile at the plotting position, Y the ordered data; the
   reference line is the least-squares line through the points (slope estimates the scale, intercept the location,
   `r` printed). Families with a shape (lognormal sigma, gamma, Weibull) take the shape fitted by maximum
-  likelihood; the quantiles are those of the standard form, as `probplot(..., sparams=shape)`. A linear graph.
+  likelihood; the quantiles are those of the standard form, as `probplot(..., sparams=shape)`. The gamma quantile is solved by bisection on ln x when the library routine cannot reach the lower tail (shape below about 1 with a small p; tested for shapes 0.05 to 2). A linear graph.
 - **Probability plot** (`ProbPlot1`): X is the ordered data, Y the plotting position in percent; the Y axis is a
   probability axis (normal and lognormal use the normal probability scale, Weibull and exponential the Weibull
   scale; gamma the normal one), the X axis is logarithmic for lognormal, Weibull and (positive data) exponential.

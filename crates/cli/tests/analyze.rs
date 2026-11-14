@@ -880,7 +880,7 @@ fn rank_tests_and_correlation_run_from_the_command_line() {
     assert!(!ok && err.contains("at least one of Pearson"), "{err}");
 }
 
-/// Distribution fit and probability plots (spec `statistics.md` section 12). The numbers of the calc crate are
+/// Distribution fit and probability plots (spec `statistics.md` section 16). The numbers of the calc crate are
 /// checked against scipy in `crates/calc/tests/scipy_stats_dist.rs`; here the wiring.
 #[test]
 fn distribution_fit_and_probability_plots_run_from_the_command_line() {

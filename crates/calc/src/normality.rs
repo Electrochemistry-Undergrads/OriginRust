@@ -124,7 +124,8 @@ pub fn ks_distance(data: &[f64]) -> Option<f64> {
 }
 
 /// Largest sample size for which [`kolmogorov_cdf`] uses the exact matrix method; above it the asymptotic
-/// series is used, which is off by up to 0.0034 (absolute, in the p-value) at n = 1000 and by 0.0011 at n = 10000.
+/// series is used, which is off by up to 0.0042 (absolute, in the p-value) at n = 1001, 0.0030 at n = 2000 and
+/// 0.0014 at n = 10000 (scanned against scipy's `kstwo.sf`).
 pub const KS_EXACT_MAX_N: usize = 1000;
 
 /// Above this `sqrt(n) d` the p-value is below 1e-7 and the asymptotic series (accurate to better than 1e-9

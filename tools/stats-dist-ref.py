@@ -138,8 +138,8 @@ def emit_ks():
     """P(D_n >= d) from scipy.stats.kstwo.sf, for samples above 140 (below it the matrix method is the same
     algorithm as scipy's and the fit fixtures cover it)."""
     rows = []
-    for n in [141, 200, 300, 500, 1000, 2000, 10000]:
-        for lam in [0.4, 0.8, 1.0, 1.3, 1.7, 2.1, 2.5, 2.9, 3.1, 3.5]:
+    for n in [141, 200, 300, 500, 1000, 1001, 1200, 1500, 1999, 2000, 10000]:
+        for lam in [0.4, 0.67, 0.8, 1.0, 1.3, 1.7, 2.1, 2.5, 2.9, 3.1, 3.5]:
             d = round(lam / np.sqrt(n), 6)
             rows.append(f"    KsCase {{ n: {n}, d: {f(d)}, p: {f(stats.kstwo.sf(d, n))} }},")
     return "pub const KS_P: &[KsCase] = &[\n" + "\n".join(rows) + "\n];\n"

@@ -66,13 +66,49 @@ fn kolmogorov_p_above_140_matches_scipy() {
             // in part of this range (about five digits), hence 1e-5.
             near(&format!("KS p (n={}, d={})", c.n, c.d), got, c.p, 1e-5, 1e-5);
         } else {
-            // the asymptotic series: off by 0.0034 at most just above 1000, 0.0011 at 10000
-            assert!((got - c.p).abs() < 0.0025, "KS p (n={}, d={}): got {got}, scipy gave {}", c.n, c.d, c.p);
+            // the asymptotic series (scanned against scipy over sqrt(n) d from 0.2 to 3): off by up to 0.0042
+            // at n = 1001, 0.0030 at n = 2000 and 0.0014 at n = 10000, worst near sqrt(n) d = 0.67
+            let bound = if c.n < 2000 {
+                0.0045
+            } else if c.n == 2000 {
+                0.0031
+            } else {
+                0.0015
+            };
+            assert!((got - c.p).abs() < bound, "KS p (n={}, d={}): got {got}, scipy gave {}", c.n, c.d, c.p);
         }
     }
     // the case of the review: n = 141, D = 0.05 (the old series gave 0.864 against scipy's 0.855)
     near("n=141, d=0.05", 1.0 - kolmogorov_cdf(141, 0.05), 0.854845693009663, 1e-5, 1e-5);
     near("n=200, d=0.05", 1.0 - kolmogorov_cdf(200, 0.05), 0.6802625495871704, 1e-5, 1e-5);
+}
+
+#[test]
+fn gamma_quantiles_for_a_small_shape_reach_the_lower_tail() {
+    // statrs' inverse_cdf returns a floor of about 9.3e-10 for these; the quantile must give back p.
+    for (shape, p) in [(0.1, 0.01), (0.095, 0.001), (0.3, 0.001), (0.05, 0.0035), (0.5, 0.01), (2.0, 0.001), (0.1, 0.9)]
+    {
+        let x = standard_quantile(Family::Gamma, shape, p);
+        let back = dist_cdf(Family::Gamma, &[shape, 1.0], x);
+        assert!((back - p).abs() <= 1e-8 * p, "shape {shape}, p {p}: x = {x:e}, cdf = {back}");
+    }
+    // the closed form of the lower tail: (p Gamma(a + 1))^(1 / a); Gamma(1.1) = 0.9513507698668732
+    let x = standard_quantile(Family::Gamma, 0.1, 0.01);
+    assert!((x / (0.01_f64 * 0.9513507698668732).powf(10.0) - 1.0).abs() < 1e-6, "{x:e}");
+    // the quantiles stay increasing (no flat floor) for a right-skewed column
+    let data: Vec<f64> = (1..=200).map(|i| (-(1.0 - (i as f64 - 0.5) / 200.0).ln()).powi(6)).collect();
+    let r = probplot(Family::Gamma, &data, None).unwrap();
+    assert!(r.shape.unwrap() < 0.3, "{:?}", r.shape);
+    assert!(r.theoretical.windows(2).all(|w| w[0] < w[1]), "{:?}", &r.theoretical[..4]);
+}
+
+#[test]
+fn an_exponential_fit_with_a_zero_has_an_infinite_a2() {
+    let r = dist_fit(Family::Exponential, &[0.0, 0.0, 1.0, 2.0, 0.5]).unwrap();
+    assert_eq!(r.ad, f64::INFINITY);
+    assert!(r.log_likelihood.is_finite() && r.aic.is_finite() && r.ks_d > 0.0);
+    // without a zero, A2 is finite
+    assert!(dist_fit(Family::Exponential, &[0.1, 1.0, 2.0, 0.5]).unwrap().ad.is_finite());
 }
 
 #[test]
@@ -188,7 +224,10 @@ fn extreme_magnitudes_give_a_result_or_an_error_never_a_panic() {
             // an error is fine (no spread, degenerate); a fit must be finite
             if let Ok(r) = fit_with_timeout(fam, data.clone()) {
                 assert!(r.params.iter().all(|p| p.is_finite()), "{} {data:?}: {:?}", fam.name(), r.params);
-                assert!(r.log_likelihood.is_finite() && r.ks_d.is_finite() && r.ad.is_finite());
+                assert!(r.log_likelihood.is_finite() && r.ks_d.is_finite());
+                // A2 is infinite only for an exponential fit to data that contain 0 (F(0) = 0)
+                let zero = fam == Family::Exponential && data.contains(&0.0);
+                assert!(r.ad.is_finite() || (zero && r.ad == f64::INFINITY), "{} {data:?}: A2 {}", fam.name(), r.ad);
             }
         }
     }

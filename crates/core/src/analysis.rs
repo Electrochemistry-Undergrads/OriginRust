@@ -695,7 +695,7 @@ pub enum Tool {
     Friedman(FriedmanSpec),
     Grubbs(OutlierSpec),
     Dixon(OutlierSpec),
-    /// Statistics > Descriptive Statistics > Distribution Fit (T14, `docs/spec/statistics.md` section 12).
+    /// Statistics > Descriptive Statistics > Distribution Fit (T14, `docs/spec/statistics.md` section 16).
     DistFit(DistFitSpec),
     /// Probability plot and Q-Q plot against a distribution family; makes a graph.
     ProbPlot(ProbPlotSpec),

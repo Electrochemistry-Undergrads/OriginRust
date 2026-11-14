@@ -29,7 +29,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1761 passed (one ignored) on macOS on branch `plot-details` with `main` merged in (2026-11-14; T13 look settings ported onto main's measured Plot Details, graphing 18.6, not yet merged back); formatting and strict all-target Clippy passed. Before that: 1718 on `main` with filtered plots, the FFT phase-boundary repair and latest FFT Filters. Previous Windows run: 1706 with FFT/IFFT and FFT Filters. Parity: 46 done, 134 partial, 54 missing of 234 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1815 passed (one ignored) on `main` on macOS after the T13 look settings, cross tabulation, Dunnett, distribution fit, probability and Q-Q plots and the app icon (2026-11-14); formatting and strict all-target Clippy passed. Before that: 1718 on `main` with filtered plots, the FFT phase-boundary repair and latest FFT Filters. Previous Windows run: 1706 with FFT/IFFT and FFT Filters. Parity: 46 done, 135 partial, 54 missing of 235 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 - FFT/IFFT CI portability: phase unwrapping treats half-turn roundoff consistently across FFT backends; the original Origin fixtures remain unchanged (analysis-tools.md 15.1). The Linux-only failure is covered by an adjacent-representable-value regression.
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
@@ -56,6 +56,17 @@ optimization", free for reuse with their build folders `target/wt-axis` and `tar
 `axis-scales` and `stats-more2` (session "Rust prompt handoff"), the matrix worktree (keep), and
 `merge-05b`, an unfinished merge of branches that are all on `main` already (abort it, do not push it).
 The disk is about 96 % full; reuse a worktree and its build folder instead of making new ones.
+
+Merged on 2026-11-14 (session "mac-integrate", macOS) after the new `main` was merged into each, main's
+Origin-measured versions winning wherever both had a feature: `plot-details` (T13 look settings ported onto main's
+Plot Details as Sheaf's own, unmeasured, graphing 18.6: fill hatch/gradient/transparency, bar Width (in %), label
+column/rows/decimals/offsets, subgroups by size, background gradient and border, X/Y Axes switches, page border,
+icons, comments, title, Miscellaneous tab; the branch's second Layer Contents/Plot Setup/Group tab dropped),
+`stats-compare` (cross tabulation and Dunnett in the one-way ANOVA, statistics.md 15; its Holm and 2D binning
+dropped for main's) and `stats-dist` (distribution fit, probability and Q-Q plots, statistics.md 16; its power
+module dropped for main's). All three are scipy-checked or unmeasured, not Origin. Each had adversarial review
+and fixes before merge. Known leftovers: Dunnett runs on the UI thread (about 8 s at 30 groups); hatch cost is
+O(lines x edges) on a very long fill-under run; Dunnett at s = 1 above 5000 df has no reference fixture.
 
 App icon (owner's request, 2026-11-14, branch `app-icon`): `tools/make-icon.py` builds the icon from the
 owner's bronze S (`docs/brand/sheaf.png`) into `crates/app/assets/icon/` (PNG, `.ico`, `.icns`); the app embeds
@@ -158,7 +169,7 @@ running release build; its exact commit was not verified and it was not rebuilt 
 ## Next step
 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
-analysis: T13 leftovers (plot tree text, Size/Speed and Display tabs, other fill modes), T14 item 6 (2D binning, discrete frequency, cross tabulation, Dunnett, distribution fit, probability and Q-Q plot are done; left: the Windows Origin measurements of cross tabulation and Dunnett in statistics.md 15.3 and of the distribution fit and plots in 16.4, since all are scipy-checked, not Origin), T16 item 6, T18 backlog items that need no Origin
+analysis: T13 leftovers (other fill modes, Offset multiplier, Data on Top of Axes, several groups per layer, Binned increments, X:Y ratio and speed mode, `.opj` writing of the 18.6 settings), T14 item 6 (2D binning, discrete frequency, cross tabulation, Dunnett, distribution fit, probability and Q-Q plot are done; left: the Windows Origin measurements of cross tabulation and Dunnett in statistics.md 15.3 and of the distribution fit and plots in 16.4, since all are scipy-checked, not Origin), T16 item 6, T18 backlog items that need no Origin
 (briefs first), merging the matrix branch (asks the owner first: it is another session's unpushed work), T19 item 2 and T04 (wizards, need Origin pages), then
 the leftovers named in each brief's Status (T22-T24 leftovers: level crossing done 2026-11-14, analysis-tools 14, and cumulative sum dropped, Origin has none; drawn
 objects read from `.opj`, page/scale attachment, copy/paste, ordering, resize handles). All earlier "open
@@ -199,7 +210,7 @@ about 88 % full, check `df -h /c` before parallel builds.
    radar, ASCII import, Column Properties (merged branches `origin-checks-*`), ternary (graphing 14.20), pies (14.21),
    curve mathematics (analysis-curve-math 4), Reduce to Evenly Spaced X (analysis-tools 12.2) and the drawn-object
    tools (graphing 17), Peak Analyzer and Import Wizard pages, Layer Contents, Plot Setup, partial import and
-   quoted fields (import-ascii 16). Left: avecurves spline ends and a turning X; the interactive Subtract Straight Line and Curve
+   quoted fields (import-ascii 16). Left: the scipy-checked statistics (cross tabulation and Dunnett, statistics.md 15.3; distribution fit, probability and Q-Q plots, 16.4) and the T13 look settings of graphing 18.6 (hatch list, gradient, bar width, label options); avecurves spline ends and a turning X; the interactive Subtract Straight Line and Curve
    Translate on the graph; Shift snapping and the ellipse tool; ternary title placement.
 
 ## Local-only resources

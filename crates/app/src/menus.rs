@@ -211,6 +211,8 @@ pub enum Cmd {
     ToggleStatusBar,
     /// File > Close: close (hide) the active window, as its title bar's close button does.
     CloseWindow,
+    /// Window > Duplicate: a copy of the active workbook or graph.
+    DuplicateWindow,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -1248,7 +1250,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         sep(),
         keyed("&Refresh", plain_key(Key::F5), Cmd::Refresh),
         sep(),
-        grey("&Duplicate"),
+        item("&Duplicate", Cmd::DuplicateWindow),
     ];
     match kind {
         WindowKind::Graph => {
@@ -2006,6 +2008,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Toolbars => Action::Toolbars,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,

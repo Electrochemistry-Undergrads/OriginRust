@@ -281,6 +281,21 @@ impl Project {
         id
     }
 
+    /// Window > Duplicate: a copy of a workbook or graph as a new window with a free name. A
+    /// workbook's copy has its own columns (fresh ids; a copied analysis result is plain data, no
+    /// longer linked to its source); a graph's copy plots the same columns. Returns the new id.
+    pub fn duplicate_window(&mut self, id: WindowId) -> Option<WindowId> {
+        match self.window(id)?.clone() {
+            Window::Workbook(mut book) => {
+                for col in book.sheets.iter_mut().flat_map(|s| s.columns.iter_mut()) {
+                    col.analysis = None;
+                }
+                Some(self.adopt_workbook(book))
+            }
+            Window::Graph(graph) => Some(self.adopt_graph(graph)),
+        }
+    }
+
     /// Adds an empty graph in the style of `template` and returns its id.
     pub fn add_graph(&mut self, template: Template) -> WindowId {
         let id = WindowId(self.fresh_id());

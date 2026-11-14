@@ -6083,3 +6083,19 @@ fn file_close_hides_the_active_window_and_keeps_its_data() {
     assert!(!h.state().workspace.is_shown(book), "the window is closed");
     assert!(project(&h).workbook(book).is_some(), "its data stays in the project");
 }
+
+#[test]
+fn window_duplicate_copies_the_workbook_with_its_own_columns() {
+    let mut h = start(vec![data_file("dupwindow")]);
+    show_window(&mut h, "Book1 - sample");
+    let before = project(&h).workbooks().count();
+    menu(&mut h, "Window", "Duplicate");
+    let books: Vec<_> = project(&h).workbooks().collect();
+    assert_eq!(books.len(), before + 1, "a new workbook");
+    let (a, b) = (&books[0].sheets[0], &books[books.len() - 1].sheets[0]);
+    assert_eq!(a.columns.len(), b.columns.len());
+    assert_ne!(a.columns[0].id, b.columns[0].id, "its own columns");
+    assert_eq!(project(&h).numeric(b.columns[1].id).unwrap(), project(&h).numeric(a.columns[1].id).unwrap());
+    assert!(h.state().workspace.is_shown(books[books.len() - 1].id), "the copy is shown");
+    assert_eq!(h.state().doc.undo_label(), Some("Duplicate window"));
+}

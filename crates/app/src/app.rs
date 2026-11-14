@@ -1035,6 +1035,13 @@ impl SheafApp {
             Action::ExportData(book) => self.export_data(book),
             Action::Focus(id) => self.focus(id),
             Action::HideWindow(id) => self.workspace.hide(id),
+            Action::DuplicateWindow(id) => {
+                let mut new = None;
+                self.doc.apply("Duplicate window", |p| new = p.duplicate_window(id));
+                if let Some(new) = new {
+                    self.focus(new);
+                }
+            }
             Action::MoveWindow { window, folder } => {
                 if explorer::home(&self.doc.project().root, window) != folder
                     && explorer::folder_at(&self.doc.project().root, &folder).is_some()

@@ -395,6 +395,8 @@ pub enum Action {
     Focus(WindowId),
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
+    /// Window > Duplicate: copy this workbook or graph into a new window.
+    DuplicateWindow(WindowId),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).

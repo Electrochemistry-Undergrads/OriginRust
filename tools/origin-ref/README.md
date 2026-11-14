@@ -60,3 +60,10 @@ kept here), the case lists `cases2..5.json` and `stats3-make-fixture.py`, which 
 `friedman` run with `rt:=<new name:=...>`; `grubbs` and `qtest` need `alpha` and the output variables passed
 explicitly. Report sheets are read cell by cell (`wcol(c)[r]`) because `GetWorksheet` does not return them.
 What the runs showed is in `docs/spec/statistics.md`, section 10.
+
+## Still to measure (stats-compare)
+
+`docs/spec/statistics.md` section 11.4 lists what Holm, Dunnett, cross tabulation and 2D binning take from scipy and
+the textbooks and what Origin has not been asked yet (`anova1` means-comparison options, the cross tabulation and 2D
+binning X-Functions). Run those here on the Windows machine and write fixtures next to
+`crates/calc/tests/fixtures/scipy_stats_compare.rs`.

@@ -111,6 +111,8 @@ fn comparison_of(comparison: ComparisonArg) -> Option<analysis::MeansComparison>
         ComparisonArg::Sidak => Some(M::Sidak),
         ComparisonArg::Lsd => Some(M::FisherLsd),
         ComparisonArg::Scheffe => Some(M::Scheffe),
+        ComparisonArg::Holm => Some(M::Holm),
+        ComparisonArg::Dunnett => Some(M::Dunnett),
         ComparisonArg::None => None,
     }
 }
@@ -438,8 +440,44 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::TTest(analysis::TTestSpec { kind, tail: tail_of(tail), alpha })))
         }
-        AnalyzeTool::Anova { target, comparison, alpha } => {
-            (target, Job::Tool(Tool::Anova(analysis::AnovaSpec { alpha, comparison: comparison_of(comparison) })))
+        AnalyzeTool::Anova { target, comparison, control, alpha } => {
+            if control == 0 {
+                bail!("--control counts the groups from 1");
+            }
+            (
+                target,
+                Job::Tool(Tool::Anova(analysis::AnovaSpec {
+                    alpha,
+                    comparison: comparison_of(comparison),
+                    control: control - 1,
+                })),
+            )
+        }
+        AnalyzeTool::Crosstab { target, no_row_percent, no_column_percent, no_total_percent, no_expected, alpha } => (
+            target,
+            Job::Tool(Tool::Crosstab(analysis::CrosstabSpec {
+                row_percent: !no_row_percent,
+                column_percent: !no_column_percent,
+                total_percent: !no_total_percent,
+                expected: !no_expected,
+                alpha,
+            })),
+        ),
+        AnalyzeTool::Bin2d { target, x_bin_size, x_bins, x_min, x_max, y_bin_size, y_bins, y_min, y_max } => {
+            let axis = |w: Option<f64>, n: Option<usize>, min, max| analysis::AxisBins {
+                min,
+                max,
+                size: match (w, n) {
+                    (Some(w), _) => analysis::BinSize::Width(w),
+                    (None, Some(n)) => analysis::BinSize::Count(n),
+                    (None, None) => analysis::BinSize::Auto,
+                },
+            };
+            let bins = analysis::Bin2dOptions {
+                x: axis(x_bin_size, x_bins, x_min, x_max),
+                y: axis(y_bin_size, y_bins, y_min, y_max),
+            };
+            (target, Job::Tool(Tool::Bin2d(analysis::Bin2dSpec { bins })))
         }
         AnalyzeTool::Anova2 { target, raw, levels_a, levels_b, no_interaction, comparison, alpha } => {
             let layout = if raw {

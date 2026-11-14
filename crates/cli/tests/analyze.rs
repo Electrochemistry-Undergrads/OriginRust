@@ -688,3 +688,96 @@ fn rank_tests_and_correlation_run_from_the_command_line() {
     let (ok, _, err) = sheaf(&["analyze", "corr", file, "--y", "a,b", "--no-pearson"]);
     assert!(!ok && err.contains("at least one of Pearson"), "{err}");
 }
+
+fn dunnett_groups_file(dir: &Path) -> PathBuf {
+    let g = [
+        [24.0, 26.5, 23.1, 25.9, 27.2, 25.0],
+        [28.1, 30.2, 27.7, 29.9, 31.0, 28.4],
+        [24.5, 25.0, 26.1, 23.8, 25.5, 27.0],
+        [33.0, 31.5, 34.2, 32.2, 30.9, 33.3],
+    ];
+    let mut text = String::from("ctrl,drugA,drugB,drugC\n");
+    for i in 0..6 {
+        text.push_str(&format!("{},{},{},{}\n", g[0][i], g[1][i], g[2][i], g[3][i]));
+    }
+    let path = dir.join("groups.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn anova_with_holm_and_dunnett_comparisons() {
+    let dir = scratch("holm-dunnett");
+    let data = dunnett_groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "holm"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Holm-Bonferroni means comparison") && out.contains("no confidence limits"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Dunnett means comparison") && out.contains("against the control ctrl"), "{out}");
+    assert!(out.contains("drugC - ctrl") && !out.contains("drugB - drugA"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett", "--control", "4"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("ctrl - drugC") && out.contains("against the control drugC"), "{out}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett", "--control", "9"]);
+    assert!(!ok && err.contains("control"), "{err}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "anova", file, "--y", "A,B,C,D", "--comparison", "dunnett", "--control", "0"]);
+    assert!(!ok && err.contains("from 1"), "{err}");
+}
+
+#[test]
+fn crosstab_counts_percents_and_tests() {
+    let dir = scratch("crosstab");
+    let path = dir.join("survey.csv");
+    std::fs::write(&path, "treated,better\ntreated,better\ntreated,same\ncontrol,same\ncontrol,same\ncontrol,better\ncontrol,same\ntreated,better\n").unwrap();
+    let export = dir.join("crosstab.csv");
+    let (ok, out, err) =
+        sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A,B", "--export", export.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Pearson chi-square(1) = 2") && out.contains("Fisher's exact test"), "{out}");
+    assert!(out.contains("Crosstab1"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(
+        exported.contains("control") && exported.contains("Row %") && exported.contains("Odds ratio"),
+        "{exported}"
+    );
+    let (ok, _, err) = sheaf(&["analyze", "crosstab", path.to_str().unwrap(), "--y", "A"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+}
+
+#[test]
+fn bin2d_counts_pairs_into_a_grid() {
+    let dir = scratch("bin2d");
+    let path = dir.join("xy.csv");
+    std::fs::write(&path, "x,y\n0,0\n1,0\n2,5\n3,10\n4,10\n").unwrap();
+    let export = dir.join("bins.csv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "bin2d",
+        path.to_str().unwrap(),
+        "--y",
+        "A,B",
+        "--x-bins",
+        "2",
+        "--y-bins",
+        "2",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("2D frequency count") && out.contains("Bin2D1") && out.contains("5 pairs"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    let rows: Vec<&str> = exported.lines().collect();
+    assert!(
+        rows[0].contains("X bin center") && rows[0].contains("[0, 5)") && rows[0].contains("[5, 10]"),
+        "{}",
+        rows[0]
+    );
+    assert!(rows[2].contains(",2,0,2") && rows[3].contains(",0,3,3"), "{exported}");
+    let (ok, _, err) = sheaf(&["analyze", "bin2d", path.to_str().unwrap(), "--y", "A"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+}

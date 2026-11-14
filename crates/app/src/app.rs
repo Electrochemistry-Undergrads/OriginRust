@@ -1600,9 +1600,20 @@ impl SheafApp {
         let project = self.doc.project();
         let columns: Vec<ColumnId> = if columns.is_empty() {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
-            project.default_plot_columns(book, sheet, Template::Line)
+            if kind == AnalysisKind::Crosstab {
+                // Categorical columns are not Y columns: start with the first two of the sheet.
+                let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
+                all.map(|c| c.iter().take(2).map(|c| c.id).collect()).unwrap_or_default()
+            } else {
+                project.default_plot_columns(book, sheet, Template::Line)
+            }
         } else {
-            columns.into_iter().filter(|id| project.column(*id).is_some_and(|c| c.data.is_numeric())).collect()
+            // The cross tabulation reads categorical columns, which may hold text.
+            let any_type = kind == AnalysisKind::Crosstab;
+            columns
+                .into_iter()
+                .filter(|id| project.column(*id).is_some_and(|c| any_type || c.data.is_numeric()))
+                .collect()
         };
         if columns.is_empty() {
             self.warn("Nothing to analyze: select one or more columns that hold numbers".to_string());

@@ -12,7 +12,7 @@ the raw output of the runs (`stats2-*.out.txt`, `stats2-*.cases.json`).
 
 The numerics are in `crates/calc` (`hypothesis`, `anova`, `anova2`, `nonparam`, `correlation`, `freq`,
 `normality`), the operations in `crates/core/src/analysis.rs` and its `statistics` submodule, the command line
-is `sheaf analyze ttest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality`, and
+is `sheaf analyze ttest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality | crosstab | bin2d`, and
 the app has a Statistics menu with one window.
 
 ## 1 t-tests
@@ -341,6 +341,103 @@ Paired Sample Sign Test and Statistics > Descriptive Statistics > Statistics on 
 (labels from the X-Function descriptions). Not done: the indexed input forms, the outlier box plot (`box`),
 Origin's report layout, outlier tests that remove several points in turn.
 
+## 11 Holm and Dunnett comparisons, cross tabulation, 2D frequency count
+
+Sources: textbook definitions and scipy 1.18.1 (`stats.dunnett`, `chi2_contingency`, `fisher_exact`,
+`binned_statistic_2d`). Nothing in this section was measured against Origin: Origin is not available on the
+machine that built it. The fixtures are named `scipy_stats_compare` and say scipy everywhere; the generator is
+`tools/scipy_stats_compare.py`, which prints `crates/calc/tests/fixtures/scipy_stats_compare.rs`; the tests are
+`crates/calc/tests/scipy_stats_compare.rs`. Every Origin detail below that is a guess is listed under "Not
+measured".
+
+### 11.1 Holm-Bonferroni and Dunnett in One-Way ANOVA
+
+Both are options of "Means comparison" next to Tukey, Bonferroni, Sidak, Fisher LSD and Scheffe (menu:
+Statistics > ANOVA > One-Way ANOVA; `sheaf analyze anova --comparison holm|dunnett [--control N]`; Holm is also
+offered in the two-way ANOVA, Dunnett is refused there because it needs one control group).
+
+- **Holm-Bonferroni** (`MeansComparison::Holm`): all pairs in the order of the other methods. The raw p-value of a
+  pair is the Fisher LSD one (t with the ANOVA mean square, `df` error degrees of freedom). Sort the `m` raw
+  values from smallest; the adjusted value of the k-th (counted from 1) is `max over j <= k of (m - j + 1) p_(j)`,
+  capped at 1. A comparison is significant where its adjusted p-value is below alpha. The statistic column is
+  `|t|`. The step-down procedure has no confidence intervals: LCL and UCL are empty.
+- **Dunnett** (`MeansComparison::Dunnett`, `calc::dunnett`): each group other than the control is compared with the
+  control group (the first chosen column, or the one named by `--control` / "Control group"). Rows are listed in the
+  order of the groups, labelled "group - control"; `diff = mean(group) - mean(control)`, `SE = sqrt(MSE (1/n_g +
+  1/n_c))`, `t = diff / SE` (shown as `|t|`). The p-value is two-sided and adjusted for the whole family:
+  `P(max_j |T_j| >= |t|)` for the multivariate t with `df` error degrees of freedom whose correlations are
+  `corr(T_i, T_j) = l_i l_j`, `l_j = sqrt(n_j / (n_j + n_c))` (this holds for unequal group sizes too). The simultaneous
+  confidence limits are `diff -/+ d SE` where `d` solves `P(max_j |T_j| <= d) = 1 - alpha` (one `d` for all rows).
+  The family is the groups other than the control, so with one treatment Dunnett equals the two-sided t-test.
+- **The multivariate t integral** is evaluated by a double Gauss-Legendre integral, not by Monte Carlo. The
+  one-factor structure turns the `m`-dimensional integral into
+  `Int f_S(s) Int phi(x) Prod_j [Phi((c s - l_j x)/r_j) - Phi((-c s - l_j x)/r_j)] dx ds` with `r_j = sqrt(1 - l_j^2)`
+  and `f_S` the density of `sqrt(chi-square(df)/df)` (Dunnett 1955; Genz and Bretz 2009 for the same reduction). Above
+  5000 degrees of freedom `s = 1`. The error of the panels used is below 1e-12.
+- **Tolerances** (`scipy_stats_compare.rs`): scipy integrates the same distribution by quasi Monte Carlo, with an
+  error of about 1e-4 in the p-value (fixed by a seed, but not reproducible to more digits, and poor in relative
+  terms below 1e-5); our p-values are compared with scipy's to 5e-4 absolute and their confidence limits to 0.02. To pin
+  the integration to 1e-9 the generator also evaluates the same double integral with its own, much finer
+  vectorised rule (different nodes, 64-point panels) and the tests compare p-values and the critical value `d` with
+  that to 1e-9 absolute. That second reference checks our implementation of the formula; the formula itself is
+  validated by the agreement with scipy's independent Monte Carlo. Dunnett statistics and Holm adjustments agree
+  with the generator to 1e-9 (scipy has no Holm: the raw p-values are `scipy.stats.t.sf`, the step-down is written
+  out in the generator).
+
+### 11.2 Cross tabulation
+
+Statistics > Descriptive Statistics > Cross Tabulation; `sheaf analyze crosstab --y ROW_COLUMN,COLUMN_COLUMN`. Two
+columns of any type (text or numbers); each distinct value is a level. Rows where one of the two cells is empty are
+left out (and counted in a note). Levels are listed sorted: numbers from small to large when all are numbers,
+otherwise text by character order ignoring case (A before a).
+
+The result sheet has three blocks next to each other: the table of counts with a "Total" row and column; one row per
+cell with Count, Expected (`row total * column total / N`), Row %, Column % and Total % (each can be switched off);
+and Statistic/Value pairs of the tests:
+
+| Test | Statistic | df | p |
+|---|---|---|---|
+| Pearson chi-square | `sum (O - E)^2 / E` | `(r - 1)(c - 1)` | upper tail of chi-square |
+| Likelihood ratio | `2 sum O ln(O / E)` (empty cells add 0) | same | same |
+| Yates (2 x 2 only) | Pearson with each count moved 0.5 (at most to E) towards E | 1 | same |
+| Fisher exact (2 x 2 only) | odds ratio `a d / (b c)` (infinite where `b c = 0`) | | two-sided, left (`P(X <= a)`), right (`P(X >= a)`) |
+
+Fisher's two-sided p-value adds the probabilities of all tables with the same margins that are no more likely than
+the observed one (relative tolerance 1e-9 on ties). A note warns when cells have an expected count below 5. A table
+with fewer than two levels in a variable is refused. Agreement with scipy `chi2_contingency` (`correction=False`,
+`lambda_="log-likelihood"`) and `fisher_exact`: 1e-9 relative on 9 tables, including zero cells.
+
+### 11.3 2D frequency count (2D binning)
+
+Statistics > Descriptive Statistics > 2D Frequency Counts/Binning; `sheaf analyze bin2d --y X_COLUMN,Y_COLUMN`.
+The first chosen column is X, the second Y; rows where either is missing are dropped. Each axis is binned with
+the rules of the frequency count (section 3): automatic size and range, a bin width, or a number of bins over the data
+range (or over a given range `[min, max]`). A bin holds its lower edge and not its upper one; only when the range
+is the data range cut into a number of bins is the very last edge counted too (as in numpy and scipy; against
+section 3, where Origin does not count the last edge, the data maximum is kept). Pairs outside a given range are not
+counted. At most 1000 bins per axis. The result sheet has X bin start, end and center columns, one count column
+per Y bin (named `[lo, hi)`, the last `[lo, hi]` when it is closed) and a Total column; a result-table row holds the
+number of pairs, the pairs counted, bins, first edge and size per axis, and the largest count. Agreement with
+scipy `binned_statistic_2d(statistic="count")`: counts exact and edges to 1e-9 on six cases (counts by number
+of bins, by width with a range, integers on the bin edges).
+
+There is no heat map or contour graph of the matrix (no such plot type yet).
+
+### 11.4 Not measured against Origin
+
+To check on the Windows machine with `tools/origin-ref` before these are called Origin behaviour:
+
+- Which means-comparison methods Origin's one-way ANOVA offers under these names, Origin's Holm adjusted p-values
+  (and whether it reports confidence limits for Holm: we leave them empty), the order and labelling of Dunnett's
+  rows, how Origin chooses the control group, its Dunnett p-values and limits (Origin may use a different
+  integration accuracy, as it does for the t quantile), and the statistic column it shows.
+- The layout of Origin's cross tabulation report (we write three blocks in one sheet), the order of the levels,
+  the percentage definitions, whether it shows the expected counts, Yates' correction, Fisher's two-sided rule, the
+  odds ratio (sample ratio here), and which rows it leaves out for missing cells.
+- Origin's 2D binning: which edge each bin includes, the automatic bin range and size (we use the 1D rules of
+  section 3), the layout of the result (Origin may write a matrix object, or XYZ columns), and its limit on bins.
+- Origin's X-Function names for these windows (the window titles show the tool name alone).
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
@@ -380,7 +477,7 @@ Not verified or not done:
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no sample size or power
   analysis, no t-test from summary data, no row-wise t-tests.
-- Three-way and repeated measures ANOVA, Holm and Dunnett comparisons, power analysis and means plots of the
+- Three-way and repeated measures ANOVA, power analysis and means plots of the
   ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).
@@ -392,3 +489,4 @@ Not verified or not done:
 - Several of the new Origin numbers were produced with a normal tail that returned 0 at 8.5 standard
   deviations; those are compared with an absolute tolerance.
 - The app window was checked with automated click tests, not looked at by the owner.
+- Section 11 (Holm, Dunnett, cross tabulation, 2D binning) is checked against scipy, not Origin.

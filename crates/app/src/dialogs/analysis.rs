@@ -11,9 +11,10 @@ use super::frame::{
 };
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AnovaSpec, BinSize, CorrelationSpec, FreqOptions, FriedmanSpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec,
-    MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, RowStatsSpec, SignTestSpec,
-    SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout,
+    AnovaSpec, AxisBins, Bin2dOptions, Bin2dSpec, BinSize, CorrelationSpec, CrosstabSpec, FreqOptions, FriedmanSpec,
+    HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec,
+    OutlierSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec,
+    Tail, TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
@@ -68,6 +69,9 @@ pub enum AnalysisKind {
     KsTwoSample,
     MedianTest,
     Friedman,
+    /// Statistics > Descriptive Statistics > Cross Tabulation and 2D Frequency Counts/Binning.
+    Crosstab,
+    Bin2d,
     /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
     AverageCurves,
     Intersect,
@@ -128,6 +132,8 @@ impl AnalysisKind {
             AnalysisKind::KsTwoSample => "Two Sample Kolmogorov-Smirnov Test...",
             AnalysisKind::MedianTest => "Mood's Median Test...",
             AnalysisKind::Friedman => "Friedman ANOVA...",
+            AnalysisKind::Crosstab => "Cross Tabulation...",
+            AnalysisKind::Bin2d => "2D Frequency Counts/Binning...",
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
@@ -175,6 +181,8 @@ impl AnalysisKind {
             "ks2" => AnalysisKind::KsTwoSample,
             "mediantest" => AnalysisKind::MedianTest,
             "friedman" => AnalysisKind::Friedman,
+            "crosstab" => AnalysisKind::Crosstab,
+            "bin2d" => AnalysisKind::Bin2d,
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
@@ -264,6 +272,13 @@ struct StatsOptions {
     alpha: f64,
     /// Index into `COMPARISONS`.
     comparison: usize,
+    /// Dunnett's control group: index among the chosen columns.
+    control: usize,
+    /// Cross tabulation: indexes into the sheet's columns, row variable and column variable.
+    pair_columns: [usize; 2],
+    cross: CrosstabSpec,
+    /// 2D binning: how the X axis and the Y axis are binned.
+    axes: [AxisState; 2],
     /// 0 automatic, 1 bin size, 2 number of bins.
     bins: usize,
     bin_size: f64,
@@ -307,6 +322,10 @@ impl Default for StatsOptions {
             tail: Tail::Two,
             alpha: 0.05,
             comparison: 0,
+            control: 0,
+            pair_columns: [0, 1],
+            cross: CrosstabSpec::default(),
+            axes: [AxisState::default(), AxisState::default()],
             bins: 0,
             bin_size: 1.0,
             bin_count: 10,
@@ -332,12 +351,66 @@ impl Default for StatsOptions {
     }
 }
 
-const COMPARISONS: [(&str, Option<MeansComparison>); 6] = [
+/// The binning of one axis of the 2D frequency count.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct AxisState {
+    /// 0 automatic, 1 bin size, 2 number of bins.
+    bins: usize,
+    size: f64,
+    count: usize,
+    own_range: bool,
+    min: f64,
+    max: f64,
+}
+
+impl Default for AxisState {
+    fn default() -> Self {
+        AxisState { bins: 2, size: 1.0, count: 10, own_range: false, min: 0.0, max: 10.0 }
+    }
+}
+
+impl AxisState {
+    fn axis(&self) -> AxisBins {
+        AxisBins {
+            min: self.own_range.then_some(self.min),
+            max: self.own_range.then_some(self.max),
+            size: match self.bins {
+                1 => BinSize::Width(self.size),
+                2 => BinSize::Count(self.count),
+                _ => BinSize::Auto,
+            },
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, name: &str) {
+        ui.horizontal(|ui| {
+            ui.label(format!("{name} bins"));
+            ui.radio_value(&mut self.bins, 0, "Automatic");
+            ui.radio_value(&mut self.bins, 1, "Bin size");
+            ui.add_enabled(self.bins == 1, DragValue::new(&mut self.size).speed(0.01).range(1e-12..=1e12));
+            ui.radio_value(&mut self.bins, 2, "Number of bins");
+            ui.add_enabled(self.bins == 2, DragValue::new(&mut self.count).range(1..=1000));
+        });
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.own_range, format!("Set the {name} range"));
+            ui.add_enabled_ui(self.own_range, |ui| {
+                ui.label("from");
+                ui.add(DragValue::new(&mut self.min).speed(0.01));
+                ui.label("to");
+                ui.add(DragValue::new(&mut self.max).speed(0.01));
+            });
+        });
+    }
+}
+
+const COMPARISONS: [(&str, Option<MeansComparison>); 8] = [
     ("Tukey", Some(MeansComparison::Tukey)),
     ("Bonferroni", Some(MeansComparison::Bonferroni)),
     ("Sidak", Some(MeansComparison::Sidak)),
     ("Fisher LSD", Some(MeansComparison::FisherLsd)),
     ("Scheffe", Some(MeansComparison::Scheffe)),
+    ("Holm-Bonferroni", Some(MeansComparison::Holm)),
+    ("Dunnett", Some(MeansComparison::Dunnett)),
     ("None", None),
 ];
 
@@ -511,6 +584,12 @@ impl AnalysisDialog {
             .collect();
         // The two-way ANOVA starts with the chosen columns as factor A, factor B and data, in this order.
         let mut stats = StatsOptions { paired: kind == AnalysisKind::SignedRankPaired, ..StatsOptions::default() };
+        if kind == AnalysisKind::Crosstab {
+            let position = |id: &ColumnId| sheet_columns.iter().position(|(c, _)| c == id);
+            let chosen: Vec<usize> = columns.iter().filter_map(position).collect();
+            let last = sheet_columns.len().saturating_sub(1);
+            stats.pair_columns = if chosen.len() >= 2 { [chosen[0], chosen[1]] } else { [0, 1.min(last)] };
+        }
         if kind == AnalysisKind::Anova2 {
             let position = |id: &ColumnId| sheet_columns.iter().position(|(c, _)| c == id);
             let chosen: Vec<usize> = columns.iter().filter_map(position).collect();
@@ -697,9 +776,15 @@ impl AnalysisDialog {
                 tail: self.stats.tail,
                 alpha: self.stats.alpha,
             }),
-            AnalysisKind::Anova => {
-                Tool::Anova(AnovaSpec { alpha: self.stats.alpha, comparison: COMPARISONS[self.stats.comparison].1 })
-            }
+            AnalysisKind::Anova => Tool::Anova(AnovaSpec {
+                alpha: self.stats.alpha,
+                comparison: COMPARISONS[self.stats.comparison].1,
+                control: self.stats.control,
+            }),
+            AnalysisKind::Crosstab => Tool::Crosstab(CrosstabSpec { alpha: self.stats.alpha, ..self.stats.cross }),
+            AnalysisKind::Bin2d => Tool::Bin2d(Bin2dSpec {
+                bins: Bin2dOptions { x: self.stats.axes[0].axis(), y: self.stats.axes[1].axis() },
+            }),
             AnalysisKind::Histogram => Tool::Histogram(HistogramSpec {
                 freq: FreqOptions {
                     min: self.stats.own_range.then_some(self.stats.bin_min),
@@ -782,6 +867,13 @@ impl AnalysisDialog {
             match (pick(a), pick(b), pick(y)) {
                 (Some(a), Some(b), Some(y)) => vec![a, b, y],
                 _ => return Err("the sheet needs three columns: factor A, factor B and the data".to_string()),
+            }
+        } else if self.kind == AnalysisKind::Crosstab {
+            let pick = |i: usize| self.sheet_columns.get(i).map(|(id, _)| *id);
+            match (pick(self.stats.pair_columns[0]), pick(self.stats.pair_columns[1])) {
+                (Some(a), Some(b)) if a != b => vec![a, b],
+                (Some(_), Some(_)) => return Err("choose two different columns".to_string()),
+                _ => return Err("the sheet needs two columns: the row variable and the column variable".to_string()),
             }
         } else {
             self.columns.clone()
@@ -1222,6 +1314,23 @@ impl AnalysisDialog {
                             }
                         });
                 });
+                if COMPARISONS[st.comparison].1 == Some(MeansComparison::Dunnett) {
+                    let names: Vec<&str> = self.column_names.split(", ").collect();
+                    st.control = st.control.min(names.len().saturating_sub(1));
+                    ui.horizontal(|ui| {
+                        ui.label("Control group");
+                        egui::ComboBox::from_id_salt("anova_control")
+                            .selected_text(names.get(st.control).copied().unwrap_or(""))
+                            .show_ui(ui, |ui| {
+                                for (i, name) in names.iter().enumerate() {
+                                    ui.selectable_value(&mut st.control, i, *name);
+                                }
+                            });
+                    });
+                    ui.weak("Every other group is compared with the control; p-values and limits are adjusted for all of them.");
+                } else if COMPARISONS[st.comparison].1 == Some(MeansComparison::Holm) {
+                    ui.weak("Holm's step-down adjustment of all pairs; it gives adjusted p-values but no confidence limits.");
+                }
                 ui.horizontal(|ui| {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
@@ -1274,8 +1383,11 @@ impl AnalysisDialog {
                     egui::ComboBox::from_id_salt("anova2_comparison")
                         .selected_text(COMPARISONS[st.comparison].0)
                         .show_ui(ui, |ui| {
-                            for (i, (label, _)) in COMPARISONS.iter().enumerate() {
-                                ui.selectable_value(&mut st.comparison, i, *label);
+                            // Dunnett's test needs one control group: one-way ANOVA only.
+                            for (i, (label, m)) in COMPARISONS.iter().enumerate() {
+                                if *m != Some(MeansComparison::Dunnett) {
+                                    ui.selectable_value(&mut st.comparison, i, *label);
+                                }
                             }
                         });
                 });
@@ -1283,6 +1395,45 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
+            }
+            AnalysisKind::Crosstab => {
+                let st = &mut self.stats;
+                for (i, label) in ["Row variable", "Column variable"].into_iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(label);
+                        let current = self.sheet_columns.get(st.pair_columns[i]).map_or("", |c| c.1.as_str());
+                        egui::ComboBox::from_id_salt(("crosstab_column", i))
+                            .selected_text(current)
+                            .width(220.0)
+                            .show_ui(ui, |ui| {
+                                for (j, (_, text)) in self.sheet_columns.iter().enumerate() {
+                                    ui.selectable_value(&mut st.pair_columns[i], j, text);
+                                }
+                            });
+                    });
+                }
+                ui.weak(
+                    "Each column holds the levels (text or numbers) of one variable; one row of the sheet is one case.",
+                );
+                ui.checkbox(&mut st.cross.row_percent, "Row percent");
+                ui.checkbox(&mut st.cross.column_percent, "Column percent");
+                ui.checkbox(&mut st.cross.total_percent, "Total percent");
+                ui.checkbox(&mut st.cross.expected, "Expected counts");
+                ui.horizontal(|ui| {
+                    ui.label("Significance level");
+                    ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
+                });
+            }
+            AnalysisKind::Bin2d => {
+                let st = &mut self.stats;
+                let names: Vec<&str> = self.column_names.split(", ").collect();
+                ui.label(format!(
+                    "X: {}    Y: {}    (the first chosen column is X, the second Y)",
+                    names.first().copied().unwrap_or("-"),
+                    names.get(1).copied().unwrap_or("choose a second column")
+                ));
+                st.axes[0].ui(ui, "X");
+                st.axes[1].ui(ui, "Y");
             }
             AnalysisKind::MannWhitney => {
                 let st = &mut self.stats;
@@ -1497,7 +1648,9 @@ impl AnalysisDialog {
             AnalysisKind::Intersect => "intersect",
             AnalysisKind::PolygonArea => "polyarea",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
-            AnalysisKind::SubtractLine
+            AnalysisKind::Crosstab
+            | AnalysisKind::Bin2d
+            | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
@@ -1544,6 +1697,10 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "Compare two samples by their distribution functions",
             AnalysisKind::MedianTest => "Compare the medians of several samples (Mood's median test)",
             AnalysisKind::Friedman => "Compare treatments in repeated blocks by ranks within each row",
+            AnalysisKind::Crosstab => {
+                "Count the cases of every combination of two categorical variables and test their independence"
+            }
+            AnalysisKind::Bin2d => "Count the (X, Y) pairs in a grid of bins",
             AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
             AnalysisKind::Intersect => "Find the points where two curves meet",
             AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
@@ -1599,6 +1756,10 @@ impl AnalysisDialog {
                 "Counts around the median, the chi-square statistic and its p-value in a new sheet"
             }
             AnalysisKind::Friedman => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
+            AnalysisKind::Crosstab => {
+                "Counts, percentages, expected counts and the chi-square and Fisher tests in a new sheet"
+            }
+            AnalysisKind::Bin2d => "The matrix of counts (X bins down, Y bins across) in a new sheet",
             AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
             AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
             AnalysisKind::PolygonArea => {

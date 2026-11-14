@@ -705,6 +705,10 @@ pub enum ComparisonArg {
     /// Fisher's least significant difference.
     Lsd,
     Scheffe,
+    /// Holm-Bonferroni step-down adjustment of all pairs (no confidence limits).
+    Holm,
+    /// Dunnett: every group against the control group (see --control); one-way ANOVA only.
+    Dunnett,
     /// No means comparison.
     None,
 }
@@ -1215,6 +1219,9 @@ pub enum AnalyzeTool {
         target: TargetArgs,
         #[arg(long, value_enum, default_value_t = ComparisonArg::Tukey)]
         comparison: ComparisonArg,
+        /// Dunnett's control group: its number among the --y columns, counted from 1.
+        #[arg(long, default_value_t = 1)]
+        control: usize,
         /// Significance level.
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
@@ -1395,6 +1402,55 @@ pub enum AnalyzeTool {
         /// Do not make a graph.
         #[arg(long)]
         no_graph: bool,
+    },
+    /// Cross tabulation of two categorical columns (--y ROW_VARIABLE,COLUMN_VARIABLE; text or numbers):
+    /// counts with row, column and total percentages, expected counts, Pearson and likelihood ratio
+    /// chi-square and, for a 2 x 2 table, Fisher's exact test. The tables go to a new sheet.
+    Crosstab {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Leave out the percentages of the row totals.
+        #[arg(long)]
+        no_row_percent: bool,
+        /// Leave out the percentages of the column totals.
+        #[arg(long)]
+        no_column_percent: bool,
+        /// Leave out the percentages of the grand total.
+        #[arg(long)]
+        no_total_percent: bool,
+        /// Leave out the expected counts.
+        #[arg(long)]
+        no_expected: bool,
+        /// Level for the sentence about the tests.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+    },
+    /// 2D frequency count (2D binning): --y X_COLUMN,Y_COLUMN; the matrix of counts goes to a new sheet.
+    /// Each axis takes a bin width or a number of bins (the data range unless --x-min/--x-max or
+    /// --y-min/--y-max are given); without either the bins are chosen automatically.
+    Bin2d {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Width of the X bins.
+        #[arg(long, conflicts_with = "x_bins")]
+        x_bin_size: Option<f64>,
+        /// Number of X bins.
+        #[arg(long)]
+        x_bins: Option<usize>,
+        #[arg(long, allow_hyphen_values = true)]
+        x_min: Option<f64>,
+        #[arg(long, allow_hyphen_values = true)]
+        x_max: Option<f64>,
+        /// Width of the Y bins.
+        #[arg(long, conflicts_with = "y_bins")]
+        y_bin_size: Option<f64>,
+        /// Number of Y bins.
+        #[arg(long)]
+        y_bins: Option<usize>,
+        #[arg(long, allow_hyphen_values = true)]
+        y_min: Option<f64>,
+        #[arg(long, allow_hyphen_values = true)]
+        y_max: Option<f64>,
     },
     /// Normality tests (Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson)
     /// of each column; the result goes to a new sheet.

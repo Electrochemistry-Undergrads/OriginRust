@@ -124,7 +124,7 @@ pub fn dunnett_p(t: f64, loadings: &[f64], df: f64) -> f64 {
 /// The critical value `d` with `P(max |T_j| <= d) = 1 - alpha` (the half-width of a simultaneous
 /// confidence interval is `d` times the standard error).
 pub fn dunnett_critical(alpha: f64, loadings: &[f64], df: f64) -> f64 {
-    if !(alpha > 0.0 && alpha < 1.0) || loadings.is_empty() || !(df > 0.0) {
+    if !(alpha > 0.0 && alpha < 1.0) || loadings.is_empty() || df.is_nan() || df <= 0.0 {
         return f64::NAN;
     }
     let m = loadings.len() as f64;

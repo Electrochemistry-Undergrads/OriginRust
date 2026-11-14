@@ -3518,6 +3518,76 @@ fn the_statistics_menu_runs_a_two_way_anova_with_text_factors() {
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
 }
 
+/// Statistics > Descriptive Statistics > Cross Tabulation...: two text columns, counts and tests in a new sheet.
+#[test]
+fn the_descriptive_menu_runs_a_cross_tabulation_of_text_columns() {
+    let data = csv_file(
+        "crosstab",
+        "survey",
+        "treated,better\ntreated,better\ntreated,same\ncontrol,same\ncontrol,same\ncontrol,better\ncontrol,same\ntreated,better\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - survey");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Cross Tabulation..."]);
+    assert!(h.state().analysis.is_some(), "the cross tabulation window is open");
+    for label in
+        ["Row variable", "Column variable", "Row percent", "Column percent", "Total percent", "Expected counts"]
+    {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let (sheet, counts) = result_column(&h, "better");
+    assert!(sheet.starts_with("Crosstab"), "{sheet}");
+    // Rows control and treated, then the total: 1 and 3 better, 4 in all.
+    assert_eq!(counts, vec![1.0, 3.0, 4.0]);
+    let (_, value) = result_column(&h, "Value");
+    assert!((value[0] - 2.0).abs() < 1e-12, "Pearson chi-square {value:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Cross tabulation"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
+/// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning...: the two Y columns are X and Y.
+#[test]
+fn the_descriptive_menu_runs_a_2d_frequency_count() {
+    let mut h = start(vec![data_file("bin2d")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "2D Frequency Counts/Binning..."]);
+    assert!(h.state().analysis.is_some(), "the 2D frequency count window is open");
+    assert!(has_label(&h, "Set the X range") && has_label(&h, "Set the Y range"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, total) = result_column(&h, "Total");
+    assert!(sheet.starts_with("Bin2D"), "{sheet}");
+    // Four pairs in 10 x 10 bins over the data range.
+    assert_eq!(total.iter().sum::<f64>(), 4.0);
+    assert_eq!(total.len(), 10);
+    assert_eq!(h.state().doc.undo_label(), Some("2D frequency count"));
+}
+
+/// Statistics > ANOVA > One-Way ANOVA...: Holm-Bonferroni and Dunnett are in the list of means comparisons; Dunnett
+/// asks for the control group.
+#[test]
+fn the_one_way_anova_window_offers_holm_and_dunnett() {
+    let mut h = start(vec![data_file("anova-dunnett")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "ANOVA", "One-Way ANOVA..."]);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Tukey")).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Holm-Bonferroni") && has_label(&h, "Dunnett"));
+    click(&mut h, "Dunnett");
+    assert!(has_label(&h, "Control group"), "Dunnett asks for the control group");
+    click(&mut h, "OK");
+    let ws = project(&h).workbooks().next().unwrap().sheets.last().unwrap().clone();
+    let labels =
+        ws.columns.iter().find(|c| c.long_name == "Dunnett comparison").expect("the Dunnett table").text().unwrap();
+    assert_eq!(labels, ["down - up"], "the first column is the control");
+    assert_eq!(h.state().doc.undo_label(), Some("One-way ANOVA"));
+}
+
 /// Statistics > Nonparametric Tests > Mann-Whitney Test... with the two Y columns of the sheet.
 #[test]
 fn the_nonparametric_menu_runs_a_mann_whitney_test() {

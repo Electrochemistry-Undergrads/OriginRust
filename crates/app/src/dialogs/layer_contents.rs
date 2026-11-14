@@ -39,6 +39,8 @@ pub enum Outcome {
     Closed,
     /// Layer Properties...: open Plot Details on this layer.
     LayerProperties(WindowId, usize),
+    /// Plot Setup...: Origin closes Layer Contents and opens Plot Setup on the layer.
+    PlotSetup(WindowId, usize),
 }
 
 pub struct LayerContentsDialog {
@@ -239,7 +241,9 @@ impl LayerContentsDialog {
                     if ui.button("Layer Properties...").clicked() {
                         outcome = Outcome::LayerProperties(self.graph, li);
                     }
-                    ui.add_enabled(false, egui::Button::new("Plot Setup..."));
+                    if ui.button("Plot Setup...").clicked() {
+                        outcome = Outcome::PlotSetup(self.graph, li);
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Cancel").clicked() {
                             outcome = Outcome::Closed;

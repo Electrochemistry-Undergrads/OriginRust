@@ -1791,3 +1791,21 @@ Up and Down move one plot; Rescale on Apply makes the axes automatic again; Laye
 Details on the layer; Plot Setup... and `>>` are greyed. Edits show at once and are one undo step; Cancel
 takes them back, Close keeps them. Plot Setup... in the Graph menu still opens Plot Details' Layer
 Contents tab.
+
+### 18.3 Plot Setup (measured 2026-11-14)
+
+Origin's Plot Setup (Layer Contents > Plot Setup..., which closes Layer Contents and opens this window;
+`re-workspace/scratch/plotsetup/p1`, `p3`) is titled "Plot Setup: Configure Data Plots in Layer". It opens with
+the Plot List only: a tree of Layer 1 (Rescale, Show), its Group and each plot by its data name, with Range
+(`[1*:11*] 0 < X < 10 , 5 < Y < 5`), Show, Plot Type and Legend; Preview, OK, Cancel, Apply. Its chevron
+shows the upper panels: Plot Type (Line, Scatter, Line + Symbol, Column / Bar, Bubble, Color Mapped, Bubble +
+Color Mapped, ...), Show(S) and the chosen sheet, the sheet's columns with X, Y, yEr and L ticks, Column, Long
+Name, Comments, Sampling Interval and Position (an `<autoX>` row first), Replace and Add.
+
+Sheaf (`dialogs/plot_setup.rs`, Graph > Plot Setup..., the layer's right-click menu and Layer Contents'
+button): the window always shows both parts: Plot Type (the first four; Bubble and the colour mapped kinds
+greyed), a sheet list, the sheet's columns with one X, any number of Y and one yEr tick (L greyed), Add (a
+plot per ticked Y with the ticked X and error column) and Replace (the chosen plot takes the ticked columns);
+the Plot List with Rescale, Range, a Show tick, Plot Type and Legend; Preview greyed, OK, Cancel, Apply. Edits
+are one undo step; Cancel takes them back. Not offered: groups in the list, drag to reorder, Sampling
+Interval, Position, `<autoX>`.

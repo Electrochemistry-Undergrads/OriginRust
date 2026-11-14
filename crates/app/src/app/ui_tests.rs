@@ -3431,6 +3431,29 @@ fn f12_opens_origins_layer_contents_window_that_removes_adds_and_groups_plots() 
 }
 
 #[test]
+fn plot_setup_opens_from_the_graph_menu_and_from_layer_contents() {
+    let mut h = start(vec![data_file("plot-setup")]);
+    let (_, graph) = window_ids(&h);
+    let before = project(&h).graph(graph).unwrap().clone();
+    menu_path(&mut h, &["Graph", "Plot Setup..."]);
+    assert!(h.state().plot_setup.is_some(), "Graph > Plot Setup... opens Origin's window");
+    for label in ["Plot Type:", "Line + Symbol", "Column / Bar", "Rescale", "Range", "Legend"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    assert!(is_disabled(&h, "Preview"));
+    click(&mut h, "Cancel");
+    assert!(h.state().plot_setup.is_none());
+    assert_eq!(project(&h).graph(graph).unwrap(), &before, "Cancel changes nothing");
+    // Layer Contents' Plot Setup... replaces it with Plot Setup, as in Origin.
+    h.key_press(egui::Key::F12);
+    settle(&mut h);
+    click(&mut h, "Plot Setup...");
+    assert!(h.state().layer_contents.is_none() && h.state().plot_setup.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().plot_setup.is_none());
+}
+
+#[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
     show_window(&mut h, "Book1 - sample");

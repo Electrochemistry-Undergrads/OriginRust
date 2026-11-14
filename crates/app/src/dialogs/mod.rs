@@ -18,6 +18,7 @@ pub mod import_wizard;
 pub mod layer_contents;
 pub mod manip_options;
 pub mod math_curves;
+pub mod plot_setup;
 pub mod power;
 pub mod reshape;
 pub mod row_filter;

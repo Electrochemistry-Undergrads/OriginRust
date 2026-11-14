@@ -163,6 +163,8 @@ pub enum Cmd {
     /// Graph > Layer Contents... (F12): Origin's own window for the plots of a layer; `None` is the
     /// active layer.
     LayerContents(Option<usize>),
+    /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
+    PlotSetup(Option<usize>),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
     GraphPropsAt {
         layer: usize,
@@ -1117,7 +1119,7 @@ fn graph_menu() -> Vec<Entry> {
     vec![
         // Layer Contents is Origin's own window; Plot Setup opens Sheaf's Plots tab (add and remove plots).
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(None)),
-        item("Plot Setup...", Cmd::GraphProps(PropsTab::Plots)),
+        item("Plot Setup...", Cmd::PlotSetup(None)),
         grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
         sep(),
         grey("Layer Management..."),
@@ -1660,7 +1662,6 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
     } else {
         grey("Hide Other Layers")
     };
-    let contents = Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None };
     let mut v = vec![
         item("Hide Layer", Cmd::GraphEdit(GraphOp::HideLayer { layer })),
         others,
@@ -1669,7 +1670,7 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         grey("Delete Layer"),
         sep(),
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(Some(layer))),
-        item("Plot Setup...", contents),
+        item("Plot Setup...", Cmd::PlotSetup(Some(layer))),
         grey("Double click to open Plot Setup"),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
@@ -2015,6 +2016,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         Cmd::GraphProps(tab) => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, tab: *tab, plot: None }
+        }
+        Cmd::PlotSetup(layer) => {
+            Action::PlotSetup { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }
         }
         Cmd::LayerContents(layer) => {
             Action::LayerContents { graph: c.graph.ok_or(NEED_GRAPH)?, layer: layer.unwrap_or(c.layer) }

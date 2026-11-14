@@ -183,6 +183,27 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
         AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
         AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
+        AnalyzeTool::FftFilter { target, kind, cutoff, freq1, freq2, threshold, pass, stop, no_offset, interval } => {
+            let kind = match kind {
+                FftFilterArg::LowPass => analysis::FftFilterType::LowPass,
+                FftFilterArg::HighPass => analysis::FftFilterType::HighPass,
+                FftFilterArg::BandPass => analysis::FftFilterType::BandPass,
+                FftFilterArg::BandBlock => analysis::FftFilterType::BandBlock,
+                FftFilterArg::Threshold => analysis::FftFilterType::Threshold,
+                FftFilterArg::Parabolic => analysis::FftFilterType::LowPassParabolic,
+            };
+            let options = analysis::FftFilterOptions {
+                kind,
+                cutoff,
+                freq1,
+                freq2,
+                threshold,
+                pass,
+                stop,
+                keep_offset: !no_offset,
+            };
+            (target, Job::Tool(Tool::FftFilter(analysis::FftFilterSpec { options, interval })))
+        }
         AnalyzeTool::Ifft { target, imaginary, interval, no_shift, no_unwrap, science } => {
             let options = analysis::IfftOptions {
                 interval: interval.unwrap_or(1.0),

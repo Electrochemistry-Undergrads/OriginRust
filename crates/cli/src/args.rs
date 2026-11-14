@@ -851,6 +851,17 @@ pub enum MathKind {
     Power,
 }
 
+/// FFT filter type (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum FftFilterArg {
+    LowPass,
+    HighPass,
+    BandPass,
+    BandBlock,
+    Threshold,
+    Parabolic,
+}
+
 /// FFT window (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftWindowArg {
@@ -1132,6 +1143,36 @@ pub enum AnalyzeTool {
         /// The +1 sign convention of the forward transform.
         #[arg(long)]
         science: bool,
+    },
+    /// Filter each column in the frequency domain (Origin's Signal Processing > FFT Filters), the
+    /// result beside it. Frequencies left out take Origin's automatic values.
+    FftFilter {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long = "type", value_enum, default_value_t = FftFilterArg::LowPass)]
+        kind: FftFilterArg,
+        /// Low and high pass.
+        #[arg(long)]
+        cutoff: Option<f64>,
+        /// Band pass and block: the lower and upper cutoff.
+        #[arg(long)]
+        freq1: Option<f64>,
+        #[arg(long)]
+        freq2: Option<f64>,
+        /// Threshold filter: the smallest magnitude kept.
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// Parabolic low pass: pass and stop frequencies.
+        #[arg(long)]
+        pass: Option<f64>,
+        #[arg(long)]
+        stop: Option<f64>,
+        /// High pass, band pass and block: remove the zero frequency (the mean) too.
+        #[arg(long)]
+        no_offset: bool,
+        /// Sampling interval; by default the X step of the column.
+        #[arg(long)]
+        interval: Option<f64>,
     },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.

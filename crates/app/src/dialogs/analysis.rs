@@ -26,7 +26,9 @@ use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
     PeakFitSpec, PeakShape,
 };
-use sheaf_core::analysis::{FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection};
+use sheaf_core::analysis::{
+    FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection,
+};
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
@@ -57,6 +59,8 @@ pub enum AnalysisKind {
     Fft,
     /// Signal Processing > FFT > IFFT (Origin's `ifft1`).
     Ifft,
+    /// Signal Processing > FFT Filters (Origin's `fft_filters`).
+    FftFilter,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -104,7 +108,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 19] = [
+    pub const ALL: [AnalysisKind; 20] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -120,6 +124,7 @@ impl AnalysisKind {
         AnalysisKind::Hilbert,
         AnalysisKind::Fft,
         AnalysisKind::Ifft,
+        AnalysisKind::FftFilter,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -144,6 +149,7 @@ impl AnalysisKind {
             AnalysisKind::Hilbert => "Hilbert Transform...",
             AnalysisKind::Fft => "FFT...",
             AnalysisKind::Ifft => "IFFT...",
+            AnalysisKind::FftFilter => "FFT Filters...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -201,6 +207,7 @@ impl AnalysisKind {
             "hilbert" => AnalysisKind::Hilbert,
             "fft" => AnalysisKind::Fft,
             "ifft" => AnalysisKind::Ifft,
+            "fft-filter" => AnalysisKind::FftFilter,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -553,6 +560,7 @@ pub struct AnalysisDialog {
     level_crossing: LevelCrossingSpec,
     fft: FftSpec,
     ifft: IfftSpec,
+    fft_filter: FftFilterSpec,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
@@ -596,6 +604,59 @@ const CURVE_OPS: [(&str, CurveOp); 5] = [
 ];
 
 /// Every numeric Y column outside `exclude`, for the reference list.
+/// A frequency or threshold that is Origin's automatic value until "Auto" is unticked.
+fn auto_value(ui: &mut egui::Ui, label: &str, value: &mut Option<f64>, start: f64) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        let mut auto = value.is_none();
+        if ui.checkbox(&mut auto, "Auto").changed() {
+            *value = if auto { None } else { Some(start) };
+        }
+        if let Some(v) = value {
+            ui.add(DragValue::new(v).speed(0.001).range(0.0..=f64::MAX));
+        }
+    });
+}
+
+/// The options of Signal Processing > FFT Filters, with Origin's names.
+fn fft_filter_options(ui: &mut egui::Ui, spec: &mut FftFilterSpec) {
+    const KINDS: [(&str, FftFilterType); 6] = [
+        ("Low Pass", FftFilterType::LowPass),
+        ("High Pass", FftFilterType::HighPass),
+        ("Band Pass", FftFilterType::BandPass),
+        ("Band Block", FftFilterType::BandBlock),
+        ("Threshold", FftFilterType::Threshold),
+        ("Low Pass Parabolic", FftFilterType::LowPassParabolic),
+    ];
+    let o = &mut spec.options;
+    ui.horizontal(|ui| {
+        ui.label("Filter Type");
+        egui::ComboBox::from_id_salt("fft_filter_type")
+            .selected_text(KINDS.iter().find(|k| k.1 == o.kind).map_or("", |k| k.0))
+            .show_ui(ui, |ui| {
+                for (label, k) in KINDS {
+                    ui.selectable_value(&mut o.kind, k, label);
+                }
+            });
+    });
+    auto_value(ui, "Sampling interval", &mut spec.interval, 1.0);
+    match o.kind {
+        FftFilterType::LowPass | FftFilterType::HighPass => auto_value(ui, "Cutoff Frequency", &mut o.cutoff, 0.1),
+        FftFilterType::BandPass | FftFilterType::BandBlock => {
+            auto_value(ui, "Lower Cutoff Frequency", &mut o.freq1, 0.1);
+            auto_value(ui, "Upper Cutoff Frequency", &mut o.freq2, 0.3);
+        }
+        FftFilterType::Threshold => auto_value(ui, "Threshold", &mut o.threshold, 1.0),
+        FftFilterType::LowPassParabolic => {
+            auto_value(ui, "Pass Frequency", &mut o.pass, 0.1);
+            auto_value(ui, "Stop Frequency", &mut o.stop, 0.3);
+        }
+    }
+    let offset = matches!(o.kind, FftFilterType::HighPass | FftFilterType::BandPass | FftFilterType::BandBlock);
+    ui.add_enabled(offset, egui::Checkbox::new(&mut o.keep_offset, "Keep DC offset"));
+    ui.weak("Auto: cutoffs at a quarter and three quarters of the Nyquist frequency, the threshold at a tenth of the largest magnitude.");
+}
+
 /// The options of Signal Processing > FFT > FFT, with Origin's names.
 fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
     let o = &mut spec.options;
@@ -774,6 +835,10 @@ impl AnalysisDialog {
             level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1, details: false },
             fft: FftSpec { auto_interval: true, ..Default::default() },
             ifft: IfftSpec { auto_interval: true, ..Default::default() },
+            fft_filter: FftFilterSpec {
+                options: FftFilterOptions { keep_offset: true, ..Default::default() },
+                interval: None,
+            },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -1067,6 +1132,7 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
             AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Fft => Tool::Fft(self.fft),
+            AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
             AnalysisKind::Ifft => {
                 let imaginary = if self.use_reference {
                     Some(
@@ -1371,6 +1437,7 @@ impl AnalysisDialog {
                 ui.weak("The reference is interpolated onto the X values of the data.");
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
+            AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
             AnalysisKind::Ifft => {
                 ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
                     ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
@@ -2069,6 +2136,7 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => "levelcrossing",
             AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Fft => "fft1",
+            AnalysisKind::FftFilter => "fft_filters",
             AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
@@ -2132,6 +2200,7 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Fft => "The frequency spectrum of the input signals",
+            AnalysisKind::FftFilter => "Remove frequencies from the input signals",
             AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
@@ -2182,7 +2251,8 @@ impl AnalysisDialog {
             | AnalysisKind::SubtractRef
             | AnalysisKind::CurveMath
             | AnalysisKind::ColumnMath
-            | AnalysisKind::Hilbert => "New columns beside the input",
+            | AnalysisKind::Hilbert
+            | AnalysisKind::FftFilter => "New columns beside the input",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
@@ -2293,6 +2363,7 @@ impl AnalysisDialog {
                 | AnalysisKind::CurveMath
                 | AnalysisKind::ColumnMath
                 | AnalysisKind::Hilbert
+                | AnalysisKind::FftFilter
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter

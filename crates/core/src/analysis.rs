@@ -38,7 +38,9 @@ pub use sheaf_calc::{
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
-pub use sheaf_calc::{FftOptions, FftWindow, IfftOptions, PowerNorm, WindowCorrection};
+pub use sheaf_calc::{
+    FftFilterOptions, FftFilterType, FftOptions, FftWindow, IfftOptions, PowerNorm, WindowCorrection,
+};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -254,6 +256,15 @@ pub struct IfftSpec {
     pub options: IfftOptions,
     /// Take the sampling interval (the frequency step) from the input's X column.
     pub auto_interval: bool,
+}
+
+/// What [`Tool::FftFilter`] does (Origin's Signal Processing > FFT Filters, `fft_filters`,
+/// measured; analysis-tools.md 15.2).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FftFilterSpec {
+    pub options: FftFilterOptions,
+    /// Sampling interval; `None`: the X step of the input (1 without an X column).
+    pub interval: Option<f64>,
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -617,6 +628,7 @@ pub enum Tool {
     Hilbert,
     Fft(FftSpec),
     Ifft(IfftSpec),
+    FftFilter(FftFilterSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -679,6 +691,7 @@ impl Tool {
             Tool::Hilbert => "Hilbert transform",
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
+            Tool::FftFilter(_) => "FFT filter",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -736,6 +749,7 @@ impl Tool {
             Tool::Hilbert => "Hilbert",
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
+            Tool::FftFilter(_) => "FFTFilter",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1734,6 +1748,30 @@ impl Project {
                     col(Designation::Y, "Phase", "Degrees", r.phase);
                     col(Designation::Y, "Power", "", r.power);
                     col(Designation::Y, "dB", "dB", r.db);
+                }
+            }
+            Tool::FftFilter(spec) => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let dt = spec.interval.unwrap_or_else(|| auto_interval(inp.xs()));
+                    if !(dt.is_finite() && dt > 0.0) {
+                        return Err(AnalysisError::BadOption(format!("{dt} is not a usable interval")));
+                    }
+                    let word = match spec.options.kind {
+                        FftFilterType::LowPass => "low pass",
+                        FftFilterType::HighPass => "high pass",
+                        FftFilterType::BandPass => "band pass",
+                        FftFilterType::BandBlock => "band block",
+                        FftFilterType::Threshold => "threshold",
+                        FftFilterType::LowPassParabolic => "parabolic low pass",
+                    };
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("{} FFT filtered", inp.name),
+                        units: inp.units.clone(),
+                        comments: format!("FFT {word} filter of {}{}", inp.short, inp.range_note()),
+                        data: inp.aligned(&calc::fft_filter(&y, dt, &spec.options)),
+                    });
                 }
             }
             Tool::Ifft(spec) => {
@@ -3177,6 +3215,23 @@ mod tests {
             assert!((t - i as f64).abs() < 1e-9 && (v - i as f64).abs() < 1e-9, "row {i}: {t} {v}");
         }
         assert!(r.message.starts_with("IFFT"), "{}", r.message);
+    }
+
+    #[test]
+    fn an_fft_filter_goes_beside_its_column() {
+        let (mut p, book, flat, ramp) = sample();
+        // The automatic low pass keeps a constant as it is.
+        let r = p.analyze(&request(&[flat, ramp], Tool::FftFilter(FftFilterSpec::default()))).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-12), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[2].comments, "FFT low pass filter of B");
+        assert_eq!(ws.columns[2].units, "A");
+        // A high pass without the offset removes the mean of the constant entirely.
+        let options = FftFilterOptions { kind: FftFilterType::HighPass, ..Default::default() };
+        let r = p.analyze(&request(&[flat], Tool::FftFilter(FftFilterSpec { options, interval: None }))).unwrap();
+        assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.abs() < 1e-12));
+        assert!(r.message.starts_with("FFT filter"), "{}", r.message);
     }
 
     #[test]

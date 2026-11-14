@@ -40,6 +40,9 @@ const CP_ANODIC_CURRENT: usize = 0x4ac;
 const SENSITIVITY_2: usize = 0x4b4;
 const CP_CATHODIC_TIME: usize = 0x4b8;
 const CP_ANODIC_TIME: usize = 0x4bc;
+/// Float 1.0 in the files of the newer programs, 0.0 in the files of the older ones that ship in
+/// the `Test Data` folder of the CHI1040C program. Decides how several channels are stored.
+const LAYOUT_FLAG: usize = 0x630;
 
 /// Significant digits of a current in the text export; pinned-current detection compares at this precision.
 const TEXT_DIGITS: usize = 4;
@@ -161,7 +164,8 @@ fn date_line(h: &Header) -> Option<String> {
 
 /// The potential of a cyclic voltammetry run, point by point.
 ///
-/// Point `k` (counted from 1) is the starting potential moved by `k` steps
+/// Point `k` (counted from 0, so the first row is Init E itself, as in the
+/// text export) is the starting potential moved by `k` steps
 /// in the initial direction, folded back and forth between the two limits
 /// like a triangle wave. A limit is reflected, not clamped: when the step
 /// would pass it, the overshoot is mirrored, so the potential can sit at the
@@ -171,7 +175,7 @@ pub(crate) fn cv_potential(init: f64, high: f64, low: f64, step: f64, positive: 
     let span = high - low;
     let period = 2.0 * span;
     let sign = if positive { 1.0 } else { -1.0 };
-    (1..=n)
+    (0..n)
         .map(|k| {
             let x = init + sign * k as f64 * step;
             let mut u = (x - low).rem_euclid(period);
@@ -183,9 +187,25 @@ pub(crate) fn cv_potential(init: f64, high: f64, low: f64, step: f64, positive: 
         .collect()
 }
 
-/// Time of point `k` (counted from 1): `k` sample intervals, free of rounding noise.
+/// Time of point `k` (counted from 0): `k` sample intervals, free of rounding noise.
 fn grid(k: usize, step: f64) -> f64 {
     (k as f64 * step * 1e9).round() / 1e9
+}
+
+/// Splits the data block into channels. In the files of the newer programs the values of the
+/// channels alternate point by point (`i1, i2, i1, i2, ...`). In the older files (layout flag 0.0)
+/// the first channel comes alone as one array and the others alternate after it, which for the
+/// three-channel sample is `i1 ... i1, i2, i3, i2, i3, ...`. A single channel is just its array.
+fn split_channels(data: &[u8], n: usize, channels: usize, old_layout: bool) -> Vec<Vec<f64>> {
+    let values: Vec<f64> = data.as_chunks::<4>().0.iter().map(|w| decimal(f32::from_le_bytes(*w))).collect();
+    let (alone, rest) = if old_layout && channels > 1 { (1, &values[n..]) } else { (0, &values[..]) };
+    let stride = channels - alone;
+    let mut out: Vec<Vec<f64>> = Vec::with_capacity(channels);
+    if alone == 1 {
+        out.push(values[..n].to_vec());
+    }
+    out.extend((0..stride).map(|c| rest.iter().skip(c).step_by(stride).copied().collect::<Vec<f64>>()));
+    out
 }
 
 /// Reads a CHI binary file. `file_stem` becomes the workbook long name and is
@@ -229,8 +249,8 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             detail: "the file holds no data points".to_string(),
         });
     }
-    // The channels are stored one after the other, each `claimed` values long. A cut-short file
-    // can only be read when there is a single channel.
+    // The data are `claimed` values for each of the channels (see `split_channels`). A cut-short
+    // file can only be read when there is a single channel.
     let needed = claimed.saturating_mul(4 * channels);
     let n = if data.len() >= needed {
         claimed
@@ -249,11 +269,12 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
     if extra > 0 {
         warnings.push(format!("{extra} bytes after the data were ignored"));
     }
-    let channel_data: Vec<Vec<f64>> = (0..channels)
-        .map(|c| {
-            data[c * n * 4..][..n * 4].as_chunks::<4>().0.iter().map(|w| decimal(f32::from_le_bytes(*w))).collect()
-        })
-        .collect();
+    let old_layout = h.f32_at(LAYOUT_FLAG) == 0.0;
+    let channel_data = split_channels(&data[..n * 4 * channels], n, channels, old_layout);
+    // The first row of a time-based run is at time 0, as in the text exports of the CHI627E
+    // program (the CHI1040C program writes its exports one sample interval later; the binary file
+    // does not say which program will export it).
+    let first = 0;
     let not_finite: usize = channel_data.iter().flatten().filter(|v| !v.is_finite()).count();
     if not_finite > 0 {
         warnings.push(format!("{not_finite} stored values are not finite numbers"));
@@ -271,6 +292,10 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
     let model = h.u32_at(MODEL);
     if (1..10_000).contains(&model) {
         meta.push(("Instrument Model".to_string(), format!("CHI{model}")));
+    }
+    // The third string is the Header text of the run (`Header: CV` in the text export).
+    if !strings[2].trim().is_empty() {
+        meta.push(("Header".to_string(), strings[2].trim().to_string()));
     }
     let current_cols = |names_from: usize| -> Vec<HeaderCol> {
         (names_from..channels)
@@ -332,7 +357,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             }
             let mut header = vec![HeaderCol::new("Time", "s")];
             header.extend(current_cols(0));
-            let mut data = vec![(1..=n).map(|k| grid(k, step)).collect::<Vec<_>>()];
+            let mut data = vec![(first..first + n).map(|k| grid(k, step)).collect::<Vec<_>>()];
             data.extend(channel_data);
             Block { header, data, x_step: Vec::new() }
         }
@@ -370,7 +395,7 @@ pub fn parse_chi_bin(bytes: &[u8], file_stem: &str, opts: &ChiOptions) -> Result
             }
             Block {
                 header: vec![HeaderCol::new("Time", "s"), HeaderCol::new("Potential", "V")],
-                data: vec![(1..=n).map(|k| grid(k, step)).collect(), potential],
+                data: vec![(first..first + n).map(|k| grid(k, step)).collect(), potential],
                 x_step: Vec::new(),
             }
         }

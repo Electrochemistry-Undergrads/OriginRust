@@ -473,6 +473,16 @@ text), and internal objects whose names start with an underscore or that have an
 `\p89(...)` wraps text at 89 percent size; the reader drops that wrapper and keeps `\b(...)`,
 `\i(...)`, `\+(...)`, `\-(...)` and `\g(...)`. A text of several lines is separated by CR LF.
 
+**Where a text is drawn [obs, 2026-11-13].** Origin turns a text object about the top-left corner of
+its unturned box, and the stored rectangle has that corner as its own top-left corner, with width
+and height swapped for a quarter turn. Measured on the owner's XRD figure (`AllDopantsXRD` in
+"XRD of all dopants for Pittcon"): the label `111` at 90 degrees is stored at x 1729..1897, y
+946..1187, and Origin draws it at the same x but from y 667 up to 932, ending at the rectangle's top;
+the upright axis title is stored at x 2735..4112 and drawn from x 328 pt, the rectangle's left edge.
+Only 0 and 90 degrees were seen; 180 and 270 are assumed to follow the same rule. An object whose
+rectangle lies wholly outside the page is not drawn by Origin (the legends of that project sit right
+of the page), so the reader skips it.
+
 ### 10.5 Curve records
 
 The column records of a graph layer are its curves (515 bytes, the same size as worksheet columns).
@@ -534,10 +544,15 @@ A legend in a file with no legend object keeps Sheaf's template default (no fram
 Plots made by one plot command are a *group*: their curve records follow one another, the first with bit `0x20` in
 byte `0x06` and the others with bit `0x10` (10.5). Nothing else in the records or the layer header marks a group, so
 the group is the run that starts at a `0x20` curve and goes on while the following curves carry `0x10`; a curve with
-neither bit ends it, and a run of one curve is not a group. Origin gives the members the colours of its colour list
-(10.6) in order, black first, whatever the records hold (13.13), which is the group's colour increment "by one"; the
-model keeps the group as `Plot::group` (a number, equal for the members of one group in a layer), the reader sets
-the members' colours from the list, and the writer writes a run of neighbouring plots with the same group number as
+neither bit ends it, and a run of one curve is not a group. Origin gives the members the colours of a colour list in
+order, black first, which is the group's colour increment "by one". The list is not always the base list (10.6): the
+owner's XRD figure draws black, red, blue, dark cyan, magenta, dark yellow (positions 0, 1, 3, 12, 5, 7), and where a
+group's list is stored was not found. When Origin saves, each record holds the colour Origin drew (checked on that
+figure against Origin's own export), so the reader keeps a colour written in the record and uses the base list only
+for a record that says "automatic". (13.13: in a file Sheaf wrote, Origin ignored the record colours and drew the base
+list; that is about what Origin draws from a file it did not write, not about what a saved file holds.) The model
+keeps the group as `Plot::group` (a number, equal for the members of one group in a layer), the reader sets
+the members' colours as just described, and the writer writes a run of neighbouring plots with the same group number as
 a group again. Increment settings other than the colour (line style, symbol shape, width), "independent" mode and
 the Group Members list live in places that were not found (13.13); the line style, width and symbol of every member
 are read as stored.
@@ -546,8 +561,7 @@ are read as stored.
 
 Read: page size; for each layer the frame, both axis ranges, steps, scale (linear or log10), minor
 ticks, tick direction, tick label size and visibility, axis line width, the box; the titles of the
-bottom and left axes with their font size; free text (one label per line, centred on the object's
-rectangle with an estimated text width); a legend (present or not, and its position); plots with
+bottom and left axes with their font size; free text (one label per line, starting at the turned box's corner as in 10.4); a legend (present or not, and its position); plots with
 their columns, type, colours, line width and style, symbol shape and size; the gap between the bars
 of a layer's column plots (from its first column plot); error columns, which are attached to the
 plot they belong to. A Y error plot (487) is attached; other error kinds are not.

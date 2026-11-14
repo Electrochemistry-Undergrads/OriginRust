@@ -9,6 +9,7 @@ description = "Turns a Sheaf graph and its data into SVG, PNG and PDF."
 
 [dependencies]
 sheaf-core = { workspace = true }
+sheaf-calc = { workspace = true }
 thiserror = { workspace = true }
 # resvg/usvg 0.45 and fontdb 0.23 are the versions svg2pdf 0.13 is built on;
 # using the same ones keeps a single copy of each in the build.

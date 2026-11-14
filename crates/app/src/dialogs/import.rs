@@ -4,8 +4,8 @@
 use eframe::egui::{self, Color32, DragValue, RichText};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::template::Template;
-use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands};
-use sheaf_io::batch::ImportMode;
+use sheaf_io::ascii::{AsciiOptions, Delimiter, Thousands, parse_widths};
+use sheaf_io::batch::{ImportMode, PlaceOptions};
 use sheaf_io::chi::ChiOptions;
 use sheaf_io::{ImportKind, Imported};
 use std::io::Read;
@@ -25,6 +25,8 @@ pub struct ImportDialog {
     pub(super) chi: ChiOptions,
     pub(super) ascii: AsciiOptions,
     pub(super) other_delimiter: String,
+    /// The column widths typed for the Fixed Width delimiter.
+    pub(super) fixed_widths: String,
     /// Make a graph of every imported file.
     pub(super) plot: bool,
     /// The graph template; `None` uses what the importer suggests for each file.
@@ -52,17 +54,19 @@ pub(super) enum ImportPage {
     ColumnDesignation,
     PartialImport,
     Miscellaneous,
+    DataImportOptions,
     FileInfo,
 }
 
 impl ImportPage {
-    const ALL: [ImportPage; 7] = [
+    const ALL: [ImportPage; 8] = [
         ImportPage::Options,
         ImportPage::ImportMode,
         ImportPage::HeaderLines,
         ImportPage::ColumnDesignation,
         ImportPage::PartialImport,
         ImportPage::Miscellaneous,
+        ImportPage::DataImportOptions,
         ImportPage::FileInfo,
     ];
 
@@ -74,6 +78,7 @@ impl ImportPage {
             ImportPage::ColumnDesignation => "Column Designation",
             ImportPage::PartialImport => "Partial Import",
             ImportPage::Miscellaneous => "Miscellaneous",
+            ImportPage::DataImportOptions => "(Re)Naming Worksheet and Workbook",
             ImportPage::FileInfo => "File Info and Parameters",
         }
     }
@@ -105,19 +110,24 @@ fn detect_in_prefix(path: &Path, options: &AsciiOptions) -> Option<sheaf_io::asc
     Some(sheaf_io::ascii::detect(&text, options))
 }
 
+/// The files that were read, and how they go into the project. Files that could not be read are
+/// in `errors`.
+pub struct ImportRequest {
+    pub items: Vec<Imported>,
+    pub errors: Vec<String>,
+    pub plot: bool,
+    pub template: Option<Template>,
+    pub mode: ImportMode,
+    pub place: PlaceOptions,
+}
+
 /// What the dialog wants the application to do after a frame.
 pub enum ImportOutcome {
     /// Keep showing the dialog.
     Open,
     Cancelled,
-    /// The user pressed Import. Files that could not be read are in `errors`.
-    Done {
-        items: Vec<Imported>,
-        errors: Vec<String>,
-        plot: bool,
-        template: Option<Template>,
-        mode: ImportMode,
-    },
+    /// The user pressed OK: import and close.
+    Done(ImportRequest),
 }
 
 impl ImportDialog {
@@ -129,6 +139,7 @@ impl ImportDialog {
             chi: ChiOptions::default(),
             ascii: AsciiOptions::default(),
             other_delimiter: "|".to_string(),
+            fixed_widths: "10".to_string(),
             plot: true,
             mode: ImportMode::NewBook,
             target: None,
@@ -145,10 +156,15 @@ impl ImportDialog {
         self.ascii.delimiter = Delimiter::Comma;
     }
 
+    /// Starts on the Data Import Options node of the tree (`--show import-data-options:FILE`).
+    pub fn show_data_import_options(&mut self) {
+        self.page = ImportPage::DataImportOptions;
+    }
+
     /// The delimiter the text import starts with.
     #[cfg(test)]
     pub fn delimiter(&self) -> Delimiter {
-        self.ascii.delimiter
+        self.ascii.delimiter.clone()
     }
 
     pub(super) fn read(&self, index: usize) -> Result<Imported, String> {
@@ -182,6 +198,7 @@ impl ImportDialog {
                 egui::TopBottomPanel::bottom("import_buttons").show_inside(ui, |ui| {
                     ui.add_space(6.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Origin's impASC window has OK and Cancel only (no Apply); the layout runs right to left.
                         if ui.button("Cancel").clicked() {
                             outcome = ImportOutcome::Cancelled;
                         }
@@ -239,7 +256,21 @@ impl ImportDialog {
                 Err(e) => errors.push(e),
             }
         }
-        ImportOutcome::Done { items, errors, plot: self.plot, template: self.template, mode: self.mode }
+        ImportOutcome::Done(self.request(items, errors))
+    }
+
+    pub(super) fn request(&self, items: Vec<Imported>, errors: Vec<String>) -> ImportRequest {
+        ImportRequest {
+            items,
+            errors,
+            plot: self.plot,
+            template: self.template,
+            mode: self.mode,
+            place: PlaceOptions {
+                // The sheet names of other formats (CH Instruments) are not the file name's business.
+                rename_sheet: self.ascii.rename_sheet || self.shown_format() != "ascii",
+            },
+        }
     }
 
     fn files_ui(&mut self, ui: &mut egui::Ui) {
@@ -320,6 +351,7 @@ impl ImportDialog {
             ImportPage::Options => self.options_page(ui),
             ImportPage::ImportMode => self.import_mode_page(ui),
             ImportPage::FileInfo => self.file_info_page(ui),
+            ImportPage::DataImportOptions => self.data_import_page(ui),
             ImportPage::Miscellaneous => {
                 self.ascii_page(ui);
                 self.chi_group(ui);
@@ -386,6 +418,20 @@ impl ImportDialog {
         });
     }
 
+    /// (Re)Naming Worksheet and Workbook: whether the imported sheet and book are named from the
+    /// file name (both on in Origin).
+    fn data_import_page(&mut self, ui: &mut egui::Ui) {
+        let ascii = self.shown_format() == "ascii";
+        ui.add_enabled_ui(ascii, |ui| {
+            let o = &mut self.ascii;
+            ui.checkbox(&mut o.rename_sheet, "Rename Sheet with (Partial) Filename");
+            ui.checkbox(&mut o.rename_book, "Rename Book with (Partial) Filename");
+        });
+        if !ascii {
+            ui.weak("The naming options apply to delimited text files.");
+        }
+    }
+
     /// File Info and Parameters: the header entries the importer found in the current file.
     fn file_info_page(&mut self, ui: &mut egui::Ui) {
         match &self.preview {
@@ -442,15 +488,16 @@ impl ImportDialog {
             if matches!(page, ImportPage::Options) {
                 ui.label("Delimiter");
                 ui.horizontal(|ui| {
-                    let name = |d: Delimiter| match d {
+                    let name = |d: &Delimiter| match d {
                         Delimiter::Auto => "Detect",
                         Delimiter::Comma => "Comma",
                         Delimiter::Tab => "Tab",
                         Delimiter::Semicolon => "Semicolon",
                         Delimiter::Whitespace => "Spaces",
-                        Delimiter::Other(_) => "Other",
+                        Delimiter::Other(_) | Delimiter::Multi(_) => "Other",
+                        Delimiter::Fixed(_) => "Fixed Width",
                     };
-                    egui::ComboBox::from_id_salt("ascii_delimiter").selected_text(name(o.delimiter)).show_ui(
+                    egui::ComboBox::from_id_salt("ascii_delimiter").selected_text(name(&o.delimiter)).show_ui(
                         ui,
                         |ui| {
                             for d in [
@@ -460,23 +507,48 @@ impl ImportDialog {
                                 Delimiter::Semicolon,
                                 Delimiter::Whitespace,
                             ] {
-                                ui.selectable_value(&mut o.delimiter, d, name(d));
+                                let label = name(&d);
+                                ui.selectable_value(&mut o.delimiter, d, label);
                             }
-                            let other = self.other_delimiter.chars().next().unwrap_or('|');
-                            let is_other = matches!(o.delimiter, Delimiter::Other(_));
-                            if ui.selectable_label(is_other, "Other").clicked() {
-                                o.delimiter = Delimiter::Other(other);
+                            let is_other = matches!(o.delimiter, Delimiter::Other(_) | Delimiter::Multi(_));
+                            if ui.selectable_label(is_other, "Other").clicked() && !is_other {
+                                o.delimiter = Delimiter::from_text(&self.other_delimiter)
+                                    .unwrap_or(Delimiter::Other('|'));
+                            }
+                            let is_fixed = matches!(o.delimiter, Delimiter::Fixed(_));
+                            if ui.selectable_label(is_fixed, "Fixed Width").clicked() && !is_fixed {
+                                o.delimiter = Delimiter::Fixed(parse_widths(&self.fixed_widths).unwrap_or(vec![10]));
                             }
                         },
                     );
-                    if let Delimiter::Other(c) = &mut o.delimiter {
-                        if ui.add(egui::TextEdit::singleline(&mut self.other_delimiter).desired_width(24.0)).changed()
-                            && let Some(typed) = self.other_delimiter.chars().next()
-                        {
-                            *c = typed;
+                    match &o.delimiter {
+                        Delimiter::Other(_) | Delimiter::Multi(_) => {
+                            ui.add(egui::TextEdit::singleline(&mut self.other_delimiter).desired_width(48.0))
+                                .on_hover_text(
+                                    "One character, or a string of characters that separates the fields as a whole",
+                                );
+                            // An empty field keeps the last delimiter that was typed.
+                            if let Some(typed) = Delimiter::from_text(&self.other_delimiter) {
+                                o.delimiter = typed;
+                            }
                         }
-                    } else if let (Delimiter::Auto, Some(d)) = (o.delimiter, &detected) {
-                        ui.weak(format!("found: {}", name(d.delimiter).to_lowercase()));
+                        Delimiter::Fixed(_) => {
+                            ui.label("Widths");
+                            ui.add(egui::TextEdit::singleline(&mut self.fixed_widths).desired_width(110.0))
+                                .on_hover_text(
+                                    "The width of each column in characters, separated by commas; the last width repeats",
+                                );
+                            // Text that is not a list of widths keeps the last list that was valid.
+                            if let Some(widths) = parse_widths(&self.fixed_widths) {
+                                o.delimiter = Delimiter::Fixed(widths);
+                            }
+                        }
+                        Delimiter::Auto => {
+                            if let Some(d) = &detected {
+                                ui.weak(format!("found: {}", name(&d.delimiter).to_lowercase()));
+                            }
+                        }
+                        _ => {}
                     }
                 });
                 ui.end_row();
@@ -493,6 +565,19 @@ impl ImportDialog {
                 ui.end_row();
                 ui.label("Line with comments");
                 optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
+                ui.end_row();
+                ui.label("Line with the short names");
+                let mut line = o.short_name_line;
+                if ui
+                    .add(
+                        DragValue::new(&mut line)
+                            .range(0..=100_000)
+                            .custom_formatter(|v, _| if v == 0.0 { "none".to_string() } else { format!("{v}") }),
+                    )
+                    .changed()
+                {
+                    o.short_name_line = line;
+                }
                 ui.end_row();
             }
             if page == ImportPage::ColumnDesignation {

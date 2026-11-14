@@ -489,11 +489,16 @@ impl Writer {
         for (i, l) in layer.labels.iter().enumerate() {
             let text = styled(&l.text, &l.font);
             let (w, h) = text_size(&text, l.font.size_pt);
-            let cx = frame_pt.left + l.x * frame_pt.width + w / 2.0;
-            let cy = frame_pt.top + l.y * frame_pt.height;
             let angle = (((l.rotation_deg % 360.0) + 360.0) % 360.0 * 10.0).round() as u16;
             let rotated = (450..1350).contains(&angle) || (2250..3150).contains(&angle);
             let (rw, rh) = if rotated { (h, w) } else { (w, h) };
+            // Origin turns the text about the top-left corner of its unturned box, which is also the
+            // top-left corner of the stored rectangle (the reader's rule, opj-format.md 10.4): the
+            // label's anchor lies half a line height down the turned text from that corner.
+            let (sin, cos) = l.rotation_deg.to_radians().sin_cos();
+            let anchor = (frame_pt.left + l.x * frame_pt.width, frame_pt.top + l.y * frame_pt.height);
+            let corner = (anchor.0 - h / 2.0 * sin, anchor.1 - h / 2.0 * cos);
+            let (cx, cy) = (corner.0 + rw / 2.0, corner.1 + rh / 2.0);
             let name = if i == 0 { "Text".to_string() } else { format!("Text{i}") };
             annotations.push(self.annotation_bytes(
                 AnnKind::Text,
@@ -659,13 +664,28 @@ impl Writer {
         }
         // Plot types the writer cannot store go out as plain columns; the companion file keeps them.
         let has = |f: &dyn Fn(PlotKind) -> bool| plots.iter().any(|r| f(r.plot.kind));
-        if has(&|k| k.is_stacked()) {
-            notes.push("stacked columns were written as columns side by side".into());
+        if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || is_pie(k)) {
+            notes.push("histogram, box and pie plots were written as plain columns of their data".into());
         }
-        if has(&|k| k == PlotKind::Bar) {
+        if plots
+            .iter()
+            .any(|r| (r.plot.size_from.is_some() && layer.coords.ternary().is_none()) || r.plot.color_from.is_some())
+        {
+            notes.push("bubble sizes and colour mapped symbol colours were not written".into());
+        }
+        if has(&|k| k.is_stacked_column()) {
+            notes.push("stacked columns and bars were written as columns side by side".into());
+        }
+        if has(&|k| k.is_stacked_area()) {
+            notes.push("stacked areas were written as areas from zero".into());
+        }
+        if plots.iter().any(|r| r.plot.kind == PlotKind::Area && r.plot.y_base.is_some()) {
+            notes.push("fill areas between two curves were written as areas down to zero".into());
+        }
+        if has(&|k| k.is_horizontal()) {
             notes.push("horizontal bars were written as vertical columns".into());
         }
-        if has(&|k| k == PlotKind::FloatingColumn) {
+        if has(&|k| matches!(k, PlotKind::FloatingColumn | PlotKind::FloatingBar)) {
             notes.push("floating columns were written as columns from zero".into());
         }
         if plots.iter().any(|r| r.plot.x_error.is_some() || !r.plot.error.is_default()) {
@@ -681,12 +701,22 @@ impl Writer {
                 | PlotKind::StackedColumn
                 | PlotKind::Stacked100Column
                 | PlotKind::Bar
-                | PlotKind::FloatingColumn => CurveKind::Column,
-                PlotKind::Area => CurveKind::Area,
+                | PlotKind::FloatingColumn
+                | PlotKind::StackedBar
+                | PlotKind::Stacked100Bar
+                | PlotKind::FloatingBar
+                | PlotKind::Histogram
+                | PlotKind::Box
+                | PlotKind::Pie
+                | PlotKind::Pie3D
+                | PlotKind::PieBw => CurveKind::Column,
+                PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => CurveKind::Area,
             };
             let connect = match p.line.connect {
                 Connect::Straight => 1,
                 Connect::Spline => 5,
+                Connect::BSpline => 8,
+                Connect::Bezier => 15,
                 Connect::StepHorizontal => 11,
                 Connect::StepVertical => 12,
             };
@@ -958,6 +988,23 @@ fn within(parent: sheaf_core::graph::Frame, f: sheaf_core::graph::Frame) -> shea
 /// whole project.
 fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: &mut Vec<String>) {
     let layer = &graph.layers[index];
+    if !layer.shapes.is_empty() {
+        let count = |k| layer.shapes.iter().filter(|s| s.kind == k).count();
+        let names: Vec<String> = sheaf_core::shape::ShapeKind::ALL
+            .iter()
+            .filter(|k| count(**k) > 0)
+            .map(|k| {
+                let noun =
+                    if *k == sheaf_core::shape::ShapeKind::Ellipse { "ellipse" } else { &k.name().to_lowercase() };
+                format!("{} {noun}", count(*k))
+            })
+            .collect();
+        notes.push(format!(
+            "layer {} has drawn objects ({}) that an Origin project file written here cannot hold; they were not written (the .opj.sheaf companion keeps them)",
+            index + 1,
+            names.join(", ")
+        ));
+    }
     if matches!(roles[index], Role::RightY { x_straight: false, .. }) {
         notes.push(
             "the X scale of a right Y layer that is not linked to its parent's was written with the link only".into(),
@@ -966,6 +1013,22 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if matches!(layer.stack, Stack::Waterfall { .. }) {
         notes.push(
             "a waterfall was written as curves moved by X and Y offsets on axes that cover them (Origin's own waterfall plot, with its Z axis, was not written)"
+                .into(),
+        );
+    }
+    if layer.coords.polar().is_some_and(|p| p.radar) {
+        notes.push(
+            "the radar layer was not written; its plots went out as plain line + symbol plots on rectangular axes"
+                .into(),
+        );
+    } else if layer.coords.polar().is_some() {
+        notes
+            .push("the polar layer was not written; its plots went out as plain line plots on rectangular axes".into());
+    }
+    if layer.coords.ternary().is_some() {
+        notes.push(
+            "the ternary layer was not written; its plots went out as plain scatter plots on rectangular axes \
+             (the Z column is not kept)"
                 .into(),
         );
     }
@@ -1185,4 +1248,9 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
         decimals,
         date_format,
     }
+}
+
+/// The three pie kinds (flat colour, 3D colour, black and white), which the writer cannot store.
+fn is_pie(k: PlotKind) -> bool {
+    matches!(k, PlotKind::Pie | PlotKind::Pie3D | PlotKind::PieBw)
 }

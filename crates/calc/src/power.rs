@@ -373,6 +373,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::excessive_precision)] // the digits as Origin printed them
     fn powers_agree_with_numbers_origin_gave() {
         // Two samples, means 5 and 6, sd 1.5, alpha 0.05, n = 10: Origin 0.29211006608063178.
         let p = t_power(PowerTest::TwoSample, 10.0, 1.0, 1.5, 0.05, true).unwrap();

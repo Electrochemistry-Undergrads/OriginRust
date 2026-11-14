@@ -46,10 +46,46 @@ pub enum Template {
     Bar,
     /// Floating column (Origin's "Floating Column"): each bar runs from one Y column to the next.
     FloatingColumn,
+    /// Stacked bar: the horizontal form of the stacked column.
+    StackedBar,
+    /// 100 % stacked bar: every pile scaled to 100, value axis from 0 to 100.
+    Stacked100Bar,
+    /// Floating bar: the horizontal form of the floating column.
+    FloatingBar,
+    /// Stacked area (Origin's "Stacked Area"): the area template with the areas piled up.
+    StackedArea,
+    /// 100 % stacked area: every pile scaled to 100, Y axis from 0 to 100.
+    Stacked100Area,
+    /// Fill area (Origin's "Fill Area"): the area between two curves, a pair of Y columns each.
+    FillArea,
+    /// Histogram (Origin's "Histogram"): the bin counts of each Y column as touching bars.
+    Histogram,
+    /// Box chart (Origin's "Box Chart"): one box per Y column.
+    BoxChart,
+    /// Bubble plot (Origin's "Bubble"): open circles whose size follows the Z column.
+    Bubble,
+    /// Colour mapped scatter plot: the colour of each symbol follows the Z column.
+    ColorMapped,
+    /// Both: bubbles whose size and colour follow the Z column.
+    BubbleColorMapped,
+    /// Pie chart (Origin's pie): the Y column's rows as slices, in a layer without axes.
+    Pie,
+    /// 3D pie seen from above at a slant (Origin's "3D Color Pie").
+    Pie3D,
+    /// Flat black and white pie with hatch patterns (Origin's "2D B&W Pie").
+    PieBw,
+    /// Polar plot, angle in degrees from the X column and radius from Y (Origin's "Polar theta(X) r(Y)").
+    Polar,
+    /// Polar plot with the radius from the X column and the angle from Y ("Polar r(X) theta(Y)").
+    PolarRTheta,
+    /// Radar chart: every Y column a closed polygon over spokes named by the X column (Origin's "Radar").
+    Radar,
+    /// Ternary plot of the X, Y and Z columns (Origin's "Ternary").
+    Ternary,
 }
 
 impl Template {
-    pub const ALL: [Template; 13] = [
+    pub const ALL: [Template; 31] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -58,7 +94,25 @@ impl Template {
         Template::Stacked100Column,
         Template::Bar,
         Template::FloatingColumn,
+        Template::StackedBar,
+        Template::Stacked100Bar,
+        Template::FloatingBar,
         Template::Area,
+        Template::StackedArea,
+        Template::Stacked100Area,
+        Template::FillArea,
+        Template::Histogram,
+        Template::BoxChart,
+        Template::Bubble,
+        Template::ColorMapped,
+        Template::BubbleColorMapped,
+        Template::Pie,
+        Template::Pie3D,
+        Template::PieBw,
+        Template::Polar,
+        Template::PolarRTheta,
+        Template::Radar,
+        Template::Ternary,
         Template::CyclicVoltammetry,
         Template::DoubleY,
         Template::StackedLines,
@@ -81,6 +135,24 @@ impl Template {
             Template::Stacked100Column => "stacked-column-100",
             Template::Bar => "bar",
             Template::FloatingColumn => "floating-column",
+            Template::StackedBar => "stacked-bar",
+            Template::Stacked100Bar => "stacked-bar-100",
+            Template::FloatingBar => "floating-bar",
+            Template::StackedArea => "stacked-area",
+            Template::Stacked100Area => "stacked-area-100",
+            Template::FillArea => "fill-area",
+            Template::Histogram => "histogram",
+            Template::BoxChart => "box",
+            Template::Bubble => "bubble",
+            Template::ColorMapped => "color-mapped",
+            Template::BubbleColorMapped => "bubble-color-mapped",
+            Template::Pie => "pie",
+            Template::Pie3D => "pie-3d",
+            Template::PieBw => "pie-bw",
+            Template::Polar => "polar",
+            Template::PolarRTheta => "polar-r-theta",
+            Template::Radar => "radar",
+            Template::Ternary => "ternary",
         }
     }
 
@@ -99,6 +171,24 @@ impl Template {
             Template::Stacked100Column => "100% Stacked Column",
             Template::Bar => "Bar",
             Template::FloatingColumn => "Floating Column",
+            Template::StackedBar => "Stacked Bar",
+            Template::Stacked100Bar => "100% Stacked Bar",
+            Template::FloatingBar => "Floating Bar",
+            Template::StackedArea => "Stacked Area",
+            Template::Stacked100Area => "100% Stacked Area",
+            Template::FillArea => "Fill Area",
+            Template::Histogram => "Histogram",
+            Template::BoxChart => "Box Chart",
+            Template::Bubble => "Bubble",
+            Template::ColorMapped => "Color Mapped",
+            Template::BubbleColorMapped => "Bubble + Color Mapped",
+            Template::Pie => "Pie",
+            Template::Pie3D => "3D Color Pie",
+            Template::PieBw => "2D B&W Pie",
+            Template::Polar => "Polar theta(X) r(Y)",
+            Template::PolarRTheta => "Polar r(X) theta(Y)",
+            Template::Radar => "Radar",
+            Template::Ternary => "Ternary",
         }
     }
 
@@ -117,12 +207,30 @@ impl Template {
             Template::DoubleY => double_y(id, name),
             Template::StackedLines => stacked_lines(id, name),
             Template::Waterfall => waterfall(id, name),
-            Template::Column => column(id, name, PlotKind::Column),
-            Template::StackedColumn => column(id, name, PlotKind::StackedColumn),
-            Template::Stacked100Column => column(id, name, PlotKind::Stacked100Column),
+            Template::Column => from_red(column(id, name, PlotKind::Column)),
+            Template::StackedColumn => themed(column(id, name, PlotKind::StackedColumn)),
+            Template::Stacked100Column => themed(column(id, name, PlotKind::Stacked100Column)),
             Template::Bar => column(id, name, PlotKind::Bar),
-            Template::FloatingColumn => column(id, name, PlotKind::FloatingColumn),
-            Template::Area => general(id, name, PlotKind::Area),
+            Template::FloatingColumn => from_blue(column(id, name, PlotKind::FloatingColumn)),
+            Template::StackedBar => themed(column(id, name, PlotKind::StackedBar)),
+            Template::Stacked100Bar => themed(column(id, name, PlotKind::Stacked100Bar)),
+            Template::FloatingBar => from_blue(column(id, name, PlotKind::FloatingBar)),
+            Template::Area => themed(general(id, name, PlotKind::Area)),
+            Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
+            Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
+            Template::FillArea => themed(general(id, name, PlotKind::Area)),
+            Template::Histogram => from_red(general(id, name, PlotKind::Histogram)),
+            Template::BoxChart => from_red(general(id, name, PlotKind::Box)),
+            Template::Bubble => bubble(id, name, false, true),
+            Template::ColorMapped => bubble(id, name, true, false),
+            Template::BubbleColorMapped => bubble(id, name, true, true),
+            Template::Pie => pie(id, name, PlotKind::Pie),
+            Template::Pie3D => pie(id, name, PlotKind::Pie3D),
+            Template::PieBw => pie(id, name, PlotKind::PieBw),
+            Template::Polar => polar(id, name, RadiusColumn::Y),
+            Template::PolarRTheta => polar(id, name, RadiusColumn::X),
+            Template::Radar => radar(id, name),
+            Template::Ternary => ternary(id, name),
         }
     }
 }
@@ -161,6 +269,68 @@ pub const ORIGIN_COLOR_LIST: [(u8, u8, u8); 24] = [
     (255, 128, 255),
     (64, 64, 64),
 ];
+
+/// The colour list of the owner's graph theme, which Origin's area, stacked area and stacked column
+/// templates use (black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, then
+/// custom colours; graphing spec section 1.5), measured on the legends of plots made from those
+/// templates.
+pub const THEME_COLOR_LIST: [(u8, u8, u8); 23] = [
+    (0, 0, 0),
+    (255, 0, 0),
+    (0, 0, 255),
+    (255, 0, 255),
+    (0, 128, 0),
+    (0, 0, 128),
+    (128, 0, 255),
+    (128, 0, 128),
+    (128, 0, 0),
+    (128, 128, 0),
+    (43, 99, 162),
+    (30, 150, 150),
+    (155, 100, 26),
+    (16, 199, 62),
+    (185, 36, 122),
+    (45, 197, 204),
+    (63, 65, 152),
+    (147, 172, 43),
+    (128, 128, 128),
+    (150, 100, 100),
+    (100, 150, 100),
+    (43, 163, 202),
+    (50, 100, 150),
+];
+
+/// The graph with its colour list replaced by the theme list ([`THEME_COLOR_LIST`]).
+fn themed(mut g: Graph) -> Graph {
+    for l in &mut g.layers {
+        l.palette.colors = THEME_COLOR_LIST.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).collect();
+    }
+    g
+}
+
+/// The graph with its colour list started at the second entry of the base palette (red, green, blue,
+/// cyan, ...), as Origin's Column and Box templates do (measured: the first column of a plain
+/// Column graph is red, not black).
+fn from_red(g: Graph) -> Graph {
+    from_entry(g, 1)
+}
+
+/// The graph with its colour list started at blue, the fourth entry of the base palette, as Origin's
+/// Floating Column template does (measured: its first plot is filled blue, graphing.md 14.12; the
+/// colours of further plots were not measured and follow the base palette from there).
+fn from_blue(g: Graph) -> Graph {
+    from_entry(g, 3)
+}
+
+fn from_entry(mut g: Graph, first: usize) -> Graph {
+    for l in &mut g.layers {
+        l.palette.colors = (first..first + ORIGIN_COLOR_LIST.len())
+            .map(|i| ORIGIN_COLOR_LIST[i % ORIGIN_COLOR_LIST.len()])
+            .map(|(r, g, b)| Color::rgb(r, g, b))
+            .collect();
+    }
+    g
+}
 
 /// Origin's default page, in inches (6432 by 4923 units of 1/600 inch). Its font sizes (18 pt tick
 /// labels, 22 pt titles) are meant for this size.
@@ -238,6 +408,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 text: None,
             },
             labels: Vec::new(),
+            shapes: Vec::new(),
             palette,
             default_line: LineStyle::solid(Color::BLACK, 0.5),
             default_symbol: SymbolStyle {
@@ -253,8 +424,100 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             stack: Stack::None,
             plot_offsets: Vec::new(),
             bars: BarSpacing::default(),
+            coords: Coords::Cartesian,
         }],
     }
+}
+
+/// The scatter template for bubble and colour mapped plots. Bubbles are open circles in the first
+/// colour of the list (measured: black rings), colour mapped symbols the usual filled squares, and
+/// bubbles that are also colour mapped are filled circles.
+fn bubble(id: WindowId, name: &str, mapped: bool, sized: bool) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    let s = &mut g.layers[0].default_symbol;
+    if sized {
+        s.shape = SymbolShape::Circle;
+        s.filled = mapped;
+    }
+    g
+}
+
+/// The pie template: no axes (the plot draws its own frame, slices, labels and legend), the colour
+/// list of the line template (measured: black, red, green, blue, cyan, ...).
+fn pie(id: WindowId, name: &str, kind: PlotKind) -> Graph {
+    let mut g = general(id, name, kind);
+    let l = &mut g.layers[0];
+    l.x_axis.side = AxisSide::Hidden;
+    l.y_axis.side = AxisSide::Hidden;
+    l.legend.visible = false;
+    g
+}
+
+/// The polar template: the line template in a layer of polar coordinates. The frame is a square
+/// on the page (the circle is as wide as the frame is high), the grid rings and spokes are grey
+/// and solid (Sheaf's usual grid style, as in Origin's polar template), and the axis titles are
+/// not drawn.
+fn polar(id: WindowId, name: &str, radius: RadiusColumn) -> Graph {
+    polar_of(id, name, radius, PlotKind::Line)
+}
+
+fn polar_of(id: WindowId, name: &str, radius: RadiusColumn, kind: PlotKind) -> Graph {
+    let mut g = general(id, name, kind);
+    // Origin's polar page (measured, spec 14.18): 8.04 by 6.15 in with a square layer of 4.55 in, its
+    // left edge at 23.3 % of the page, and the legend above the layer's top right corner.
+    g.page = Page::inches(8.04, 6.15);
+    let l = &mut g.layers[0];
+    l.frame = Frame { left: 0.2326, top: 0.1174, width: 0.5665, height: 0.7402 };
+    l.legend.position = LegendPosition::Manual { x: 0.84, y: -0.108 };
+    l.coords = Coords::Polar(PolarCoords { radius, ..PolarCoords::default() });
+    let grid = LineStyle::solid(Color::rgb(204, 204, 204), 0.5);
+    for a in [&mut l.x_axis, &mut l.y_axis] {
+        a.major_grid = Some(grid.clone());
+        a.show_title = false;
+        a.major_tick = TickDirection::Out;
+        a.major_tick_len_pt = 6.0;
+        a.minor_ticks = 0;
+    }
+    g
+}
+
+/// The radar template: the line + symbol template in a layer of polar coordinates whose spokes are
+/// the rows (graphing spec section 14.19). The grid is made of polygons at the radius ticks and
+/// straight spokes; the spoke names stand outside, the outer polygon has no ticks.
+fn radar(id: WindowId, name: &str) -> Graph {
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
+    let l = &mut g.layers[0];
+    l.coords = Coords::Polar(PolarCoords { zero_deg: 90.0, clockwise: true, radar: true, ..PolarCoords::default() });
+    // Origin's radar page (measured, spec 14.19): 8 by 6.125 in, the layer 61 % wide and 75 % high from
+    // 11.7 % and 10.9 %, the legend at the top right corner of the layer.
+    g.page = Page::inches(8.0, 6.125);
+    let l = &mut g.layers[0];
+    l.frame = Frame { left: 0.1173, top: 0.1092, width: 0.612, height: 0.7535 };
+    l.legend.position = LegendPosition::Manual { x: 1.0116, y: -0.0208 };
+    l.x_axis.major_tick = TickDirection::None;
+    l.y_axis.major_tick_len_pt = 5.0;
+    g
+}
+
+/// The ternary template: a scatter plot in a layer of triangle coordinates. The frame is a square
+/// on the page (the triangle is as wide as it fits), the grid lines parallel to the sides are on
+/// at the major ticks, minor ticks are off. The three axis titles are the column names.
+fn ternary(id: WindowId, name: &str) -> Graph {
+    let mut g = general(id, name, PlotKind::Scatter);
+    g.page = Page::inches(6.0, 6.0);
+    let l = &mut g.layers[0];
+    l.frame = Frame { left: 0.2, top: 0.2, width: 0.6, height: 0.6 };
+    l.coords = Coords::Ternary(TernaryCoords::default());
+    // The one plot would be named after its Y column only, which says nothing about the rest.
+    l.legend.visible = false;
+    let grid = LineStyle::solid(Color::rgb(204, 204, 204), 0.5);
+    for a in [&mut l.x_axis, &mut l.y_axis] {
+        a.major_grid = Some(grid.clone());
+        a.major_tick = TickDirection::Out;
+        a.major_tick_len_pt = 6.0;
+        a.minor_ticks = 0;
+    }
+    g
 }
 
 fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
@@ -394,6 +657,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     let mut l = parent.clone();
     l.plots.clear();
     l.labels.clear();
+    l.shapes.clear();
     l.plot_offsets.clear();
     // The right axis has curves of its own: they are not stacked, and its values are shown even
     // when the stacked parent hides its own (offset) Y values.
@@ -465,7 +729,9 @@ mod tests {
         assert_eq!(Template::from_name("stacked-column-100"), Some(Template::Stacked100Column));
         assert_eq!(Template::from_name("bar"), Some(Template::Bar));
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
-        assert_eq!(Template::ALL.len(), 13);
+        assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
+        assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
+        assert_eq!(Template::ALL.len(), 31);
     }
 
     #[test]
@@ -487,11 +753,12 @@ mod tests {
         assert_eq!((l.x_axis.major_tick, l.x_axis.minor_tick), (TickDirection::None, TickDirection::None));
         assert_eq!((l.x_axis.minor_ticks, l.y_axis.minor_ticks), (0, 1));
         assert_eq!(l.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
-        // Page, fonts, legend and colors are those of the line template.
+        // Page, fonts and legend are those of the line template; the colours start at red (measured).
         let line = Template::Line.new_graph(WindowId(1), "Graph1");
         assert_eq!(g.page, line.page);
         assert_eq!(l.legend, line.layers[0].legend);
-        assert_eq!(l.palette, line.layers[0].palette);
+        assert_eq!(l.palette.colors[0], Color::rgb(255, 0, 0));
+        assert_eq!(l.palette.colors.len(), line.layers[0].palette.colors.len());
         assert_eq!(l.x_axis.tick_font, line.layers[0].x_axis.tick_font);
         // No template writes the new keys, so their files look as before.
         for t in Template::ALL {
@@ -602,5 +869,43 @@ mod tests {
         let r = right_y_layer(&stacked, 0);
         assert_eq!(r.stack, Stack::None);
         assert!(r.y_axis.show_tick_labels);
+    }
+
+    #[test]
+    fn floating_column_starts_its_colours_at_blue_as_origin() {
+        let g = Template::FloatingColumn.new_graph(WindowId(0), "");
+        assert_eq!(g.layers[0].palette.colors[0], Color::rgb(0, 0, 255));
+        let c = Template::Column.new_graph(WindowId(0), "");
+        assert_eq!(c.layers[0].palette.colors[0], Color::rgb(255, 0, 0), "plain columns still start at red");
+    }
+
+    /// Measured on the legends of 12 and 13 plots in Origin (spec 14.12).
+    #[test]
+    fn horizontal_stacked_and_floating_bars_use_the_colour_lists_of_their_vertical_forms() {
+        let colors = |t: Template| t.new_graph(WindowId(0), "").layers[0].palette.colors.clone();
+        let floating: Vec<Color> = [
+            (0, 0, 255),
+            (0, 255, 255),
+            (255, 0, 255),
+            (255, 255, 0),
+            (128, 128, 0),
+            (0, 0, 128),
+            (128, 0, 128),
+            (128, 0, 0),
+            (0, 128, 0),
+            (0, 128, 128),
+            (0, 0, 160),
+            (255, 128, 0),
+        ]
+        .map(|(r, g, b)| Color::rgb(r, g, b))
+        .to_vec();
+        for t in [Template::FloatingColumn, Template::FloatingBar] {
+            assert_eq!(colors(t)[..12], floating[..], "{t:?}");
+        }
+        for t in [Template::StackedBar, Template::Stacked100Bar] {
+            assert_eq!(colors(t), colors(Template::StackedColumn), "{t:?}");
+            assert_eq!(colors(t)[1], Color::rgb(255, 0, 0));
+            assert_eq!(colors(t)[2], Color::rgb(0, 0, 255), "black, red, blue, magenta, green, ...");
+        }
     }
 }

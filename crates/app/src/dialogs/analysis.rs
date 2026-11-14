@@ -68,6 +68,17 @@ pub enum AnalysisKind {
     KsTwoSample,
     MedianTest,
     Friedman,
+    /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
+    AverageCurves,
+    Intersect,
+    PolygonArea,
+    /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
+    SubtractLine,
+    ReduceDup,
+    ReduceX,
+    TranslateX,
+    TranslateY,
+    MedianFilter,
 }
 
 impl AnalysisKind {
@@ -118,6 +129,15 @@ impl AnalysisKind {
             AnalysisKind::KsTwoSample => "Two Sample Kolmogorov-Smirnov Test...",
             AnalysisKind::MedianTest => "Mood's Median Test...",
             AnalysisKind::Friedman => "Friedman ANOVA...",
+            AnalysisKind::AverageCurves => "Average Multiple Curves...",
+            AnalysisKind::Intersect => "Intersect...",
+            AnalysisKind::PolygonArea => "Polygon Area...",
+            AnalysisKind::SubtractLine => "Subtract Straight Line...",
+            AnalysisKind::ReduceDup => "Reduce Duplicate X Data...",
+            AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
+            AnalysisKind::TranslateX => "Curve Translate X...",
+            AnalysisKind::TranslateY => "Curve Translate Y...",
+            AnalysisKind::MedianFilter => "Median Filter...",
         }
     }
 
@@ -157,6 +177,15 @@ impl AnalysisKind {
             "ks2" => AnalysisKind::KsTwoSample,
             "mediantest" => AnalysisKind::MedianTest,
             "friedman" => AnalysisKind::Friedman,
+            "average-curves" => AnalysisKind::AverageCurves,
+            "intersect" => AnalysisKind::Intersect,
+            "polygon-area" => AnalysisKind::PolygonArea,
+            "subtract-line" => AnalysisKind::SubtractLine,
+            "reduce-dup" => AnalysisKind::ReduceDup,
+            "reduce-x" => AnalysisKind::ReduceX,
+            "translate-x" => AnalysisKind::TranslateX,
+            "translate-y" => AnalysisKind::TranslateY,
+            "median-filter" => AnalysisKind::MedianFilter,
             _ => return None,
         })
     }
@@ -399,6 +428,10 @@ pub struct AnalysisDialog {
     line: [f64; 4],
     interp: InterpSpec,
     interp_own_range: bool,
+    /// Interpolate onto the values of this column (index into `sheet_columns`) instead of a grid.
+    interp_at: Option<usize>,
+    /// The column that `interp_at` starts at when the X values are taken from a column.
+    interp_at_default: usize,
     peaks: PeakOptions,
     peak_keep: PeakKeep,
     peak_height: f64,
@@ -422,6 +455,9 @@ pub struct AnalysisDialog {
     reference: usize,
     common_only: bool,
     stats: StatsOptions,
+    curves: super::math_curves::CurveOptions,
+    /// Options of the Data Manipulation windows and the median filter.
+    manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
     /// (the factor columns may hold text).
     sheet_columns: Vec<(ColumnId, String)>,
@@ -482,6 +518,22 @@ impl AnalysisDialog {
     }
 
     /// A window for running `kind` on `columns`. `None` when a column no longer exists.
+    /// Chooses the interpolation method (the Mathematics menu's Linear, Spline and B-Spline items).
+    pub fn set_interp_method(&mut self, method: InterpMethod) {
+        self.interp.method = method;
+    }
+
+    /// Mathematics > Interpolate/Extrapolate Y from X: the X values come from a column, at first the
+    /// first column of the sheet that is neither an input nor an input's X column.
+    pub fn set_interp_from_column(&mut self) {
+        self.interp_at = Some(self.interp_at_default);
+    }
+
+    #[cfg(test)]
+    pub fn interp_method(&self) -> InterpMethod {
+        self.interp.method
+    }
+
     pub fn new(project: &Project, kind: AnalysisKind, columns: Vec<ColumnId>) -> Option<Self> {
         let (_, sheet, _) = project.locate(*columns.first()?)?;
         let names: Vec<&str> =
@@ -509,6 +561,18 @@ impl AnalysisDialog {
                 (c.id, format!("{}{detail}", c.short_name))
             })
             .collect();
+        // Interpolate/Extrapolate Y from X: the X values come at first from the first column that is
+        // neither an input nor the X column of an input (that would give the data back).
+        let input_xs: Vec<ColumnId> = columns
+            .iter()
+            .filter_map(|id| sheet.column_index(*id).and_then(|i| sheet.x_for(i)).map(|c| c.id))
+            .collect();
+        let interp_at_default = sheet
+            .columns
+            .iter()
+            .position(|c| !columns.contains(&c.id) && !input_xs.contains(&c.id))
+            .or_else(|| sheet.columns.iter().position(|c| !columns.contains(&c.id)))
+            .unwrap_or(0);
         // The two-way ANOVA starts with the chosen columns as factor A, factor B and data, in this order.
         let mut stats = StatsOptions { paired: kind == AnalysisKind::SignedRankPaired, ..StatsOptions::default() };
         if kind == AnalysisKind::Anova2 {
@@ -555,6 +619,8 @@ impl AnalysisDialog {
             line: [x_lo, 0.0, x_hi, 0.0],
             interp: InterpSpec { range: Some((x_lo, x_hi)), ..InterpSpec::default() },
             interp_own_range: false,
+            interp_at: None,
+            interp_at_default,
             peaks: PeakOptions::default(),
             peak_keep: PeakKeep::Default,
             peak_height: 0.0,
@@ -567,6 +633,8 @@ impl AnalysisDialog {
             chain_fit: None,
             chain_fit_linear: true,
             stats,
+            curves: Default::default(),
+            manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
             picker: None,
@@ -609,7 +677,16 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceDup
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
+            AnalysisKind::AverageCurves => self.curves.average_tool(),
+            AnalysisKind::Intersect => self.curves.intersect_tool(),
+            AnalysisKind::PolygonArea => Tool::PolygonArea,
             AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
                 method: match self.smooth_kind {
                     SmoothKind::SavitzkyGolay => SmoothMethod::SavitzkyGolay { poly_order: self.smooth_poly },
@@ -636,6 +713,7 @@ impl AnalysisDialog {
             }),
             AnalysisKind::Interpolate => Tool::Interpolate(InterpSpec {
                 range: if self.interp_own_range { self.interp.range } else { None },
+                at: self.interp_at.and_then(|i| self.sheet_columns.get(i)).map(|(id, _)| *id),
                 ..self.interp
             }),
             AnalysisKind::Peaks => Tool::FindPeaks(PeakOptions {
@@ -828,6 +906,12 @@ impl AnalysisDialog {
                     "Subtract the line through the first and last point of each range",
                 );
             }
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceDup
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => self.manip.options(ui, self.kind),
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
@@ -1031,11 +1115,39 @@ impl AnalysisDialog {
                     });
                 }
                 ui.horizontal(|ui| {
-                    ui.label("Number of points");
-                    ui.add(DragValue::new(&mut self.interp.npts).range(2..=10_000_000));
+                    ui.label("Outside the data");
+                    use sheaf_core::analysis::Extrapolation as E;
+                    ui.radio_value(&mut self.interp.extrapolation, E::Extrapolate, "Extrapolate");
+                    ui.radio_value(&mut self.interp.extrapolation, E::Missing, "Missing value");
+                    ui.radio_value(&mut self.interp.extrapolation, E::Repeat, "Repeat the end value");
                 });
-                ui.checkbox(&mut self.interp_own_range, "Choose the X range of the result");
-                ui.add_enabled_ui(self.interp_own_range, |ui| {
+                let mut from_column = self.interp_at.is_some();
+                if ui.checkbox(&mut from_column, "Interpolate at the X values of a column").changed() {
+                    if from_column {
+                        self.set_interp_from_column();
+                    } else {
+                        self.interp_at = None;
+                    }
+                }
+                if let Some(at) = &mut self.interp_at {
+                    let names = &self.sheet_columns;
+                    egui::ComboBox::from_id_salt("interp_at_column")
+                        .selected_text(names.get(*at).map_or("", |(_, n)| n.as_str()))
+                        .show_ui(ui, |ui| {
+                            for (k, (_, name)) in names.iter().enumerate() {
+                                ui.selectable_value(at, k, name);
+                            }
+                        });
+                }
+                let grid = self.interp_at.is_none();
+                ui.add_enabled_ui(grid, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Number of points");
+                        ui.add(DragValue::new(&mut self.interp.npts).range(2..=10_000_000));
+                    });
+                    ui.checkbox(&mut self.interp_own_range, "Choose the X range of the result");
+                });
+                ui.add_enabled_ui(grid && self.interp_own_range, |ui| {
                     let (mut lo, mut hi) = self.interp.range.unwrap_or((0.0, 1.0));
                     ui.horizontal(|ui| {
                         ui.label("X from");
@@ -1398,6 +1510,14 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::AverageCurves => self.curves.average_ui(ui, self.columns.len()),
+            AnalysisKind::Intersect => self.curves.intersect_ui(ui),
+            AnalysisKind::PolygonArea => {
+                ui.weak(
+                    "Each input column is a closed curve: its last point is joined to its first. The area is \
+                     reported with its sign, so a curve that runs counterclockwise is positive.",
+                );
+            }
             AnalysisKind::Normality => {
                 let st = &mut self.stats;
                 ui.horizontal(|ui| {
@@ -1411,6 +1531,18 @@ impl AnalysisDialog {
     /// Ticks "Auto Preview" (for `--show analysis-preview:NAME`).
     pub fn tick_auto_preview(&mut self) {
         self.auto_preview = true;
+    }
+
+    /// The result curve of the preview, X then Y (for tests).
+    #[cfg(test)]
+    pub fn preview_result(&self) -> Option<(Vec<f64>, Vec<f64>)> {
+        self.preview.as_ref()?.as_ref().ok().map(|d| (d.rx.clone(), d.ry.clone()))
+    }
+
+    /// Sets the Curve Translate shift as the dialog's field would (for tests).
+    #[cfg(test)]
+    pub fn set_translate_by(&mut self, by: f64) {
+        self.manip.set_by(by);
     }
 
     /// How many points the preview holds, or the reason there is none (for tests).
@@ -1449,6 +1581,16 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "kstest2",
             AnalysisKind::MedianTest => "mediantest",
             AnalysisKind::Friedman => "friedman",
+            AnalysisKind::AverageCurves => "avecurves",
+            AnalysisKind::Intersect => "intersect",
+            AnalysisKind::PolygonArea => "polyarea",
+            AnalysisKind::ReduceDup => "reducedup",
+            // Origin's X-Function names for these were not looked up; the title shows the tool alone.
+            AnalysisKind::SubtractLine
+            | AnalysisKind::ReduceX
+            | AnalysisKind::TranslateX
+            | AnalysisKind::TranslateY
+            | AnalysisKind::MedianFilter => "",
         }
     }
 
@@ -1491,7 +1633,16 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "Compare two samples by their distribution functions",
             AnalysisKind::MedianTest => "Compare the medians of several samples (Mood's median test)",
             AnalysisKind::Friedman => "Compare treatments in repeated blocks by ranks within each row",
+            AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
+            AnalysisKind::Intersect => "Find the points where two curves meet",
+            AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
+            AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
+            AnalysisKind::ReduceDup => "Replace the points that share an X value by one point",
+            AnalysisKind::ReduceX => "Reduce the input curves to evenly spaced X values",
+            AnalysisKind::TranslateX => "Shift the input curves horizontally",
+            AnalysisKind::TranslateY => "Shift the input curves vertically",
+            AnalysisKind::MedianFilter => "Replace each point by the median of the points around it",
         }
     }
 
@@ -1538,7 +1689,18 @@ impl AnalysisDialog {
                 "Counts around the median, the chi-square statistic and its p-value in a new sheet"
             }
             AnalysisKind::Friedman => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
+            AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
+            AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
+            AnalysisKind::PolygonArea => {
+                "Area, signed area, centroid, perimeter and a self-intersection flag in a new sheet"
+            }
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
+            AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
+                "New columns beside the input"
+            }
+            AnalysisKind::ReduceDup | AnalysisKind::ReduceX | AnalysisKind::TranslateX => {
+                "The curves in a new sheet with their own X column"
+            }
         }
     }
 
@@ -1555,7 +1717,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Interpolate
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
-        )
+        ) || super::manip_options::handles(self.kind)
     }
 
     /// Chooses other input columns of the sheet.
@@ -1595,6 +1757,9 @@ impl AnalysisDialog {
                 | AnalysisKind::Smooth
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::SubtractLine
+                | AnalysisKind::TranslateY
+                | AnalysisKind::MedianFilter
         )
     }
 
@@ -1743,10 +1908,18 @@ impl AnalysisDialog {
             Some(v) => (0..y.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
             None => (1..=y.len()).map(|i| i as f64).collect(),
         };
-        let (rx, ry) = if let Some(id) = report.new_columns.first() {
+        // A tool that writes a new sheet puts its X column first; the preview of those is the sheet's X
+        // and Y pair, not the X column plotted against the input's X.
+        let result_sheet = report.new_sheet.and_then(|s| copy.workbook(report.book)?.sheets.get(s));
+        let on_result_sheet = |id: &ColumnId| result_sheet.is_some_and(|s| s.column(*id).is_some());
+        let (rx, ry) = if let Some(s) = result_sheet.filter(|_| report.new_columns.first().is_some_and(on_result_sheet))
+        {
+            let col = |i: usize| s.columns.get(i).and_then(|c| c.numeric()).map(<[f64]>::to_vec);
+            (col(0).ok_or("no result")?, col(1).ok_or("no result")?)
+        } else if let Some(id) = report.new_columns.first() {
             let c = copy.column(*id).and_then(|c| c.numeric()).ok_or("the result has no numbers")?;
             ((0..c.len()).map(|i| x.get(i).copied().unwrap_or(f64::NAN)).collect(), c.to_vec())
-        } else if let Some(s) = report.new_sheet.and_then(|s| copy.workbook(report.book)?.sheets.get(s)) {
+        } else if let Some(s) = result_sheet {
             let col = |i: usize| s.columns.get(i).and_then(|c| c.numeric()).map(<[f64]>::to_vec);
             (col(0).ok_or("no result")?, col(1).ok_or("no result")?)
         } else {

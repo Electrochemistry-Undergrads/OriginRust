@@ -304,6 +304,9 @@ fn build_layer(
                 axis.show_title = true;
                 axis.title_font.size_pt = size_pt;
             }
+            // Origin draws nothing outside the page: a legend or text moved off it is hidden there
+            // (the owner's XRD project keeps its legends right of the page).
+            n if n.eq_ignore_ascii_case("legend") && off_page(a, page) => {}
             n if n.eq_ignore_ascii_case("legend") => {
                 out.legend.visible = true;
                 out.legend.font.size_pt = size_pt;
@@ -320,10 +323,10 @@ fn build_layer(
             }
             n if n.starts_with('_') || n.is_empty() || a.block1.len() != 102 => {}
             _ => {
-                if text.trim().is_empty() || frame_size.0 <= 0.0 || frame_size.1 <= 0.0 {
+                if text.trim().is_empty() || frame_size.0 <= 0.0 || frame_size.1 <= 0.0 || off_page(a, page) {
                     continue;
                 }
-                push_text_label(&mut out, a, &text, size_pt, page_units, frame_pt, frame_size);
+                push_text_label(&mut out, a, &text, size_pt, frame_pt, frame_size);
             }
         }
     }
@@ -553,34 +556,62 @@ fn annotation_center(a: &WinAnnotation, page_units: (f64, f64)) -> (f64, f64) {
     ((l + r) / 2.0, (t + b) / 2.0)
 }
 
-/// A free text object becomes one label per line of text (the model draws single lines), each
-/// line starting at an estimated left edge so that the text is centred on the object.
+/// True when the annotation's rectangle lies wholly outside the page (an empty rectangle is not).
+fn off_page(a: &WinAnnotation, page: &Page) -> bool {
+    let (l, t, r, b) = annotation_rect_pt(a);
+    (r > l || b > t) && (l >= page.width_pt || t >= page.height_pt || r <= 0.0 || b <= 0.0)
+}
+
+/// The rectangle of an annotation in points: left, top, right, bottom.
+fn annotation_rect_pt(a: &WinAnnotation) -> (f64, f64, f64, f64) {
+    let pt = |k: usize| f64::from(u16_at(&a.header, ANN_RECT_AT + k)) / PAGE_UNITS_PER_INCH * 72.0;
+    (pt(0), pt(2), pt(4), pt(6))
+}
+
+/// A free text object becomes one label per line of text (the model draws single lines).
+///
+/// Origin turns a text object about the top-left corner of its unturned box, and the rectangle
+/// stored in the file has that corner as its own top-left corner, with width and height swapped
+/// for a quarter or three-quarter turn (opj-format.md 10.4). Measured on a 90-degree label: the
+/// stored rectangle runs from y 946 to 1187 (1/600 inch) while Origin draws the text from 667 up to
+/// 932, ending at the rectangle's top. So each line starts at that corner, moved down the turned
+/// text by half a line height per line, which is where the model anchors a label (the vertical
+/// middle of the first character).
 fn push_text_label(
     out: &mut Layer,
     a: &WinAnnotation,
     text: &str,
     size_pt: f64,
-    page_units: (f64, f64),
     frame_pt: (f64, f64),
     frame_size: (f64, f64),
 ) {
-    let (cx, cy) = annotation_center(a, page_units);
-    let (cx, cy) = (cx / PAGE_UNITS_PER_INCH * 72.0, cy / PAGE_UNITS_PER_INCH * 72.0);
+    let (l, t, r, b) = annotation_rect_pt(a);
     let angle = f64::from(u16_at(&a.block1, ANN_ANGLE_AT)) / 10.0;
     let lines: Vec<String> = text.split(['\r', '\n']).filter(|l| !l.trim().is_empty()).map(clean_markup).collect();
-    let line_height = 1.2 * size_pt;
-    let first = cy - line_height * (lines.len() as f64 - 1.0) / 2.0;
+    if lines.is_empty() {
+        return;
+    }
+    // The height of the unturned box: the rectangle's height, or its width when a quarter turn
+    // made the rectangle tall.
+    let quarter = ((angle / 90.0).round() as i64).rem_euclid(4);
+    let square = (angle / 90.0 - (angle / 90.0).round()).abs() < 1e-6;
+    let box_height = match (square, quarter) {
+        (true, 1 | 3) => r - l,
+        (true, _) => b - t,
+        _ => 0.0,
+    };
+    let line_height = if box_height > 0.0 { box_height / lines.len() as f64 } else { 1.2 * size_pt };
+    // Down the turned text: the screen direction of "down" in the unturned box (y grows downwards).
+    let (sin, cos) = angle.to_radians().sin_cos();
     for (k, line) in lines.iter().enumerate() {
-        let plain = strip_escapes(line);
-        let width = 0.58 * size_pt * plain.chars().count() as f64;
-        let left = cx - width / 2.0;
-        let mid = first + line_height * k as f64;
+        let along = line_height * (k as f64 + 0.5);
+        let (x, y) = (l + along * sin, t + along * cos);
         let mut font = out.legend.font.clone();
         font.size_pt = size_pt;
         out.labels.push(TextLabel {
             text: line.clone(),
-            x: (left - frame_pt.0) / frame_size.0,
-            y: (mid - frame_pt.1) / frame_size.1,
+            x: (x - frame_pt.0) / frame_size.0,
+            y: (y - frame_pt.1) / frame_size.1,
             font,
             rotation_deg: angle,
         });
@@ -666,9 +697,11 @@ fn color_code(b: &[u8], at: usize) -> Option<Color> {
     }
 }
 
-/// The line connection: 1 straight, 5 to 10 smooth curves, 11 and 12 steps (spec 10.5).
+/// The line connection: 1 straight, 5 to 10 smooth curves (8 is read as a B-spline), 15 Bezier, 11 and 12 steps (spec 10.5).
 fn connect_kind(code: u8, notes: &mut Vec<String>) -> Connect {
     match code {
+        8 => Connect::BSpline,
+        15 => Connect::Bezier,
         5..=10 => Connect::Spline,
         11 => Connect::StepHorizontal,
         12 => Connect::StepVertical,
@@ -824,15 +857,31 @@ fn read_curve(
         x_error: None,
         y_base: None,
         error: ErrorStyle::default(),
+        hist: Default::default(),
+        size_from: None,
+        color_from: None,
     };
-    // A plot group colours its members from Origin's colour list in order, whatever the records
-    // hold (opj-format 13.13); a lone column plot or area keeps its outline.
+    // A plot group colours its members from a colour list by their place in the group. The list
+    // is not always Origin's base palette (the owner's XRD figure draws black, red, blue, dark
+    // cyan, magenta, dark yellow), and where the list is stored was not found; but Origin writes the
+    // colour it drew into each record when it saves, so a colour written there wins, and only an
+    // automatic one takes the base list (opj-format.md 10.9). A lone column plot or area keeps its
+    // outline.
     if let Some((group, pos)) = run.place(u8_at(r, CURVE_GROUP_AT)) {
-        let c = palette_color(pos);
+        let recorded = match kind {
+            PlotKind::Column | PlotKind::Area => (u8_at(r, CURVE_FILL_USED_AT) & CURVE_FILL_USED_BIT != 0)
+                .then(|| color_code(r, CURVE_FILL_AT))
+                .flatten(),
+            PlotKind::Scatter => symbol_code.or(line_code),
+            _ => line_code.or(symbol_code),
+        };
         plot.group = Some(group);
-        plot.symbol.color = c;
-        if !matches!(kind, PlotKind::Column | PlotKind::Area) {
-            plot.line.color = c;
+        if recorded.is_none() {
+            let c = palette_color(pos);
+            plot.symbol.color = c;
+            if !matches!(kind, PlotKind::Column | PlotKind::Area) {
+                plot.line.color = c;
+            }
         }
         plot.auto_color = false;
     }
@@ -1267,5 +1316,76 @@ mod tests {
         assert_eq!((plots[0].symbol.color, plots[1].symbol.color), (Color::BLACK, Color::rgb(255, 0, 0)));
         assert_eq!(plots[1].line.color, Color::BLACK);
         assert_eq!((plots[0].group, plots[1].group), (Some(1), Some(1)));
+    }
+
+    /// The owner's XRD figure: a group whose records hold black, red, blue and dark cyan (list
+    /// positions 0, 1, 3, 12) is drawn with those colours by Origin, not with the base list.
+    #[test]
+    fn a_group_keeps_the_colours_written_in_its_records() {
+        let mut w = window();
+        let rec = |flags: u8, color: [u8; 4]| {
+            let mut c = curve(2, 1, 200, color);
+            c.record[CURVE_GROUP_AT] = flags;
+            c
+        };
+        w.layers[0].columns = vec![
+            rec(0x29, [0, 0, 0, 0]),
+            rec(0x19, [1, 0, 0, 0]),
+            rec(0x19, [3, 0, 0, 0]),
+            rec(0x19, [12, 0, 0, 0]),
+            rec(0x19, [0xF7, 0xFF, 0xFF, 0xFF]),
+        ];
+        let g = build(&w, &ids(), &mut Vec::new());
+        let colors: Vec<Color> = g.layers[0].plots.iter().map(|p| p.line.color).collect();
+        assert_eq!(
+            colors,
+            vec![Color::BLACK, Color::RED, Color::BLUE, Color::rgb(0, 128, 128), palette_color(4)],
+            "written colours win; an automatic one takes the list colour of its place"
+        );
+    }
+
+    /// A label turned 90 degrees starts at the top-left corner of its stored rectangle and runs up
+    /// from it (measured in Origin on the owner's XRD figure: rectangle y 946..1187, text drawn from
+    /// 667 to 932); the anchor is the middle of the first character, half the box width to the right.
+    #[test]
+    fn a_turned_label_starts_at_the_top_left_corner_of_its_rectangle() {
+        let mut w = window();
+        let mut a = text_annotation("Text8", "\\b(111)", 17, [1729, 946, 1897, 1187]);
+        put_u16(&mut a.block1, ANN_ANGLE_AT, 900);
+        let mut flat =
+            text_annotation("Text9", "\\b(2\\g(q) \\f:Default: Arial((degree)))", 30, [2735, 2000, 4112, 2320]);
+        put_u16(&mut flat.block1, ANN_ANGLE_AT, 0);
+        w.layers[0].annotations = vec![a, flat];
+        let g = build(&w, &ids(), &mut Vec::new());
+        let l = &g.layers[0];
+        let to_pt = |u: f64| u / PAGE_UNITS_PER_INCH * 72.0;
+        let at = |k: usize| {
+            let lb = &l.labels[k];
+            (
+                (l.frame.left + lb.x * l.frame.width) * g.page.width_pt,
+                (l.frame.top + lb.y * l.frame.height) * g.page.height_pt,
+            )
+        };
+        let (x, y) = at(0);
+        assert!((x - to_pt(1729.0 + 84.0)).abs() < 1e-6, "{x}");
+        assert!((y - to_pt(946.0)).abs() < 1e-6, "{y}");
+        assert_eq!(l.labels[0].rotation_deg, 90.0);
+        // An upright label starts at the rectangle's left edge, whatever escapes its text holds.
+        let (x, y) = at(1);
+        assert!((x - to_pt(2735.0)).abs() < 1e-6, "{x}");
+        assert!((y - to_pt(2160.0)).abs() < 1e-6, "{y}");
+    }
+
+    /// A legend or text moved wholly off the page is not drawn by Origin, so it is not shown.
+    #[test]
+    fn a_legend_off_the_page_is_hidden() {
+        let mut w = window();
+        w.layers[0].annotations = vec![
+            text_annotation("Legend", "\\l(1) %(1)", 18, [60000, 400, 61000, 700]),
+            text_annotation("Text3", "away", 18, [60000, 400, 61000, 700]),
+        ];
+        let g = build(&w, &ids(), &mut Vec::new());
+        assert!(!g.layers[0].legend.visible);
+        assert!(g.layers[0].labels.is_empty());
     }
 }

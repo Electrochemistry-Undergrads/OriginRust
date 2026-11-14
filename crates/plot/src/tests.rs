@@ -116,9 +116,9 @@ fn cv_template_has_a_closed_box_no_grid_and_a_symmetric_current_axis() {
     // Tight X axis: exactly the data range.
     assert!((geom.x.min + 0.2).abs() < 1e-12 && (geom.x.max - 0.6).abs() < 1e-12);
 
-    // Splines are written as cubic Bezier segments.
+    // Splines are written as many short chords.
     let plots = with_class(&d, "plots")[0];
-    assert!(paths_in(plots)[0].attribute("d").unwrap().contains('C'));
+    assert!(paths_in(plots)[0].attribute("d").unwrap().matches('L').count() > 100);
     // Legend in the lower right corner, inside the frame.
     let t = texts(&d);
     assert!(t.contains(&"Scan 1".to_string()) && t.contains(&"Scan 2".to_string()));
@@ -253,17 +253,54 @@ fn step_and_spline_connections() {
     set(&mut p, Connect::Spline);
     let d2 = svg_of(&p, g);
     let path = paths_in(with_class(&doc(&d2), "plots")[0])[0].attribute("d").unwrap().to_string();
-    assert_eq!(path.matches('C').count(), 2, "{path}");
+    assert!(!path.contains('C'), "a spline is drawn as short chords: {path}");
+    assert!(path.matches('L').count() > 4, "{path}");
 }
 
 #[test]
-fn spline_control_points_follow_catmull_rom() {
-    let mut d = String::new();
-    let pts = [(0.0, 0.0), (6.0, 6.0), (12.0, 0.0), (18.0, 6.0)];
-    plots::polyline_path_for_test(&mut d, &pts);
-    // First segment: P0 duplicated: c1 = P1 + (P2-P0)/6 = (6,6)? no: segment P0->P1,
-    // c1 = P0 + (P1 - P0)/6 = (1,1); c2 = P1 - (P2 - P0)/6 = (4,6).
-    assert!(d.starts_with("M0 0C1,1 4,6 6,6"), "{d}");
+fn spline_is_a_natural_cubic_spline() {
+    // y = 0, 1, 0 at x = 0, 8, 16: second derivative 0 at the ends, -3/64 in the middle.
+    let c = plots::smooth_for_test(Connect::Spline, &[(0.0, 0.0), (8.0, 1.0), (16.0, 0.0)]);
+    assert_eq!(c.first(), Some(&(0.0, 0.0)));
+    assert_eq!(c.last(), Some(&(16.0, 0.0)));
+    let mid = c.iter().find(|p| (p.0 - 4.0).abs() < 1e-9).unwrap();
+    assert!((mid.1 - 0.6875).abs() < 1e-9, "{mid:?}");
+    // Points on a line stay on it, whatever the spacing.
+    let c = plots::smooth_for_test(Connect::Spline, &[(0.0, 1.0), (3.0, 7.0), (10.0, 21.0), (11.0, 23.0)]);
+    assert!(c.iter().all(|p| (p.1 - (2.0 * p.0 + 1.0)).abs() < 1e-9));
+}
+
+#[test]
+fn b_spline_and_bezier_shapes() {
+    let pts = [(0.0, 0.0), (8.0, 8.0), (16.0, 0.0), (24.0, 8.0), (32.0, 0.0)];
+    let c = plots::smooth_for_test(Connect::BSpline, &pts);
+    assert_eq!(c.first(), Some(&pts[0]));
+    let last = c.last().unwrap();
+    assert!((last.0 - 32.0).abs() < 1e-9 && last.1.abs() < 1e-9);
+    assert!(c.iter().all(|p| p.1 < 8.0 - 1e-6), "the curve stays inside the points");
+    // Bezier: groups of four share their end point; one point left over is not drawn.
+    let pts = [(0.0, 0.0), (8.0, 8.0), (16.0, 8.0), (24.0, 0.0), (30.0, 5.0)];
+    let c = plots::smooth_for_test(Connect::Bezier, &pts);
+    assert_eq!(c.last(), Some(&(24.0, 0.0)));
+    let mid = c.iter().find(|p| (p.0 - 12.0).abs() < 1e-9).unwrap();
+    assert!((mid.1 - 6.0).abs() < 1e-9, "{mid:?}");
+}
+
+#[test]
+fn spline_needs_increasing_x_and_at_most_900_points() {
+    let svg_for = |x: Vec<f64>| {
+        let y: Vec<f64> = (0..x.len()).map(|i| (i % 3) as f64).collect();
+        let (mut p, g) = project(Template::Line, x, vec![y]);
+        p.graph_mut(g).unwrap().layers[0].plots[0].line.connect = Connect::Spline;
+        let svg = svg_of(&p, g);
+        let d = doc(&svg);
+        paths_in(with_class(&d, "plots")[0])[0].attribute("d").unwrap().matches('L').count()
+    };
+    let n = |k: usize| -> Vec<f64> { (0..k).map(|i| i as f64).collect() };
+    assert_eq!(svg_for(vec![0.0, 3.0, 2.0, 4.0]), 3, "decreasing X: straight");
+    assert_eq!(svg_for(vec![0.0, 1.0, 1.0, 4.0]), 3, "repeated X: straight");
+    assert!(svg_for(n(5)) > 4, "increasing X: chords");
+    assert_eq!(svg_for(n(901)), 900, "above 900 points: straight");
 }
 
 #[test]
@@ -530,8 +567,8 @@ fn export_by_extension() {
         let bytes = std::fs::read(&path).unwrap();
         assert!(bytes.starts_with(magic), "{name}");
     }
-    let err = export_file(&p, g, &dir.join("d.pcx"), 72.0).unwrap_err();
-    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "pcx"));
+    let err = export_file(&p, g, &dir.join("d.psd"), 72.0).unwrap_err();
+    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "psd"));
     assert!(err.to_string().contains(".svg"));
     let err = export_file(&p, g, &dir.join("no-such-folder").join("e.svg"), 72.0).unwrap_err();
     assert!(matches!(err, PlotError::Io { .. }));
@@ -1686,7 +1723,7 @@ fn one_column_plot_draws_bars_from_zero_over_80_percent_of_the_spacing() {
     assert_eq!(bars.len(), 5);
     let (l, r, b, t) = bar_in_data(geom, bars[0].0);
     assert!(close9(l, 0.6) && close9(r, 1.4) && close9(b, 0.0) && close9(t, 1.2), "{l} {r} {b} {t}");
-    assert!(bars.iter().all(|(_, fill, _)| *fill == Some(Color::BLACK)));
+    assert!(bars.iter().all(|(_, fill, _)| *fill == Some(Color::rgb(255, 0, 0)))); // Origin's Column template starts at red
     assert_eq!((geom.y.min, geom.y.max), (0.0, 3.5), "the Y axis reaches down to 0");
     let svg = svg_of(&p, g);
     let d = doc(&svg);
@@ -2294,7 +2331,7 @@ fn sized_exports_and_tiff() {
     assert_eq!(res, vec![15000, 100], "150 dpi");
     let tiff::decoder::DecodingResult::U8(pixels) = dec.read_image().unwrap() else { panic!("8-bit image") };
     assert_eq!(&pixels[..3], &[255, 255, 255], "the corner of the page is white");
-    assert!(matches!(export_bytes(&p, g, "pcx", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
+    assert!(matches!(export_bytes(&p, g, "psd", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
 }
 
 // ----- stacked, horizontal and floating bars, error bars (graphing spec 14.12, 5.5) ---------------
@@ -2487,6 +2524,82 @@ fn golden_floating_column_template() {
 }
 
 #[test]
+fn stacked_bars_pile_from_left_to_right() {
+    let (p, g) = bar_probe(Template::StackedBar);
+    let l = layer_data(&p, g);
+    let pd = &l.plots[1];
+    assert!(pd.transposed());
+    assert_eq!((pd.base_at(2), pd.x_at(2), pd.y_at(2)), (Some(4.0), 5.0, 3.0), "values on X, positions on Y");
+    let xs = data::axis_range(l.plots.iter(), data::Dim::X, ScaleKind::Linear).unwrap();
+    assert_eq!(xs, (0.0, 8.0));
+    // One slot for the whole pile, as for stacked columns.
+    for pd in &l.plots {
+        let b = pd.bar.unwrap();
+        assert!((b.left + 0.4).abs() < 1e-12 && (b.width - 0.8).abs() < 1e-12);
+    }
+}
+
+#[test]
+fn hundred_percent_stacked_bars_end_at_100_on_the_x_axis() {
+    let (p, g) = bar_probe(Template::Stacked100Bar);
+    let l = layer_data(&p, g);
+    for i in 0..4 {
+        assert!((l.plots[2].x_at(i) - 100.0).abs() < 1e-9);
+    }
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|t| t == "100"), "the value axis shows 100");
+    assert!(!t.iter().any(|t| t == "120"), "and ends there");
+}
+
+#[test]
+fn floating_bars_run_along_x_from_the_base_column() {
+    let (mut p, g) = bar_probe(Template::FloatingBar);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.truncate(1);
+    layer.plots[0].y_base = Some(low);
+    let l = layer_data(&p, g);
+    assert!(l.plots[0].transposed());
+    assert_eq!((l.plots[0].base_at(2), l.plots[0].x_at(2), l.plots[0].y_at(2)), (Some(1.0), 4.0, 3.0));
+    let xs = data::axis_range(l.plots.iter(), data::Dim::X, ScaleKind::Linear).unwrap();
+    assert_eq!(xs, (1.0, 5.0));
+}
+
+#[test]
+fn plot_columns_pairs_the_columns_of_a_floating_bar() {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let lo = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let hi = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0])).unwrap();
+    let g = p.plot_columns(Template::FloatingBar, &[lo, hi]).unwrap();
+    let plots = &p.graph(g).unwrap().layers[0].plots;
+    assert_eq!((plots.len(), plots[0].y, plots[0].y_base), (1, hi, Some(lo)));
+}
+
+#[test]
+fn golden_stacked_bar_template() {
+    let (p, g) = bar_probe(Template::StackedBar);
+    compare_golden("stacked-bar", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_stacked_bar_100_template() {
+    let (p, g) = bar_probe(Template::Stacked100Bar);
+    compare_golden("stacked-bar-100", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_floating_bar_template() {
+    let (mut p, g) = bar_probe(Template::FloatingBar);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.truncate(1);
+    layer.plots[0].y_base = Some(low);
+    compare_golden("floating-bar", &svg_of(&p, g));
+}
+
+#[test]
 fn golden_xy_error_bars() {
     let (p, g) = error_project(sheaf_core::graph::ErrorDirection::Both, 8.0);
     compare_golden("xy-error", &svg_of(&p, g));
@@ -2503,4 +2616,956 @@ fn a_masked_point_is_drawn_red_with_its_two_line_segments() {
     p.column_mut(id).unwrap().mask.insert(2);
     let svg = svg_of(&p, g);
     assert_eq!(svg.matches("#FF0000").count(), 2, "one red line path and one red symbol path");
+}
+
+// ----- stacked area and fill area (graphing spec 14.13) ------------------------------------------
+
+/// The data of the Origin probe of the stacked area: X 1..8 and three Y columns.
+fn area_probe(template: Template) -> (Project, WindowId) {
+    project(
+        template,
+        (1..=8).map(f64::from).collect(),
+        vec![
+            vec![2.0, 3.0, 5.0, 4.0, 6.0, 5.0, 7.0, 6.0],
+            vec![1.0, 1.0, 2.0, 2.0, 3.0, 2.0, 3.0, 3.0],
+            vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0],
+        ],
+    )
+}
+
+#[test]
+fn stacked_areas_pile_up_row_by_row() {
+    let (p, g) = area_probe(Template::StackedArea);
+    let l = layer_data(&p, g);
+    let top = |k: usize| (0..8).map(|i| l.plots[k].val_at(i)).collect::<Vec<f64>>();
+    assert_eq!(top(0), vec![2.0, 3.0, 5.0, 4.0, 6.0, 5.0, 7.0, 6.0]);
+    assert_eq!(top(1)[2], 7.0);
+    assert_eq!(top(2)[6], 11.0);
+    assert_eq!(l.plots[2].base_at(6), Some(10.0), "an area starts where the one below ends");
+    assert!(l.plots.iter().all(|pd| pd.bar.is_none()), "areas have no bar slot");
+}
+
+#[test]
+fn stacked_area_probe_matches_origin_axis_and_colours() {
+    // Origin: X 1 to 8 (no margin), Y 0 to 12; colours black, red, blue (the theme list).
+    let (p, g) = area_probe(Template::StackedArea);
+    let svg = svg_of(&p, g);
+    let t = texts(&doc(&svg));
+    assert!(t.iter().any(|s| s == "12") && !t.iter().any(|s| s == "14"), "Y axis ends at 12: {t:?}");
+    let colours: Vec<_> = p.graph(g).unwrap().layers[0].plots.iter().map(|pl| pl.symbol.color).collect();
+    assert_eq!(colours, vec![Color::rgb(0, 0, 0), Color::rgb(255, 0, 0), Color::rgb(0, 0, 255)]);
+}
+
+#[test]
+fn hundred_percent_stacked_areas_end_at_100() {
+    let (p, g) = area_probe(Template::Stacked100Area);
+    let l = layer_data(&p, g);
+    for i in 0..8 {
+        assert!((l.plots[2].val_at(i) - 100.0).abs() < 1e-9);
+    }
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|s| s == "100") && !t.iter().any(|s| s == "120"));
+}
+
+#[test]
+fn a_fill_area_runs_between_two_columns() {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    let lo = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 1.0, 2.0])).unwrap();
+    let hi = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 4.0, 5.0])).unwrap();
+    let g = p.plot_columns(Template::FillArea, &[lo, hi]).unwrap();
+    let plots = &p.graph(g).unwrap().layers[0].plots;
+    assert_eq!((plots.len(), plots[0].y, plots[0].y_base), (1, hi, Some(lo)));
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let fill = paths_in(with_class(&d, "plots")[0])
+        .into_iter()
+        .find(|n| n.attribute("d").is_some_and(|d| d.ends_with('Z')) && n.attribute("fill") != Some("none"))
+        .expect("the filled shape");
+    // From the first lower point: 3 upper points, then 3 lower points back: M + 6 L + Z.
+    assert_eq!(fill.attribute("d").unwrap().matches('L').count(), 6);
+}
+
+#[test]
+fn golden_stacked_area_template() {
+    let (p, g) = area_probe(Template::StackedArea);
+    compare_golden("stacked-area", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_fill_area_template() {
+    let (mut p, g) = area_probe(Template::FillArea);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let low = layer.plots[1].y;
+    layer.plots.truncate(1);
+    layer.plots[0].y_base = Some(low);
+    compare_golden("fill-area", &svg_of(&p, g));
+}
+
+// ----- histogram and box chart (graphing spec 14.15) ----------------------------------------------
+
+/// The probe values of Origin's histogram run: 12 values, auto bins of 7 from 35 to 70.
+const HIST_PROBE: [f64; 12] = [40.7, 47.4, 47.4, 49.6, 49.7, 52.0, 55.3, 58.0, 60.2, 63.1, 66.0, 69.0];
+
+fn single_column_project(template: Template, values: Vec<f64>) -> (Project, WindowId) {
+    project(template, (1..=values.len()).map(|i| i as f64).collect(), vec![values])
+}
+
+#[test]
+fn a_histogram_counts_into_origins_automatic_bins() {
+    // Origin: 12 values between 40.7 and 69: bins of 7 from 35 to 70, the X axis exactly 35 to 70.
+    let (p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    let l = layer_data(&p, g);
+    let pd = &l.plots[0];
+    let counts: Vec<f64> = (0..pd.end).map(|i| pd.y[i]).collect();
+    assert_eq!(counts, vec![1.0, 2.0, 4.0, 2.0, 3.0]);
+    assert_eq!(counts.iter().sum::<f64>(), 12.0);
+    assert_eq!(pd.x.as_ref().unwrap()[0], 38.5, "bars stand at the bin centres");
+    let bar = pd.bar.unwrap();
+    assert!((bar.width - 7.0).abs() < 1e-9, "no gap between the bars");
+    let geom = &fixed_geometry(&p, g)[0];
+    assert_eq!((geom.x.min, geom.x.max), (35.0, 70.0));
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|s| s == "Count"));
+}
+
+#[test]
+fn histogram_bins_can_be_chosen() {
+    let (mut p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    p.graph_mut(g).unwrap().layers[0].plots[0].hist =
+        sheaf_core::graph::HistogramStyle { bin_size: Some(10.0), begin: Some(40.0), end: Some(70.0) };
+    let l = layer_data(&p, g);
+    let pd = &l.plots[0];
+    assert_eq!((0..pd.end).map(|i| pd.y[i]).collect::<Vec<_>>(), vec![5.0, 3.0, 4.0]);
+}
+
+#[test]
+fn a_box_chart_uses_origins_quartiles_and_whiskers() {
+    // Origin probe: 2..13 (box 4.5 to 10.5, median 7.5, whiskers 2 and 13) and a column with one outlier.
+    let b1: Vec<f64> = (2..=13).map(f64::from).collect();
+    let b2 = vec![4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 30.0];
+    let (p, g) = project(Template::BoxChart, (1..=12).map(f64::from).collect(), vec![b1, b2]);
+    let l = layer_data(&p, g);
+    let a = l.plots[0].boxed.as_ref().unwrap();
+    assert_eq!((a.q1, a.median, a.q3, a.whisker_low, a.whisker_high), (4.5, 7.5, 10.5, 2.0, 13.0));
+    assert!(a.outliers.is_empty());
+    let b = l.plots[1].boxed.as_ref().unwrap();
+    assert_eq!((b.q1, b.median, b.whisker_low, b.whisker_high), (5.0, 6.0, 4.0, 8.0));
+    assert_eq!(b.outliers, vec![30.0]);
+    assert_eq!((a.pos, b.pos), (1.0, 2.0));
+    let range = data::axis_range(l.plots.iter(), data::Dim::Y, ScaleKind::Linear).unwrap();
+    assert_eq!(range, (2.0, 30.0), "the outlier counts");
+    let t = texts(&doc(&svg_of(&p, g)));
+    assert!(t.iter().any(|s| s == "Scan 1") && t.iter().any(|s| s == "Scan 2"), "one tick label per box: {t:?}");
+}
+
+#[test]
+fn golden_histogram_template() {
+    let (p, g) = single_column_project(Template::Histogram, HIST_PROBE.to_vec());
+    compare_golden("histogram", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_box_template() {
+    let b1: Vec<f64> = (2..=13).map(f64::from).collect();
+    let b2 = vec![4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 30.0];
+    let (p, g) = project(Template::BoxChart, (1..=12).map(f64::from).collect(), vec![b1, b2]);
+    compare_golden("box", &svg_of(&p, g));
+}
+
+// ----- bubble and colour mapped symbols (graphing spec 14.16) --------------------------------------
+
+/// The probe of Origin's bubble run: X 1..8, Y and Z columns.
+fn bubble_probe(template: Template) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric((1..=8).map(f64::from).collect())).unwrap();
+    let y = p
+        .add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 3.0, 6.0, 5.0, 7.0, 6.0, 8.0]))
+        .unwrap();
+    p.add_column(book, 0, Designation::Z, ColumnData::numeric(vec![1.0, 4.0, 2.0, 9.0, 3.0, 6.0, 8.0, 5.0])).unwrap();
+    let g = p.plot_columns(template, &[y]).unwrap();
+    if let Some(dir) = std::env::var_os("SHEAF_T12_OUT") {
+        let png = crate::render_png(&p, g, 300.0).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join(format!("sheaf-{}.png", template.name())), png).unwrap();
+    }
+    (p, g)
+}
+
+#[test]
+fn bubbles_are_as_wide_as_the_z_value_says() {
+    let (p, g) = bubble_probe(Template::Bubble);
+    let plot = &p.graph(g).unwrap().layers[0].plots[0];
+    assert!(plot.size_from.is_some() && plot.color_from.is_none());
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    // One filled-or-stroked path per point, drawn as two arcs; the radius is the first number after "A".
+    let radii: Vec<f64> = paths_in(with_class(&d, "plots")[0])
+        .iter()
+        .filter_map(|n| n.attribute("d"))
+        .filter(|d| d.contains('A'))
+        .map(|d| d.split('A').nth(1).unwrap().split_whitespace().next().unwrap().parse().unwrap())
+        .collect();
+    assert_eq!(radii.len(), 8);
+    // Z = 1 (smallest) is 2 pt wide, Z = 9 (largest) 20 pt, linear in between: Z = 5 is 11 pt.
+    assert!(
+        (radii[0] - 1.0).abs() < 1e-6 && (radii[3] - 10.0).abs() < 1e-6 && (radii[7] - 5.5).abs() < 1e-6,
+        "{radii:?}"
+    );
+}
+
+#[test]
+fn color_mapped_symbols_run_from_blue_to_red() {
+    let (p, g) = bubble_probe(Template::ColorMapped);
+    let plot = &p.graph(g).unwrap().layers[0].plots[0];
+    assert!(plot.size_from.is_none() && plot.color_from.is_some());
+    let svg = svg_of(&p, g);
+    assert!(svg.contains("#0000FF") && svg.contains("#FF0000"), "smallest Z blue, largest red");
+}
+
+#[test]
+fn golden_bubble_template() {
+    let (p, g) = bubble_probe(Template::Bubble);
+    compare_golden("bubble", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_bubble_color_mapped_template() {
+    let (p, g) = bubble_probe(Template::BubbleColorMapped);
+    compare_golden("bubble-color-mapped", &svg_of(&p, g));
+}
+
+// ----- pie (graphing spec 14.17) ------------------------------------------------------------------
+
+/// The pie of Origin's probe: values 3, 5, 2, 7, 4 (21 in all).
+fn pie_probe() -> (Project, WindowId) {
+    let (p, g) = project(Template::Pie, vec![1.0, 2.0, 3.0, 4.0, 5.0], vec![vec![3.0, 5.0, 2.0, 7.0, 4.0]]);
+    if let Some(dir) = std::env::var_os("SHEAF_T12_OUT") {
+        let png = crate::render_png(&p, g, 300.0).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join("sheaf-pie.png"), png).unwrap();
+    }
+    (p, g)
+}
+
+#[test]
+fn a_pie_labels_every_slice_with_its_share_to_two_decimals() {
+    // Origin: 14.29 %, 23.81 %, 9.52 %, 33.33 %, 19.05 %; no axes.
+    let (p, g) = pie_probe();
+    let t = texts(&doc(&svg_of(&p, g)));
+    for s in ["14.29%", "23.81%", "9.52%", "33.33%", "19.05%"] {
+        assert!(t.iter().any(|x| x == s), "{s} in {t:?}");
+    }
+    assert!(!t.iter().any(|x| x == "0" || x == "Row"), "no axis labels or titles: {t:?}");
+}
+
+#[test]
+fn pie_slices_use_the_base_palette_and_start_at_twelve_oclock_clockwise() {
+    let (p, g) = pie_probe();
+    let colours: Vec<_> = p.graph(g).unwrap().layers[0].plots.iter().map(|pl| pl.symbol.color).collect();
+    assert_eq!(colours[0], Color::rgb(0, 0, 0));
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let plots = with_class(&d, "plots");
+    let slices: Vec<&str> =
+        paths_in(plots[0]).iter().filter_map(|n| n.attribute("d")).filter(|d| d.contains('A')).collect();
+    assert_eq!(slices.len(), 5);
+    // Every slice has the sweep flag 1 (clockwise on the page) and the first one starts straight up.
+    assert!(slices.iter().all(|s| s.contains(" 1 ") && s.ends_with('Z')));
+    let first: Vec<f64> = slices[0].split(['M', 'L', ',', ' ']).filter_map(|t| t.parse().ok()).collect();
+    assert!((first[0] - first[2]).abs() < 1e-6 && first[3] < first[1], "up from the centre: {first:?}");
+}
+
+#[test]
+fn golden_pie_template() {
+    let (p, g) = pie_probe();
+    compare_golden("pie", &svg_of(&p, g));
+}
+
+// ----- 3D and black and white pies (graphing spec 14.21) -------------------------------------------
+
+fn pie_variant(template: Template) -> (Project, WindowId) {
+    project(template, vec![1.0, 2.0, 3.0, 4.0, 5.0], vec![vec![3.0, 5.0, 2.0, 7.0, 4.0]])
+}
+
+#[test]
+fn the_3d_pie_is_an_ellipse_half_as_high_as_wide_with_a_darker_side_band() {
+    let (p, g) = pie_variant(Template::Pie3D);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let t = texts(&d);
+    for s in ["14.29%", "23.81%", "9.52%", "33.33%", "19.05%"] {
+        assert!(t.iter().any(|x| x == s), "{s} in {t:?}");
+    }
+    let plots = with_class(&d, "plots");
+    let ds: Vec<&str> = paths_in(plots[0]).iter().filter_map(|n| n.attribute("d")).collect();
+    // The arcs are elliptical: ry is half of rx.
+    let top = ds.iter().find(|d| d.contains(" 0 0 1 ") && d.starts_with('M')).unwrap();
+    let arc = top.find('A').unwrap();
+    let v: Vec<f64> = top[arc + 1..].split(' ').take(2).map(|t| t.parse().unwrap()).collect();
+    assert!((v[1] / v[0] - 0.5).abs() < 1e-3, "{v:?}");
+    assert!(svg.contains("#990000"), "a darker red band");
+}
+
+#[test]
+fn the_bw_pie_uses_white_slices_and_hatches_that_differ() {
+    let (p, g) = pie_variant(Template::PieBw);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let plots = with_class(&d, "plots");
+    let hatches: Vec<&str> = paths_in(plots[0])
+        .iter()
+        .filter(|n| n.attribute("fill").is_none_or(|f| f == "none"))
+        .filter_map(|n| n.attribute("d"))
+        .filter(|d| !d.contains('A'))
+        .collect();
+    assert_eq!(hatches.len(), 10, "one hatch per slice and one per legend square");
+    for i in 0..10 {
+        for j in i + 1..10 {
+            assert_ne!(hatches[i], hatches[j]);
+        }
+    }
+    assert!(!svg.contains("#ff0000"), "no colour");
+}
+
+#[test]
+fn hatch_lines_stay_inside_a_concave_polygon() {
+    // An L shape: the lines must not cross the notch.
+    let poly = [(0.0, 0.0), (10.0, 0.0), (10.0, 4.0), (4.0, 4.0), (4.0, 10.0), (0.0, 10.0)];
+    let lines = crate::pie::hatch(&poly, 0.0, 1.0);
+    assert!(!lines.is_empty());
+    for (a, b) in lines {
+        assert!((a.1 - b.1).abs() < 1e-9);
+        if a.1 > 4.0 {
+            assert!(b.0 <= 4.0 + 1e-9 && a.0 >= -1e-9, "{a:?} {b:?}");
+        }
+    }
+}
+
+#[test]
+fn golden_pie_3d_template() {
+    let (p, g) = pie_variant(Template::Pie3D);
+    compare_golden("pie-3d", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_pie_bw_template() {
+    let (p, g) = pie_variant(Template::PieBw);
+    compare_golden("pie-bw", &svg_of(&p, g));
+}
+
+// ----- polar plots (graphing spec 14.18) ----------------------------------------------------------
+
+/// Angles 0 to 360 degrees in steps of 15 and the radius 1.5 + 0.5 cos(2 theta).
+fn polar_probe(template: Template) -> (Project, WindowId) {
+    let theta: Vec<f64> = (0..=24).map(|i| f64::from(i) * 15.0).collect();
+    let r: Vec<f64> = theta.iter().map(|t| 1.5 + 0.5 * (2.0 * t.to_radians()).cos()).collect();
+    if template == Template::PolarRTheta {
+        project(template, r, vec![theta])
+    } else {
+        project(template, theta, vec![r])
+    }
+}
+
+#[test]
+fn golden_polar_template() {
+    let (p, g) = polar_probe(Template::Polar);
+    compare_golden("polar", &svg_of(&p, g));
+}
+
+#[test]
+fn a_polar_layer_labels_the_angles_every_30_degrees_and_the_radius_twice() {
+    let (p, g) = polar_probe(Template::Polar);
+    let t = texts(&doc(&svg_of(&p, g)));
+    for a in (0..360).step_by(30) {
+        assert!(t.iter().any(|x| *x == a.to_string()), "angle {a} in {t:?}");
+    }
+    assert!(!t.iter().any(|x| x == "360"), "360 coincides with 0: {t:?}");
+    // The radius labels stand on two axes left of the circle, one above the other: each one twice.
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    for v in geom.y.major.iter().zip(&geom.y.labels).filter(|(v, _)| geom.radius_unit(**v) > 1e-9).map(|(_, l)| l) {
+        assert!(t.iter().filter(|x| *x == v).count() >= 2, "{v} twice in {t:?}");
+    }
+    assert!(!t.iter().any(|x| x == "Row" || x.contains("Current")), "no axis titles: {t:?}");
+}
+
+#[test]
+fn polar_geometry_puts_angle_zero_on_the_right_and_counts_counter_clockwise() {
+    let (p, g) = polar_probe(Template::Polar);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.expect("a polar layer");
+    assert!((map.radius - geom.frame.w.min(geom.frame.h) / 2.0).abs() < 1e-9);
+    let rmax = geom.y.max;
+    let (x0, y0) = geom.data_to_page(0.0, rmax);
+    assert!((x0 - (map.cx + map.radius)).abs() < 1e-6 && (y0 - map.cy).abs() < 1e-6, "0 degrees at 3 o'clock");
+    let (x1, y1) = geom.data_to_page(90.0, rmax);
+    assert!((x1 - map.cx).abs() < 1e-6 && (y1 - (map.cy - map.radius)).abs() < 1e-6, "90 degrees at 12 o'clock");
+    let (x2, y2) = geom.data_to_page(180.0, 0.0);
+    assert!((x2 - map.cx).abs() < 1e-6 && (y2 - map.cy).abs() < 1e-6, "radius 0 is the centre");
+}
+
+#[test]
+fn polar_data_to_page_and_page_to_data_invert_each_other() {
+    for template in [Template::Polar, Template::PolarRTheta] {
+        let (p, g) = polar_probe(template);
+        let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+        for theta in [0.0, 10.0, 90.0, 179.0, 270.5, 359.0] {
+            for r in [geom.y.min + 0.1, 1.3, 1.7, geom.y.max] {
+                let (px, py) = geom.data_to_page(theta, r);
+                let (t, rr) = geom.page_to_data(px, py);
+                assert!((t - theta).abs() < 1e-6 && (rr - r).abs() < 1e-9, "{theta},{r} -> {t},{rr}");
+            }
+        }
+    }
+    // The same with the rotation and sense of the layer changed.
+    let (mut p, g) = polar_probe(Template::Polar);
+    if let Some(sheaf_core::graph::Coords::Polar(c)) = p.graph_mut(g).map(|g| &mut g.layers[0].coords) {
+        c.zero_deg = 90.0;
+        c.clockwise = true;
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(0.0, geom.y.max);
+    assert!((x - map.cx).abs() < 1e-6 && y < map.cy, "0 degrees straight up");
+    let (x, y) = geom.data_to_page(90.0, geom.y.max);
+    assert!(x > map.cx, "clockwise from the top goes right");
+    let (t, _) = geom.page_to_data(x, y);
+    assert!((t - 90.0).abs() < 1e-6);
+}
+
+#[test]
+fn the_radius_axis_of_a_polar_layer_follows_the_radius_values() {
+    // Measured in Origin: data 1 to 2 gave 0.75 to 2.25 (steps of 0.5), data 1.13 to 2.37 gave 1 to 2.5, data 3.2 to 87
+    // gave 0 to 100, and a negative lower end is cut at 0: the usual rule with its 8 % margin.
+    let (p, g) = polar_probe(Template::Polar);
+    let small = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+    assert!((small.min - 0.75).abs() < 1e-9 && (small.max - 2.25).abs() < 1e-9, "radii 1 to 2: {small:?}");
+    assert_eq!(small.major, vec![1.0, 1.5, 2.0]);
+    let radii = |lo: f64, hi: f64| {
+        let r: Vec<f64> =
+            (0..19).map(|i| lo + (hi - lo) * (0.5 + 0.5 * (f64::from(i) * 20.0).to_radians().cos())).collect();
+        let theta: Vec<f64> = (0..19).map(|i| f64::from(i) * 20.0).collect();
+        let (p, g) = project(Template::Polar, theta, vec![r]);
+        let y = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+        (y.min, y.max, y.step)
+    };
+    let close = |a: (f64, f64, f64), b: (f64, f64, f64)| {
+        assert!((a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9 && (a.2 - b.2).abs() < 1e-9, "{a:?} vs {b:?}")
+    };
+    close(radii(1.13, 2.37), (1.0, 2.5, 0.5));
+    close(radii(0.0, 2.37), (0.0, 3.0, 1.0));
+    close(radii(3.2, 87.0), (0.0, 100.0, 20.0));
+    // (Origin kept steps of 0.5 and a limit of 2.25 for data -1 to 2; Sheaf only cuts the lower limit at 0.)
+    assert_eq!(radii(-1.0, 2.0).0, 0.0);
+    close(radii(1.45, 2.05), (1.4, 2.1, 0.2));
+    // The angle axis ignores the data.
+    let (p, g) = project(Template::Polar, vec![0.0, 90.0, 180.0, 270.0], vec![vec![10.0, 40.0, 25.0, 30.0]]);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert_eq!((geom.x.min, geom.x.max), (0.0, 360.0));
+    assert_eq!(geom.x.major.len(), 12);
+}
+
+#[test]
+fn the_centre_of_a_polar_layer_is_radius_zero_and_the_lower_limit_leaves_a_hole() {
+    // Origin's "Center at Zero" (default): a radius is placed at |r| / upper limit of the circle's radius, and
+    // what lies below the lower limit is not drawn (measured: limits 1.5 to 2.5 left the ring 1.5 empty inside).
+    let (mut p, g) = polar_probe(Template::Polar);
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(1.5);
+    axis.max = Some(2.5);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(0.0, 2.0);
+    assert!((x - (map.cx + 0.8 * map.radius)).abs() < 1e-6 && (y - map.cy).abs() < 1e-6, "2 of 2.5 is 0.8 radii out");
+    let (t, r) = geom.page_to_data(x, y);
+    assert!(t.abs() < 1e-6 && (r - 2.0).abs() < 1e-9);
+    assert!(geom.checked_data_to_page(0.0, 1.0).is_none(), "inside the hole");
+    assert!(geom.checked_data_to_page(0.0, 1.5).is_some());
+    // A negative radius is drawn on the opposite side of the centre.
+    axis_free(&mut p, g);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let (x1, y1) = geom.data_to_page(0.0, 1.0);
+    let (x2, y2) = geom.data_to_page(180.0, -1.0);
+    assert!((x1 - x2).abs() < 1e-9 && (y1 - y2).abs() < 1e-9);
+}
+
+fn axis_free(p: &mut Project, g: WindowId) {
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(0.0);
+    axis.max = Some(2.5);
+}
+
+#[test]
+fn the_radius_axis_stands_left_of_the_circle_in_two_pieces_when_there_is_a_hole() {
+    let (p, g) = polar_probe(Template::Polar);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.unwrap();
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    // The labels of the radius axis are all left of the circle.
+    let left = map.cx - map.radius;
+    let radius_labels: Vec<_> = d
+        .descendants()
+        .filter(|n| n.has_tag_name("text") && n.text().is_some_and(|t| t == "1.5" || t == "2.0" || t == "1.0"))
+        .collect();
+    assert!(radius_labels.len() >= 6, "three labels twice");
+    for n in radius_labels {
+        let x: f64 = n.attribute("x").and_then(|v| v.parse().ok()).unwrap();
+        assert!(x < left, "label at x={x} left of the circle at {left}");
+    }
+}
+
+#[test]
+fn a_polar_layer_in_radians_has_eight_ticks_labelled_in_pi() {
+    let (mut p, g) = polar_probe(Template::Polar);
+    if let Some(sheaf_core::graph::Coords::Polar(c)) = p.graph_mut(g).map(|g| &mut g.layers[0].coords) {
+        c.angle_unit = sheaf_core::graph::AngleUnit::Radians;
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert_eq!((geom.x.min, geom.x.max), (0.0, std::f64::consts::TAU));
+    assert_eq!(geom.x.major.len(), 8);
+    assert_eq!(geom.x.labels[0], "0.00\u{3c0}");
+    assert_eq!(geom.x.labels[2], "0.50\u{3c0}");
+    // An angle of pi / 2 points straight up, and the cursor reads it back in radians.
+    let map = geom.polar.unwrap();
+    let (x, y) = geom.data_to_page(std::f64::consts::FRAC_PI_2, geom.y.max);
+    assert!((x - map.cx).abs() < 1e-6 && y < map.cy);
+    let (t, _) = geom.page_to_data(x, y);
+    assert!((t - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+}
+
+#[test]
+fn polar_r_theta_reads_the_radius_from_the_x_column() {
+    let (p1, g1) = polar_probe(Template::Polar);
+    let (p2, g2) = polar_probe(Template::PolarRTheta);
+    let plots = |p: &Project, g| {
+        let svg = svg_of(p, g);
+        let d = doc(&svg);
+        with_class(&d, "plots")
+            .iter()
+            .flat_map(|n| paths_in(*n))
+            .filter_map(|n| n.attribute("d").map(String::from))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(plots(&p1, g1), plots(&p2, g2), "the same curve from swapped columns");
+}
+
+#[test]
+fn a_radius_outside_the_axis_range_is_not_drawn() {
+    let (mut p, g) = polar_probe(Template::Polar);
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].y_axis;
+    axis.min = Some(0.0);
+    axis.max = Some(1.2);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert!(geom.checked_data_to_page(0.0, 1.0).is_some());
+    assert!(geom.checked_data_to_page(0.0, 2.0).is_none());
+    // A negative radius is drawn on the other side, so only its size has to be in range.
+    assert!(geom.checked_data_to_page(0.0, -0.5).is_some());
+    assert!(geom.checked_data_to_page(0.0, -2.0).is_none());
+}
+
+// ----- radar charts (graphing spec 14.19) ---------------------------------------------------------
+
+/// Six spokes named by a text X column and two Y columns.
+fn radar_probe() -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let names = ["Speed", "Power", "Range", "Comfort", "Safety", "Price"].map(String::from).to_vec();
+    p.add_column(book, 0, Designation::X, ColumnData::text(names)).unwrap();
+    let g = p.add_graph(Template::Radar);
+    for (i, y) in [vec![4.0, 3.0, 5.0, 2.0, 4.5, 3.5], vec![2.0, 4.5, 3.0, 4.0, 2.5, 5.0]].into_iter().enumerate() {
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        p.column_mut(yc).unwrap().long_name = format!("Model {}", i + 1);
+        p.add_plot(g, 0, yc).unwrap();
+    }
+    (p, g)
+}
+
+/// The radius range of a radar chart of one column of values, rows spread over the spokes.
+fn radar_range(values: Vec<f64>) -> (f64, f64, f64) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let g = p.add_graph(Template::Radar);
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(values)).unwrap();
+    p.add_plot(g, 0, yc).unwrap();
+    let y = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+    (y.min, y.max, y.step)
+}
+
+#[test]
+fn the_radar_scale_follows_the_values_in_steps_of_half_the_usual_table() {
+    // Measured in Origin (spec 14.19): the limits are the values plus the 8 % margin rounded outwards to whole steps.
+    assert_eq!(radar_range(vec![3.2, 4.1, 2.5, 5.2, 4.4, 3.0, 2.1]), (1.5, 5.5, 0.5));
+    assert_eq!(radar_range(vec![0.0, 4.0, 1.0, 3.0, 2.0]), (-1.0, 5.0, 1.0));
+    assert_eq!(radar_range(vec![-3.0, -1.0, -2.0, -4.0]), (-4.5, -0.5, 0.5));
+}
+
+#[test]
+fn golden_radar_template() {
+    let (p, g) = radar_probe();
+    compare_golden("radar", &svg_of(&p, g));
+}
+
+#[test]
+fn radar_spokes_are_evenly_spaced_from_twelve_oclock_clockwise_and_named_by_the_x_column() {
+    let (p, g) = radar_probe();
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.polar.expect("a radar layer is a polar layer");
+    assert_eq!(geom.x.major, [0.0, 60.0, 120.0, 180.0, 240.0, 300.0]);
+    assert_eq!(geom.x.labels, ["Speed", "Power", "Range", "Comfort", "Safety", "Price"]);
+    let top = geom.y.max;
+    let (x0, y0) = geom.data_to_page(0.0, top);
+    assert!((x0 - map.cx).abs() < 1e-6 && (y0 - (map.cy - map.radius)).abs() < 1e-6, "first spoke up");
+    let (x1, y1) = geom.data_to_page(60.0, top);
+    assert!(x1 > map.cx && y1 < map.cy, "the second spoke is up and to the right (clockwise)");
+    let (x3, y3) = geom.data_to_page(180.0, top);
+    assert!((x3 - map.cx).abs() < 1e-6 && y3 > map.cy, "the fourth of six points down");
+    // The radial scale starts at its lower limit in the centre (not at 0): values 2 to 5 gave 1.5 to 5.5.
+    assert_eq!((geom.y.min, geom.y.max, geom.y.step), (1.5, 5.5, 0.5));
+    let (cx, cy) = geom.data_to_page(0.0, geom.y.min);
+    assert!((cx - map.cx).abs() < 1e-6 && (cy - map.cy).abs() < 1e-6);
+    let t = texts(&doc(&svg_of(&p, g)));
+    for name in ["Speed", "Power", "Range", "Comfort", "Safety", "Price"] {
+        assert!(t.iter().any(|x| x == name), "{name} in {t:?}");
+    }
+    // The radius labels stand on the first spoke only: each once.
+    for v in geom.y.labels.iter().skip(1) {
+        assert_eq!(t.iter().filter(|x| *x == v).count(), 1, "{v} once in {t:?}");
+    }
+}
+
+#[test]
+fn a_radar_polygon_runs_through_the_values_and_closes_on_the_first_spoke() {
+    let (p, g) = radar_probe();
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let paths: Vec<String> = with_class(&d, "plots")
+        .iter()
+        .flat_map(|n| paths_in(*n))
+        .filter_map(|n| n.attribute("d").map(String::from))
+        .collect();
+    let numbers = |s: &str| -> Vec<f64> {
+        s.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-')).filter_map(|t| t.parse().ok()).collect()
+    };
+    let first = paths
+        .iter()
+        .map(|s| numbers(s))
+        .find(|n| n.len() == 14)
+        .unwrap_or_else(|| panic!("a line of 7 points (6 spokes and the closing one) in {paths:?}"));
+    let (sx, sy) = geom.data_to_page(0.0, 4.0);
+    assert!((first[0] - sx).abs() < 0.05 && (first[1] - sy).abs() < 0.05, "starts at the value on spoke 1");
+    assert!((first[12] - first[0]).abs() < 1e-6 && (first[13] - first[1]).abs() < 1e-6, "ends where it started");
+    let (px, py) = geom.data_to_page(60.0, 3.0);
+    assert!((first[2] - px).abs() < 0.05 && (first[3] - py).abs() < 0.05, "second point on spoke 2");
+}
+
+#[test]
+fn a_radar_chart_without_an_x_column_numbers_its_spokes() {
+    let (p, g) = project(Template::Radar, vec![], vec![vec![1.0, 2.0, 3.0, 4.0]]);
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    assert_eq!(geom.x.labels, ["1", "2", "3", "4"]);
+    assert_eq!(geom.x.major, [0.0, 90.0, 180.0, 270.0]);
+}
+
+#[test]
+fn a_radar_polygon_draws_one_symbol_per_row_and_keeps_masked_rows() {
+    let (mut p, g) = radar_probe();
+    let plain = svg_of(&p, g);
+    let symbols = |svg: &str| {
+        let d = doc(svg);
+        with_class(&d, "plots")
+            .iter()
+            .flat_map(|n| paths_in(*n))
+            .filter_map(|n| n.attribute("d").map(|s| s.matches('M').count()))
+            .collect::<Vec<_>>()
+    };
+    // The closing point of a polygon of 6 rows carries no symbol: no path has 7 subpaths.
+    assert!(symbols(&plain).iter().all(|&n| n != 7), "{:?}", symbols(&plain));
+    let y = p.graph(g).unwrap().layers[0].plots[0].y;
+    p.column_mut(y).unwrap().mask.insert(2);
+    let masked = svg_of(&p, g);
+    assert!(masked.contains("#FF0000"), "masked row is red");
+}
+
+// ----- ternary plots (graphing spec 14.20) ---------------------------------------------------------
+
+/// Sand, silt and clay of ten samples; the last two rows sum to 0.9 and 1.2 and are normalised.
+fn ternary_rows() -> [[f64; 3]; 10] {
+    [
+        [0.80, 0.10, 0.10],
+        [0.60, 0.30, 0.10],
+        [0.40, 0.40, 0.20],
+        [0.20, 0.30, 0.50],
+        [0.10, 0.60, 0.30],
+        [0.30, 0.10, 0.60],
+        [0.50, 0.25, 0.25],
+        [0.05, 0.05, 0.90],
+        [0.54, 0.27, 0.09],
+        [0.30, 0.30, 0.60],
+    ]
+}
+
+fn ternary_project(rows: &[[f64; 3]]) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("soil");
+    let mut ids = Vec::new();
+    let columns = [("Sand", Designation::X), ("Silt", Designation::Y), ("Clay", Designation::Z)];
+    for (i, (name, des)) in columns.iter().enumerate() {
+        let col: Vec<f64> = rows.iter().map(|r| r[i]).collect();
+        let id = p.add_column(book, 0, *des, ColumnData::numeric(col)).unwrap();
+        p.column_mut(id).unwrap().long_name = (*name).into();
+        ids.push(id);
+    }
+    let g = p.plot_columns(Template::Ternary, &[ids[1]]).unwrap();
+    (p, g)
+}
+
+/// The path data of the plots group of the picture of `rows`.
+fn ternary_marks(rows: &[[f64; 3]]) -> Vec<String> {
+    let (p, g) = ternary_project(rows);
+    let svg = svg_of(&p, g);
+    let d = doc(&svg);
+    with_class(&d, "plots")
+        .iter()
+        .flat_map(|n| paths_in(*n))
+        .filter_map(|n| n.attribute("d").map(String::from))
+        .collect()
+}
+
+#[test]
+fn golden_ternary_template() {
+    let (p, g) = ternary_project(&ternary_rows());
+    compare_golden("ternary", &svg_of(&p, g));
+}
+
+#[test]
+fn the_corners_of_a_ternary_layer_are_x_bottom_right_y_top_and_z_bottom_left() {
+    let (p, g) = ternary_project(&ternary_rows());
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let map = geom.ternary.expect("a ternary layer");
+    let near = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+    assert!(near(geom.data_to_page(1.0, 0.0), map.right), "X = 1");
+    assert!(near(geom.data_to_page(0.0, 1.0), map.top), "Y = 1");
+    assert!(near(geom.data_to_page(0.0, 0.0), map.left), "Z = 1");
+    // An equilateral triangle, as large as the frame lets it be, centred in it.
+    let side = map.right.0 - map.left.0;
+    let h = map.left.1 - map.top.1;
+    assert!((h - side * 3f64.sqrt() / 2.0).abs() < 1e-9);
+    assert!(side <= geom.frame.w + 1e-9 && h <= geom.frame.h + 1e-9);
+    assert!(side >= geom.frame.w - 1e-9 || h >= geom.frame.h - 1e-9, "one side of the frame is used up");
+    let mid = geom.data_to_page(1.0 / 3.0, 1.0 / 3.0);
+    assert!((mid.0 - (geom.frame.x + geom.frame.w / 2.0)).abs() < 1e-9);
+    // X runs left to right along the bottom, Y bottom to top along the right side.
+    assert!(geom.data_to_page(0.75, 0.0).0 > geom.data_to_page(0.25, 0.0).0);
+    assert!(geom.data_to_page(0.0, 0.75).1 < geom.data_to_page(0.0, 0.25).1);
+}
+
+#[test]
+fn ternary_data_to_page_and_page_to_data_invert_each_other() {
+    let (p, g) = ternary_project(&ternary_rows());
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    for (x, y) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (0.2, 0.5), (0.6, 0.1), (0.33, 0.33)] {
+        let (px, py) = geom.data_to_page(x, y);
+        let (a, b) = geom.page_to_data(px, py);
+        assert!((a - x).abs() < 1e-9 && (b - y).abs() < 1e-9, "{x},{y} -> {a},{b}");
+    }
+}
+
+#[test]
+fn rows_that_do_not_sum_to_one_are_normalised_and_unusable_rows_are_skipped() {
+    use crate::ternary::normalise;
+    assert_eq!(normalise(0.5, 0.25, 0.25), Some((0.5, 0.25)));
+    let (a, b) = normalise(0.54, 0.27, 0.09).unwrap();
+    assert!((a - 0.6).abs() < 1e-12 && (b - 0.3).abs() < 1e-12);
+    let (a, b) = normalise(60.0, 30.0, 10.0).unwrap();
+    assert!((a - 0.6).abs() < 1e-12 && (b - 0.3).abs() < 1e-12);
+    assert_eq!(normalise(0.0, 0.0, 0.0), None);
+    assert_eq!(normalise(-0.1, 0.6, 0.5), None);
+    assert_eq!(normalise(f64::NAN, 0.5, 0.5), None);
+    // A row that needs normalising lands where the same row, already normalised, does.
+    assert_eq!(ternary_marks(&[[0.54, 0.27, 0.09]]), ternary_marks(&[[0.6, 0.3, 0.1]]));
+    // A bad row draws nothing: the picture is that of the good rows alone.
+    let good = [[0.6, 0.3, 0.1], [0.2, 0.2, 0.6]];
+    let with_bad = [good[0], [0.0, 0.0, 0.0], [-0.2, 0.7, 0.5], good[1]];
+    assert_eq!(ternary_marks(&good), ternary_marks(&with_bad));
+}
+
+#[test]
+fn a_ternary_layer_labels_three_axes_with_the_column_names_and_steps_of_a_fifth() {
+    let (p, g) = ternary_project(&ternary_rows());
+    let t = texts(&doc(&svg_of(&p, g)));
+    for name in ["Sand", "Silt", "Clay"] {
+        assert!(t.iter().any(|x| x == name), "{name} in {t:?}");
+    }
+    for v in ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"] {
+        assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
+    }
+    // Percentages: the ticks count to 100.
+    let (p, g) = ternary_project(&[[60.0, 30.0, 10.0], [20.0, 20.0, 60.0]]);
+    let t = texts(&doc(&svg_of(&p, g)));
+    for v in ["0", "20", "40", "60", "80", "100"] {
+        assert_eq!(t.iter().filter(|x| *x == v).count(), 3, "{v} once per axis in {t:?}");
+    }
+}
+
+// ----- floating bars measured in Origin (graphing spec 14.12) -----------------------------------
+
+/// Four columns B..E for a floating plot: Origin made the bars B-C, C-D and D-E.
+fn floating_chain(template: Template) -> (Project, WindowId) {
+    let mut p = Project::new();
+    let book = p.add_workbook("b");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let mut ys = Vec::new();
+    for (i, v) in [[1.0, 2.0], [3.0, 4.0], [4.0, 6.0], [7.0, 7.5]].into_iter().enumerate() {
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(v.to_vec())).unwrap();
+        p.column_mut(c).unwrap().long_name = ["B", "C", "D", "E"][i].into();
+        ys.push(c);
+    }
+    let g = p.plot_columns(template, &ys).unwrap();
+    (p, g)
+}
+
+#[test]
+fn floating_plots_chain_the_columns_and_share_one_slot() {
+    for template in [Template::FloatingColumn, Template::FloatingBar] {
+        let (p, g) = floating_chain(template);
+        let plots = &p.graph(g).unwrap().layers[0].plots;
+        assert_eq!(plots.len(), 3);
+        assert_eq!(plots[1].y_base, Some(plots[0].y));
+        assert_eq!(plots[2].y_base, Some(plots[1].y));
+        let l = layer_data(&p, g);
+        let slots: Vec<_> = l.plots.iter().map(|pd| pd.bar.unwrap().left).collect();
+        assert!(slots.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-12), "the same slot: {slots:?}");
+    }
+}
+
+#[test]
+fn floating_bar_and_column_legends_list_the_last_plot_first() {
+    for template in [Template::FloatingColumn, Template::FloatingBar] {
+        let (p, g) = floating_chain(template);
+        let t = texts(&doc(&svg_of(&p, g)));
+        let at = |s: &str| t.iter().rposition(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        assert!(at("E") < at("D") && at("D") < at("C"), "E, D, C from the top: {t:?}");
+    }
+}
+
+// ----- drawn objects (graphing spec section 17) ----------------------------
+
+fn graph_with_one_of_each_shape() -> (sheaf_core::Project, sheaf_core::WindowId) {
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let mut line = Shape::new(ShapeKind::Line, (0.1, 0.1), (0.4, 0.1));
+    line.dash = sheaf_core::graph::Dash::Dash;
+    let mut arrow = Shape::new(ShapeKind::Arrow, (0.1, 0.3), (0.4, 0.5));
+    arrow.color = Color { r: 200, g: 0, b: 0, a: 255 };
+    arrow.head_at_start = true;
+    let mut rect = Shape::new(ShapeKind::Rectangle, (0.55, 0.1), (0.9, 0.3));
+    rect.fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    let ellipse = Shape::new(ShapeKind::Ellipse, (0.55, 0.5), (0.9, 0.9));
+    layer.shapes = vec![line, arrow, rect, ellipse];
+    (p, g)
+}
+
+#[test]
+fn golden_drawn_shapes() {
+    let (p, g) = graph_with_one_of_each_shape();
+    compare_golden("shapes", &svg_of(&p, g));
+}
+
+#[test]
+fn drawn_shapes_are_picked_by_outline_or_fill() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    let (p, g) = graph_with_one_of_each_shape();
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.25, 0.1), shape(0), "on the line");
+    assert_eq!(at(0.25, 0.4), shape(1), "on the arrow's middle");
+    assert_eq!(at(0.7, 0.2), shape(2), "inside the filled rectangle");
+    assert_eq!(at(0.55, 0.2), shape(2), "on its outline");
+    assert_eq!(at(0.725, 0.5), shape(3), "on the ellipse's top");
+    assert_eq!(at(0.56, 0.51), Hit::Layer(0), "in the ellipse's box corner");
+    // An unfilled shape is hit on its outline only: its inside is the layer behind it.
+    assert_eq!(at(0.725, 0.7), Hit::Layer(0), "inside the unfilled ellipse");
+    assert_eq!(at(0.9, 0.7), shape(3), "on the unfilled ellipse's right end");
+    // Outside the filled rectangle, 1 pt from its edge, is within the pick tolerance; 10 pt is not.
+    assert_eq!(hit_test(&scene, (f.x + 0.55 * f.w - 1.0, f.y + 0.2 * f.h), 2.0), shape(2), "1 pt outside the edge");
+    assert_eq!(hit_test(&scene, (f.x + 0.55 * f.w - 10.0, f.y + 0.2 * f.h), 2.0), Hit::Layer(0), "10 pt outside");
+}
+
+#[test]
+fn an_unfilled_rectangle_is_hit_on_its_edge_and_a_filled_ellipse_inside_only() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let mut rect = Shape::new(ShapeKind::Rectangle, (0.1, 0.1), (0.4, 0.4));
+    rect.fill = None;
+    let mut ellipse = Shape::new(ShapeKind::Ellipse, (0.55, 0.5), (0.9, 0.9));
+    ellipse.fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    p.graph_mut(g).unwrap().layers[0].shapes = vec![rect, ellipse];
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.1, 0.25), shape(0), "on the unfilled rectangle's edge");
+    assert_eq!(at(0.25, 0.25), Hit::Layer(0), "inside the unfilled rectangle");
+    assert_eq!(at(0.725, 0.7), shape(1), "inside the filled ellipse");
+    assert_eq!(at(0.56, 0.51), Hit::Layer(0), "the filled ellipse's box corner");
+}
+
+#[test]
+fn the_topmost_of_overlapping_drawn_objects_is_picked() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    // Shape 0 is a big filled rectangle, shape 1 a smaller filled one drawn over it, shape 2 a
+    // filled rectangle that covers the label.
+    let mut big = Shape::new(ShapeKind::Rectangle, (0.1, 0.1), (0.6, 0.6));
+    big.fill = fill;
+    let mut small = Shape::new(ShapeKind::Rectangle, (0.3, 0.3), (0.5, 0.5));
+    small.fill = fill;
+    let mut cover = Shape::new(ShapeKind::Rectangle, (0.7, 0.7), (0.95, 0.95));
+    cover.fill = fill;
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.shapes = vec![big, small, cover];
+    layer.labels.push(sheaf_core::graph::TextLabel::new("peak", 0.8, 0.8, sheaf_core::graph::Font::new("Arial", 10.0)));
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.4, 0.4), shape(1), "the overlap picks the rectangle painted last");
+    assert_eq!(at(0.2, 0.2), shape(0), "outside the small one the big one is picked");
+    assert_eq!(at(0.82, 0.8), shape(2), "a shape over a label is picked, not the label");
+}
+
+#[test]
+fn a_thick_line_is_picked_on_its_visible_width() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let mut line = Shape::new(ShapeKind::Line, (0.1, 0.5), (0.4, 0.5));
+    line.width_pt = 10.0;
+    p.graph_mut(g).unwrap().layers[0].shapes = vec![line];
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |dy: f64| hit_test(&scene, (f.x + 0.25 * f.w, f.y + 0.5 * f.h + dy), 1.0);
+    let shape = Hit::Object { layer: 0, kind: ObjectKind::Shape(0) };
+    assert_eq!(at(4.0), shape, "4 pt off the centre of a 10 pt line is on the stroke");
+    assert_eq!(at(-4.0), shape);
+    assert_eq!(at(20.0), Hit::Layer(0), "far from it is not");
+    // The selection box (the recorded bounds) holds the stroke.
+    let o = scene.layers[0].objects.iter().find(|o| o.kind == ObjectKind::Shape(0)).unwrap();
+    assert!(o.bounds.h >= 10.0 - 1e-9, "{:?}", o.bounds);
 }

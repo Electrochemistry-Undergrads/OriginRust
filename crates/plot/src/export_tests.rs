@@ -339,6 +339,30 @@ fn jpeg_bmp_and_gif_are_written_with_their_headers() {
 }
 
 #[test]
+fn tga_is_written_with_its_header_in_each_depth() {
+    for (depth, image_type, bpp, map) in
+        [(ColorDepth::Bit24, 2, 24, 0usize), (ColorDepth::Grey8, 3, 8, 0), (ColorDepth::Colors256, 1, 8, 768)]
+    {
+        let tga = raster_bytes("tga", &RasterOptions { depth, ..RasterOptions::default() });
+        assert_eq!((tga[1], tga[2], tga[16], tga[17]), (u8::from(map > 0), image_type, bpp, 0x20), "{depth:?}");
+        let (w, h) = (u16::from_le_bytes([tga[12], tga[13]]) as usize, u16::from_le_bytes([tga[14], tga[15]]) as usize);
+        assert_eq!(tga.len(), 18 + map + w * h * usize::from(bpp / 8), "{depth:?}: header, palette and pixels");
+    }
+}
+
+#[test]
+fn pcx_is_written_with_its_header_and_palette() {
+    let rgb = raster_bytes("pcx", &RasterOptions { depth: ColorDepth::Bit24, ..RasterOptions::default() });
+    assert_eq!(&rgb[..4], &[0x0A, 5, 1, 8], "maker, version 5, run-length, 8 bits");
+    assert_eq!(rgb[65], 3, "three colour planes");
+    let pal = raster_bytes("pcx", &RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() });
+    assert_eq!(pal[65], 1, "one plane");
+    assert_eq!(pal[pal.len() - 769], 0x0C, "256-colour palette marker before the last 768 bytes");
+    let grey = raster_bytes("pcx", &RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() });
+    assert_eq!(u16::from_le_bytes([grey[68], grey[69]]), 2, "grey palette info");
+}
+
+#[test]
 fn colour_depth_changes_png_bmp_and_tiff() {
     let colours = RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() };
     let png = raster_bytes("png", &colours);

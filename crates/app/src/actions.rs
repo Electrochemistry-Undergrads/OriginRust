@@ -7,6 +7,7 @@
 
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
+use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
 use crate::panels::PanelId;
 use sheaf_core::graph::PlotKind;
@@ -35,6 +36,8 @@ pub enum CellOp {
     PasteText(String),
     /// Empty the cells (the Delete key).
     Clear,
+    /// Store the same text in every selected cell (Ctrl+Enter in the cell editor).
+    Fill(String),
     /// Column > Mask > Apply, Remove or Swap on the selected cells.
     Mask(sheaf_core::sheetops::MaskOp),
     /// Edit > Insert: blank rows above the selected rows (only in the selected columns for a
@@ -102,6 +105,8 @@ pub enum GraphOp {
     HideTitle { layer: usize, y: bool },
     /// Delete on a free text label.
     DeleteLabel { layer: usize, label: usize },
+    /// Delete on a drawn line, arrow, rectangle or ellipse.
+    DeleteShape { layer: usize, shape: usize },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.
@@ -117,6 +122,8 @@ pub enum GraphTool {
     Reader,
     /// The Text tool: the next click on the page places a text label.
     Text,
+    /// A drawing tool (Line, Arrow, Rectangle, Circle): a drag on the graph draws one object.
+    Draw(sheaf_core::shape::ShapeKind),
 }
 
 /// Which File > Import item opened the file chooser.
@@ -146,6 +153,10 @@ pub enum Action {
     GoToCell(WindowId),
     /// Statistics > Power and Sample Size > a test.
     Power(sheaf_core::analysis::PowerKind),
+    /// Edit > Find in Sheets... in this workbook.
+    FindInSheets(WindowId),
+    /// Edit > Replace... in this workbook.
+    ReplaceInSheets(WindowId),
     Undo,
     Redo,
     NewWorkbook,
@@ -198,6 +209,18 @@ pub enum Action {
     Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
     /// for the columns a plot of the active sheet would show.
+    /// The Interpolate window with this method chosen (Mathematics > Linear, Spline or B-Spline
+    /// Interpolation).
+    /// The Interpolate window taking its X values from a column (Interpolate/Extrapolate Y from X).
+    InterpolateFromColumn {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    InterpolateWith {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        method: sheaf_core::analysis::InterpMethod,
+    },
     Analyze {
         book: WindowId,
         columns: Vec<ColumnId>,
@@ -209,6 +232,12 @@ pub enum Action {
         book: WindowId,
         column: Option<ColumnId>,
         kind: FitKind,
+    },
+    /// Open Multiple Linear Regression, Compare Models or Rank Models for a column.
+    FitMore {
+        book: WindowId,
+        column: Option<ColumnId>,
+        kind: FitMoreKind,
     },
     /// Sort the rows of the sheet that holds this column by the column's values.
     SortSheet {
@@ -243,6 +272,8 @@ pub enum Action {
     },
     /// Column > Reverse Order: turn the values of each selected column round.
     ReverseColumns(Vec<ColumnId>),
+    /// Empty every column of the active sheet of this workbook (one undo step).
+    ClearWorksheet(WindowId),
     /// Column > Filter > Add or Remove Filter: the window for the sheet filter, with presets for
     /// this column.
     RowFilterDialog {
@@ -321,6 +352,26 @@ pub enum Action {
         x: f64,
         y: f64,
     },
+    /// Adds a drawn object to a layer: one undo step.
+    AddShape {
+        graph: WindowId,
+        layer: usize,
+        shape: sheaf_core::shape::Shape,
+    },
+    /// Moves a drawn object by `(dx, dy)` fractions of the layer frame: one undo step.
+    MoveShape {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+        dx: f64,
+        dy: f64,
+    },
+    /// Opens the properties window of a drawn object (double click, Properties).
+    EditShape {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+    },
     /// Moves the legend to a new centre (fractions of the layer frame): it becomes manually
     /// placed; one undo step.
     MoveLegend {
@@ -351,6 +402,11 @@ pub enum Action {
     Focus(WindowId),
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
+    /// Window > Duplicate: copy this workbook or graph into a new window.
+    DuplicateWindow(WindowId),
+    /// File > Append: bring the windows of another project file into this one (the file, or `None`
+    /// to ask for it).
+    AppendProject(Option<std::path::PathBuf>),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).
@@ -395,5 +451,7 @@ pub enum Action {
     About,
     /// Open the window of View > Toolbars.
     Toolbars,
+    /// View > Status Bar: show or hide the status bar.
+    ToggleStatusBar,
     Quit,
 }

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="771.84pt" height="590.76pt" viewBox="0 0 771.84 590.76">
+<rect x="0" y="0" width="771.84" height="590.76" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+<path d="M138.237 460.111L138.237 394.828L213.392 362.186L288.547 296.902L363.702 329.544L438.857 264.261L514.012 296.902L589.168 231.619L664.323 264.261L664.323 460.111L589.168 460.111L514.012 460.111L438.857 460.111L363.702 460.111L288.547 460.111L213.392 460.111L138.237 460.111Z" fill="#000000"/>
+<path d="M138.237 394.828L213.392 362.186L288.547 296.902L363.702 329.544L438.857 264.261L514.012 296.902L589.168 231.619L664.323 264.261" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M138.237 394.828L138.237 362.186L213.392 329.544L288.547 231.619L363.702 264.261L438.857 166.335L514.012 231.619L589.168 133.694L664.323 166.335L664.323 264.261L589.168 231.619L514.012 296.902L438.857 264.261L363.702 329.544L288.547 296.902L213.392 362.186L138.237 394.828Z" fill="#FF0000"/>
+<path d="M138.237 362.186L213.392 329.544L288.547 231.619L363.702 264.261L438.857 166.335L514.012 231.619L589.168 133.694L664.323 166.335" fill="none" stroke="#FF0000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M138.237 362.186L138.237 329.544L213.392 264.261L288.547 198.977L363.702 198.977L438.857 133.694L514.012 166.335L589.168 101.052L664.323 101.052L664.323 166.335L589.168 133.694L514.012 231.619L438.857 166.335L363.702 264.261L288.547 231.619L213.392 329.544L138.237 362.186Z" fill="#0000FF"/>
+<path d="M138.237 329.544L213.392 264.261L288.547 198.977L363.702 198.977L438.857 133.694L514.012 166.335L589.168 101.052L664.323 101.052" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="overlay">
+<path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 68.41L138.237 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M213.392 492.753L213.392 501.753M363.702 492.753L363.702 501.753M514.012 492.753L514.012 501.753M664.323 492.753L664.323 501.753M138.237 492.753L138.237 497.253M288.547 492.753L288.547 497.253M438.857 492.753L438.857 497.253M589.168 492.753L589.168 497.253" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 460.111L129.237 460.111M138.237 394.828L129.237 394.828M138.237 329.544L129.237 329.544M138.237 264.261L129.237 264.261M138.237 198.977L129.237 198.977M138.237 133.694L129.237 133.694M138.237 68.41L129.237 68.41M138.237 492.753L133.737 492.753M138.237 427.469L133.737 427.469M138.237 362.186L133.737 362.186M138.237 296.902L133.737 296.902M138.237 231.619L133.737 231.619M138.237 166.335L133.737 166.335M138.237 101.052L133.737 101.052" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="213.392" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">2</text>
+<text x="363.702" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">4</text>
+<text x="514.012" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">6</text>
+<text x="664.323" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">8</text>
+<text x="122.937" y="464.701" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="122.937" y="399.418" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="122.937" y="334.134" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="122.937" y="268.851" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
+<text x="122.937" y="203.567" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">8</text>
+<text x="122.937" y="138.284" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">10</text>
+<text x="122.937" y="73" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">12</text>
+<text x="401.28" y="553.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="85.317" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 85.317 280.581)">Current 1 (mA)</text>
+<rect x="497.123" y="86.01" width="149.6" height="103.4" fill="none" stroke="#000000" stroke-width="0.75"/>
+<path d="M505.923 109.11L554.323 109.11" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="505.923" y="98.11" width="48.4" height="22" fill="#000000" stroke="#000000" stroke-width="0.5"/>
+<text x="565.323" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 1</text>
+<path d="M505.923 137.71L554.323 137.71" fill="none" stroke="#FF0000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="505.923" y="126.71" width="48.4" height="22" fill="#FF0000" stroke="#FF0000" stroke-width="0.5"/>
+<text x="565.323" y="143.32" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 2</text>
+<path d="M505.923 166.31L554.323 166.31" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="505.923" y="155.31" width="48.4" height="22" fill="#0000FF" stroke="#0000FF" stroke-width="0.5"/>
+<text x="565.323" y="171.92" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 3</text>
+</g>
+</g>
+</svg>

@@ -58,6 +58,7 @@ impl PowerDialog {
         }
     }
 
+    #[cfg(test)]
     pub fn kind(&self) -> PowerKind {
         self.kind
     }

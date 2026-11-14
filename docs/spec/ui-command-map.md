@@ -250,6 +250,8 @@ Labels by folder (paraphrased lists of the English labels, P-tags in brackets):
   Interpolate/Extrapolate, Interpolate/Extrapolate Y from X, Trace Interpolation, Linear/Spline/
   B-Spline Interpolation, 2D and 3D interpolation, Intersect, Normalize (columns/curves), Average
   Multiple Curves, Polygon Area, XYZ Surface Area, Median Filter, Special Filter, Inverse. [P1]
+  Sheaf: Intersect, Average Multiple Curves and Polygon Area are live (rules in `analysis-curve-math.md`,
+  unmeasured); the others of this folder not named in their own task stay grey.
 - **Signal Processing**: Smooth [P0], FFT Filters, FFT (submenu FFT: FFT, IFFT, 2D FFT, 2D IFFT),
   Convolution, Deconvolution, Correlation, 2D Correlation, Coherence, Decimation, Envelope,
   Hilbert Transform, IIR Filter, STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
@@ -312,6 +314,7 @@ Re-Import Directly [Ctrl+4].
   column labels. Other: action when non-numeric text is met in a numeric field; support numbers
   with leading zeros; "Import Into Worksheet as" (new book, new sheets, replace existing,
   new columns, etc.). A second page "Data Import Options": rename columns if first line holds
+  (Measured 2026-11-13 in the 2016 `impASC` window: it has no "Data Import Options" page; see import-ascii.md section 10.)
   labels; rename worksheet to the file name; apply new range to associated plots; create column
   labels from the header.
 - `impCSV` parameters: `fname`, `trfiles`, `options`, `orng` (destination range, default active

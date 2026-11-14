@@ -60,3 +60,30 @@ kept here), the case lists `cases2..5.json` and `stats3-make-fixture.py`, which 
 `friedman` run with `rt:=<new name:=...>`; `grubbs` and `qtest` need `alpha` and the output variables passed
 explicitly. Report sheets are read cell by cell (`wcol(c)[r]`) because `GetWorksheet` does not return them.
 What the runs showed is in `docs/spec/statistics.md`, section 10.
+
+## Origin's own dialogs (lists of controls, defaults, combo box items)
+
+`origin-dialog.ps1` opens one of Origin's dialogs in a temporary visible Origin (same lock) and writes, per step, a picture
+of the dialog, a list of its controls (class, text, position, tick state) and the items of every combo box. Either a
+LabTalk command that opens the dialog (`-Command 'impasc fname:="%WORK%file.txt" -d;'`, which blocks, so the helper
+`origin-dialog-watch.ps1` does the looking and closes the dialog with Escape) or a double-click on the main window
+(`-DoubleClick x,y`, for example on a column header to open Column Properties). `-StepsFile` lists steps as
+`name=actions`; actions are `@L:x,y` click, `@D:x,y` double click, `@S:x,y,n` mouse wheel, `@C:i,j` pick item j of the
+i-th combo box (and tell the dialog), `@T:i,text` set the i-th edit box, `@B:text` click a button, `@W:ms` wait, or
+SendKeys text; positions are pixels from the top-left corner of the dialog. `-After` runs LabTalk after the dialog closed
+(`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin.
+
+## Column format reference runs
+
+`colfmt-*.lines.txt` are line scripts (run with `run-labtalk-lines.ps1`, which prints strings as raw bytes in the console
+encoding, so micro signs come out wrong; run them through a copy that sets `[Console]::OutputEncoding` to UTF-8) that set a
+column's `format`, `subformat`, `digitMode` and `digits` and print `cell(r,1)$`, the text Origin shows: Month and Day of
+Week numbers (`colfmt-weekday-month`), Engineering digits and letters (`colfmt-engineering-digits`,
+`colfmt-engineering-carry`, `colfmt-significant-digits`). The findings are in `docs/spec/workbook-model.md`.
+
+`import-shortnames*.lines.txt` import `import-inputs/shortn2.txt` and `shortn3.txt` with the short-name line option
+(`options.Hdr.SNames`) and print the column names; the rules are in `docs/spec/import-ascii.md`, section 3.
+
+`import-replace-plots.lines.txt` replaces the data of a sheet by `impasc` while two graphs plot it (one of all rows, one
+with a row range) and prints each plot's begin and end row before and after (`get %C -b`, `get %C -e`); run it with
+`import-inputs` as the work folder. See `docs/spec/import-ascii.md`, section 10.

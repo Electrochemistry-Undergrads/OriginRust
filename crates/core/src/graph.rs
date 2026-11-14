@@ -168,6 +168,9 @@ pub struct Layer {
     /// Free text labels placed in the layer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<TextLabel>,
+    /// Drawn lines, arrows, rectangles and ellipses (graphing spec section 17), above the data.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shapes: Vec<crate::shape::Shape>,
     /// The colors given to new plots, in order. See [`Layer::next_color`].
     pub palette: Palette,
     /// Style copied to each new plot added to this layer.
@@ -192,6 +195,138 @@ pub struct Layer {
     /// layer stand side by side as one group (graphing spec section 14.4).
     #[serde(default, skip_serializing_if = "BarSpacing::is_default")]
     pub bars: BarSpacing,
+    /// The coordinate system the plots are drawn in: the usual rectangular axes, or a circle with
+    /// angle and radius (graphing spec section 14.18).
+    #[serde(default, skip_serializing_if = "Coords::is_cartesian")]
+    pub coords: Coords,
+}
+
+/// The coordinate system of a layer.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Coords {
+    /// Rectangular X and Y axes.
+    #[default]
+    Cartesian,
+    /// A circle: the angle runs round it, the radius from its centre to its edge. The plots are
+    /// ordinary line and symbol plots whose two columns are read as angle and radius.
+    Polar(PolarCoords),
+    /// An equilateral triangle: three fractions that sum to 1 give the position of a point
+    /// (graphing spec section 14.20). Plots take their X, Y and Z columns as the three parts.
+    Ternary(TernaryCoords),
+}
+
+impl Coords {
+    pub fn is_cartesian(&self) -> bool {
+        *self == Coords::Cartesian
+    }
+
+    /// The polar settings, `None` for a rectangular layer.
+    pub fn polar(&self) -> Option<&PolarCoords> {
+        match self {
+            Coords::Polar(p) => Some(p),
+            _ => None,
+        }
+    }
+
+    /// The ternary settings, `None` for any other layer.
+    pub fn ternary(&self) -> Option<&TernaryCoords> {
+        match self {
+            Coords::Ternary(t) => Some(t),
+            _ => None,
+        }
+    }
+}
+
+/// How the ticks of a ternary layer count: fractions (0 to 1) or percent (0 to 100).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TernaryScale {
+    /// Percent when a row of the data sums to about 100 (99 to 101), else fractions.
+    #[default]
+    Auto,
+    /// Ticks 0, 0.2, ... 1.
+    Fraction,
+    /// Ticks 0, 20, ... 100.
+    Percent,
+}
+
+/// Settings of a ternary layer (graphing spec section 14.20). A plot of such a layer names its Z
+/// column in `Plot::size_from` (no bubble sizes are drawn there).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TernaryCoords {
+    #[serde(default)]
+    pub scale: TernaryScale,
+}
+
+/// Which column of a plot holds the radius in a polar layer.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RadiusColumn {
+    /// Origin's "theta(X) r(Y)": the angle comes from the X column, the radius from Y.
+    #[default]
+    Y,
+    /// Origin's "r(X) theta(Y)": the radius comes from the X column, the angle from Y.
+    X,
+}
+
+/// The unit of the angle of a polar layer (Origin's Units of the angular axis).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AngleUnit {
+    /// A full turn is 360; the axis has a tick every 30 and plain number labels.
+    #[default]
+    Degrees,
+    /// A full turn is 2 pi; the axis has a tick every quarter of pi and labels like 0.25 and the pi sign.
+    Radians,
+}
+
+impl AngleUnit {
+    /// The angle of a full turn in this unit.
+    pub fn circle(self) -> f64 {
+        match self {
+            AngleUnit::Degrees => 360.0,
+            AngleUnit::Radians => std::f64::consts::TAU,
+        }
+    }
+}
+
+/// Settings of a polar layer (graphing spec section 14.18).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PolarCoords {
+    /// Which column holds the radius.
+    #[serde(default)]
+    pub radius: RadiusColumn,
+    /// Where angle 0 is, in degrees counter-clockwise from the right (3 o'clock). Origin's default 0.
+    #[serde(default)]
+    pub zero_deg: f64,
+    /// True when the angle grows clockwise. Origin's default is counter-clockwise.
+    #[serde(default)]
+    pub clockwise: bool,
+    /// True for a radar chart (graphing spec section 14.19): the rows are the spokes, evenly spaced
+    /// from 12 o'clock clockwise, whatever `zero_deg` and `clockwise` say, and the grid is made of
+    /// polygons.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub radar: bool,
+    /// The unit the angle column is in (Origin's Units on the angular axis; degrees by default).
+    #[serde(default, skip_serializing_if = "is_default_angle_unit")]
+    pub angle_unit: AngleUnit,
+}
+
+fn is_default_angle_unit(u: &AngleUnit) -> bool {
+    *u == AngleUnit::Degrees
+}
+
+impl Default for PolarCoords {
+    fn default() -> Self {
+        PolarCoords {
+            radius: RadiusColumn::Y,
+            zero_deg: 0.0,
+            clockwise: false,
+            radar: false,
+            angle_unit: AngleUnit::Degrees,
+        }
+    }
 }
 
 /// How the bars of the column plots of a layer share the room at one X position (Origin's "Gap
@@ -686,8 +821,13 @@ impl Dash {
 pub enum Connect {
     #[default]
     Straight,
-    /// A smooth curve through every point (Catmull-Rom spline).
+    /// A natural cubic spline through every point; needs increasing X and at most 900 points,
+    /// otherwise the points are joined by straight segments (as Origin does).
     Spline,
+    /// A cubic B-spline that winds around the points, starting and ending at the end points.
+    BSpline,
+    /// Cubic Bezier segments over groups of four points (consecutive groups share an end point).
+    Bezier,
     /// Horizontal first, then vertical.
     StepHorizontal,
     /// Vertical first, then horizontal.
@@ -782,11 +922,43 @@ pub enum PlotKind {
     /// A column from the plot's base column (`Plot::y_base`) up to its Y column (Origin's
     /// plot type 207).
     FloatingColumn,
+    /// Bars piled on each other, lying down: the horizontal form of [`PlotKind::StackedColumn`]
+    /// (Origin's plot type 216 with the stacked bar template). The piles grow from left to right.
+    StackedBar,
+    /// Like [`PlotKind::StackedBar`], with every pile scaled to 100; the value axis runs from 0 to 100.
+    Stacked100Bar,
+    /// The horizontal form of [`PlotKind::FloatingColumn`]: a bar from the plot's base column
+    /// (`Plot::y_base`) to its Y column along the horizontal axis.
+    FloatingBar,
+    /// Areas piled on each other (Origin's plot type 214): each plot's area runs from the curve of
+    /// the plots before it (in plot order) up to the sum of their values and its own.
+    StackedArea,
+    /// Like [`PlotKind::StackedArea`] with every pile scaled to 100; the Y axis runs from 0 to 100.
+    Stacked100Area,
+    /// A histogram of the plot's Y column (Origin's plot type 219): the values are counted into bins
+    /// (`Plot::hist`) and drawn as touching bars; the bars stand at the bin centres.
+    Histogram,
+    /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
+    /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
+    Box,
+    /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
+    /// from 12 o'clock, each labelled with its share. The layer draws no axes.
+    Pie,
+    /// Origin's 3D Color Pie: the pie seen from above at a slant, an ellipse about half as high as
+    /// wide with a side band, slices in the palette colours.
+    Pie3D,
+    /// Origin's 2D B&W Pie: a flat pie of white slices with black hatch patterns that differ per slice.
+    PieBw,
 }
 
 impl PlotKind {
     pub fn has_line(&self) -> bool {
-        matches!(self, PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area)
+        matches!(self, PlotKind::Line | PlotKind::LineSymbol) || self.is_area()
+    }
+
+    /// True for the kinds drawn as a filled area under a curve.
+    pub fn is_area(&self) -> bool {
+        matches!(self, PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area)
     }
 
     /// True for every kind drawn as rectangles standing on a base: the column kinds and bars.
@@ -798,21 +970,66 @@ impl PlotKind {
                 | PlotKind::Stacked100Column
                 | PlotKind::Bar
                 | PlotKind::FloatingColumn
+                | PlotKind::StackedBar
+                | PlotKind::Stacked100Bar
+                | PlotKind::FloatingBar
+                | PlotKind::Histogram
         )
     }
 
     /// True for the kinds that pile on each other instead of standing side by side.
     pub fn is_stacked(&self) -> bool {
-        matches!(self, PlotKind::StackedColumn | PlotKind::Stacked100Column)
+        self.is_stacked_column() || self.is_stacked_area()
+    }
+
+    /// True for the piled column and piled bar kinds.
+    pub fn is_stacked_column(&self) -> bool {
+        matches!(
+            self,
+            PlotKind::StackedColumn | PlotKind::Stacked100Column | PlotKind::StackedBar | PlotKind::Stacked100Bar
+        )
+    }
+
+    /// True for the floating column and floating bar kinds: every plot is a bar between two columns,
+    /// and all the plots of a layer stand in the same slot, on top of each other (measured, spec 14.12).
+    pub fn is_floating(&self) -> bool {
+        matches!(self, PlotKind::FloatingColumn | PlotKind::FloatingBar)
+    }
+
+    /// True for the piled area kinds.
+    pub fn is_stacked_area(&self) -> bool {
+        matches!(self, PlotKind::StackedArea | PlotKind::Stacked100Area)
+    }
+
+    /// True when every pile is scaled to a total of 100.
+    pub fn is_percent_stacked(&self) -> bool {
+        matches!(self, PlotKind::Stacked100Column | PlotKind::Stacked100Bar | PlotKind::Stacked100Area)
     }
 
     /// True when the bars lie down: values along the horizontal axis.
     pub fn is_horizontal(&self) -> bool {
-        matches!(self, PlotKind::Bar)
+        matches!(self, PlotKind::Bar | PlotKind::StackedBar | PlotKind::Stacked100Bar | PlotKind::FloatingBar)
     }
 
     pub fn has_symbols(&self) -> bool {
         matches!(self, PlotKind::Scatter | PlotKind::LineSymbol)
+    }
+}
+
+/// How the values of a [`PlotKind::Histogram`] plot are binned. `None` takes Origin's automatic
+/// choice (see `sheaf_calc::freq`).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HistogramStyle {
+    pub bin_size: Option<f64>,
+    /// First bin edge.
+    pub begin: Option<f64>,
+    /// End of the last bin.
+    pub end: Option<f64>,
+}
+
+impl HistogramStyle {
+    pub fn is_default(&self) -> bool {
+        *self == HistogramStyle::default()
     }
 }
 
@@ -850,12 +1067,24 @@ pub struct Plot {
     /// Error values in X (the third column type "X error"); drawn as horizontal error bars.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub x_error: Option<ColumnId>,
-    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] plot.
+    /// The column that holds the lower end of each bar of a [`PlotKind::FloatingColumn`] or [`PlotKind::FloatingBar`] plot, or
+    /// the lower edge of the fill of an [`PlotKind::Area`] plot (Origin's Fill Area between two
+    /// curves).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub y_base: Option<ColumnId>,
     /// Direction and cap width of the error bars.
     #[serde(default, skip_serializing_if = "ErrorStyle::is_default")]
     pub error: ErrorStyle,
+    /// The bins of a histogram plot.
+    #[serde(default, skip_serializing_if = "HistogramStyle::is_default")]
+    pub hist: HistogramStyle,
+    /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
+    /// Z column of a Bubble plot).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_from: Option<ColumnId>,
+    /// A colour mapped plot: the symbol of each point takes its colour from this column's value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_from: Option<ColumnId>,
 }
 
 /// Which side of the point an error bar reaches.
@@ -1262,6 +1491,9 @@ mod tests {
             x_error: None,
             y_base: None,
             error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         layer.plots = vec![plot(PlotKind::Column), plot(PlotKind::Column), plot(PlotKind::Line)];
         layer.recolor_automatic();
@@ -1338,6 +1570,9 @@ mod tests {
             x_error: None,
             y_base: None,
             error: ErrorStyle::default(),
+            hist: Default::default(),
+            size_from: None,
+            color_from: None,
         };
         assert!(!serde_json::to_string(&plot).unwrap().contains("group"));
         plot.group = Some(2);
@@ -1346,5 +1581,67 @@ mod tests {
         let back: Plot = serde_json::from_str(&json).unwrap();
         assert_eq!(back.group, Some(2));
         layer.plots.push(back);
+    }
+}
+
+#[cfg(test)]
+mod polar_tests {
+    use super::*;
+    use crate::template::Template;
+
+    #[test]
+    fn a_layer_without_coords_is_rectangular_and_polar_settings_round_trip() {
+        let g = Template::Line.new_graph(WindowId(1), "G");
+        let json = serde_json::to_string(&g.layers[0]).unwrap();
+        assert!(!json.contains("coords"), "rectangular layers are written as before");
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.coords, Coords::Cartesian);
+        let mut polar = Template::PolarRTheta.new_graph(WindowId(1), "P").layers.remove(0);
+        if let Coords::Polar(c) = &mut polar.coords {
+            c.zero_deg = 90.0;
+            c.clockwise = true;
+        }
+        let back: Layer = serde_json::from_str(&serde_json::to_string(&polar).unwrap()).unwrap();
+        assert_eq!(back, polar);
+        let c = back.coords.polar().unwrap();
+        assert_eq!((c.radius, c.zero_deg, c.clockwise), (RadiusColumn::X, 90.0, true));
+    }
+
+    #[test]
+    fn the_radar_template_is_a_polar_layer_with_the_radar_flag_and_round_trips() {
+        assert_eq!(Template::from_name("radar"), Some(Template::Radar));
+        let l = Template::Radar.new_graph(WindowId(1), "R").layers.remove(0);
+        assert!(l.coords.polar().is_some_and(|c| c.radar));
+        assert_eq!(l.default_kind, crate::graph::PlotKind::LineSymbol);
+        let back: Layer = serde_json::from_str(&serde_json::to_string(&l).unwrap()).unwrap();
+        assert_eq!(back, l);
+        let plain = serde_json::to_string(&Template::Polar.new_graph(WindowId(1), "P").layers[0]).unwrap();
+        assert!(!plain.contains("radar"), "polar layers are written as before");
+    }
+
+    #[test]
+    fn the_polar_templates_have_names_for_the_command_line() {
+        assert_eq!(Template::from_name("polar"), Some(Template::Polar));
+        assert_eq!(Template::from_name("polar-r-theta"), Some(Template::PolarRTheta));
+        let l = &Template::Polar.new_graph(WindowId(1), "P").layers[0];
+        assert_eq!(l.coords.polar().map(|c| c.radius), Some(RadiusColumn::Y));
+        assert!(l.x_axis.major_grid.is_some() && l.y_axis.major_grid.is_some(), "rings and spokes");
+    }
+}
+
+#[cfg(test)]
+mod ternary_tests {
+    use super::*;
+    use crate::template::Template;
+
+    #[test]
+    fn ternary_settings_round_trip_and_old_layers_are_unchanged() {
+        let g = Template::Ternary.new_graph(WindowId(1), "T");
+        let layer = &g.layers[0];
+        assert_eq!(layer.coords.ternary().map(|t| t.scale), Some(TernaryScale::Auto));
+        let back: Layer = serde_json::from_str(&serde_json::to_string(layer).unwrap()).unwrap();
+        assert_eq!(&back, layer);
+        assert!(back.coords.polar().is_none());
+        assert_eq!(Template::from_name("ternary"), Some(Template::Ternary));
     }
 }

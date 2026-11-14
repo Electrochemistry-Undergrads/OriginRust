@@ -154,7 +154,7 @@ fn statistics_of_infinite_data_are_not_zero() {
     let e = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
     assert!(e("sd(col(A))").is_nan(), "the spread of data with infinity is undefined");
     assert!(e("var(col(A))").is_nan());
-    assert_eq!(e("sum(col(A))"), f64::INFINITY);
+    assert_eq!(e("total(col(A))"), f64::INFINITY);
     assert_eq!(e("count(col(A))"), 3.0);
 }
 
@@ -240,15 +240,16 @@ fn statistics_over_columns_and_ranges() {
     let a = [1.0, 2.0, f64::NAN, 5.0];
     let host = SimpleHost::new().short("A", &a);
     let one = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
-    assert_eq!(one("sum(col(A))"), 8.0);
+    // Origin: `sum` is the running sum (row 1 holds A[1]), `count` counts the missing cell too.
+    assert_eq!(one("sum(col(A))"), 1.0);
     assert_eq!(one("total(col(A))"), 8.0);
-    assert_eq!(one("count(col(A))"), 3.0);
+    assert_eq!(one("count(col(A))"), 4.0);
     near_eq(one("mean(col(A))"), 8.0 / 3.0);
     assert_eq!(one("min(col(A))"), 1.0);
     assert_eq!(one("max(col(A))"), 5.0);
     assert_eq!(one("median(col(A))"), 2.0);
     assert_eq!(one("mean(col(A)[1:2])"), 1.5);
-    assert_eq!(one("sum(col(A)[2:99])"), 7.0);
+    assert_eq!(one("total(col(A)[2:99])"), 7.0);
     assert!(one("mean(col(A)[3:3])").is_nan());
     near_eq(one("sd(col(A)[1:2])"), 0.5f64.sqrt());
     // The documented gap-filling formula.
@@ -293,7 +294,7 @@ fn host_without_slices() {
     assert_eq!(&v[1..], &[21.0, 32.0]);
     let m = Expr::parse("mean(col(A)[i:3])").unwrap().eval_rows(&h, 3).unwrap();
     assert_eq!(m, [2.0, 2.5, 3.0]);
-    assert_eq!(Expr::parse("sum(col(A))").unwrap().eval(&h).unwrap(), 6.0);
+    assert_eq!(Expr::parse("total(col(A))").unwrap().eval(&h).unwrap(), 6.0);
 }
 
 #[test]
@@ -328,7 +329,7 @@ fn error_messages_and_positions() {
         ("   ", 0, "empty"),
         ("1 = 2", 2, "single '='"),
         ("1 & 2", 2, "'&' must be doubled"),
-        ("2 $ 3", 2, "unexpected character '$'"),
+        ("2 $ 3", 2, "found '$'"),
         ("col(\"abc", 4, "missing its closing"),
         ("col(2.5)", 4, "whole number"),
         ("col()", 4, "expected a column name"),
@@ -337,7 +338,7 @@ fn error_messages_and_positions() {
         ("col(A)[1", 8, "expected ']'"),
         ("sum(3)", 0, "needs a column"),
         ("1e999", 0, "too large"),
-        ("\"text\" + 1", 0, "text strings"),
+        ("\"text\"[1]", 6, "only a column reference"),
         ("1 ? 2 3", 6, "expected ':'"),
     ];
     for (src, pos, text) in cases {
@@ -492,6 +493,37 @@ fn stddevp_and_sem() {
 }
 
 #[test]
+fn sum_is_the_running_sum_and_count_counts_missing_cells_as_in_origin() {
+    // Origin (probes a1, a2, a3 in re-workspace/scratch/expr-funcs2/): `sum(col(A))` in a column
+    // formula is the running sum, missing where the input is missing; `total` is the total.
+    let run = [3.0, 4.0, 8.0, 9.0, 14.0, NAN, 23.0, 25.0, 31.0];
+    same(&rows("sum(col(A))"), &run);
+    // A range: the running sum inside it from row 1 (Origin: 5 . 14 for [5:7]).
+    same(&rows("sum(col(A)[5:7])")[..4], &[5.0, NAN, 14.0, NAN]);
+    // Scalars measured: total 31, mean 3.875, max 9, min 1, count 9 (the missing cell counts).
+    assert_eq!(first("total(col(A))"), 31.0);
+    assert_eq!(first("mean(col(A))"), 3.875);
+    assert_eq!(first("max(col(A))"), 9.0);
+    assert_eq!(first("min(col(A))"), 1.0);
+    assert_eq!(first("count(col(A))"), 9.0);
+    assert_eq!(first("count(col(A)[5:7])"), 3.0);
+    assert_eq!(first("count(col(A)[0:3])"), 3.0);
+    assert_eq!(first("count(col(A)[3:2])"), 0.0);
+    assert_eq!(first("total(col(A)[3:2])"), 0.0);
+}
+
+#[test]
+fn count_stops_at_the_last_value_of_the_column() {
+    // Origin: with A = . 1 4 1 5 . 9 2 . (trailing missing not stored) count(col(A)[1:20]) is 8.
+    let a = [NAN, 1.0, 4.0, 1.0, 5.0, NAN, 9.0, 2.0, NAN, NAN];
+    let host = SimpleHost::new().short("A", &a);
+    let one = |s: &str| Expr::parse(s).unwrap().eval(&host).unwrap();
+    assert_eq!(one("count(col(A))"), 8.0);
+    assert_eq!(one("count(col(A)[1:20])"), 8.0);
+    assert_eq!(one("count(col(A)[2:6])"), 5.0);
+}
+
+#[test]
 fn cumsum_matches_origin_sum_of_a_column() {
     // Origin evaluates `sum(col(A))` in a column formula as the running sum, skipping the
     // missing row and leaving it missing: 3 4 8 9 14 . 23 25 31.
@@ -635,4 +667,255 @@ fn lookup_cell_and_distance() {
     // Origin: distance(x1,y1,x2,y2) is the Euclidean distance; (A,1)-(A+3,5) is 5.
     same(&rows("distance(col(A),1,col(A)+3,5)"), &[5.0, 5.0, 5.0, 5.0, 5.0, NAN, 5.0, 5.0, 5.0]);
     assert_eq!(ev("distance(0,0,3,4)"), 5.0);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Text values and string functions. Expected values were measured in Origin with
+// tools/origin-ref/run-labtalk-lines.ps1 (probes c1 to c7 in re-workspace/scratch/expr-funcs2/,
+// local only): a Text & Numeric column filled with the cells below, then `col(X)=<formula>`.
+// ---------------------------------------------------------------------------------------------
+
+use crate::Value;
+
+#[derive(Clone)]
+enum Cell {
+    N(f64),
+    S(&'static str),
+}
+
+struct TextHost {
+    cols: Vec<(&'static str, Vec<Cell>)>,
+}
+
+impl TextHost {
+    fn find(&self, c: &ColumnRef) -> Option<&Vec<Cell>> {
+        match c {
+            ColumnRef::Short(n) => self.cols.iter().find(|(k, _)| k.eq_ignore_ascii_case(n)).map(|(_, v)| v),
+            _ => None,
+        }
+    }
+}
+
+impl Host for TextHost {
+    fn variable(&self, _name: &str) -> Option<f64> {
+        None
+    }
+    fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
+        Some(match self.find(col)?.get(row)? {
+            Cell::N(x) => *x,
+            Cell::S(_) => f64::NAN,
+        })
+    }
+    fn has_column(&self, col: &ColumnRef) -> bool {
+        self.find(col).is_some()
+    }
+    fn column_len(&self, col: &ColumnRef) -> usize {
+        self.find(col).map_or(0, Vec::len)
+    }
+    fn text_cell(&self, col: &ColumnRef, row: usize) -> Option<String> {
+        match self.find(col)?.get(row)? {
+            Cell::S(s) => Some((*s).to_string()),
+            Cell::N(_) => None,
+        }
+    }
+    fn column_has_text(&self, col: &ColumnRef) -> bool {
+        self.find(col).is_some_and(|v| v.iter().any(|c| matches!(c, Cell::S(_))))
+    }
+}
+
+/// Column A of probe c2: Hello, "  World  ", abcabc, 12.5, "", Hello World, 42, missing, "-1e3".
+fn probe_a() -> TextHost {
+    use Cell::{N, S};
+    TextHost {
+        cols: vec![(
+            "A",
+            vec![
+                S("Hello"),
+                S("  World  "),
+                S("abcabc"),
+                N(12.5),
+                S(""),
+                S("Hello World"),
+                N(42.0),
+                N(f64::NAN),
+                S("-1e3"),
+            ],
+        )],
+    }
+}
+
+fn texts(host: &TextHost, src: &str) -> Vec<String> {
+    let n = host.cols[0].1.len();
+    Expr::parse(src)
+        .unwrap_or_else(|e| panic!("{src}: {e}"))
+        .eval_values(host, n)
+        .unwrap_or_else(|e| panic!("{src}: {e}"))
+        .into_iter()
+        .map(|v| match v {
+            Value::Text(s) => s,
+            Value::Num(x) if x.is_nan() => "<missing>".to_string(),
+            Value::Num(x) => format!("{x}"),
+        })
+        .collect()
+}
+
+#[test]
+fn string_functions_match_origin() {
+    let h = probe_a();
+    let t = |src: &str, want: [&str; 9]| assert_eq!(texts(&h, src), want, "{src}");
+    t("col(A)$", ["Hello", "  World  ", "abcabc", "12.5", "", "Hello World", "42", "--", "-1e3"]);
+    t("right(col(A)$,3)", ["llo", "d  ", "abc", "2.5", "", "rld", "42", "--", "1e3"]);
+    t("mid(col(A)$,2,3)", ["ell", " Wo", "bca", "2.5", "", "ell", "2", "-", "1e3"]);
+    t("mid(col(A)$,0,3)", ["Hel", "  W", "abc", "12.", "", "Hel", "42", "--", "-1e"]);
+    t("mid(col(A)$,3)", ["llo", "World  ", "cabc", ".5", "", "llo World", "", "", "e3"]);
+    t("left(col(A)$,2)", ["He", "  ", "ab", "12", "", "He", "42", "--", "-1"]);
+    t("left(col(A)$,-1)", ["", "", "", "", "", "", "", "", ""]);
+    t("right(col(A)$,0)", ["", "", "", "", "", "", "", "", ""]);
+    t("trim(col(A)$)", ["Hello", "World", "abcabc", "12.5", "", "Hello World", "42", "--", "-1e3"]);
+    t("lower(col(A)$)", ["hello", "  world  ", "abcabc", "12.5", "", "hello world", "42", "--", "-1e3"]);
+    t("upper(col(A)$)", ["HELLO", "  WORLD  ", "ABCABC", "12.5", "", "HELLO WORLD", "42", "--", "-1E3"]);
+    t("replace(col(A)$,2,2,\"ZZ\")", ["HZZlo", " ZZorld  ", "aZZabc", "1ZZ5", "", "HZZlo World", "4ZZ", "-ZZ", "-ZZ3"]);
+    t("col(A)$+\"!\"", ["Hello!", "  World  !", "abcabc!", "12.5!", "!", "Hello World!", "42!", "--!", "-1e3!"]);
+    t(
+        "\"pre-\"+col(A)$",
+        [
+            "pre-Hello",
+            "pre-  World  ",
+            "pre-abcabc",
+            "pre-12.5",
+            "pre-",
+            "pre-Hello World",
+            "pre-42",
+            "pre---",
+            "pre--1e3",
+        ],
+    );
+    // Numbers: find and search count from 1 and give -1 for no match; len counts characters.
+    t("find(col(A)$,\"c\")", ["-1", "-1", "3", "-1", "-1", "-1", "-1", "-1", "-1"]);
+    t("find(col(A)$,\"c\",4)", ["-1", "-1", "6", "-1", "-1", "-1", "-1", "-1", "-1"]);
+    t("search(col(A)$,\"WORLD\")", ["-1", "3", "-1", "-1", "-1", "7", "-1", "-1", "-1"]);
+    t("len(col(A)$)", ["5", "9", "6", "4", "0", "11", "2", "2", "4"]);
+    t("len(col(A))", ["5", "9", "6", "4", "0", "11", "2", "2", "4"]);
+    t("col(A)$==\"Hello\"", ["1", "0", "0", "0", "0", "0", "0", "0", "0"]);
+    t("col(A)==\"Hello\"", ["1", "0", "0", "0", "0", "0", "0", "0", "0"]);
+    t("exact(col(A)$,\"hello\")", ["0"; 9]);
+    t("exact(col(A)$,\"Hello\")", ["1", "0", "0", "0", "0", "0", "0", "0", "0"]);
+}
+
+#[test]
+fn a_bare_column_is_text_only_where_text_is_wanted() {
+    let h = probe_a();
+    // Origin: col(O)=col(A) copies the text cells; arithmetic sees text as missing.
+    let copy = texts(&h, "col(A)");
+    assert_eq!(copy[0], "Hello");
+    assert_eq!(copy[3], "12.5");
+    assert_eq!(copy[4], "", "an empty text stays an empty text (a column stores it as a missing cell)");
+    assert_eq!(copy[7], "<missing>");
+    let plus = texts(&h, "col(A)+1");
+    assert_eq!(
+        plus,
+        ["<missing>", "<missing>", "<missing>", "13.5", "<missing>", "<missing>", "43", "<missing>", "<missing>"]
+    );
+    // The numbers of the formula, for a caller that wants numbers only.
+    let rows = Expr::parse("col(A)").unwrap().eval_rows(&h, 9).unwrap();
+    assert!(rows[0].is_nan());
+    assert_eq!(rows[3], 12.5);
+    // value() reads a number out of text.
+    let v = texts(&h, "value(col(A)$)+1");
+    assert_eq!(v[3], "13.5");
+    assert_eq!(v[6], "43");
+    assert_eq!(v[0], "<missing>");
+}
+
+#[test]
+fn compare_and_the_text_of_two_columns() {
+    use Cell::{N, S};
+    // Probe c3: A = Hello b abcabc 12.5 "" . 42 "3"; B = Help a ABCABC 1 x q 2 3.
+    let h = TextHost {
+        cols: vec![
+            ("A", vec![S("Hello"), S("b"), S("abcabc"), N(12.5), S(""), N(f64::NAN), N(42.0), S("3")]),
+            ("B", vec![S("Help"), S("a"), S("ABCABC"), N(1.0), S("x"), S("q"), N(2.0), N(3.0)]),
+        ],
+    };
+    let r = |src: &str| texts(&h, src);
+    // compare is 1 for equal texts, case matters unless the third argument is 0.
+    assert_eq!(r("compare(col(A)$,col(B)$)"), ["0", "0", "0", "0", "0", "0", "0", "1"]);
+    assert_eq!(r("compare(col(A)$,col(B)$,0)")[2], "1");
+    assert_eq!(r("compare(col(A)$,col(B)$,1)")[2], "0");
+    // + joins two texts; between two bare columns it is the number sum, with text as missing.
+    assert_eq!(r("col(A)$+col(B)$")[..3], ["HelloHelp", "ba", "abcabcABCABC"]);
+    let sum = r("col(A)+col(B)");
+    assert_eq!(sum[3], "13.5");
+    assert_eq!(sum[6], "44");
+    assert!([0, 1, 2, 4, 5, 7].iter().all(|&k| sum[k] == "<missing>"));
+    // A number added to a text adds nothing (Origin: "n=" + len(...) is "n=").
+    assert_eq!(r("col(A)$ + \"n=\" + len(col(A)$)")[..2], ["Hellon=", "bn="]);
+    // Ordered comparison of texts is missing.
+    assert_eq!(r("col(A)$ < col(B)$")[0], "<missing>");
+}
+
+#[test]
+fn text_of_numbers_matches_origin_formats() {
+    use crate::text::format_number as f;
+    // *n significant digits (Origin: text(col(A),"*3") and "*5").
+    assert_eq!(f(3.14259, "*3"), "3.14");
+    assert_eq!(f(1234.5678, "*3"), "1.23E+03");
+    assert_eq!(f(0.000123456, "*3"), "1.23E-04");
+    assert_eq!(f(-42.0, "*3"), "-42.0");
+    assert_eq!(f(1e10, "*3"), "1.00E+10");
+    assert_eq!(f(0.0, "*3"), "0.00");
+    assert_eq!(f(f64::NAN, "*3"), "--");
+    assert_eq!(f(1234.5678, "*5"), "1234.6");
+    assert_eq!(f(-0.5, "*3"), "-0.500");
+    assert_eq!(f(100.0, "*3"), "100");
+    assert_eq!(f(999.5, "*3"), "1000");
+    assert_eq!(f(12345.0, "*1"), "1E+04");
+    assert_eq!(f(2.5, "*1"), "3");
+    // .n decimals.
+    assert_eq!(f(3.14259, ".2"), "3.14");
+    assert_eq!(f(1234.5678, ".2"), "1234.57");
+    assert_eq!(f(0.000123456, ".2"), "1.23E-04");
+    assert_eq!(f(-42.0, ".2"), "-42.00");
+    assert_eq!(f(1e6, ".2"), "1000000.00");
+    assert_eq!(f(1234567.0, ".2"), "1.23E+06");
+    assert_eq!(f(0.001234, ".2"), "0.00");
+    // E*n: engineering notation with a unit prefix.
+    assert_eq!(f(1234.5678, "E*3"), "1.23k");
+    assert_eq!(f(12345.0, "E*3"), "12.3k");
+    assert_eq!(f(0.001234, "E*3"), "1.23m");
+    assert_eq!(f(-0.5, "E*3"), "-500m");
+    assert_eq!(f(1e10, "E*3"), "10.0G");
+    assert_eq!(f(100.0, "E*3"), "100");
+    assert_eq!(f(0.0, "E*3"), "0.00");
+    // No format: the general form.
+    assert_eq!(f(0.000123456, "*"), "1.23456E-4");
+    let h = probe_a();
+    assert_eq!(texts(&h, "text(col(A))")[3], "12.5");
+    assert_eq!(texts(&h, "text(col(A),\"*3\")+\" V\"")[3], "12.5 V");
+    assert_eq!(texts(&h, "text(col(A),\"*3\")")[7], "--");
+}
+
+#[test]
+fn text_formulas_in_a_numeric_context() {
+    let h = probe_a();
+    // eval_rows gives numbers and a missing value where the result is text.
+    let e = Expr::parse("left(col(A)$,2)").unwrap();
+    assert!(e.eval_rows(&h, 9).unwrap().iter().all(|v| v.is_nan()));
+    // A string function with a number as the result is a number in every row.
+    let n = Expr::parse("len(col(A)$)*2").unwrap().eval_rows(&h, 9).unwrap();
+    assert_eq!(n[0], 10.0);
+    // On a host without text, `col(A)$` is the text of the number.
+    let a = [1.5, f64::NAN];
+    let plain = SimpleHost::new().short("A", &a);
+    let v = Expr::parse("col(A)$+\"x\"").unwrap().eval_values(&plain, 2).unwrap();
+    assert_eq!(v, [Value::Text("1.5x".into()), Value::Text("--x".into())]);
+    // The subscript form and errors.
+    let v = Expr::parse("col(A)[2]$").unwrap().eval_values(&plain, 1).unwrap();
+    assert_eq!(v, [Value::Text("--".into())]);
+    assert!(Expr::parse("left(col(A)$)").is_err());
+    assert!(Expr::parse("2$").is_err());
+    // Origin's substitute() returned its text unchanged in the probe, so it is not offered.
+    assert!(Expr::parse("substitute(col(A)$,\"a\",\"b\")").is_err());
+    // compile() has no text values.
+    assert!(Expr::parse("col(A)$").unwrap().compile(&plain).is_err());
 }

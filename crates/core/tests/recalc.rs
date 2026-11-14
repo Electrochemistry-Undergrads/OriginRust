@@ -240,3 +240,62 @@ fn a_million_row_column_recalculates_quickly() {
     // A debug build is several times slower than release; this only guards against a quadratic mistake.
     assert!(elapsed.as_secs_f64() < 20.0, "{elapsed:?}");
 }
+
+#[test]
+fn cell_reads_are_dependencies() {
+    let (mut d, _, c) = book();
+    // B reads row 2 of column 1 by position, C reads a column that the formula computes.
+    set(&mut d, c[1], "cell(2, 1)*10", RecalcMode::Auto).unwrap();
+    set(&mut d, c[2], "cell(3, 1+0*i)", RecalcMode::Auto).unwrap();
+    assert_eq!(values(&d, c[1])[0], 20.0);
+    assert_eq!(values(&d, c[2])[0], 3.0);
+    edit_cell(&mut d, c[0], 1, "7");
+    edit_cell(&mut d, c[0], 2, "9");
+    assert_eq!(values(&d, c[1])[0], 70.0, "a constant column is tracked");
+    assert_eq!(values(&d, c[2])[0], 9.0, "a computed column may be any column");
+    // A formula that reads a column by position, and that column reads it back: a loop.
+    set(&mut d, c[3], "cell(1, 5)", RecalcMode::Auto).unwrap();
+    let e = set(&mut d, c[4], "cell(1, 4)", RecalcMode::Auto).unwrap_err();
+    assert!(matches!(e, FormulaError::Cycle(_)), "{e}");
+}
+
+#[test]
+fn a_text_result_makes_a_text_and_numeric_column() {
+    let (mut d, _, c) = book();
+    set(&mut d, c[1], "\"n=\" + text(col(A))", RecalcMode::Auto).unwrap();
+    let col = d.project().column(c[1]).unwrap();
+    assert!(col.data.is_mixed());
+    assert_eq!(col.data.text_cell(0), Some("n=1"));
+    assert_eq!(col.data.text_cell(3), Some("n=4"));
+    // The text follows its source.
+    edit_cell(&mut d, c[0], 0, "2.5");
+    assert_eq!(d.project().column(c[1]).unwrap().data.text_cell(0), Some("n=2.5"));
+    // A formula that gives text in some rows and numbers in others fills both kinds of cell.
+    set(&mut d, c[2], "ifelse(col(A) > 2.6, left(\"abcdef\", col(A)), col(A))", RecalcMode::None).unwrap();
+    let col = d.project().column(c[2]).unwrap();
+    assert_eq!(col.numeric().unwrap()[..2], [2.5, 2.0]);
+    assert_eq!(col.data.text_cell(2), Some("abc"));
+    assert_eq!(col.data.text_cell(3), Some("abcd"));
+    assert_eq!(col.data.text_cell(0), None);
+}
+
+#[test]
+fn text_columns_can_be_read_and_copied() {
+    let (mut d, _, c) = book();
+    d.apply("Text", |p| {
+        let col = p.column_mut(c[1]).unwrap();
+        col.data = ColumnData::text(vec!["Hello".into(), "World".into(), String::new(), "x y".into()]);
+    });
+    set(&mut d, c[2], "upper(left(col(B)$, 3)) + \"-\" + text(col(A))", RecalcMode::None).unwrap();
+    let col = d.project().column(c[2]).unwrap();
+    assert_eq!(col.data.text_cell(0), Some("HEL-1"));
+    assert_eq!(col.data.text_cell(2), Some("-3"));
+    assert_eq!(col.data.text_cell(3), Some("X Y-4"));
+    // A plain copy keeps the text; a number formula sees text as missing.
+    set(&mut d, c[3], "col(B)", RecalcMode::None).unwrap();
+    assert_eq!(d.project().column(c[3]).unwrap().data.text_cell(1), Some("World"));
+    set(&mut d, c[4], "len(col(B)) + col(B)*0", RecalcMode::None).unwrap();
+    assert!(d.project().numeric(c[4]).unwrap().iter().all(|v| v.is_nan()));
+    set(&mut d, c[4], "len(col(B))", RecalcMode::None).unwrap();
+    assert_eq!(values(&d, c[4]), [5.0, 5.0, 0.0, 3.0]);
+}

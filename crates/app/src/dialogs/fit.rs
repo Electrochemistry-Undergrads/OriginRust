@@ -13,9 +13,10 @@
 
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::RowRange;
+use sheaf_core::fitting::Algorithm;
 use sheaf_core::fitting::{
-    BandChoice, FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, ParamSetting,
-    builtin_functions, model_parameters,
+    BandChoice, FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, MultiFitOutcome,
+    ParamSetting, builtin_functions, model_parameters,
 };
 use sheaf_core::{ColumnId, Designation, Document, Project, WindowId};
 use std::path::PathBuf;
@@ -24,16 +25,39 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FitKind {
     Linear,
+    /// Analysis > Fitting > Linear Fit with X Error (needs an X-error column).
+    LinearXError,
     Polynomial,
     BuiltIn,
     Formula,
     Fdf,
+    /// Analysis > Fitting > Exponential Fit: NLFit limited to the exponential functions.
+    Exponential,
+    /// Sigmoidal Fit: NLFit limited to Boltzmann, Logistic, Hill and DoseResp.
+    Sigmoidal,
+    /// Single Peak Fit: NLFit limited to Gauss and Lorentz.
+    SinglePeak,
 }
 
 impl FitKind {
+    /// What a quick fit offers: window title, category, functions (the first is the default).
+    fn quick(self) -> Option<(&'static str, &'static str, &'static [&'static str])> {
+        match self {
+            FitKind::Exponential => {
+                Some(("Fit Exponential", "Exponential", &["ExpDec1", "ExpDec2", "ExpDec3", "ExpGrow1"]))
+            }
+            FitKind::Sigmoidal => {
+                Some(("Fit Sigmoidal", "Growth/Sigmoidal", &["Boltzmann", "Logistic", "Hill", "DoseResp"]))
+            }
+            FitKind::SinglePeak => Some(("Single Peak Fit", "Peak Functions", &["Gauss", "Lorentz"])),
+            _ => None,
+        }
+    }
+
     /// Menu entries of the Analysis menu that open this window.
-    pub const MENU: [(FitKind, &'static str); 3] = [
+    pub const MENU: [(FitKind, &'static str); 4] = [
         (FitKind::Linear, "Fit Linear..."),
+        (FitKind::LinearXError, "Fit Linear with X Error..."),
         (FitKind::Polynomial, "Fit Polynomial..."),
         (FitKind::BuiltIn, "Nonlinear Curve Fit..."),
     ];
@@ -41,10 +65,14 @@ impl FitKind {
     fn label(self) -> &'static str {
         match self {
             FitKind::Linear => "Straight line",
+            FitKind::LinearXError => "Straight line with X error",
             FitKind::Polynomial => "Polynomial",
             FitKind::BuiltIn => "Built-in function",
             FitKind::Formula => "My own formula",
             FitKind::Fdf => "Origin .FDF file",
+            FitKind::Exponential => "Exponential",
+            FitKind::Sigmoidal => "Sigmoidal",
+            FitKind::SinglePeak => "Single peak",
         }
     }
 
@@ -52,10 +80,14 @@ impl FitKind {
     pub fn from_name(name: &str) -> Option<Self> {
         Some(match name {
             "linear" => FitKind::Linear,
+            "linearx" | "xerror" => FitKind::LinearXError,
             "poly" | "polynomial" => FitKind::Polynomial,
             "nonlinear" | "builtin" => FitKind::BuiltIn,
             "formula" => FitKind::Formula,
             "fdf" => FitKind::Fdf,
+            "exponential" | "exp" => FitKind::Exponential,
+            "sigmoidal" => FitKind::Sigmoidal,
+            "peak" | "singlepeak" => FitKind::SinglePeak,
             _ => return None,
         })
     }
@@ -80,6 +112,8 @@ struct ParamRow {
     lower: f64,
     has_upper: bool,
     upper: f64,
+    /// Global fit: one value for all datasets.
+    shared: bool,
 }
 
 impl ParamRow {
@@ -93,6 +127,7 @@ impl ParamRow {
             lower: 0.0,
             has_upper: false,
             upper: 1.0,
+            shared: false,
         }
     }
 
@@ -113,6 +148,18 @@ pub enum FitDialogOutcome {
     Closed,
     /// The fit ran; the window closes. The graph is the one made for it, if any.
     Done(Box<FitOutcome>, Option<WindowId>),
+    /// Several columns were fitted (independently or as a global fit); the graph is the one made
+    /// for the first column, if any.
+    DoneMulti(Box<MultiFitOutcome>, Option<WindowId>),
+}
+
+/// How several columns are fitted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MultiMode {
+    /// One fit per column.
+    Independent,
+    /// One fit of all columns together, with the parameters ticked "Shared" taking one value.
+    Global,
 }
 
 pub struct FitDialog {
@@ -133,11 +180,24 @@ pub struct FitDialog {
     model_problem: Option<String>,
     weighting: FitWeighting,
     has_error_column: bool,
+    /// Scale Error with sqrt(Reduced Chi-Sqr) (Advanced > Fit Control).
+    scale_errors: bool,
+    /// Every numeric column of the sheet, for the weight column of direct weighting.
+    weight_choices: Vec<(ColumnId, String)>,
+    weight_col: Option<ColumnId>,
+    /// The Y columns that can be fitted together with `y` (no fit results).
+    dataset_choices: Vec<(ColumnId, String)>,
+    /// Further columns fitted together with `y`.
+    extra: Vec<ColumnId>,
+    multi_mode: MultiMode,
+    /// A quick fit: window title, category and the functions it offers.
+    quick: Option<(&'static str, &'static str, &'static [&'static str])>,
     confidence: f64,
     bands: BandChoice,
     /// Confidence level of the bands, in percent.
     band_level: f64,
     max_iterations: usize,
+    algorithm: Algorithm,
     /// The tolerance is 10^-digits (Origin's default 1e-9 is 9 digits).
     tolerance_digits: u32,
     row_mode: RowMode,
@@ -204,7 +264,34 @@ impl FitDialog {
         };
         let rows_in_sheet = sheet.row_count().max(1);
         let functions = builtin_functions();
-        let function = functions.iter().find(|f| f.name == "Gauss").or(functions.first()).map(|f| f.name.clone())?;
+        let quick = kind.quick();
+        let kind = if quick.is_some() { FitKind::BuiltIn } else { kind };
+        let wanted = quick.map_or("Gauss", |q| q.2[0]);
+        let function = functions.iter().find(|f| f.name == wanted).or(functions.first()).map(|f| f.name.clone())?;
+        let weight_choices: Vec<(ColumnId, String)> = sheet
+            .columns
+            .iter()
+            .filter(|c| c.data.is_numeric() && !c.fit_result)
+            .map(|c| (c.id, format!("{}: {}", c.short_name, c.axis_title())))
+            .collect();
+        let weight_col = sheet
+            .columns
+            .iter()
+            .find(|c| c.designation == Designation::YError && c.data.is_numeric())
+            .map(|c| c.id)
+            .or_else(|| {
+                sheet
+                    .columns
+                    .iter()
+                    .find(|c| c.designation == Designation::Y && c.data.is_numeric() && c.id != y)
+                    .map(|c| c.id)
+            });
+        let dataset_choices: Vec<(ColumnId, String)> = sheet
+            .columns
+            .iter()
+            .filter(|c| c.designation == Designation::Y && c.data.is_numeric() && !c.fit_result)
+            .map(|c| (c.id, format!("{}: {}", c.short_name, c.axis_title())))
+            .collect();
         let mut d = FitDialog {
             book,
             choices,
@@ -221,10 +308,18 @@ impl FitDialog {
             model_problem: None,
             weighting: FitWeighting::None,
             has_error_column: false,
+            scale_errors: true,
+            weight_choices,
+            weight_col,
+            dataset_choices,
+            extra: Vec::new(),
+            multi_mode: MultiMode::Independent,
+            quick,
             confidence: 95.0,
             bands: BandChoice::None,
             band_level: 95.0,
             max_iterations: 400,
+            algorithm: Algorithm::LevenbergMarquardt,
             tolerance_digits: 9,
             row_mode: RowMode::All,
             rows_in_sheet,
@@ -285,8 +380,11 @@ impl FitDialog {
     fn model(&self) -> Option<FitModel> {
         Some(match self.kind {
             FitKind::Linear => FitModel::Linear,
+            FitKind::LinearXError => FitModel::LinearXError,
             FitKind::Polynomial => FitModel::Polynomial { order: self.order },
-            FitKind::BuiltIn => FitModel::BuiltIn(self.function.clone()),
+            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
+                FitModel::BuiltIn(self.function.clone())
+            }
             FitKind::Formula => FitModel::Formula {
                 formula: self.formula.clone(),
                 params: self
@@ -329,7 +427,7 @@ impl FitDialog {
 
     /// Whether the model is fitted by iterating (everything but a line and a polynomial).
     fn iterative(&self) -> bool {
-        !matches!(self.kind, FitKind::Linear | FitKind::Polynomial)
+        !matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial)
     }
 
     /// Runs the fit on a copy of the project, from the values now in the Parameters table, for
@@ -349,16 +447,27 @@ impl FitDialog {
         self.problem = None;
         self.message = None;
         let mut copy = project.clone();
-        let outcome = match copy.fit(&request) {
+        let result = match self.requests() {
+            Some((mut requests, shared)) if self.multi() => {
+                for r in &mut requests {
+                    if let Some(n) = max_iterations {
+                        r.max_iterations = n;
+                    }
+                }
+                copy.fit_multi(&requests, shared.as_deref()).map(|m| (m.outcomes[0].report.clone(), m.message))
+            }
+            _ => copy.fit(&request).map(|o| (o.report, o.message)),
+        };
+        let (report, message) = match result {
             Ok(o) => o,
             Err(e) => {
                 self.problem = Some(e.to_string());
                 return;
             }
         };
-        let report = &outcome.report;
+        let report = &report;
         if !self.iterative() {
-            self.say(outcome.message);
+            self.say(message);
             return;
         }
         self.history.push((self.params.clone(), self.iterations));
@@ -409,6 +518,50 @@ impl FitDialog {
     }
 
     #[cfg(test)]
+    pub(crate) fn weight_column_for_test(&mut self, id: ColumnId) {
+        self.weight_col = Some(id);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn request_for_test(&self) -> Option<FitRequest> {
+        self.request()
+    }
+
+    /// Test hook: fit these columns together with the chosen one, as a global fit sharing the
+    /// named parameters (`None`: independent fits).
+    #[cfg(test)]
+    pub(crate) fn also_fit_for_test(&mut self, columns: &[ColumnId], shared: Option<&[&str]>) {
+        self.extra = columns.to_vec();
+        match shared {
+            Some(names) => {
+                self.multi_mode = MultiMode::Global;
+                for p in &mut self.params {
+                    p.shared = names.contains(&p.name.as_str());
+                }
+            }
+            None => self.multi_mode = MultiMode::Independent,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn function_for_test(&self) -> (String, Vec<String>, bool) {
+        let only = self.quick.map(|q| q.2);
+        let offered = self
+            .functions
+            .iter()
+            .filter(|f| f.category == self.category() && only.is_none_or(|o| o.contains(&f.name.as_str())))
+            .map(|f| f.name.clone())
+            .collect();
+        (self.function.clone(), offered, self.quick.is_some())
+    }
+
+    #[cfg(test)]
+    #[cfg(test)]
+    pub(crate) fn problem_for_test(&self) -> Option<String> {
+        self.problem.clone()
+    }
+
+    #[cfg(test)]
     pub(crate) fn message_for_test(&self) -> String {
         self.message.clone().unwrap_or_default()
     }
@@ -425,13 +578,13 @@ impl FitDialog {
 
     fn request(&self) -> Option<FitRequest> {
         let mut r = FitRequest::new(self.y, self.model()?);
-        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::Polynomial);
+        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial);
         r.params = self
             .params
             .iter()
             // A straight line or polynomial has only fixed values; start values and bounds typed
             // for another model with the same parameter names do not apply.
-            .filter(|p| !closed_form || p.fixed)
+            .filter(|p| (!closed_form || p.fixed) && self.kind != FitKind::LinearXError)
             .map(|p| {
                 if closed_form {
                     ParamRow { set_initial: false, has_lower: false, has_upper: false, ..p.clone() }
@@ -442,10 +595,15 @@ impl FitDialog {
             .filter_map(|p| p.setting())
             .collect();
         r.weighting = self.weighting;
+        if self.weighting == FitWeighting::Direct {
+            r.y_error = self.weight_col;
+        }
+        r.scale_errors = self.scale_errors;
         r.confidence_level = self.confidence / 100.0;
         r.bands = self.bands;
         r.band_level = self.band_level / 100.0;
         r.max_iterations = self.max_iterations;
+        r.algorithm = self.algorithm;
         r.curve_points = self.curve_points;
         r.curve_range = self.curve_custom.then_some((self.curve_from, self.curve_to));
         r.add_to_graphs = self.plot_on_graph;
@@ -459,10 +617,41 @@ impl FitDialog {
         Some(r)
     }
 
+    /// Whether the window fits several columns at once.
+    fn multi(&self) -> bool {
+        !self.extra.is_empty() && self.iterative_or_global()
+    }
+
+    fn iterative_or_global(&self) -> bool {
+        self.multi_mode == MultiMode::Independent || self.iterative()
+    }
+
+    /// Whether a global fit was asked for (and the function allows it).
+    fn global(&self) -> bool {
+        self.multi() && self.multi_mode == MultiMode::Global
+    }
+
+    /// One request per fitted column (the chosen column first) and, for a global fit, the names
+    /// of the shared parameters.
+    fn requests(&self) -> Option<(Vec<FitRequest>, Option<Vec<String>>)> {
+        let base = self.request()?;
+        let mut out = vec![base.clone()];
+        if self.multi() {
+            for id in &self.extra {
+                let mut r = base.clone();
+                r.y = *id;
+                out.push(r);
+            }
+        }
+        let shared =
+            self.global().then(|| self.params.iter().filter(|p| p.shared).map(|p| p.name.clone()).collect::<Vec<_>>());
+        Some((out, shared))
+    }
+
     /// The categories of the Category drop-down: the two closed-form fits, Origin's function
     /// categories, then the two ways to bring in a function of one's own.
     fn categories(&self) -> Vec<String> {
-        let mut out = vec![CAT_LINEAR.to_string(), CAT_POLY.to_string()];
+        let mut out = vec![CAT_LINEAR.to_string(), CAT_LINEAR_X.to_string(), CAT_POLY.to_string()];
         for f in &self.functions {
             if !out.contains(&f.category) {
                 out.push(f.category.clone());
@@ -477,10 +666,11 @@ impl FitDialog {
     fn category(&self) -> String {
         match self.kind {
             FitKind::Linear => CAT_LINEAR.to_string(),
+            FitKind::LinearXError => CAT_LINEAR_X.to_string(),
             FitKind::Polynomial => CAT_POLY.to_string(),
             FitKind::Formula => CAT_FORMULA.to_string(),
             FitKind::Fdf => CAT_FDF.to_string(),
-            FitKind::BuiltIn => {
+            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
                 self.functions.iter().find(|f| f.name == self.function).map(|f| f.category.clone()).unwrap_or_default()
             }
         }
@@ -490,6 +680,7 @@ impl FitDialog {
     fn set_category(&mut self, category: &str) {
         match category {
             CAT_LINEAR => self.kind = FitKind::Linear,
+            CAT_LINEAR_X => self.kind = FitKind::LinearXError,
             CAT_POLY => self.kind = FitKind::Polynomial,
             CAT_FORMULA => self.kind = FitKind::Formula,
             CAT_FDF => self.kind = FitKind::Fdf,
@@ -520,13 +711,16 @@ impl FitDialog {
     fn formula_text(&self) -> String {
         match self.kind {
             FitKind::Linear => "y = Intercept + Slope*x".to_string(),
+            FitKind::LinearXError => "y = Intercept + Slope*x  (errors in x and y)".to_string(),
             FitKind::Polynomial => "y = Intercept + B1*x + B2*x^2 + ...".to_string(),
-            FitKind::BuiltIn => match self.functions.iter().find(|f| f.name == self.function) {
-                Some(f) => {
-                    f.formula.as_deref().map_or_else(|| "(computed in code)".to_string(), |s| format!("y = {s}"))
+            FitKind::BuiltIn | FitKind::Exponential | FitKind::Sigmoidal | FitKind::SinglePeak => {
+                match self.functions.iter().find(|f| f.name == self.function) {
+                    Some(f) => {
+                        f.formula.as_deref().map_or_else(|| "(computed in code)".to_string(), |s| format!("y = {s}"))
+                    }
+                    None => String::new(),
                 }
-                None => String::new(),
-            },
+            }
             FitKind::Formula => format!("y = {}", self.formula),
             FitKind::Fdf => self.fdf_text.as_deref().map(|_| "(from the .FDF file)".to_string()).unwrap_or_default(),
         }
@@ -539,17 +733,21 @@ impl FitDialog {
         ui.horizontal(|ui| {
             ui.label("Category");
             let current = self.category();
-            egui::ComboBox::from_id_salt("fit_category").selected_text(&current).width(190.0).height(420.0).show_ui(
-                ui,
-                |ui| {
-                    for c in self.categories() {
-                        if ui.selectable_label(c == current, &c).clicked() && c != current {
-                            self.set_category(&c);
-                            changed = true;
+            let locked = self.quick.is_some();
+            ui.add_enabled_ui(!locked, |ui| {
+                egui::ComboBox::from_id_salt("fit_category")
+                    .selected_text(&current)
+                    .width(190.0)
+                    .height(420.0)
+                    .show_ui(ui, |ui| {
+                        for c in self.categories() {
+                            if ui.selectable_label(c == current, &c).clicked() && c != current {
+                                self.set_category(&c);
+                                changed = true;
+                            }
                         }
-                    }
-                },
-            );
+                    });
+            });
             ui.add_space(12.0);
             ui.label("Function");
             let label = self.function_label();
@@ -561,7 +759,12 @@ impl FitDialog {
                         .width(190.0)
                         .height(420.0)
                         .show_ui(ui, |ui| {
-                            for f in self.functions.iter().filter(|f| f.category == category) {
+                            let only = self.quick.map(|q| q.2);
+                            for f in self
+                                .functions
+                                .iter()
+                                .filter(|f| f.category == category && only.is_none_or(|o| o.contains(&f.name.as_str())))
+                            {
                                 if ui.selectable_label(f.name == self.function, &f.name).clicked() {
                                     self.function = f.name.clone();
                                     changed = true;
@@ -625,12 +828,18 @@ impl FitDialog {
             }
             _ => {}
         }
-        ui.add_enabled_ui(false, |ui| {
+        if self.iterative() {
             ui.horizontal(|ui| {
                 ui.label("Iteration Algorithm");
-                egui::ComboBox::from_id_salt("fit_algorithm").selected_text("Levenberg Marquardt").show_ui(ui, |_| {});
+                egui::ComboBox::from_id_salt("fit_algorithm").selected_text(self.algorithm.label()).show_ui(ui, |ui| {
+                    for a in Algorithm::ALL {
+                        if ui.selectable_value(&mut self.algorithm, a, a.label()).changed() {
+                            changed = true;
+                        }
+                    }
+                });
             });
-        });
+        }
         ui.horizontal_top(|ui| {
             ui.label("Description");
             ui.add(egui::Label::new(RichText::new(self.formula_text()).monospace().small()).wrap());
@@ -678,7 +887,27 @@ impl FitDialog {
                     .on_disabled_hover_text("The column has no Y-error column next to it.");
             });
             ui.radio_value(&mut self.weighting, FitWeighting::Statistical, STATISTICAL_LABEL);
+            ui.add_enabled_ui(!self.weight_choices.is_empty(), |ui| {
+                ui.radio_value(&mut self.weighting, FitWeighting::Direct, "Direct").on_hover_text(
+                    "The weights are the values of a column, used as given (1/err\u{b2} for errors err).",
+                );
+            });
         });
+        if self.weighting == FitWeighting::Direct {
+            ui.horizontal(|ui| {
+                ui.label("Weight column");
+                let label = self
+                    .weight_col
+                    .and_then(|w| self.weight_choices.iter().find(|(c, _)| *c == w))
+                    .map(|(_, l)| l.clone())
+                    .unwrap_or_else(|| "(choose)".to_string());
+                egui::ComboBox::from_id_salt("fit_weight_column").selected_text(label).width(300.0).show_ui(ui, |ui| {
+                    for (id, l) in &self.weight_choices {
+                        ui.selectable_value(&mut self.weight_col, Some(*id), l);
+                    }
+                });
+            });
+        }
         ui.add_space(4.0);
         ui.strong("Input Data");
         ui.horizontal(|ui| {
@@ -690,6 +919,36 @@ impl FitDialog {
                 }
             });
         });
+        let others: Vec<(ColumnId, String)> =
+            self.dataset_choices.iter().filter(|(c, _)| *c != self.y).cloned().collect();
+        if !others.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Also fit");
+                for (id, l) in &others {
+                    let mut on = self.extra.contains(id);
+                    if ui.checkbox(&mut on, l).changed() {
+                        if on {
+                            self.extra.push(*id);
+                        } else {
+                            self.extra.retain(|c| c != id);
+                        }
+                    }
+                }
+            });
+            if !self.extra.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label("Multiple datasets");
+                    ui.radio_value(&mut self.multi_mode, MultiMode::Independent, "Independent Fit");
+                    ui.add_enabled_ui(self.iterative(), |ui| {
+                        ui.radio_value(&mut self.multi_mode, MultiMode::Global, "Global Fit")
+                            .on_hover_text("One fit of all the columns; tick Shared on the Parameters tab.");
+                    });
+                });
+                if self.multi_mode == MultiMode::Global && !self.iterative() {
+                    ui.weak("A global fit needs a nonlinear function.");
+                }
+            }
+        }
         ui.horizontal(|ui| {
             ui.label("Rows");
             ui.radio_value(&mut self.row_mode, RowMode::All, "All");
@@ -779,6 +1038,9 @@ impl FitDialog {
             ui.add(DragValue::new(&mut self.tolerance_digits).range(3..=15))
                 .on_hover_text("Nonlinear fits only; a straight line or polynomial is solved directly.");
         });
+        ui.checkbox(&mut self.scale_errors, "Scale Error with sqrt(Reduced Chi-Sqr)").on_hover_text(
+            "Multiplies the parameter variances by the reduced chi-square. Without weights Origin always scales, so this only matters with weights.",
+        );
         ui.add_space(4.0);
         ui.strong("Quantities");
         ui.horizontal(|ui| {
@@ -798,40 +1060,51 @@ impl FitDialog {
             return;
         }
         // A linear fit can fix the intercept and the slope; a polynomial only the intercept.
-        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::Polynomial);
-        egui::Grid::new("fit_params").num_columns(3).spacing([14.0, 4.0]).striped(true).show(ui, |ui| {
-            ui.strong("Meaning");
-            ui.strong(if closed_form { "" } else { "Value" });
-            ui.strong("Fixed");
-            ui.end_row();
-            for p in self.params.iter_mut() {
-                let can_fix =
-                    !closed_form || p.name == "Intercept" || (self.kind == FitKind::Linear && p.name == "Slope");
-                ui.label(&p.name);
-                if closed_form {
-                    ui.label("");
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut p.set_initial, "")
-                            .on_hover_text("Off: the function's own guess from the data");
-                        if p.set_initial || p.fixed {
-                            ui.add(DragValue::new(&mut p.initial).speed(0.01).max_decimals(10));
-                        } else {
-                            ui.weak("guess");
-                        }
-                    });
+        let closed_form = matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial);
+        let global = self.global();
+        egui::Grid::new("fit_params").num_columns(if global { 4 } else { 3 }).spacing([14.0, 4.0]).striped(true).show(
+            ui,
+            |ui| {
+                ui.strong("Meaning");
+                ui.strong(if closed_form { "" } else { "Value" });
+                ui.strong("Fixed");
+                if global {
+                    ui.strong("Shared");
                 }
-                ui.add_enabled_ui(can_fix, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut p.fixed, "");
-                        if closed_form && p.fixed {
-                            ui.add(DragValue::new(&mut p.initial).speed(0.01).max_decimals(10));
-                        }
-                    });
-                });
                 ui.end_row();
-            }
-        });
+                for p in self.params.iter_mut() {
+                    let can_fix = !closed_form
+                        || (self.kind != FitKind::LinearXError
+                            && (p.name == "Intercept" || (self.kind == FitKind::Linear && p.name == "Slope")));
+                    ui.label(&p.name);
+                    if closed_form {
+                        ui.label("");
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut p.set_initial, "")
+                                .on_hover_text("Off: the function's own guess from the data");
+                            if p.set_initial || p.fixed {
+                                ui.add(DragValue::new(&mut p.initial).speed(0.01).max_decimals(10));
+                            } else {
+                                ui.weak("guess");
+                            }
+                        });
+                    }
+                    ui.add_enabled_ui(can_fix, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut p.fixed, "");
+                            if closed_form && p.fixed {
+                                ui.add(DragValue::new(&mut p.initial).speed(0.01).max_decimals(10));
+                            }
+                        });
+                    });
+                    if global {
+                        ui.checkbox(&mut p.shared, "");
+                    }
+                    ui.end_row();
+                }
+            },
+        );
     }
 
     /// The Bounds page: lower and upper limits of nonlinear fits.
@@ -840,7 +1113,7 @@ impl FitDialog {
             ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
             return;
         }
-        if matches!(self.kind, FitKind::Linear | FitKind::Polynomial) {
+        if matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial) {
             ui.add_enabled_ui(false, |ui| ui.label("A straight line or polynomial is solved directly: no bounds."));
             return;
         }
@@ -1001,7 +1274,10 @@ impl FitDialog {
         let mut revert = false;
         let mut cancel = false;
         let mut column_changed = false;
-        let title = format!("NLFit ({})", self.function_label());
+        let title = match self.quick {
+            Some((name, _, _)) => format!("{name} ({})", self.function_label()),
+            None => format!("NLFit ({})", self.function_label()),
+        };
         egui::Window::new(title)
             .id(egui::Id::new("fit"))
             .open(&mut open)
@@ -1113,6 +1389,30 @@ impl FitDialog {
                 request.max_iterations = 0;
             }
             let y = self.y;
+            if self.multi()
+                && let Some((mut requests, shared)) = self.requests()
+            {
+                for r in &mut requests {
+                    r.max_iterations = request.max_iterations;
+                }
+                let result = doc.edit("Fit", |p| -> Result<(MultiFitOutcome, Option<WindowId>), FitRequestError> {
+                    let outcome = p.fit_multi(&requests, shared.as_deref())?;
+                    let graph = if outcome.outcomes[0].graphs.is_empty() {
+                        Some(
+                            p.plot_fit(&outcome.outcomes[0], y)
+                                .map_err(|e| FitRequestError::BadOption(e.to_string()))?,
+                        )
+                    } else {
+                        None
+                    };
+                    Ok((outcome, graph))
+                });
+                match result {
+                    Ok((outcome, graph)) => return FitDialogOutcome::DoneMulti(Box::new(outcome), graph),
+                    Err(e) => self.problem = Some(e.to_string()),
+                }
+                return if open && !cancel { FitDialogOutcome::Open } else { FitDialogOutcome::Closed };
+            }
             let result = doc.edit("Fit", |p| -> Result<(FitOutcome, Option<WindowId>), FitRequestError> {
                 let outcome = p.fit(&request)?;
                 let graph = if outcome.graphs.is_empty() {
@@ -1198,6 +1498,7 @@ fn draw_xy(ui: &mut egui::Ui, size: egui::Vec2, series: &[(&[(f64, f64)], Series
 }
 
 const CAT_LINEAR: &str = "Linear Fit";
+const CAT_LINEAR_X: &str = "Linear Fit with X Error";
 const CAT_POLY: &str = "Polynomial Fit";
 const CAT_FORMULA: &str = "User Defined";
 const CAT_FDF: &str = "Origin .FDF File";
@@ -1357,6 +1658,9 @@ mod tests {
         d.tolerance_digits = 12;
         let r = d.request().unwrap();
         assert_eq!((r.bands, r.band_level, r.max_iterations, r.tolerance), (BandChoice::Both, 0.9, 50, 1e-12));
+        assert_eq!(r.algorithm, Algorithm::LevenbergMarquardt);
+        d.algorithm = Algorithm::Simplex;
+        assert_eq!(d.request().unwrap().algorithm, Algorithm::Simplex);
 
         // Switching to a straight line keeps only fixed values.
         let (p, book, y) = project();

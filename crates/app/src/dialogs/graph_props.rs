@@ -442,7 +442,9 @@ pub(super) fn dash_ui(ui: &mut egui::Ui, id: &str, dash: &mut Dash) {
 pub(super) fn connect_name(c: Connect) -> &'static str {
     match c {
         Connect::Straight => "Straight",
-        Connect::Spline => "Smooth (spline)",
+        Connect::Spline => "Spline",
+        Connect::BSpline => "B-spline",
+        Connect::Bezier => "Bezier",
         Connect::StepHorizontal => "Step, horizontal first",
         Connect::StepVertical => "Step, vertical first",
     }

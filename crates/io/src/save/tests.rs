@@ -250,3 +250,52 @@ fn the_original_file_is_copied_once_before_it_is_replaced() {
     assert_eq!(std::fs::read(&b).unwrap(), b"original");
     assert!(backup_original(&dir.join("missing.opj")).unwrap().is_none());
 }
+
+#[test]
+fn a_polar_layer_is_kept_by_the_companion_and_the_opj_warns() {
+    let dir = scratch("polar");
+    let opj = dir.join("lab.opj");
+    let mut p = workbook_project();
+    let y = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+    let g = p.add_graph(Template::PolarRTheta);
+    p.add_plot(g, 0, y).unwrap();
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("polar")), "{:?}", out.warnings);
+    assert!(out.companion.is_some(), "the layer the .opj cannot hold goes to the companion");
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.companion_used);
+    let layer = &opened.project.graphs().next().unwrap().layers[0];
+    let polar = layer.coords.polar().expect("the polar layer comes back from the companion");
+    assert_eq!(polar.radius, sheaf_core::graph::RadiusColumn::X);
+}
+
+#[test]
+fn a_ternary_layer_is_kept_by_the_companion_and_the_opj_warns() {
+    let dir = scratch("ternary");
+    let opj = dir.join("soil.opj");
+    let mut p = workbook_project();
+    let book = p.workbooks().next().unwrap().id;
+    let y = p.workbooks().next().unwrap().sheets[0].columns[1].id;
+    p.add_column(book, 0, Designation::Z, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    p.plot_columns(Template::Ternary, &[y]).unwrap();
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("ternary")), "{:?}", out.warnings);
+    assert!(!out.warnings.iter().any(|w| w.contains("bubble")), "{:?}", out.warnings);
+    assert!(out.companion.is_some());
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.companion_used);
+    let layer = &opened.project.graphs().next().unwrap().layers[0];
+    assert!(layer.coords.ternary().is_some(), "the ternary layer comes back from the companion");
+    assert!(layer.plots[0].size_from.is_some(), "with its Z column");
+}
+
+#[test]
+fn a_save_to_opju_is_refused_and_writes_nothing() {
+    let dir = scratch("opju-refused");
+    let path = dir.join("fig.opju");
+    let err = save_project(&workbook_project(), &path).unwrap_err();
+    assert!(matches!(err, IoError::OpjuWrite { .. }), "{err}");
+    assert!(err.to_string().contains(".opj"), "the message points to .opj: {err}");
+    assert!(!path.exists(), "no file is written");
+    assert!(!dir.join("fig.opju.sheaf").exists(), "and no companion");
+}

@@ -14,10 +14,12 @@ use crate::fonts::TextMeasurer;
 use crate::hit;
 use crate::legend;
 use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
+use crate::polar;
 use crate::scene::{
     Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
 };
 use crate::stack;
+use crate::ternary;
 use crate::text::{self, ASCENT, DESCENT};
 use crate::ticks::{ResolvedAxis, resolve_axis_edges};
 use crate::{LayerGeometry, PlotError, Rect};
@@ -106,7 +108,14 @@ pub(crate) fn graph_geometry(
 fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotData]) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
-    let mut resolved = if dim == Dim::X && data::is_category(project, axis, first) {
+    let boxes: Vec<&data::BoxStats> = sources.iter().filter_map(|pd| pd.boxed.as_ref()).collect();
+    let mut resolved = if dim == Dim::X && !boxes.is_empty() {
+        // Box charts: one category per box, named by its column.
+        let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
+        let names: Vec<String> = boxes.iter().map(|b| b.label.clone()).collect();
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && data::is_category(project, axis, first) {
         crate::ticks::resolve_category(axis, range)
     } else {
         let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
@@ -131,7 +140,7 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
                     // A base at or beyond the data limit is the axis limit itself, without a margin.
                     free = (blo > lo, bhi < hi);
                     range = Some((lo.min(blo), hi.max(bhi)));
-                    if bars.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Column) {
+                    if bars.iter().any(|pd| pd.plot.kind.is_percent_stacked()) {
                         // Piles of 100: the axis ends exactly at 0 and 100.
                         range = Some((0.0, 100.0));
                         free = (false, false);
@@ -146,6 +155,49 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
         {
             let base = drawn.as_ref().unwrap_or(axis);
             drawn = Some(Axis { major_step: Some(crate::ticks::nice_step((hi - lo) / 5.0)), ..base.clone() });
+        }
+        if dim == Dim::X && linear && drawn.is_none() && sources.first().is_some_and(|pd| pd.plot.kind.is_area()) {
+            // Area plots reach the frame at both ends: Origin gives them no margin in X (measured).
+            drawn = Some(Axis { auto_range: sheaf_core::graph::AutoRange::Tight, ..axis.clone() });
+        }
+        if dim == Dim::Y
+            && linear
+            && let Some((lo, hi)) = range
+            && lo > 0.0
+            && sources.iter().any(|pd| pd.plot.kind.is_area() && pd.plot.y_base.is_none())
+        {
+            // The fill stands on Y = 0: the axis starts there exactly (measured).
+            range = Some((0.0, hi));
+            free.0 = false;
+        }
+        if dim == Dim::Y
+            && linear
+            && let Some((lo, hi)) = range
+            && axis.min.is_none()
+            && axis.max.is_none()
+            && axis.major_step.is_none()
+            && sources.iter().any(|pd| pd.spokes.is_some())
+        {
+            // A radar chart's centre is the axis' lower limit, which can be anything (graphing spec 14.19). The
+            // step is half of the usual table's, and both limits are rounded outwards to whole steps after
+            // the margin (measured: 2.1..5.2 gave 1.5..5.5 in steps of 0.5, 0..4 gave -1..5 in steps of 1).
+            let span = if hi > lo {
+                hi - lo
+            } else if hi != 0.0 {
+                hi.abs() * 0.2
+            } else {
+                1.0
+            };
+            let step = sheaf_core::autorange::linear_step(span) / 2.0;
+            let margin = axis.rescale_margin_pct / 100.0 * span;
+            let from = ((lo - margin) / step + 1e-9).floor() * step;
+            let to = ((hi.max(lo + span) + margin) / step - 1e-9).ceil() * step;
+            drawn = Some(Axis { min: Some(from), max: Some(to), major_step: Some(step), ..axis.clone() });
+        }
+        if dim == Dim::Y && linear && sources.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Area) {
+            // Piles of 100: the axis ends exactly at 0 and 100.
+            range = Some((0.0, 100.0));
+            free = (false, false);
         }
         resolve_axis_edges(drawn.as_ref().unwrap_or(axis), range, free)
     };
@@ -177,12 +229,50 @@ fn group_geometry(
         let sources: Vec<&data::PlotData> = pds[i].plots.iter().collect();
         resolve_dim(project, axis, dim, &sources)
     };
-    let (root_x, root_y) = (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis));
+    let spoke_axis = |i: usize, axis: &Axis| match g.layers[i].coords.polar() {
+        Some(p) if p.radar => {
+            polar::radar_axis(pds[i].plots.first().and_then(|pd| pd.spokes.as_deref()).unwrap_or(&[]))
+        }
+        Some(p) => polar::angle_axis(axis, p.angle_unit),
+        None => polar::angle_axis(axis, sheaf_core::graph::AngleUnit::Degrees),
+    };
+    // The scale of the three axes of a ternary layer.
+    let ternary_scale = |i: usize| {
+        g.layers[i].coords.ternary().map(|t| {
+            let percent = ternary::is_percent(project, &g.layers[i], t);
+            (ternary::scale_axis(&g.layers[i].x_axis, percent), ternary::scale_axis(&g.layers[i].y_axis, percent))
+        })
+    };
+    // The radius axis of a polar graph cannot start below 0 (Origin refuses a negative lower limit).
+    let polar_floor = |i: usize, y: ResolvedAxis| {
+        let l = &g.layers[i];
+        if y.min >= 0.0 || l.y_axis.min.is_some() || !l.coords.polar().is_some_and(|p| !p.radar) {
+            return y;
+        }
+        // The rest of the range stays as the data made it (measured: -1 to 2 gave 0 to 2.25, steps of 0.5).
+        own(i, Dim::Y, &Axis { min: Some(0.0), max: Some(y.max), major_step: Some(y.step), ..l.y_axis.clone() })
+    };
+    let (root_x, root_y) = if rl.coords.polar().is_some() {
+        (spoke_axis(root, &rl.x_axis), polar_floor(root, shared(Dim::Y, &rl.y_axis)))
+    } else if let Some((x, y)) = ternary_scale(root) {
+        (x, y)
+    } else {
+        (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
+    };
     let axes: Vec<(ResolvedAxis, ResolvedAxis)> = members
         .iter()
         .map(|&i| {
             let l = &g.layers[i];
-            let x = if shares(i, Dim::X) { root_x.clone() } else { own(i, Dim::X, &l.x_axis) };
+            if let Some(xy) = ternary_scale(i) {
+                return xy;
+            }
+            let x = if l.coords.polar().is_some() {
+                spoke_axis(i, &l.x_axis)
+            } else if shares(i, Dim::X) {
+                root_x.clone()
+            } else {
+                own(i, Dim::X, &l.x_axis)
+            };
             let y = if shares(i, Dim::Y) { root_y.clone() } else { own(i, Dim::Y, &l.y_axis) };
             (x, y)
         })
@@ -199,6 +289,24 @@ fn group_geometry(
     for (&i, (x, y)) in members.iter().zip(&axes) {
         let f = frame_of(nominal, i);
         bounds = cover(bounds, f);
+        if let Some(t) = g.layers[i].coords.ternary() {
+            // The triangle, its tick labels and titles.
+            let percent = ternary::is_percent(project, &g.layers[i], t);
+            let geom = LayerGeometry {
+                frame: f,
+                clip: f,
+                x: x.clone(),
+                y: y.clone(),
+                polar: None,
+                ternary: Some(ternary::TernaryMap::new(f, percent)),
+            };
+            let (l, t, r, b) = ternary::draw_axes(&mut Vec::new(), project, &g.layers[i], &pds[i].plots, &geom, m);
+            edges.left = edges.left.min(l);
+            edges.top = edges.top.min(t);
+            edges.right = edges.right.max(r);
+            edges.bottom = edges.bottom.max(b);
+            continue;
+        }
         label_edges(&mut edges, &g.layers[i], f, x, y, m);
     }
     let fitted = fit_on_page(bounds, &edges, &g.page);
@@ -212,7 +320,29 @@ fn group_geometry(
                 Some((sx, sy)) => stack::front_frame(clip, pds[i].members, sx, sy),
                 None => clip,
             };
-            (i, LayerGeometry { frame, clip, x, y })
+            let polar = g.layers[i].coords.polar().map(|p| polar::PolarMap::new(frame, p));
+            let ternary = g.layers[i]
+                .coords
+                .ternary()
+                .map(|t| ternary::TernaryMap::new(frame, ternary::is_percent(project, &g.layers[i], t)));
+            // A symbol on the outer polygon of a radar or on a side of a triangle sticks out of the
+            // frame; the clip leaves room for it.
+            let clip = match g.layers[i].coords.polar() {
+                Some(p) if p.radar => {
+                    let pad = pds[i]
+                        .plots
+                        .iter()
+                        .map(|pd| pd.plot.symbol.size_pt + pd.plot.symbol.edge_width_pt)
+                        .fold(0.0, f64::max);
+                    Rect { x: clip.x - pad, y: clip.y - pad, w: clip.w + 2.0 * pad, h: clip.h + 2.0 * pad }
+                }
+                _ if ternary.is_some() => {
+                    let e = PAGE_MARGIN * 3.0;
+                    Rect { x: clip.x - e, y: clip.y - e, w: clip.w + 2.0 * e, h: clip.h + 2.0 * e }
+                }
+                _ => clip,
+            };
+            (i, LayerGeometry { frame, clip, x, y, polar, ternary })
         })
         .collect()
 }
@@ -235,6 +365,24 @@ impl LabelEdges {
 fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: &ResolvedAxis, m: &dyn TextMeasurer) {
     let mut scratch = Vec::new();
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
+    if let Some(p) = layer.coords.polar() {
+        // The circle and the angle labels round it.
+        let geom = LayerGeometry {
+            frame: f,
+            clip: f,
+            x: x.clone(),
+            y: y.clone(),
+            polar: Some(polar::PolarMap::new(f, p)),
+            ternary: None,
+        };
+        let paint = AxisPaint::new(xa, None);
+        let (l, t, r, b) = polar::draw_angle_axis(&mut scratch, xa, &paint, &geom, m);
+        e.left = e.left.min(l);
+        e.top = e.top.min(t);
+        e.right = e.right.max(r);
+        e.bottom = e.bottom.max(b);
+        return;
+    }
     let x_size = xa.title_font.size_pt;
     match xa.side {
         AxisSide::Normal => {
@@ -414,7 +562,13 @@ fn layer_scene(
         y_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.y_axis.clone() };
         (&x_axis, &y_axis)
     } else {
-        draw_grid(&mut scene.grid, layer, geom);
+        if geom.polar.is_some() {
+            polar::draw_grid(&mut scene.grid, layer, geom);
+        } else if geom.ternary.is_some() {
+            ternary::draw_grid(&mut scene.grid, layer, geom);
+        } else {
+            draw_grid(&mut scene.grid, layer, geom);
+        }
         (&layer.x_axis, &layer.y_axis)
     };
     match waterfall {
@@ -448,6 +602,23 @@ fn layer_scene(
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
+    if geom.ternary.is_some() {
+        let start = out.len();
+        ternary::draw_axes(out, project, layer, pds, geom, m);
+        rec(objects, out, start, ObjectKind::XAxis, &[]);
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
+    if geom.polar.is_some() {
+        let start = out.len();
+        polar::draw_angle_axis(out, xa, &xp, geom, m);
+        rec(objects, out, start, ObjectKind::XAxis, &[]);
+        let start = out.len();
+        polar::draw_radius_axis(out, ya, &yp, geom, m);
+        rec(objects, out, start, ObjectKind::YAxis, &[]);
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
@@ -491,6 +662,25 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::YTitle, &[]);
+    draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+    scene
+}
+
+/// The legend of a layer (when it lists its own plots) and its free text labels.
+fn draw_legend_and_labels(
+    out: &mut Vec<Item>,
+    objects: &mut Vec<SceneObject>,
+    project: &Project,
+    g: &Graph,
+    index: usize,
+    f: Rect,
+    pds: &[PlotData],
+    m: &dyn TextMeasurer,
+) {
+    let layer = &g.layers[index];
+    let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
+        hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
+    };
     if layer.legend.scope == LegendScope::Layer {
         let entries: Vec<&PlotData> = pds.iter().collect();
         let start = out.len();
@@ -509,7 +699,7 @@ fn layer_scene(
         text::place(out, m, &label.text, &label.font, size, pos, Anchor::Start, label.rotation_deg);
         rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
-    scene
+    crate::shapes::draw_shapes(out, objects, layer, index, f, m);
 }
 
 // ----- axis colors ---------------------------------------------------------------------------
@@ -518,24 +708,26 @@ fn layer_scene(
 /// for scatter and column plots, which have no line of their own to show.
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
     pds.first().map(|pd| match pd.plot.kind {
-        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area => pd.plot.line.color,
+        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => {
+            pd.plot.line.color
+        }
         _ => pd.plot.symbol.color,
     })
 }
 
 /// The colors an axis is drawn in: its own, or that of the layer's first plot when the axis
 /// follows the plot (and the layer has one).
-struct AxisPaint {
+pub(crate) struct AxisPaint {
     /// Axis line and ticks.
-    line: Color,
+    pub line: Color,
     /// The tick label font, in its final color.
-    labels: Font,
+    pub labels: Font,
     /// The title font, in its final color.
-    title: Font,
+    pub title: Font,
 }
 
 impl AxisPaint {
-    fn new(axis: &Axis, plot: Option<Color>) -> AxisPaint {
+    pub(crate) fn new(axis: &Axis, plot: Option<Color>) -> AxisPaint {
         let follow = plot.filter(|_| axis.color_follows_plot);
         let title_follow = plot.filter(|_| axis.title_color_follows_plot);
         AxisPaint {
@@ -860,6 +1052,17 @@ fn draw_y_labels(
 /// else `Row`.
 fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
+    if pd.plot.kind == PlotKind::Histogram {
+        // The counts up the page, the binned column along it.
+        return if y_axis {
+            "Count".to_string()
+        } else {
+            project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default()
+        };
+    }
+    if pd.boxed.is_some() && !y_axis {
+        return String::new();
+    }
     // Horizontal bars show their values on the X axis and their positions on the Y axis.
     if y_axis != pd.transposed() {
         return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
@@ -1001,8 +1204,10 @@ fn draw_legend(
     let row_h = 1.3 * fs;
     let col_gap = fs;
 
-    // Piled and lying bars list the last plot first, as they appear on the page.
-    let reversed = entries.first().is_some_and(|pd| pd.plot.kind.is_stacked() || pd.plot.kind.is_horizontal());
+    // Piled, floating and lying bars list the last plot first (measured, spec 14.12).
+    let reversed = entries.first().is_some_and(|pd| {
+        pd.plot.kind.is_stacked_column() || pd.plot.kind.is_floating() || pd.plot.kind == PlotKind::Bar
+    });
     let text = lg.text.clone().unwrap_or_else(|| {
         if reversed {
             let rev: Vec<String> = ids.iter().rev().cloned().collect();
@@ -1110,7 +1315,14 @@ fn draw_legend(
                         symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
                         out.push(symbol_item(d, &plot.symbol));
                     }
-                    if plot.kind.is_bar() || plot.kind == PlotKind::Area {
+                    if matches!(plot.kind, PlotKind::Histogram | PlotKind::Box) {
+                        // An outlined box in the plot's colour, without a fill.
+                        out.push(Item::Rect {
+                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            fill: None,
+                            stroke: Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        });
+                    } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
                         out.push(Item::Rect {

@@ -148,7 +148,7 @@ impl ImportWizard {
                 Err(e) => errors.push(e),
             }
         }
-        ImportOutcome::Done { items, errors, plot: self.dlg.plot, template: self.dlg.template, mode: self.dlg.mode }
+        ImportOutcome::Done(self.dlg.request(items, errors))
     }
 
     pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {

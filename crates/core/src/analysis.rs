@@ -33,12 +33,15 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 
 pub use sheaf_calc::{
-    AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection, PeakFilter,
-    PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
+    AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
+    PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
 pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
+
+pub use curves::{AverageSpec, IntersectSpec};
+pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
 /// every peak the search found, started at the found centre, width and height.
@@ -116,6 +119,13 @@ pub struct InterpSpec {
     /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
     /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
     pub smoothing: f64,
+    /// Interpolate onto the values of this column instead of an even grid (Mathematics >
+    /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are
+    /// then not used.
+    pub at: Option<ColumnId>,
+    /// Values outside the X range of the data: continue the end segment (Origin's default),
+    /// missing, or repeat the end value (Origin's `option` extrap, miss, repeat).
+    pub extrapolation: calc::Extrapolation,
 }
 
 impl Default for InterpSpec {
@@ -126,6 +136,8 @@ impl Default for InterpSpec {
             npts: 100,
             range: None,
             smoothing: 0.0,
+            at: None,
+            extrapolation: calc::Extrapolation::Extrapolate,
         }
     }
 }
@@ -489,6 +501,16 @@ pub enum Tool {
     Integrate(IntegrateSpec),
     IntegrateRanges(IntegrateRangesSpec),
     CurveMath(CurveMathSpec),
+    /// Data Manipulation: subtract the straight line through two points.
+    SubtractLine(SubtractLineSpec),
+    /// Data Manipulation: reduce duplicate X data.
+    ReduceDup(ReduceDupSpec),
+    /// Data Manipulation: reduce to evenly spaced X.
+    ReduceX(ReduceOptions),
+    /// Data Manipulation: curve translate X or Y.
+    Translate(TranslateSpec),
+    /// Mathematics: running median.
+    MedianFilter(MedianFilterSpec),
     Differentiate(DiffOptions),
     Smooth(SmoothOptions),
     Normalize(NormalizeMethod),
@@ -513,6 +535,9 @@ pub enum Tool {
     Friedman(FriedmanSpec),
     Grubbs(OutlierSpec),
     Dixon(OutlierSpec),
+    AverageCurves(AverageSpec),
+    Intersect(IntersectSpec),
+    PolygonArea,
 }
 
 impl Tool {
@@ -525,6 +550,14 @@ impl Tool {
                 (CurveOperand::Reference(_), CurveOp::Subtract) => "Subtract reference",
                 _ => "Curve math",
             },
+            Tool::SubtractLine(_) => "Subtract straight line",
+            Tool::ReduceDup(_) => "Reduce duplicate X data",
+            Tool::ReduceX(_) => "Reduce to evenly spaced X",
+            Tool::Translate(spec) => match spec.axis {
+                TranslateAxis::X => "Translate X",
+                TranslateAxis::Y => "Translate Y",
+            },
+            Tool::MedianFilter(_) => "Median filter",
             Tool::Differentiate(_) => "Differentiate",
             Tool::Smooth(_) => "Smooth",
             Tool::Normalize(_) => "Normalize",
@@ -556,6 +589,9 @@ impl Tool {
             Tool::Friedman(_) => "Friedman ANOVA",
             Tool::Grubbs(_) => "Grubbs test",
             Tool::Dixon(_) => "Dixon's Q test",
+            Tool::AverageCurves(_) => "Average multiple curves",
+            Tool::Intersect(_) => "Intersect",
+            Tool::PolygonArea => "Polygon area",
         }
     }
 
@@ -563,6 +599,9 @@ impl Tool {
         match self {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
             Tool::CurveMath(_) => "Math",
+            Tool::ReduceX(_) => "Reduced",
+            Tool::ReduceDup(_) => "ReduceDup",
+            Tool::Translate(_) => "Translate",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Peaks",
             Tool::PeakChain(_) => "PeakAnalysis",
@@ -582,6 +621,9 @@ impl Tool {
             Tool::Friedman(_) => "Friedman",
             Tool::Grubbs(_) => "Grubbs",
             Tool::Dixon(_) => "Dixon",
+            Tool::AverageCurves(_) => "Average",
+            Tool::Intersect(_) => "Intersect",
+            Tool::PolygonArea => "PolygonArea",
             _ => "Result",
         }
     }
@@ -1093,9 +1135,15 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod curves;
+mod manip;
 mod power;
 mod statistics;
+pub use manip::{
+    MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
+};
 pub use power::{PowerGoal, PowerKind, PowerOutput, PowerSpec, power_analysis};
+pub use sheaf_calc::{DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions};
 
 impl Project {
     /// A new graph with a column plot of each (bin centre, count) pair of columns.
@@ -1211,6 +1259,19 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+            }
+            Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
+                let out = curves::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::SubtractLine(_)
+            | Tool::ReduceDup(_)
+            | Tool::ReduceX(_)
+            | Tool::Translate(_)
+            | Tool::MedianFilter(_) => {
+                manip::run(&request.tool, &inputs, &mut beside, &mut on_sheet)?;
             }
             Tool::PeakChain(spec) => {
                 table = Some(run_peak_chain(spec, &inputs, &mut beside, &mut notes)?);
@@ -1548,7 +1609,11 @@ impl Project {
                 }
             }
             Tool::Interpolate(spec) => {
-                if spec.npts < 2 {
+                let at_values: Option<Vec<f64>> = match spec.at {
+                    Some(c) => Some(self.numeric(c).ok_or(AnalysisError::NoSuchColumn(c))?.to_vec()),
+                    None => None,
+                };
+                if at_values.is_none() && spec.npts < 2 {
                     return Err(AnalysisError::BadOption("interpolation needs at least two result points".into()));
                 }
                 if spec.method == InterpMethod::BSpline && !(spec.smoothing >= 0.0 && spec.smoothing.is_finite()) {
@@ -1559,7 +1624,7 @@ impl Project {
                 let options = calc::InterpOptions {
                     method: spec.method,
                     boundary: spec.boundary,
-                    extrapolation: calc::Extrapolation::Extrapolate,
+                    extrapolation: spec.extrapolation,
                     smoothing: spec.smoothing,
                 };
                 let needed = if spec.method == InterpMethod::BSpline { 4 } else { 2 };
@@ -1579,7 +1644,10 @@ impl Project {
                         Some((a, b)) => (Some(a.min(b)), Some(a.max(b))),
                         None => (None, None),
                     };
-                    let (gx, gy) = calc::interp1xy(inp.xs(), inp.ys(), spec.npts, lo, hi, &options);
+                    let (gx, gy) = match &at_values {
+                        Some(at) => (at.clone(), calc::interp1(inp.xs(), inp.ys(), at, &options)),
+                        None => calc::interp1xy(inp.xs(), inp.ys(), spec.npts, lo, hi, &options),
+                    };
                     on_sheet.push(SheetColumn {
                         designation: Designation::X,
                         long_name: inp.x_name.clone(),
@@ -1591,7 +1659,10 @@ impl Project {
                         designation: Designation::Y,
                         long_name: inp.name.clone(),
                         units: inp.units.clone(),
-                        comments: format!("{} interpolated to {} points{}", inp.label, spec.npts, inp.range_note()),
+                        comments: match &at_values {
+                            Some(at) => format!("{} at {} given X values{}", inp.label, at.len(), inp.range_note()),
+                            None => format!("{} interpolated to {} points{}", inp.label, spec.npts, inp.range_note()),
+                        },
                         data: ColumnData::numeric(gy),
                     });
                 }
@@ -2192,6 +2263,29 @@ mod tests {
         let source = ws.column_index(ramp).unwrap();
         assert_eq!(ws.columns.len(), source + 6);
         assert!(d.new_sheet.is_none());
+    }
+
+    #[test]
+    fn interpolation_onto_the_values_of_a_column() {
+        let (mut p, book, _, ramp) = sample();
+        let at = p.add_column(book, 0, Designation::Disregard, ColumnData::numeric(vec![0.5, 2.25, 12.0])).unwrap();
+        let spec = InterpSpec { at: Some(at), ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns[0].numeric().unwrap(), [0.5, 2.25, 12.0], "X is the given column");
+        assert_eq!(ws.columns[1].numeric().unwrap(), [0.5, 2.25, 12.0], "y = x, extrapolated past 10");
+        assert!(ws.columns[1].comments.contains("3 given X values"), "{}", ws.columns[1].comments);
+        let missing = InterpSpec { at: Some(ColumnId(9999)), ..Default::default() };
+        assert!(p.analyze(&request(&[ramp], Tool::Interpolate(missing))).is_err());
+        // Outside the data (X 0..10): missing, or the end value repeated.
+        for (extrapolation, want) in [(Extrapolation::Missing, f64::NAN), (Extrapolation::Repeat, 10.0)] {
+            let spec = InterpSpec { at: Some(at), extrapolation, ..Default::default() };
+            let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
+            let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+            let y = ws.columns[1].numeric().unwrap();
+            assert_eq!(&y[..2], [0.5, 2.25], "{extrapolation:?}: inside the data as before");
+            assert!(y[2] == want || (want.is_nan() && y[2].is_nan()), "{extrapolation:?}: {}", y[2]);
+        }
     }
 
     #[test]

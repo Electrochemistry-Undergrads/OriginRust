@@ -22,6 +22,7 @@ use crate::panels::PanelId;
 use crate::theme;
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Shape, Stroke, Ui, vec2};
 use sheaf_core::Designation;
+use sheaf_core::shape::ShapeKind;
 use sheaf_core::template::Template;
 use std::collections::HashSet;
 use std::sync::OnceLock;
@@ -164,6 +165,7 @@ pub enum Icon {
     Arrow,
     Line,
     Rectangle,
+    Circle,
     Hand,
     // 2D graphs
     PlotLine,
@@ -232,7 +234,7 @@ fn tool(icon: Icon, tip: &'static str, cmd: Cmd) -> Item {
 /// True for the commands of tools (no menu entry; pressed while on).
 #[cfg(test)]
 fn is_tool(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool)
+    matches!(cmd, Cmd::Pointer | Cmd::DataReader | Cmd::TextTool | Cmd::ShapeTool(_))
 }
 
 /// A button for a feature Sheaf lacks.
@@ -336,16 +338,16 @@ fn build(bar: Bar) -> Vec<Item> {
             b(PlotLineSymbol, "Line + Symbol", Cmd::Plot(Template::LineSymbol), "Line + Symbol"),
             b(PlotColumn, "Column", Cmd::Plot(Template::Column), "Column"),
             g(PlotBar, "Bar"),
-            g(PlotPie, "Pie"),
+            b(PlotPie, "Pie (3D Color)", Cmd::Plot(Template::Pie3D), "3D Color Pie"),
             b(PlotArea, "Area", Cmd::Plot(Template::Area), "Area"),
             g(PlotStackedArea, "Stacked Area"),
             g(PlotHlc, "High-Low-Close"),
             g(PlotBox, "Box Chart"),
             g(PlotHistogram, "Histogram"),
             g(PlotBubble, "Bubble"),
-            g(PlotPolar, "Polar theta(X) r(Y)"),
-            g(PlotTernary, "Ternary"),
-            g(PlotRadar, "Radar"),
+            b(PlotPolar, "Polar theta(X) r(Y)", Cmd::Plot(Template::Polar), "Polar theta(X) r(Y)"),
+            b(PlotTernary, "Ternary", Cmd::Plot(Template::Ternary), "Ternary"),
+            b(PlotRadar, "Radar", Cmd::Plot(Template::Radar), "Radar"),
         ],
         Bar::Tools => vec![
             tool(Pointer, "Pointer", Cmd::Pointer),
@@ -355,9 +357,10 @@ fn build(bar: Bar) -> Vec<Item> {
             tool(DataReader, "Data Reader", Cmd::DataReader),
             gap(),
             tool(Text, "Text", Cmd::TextTool),
-            g(Arrow, "Arrow"),
-            g(Icon::Line, "Line"),
-            g(Rectangle, "Rectangle"),
+            tool(Arrow, "Arrow", Cmd::ShapeTool(ShapeKind::Arrow)),
+            tool(Icon::Line, "Line", Cmd::ShapeTool(ShapeKind::Line)),
+            tool(Rectangle, "Rectangle", Cmd::ShapeTool(ShapeKind::Rectangle)),
+            tool(Circle, "Circle", Cmd::ShapeTool(ShapeKind::Ellipse)),
             g(Hand, "Pan"),
         ],
         Bar::ObjectEdit => vec![
@@ -475,6 +478,7 @@ fn draw_button(ui: &mut Ui, bar: Bar, button: &Button, c: &MenuContext, actions:
         Some(Cmd::Pointer) => c.tool == GraphTool::Pointer,
         Some(Cmd::DataReader) => c.tool == GraphTool::Reader,
         Some(Cmd::TextTool) => c.tool == GraphTool::Text,
+        Some(Cmd::ShapeTool(kind)) => c.tool == GraphTool::Draw(kind),
         _ => button.on,
     };
     let enabled = on || matches!(resolved, Some(Ok(_)));
@@ -917,6 +921,18 @@ impl Pen<'_> {
                     self.dot(p, 1.3, true);
                 }
             }
+            Circle => {
+                let pts: Vec<P> = (0..24)
+                    .map(|k| {
+                        let t = std::f32::consts::TAU * k as f32 / 24.0;
+                        (8.0 + 5.5 * t.cos(), 8.0 + 5.5 * t.sin())
+                    })
+                    .collect();
+                self.closed(&pts, false);
+                for p in [(2.5, 8.0), (13.5, 8.0), (8.0, 2.5), (8.0, 13.5)] {
+                    self.dot(p, 1.3, true);
+                }
+            }
             Hand => {
                 self.closed(
                     &[
@@ -1167,7 +1183,7 @@ mod tests {
         };
         assert_eq!(&tips(Bar::Graphs2D)[..5], ["Line", "Scatter", "Line + Symbol", "Column", "Bar"]);
         assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Zoom In", "Zoom Out", "Rescale"]);
-        assert_eq!(&tips(Bar::Tools)[4..], ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Pan"]);
+        assert_eq!(&tips(Bar::Tools)[4..], ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Pan"]);
         assert_eq!(&tips(Bar::Edit)[..3], ["Cut", "Copy", "Paste"]);
         assert_eq!(&tips(Bar::Standard)[..2], ["New Project", "New Workbook"]);
     }

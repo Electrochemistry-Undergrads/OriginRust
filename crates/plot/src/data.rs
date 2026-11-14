@@ -7,6 +7,7 @@ use sheaf_core::graph::{
     Axis, BarSpacing, ErrorDirection, Frame, Layer, Page, Plot, PlotKind, ScaleKind, TickFormat, TickLabelSource,
 };
 use sheaf_core::{Column, Project};
+use std::borrow::Cow;
 
 /// Where the bars of one column plot stand at each X position (graphing spec 14.4), in X axis units.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -30,10 +31,10 @@ impl BarSlot {
 pub(crate) struct PlotData<'a> {
     pub plot: &'a Plot,
     /// X values; `None` plots against the row number (1, 2, 3, ...).
-    pub x: Option<&'a [f64]>,
+    pub x: Option<Cow<'a, [f64]>>,
     /// How the X column shows its values (a date format makes a date axis).
     pub x_format: Option<NumberFormat>,
-    pub y: &'a [f64],
+    pub y: Cow<'a, [f64]>,
     /// Rows of the Y column that are masked: drawn red, as Origin does.
     pub mask: Option<&'a std::collections::BTreeSet<usize>>,
     pub err: Option<&'a [f64]>,
@@ -53,6 +54,86 @@ pub(crate) struct PlotData<'a> {
     pub member: Option<usize>,
     /// Where the bars of a column plot stand; `None` for other kinds.
     pub bar: Option<BarSlot>,
+    /// The statistics a box chart plot draws; `None` for other kinds.
+    pub boxed: Option<BoxStats>,
+    /// What a pie chart plot draws; `None` for other kinds.
+    pub pie: Option<PieData>,
+    /// The values that set the size of each symbol of a bubble plot.
+    pub size_z: Option<&'a [f64]>,
+    /// The values that set the colour of each symbol of a colour mapped plot.
+    pub color_z: Option<&'a [f64]>,
+    /// The spoke names of a plot of a radar layer (graphing spec 14.19); `None` elsewhere.
+    pub spokes: Option<Vec<String>>,
+    /// The last row is the first point repeated to close a radar polygon: the line runs to it, but
+    /// no symbol or mask belongs to it.
+    pub closing: bool,
+}
+
+/// The numbers of one box of a box chart (Origin's defaults: the box runs from the 25th to the
+/// 75th percentile, the whiskers to the furthest values within 1.5 times the box height, the other
+/// values are outliers).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BoxStats {
+    /// Where the box stands on the X axis (1, 2, 3, ...).
+    pub pos: f64,
+    /// The tick label under the box.
+    pub label: String,
+    pub q1: f64,
+    pub median: f64,
+    pub q3: f64,
+    pub mean: f64,
+    pub whisker_low: f64,
+    pub whisker_high: f64,
+    pub outliers: Vec<f64>,
+}
+
+/// The slices of a pie chart plot.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PieData {
+    /// The value of each slice (rows that are not positive numbers are left out).
+    pub values: Vec<f64>,
+    /// The legend text of each slice: the X column's cell, or the row number.
+    pub names: Vec<String>,
+    pub colors: Vec<sheaf_core::Color>,
+    /// The font of the percentages and of the legend.
+    pub label_font: sheaf_core::graph::Font,
+    pub legend_font: sheaf_core::graph::Font,
+}
+
+/// Width of a box, in X axis units (measured: 0.8 of the spacing of the boxes).
+pub(crate) const BOX_WIDTH: f64 = 0.8;
+
+/// The statistics of one box from the finite values of a column, `None` without any.
+fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxStats> {
+    let mut v: Vec<f64> = values.iter().copied().filter(|x| x.is_finite()).collect();
+    if v.is_empty() {
+        return None;
+    }
+    v.sort_by(|a, b| a.total_cmp(b));
+    let q = |p: f64| sheaf_calc::stats::quantile_origin(&v, p);
+    let (q1, median, q3) = (q(0.25), q(0.5), q(0.75));
+    let fence = 1.5 * (q3 - q1);
+    let (lo_fence, hi_fence) = (q1 - fence, q3 + fence);
+    let inside = v.iter().copied().filter(|x| *x >= lo_fence && *x <= hi_fence);
+    let (whisker_low, whisker_high) = inside.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
+    let outliers = v.iter().copied().filter(|x| *x < lo_fence || *x > hi_fence).collect();
+    let mean = v.iter().sum::<f64>() / v.len() as f64;
+    Some(BoxStats { pos, label, q1, median, q3, mean, whisker_low, whisker_high, outliers })
+}
+
+/// The bins of a histogram plot as the points of a column plot: bin centres and counts. `None`
+/// without numbers or with a bin size that cannot be used.
+fn histogram_points(values: &[f64], style: &sheaf_core::graph::HistogramStyle) -> Option<(Vec<f64>, Vec<f64>)> {
+    use sheaf_calc::freq::{BinSize, FreqOptions, freq_counts};
+    let opts = FreqOptions {
+        min: style.begin,
+        max: style.end,
+        size: style.bin_size.map_or(BinSize::Auto, BinSize::Width),
+        below: false,
+        above: false,
+    };
+    let f = freq_counts(values, &opts)?;
+    Some((f.rows.iter().map(|r| r.center).collect(), f.rows.iter().map(|r| r.count as f64).collect()))
 }
 
 impl PlotData<'_> {
@@ -76,7 +157,7 @@ impl PlotData<'_> {
 
     /// The position of row `i` along the X column (the row number without one), with its offset.
     pub fn cat_at(&self, i: usize) -> f64 {
-        let x = match self.x {
+        let x = match &self.x {
             None => (i + 1) as f64,
             Some(x) => x.get(i).copied().unwrap_or(f64::NAN),
         };
@@ -140,6 +221,7 @@ pub(crate) use sheaf_core::stack::row_range;
 pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'a> {
     let (places, members) = stack::places(project, layer);
     let mut plots = Vec::new();
+    let mut boxes = 0usize;
     for (plot, place) in layer.plots.iter().zip(places).filter(|(p, _)| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
@@ -148,11 +230,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));
         let (start, end) = row_range(plot, y.len());
-        plots.push(PlotData {
+        let mut pd = PlotData {
             plot,
-            x,
+            x: x.map(Cow::Borrowed),
             x_format,
-            y,
+            y: Cow::Borrowed(y),
             mask: project.column(plot.y).map(|c| &c.mask).filter(|m| !m.is_empty()),
             err,
             xerr,
@@ -164,11 +246,137 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             oy: place.oy,
             member: place.member,
             bar: None,
-        });
+            boxed: None,
+            pie: None,
+            size_z: plot.size_from.and_then(|id| project.numeric(id)),
+            color_z: plot.color_from.and_then(|id| project.numeric(id)),
+            spokes: None,
+            closing: false,
+        };
+        match plot.kind {
+            PlotKind::Histogram => {
+                // The plot shows the counts of the bins of its Y values: one point per bin.
+                let Some((centres, counts)) = histogram_points(&y[start..end], &plot.hist) else { continue };
+                pd.start = 0;
+                pd.end = counts.len();
+                pd.x = Some(Cow::Owned(centres));
+                pd.y = Cow::Owned(counts);
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Pie | PlotKind::Pie3D | PlotKind::PieBw => {
+                let labels = plot.x.and_then(|id| project.column(id));
+                let rows: Vec<usize> =
+                    (start..end).filter(|&r| y.get(r).is_some_and(|v| v.is_finite() && *v > 0.0)).collect();
+                pd.pie = Some(PieData {
+                    values: rows.iter().map(|&r| y[r]).collect(),
+                    names: rows
+                        .iter()
+                        .map(|&r| labels.map_or_else(|| (r + 1).to_string(), |c| c.cell_text(r)))
+                        .collect(),
+                    colors: (0..rows.len()).map(|i| layer.palette.color(i, rows.len())).collect(),
+                    label_font: layer.x_axis.tick_font.clone(),
+                    legend_font: layer.legend.font.clone(),
+                });
+                // A pie has no points on any axis.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Box => {
+                boxes += 1;
+                let label = project.plot_label(plot);
+                let Some(stats) = box_stats(&y[start..end], boxes as f64, label) else {
+                    continue;
+                };
+                // The plot is the one point at the middle of its box.
+                pd.x = Some(Cow::Owned(vec![stats.pos]));
+                pd.y = Cow::Owned(vec![stats.median]);
+                pd.start = 0;
+                pd.end = 1;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+                pd.boxed = Some(stats);
+            }
+            _ => {}
+        }
+        if let Some(polar) = layer.coords.polar() {
+            polar_columns(&mut pd, polar.radius);
+        }
+        if layer.coords.ternary().is_some() {
+            crate::ternary::columns(&mut pd, plot.size_from.and_then(|id| project.numeric(id)));
+        }
+        plots.push(pd);
+    }
+    if layer.coords.polar().is_some_and(|p| p.radar) {
+        radar_columns(project, &mut plots);
     }
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     LayerData { plots, members }
+}
+
+/// Reads the two columns of a plot of a polar layer as `(angle, radius)`: `x` becomes the angle
+/// and `y` the radius, whichever column the layer takes the radius from (a missing X column is
+/// the row number). Error bars are not drawn in polar layers.
+fn polar_columns(pd: &mut PlotData, radius: sheaf_core::graph::RadiusColumn) {
+    pd.err = None;
+    pd.xerr = None;
+    pd.x_format = None;
+    if radius == sheaf_core::graph::RadiusColumn::X {
+        let angle = std::mem::replace(&mut pd.y, Cow::Owned(Vec::new()));
+        let r = pd.x.take().unwrap_or_else(|| Cow::Owned((1..=angle.len()).map(|i| i as f64).collect()));
+        pd.end = pd.end.min(r.len());
+        pd.x = Some(angle);
+        pd.y = r;
+    }
+}
+
+/// Reads the plots of a radar layer (graphing spec 14.19) as `(angle, value)` pairs: row `i` of `n`
+/// is the spoke at `360 i / n` degrees, `n` the number of rows of the longest plot, and every plot
+/// ends with its first point again at 360 degrees, which closes the polygon. The spokes are named
+/// by the cells of the first plot's X column, or by the row numbers.
+fn radar_columns(project: &Project, plots: &mut [PlotData]) {
+    let n = plots.iter().map(|pd| pd.end.saturating_sub(pd.start)).max().unwrap_or(0);
+    if n == 0 {
+        return;
+    }
+    let first = &plots[0];
+    let labels = first.plot.x.and_then(|id| project.column(id));
+    let names: Vec<String> = (0..n)
+        .map(|i| {
+            let row = first.start + i;
+            // An empty cell of the X column leaves the spoke with its row number.
+            labels.map(|c| c.cell_text(row)).filter(|t| !t.is_empty()).unwrap_or_else(|| (row + 1).to_string())
+        })
+        .collect();
+    let angle = |i: usize| 360.0 * i as f64 / n as f64;
+    for pd in plots.iter_mut() {
+        // Rows keep their place (the mask counts rows of the column); the first drawn row is
+        // repeated once after the last, at 360 degrees, to close the polygon.
+        let (start, end) = (pd.start, pd.end.min(pd.y.len()));
+        if start >= end {
+            continue;
+        }
+        let mut ys: Vec<f64> = pd.y[..end].to_vec();
+        let mut xs: Vec<f64> = (0..end).map(|r| angle(r.saturating_sub(start))).collect();
+        ys.push(ys[start]);
+        xs.push(360.0);
+        pd.end = ys.len();
+        pd.x = Some(Cow::Owned(xs));
+        pd.y = Cow::Owned(ys);
+        pd.closing = true;
+        pd.err = None;
+        pd.xerr = None;
+        pd.x_format = None;
+        pd.spokes = Some(names.clone());
+    }
 }
 
 /// A percentage of the model clamped to `lo..=hi`; a value that is not finite takes `default`.
@@ -183,14 +391,19 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
     let columns: Vec<usize> = (0..plots.len()).filter(|&i| plots[i].plot.kind.is_bar()).collect();
     let Some(&first) = columns.first() else { return };
     let s = bar_spacing(&plots[first]);
-    let gap = percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0;
+    // Histogram bars touch.
+    let gap = if plots[first].plot.kind == PlotKind::Histogram {
+        0.0
+    } else {
+        percent(bars.gap_pct, 0.0, 100.0, sheaf_core::graph::DEFAULT_BAR_GAP_PCT) / 100.0
+    };
     let overlap = percent(bars.overlap_pct, -100.0, 100.0, 0.0) / 100.0;
-    // Stacked plots share one slot, which stands where the first of them stands.
+    // Stacked plots share one slot, which stands where the first of them stands; so do floating ones.
     let mut slot_of = vec![0usize; plots.len()];
     let mut slots = 0usize;
     let mut stacked_slot = None;
     for &i in &columns {
-        if plots[i].plot.kind.is_stacked() {
+        if plots[i].plot.kind.is_stacked_column() || plots[i].plot.kind.is_floating() {
             slot_of[i] = *stacked_slot.get_or_insert_with(|| {
                 slots += 1;
                 slots - 1
@@ -209,20 +422,31 @@ fn place_bars(plots: &mut [PlotData], bars: &BarSpacing) {
     }
 }
 
-/// Piles the stacked column plots of a layer: the bar of each plot starts where the bars of the
-/// plots before it end, row by row (a missing value counts as 0). With a 100 % plot among them
-/// every pile is scaled to a total of 100.
+/// Piles the stacked plots of a layer: the bar or area of each plot starts where those of the
+/// plots before it (of the same family, columns or areas) end, row by row (a missing value counts
+/// as 0). With a 100 % plot among them every pile is scaled to a total of 100.
 fn stack_bars(plots: &mut [PlotData]) {
-    let idx: Vec<usize> = (0..plots.len()).filter(|&i| plots[i].plot.kind.is_stacked()).collect();
+    for areas in [false, true] {
+        let idx: Vec<usize> = (0..plots.len())
+            .filter(|&i| {
+                let k = plots[i].plot.kind;
+                if areas { k.is_stacked_area() } else { k.is_stacked_column() }
+            })
+            .collect();
+        pile(plots, &idx);
+    }
+}
+
+fn pile(plots: &mut [PlotData], idx: &[usize]) {
     if idx.is_empty() {
         return;
     }
     let rows = idx.iter().map(|&i| plots[i].y.len()).max().unwrap_or(0);
-    let percent = idx.iter().any(|&i| plots[i].plot.kind == PlotKind::Stacked100Column);
+    let percent = idx.iter().any(|&i| plots[i].plot.kind.is_percent_stacked());
     let value = |pd: &PlotData, r: usize| pd.y.get(r).copied().filter(|v| v.is_finite()).unwrap_or(0.0);
     let totals: Vec<f64> = (0..rows).map(|r| idx.iter().map(|&i| value(&plots[i], r)).sum()).collect();
     let mut run = vec![0.0; rows];
-    for &i in &idx {
+    for &i in idx {
         let (mut lo, mut hi) = (vec![f64::NAN; rows], vec![f64::NAN; rows]);
         for r in 0..rows {
             let scale = if !percent {
@@ -323,6 +547,19 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(b) = &pd.boxed {
+            if dim == Dim::X {
+                add(b.pos - BOX_WIDTH / 2.0);
+                add(b.pos + BOX_WIDTH / 2.0);
+            } else {
+                add(b.whisker_low);
+                add(b.whisker_high);
+                b.outliers.iter().for_each(|v| add(*v));
+                add(b.q1);
+                add(b.q3);
+            }
+            continue;
+        }
         let dir = pd.plot.error.direction;
         let transposed = pd.transposed();
         let value_dim = if transposed { Dim::X } else { Dim::Y };

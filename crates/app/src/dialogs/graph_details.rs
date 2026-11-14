@@ -89,6 +89,16 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Stacked100Column => "100% Stacked Column",
         PlotKind::Bar => "Bar",
         PlotKind::FloatingColumn => "Floating Column",
+        PlotKind::StackedBar => "Stacked Bar",
+        PlotKind::Stacked100Bar => "100% Stacked Bar",
+        PlotKind::FloatingBar => "Floating Bar",
+        PlotKind::StackedArea => "Stacked Area",
+        PlotKind::Stacked100Area => "100% Stacked Area",
+        PlotKind::Histogram => "Histogram",
+        PlotKind::Box => "Box Chart",
+        PlotKind::Pie => "Pie",
+        PlotKind::Pie3D => "3D Color Pie",
+        PlotKind::PieBw => "2D B&W Pie",
     }
 }
 
@@ -124,8 +134,21 @@ pub fn dialog_body(
             ui.horizontal(|ui| {
                 ui.label("Plot Type");
                 if let Node::Plot(l, p) = *node {
+                    let polar = graph.layers[l].coords.polar().is_some();
+                    let radar = graph.layers[l].coords.polar().is_some_and(|p| p.radar);
+                    let ternary = graph.layers[l].coords.ternary().is_some();
                     let plot = &mut graph.layers[l].plots[p];
-                    egui::ComboBox::from_id_salt("plot_type").selected_text(kind_name(plot.kind)).show_ui(ui, |ui| {
+                    // A plot of a polar or ternary layer is an ordinary line or symbol plot.
+                    let shown = if radar {
+                        format!("Radar {}", kind_name(plot.kind))
+                    } else if ternary {
+                        format!("Ternary {}", kind_name(plot.kind))
+                    } else if polar {
+                        format!("Polar {}", kind_name(plot.kind))
+                    } else {
+                        kind_name(plot.kind).to_string()
+                    };
+                    egui::ComboBox::from_id_salt("plot_type").selected_text(shown).show_ui(ui, |ui| {
                         for k in [
                             PlotKind::Line,
                             PlotKind::Scatter,
@@ -135,7 +158,17 @@ pub fn dialog_body(
                             PlotKind::Stacked100Column,
                             PlotKind::Bar,
                             PlotKind::FloatingColumn,
+                            PlotKind::StackedBar,
+                            PlotKind::Stacked100Bar,
+                            PlotKind::FloatingBar,
                             PlotKind::Area,
+                            PlotKind::StackedArea,
+                            PlotKind::Stacked100Area,
+                            PlotKind::Histogram,
+                            PlotKind::Box,
+                            PlotKind::Pie,
+                            PlotKind::Pie3D,
+                            PlotKind::PieBw,
                         ] {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }
@@ -217,7 +250,14 @@ fn plot_tab(
                 egui::ComboBox::from_id_salt("plot_connect").selected_text(connect_name(plot.line.connect)).show_ui(
                     ui,
                     |ui| {
-                        for c in [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical] {
+                        for c in [
+                            Connect::Straight,
+                            Connect::Spline,
+                            Connect::BSpline,
+                            Connect::Bezier,
+                            Connect::StepHorizontal,
+                            Connect::StepVertical,
+                        ] {
                             ui.selectable_value(&mut plot.line.connect, c, connect_name(c));
                         }
                     },
@@ -554,6 +594,9 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 x_error: None,
                 y_base: None,
                 error: ErrorStyle::default(),
+                hist: Default::default(),
+                size_from: None,
+                color_from: None,
             });
         }
         layer.recolor_automatic();

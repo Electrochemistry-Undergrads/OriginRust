@@ -1,0 +1,44 @@
+[
+ {
+  "name": "expgrow1",
+  "func": "ExpGrow1",
+  "params": [
+   "y0",
+   "x0",
+   "A1",
+   "t1"
+  ],
+  "fixed": {
+   "x0": 0.0
+  }
+ },
+ {
+  "name": "logistic",
+  "func": "Logistic",
+  "params": [
+   "A1",
+   "A2",
+   "x0",
+   "p"
+  ]
+ },
+ {
+  "name": "hill",
+  "func": "Hill",
+  "params": [
+   "Vmax",
+   "k",
+   "n"
+  ]
+ },
+ {
+  "name": "doseresp",
+  "func": "DoseResp",
+  "params": [
+   "A1",
+   "A2",
+   "LOGx0",
+   "p"
+  ]
+ }
+]

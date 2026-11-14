@@ -3141,12 +3141,14 @@ dependencies = [
 name = "sheaf-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
  "sheaf-calc",
  "sheaf-expr",
  "sheaf-fit",
  "thiserror 2.0.21",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3191,6 +3193,7 @@ dependencies = [
  "png 0.18.1",
  "resvg",
  "roxmltree",
+ "sheaf-calc",
  "sheaf-core",
  "svg2pdf",
  "thiserror 2.0.21",

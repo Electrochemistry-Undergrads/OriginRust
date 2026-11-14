@@ -677,6 +677,218 @@ fn the_fit_window_offers_bands_and_iteration_controls() {
     assert_eq!(curve.columns.len(), 2 + 4, "the curve and four band columns");
 }
 
+/// A CSV with X, two decaying columns of one time constant and a weight column.
+fn decays_file(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("decays.csv");
+    let mut csv = String::from("t,a,b,w\n");
+    for i in 0..30 {
+        let x = i as f64 * 0.3;
+        csv += &format!(
+            "{x},{},{},{}\n",
+            1.0 + 4.0 * (-x / 2.0).exp() + 0.01 * (7.0 * i as f64).sin(),
+            0.5 + 2.0 * (-x / 2.0).exp() + 0.01 * (5.0 * i as f64).sin(),
+            1.0 + 0.5 * (3.0 * i as f64).sin().abs()
+        );
+    }
+    std::fs::write(&path, csv).unwrap();
+    path
+}
+
+#[test]
+fn the_fit_window_offers_direct_weighting_and_the_scale_errors_switch() {
+    let mut h = start(vec![decays_file("fitdirect")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Linear }, &ctx);
+    settle(&mut h);
+    use sheaf_core::fitting::FitWeighting;
+    let request = |h: &Harness<'static, SheafApp>| h.state().fit.as_ref().unwrap().request_for_test().unwrap();
+    assert_eq!((request(&h).weighting, request(&h).scale_errors), (FitWeighting::None, true));
+    click(&mut h, "Data Selection");
+    h.get_by_label("Direct");
+    click(&mut h, "Direct");
+    h.get_by_label("Weight column");
+    let r = request(&h);
+    assert_eq!(r.weighting, FitWeighting::Direct);
+    assert!(r.y_error.is_some(), "a weight column is preselected");
+    click(&mut h, "Advanced");
+    click(&mut h, "Scale Error with sqrt(Reduced Chi-Sqr)");
+    assert!(!request(&h).scale_errors, "the box was ticked and is now off");
+    // The weight column w is chosen and the fit runs with the weights from it.
+    let w = project(&h).workbooks().next().unwrap().sheets[0].column_by_name("w").unwrap().id;
+    h.state_mut().fit.as_mut().unwrap().weight_column_for_test(w);
+    assert_eq!(request(&h).y_error, Some(w));
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_none(), "Done closes the window");
+    let b = project(&h).workbooks().next().unwrap();
+    assert!(b.sheets.iter().any(|s| s.name == "FitLinear1"), "the fit was written");
+}
+
+#[test]
+fn the_fit_window_fits_several_columns_independently_or_as_a_global_fit() {
+    let mut h = start(vec![decays_file("fitglobal")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit.as_mut().unwrap().choose_for_test("ExpDec1");
+    let sheet = &project(&h).workbooks().next().unwrap().sheets[0];
+    let b = sheet.column_by_name("b").unwrap().id;
+    settle(&mut h);
+    click(&mut h, "Data Selection");
+    h.get_by_label("Also fit");
+    h.state_mut().fit.as_mut().unwrap().also_fit_for_test(&[b], None);
+    settle(&mut h);
+    h.get_by_label("Multiple datasets");
+    h.get_by_label("Global Fit");
+    // Global fit: the Parameters tab gets a Shared column.
+    h.state_mut().fit.as_mut().unwrap().also_fit_for_test(&[b], Some(&["t1"]));
+    settle(&mut h);
+    click(&mut h, "Parameters");
+    h.get_by_label("Shared");
+    click(&mut h, "Done");
+    // Done with no iterations of its own writes the starting values; the table is the guess.
+    assert!(h.state().fit.is_none());
+    let names: Vec<String> = project(&h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+    assert!(names.contains(&"FitNLGlobal1".to_string()), "{names:?}");
+    assert!(names.contains(&"FitNL1".to_string()) && names.contains(&"FitNL2".to_string()), "{names:?}");
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1, "one undo removes all of it");
+
+    // Independent fits: one set of result sheets per column, no combined table.
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit.as_mut().unwrap().choose_for_test("ExpDec1");
+    h.state_mut().fit.as_mut().unwrap().also_fit_for_test(&[b], None);
+    click(&mut h, "Fit");
+    let names: Vec<String> = project(&h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+    assert!(!names.iter().any(|n| n.starts_with("FitNLGlobal")), "{names:?}");
+    assert!(names.contains(&"FitNL2".to_string()), "{names:?}");
+}
+
+fn sheet_names(h: &Harness<'static, SheafApp>) -> Vec<String> {
+    project(h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect()
+}
+
+#[test]
+fn linear_fit_with_x_error_asks_for_an_x_error_column_then_fits() {
+    let mut h = start(vec![decays_file("fitxerr")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::LinearXError }, &ctx);
+    settle(&mut h);
+    h.get_by_label("NLFit (Straight line with X error)");
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_some(), "without an X-error column the window stays open");
+    assert!(!h.query_all_by_label_contains("X-error").collect::<Vec<_>>().is_empty());
+    // An X-error column right after the Y column is what the fit needs.
+    h.state_mut().doc.apply("Add X error", |p| {
+        let id = p.new_column_id();
+        let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+        let at = ws.column_by_name("B").map(|c| ws.column_index(c.id).unwrap()).unwrap() + 1;
+        let name = ws.next_short_name();
+        ws.columns
+            .insert(at, sheaf_core::Column::new(id, name, Designation::XError, ColumnData::numeric(vec![0.05; 30])));
+    });
+    click(&mut h, "Done");
+    assert!(h.state().fit.is_none(), "{:?}", h.state().fit.as_ref().map(|d| d.problem_for_test()));
+    assert!(sheet_names(&h).contains(&"FitLinear1".to_string()), "{:?}", sheet_names(&h));
+}
+
+#[test]
+fn multiple_regression_compare_models_and_rank_models_are_in_the_fitting_menu() {
+    let mut h = start(vec![decays_file("fitmore")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    let sheet = &project(&h).workbooks().next().unwrap().sheets[0];
+    let (t, b, w) = (
+        sheet.column_by_name("t").unwrap().id,
+        sheet.column_by_name("b").unwrap().id,
+        sheet.column_by_name("w").unwrap().id,
+    );
+    // Multiple Linear Regression: pick the variables, OK writes FitMR1 and its statistics.
+    h.state_mut().apply(Action::FitMore { book, column: None, kind: FitMoreKind::Multiple }, &ctx);
+    settle(&mut h);
+    h.get_by_label("Multiple Linear Regression");
+    h.get_by_label("Independent variables (X)");
+    h.state_mut().fit_more.as_mut().unwrap().choose_x_for_test(&[t, b, w]);
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_none());
+    let names = sheet_names(&h);
+    assert!(names.contains(&"FitMR1".to_string()) && names.contains(&"FitMR1Stats".to_string()), "{names:?}");
+    // Compare Models.
+    h.state_mut().apply(Action::FitMore { book, column: None, kind: FitMoreKind::Compare }, &ctx);
+    settle(&mut h);
+    h.get_by_label("Model 1");
+    h.state_mut().fit_more.as_mut().unwrap().choose_models_for_test("ExpDec1", "Linear");
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_none());
+    assert!(sheet_names(&h).contains(&"FitCompare1".to_string()), "{:?}", sheet_names(&h));
+    // Rank Models; with fewer than two functions the window stays open and says why.
+    h.state_mut().apply(Action::FitMore { book, column: None, kind: FitMoreKind::Rank }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit_more.as_mut().unwrap().choose_functions_for_test(&["ExpDec1"]);
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_some());
+    assert!(h.state().fit_more.as_ref().unwrap().problem_for_test().unwrap().contains("at least two"));
+    h.state_mut().fit_more.as_mut().unwrap().choose_functions_for_test(&["ExpDec1", "ExpDec2", "Gauss"]);
+    click(&mut h, "OK");
+    assert!(h.state().fit_more.is_none());
+    assert!(sheet_names(&h).contains(&"FitRank1".to_string()), "{:?}", sheet_names(&h));
+    // Each step is one undo.
+    let n = sheet_names(&h).len();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(sheet_names(&h).len(), n - 1);
+}
+
+#[test]
+fn the_quick_fits_open_nlfit_with_a_preset_function_and_a_locked_category() {
+    let mut h = start(vec![decays_file("fitquick")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    for (kind, title, default, offered) in [
+        (
+            FitKind::Exponential,
+            "Fit Exponential (ExpDec1)",
+            "ExpDec1",
+            vec!["ExpDec1", "ExpDec2", "ExpDec3", "ExpGrow1"],
+        ),
+        (
+            FitKind::Sigmoidal,
+            "Fit Sigmoidal (Boltzmann)",
+            "Boltzmann",
+            vec!["Boltzmann", "Logistic", "Hill", "DoseResp"],
+        ),
+        (FitKind::SinglePeak, "Single Peak Fit (Gauss)", "Gauss", vec!["Gauss", "Lorentz"]),
+    ] {
+        h.state_mut().apply(Action::Fit { book, column: None, kind }, &ctx);
+        settle(&mut h);
+        h.get_by_label(title);
+        let (function, list, quick) = h.state().fit.as_ref().unwrap().function_for_test();
+        assert!(quick);
+        assert_eq!(function, default);
+        let mut list = list;
+        list.sort();
+        let mut want: Vec<String> = offered.iter().map(|s| s.to_string()).collect();
+        want.sort();
+        assert_eq!(list, want, "{title}");
+        click(&mut h, "Cancel");
+        assert!(h.state().fit.is_none());
+    }
+    // The menu items are no longer greyed.
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::Sigmoidal }, &ctx);
+    settle(&mut h);
+    click(&mut h, "Done");
+    let names: Vec<String> = project(&h).workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+    assert!(names.contains(&"FitNL1".to_string()), "{names:?}");
+}
+
 #[test]
 fn the_fit_window_has_origins_tabs_pages_and_lower_panel() {
     let mut h = start(vec![data_file("fitpages")]);
@@ -1138,9 +1350,9 @@ fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_sep
     assert!(h.query_by_label_contains("found: comma").is_some());
     // Put the data into the active sheet as new columns (the Import Mode node of the tree).
     click(&mut h, "Import Mode");
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New book")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Start New Books")).click();
     settle(&mut h);
-    click(&mut h, "New columns");
+    click(&mut h, "Start New Columns");
     click(&mut h, "OK");
     assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1, "no new book was made");
@@ -1622,9 +1834,16 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
         &["Analysis", "Mathematics", "Integrate Ranges..."],
         &["Analysis", "Mathematics", "Interpolate/Extrapolate..."],
         &["Analysis", "Mathematics", "Normalize Columns..."],
+        &["Analysis", "Mathematics", "Average Multiple Curves..."],
+        &["Analysis", "Mathematics", "Intersect..."],
+        &["Analysis", "Mathematics", "Polygon Area..."],
         &["Analysis", "Data Manipulation", "Subtract Reference Data..."],
         &["Analysis", "Fitting", "Linear Fit..."],
         &["Analysis", "Fitting", "Polynomial Fit..."],
+        &["Analysis", "Fitting", "Fit Linear with X Error..."],
+        &["Analysis", "Fitting", "Multiple Linear Regression..."],
+        &["Analysis", "Fitting", "Compare Models..."],
+        &["Analysis", "Fitting", "Rank Models..."],
         &["Analysis", "Fitting", "Nonlinear Curve Fit..."],
         &["Analysis", "Signal Processing", "Smooth..."],
         &["Analysis", "Peaks and Baseline", "Find Peaks..."],
@@ -1670,8 +1889,13 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     click(&mut h, "Title Book1 - sample");
     menu_path(&mut h, &["Plot", "Column/Bar/Pie"]);
     assert!(entry_enabled(&h, "Stacked Column"), "stacked columns exist now");
-    assert!(!entry_enabled(&h, "Stacked Bar"), "an item Sheaf lacks is greyed");
-    menu_entry(&h, "Stacked Bar").hover();
+    for live in ["Stacked Bar", "100% Stacked Bar", "Floating Bar"] {
+        assert!(entry_enabled(&h, live), "{live} exists now");
+    }
+    assert!(entry_enabled(&h, "3D Color Pie") && entry_enabled(&h, "2D B&W Pie"), "the pies exist now");
+    assert!(h.query_by_label("2D Color Pie").is_none(), "Origin has no 2D Color Pie");
+    assert!(!entry_enabled(&h, "Column + Label"), "an item Sheaf lacks is greyed");
+    menu_entry(&h, "Column + Label").hover();
     h.run_steps(30);
     assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
     close_menus(&mut h);
@@ -1842,6 +2066,237 @@ fn book_ui<'a>(h: &'a Harness<'static, SheafApp>) -> &'a BookUi {
 
 fn sheet<'a>(h: &'a Harness<'static, SheafApp>) -> &'a sheaf_core::Worksheet {
     project(h).workbooks().next().unwrap().sheet()
+}
+
+/// Exercise the owner's two entry points without selecting cells through internal state.
+fn cell_regression_table(imported: bool, tag: &str) -> Harness<'static, SheafApp> {
+    if imported {
+        let mut h = start(vec![data_file(tag)]);
+        show_window(&mut h, "Book1 - sample");
+        h
+    } else {
+        let mut h = start(Vec::new());
+        menu_path(&mut h, &["File", "New", "Worksheet..."]);
+        pause(&mut h);
+        h
+    }
+}
+
+/// Coordinates also work for the empty cells in a brand-new workbook.
+fn worksheet_cell_pos(h: &Harness<'static, SheafApp>, column: usize, row: usize) -> egui::Pos2 {
+    let x = text_pos(h, &grid::head_name(sheet(h), column)).x;
+    let height = text_pos(h, "Comments").y - text_pos(h, "Units").y;
+    egui::pos2(x, text_pos(h, "F(x)=").y + height * (row + 1) as f32)
+}
+
+#[test]
+fn owner_regression_yellow_cell_click_does_not_select_the_column() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-selection");
+        let at = egui::pos2(text_pos(&h, "B(Y1)").x, text_pos(&h, "Long Name").y);
+        click_at(&mut h, at);
+        assert_eq!(
+            cells(&h),
+            Sel::Label { column: column_id(&h, "B"), row: LabelRow::LongName },
+            "one yellow cell, imported={imported}"
+        );
+        assert!(book_ui(&h).target(sheet(&h)).is_none(), "labels must not target worksheet data");
+    }
+}
+
+#[test]
+fn owner_regression_label_typing_navigation_and_clipboard_do_not_edit_data() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-keys");
+        let before = sheet(&h).columns.iter().map(|c| c.data.clone()).collect::<Vec<_>>();
+        click(&mut h, "B Long Name");
+        h.event(egui::Event::Text("Signal".into()));
+        settle(&mut h);
+        assert!(book_ui(&h).editing_label.is_some(), "typing into a label, imported={imported}");
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].long_name, "Signal");
+        assert_eq!(cells(&h), Sel::Label { column: column_id(&h, "B"), row: LabelRow::Units });
+        h.event(egui::Event::Text("mA".into()));
+        settle(&mut h);
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        key(&mut h, egui::Key::Tab);
+        key(&mut h, egui::Key::F2);
+        assert_eq!(book_ui(&h).editing_label.as_ref().unwrap().2, "mA");
+        h.event(egui::Event::Text("discard".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Escape);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        ctrl(&mut h, egui::Key::C);
+        assert_eq!(h.state().copied, "mA");
+        key(&mut h, egui::Key::ArrowLeft);
+        paste(&mut h, "volts");
+        assert_eq!(sheet(&h).columns[0].units, "volts");
+        ctrl(&mut h, egui::Key::Z);
+        assert_ne!(sheet(&h).columns[0].units, "volts");
+        key(&mut h, egui::Key::ArrowRight);
+        key(&mut h, egui::Key::Delete);
+        assert!(sheet(&h).columns[1].units.is_empty());
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        ctrl(&mut h, egui::Key::X);
+        assert_eq!(h.state().copied, "mA");
+        assert!(sheet(&h).columns[1].units.is_empty());
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].units, "mA");
+        assert_eq!(sheet(&h).columns.iter().map(|c| c.data.clone()).collect::<Vec<_>>(), before);
+    }
+}
+
+#[test]
+fn owner_regression_label_navigation_reaches_data_and_formula_keeps_its_editor() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-to-data");
+        click(&mut h, "B Long Name");
+        for row in [LabelRow::Units, LabelRow::Comments, LabelRow::Formula] {
+            key(&mut h, egui::Key::ArrowDown);
+            assert_eq!(cells(&h), Sel::Label { column: column_id(&h, "B"), row });
+        }
+        key(&mut h, egui::Key::ArrowDown);
+        assert_eq!(cells(&h), at(1, 0));
+        h.event(egui::Event::Text("12".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "12");
+        click(&mut h, "B F(x)=");
+        key(&mut h, egui::Key::F2);
+        assert!(h.state().set_values.is_some(), "formula dialog, imported={imported}");
+    }
+}
+
+#[test]
+fn owner_regression_blank_cells_accept_mouse_typing_navigation_and_clipboard() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "new-table-cells");
+        let at = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, at);
+        assert_eq!(cells(&h), self::at(1, 0), "mouse selection, imported={imported}");
+        h.event(egui::Event::Text("42".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "42", "typing, imported={imported}");
+        assert_eq!(cells(&h), self::at(1, 1));
+        paste(&mut h, "7\t8\n9\t10");
+        assert_eq!(sheet(&h).columns[1].cell_text(1), "7");
+        assert_eq!(sheet(&h).columns[2].cell_text(2), "10");
+        ctrl(&mut h, egui::Key::C);
+        assert_eq!(h.state().copied, "7\t8\n9\t10\n");
+        key(&mut h, egui::Key::Delete);
+        assert!(sheet(&h).columns[1].numeric().unwrap().get(1).is_none_or(|v| v.is_nan()));
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(sheet(&h).columns[1].cell_text(1), "7");
+    }
+}
+
+#[test]
+fn owner_regression_tab_commits_and_keeps_typing_focus_in_the_next_data_cell() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "tab-focus");
+        let at = worksheet_cell_pos(&h, 0, 0);
+        click_at(&mut h, at);
+        h.event(egui::Event::Text("8".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[0].cell_text(0), "8");
+        assert_eq!(cells(&h), self::at(1, 0));
+        h.event(egui::Event::Text("9".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("9"), "imported={imported}");
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Tab);
+        assert_eq!(sheet(&h).columns[1].cell_text(0), "9");
+        assert_eq!(cells(&h), self::at(0, 0));
+        h.event(egui::Event::Text("10".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("10"), "Shift+Tab, imported={imported}");
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[0].cell_text(0), "10");
+        assert_eq!(cells(&h), self::at(0, 1));
+        key(&mut h, egui::Key::ArrowDown);
+        assert_eq!(cells(&h), self::at(0, 2));
+    }
+}
+
+#[test]
+fn owner_regression_replacing_a_cell_starts_the_cursor_after_the_first_typed_character() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "typing-order");
+        let pos = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, pos);
+        // Leave a cached cursor at the start, then begin a new replacement edit.
+        key(&mut h, egui::Key::F2);
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("a".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("b".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("ab"), "imported={imported}");
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("α".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("β".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("αβ"));
+        // Ordinary cursor movement within the same edit must still work.
+        key(&mut h, egui::Key::Home);
+        h.event(egui::Event::Text("x".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing.as_ref().map(|e| e.2.as_str()), Some("xαβ"));
+    }
+}
+
+#[test]
+fn owner_regression_label_replacement_does_not_reuse_an_old_cursor_position() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "label-typing-order");
+        click(&mut h, "B Long Name");
+        key(&mut h, egui::Key::F2);
+        key(&mut h, egui::Key::Home);
+        key(&mut h, egui::Key::Escape);
+        h.event(egui::Event::Text("a".into()));
+        settle(&mut h);
+        h.event(egui::Event::Text("b".into()));
+        settle(&mut h);
+        assert_eq!(book_ui(&h).editing_label.as_ref().map(|e| e.2.as_str()), Some("ab"));
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(sheet(&h).columns[1].long_name, "ab");
+    }
+}
+
+#[test]
+fn owner_regression_quick_mouse_drag_keeps_its_start_cell_in_new_and_imported_tables() {
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "quick-drag");
+        let from = worksheet_cell_pos(&h, 0, 0);
+        let to = worksheet_cell_pos(&h, 1, 3);
+        pause(&mut h);
+        h.event(egui::Event::PointerMoved(from));
+        h.step();
+        h.event(egui::Event::PointerButton {
+            pos: from,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        });
+        // A real input frame can contain the press and movement together.
+        h.event(egui::Event::PointerMoved(to));
+        h.step();
+        h.event(egui::Event::PointerButton {
+            pos: to,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+        settle(&mut h);
+        assert_eq!(cells(&h), Sel::Cells { anchor: (0, 0), end: (1, 3) }, "imported={imported}");
+    }
 }
 
 fn column_id(h: &Harness<'static, SheafApp>, short: &str) -> ColumnId {
@@ -2458,12 +2913,12 @@ fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
     let mut h = start(vec![data_file("tb-grey")]);
     show_window(&mut h, "Book1 - sample");
     let windows = project(&h).windows.len();
-    // Pie is a 2D type Sheaf lacks: greyed, a click changes nothing.
-    assert!(bar_button!(h, "2D Graphs", "Pie").accesskit_node().is_disabled());
-    bar_button!(h, "2D Graphs", "Pie").click();
+    // Stacked Area is a 2D type Sheaf lacks: greyed, a click changes nothing.
+    assert!(bar_button!(h, "2D Graphs", "Stacked Area").accesskit_node().is_disabled());
+    bar_button!(h, "2D Graphs", "Stacked Area").click();
     settle(&mut h);
     assert_eq!(project(&h).windows.len(), windows);
-    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Pie")));
+    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Stacked Area")));
     // Line needs a selected column.
     click_text(&mut h, "C(Y1)");
     assert!(!bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());
@@ -3841,6 +4296,155 @@ fn an_auto_result_follows_its_input_in_the_same_undo_step() {
     assert_eq!(project(&h).numeric(out).unwrap(), first.as_slice(), "and the result with it");
 }
 
+/// Analysis > Mathematics > Average Multiple Curves...: the mean of up and down on their shared X, with the SD
+/// as the error column and the count; one Undo removes the result.
+#[test]
+fn the_mathematics_menu_averages_curves() {
+    let mut h = start(vec![data_file("avecurves")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    for label in ["All X values of the curves", "Evenly spaced", "Those of one curve", "Linear", "Akima spline"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, mean) = result_column(&h, "Mean");
+    assert!(sheet.starts_with("Average"), "{sheet}");
+    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5], "(2.5 + 30.5) / 2 and so on");
+    let (_, sd) = result_column(&h, "SD");
+    // The sample SD of two values is their distance over the square root of two.
+    for (s, gap) in sd.iter().zip([28.0, 16.0, 4.0, 8.0]) {
+        assert!((s - gap / 2.0_f64.sqrt()).abs() < 1e-9, "{sd:?}");
+    }
+    let (_, n) = result_column(&h, "N");
+    assert_eq!(n, vec![2.0; 4]);
+    assert_eq!(h.state().doc.undo_label(), Some("Average multiple curves"));
+}
+
+/// The evenly spaced choice shows its point count and gives that many rows.
+#[test]
+fn average_curves_can_use_evenly_spaced_x() {
+    let mut h = start(vec![data_file("avecurves-even")]);
+    open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B", "C"]);
+    click(&mut h, "Evenly spaced");
+    assert!(has_label(&h, "Number of points"));
+    click(&mut h, "OK");
+    let (_, x) = result_column(&h, "t");
+    assert_eq!(x.len(), 100, "the default is 100 points");
+    assert_eq!((x[0], x[99]), (1.0, 4.0));
+}
+
+/// One column is not enough to average: the window stays open and says why.
+#[test]
+fn average_curves_with_one_column_is_refused_in_the_window() {
+    let mut h = start(vec![data_file("avecurves-one")]);
+    open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B"]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_some(), "the window stays open");
+    assert!(h.state().doc.undo_label().is_none_or(|l| l != "Average multiple curves"));
+}
+
+/// Analysis > Mathematics > Intersect...: up and down cross between t = 3 and t = 4, at t = 10 / 3.
+#[test]
+fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
+    let mut h = start(vec![data_file("intersect")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(x.len(), 1);
+    assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Intersect"));
+}
+
+/// Analysis > Mathematics > Polygon Area...: up and down are two open polylines; each is closed by its last
+/// point back to its first. up and down both run along a line, so their polygons have no area (the loop test below checks real numbers); the table has one row per column.
+#[test]
+fn the_mathematics_menu_gives_the_polygon_area_of_each_column() {
+    let mut h = start(vec![data_file("polyarea")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("PolygonArea"), "{sheet}");
+    assert_eq!(area.len(), 2, "one row per column");
+    assert!(area.iter().all(|a| a.abs() < 1e-9), "straight lines enclose nothing: {area:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Polygon area"));
+}
+
+/// A closed loop in a data file: the window passes the right X and Y, so the area is the 2 x 3 rectangle's.
+#[test]
+fn the_polygon_area_window_measures_a_closed_loop() {
+    let loop_csv = csv_file("polyloop", "loop", "x,y\n0,0\n2,0\n2,3\n0,3\n");
+    let mut h = start(vec![loop_csv]);
+    show_window(&mut h, "Book1 - loop");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
+    click(&mut h, "OK");
+    let (_, area) = result_column(&h, "Area");
+    assert_eq!(area, vec![6.0]);
+    assert_eq!(result_column(&h, "Signed area").1, vec![6.0], "counterclockwise");
+    assert_eq!(result_column(&h, "Centroid X").1, vec![1.0]);
+    assert_eq!(result_column(&h, "Centroid Y").1, vec![1.5]);
+    assert_eq!(result_column(&h, "Perimeter").1, vec![10.0]);
+}
+
+/// From a graph, Average Multiple Curves and Intersect start with the curves of the layer, so OK
+/// runs without picking the columns again.
+#[test]
+fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-curves")]);
+    assert!(h.state().menu_context().layer_curves.len() >= 2, "the graph plots up and down");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
+    assert!(h.state().analysis.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
+}
+
+#[test]
+fn from_a_graph_average_multiple_curves_starts_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-average")]);
+    menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, mean) = result_column(&h, "Mean");
+    assert!(sheet.starts_with("Average"), "{sheet}");
+    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5]);
+}
+
+/// The new tools can follow their input: Intersect with Auto moves its point when a cell changes, in the same
+/// undo step as the edit.
+#[test]
+fn an_auto_intersect_follows_an_edit_of_its_input() {
+    let mut h = start(vec![data_file("intersect-auto")]);
+    open_analysis_on(&mut h, AnalysisKind::Intersect, &["B", "C"]);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Auto"), "Intersect can follow its input");
+    click(&mut h, "Auto");
+    let c = column_id(&h, "C");
+    click(&mut h, "OK");
+    let (_, first) = result_column(&h, "Intersection X (t)");
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: c, row: 3, text: "20".into() }, &ctx);
+    settle(&mut h);
+    let (_, second) = result_column(&h, "Intersection X (t)");
+    assert_ne!(first, second, "the crossing moved");
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    let (_, back) = result_column(&h, "Intersection X (t)");
+    assert_eq!(first, back, "one Undo takes the edit and the result back");
+}
+
 #[test]
 fn the_output_node_can_send_results_to_a_new_sheet_or_to_existing_columns() {
     let mut h = start(vec![data_file("output-choice")]);
@@ -4081,9 +4685,9 @@ fn the_wizard_source_page_chooses_the_filter_and_the_import_mode() {
     std::fs::write(&more, "w\tz\n1\t1\n2\t2\n3\t3\n4\t4\n").unwrap();
     h.state_mut().import_wizard = Some(ImportWizard::new(vec![more]));
     settle(&mut h);
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New book")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Start New Books")).click();
     settle(&mut h);
-    click(&mut h, "New columns");
+    click(&mut h, "Start New Columns");
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("<None>")).click();
     settle(&mut h);
     click(&mut h, "Delimited Text");
@@ -4942,4 +5546,853 @@ fn set_as_categorical_toggles_and_group_and_subject_are_designations() {
     assert_eq!(project(&h).column(b).unwrap().designation, Designation::Group);
     assert_eq!(Designation::Group.tag(), "G");
     assert_eq!(Designation::Subject.tag(), "S");
+}
+
+// ----- spreadsheet keys (Excel's, unbound in Origin's worksheet) ---------------------------------
+
+#[test]
+fn ctrl_a_selects_the_sheet_and_ctrl_or_shift_space_the_columns_or_rows_of_the_block() {
+    let mut h = start(vec![data_file("excel-select")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::A);
+    assert_eq!(cells(&h), Sel::All);
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+    // Shift+Space also arrives as a typed space; it must not start editing.
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Space);
+    h.event(egui::Event::Text(" ".to_string()));
+    settle(&mut h);
+    assert_eq!(cells(&h), Sel::Rows { anchor: 1, end: 2 });
+    assert!(book_ui(&h).editing.is_none());
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Space);
+    assert_eq!(cells(&h), Sel::Columns);
+    assert_eq!(book_ui(&h).selected, vec![column_id(&h, "B"), column_id(&h, "C")]);
+}
+
+#[test]
+fn backspace_empties_the_cell_and_starts_editing_it() {
+    let mut h = start(vec![data_file("excel-backspace")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    key(&mut h, egui::Key::Backspace);
+    assert_eq!(book_ui(&h).editing.as_ref().map(|e| (e.1, e.2.clone())), Some((1, String::new())));
+    key(&mut h, egui::Key::Enter);
+    let b = column(&h, "B");
+    assert!(b[1].is_nan(), "the cell was emptied: {b:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit cell"));
+}
+
+#[test]
+fn ctrl_enter_stores_the_typed_value_in_every_cell_of_the_block_in_one_undo_step() {
+    let mut h = start(vec![data_file("excel-fill")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "2.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+    h.event(egui::Event::Text("7".to_string()));
+    settle(&mut h);
+    assert!(book_ui(&h).editing.is_some());
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Enter);
+    assert!(book_ui(&h).editing.is_none());
+    assert_eq!(column(&h, "B"), [7.0, 7.0, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [7.0, 7.0, 10.5, 0.5]);
+    assert_eq!(cells(&h), Sel::Cells { anchor: (1, 0), end: (2, 1) }, "the block stays selected");
+    assert_eq!(h.state().doc.undo_label(), Some("Fill cells"));
+    ctrl(&mut h, egui::Key::Z);
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+}
+
+#[test]
+fn ctrl_plus_inserts_and_ctrl_minus_deletes_at_the_selection() {
+    let mut h = start(vec![data_file("excel-insert")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "4.5");
+    key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::Space);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Minus);
+    assert_eq!(column(&h, "B"), [2.5, 6.5, 8.5], "row 2 was deleted");
+    assert_eq!(column(&h, "A"), [1.0, 3.0, 4.0]);
+    // Ctrl++ is Ctrl+Shift+= on most keyboards.
+    key_with(&mut h, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Equals);
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().len(), 4, "a blank row was inserted");
+    assert!(column(&h, "B")[1].is_nan());
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::Plus);
+    assert_eq!(sheet(&h).column_by_name("B").unwrap().len(), 5);
+}
+
+#[test]
+fn ctrl_page_down_and_up_step_through_the_sheets() {
+    let mut h = start(vec![data_file("excel-sheets")]);
+    show_window(&mut h, "Book1 - sample");
+    let (book, _) = window_ids(&h);
+    h.state_mut()
+        .doc
+        .apply("Test", |p| p.workbook_mut(book).unwrap().sheets.push(sheaf_core::Worksheet::new("Sheet2")));
+    settle(&mut h);
+    click_text(&mut h, "4.5");
+    let active = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().active_sheet;
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageDown);
+    assert_eq!(active(&h), 1);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageDown);
+    assert_eq!(active(&h), 1, "stays on the last sheet");
+    // The second sheet is empty; the keys still leave it.
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageUp);
+    assert_eq!(active(&h), 0);
+    key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageUp);
+    assert_eq!(active(&h), 0, "stays on the first sheet");
+}
+
+#[test]
+fn clear_worksheet_empties_every_column_in_one_undo_step() {
+    let mut h = start(vec![data_file("clearsheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Worksheet", "Clear Worksheet..."]);
+    assert!(column(&h, "A").is_empty() && column(&h, "C").is_empty());
+    assert_eq!(project(&h).workbooks().next().unwrap().sheet().columns.len(), 3, "the columns stay");
+    assert_eq!(h.state().doc.undo_label(), Some("Clear worksheet"));
+    menu(&mut h, "Edit", "Undo Clear worksheet");
+    assert_eq!(column(&h, "A"), [1.0, 2.0, 3.0, 4.0]);
+}
+
+#[test]
+fn plot_specialized_polar_makes_a_polar_graph_of_the_selected_columns() {
+    use sheaf_core::graph::RadiusColumn;
+    let mut h = start(vec![data_file("polar-menu")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    let c = project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().id;
+    let before = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Specialized", "Polar theta(X) r(Y)"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let layer = &graphs[before].layers[0];
+    assert_eq!(layer.coords.polar().map(|p| p.radius), Some(RadiusColumn::Y));
+    assert_eq!(layer.plots.len(), 1);
+    assert_eq!(layer.plots[0].y, c);
+
+    // Back in the worksheet, the other item.
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    menu_path(&mut h, &["Plot", "Specialized", "Polar r(X) theta(Y)"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 2);
+    assert_eq!(graphs[before + 1].layers[0].coords.polar().map(|p| p.radius), Some(RadiusColumn::X));
+}
+
+#[test]
+fn the_polar_button_of_the_2d_graphs_bar_makes_a_polar_graph() {
+    let mut h = start(vec![data_file("polar-button")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    let before = project(&h).graphs().count();
+    bar_button!(h, "2D Graphs", "Polar theta(X) r(Y)").click();
+    settle(&mut h);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    assert!(graphs[before].layers[0].coords.polar().is_some());
+}
+
+#[test]
+fn the_import_window_reads_fixed_width_columns_and_has_ok_and_cancel_only() {
+    use crate::actions::ImportPick;
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fixed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("aligned.txt");
+    let mut text = format!("{:>10}{:>10}\n", "t", "i");
+    for k in 1..=5 {
+        text.push_str(&format!("{:>10}{:>10}\n", k, k * 3));
+    }
+    std::fs::write(&file, text).unwrap();
+    let mut h = start_auto_hide(vec![]);
+    h.state_mut().start_import(Some(vec![file]), ImportPick::Multiple);
+    settle(&mut h);
+    // Delimiter: Fixed Width, with the default width of 10 characters.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Detect")).click();
+    settle(&mut h);
+    click(&mut h, "Fixed Width");
+    h.get_by_label("Widths");
+    // Origin's impASC window has OK and Cancel, in that order, and no Apply.
+    assert!(button_x(&h, "OK") < button_x(&h, "Cancel"));
+    assert!(h.query_by_label("Apply").is_none(), "no Apply button");
+    click(&mut h, "OK");
+    assert!(h.state().import.is_none());
+    assert_eq!(project(&h).workbooks().count(), 1);
+    let book = project(&h).workbooks().next().unwrap();
+    assert_eq!(book.sheet().columns.len(), 2, "the widths cut the lines into two columns");
+    assert_eq!(column(&h, "B"), [3.0, 6.0, 9.0, 12.0, 15.0]);
+}
+
+#[test]
+fn the_naming_page_and_the_short_name_line_control_the_names() {
+    use crate::actions::ImportPick;
+    let mut h = start_auto_hide(vec![]);
+    h.state_mut().start_import(Some(vec![data_file("data-import-options")]), ImportPick::Multiple);
+    settle(&mut h);
+    // The short-name line is part of the Header Lines page, as in Origin.
+    click(&mut h, "Header Lines");
+    h.get_by_label("Line with the short names");
+    click(&mut h, "(Re)Naming Worksheet and Workbook");
+    h.get_by_label("Rename Book with (Partial) Filename");
+    assert!(h.query_by_label("Apply the new range to plots").is_none(), "Origin has no such option");
+    click(&mut h, "Rename Sheet with (Partial) Filename");
+    click(&mut h, "OK");
+    let book = project(&h).workbooks().next().expect("imported");
+    assert_eq!(book.sheet().name, "Sheet1");
+    assert_eq!(book.sheet().columns[1].long_name, "up", "the header line still names the columns");
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+}
+
+#[test]
+fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() {
+    use sheaf_core::column::Storage;
+    use sheaf_core::format::{NameStyle, NumberFormat};
+    let mut h = start(vec![data_file("colprops-kinds")]);
+    let b = open_column_props(&mut h, "B");
+    let start_kind = project(&h).column(b).unwrap().storage();
+    // The Format list names Origin's kinds.
+    fn combo<'a>(h: &'a Harness<'static, SheafApp>, v: &'a str) -> egui_kittest::Node<'a> {
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value(v))
+    }
+    let kind_name = if start_kind == Storage::Mixed { "Text & Numeric" } else { "Numeric" };
+    combo(&h, kind_name).click();
+    settle(&mut h);
+    for item in ["Numeric", "Text", "Time", "Date", "Month", "Day of Week"] {
+        assert!(has_label(&h, item), "{item} missing from the Format list");
+    }
+    click(&mut h, "Month");
+    click(&mut h, "Apply");
+    let c = project(&h).column(b).unwrap();
+    assert_eq!(c.format, NumberFormat::Month(NameStyle::Short));
+    let first = c.numeric().unwrap()[0];
+    assert_eq!(c.cell_text(0), NumberFormat::Month(NameStyle::Short).format(first));
+    // The display of a month is its name style, listed as samples like Origin's list.
+    combo(&h, "Jan").click();
+    settle(&mut h);
+    click(&mut h, "January");
+    click(&mut h, "Apply");
+    assert_eq!(project(&h).column(b).unwrap().format, NumberFormat::Month(NameStyle::Full));
+    // Text keeps what the cells showed.
+    combo(&h, "Month").click();
+    settle(&mut h);
+    click(&mut h, "Text");
+    click(&mut h, "OK");
+    let c = project(&h).column(b).unwrap();
+    assert_eq!(c.storage(), Storage::Text);
+    assert_eq!(c.format, NumberFormat::General);
+    assert_eq!(c.text().unwrap()[0], NumberFormat::Month(NameStyle::Full).format(first));
+}
+
+#[test]
+fn column_properties_cuts_the_short_name_like_origin() {
+    let mut h = start(vec![data_file("colprops-longname")]);
+    let b = open_column_props(&mut h, "B");
+    // A longer name is cut to 18 characters and characters Origin drops are dropped, no message.
+    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS_T");
+    click(&mut h, "OK");
+    assert!(h.state().column_props.is_none(), "the window closes");
+    assert_eq!(project(&h).column(b).unwrap().short_name, "ABCDEFGHIJKLMNOPQR");
+}
+
+#[test]
+fn plot_specialized_radar_and_its_toolbar_button_make_a_radar_graph() {
+    let mut h = start(vec![data_file("radar-menu")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    let before = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Specialized", "Radar"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let layer = &graphs[before].layers[0];
+    assert!(layer.coords.polar().is_some_and(|p| p.radar));
+    assert_eq!(layer.plots.len(), 1);
+    assert_eq!(layer.plots[0].kind, sheaf_core::graph::PlotKind::LineSymbol);
+
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "C(Y1)");
+    bar_button!(h, "2D Graphs", "Radar").click();
+    settle(&mut h);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 2);
+    assert!(graphs[before + 1].layers[0].coords.polar().is_some_and(|p| p.radar));
+}
+
+#[test]
+fn plot_specialized_ternary_and_its_button_make_a_ternary_graph_of_the_selected_columns() {
+    let mut h = start(vec![data_file("ternary-menu")]);
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "B(Y1)");
+    let column = |h: &Harness<'static, SheafApp>, name: &str| {
+        project(h).workbooks().next().unwrap().sheet().column_by_name(name).unwrap().id
+    };
+    let (b, c) = (column(&h, "B"), column(&h, "C"));
+    let before = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Specialized", "Ternary"]);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 1);
+    let layer = &graphs[before].layers[0];
+    assert!(layer.coords.ternary().is_some());
+    assert_eq!(layer.plots.len(), 1);
+    assert_eq!((layer.plots[0].y, layer.plots[0].size_from), (b, Some(c)), "Y, and the next column as Z");
+
+    // The 2D Graphs button does the same.
+    show_window(&mut h, "Book1 - sample");
+    click_text(&mut h, "B(Y1)");
+    bar_button!(h, "2D Graphs", "Ternary").click();
+    settle(&mut h);
+    let graphs: Vec<_> = project(&h).graphs().collect();
+    assert_eq!(graphs.len(), before + 2);
+    assert!(graphs[before + 1].layers[0].coords.ternary().is_some());
+}
+
+// ----- drawn objects: Line, Arrow, Rectangle, Circle tools ------------------------------------------
+
+fn shapes(h: &Harness<'static, SheafApp>) -> Vec<sheaf_core::shape::Shape> {
+    graph(h).layers[0].shapes.clone()
+}
+
+/// A page point at the given fractions of the first layer's frame, on screen.
+fn frame_point(h: &Harness<'static, SheafApp>, fx: f64, fy: f64) -> egui::Pos2 {
+    let f = sheaf_plot::layout_geometry(project(h), graph(h).id).unwrap()[0].frame;
+    graph_ui(h).page_point(f.x + f.w * fx, f.y + f.h * fy).unwrap()
+}
+
+fn drag_frame(h: &mut Harness<'static, SheafApp>, a: (f64, f64), b: (f64, f64)) {
+    let (from, to) = (frame_point(h, a.0, a.1), frame_point(h, b.0, b.1));
+    drag(h, from, to);
+}
+
+#[test]
+fn a_drag_with_the_rectangle_tool_draws_one_object_and_the_tool_ends() {
+    let mut h = start(vec![data_file("drawrect")]);
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(&mut h);
+    assert!(graph_ui(&h).shape_tool.is_some(), "the tool is on");
+    drag_frame(&mut h, (0.2, 0.2), (0.5, 0.4));
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, sheaf_core::shape::ShapeKind::Rectangle);
+    assert!((s[0].x1 - 0.2).abs() < 0.01 && (s[0].y2 - 0.4).abs() < 0.01, "{:?}", s[0]);
+    assert!(graph_ui(&h).shape_tool.is_none(), "the tool returns to the Pointer");
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Shape(0))));
+    assert_eq!(h.state().doc.undo_label(), Some("Add drawn object"));
+    menu(&mut h, "Edit", "Undo Add drawn object");
+    assert!(shapes(&h).is_empty());
+}
+
+#[test]
+fn a_drawn_arrow_is_moved_and_deleted_with_undo() {
+    let mut h = start(vec![data_file("movearrow")]);
+    bar_button!(h, "Tools", "Arrow").click();
+    settle(&mut h);
+    drag_frame(&mut h, (0.2, 0.2), (0.6, 0.2));
+    assert_eq!(shapes(&h)[0].kind, sheaf_core::shape::ShapeKind::Arrow);
+    let before = shapes(&h)[0].clone();
+    // Pick it in the middle of the line and drag it down.
+    let at = frame_point(&h, 0.4, 0.2);
+    pause(&mut h);
+    drag(&mut h, at, at + egui::vec2(0.0, 50.0));
+    let after = shapes(&h)[0].clone();
+    assert!(after.y1 > before.y1 && (after.x1 - before.x1).abs() < 1e-9, "{before:?} -> {after:?}");
+    assert!((after.y2 - after.y1 - (before.y2 - before.y1)).abs() < 1e-9, "the length is kept");
+    assert_eq!(h.state().doc.undo_label(), Some("Move drawn object"));
+    menu(&mut h, "Edit", "Undo Move drawn object");
+    assert_eq!(shapes(&h)[0], before);
+    // Delete removes the selected object; Undo brings it back.
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert!(shapes(&h).is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Delete drawn object"));
+    menu(&mut h, "Edit", "Undo Delete drawn object");
+    assert_eq!(shapes(&h).len(), 1);
+}
+
+#[test]
+fn double_clicking_a_drawn_object_opens_its_properties() {
+    let mut h = start(vec![data_file("shapeprops")]);
+    bar_button!(h, "Tools", "Circle").click();
+    settle(&mut h);
+    drag_frame(&mut h, (0.3, 0.3), (0.7, 0.7));
+    assert_eq!(shapes(&h)[0].kind, sheaf_core::shape::ShapeKind::Ellipse);
+    // The top of the ellipse is on its outline.
+    let at = frame_point(&h, 0.5, 0.3);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the properties window opened");
+    click(&mut h, "Filled");
+    click(&mut h, "OK");
+    assert!(shapes(&h)[0].fill.is_some());
+    assert_eq!(h.state().doc.undo_label(), Some("Edit drawn object"));
+}
+
+/// An arrow (object 0) and a rectangle (object 1), drawn with the tools.
+fn draw_arrow_and_rectangle(h: &mut Harness<'static, SheafApp>) {
+    bar_button!(h, "Tools", "Arrow").click();
+    settle(h);
+    drag_frame(h, (0.2, 0.2), (0.6, 0.2));
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(h);
+    drag_frame(h, (0.2, 0.5), (0.6, 0.7));
+    assert_eq!(shapes(h).len(), 2);
+}
+
+#[test]
+fn the_drawn_object_window_closes_when_delete_removes_its_object() {
+    use sheaf_core::shape::ShapeKind;
+    let mut h = start(vec![data_file("shapestaledel")]);
+    draw_arrow_and_rectangle(&mut h);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Fill", |p| {
+        p.graph_mut(id).unwrap().layers[0].shapes[1].fill = Some(sheaf_core::Color::rgba(1, 2, 3, 255));
+    });
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the arrow's window opened");
+    // Delete removes the arrow; the rectangle now has its index, but the window must not edit it.
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert_eq!(shapes(&h).len(), 1);
+    assert!(h.state().shape_dialog.is_none(), "the window of a deleted object closes");
+    let rect = shapes(&h)[0].clone();
+    assert_eq!(rect.kind, ShapeKind::Rectangle);
+    assert!(rect.fill.is_some(), "the rectangle keeps its fill");
+}
+
+#[test]
+fn the_drawn_object_window_closes_on_undo_and_redo_of_its_layer() {
+    let mut h = start(vec![data_file("shapestaleundo")]);
+    draw_arrow_and_rectangle(&mut h);
+    // Double-click the rectangle's top edge, then undo its drawing.
+    let at = frame_point(&h, 0.4, 0.5);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the rectangle's window opened");
+    menu(&mut h, "Edit", "Undo Add drawn object");
+    assert_eq!(shapes(&h).len(), 1);
+    assert!(h.state().shape_dialog.is_none(), "undo closed the window");
+    // Redo while a window of the arrow is open closes it as well.
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the arrow's window opened");
+    menu(&mut h, "Edit", "Redo Add drawn object");
+    assert_eq!(shapes(&h).len(), 2);
+    assert!(h.state().shape_dialog.is_none(), "redo closed the window");
+}
+
+#[test]
+fn the_drawn_object_window_closes_when_another_kind_takes_its_index() {
+    let mut h = start(vec![data_file("shapestalekind")]);
+    draw_arrow_and_rectangle(&mut h);
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some());
+    // A change that does not go through the graph or undo handlers (the object list shifts).
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Remove", |p| {
+        p.graph_mut(id).unwrap().layers[0].shapes.remove(0);
+    });
+    settle(&mut h);
+    assert!(h.state().shape_dialog.is_none(), "the arrow's window closed: a rectangle is at its index");
+}
+
+#[test]
+fn a_drag_shorter_than_the_minimum_draws_nothing_and_keeps_the_tool_on() {
+    let mut h = start(vec![data_file("drawtiny")]);
+    bar_button!(h, "Tools", "Line").click();
+    settle(&mut h);
+    // A press held long enough to be a drag (egui decides by distance or time), moved about 2
+    // page points (a page point is about half a screen pixel here): under the 3 point minimum.
+    let from = frame_point(&h, 0.3, 0.3);
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.run_steps(100);
+    h.event(egui::Event::PointerMoved(from + egui::vec2(1.0, 0.0)));
+    h.step();
+    h.event(button(from + egui::vec2(1.0, 0.0), false));
+    h.step();
+    settle(&mut h);
+    assert!(shapes(&h).is_empty(), "too short to draw");
+    assert!(graph_ui(&h).shape_tool.is_some(), "the tool is still on");
+    // Escape ends the tool.
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    assert!(graph_ui(&h).shape_tool.is_none(), "Escape ends the tool");
+    assert!(shapes(&h).is_empty());
+}
+
+/// A drag from `from` to `to` with Shift held (the whole gesture).
+fn drag_shifted(h: &mut Harness<'static, SheafApp>, from: egui::Pos2, to: egui::Pos2) {
+    let shift = egui::Modifiers::SHIFT;
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: shift,
+    };
+    for event in [
+        egui::Event::PointerMoved(from),
+        button(from, true),
+        egui::Event::PointerMoved(from.lerp(to, 0.5)),
+        egui::Event::PointerMoved(to),
+        button(to, false),
+    ] {
+        h.event_modifiers(event, shift);
+        h.step();
+    }
+    settle(h);
+}
+
+#[test]
+fn shift_while_drawing_snaps_a_line_and_squares_a_rectangle() {
+    use sheaf_core::shape::ShapeKind;
+    let mut h = start(vec![data_file("drawshift")]);
+    let f = sheaf_plot::layout_geometry(project(&h), graph(&h).id).unwrap()[0].frame;
+    // A line that is about 10 degrees off horizontal becomes horizontal; the length is kept.
+    bar_button!(h, "Tools", "Line").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.2, 0.3), frame_point(&h, 0.6, 0.3) + egui::vec2(0.0, 12.0));
+    drag_shifted(&mut h, a, b);
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, ShapeKind::Line);
+    assert!((s[0].y2 - s[0].y1).abs() < 1e-9, "horizontal: {:?}", s[0]);
+    assert!(s[0].x2 > s[0].x1 + 0.1);
+    // A rectangle dragged wider than tall is a square in page points.
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.1, 0.5), frame_point(&h, 0.4, 0.6));
+    drag_shifted(&mut h, a, b);
+    let r = shapes(&h)[1].clone();
+    assert_eq!(r.kind, ShapeKind::Rectangle);
+    let (w, hgt) = ((r.x2 - r.x1).abs() * f.w, (r.y2 - r.y1).abs() * f.h);
+    assert!((w - hgt).abs() < 1e-6, "square: {w} x {hgt}");
+}
+
+#[test]
+fn data_manipulation_items_and_median_filter_open_and_run() {
+    let mut h = start(vec![data_file("manip")]);
+    show_window(&mut h, "Book1 - sample");
+    // Both columns are straight lines, so the line through the first and last point removes them.
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let added: Vec<Vec<f64>> = project(&h)
+        .workbooks()
+        .flat_map(|b| b.sheet().columns.iter())
+        .filter(|c| c.long_name.ends_with("minus line"))
+        .map(|c| c.numeric().unwrap().to_vec())
+        .collect();
+    assert_eq!(added.len(), 2);
+    for v in &added {
+        assert!(v.iter().all(|x| x.abs() < 1e-9), "{v:?}");
+    }
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract straight line"));
+
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Median Filter..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Median filter"));
+
+    // Translate X writes a new sheet.
+    show_window(&mut h, "Book1 - sample");
+    let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Curve Translate X..."]);
+    click(&mut h, "OK");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), sheets_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Translate X"));
+}
+
+#[test]
+fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_after_x() {
+    let mut h = start(vec![data_file("manip2")]);
+    show_window(&mut h, "Book1 - sample");
+    // Two of the Data Manipulation items open their windows (they are no longer greyed) and Cancel changes nothing.
+    let undo_before = h.state().doc.undo_label().map(str::to_string);
+    for path in [
+        ["Analysis", "Data Manipulation", "Reduce to Evenly Spaced X..."],
+        ["Analysis", "Data Manipulation", "Curve Translate Y..."],
+    ] {
+        menu_path(&mut h, &path);
+        assert!(h.state().analysis.is_some(), "{path:?} opens its window");
+        click(&mut h, "Cancel");
+        assert!(h.state().analysis.is_none());
+        assert_eq!(h.state().doc.undo_label().map(str::to_string), undo_before, "Cancel changes nothing");
+    }
+    let analysis = menus::bar(WindowKind::Workbook).iter().find(|m| m.name() == "Analysis").expect("the Analysis menu");
+    let manip = analysis
+        .entries
+        .iter()
+        .find_map(|e| match e {
+            menus::Entry::Submenu(s) if menus::plain(&s.label) == "Data Manipulation" => Some(s),
+            _ => None,
+        })
+        .expect("the Data Manipulation submenu");
+    let names: Vec<String> = manip
+        .entries
+        .iter()
+        .filter_map(|e| if let menus::Entry::Item(i) = e { Some(menus::plain(&i.label)) } else { None })
+        .collect();
+    let x = names.iter().position(|n| n == "Curve Translate X...").unwrap_or_else(|| panic!("{names:?}"));
+    assert_eq!(names[x + 1], "Curve Translate Y...");
+
+    // Reduce to 4 evenly spaced X values (the default is 100 points: the run keeps the X range).
+    open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Reduce to evenly spaced X"));
+    let sheets = &project(&h).workbooks().next().unwrap().sheets;
+    let cols = &sheets.last().unwrap().columns;
+    assert_eq!(cols.len(), 2);
+    assert_eq!(cols[0].numeric().unwrap().len(), 100);
+    assert_eq!(cols[0].numeric().unwrap()[0], 1.0);
+    assert_eq!(cols[0].numeric().unwrap()[99], 4.0);
+
+    // The reduced sheet is now the active one. Translate Y with the shift set to 1.5 writes the Y column
+    // plus 1.5 beside it, and Undo removes it.
+    let reduced = cols[1].numeric().unwrap().to_vec();
+    open_analysis_on(&mut h, AnalysisKind::TranslateY, &["B"]);
+    h.state_mut().analysis.as_mut().unwrap().set_translate_by(1.5);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Translate Y"));
+    let shifted = project(&h)
+        .workbooks()
+        .next()
+        .unwrap()
+        .sheet()
+        .columns
+        .iter()
+        .find(|c| c.long_name == "up shifted")
+        .map(|c| c.numeric().unwrap().to_vec())
+        .expect("the shifted column");
+    let expected: Vec<f64> = reduced.iter().map(|v| v + 1.5).collect();
+    assert_eq!(shifted, expected);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert!(project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "up shifted"));
+}
+
+#[test]
+fn reduce_duplicate_x_data_runs_from_the_menu_into_origins_columns() {
+    let mut h = start(vec![data_file("reducedup")]);
+    show_window(&mut h, "Book1 - sample");
+    let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Reduce Duplicate X Data..."]);
+    assert!(h.state().analysis.is_some(), "the item opens its window");
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Reduce duplicate X data"));
+    let sheets = &project(&h).workbooks().next().unwrap().sheets;
+    assert_eq!(sheets.len(), sheets_before + 1);
+    let cols = &sheets.last().unwrap().columns;
+    let names: Vec<&str> = cols.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names[..2], ["ReduceDupX1", "ReduceDupY1"]);
+    // t = 1..4 has no duplicates, so the curve comes back unchanged.
+    assert_eq!(cols[0].numeric().unwrap(), [1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(cols[1].numeric().unwrap(), [2.5, 4.5, 6.5, 8.5]);
+}
+
+#[test]
+fn the_preview_of_a_tool_that_writes_a_new_sheet_shows_the_new_curve() {
+    let mut h = start(vec![data_file("manip-preview")]);
+    // The input is t = 1..4, up = 2.5, 4.5, 6.5, 8.5. Translate X by 10 keeps Y and moves X.
+    open_analysis_on(&mut h, AnalysisKind::TranslateX, &["B"]);
+    h.state_mut().analysis.as_mut().unwrap().set_translate_by(10.0);
+    click(&mut h, "Preview");
+    let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
+    assert_eq!(rx, [11.0, 12.0, 13.0, 14.0]);
+    assert_eq!(ry, [2.5, 4.5, 6.5, 8.5]);
+    click(&mut h, "Cancel");
+    // Reduce to Evenly Spaced X: 100 points from X = 1 to 4, on the straight line y = 2 x + 0.5.
+    open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
+    click(&mut h, "Preview");
+    let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
+    assert_eq!((rx.len(), rx[0], rx[99]), (100, 1.0, 4.0));
+    assert!(rx.iter().zip(&ry).all(|(x, y)| (y - (2.0 * x + 0.5)).abs() < 1e-9), "{ry:?}");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1, "a preview writes nothing");
+}
+
+#[test]
+fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
+    let mut h = start(vec![data_file("manip-auto")]);
+    open_analysis_on(&mut h, AnalysisKind::MedianFilter, &["B"]);
+    // Manual is the default; the median filter can follow its input, so Auto is offered.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Auto"));
+    click(&mut h, "Auto");
+    click(&mut h, "OK");
+    let b = column_id(&h, "B");
+    let out = project(&h)
+        .workbooks()
+        .next()
+        .unwrap()
+        .sheet()
+        .columns
+        .iter()
+        .find(|c| c.long_name == "Median filtered up")
+        .expect("the filtered column")
+        .id;
+    // The window of 5 shrinks at the ends to as many points as fit on both sides, and a straight line
+    // is its own median.
+    assert_eq!(project(&h).numeric(out).unwrap(), [2.5, 4.5, 6.5, 8.5]);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "100".into() }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).numeric(out).unwrap(), [100.0, 6.5, 6.5, 8.5], "the same column was updated");
+    assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
+}
+
+#[test]
+fn the_interpolation_items_open_the_interpolate_window_with_their_method() {
+    use sheaf_core::analysis::InterpMethod;
+    let mut h = start(vec![data_file("interpitems")]);
+    show_window(&mut h, "Book1 - sample");
+    for (label, method) in [
+        ("Linear Interpolation...", InterpMethod::Linear),
+        ("Spline Interpolation...", InterpMethod::CubicSpline),
+        ("B-Spline Interpolation...", InterpMethod::BSpline),
+    ] {
+        menu_path(&mut h, &["Analysis", "Mathematics", label]);
+        let d = h.state().analysis.as_ref().unwrap_or_else(|| panic!("{label} opens a window"));
+        assert_eq!(d.interp_method(), method, "{label}");
+        h.state_mut().analysis = None;
+        settle(&mut h);
+    }
+}
+
+#[test]
+fn view_status_bar_hides_and_shows_the_status_bar() {
+    let mut h = start(vec![data_file("statusbar")]);
+    assert!(h.query_by_label("AU : ON").is_some(), "the status bar is shown at first");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_none(), "hidden");
+    menu(&mut h, "View", "Status Bar");
+    assert!(h.query_by_label("AU : ON").is_some(), "shown again");
+}
+
+#[test]
+fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
+    let mut h = start(vec![data_file("findsheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Find in Sheets...");
+    assert!(h.state().find.is_some(), "the window opens");
+    h.state_mut().find.as_mut().unwrap().set_text("4.5");
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((1, 1)), "column B, row 2");
+    // No cell of B after B2 holds "0.5" (6.5, 8.5); the search goes on from the cursor, column by
+    // column, to C1 (30.5).
+    h.state_mut().find.as_mut().unwrap().set_text("0.5");
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    assert_eq!(book_ui(&h).active_cell(), Some((2, 0)), "column C, row 1 (30.5)");
+    click(&mut h, "Close");
+    assert!(h.state().find.is_none());
+}
+
+#[test]
+fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step() {
+    let mut h = start(vec![data_file("replacesheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Replace...");
+    {
+        let d = h.state_mut().find.as_mut().expect("the Replace window opens");
+        d.set_text("4.5");
+        d.set_replacement("4.75");
+    }
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    // "Replace" is also the window's title: click the button.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Replace").click();
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.75, 6.5, 8.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace"));
+    {
+        let d = h.state_mut().find.as_mut().unwrap();
+        d.set_text(".5");
+        d.set_replacement(".25");
+    }
+    settle(&mut h);
+    click(&mut h, "Replace All");
+    assert_eq!(column(&h, "B"), [2.25, 4.75, 6.25, 8.25]);
+    assert_eq!(column(&h, "C"), [30.25, 20.25, 10.25, 0.25]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace all"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "one undo step");
+}
+
+#[test]
+fn file_close_hides_the_active_window_and_keeps_its_data() {
+    let mut h = start(vec![data_file("fileclose")]);
+    show_window(&mut h, "Book1 - sample");
+    let book = project(&h).workbooks().next().unwrap().id;
+    assert!(h.state().workspace.is_shown(book));
+    menu(&mut h, "File", "Close");
+    assert!(!h.state().workspace.is_shown(book), "the window is closed");
+    assert!(project(&h).workbook(book).is_some(), "its data stays in the project");
+}
+
+#[test]
+fn window_duplicate_copies_the_workbook_with_its_own_columns() {
+    let mut h = start(vec![data_file("dupwindow")]);
+    show_window(&mut h, "Book1 - sample");
+    let before = project(&h).workbooks().count();
+    menu(&mut h, "Window", "Duplicate");
+    let books: Vec<_> = project(&h).workbooks().collect();
+    assert_eq!(books.len(), before + 1, "a new workbook");
+    let (a, b) = (&books[0].sheets[0], &books[books.len() - 1].sheets[0]);
+    assert_eq!(a.columns.len(), b.columns.len());
+    assert_ne!(a.columns[0].id, b.columns[0].id, "its own columns");
+    assert_eq!(project(&h).numeric(b.columns[1].id).unwrap(), project(&h).numeric(a.columns[1].id).unwrap());
+    assert!(h.state().workspace.is_shown(books[books.len() - 1].id), "the copy is shown");
+    assert_eq!(h.state().doc.undo_label(), Some("Duplicate window"));
+}
+
+#[test]
+fn file_append_brings_another_projects_windows_in_one_undo_step() {
+    let mut h = start(vec![data_file("appendproj")]);
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-append-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let other = dir.join("other.sheaf");
+    sheaf_io::save::save_project(project(&h), &other).unwrap();
+    let before = project(&h).windows.len();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::AppendProject(Some(other)), &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), before * 2, "every window comes over");
+    assert_eq!(project(&h).root.folders.last().unwrap().name, "other");
+    assert_eq!(h.state().doc.undo_label(), Some("Append project"));
+    // The File menu item is live (a greyed item would not be clickable).
+    menu_path(&mut h, &["File"]);
+    assert!(!h.get_by_label("Append...").accesskit_node().is_disabled());
+}
+
+#[test]
+fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
+    let mut h = start(vec![data_file("interpfromx")]);
+    show_window(&mut h, "Book1 - sample");
+    // B is the curve; C's values (30.5 ... 0.5) are the X values to interpolate at.
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
+    let ctx = h.ctx.clone();
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().apply(Action::InterpolateFromColumn { book, columns: vec![b] }, &ctx);
+    settle(&mut h);
+    assert!(h.state().analysis.is_some(), "the Interpolate window opens");
+    click(&mut h, "OK");
+    let book = project(&h).workbooks().next().unwrap();
+    let sheet = book.sheets.last().unwrap();
+    // B against A: 2.5 4.5 6.5 8.5 at 1 2 3 4, so y = 2x + 0.5, extrapolated outside 1..4.
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [30.5, 20.5, 10.5, 0.5]);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
 }

@@ -64,15 +64,22 @@ pub(crate) fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
             "tab" | "\\t" => Delimiter::Tab,
             "semicolon" | ";" => Delimiter::Semicolon,
             "space" | "whitespace" | " " => Delimiter::Whitespace,
-            other => {
-                let mut chars = other.chars();
-                match (chars.next(), chars.next()) {
-                    (Some(c), None) => Delimiter::Other(c),
-                    _ => bail!("--delimiter must be comma, tab, semicolon, space or a single character, not '{d}'"),
-                }
-            }
+            _ => match Delimiter::from_text(d) {
+                Some(delimiter) => delimiter,
+                None => bail!("--delimiter must not be empty"),
+            },
         };
     }
+    if !r.fixed_width.is_empty() {
+        if r.fixed_width.contains(&0) {
+            bail!("--fixed-width: every width must be above 0");
+        }
+        o.delimiter = Delimiter::Fixed(r.fixed_width.clone());
+    }
+    o.short_name_line = r.short_name_line.unwrap_or(0);
+    o.rename_columns = !r.no_rename_columns;
+    o.rename_sheet = !r.no_rename_sheet;
+    o.rename_book = !r.no_rename_book;
     o.header_lines = r.header_lines;
     o.decimal_comma = r.decimal_comma;
     o.thousands = match r.thousands {
@@ -450,6 +457,7 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_pane
     require_range("--bar-gap", s.bar_gap, 0.0, 100.0)?;
     require_range("--bar-overlap", s.bar_overlap, -100.0, 100.0)?;
     let labels: Vec<(String, f64, f64)> = s.label.iter().map(|v| parse_label(v)).collect::<Result<_>>()?;
+    let shapes: Vec<sheaf_core::shape::Shape> = s.draw.iter().map(|v| parse_draw(v)).collect::<Result<_>>()?;
     let x_labels = s.x_labels.as_deref().map(|text| x_label_source(project, graph, text)).transpose()?;
     let g = project.graph_mut(graph).ok_or_else(|| anyhow!("graph not found"))?;
     // The layers the options act on, in legend order, and the panels among them.
@@ -531,12 +539,34 @@ fn apply_style(project: &mut Project, graph: WindowId, s: &StyleArgs, every_pane
         }
     }
     if let Some(layer) = g.layers.first_mut() {
+        layer.shapes.extend(shapes);
         for (text, x, y) in labels {
             let font = layer.new_label_font();
             layer.labels.push(TextLabel::new(text, x, y, font));
         }
     }
     Ok(())
+}
+
+/// Reads one `--draw` value, "KIND@X1,Y1,X2,Y2".
+fn parse_draw(value: &str) -> Result<sheaf_core::shape::Shape> {
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let usage = "--draw must look like \"KIND@X1,Y1,X2,Y2\" with KIND line, arrow, rectangle or ellipse and four fractions of the layer frame, for example \"arrow@0.2,0.2,0.5,0.4\"";
+    let Some((kind, at)) = value.split_once('@') else {
+        bail!("--draw \"{value}\": there is no @ after the kind; {usage}");
+    };
+    let kind = match kind.trim().to_ascii_lowercase().as_str() {
+        "line" => ShapeKind::Line,
+        "arrow" => ShapeKind::Arrow,
+        "rectangle" | "rect" => ShapeKind::Rectangle,
+        "ellipse" | "circle" => ShapeKind::Ellipse,
+        other => bail!("--draw \"{value}\": \"{other}\" is not a kind; {usage}"),
+    };
+    let n: Vec<f64> = at.split(',').filter_map(|v| v.trim().parse::<f64>().ok().filter(|v| v.is_finite())).collect();
+    if n.len() != 4 || at.split(',').count() != 4 {
+        bail!("--draw \"{value}\": \"{at}\" is not four numbers X1,Y1,X2,Y2; {usage}");
+    }
+    Ok(Shape::new(kind, (n[0], n[1]), (n[2], n[3])))
 }
 
 /// Reads one `--label` value, "TEXT@X,Y": the text up to the last `@`, then two fractions of the

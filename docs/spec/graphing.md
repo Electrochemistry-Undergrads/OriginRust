@@ -286,6 +286,11 @@ Line (200), scatter (201), line+symbol (202) are one plot object differing in co
 | Step horizontal centred | 13 | |
 | Step vertical centred | not documented | |
 | Bezier | 15 | groups of 4, passes through 1st and 4th; leftovers unused |
+**Measured in Origin** (line graphs, `set %C -l N`, PNG export, curve read pixel by pixel; seven points X 0..6, Y 0 3 1 4 1 5 2):
+- **Spline (9)** is a *natural* cubic spline y(x) (zero second derivative at both ends): rms 0.5 px against the picture; not-a-knot, clamped, Akima and PCHIP are 10 to 38 px off. It is drawn only when X is strictly increasing and the plot has at most 900 points (900 splined, 901 straight, also when zoomed in to show 30 points; the count is all points of the plot, not the visible ones). Decreasing X, repeated X or more than 900 points: the whole plot is drawn with straight segments in row order. Two or three points work. Between points the curve is drawn as chords, with no inner points when a segment is shorter than about 4 px on screen (dense data therefore looks straight; at about 7 px a segment gets one inner point).
+- **B-spline (8)** is a uniform cubic B-spline over the points with the first and last point repeated three times, so it starts and ends at the end points and winds around the others: rms 0.4 px. It is parametric, so any X order works (loops appear when X goes back).
+- **Bezier (15)** is a cubic Bezier over points 0-3, then 3-6, 6-9 and so on (groups share their end point); leftover points are not drawn (5 and 6 points draw only the first group, 8 points end at the 7th point, 10 points at the 10th). Standard cubic Bezier formula, rms 1.5 px, largest error 3.8 px at the cusp where two groups meet (Origin draws fewer chords). Fewer than 4 points: not measured, Sheaf draws straight.
+- Raw probes and images: `re-workspace/scratch/spline-connect/` (local). Not measured: SplineStep resolution dependence, 900 limit for B-spline and Bezier (Sheaf applies none), the `.opj` file codes of 8/9/15 (Sheaf reads 8 as B-spline, 15 as Bezier, 5 to 10 else as Spline, writes 5, 8, 15).
 Also: connect begin and end (closes; off), connect within subset (on for line plots), Akima/modified Bezier (later versions).
 
 ### 5.3 Line options
@@ -1191,7 +1196,10 @@ Measured with Origin through COM on X = 1..4 and Y = (2,3,4,5), (1,2,1,2), (3,1,
 - **100 % stacked column.** Every pile is scaled to 100; the Y axis runs exactly from 0 to 100 with no margin. The template adds data labels (the percentage on each bar) and thin lines joining the tops of neighbouring bars; Sheaf draws neither.
 - **Horizontal bar (215).** Same geometry as columns with the axes exchanged. In the picture the layer's X axis is the vertical one on the left (the title of the X column is there) and the Y axis is at the bottom; `layer.x.from/to` was 0.5..4.5 and `layer.y.to` 5.6 for values up to 5. The first plot of a group is the lowest bar of each position and the legend is listed in reverse. The BAR template colours the group red, green, blue (the column template: black, red, blue); the template has dotted lines and ticks between the positions. Sheaf draws plain ticks and its own palette.
 - **Floating column (207).** Two Y columns B (first) and C (second) gave bars from C to B at each X; the legend names the second column; Y range 0..6 for ends 1..5 (0 is included as for columns). The default fill was blue, outline black.
-- **Sheaf.** `PlotKind::{StackedColumn, Stacked100Column, Bar, FloatingColumn}` and templates `stacked-column`, `stacked-column-100`, `bar`, `floating-column` (CLI `-t`). A horizontal-bar layer shows the values on its X axis (bottom) and the positions on its Y axis (left); Origin names the axes the other way round. Stacked plots share the slot of the first of them; negative values are added like the others. A floating column plot takes the lower end from `Plot::y_base`; `plot_columns` pairs the selected columns (first of a pair = lower end). Not done: stacked and 100 % stacked bars, floating bars, bar labels and join lines, category (text) axes for horizontal bars.
+- **Sheaf.** `PlotKind::{StackedColumn, Stacked100Column, Bar, FloatingColumn}` and templates `stacked-column`, `stacked-column-100`, `bar`, `floating-column` (CLI `-t`). A horizontal-bar layer shows the values on its X axis (bottom) and the positions on its Y axis (left); Origin names the axes the other way round. Stacked plots share the slot of the first of them; negative values are added like the others. A floating column plot takes the lower end from `Plot::y_base`; `plot_columns` chains the selected columns (each plot runs from the column before it to its own). Stacked bars (`PlotKind::StackedBar`, `Stacked100Bar`, templates `stacked-bar`, `stacked-bar-100`) and floating bars (`PlotKind::FloatingBar`, template `floating-bar`) are the horizontal forms of the stacked, 100 % stacked and floating columns and share their code (`is_horizontal()`, `is_stacked_column()`, `is_percent_stacked()`, `Plot::y_base`): piles grow from left to right, the first plot innermost at the value axis' zero, the 100 % value axis is exactly 0..100, a floating bar runs from `y_base` to the Y column along the horizontal axis and `plot_columns` chains columns as for the floating column. Origin draws these with plot type 216 and the stacked bar template (measured above).
+- **Measured later** (`re-workspace/scratch/oc-graphs/bars*.lines.txt`, 12 and 13 Y columns, X = 1..3, legend swatches read pixel by pixel): the stacked bar (`StackBar`) and the 100 % stacked bar (`StackBarP`) take the colour list of the stacked column (black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, then (43,99,162), (30,150,150), (155,100,26)); both list the last plot first in the legend and pile from the left with the first plot innermost. The 100 % bar's value axis runs exactly 0 to 100 in steps of 20 (as the column's) and the template writes a white share on each part ("8%" for 12 equal parts); the stacked bar's value axis ran 0 to 26 for piles of 24 and 0 to 128 for piles up to 117 (the usual rule).
+- The floating column (`FloatCol`) and the floating bar (`FloatBar`, plot type 207 for both) chain their columns: with columns B, C, D, E the plots are C (the bar from B to C), D (from C to D) and E (from D to E), each named after its column, all in the same slot at full width and drawn in plot order (the later over the earlier). The colours are blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, green, dark cyan, (0,0,160), orange for 12 plots, which is the base palette from its fourth entry, as the first plot's blue showed. The legend lists the last plot first (G, F, E, D, C for five plots), for the floating column too.
+- **Sheaf, after the measurement.** The three colour lists were right; the floating legends were wrong and now list the last plot first (`PlotKind::is_floating`), floating plots share one slot (they overlapped before only by accident of a single plot), and `plot_columns` chains the columns of a floating template instead of pairing them (a pair is still one plot). Fill Area keeps its pairs (not measured). Not drawn: the shares on the 100 % bars. Not done: bar labels and join lines, category (text) axes for horizontal bars. The `.opj` writer stores all three as plain columns (type 203) and the save warns.
 - **`.opj`.** The writer stores these plots as plain columns (type 203) and names the loss in the save warnings; the companion keeps the real type.
 
 ### 14.13 Error bars
@@ -1203,6 +1211,150 @@ Measured with Origin on a scatter plot of 5 points with a Y error column (`p6`, 
 - **Columns.** A third plot column `(x, y, err)` in `plotxy iy:=(1,2,3)` is always read as the Y error; X error needs a column designated X error, which `plotxy` could not be made to read in 2016 (no X error measurement; the same cap is assumed).
 - **Range.** The automatic axis range reaches the ends of the error bars (data 2..5 with ends 1.5 and 6 gave Y 1..6.5).
 - **Sheaf.** `Plot::x_error` (X error column after the Y column, found like the Y error), `Plot::error` with direction (both, positive, negative) and cap width (default 8 pt, 0 = no cap); Plot Details > Error Bar edits direction and cap width; Plot > Symbol > XY Error plots with both columns. X error bars are not drawn for bar plots. Positive and negative directions draw the bar from the point to that end only, with one cap; the range widens only on that side. Not stored in `.opj` (save warning).
+
+### 14.14 Colour lists of column and area templates; stacked area and fill area (T12)
+
+Measured with `plotxy` and `expGraph` through COM on synthetic data (scripts and PNGs in `re-workspace/scratch/T12/`, local only), legends read pixel by pixel. The same twelve Y columns plotted from each template:
+
+| Template | Colours of the plots in order |
+|---|---|
+| `<new>` (no template), Line, Scatter, Line + Symbol | the base palette: black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, ... (section 1.5) |
+| Column, Box | the base palette from its second entry: red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, dark cyan |
+| Stacked Column, Area, Stacked Area | the theme list (section 1.5, "Q02 Basic"): black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, (43,99,162), (30,150,150), ... |
+
+Sheaf copies this in `template.rs`: `from_red` for Column, `themed` for the stacked column, area and fill area templates. Plain Area draws the later plots over the earlier ones (no pile).
+
+- **Stacked Area (214) and 100 % Stacked Area.** Plot i fills from the sum of the plots before it up to the sum including itself, row by row; the legend lists the plots in plot order (stacked columns list them reversed). The Y axis starts at exactly 0; the X axis runs from the first to the last X value with no margin (the same for plain Area, measured: probe X 1 to 8 gave a 1 to 8 axis, Y 0 to 12 for a pile reaching 11).
+- **Fill Area.** One plot per pair of Y columns: the first of a pair is the lower edge, the second the upper edge and the plot's name (`Plot::y_base`, as Floating Column). Origin's template could not be told apart from two plain areas drawn over each other, so only the pair form is implemented.
+- `.opj`: stacked areas are written as plain areas from zero, fill areas as areas down to zero, and the save warns (the companion keeps them).
+
+### 14.15 Histogram and box chart (T12)
+
+Measured through COM (`plot:=219` with the HIST template, `plot:=206` with BOX; `plotxy iy:=[Book]Sheet1!1:3`: the range without parentheses makes each column a box, with parentheses the first column is X and the boxes are grouped by its values). PNGs in `re-workspace/scratch/T12/`.
+
+- **Histogram.** The bins are those of the Frequency Counts tool (`sheaf_calc::freq`, size by the 1.75 ln n rule, edges at multiples of the size): data 40.7 to 69 (12 values) gave bins of 7 from 35 to 70, data 13.9 to 73.2 (100 values) bins of 10 from 10 to 80, data 38.7 to 63.7 (7 values) bins of 9 from 36 to 72, each time with the X axis exactly from the first to the last edge and the Y axis from 0 (to 4.5 for a highest bin of 4, to 50 for 43). The bars touch. The Y title is "Count", the X title the column's. The first colour is red; Origin hatches the bars and outlines them in that colour. Sheaf outlines the bars in the colour and leaves them unfilled, as it has no pattern fills. `Plot::hist` (bin size, first edge, end) overrides the automatic bins.
+- **Box chart.** One box per Y column, at 1, 2, 3, ... with the column names as tick labels and no X title; colours red, green, blue (the Box template, 14.14). Box from the 25th to the 75th percentile by the Hazen rule of the statistics tools (`quantile_origin`), median line across the full box, whiskers to the furthest values within 1.5 times the box height (caps 0.1 of the box spacing wide), a cross at each whisker end, the other values as crosses (outliers), the mean as a small open square; box width 0.8 of the spacing; 0.5 pt lines. Checked: 2..13 gave a box from 4.5 to 10.5, median 7.5, whiskers 2 and 13; a column with 30 among values 4 to 8 gave the outlier 30 and whiskers 4 and 8.
+- **Not done:** grouped box charts and the data points beside the box need the Group and Subject designations and categorical columns of T10 (`worksheet-ops`); a worksheet with a grouping column is plotted today as one box per Y column only. The Y axis of the box chart follows the automatic rule of T20 (Origin: -5 to 40 for data 1 to 30; Sheaf -2 to 32); the Y limit of a histogram from 4 is 4.5 as in Origin.
+- `.opj`: both are written as plain columns of their data and the save warns.
+
+### 14.16 Bubble and colour mapped symbols (T12)
+
+Measured through COM: `plotxy iy:=[Book]Sheet1!(1,2) plot:=201 ogl:=[<new template:=BUBBLE>]` with the third column set as Z (`wks.col3.type=5`; X is 4 and Y 1) draws the bubbles (the plot type numbers 245 to 247 gave nothing). Probe: X 1..8, Y 2 4 3 6 5 7 6 8, Z 1 4 2 9 3 6 8 5.
+
+- Bubbles are open circles in the first colour (black rings). Their width is linear in Z from the smallest to the largest value: measured on the 800 px export 2.5, 5, 7, 9, 12, 14, 19 and 22 px (about 2.4 to 21 pt) for Z = 1, 2, 3, 4, 5, 6, 8, 9. Sheaf uses 2 pt to 20 pt (the outline adds the rest).
+- Origin adds a size legend beside the frame (title = the Z column, four circles labelled 1.00, 3.66, 6.32, 8.98: the smallest value and three equal steps to the largest). Not drawn by Sheaf.
+- Colour mapped symbols: Origin's default colour map was not measured (no plot number reached the Color Mapped command); Sheaf maps the smallest to the largest Z over blue, cyan, green, yellow and red. No colour scale is drawn.
+- Model: `Plot::size_from` and `Plot::color_from` name the Z column (found from the Z designation after the Y column by `Project::z_column_for`); `Template::Bubble`, `ColorMapped`, `BubbleColorMapped`; CLI `-t bubble` needs a project file with a Z column. `.opj`: written as plain scatter, the save warns.
+
+### 14.17 Pie; what was seen of polar (T12)
+
+Measured through COM: `plotxy iy:=[Book]Sheet1!1 plot:=225 ogl:=[<new template:=PIE>]` with the column set as Y (a column left as X puts its values into the legend instead). PNGs in `re-workspace/scratch/T12/`.
+
+- The pie template is a 3D pie viewed from above at a slant (an ellipse about half as high as wide, with a side band); the 2D template (`PIEBW`) is a flat black and white pie with hatch patterns. Both: the first slice starts at 12 o'clock and the slices follow clockwise, each outlined in black; every slice is labelled outside with its share to two decimals (`33.33%`); the legend lists one square per slice at the top right, named by the X column's cells or by the row numbers 1, 2, 3, ...; the slices take the base palette in order (black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple); the layer has no axes and a black frame around the whole layer; the legend font is the legend font of the layer, the percentages the tick label font.
+- Sheaf draws the flat pie in colour (`PlotKind::Pie`, `Template::Pie`, CLI `-t pie`, no longer in the menu because Origin has no "2D Color Pie"): a pie whose radius is 35 % of the frame height, centre at 42 % of the width, drawn by `draw_pie`. The menu items "3D Color Pie" and "2D B&W Pie" draw the 3D pie and the hatched pie: see 14.21. Rows that are not positive numbers are left out. Not done: exploded slices, label positions inside, other label contents.
+- `.opj`: written as plain columns, the save warns.
+- **Polar** (`POLAR` template, `plotxy iy:=[Book]Sheet1!(1,2) plot:=200`): theta from 0 to 360 degrees in steps of 30 with labels outside the circle (0 on the right, counter-clockwise), grey ring and spoke grid lines, the radius axis drawn twice along the vertical diameter (labels 1.0 to 2.0 up and down, mirrored) and a line curve. Sheaf draws it as a polar layer: see 14.18.
+
+### 14.18 Polar plots (T12)
+
+Origin's Plot > Specialized > "Polar theta(X) r(Y)" and "Polar r(X) theta(Y)", and the 2D Graphs toolbar button of the first one.
+
+**Measured** (spec 14.17, `POLAR` template, `plotxy plot:=200`, one probe): angle 0 to 360 degrees in steps of 30 with the labels outside the circle, 0 on the right and counter-clockwise; grey ring and spoke grid lines; the radius axis drawn twice along the vertical diameter, labels going up and the same going down (the centre is the radial "from" value, the circle edge the "to" value); the data as a line curve.
+
+**Measured later** (`POLAR` template, data 1.13 to 2.37 and other ranges, `re-workspace/scratch/oc-graphs/pol*.lines.txt`, pictures `pol1.png` and `pa1.png`; the axis dialog was read through the program window):
+
+- **Page and layer.** The page is 8.04 by 6.15 in. The layer is a square of 4.55 in whose left edge is at 23.3 % of the page and top at 11.7 %. The angle labels stand outside the circle and the circle touches the layer's frame.
+- **Legend.** The default legend is at the top, above the layer's top right: its box spans 66 % to 76 % of the page width and 1 % to 6 % of the page height, so it sits over the right half of the circle's top edge without touching it.
+- **Radius axis.** It is drawn twice, to the left of the circle (0.2 radii off its left edge, not on a diameter): the upper copy runs from the circle's top down to the hole (the axis' lower limit) with the numbers increasing upwards, the lower copy mirrors it; with a lower limit of 0 the two join at the centre, which is labelled once. The Y column's name is the axis title, rotated, left of the axis (Sheaf draws no axis title).
+- **The centre is radius 0, not the lower limit.** The Radial Axes > Scale page has a check box "Center at Zero" which is on. A point at radius r stands at r / (upper limit) of the circle's radius; the lower limit only leaves a hole round the centre that stays empty: with limits 1.5 to 2.5 the ring for 2.0 stood at the same place as with limits 0 to 2.5, the spokes and rings start at the hole and a line is cut where it enters it. Negative radii are drawn on the opposite side of the centre; the radius axis cannot be given a negative lower limit (`layer.y.from = -1` was refused, 0 stayed). With the box off the lower limit is the centre (what Sheaf drew before).
+- **Automatic radius range.** The usual rule with the 8 % rescale margin, the same as for a Y axis (spec 4): data 1 to 2 gave 0.75 to 2.25 (steps of 0.5), 1.13 to 2.37 gave 1 to 2.5, 0.2 to 0.37 gave 0.175 to 0.4 (steps of 0.05), 1.45 to 2.05 gave 1.4 to 2.1 (steps of 0.2), 10 to 10.4 gave 9.9 to 10.5. So the limits are not rounded to a tick; they are the data plus the margin rounded outwards to half a step. A lower limit below 0 is cut at 0 (data 3.2 to 87 gave 0 to 100; data -1 to 2 gave 0 to 2.25 with steps of 0.5, where Sheaf's rule gives steps of 1).
+- **Angle.** The angular axis runs 0 to 360 in steps of 30 with one minor tick, 0 on the right and counter-clockwise; its From and To can cut the circle (0 to 180 gave a half circle) but setting 90 to 450 or 360 to 0 changed nothing. Its Units are Degrees, Radians, Gradians or Custom (circle start and end values, greyed for the first three). With Radians the circle is 0 to 2 pi, there is a tick every quarter of pi (eight spokes) and the labels read 0.00, 0.25, 0.50 ... with the pi sign after the number. Gradians and Custom were not measured. No setting for the zero direction or the sense of rotation exists in the angular or radial axis pages, in the layer or in the plot details of this version, and no LabTalk property reached one (the properties tried changed nothing in the picture), so the angle 0 on the right and counter-clockwise are fixed; Sheaf keeps `zero_deg` and `clockwise` as its own options.
+
+**What Sheaf does**
+
+- Model (`sheaf-core`): `Layer::coords` is `Coords::Cartesian` (default, not written to the project file, so old files load unchanged) or `Coords::Polar(PolarCoords)`. `PolarCoords` holds `radius` (`RadiusColumn::Y` for theta(X) r(Y), `X` for r(X) theta(Y)), `zero_deg` (where angle 0 points, counter-clockwise from 3 o'clock; Origin's default 0), `clockwise` (default false) and `angle_unit` (`AngleUnit::Degrees`, default, or `Radians`; written only when it is not degrees). There is no dialog for these yet. The plots of a polar layer are ordinary Line, Scatter and LineSymbol plots. Templates `polar` and `polar-r-theta` (CLI `sheaf plot FILE -t polar`); the layer's frame is a square, the grid rings and spokes are on (grey, 0.5 pt, the grid style of the Grids toggle) and the axis titles are off.
+- Data (`data::collect`): for a polar layer the two columns of a plot are read as `(angle, radius)`; with the radius in X the columns are swapped, a missing X column being the row number. Error bars are not drawn.
+- Geometry (`LayerGeometry::polar`, a `PolarMap`): the circle is centred in the frame, its radius is half the smaller side. `data_to_page(theta, r)` puts the point at distance `|r| / (radius axis upper limit)` of the circle's radius from the centre in the direction `zero_deg + theta` (minus theta when clockwise; a negative r points the opposite way; the centre is radius 0, `PolarMap::zero_centred`, which is off for radar charts, where the lower limit is the centre); `page_to_data` is its inverse (angle in [0, one turn)); `checked_data_to_page` gives `None` for a radius whose size is outside the radius axis range (so the hole below the lower limit stays empty). So lines, symbols, hit testing and the cursor read-out use the same functions as for rectangular layers. Lines are straight segments between the points on the page (no arcs between them).
+- A point whose radius lies outside the radius range (below the lower limit too) is not drawn, and the line breaks there (it is not clipped to the circle). With the automatic range every point is inside.
+- Axes: the angle axis is fixed, one turn (0 to 360 in steps of 30, or 0 to 2 pi in steps of a quarter of pi in radians) whatever the data hold; the end of the turn coincides with 0 so only one label stands there. The radius axis uses the layer's Y axis settings and its automatic range rule (`crates/core/src/autorange.rs`: the data span plus the rescale margin, 8 % as in Origin, rounded outwards) on the radius values, with the lower limit cut at 0; its upper limit is the circle's edge and its lower limit the hole round the centre. A fixed `min` and `max` of the Y axis work as usual.
+- Drawing (`crates/plot/src/polar.rs`): the grid first (rings at the radius major ticks, spokes at the angle major ticks, in the grid styles of the Y and X axis), then the data, then the outer circle in the angle axis' colour and width with outward ticks, the angle labels outside the circle (the text box is pushed away along its direction so that its nearest point is a fixed gap off the circle), and the radius axis left of the circle (0.2 radii off its edge): line, ticks pointing left and the labels left of the line, on the upper and the lower half, from the circle's top and bottom to the hole, the centre labelled once when there is no hole. The grid's spokes start at the hole. Cartesian axes, axis titles and the rectangular frame are not drawn. The legend and free labels work as for any layer. The labels count towards the room kept inside the page.
+- Template (measured above): page 8.04 by 6.15 in, a square layer from 23.3 % and 11.7 % of the page, the legend centred at 0.84 of the layer's width and 0.11 of its height above its top edge, the default Rescale Margin of 8 %.
+- Differences left: the radius axis title (Origin writes the Y column's name left of the axis), Gradians and Custom units, a dialog for the units, and Origin's minor ticks (one between the major ones) on both axes.
+- `.opj`: written as a plain line plot on rectangular axes; the save warns that the polar layer was not written, and the `.opj.sheaf` companion keeps the layer (round trip tested).
+- Golden image: `crates/plot/tests/golden/polar.svg` (angles 0 to 360 in steps of 15, r = 1.5 + 0.5 cos 2 theta).
+- Not done: the angle in gradians, the axis dialog for the units, zero direction and sense of rotation, a polar axis dialog (radius labels along other angles, labels at the circle edge only), polar contour and wind rose, zooming the circle, the Plot Details tab of the polar axes. Plot Details shows the plot type of a plot in a polar layer as "Polar Line" and so on.
+
+### 14.19 Radar charts (T12)
+
+Menu Plot > Specialized > Radar, the 2D Graphs button PlotRadar, `sheaf plot -t radar`. Measured with Origin
+through COM (`plotxy iy:=... plot:=202 ogl:=[<new template:=Radar>]`, `re-workspace/scratch/oc-graphs/rad*.lines.txt`,
+pictures `rad1.png`, `rad2_*.png`, `rad4.png`):
+
+- **First spoke and direction.** The first row is the spoke straight up and the others follow clockwise, evenly spaced.
+- **Spoke names.** The X column's cells (text or numbers, e.g. 10, 20, 30) name the spokes, outside the outer polygon; with no X column the row numbers 1, 2, 3, ... do.
+- **Scale.** One radial scale with its tick labels on the first spoke, upwards from the centre. The centre is the axis' lower limit, not 0: values 2.1 to 5.2 gave 1.5 to 5.5 with the label 1.5 at the centre and 5.5 at the top vertex, values 0 to 4 gave -1 to 5, values -4 to -1 gave -4.5 to -0.5. The limits are the values plus the 8 % margin rounded outwards to whole steps, and the step is half of the one the usual table gives for that span (0.5 for spans of 3 and 3.1 where a Y axis has 1; 1 for a span of 4 where a Y axis has 2).
+- **Grid.** One grey polygon at every radius tick up to the outer polygon, and a spoke to every vertex; the outline is a polygon without ticks.
+- **Page and legend.** The page is 8.0 by 6.125 in; the layer is 61.2 % wide and 75.4 % high with its left edge at 11.7 % and top at 10.9 % of the page. The legend (line + symbol swatches, black square then red circle) stands at the layer's top right corner: its box spans 69 % to 79 % of the page width and 4 % to 14 % of its height.
+- Each Y column is one plot, a closed polygon (line + symbol by default) joining its values on the spokes.
+
+- The worksheet rows are the spokes, evenly spaced: spoke `i` of `n` is at `360 i / n` degrees. The
+  first spoke points up (12 o'clock), the others follow clockwise.
+- Sheaf closes each polygon by repeating the first point at 360 degrees (line + symbol colours from the line +
+  symbol list).
+- The X column's cells, text or numbers, name the spokes, drawn outside the outer polygon; with no X
+  column (or an empty cell) the row number is the name.
+- One radial scale for all spokes, its tick labels on the first spoke from the centre up. The centre
+  is the lower limit; with automatic limits they are the values plus the margin rounded outwards to
+  whole steps of half the usual step (`resolve_dim` in `layout.rs`; before the measurement Sheaf started at 0).
+  A radius outside the range is not drawn. Template: page 8.0 by 6.125 in, the layer and legend as measured above.
+- The grid is concentric polygons at the radius major ticks plus straight spokes (the polar grid
+  style); the outline is a polygon, with no ticks.
+- Implementation: a polar layer with `PolarCoords::radar = true`. `PolarMap` forces zero at 90
+  degrees and clockwise, so `data_to_page`, `page_to_data`, symbols and hit testing are those of the
+  polar layer. `data::radar_columns` turns the rows into `(angle, value)`; `polar::radar_axis` gives
+  the spoke ticks and names. The radar page is 8 by 6.125 inches with the legend at the layer's top right corner.
+- The closing point is a repeated row marked `PlotData::closing`: the line runs to it, but it gets
+  no symbol and no mask, and a masked first row also reddens the closing segment. Rows keep their
+  place, so the column's mask still counts the right rows. The plot clip of a radar layer is
+  widened by one symbol size, so a symbol on the outer polygon is not cut. When all values are equal
+  their span is taken as 20 % of the value (1 for 0) to find the range (Origin's range for that case was not measured). Spoke names go through the label markup like every other label column
+  (see 14.11).
+- The .opj writer stores plain line + symbol plots and warns; the companion keeps the layer.
+
+### 14.20 Ternary plots (T12)
+
+Origin's Plot > Specialized > "Ternary" and the 2D Graphs toolbar button of the same name.
+
+**Measured:** nothing yet; this machine has no Origin. Everything below about Origin is **from Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref**: three columns X, Y and Z (Z the designated column after the Y column) give the three parts of each point; a row that does not sum to 1 (or 100) is normalised; the plot is a scatter plot by default; the layer is an equilateral triangle with three axes along its sides, ticks from 0 to 1 in steps of 0.2 (0 to 100 for percentages), tick labels outside the triangle, the column names as axis titles; X runs along the bottom from left to right (X = 1 at the bottom right corner), Y along the right side from bottom to top (Y = 1 at the top corner), Z along the left side from top to bottom (Z = 1 at the bottom left corner); grid lines parallel to the sides at the major ticks.
+
+**Could not confirm (to measure):** whether the grid is on in Origin's default ternary graph (Sheaf draws it, grey 0.5 pt); the direction of the tick marks (Sheaf: along the grid line, pointing out of the triangle, so each tick continues the grid line that starts at it); the default legend (Sheaf hides it, because a one-plot legend would be named after the Y column only); how Origin decides between 0 to 1 and 0 to 100; the title rotation and distance; the size of the triangle in the default page (Sheaf: a 6 by 6 in page with a square frame of 60 %); whether Origin skips rows with a negative part (Sheaf does).
+
+**What Sheaf does**
+
+- Model (`sheaf-core`): `Coords::Ternary(TernaryCoords)`, `TernaryCoords { scale: TernaryScale }` with `Auto` (default), `Fraction` and `Percent`. Old files load unchanged (`coords` is only written when it is not rectangular). The Z column of a plot is `Plot::size_from` (the field the bubble plot uses for its sizes; a ternary layer draws no bubbles). `Project::plot_columns(Template::Ternary, ys)` fills it from `Project::ternary_z_for`: the Z column after the Y column (`z_column_for`), or, in a sheet without Z designations, the numeric column right after Y, so that a plain three column file works (CLI `sheaf plot soil.csv -t ternary`). `default_plot_columns` for the template gives the Y columns that have a Z column, else the first Y column that has a column after it.
+- Template `ternary` (menu item and button live): a scatter plot, page 6 by 6 in, square frame, grid on, outward major ticks, no minor ticks, legend off.
+- Data (`data::collect`, `ternary::columns`): each row is divided by its sum; the plot's `x` and `y` become the normalised X and Y fractions and Z is `1 - x - y`. A row with a missing or negative part, or with a zero sum, becomes NaN and is not drawn (a line breaks there).
+- Geometry (`LayerGeometry::ternary`, a `TernaryMap`): the largest equilateral triangle that fits in the frame, centred in it. `data_to_page(x, y)` is the barycentric combination `x * right + y * top + (1 - x - y) * left` and `page_to_data` its inverse, so symbols, lines, hit testing and the cursor read-out use the usual functions; they work in fractions whatever the tick scale. The clip rectangle is the frame widened by 9 pt so that symbols on the sides are whole.
+- Ticks: 0 to 1 in steps of 0.2, or 0 to 100 in steps of 20 when the scale is percent (`Auto`: some row of the raw data sums to between 99 and 101, so raw counts such as 1, 2, 3 stay in fractions; unmeasured). Tick font, length, direction and line settings are those of the layer's X axis (bottom and left sides) and Y axis (right side); the major grid styles likewise (X and Z lines from the X axis, Y lines from the Y axis). Labels of the three axes are the same numbers.
+- Drawing (`crates/plot/src/ternary.rs`): grid lines first (for each interior tick, the line of constant X, of constant Y and of constant Z: the first parallel to the left side, the second to the bottom, the third to the right side), then the data, then the triangle outline, the ticks, the tick labels outside (each pushed off its tick end along the outward normal of the side until the nearest point of its box is a fixed gap away), and the three titles: X (the X column's name and units) under the bottom side, Y rotated -60 degrees along the right side, Z (the Z column's name) rotated +60 degrees along the left side; titles can be replaced with the X and Y axis' title text (Z has no setting yet). The labels and titles count towards the room kept inside the page. Cartesian axes and the rectangular frame are not drawn.
+- `.opj`: written as a plain scatter plot of X and Y; the save warns that the ternary layer was not written, and the `.opj.sheaf` companion keeps it with its Z column (round trip tested). Plot Details shows the plot type as "Ternary Scatter".
+- Golden image: `crates/plot/tests/golden/ternary.svg` (eight rows that sum to 1 and two that sum to 0.9 and 1.2).
+- Not done: a ternary axis dialog (scale, per-axis ranges and zoom into part of the triangle, which Origin offers), axis directions (clockwise or counter-clockwise), the Z column in Plot Details, ternary contour and colour mapped surfaces, a Z axis title setting, a legend in the ternary style.
+
+### 14.21 3D Color Pie and 2D B&W Pie (T12)
+
+Origin's Plot > Column/Bar/Pie menu has "3D Color Pie" (template `PIE`) and "2D B&W Pie" (template `PIEBW`); it has no "2D Color Pie". What was measured is in 14.17 (3D pie from above at a slant, ellipse about half as high as wide with a side band; flat black and white pie with hatch patterns; slices clockwise from 12 o'clock, black outlines, outside labels with two decimals, legend squares at the top right, palette in order for the 3D pie).
+
+**From Origin's public documentation, not measured; measure on the Windows machine with tools/origin-ref:** the 3D pie's view angle, thickness and rotation can be changed in the plot's details; slices can be pulled out; Origin's hatch patterns are a fixed list of pattern fills cycling over the slices; exact side band shade, band thickness and the exact patterns of the 2D template.
+
+**What Sheaf does**
+
+- Plot kinds `PlotKind::Pie3D` and `PlotKind::PieBw`, templates `pie-3d` ("3D Color Pie") and `pie-bw` ("2D B&W Pie"), both live in the menu; the item "2D Color Pie" is gone from the menu. `Template::Pie` (`-t pie`, `PlotKind::Pie`) stays as a CLI name and for existing projects: the flat colour pie of 14.17, golden `pie.svg` unchanged.
+- Drawing (`crates/plot/src/pie.rs`): same frame, labels (share to two decimals outside the slice) and legend placement as the flat pie. 3D: the ellipse is 0.5 as high as wide (`SLANT`), the width the largest that fits (at most 30 % of the frame width as radius); the side band is 0.2 of the radius thick (`BAND`), drawn only on the front half of the rim (90 to 270 degrees) in 60 % of the slice colour, then the tops on it, all outlined 0.5 pt black; labels of the front half sit below the band. B&W: white slices, each with one of eight hatch patterns (45 degrees, 135 degrees, horizontal, vertical, grid, diagonal grid, dense 45, dense 135; slices past the eighth reuse them at wider spacing), 0.5 pt black lines; legend squares carry the same pattern.
+- Pattern fills: the scene has no clip item, so `pie::hatch` cuts parallel lines against the slice polygon (the arc in steps of about 2 degrees; works for concave shapes) and the lines are drawn as one path per slice. Lines sit at multiples of the spacing from the page origin, so patterns continue across shapes. Works in every renderer since it is plain paths. It is not a general pattern fill of the model (`FillStyle` has none yet).
+- `.opj`: written as plain columns, the save warns (same note as the flat pie); the `.opj.sheaf` companion keeps the kind.
+- Goldens: `pie-3d.svg`, `pie-bw.svg` (values 3, 5, 2, 7, 4).
+- Not done: changing the 3D view (tilt, thickness, rotation), exploded slices, label positions inside, the toolbar button "Pie" (still greyed), hatch pattern choice per slice, Plot Details shows the kinds by name.
 
 ### 14.11 Unknowns
 
@@ -1445,3 +1597,48 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 ### 16.4 Not done
 
 - Colour, font family, attachment choice, resizing and a background or frame for a label; copy and paste of labels; "Bring to the front" and "Push to the back"; editing text in place on the graph.
+
+## 17. Drawn objects (P1, T24)
+
+Lines, arrows, rectangles and ellipses drawn on a graph with the Line, Arrow, Rectangle and Circle buttons of the Tools toolbar. Pictures and the inset graph are not part of this section.
+
+### 17.1 What Origin does
+
+Nothing in this section was measured: the work was done on a machine without Origin. Every line below is from Origin's public documentation, paraphrased, and must be checked on the Windows machine (`tools/origin-ref`) before it is called Origin's behaviour. Tag: [DOC].
+
+- [DOC] The Tools toolbar has Line, Arrow, Rectangle and Circle. One drag makes one object, and the tool returns to the Pointer.
+- [DOC] Shift while dragging: a line or arrow snaps to horizontal, vertical or 45 degrees; a rectangle becomes a square; the Circle tool makes a circle instead of an ellipse.
+- [DOC] An object is attached to the page, the layer frame, or the layer and its scales.
+- [DOC] A double click opens a window with the line (style, width, colour), the arrow (shape, length, width, at the begin and/or end) and the fill (pattern, colour) of the object. Delete removes it; dragging moves it.
+
+Unmeasured, so chosen by Sheaf: the default line width and colour, the arrow head size and shape, whether the tool stays on after one object, the stacking order of objects against labels and the legend, the cursor, what a click without a drag does, and the exact snapping rule near the angle boundaries.
+
+### 17.2 Sheaf's model (Sheaf choice)
+
+- `Layer::shapes` holds `Shape { kind, x1, y1, x2, y2, color, width_pt, dash, fill, head_pt, head_at_start }`, saved only when not empty, so files written before this section load unchanged. Kinds: `line`, `arrow`, `rectangle`, `ellipse`.
+- The points are fractions of the layer's frame, as for a text label (section 16.2): `(0, 0)` is the top left corner, `(1, 1)` the bottom right, outside 0 to 1 is allowed. The objects are attached to the layer frame and do not follow the axis scales; a "layer and scales" or "page" attachment does not exist yet.
+- A line or arrow runs from the first to the second point. An arrow has a filled triangular head at the second point (`head_at_start` adds one at the first); the head is `head_pt` long (default 9 pt) and 0.7 of that wide, and is shortened so that it never takes more than the line. A rectangle has the two points as opposite corners; an ellipse is inscribed in that rectangle. `fill` (rectangle and ellipse) is a solid colour; no fill is the default, so the data shows through.
+- Drawing: the objects are drawn after the legend and the labels, in list order, so they are above the data and above the text. Every renderer (SVG, PNG, PDF, EPS, EMF, TIFF and the window) takes them from the same scene.
+- Picking: a line or arrow is hit near its line, an unfilled shape on its outline, a filled one inside it as well (a point in the empty corner of an ellipse's box is not a hit). The tolerance adds half the stroke width, and the bounds of an object include it. Where objects overlap the one drawn last (on top) is picked: a shape over a label, or a later shape over an earlier one.
+- Shift constrains in page points, not in fractions: a line or arrow snaps to the nearest of 0, 45, 90 degrees and so on with its length kept; a rectangle or ellipse takes the longer side on both axes.
+
+### 17.3 Commands
+
+**Desktop app.**
+- Tools > Line, Arrow, Rectangle, Circle: the tool is on (pressed) until one object is drawn, a click on Pointer, or Esc. A drag draws it in the layer under the pointer's start (the active layer if that is outside every frame), with a blue outline while dragging. A drag shorter than 3 page points draws nothing and leaves the tool on. The new object is selected and the tool is the Pointer again.
+- A click selects an object, dragging it moves it (it moves when the button is let go), Delete removes it, a double click or right-click Properties... opens the window with the line colour, width and style, the fill of a rectangle or ellipse, and the head length and a second head of an arrow. OK and Apply are one undo step each.
+- The window closes when Delete, Undo or Redo changes the objects of its layer, or when its object is gone or another kind of object has its place, so it never edits another object.
+- Add, Move, Edit and Delete of a drawn object are one undo step each ("Add drawn object", "Move drawn object", "Edit drawn object", "Delete drawn object").
+- The right-click menu of an object has Delete and Properties...; Cut, Copy, "Bring to the front" and "Push to the back" are shown greyed.
+- `sheaf-app --show shape:N` opens the window of the N-th object of the first graph (for pictures).
+
+**Command line** (`sheaf plot`, `sheaf export`, style option):
+- `--draw "KIND@X1,Y1,X2,Y2"`, repeatable: KIND is `line`, `arrow`, `rectangle` (or `rect`) or `ellipse` (or `circle`); the four numbers are fractions of the first layer's frame. The object is black, 1 pt, solid, unfilled. A value without `@`, with another kind or without four finite numbers is an error that quotes the value; no file is written. The objects are saved with `--save`.
+
+### 17.4 Origin project files
+
+An `.opj` file written here does not hold drawn objects. The writer says so in a warning that counts them per layer ("layer 1 has drawn objects (2 arrow, 1 ellipse) that an Origin project file written here cannot hold") and the `.opj.sheaf` companion keeps them. Reading drawn objects from `.opj` files is not done.
+
+### 17.5 Not done
+
+Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.

@@ -204,8 +204,16 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
             g.layers[0].plots[0].line.dash = *d;
         });
     }
-    for (k, c) in
-        [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical].iter().enumerate()
+    for (k, c) in [
+        Connect::Straight,
+        Connect::Spline,
+        Connect::StepHorizontal,
+        Connect::StepVertical,
+        Connect::BSpline,
+        Connect::Bezier,
+    ]
+    .iter()
+    .enumerate()
     {
         graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
             g.name = format!("C{k}");
@@ -215,7 +223,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     let (imp, warnings) = round_trip(&p);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
-    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 4);
+    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 6);
     let by_name = |n: &str| imp.graphs.iter().find(|g| g.name == n).unwrap().layers[0].plots[0].clone();
     for (k, kind) in kinds.iter().enumerate() {
         let got = by_name(&format!("K{k}"));
@@ -232,7 +240,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
             | PlotKind::Stacked100Column
             | PlotKind::Bar
             | PlotKind::FloatingColumn => assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of a bar"),
-            PlotKind::Area => {
+            _ => {
                 assert_eq!(got.symbol.color, Color::rgb(10, 10, 200), "the fill of an area");
                 assert_eq!(got.line.color, Color::rgb(200, 10, 10), "its border");
             }
@@ -244,8 +252,16 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     for (k, d) in Dash::ALL.iter().enumerate() {
         assert_eq!(by_name(&format!("D{k}")).line.dash, *d);
     }
-    for (k, c) in
-        [Connect::Straight, Connect::Spline, Connect::StepHorizontal, Connect::StepVertical].iter().enumerate()
+    for (k, c) in [
+        Connect::Straight,
+        Connect::Spline,
+        Connect::StepHorizontal,
+        Connect::StepVertical,
+        Connect::BSpline,
+        Connect::Bezier,
+    ]
+    .iter()
+    .enumerate()
     {
         assert_eq!(by_name(&format!("C{k}")).line.connect, *c);
     }
@@ -460,6 +476,26 @@ fn rotated_tick_labels_are_named() {
     graph_with(&mut p, Template::Line, &[(0, 1), (0, 2)], |g| g.layers[0].x_axis.tick_label_angle_deg = 45.0);
     let (_, warnings) = round_trip(&p);
     assert!(warnings.iter().any(|w| w.contains("rotated tick labels")), "{warnings:?}");
+}
+
+#[test]
+fn drawn_objects_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].shapes = vec![
+            Shape::new(ShapeKind::Arrow, (0.1, 0.1), (0.4, 0.4)),
+            Shape::new(ShapeKind::Arrow, (0.1, 0.2), (0.4, 0.5)),
+            Shape::new(ShapeKind::Ellipse, (0.5, 0.5), (0.9, 0.9)),
+        ];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("drawn objects")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("2 arrow") && w.contains("1 ellipse"), "{w}");
+    assert!(imp.graphs[0].layers[0].shapes.is_empty());
+    // A layer without drawn objects says nothing.
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("drawn objects")));
 }
 
 #[test]

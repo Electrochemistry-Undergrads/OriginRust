@@ -598,3 +598,28 @@ fn window_places_are_written_as_the_window_rectangle() {
     assert_eq!(after[0][0x32] & 3, 0);
     assert_eq!(after[1][0x32] & 3, 2);
 }
+
+#[test]
+fn a_polar_layer_is_written_as_a_line_plot_and_named() {
+    let p = one_layer(|l| l.coords = Coords::Polar(PolarCoords::default()));
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("polar")), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].plots[0].kind, PlotKind::Line);
+    assert!(imp.graphs[0].layers[0].coords.is_cartesian());
+}
+
+#[test]
+fn a_radar_layer_is_written_as_a_line_symbol_plot_and_named() {
+    let p = one_layer(|l| l.coords = Coords::Polar(PolarCoords { radar: true, ..PolarCoords::default() }));
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("radar")), "{:?}", out.warnings);
+    assert!(imp.graphs[0].layers[0].coords.is_cartesian());
+}
+
+#[test]
+fn a_ternary_layer_is_written_as_a_scatter_plot_and_named() {
+    let p = one_layer(|l| l.coords = Coords::Ternary(TernaryCoords::default()));
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("ternary")), "{:?}", out.warnings);
+    assert!(imp.graphs[0].layers[0].coords.is_cartesian());
+}

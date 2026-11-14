@@ -19,11 +19,15 @@ mod layout;
 mod legend;
 mod margin;
 pub mod markup;
+mod pie;
 mod plots;
+mod polar;
 mod raster;
 pub mod scene;
+mod shapes;
 mod stack;
 mod svg;
+mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
@@ -43,6 +47,7 @@ pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
 
+use sheaf_core::graph::ScaleKind;
 use sheaf_core::{Project, WindowId};
 use std::path::{Path, PathBuf};
 
@@ -216,18 +221,56 @@ pub struct LayerGeometry {
     pub x: ticks::ResolvedAxis,
     /// The resolved Y axis.
     pub y: ticks::ResolvedAxis,
+    /// The circle of a polar layer. Then `x` is the angle axis (degrees) and `y` the radius axis,
+    /// and the data are placed on the circle (graphing spec section 14.18).
+    pub polar: Option<polar::PolarMap>,
+    /// The triangle of a ternary layer. Then the data are the normalised X and Y fractions of the
+    /// rows (graphing spec section 14.20).
+    pub ternary: Option<ternary::TernaryMap>,
 }
 
 impl LayerGeometry {
+    /// The fraction of the circle's radius at which radius value `r` stands in a polar layer. With the
+    /// centre at zero (Origin's default for polar graphs) it is `|r|` over the upper limit, so the lower
+    /// limit leaves a hole round the centre; otherwise the lower limit is the centre.
+    pub(crate) fn radius_unit(&self, r: f64) -> f64 {
+        match &self.polar {
+            Some(map) if map.zero_centred && self.y.scale == ScaleKind::Linear && self.y.max > 0.0 => {
+                r.abs() / self.y.max
+            }
+            _ => self.y.to_unit(r),
+        }
+    }
+
     /// Page position (points) of a data point. Values that cannot be placed
     /// (non-positive on a log axis) give NaN.
     pub fn data_to_page(&self, x: f64, y: f64) -> (f64, f64) {
+        if let Some(map) = &self.polar {
+            // A negative radius of a polar graph is drawn on the opposite side of the centre.
+            let (theta, r) = if map.zero_centred && y < 0.0 { (x + map.circle / 2.0, -y) } else { (x, y) };
+            return map.point(theta, self.radius_unit(r));
+        }
+        if let Some(map) = &self.ternary {
+            return map.point(x, y);
+        }
         let f = self.frame;
         (f.x + self.x.to_unit(x) * f.w, f.y + (1.0 - self.y.to_unit(y)) * f.h)
     }
 
     /// Data value under a page position (points). Inverse of [`LayerGeometry::data_to_page`].
     pub fn page_to_data(&self, px: f64, py: f64) -> (f64, f64) {
+        if let Some(map) = &self.polar {
+            let (theta, u) = map.angle_and_unit(px, py);
+            let r = if map.zero_centred && self.y.scale == ScaleKind::Linear {
+                u * self.y.max
+            } else {
+                self.y.from_unit(u)
+            };
+            return (theta, r);
+        }
+        if let Some(map) = &self.ternary {
+            return map.fractions(px, py);
+        }
         let f = self.frame;
         (self.x.from_unit((px - f.x) / f.w), self.y.from_unit(1.0 - (py - f.y) / f.h))
     }
@@ -236,6 +279,18 @@ impl LayerGeometry {
     /// finite or cannot be placed. Used to break lines at gaps.
     pub(crate) fn checked_data_to_page(&self, x: f64, y: f64) -> Option<(f64, f64)> {
         let p = self.data_to_page(x, y);
+        if let Some(map) = &self.polar {
+            // A radius outside the axis range is not drawn (it would leave the circle or cross the
+            // centre; with the centre at zero the hole below the lower limit stays empty too).
+            let inside = if map.zero_centred && self.y.scale == ScaleKind::Linear {
+                (self.y.min - 1e-9..=self.y.max + 1e-9).contains(&y.abs())
+            } else {
+                (-1e-9..=1.0 + 1e-9).contains(&self.y.to_unit(y))
+            };
+            if !inside {
+                return None;
+            }
+        }
         (x.is_finite() && y.is_finite() && p.0.is_finite() && p.1.is_finite()).then_some(p)
     }
 }

@@ -277,7 +277,72 @@ pub struct Column {
 /// Origin's default column width in characters.
 pub const DEFAULT_WIDTH: u16 = 8;
 
+/// How a column keeps its cells (the data side of Origin's Format list).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Storage {
+    Numeric,
+    Text,
+    /// Text & Numeric.
+    Mixed,
+}
+
 impl Column {
+    /// How the column keeps its cells now.
+    pub fn storage(&self) -> Storage {
+        match self.data {
+            ColumnData::Numeric(_) => Storage::Numeric,
+            ColumnData::Text(_) => Storage::Text,
+            ColumnData::Mixed { .. } => Storage::Mixed,
+        }
+    }
+
+    /// Changes how the column keeps its cells, as the Format list of Column Properties does.
+    /// Numbers become the text the cells show; text is read as numbers where it can be (what
+    /// cannot be is missing in a Numeric column and stays text in a Text & Numeric one).
+    /// A Text column shows its text, so its display format goes back to General.
+    pub fn convert_storage(&mut self, to: Storage) {
+        if self.storage() == to {
+            return;
+        }
+        let rows = self.len();
+        let data = match to {
+            Storage::Text => {
+                let texts: Vec<String> = (0..rows)
+                    .map(|r| match self.numeric().and_then(|n| n.get(r)) {
+                        Some(x) if x.is_nan() && self.data.text_cell(r).is_none() => String::new(),
+                        _ => self.cell_text(r),
+                    })
+                    .collect();
+                ColumnData::text(texts)
+            }
+            Storage::Numeric | Storage::Mixed => {
+                let mut numbers = Vec::with_capacity(rows);
+                let mut texts = BTreeMap::new();
+                match &self.data {
+                    ColumnData::Text(v) => {
+                        for (r, t) in v.iter().enumerate() {
+                            match t.trim().parse::<f64>() {
+                                Ok(x) if x.is_finite() => numbers.push(x),
+                                _ => {
+                                    numbers.push(f64::NAN);
+                                    if !t.is_empty() {
+                                        texts.insert(r, t.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => numbers.extend_from_slice(self.numeric().unwrap_or(&[])),
+                }
+                if to == Storage::Numeric { ColumnData::numeric(numbers) } else { ColumnData::mixed(numbers, texts) }
+            }
+        };
+        self.data = data;
+        if to == Storage::Text {
+            self.format = crate::format::NumberFormat::General;
+        }
+    }
+
     /// The width in characters the worksheet shows the column at.
     /// The numbers of the column with the masked cells replaced by missing values: what
     /// analysis, fits and statistics read. Borrowed when nothing is masked.
@@ -512,6 +577,28 @@ impl Column {
     }
 }
 
+/// The longest column short name; Origin cuts a longer one to this length without a message.
+pub const MAX_SHORT_NAME: usize = 18;
+
+/// A column short name as Origin keeps it when it is typed in Column Properties or set from a
+/// script (measured 2026-11-13): letters, digits and dots stay, every other character (space,
+/// underscore, hyphen, brackets, slash, ...) is dropped, and at most [`MAX_SHORT_NAME`] characters
+/// are kept. A name may start with a digit there. The result can be empty.
+pub fn clean_short_name(text: &str) -> String {
+    text.chars().filter(|c| c.is_alphanumeric() || *c == '.').take(MAX_SHORT_NAME).collect()
+}
+
+/// A short name from a header cell of an imported text file: [`clean_short_name`], and a first
+/// character that is a digit or a dot becomes `A` (`3rd-col` gives `Ardcol`, `9lives` gives
+/// `Alives`, `1.5` gives `A.5`). The result can be empty.
+pub fn imported_short_name(text: &str) -> String {
+    let mut name = clean_short_name(text);
+    if name.starts_with(|c: char| c.is_ascii_digit() || c == '.') {
+        name.replace_range(..1, "A");
+    }
+    name
+}
+
 /// Default short names in worksheet order: `A`..`Z`, then `AA`, `AB`, ...
 pub fn default_short_name(index: usize) -> String {
     let mut n = index;
@@ -529,7 +616,60 @@ pub fn default_short_name(index: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn text_to_numeric_keeps_words_like_inf_and_nan_as_text() {
+        let mut c = Column::new(
+            ColumnId(1),
+            "A",
+            Designation::Y,
+            ColumnData::text(vec!["1.5".into(), "inf".into(), "NaN".into(), "1e999".into()]),
+        );
+        c.convert_storage(Storage::Mixed);
+        assert_eq!(c.numeric().unwrap()[0], 1.5);
+        assert_eq!(c.data.text_cell(1), Some("inf"));
+        assert_eq!(c.data.text_cell(2), Some("NaN"));
+        assert_eq!(c.data.text_cell(3), Some("1e999"));
+    }
+
+    #[test]
+    fn storage_conversions_keep_what_can_be_kept() {
+        let mut c = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![1.5, f64::NAN, 3.0]));
+        c.format = crate::format::NumberFormat::Decimal(2);
+        c.convert_storage(Storage::Text);
+        assert_eq!(c.text().unwrap(), ["1.50", "", "3.00"]);
+        assert_eq!(c.format, crate::format::NumberFormat::General);
+        c.set_cell_text(1, "abc");
+        c.convert_storage(Storage::Mixed);
+        assert_eq!(c.data.text_cell(1), Some("abc"));
+        assert_eq!(c.numeric().unwrap()[0], 1.5);
+        c.convert_storage(Storage::Numeric);
+        assert!(c.numeric().unwrap()[1].is_nan());
+        assert_eq!(c.storage(), Storage::Numeric);
+    }
+
     use super::*;
+
+    #[test]
+    fn short_names_are_cleaned_like_origin() {
+        // Measured in Origin: the Column Properties box and `wks.col1.name$` give the same results.
+        assert_eq!(clean_short_name("a b_c-d.e"), "abcd.e");
+        assert_eq!(clean_short_name("my_name_1"), "myname1");
+        assert_eq!(clean_short_name("9abc"), "9abc");
+        assert_eq!(clean_short_name("a/b(c)+d%e,f:g#h"), "abcdefgh");
+        assert_eq!(clean_short_name("abcdefghijklmnopqrstuvwxyz"), "abcdefghijklmnopqr");
+        assert_eq!(clean_short_name("_ ."), ".");
+        assert_eq!(clean_short_name("__"), "");
+        // From an imported header cell a first digit or dot becomes A.
+        assert_eq!(imported_short_name("3rd-col"), "Ardcol");
+        assert_eq!(imported_short_name("9lives"), "Alives");
+        assert_eq!(imported_short_name("12x"), "A2x");
+        assert_eq!(imported_short_name("1.5"), "A.5");
+        assert_eq!(imported_short_name(".5x"), "A5x");
+        assert_eq!(imported_short_name("..a"), "A.a");
+        assert_eq!(imported_short_name("x1"), "x1");
+        assert_eq!(imported_short_name("Second Col"), "SecondCol");
+        assert_eq!(imported_short_name("---"), "");
+    }
 
     #[test]
     fn short_names_follow_spreadsheet_order() {

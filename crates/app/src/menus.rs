@@ -19,6 +19,7 @@ use crate::actions::{Action, CellOp, CopyKind, GraphOp, GraphTool, ImportPick, S
 use crate::app::APP_NAME;
 use crate::dialogs::analysis::AnalysisKind;
 use crate::dialogs::fit::FitKind;
+use crate::dialogs::fit_more::FitMoreKind;
 use crate::dialogs::graph_props::PropsTab;
 use crate::dialogs::reshape::ReshapeKind;
 use crate::gadget::GadgetOp;
@@ -72,6 +73,10 @@ pub enum Cmd {
     GoToCell,
     /// Statistics > Power and Sample Size > one of the tests.
     Power(sheaf_core::analysis::PowerKind),
+    /// Edit > Find in Sheets... (Ctrl+F) in a workbook.
+    FindInSheets,
+    /// Edit > Replace... (Ctrl+H) in a workbook.
+    ReplaceInSheets,
     ExportGraph,
     ExportWorksheet,
     Exit,
@@ -140,11 +145,19 @@ pub enum Cmd {
         range: bool,
     },
     SortByLabel,
+    /// Worksheet > Clear Worksheet: empty every column of the active sheet.
+    ClearWorksheet,
     /// Column > Reverse Order.
     ReverseOrder,
     FilterRows,
     Analyze(AnalysisKind),
+    /// Mathematics > Linear, Spline or B-Spline Interpolation: the Interpolate window with that
+    /// method chosen.
+    InterpolateWith(sheaf_core::analysis::InterpMethod),
+    /// Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a column.
+    InterpolateFromColumn,
     Fit(FitKind),
+    FitMore(FitMoreKind),
     /// The graph settings of the active layer on a tab.
     GraphProps(PropsTab),
     /// The graph settings of a given layer, with a plot chosen (the graph's right-click menus).
@@ -176,6 +189,13 @@ pub enum Cmd {
     DataReader,
     /// The Text tool of the Tools toolbar.
     TextTool,
+    /// A drawing tool of the Tools toolbar.
+    ShapeTool(sheaf_core::shape::ShapeKind),
+    /// Properties of a drawn object.
+    EditShape {
+        layer: usize,
+        shape: usize,
+    },
     /// Add Text...: a new text label in the active layer.
     AddText,
     /// Properties of a text label (its text window).
@@ -191,6 +211,14 @@ pub enum Cmd {
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
     Toolbars,
+    /// View > Status Bar: show or hide the status bar.
+    ToggleStatusBar,
+    /// File > Close: close (hide) the active window, as its title bar's close button does.
+    CloseWindow,
+    /// Window > Duplicate: a copy of the active workbook or graph.
+    DuplicateWindow,
+    /// File > Append...: bring the windows of another project into this one.
+    AppendProject,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -264,6 +292,10 @@ pub struct MenuContext<'a> {
     /// plot: the workbook and Y column of the selected plot, or else of the active layer's first
     /// visible plot of numbers. `None` when the graph has no such plot.
     pub curve: Option<(WindowId, ColumnId)>,
+    /// On a graph: the Y columns of the active layer's visible plots of numbers that sit in the same
+    /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
+    /// compare curves (Average Multiple Curves, Intersect) start from these.
+    pub layer_curves: Vec<ColumnId>,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -400,8 +432,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         keyed("&Open...", ctrl(Key::O), Cmd::OpenProject),
         grey_keyed("Open &Excel...", ctrl(Key::E)),
         grey("Open Sample Projects"),
-        grey("Appen&d..."),
-        grey("&Close"),
+        item("Appen&d...", Cmd::AppendProject),
+        item("&Close", Cmd::CloseWindow),
         sep(),
         keyed("&Save Project", ctrl(Key::S), Cmd::SaveProject),
         keyed("Save Project &As...", ctrl_shift(Key::S), Cmd::SaveProjectAs),
@@ -504,8 +536,8 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(item("&Delete", Cmd::DeleteCells));
         v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
-        v.push(grey_keyed("Find in Sheets...", ctrl(Key::F)));
-        v.push(grey_keyed("Replace...", ctrl(Key::H)));
+        v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
+        v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
         v.extend(greys(&["-", "Button Edit Mode"]));
     } else {
@@ -544,7 +576,12 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
 }
 
 fn view_menu(kind: WindowKind) -> Vec<Entry> {
-    let mut v = vec![grey("Menu"), keyed("&Toolbars...", ctrl(Key::T), Cmd::Toolbars), grey("Status Bar"), sep()];
+    let mut v = vec![
+        grey("Menu"),
+        keyed("&Toolbars...", ctrl(Key::T), Cmd::Toolbars),
+        item("Status Bar", Cmd::ToggleStatusBar),
+        sep(),
+    ];
     v.push(grey_keyed("Command Window", alt(Key::Num3)));
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
@@ -609,7 +646,12 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("&Scatter", Cmd::Plot(Template::Scatter)), grey("Scatter Central"), grey("Column Scatter")],
                 vec![item("Y Error", Cmd::PlotYError), item("XY Error", Cmd::PlotXYError)],
-                greys(&["Vertical Drop Line", "Bubble", "Color Mapped", "Bubble + Color Mapped"]),
+                greys(&["Vertical Drop Line"]),
+                vec![
+                    item("Bubble", Cmd::Plot(Template::Bubble)),
+                    item("Color Mapped", Cmd::Plot(Template::ColorMapped)),
+                    item("Bubble + Color Mapped", Cmd::Plot(Template::BubbleColorMapped)),
+                ],
             ]
             .concat(),
         ),
@@ -628,12 +670,13 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("Bar", Cmd::Plot(Template::Bar)),
                     item("Stacked Column", Cmd::Plot(Template::StackedColumn)),
-                    grey("Stacked Bar"),
+                    item("Stacked Bar", Cmd::Plot(Template::StackedBar)),
                     item("100% Stacked Column", Cmd::Plot(Template::Stacked100Column)),
-                    grey("100% Stacked Bar"),
+                    item("100% Stacked Bar", Cmd::Plot(Template::Stacked100Bar)),
                     item("Floating Column", Cmd::Plot(Template::FloatingColumn)),
+                    item("Floating Bar", Cmd::Plot(Template::FloatingBar)),
                 ],
-                greys(&["Floating Bar", "3D Color Pie", "2D B&&W Pie"]),
+                vec![item("3D Color Pie", Cmd::Plot(Template::Pie3D)), item("2D B&&W Pie", Cmd::Plot(Template::PieBw))],
             ]
             .concat(),
         ),
@@ -695,26 +738,36 @@ fn plot_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
-        grey_sub(
+        sub(
             "S&tatistics",
-            &[
-                "Box Chart",
-                "Grouped Box Charts",
-                "Interval Plot",
-                "Histogram",
-                "Histogram + Probabilities",
-                "Stacked Histograms",
-                "Marginal Histograms",
-                "Marginal Box Charts",
-                "2D Kernel Density",
-                "QC (X bar R) Chart",
-                "Pareto",
-                "Scatter Matrix",
-                "Probability Plot",
-                "Q-Q Plot",
+            [
+                vec![item("Box Chart", Cmd::Plot(Template::BoxChart))],
+                greys(&["Grouped Box Charts", "Interval Plot"]),
+                vec![item("Histogram", Cmd::Plot(Template::Histogram))],
+                greys(&[
+                    "Histogram + Probabilities",
+                    "Stacked Histograms",
+                    "Marginal Histograms",
+                    "Marginal Box Charts",
+                    "2D Kernel Density",
+                    "QC (X bar R) Chart",
+                    "Pareto",
+                    "Scatter Matrix",
+                    "Probability Plot",
+                    "Q-Q Plot",
+                ]),
+            ]
+            .concat(),
+        ),
+        sub(
+            "&Area",
+            vec![
+                item("&Area", Cmd::Plot(Template::Area)),
+                item("Stacked Area", Cmd::Plot(Template::StackedArea)),
+                item("100% Stacked Area", Cmd::Plot(Template::Stacked100Area)),
+                item("Fill Area", Cmd::Plot(Template::FillArea)),
             ],
         ),
-        sub("&Area", vec![item("&Area", Cmd::Plot(Template::Area)), grey("Stacked Area"), grey("Fill Area")]),
         grey_sub(
             "Contour/&Heat Map",
             &[
@@ -728,21 +781,22 @@ fn plot_menu() -> Vec<Entry> {
             ],
         ),
         grey_sub("Pro&file", &["Contour Profiles", "Image Profiles"]),
-        grey_sub(
+        sub(
             "Specialize&d",
-            &[
-                "Polar theta(X) r(Y)",
-                "Polar r(X) theta(Y)",
-                "Wind Rose",
-                "Ternary",
-                "Piper",
-                "Smith Chart",
-                "Radar",
-                "High-Low-Close",
-                "Vector XYAM",
-                "Vector XYXY",
-                "Zoom",
-            ],
+            [
+                with(
+                    vec![
+                        item("Polar theta(X) r(Y)", Cmd::Plot(Template::Polar)),
+                        item("Polar r(X) theta(Y)", Cmd::Plot(Template::PolarRTheta)),
+                    ],
+                    &["Wind Rose"],
+                ),
+                vec![item("Ternary", Cmd::Plot(Template::Ternary))],
+                greys(&["Piper", "Smith Chart"]),
+                vec![item("Radar", Cmd::Plot(Template::Radar))],
+                greys(&["High-Low-Close", "Vector XYAM", "Vector XYXY", "Zoom"]),
+            ]
+            .concat(),
         ),
         grey_sub("Stoc&k", &["High-Low-Close", "Japanese Candlestick", "OHLC Bar Chart", "OHLC-Volume", "Line"]),
         sep(),
@@ -852,7 +906,7 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
-        grey("Clear Worksheet..."),
+        item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         grey("Pivot Table..."),
         item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
@@ -882,18 +936,18 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Integrate Ranges...", Cmd::Analyze(AnalysisKind::IntegrateRanges)),
                 sep(),
                 item("Interpolate/Extrapolate...", Cmd::Analyze(AnalysisKind::Interpolate)),
-                grey("Interpolate/Extrapolate Y from X..."),
+                item("Interpolate/Extrapolate Y from X...", Cmd::InterpolateFromColumn),
                 grey("Trace Interpolation..."),
-                grey("Linear Interpolation..."),
-                grey("Spline Interpolation..."),
-                grey("B-Spline Interpolation..."),
+                item("Linear Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::Linear)),
+                item("Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::CubicSpline)),
+                item("B-Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::BSpline)),
                 sep(),
-                grey("Intersect..."),
+                item("Intersect...", Cmd::Analyze(AnalysisKind::Intersect)),
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
-                grey("Average Multiple Curves..."),
-                grey("Polygon Area..."),
+                item("Average Multiple Curves...", Cmd::Analyze(AnalysisKind::AverageCurves)),
+                item("Polygon Area...", Cmd::Analyze(AnalysisKind::PolygonArea)),
                 grey("XYZ Surface Area..."),
-                grey("Median Filter..."),
+                item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
                 grey("Inverse..."),
             ],
@@ -902,18 +956,21 @@ fn analysis_menu() -> Vec<Entry> {
             "&Data Manipulation",
             vec![
                 item("Subtract Reference Data...", Cmd::Analyze(AnalysisKind::SubtractRef)),
-                grey("Subtract Straight Line..."),
-                grey("Reduce to Evenly Spaced X..."),
-                grey("Curve Translate X..."),
+                item("Subtract Straight Line...", Cmd::Analyze(AnalysisKind::SubtractLine)),
+                item("Reduce Duplicate X Data...", Cmd::Analyze(AnalysisKind::ReduceDup)),
+                item("Reduce to Evenly Spaced X...", Cmd::Analyze(AnalysisKind::ReduceX)),
+                item("Curve Translate X...", Cmd::Analyze(AnalysisKind::TranslateX)),
+                // Sheaf's own: the same window along Y.
+                item("Curve Translate Y...", Cmd::Analyze(AnalysisKind::TranslateY)),
             ],
         ),
         sub(
             "&Fitting",
             vec![
                 item("Linear Fit...", Cmd::Fit(FitKind::Linear)),
-                grey("Fit Linear with X Error..."),
+                item("Fit Linear with X Error...", Cmd::Fit(FitKind::LinearXError)),
                 item("Polynomial Fit...", Cmd::Fit(FitKind::Polynomial)),
-                grey("Multiple Linear Regression..."),
+                item("Multiple Linear Regression...", Cmd::FitMore(FitMoreKind::Multiple)),
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
                 grey("Nonlinear Implicit Curve Fit..."),
@@ -922,13 +979,13 @@ fn analysis_menu() -> Vec<Entry> {
                 grey("Simulate Curve..."),
                 grey("Simulate Surface..."),
                 sep(),
-                grey("Exponential Fit..."),
-                grey("Single Peak Fit..."),
-                grey("Sigmoidal Fit..."),
+                item("Exponential Fit...", Cmd::Fit(FitKind::Exponential)),
+                item("Single Peak Fit...", Cmd::Fit(FitKind::SinglePeak)),
+                item("Sigmoidal Fit...", Cmd::Fit(FitKind::Sigmoidal)),
                 sep(),
                 grey("Compare Datasets..."),
-                grey("Compare Models..."),
-                grey("Rank Models..."),
+                item("Compare Models...", Cmd::FitMore(FitMoreKind::Compare)),
+                item("Rank Models...", Cmd::FitMore(FitMoreKind::Rank)),
             ],
         ),
         sub(
@@ -1208,7 +1265,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         sep(),
         keyed("&Refresh", plain_key(Key::F5), Cmd::Refresh),
         sep(),
-        grey("&Duplicate"),
+        item("&Duplicate", Cmd::DuplicateWindow),
     ];
     match kind {
         WindowKind::Graph => {
@@ -1355,7 +1412,17 @@ pub fn column_header_menu() -> Vec<Entry> {
     v
 }
 
-/// The menu of a cell.
+/// Metadata cells have clipboard commands, without structural operations on worksheet data.
+pub fn label_cell_menu() -> Vec<Entry> {
+    vec![
+        keyed("Cut", ctrl(Key::X), Cmd::Cut),
+        sub("Copy", copy_entries()),
+        keyed("Paste", ctrl(Key::V), Cmd::Paste),
+        keyed("Clear", plain_key(Key::Delete), Cmd::Clear),
+    ]
+}
+
+/// The menu of a data cell.
 pub fn cell_menu() -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
@@ -1438,6 +1505,7 @@ pub fn graph_plot_menu(
                 change("Line + Symbol", PlotKind::LineSymbol),
                 change("Column", PlotKind::Column),
                 change("Area", PlotKind::Area),
+                change("Stacked Area", PlotKind::StackedArea),
             ],
         ),
         grey("Change X"),
@@ -1510,6 +1578,20 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
         grey("Push to the back"),
         sep(),
         item("Properties...", Cmd::EditText { layer, label }),
+    ]
+}
+
+/// The menu of a drawn line, arrow, rectangle or ellipse.
+pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
+    vec![
+        grey_keyed("Cut", ctrl(Key::X)),
+        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
+        sep(),
+        grey("Bring to the front"),
+        grey("Push to the back"),
+        sep(),
+        item("Properties...", Cmd::EditShape { layer, shape }),
     ]
 }
 
@@ -1771,6 +1853,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportWizard => Action::ImportWizard,
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::Power(kind) => Action::Power(*kind),
+        Cmd::FindInSheets => Action::FindInSheets(book?),
+        Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::Exit => Action::Quit,
@@ -1850,6 +1934,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SortCustom { book, columns }
         }
         Cmd::SortByLabel => Action::SortByLabel(book?),
+        Cmd::ClearWorksheet => Action::ClearWorksheet(book?),
         Cmd::SetCategorical => {
             book?;
             Action::SetCategorical(some()?)
@@ -1878,7 +1963,28 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Analyze(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
-                Action::Analyze { book, columns: vec![y], kind: *kind }
+                let columns = match kind {
+                    AnalysisKind::AverageCurves if c.layer_curves.len() >= 2 => c.layer_curves.clone(),
+                    AnalysisKind::Intersect if c.layer_curves.len() >= 2 => c.layer_curves[..2].to_vec(),
+                    _ => vec![y],
+                };
+                Action::Analyze { book, columns, kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
+        Cmd::InterpolateFromColumn => match (c.book, c.curve) {
+            (Some(book), _) => Action::InterpolateFromColumn { book, columns: c.selected.to_vec() },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::InterpolateFromColumn { book, columns: vec![y] }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
+        Cmd::InterpolateWith(method) => match (c.book, c.curve) {
+            (Some(book), _) => Action::InterpolateWith { book, columns: c.selected.to_vec(), method: *method },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::InterpolateWith { book, columns: vec![y], method: *method }
             }
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),
@@ -1887,6 +1993,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             (Some(book), _) => Action::Fit { book, column: c.selected.first().copied(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
                 Action::Fit { book, column: Some(y), kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
+        Cmd::FitMore(kind) => match (c.book, c.curve) {
+            (Some(book), _) => Action::FitMore { book, column: c.selected.first().copied(), kind: *kind },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::FitMore { book, column: Some(y), kind: *kind }
             }
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),
@@ -1914,6 +2028,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
+        Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
+        Cmd::EditShape { layer, shape } => {
+            Action::EditShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
+        }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
@@ -1922,6 +2040,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
+        Cmd::ToggleStatusBar => Action::ToggleStatusBar,
+        Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::AppendProject => Action::AppendProject(None),
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,
@@ -2201,10 +2323,39 @@ mod tests {
             walk(&m.entries, &mut |i| cmds.extend(i.cmd.clone()));
         }
         for t in Template::ALL {
+            // The flat colour pie stays as a CLI name only: Origin has no "2D Color Pie".
+            if t == Template::Pie {
+                continue;
+            }
             assert!(cmds.contains(&Cmd::Plot(t)), "{t:?} is not in the Plot menu");
         }
         for d in Designation::ALL {
             assert!(cmds.contains(&Cmd::SetAs(d)), "{d:?} is not in Column > Set As");
+        }
+    }
+
+    #[test]
+    fn the_horizontal_bar_items_of_the_plot_menu_are_live_and_make_the_right_graph() {
+        use sheaf_core::graph::PlotKind;
+        let mut items: Vec<(String, Cmd)> = Vec::new();
+        for m in bar(WindowKind::Workbook) {
+            walk(&m.entries, &mut |i| {
+                if let Some(c) = &i.cmd {
+                    items.push((i.label.clone(), c.clone()));
+                }
+            });
+        }
+        for (label, t, kind) in [
+            ("Stacked Bar", Template::StackedBar, PlotKind::StackedBar),
+            ("100% Stacked Bar", Template::Stacked100Bar, PlotKind::Stacked100Bar),
+            ("Floating Bar", Template::FloatingBar, PlotKind::FloatingBar),
+        ] {
+            assert!(
+                items.iter().any(|(l, c)| l.replace('&', "") == label && *c == Cmd::Plot(t)),
+                "{label} is a live item"
+            );
+            let g = t.new_graph(sheaf_core::WindowId(0), "");
+            assert_eq!(g.layers[0].default_kind, kind);
         }
     }
 
@@ -2261,6 +2412,7 @@ mod tests {
             layer: 0,
             tool: Default::default(),
             curve: None,
+            layer_curves: Vec::new(),
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

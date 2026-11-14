@@ -197,10 +197,7 @@ impl AnalysisKind {
     }
 
     fn title(self) -> &'static str {
-        match self {
-            // The four power windows are told apart by their test; Origin's titles for them were not looked up.
-            _ => self.menu_label().trim_end_matches("..."),
-        }
+        self.menu_label().trim_end_matches("...")
     }
 
     /// The name used on the command line with `--show analysis:NAME`.
@@ -2825,8 +2822,19 @@ impl AnalysisDialog {
                         preview_now = true;
                     }
                     ui.add_enabled(self.has_preview(), egui::Checkbox::new(&mut self.auto_preview, "Auto Preview"));
-                    ui.checkbox(&mut self.auto_apply, "Auto Apply")
-                        .on_hover_text("Run the tool again at once whenever an option changes");
+                    // The probability and Q-Q plots make a new sheet and a new graph on every run, so running them
+                    // at each option change would pile those up; they run on OK and Apply only.
+                    let allowed = !matches!(self.kind, AnalysisKind::ProbPlot | AnalysisKind::QQPlot);
+                    if !allowed {
+                        self.auto_apply = false;
+                    }
+                    ui.add_enabled(allowed, egui::Checkbox::new(&mut self.auto_apply, "Auto Apply")).on_hover_text(
+                        if allowed {
+                            "Run the tool again at once whenever an option changes"
+                        } else {
+                            "This tool makes a new sheet and graph each time it runs; use Apply"
+                        },
+                    );
                 });
             });
         self.picker_window(ctx, doc.project());

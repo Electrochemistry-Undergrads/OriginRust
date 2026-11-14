@@ -5210,6 +5210,26 @@ fn auto_apply_runs_the_tool_again_after_each_change_and_replaces_its_result() {
     assert_eq!(cols(&h), 3, "one Undo removes everything the window did");
 }
 
+/// The probability and Q-Q plots make a sheet and a graph on each run, so Auto Apply is off for them and an option
+/// change adds nothing until Apply or OK.
+#[test]
+fn auto_apply_is_not_offered_for_the_plots_that_make_a_graph() {
+    for kind in [AnalysisKind::ProbPlot, AnalysisKind::QQPlot] {
+        let mut h = start(vec![data_file("auto-apply-prob")]);
+        open_analysis_on(&mut h, kind, &["B"]);
+        let graphs = project(&h).graphs().count();
+        assert!(is_disabled(&h, "Auto Apply"), "{kind:?}");
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Normal")).click();
+        settle(&mut h);
+        click(&mut h, "Weibull");
+        settle(&mut h);
+        assert_eq!(project(&h).graphs().count(), graphs, "{kind:?}: an option change makes no graph");
+        assert!(h.state().analysis.is_some());
+        click(&mut h, "OK");
+        assert_eq!(project(&h).graphs().count(), graphs + 1, "{kind:?}");
+    }
+}
+
 #[test]
 fn the_analysis_window_cancel_changes_nothing() {
     let mut h = start(vec![data_file("frame-cancel")]);

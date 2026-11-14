@@ -651,6 +651,9 @@ Both make a new graph (a scatter plot and a line plot per column, the line in th
 "Make a graph" is off, plus the result sheet with the plotted columns and a table (N, parameters or slope,
 intercept, r). One undo step removes sheet and graph.
 
+Auto Apply is not offered for these two windows (the checkbox is disabled): each run makes a new sheet and a new
+graph, so running at every option change would pile them up; they run on OK and Apply.
+
 ### 16.3 Checked against scipy, tolerances
 
 Normal, lognormal and exponential estimates, log-likelihood, AIC, BIC, KS D, A2, probability plot quantiles, slope,

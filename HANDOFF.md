@@ -61,7 +61,9 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
 - T08 text substitution: `substitute(s,new,find[,n])$` follows Origin's documented argument order;
   omitted/zero occurrence replaces all, a positive integer chooses one. Function > Text exposes it.
   Text-returning functions accept `$`; worksheet regressions cover Auto recalculation and undo.
-  The reference and unmeasured edge choices are in expression-language.md section 3.
+  Built-in column headers (`G/L/U/C/O`, e.g. `col(A)[U]$`) now support text/numeric reads,
+  Auto/Manual recalculation after header edits, and self-label references without false cycles.
+  The references and unmeasured edge choices are in expression-language.md section 3.
 
 - [x] **Single yellow-cell selection** (fixed 2026-11-13): labels have their own `Sel::Label`
       selection, with a border around just that cell; column letters still select columns.

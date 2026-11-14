@@ -8,7 +8,7 @@ use crate::column::{Column, ColumnData, FormulaState, RecalcMode};
 use crate::ids::ColumnId;
 use crate::project::Project;
 use crate::worksheet::Worksheet;
-use sheaf_expr::{CellReads, ColumnRef, Expr, ExprError, Host, Value};
+use sheaf_expr::{CellReads, ColumnLabel, ColumnRef, Expr, ExprError, Host, Value};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::ops::Range;
 
@@ -65,6 +65,17 @@ impl<'a> SheetHost<'a> {
 }
 
 impl Host for SheetHost<'_> {
+    fn column_label(&self, col: &ColumnRef, label: ColumnLabel) -> Option<String> {
+        let c = self.find(col)?;
+        Some(match label {
+            ColumnLabel::ShortName => c.short_name.clone(),
+            ColumnLabel::LongName => c.long_name.clone(),
+            ColumnLabel::Units => c.units.clone(),
+            ColumnLabel::Comments => c.comments.clone(),
+            ColumnLabel::Formula => c.formula.clone().unwrap_or_default(),
+        })
+    }
+
     fn variable(&self, _name: &str) -> Option<f64> {
         None
     }
@@ -117,13 +128,18 @@ pub(crate) fn eval_on_sheet(expr: &Expr, sheet: &Worksheet, rows: usize) -> Resu
     expr.eval_rows(&SheetHost { sheet }, rows)
 }
 
-/// The columns of the sheet that the formula of column `me` reads, or the first reference that
-/// matches no column. `cell(r, c)` reads the column at position `c`: a constant `c` names that
-/// column; any other `c` may be any column, so every other column of the sheet is a source.
-fn resolve_deps(expr: &Expr, sheet: &Worksheet, me: ColumnId) -> Result<Vec<ColumnId>, ColumnRef> {
+/// Cell reads determine calculation order; header reads only invalidate a result.
+struct FormulaDeps {
+    data: Vec<ColumnId>,
+    labels: Vec<ColumnId>,
+}
+
+/// Resolves cell and header sources, or returns the first reference that matches no column.
+/// A computed `cell(r,c)` may read any other column of the sheet.
+fn resolve_deps(expr: &Expr, sheet: &Worksheet, me: ColumnId) -> Result<FormulaDeps, ColumnRef> {
     let host = SheetHost { sheet };
     let mut out = Vec::new();
-    for r in expr.columns() {
+    for r in expr.data_columns() {
         let id = host.find(&r).ok_or(r)?.id;
         if !out.contains(&id) {
             out.push(id);
@@ -148,7 +164,14 @@ fn resolve_deps(expr: &Expr, sheet: &Worksheet, me: ColumnId) -> Result<Vec<Colu
             }
         }
     }
-    Ok(out)
+    let mut labels = Vec::new();
+    for r in expr.label_columns() {
+        let id = host.find(&r).ok_or(r)?.id;
+        if !labels.contains(&id) {
+            labels.push(id);
+        }
+    }
+    Ok(FormulaDeps { data: out, labels })
 }
 
 /// The new data of `target` after its formula filled `range`. Rows outside the range keep their
@@ -254,7 +277,7 @@ fn find_cycle(sheet: &Worksheet, target: ColumnId, deps: &[ColumnId]) -> Option<
         let Ok(next) = resolve_deps(&expr, sheet, id) else {
             continue;
         };
-        for n in next {
+        for n in next.data {
             if n == target {
                 let mut chain = vec![id];
                 let mut cur = id;
@@ -289,7 +312,7 @@ pub struct RecalcProblem {
 struct FormulaNode {
     idx: usize,
     id: ColumnId,
-    deps: Result<Vec<ColumnId>, String>,
+    deps: Result<FormulaDeps, String>,
     expr: Option<Expr>,
 }
 
@@ -329,13 +352,14 @@ pub(crate) fn recalc_sheet(
         return problems;
     }
 
-    // Dependency order (Kahn). Nodes left over take part in a circular chain.
+    // Dependency order (Kahn), using cell data only: headers are scalars independent of their
+    // column's formula result. Nodes left over take part in a circular data chain.
     let position: HashMap<ColumnId, usize> = nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
     let mut indegree = vec![0usize; nodes.len()];
     let mut readers: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
     for (j, n) in nodes.iter().enumerate() {
         if let Ok(deps) = &n.deps {
-            for d in deps {
+            for d in &deps.data {
                 if let Some(&i) = position.get(d) {
                     indegree[j] += 1;
                     readers[i].push(j);
@@ -374,7 +398,8 @@ pub(crate) fn recalc_sheet(
             }
         };
         let forced = force.contains(&node.id);
-        let needs = forced || state == FormulaState::Broken || deps.iter().any(|d| dirty.contains(d));
+        let needs =
+            forced || state == FormulaState::Broken || deps.data.iter().chain(&deps.labels).any(|d| dirty.contains(d));
         if !needs {
             continue;
         }
@@ -384,14 +409,22 @@ pub(crate) fn recalc_sheet(
         }
         let derived = formula_rows.is_none();
         let range = formula_rows.unwrap_or_else(|| {
-            let rows = deps.iter().filter_map(|d| ws.column(*d)).map(Column::len).max().unwrap_or(0);
+            // Headers are scalars, not data ranges. A header-only formula fills the current
+            // worksheet rows; header reads do not lengthen a formula over actual data columns.
+            let rows = deps
+                .data
+                .iter()
+                .filter_map(|d| ws.column(*d))
+                .map(Column::len)
+                .max()
+                .unwrap_or_else(|| if deps.labels.is_empty() { 0 } else { ws.row_count() });
             0..rows
         });
         if range.is_empty() {
             let c = &mut ws.columns[node.idx];
             // A formula over the whole column follows its sources, so when they are all empty
             // (for example after a shorter re-import) the results go too.
-            if derived && !deps.is_empty() && !c.is_empty() {
+            if derived && !deps.data.is_empty() && !c.is_empty() {
                 c.data = if c.data.is_mixed() { ColumnData::default() } else { ColumnData::numeric(Vec::new()) };
                 dirty.insert(node.id);
             }
@@ -478,10 +511,10 @@ impl Project {
         if mode != RecalcMode::None
             && let Ok(deps) = resolve_deps(&expr, sheet, column)
         {
-            if deps.contains(&column) {
+            if deps.data.contains(&column) {
                 // Origin documents this case: a formula that reads its own column runs once.
                 mode = RecalcMode::None;
-            } else if let Some(path) = find_cycle(sheet, column, &deps) {
+            } else if let Some(path) = find_cycle(sheet, column, &deps.data) {
                 let names: Vec<&str> =
                     path.iter().map(|id| sheet.column(*id).map_or("?", |c| c.short_name.as_str())).collect();
                 return Err(FormulaError::Cycle(names.join(" -> ")));
@@ -558,7 +591,7 @@ impl Project {
     }
 
     /// Brings recalculating columns up to date after an edit that turned `before` into `self`:
-    /// columns whose data or names differ are the changes. Does nothing when no column in the
+    /// columns whose data, names or label metadata differ are the changes. Does nothing when no column in the
     /// project recalculates. Used by [`crate::Document`], which calls it inside the undo step of
     /// the edit.
     pub fn recalculate_since(&mut self, before: &Project) -> Vec<RecalcProblem> {
@@ -584,7 +617,12 @@ impl Project {
                         .iter()
                         .filter(|c| {
                             old.get(&c.id).is_none_or(|o| {
-                                o.data != c.data || o.short_name != c.short_name || o.long_name != c.long_name
+                                o.data != c.data
+                                    || o.short_name != c.short_name
+                                    || o.long_name != c.long_name
+                                    || o.units != c.units
+                                    || o.comments != c.comments
+                                    || o.formula != c.formula
                             })
                         })
                         .map(|c| c.id)

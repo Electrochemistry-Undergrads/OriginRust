@@ -5206,6 +5206,33 @@ fn set_values_substitute_picker_and_formula_fill_text_cells() {
 }
 
 #[test]
+fn column_label_formula_recalculates_after_a_grid_header_edit() {
+    let mut h = start(vec![data_file("header_formula")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    h.event(egui::Event::Text(r#"col(B)[L]$+" ["+col(B)[U]$+"]""#.into()));
+    settle(&mut h);
+    choose_recalc(&mut h, "Manual", "Auto");
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "a valid header formula closes the dialog");
+    let result = |h: &Harness<'static, SheafApp>| {
+        project(h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().cell_text(0)
+    };
+    assert_eq!(result(&h), "up []");
+    click(&mut h, "B Units");
+    h.event(egui::Event::Text("mA".into()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(result(&h), "up [mA]");
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(result(&h), "up []");
+    menu(&mut h, "Edit", "Redo");
+    assert_eq!(result(&h), "up [mA]");
+}
+
+#[test]
 fn set_values_apply_waits_for_a_change_and_recalculate_defaults_to_manual() {
     let mut h = start(vec![data_file("setvals")]);
     show_window(&mut h, "Book1 - sample");

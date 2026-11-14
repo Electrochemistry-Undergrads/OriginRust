@@ -6,7 +6,7 @@
 //! any heap allocation (except for statistics over a moving row range on a host that cannot
 //! lend column slices).
 
-use crate::ast::{ColumnRef, Expr, Kind, Node, UnOp};
+use crate::ast::{ColumnLabel, ColumnRef, Expr, Kind, Node, UnOp};
 use crate::error::ExprError;
 use crate::funcs::{self, Agg, BinOp, F1, F2, FnN, Func, NA, VecFn, apply_bin, max2, min2, truthy};
 use crate::text::{self, StrFn, Value};
@@ -71,6 +71,12 @@ pub trait Host {
     /// `col(A)`, are evaluated with text values (see [`Expr::eval_values`]).
     fn column_has_text(&self, _col: &ColumnRef) -> bool {
         false
+    }
+
+    /// The text of a built-in column header. A host without metadata returns `None`, read as
+    /// empty text (or missing in a numeric header read). Column existence is checked separately.
+    fn column_label(&self, _col: &ColumnRef, _label: ColumnLabel) -> Option<String> {
+        None
     }
 
     /// The 0-based row that [`Expr::eval`] evaluates. The variable `i` is this row plus one.
@@ -380,7 +386,7 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
     let b = |n: &Node| build(host, seeds, n).map(Box::new);
     let c = match &n.kind {
         Kind::Num(v) => C::Num(*v),
-        Kind::Str(_) | Kind::Text(_) => {
+        Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } => {
             return Err(ExprError::at(
                 n.pos(),
                 "text values are not available here (only as the result of a column formula)",
@@ -392,6 +398,10 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
             None => return Err(ExprError::at(*pos, format!("unknown variable '{name}'"))),
         },
         Kind::Col { .. } => C::Col(build_col(host, n)?),
+        Kind::Label { r, label, text: false } => {
+            let s = read_label(host, r, *label, n.pos())?;
+            C::Num(text::apply(StrFn::Value, vec![Value::Text(s)]).number())
+        }
         Kind::Index { base, idx } => C::Index(build_col(host, base)?, b(idx)?),
         Kind::Range { pos, .. } => {
             return Err(ExprError::at(
@@ -599,7 +609,10 @@ fn ev_inner(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
 fn explicit_text(n: &Node) -> bool {
     let mut found = false;
     n.walk(&mut |m| {
-        found |= matches!(m.kind, Kind::Str(_) | Kind::Text(_) | Kind::Call { func: Func::Str(_), .. });
+        found |= matches!(
+            m.kind,
+            Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } | Kind::Call { func: Func::Str(_), .. }
+        );
     });
     found
 }
@@ -608,7 +621,7 @@ fn explicit_text(n: &Node) -> bool {
 /// that returns text, a join with `+`).
 fn is_str(n: &Node) -> bool {
     match &n.kind {
-        Kind::Str(_) | Kind::Text(_) => true,
+        Kind::Str(_) | Kind::Text(_) | Kind::Label { text: true, .. } => true,
         Kind::Call { func: Func::Str(f), .. } => f.returns_text(),
         Kind::Binary(BinOp::Add, a, b) => is_str(a) || is_str(b),
         Kind::Cond(_, a, b) => is_str(a) || is_str(b),
@@ -658,6 +671,13 @@ enum V<'h> {
     Str1(StrFn, Vec<V<'h>>),
 }
 
+fn read_label(host: &dyn Host, r: &ColumnRef, label: ColumnLabel, pos: usize) -> Result<String, ExprError> {
+    if !host.has_column(r) {
+        return Err(ExprError::at(pos, format!("unknown column {r}")));
+    }
+    Ok(host.column_label(r, label).unwrap_or_default())
+}
+
 fn cell_ref(host: &dyn Host, n: &Node) -> Result<(ColumnRef, Option<Node>), ExprError> {
     let (col, idx) = match &n.kind {
         Kind::Index { base, idx } => (&**base, Some((**idx).clone())),
@@ -684,6 +704,7 @@ fn build_v_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool
     let list = |args: &[Node]| args.iter().map(|a| build_v(host, seeds, a, false)).collect::<Result<Vec<_>, _>>();
     Ok(match &n.kind {
         Kind::Str(s) => V::Str(s.clone()),
+        Kind::Label { r, label, text: true } => V::Str(read_label(host, r, *label, n.pos())?),
         Kind::Text(inner) => {
             let (r, idx) = cell_ref(host, inner)?;
             V::TextOf(r, idx.map(|i| b(&i, false)).transpose()?)
@@ -714,7 +735,9 @@ fn build_v_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node, free: bool
             Func::IfElse => V::Cond(b(&args[0], false)?, b(&args[1], free)?, b(&args[2], free)?),
             _ => return Err(ExprError::at(n.pos(), "text cannot be used in this function")),
         },
-        Kind::Num(_) | Kind::Var { .. } | Kind::Range { .. } => build(host, seeds, n).map(V::Num)?,
+        Kind::Num(_) | Kind::Var { .. } | Kind::Range { .. } | Kind::Label { text: false, .. } => {
+            build(host, seeds, n).map(V::Num)?
+        }
     })
 }
 

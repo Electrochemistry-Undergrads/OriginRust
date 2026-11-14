@@ -14,7 +14,7 @@
 //! primary  := number | "text" | name | name '(' args ')' | col-reference | '(' ternary ')'
 //! ```
 
-use crate::ast::{ColumnRef, Kind, Node, UnOp};
+use crate::ast::{ColumnLabel, ColumnRef, Kind, Node, UnOp};
 use crate::error::ExprError;
 use crate::funcs::{Agg, BinOp, Func, Resolved, resolve};
 use crate::lexer::{Tok, Token, lex};
@@ -211,6 +211,17 @@ impl Parser {
                 pos,
                 "only a column reference such as col(A) can be followed by a [row] subscript",
             ));
+        }
+        if let Tok::Ident(code) = self.peek_tok()
+            && let Some(label) = ColumnLabel::from_code(code)
+            && self.toks.get(self.at + 1).is_some_and(|t| t.tok == Tok::RBracket)
+        {
+            // A standalone label-row character takes precedence over a variable of that name.
+            self.advance();
+            self.advance();
+            let text = self.eat(&Tok::Dollar);
+            let Kind::Col { r, .. } = node.kind else { unreachable!("checked above") };
+            return Node::new(Kind::Label { r, label, text }, pos);
         }
         let first = self.ternary()?;
         if self.eat(&Tok::Colon) {

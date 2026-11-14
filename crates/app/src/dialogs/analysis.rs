@@ -49,6 +49,8 @@ pub enum AnalysisKind {
     TTest,
     Anova,
     Histogram,
+    /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (options in `bin2d_options.rs`).
+    Binning2D,
     Normality,
     /// Statistics > ANOVA > Two-Way ANOVA.
     Anova2,
@@ -116,6 +118,7 @@ impl AnalysisKind {
             AnalysisKind::TTest => "t-Test...",
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
+            AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
             AnalysisKind::Normality => "Normality Test...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
             AnalysisKind::MannWhitney => "Mann-Whitney Test...",
@@ -164,6 +167,7 @@ impl AnalysisKind {
             "ttest" => AnalysisKind::TTest,
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
+            "bin2d" => AnalysisKind::Binning2D,
             "normality" => AnalysisKind::Normality,
             "anova2" => AnalysisKind::Anova2,
             "mannwhitney" => AnalysisKind::MannWhitney,
@@ -501,6 +505,7 @@ pub struct AnalysisDialog {
     common_only: bool,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
+    bin2d: super::bin2d_options::Bin2dState,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
     /// Every column of the sheet with a description, for the factor and data choices of the two-way ANOVA
@@ -682,6 +687,7 @@ impl AnalysisDialog {
             chain_fit_linear: true,
             stats,
             curves: Default::default(),
+            bin2d: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
             problem: None,
@@ -1033,6 +1039,7 @@ impl AnalysisDialog {
                 },
                 graph: self.stats.graph,
             }),
+            AnalysisKind::Binning2D => Tool::Binning2D(self.bin2d.options()),
             AnalysisKind::Normality => Tool::Normality(NormalitySpec { alpha: self.stats.alpha }),
             AnalysisKind::Anova2 => {
                 let layout = if self.stats.two_way_raw {
@@ -1697,6 +1704,15 @@ impl AnalysisDialog {
                 });
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
+            AnalysisKind::Binning2D => {
+                let mut names = self.column_names.split(", ");
+                let (x, y) = match (names.next(), names.next()) {
+                    (Some(a), Some(b)) if self.columns.len() >= 2 => (format!("{a}(X)"), format!("{b}(Y)")),
+                    (Some(a), _) => ("X".to_string(), format!("{a}(Y)")),
+                    _ => ("X".to_string(), "Y".to_string()),
+                };
+                self.bin2d.ui(ui, &x, &y);
+            }
             AnalysisKind::AverageCurves => self.curves.average_ui(ui, self.columns.len()),
             AnalysisKind::Intersect => self.curves.intersect_ui(ui),
             AnalysisKind::PolygonArea => {
@@ -1755,6 +1771,7 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "ttest",
             AnalysisKind::Anova => "anova1",
             AnalysisKind::Histogram => "freqcounts",
+            AnalysisKind::Binning2D => "twoDBinning",
             AnalysisKind::Normality => "normtest",
             AnalysisKind::Anova2 => "anova2",
             AnalysisKind::MannWhitney => "mannwhitney",
@@ -1807,6 +1824,7 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "Test the means of one or two samples",
             AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
             AnalysisKind::Histogram => "Count the values of the input columns in bins",
+            AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
             AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
@@ -1855,6 +1873,7 @@ impl AnalysisDialog {
             AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
             AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
+            AnalysisKind::Binning2D => "One row per X bin and one column per Y bin in a new sheet",
             AnalysisKind::Normality => {
                 "Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson in a new sheet"
             }

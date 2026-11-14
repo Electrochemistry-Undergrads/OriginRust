@@ -1045,7 +1045,7 @@ fn statistics_menu() -> Vec<Entry> {
                 sep(),
                 grey("Discrete Frequency..."),
                 item("Frequency Counts...", Cmd::Analyze(AnalysisKind::Histogram)),
-                grey("2D Frequency Counts/Binning..."),
+                item("2D Frequency Counts/Binning...", Cmd::Analyze(AnalysisKind::Binning2D)),
                 sep(),
                 grey("Distribution Fit..."),
                 item("Normality Test...", Cmd::Analyze(AnalysisKind::Normality)),

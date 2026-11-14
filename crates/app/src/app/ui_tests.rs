@@ -3574,6 +3574,26 @@ fn the_statistics_menu_makes_a_histogram_graph() {
     assert!(p.workbooks().next().unwrap().sheets[1].name.starts_with("Histogram"));
 }
 
+/// Statistics > 2D Frequency Counts/Binning... opens Origin's option groups and writes the grid sheet.
+#[test]
+fn the_statistics_menu_makes_2d_frequency_counts() {
+    let mut h = start(vec![data_file("bin2d")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "2D Frequency Counts/Binning..."]);
+    // One group per axis, then the quantity.
+    for label in ["Specify Binning Range by", "Minimum Bin Beginning", "Step by"] {
+        assert_eq!(h.query_all_by_label(label).count(), 2, "{label} is shown for X and for Y");
+    }
+    assert!(h.query_by_label("Quantity to Compute").is_some());
+    click(&mut h, "OK");
+    let p = project(&h);
+    let ws = &p.workbooks().next().unwrap().sheets[1];
+    assert!(ws.name.starts_with("Binning2D"), "{}", ws.name);
+    assert!(ws.columns[0].long_name.starts_with("Bin Ends of"), "{}", ws.columns[0].long_name);
+    assert!(ws.columns.len() >= 2 && ws.columns[1].long_name == "Count");
+    assert_eq!(h.state().doc.undo_label(), Some("2D frequency counts"));
+}
+
 // ----- graph window: picking objects with the mouse (gui-look.md section 4) -----------------------
 
 fn graph_ui<'a>(h: &'a Harness<'static, SheafApp>) -> &'a crate::graph_view::GraphUi {

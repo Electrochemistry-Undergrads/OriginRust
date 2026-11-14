@@ -2,6 +2,7 @@
 //! application shows while its `Option` is filled.
 
 pub mod analysis;
+pub mod bin2d_options;
 pub mod column_props;
 pub mod export;
 pub mod export_sheet;

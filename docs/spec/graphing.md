@@ -1725,3 +1725,7 @@ Update when Adding, Include data plots from all Layers (off), Legend Symbol Widt
 Sheaf shows Print/Dimensions (size in inch, cm, mm or point, and Sheaf's page title), Display (page
 colour), Legends/Titles (Include data plots from all Layers, which sets every layer's legend scope) and
 its own Text tab; Miscellaneous and the other controls are not offered.
+
+Buttons (measured): Origin's Plot Details has `>>` (left of the buttons), Workbook (on a plot node), OK,
+Cancel and Apply. Sheaf has OK, Cancel and Apply, and Workbook on a plot node, which brings the
+worksheet of the plot's Y column to the front while the dialog stays open; `>>` is not offered.

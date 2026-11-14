@@ -67,6 +67,8 @@ pub struct GraphPropsDialog {
     selected_plot: usize,
     /// The sheet chosen in "Add data to this graph" (index into the list of sheets with Y columns).
     add_from: usize,
+    /// Set by Origin's Workbook button: the Y column whose workbook the app should bring forward.
+    show_workbook: Option<ColumnId>,
 }
 
 /// A Y column that can be added to a graph, with the X and error columns its sheet gives it.
@@ -135,7 +137,17 @@ impl GraphPropsDialog {
             PropsTab::Legend => View::Details { node: Node::Layer(layer), tab: DetailTab::Legend },
             PropsTab::Page => View::Details { node: Node::Graph, tab: DetailTab::Page },
         };
-        GraphPropsDialog { graph, layer, view, token, baseline: None, touched: false, selected_plot: 0, add_from: 0 }
+        GraphPropsDialog {
+            graph,
+            layer,
+            view,
+            token,
+            baseline: None,
+            touched: false,
+            selected_plot: 0,
+            add_from: 0,
+            show_workbook: None,
+        }
     }
 
     /// Which of the entry points this dialog is at now.
@@ -194,6 +206,11 @@ impl GraphPropsDialog {
                 }
             });
         }
+    }
+
+    /// The Y column whose workbook the Workbook button asked for, once.
+    pub fn take_show_workbook(&mut self) -> Option<ColumnId> {
+        self.show_workbook.take()
     }
 
     /// Draws the window. Returns `false` when it was closed.
@@ -286,6 +303,13 @@ impl GraphPropsDialog {
                     }
                     if ui.button("OK").clicked() {
                         button = Some(Button::Ok);
+                    }
+                    // Origin's Workbook button: the worksheet of the chosen plot.
+                    if let View::Details { node: Node::Plot(l, p), .. } = this.view
+                        && let Some(plot) = graph.layers.get(l).and_then(|layer| layer.plots.get(p))
+                        && ui.button("Workbook").on_hover_text("Show the worksheet of this plot").clicked()
+                    {
+                        this.show_workbook = Some(plot.y);
                     }
                 });
             });

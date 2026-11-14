@@ -3330,6 +3330,20 @@ fn a_dependent_group_shares_a_change_and_an_independent_one_does_not() {
 }
 
 #[test]
+fn the_workbook_button_of_plot_details_brings_the_plots_worksheet_forward() {
+    let mut h = start(vec![data_file("pd-workbook")]);
+    let (book, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let at = in_right_panel(&h, &project(&h).plot_label(&plots[0]));
+    double_click_at(&mut h, at);
+    assert_eq!(h.state().active, Some(graph));
+    click(&mut h, "Workbook");
+    assert_eq!(h.state().active, Some(book), "the worksheet of the plot is in front");
+}
+
+#[test]
 fn the_status_bar_shows_average_sum_and_count_of_the_selected_cells_and_the_fixed_boxes() {
     let mut h = start(vec![data_file("stats")]);
     show_window(&mut h, "Book1 - sample");

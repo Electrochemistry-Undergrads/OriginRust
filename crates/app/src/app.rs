@@ -2081,6 +2081,12 @@ impl SheafApp {
         {
             self.graph_props = None;
         }
+        if let Some(column) = self.graph_props.as_mut().and_then(|d| d.take_show_workbook())
+            && let Some((book, _, _)) = self.doc.project().locate(column)
+        {
+            let id = book.id;
+            self.focus(id);
+        }
         if let Some(d) = &mut self.column_props
             && !d.show(ctx, &mut self.doc)
         {

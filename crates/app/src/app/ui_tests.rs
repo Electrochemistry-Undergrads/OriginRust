@@ -4331,21 +4331,26 @@ fn the_mathematics_menu_averages_curves() {
     show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
-    for label in ["All X values of the curves", "Evenly spaced", "Those of one curve", "Linear", "Akima spline"] {
+    for label in
+        ["Averaged X", "Number of Points", "Auto", "Interpolate", "Std Dev", "Std Err", "N", "Minimum", "Maximum"]
+    {
         assert!(has_label(&h, label), "{label}");
     }
+    // Origin's Std Dev and N are off by default; tick them here.
+    click(&mut h, "Std Dev");
+    click(&mut h, "N");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
-    let (sheet, mean) = result_column(&h, "Mean");
-    assert!(sheet.starts_with("Average"), "{sheet}");
-    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5], "(2.5 + 30.5) / 2 and so on");
-    let (_, sd) = result_column(&h, "SD");
+    // Full X Range with Auto points: 5 x 4 = 20 evenly spaced X from 1 to 4 (Origin's defaults).
+    let (sheet, mean) = result_column(&h, "Averaged Y");
+    assert!(sheet.starts_with("AverageResult"), "{sheet}");
+    assert_eq!(mean.len(), 20);
+    assert_eq!((mean[0], mean[19]), (16.5, 4.5), "(2.5 + 30.5) / 2 at t = 1 and (8.5 + 0.5) / 2 at t = 4");
+    let (_, sd) = result_column(&h, "Standard Deviation");
     // The sample SD of two values is their distance over the square root of two.
-    for (s, gap) in sd.iter().zip([28.0, 16.0, 4.0, 8.0]) {
-        assert!((s - gap / 2.0_f64.sqrt()).abs() < 1e-9, "{sd:?}");
-    }
-    let (_, n) = result_column(&h, "N");
-    assert_eq!(n, vec![2.0; 4]);
+    assert!((sd[0] - 28.0 / 2.0_f64.sqrt()).abs() < 1e-9, "{sd:?}");
+    let (_, n) = result_column(&h, "Count");
+    assert_eq!(n, vec![2.0; 20]);
     assert_eq!(h.state().doc.undo_label(), Some("Average multiple curves"));
 }
 
@@ -4354,11 +4359,12 @@ fn the_mathematics_menu_averages_curves() {
 fn average_curves_can_use_evenly_spaced_x() {
     let mut h = start(vec![data_file("avecurves-even")]);
     open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B", "C"]);
-    click(&mut h, "Evenly spaced");
-    assert!(has_label(&h, "Number of points"));
+    assert!(has_label(&h, "Number of Points"));
+    // Untick Auto: the number in the box (100) is used.
+    click(&mut h, "Auto");
     click(&mut h, "OK");
-    let (_, x) = result_column(&h, "t");
-    assert_eq!(x.len(), 100, "the default is 100 points");
+    let (_, x) = result_column(&h, "Averaged X");
+    assert_eq!(x.len(), 100);
     assert_eq!((x[0], x[99]), (1.0, 4.0));
 }
 
@@ -4382,7 +4388,7 @@ fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
     assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
-    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    let (sheet, x) = result_column(&h, "Intersection X1");
     assert!(sheet.starts_with("Intersect"), "{sheet}");
     assert_eq!(x.len(), 1);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
@@ -4432,7 +4438,7 @@ fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
     assert!(h.state().analysis.is_some());
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "it ran with the two plots");
-    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    let (sheet, x) = result_column(&h, "Intersection X1");
     assert!(sheet.starts_with("Intersect"), "{sheet}");
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
 }
@@ -4443,9 +4449,9 @@ fn from_a_graph_average_multiple_curves_starts_with_the_plots_of_the_layer() {
     menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "it ran with the two plots");
-    let (sheet, mean) = result_column(&h, "Mean");
-    assert!(sheet.starts_with("Average"), "{sheet}");
-    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5]);
+    let (sheet, mean) = result_column(&h, "Averaged Y");
+    assert!(sheet.starts_with("AverageResult"), "{sheet}");
+    assert_eq!((mean.len(), mean[0], mean[19]), (20, 16.5, 4.5));
 }
 
 /// The new tools can follow their input: Intersect with Auto moves its point when a cell changes, in the same
@@ -4460,15 +4466,15 @@ fn an_auto_intersect_follows_an_edit_of_its_input() {
     click(&mut h, "Auto");
     let c = column_id(&h, "C");
     click(&mut h, "OK");
-    let (_, first) = result_column(&h, "Intersection X (t)");
+    let (_, first) = result_column(&h, "Intersection X1");
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::SetCell { column: c, row: 3, text: "20".into() }, &ctx);
     settle(&mut h);
-    let (_, second) = result_column(&h, "Intersection X (t)");
+    let (_, second) = result_column(&h, "Intersection X1");
     assert_ne!(first, second, "the crossing moved");
     h.state_mut().apply(Action::Undo, &ctx);
     settle(&mut h);
-    let (_, back) = result_column(&h, "Intersection X (t)");
+    let (_, back) = result_column(&h, "Intersection X1");
     assert_eq!(first, back, "one Undo takes the edit and the result back");
 }
 

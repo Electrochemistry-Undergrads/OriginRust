@@ -853,12 +853,19 @@ pub enum InterpKind {
     BSpline,
 }
 
+/// Origin's Averaged X choices of Average Multiple Curves, and Sheaf's `any`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum AverageRange {
-    /// Only X values covered by every curve.
-    Intersection,
-    /// From the smallest start to the largest end; curves are not extrapolated.
-    Union,
+pub enum AverageX {
+    /// Same as Source X: curves that share an X column are averaged row by row (otherwise every X
+    /// value of the curves over the range they all cover).
+    Same,
+    /// Common X Range: evenly spaced X over the range every curve covers.
+    Common,
+    /// Full X Range (Origin's default): evenly spaced X from the smallest to the largest X, each
+    /// curve continued past its ends.
+    Full,
+    /// Evenly spaced X from the smallest to the largest X, each curve counted only where it has data.
+    Any,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -1045,22 +1052,33 @@ pub enum AnalyzeTool {
     Average {
         #[command(flatten)]
         target: TargetArgs,
-        /// Evaluate at this many evenly spaced X values (default: every X value of the curves).
+        /// Which X values (Origin's Averaged X; full by default).
+        #[arg(long, value_enum, default_value_t = AverageX::Full)]
+        x: AverageX,
+        /// Number of evenly spaced X values (default Origin's Auto: five times the mean number of
+        /// points per curve, at most 1000).
         #[arg(long, conflicts_with = "reference_curve")]
         points: Option<usize>,
         /// Evaluate at the X values of this curve, counted from 1 among the chosen columns.
         #[arg(long)]
         reference_curve: Option<usize>,
-        #[arg(long, value_enum, default_value_t = AverageRange::Intersection)]
-        range: AverageRange,
         #[arg(long, value_enum, default_value_t = AverageInterp::Linear)]
         method: AverageInterp,
-        /// Leave out the standard deviation column.
+        /// Add the standard deviation column (Origin's Std Dev).
         #[arg(long)]
-        no_sd: bool,
-        /// Leave out the count column.
+        sd: bool,
+        /// Add the standard error column.
         #[arg(long)]
-        no_count: bool,
+        se: bool,
+        /// Add the count column (Origin's N).
+        #[arg(long)]
+        count: bool,
+        /// Add the minimum column.
+        #[arg(long)]
+        min: bool,
+        /// Add the maximum column.
+        #[arg(long)]
+        max: bool,
     },
     /// Find where two curves meet; X and Y of each point go to a new sheet. Needs exactly two curves.
     Intersect {

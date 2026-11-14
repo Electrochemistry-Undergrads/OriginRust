@@ -621,7 +621,7 @@ impl Tool {
             Tool::Friedman(_) => "Friedman",
             Tool::Grubbs(_) => "Grubbs",
             Tool::Dixon(_) => "Dixon",
-            Tool::AverageCurves(_) => "Average",
+            Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
             _ => "Result",

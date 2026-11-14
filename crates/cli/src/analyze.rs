@@ -241,26 +241,26 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Average { target, points, reference_curve, range, method, no_sd, no_count } => {
-            let x = match (points, reference_curve) {
-                (Some(n), _) => analysis::CommonX::Evenly(n),
-                (None, Some(0)) => bail!("--reference-curve counts from 1"),
-                (None, Some(r)) => analysis::CommonX::Reference(r - 1),
-                (None, None) => analysis::CommonX::Points,
+        AnalyzeTool::Average { target, x: which, points, reference_curve, method, sd, se, count, min, max } => {
+            let evenly = points.map_or(analysis::CommonX::Auto, analysis::CommonX::Evenly);
+            let (x, range) = match (which, reference_curve) {
+                (_, Some(0)) => bail!("--reference-curve counts from 1"),
+                (_, Some(r)) => (analysis::CommonX::Reference(r - 1), analysis::XRange::Intersection),
+                (AverageX::Same, None) => (analysis::CommonX::Points, analysis::XRange::Intersection),
+                (AverageX::Common, None) => (evenly, analysis::XRange::Intersection),
+                (AverageX::Full, None) => (evenly, analysis::XRange::Full),
+                (AverageX::Any, None) => (evenly, analysis::XRange::Union),
             };
             let options = analysis::AverageOptions {
                 x,
-                range: match range {
-                    AverageRange::Intersection => analysis::XRange::Intersection,
-                    AverageRange::Union => analysis::XRange::Union,
-                },
+                range,
                 method: match method {
                     AverageInterp::Linear => analysis::AverageMethod::Linear,
                     AverageInterp::Spline => analysis::AverageMethod::CubicSpline,
                     AverageInterp::Akima => analysis::AverageMethod::Akima,
                 },
             };
-            (target, Job::Tool(Tool::AverageCurves(analysis::AverageSpec { options, sd: !no_sd, count: !no_count })))
+            (target, Job::Tool(Tool::AverageCurves(analysis::AverageSpec { options, sd, count, se, min, max })))
         }
         AnalyzeTool::Intersect { target, touching } => {
             (target, Job::Tool(Tool::Intersect(analysis::IntersectSpec { include_touching: touching })))

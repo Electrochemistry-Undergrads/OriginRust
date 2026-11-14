@@ -21,21 +21,23 @@ Manual (the result follows its input, replaced in place, in the same undo step a
 
 ## 1. Average Multiple Curves (`avecurves`)
 
-Input: two or more curves. Output (a new sheet by default): X, `Mean` (Y), `SD` (a Y-error column of the
-mean, optional) and `N` (the number of curves at that X, optional, a Disregard column). The long name of the
-mean column is "Mean" with the unit of the first curve; its comment lists the averaged columns.
+Input: two or more curves. Output, as Origin's (section 4): a new sheet `AverageResult1` with "Averaged X",
+"Averaged Y" (comment "Average of B, D", the unit of the first curve) and, when ticked, "Standard Deviation"
+(a Y-error column of the mean), "Standard Error", "Count", "Minimum" and "Maximum", all off by default.
 
-Choices (defaults in bold):
+Choices (defaults in bold, Origin's names):
 
-- X values: **every X value of the curves** (union of the points inside the range, sorted, no repeats),
-  evenly spaced (N points, default 100, at least 2), or the X values of one chosen curve (counted from 1 among
-  the input columns) that lie in the range.
-- X range: **covered by every curve** (largest start to smallest end) or covered by any curve (smallest start
-  to largest end; a curve is never extrapolated, so at the ends fewer curves contribute and `N` says how many).
+- Averaged X: Same as Source X (row by row for a shared X, below; otherwise every X value of the curves,
+  sorted, no repeats, over the range every curve covers), Common X Range (evenly spaced over the range every
+  curve covers), **Full X Range** (evenly spaced from the smallest start to the largest end, each curve
+  continued along its end segments), and Sheaf's own: the X values of one chosen curve (counted from 1), or
+  `--x any` on the command line (the full range without continuation; a curve counts only where it has data).
+- Number of points of the evenly spaced choices: **Auto** (five times the mean number of points per curve,
+  at most 1000), or a number.
 - Interpolation: **linear**, cubic spline, Akima spline (the same interpolators as Interpolate/Extrapolate;
-  splines return missing outside a curve's own range).
+  splines continue their end cubic in Full X Range and are missing outside a curve's range otherwise).
 - Standard deviation: the sample standard deviation (divisor n - 1), missing where fewer than two curves
-  contribute. Mean and SD ignore curves that have no value at that X.
+  contribute; the standard error is SD / sqrt(n). Mean and SD ignore curves that have no value at that X.
 
 Special case, the usual one for repeated scans: if the curves share their X column, they are averaged row by
 row in their original order with no interpolation, and the X values may then turn back (a whole cyclic sweep
@@ -87,28 +89,59 @@ the sum of (x_i + x_(i+1)) times that cross term over 6 times the signed area, a
 taken relative to the first point to keep precision. For a polygon that crosses itself the parts that run the
 other way count as negative, so the area is not the total enclosed; a note says so.
 
+## 4. Measured in Origin (2026-11-13)
+
+Runs of `avecurves`, `intersect` and `polyarea` through `tools/origin-ref/run-labtalk-lines.ps1`
+(`re-workspace/scratch/curvemath2/cm*.lines.txt` and `.out.txt`).
+
+Average Multiple Curves (`avecurves`):
+
+- Default Averaged X is Full X Range: evenly spaced X from the smallest start to the largest end of all
+  curves, each curve continued past its ends by the straight line of its end segment, so every curve
+  counts at every X (a curve 0..5 with y = 2x and a flat curve 0.5..6.5 gave, at X = 6.5, a mean of 7
+  from 13 and 1). Common X Range spaces the X values over the range every curve covers. Same as Source
+  X needs curves with the same X (two curves with different X were refused).
+- Auto number of points: five times the mean number of points per curve, rounded down, at most 1000
+  (3 and 3 points gave 15, 7 and 20 gave 65, 6 and 7 gave 30, 1000 and 400 gave 1000, three curves of 250
+  gave 1000). Curves with exactly the same X are also regridded (6 and 6 points gave 30 rows).
+- The standard deviation uses n - 1; the standard error is SD / sqrt(n).
+- Output: a new sheet `AverageResult1` in the input book with "Averaged X", "Averaged Y" (comment "Average
+  of B, D"), and when ticked "Standard Deviation", "Standard Error", "Count", "Minimum", "Maximum"; all five
+  are off by default.
+
+Sheaf copies these (`CommonX::Auto`, `XRange::Full`, `AverageSpec` with Origin's names and defaults);
+Sheaf's row-by-row average of a shared X is offered as Same as Source X, and Sheaf keeps its extra choices
+(the X values of one curve; any curve's range without continuation, `--x any`).
+
+Intersect (`intersect`, Method Linear, Sampling Points 1000):
+
+- A crossing is found exactly (curves y = 0, 3, 0, 3 and the line from (0, 3) to (3, 0) gave X = 0.75, 1.5,
+  2.25, in increasing X, the same with the curves swapped).
+- A touch that does not fall on one of the 1000 sample points is not reported: a zigzag 0, 2, 0, 2, 0 on X
+  0..4 against y = 2 gave nothing, against y = 0 gave only its two ends (0, 0) and (4, 0) and not the valley
+  at X = 2. Sheaf reports no touching point unless asked, so it gives nothing in the first case and nothing
+  in the second (Origin's two end points are not copied).
+- Output columns "Intersection X1" and "Intersection Y1" (Sheaf writes them on a new sheet).
+
+Polygon Area (`polyarea`, Area Type Mathematical Area or Absolute Area (default)):
+
+- Mathematical area is the signed shoelace area: +12 for (0,0) (4,0) (4,3) (0,3), -12 for the same
+  rectangle clockwise; a last point equal to the first changes nothing. Absolute area is the size of the
+  signed area, so a bow-tie (0,0) (2,2) (2,0) (0,2) gives 0 for both. Sheaf's Area is the absolute and its
+  Signed Area the mathematical value, as measured.
+
 ## Unmeasured
 
 Each item is what Origin has to be asked; Sheaf's current choice is stated above.
 
-1. Average: which X values Origin uses by default, and whether "all X values" is a sorted union, the longest
-   curve's X, or something else; the evenly spaced default point count.
-2. Average: the exact interpolation Origin applies by default, and whether splines are offered with the same
-   names; behaviour of spline interpolation next to a curve's end.
-3. Average: how Origin treats curves that do not cover the whole X range (we use the intersection by default
-   and never extrapolate), and the first/last point tolerance.
-4. Average: whether the SD column uses divisor n - 1 (we do), whether Origin writes the standard error or the
-   SD, and what it writes where fewer than two curves contribute.
-5. Average: how Origin handles an X that turns back (we refuse), repeated X values (we take their mean) and
-   curves with the same X (we average row by row).
-6. Average: names, order, designations and units of the output columns, and whether the count column exists
-   by default.
+1-6. Average: measured, see section 4. Still open: spline interpolation next to a curve's end, Origin's
+   Custom X choice and Follow Curve Trace, its handling of an X that turns back (Origin sorts X ascending by
+   default; Sheaf refuses), and what Same as Source X does with X values that are not shared.
 7. Intersect: more or fewer than two input curves (Origin may accept a reference curve or a range of several);
    the order of the output points; whether touching points and coincident stretches are reported at all, and
    how (we report the two ends of a stretch); the treatment of a point that is a vertex of both curves.
-8. Intersect: the output columns, names, and whether X and Y are interleaved or on separate sheets.
-9. Polygon Area: whether the area is signed or absolute and what Origin does with a self-crossing polygon; the
-   closing rule (last point to first); whether the centroid and perimeter are reported; the area unit.
+8-9. Intersect output names and Polygon Area sign and self-crossing rule: measured, section 4. Still open:
+   whether Origin reports a centroid and perimeter (its X-Function outputs only the area).
 10. Polygon Area: input of a single polyline given as an X and a Y column versus a selection of several
     curves; behaviour with fewer than three points.
 11. How Recalculate (Auto, Manual) treats these tools in Origin, and whether results go to a new sheet or next

@@ -165,7 +165,7 @@ Cross-cutting findings:
 | Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); level crossing none | ◐ | not measured in Origin, `analysis-curve-math.md`; no level crossing | P1 |
 | Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (Origin's reduce_ex: every N points, intervals, number of intervals, frequency, first point or Y mean, measured), Reduce Duplicate X Data (all eight methods, tolerance, counts, column names checked against Origin's reducedup) | ◐ | Reduce Rows layout not compared with Origin; reducedup writes a new sheet where Origin adds columns to the input sheet; no Reduce XY Data | P1 |
 | Sampling interval check | vinc | internal use only | ✗ | | P1 |
-| Average multiple curves | avecurves | Average Multiple Curves window and `analyze average`: mean, SD, count; Recalculate Auto/Manual | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
+| Average multiple curves | avecurves | Average Multiple Curves window and `analyze average` with Origin's defaults (Full X Range, Auto points, curves continued past their ends), Same as Source X and Common X Range, Std Dev, Std Err, N, Minimum, Maximum; Recalculate Auto/Manual; measured (`analysis-curve-math.md` 4) | ◐ | no Custom X, Follow Curve Trace or Concatenate; Origin sorts a turning X, Sheaf refuses it | P1 |
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Cumulative sum | Mathematics | running integral only | ✗ | | P1 |
 | Convolution, deconvolution | Signal Processing | none | ✗ | | P2 |

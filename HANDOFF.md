@@ -150,9 +150,8 @@ about 88 % full, check `df -h /c` before parallel builds.
    spoke up and clockwise, scale from 0, spoke names, grid polygons, page and legend place); ternary (14.20:
    corner and axis directions, 0.2 step, when Origin uses 0-100, grid and legend defaults, tick direction,
    rows with a negative part); pies (14.21: the 3D pie's band thickness and shade, Origin's hatch list); curve mathematics
-   (`analysis-curve-math.md`, interfaces read 2026-11-13: avecurves numbers, interpolation, range rule, SD divisor and output
-   names; intersect curve count, order, touching points; polyarea sign, closing rule, centroid and
-   perimeter output); data manipulation (analysis-tools.md 12; X-Function names and Reduce to Evenly Spaced X measured
+   (`analysis-curve-math.md` 4, measured 2026-11-13; left: avecurves spline ends and a turning
+   X); data manipulation (analysis-tools.md 12; X-Function names and Reduce to Evenly Spaced X measured
    2026-11-13, left: how the interactive Subtract Straight Line and Curve Translate behave on the graph);
    drawn objects (graphing.md 17: one object per drag, Shift snapping, attachment default, properties
    tabs, default width/colour/head size).

@@ -1,8 +1,9 @@
 //! Curve mathematics: the mean of several curves, the intersections of two curves and the area of a
 //! closed curve.
 //!
-//! None of the rules here were measured in Origin (see `docs/spec/analysis-curve-math.md`, section
-//! "Unmeasured"); the tests use values worked out by hand from the formulas.
+//! The defaults of the average and the rules of Polygon Area and Intersect were measured in Origin
+//! (`docs/spec/analysis-curve-math.md` section 4); the other choices are Sheaf's (section
+//! "Unmeasured").
 //!
 //! All functions take parallel `x` and `y` slices. A point with a missing (non-finite) X or Y is
 //! dropped before anything else.
@@ -28,6 +29,17 @@ pub enum CommonX {
     /// The X values of one curve (0-based index in the list of curves) that lie inside the range,
     /// in increasing order.
     Reference(usize),
+    /// Origin's Auto number of evenly spaced points (the default): five times the mean number of
+    /// points per curve (rounded down), at most 1000 (measured).
+    Auto,
+}
+
+/// The number of points of [`CommonX::Auto`] for curves with these numbers of points.
+pub fn auto_average_points(lens: &[usize]) -> usize {
+    if lens.is_empty() {
+        return 0;
+    }
+    (5 * (lens.iter().sum::<usize>() / lens.len())).min(1000)
 }
 
 /// Which X range [`average_curves`] covers.
@@ -39,6 +51,10 @@ pub enum XRange {
     /// From the smallest start to the largest end. A curve contributes only where it has data (it
     /// is never extrapolated), so the mean there uses fewer curves; the count column says how many.
     Union,
+    /// Origin's Full X Range (its default): from the smallest start to the largest end, every curve
+    /// continued past its ends (a straight line through its end points for linear interpolation),
+    /// so every curve counts everywhere (measured).
+    Full,
 }
 
 /// The interpolation between the points of a curve.
@@ -59,8 +75,9 @@ pub struct AverageOptions {
 }
 
 impl Default for AverageOptions {
+    /// Origin's defaults: Full X Range, Auto points, linear interpolation.
     fn default() -> Self {
-        AverageOptions { x: CommonX::Points, range: XRange::Intersection, method: AverageMethod::Linear }
+        AverageOptions { x: CommonX::Auto, range: XRange::Full, method: AverageMethod::Linear }
     }
 }
 
@@ -74,6 +91,9 @@ pub struct AverageResult {
     pub sd: Vec<f64>,
     /// Number of curves that contribute at the X.
     pub n: Vec<usize>,
+    /// The smallest and largest value of the curves at the X (NaN where none has).
+    pub min: Vec<f64>,
+    pub max: Vec<f64>,
 }
 
 /// Why a curve calculation was refused.
@@ -202,7 +222,7 @@ pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> 
     let ends = ordered.iter().map(|c| c[c.len() - 1].0);
     let (lo, hi) = match options.range {
         XRange::Intersection => (starts.fold(f64::NEG_INFINITY, f64::max), ends.fold(f64::INFINITY, f64::min)),
-        XRange::Union => (starts.fold(f64::INFINITY, f64::min), ends.fold(f64::NEG_INFINITY, f64::max)),
+        XRange::Union | XRange::Full => (starts.fold(f64::INFINITY, f64::min), ends.fold(f64::NEG_INFINITY, f64::max)),
     };
     if lo > hi {
         return Err(CurveError::NoCommonRange);
@@ -215,7 +235,11 @@ pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> 
             all.dedup();
             all
         }
-        CommonX::Evenly(n) => {
+        CommonX::Evenly(_) | CommonX::Auto => {
+            let n = match options.x {
+                CommonX::Evenly(n) => n,
+                _ => auto_average_points(&raw.iter().map(Vec::len).collect::<Vec<_>>()),
+            };
             if n < 2 && lo != hi {
                 return Err(CurveError::TooFewPoints);
             }
@@ -246,18 +270,25 @@ pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> 
         .map(|curve| {
             let (c_lo, c_hi) = (curve[0].0, curve[curve.len() - 1].0);
             let tol = 1e-12 * span.max(c_lo.abs()).max(c_hi.abs());
+            let full = options.range == XRange::Full;
             let inside: Vec<usize> =
-                (0..grid.len()).filter(|&k| grid[k] >= c_lo - tol && grid[k] <= c_hi + tol).collect();
+                (0..grid.len()).filter(|&k| full || (grid[k] >= c_lo - tol && grid[k] <= c_hi + tol)).collect();
             let mut out = vec![f64::NAN; grid.len()];
             if method == InterpMethod::Linear {
                 for &k in &inside {
-                    out[k] = linear_at(curve, grid[k].clamp(c_lo, c_hi));
+                    out[k] = if full {
+                        linear_extended(curve, grid[k])
+                    } else {
+                        linear_at(curve, grid[k].clamp(c_lo, c_hi))
+                    };
                 }
             } else {
-                let at: Vec<f64> = inside.iter().map(|&k| grid[k].clamp(c_lo, c_hi)).collect();
+                let at: Vec<f64> =
+                    inside.iter().map(|&k| if full { grid[k] } else { grid[k].clamp(c_lo, c_hi) }).collect();
                 let xs: Vec<f64> = curve.iter().map(|p| p.0).collect();
                 let ys: Vec<f64> = curve.iter().map(|p| p.1).collect();
-                let opts = InterpOptions { method, extrapolation: Extrapolation::Missing, ..InterpOptions::default() };
+                let extrapolation = if full { Extrapolation::Extrapolate } else { Extrapolation::Missing };
+                let opts = InterpOptions { method, extrapolation, ..InterpOptions::default() };
                 for (&k, v) in inside.iter().zip(interp1(&xs, &ys, &at, &opts)) {
                     out[k] = v;
                 }
@@ -266,14 +297,37 @@ pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> 
         })
         .collect();
 
-    let (mut mean, mut sd, mut n) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut mean, mut sd, mut n, mut min, mut max) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for k in 0..grid.len() {
         let (m, s, c) = mean_sd(columns.iter().map(|col| col[k]));
+        let (lo, hi) = min_max(columns.iter().map(|col| col[k]));
         mean.push(m);
         sd.push(s);
         n.push(c);
+        min.push(lo);
+        max.push(hi);
     }
-    Ok(AverageResult { x: grid, mean, sd, n })
+    Ok(AverageResult { x: grid, mean, sd, n, min, max })
+}
+
+/// The smallest and largest finite value (NaN, NaN when there is none).
+fn min_max(values: impl Iterator<Item = f64>) -> (f64, f64) {
+    values.filter(|v| v.is_finite()).fold((f64::NAN, f64::NAN), |(lo, hi), v| {
+        (if lo.is_nan() { v } else { lo.min(v) }, if hi.is_nan() { v } else { hi.max(v) })
+    })
+}
+
+/// The value of an increasing polyline at `x`, continued past its ends along its end segments.
+fn linear_extended(pts: &[(f64, f64)], x: f64) -> f64 {
+    let last = pts.len() - 1;
+    let segment = |a: (f64, f64), b: (f64, f64)| a.1 + (x - a.0) / (b.0 - a.0) * (b.1 - a.1);
+    if x < pts[0].0 {
+        segment(pts[0], pts[1])
+    } else if x > pts[last].0 {
+        segment(pts[last - 1], pts[last])
+    } else {
+        linear_at(pts, x)
+    }
 }
 
 /// Row-by-row mean of curves that share their X values, decided from the raw X slices so a missing
@@ -288,7 +342,8 @@ fn shared_x_average(curves: &[(&[f64], &[f64])], raw: &[Vec<(f64, f64)>]) -> Opt
     // Row count of each curve: its X and Y both exist.
     let lens: Vec<usize> = curves.iter().map(|(x, y)| x.len().min(y.len())).collect();
     let rows = lens.iter().copied().max()?;
-    let (mut xs, mut mean, mut sd, mut n) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut xs, mut mean, mut sd, mut n, mut min, mut max) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for k in 0..rows {
         let mut x_here = f64::NAN;
         for (c, &len) in curves.iter().zip(&lens) {
@@ -303,21 +358,23 @@ fn shared_x_average(curves: &[(&[f64], &[f64])], raw: &[Vec<(f64, f64)>]) -> Opt
         if x_here.is_nan() {
             continue;
         }
-        let (m, s, count) = mean_sd(
-            curves
-                .iter()
-                .zip(&lens)
-                .filter(|&(_, &len)| k < len)
-                .map(|(c, _)| if c.0[k].is_finite() { c.1[k] } else { f64::NAN }),
-        );
+        let here = curves
+            .iter()
+            .zip(&lens)
+            .filter(|&(_, &len)| k < len)
+            .map(|(c, _)| if c.0[k].is_finite() { c.1[k] } else { f64::NAN });
+        let (m, s, count) = mean_sd(here.clone());
         if count > 0 {
+            let (lo, hi) = min_max(here);
             xs.push(x_here);
             mean.push(m);
             sd.push(s);
             n.push(count);
+            min.push(lo);
+            max.push(hi);
         }
     }
-    (xs.len() >= 2).then_some(AverageResult { x: xs, mean, sd, n })
+    (xs.len() >= 2).then_some(AverageResult { x: xs, mean, sd, n, min, max })
 }
 
 /// Mean, sample standard deviation and count of the finite values.
@@ -695,6 +752,52 @@ fn is_self_intersecting(q: &[(f64, f64)]) -> bool {
 mod tests {
     use super::*;
 
+    /// Every X value (or row by row for a shared X) over the range covered by every curve: the
+    /// choices the tests below exercise (Origin's defaults are tested in `average_matches_origin`).
+    fn sheaf_points() -> AverageOptions {
+        AverageOptions { x: CommonX::Points, range: XRange::Intersection, method: AverageMethod::Linear }
+    }
+
+    /// Numbers measured with Origin's `avecurves` (`re-workspace/scratch/curvemath2/cm*.out.txt`).
+    #[test]
+    #[allow(clippy::excessive_precision)] // the digits as Origin printed them
+    fn average_matches_origin() {
+        let xa = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+        let ya = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0];
+        let xb = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5];
+        let yb = [1.0; 7];
+        // Full X Range, Auto points (5 * 6 = 30), straight lines continued past the ends.
+        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &AverageOptions::default()).unwrap();
+        assert_eq!(r.x.len(), 30);
+        let at = |k: usize| (r.x[k], r.mean[k], r.sd[k], r.n[k], r.min[k], r.max[k]);
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-12;
+        let (x, m, sd, n, lo, hi) = at(0);
+        assert!(
+            close(x, 0.0)
+                && close(m, 0.5)
+                && close(sd, std::f64::consts::FRAC_1_SQRT_2)
+                && n == 2
+                && lo == 0.0
+                && hi == 1.0
+        );
+        let (x, m, sd, _, lo, hi) = at(1);
+        assert!(close(x, 0.22413793103448276) && close(m, 0.72413793103448276) && close(sd, 0.39012787927533643));
+        assert!(close(lo, 0.44827586206896552) && hi == 1.0);
+        let (x, m, sd, _, _, hi) = at(29);
+        assert!(close(x, 6.5) && close(m, 7.0) && close(sd, 8.4852813742385713) && close(hi, 13.0));
+        // Common X Range: 30 points from 0.5 to 5.
+        let o = AverageOptions { range: XRange::Intersection, ..AverageOptions::default() };
+        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
+        assert_eq!((r.x.len(), r.x[0], r.x[29]), (30, 0.5, 5.0));
+        assert!(close(r.mean[1], 1.1551724137931034) && close(r.sd[1], 0.21944693209237703));
+        // The Auto count: five times the mean number of points (rounded down), at most 1000.
+        for (lens, n) in [(&[3, 3][..], 15), (&[10, 10], 50), (&[7, 20], 65), (&[50, 100], 375), (&[6, 7], 30)] {
+            assert_eq!(auto_average_points(lens), n, "{lens:?}");
+        }
+        assert_eq!(auto_average_points(&[1000, 400]), 1000);
+        assert_eq!(auto_average_points(&[250, 250, 250]), 1000);
+    }
+
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() <= 1e-12 * (1.0 + a.abs().max(b.abs()))
     }
@@ -899,7 +1002,7 @@ mod tests {
         let x = [0.0, 1.0, 2.0, 1.0, 0.0];
         let a = [1.0, 2.0, 3.0, 2.0, 1.0];
         let b = [3.0, 4.0, 7.0, 4.0, 3.0];
-        let r = average_curves(&[(&x, &a), (&x, &b)], &AverageOptions::default()).unwrap();
+        let r = average_curves(&[(&x, &a), (&x, &b)], &sheaf_points()).unwrap();
         assert_eq!(r.x, x);
         assert_eq!(r.mean, [2.0, 3.0, 5.0, 3.0, 2.0]);
         assert!(close(r.sd[2], (8.0_f64).sqrt())); // values 3 and 7: SD = 4/sqrt(2)
@@ -911,7 +1014,7 @@ mod tests {
         // y = 2x on x = 0, 2, 4 and y = 2x + 2 on x = 1, 3, 5. Intersection range is 1..=4.
         let (xa, ya) = ([0.0, 2.0, 4.0], [0.0, 4.0, 8.0]);
         let (xb, yb) = ([1.0, 3.0, 5.0], [4.0, 8.0, 12.0]);
-        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &AverageOptions::default()).unwrap();
+        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &sheaf_points()).unwrap();
         assert_eq!(r.x, [1.0, 2.0, 3.0, 4.0]);
         // Means of 2x and 2x + 2 are 2x + 1.
         for (x, m) in r.x.iter().zip(&r.mean) {
@@ -925,7 +1028,7 @@ mod tests {
     fn union_range_uses_fewer_curves_at_the_ends() {
         let (xa, ya) = ([0.0, 2.0, 4.0], [0.0, 4.0, 8.0]);
         let (xb, yb) = ([1.0, 3.0, 5.0], [4.0, 8.0, 12.0]);
-        let o = AverageOptions { range: XRange::Union, ..AverageOptions::default() };
+        let o = AverageOptions { range: XRange::Union, ..sheaf_points() };
         let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
         assert_eq!(r.x, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(r.n, [1, 2, 2, 2, 2, 1]);
@@ -937,15 +1040,15 @@ mod tests {
     fn evenly_spaced_and_reference_grids() {
         let (xa, ya) = ([0.0, 4.0], [0.0, 8.0]);
         let (xb, yb) = ([0.0, 2.0, 4.0], [2.0, 2.0, 2.0]);
-        let o = AverageOptions { x: CommonX::Evenly(5), ..AverageOptions::default() };
+        let o = AverageOptions { x: CommonX::Evenly(5), ..sheaf_points() };
         let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
         assert_eq!(r.x, [0.0, 1.0, 2.0, 3.0, 4.0]);
         assert_eq!(r.mean, [1.0, 2.0, 3.0, 4.0, 5.0]);
-        let o = AverageOptions { x: CommonX::Reference(1), ..AverageOptions::default() };
+        let o = AverageOptions { x: CommonX::Reference(1), ..sheaf_points() };
         let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
         assert_eq!(r.x, [0.0, 2.0, 4.0]);
         assert_eq!(r.mean, [1.0, 3.0, 5.0]);
-        let o = AverageOptions { x: CommonX::Reference(2), ..AverageOptions::default() };
+        let o = AverageOptions { x: CommonX::Reference(2), ..sheaf_points() };
         assert_eq!(average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap_err(), CurveError::NoReference(2));
     }
 
@@ -954,7 +1057,7 @@ mod tests {
         // A reverse sweep: X from 1 down to 0 on one curve, up on the other.
         let (xa, ya) = ([1.0, 0.5, 0.0], [10.0, 5.0, 0.0]);
         let (xb, yb) = ([0.0, 0.25, 0.5, 1.0], [2.0, 2.0, 2.0, 2.0]);
-        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &AverageOptions::default()).unwrap();
+        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &sheaf_points()).unwrap();
         assert_eq!(r.x, [0.0, 0.25, 0.5, 1.0]);
         assert_eq!(r.mean, [1.0, 2.25, 3.5, 6.0]);
     }
@@ -963,7 +1066,7 @@ mod tests {
     fn turning_curve_is_refused_unless_x_is_shared() {
         let (xa, ya) = ([0.0, 1.0, 0.0], [0.0, 1.0, 2.0]);
         let (xb, yb) = ([0.0, 0.5, 1.0], [0.0, 1.0, 2.0]);
-        let e = average_curves(&[(&xa, &ya), (&xb, &yb)], &AverageOptions::default()).unwrap_err();
+        let e = average_curves(&[(&xa, &ya), (&xb, &yb)], &sheaf_points()).unwrap_err();
         assert_eq!(e, CurveError::NotMonotonic { curve: 0, row: 3 });
         assert!(e.to_string().contains("curve 1"));
     }
@@ -973,7 +1076,7 @@ mod tests {
         // Two Y values at x = 1 become their mean.
         let (xa, ya) = ([0.0, 1.0, 1.0, 2.0], [0.0, 1.0, 3.0, 4.0]);
         let (xb, yb) = ([0.0, 2.0], [0.0, 0.0]);
-        let o = AverageOptions { x: CommonX::Evenly(3), ..AverageOptions::default() };
+        let o = AverageOptions { x: CommonX::Evenly(3), ..sheaf_points() };
         let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
         assert_eq!(r.mean, [0.0, 1.0, 2.0]);
         assert_eq!(average_curves(&[(&xa, &ya)], &o).unwrap_err(), CurveError::TooFewCurves);
@@ -993,8 +1096,7 @@ mod tests {
         let xb: Vec<f64> = (0..=6).map(|k| f64::from(k) * 0.7).collect();
         let ya: Vec<f64> = xa.iter().map(|x| x * x * x).collect();
         let yb: Vec<f64> = xb.iter().map(|x| x * x * x).collect();
-        let o =
-            AverageOptions { x: CommonX::Evenly(5), method: AverageMethod::CubicSpline, ..AverageOptions::default() };
+        let o = AverageOptions { x: CommonX::Evenly(5), method: AverageMethod::CubicSpline, ..sheaf_points() };
         let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
         for (x, m) in r.x.iter().zip(&r.mean) {
             assert!((m - x * x * x).abs() < 1e-9, "{x} {m}");
@@ -1008,7 +1110,7 @@ mod tests {
         let xb: Vec<f64> = (0..=6).map(|k| f64::from(k) * 0.7).collect();
         let ya: Vec<f64> = xa.iter().map(|x| 2.0 * x + 1.0).collect();
         let yb: Vec<f64> = xb.iter().map(|x| 2.0 * x + 3.0).collect();
-        let o = AverageOptions { x: CommonX::Evenly(5), method: AverageMethod::Akima, ..AverageOptions::default() };
+        let o = AverageOptions { x: CommonX::Evenly(5), method: AverageMethod::Akima, ..sheaf_points() };
         let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &o).unwrap();
         assert_eq!(r.n, [2; 5]);
         for (x, m) in r.x.iter().zip(&r.mean) {
@@ -1055,24 +1157,24 @@ mod tests {
         let x = [0.0, 1.0, 2.0, 1.0, 0.0];
         let a = [1.0, 2.0, 3.0, 2.0, 1.0];
         let b = [3.0, 4.0, 7.0, 4.0, f64::NAN];
-        let r = average_curves(&[(&x, &a), (&x, &b)], &AverageOptions::default()).unwrap();
+        let r = average_curves(&[(&x, &a), (&x, &b)], &sheaf_points()).unwrap();
         assert_eq!(r.x, x);
         assert_eq!(r.n, [2, 2, 2, 2, 1]);
         assert_eq!(r.mean, [2.0, 3.0, 5.0, 3.0, 1.0]);
         assert!(r.sd[4].is_nan());
         // The second curve is one row shorter (its X column is cut to its own length).
-        let r = average_curves(&[(&x, &a), (&x[..4], &b[..4])], &AverageOptions::default()).unwrap();
+        let r = average_curves(&[(&x, &a), (&x[..4], &b[..4])], &sheaf_points()).unwrap();
         assert_eq!(r.x, x);
         assert_eq!(r.n, [2, 2, 2, 2, 1]);
         // A missing Y in the middle of the first curve.
         let a2 = [1.0, f64::NAN, 3.0, 2.0, 1.0];
-        let r = average_curves(&[(&x, &a2), (&x, &b)], &AverageOptions::default()).unwrap();
+        let r = average_curves(&[(&x, &a2), (&x, &b)], &sheaf_points()).unwrap();
         assert_eq!(r.n, [2, 1, 2, 2, 1]);
         assert_eq!(r.mean[1], 4.0);
         // Different X values on a turning curve are still refused.
         let x2 = [0.0, 1.0, 2.0, 1.5, 0.0];
         assert!(matches!(
-            average_curves(&[(&x, &a), (&x2, &b)], &AverageOptions::default()),
+            average_curves(&[(&x, &a), (&x2, &b)], &sheaf_points()),
             Err(CurveError::NotMonotonic { .. })
         ));
     }

@@ -1648,8 +1648,19 @@ Measured with LabTalk's `draw` command (2026-11-13, `re-workspace/scratch/draw17
 may not use the defaults of the graph's Line and Arrow tools: `draw -l` makes a line attached to the axis
 scales (`attach` 2), 0.5 pt wide, colour 1 (black), line type 1, arrow head width 5 and length 10; `-a`
 did not change the arrow shapes; `draw -r` was refused and `draw -c` gave an object without these
-properties. Sheaf keeps its own defaults (1 pt, a 9 pt head, attached to the frame) until the tools
-themselves are measured with a drag in Origin's window.
+properties.
+
+The tools themselves, measured the same day by dragging them on a graph in Origin's window and opening the
+new object's Object Properties (`origin-dialog.ps1 -MenuClicks` with a `G:` drag and a `DC:` double click,
+`re-workspace/scratch/draw17/line*`, `arrow1`, `rect*`): the Line tool draws Black, Width 0.5, Solid, no
+heads, attached to Layer and Scale; the Arrow tool the same with no head at the start and a filled head at
+the end, Width 5 and Length 10; the Rectangle tool a Black 0.5 Solid border filled LT Gray without
+pattern, attached to Layer Frame. The windows have the tabs Line, Arrow, Coordinates (units inch, cm, mm,
+pixel (default), point, scale), Control (Name, Attach to Page / Layer Frame / Layer and Scale, Visible,
+Selectable, movement, resizing, rotating, skewing and Edit locks) for lines, and Border, Fill Pattern,
+Dimensions, Control for rectangles. Sheaf now uses 0.5 pt, a 10 pt head and the LT Gray (192, 192, 192)
+fill of a new rectangle; it still attaches every object to the frame (lines and arrows do not follow the
+axis scale), and the ellipse tool was not measured.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 

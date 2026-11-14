@@ -71,10 +71,13 @@ fn default_head() -> f64 {
 }
 
 impl Shape {
-    /// Arrow head length of a new arrow (Sheaf's choice; Origin's default is unmeasured).
-    pub const DEFAULT_HEAD_PT: f64 = 9.0;
-    /// Line width of a new object.
-    pub const DEFAULT_WIDTH_PT: f64 = 1.0;
+    /// Arrow head length of a new arrow: Origin's Arrow tool gives Length 10 (and Width 5), measured
+    /// in its Object Properties (graphing spec 17).
+    pub const DEFAULT_HEAD_PT: f64 = 10.0;
+    /// Line width of a new object: Origin's Line, Arrow and Rectangle tools give 0.5 (measured).
+    pub const DEFAULT_WIDTH_PT: f64 = 0.5;
+    /// Fill of a new rectangle: Origin's Rectangle tool fills with "LT Gray" (measured).
+    pub const DEFAULT_RECT_FILL: Color = Color::rgb(192, 192, 192);
 
     /// A new black object of `kind` with the given corners.
     pub fn new(kind: ShapeKind, (x1, y1): (f64, f64), (x2, y2): (f64, f64)) -> Shape {
@@ -87,7 +90,7 @@ impl Shape {
             color: Color::BLACK,
             width_pt: Self::DEFAULT_WIDTH_PT,
             dash: Dash::Solid,
-            fill: None,
+            fill: (kind == ShapeKind::Rectangle).then_some(Self::DEFAULT_RECT_FILL),
             head_pt: Self::DEFAULT_HEAD_PT,
             head_at_start: false,
         }
@@ -170,7 +173,7 @@ mod tests {
         let minimal = r##"{"kind":"rectangle","x1":0,"y1":0,"x2":1,"y2":1,
             "color":"#000000","width_pt":2}"##;
         let r: Shape = serde_json::from_str(minimal).unwrap();
-        assert_eq!((r.fill, r.dash, r.head_pt, r.head_at_start), (None, Dash::Solid, 9.0, false));
+        assert_eq!((r.fill, r.dash, r.head_pt, r.head_at_start), (None, Dash::Solid, Shape::DEFAULT_HEAD_PT, false));
     }
 
     #[test]

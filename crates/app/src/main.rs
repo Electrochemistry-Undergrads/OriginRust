@@ -33,6 +33,14 @@ mod workspace;
 
 use std::path::PathBuf;
 
+/// Sheaf's icon (the owner's S logo in paper white on a rust tile, made by `tools/make-icon.py`). eframe shows it on the
+/// window, in the macOS Dock and in the Windows taskbar, also when the app is started with `cargo run`.
+const ICON_PNG: &[u8] = include_bytes!("../assets/icon/sheaf-256.png");
+
+fn app_icon() -> eframe::egui::IconData {
+    eframe::icon_data::from_png_bytes(ICON_PNG).unwrap_or_default()
+}
+
 fn main() -> eframe::Result {
     let mut startup = app::Startup::default();
     let mut args = std::env::args().skip(1);
@@ -48,8 +56,24 @@ fn main() -> eframe::Result {
             .with_title(app::APP_NAME)
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([640.0, 400.0])
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_app_id("sheaf")
+            .with_icon(app_icon()),
         ..Default::default()
     };
     eframe::run_native(app::APP_NAME, options, Box::new(|cc| Ok(Box::new(app::SheafApp::new(cc, startup)))))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_embedded_icon_is_a_256_pixel_square_with_see_through_corners() {
+        let icon = super::app_icon();
+        assert_eq!((icon.width, icon.height), (256, 256));
+        assert_eq!(icon.rgba.len(), 256 * 256 * 4);
+        // The corner lies outside the rounded tile, the centre is on it.
+        assert_eq!(icon.rgba[3], 0, "top-left corner is transparent");
+        let centre = (128 * 256 + 128) * 4;
+        assert_eq!(icon.rgba[centre + 3], 255, "the middle of the icon is opaque");
+    }
 }

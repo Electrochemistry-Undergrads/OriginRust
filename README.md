@@ -112,6 +112,21 @@ cargo run --release -p sheaf-app
 
 Cargo reuses the existing build when the code and dependencies have not changed.
 
+### Add Sheaf to Applications (macOS)
+
+To start Sheaf like any other app, without a terminal, build its app bundle once from the
+`OriginRust` folder:
+
+```sh
+tools/make-macos-app.sh --install
+```
+
+This puts **Sheaf.app**, with its icon, in your `Applications` folder (the one in your home
+folder). Find it with Spotlight (Cmd+Space, type "Sheaf"), in Launchpad, or in Finder, and drag it
+to the Dock to keep it there. Run the command again after `git pull` to update the app. Open files
+from inside Sheaf (File > Open, or drag a file onto the window); double-clicking a data file in
+Finder does not open it in Sheaf yet.
+
 ### Open a data file
 
 Drop a data file onto the window, or run this from your existing `OriginRust` folder:

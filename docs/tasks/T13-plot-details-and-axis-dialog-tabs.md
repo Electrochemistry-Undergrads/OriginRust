@@ -1,8 +1,20 @@
 # T13: Missing Plot Details tabs and controls
 
-**Status:** open; parts depend on T11 (axis features) and T12 (plot types). Coordinate with
-`nlfit-origin`/`graph-defaults` only if they touch the same files. **Size:** M. **Branch:**
-`plot-details`. **Model:** Sonnet.
+**Status:** done on `plot-details`, not merged (2026-11-14, macOS, no Origin: nothing was measured;
+every Origin detail is listed as "not measured" in `docs/spec/graphing.md` section 18, to be checked
+on the Windows machine with `tools/origin-ref`). All seven items are in: plot tabs (Drop Lines, Label,
+Offset, line transparency, Fill Area Under Curve, pattern colour/transparency/gradient, bar Width in %),
+Group tab (Edit Mode, increments for colour, line style and symbol shape, members, subgrouping by size),
+layer tabs (Background, Size, Display, Link Axes Scales), page tabs (Print/Dimensions, Legends/Titles,
+Miscellaneous, Display), the tree text, separate Layer Contents and Plot Setup dialogs, the Workbook
+button and the ">>" side panel (rows and row range). Each control writes the model, is drawn by the
+renderer and round-trips in the project file with serde defaults.
+**Left out because it cannot be made real here (no dead controls):** the speed part of Size/Speed;
+Drop Lines "Skip Points"; Label "White Out", frame, margin, attach-to, automatic overlap avoidance and
+leader line; Offset multipliers; subgrouping by column label; the Pattern preview box; print margins
+of Print/Dimensions; writing the new settings to `.opj` (the writer names them in its save warnings).
+**Open:** compare layout, tab rows and window sizes with Origin on the Windows machine. **Size:** M.
+**Branch:** `plot-details`. **Model:** Sonnet.
 **Detail:** audit B "Plot Details", "Layer Contents (F12) and Plot Setup".
 **Spec:** `docs/spec/gui-look.md` (Plot Details), `docs/spec/ui-command-map.md` D1/D3.
 

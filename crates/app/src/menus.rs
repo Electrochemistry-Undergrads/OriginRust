@@ -1075,9 +1075,8 @@ fn image_menu() -> Vec<Entry> {
 
 fn graph_menu() -> Vec<Entry> {
     vec![
-        // Sheaf's Plots tab does what Layer Contents and Plot Setup do: add and remove plots.
-        keyed("Layer Contents...", plain_key(Key::F12), Cmd::GraphProps(PropsTab::Plots)),
-        item("Plot Setup...", Cmd::GraphProps(PropsTab::Plots)),
+        keyed("Layer Contents...", plain_key(Key::F12), Cmd::GraphProps(PropsTab::Contents)),
+        item("Plot Setup...", Cmd::GraphProps(PropsTab::Setup)),
         grey_sub("Add Plot to Layer", &["Line...", "Scatter...", "Line + Symbol...", "Column...", "Area..."]),
         sep(),
         grey("Layer Management..."),
@@ -1610,7 +1609,8 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
     } else {
         grey("Hide Other Layers")
     };
-    let contents = Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None };
+    let contents = Cmd::GraphPropsAt { layer, tab: PropsTab::Contents, plot: None };
+    let setup = Cmd::GraphPropsAt { layer, tab: PropsTab::Setup, plot: None };
     let mut v = vec![
         item("Hide Layer", Cmd::GraphEdit(GraphOp::HideLayer { layer })),
         others,
@@ -1618,12 +1618,12 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         grey("Set Active Layer By Layer Icon Only"),
         grey("Delete Layer"),
         sep(),
-        keyed("Layer Contents...", plain_key(Key::F12), contents.clone()),
-        item("Plot Setup...", contents),
+        keyed("Layer Contents...", plain_key(Key::F12), contents),
+        item("Plot Setup...", setup),
         grey("Double click to open Plot Setup"),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
-        grey("Layer Properties..."),
+        item("Layer Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
         grey("Layer Management..."),
     ];
     if !plots.is_empty() {

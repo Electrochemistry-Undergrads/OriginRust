@@ -3,6 +3,8 @@
 
 pub mod analysis;
 pub mod column_props;
+pub mod details_layer;
+pub mod details_plot;
 pub mod export;
 pub mod export_sheet;
 pub mod fit;
@@ -14,6 +16,7 @@ pub mod graph_details;
 pub mod graph_props;
 pub mod import;
 pub mod import_wizard;
+pub mod layer_contents;
 pub mod manip_options;
 pub mod math_curves;
 pub mod reshape;

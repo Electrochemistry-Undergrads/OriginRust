@@ -506,7 +506,7 @@ fn the_plot_details_tree_chooses_a_plot_of_the_second_layer() {
         let moved = graph.layers[0].plots.remove(1);
         graph.layers[1].plots.push(moved);
     });
-    let name = project(&h).plot_label(&graph(&h).layers[1].plots[0]);
+    let name = project(&h).plot_tree_text(&graph(&h).layers[1].plots[0]);
     open_props(&mut h, 0, PropsTab::Plots, None);
     assert_eq!(h.state().graph_props.as_ref().unwrap().layer, 0);
     for entry in ["Layer 1", "Layer 2"] {
@@ -531,6 +531,9 @@ fn plot_details_opened_for_the_page_and_the_legend_show_those_tabs() {
     let mut h = start(vec![data_file("details-page")]);
     open_props(&mut h, 0, PropsTab::Page, None);
     assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Page);
+    for tab in ["Print/Dimensions", "Legends/Titles", "Miscellaneous", "Display"] {
+        assert!(h.query_by_label(tab).is_some(), "the page tab {tab}");
+    }
     click(&mut h, "Text");
     click(&mut h, "+10 %");
     open_props(&mut h, 0, PropsTab::Legend, None);
@@ -3348,7 +3351,7 @@ fn the_layer_icon_has_origins_menu_and_a_double_click_opens_the_plot_list() {
     close_menus(&mut h);
     double_click_at(&mut h, at);
     let d = h.state().graph_props.as_ref().expect("Plot Setup");
-    assert_eq!(d.tab(), PropsTab::Plots);
+    assert_eq!(d.tab(), PropsTab::Setup);
 }
 
 #[test]
@@ -5991,4 +5994,223 @@ fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
     settle(&mut h);
     assert_eq!(project(&h).numeric(out).unwrap(), [100.0, 6.5, 6.5, 8.5], "the same column was updated");
     assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
+}
+
+// ----- Plot Details tabs, Layer Contents and Plot Setup (brief T13) ------------------------------
+
+fn state_graph_edit(h: &mut Harness<'static, SheafApp>, edit: impl FnOnce(&mut sheaf_core::Graph) + 'static) {
+    let (_, id) = window_ids(h);
+    h.state_mut().doc.apply("Test edit", move |p| edit(p.graph_mut(id).unwrap()));
+    settle(h);
+}
+
+#[test]
+fn layer_contents_moves_columns_across_reorders_and_groups() {
+    let mut h = start(vec![data_file("lcont")]);
+    open_props(&mut h, 0, PropsTab::Contents, None);
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Contents);
+    let texts: Vec<String> = graph(&h).layers[0].plots.iter().map(|p| project(&h).plot_tree_text(p)).collect();
+    assert!(texts[0].starts_with("[Book1]") && texts[0].contains("(X)") && texts[0].ends_with("[1*:4*]"), "{texts:?}");
+    let (up, down) = (graph(&h).layers[0].plots[0].y, graph(&h).layers[0].plots[1].y);
+    // Remove the first plot, then add its column back from the list at the left.
+    click(&mut h, &texts[0]);
+    click(&mut h, "<=");
+    assert_eq!(graph(&h).layers[0].plots.len(), 1);
+    assert_eq!(graph(&h).layers[0].plots[0].y, down);
+    h.get_by_label_contains("B: ").click();
+    settle(&mut h);
+    click(&mut h, "=>");
+    let ys: Vec<_> = graph(&h).layers[0].plots.iter().map(|p| p.y).collect();
+    assert_eq!(ys, vec![down, up]);
+    // Reorder.
+    click(&mut h, &texts[0]);
+    click(&mut h, "Up");
+    let ys: Vec<_> = graph(&h).layers[0].plots.iter().map(|p| p.y).collect();
+    assert_eq!(ys, vec![up, down]);
+    // Ungroup keeps the plot's style out of the increment rules; Group puts it back.
+    click(&mut h, "Ungroup");
+    assert!(!graph(&h).layers[0].plots[0].auto_color);
+    assert_eq!(graph(&h).layers[0].group_members().len(), 1);
+    click(&mut h, "Group");
+    assert!(graph(&h).layers[0].plots[0].auto_color);
+    // The two other dialogs are one click away.
+    click(&mut h, "Plot Setup...");
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Setup);
+    click(&mut h, "Layer Contents...");
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Contents);
+    click(&mut h, "Cancel");
+    assert_eq!(graph(&h).layers[0].plots.len(), 2);
+}
+
+#[test]
+fn plot_setup_changes_the_type_of_one_plot_and_f12_opens_layer_contents() {
+    let mut h = start(vec![data_file("setup")]);
+    open_props(&mut h, 0, PropsTab::Setup, None);
+    for head in ["X", "Y", "Y Error", "Type"] {
+        assert!(h.query_by_label(head).is_some(), "{head}");
+    }
+    let first = h.query_all_by_value("Line").next().expect("the type of the first plot");
+    first.click();
+    settle(&mut h);
+    click(&mut h, "Scatter");
+    assert_eq!(graph(&h).layers[0].plots[0].kind, PlotKind::Scatter);
+    assert_ne!(graph(&h).layers[0].plots[1].kind, PlotKind::Scatter);
+    click(&mut h, "Plot Details...");
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Plots);
+    click(&mut h, "OK");
+    show_window(&mut h, "Graph1 - sample");
+    menu(&mut h, "Graph", "Layer Contents...");
+    assert_eq!(h.state().graph_props.as_ref().unwrap().tab(), PropsTab::Contents);
+}
+
+#[test]
+fn the_line_plot_tabs_set_drop_lines_labels_offsets_and_the_fill_under_the_curve() {
+    let mut h = start(vec![data_file("pd-line")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    for tab in ["Group", "Line", "Drop Lines", "Label", "Offset"] {
+        assert!(h.query_by_label(tab).is_some(), "the tab {tab}");
+    }
+    click(&mut h, "Line");
+    click(&mut h, "Fill Area Under Curve");
+    assert!(graph(&h).layers[0].plots[0].details.fill_under);
+    click(&mut h, "Fill with a gradient");
+    assert!(graph(&h).layers[0].plots[0].details.fill.gradient.is_some());
+    click(&mut h, "Drop Lines");
+    click(&mut h, "Vertical (to the X axis)");
+    let drops = graph(&h).layers[0].plots[0].details.drop_lines.clone();
+    assert!(drops.vertical.is_some() && drops.horizontal.is_none());
+    click(&mut h, "Label");
+    click(&mut h, "Enable");
+    assert!(graph(&h).layers[0].plots[0].details.labels.enabled);
+    click(&mut h, "Offset");
+    assert_ne!(graph(&h).layers[0].stack, sheaf_core::graph::Stack::Individual);
+    click(&mut h, "Offset each plot by hand");
+    assert_eq!(graph(&h).layers[0].stack, sheaf_core::graph::Stack::Individual);
+    // The rendered figure has the drop line and the labels.
+    let (_, id) = window_ids(&h);
+    let svg = sheaf_plot::render_svg(project(&h), id).unwrap();
+    assert!(svg.contains("stroke-dasharray"), "the dashed drop lines are drawn");
+    // One undo step undoes all of it.
+    assert_eq!(h.state().doc.undo_label(), Some("Change graph settings"));
+}
+
+#[test]
+fn the_group_tab_edits_the_mode_the_increments_and_the_subgroups() {
+    use sheaf_core::graph::{EditMode, Increment, Subgrouping};
+    let mut h = start(vec![data_file("pd-group")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Group");
+    assert_eq!(graph(&h).layers[0].groups.edit_mode, EditMode::Dependent);
+    click(&mut h, "Independent");
+    assert_eq!(graph(&h).layers[0].groups.edit_mode, EditMode::Independent);
+    click(&mut h, "Dependent");
+    // Line style "By One": the second plot's dash follows the first by one place.
+    let none = h.query_all_by_value("None").next().expect("the line style increment");
+    none.click();
+    settle(&mut h);
+    click(&mut h, "By One");
+    let g = graph(&h);
+    assert_eq!(g.layers[0].groups.line_style, Increment::ByOne);
+    assert_ne!(g.layers[0].plots[0].line.dash, g.layers[0].plots[1].line.dash);
+    click(&mut h, "By Size");
+    assert_eq!(graph(&h).layers[0].groups.subgrouping, Subgrouping::BySize { size: 2 });
+    click(&mut h, "Recolor plots");
+    assert!(graph(&h).layers[0].plots.iter().all(|p| p.auto_color));
+}
+
+#[test]
+fn a_column_plot_has_pattern_spacing_and_label_tabs_and_the_pattern_is_set() {
+    let mut h = start(vec![data_file("pd-col")]);
+    state_graph_edit(&mut h, |g| g.layers[0].plots[0].kind = PlotKind::Column);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    for tab in ["Group", "Pattern", "Spacing", "Label"] {
+        assert!(h.query_all_by_label(tab).next().is_some(), "the tab {tab}");
+    }
+    assert!(h.query_by_label("Drop Lines").is_none(), "a column plot has no drop lines");
+    h.query_all_by_label("Pattern").next().unwrap().click();
+    settle(&mut h);
+    h.get_by_value("None").click();
+    settle(&mut h);
+    click(&mut h, "Cross");
+    assert_eq!(graph(&h).layers[0].plots[0].details.fill.pattern, sheaf_core::graph::FillPattern::Cross);
+    click(&mut h, "Spacing");
+    click(&mut h, "Set");
+    assert!(graph(&h).layers[0].bars.width_pct.is_some());
+}
+
+#[test]
+fn the_layer_tabs_set_display_background_and_the_links_between_layers() {
+    use sheaf_core::graph::ScaleLink;
+    let mut h = start(vec![data_file("pd-layer")]);
+    state_graph_edit(&mut h, |g| {
+        let l = g.layers[0].clone();
+        g.layers.push(l);
+    });
+    open_props(&mut h, 1, PropsTab::Plots, None);
+    for tab in ["Background", "Size", "Display", "Stack", "Link Axes Scales"] {
+        assert!(h.query_by_label(tab).is_some(), "the tab {tab}");
+    }
+    click(&mut h, "Background");
+    click(&mut h, "Fill the area behind the plots");
+    assert!(graph(&h).layers[1].background.color.is_some());
+    click(&mut h, "Draw a border line");
+    assert!(graph(&h).layers[1].background.border.is_some());
+    click(&mut h, "Display");
+    click(&mut h, "Show the axes (lines, ticks, tick labels and titles)");
+    assert!(!graph(&h).layers[1].display.show_axes);
+    assert!(graph(&h).layers[0].display.show_axes, "only the chosen layer changes");
+    click(&mut h, "Link Axes Scales");
+    h.get_by_value("None").click();
+    settle(&mut h);
+    h.query_all_by_label("Layer 1").last().unwrap().click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[1].link.map(|k| k.parent), Some(0));
+    let x = h.query_all_by_value("Independent (its own scale)").next().unwrap();
+    x.click();
+    settle(&mut h);
+    click(&mut h, "Straight (1 to 1)");
+    assert_eq!(graph(&h).layers[1].link.unwrap().x, ScaleLink::Straight);
+}
+
+#[test]
+fn the_page_tabs_set_units_titles_comments_and_the_layer_icons() {
+    use sheaf_core::graph::{LengthUnit, TitleDisplay};
+    let mut h = start(vec![data_file("pd-page")]);
+    open_props(&mut h, 0, PropsTab::Page, None);
+    h.get_by_value("inch").click();
+    settle(&mut h);
+    click(&mut h, "cm");
+    assert_eq!(graph(&h).page.style.units, LengthUnit::Centimetre);
+    click(&mut h, "Legends/Titles");
+    h.get_by_value("Short and long name").click();
+    settle(&mut h);
+    click(&mut h, "Short name");
+    assert_eq!(graph(&h).page.style.title_display, TitleDisplay::Name);
+    click(&mut h, "Miscellaneous");
+    h.query_all_by_role(egui::accesskit::Role::MultilineTextInput).next().expect("the comments box").focus();
+    settle(&mut h);
+    h.event(egui::Event::Text("a note".to_string()));
+    settle(&mut h);
+    assert_eq!(graph(&h).page.style.comments, "a note");
+    click(&mut h, "Display");
+    click(&mut h, "Draw a border line");
+    assert!(graph(&h).page.style.border.is_some());
+    assert!(graph(&h).page.style.layer_icons);
+    click(&mut h, "Show the layer icons");
+    assert!(!graph(&h).page.style.layer_icons);
+    click(&mut h, "OK");
+    assert!(graph_ui(&h).page_point(0.0, 0.0).is_some());
+}
+
+#[test]
+fn the_workbook_button_shows_the_sheet_and_the_side_panel_sets_the_row_range() {
+    let mut h = start(vec![data_file("pd-wb")]);
+    let (book, _) = window_ids(&h);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Workbook");
+    assert_eq!(h.state().active, Some(book));
+    click(&mut h, ">>");
+    assert!(graph(&h).layers[0].plots[0].rows.is_none());
+    click(&mut h, "Plot a range of rows only");
+    assert_eq!(graph(&h).layers[0].plots[0].rows, Some((0, 4)));
 }

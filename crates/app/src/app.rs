@@ -1971,10 +1971,15 @@ impl SheafApp {
                 }
             }
         }
-        if let Some(d) = &mut self.graph_props
-            && !d.show(ctx, &mut self.doc)
-        {
-            self.graph_props = None;
+        if let Some(d) = &mut self.graph_props {
+            let open = d.show(ctx, &mut self.doc);
+            let workbook = d.take_workbook();
+            if !open {
+                self.graph_props = None;
+            }
+            if let Some(book) = workbook {
+                self.focus(book);
+            }
         }
         if let Some(d) = &mut self.column_props
             && !d.show(ctx, &mut self.doc)
@@ -2425,6 +2430,8 @@ impl SheafApp {
                         let tab = match arg {
                             "y" => PropsTab::YAxis,
                             "plots" => PropsTab::Plots,
+                            "contents" => PropsTab::Contents,
+                            "setup" => PropsTab::Setup,
                             "legend" => PropsTab::Legend,
                             "page" => PropsTab::Page,
                             _ => PropsTab::XAxis,

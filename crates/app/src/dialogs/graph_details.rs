@@ -1,19 +1,25 @@
 //! The body of Plot Details: a tree at the left (the graph, its layers, their plots) with the plot
 //! type under it, and at the right the tabs of what is chosen.
 //!
-//! * graph: Page, Text
-//! * layer: Layer Contents (the plots and "Add data to this graph"), Background (grey: layers have
-//!   no background of their own yet), Size, Stack, Legend
-//! * plot: Group, Line, Symbol, Pattern (columns), Spacing (columns), Error Bar (when the plot has
-//!   error bars)
+//! * graph: Print/Dimensions, Legends/Titles, Miscellaneous, Display, Text (Sheaf's own)
+//! * layer: Background, Size, Display, Stack, Link Axes Scales, Legend (Sheaf's own place for the
+//!   legend text). Layer Contents and Plot Setup are separate dialogs (`layer_contents.rs`).
+//! * plot: Group, Line, Symbol, Drop Lines, Label, Offset (a line or symbol plot); Group, Pattern,
+//!   Spacing, Label (columns); Error Bar when the plot has error bars
+//!
+//! The Workbook button shows the sheet of the chosen plot; ">>" opens a side panel with the rows
+//! the plot draws and the row range.
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
 use sheaf_core::{Color, ColumnId};
 
+use super::details_layer as layer_tabs;
+use super::details_plot as plot_tabs;
 use super::graph_props::{
-    Source, color_button, connect_name, dash_ui, font_ui, grid, group_box, section, symbol_name, tab_row,
+    color_button, connect_name, dash_ui, font_ui, grid, group_box, section, symbol_name, tab_row,
 };
+use sheaf_core::{Project, WindowId};
 
 /// What the tree has chosen.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -29,40 +35,66 @@ pub enum DetailTab {
     Group,
     Line,
     Symbol,
+    DropLines,
+    Label,
+    Offset,
     Pattern,
     Spacing,
     ErrorBar,
-    LayerContents,
     Background,
     Size,
+    Display,
     Stack,
+    LinkAxes,
     Legend,
-    Page,
+    Dimensions,
+    Titles,
+    Misc,
+    PageDisplay,
     Text,
 }
 
 fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
     match node {
-        Node::Graph => vec![(DetailTab::Page, "Page", true), (DetailTab::Text, "Text", true)],
+        Node::Graph => vec![
+            (DetailTab::Dimensions, "Print/Dimensions", true),
+            (DetailTab::Titles, "Legends/Titles", true),
+            (DetailTab::Misc, "Miscellaneous", true),
+            (DetailTab::PageDisplay, "Display", true),
+            (DetailTab::Text, "Text", true),
+        ],
         Node::Layer(_) => vec![
-            (DetailTab::LayerContents, "Layer Contents", true),
-            (DetailTab::Background, "Background", false),
+            (DetailTab::Background, "Background", true),
             (DetailTab::Size, "Size", true),
+            (DetailTab::Display, "Display", true),
             (DetailTab::Stack, "Stack", true),
+            (DetailTab::LinkAxes, "Link Axes Scales", true),
             (DetailTab::Legend, "Legend", true),
         ],
         Node::Plot(l, p) => {
             let plot = &graph.layers[l].plots[p];
+            let k = plot.kind;
             let mut tabs = vec![(DetailTab::Group, "Group", true)];
-            if plot.kind.has_line() {
+            if k.has_line() {
                 tabs.push((DetailTab::Line, "Line", true));
             }
-            if plot.kind.has_symbols() {
+            if k.has_symbols() {
                 tabs.push((DetailTab::Symbol, "Symbol", true));
             }
-            if plot.kind.is_bar() {
+            if k.has_line() || k.has_symbols() {
+                tabs.push((DetailTab::DropLines, "Drop Lines", true));
+            }
+            if k.is_bar() || k.is_area() {
                 tabs.push((DetailTab::Pattern, "Pattern", true));
+            }
+            if k.is_bar() {
                 tabs.push((DetailTab::Spacing, "Spacing", true));
+            }
+            if has_labels(k) {
+                tabs.push((DetailTab::Label, "Label", true));
+            }
+            if k.has_line() || k.has_symbols() {
+                tabs.push((DetailTab::Offset, "Offset", true));
             }
             if plot.y_error.is_some() || plot.x_error.is_some() {
                 tabs.push((DetailTab::ErrorBar, "Error Bar", true));
@@ -72,13 +104,18 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
     }
 }
 
+/// The kinds that draw data labels (the renderer skips boxes and pies).
+fn has_labels(k: PlotKind) -> bool {
+    !matches!(k, PlotKind::Box | PlotKind::Pie | PlotKind::Pie3D | PlotKind::PieBw)
+}
+
 /// The tab to show when the one that was shown does not exist for the new node.
 fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
     let preferred = [DetailTab::Line, DetailTab::Pattern, DetailTab::Symbol];
     preferred.into_iter().find(|t| tabs.iter().any(|(x, _, on)| x == t && *on)).unwrap_or(tabs[0].0)
 }
 
-fn kind_name(k: PlotKind) -> &'static str {
+pub fn kind_name(k: PlotKind) -> &'static str {
     match k {
         PlotKind::Line => "Line",
         PlotKind::Scatter => "Scatter",
@@ -102,16 +139,57 @@ fn kind_name(k: PlotKind) -> &'static str {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// What Plot Details reads about the project (the graph itself is edited).
+pub struct Info<'a> {
+    pub project: &'a Project,
+    /// The short name of every plot, per layer (legend text, group members).
+    pub labels: &'a [Vec<String>],
+    /// The tree text of every plot, per layer: `[Book1]Sheet1! "Conc"(X), "Signal"(Y) [1*:10*]`.
+    pub texts: &'a [Vec<String>],
+    pub columns: &'a [(ColumnId, String)],
+}
+
+/// What the body keeps between frames besides the chosen node and tab.
+#[derive(Default)]
+pub struct Local {
+    /// The ">>" side panel is open.
+    pub side: bool,
+    /// Resizing the page keeps the layers' size (Print/Dimensions).
+    pub keep_layers: bool,
+    /// Set by the Workbook button: the window to show.
+    pub open_workbook: Option<WindowId>,
+}
+
+/// The kinds of plot a plot of the tree can be changed to in the Plot Type box.
+pub const KINDS: [PlotKind; 19] = [
+    PlotKind::Line,
+    PlotKind::Scatter,
+    PlotKind::LineSymbol,
+    PlotKind::Column,
+    PlotKind::StackedColumn,
+    PlotKind::Stacked100Column,
+    PlotKind::Bar,
+    PlotKind::FloatingColumn,
+    PlotKind::StackedBar,
+    PlotKind::Stacked100Bar,
+    PlotKind::FloatingBar,
+    PlotKind::Area,
+    PlotKind::StackedArea,
+    PlotKind::Stacked100Area,
+    PlotKind::Histogram,
+    PlotKind::Box,
+    PlotKind::Pie,
+    PlotKind::Pie3D,
+    PlotKind::PieBw,
+];
+
 pub fn dialog_body(
     ui: &mut egui::Ui,
     node: &mut Node,
     tab: &mut DetailTab,
     graph: &mut Graph,
-    labels: &[Vec<String>],
-    sources: &[Source],
-    columns: &[(ColumnId, String)],
-    add_from: &mut usize,
+    info: &Info,
+    local: &mut Local,
 ) {
     // The node may have gone (a plot was removed).
     *node = match *node {
@@ -124,12 +202,12 @@ pub fn dialog_body(
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
             ui.set_width(300.0);
-            let tree_h = (ui.available_height() - 40.0).max(120.0);
-            egui::ScrollArea::vertical()
+            let tree_h = (ui.available_height() - 70.0).max(120.0);
+            egui::ScrollArea::both()
                 .id_salt("details_tree")
                 .max_height(tree_h)
                 .auto_shrink([false, false])
-                .show(ui, |ui| tree(ui, node, graph, labels));
+                .show(ui, |ui| tree(ui, node, graph, info.texts));
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label("Plot Type");
@@ -149,27 +227,7 @@ pub fn dialog_body(
                         kind_name(plot.kind).to_string()
                     };
                     egui::ComboBox::from_id_salt("plot_type").selected_text(shown).show_ui(ui, |ui| {
-                        for k in [
-                            PlotKind::Line,
-                            PlotKind::Scatter,
-                            PlotKind::LineSymbol,
-                            PlotKind::Column,
-                            PlotKind::StackedColumn,
-                            PlotKind::Stacked100Column,
-                            PlotKind::Bar,
-                            PlotKind::FloatingColumn,
-                            PlotKind::StackedBar,
-                            PlotKind::Stacked100Bar,
-                            PlotKind::FloatingBar,
-                            PlotKind::Area,
-                            PlotKind::StackedArea,
-                            PlotKind::Stacked100Area,
-                            PlotKind::Histogram,
-                            PlotKind::Box,
-                            PlotKind::Pie,
-                            PlotKind::Pie3D,
-                            PlotKind::PieBw,
-                        ] {
+                        for k in KINDS {
                             ui.selectable_value(&mut plot.kind, k, kind_name(k));
                         }
                     });
@@ -177,31 +235,110 @@ pub fn dialog_body(
                     ui.add_enabled(false, egui::Button::new("-"));
                 }
             });
+            ui.horizontal(|ui| {
+                if ui.selectable_label(local.side, ">>").on_hover_text("Rows of the chosen plot").clicked() {
+                    local.side = !local.side;
+                }
+                let book = match *node {
+                    Node::Plot(l, p) => info.project.plot_book(&graph.layers[l].plots[p]),
+                    _ => None,
+                };
+                if ui
+                    .add_enabled(book.is_some(), egui::Button::new("Workbook"))
+                    .on_hover_text("Show the worksheet of the chosen plot")
+                    .clicked()
+                {
+                    local.open_workbook = book;
+                }
+            });
         });
         ui.separator();
         ui.vertical(|ui| {
-            let tabs = tabs_for(*node, graph);
-            if *node != before || !tabs.iter().any(|(t, _, on)| t == tab && *on) {
-                *tab = first_tab(&tabs);
-            }
-            tab_row(ui, tab, &tabs);
-            ui.separator();
-            egui::ScrollArea::vertical().id_salt("details_page").auto_shrink([false, false]).show(
-                ui,
-                |ui| match *node {
-                    Node::Graph => match *tab {
-                        DetailTab::Text => text_tab(ui, graph),
-                        _ => page_tab(ui, graph),
-                    },
-                    Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from),
-                    Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, node),
-                },
-            );
+            let side_w = if local.side { 250.0 } else { 0.0 };
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width((ui.available_width() - side_w - 10.0).max(300.0));
+                    let tabs = tabs_for(*node, graph);
+                    if *node != before || !tabs.iter().any(|(t, _, on)| t == tab && *on) {
+                        *tab = first_tab(&tabs);
+                    }
+                    tab_row(ui, tab, &tabs);
+                    ui.separator();
+                    egui::ScrollArea::vertical().id_salt("details_page").auto_shrink([false, false]).show(ui, |ui| {
+                        match *node {
+                            Node::Graph => match *tab {
+                                DetailTab::Text => text_tab(ui, graph),
+                                DetailTab::Titles => layer_tabs::titles_tab(ui, graph),
+                                DetailTab::Misc => layer_tabs::misc_tab(ui, graph),
+                                DetailTab::PageDisplay => layer_tabs::page_display_tab(ui, graph),
+                                _ => layer_tabs::dimensions_tab(ui, graph, &mut local.keep_layers),
+                            },
+                            Node::Layer(l) => layer_tab(ui, *tab, graph, l),
+                            Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, info, node),
+                        }
+                    });
+                });
+                if local.side {
+                    ui.separator();
+                    ui.vertical(|ui| {
+                        ui.set_width(side_w);
+                        side_panel(ui, *node, graph, info);
+                    });
+                }
+            });
         });
     });
 }
 
-fn tree(ui: &mut egui::Ui, node: &mut Node, graph: &mut Graph, labels: &[Vec<String>]) {
+/// The ">>" panel: the rows the chosen plot draws and the row range it uses.
+fn side_panel(ui: &mut egui::Ui, node: Node, graph: &mut Graph, info: &Info) {
+    let Node::Plot(l, p) = node else {
+        ui.weak("Choose a plot to see its rows.");
+        return;
+    };
+    let plot = &mut graph.layers[l].plots[p];
+    let Some((book, sheet, y)) = info.project.locate(plot.y) else {
+        ui.weak("The column of this plot is gone.");
+        return;
+    };
+    ui.label(egui::RichText::new(format!("{} / {}", book.title(), sheet.name)).strong());
+    let len = y.len();
+    ui.label(format!("{len} rows in the Y column"));
+    let mut limited = plot.rows.is_some();
+    if ui.checkbox(&mut limited, "Plot a range of rows only").changed() {
+        plot.rows = limited.then_some((0, len));
+    }
+    if let Some((a, b)) = &mut plot.rows {
+        let (mut from, mut to) = (*a + 1, *b);
+        ui.horizontal(|ui| {
+            ui.label("From");
+            ui.add(DragValue::new(&mut from).range(1..=len.max(1)));
+            ui.label("to");
+            ui.add(DragValue::new(&mut to).range(1..=len.max(1)));
+        });
+        *a = from.saturating_sub(1).min(len);
+        *b = to.max(*a).min(len);
+    }
+    ui.separator();
+    let x = plot.x.and_then(|id| info.project.column(id));
+    let range = plot.rows.unwrap_or((0, len));
+    egui::ScrollArea::vertical().id_salt("side_rows").auto_shrink([false, false]).show(ui, |ui| {
+        egui::Grid::new("side_grid").num_columns(3).striped(true).show(ui, |ui| {
+            ui.label(egui::RichText::new("Row").weak());
+            ui.label(egui::RichText::new(x.map(|c| c.display_name().to_string()).unwrap_or_else(|| "X".into())).weak());
+            ui.label(egui::RichText::new(y.display_name()).weak());
+            ui.end_row();
+            for r in range.0..range.1.min(range.0 + 200) {
+                ui.label(format!("{}", r + 1));
+                ui.label(x.map(|c| c.shown_text(r)).unwrap_or_else(|| format!("{}", r + 1)));
+                ui.label(y.shown_text(r));
+                ui.end_row();
+            }
+        });
+    });
+}
+
+fn tree(ui: &mut egui::Ui, node: &mut Node, graph: &mut Graph, texts: &[Vec<String>]) {
     if ui.selectable_label(*node == Node::Graph, &graph.name).clicked() {
         *node = Node::Graph;
     }
@@ -218,7 +355,7 @@ fn tree(ui: &mut egui::Ui, node: &mut Node, graph: &mut Graph, labels: &[Vec<Str
                         ui.checkbox(&mut plot.visible, "").on_hover_text("Show this plot");
                         crate::grid::color_swatch(ui, plot.line.color);
                         let text =
-                            labels.get(l).and_then(|v| v.get(p)).cloned().unwrap_or_else(|| format!("Plot {}", p + 1));
+                            texts.get(l).and_then(|v| v.get(p)).cloned().unwrap_or_else(|| format!("Plot {}", p + 1));
                         if ui.selectable_label(*node == Node::Plot(l, p), text).clicked() {
                             *node = Node::Plot(l, p);
                         }
@@ -231,20 +368,13 @@ fn tree(ui: &mut egui::Ui, node: &mut Node, graph: &mut Graph, labels: &[Vec<Str
 
 // ----- plot ---------------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
-fn plot_tab(
-    ui: &mut egui::Ui,
-    tab: DetailTab,
-    graph: &mut Graph,
-    l: usize,
-    p: usize,
-    labels: &[Vec<String>],
-    columns: &[(ColumnId, String)],
-    node: &mut Node,
-) {
+fn plot_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, p: usize, info: &Info, node: &mut Node) {
+    let (labels, columns) = (info.labels, info.columns);
     match tab {
         DetailTab::Line => {
-            let plot = &mut graph.layers[l].plots[p];
+            let layer = &mut graph.layers[l];
+            let plot = &mut layer.plots[p];
+            let mut dash = plot.line.dash;
             grid(ui, "plot_line", |ui| {
                 ui.label("Connect");
                 egui::ComboBox::from_id_salt("plot_connect").selected_text(connect_name(plot.line.connect)).show_ui(
@@ -264,7 +394,7 @@ fn plot_tab(
                 );
                 ui.end_row();
                 ui.label("Style");
-                dash_ui(ui, "plot_dash", &mut plot.line.dash);
+                dash_ui(ui, "plot_dash", &mut dash);
                 ui.end_row();
                 ui.label("Width");
                 ui.add(DragValue::new(&mut plot.line.width_pt).range(0.1..=20.0).speed(0.05).suffix(" pt"));
@@ -278,20 +408,35 @@ fn plot_tab(
                     plot.auto_color = false;
                 }
                 ui.end_row();
+                ui.label("Transparency");
+                ui.add(DragValue::new(&mut plot.details.line_transparency_pct).range(0..=100).suffix(" %"));
+                ui.end_row();
             });
+            let plot = &mut layer.plots[p];
+            if plot.kind.is_area() {
+                ui.weak("The area under the curve is set on the Pattern tab.");
+            } else {
+                ui.add_space(4.0);
+                ui.checkbox(&mut plot.details.fill_under, "Fill Area Under Curve");
+                if plot.details.fill_under {
+                    layer_tabs::plot_fill(ui, "line_fill", plot);
+                }
+            }
+            if dash != layer.plots[p].line.dash {
+                layer.set_line_dash(p, dash);
+            }
         }
         DetailTab::Symbol => {
-            let plot = &mut graph.layers[l].plots[p];
+            let layer = &mut graph.layers[l];
+            let plot = &mut layer.plots[p];
+            let mut shape = plot.symbol.shape;
             grid(ui, "plot_symbol", |ui| {
                 ui.label("Shape");
-                egui::ComboBox::from_id_salt("plot_symbol").selected_text(symbol_name(plot.symbol.shape)).show_ui(
-                    ui,
-                    |ui| {
-                        for s in SymbolShape::ALL {
-                            ui.selectable_value(&mut plot.symbol.shape, s, symbol_name(s));
-                        }
-                    },
-                );
+                egui::ComboBox::from_id_salt("plot_symbol").selected_text(symbol_name(shape)).show_ui(ui, |ui| {
+                    for s in SymbolShape::ALL {
+                        ui.selectable_value(&mut shape, s, symbol_name(s));
+                    }
+                });
                 ui.end_row();
                 ui.label("Size");
                 ui.add(DragValue::new(&mut plot.symbol.size_pt).range(0.5..=40.0).speed(0.1).suffix(" pt"));
@@ -314,7 +459,13 @@ fn plot_tab(
                 ui.add(DragValue::new(&mut plot.symbol.every).range(1..=100000).suffix(" th point"));
                 ui.end_row();
             });
+            if shape != layer.plots[p].symbol.shape {
+                layer.set_symbol_shape(p, shape);
+            }
         }
+        DetailTab::DropLines => plot_tabs::drop_lines_tab(ui, &mut graph.layers[l].plots[p]),
+        DetailTab::Label => plot_tabs::label_tab(ui, &mut graph.layers[l].plots[p], columns),
+        DetailTab::Offset => plot_tabs::offset_tab(ui, &mut graph.layers[l], p),
         DetailTab::Pattern => {
             let plot = &mut graph.layers[l].plots[p];
             group_box(ui, "Border", |ui| {
@@ -334,20 +485,7 @@ fn plot_tab(
                     ui.end_row();
                 });
             });
-            group_box(ui, "Fill", |ui| {
-                grid(ui, "plot_fill", |ui| {
-                    ui.label("Color");
-                    let before = plot.symbol.color;
-                    color_button(ui, &mut plot.symbol.color);
-                    if plot.symbol.color != before {
-                        plot.auto_color = false;
-                    }
-                    ui.end_row();
-                    ui.label("Pattern");
-                    ui.add_enabled(false, egui::Button::new("None"));
-                    ui.end_row();
-                });
-            });
+            group_box(ui, "Fill", |ui| layer_tabs::plot_fill(ui, "plot_fill", plot));
         }
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
@@ -359,10 +497,18 @@ fn plot_tab(
                 ui.add(DragValue::new(&mut bars.overlap_pct).range(-100.0..=100.0).speed(0.5));
                 ui.end_row();
                 ui.label("Width (in %)");
-                ui.add_enabled(false, DragValue::new(&mut 0.0));
+                ui.horizontal(|ui| {
+                    let mut set = bars.width_pct.is_some();
+                    if ui.checkbox(&mut set, "Set").changed() {
+                        bars.width_pct = set.then_some(100.0 - bars.gap_pct);
+                    }
+                    if let Some(w) = &mut bars.width_pct {
+                        ui.add(DragValue::new(w).range(1.0..=100.0).speed(0.5));
+                    }
+                });
                 ui.end_row();
             });
-            ui.weak("Gap and overlap are shared by all column plots of the layer.");
+            ui.weak("Gap, overlap and width are shared by all column plots of the layer; a width replaces the gap.");
         }
         DetailTab::ErrorBar => {
             let plot = &mut graph.layers[l].plots[p];
@@ -485,122 +631,26 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
         *node = if layer.plots.is_empty() { Node::Layer(l) } else { Node::Plot(l, p.saturating_sub(1)) };
     }
 
-    section(ui, "Colors of this layer");
     ui.horizontal(|ui| {
-        for c in &mut layer.palette.colors {
-            color_button(ui, c);
-        }
-        if ui.small_button("+").clicked() {
-            layer.palette.colors.push(Color::BLACK);
-        }
-        if layer.palette.colors.len() > 1 && ui.small_button("-").clicked() {
-            layer.palette.colors.pop();
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.selectable_value(&mut layer.palette.mode, PaletteMode::Cycle, "One color per plot")
-            .on_hover_text("Plot 1 takes color 1, plot 2 color 2, and so on");
-        ui.selectable_value(&mut layer.palette.mode, PaletteMode::Spread, "Gradient")
-            .on_hover_text("Colors run from the first to the last color over all plots");
-        if ui.button("Recolor plots").clicked() {
+        if ui.button("Recolor plots").on_hover_text("Style every plot of the layer again from the rules").clicked() {
             layer.apply_palette();
         }
     });
+    plot_tabs::group_rules(ui, layer, &labels[l]);
 }
 
 // ----- layer --------------------------------------------------------------------------------
 
-fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sources: &[Source], add_from: &mut usize) {
-    let link = graph.layers[l].link.map(|k| k.parent);
+fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize) {
     // The ids that `\l(n)` and `%(n)` in the legend text refer to.
     let legend_ids = graph.legend_ids(l, &|j| graph.layers[j].plots.iter().filter(|p| p.visible).count());
-    let layer = &mut graph.layers[l];
     match tab {
-        DetailTab::Size => {
-            if let Some(parent) = link {
-                ui.weak(format!(
-                    "This layer follows layer {}: the values are fractions of that layer's plot area.",
-                    parent + 1
-                ));
-            }
-            grid(ui, "frame_props", |ui| {
-                let pct = |ui: &mut egui::Ui, label: &str, v: &mut f64| {
-                    let mut p = *v * 100.0;
-                    ui.label(label);
-                    ui.add(DragValue::new(&mut p).range(0.0..=100.0).speed(0.2).suffix(" %"));
-                    ui.end_row();
-                    *v = p / 100.0;
-                };
-                pct(ui, "Left", &mut layer.frame.left);
-                pct(ui, "Top", &mut layer.frame.top);
-                pct(ui, "Width", &mut layer.frame.width);
-                pct(ui, "Height", &mut layer.frame.height);
-            });
-        }
-        DetailTab::Stack => stack_tab(ui, layer),
-        DetailTab::Legend => legend_ui(ui, &mut layer.legend, &legend_ids),
-        _ => {
-            ui.label(format!(
-                "{} plot(s) in this layer. Select one in the tree to change its look.",
-                layer.plots.len()
-            ));
-            add_plot_ui(ui, layer, sources, add_from);
-        }
-    }
-}
-
-/// Lets the user overlay columns of any worksheet of the project on this layer.
-fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &mut usize) {
-    section(ui, "Add data to this graph");
-    if sources.is_empty() {
-        ui.weak("The project has no numeric Y columns.");
-        return;
-    }
-    *from = (*from).min(sources.len() - 1);
-    egui::ComboBox::from_id_salt("add_plot_source").selected_text(&sources[*from].title).width(320.0).show_ui(
-        ui,
-        |ui| {
-            for (i, s) in sources.iter().enumerate() {
-                ui.selectable_value(from, i, &s.title);
-            }
-        },
-    );
-    let mut add: Vec<&super::graph_props::Addable> = Vec::new();
-    ui.horizontal_wrapped(|ui| {
-        for a in &sources[*from].columns {
-            let already = layer.plots.iter().any(|p| p.y == a.y);
-            if ui.add_enabled(!already, egui::Button::new(&a.label).small()).clicked() {
-                add.push(a);
-            }
-        }
-    });
-    if ui.button("Add all columns of this sheet").clicked() {
-        add = sources[*from].columns.iter().filter(|a| !layer.plots.iter().any(|p| p.y == a.y)).collect();
-    }
-    if !add.is_empty() {
-        for a in add {
-            layer.plots.push(Plot {
-                x: a.x,
-                y: a.y,
-                y_error: a.y_error,
-                rows: None,
-                kind: layer.default_kind,
-                line: layer.default_line.clone(),
-                symbol: layer.default_symbol.clone(),
-                label: None,
-                visible: true,
-                auto_color: true,
-                group: None,
-                x_error: None,
-                y_base: None,
-                error: ErrorStyle::default(),
-                hist: Default::default(),
-                size_from: None,
-                color_from: None,
-                details: Default::default(),
-            });
-        }
-        layer.recolor_automatic();
+        DetailTab::Size => layer_tabs::size_tab(ui, graph, l),
+        DetailTab::Display => layer_tabs::display_tab(ui, &mut graph.layers[l]),
+        DetailTab::LinkAxes => layer_tabs::link_tab(ui, graph, l),
+        DetailTab::Stack => stack_tab(ui, &mut graph.layers[l]),
+        DetailTab::Legend => legend_ui(ui, &mut graph.layers[l].legend, &legend_ids),
+        _ => layer_tabs::background_tab(ui, &mut graph.layers[l]),
     }
 }
 
@@ -767,27 +817,6 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
 }
 
 // ----- graph --------------------------------------------------------------------------------
-
-fn page_tab(ui: &mut egui::Ui, graph: &mut Graph) {
-    grid(ui, "page_props", |ui| {
-        let mut w = graph.page.width_pt / 72.0;
-        let mut h = graph.page.height_pt / 72.0;
-        ui.label("Width");
-        ui.add(DragValue::new(&mut w).range(1.0..=40.0).speed(0.02).suffix(" in"));
-        ui.end_row();
-        ui.label("Height");
-        ui.add(DragValue::new(&mut h).range(1.0..=40.0).speed(0.02).suffix(" in"));
-        ui.end_row();
-        graph.page.width_pt = w * 72.0;
-        graph.page.height_pt = h * 72.0;
-        ui.label("Background");
-        color_button(ui, &mut graph.page.background);
-        ui.end_row();
-        ui.label("Title");
-        ui.add(egui::TextEdit::singleline(&mut graph.long_name).desired_width(220.0));
-        ui.end_row();
-    });
-}
 
 /// The text settings of the whole graph: one font family and one size factor for every text.
 fn text_tab(ui: &mut egui::Ui, graph: &mut Graph) {

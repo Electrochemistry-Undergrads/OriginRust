@@ -20,6 +20,7 @@ use sheaf_core::{Color, ColumnId, Document, Project, WindowId};
 
 use super::graph_axis::{self, AxisTab};
 use super::graph_details::{self, DetailTab, Node};
+use super::layer_contents::{self, ContentsUi, Goto};
 
 /// The undo label of the dialog's edits.
 const LABEL: &str = "Change graph settings";
@@ -31,8 +32,12 @@ pub enum PropsTab {
     XAxis,
     /// The axis dialog on the vertical axis.
     YAxis,
-    /// Plot Details on a plot (when one is given) or on the layer (Layer Contents).
+    /// Plot Details on a plot (when one is given) or on the layer.
     Plots,
+    /// Layer Contents (F12): the data of the layer and what can be added to it.
+    Contents,
+    /// Plot Setup (double-click on the layer icon): the columns each plot draws.
+    Setup,
     /// Plot Details on the legend settings of the layer.
     Legend,
     /// Plot Details on the page of the graph.
@@ -43,6 +48,8 @@ pub enum PropsTab {
 enum View {
     Axis { vertical: bool, tab: AxisTab },
     Details { node: Node, tab: DetailTab },
+    Contents,
+    Setup,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -65,8 +72,10 @@ pub struct GraphPropsDialog {
     touched: bool,
     /// The plot of the dialog's layer that was chosen last.
     selected_plot: usize,
-    /// The sheet chosen in "Add data to this graph" (index into the list of sheets with Y columns).
-    add_from: usize,
+    /// What Layer Contents has selected.
+    contents: ContentsUi,
+    /// Side panel, page resize choice and the Workbook request of Plot Details.
+    local: graph_details::Local,
 }
 
 /// A Y column that can be added to a graph, with the X and error columns its sheet gives it.
@@ -131,11 +140,23 @@ impl GraphPropsDialog {
         let view = match tab {
             PropsTab::XAxis => View::Axis { vertical: false, tab: AxisTab::Scale },
             PropsTab::YAxis => View::Axis { vertical: true, tab: AxisTab::Scale },
-            PropsTab::Plots => View::Details { node: Node::Layer(layer), tab: DetailTab::LayerContents },
+            PropsTab::Plots => View::Details { node: Node::Layer(layer), tab: DetailTab::Background },
+            PropsTab::Contents => View::Contents,
+            PropsTab::Setup => View::Setup,
             PropsTab::Legend => View::Details { node: Node::Layer(layer), tab: DetailTab::Legend },
-            PropsTab::Page => View::Details { node: Node::Graph, tab: DetailTab::Page },
+            PropsTab::Page => View::Details { node: Node::Graph, tab: DetailTab::Dimensions },
         };
-        GraphPropsDialog { graph, layer, view, token, baseline: None, touched: false, selected_plot: 0, add_from: 0 }
+        GraphPropsDialog {
+            graph,
+            layer,
+            view,
+            token,
+            baseline: None,
+            touched: false,
+            selected_plot: 0,
+            contents: ContentsUi::default(),
+            local: graph_details::Local::default(),
+        }
     }
 
     /// Which of the entry points this dialog is at now.
@@ -144,6 +165,8 @@ impl GraphPropsDialog {
         match self.view {
             View::Axis { vertical: false, .. } => PropsTab::XAxis,
             View::Axis { vertical: true, .. } => PropsTab::YAxis,
+            View::Contents => PropsTab::Contents,
+            View::Setup => PropsTab::Setup,
             View::Details { node: Node::Graph, .. } => PropsTab::Page,
             View::Details { node: Node::Layer(_), tab: DetailTab::Legend } => PropsTab::Legend,
             View::Details { .. } => PropsTab::Plots,
@@ -159,13 +182,15 @@ impl GraphPropsDialog {
     /// when a plot is clicked) and, in Plot Details, shows its node.
     pub fn select_plot(&mut self, plot: usize) {
         self.selected_plot = plot;
-        if let View::Details { node, tab } = &mut self.view {
-            *node = Node::Plot(self.layer, plot);
+        if let View::Details { node, .. } = &mut self.view {
             // The tab is made valid for the plot while drawing.
-            if matches!(*tab, DetailTab::LayerContents | DetailTab::Page) {
-                *tab = DetailTab::Line;
-            }
+            *node = Node::Plot(self.layer, plot);
         }
+    }
+
+    /// The workbook the Workbook button asked for, once.
+    pub fn take_workbook(&mut self) -> Option<WindowId> {
+        self.local.open_workbook.take()
     }
 
     fn fresh_token(&mut self) {
@@ -213,6 +238,8 @@ impl GraphPropsDialog {
         let geometry = sheaf_plot::layout_geometry(doc.project(), self.graph).ok();
         let labels: Vec<Vec<String>> =
             graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_label(p)).collect()).collect();
+        let texts: Vec<Vec<String>> =
+            graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_tree_text(p)).collect()).collect();
         let sources = sources(doc.project());
         let columns = all_columns(doc.project());
 
@@ -222,6 +249,8 @@ impl GraphPropsDialog {
                 "graph_axis_dialog",
                 [600.0_f32, 540.0],
             ),
+            View::Contents => (format!("Layer Contents - Layer {}", li + 1), "graph_contents_dialog", [780.0, 470.0]),
+            View::Setup => (format!("Plot Setup - Layer {}", li + 1), "graph_setup_dialog", [820.0, 420.0]),
             View::Details { node, .. } => (
                 format!(
                     "Plot Details - {}",
@@ -243,6 +272,7 @@ impl GraphPropsDialog {
         let mut open = true;
         let mut button: Option<Button> = None;
         let this = &mut *self;
+        let mut goto: Option<Goto> = None;
         egui::Window::new(title)
             .id(egui::Id::new(window_id))
             .open(&mut open)
@@ -259,16 +289,31 @@ impl GraphPropsDialog {
                         graph_axis::dialog_body(ui, vertical, tab, &mut graph, li, resolved, &columns);
                     }
                     View::Details { node, tab } => {
-                        graph_details::dialog_body(
-                            ui,
-                            node,
-                            tab,
-                            &mut graph,
-                            &labels,
-                            &sources,
-                            &columns,
-                            &mut this.add_from,
-                        );
+                        let info = graph_details::Info {
+                            project: doc.project(),
+                            labels: &labels,
+                            texts: &texts,
+                            columns: &columns,
+                        };
+                        graph_details::dialog_body(ui, node, tab, &mut graph, &info, &mut this.local);
+                    }
+                    View::Contents => {
+                        let info = graph_details::Info {
+                            project: doc.project(),
+                            labels: &labels,
+                            texts: &texts,
+                            columns: &columns,
+                        };
+                        goto = layer_contents::contents_body(ui, &mut graph, li, &info, &sources, &mut this.contents);
+                    }
+                    View::Setup => {
+                        let info = graph_details::Info {
+                            project: doc.project(),
+                            labels: &labels,
+                            texts: &texts,
+                            columns: &columns,
+                        };
+                        goto = layer_contents::setup_body(ui, &mut graph, li, &info);
                     }
                 });
                 ui.separator();
@@ -286,6 +331,18 @@ impl GraphPropsDialog {
                     }
                 });
             });
+
+        match goto {
+            Some(Goto::Contents) => self.view = View::Contents,
+            Some(Goto::Setup) => self.view = View::Setup,
+            Some(Goto::Details) => {
+                self.view = View::Details { node: Node::Layer(self.layer), tab: DetailTab::Background };
+                if !graph.layers[self.layer.min(graph.layers.len() - 1)].plots.is_empty() {
+                    self.select_plot(self.selected_plot.min(graph.layers[li].plots.len().saturating_sub(1)));
+                }
+            }
+            None => {}
+        }
 
         // Which plot and layer the dialog is on, for the Object Manager and the next opening.
         if let View::Details { node, .. } = self.view {

@@ -1627,3 +1627,98 @@ An `.opj` file written here does not hold drawn objects. The writer says so in a
 ### 17.5 Not done
 
 Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
+
+## 18. Plot, layer and page look settings (P1, T13)
+
+**Measured:** nothing. This section was written on a machine without Origin. Every Origin detail named
+below is marked "not measured" and is to be checked on the Windows machine with `tools/origin-ref`.
+The control names follow the layout in `gui-look.md` section 5; the rules are Sheaf's own choices.
+
+Every setting is in `crates/core/src/graph_style.rs`, written to the project file only when it
+differs from the default (a file written before loads unchanged), drawn by `sheaf-plot` in SVG, PNG,
+PDF, EPS and EMF, and edited in Plot Details (`dialogs/details_plot.rs`, `details_layer.rs`).
+
+### 18.1 Plot tabs
+
+- **Line transparency** (Line tab): the data line takes the share of its colour that the percentage
+  leaves. It does not reach symbols, error bars, borders of bars or drop lines.
+- **Fill Area Under Curve** (Line tab, line and line + symbol plots; an area plot is always filled and
+  has its fill on the Pattern tab): the area between the curve and Y = 0 (the frame edge when 0 is
+  outside the range), in the plot's symbol colour and the fill style below.
+- **Fill style** (Pattern tab of columns, bars, histograms and areas; the Line tab's fill): transparency,
+  a hatch (forward or backward diagonal, horizontal, vertical, cross, diagonal cross; colour, line width
+  0.5 pt and spacing 3 pt by default) cut to the shape, and a linear gradient from the fill colour to a
+  second colour in one of four directions (drawn as bands). Not measured: Origin's own list of
+  patterns, its default hatch width and spacing, how a gradient and a pattern combine.
+- **Drop Lines**: a horizontal line from each point to the left edge of the frame and a vertical one to
+  the bottom edge, each with its own style, width and colour (default dashed, 0.5 pt, the plot's line
+  colour). Not measured: where Origin ends them with a reversed, logarithmic or opposite axis.
+- **Label**: a text beside each point inside the frame, showing the Y value, the X value, the row number
+  or the cell of a column; position right, left, above, below or centre; font, size, bold, italic, colour,
+  rotation, an extra shift in points, decimal places, and a list of rows (`1,3,5-8`). Not drawn for box
+  charts and pies. Not measured: Origin's default label font, size and gap, its automatic placement to
+  avoid overlaps.
+- **Offset** (line and symbol plots): the plot's own X and Y offset of section 13; it is used while the layer's
+  Stack says "Individual offsets", and a button on the tab switches that on.
+- **Spacing, Width (in %)**: the bars at one X position together take this share of the X spacing, which
+  replaces the gap while it is set.
+
+### 18.2 Group tab (plot group)
+
+The members of a layer's group are the plots that follow the layer's colour list (`Plot::auto_color`);
+the tick in the member list adds a plot or lets it go, and Layer Contents' Group and Ungroup do the same
+for a selection.
+
+- **Edit Mode**: Dependent restyles the members at once when a rule, the colour list or the membership
+  changes, and a change of the line style or symbol shape of one member moves the others by the same
+  number of steps; Independent changes only the chosen plot and leaves the rest, and only "Recolor plots"
+  styles all plots again.
+- **Increments**: colour None (all members take the first colour), By One (colour k for member k, wrapping)
+  or Gradient (the list spread over the members); line style and symbol shape None or By One. The first
+  member keeps its own dash and shape, the others step through Sheaf's list (the dash list of the Line tab,
+  the shape list of the Symbol tab).
+- **Subgrouping**: None or By Size (n plots per subgroup, in plot order); "Subgroup on Increment" names the
+  property that steps from one subgroup to the next (colour, line style or symbol shape) while the others
+  step inside the subgroup.
+- Not measured: Origin's order of dash and symbol lists, its Stretch and Binned increments, how it numbers
+  members of a subgroup, and what its Details buttons offer.
+
+### 18.3 Layer tabs
+
+- **Background**: a fill colour with transparency and an optional gradient behind the plots, and a border
+  line (colour, dash, width) around the frame. Nothing is drawn by default.
+- **Size**: left, top, width and height of the plot area in the page's unit (inch, cm, mm, pt); a layer that
+  follows another shows fractions of its parent's area.
+- **Display**: show the layer, its plots, its axes (lines, ticks, tick labels, titles), its text labels and
+  drawn objects. A hidden layer keeps its place, so layers linked to it do not move.
+- **Link Axes Scales**: a layer can follow an earlier layer that does not follow another; X and Y scales are
+  each independent or Straight (1 to 1). Origin's other link modes (custom formulas) are not done.
+
+### 18.4 Page tabs
+
+- **Print/Dimensions**: the unit and the page size; "keep the size of the layers" resizes the page with the
+  layers standing still in points, off lets them grow with it. Print margins and scaling are not done.
+- **Legends/Titles**: the long name and what the window title shows (both names, the short or the long one),
+  and one switch for the legends of all layers.
+- **Miscellaneous**: comments, shown as the hover text of the graph in the Object Manager.
+- **Display**: page colour, a border line inside the page edge, and the layer icons at the top left of the
+  window (the switch hides them; they are not part of exported pictures).
+
+### 18.5 Dialogs
+
+Plot Details' tree writes each plot as `[Book1]Sheet1! "Conc"(X), "Signal"(Y) [1*:10*]` (long name, else
+short name; yEr and xEr for error columns; a star after a row number says the end follows the data; a range
+chosen for the plot is written without stars). The Workbook button shows the sheet of the chosen plot; ">>"
+opens a side panel with the plot's rows and the row range it draws. **Layer Contents** (F12) has the
+available data at the left, the layer's plots at the right, Add, Remove, Up, Down, Group, Ungroup, and buttons to
+Plot Setup and Plot Details. **Plot Setup** (double click on the layer icon) has a row per plot with drop-downs
+for its X, Y and Y error column and its type. Not measured: what Origin's ">>" panel shows, Origin's exact
+button rows in both dialogs.
+
+### 18.6 Not done
+
+Speed mode of the layer's Size/Speed tab (no redraw-speed concept exists), the Skip Points control of Drop
+Lines, "White Out", frame, margin, attach-to, automatic overlap avoidance and leader lines of Label, X and
+Y multiplier of Offset, subgrouping By Column Label, a preview box on Pattern, the print margins of
+Print/Dimensions, writing these settings to `.opj` (the writer names what it cannot hold in its save
+warnings).

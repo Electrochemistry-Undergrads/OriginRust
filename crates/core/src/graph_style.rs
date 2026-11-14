@@ -678,9 +678,7 @@ mod tests {
 
     #[test]
     fn plot_details_round_trip() {
-        let mut d = PlotDetails::default();
-        d.line_transparency_pct = 40;
-        d.fill_under = true;
+        let mut d = PlotDetails { line_transparency_pct: 40, fill_under: true, ..Default::default() };
         d.fill.pattern = FillPattern::Cross;
         d.fill.transparency_pct = 25;
         d.fill.gradient = Some(Gradient { color: Color::RED, direction: GradientDirection::BottomToTop });

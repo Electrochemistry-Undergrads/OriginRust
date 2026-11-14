@@ -832,6 +832,31 @@ missing value inside is refused. Command line: `sheaf analyze fft FILE --y B [--
 [--no-unwrap] [--science] [--power msa|ssa|tisa]`. Not built: complex input, IFFT, 2D FFT, the
 graphs Origin makes with the result.
 
+### 15.1 IFFT (`ifft1`)
+
+Analysis > Signal Processing > FFT > IFFT. Options: the input `ix` (real and imaginary parts in
+two columns, or one), `interval` (`<Auto>`), `shift` (on), `win`, `correct`, `factor`, `unwrap`.
+Observed (`re-workspace/scratch/fft/i1.out.txt`, the two-sided unshifted FFT of eight points; Rust
+test `inverse_fft_matches_origin`):
+
+- The result sheet has Time, Real, Imaginary, Amplitude (`|x|`) and Phase (degrees, unwrapped).
+  `x_n = (1/N) sum X_k e^(2 pi i k n/N)`; Science uses the other sign (the signal comes out in
+  reverse order after the first point).
+- The interval is the step of the spectrum; the time step is `1 / (N * interval)` (interval 1
+  gave 0.125 for eight points, 0.25 gave 0.5).
+- Shift on (the default) treats the input as shifted the way FFT writes it and puts it back in FFT
+  order first; on an unshifted spectrum this gives a rotated (complex) result, as Origin's does.
+- Only the real part given: the imaginary part is 0.
+- The default window gave the same numbers as Rectangle; windows are not offered in Sheaf's IFFT.
+- Unwrap: a step of exactly -180 degrees gains 360 (0, 180, 0 became 0, 180, 360) but +180 is kept;
+  Sheaf's FFT uses the same rule.
+
+Sheaf: `sheaf_calc::ifft_spectrum`, `Tool::Ifft(IfftSpec)`; the input columns are real parts, the
+imaginary part a chosen column read row by row (the window suggests the column right after the
+input, as in an FFT result sheet). Auto takes the X step of the input (the frequency step of an FFT
+result). Command line: `sheaf analyze ifft FILE --y Real [--imaginary Imag] [--interval D]
+[--no-shift] [--no-unwrap] [--science]`.
+
 ## Files
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with

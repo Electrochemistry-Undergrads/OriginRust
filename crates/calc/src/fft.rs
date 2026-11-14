@@ -176,17 +176,87 @@ pub fn fft_spectrum(y: &[f64], o: &FftOptions) -> FftResult {
         r.db.push(if db.is_finite() { db } else { f64::NAN });
     }
     if o.unwrap {
-        for i in 1..r.phase.len() {
-            let prev = r.phase[i - 1];
-            let mut p = r.phase[i];
-            while p - prev > 180.0 {
-                p -= 360.0;
-            }
-            while p - prev < -180.0 {
-                p += 360.0;
-            }
-            r.phase[i] = p;
+        unwrap_degrees(&mut r.phase);
+    }
+    r
+}
+
+/// Origin's phase unwrapping in row order: a step above 180 degrees loses 360, a step of -180 or
+/// less gains 360 (measured: 0, 180, 0 becomes 0, 180, 360).
+fn unwrap_degrees(phase: &mut [f64]) {
+    for i in 1..phase.len() {
+        let prev = phase[i - 1];
+        let mut p = phase[i];
+        while p - prev > 180.0 {
+            p -= 360.0;
         }
+        while p - prev <= -180.0 {
+            p += 360.0;
+        }
+        phase[i] = p;
+    }
+}
+
+/// Options of [`ifft_spectrum`], with Origin's defaults.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IfftOptions {
+    /// Sampling interval of the input (its frequency step): the time step is `1 / (N * interval)`.
+    pub interval: f64,
+    /// The input is a shifted spectrum (negative frequencies first, as [`fft_spectrum`] writes it):
+    /// put it back in FFT order first.
+    pub shift: bool,
+    pub unwrap: bool,
+    /// The +1 (science) sign of the forward transform, so the inverse uses -1.
+    pub science: bool,
+}
+
+impl Default for IfftOptions {
+    fn default() -> Self {
+        IfftOptions { interval: 1.0, shift: true, unwrap: true, science: false }
+    }
+}
+
+/// The columns of an inverse FFT result.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct IfftResult {
+    pub time: Vec<f64>,
+    pub real: Vec<f64>,
+    pub imaginary: Vec<f64>,
+    /// `|x|`.
+    pub amplitude: Vec<f64>,
+    /// Degrees.
+    pub phase: Vec<f64>,
+}
+
+/// The inverse FFT of the spectrum `re + i im` (`im` missing: 0), as Origin's FFT > IFFT
+/// (`ifft1`, measured): `x_n = (1/N) sum X_k e^(2 pi i k n / N)`.
+pub fn ifft_spectrum(re: &[f64], im: Option<&[f64]>, o: &IfftOptions) -> IfftResult {
+    let n = re.len();
+    if n == 0 {
+        return IfftResult::default();
+    }
+    let at = |k: usize| Complex::new(re[k], im.and_then(|v| v.get(k)).copied().unwrap_or(0.0));
+    // A shifted spectrum holds frequency k at row (k - (N/2 + 1)) mod N.
+    let mut buf: Vec<Complex<f64>> =
+        (0..n).map(|k| if o.shift { at((k + n - (n / 2 + 1) % n) % n) } else { at(k) }).collect();
+    let mut planner = FftPlanner::<f64>::new();
+    if o.science {
+        planner.plan_fft_forward(n).process(&mut buf);
+    } else {
+        planner.plan_fft_inverse(n).process(&mut buf);
+    }
+    let nf = n as f64;
+    let mut r = IfftResult::default();
+    for (i, c) in buf.iter().enumerate() {
+        let c = c / nf;
+        r.time.push(i as f64 / (nf * o.interval));
+        r.real.push(c.re);
+        r.imaginary.push(c.im);
+        r.amplitude.push(c.norm());
+        r.phase.push(c.im.atan2(c.re).to_degrees());
+    }
+    if o.unwrap {
+        unwrap_degrees(&mut r.phase);
     }
     r
 }
@@ -265,6 +335,41 @@ mod tests {
         close(&r.power, &[9.0, 2.3912427893638992, 3.2499999999999996, 9.1087572106361012, 12.5]);
         let r = fft_spectrum(&X, &FftOptions { power: PowerNorm::Ssa, ..Default::default() });
         close(&r.power, &[18.0, 4.7824855787277984, 6.4999999999999991, 18.217514421272202, 25.0]);
+    }
+
+    #[test]
+    fn inverse_fft_matches_origin() {
+        let spec = fft_spectrum(&X, &FftOptions { two_sided: true, shift: false, ..Default::default() });
+        let unshifted = IfftOptions { shift: false, ..Default::default() };
+        let r = ifft_spectrum(&spec.real, Some(&spec.imaginary), &unshifted);
+        close(&r.time, &[0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]);
+        close(&r.real, &X);
+        close(&r.imaginary, &[0.0; 8]);
+        close(&r.amplitude, &[1.0, 3.0, 2.0, 4.0, 0.0, 5.0, 2.0, 1.0]);
+        close(&r.phase, &[0.0, 0.0, 180.0, 360.0, 360.0, 360.0, 360.0, 540.0]);
+        // Shift on an unshifted spectrum: Origin rotates it as if it were shifted.
+        let r = ifft_spectrum(&spec.real, Some(&spec.imaginary), &IfftOptions::default());
+        close(
+            &r.real,
+            &[1.0, -2.1213203435596428, 0.0, 2.82842712474619, 0.0, 3.5355339059327378, 0.0, 0.70710678118654746],
+        );
+        close(
+            &r.imaginary,
+            &[0.0, -2.1213203435596428, -2.0, -2.82842712474619, 0.0, 3.5355339059327378, -2.0, -0.70710678118654746],
+        );
+        close(&r.phase, &[0.0, -135.0, -90.0, -45.0, 0.0, 45.0, -90.0, -45.0]);
+        let r = ifft_spectrum(&spec.real, Some(&spec.imaginary), &IfftOptions { science: true, ..unshifted });
+        close(&r.real, &[1.0, -1.0, 2.0, 5.0, 0.0, 4.0, -2.0, 3.0]);
+        close(&r.phase, &[0.0, 180.0, 360.0, 360.0, 360.0, 360.0, 540.0, 720.0]);
+        // The real part alone, interval 0.25.
+        let r = ifft_spectrum(&spec.real, None, &IfftOptions { interval: 0.25, ..unshifted });
+        close(&r.time, &[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]);
+        close(&r.real, &[1.0, 1.0, 0.0, 4.5, 0.0, 4.5, 0.0, 1.0]);
+        // A shifted FFT comes back unchanged with Shift on.
+        let shifted = fft_spectrum(&X, &FftOptions { two_sided: true, ..Default::default() });
+        close(&ifft_spectrum(&shifted.real, Some(&shifted.imaginary), &IfftOptions::default()).real, &X);
+        let odd = fft_spectrum(&X[..7], &FftOptions { two_sided: true, ..Default::default() });
+        close(&ifft_spectrum(&odd.real, Some(&odd.imaginary), &IfftOptions::default()).real, &X[..7]);
     }
 
     #[test]

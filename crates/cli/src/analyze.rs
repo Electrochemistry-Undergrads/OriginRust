@@ -95,6 +95,12 @@ enum Job {
         normalize: bool,
         interval: Option<f64>,
     },
+    /// Inverse FFT; the imaginary column is looked up once the project is loaded.
+    Ifft {
+        imaginary: Option<String>,
+        options: analysis::IfftOptions,
+        auto_interval: bool,
+    },
     Sort {
         by: String,
         descending: bool,
@@ -177,6 +183,15 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
         AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
         AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
+        AnalyzeTool::Ifft { target, imaginary, interval, no_shift, no_unwrap, science } => {
+            let options = analysis::IfftOptions {
+                interval: interval.unwrap_or(1.0),
+                shift: !no_shift,
+                unwrap: !no_unwrap,
+                science,
+            };
+            (target, Job::Ifft { imaginary, options, auto_interval: interval.is_none() })
+        }
         AnalyzeTool::Fft {
             target,
             interval,
@@ -847,6 +862,13 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         Job::Math { op, operand, column } => {
             Job::Tool(math_tool(&mut project, book, sheet, op, &operand, column, &target.read)?)
         }
+        Job::Ifft { imaginary, options, auto_interval } => {
+            let imaginary = match imaginary {
+                Some(name) => Some(named_columns(&project, book, sheet, std::slice::from_ref(&name))?[0]),
+                None => None,
+            };
+            Job::Tool(Tool::Ifft(analysis::IfftSpec { imaginary, options, auto_interval }))
+        }
         Job::Signal { conv, other, circular, normalize, interval } => {
             let other = named_columns(&project, book, sheet, std::slice::from_ref(&other))?[0];
             Job::Tool(if conv {
@@ -891,7 +913,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
             println!("{}", report.message);
             report.new_sheet.unwrap_or(sheet)
         }
-        Job::Math { .. } | Job::Signal { .. } => unreachable!("turned into a tool above"),
+        Job::Math { .. } | Job::Signal { .. } | Job::Ifft { .. } => unreachable!("turned into a tool above"),
         Job::Sort { by, descending } => {
             let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;

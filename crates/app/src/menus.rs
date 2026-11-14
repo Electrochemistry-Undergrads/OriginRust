@@ -1008,7 +1008,7 @@ fn analysis_menu() -> Vec<Entry> {
                     "FFT",
                     vec![
                         item("FFT...", Cmd::Analyze(AnalysisKind::Fft)),
-                        grey("IFFT..."),
+                        item("IFFT...", Cmd::Analyze(AnalysisKind::Ifft)),
                         grey("2D FFT..."),
                         grey("2D IFFT..."),
                     ],

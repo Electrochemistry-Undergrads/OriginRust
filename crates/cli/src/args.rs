@@ -1113,6 +1113,26 @@ pub enum AnalyzeTool {
         #[arg(long, value_enum, default_value_t = FftPowerArg::Msa)]
         power: FftPowerArg,
     },
+    /// The inverse FFT of each column as the real part of a spectrum (Origin's Signal Processing >
+    /// FFT > IFFT): time, real, imaginary, amplitude and phase in a new sheet.
+    Ifft {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The column with the imaginary part (0 without).
+        #[arg(long)]
+        imaginary: Option<String>,
+        /// Sampling interval of the spectrum; by default the X step of the column.
+        #[arg(long)]
+        interval: Option<f64>,
+        /// The input is in FFT order (zero frequency first), not shifted.
+        #[arg(long)]
+        no_shift: bool,
+        #[arg(long)]
+        no_unwrap: bool,
+        /// The +1 sign convention of the forward transform.
+        #[arg(long)]
+        science: bool,
+    },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.
     Hilbert {

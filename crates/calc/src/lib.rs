@@ -52,7 +52,10 @@ pub use curves::{
 };
 pub use differentiate::{DiffOptions, differentiate};
 pub use discfreq::{Category, DiscSort, DiscreteFreq, DiscreteRow, discrete_frequency};
-pub use fft::{FftOptions, FftResult, FftWindow, PowerNorm, WindowCorrection, fft_spectrum, fft_window};
+pub use fft::{
+    FftOptions, FftResult, FftWindow, IfftOptions, IfftResult, PowerNorm, WindowCorrection, fft_spectrum, fft_window,
+    ifft_spectrum,
+};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};

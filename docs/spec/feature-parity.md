@@ -183,7 +183,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Smooth: Savitzky-Golay, adjacent average, weighted, percentile, FFT filter | Signal Processing > Smooth | `calc/smooth.rs`, checked against Origin; boundary options; Preview pane with Auto Preview in the shared analysis frame | ✓ | no auto-apply or recalculate | P0 |
 | Smooth: LOWESS, LOESS, binomial | Smooth dialog | Lowess, Loess (span or points) and binomial (order) as measured in Origin, dialog and CLI | ✓ | | P1 |
-| FFT and inverse FFT | fft1, ifft1 | FFT window, `analyze fft`, `Tool::Fft`: Origin's columns, windows, corrections, one- and two-sided, shift, unwrap, MSA/SSA/TISA (analysis-tools 15) | ◐ | no IFFT, no complex input, no result graphs | P1 |
+| FFT and inverse FFT | fft1, ifft1 | FFT window, `analyze fft`, `Tool::Fft`: Origin's columns, windows, corrections, one- and two-sided, shift, unwrap, MSA/SSA/TISA (analysis-tools 15); IFFT window, `analyze ifft` (15.1) | ◐ | no complex input column, no windows in IFFT, no result graphs | P1 |
 | FFT filters | low, high, band pass, block, notch | low-pass inside Smooth only | ✗ | | P1 |
 | Correlation, wavelets, decimation, Hilbert, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
 

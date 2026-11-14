@@ -14,7 +14,7 @@ the audit section named and the parity table row.
 | Importers: Excel, HDF5, NetCDF, JCAMP, Matlab, Thermo, ODBC | A, E | only CH Instruments and ASCII today |
 | `.opju` reading and writing | E | workbooks read since `39178fc` (`crates/io/src/opju`, spec `opju-format.md`); left: decoding drift in about 200 columns of the samples (section 5.4), designations and labels, graphs, matrices, folders; no writer (a save to `.opju` is refused) |
 | `.opj` read of matrices, notes, layouts, fits, masks, number formats, hidden columns, widths | E | plot groups and legend frames: branch `opj-groups-frames` |
-| Signal processing: FFT/IFFT tool, FFT filters beyond low-pass, Hilbert, convolution, deconvolution, STFT, wavelets, IIR | D | convolution, correlation, the Hilbert transform (13) and FFT (15) done |
+| Signal processing: FFT/IFFT tool, FFT filters beyond low-pass, Hilbert, convolution, deconvolution, STFT, wavelets, IIR | D | convolution, correlation, the Hilbert transform (13) and FFT/IFFT (15) done |
 | Mathematics: cumulative sum tool, level crossing, curve intersect, average curves, polygon area | D | curve intersect, average curves and polygon area: brief T22; Median Filter, Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate: brief T23 (both done); level crossing done (analysis-tools 14); cumulative sum remains |
 | Multivariate: PCA, k-means, ROC, Kaplan-Meier | D | |
 | Toolbars as separate bars, View > Toolbars customisation | A | |

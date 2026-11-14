@@ -26,7 +26,7 @@ use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
     PeakFitSpec, PeakShape,
 };
-use sheaf_core::analysis::{FftSpec, FftWindow, PowerNorm, WindowCorrection};
+use sheaf_core::analysis::{FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection};
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
@@ -55,6 +55,8 @@ pub enum AnalysisKind {
     Hilbert,
     /// Signal Processing > FFT > FFT (Origin's `fft1`).
     Fft,
+    /// Signal Processing > FFT > IFFT (Origin's `ifft1`).
+    Ifft,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -102,7 +104,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 18] = [
+    pub const ALL: [AnalysisKind; 19] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -117,6 +119,7 @@ impl AnalysisKind {
         AnalysisKind::LevelCrossing,
         AnalysisKind::Hilbert,
         AnalysisKind::Fft,
+        AnalysisKind::Ifft,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -140,6 +143,7 @@ impl AnalysisKind {
             AnalysisKind::LevelCrossing => "Level Crossing...",
             AnalysisKind::Hilbert => "Hilbert Transform...",
             AnalysisKind::Fft => "FFT...",
+            AnalysisKind::Ifft => "IFFT...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -196,6 +200,7 @@ impl AnalysisKind {
             "level-crossing" => AnalysisKind::LevelCrossing,
             "hilbert" => AnalysisKind::Hilbert,
             "fft" => AnalysisKind::Fft,
+            "ifft" => AnalysisKind::Ifft,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -547,6 +552,7 @@ pub struct AnalysisDialog {
     signal_interval: Option<f64>,
     level_crossing: LevelCrossingSpec,
     fft: FftSpec,
+    ifft: IfftSpec,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
@@ -705,8 +711,18 @@ impl AnalysisDialog {
         };
         let (x_lo, x_hi) = if x_lo <= x_hi { (x_lo, x_hi) } else { (0.0, 1.0) };
         // Convolution and Correlation may use an input itself (autocorrelation, as Origin).
-        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        let signal = matches!(kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
         let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
+        // IFFT: the column right after the (first) input is the imaginary part, as an FFT sheet has it.
+        let next_column = columns.first().and_then(|c| {
+            let (_, sheet, _) = project.locate(*c)?;
+            let at = sheet.column_index(*c)?;
+            sheet.columns.get(at + 1).map(|n| n.id)
+        });
+        let first_reference = match (kind, next_column) {
+            (AnalysisKind::Ifft, Some(id)) => reference_choices.iter().position(|(c, _)| *c == id).unwrap_or(0),
+            _ => 0,
+        };
         let sheet_columns: Vec<(ColumnId, String)> = sheet
             .columns
             .iter()
@@ -750,13 +766,14 @@ impl AnalysisDialog {
                 || (kind != AnalysisKind::ColumnMath && !reference_choices.is_empty()),
             constant: if kind == AnalysisKind::ColumnMath { 10.0 } else { 1.0 },
             reference_choices,
-            reference: 0,
+            reference: first_reference,
             common_only: false,
             signal_circular: false,
             signal_normalize: false,
             signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
             level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1, details: false },
             fft: FftSpec { auto_interval: true, ..Default::default() },
+            ifft: IfftSpec { auto_interval: true, ..Default::default() },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -1050,6 +1067,19 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
             AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Fft => Tool::Fft(self.fft),
+            AnalysisKind::Ifft => {
+                let imaginary = if self.use_reference {
+                    Some(
+                        self.reference_choices
+                            .get(self.reference)
+                            .map(|(id, _)| *id)
+                            .ok_or("there is no other column with numbers to use as the imaginary part")?,
+                    )
+                } else {
+                    None
+                };
+                Tool::Ifft(IfftSpec { imaginary, ..self.ifft })
+            }
             AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
                 let other = self
                     .reference_choices
@@ -1273,6 +1303,7 @@ impl AnalysisDialog {
             AnalysisKind::ColumnMath => "Column",
             AnalysisKind::Convolution => "Response",
             AnalysisKind::SignalCorrelation => "Second signal",
+            AnalysisKind::Ifft => "Imaginary",
             _ => "Reference",
         };
         let text = match self.reference_choices.get(self.reference) {
@@ -1293,7 +1324,7 @@ impl AnalysisDialog {
             ui.weak("Row by row, without X values; rows past the end of the column count as 0.");
             return;
         }
-        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation) {
+        if matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft) {
             return;
         }
         ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
@@ -1340,6 +1371,29 @@ impl AnalysisDialog {
                 ui.weak("The reference is interpolated onto the X values of the data.");
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
+            AnalysisKind::Ifft => {
+                ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
+                    ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
+                });
+                ui.add_enabled_ui(self.use_reference, |ui| self.reference_options(ui));
+                let spec = &mut self.ifft;
+                ui.horizontal(|ui| {
+                    ui.label("Sampling interval");
+                    ui.checkbox(&mut spec.auto_interval, "Auto")
+                        .on_hover_text("The X step of the input column (its frequency step); 1 without an X column.");
+                    ui.add_enabled(
+                        !spec.auto_interval,
+                        DragValue::new(&mut spec.options.interval).speed(0.01).range(1e-300..=f64::MAX),
+                    );
+                });
+                ui.checkbox(&mut spec.options.shift, "Shift (the input has the zero frequency in the middle)");
+                ui.checkbox(&mut spec.options.unwrap, "Unwrap Phase");
+                ui.horizontal(|ui| {
+                    ui.label("Factor");
+                    ui.radio_value(&mut spec.options.science, false, "-1 (Electrical Engineering)");
+                    ui.radio_value(&mut spec.options.science, true, "+1 (Science)");
+                });
+            }
             AnalysisKind::Hilbert => {
                 ui.weak(
                     "Writes the Hilbert transform of each input column. Origin also writes the analytic signal as a \
@@ -2015,6 +2069,7 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => "levelcrossing",
             AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Fft => "fft1",
+            AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -2077,6 +2132,7 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Fft => "The frequency spectrum of the input signals",
+            AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -2131,6 +2187,7 @@ impl AnalysisDialog {
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
             AnalysisKind::Fft => "Eight spectrum columns per input in a new sheet",
+            AnalysisKind::Ifft => "Time, real, imaginary, amplitude and phase in a new sheet",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
@@ -2206,7 +2263,8 @@ impl AnalysisDialog {
             return;
         }
         self.column_names = names.join(", ");
-        let signal = matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation);
+        let signal =
+            matches!(self.kind, AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft);
         self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
         if matches!(self.kind, AnalysisKind::CurveMath | AnalysisKind::ColumnMath) {

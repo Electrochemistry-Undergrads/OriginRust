@@ -1505,6 +1505,20 @@ fn fft_opens_from_signal_processing_and_writes_a_spectrum_sheet() {
 }
 
 #[test]
+fn ifft_opens_from_signal_processing_and_takes_the_next_column_as_the_imaginary_part() {
+    let mut h = start(vec![data_file("ifft")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FFT", "IFFT..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("IFFT")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 10, "five columns for each of the two inputs");
+    // The column right after the first input is the imaginary part.
+    assert_eq!(sheet.columns[1].comments, "IFFT of B + i C");
+}
+
+#[test]
 fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("hilbert")]);
     show_window(&mut h, "Book1 - sample");

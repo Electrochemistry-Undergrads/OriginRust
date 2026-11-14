@@ -6072,3 +6072,14 @@ fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step
     h.state_mut().apply(Action::Undo, &ctx);
     assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "one undo step");
 }
+
+#[test]
+fn file_close_hides_the_active_window_and_keeps_its_data() {
+    let mut h = start(vec![data_file("fileclose")]);
+    show_window(&mut h, "Book1 - sample");
+    let book = project(&h).workbooks().next().unwrap().id;
+    assert!(h.state().workspace.is_shown(book));
+    menu(&mut h, "File", "Close");
+    assert!(!h.state().workspace.is_shown(book), "the window is closed");
+    assert!(project(&h).workbook(book).is_some(), "its data stays in the project");
+}

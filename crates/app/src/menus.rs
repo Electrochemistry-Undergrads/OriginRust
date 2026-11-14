@@ -209,6 +209,8 @@ pub enum Cmd {
     Toolbars,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// File > Close: close (hide) the active window, as its title bar's close button does.
+    CloseWindow,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -423,7 +425,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         grey_keyed("Open &Excel...", ctrl(Key::E)),
         grey("Open Sample Projects"),
         grey("Appen&d..."),
-        grey("&Close"),
+        item("&Close", Cmd::CloseWindow),
         sep(),
         keyed("&Save Project", ctrl(Key::S), Cmd::SaveProject),
         keyed("Save Project &As...", ctrl_shift(Key::S), Cmd::SaveProjectAs),
@@ -2003,6 +2005,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
+        Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,

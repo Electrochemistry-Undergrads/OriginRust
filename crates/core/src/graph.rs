@@ -168,6 +168,9 @@ pub struct Layer {
     /// Free text labels placed in the layer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<TextLabel>,
+    /// Drawn lines, arrows, rectangles and ellipses (graphing spec section 17), above the data.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shapes: Vec<crate::shape::Shape>,
     /// The colors given to new plots, in order. See [`Layer::next_color`].
     pub palette: Palette,
     /// Style copied to each new plot added to this layer.

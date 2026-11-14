@@ -408,6 +408,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 text: None,
             },
             labels: Vec::new(),
+            shapes: Vec::new(),
             palette,
             default_line: LineStyle::solid(Color::BLACK, 0.5),
             default_symbol: SymbolStyle {
@@ -655,6 +656,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     let mut l = parent.clone();
     l.plots.clear();
     l.labels.clear();
+    l.shapes.clear();
     l.plot_offsets.clear();
     // The right axis has curves of its own: they are not stacked, and its values are shown even
     // when the stacked parent hides its own (offset) Y values.

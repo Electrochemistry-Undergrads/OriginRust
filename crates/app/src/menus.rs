@@ -178,6 +178,13 @@ pub enum Cmd {
     DataReader,
     /// The Text tool of the Tools toolbar.
     TextTool,
+    /// A drawing tool of the Tools toolbar.
+    ShapeTool(sheaf_core::shape::ShapeKind),
+    /// Properties of a drawn object.
+    EditShape {
+        layer: usize,
+        shape: usize,
+    },
     /// Add Text...: a new text label in the active layer.
     AddText,
     /// Properties of a text label (its text window).
@@ -266,6 +273,10 @@ pub struct MenuContext<'a> {
     /// plot: the workbook and Y column of the selected plot, or else of the active layer's first
     /// visible plot of numbers. `None` when the graph has no such plot.
     pub curve: Option<(WindowId, ColumnId)>,
+    /// On a graph: the Y columns of the active layer's visible plots of numbers that sit in the same
+    /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
+    /// compare curves (Average Multiple Curves, Intersect) start from these.
+    pub layer_curves: Vec<ColumnId>,
 }
 
 // ----- the table ---------------------------------------------------------------------------
@@ -907,12 +918,12 @@ fn analysis_menu() -> Vec<Entry> {
                 grey("Spline Interpolation..."),
                 grey("B-Spline Interpolation..."),
                 sep(),
-                grey("Intersect..."),
+                item("Intersect...", Cmd::Analyze(AnalysisKind::Intersect)),
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
-                grey("Average Multiple Curves..."),
-                grey("Polygon Area..."),
+                item("Average Multiple Curves...", Cmd::Analyze(AnalysisKind::AverageCurves)),
+                item("Polygon Area...", Cmd::Analyze(AnalysisKind::PolygonArea)),
                 grey("XYZ Surface Area..."),
-                grey("Median Filter..."),
+                item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
                 grey("Inverse..."),
             ],
@@ -921,9 +932,11 @@ fn analysis_menu() -> Vec<Entry> {
             "&Data Manipulation",
             vec![
                 item("Subtract Reference Data...", Cmd::Analyze(AnalysisKind::SubtractRef)),
-                grey("Subtract Straight Line..."),
-                grey("Reduce to Evenly Spaced X..."),
-                grey("Curve Translate X..."),
+                item("Subtract Straight Line...", Cmd::Analyze(AnalysisKind::SubtractLine)),
+                item("Reduce to Evenly Spaced X...", Cmd::Analyze(AnalysisKind::ReduceX)),
+                item("Curve Translate X...", Cmd::Analyze(AnalysisKind::TranslateX)),
+                // Sheaf's own: the same window along Y.
+                item("Curve Translate Y...", Cmd::Analyze(AnalysisKind::TranslateY)),
             ],
         ),
         sub(
@@ -1525,6 +1538,20 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
     ]
 }
 
+/// The menu of a drawn line, arrow, rectangle or ellipse.
+pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
+    vec![
+        grey_keyed("Cut", ctrl(Key::X)),
+        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
+        sep(),
+        grey("Bring to the front"),
+        grey("Push to the back"),
+        sep(),
+        item("Properties...", Cmd::EditShape { layer, shape }),
+    ]
+}
+
 /// The menu of the legend.
 pub fn graph_legend_menu(layer: usize) -> Vec<Entry> {
     vec![
@@ -1890,7 +1917,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Analyze(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
-                Action::Analyze { book, columns: vec![y], kind: *kind }
+                let columns = match kind {
+                    AnalysisKind::AverageCurves if c.layer_curves.len() >= 2 => c.layer_curves.clone(),
+                    AnalysisKind::Intersect if c.layer_curves.len() >= 2 => c.layer_curves[..2].to_vec(),
+                    _ => vec![y],
+                };
+                Action::Analyze { book, columns, kind: *kind }
             }
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),
@@ -1934,6 +1966,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
         Cmd::TextTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Text },
+        Cmd::ShapeTool(kind) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Draw(*kind) },
+        Cmd::EditShape { layer, shape } => {
+            Action::EditShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
+        }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
@@ -2310,6 +2346,7 @@ mod tests {
             layer: 0,
             tool: Default::default(),
             curve: None,
+            layer_curves: Vec::new(),
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

@@ -24,8 +24,8 @@ Cyclic Voltammetry                    <- line 2: technique name
 File: C:\data\run1.bin                <- source data file
 Data Source: Experiment
 Instrument Model:  CHI627E
-Header:                               <- free text the operator typed (may be empty)
-Note:
+Header:                               <- free text the operator typed (may be empty); kept as meta `Header`
+Note:                                 <- kept as meta `Note` when not empty
 
 Init E (V) = 1.2                      <- parameter lines: "name = value"
 High E (V) = 1.2
@@ -160,6 +160,11 @@ largest magnitude; if 20 or more consecutive rows have a value within a relative
 of `m`, add a warning naming the scan, the pinned value in mA, the number of rows, and the potential
 (or time) range of the run. A real peak top repeats at most about 5 rows at CHI's 4 significant
 digits, so it does not trigger the warning.
+
+The check applies to every current column: `Current/A` and the numbered `i1/A`, `i2/A`, ... of a
+multi-channel i-t export (each channel is reported under its own name, `i2: positive current ...`).
+The binary reader makes the same check on the same columns, with the stored values rounded to 4
+digits, and the two importers give the same warnings for the same run (tested on six runs).
 
 ### 2.4 Chronopotentiometry: charge and discharge segments
 

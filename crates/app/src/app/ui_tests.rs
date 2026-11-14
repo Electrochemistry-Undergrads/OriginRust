@@ -1834,6 +1834,9 @@ fn every_command_of_a_workbook_is_reachable_from_its_origin_menu() {
         &["Analysis", "Mathematics", "Integrate Ranges..."],
         &["Analysis", "Mathematics", "Interpolate/Extrapolate..."],
         &["Analysis", "Mathematics", "Normalize Columns..."],
+        &["Analysis", "Mathematics", "Average Multiple Curves..."],
+        &["Analysis", "Mathematics", "Intersect..."],
+        &["Analysis", "Mathematics", "Polygon Area..."],
         &["Analysis", "Data Manipulation", "Subtract Reference Data..."],
         &["Analysis", "Fitting", "Linear Fit..."],
         &["Analysis", "Fitting", "Polynomial Fit..."],
@@ -4062,6 +4065,155 @@ fn an_auto_result_follows_its_input_in_the_same_undo_step() {
     assert_eq!(project(&h).numeric(out).unwrap(), first.as_slice(), "and the result with it");
 }
 
+/// Analysis > Mathematics > Average Multiple Curves...: the mean of up and down on their shared X, with the SD
+/// as the error column and the count; one Undo removes the result.
+#[test]
+fn the_mathematics_menu_averages_curves() {
+    let mut h = start(vec![data_file("avecurves")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    for label in ["All X values of the curves", "Evenly spaced", "Those of one curve", "Linear", "Akima spline"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, mean) = result_column(&h, "Mean");
+    assert!(sheet.starts_with("Average"), "{sheet}");
+    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5], "(2.5 + 30.5) / 2 and so on");
+    let (_, sd) = result_column(&h, "SD");
+    // The sample SD of two values is their distance over the square root of two.
+    for (s, gap) in sd.iter().zip([28.0, 16.0, 4.0, 8.0]) {
+        assert!((s - gap / 2.0_f64.sqrt()).abs() < 1e-9, "{sd:?}");
+    }
+    let (_, n) = result_column(&h, "N");
+    assert_eq!(n, vec![2.0; 4]);
+    assert_eq!(h.state().doc.undo_label(), Some("Average multiple curves"));
+}
+
+/// The evenly spaced choice shows its point count and gives that many rows.
+#[test]
+fn average_curves_can_use_evenly_spaced_x() {
+    let mut h = start(vec![data_file("avecurves-even")]);
+    open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B", "C"]);
+    click(&mut h, "Evenly spaced");
+    assert!(has_label(&h, "Number of points"));
+    click(&mut h, "OK");
+    let (_, x) = result_column(&h, "t");
+    assert_eq!(x.len(), 100, "the default is 100 points");
+    assert_eq!((x[0], x[99]), (1.0, 4.0));
+}
+
+/// One column is not enough to average: the window stays open and says why.
+#[test]
+fn average_curves_with_one_column_is_refused_in_the_window() {
+    let mut h = start(vec![data_file("avecurves-one")]);
+    open_analysis_on(&mut h, AnalysisKind::AverageCurves, &["B"]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_some(), "the window stays open");
+    assert!(h.state().doc.undo_label().is_none_or(|l| l != "Average multiple curves"));
+}
+
+/// Analysis > Mathematics > Intersect...: up and down cross between t = 3 and t = 4, at t = 10 / 3.
+#[test]
+fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
+    let mut h = start(vec![data_file("intersect")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(x.len(), 1);
+    assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Intersect"));
+}
+
+/// Analysis > Mathematics > Polygon Area...: up and down are two open polylines; each is closed by its last
+/// point back to its first. up and down both run along a line, so their polygons have no area (the loop test below checks real numbers); the table has one row per column.
+#[test]
+fn the_mathematics_menu_gives_the_polygon_area_of_each_column() {
+    let mut h = start(vec![data_file("polyarea")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, area) = result_column(&h, "Area");
+    assert!(sheet.starts_with("PolygonArea"), "{sheet}");
+    assert_eq!(area.len(), 2, "one row per column");
+    assert!(area.iter().all(|a| a.abs() < 1e-9), "straight lines enclose nothing: {area:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Polygon area"));
+}
+
+/// A closed loop in a data file: the window passes the right X and Y, so the area is the 2 x 3 rectangle's.
+#[test]
+fn the_polygon_area_window_measures_a_closed_loop() {
+    let loop_csv = csv_file("polyloop", "loop", "x,y\n0,0\n2,0\n2,3\n0,3\n");
+    let mut h = start(vec![loop_csv]);
+    show_window(&mut h, "Book1 - loop");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Polygon Area..."]);
+    click(&mut h, "OK");
+    let (_, area) = result_column(&h, "Area");
+    assert_eq!(area, vec![6.0]);
+    assert_eq!(result_column(&h, "Signed area").1, vec![6.0], "counterclockwise");
+    assert_eq!(result_column(&h, "Centroid X").1, vec![1.0]);
+    assert_eq!(result_column(&h, "Centroid Y").1, vec![1.5]);
+    assert_eq!(result_column(&h, "Perimeter").1, vec![10.0]);
+}
+
+/// From a graph, Average Multiple Curves and Intersect start with the curves of the layer, so OK
+/// runs without picking the columns again.
+#[test]
+fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-curves")]);
+    assert!(h.state().menu_context().layer_curves.len() >= 2, "the graph plots up and down");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Intersect..."]);
+    assert!(h.state().analysis.is_some());
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, x) = result_column(&h, "Intersection X (t)");
+    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
+}
+
+#[test]
+fn from_a_graph_average_multiple_curves_starts_with_the_plots_of_the_layer() {
+    let mut h = start(vec![data_file("graph-average")]);
+    menu_path(&mut h, &["Analysis", "Mathematics", "Average Multiple Curves..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    let (sheet, mean) = result_column(&h, "Mean");
+    assert!(sheet.starts_with("Average"), "{sheet}");
+    assert_eq!(mean, vec![16.5, 12.5, 8.5, 4.5]);
+}
+
+/// The new tools can follow their input: Intersect with Auto moves its point when a cell changes, in the same
+/// undo step as the edit.
+#[test]
+fn an_auto_intersect_follows_an_edit_of_its_input() {
+    let mut h = start(vec![data_file("intersect-auto")]);
+    open_analysis_on(&mut h, AnalysisKind::Intersect, &["B", "C"]);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Auto"), "Intersect can follow its input");
+    click(&mut h, "Auto");
+    let c = column_id(&h, "C");
+    click(&mut h, "OK");
+    let (_, first) = result_column(&h, "Intersection X (t)");
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: c, row: 3, text: "20".into() }, &ctx);
+    settle(&mut h);
+    let (_, second) = result_column(&h, "Intersection X (t)");
+    assert_ne!(first, second, "the crossing moved");
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    let (_, back) = result_column(&h, "Intersection X (t)");
+    assert_eq!(first, back, "one Undo takes the edit and the result back");
+}
+
 #[test]
 fn the_output_node_can_send_results_to_a_new_sheet_or_to_existing_columns() {
     let mut h = start(vec![data_file("output-choice")]);
@@ -5455,4 +5607,388 @@ fn plot_specialized_ternary_and_its_button_make_a_ternary_graph_of_the_selected_
     let graphs: Vec<_> = project(&h).graphs().collect();
     assert_eq!(graphs.len(), before + 2);
     assert!(graphs[before + 1].layers[0].coords.ternary().is_some());
+}
+
+// ----- drawn objects: Line, Arrow, Rectangle, Circle tools ------------------------------------------
+
+fn shapes(h: &Harness<'static, SheafApp>) -> Vec<sheaf_core::shape::Shape> {
+    graph(h).layers[0].shapes.clone()
+}
+
+/// A page point at the given fractions of the first layer's frame, on screen.
+fn frame_point(h: &Harness<'static, SheafApp>, fx: f64, fy: f64) -> egui::Pos2 {
+    let f = sheaf_plot::layout_geometry(project(h), graph(h).id).unwrap()[0].frame;
+    graph_ui(h).page_point(f.x + f.w * fx, f.y + f.h * fy).unwrap()
+}
+
+fn drag_frame(h: &mut Harness<'static, SheafApp>, a: (f64, f64), b: (f64, f64)) {
+    let (from, to) = (frame_point(h, a.0, a.1), frame_point(h, b.0, b.1));
+    drag(h, from, to);
+}
+
+#[test]
+fn a_drag_with_the_rectangle_tool_draws_one_object_and_the_tool_ends() {
+    let mut h = start(vec![data_file("drawrect")]);
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(&mut h);
+    assert!(graph_ui(&h).shape_tool.is_some(), "the tool is on");
+    drag_frame(&mut h, (0.2, 0.2), (0.5, 0.4));
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, sheaf_core::shape::ShapeKind::Rectangle);
+    assert!((s[0].x1 - 0.2).abs() < 0.01 && (s[0].y2 - 0.4).abs() < 0.01, "{:?}", s[0]);
+    assert!(graph_ui(&h).shape_tool.is_none(), "the tool returns to the Pointer");
+    assert_eq!(graph_ui(&h).selected, Some((0, ObjectKind::Shape(0))));
+    assert_eq!(h.state().doc.undo_label(), Some("Add drawn object"));
+    menu(&mut h, "Edit", "Undo Add drawn object");
+    assert!(shapes(&h).is_empty());
+}
+
+#[test]
+fn a_drawn_arrow_is_moved_and_deleted_with_undo() {
+    let mut h = start(vec![data_file("movearrow")]);
+    bar_button!(h, "Tools", "Arrow").click();
+    settle(&mut h);
+    drag_frame(&mut h, (0.2, 0.2), (0.6, 0.2));
+    assert_eq!(shapes(&h)[0].kind, sheaf_core::shape::ShapeKind::Arrow);
+    let before = shapes(&h)[0].clone();
+    // Pick it in the middle of the line and drag it down.
+    let at = frame_point(&h, 0.4, 0.2);
+    pause(&mut h);
+    drag(&mut h, at, at + egui::vec2(0.0, 50.0));
+    let after = shapes(&h)[0].clone();
+    assert!(after.y1 > before.y1 && (after.x1 - before.x1).abs() < 1e-9, "{before:?} -> {after:?}");
+    assert!((after.y2 - after.y1 - (before.y2 - before.y1)).abs() < 1e-9, "the length is kept");
+    assert_eq!(h.state().doc.undo_label(), Some("Move drawn object"));
+    menu(&mut h, "Edit", "Undo Move drawn object");
+    assert_eq!(shapes(&h)[0], before);
+    // Delete removes the selected object; Undo brings it back.
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert!(shapes(&h).is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Delete drawn object"));
+    menu(&mut h, "Edit", "Undo Delete drawn object");
+    assert_eq!(shapes(&h).len(), 1);
+}
+
+#[test]
+fn double_clicking_a_drawn_object_opens_its_properties() {
+    let mut h = start(vec![data_file("shapeprops")]);
+    bar_button!(h, "Tools", "Circle").click();
+    settle(&mut h);
+    drag_frame(&mut h, (0.3, 0.3), (0.7, 0.7));
+    assert_eq!(shapes(&h)[0].kind, sheaf_core::shape::ShapeKind::Ellipse);
+    // The top of the ellipse is on its outline.
+    let at = frame_point(&h, 0.5, 0.3);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the properties window opened");
+    click(&mut h, "Filled");
+    click(&mut h, "OK");
+    assert!(shapes(&h)[0].fill.is_some());
+    assert_eq!(h.state().doc.undo_label(), Some("Edit drawn object"));
+}
+
+/// An arrow (object 0) and a rectangle (object 1), drawn with the tools.
+fn draw_arrow_and_rectangle(h: &mut Harness<'static, SheafApp>) {
+    bar_button!(h, "Tools", "Arrow").click();
+    settle(h);
+    drag_frame(h, (0.2, 0.2), (0.6, 0.2));
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(h);
+    drag_frame(h, (0.2, 0.5), (0.6, 0.7));
+    assert_eq!(shapes(h).len(), 2);
+}
+
+#[test]
+fn the_drawn_object_window_closes_when_delete_removes_its_object() {
+    use sheaf_core::shape::ShapeKind;
+    let mut h = start(vec![data_file("shapestaledel")]);
+    draw_arrow_and_rectangle(&mut h);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Fill", |p| {
+        p.graph_mut(id).unwrap().layers[0].shapes[1].fill = Some(sheaf_core::Color::rgba(1, 2, 3, 255));
+    });
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the arrow's window opened");
+    // Delete removes the arrow; the rectangle now has its index, but the window must not edit it.
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    assert_eq!(shapes(&h).len(), 1);
+    assert!(h.state().shape_dialog.is_none(), "the window of a deleted object closes");
+    let rect = shapes(&h)[0].clone();
+    assert_eq!(rect.kind, ShapeKind::Rectangle);
+    assert!(rect.fill.is_some(), "the rectangle keeps its fill");
+}
+
+#[test]
+fn the_drawn_object_window_closes_on_undo_and_redo_of_its_layer() {
+    let mut h = start(vec![data_file("shapestaleundo")]);
+    draw_arrow_and_rectangle(&mut h);
+    // Double-click the rectangle's top edge, then undo its drawing.
+    let at = frame_point(&h, 0.4, 0.5);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the rectangle's window opened");
+    menu(&mut h, "Edit", "Undo Add drawn object");
+    assert_eq!(shapes(&h).len(), 1);
+    assert!(h.state().shape_dialog.is_none(), "undo closed the window");
+    // Redo while a window of the arrow is open closes it as well.
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some(), "the arrow's window opened");
+    menu(&mut h, "Edit", "Redo Add drawn object");
+    assert_eq!(shapes(&h).len(), 2);
+    assert!(h.state().shape_dialog.is_none(), "redo closed the window");
+}
+
+#[test]
+fn the_drawn_object_window_closes_when_another_kind_takes_its_index() {
+    let mut h = start(vec![data_file("shapestalekind")]);
+    draw_arrow_and_rectangle(&mut h);
+    let at = frame_point(&h, 0.4, 0.2);
+    double_click_at(&mut h, at);
+    assert!(h.state().shape_dialog.is_some());
+    // A change that does not go through the graph or undo handlers (the object list shifts).
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Remove", |p| {
+        p.graph_mut(id).unwrap().layers[0].shapes.remove(0);
+    });
+    settle(&mut h);
+    assert!(h.state().shape_dialog.is_none(), "the arrow's window closed: a rectangle is at its index");
+}
+
+#[test]
+fn a_drag_shorter_than_the_minimum_draws_nothing_and_keeps_the_tool_on() {
+    let mut h = start(vec![data_file("drawtiny")]);
+    bar_button!(h, "Tools", "Line").click();
+    settle(&mut h);
+    // A press held long enough to be a drag (egui decides by distance or time), moved about 2
+    // page points (a page point is about half a screen pixel here): under the 3 point minimum.
+    let from = frame_point(&h, 0.3, 0.3);
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(button(from, true));
+    h.step();
+    h.run_steps(100);
+    h.event(egui::Event::PointerMoved(from + egui::vec2(1.0, 0.0)));
+    h.step();
+    h.event(button(from + egui::vec2(1.0, 0.0), false));
+    h.step();
+    settle(&mut h);
+    assert!(shapes(&h).is_empty(), "too short to draw");
+    assert!(graph_ui(&h).shape_tool.is_some(), "the tool is still on");
+    // Escape ends the tool.
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    assert!(graph_ui(&h).shape_tool.is_none(), "Escape ends the tool");
+    assert!(shapes(&h).is_empty());
+}
+
+/// A drag from `from` to `to` with Shift held (the whole gesture).
+fn drag_shifted(h: &mut Harness<'static, SheafApp>, from: egui::Pos2, to: egui::Pos2) {
+    let shift = egui::Modifiers::SHIFT;
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: shift,
+    };
+    for event in [
+        egui::Event::PointerMoved(from),
+        button(from, true),
+        egui::Event::PointerMoved(from.lerp(to, 0.5)),
+        egui::Event::PointerMoved(to),
+        button(to, false),
+    ] {
+        h.event_modifiers(event, shift);
+        h.step();
+    }
+    settle(h);
+}
+
+#[test]
+fn shift_while_drawing_snaps_a_line_and_squares_a_rectangle() {
+    use sheaf_core::shape::ShapeKind;
+    let mut h = start(vec![data_file("drawshift")]);
+    let f = sheaf_plot::layout_geometry(project(&h), graph(&h).id).unwrap()[0].frame;
+    // A line that is about 10 degrees off horizontal becomes horizontal; the length is kept.
+    bar_button!(h, "Tools", "Line").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.2, 0.3), frame_point(&h, 0.6, 0.3) + egui::vec2(0.0, 12.0));
+    drag_shifted(&mut h, a, b);
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, ShapeKind::Line);
+    assert!((s[0].y2 - s[0].y1).abs() < 1e-9, "horizontal: {:?}", s[0]);
+    assert!(s[0].x2 > s[0].x1 + 0.1);
+    // A rectangle dragged wider than tall is a square in page points.
+    bar_button!(h, "Tools", "Rectangle").click();
+    settle(&mut h);
+    let (a, b) = (frame_point(&h, 0.1, 0.5), frame_point(&h, 0.4, 0.6));
+    drag_shifted(&mut h, a, b);
+    let r = shapes(&h)[1].clone();
+    assert_eq!(r.kind, ShapeKind::Rectangle);
+    let (w, hgt) = ((r.x2 - r.x1).abs() * f.w, (r.y2 - r.y1).abs() * f.h);
+    assert!((w - hgt).abs() < 1e-6, "square: {w} x {hgt}");
+}
+
+#[test]
+fn data_manipulation_items_and_median_filter_open_and_run() {
+    let mut h = start(vec![data_file("manip")]);
+    show_window(&mut h, "Book1 - sample");
+    // Both columns are straight lines, so the line through the first and last point removes them.
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let added: Vec<Vec<f64>> = project(&h)
+        .workbooks()
+        .flat_map(|b| b.sheet().columns.iter())
+        .filter(|c| c.long_name.ends_with("minus line"))
+        .map(|c| c.numeric().unwrap().to_vec())
+        .collect();
+    assert_eq!(added.len(), 2);
+    for v in &added {
+        assert!(v.iter().all(|x| x.abs() < 1e-9), "{v:?}");
+    }
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract straight line"));
+
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Median Filter..."]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Median filter"));
+
+    // Translate X writes a new sheet.
+    show_window(&mut h, "Book1 - sample");
+    let sheets_before = project(&h).workbooks().next().unwrap().sheets.len();
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Curve Translate X..."]);
+    click(&mut h, "OK");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), sheets_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Translate X"));
+}
+
+#[test]
+fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_after_x() {
+    let mut h = start(vec![data_file("manip2")]);
+    show_window(&mut h, "Book1 - sample");
+    // Two of the Data Manipulation items open their windows (they are no longer greyed) and Cancel changes nothing.
+    let undo_before = h.state().doc.undo_label().map(str::to_string);
+    for path in [
+        ["Analysis", "Data Manipulation", "Reduce to Evenly Spaced X..."],
+        ["Analysis", "Data Manipulation", "Curve Translate Y..."],
+    ] {
+        menu_path(&mut h, &path);
+        assert!(h.state().analysis.is_some(), "{path:?} opens its window");
+        click(&mut h, "Cancel");
+        assert!(h.state().analysis.is_none());
+        assert_eq!(h.state().doc.undo_label().map(str::to_string), undo_before, "Cancel changes nothing");
+    }
+    let analysis = menus::bar(WindowKind::Workbook).iter().find(|m| m.name() == "Analysis").expect("the Analysis menu");
+    let manip = analysis
+        .entries
+        .iter()
+        .find_map(|e| match e {
+            menus::Entry::Submenu(s) if menus::plain(&s.label) == "Data Manipulation" => Some(s),
+            _ => None,
+        })
+        .expect("the Data Manipulation submenu");
+    let names: Vec<String> = manip
+        .entries
+        .iter()
+        .filter_map(|e| if let menus::Entry::Item(i) = e { Some(menus::plain(&i.label)) } else { None })
+        .collect();
+    let x = names.iter().position(|n| n == "Curve Translate X...").unwrap_or_else(|| panic!("{names:?}"));
+    assert_eq!(names[x + 1], "Curve Translate Y...");
+
+    // Reduce to 4 evenly spaced X values (the default is 100 points: the run keeps the X range).
+    open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Reduce to evenly spaced X"));
+    let sheets = &project(&h).workbooks().next().unwrap().sheets;
+    let cols = &sheets.last().unwrap().columns;
+    assert_eq!(cols.len(), 2);
+    assert_eq!(cols[0].numeric().unwrap().len(), 100);
+    assert_eq!(cols[0].numeric().unwrap()[0], 1.0);
+    assert_eq!(cols[0].numeric().unwrap()[99], 4.0);
+
+    // The reduced sheet is now the active one. Translate Y with the shift set to 1.5 writes the Y column
+    // plus 1.5 beside it, and Undo removes it.
+    let reduced = cols[1].numeric().unwrap().to_vec();
+    open_analysis_on(&mut h, AnalysisKind::TranslateY, &["B"]);
+    h.state_mut().analysis.as_mut().unwrap().set_translate_by(1.5);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Translate Y"));
+    let shifted = project(&h)
+        .workbooks()
+        .next()
+        .unwrap()
+        .sheet()
+        .columns
+        .iter()
+        .find(|c| c.long_name == "up shifted")
+        .map(|c| c.numeric().unwrap().to_vec())
+        .expect("the shifted column");
+    let expected: Vec<f64> = reduced.iter().map(|v| v + 1.5).collect();
+    assert_eq!(shifted, expected);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert!(project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "up shifted"));
+}
+
+#[test]
+fn the_preview_of_a_tool_that_writes_a_new_sheet_shows_the_new_curve() {
+    let mut h = start(vec![data_file("manip-preview")]);
+    // The input is t = 1..4, up = 2.5, 4.5, 6.5, 8.5. Translate X by 10 keeps Y and moves X.
+    open_analysis_on(&mut h, AnalysisKind::TranslateX, &["B"]);
+    h.state_mut().analysis.as_mut().unwrap().set_translate_by(10.0);
+    click(&mut h, "Preview");
+    let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
+    assert_eq!(rx, [11.0, 12.0, 13.0, 14.0]);
+    assert_eq!(ry, [2.5, 4.5, 6.5, 8.5]);
+    click(&mut h, "Cancel");
+    // Reduce to Evenly Spaced X: 100 points from X = 1 to 4, on the straight line y = 2 x + 0.5.
+    open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
+    click(&mut h, "Preview");
+    let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
+    assert_eq!((rx.len(), rx[0], rx[99]), (100, 1.0, 4.0));
+    assert!(rx.iter().zip(&ry).all(|(x, y)| (y - (2.0 * x + 0.5)).abs() < 1e-9), "{ry:?}");
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1, "a preview writes nothing");
+}
+
+#[test]
+fn a_median_filter_made_with_recalculate_auto_follows_the_edited_input() {
+    let mut h = start(vec![data_file("manip-auto")]);
+    open_analysis_on(&mut h, AnalysisKind::MedianFilter, &["B"]);
+    // Manual is the default; the median filter can follow its input, so Auto is offered.
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Manual")).click();
+    settle(&mut h);
+    assert!(!is_disabled(&h, "Auto"));
+    click(&mut h, "Auto");
+    click(&mut h, "OK");
+    let b = column_id(&h, "B");
+    let out = project(&h)
+        .workbooks()
+        .next()
+        .unwrap()
+        .sheet()
+        .columns
+        .iter()
+        .find(|c| c.long_name == "Median filtered up")
+        .expect("the filtered column")
+        .id;
+    // The window of 5 shrinks at the ends to as many points as fit on both sides, and a straight line
+    // is its own median.
+    assert_eq!(project(&h).numeric(out).unwrap(), [2.5, 4.5, 6.5, 8.5]);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "100".into() }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).numeric(out).unwrap(), [100.0, 6.5, 6.5, 8.5], "the same column was updated");
+    assert_eq!(project(&h).column(out).unwrap().analysis.unwrap().state, sheaf_core::FormulaState::Current);
 }

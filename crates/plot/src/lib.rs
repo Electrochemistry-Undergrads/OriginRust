@@ -24,6 +24,7 @@ mod plots;
 mod polar;
 mod raster;
 pub mod scene;
+mod shapes;
 mod stack;
 mod svg;
 mod ternary;

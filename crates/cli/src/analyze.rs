@@ -239,6 +239,74 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Average { target, points, reference_curve, range, method, no_sd, no_count } => {
+            let x = match (points, reference_curve) {
+                (Some(n), _) => analysis::CommonX::Evenly(n),
+                (None, Some(0)) => bail!("--reference-curve counts from 1"),
+                (None, Some(r)) => analysis::CommonX::Reference(r - 1),
+                (None, None) => analysis::CommonX::Points,
+            };
+            let options = analysis::AverageOptions {
+                x,
+                range: match range {
+                    AverageRange::Intersection => analysis::XRange::Intersection,
+                    AverageRange::Union => analysis::XRange::Union,
+                },
+                method: match method {
+                    AverageInterp::Linear => analysis::AverageMethod::Linear,
+                    AverageInterp::Spline => analysis::AverageMethod::CubicSpline,
+                    AverageInterp::Akima => analysis::AverageMethod::Akima,
+                },
+            };
+            (target, Job::Tool(Tool::AverageCurves(analysis::AverageSpec { options, sd: !no_sd, count: !no_count })))
+        }
+        AnalyzeTool::Intersect { target, touching } => {
+            (target, Job::Tool(Tool::Intersect(analysis::IntersectSpec { include_touching: touching })))
+        }
+        AnalyzeTool::PolygonArea { target } => (target, Job::Tool(Tool::PolygonArea)),
+        AnalyzeTool::SubtractLine { target, x1, x2, y1, y2 } => (
+            target,
+            Job::Tool(Tool::SubtractLine(analysis::SubtractLineSpec {
+                p1: analysis::LinePoint { x: x1, y: y1 },
+                p2: analysis::LinePoint { x: x2, y: y2 },
+            })),
+        ),
+        AnalyzeTool::ReduceX { target, step, points, method, x_min, x_max } => {
+            let range = match (x_min, x_max) {
+                (None, None) => None,
+                (Some(lo), Some(hi)) => Some((lo, hi)),
+                _ => bail!("give both --x-min and --x-max, or neither"),
+            };
+            let grid = match step {
+                Some(s) => analysis::EvenGrid::Step(s),
+                None => analysis::EvenGrid::Count(points.unwrap_or(100)),
+            };
+            let method = match method {
+                ReduceKind::Interpolate => analysis::ReduceMethod::Interpolate,
+                ReduceKind::Average => analysis::ReduceMethod::Average,
+            };
+            (target, Job::Tool(Tool::ReduceX(analysis::ReduceOptions { grid, method, range })))
+        }
+        AnalyzeTool::Translate { target, axis, by, at, to } => {
+            let shift = match (by, at, to) {
+                (Some(d), _, _) => analysis::Shift::By(d),
+                (None, Some(at), Some(to)) => analysis::Shift::PointTo { at, to },
+                _ => bail!("give --by AMOUNT, or --at X together with --to VALUE"),
+            };
+            let axis = match axis {
+                AxisKind::X => analysis::TranslateAxis::X,
+                AxisKind::Y => analysis::TranslateAxis::Y,
+            };
+            (target, Job::Tool(Tool::Translate(analysis::TranslateSpec { axis, shift })))
+        }
+        AnalyzeTool::MedianFilter { target, points, edge } => {
+            let edge = match edge {
+                MedianEdgeKind::Shrink => analysis::MedianEdge::Shrink,
+                MedianEdgeKind::Repeat => analysis::MedianEdge::Repeat,
+                MedianEdgeKind::Reflect => analysis::MedianEdge::Reflect,
+            };
+            (target, Job::Tool(Tool::MedianFilter(analysis::MedianFilterSpec { npts: points, edge })))
+        }
         AnalyzeTool::Peaks {
             target,
             direction,

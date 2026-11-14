@@ -256,8 +256,10 @@ the default project format.
       correlation and normality tests (`148e9b1`); expanded descriptive statistics and statistics
       on rows, Grubbs/Dixon outlier tests, Friedman, sign, median and two-sample KS tests measured
       against Origin (T14 items 1-4, `c44a1a6`)
-- [ ] Statistics breadth left: Holm/Dunnett comparisons, cross tabulation, 2D binning, distribution
-      fitting, probability plots and power analysis (T14 items 5-6); documented Kendall/normality
+- [x] Holm comparisons and power analysis (`d724c40`); 2D frequency counts and binning measured against
+      Origin's `twoDBinning` (T14 item 6, statistics.md 13)
+- [ ] Statistics breadth left: cross tabulation, distribution fitting, probability plots (T14 item 6;
+      Dunnett not measurable); documented Kendall/normality
       p-value differences remain (T16)
 - [ ] Batch processing and analysis templates (batch file import already works)
 - [ ] Scripting through an embedded language

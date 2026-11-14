@@ -1246,6 +1246,43 @@ fn export_graphs_apply_writes_the_file_and_asks_before_replacing_it() {
 }
 
 #[test]
+fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
+    let mut h = start(vec![data_file("export-psd")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    h.get_by_value("Portable Network Graphics (*.png)").click();
+    settle(&mut h);
+    click(&mut h, "Photoshop Document (*.psd)");
+    assert!(h.query_by_label("File will be saved as sample.psd").is_some());
+    assert!(h.query_by_label("Resolution").is_some());
+    assert!(h.query_by_label("Color Depth").is_some());
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-psd-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    let mut current = "24-bit Color";
+    for (name, depth, mode) in
+        [("rgb", "24-bit Color", 3), ("grey", "8-bit Grayscale", 1), ("indexed", "256 Colors", 2)]
+    {
+        if depth != current {
+            h.get_by_value(current).click();
+            settle(&mut h);
+            h.get_all_by_label(depth).last().unwrap().click();
+            settle(&mut h);
+            current = depth;
+        }
+        h.state_mut().export.as_mut().unwrap().set_file_name(name);
+        settle(&mut h);
+        click(&mut h, "Apply");
+        let bytes = std::fs::read(dir.join(format!("{name}.psd"))).expect("Apply writes the selected PSD mode");
+        assert_eq!(&bytes[..4], b"8BPS");
+        assert_eq!(u16::from_be_bytes(bytes[24..26].try_into().unwrap()), mode);
+        assert!(h.state().export.is_some(), "Apply keeps the window open");
+    }
+    click(&mut h, "Cancel");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
     let mut h = start(vec![data_file("ranges")]);
     show_window(&mut h, "Book1 - sample");

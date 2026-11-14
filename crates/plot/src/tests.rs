@@ -569,8 +569,10 @@ fn export_by_extension() {
         let bytes = std::fs::read(&path).unwrap();
         assert!(bytes.starts_with(magic), "{name}");
     }
-    let err = export_file(&p, g, &dir.join("d.psd"), 72.0).unwrap_err();
-    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "psd"));
+    export_file(&p, g, &dir.join("d.psd"), 72.0).unwrap();
+    assert!(std::fs::read(dir.join("d.psd")).unwrap().starts_with(b"8BPS"));
+    let err = export_file(&p, g, &dir.join("d.xyz"), 72.0).unwrap_err();
+    assert!(matches!(&err, PlotError::UnknownFormat(e) if e == "xyz"));
     assert!(err.to_string().contains(".svg"));
     let err = export_file(&p, g, &dir.join("no-such-folder").join("e.svg"), 72.0).unwrap_err();
     assert!(matches!(err, PlotError::Io { .. }));
@@ -2333,7 +2335,8 @@ fn sized_exports_and_tiff() {
     assert_eq!(res, vec![15000, 100], "150 dpi");
     let tiff::decoder::DecodingResult::U8(pixels) = dec.read_image().unwrap() else { panic!("8-bit image") };
     assert_eq!(&pixels[..3], &[255, 255, 255], "the corner of the page is white");
-    assert!(matches!(export_bytes(&p, g, "psd", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
+    assert!(export_bytes(&p, g, "psd", 72.0, ExportSize::default()).unwrap().starts_with(b"8BPS"));
+    assert!(matches!(export_bytes(&p, g, "xyz", 72.0, ExportSize::default()), Err(PlotError::UnknownFormat(_))));
 }
 
 // ----- stacked, horizontal and floating bars, error bars (graphing spec 14.12, 5.5) ---------------

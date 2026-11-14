@@ -151,11 +151,12 @@ pub struct FitArgs {
     /// negative limits as --x-range=-0.5:0.1).
     #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
     pub x_range: Option<String>,
-    /// Draw the data with the fitted curve and write the figure (.png, .svg, .pdf, .eps, .emf or .tif). With
+    /// Draw the data with the fitted curve and write the figure (.png, .tif, .jpg, .bmp, .gif, .tga,
+    /// .pcx, .psd, .svg, .pdf, .eps or .emf). With
     /// several columns, only the first one is drawn.
     #[arg(long, value_name = "FIGURE")]
     pub plot: Option<PathBuf>,
-    /// Resolution of a PNG figure in dots per inch.
+    /// Resolution of a raster figure in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
     /// Save the project with the results to this file: .opj (also when no extension is given, with a
@@ -509,10 +510,10 @@ pub struct PlotArgs {
     /// A data file, a .sheaf project or an Origin .opj or .opju project. Several data files are overlaid in one figure.
     #[arg(required = true)]
     pub inputs: Vec<PathBuf>,
-    /// The figure to write: .png, .svg, .pdf, .eps, .emf or .tif.
+    /// The figure to write: .png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps or .emf.
     #[arg(short, long)]
     pub output: PathBuf,
-    /// Resolution of PNG output in dots per inch.
+    /// Resolution of raster output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
     /// Width of the exported picture, with a unit: in, cm, mm, pt, px or % (for example 3.5in or
@@ -620,11 +621,12 @@ pub struct ExportArgs {
     /// Name of the graph (default: the only graph of the project). Not used for .opj output.
     #[arg(long)]
     pub graph: Option<String>,
-    /// What to write: a figure (.png, .svg, .pdf, .eps, .emf or .tif) or, with .opj, the whole project as an Origin
-    /// 2016 project file (workbooks and graphs; what the file cannot hold is listed as warnings).
+    /// What to write: a figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps or .emf)
+    /// or, with .opj, the whole project as an Origin project file (workbooks and graphs;
+    /// what the file cannot hold is listed as warnings).
     #[arg(short, long)]
     pub output: PathBuf,
-    /// Resolution of PNG output in dots per inch.
+    /// Resolution of raster output in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,
     /// Width of the exported picture, with a unit: in, cm, mm, pt, px or % (for example 3.5in or

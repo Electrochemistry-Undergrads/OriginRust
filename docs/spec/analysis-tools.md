@@ -791,7 +791,8 @@ curves of each input (X and Y of each envelope) in a new sheet named `Envelope..
 window has Type, Method (fixed) and the points on each side. Command line: `sheaf analyze envelope
 FILE --y B [--type upper|lower|both] [--npts N]`. Not measured or not built: other methods (Origin has
 only the spline one in this version), repeated X values at two extremes (refused by Sheaf, not
-tried in Origin), the default workbook name of a call without `rd`, non-numeric input.
+tried in Origin), the default workbook name of a call without `rd`, non-numeric input, several input columns (each
+pair is named Envelope X 1/Y 1 again) and row ranges.
 
 ## 14. Level crossing (`levelcrossing`)
 

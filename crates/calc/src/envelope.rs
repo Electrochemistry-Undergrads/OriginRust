@@ -67,7 +67,7 @@ pub enum EnvelopeError {
 pub fn extreme_points(y: &[f64], n: usize, upper: bool) -> Vec<usize> {
     let len = y.len();
     let mut out = Vec::new();
-    if len < 2 * n + 1 {
+    if n > len / 2 || len < n.saturating_mul(2).saturating_add(1) {
         return out;
     }
     let sign = if upper { 1.0 } else { -1.0 };
@@ -132,6 +132,7 @@ pub fn envelope(x: &[f64], y: &[f64], opts: &EnvelopeOptions) -> Result<Envelope
     if opts.npts.is_nan() || opts.npts < 0.0 {
         return Err(EnvelopeError::BadNpts);
     }
+    // `as usize` saturates for a huge or infinite value; such a window never fits (too few extremes).
     let n = (opts.npts.floor() as usize).max(1);
     // Data in monotonic X (either direction) are used as they are; any other order is sorted by
     // X for the spline nodes, while the extremes are still searched in the input order.
@@ -442,5 +443,28 @@ mod tests {
         assert!(envelope(&x, &y, &lower).is_ok());
         let negative = EnvelopeOptions { kind: EnvelopeType::Lower, npts: -1.0 };
         assert_eq!(envelope(&x, &y, &negative), Err(EnvelopeError::BadNpts));
+    }
+
+    #[test]
+    fn huge_npts_is_too_few_extremes() {
+        let x: Vec<f64> = (0..8).map(f64::from).collect();
+        let y = [0.0, 2.0, 1.0, 3.0, 0.5, 4.0, 0.2, 2.0];
+        for npts in [f64::INFINITY, 1e30, 4.0] {
+            let o = EnvelopeOptions { kind: EnvelopeType::Both, npts };
+            assert_eq!(envelope(&x, &y, &o), Err(EnvelopeError::TooFewExtremes), "npts {npts}");
+        }
+        assert!(extreme_points(&y, usize::MAX, true).is_empty());
+    }
+
+    #[test]
+    fn origin_first_and_last_y_missing() {
+        // Rows 2..11 of the 12-row curve, the first and last Y missing (dropped), as printed by Origin.
+        let x: Vec<f64> = (1..=10).map(f64::from).collect();
+        let y = [2.0, 1.0, 3.0, 0.5, 4.0, 0.2, 2.0, 1.0, 5.0, 4.0];
+        let want_upper = [2.0, 2.075, 3.0, 3.925, 4.0, 2.85, 2.0, 2.925, 5.0, 7.075];
+        let want_lower = [1.2425, 1.0, 0.7575, 0.5, 0.25249999999999995, 0.2, 0.49499999999999994, 1.0, 1.505, 1.8];
+        let r = envelope(&x, &y, &EnvelopeOptions { kind: EnvelopeType::Both, npts: 1.0 }).unwrap();
+        close(&r.upper.unwrap(), &want_upper);
+        close(&r.lower.unwrap(), &want_lower);
     }
 }

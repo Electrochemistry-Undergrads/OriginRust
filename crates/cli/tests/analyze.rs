@@ -390,6 +390,31 @@ fn convolution_and_signal_correlation_write_a_new_sheet() {
 }
 
 #[test]
+fn level_crossing_lists_the_crossings() {
+    let dir = scratch("level-crossing");
+    let data = data_file(&dir);
+    let out = dir.join("lx.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "level-crossing",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--level",
+        "2.5",
+        "--row",
+        "right",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Level crossing"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    // X, level, direction and the right-hand row (X 2.5 lies between rows 3 and 4).
+    assert!(text.lines().any(|l| l == "2.5,2.5,1,4"), "{text}");
+}
+
+#[test]
 fn curve_math_and_range_mistakes_are_explained() {
     let dir = scratch("math-errors");
     let data = data_file(&dir);

@@ -1379,6 +1379,19 @@ fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet
     }
 }
 
+#[test]
+fn level_crossing_opens_from_mathematics_and_lists_the_crossings() {
+    let mut h = start(vec![data_file("levelx")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("LevelCrossing")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 8, "X, level, direction and row for each of the two inputs");
+    assert_eq!(h.state().doc.undo_label(), Some("Level crossing"));
+}
+
 fn date_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

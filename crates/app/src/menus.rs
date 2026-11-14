@@ -952,6 +952,8 @@ fn analysis_menu() -> Vec<Entry> {
                 item("B-Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::BSpline)),
                 sep(),
                 item("Intersect...", Cmd::Analyze(AnalysisKind::Intersect)),
+                // Sheaf's own: Origin has the levelcrossing X-Function but no menu item for it.
+                item("Level Crossing...", Cmd::Analyze(AnalysisKind::LevelCrossing)),
                 item("Normalize Columns...", Cmd::Analyze(AnalysisKind::Normalize)),
                 item("Average Multiple Curves...", Cmd::Analyze(AnalysisKind::AverageCurves)),
                 item("Polygon Area...", Cmd::Analyze(AnalysisKind::PolygonArea)),

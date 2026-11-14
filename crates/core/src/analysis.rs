@@ -37,7 +37,7 @@ pub use sheaf_calc::{
     PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
-pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
+pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -207,6 +207,17 @@ pub struct SignalCorrelationSpec {
     pub normalize: bool,
     /// The lag step of the result's X (Origin: 1 unless given).
     pub interval: f64,
+}
+
+/// What [`Tool::LevelCrossing`] does (Origin's `levelcrossing` X-Function, measured;
+/// analysis-tools.md 14).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LevelCrossingSpec {
+    pub level: f64,
+    /// The row given for a crossing between two rows (Origin's `type`).
+    pub index: CrossingIndex,
+    /// Drop both crossings of a pair whose rows are closer than this (Origin's `pts`, 1: keep all).
+    pub min_gap: usize,
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -565,6 +576,7 @@ pub enum Tool {
     ColumnMath(ColumnMathSpec),
     Convolution(ConvolutionSpec),
     SignalCorrelation(SignalCorrelationSpec),
+    LevelCrossing(LevelCrossingSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -623,6 +635,7 @@ impl Tool {
             Tool::ColumnMath(_) => "Column math",
             Tool::Convolution(_) => "Convolution",
             Tool::SignalCorrelation(_) => "Signal correlation",
+            Tool::LevelCrossing(_) => "Level crossing",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -676,6 +689,7 @@ impl Tool {
             Tool::CurveMath(_) | Tool::ColumnMath(_) => "Math",
             Tool::Convolution(_) => "Convolution",
             Tool::SignalCorrelation(_) => "Correlation",
+            Tool::LevelCrossing(_) => "LevelCrossing",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1642,6 +1656,45 @@ impl Project {
                             if *normalize { ", normalized" } else { "" }
                         ),
                         data: ColumnData::numeric(v),
+                    });
+                }
+            }
+            Tool::LevelCrossing(spec) => {
+                if !spec.level.is_finite() {
+                    return Err(AnalysisError::BadOption(format!("{} is not a usable level", spec.level)));
+                }
+                for inp in &inputs {
+                    let found = calc::level_crossings(inp.xs(), inp.ys(), spec.level, spec.index, spec.min_gap);
+                    // Rows of the sheet, not of the chosen range.
+                    let row = |c: &calc::Crossing| (c.row + inp.first) as f64;
+                    let note = format!("{} at {}{}", inp.short, spec.level, inp.range_note());
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: inp.x_name.clone(),
+                        units: inp.x_units.clone(),
+                        comments: format!("Crossings of {note}"),
+                        data: ColumnData::numeric(found.iter().map(|c| c.x).collect()),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: "Level".into(),
+                        units: inp.units.clone(),
+                        comments: note.clone(),
+                        data: ColumnData::numeric(vec![spec.level; found.len()]),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: "Direction".into(),
+                        units: String::new(),
+                        comments: "1 up, -1 down, 0 touching".into(),
+                        data: ColumnData::numeric(found.iter().map(|c| f64::from(c.direction)).collect()),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Label,
+                        long_name: "Row".into(),
+                        units: String::new(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(found.iter().map(row).collect()),
                     });
                 }
             }
@@ -2919,6 +2972,26 @@ mod tests {
             p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))),
             Err(AnalysisError::BadOption(_))
         ));
+    }
+
+    #[test]
+    fn level_crossing_lists_x_level_direction_and_row_in_a_new_sheet() {
+        let (mut p, book, _, ramp) = sample();
+        let spec = LevelCrossingSpec { level: 4.5, index: CrossingIndex::Nearest, min_gap: 1 };
+        let r = p.analyze(&request(&[ramp], Tool::LevelCrossing(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("LevelCrossing"), "{}", rs.name);
+        let values: Vec<Vec<f64>> = rs.columns.iter().map(|c| c.numeric().unwrap().to_vec()).collect();
+        // 0..10 crosses 4.5 upward at X 4.5, between rows 5 and 6 (a tie: the left row).
+        assert_eq!(values, [vec![4.5], vec![4.5], vec![1.0], vec![5.0]]);
+        assert_eq!(rs.columns[3].designation, Designation::Label);
+        assert_eq!(rs.columns[0].units, "s");
+        // Within rows 7 to 11 the rows are still those of the sheet.
+        let mut req = request(&[ramp], Tool::LevelCrossing(LevelCrossingSpec { level: 8.0, ..spec }));
+        req.rows = RowRange::Rows(7, 11);
+        let r = p.analyze(&req).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(rs.columns[3].numeric().unwrap(), [9.0]);
     }
 
     fn ranges(list: &[(f64, f64)], end_point_baseline: bool) -> Tool {

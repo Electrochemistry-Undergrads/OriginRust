@@ -176,6 +176,14 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         }
         AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
         AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
+        AnalyzeTool::LevelCrossing { target, level, row, min_gap } => {
+            let index = match row {
+                CrossingRow::Any => analysis::CrossingIndex::Nearest,
+                CrossingRow::Left => analysis::CrossingIndex::Left,
+                CrossingRow::Right => analysis::CrossingIndex::Right,
+            };
+            (target, Job::Tool(Tool::LevelCrossing(analysis::LevelCrossingSpec { level, index, min_gap })))
+        }
         AnalyzeTool::Convolution { target, response, circular, normalize, interval } => {
             (target, Job::Signal { conv: true, other: response, circular, normalize, interval })
         }

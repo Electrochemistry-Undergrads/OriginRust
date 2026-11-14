@@ -17,10 +17,10 @@ use sheaf_core::analysis::{
     TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
-    AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CurveMathSpec, CurveOp, CurveOperand,
-    DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod,
-    OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange, SignalCorrelationSpec,
-    SmoothMethod, SmoothOptions, SplineBoundary, Tool,
+    AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
+    CurveOperand, DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LevelCrossingSpec,
+    LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange,
+    SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
 };
 use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
@@ -48,6 +48,8 @@ pub enum AnalysisKind {
     Convolution,
     /// Signal Processing > Correlation (Origin's `corr1`).
     SignalCorrelation,
+    /// Level Crossing (Origin's `levelcrossing` X-Function, which has no menu item there).
+    LevelCrossing,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -95,7 +97,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 15] = [
+    pub const ALL: [AnalysisKind; 16] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -107,6 +109,7 @@ impl AnalysisKind {
         AnalysisKind::ColumnMath,
         AnalysisKind::Convolution,
         AnalysisKind::SignalCorrelation,
+        AnalysisKind::LevelCrossing,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -127,6 +130,7 @@ impl AnalysisKind {
             AnalysisKind::ColumnMath => "Simple Column Math...",
             AnalysisKind::Convolution => "Convolution...",
             AnalysisKind::SignalCorrelation => "Correlation...",
+            AnalysisKind::LevelCrossing => "Level Crossing...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -180,6 +184,7 @@ impl AnalysisKind {
             "column-math" => AnalysisKind::ColumnMath,
             "convolution" => AnalysisKind::Convolution,
             "signal-correlation" => AnalysisKind::SignalCorrelation,
+            "level-crossing" => AnalysisKind::LevelCrossing,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -529,6 +534,7 @@ pub struct AnalysisDialog {
     signal_circular: bool,
     signal_normalize: bool,
     signal_interval: Option<f64>,
+    level_crossing: LevelCrossingSpec,
     stats: StatsOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
@@ -680,6 +686,7 @@ impl AnalysisDialog {
             signal_circular: false,
             signal_normalize: false,
             signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
+            level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1 },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -970,6 +977,7 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
             AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
                 let other = self
                     .reference_choices
@@ -1258,6 +1266,25 @@ impl AnalysisDialog {
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
+            }
+            AnalysisKind::LevelCrossing => {
+                let spec = &mut self.level_crossing;
+                ui.horizontal(|ui| {
+                    ui.label("Level");
+                    ui.add(DragValue::new(&mut spec.level).speed(0.01));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Row of a crossing between rows");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Nearest, "Any");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Left, "Left");
+                    ui.radio_value(&mut spec.index, CrossingIndex::Right, "Right");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Minimum rows between a pair");
+                    ui.add(DragValue::new(&mut spec.min_gap).range(1..=1_000_000));
+                })
+                .response
+                .on_hover_text("Both crossings of a pair closer than this are dropped (Origin's pts).");
             }
             AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
                 self.reference_options(ui);
@@ -1899,6 +1926,7 @@ impl AnalysisDialog {
             AnalysisKind::ColumnMath => "vmathtool",
             AnalysisKind::Convolution => "conv",
             AnalysisKind::SignalCorrelation => "corr1",
+            AnalysisKind::LevelCrossing => "levelcrossing",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -1958,6 +1986,7 @@ impl AnalysisDialog {
             }
             AnalysisKind::Convolution => "Convolve the input signals with a response",
             AnalysisKind::SignalCorrelation => "Correlate the input signals with a second signal",
+            AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -2009,6 +2038,7 @@ impl AnalysisDialog {
             | AnalysisKind::ColumnMath => "New columns beside the input",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
+            AnalysisKind::LevelCrossing => "X, level, direction and row of each crossing in a new sheet",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",

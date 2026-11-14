@@ -737,6 +737,35 @@ Command line: `sheaf analyze convolution FILE --y B --response C [--circular] [-
 [--interval D]` and `sheaf analyze signal-correlation FILE --y B --with C [--circular] [--normalize]
 [--interval D]`.
 
+## 14. Level crossing (`levelcrossing`)
+
+Origin has the `levelcrossing` X-Function (Data Manipulation) but no menu item for it; Sheaf puts it
+under Analysis > Mathematics > Level Crossing. Inputs (from its X-Function file): the curve `iy`,
+`level` (0), `type` (Any, Left, Right: the row given for a crossing between two rows), `pts` (1: both
+crossings of a pair closer than this many rows are dropped) and the outputs: X of each crossing
+(`oy`, an X column), `direction` (1 up, -1 down, 0 "derivative zero"), `xindex` (a Label column)
+and `yval` (the level).
+
+Observed (Origin, `re-workspace/scratch/levelx/lx.out.txt`; Rust test `level_crossings_match_origin`
+in `crates/calc/src/levelcross.rs`):
+
+- A data point exactly on the level is a crossing at its own X and row. Its direction is the sign
+  of the steps before and after it when they agree, else 0: a touch (1, 0, 1 at level 0) and each
+  point of a run on the level (-1, 0, 0, 3) have direction 0. At the first point the one step
+  there decides (0, 1, ... gives 1).
+- Between two points on opposite sides the crossing is interpolated linearly, direction of the step.
+- The row (1-based) for an interpolated crossing: Left the row before, Right the row after, Any the
+  nearer one, the left one on a tie.
+- `pts`: with indices 2, 4, 8, 9 and `pts` 3 all four were dropped; with 1, 2, 3, 4, 7 and `pts` 2
+  only 7 was left. Sheaf takes the crossings in pairs in order (first with second, third with
+  fourth); a sliding comparison would fit these two cases as well.
+- No crossing: empty outputs (Origin still wrote the level once into `yval`; Sheaf writes nothing).
+
+Sheaf: `sheaf_calc::level_crossings`, `Tool::LevelCrossing(LevelCrossingSpec)`; a new sheet
+`LevelCrossing<n>` with X, Level, Direction and Row (a Label column, rows of the sheet) per input.
+Command line: `sheaf analyze level-crossing FILE --y B [--level L] [--row any|left|right]
+[--min-gap N]`.
+
 ## Files
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with

@@ -1643,6 +1643,14 @@ An `.opj` file written here does not hold drawn objects. The writer says so in a
 
 Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
 
+
+Measured with LabTalk's `draw` command (2026-11-13, `re-workspace/scratch/draw17/draw1.out.txt`), which
+may not use the defaults of the graph's Line and Arrow tools: `draw -l` makes a line attached to the axis
+scales (`attach` 2), 0.5 pt wide, colour 1 (black), line type 1, arrow head width 5 and length 10; `-a`
+did not change the arrow shapes; `draw -r` was refused and `draw -c` gave an object without these
+properties. Sheaf keeps its own defaults (1 pt, a 9 pt head, attached to the frame) until the tools
+themselves are measured with a drag in Origin's window.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

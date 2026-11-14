@@ -532,9 +532,10 @@ fn read_settings(a: &ImportArgs) -> Result<ReadSettings, ToolError> {
         "apostrophe" => ThousandsSetting::Apostrophe,
         _ => ThousandsSetting::Auto,
     };
-    r.first_row = x.skip_rows + 1;
+    let too_big = || ToolError::new("skip_rows and max_rows are too large");
+    r.first_row = x.skip_rows.checked_add(1).ok_or_else(too_big)?;
     if x.max_rows > 0 {
-        r.last_row = r.first_row + x.max_rows - 1;
+        r.last_row = r.first_row.checked_add(x.max_rows - 1).ok_or_else(too_big)?;
     }
     r.dates_as_text = one_of("dates", x.dates.as_deref().unwrap_or("detect"), &["detect", "text"])? == "text";
     r.day_first = one_of("date_order", x.date_order.as_deref().unwrap_or("mdy"), &["mdy", "dmy"])? == "dmy";
@@ -547,7 +548,8 @@ fn expand_checked(s: &Server, texts: &[String]) -> Result<Vec<PathBuf>, ToolErro
     for text in texts {
         let path = s.open_path(text)?;
         if sheaf_ops::session::is_project(&path) {
-            out.push(path);
+            // A project is opened with its `.opj.sheaf` companion: check that too.
+            out.push(s.roots.check_open(&path.display().to_string())?);
             continue;
         }
         for m in sheaf_io::batch::expand_inputs(&path).map_err(ToolError::new)? {

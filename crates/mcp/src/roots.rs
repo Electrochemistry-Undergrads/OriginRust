@@ -88,6 +88,11 @@ impl Roots {
         let Some(first) = self.dirs.first() else {
             return Err("no folder is allowed: start sheaf-mcp with --root DIR".to_string());
         };
+        // Network shares and device names are refused before anything touches the file system:
+        // resolving them could connect to another machine or open a device.
+        if !local_name(path) {
+            return Err(Self::outside(shown));
+        }
         let absolute = if path.is_absolute() { path.to_path_buf() } else { first.join(path) };
         let resolved = canonical(&absolute).ok_or_else(|| Self::outside(shown))?;
         if self.dirs.iter().any(|r| resolved.starts_with(r)) { Ok(plain(resolved)) } else { Err(Self::outside(shown)) }
@@ -113,6 +118,30 @@ impl Roots {
         }
         Ok(path)
     }
+}
+
+/// False for a path that names a network share (`\\host\share`, `//host/share`), a device
+/// (`\\.\pipe\x`, `\\?\UNC\...`, `\\?\GLOBALROOT\...`) or a reserved Windows device name in any part
+/// (`CON`, `NUL`, `COM1`, `LPT1.txt`, ...). Drive paths, `\\?\C:\` paths and relative paths pass.
+fn local_name(path: &Path) -> bool {
+    let text = path.to_string_lossy();
+    let verbatim_drive = text
+        .strip_prefix("\\\\?\\")
+        .is_some_and(|rest| rest.len() > 2 && rest.as_bytes()[0].is_ascii_alphabetic() && rest.as_bytes()[1] == b':');
+    let starts_double =
+        text.starts_with("\\\\") || text.starts_with("//") || text.starts_with("\\/") || text.starts_with("/\\");
+    if starts_double && !verbatim_drive {
+        return false;
+    }
+    const DEVICES: [&str; 4] = ["CON", "PRN", "AUX", "NUL"];
+    text.split(['/', '\\']).all(|part| {
+        let stem = part.split('.').next().unwrap_or("").trim_end_matches([' ', ':']).to_ascii_uppercase();
+        let numbered = (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit()
+            && stem.as_bytes()[3] != b'0';
+        !(DEVICES.contains(&stem.as_str()) || numbered || stem.contains("CONIN$") || stem.contains("CONOUT$"))
+    })
 }
 
 /// `path` with `suffix` appended to the whole file name (`a.opj` to `a.opj.sheaf`).
@@ -193,6 +222,30 @@ mod tests {
         assert!(roots.check_save("p").is_ok());
         assert!(roots.check_save("p.opj").is_ok());
         assert!(roots.check_save("../p.opj").is_err());
+    }
+
+    #[test]
+    fn shares_and_devices_are_refused_without_being_opened() {
+        let (_dir, roots) = setup("devices");
+        for bad in [
+            "\\\\host\\share\\a.csv",
+            "//host/share/a.csv",
+            "\\\\.\\pipe\\x",
+            "\\\\.\\COM1",
+            "\\\\?\\UNC\\host\\share\\a.csv",
+            "\\\\?\\GLOBALROOT\\Device\\x",
+            "NUL",
+            "sub/con.txt",
+            "COM3",
+            "lpt1.csv",
+            "CONIN$",
+        ] {
+            assert!(roots.check(bad).is_err(), "{bad}");
+        }
+        // Names that only look like devices are fine.
+        for good in ["console.csv", "com10.csv", "com0.csv", "nul2.txt", "data.csv"] {
+            assert!(roots.check(good).is_ok(), "{good}");
+        }
     }
 
     #[test]

@@ -286,7 +286,11 @@ the limits of section 7. No resource reads a file by path.
   Wildcard matches, the `.opj.sheaf` companion and the `.bak` copy are checked the same way. Refused
   with `path is outside the allowed folders: <path>`. Without `--root` nothing is allowed: a tool that
   names a file fails with `no folder is allowed: start sheaf-mcp with --root DIR`. A link that points
-  nowhere is refused (a write through it could land anywhere).
+  nowhere is refused (a write through it could land anywhere). Network shares (`\\host\share`,
+  `//host/share`, `\\?\UNC\...`), device paths (`\\.\...`, `\\?\GLOBALROOT\...`) and reserved Windows
+  device names in any part (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, with or without an
+  extension) are refused before the file system is asked, so no connection or device open happens. A
+  project named in `import_files` is checked with its companion, as in `open_project`.
 - **No shell, no script.** No tool runs a command or a script. Formulas use the expression language,
   which has no file or process access.
 - **Size.** 10 000 cells per `read_columns` or resource reply; the caps of `export_graph` above; an

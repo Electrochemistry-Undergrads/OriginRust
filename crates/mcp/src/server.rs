@@ -15,6 +15,7 @@ pub const PARSE_ERROR: i64 = -32700;
 pub const INVALID_REQUEST: i64 = -32600;
 pub const METHOD_NOT_FOUND: i64 = -32601;
 pub const INVALID_PARAMS: i64 = -32602;
+pub const INTERNAL_ERROR: i64 = -32603;
 pub const RESOURCE_NOT_FOUND: i64 = -32002;
 
 /// A protocol error: the request itself was wrong, not the work it asked for.
@@ -131,7 +132,10 @@ impl Server {
                     .get("uri")
                     .and_then(Value::as_str)
                     .ok_or_else(|| RpcError::new(INVALID_PARAMS, "invalid params: missing \"uri\""))?;
-                resources::read(self, uri)
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resources::read(self, uri))) {
+                    Ok(r) => r,
+                    Err(_) => Err(RpcError::new(INTERNAL_ERROR, "internal error while reading the resource")),
+                }
             }
             m if m.starts_with("notifications/") => Ok(json!({})),
             m => Err(RpcError::new(METHOD_NOT_FOUND, format!("method not found: {m}"))),
@@ -188,9 +192,15 @@ impl Server {
         if !tools::exists(name) {
             return Err(RpcError::new(INVALID_PARAMS, format!("unknown tool: {name}")));
         }
-        Ok(match tools::call(self, name, &args) {
-            Ok(out) => out.into_result(self.protocol == NEWEST_PROTOCOL),
-            Err(e) => e.into_result(self.protocol == NEWEST_PROTOCOL),
+        let structured = self.protocol == NEWEST_PROTOCOL;
+        let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tools::call(self, name, &args)));
+        Ok(match done {
+            Ok(Ok(out)) => out.into_result(structured),
+            Ok(Err(e)) => e.into_result(structured),
+            Err(_) => json!({
+                "content": [{"type": "text", "text": "internal error: the tool failed unexpectedly; the project may be unchanged"}],
+                "isError": true
+            }),
         })
     }
 }

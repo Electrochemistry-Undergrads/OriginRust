@@ -243,3 +243,26 @@ fn decode_base64(s: &str) -> Vec<u8> {
     }
     out
 }
+
+#[test]
+fn plot_with_graph_is_refused_with_y_and_jpeg_matches_jpg() {
+    let dir = Dir::new("review");
+    let mut csv = String::from("x,a\n");
+    for i in 0..5 {
+        csv.push_str(&format!("{i},{}\n", i * i));
+    }
+    std::fs::write(dir.0.join("d.csv"), csv).unwrap();
+    let replies = run(
+        &dir.0,
+        &[
+            call(1, "import_files", json!({"files": ["d.csv"]})),
+            call(2, "plot", json!({"template": "scatter"})),
+            call(3, "plot", json!({"graph": "Graph1", "y": ["a"]})),
+            call(4, "export_graph", json!({"path": "f.jpg", "format": "jpeg", "dpi": 72})),
+            call(5, "analyze", json!({"tool": "interpolate", "options": {"points": 4_000_000_000_000u64}})),
+        ],
+    );
+    assert_eq!(reply(&replies, 3)["result"]["isError"], true, "{}", reply(&replies, 3));
+    assert_eq!(reply(&replies, 4)["result"]["isError"], false, "{}", reply(&replies, 4));
+    assert_eq!(reply(&replies, 5)["result"]["isError"], true);
+}

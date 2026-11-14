@@ -41,7 +41,7 @@ pub fn templates() -> Vec<Value> {
     vec![
         json!({
             "uriTemplate": "sheaf://column/{book}/{sheet}/{column}", "name": "column",
-            "description": "One column with its X column as CSV, at most 10000 rows. Names are percent-encoded.",
+            "description": "One column with its X column as CSV, at most 10000 cells; a longer column is cut with a last comment line giving the total, and read_columns pages through it. Names are percent-encoded.",
             "mimeType": "text/csv"
         }),
         json!({
@@ -135,6 +135,13 @@ pub fn read(server: &mut Server, uri: &str) -> Result<Value, RpcError> {
             text.push_str(&line.join(","));
             text.push('\n');
         }
+        let total = cols.iter().map(|c| c.len()).max().unwrap_or(0);
+        if total > rows {
+            text.push_str(&format!(
+                "# truncated: {rows} of {total} rows; use read_columns with from and limit for the rest
+"
+            ));
+        }
         return Ok(json!({"contents": [{"uri": uri, "mimeType": "text/csv", "text": text}]}));
     }
     Err(not_found(uri))
@@ -170,6 +177,12 @@ mod tests {
         assert_eq!(r["contents"][0]["text"], "A,B (mA)\n1.0,10.0\n2.0,\n");
         let p = read(&mut s, PROJECT_URI).unwrap();
         assert!(p["contents"][0]["text"].as_str().unwrap().contains("Book1"));
+        let long: Vec<f64> = (0..20000).map(|i| i as f64).collect();
+        let z = s.project.add_column(book, 0, Designation::Y, ColumnData::numeric(long)).unwrap();
+        s.project.column_mut(z).unwrap().short_name = "C".into();
+        let t = read(&mut s, "sheaf://column/Book1/Sheet1/C").unwrap();
+        let text = t["contents"][0]["text"].as_str().unwrap();
+        assert!(text.contains("# truncated: 5000 of 20000 rows"), "{}", &text[text.len().saturating_sub(120)..]);
         assert_eq!(read(&mut s, "sheaf://column/Book1/Sheet1/Q").unwrap_err().code, RESOURCE_NOT_FOUND);
         assert_eq!(read(&mut s, "sheaf://graph/Nope.png").unwrap_err().code, RESOURCE_NOT_FOUND);
         assert_eq!(read(&mut s, "file:///etc/passwd").unwrap_err().code, RESOURCE_NOT_FOUND);

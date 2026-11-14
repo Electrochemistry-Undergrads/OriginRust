@@ -252,7 +252,7 @@ pub fn defs() -> Vec<Def> {
         },
         Def {
             name: "plot",
-            description: "Make a graph from columns, or add plots to an existing graph. Returns the graph name; use export_graph to see it.",
+            description: "Make a graph from columns, or, with graph, restyle an existing graph (template, y and y2 are then refused). Returns the graph name; use export_graph to see it.",
             read_only: false,
             schema: obj(
                 vec![

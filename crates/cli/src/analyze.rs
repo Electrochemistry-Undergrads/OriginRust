@@ -962,4 +962,39 @@ mod tests {
         assert_eq!(short_number(f64::NAN), "--");
         assert_eq!(short_number(123456789.0), "123456789");
     }
+
+    /// The MCP `analyze` tool must give the same job as the command line for the same request.
+    #[test]
+    fn mcp_defaults_equal_the_command_line_defaults() {
+        use clap::Parser;
+        // (subcommand, extra arguments, MCP tool, MCP options)
+        let cases: [(&str, &[&str], &str, serde_json::Value); 16] = [
+            ("integrate", &[], "integrate", serde_json::json!({})),
+            ("smooth", &[], "smooth", serde_json::json!({})),
+            ("differentiate", &[], "differentiate", serde_json::json!({})),
+            ("normalize", &[], "normalize", serde_json::json!({})),
+            ("interpolate", &[], "interpolate", serde_json::json!({})),
+            ("fft", &[], "fft", serde_json::json!({})),
+            ("hilbert", &[], "hilbert", serde_json::json!({})),
+            ("envelope", &[], "envelope", serde_json::json!({})),
+            ("level-crossing", &["--level", "0.5"], "level_crossing", serde_json::json!({"level": 0.5})),
+            ("median-filter", &[], "median_filter", serde_json::json!({})),
+            ("decimate", &[], "decimate", serde_json::json!({})),
+            ("decimate", &["--filter", "fir"], "decimate", serde_json::json!({"filter": "fir"})),
+            ("translate", &["--by", "5"], "translate", serde_json::json!({"by": 5.0})),
+            ("peaks", &[], "find_peaks", serde_json::json!({})),
+            ("stats", &[], "statistics", serde_json::json!({})),
+            ("intersect", &[], "intersect", serde_json::json!({})),
+        ];
+        for (sub, extra, tool, options) in cases {
+            let mut argv = vec!["sheaf", "analyze", sub, "data.csv"];
+            argv.extend_from_slice(extra);
+            let cli = Cli::try_parse_from(&argv).unwrap_or_else(|e| panic!("{sub}: {e}"));
+            let Command::Analyze(a) = cli.command else { panic!("{sub}: not analyze") };
+            let (_, cli_job) = job_from(a.tool).unwrap();
+            let mcp_job = sheaf_mcp::analysis_tools::build(tool, options.as_object().unwrap()).unwrap();
+            let (Job::Tool(c), Job::Tool(m)) = (cli_job, mcp_job) else { panic!("{sub}: not a plain tool") };
+            assert_eq!(c, m, "{sub} {extra:?}");
+        }
+    }
 }

@@ -54,6 +54,11 @@ fn needed(name: &'static str, ty: &'static str, description: &'static str) -> Op
     OptionDesc { name, ty, default: Value::Null, description, required: true, choices: &[] }
 }
 
+/// The largest value of an integer option such as a window, an order or a polynomial degree.
+const OPTION_CAP: usize = 10_000;
+/// The largest number of rows an option may ask for: points of a result, a decimation factor.
+const ROW_CAP: usize = 10_000_000;
+
 const MATH_OPS: &[&str] = &["add", "subtract", "multiply", "divide", "power"];
 
 fn operand_options(column: bool) -> Vec<OptionDesc> {
@@ -215,7 +220,7 @@ pub fn registry() -> Vec<ToolDesc> {
                 &["rectangle", "welch", "triangular", "bartlett", "hanning", "hamming", "blackman"],
                 "The window.",
             ),
-            choice("correction", "none", &["none", "amplitude", "power"], "Window correction."),
+            choice("correction", "amplitude", &["none", "amplitude", "power"], "Window correction."),
             flag("normalize", false, "Divide by N."),
             flag("two_sided", false, "All N frequencies."),
             flag("shift", true, "Two-sided: negative frequencies first."),
@@ -261,7 +266,7 @@ pub fn registry() -> Vec<ToolDesc> {
         vec![
             int("factor", 2, "Keep every factor-th point."),
             choice("filter", "none", &["none", "ave", "fir"], "Filter applied first."),
-            int("order", 8, "FIR filter order (8 to 60)."),
+            int("order", 30, "FIR filter order (8 to 60)."),
         ],
         None,
     );
@@ -269,7 +274,7 @@ pub fn registry() -> Vec<ToolDesc> {
         "translate",
         "Shift each curve in X or Y.",
         vec![
-            choice("axis", "y", &["x", "y"], "Which axis."),
+            choice("axis", "x", &["x", "y"], "Which axis."),
             maybe("by", "number", "Shift by this amount."),
             maybe("at", "number", "Move the point at this X (with to)..."),
             maybe("to", "number", "...to this value."),
@@ -347,19 +352,33 @@ impl Opts<'_> {
         Ok(self.opt_num(name)?.unwrap_or(default))
     }
 
-    fn opt_usize(&self, name: &str) -> Result<Option<usize>> {
+    /// A whole number of at most `max`, so that no option can size an endless loop or a huge column.
+    fn opt_usize_up_to(&self, name: &str, max: usize) -> Result<Option<usize>> {
         match self.get(name) {
             None => Ok(None),
-            Some(v) => v
-                .as_u64()
-                .and_then(|x| usize::try_from(x).ok())
-                .map(Some)
-                .ok_or_else(|| self.bad(name, "a whole number, 0 or more")),
+            Some(v) => {
+                let n = v
+                    .as_u64()
+                    .and_then(|x| usize::try_from(x).ok())
+                    .ok_or_else(|| self.bad(name, "a whole number, 0 or more"))?;
+                if n > max {
+                    return Err(self.bad(name, &format!("a whole number of at most {max}")));
+                }
+                Ok(Some(n))
+            }
         }
     }
 
+    fn opt_usize(&self, name: &str) -> Result<Option<usize>> {
+        self.opt_usize_up_to(name, OPTION_CAP)
+    }
+
+    fn usize_up_to(&self, name: &str, default: usize, max: usize) -> Result<usize> {
+        Ok(self.opt_usize_up_to(name, max)?.unwrap_or(default))
+    }
+
     fn usize(&self, name: &str, default: usize) -> Result<usize> {
-        Ok(self.opt_usize(name)?.unwrap_or(default))
+        self.usize_up_to(name, default, OPTION_CAP)
     }
 
     fn flag(&self, name: &str, default: bool) -> Result<bool> {
@@ -595,7 +614,7 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
             };
             Job::Tool(Tool::Interpolate(InterpSpec {
                 method,
-                npts: o.usize("points", 100)?,
+                npts: o.usize_up_to("points", 100, ROW_CAP)?,
                 range,
                 smoothing: o.num("smoothing", 0.0)?,
                 ..InterpSpec::default()
@@ -658,7 +677,7 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
                 "hamming" => analysis::FftWindow::Hamming,
                 _ => analysis::FftWindow::Blackman,
             };
-            let correction = match o.pick("correction", "none", &["none", "amplitude", "power"])?.as_str() {
+            let correction = match o.pick("correction", "amplitude", &["none", "amplitude", "power"])?.as_str() {
                 "none" => analysis::WindowCorrection::None,
                 "amplitude" => analysis::WindowCorrection::Amplitude,
                 _ => analysis::WindowCorrection::Power,
@@ -700,7 +719,7 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
             Job::Tool(Tool::LevelCrossing(analysis::LevelCrossingSpec {
                 level: o.required_num("level")?,
                 index,
-                min_gap: o.usize("min_gap", 1)?,
+                min_gap: o.usize_up_to("min_gap", 1, ROW_CAP)?,
                 details: o.flag("details", false)?,
             }))
         }
@@ -718,8 +737,11 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
                 "ave" => analysis::DecimateFilter::MovingAverage,
                 _ => analysis::DecimateFilter::Fir,
             };
-            let options =
-                analysis::DecimateOptions { factor: o.usize("factor", 2)?, filter, order: o.usize("order", 8)? };
+            let options = analysis::DecimateOptions {
+                factor: o.usize_up_to("factor", 2, ROW_CAP)?,
+                filter,
+                order: o.usize_up_to("order", 30, ROW_CAP)?,
+            };
             Job::Tool(Tool::Decimate(analysis::DecimateSpec { options }))
         }
         "translate" => {
@@ -728,7 +750,7 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
                 (None, Some(at), Some(to)) => analysis::Shift::PointTo { at, to },
                 _ => bail!("give \"by\" AMOUNT, or \"at\" X together with \"to\" VALUE"),
             };
-            let axis = if o.pick("axis", "y", &["x", "y"])? == "x" {
+            let axis = if o.pick("axis", "x", &["x", "y"])? == "x" {
                 analysis::TranslateAxis::X
             } else {
                 analysis::TranslateAxis::Y
@@ -779,6 +801,32 @@ mod tests {
         assert_eq!(s.npts, 5);
         let listed = registry().into_iter().find(|t| t.name == "smooth").unwrap();
         assert_eq!(listed.options.iter().find(|o| o.name == "points").unwrap().default, json!(5));
+    }
+
+    #[test]
+    fn huge_integer_options_are_refused() {
+        let e = build("interpolate", &opts(json!({"points": 4_000_000_000_000u64}))).err().unwrap().to_string();
+        assert!(e.contains("at most 10000000"), "{e}");
+        assert!(build("interpolate", &opts(json!({"points": 10_000_000}))).is_ok());
+        for (tool, o) in [
+            ("smooth", json!({"method": "binomial", "order": 4_000_000_000_000u64})),
+            ("smooth", json!({"poly": 100000})),
+            ("smooth", json!({"points": 100000})),
+            ("differentiate", json!({"points": 100000})),
+            ("decimate", json!({"order": 100_000_000})),
+        ] {
+            assert!(build(tool, &opts(o.clone())).is_err(), "{tool} {o}");
+        }
+    }
+
+    #[test]
+    fn defaults_follow_the_command_line() {
+        let Job::Tool(Tool::Fft(f)) = build("fft", &Map::new()).unwrap() else { panic!() };
+        assert_eq!(f.options.correction, analysis::WindowCorrection::Amplitude);
+        let Job::Tool(Tool::Decimate(d)) = build("decimate", &Map::new()).unwrap() else { panic!() };
+        assert_eq!(d.options.order, 30);
+        let Job::Tool(Tool::Translate(t)) = build("translate", &opts(json!({"by": 1}))).unwrap() else { panic!() };
+        assert_eq!(t.axis, analysis::TranslateAxis::X);
     }
 
     #[test]

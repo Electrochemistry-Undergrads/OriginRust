@@ -914,6 +914,11 @@ fn plot(s: &mut Server, a: &Value) -> Res {
     if !a.overlay_files.is_empty() && (a.book.is_some() || a.sheet.is_some() || a.graph.is_some()) {
         return Err(ToolError::new("overlay_files cannot be combined with book, sheet or graph"));
     }
+    if a.graph.is_some() && (a.template.is_some() || !a.y.is_empty() || !a.y2.is_empty()) {
+        return Err(ToolError::new(
+            "with graph, plot only restyles that graph; template, y and y2 are not used. Leave graph out to make a new graph",
+        ));
+    }
     let mut spec = PlotSpec {
         template: a.template.clone(),
         y: a.y.clone(),
@@ -999,8 +1004,16 @@ fn export_graph(s: &mut Server, a: &Value) -> Res {
     }
     let path = a.path.as_deref().map(|p| s.roots.check(p)).transpose()?;
     let from_path = path.as_ref().and_then(|p| p.extension()).and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    let same = |f: &str, e: &str| {
+        let norm = |t: &str| match t.to_ascii_lowercase().as_str() {
+            "jpeg" => "jpg".to_string(),
+            "tif" => "tiff".to_string(),
+            other => other.to_string(),
+        };
+        norm(f) == norm(e)
+    };
     let format = match (&a.format, &from_path) {
-        (Some(f), Some(e)) if !f.eq_ignore_ascii_case(e) => {
+        (Some(f), Some(e)) if !same(f, e) => {
             return Err(ToolError::new(format!("format \"{f}\" does not match the extension of the path (.{e})")));
         }
         (Some(f), _) => f.to_ascii_lowercase(),

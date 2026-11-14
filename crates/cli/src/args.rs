@@ -1541,6 +1541,61 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// 2D frequency counts and binning (Origin's twoDBinning): the points of one Y column against its X
+    /// column, or of two columns (--y X --y Y), counted in a grid of X and Y bins; one row per X bin and
+    /// one column per Y bin go to a new sheet. Each axis takes a bin size or a number of bins, and a
+    /// range; what is left out is chosen from the data as Origin does.
+    #[command(name = "bin2d")]
+    Bin2d {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// What each cell holds: count, freq (percent of the binned points), or sum, mean, min, max,
+        /// median of the Y values.
+        #[arg(long, default_value = "count", value_parser = ["count", "freq", "sum", "mean", "min", "max", "median"])]
+        stat: String,
+        /// Width of an X bin.
+        #[arg(long, conflicts_with = "x_bins")]
+        x_inc: Option<f64>,
+        /// Number of X bins.
+        #[arg(long)]
+        x_bins: Option<usize>,
+        /// First X edge (the first bin's centre with --x-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        x_min: Option<f64>,
+        /// Last X edge (the last bin's centre with --x-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        x_max: Option<f64>,
+        /// Label the X bins by their centres, and read --x-min and --x-max as centres.
+        #[arg(long)]
+        x_centers: bool,
+        /// Add an X bin for the values below the range.
+        #[arg(long)]
+        x_below: bool,
+        /// Add an X bin for the values at or above the range.
+        #[arg(long)]
+        x_above: bool,
+        /// Width of a Y bin.
+        #[arg(long, conflicts_with = "y_bins")]
+        y_inc: Option<f64>,
+        /// Number of Y bins.
+        #[arg(long)]
+        y_bins: Option<usize>,
+        /// First Y edge (the first bin's centre with --y-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        y_min: Option<f64>,
+        /// Last Y edge (the last bin's centre with --y-centers).
+        #[arg(long, allow_hyphen_values = true)]
+        y_max: Option<f64>,
+        /// Read --y-min and --y-max as the centres of the first and last Y bin.
+        #[arg(long)]
+        y_centers: bool,
+        /// Add a Y bin for the values below the range.
+        #[arg(long)]
+        y_below: bool,
+        /// Add a Y bin for the values at or above the range.
+        #[arg(long)]
+        y_above: bool,
+    },
     /// Normality tests (Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling, D'Agostino-Pearson)
     /// of each column; the result goes to a new sheet.
     Normality {

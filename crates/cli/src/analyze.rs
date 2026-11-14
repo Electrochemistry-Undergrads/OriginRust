@@ -572,6 +572,48 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             let freq = analysis::FreqOptions { min, max, size, below, above };
             (target, Job::Tool(Tool::Histogram(analysis::HistogramSpec { freq, graph: !no_graph })))
         }
+        AnalyzeTool::Bin2d {
+            target,
+            stat,
+            x_inc,
+            x_bins,
+            x_min,
+            x_max,
+            x_centers,
+            x_below,
+            x_above,
+            y_inc,
+            y_bins,
+            y_min,
+            y_max,
+            y_centers,
+            y_below,
+            y_above,
+        } => {
+            let size = |inc: Option<f64>, bins: Option<usize>| match (inc, bins) {
+                (Some(w), _) => analysis::BinSize::Width(w),
+                (None, Some(n)) => analysis::BinSize::Count(n),
+                (None, None) => analysis::BinSize::Auto,
+            };
+            let x = analysis::AxisBins {
+                min: x_min,
+                max: x_max,
+                size: size(x_inc, x_bins),
+                centers: x_centers,
+                below: x_below,
+                above: x_above,
+            };
+            let y = analysis::AxisBins {
+                min: y_min,
+                max: y_max,
+                size: size(y_inc, y_bins),
+                centers: y_centers,
+                below: y_below,
+                above: y_above,
+            };
+            let stat = analysis::Bin2dStat::from_code(&stat).expect("clap checks the value");
+            (target, Job::Tool(Tool::Binning2D(analysis::Bin2dOptions { x, y, stat })))
+        }
         AnalyzeTool::Normality { target, alpha } => {
             (target, Job::Tool(Tool::Normality(analysis::NormalitySpec { alpha })))
         }

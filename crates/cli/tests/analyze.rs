@@ -732,3 +732,26 @@ fn power_needs_no_file_and_prints_origins_numbers() {
     let (ok, _, err) = sheaf(&["analyze", "power", "--test", "anova"]);
     assert!(!ok && err.contains("either --sizes"), "{err}");
 }
+
+#[test]
+fn bin2d_counts_points_in_a_grid() {
+    let dir = scratch("bin2d");
+    let file = dir.join("points.csv");
+    let x = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 1.2, 1.7, 2.2, 8.1, 8.8, 10.0, 0.0];
+    let y = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 2.2, 2.7, 9.1, 0.4, 3.3, 5.0, 0.0];
+    let text: String =
+        std::iter::once("x,y\n".to_string()).chain(x.iter().zip(y).map(|(a, b)| format!("{a},{b}\n"))).collect();
+    std::fs::write(&file, text).unwrap();
+    let file = file.to_str().unwrap();
+    let grid = ["--x-min", "0", "--x-max", "10", "--x-inc", "2", "--y-min", "0", "--y-max", "10", "--y-inc", "5"];
+    let args: Vec<&str> = ["analyze", "bin2d", file, "--y", "y"].into_iter().chain(grid).collect();
+    let (ok, out, err) = sheaf(&args);
+    assert!(ok, "{err}");
+    assert!(out.contains("Binning2D1") && out.contains("17 points") && out.contains("5 X bins by 2 Y bins"), "{out}");
+    let args: Vec<&str> = ["analyze", "bin2d", file, "--y", "x,y", "--stat", "mean"].into_iter().chain(grid).collect();
+    let (ok, out, err) = sheaf(&args);
+    assert!(ok, "{err}");
+    assert!(out.contains("(mean)"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "bin2d", file, "--y", "y", "--stat", "mode"]);
+    assert!(!ok && err.contains("mode"), "{err}");
+}

@@ -98,10 +98,10 @@ pub(super) fn crosstab(
         &format!("{name_r} \\ {name_c}"),
         levels_r.iter().cloned().chain(std::iter::once("Total".to_string())).collect(),
     )];
-    for j in 0..nc {
+    for (j, level) in levels_c.iter().enumerate().take(nc) {
         let mut v: Vec<f64> = (0..nr).map(|i| t.counts[i][j] as f64).collect();
         v.push(t.col_totals[j] as f64);
-        let mut col = number_column(&levels_c[j], "", v);
+        let mut col = number_column(level, "", v);
         col.comments = name_c.clone();
         on_sheet.push(col);
     }

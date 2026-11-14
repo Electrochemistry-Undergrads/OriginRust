@@ -179,6 +179,12 @@ missing. [inferred]
 - [obs 40] `cell://...` strings (after `FF FF <rows> 01`): references from cells to cells of other
   sheets (analysis reports). [unknown]
 - Function-plot data sets (`FUNC12_3`): the start and step of a function, not values.
+- [obs 207 columns, 2026-11-13] Decoding drifts inside a column: the values are a clean series up to some
+  row and then stop looking like the column (in `T275K_B` of the line-graph sample, 59 values with three
+  decimals, then `1019.5521105961651`, and from row 188 magnitudes above 1e250). [unknown] which token is
+  misread. The reader cuts a column at the first value that is not finite or above 1e250 in magnitude and
+  names the cut in a warning (`cut_implausible_tail`); the drifted values before that point are still read
+  and are wrong. Counts per sample in section 9.
 
 ## 6. Text blocks (kind 05, no `0C`)
 
@@ -262,6 +268,12 @@ and the unsupported kinds of section 5.4):
 | Statistical Graphs | 23 | 75 | 59 |
 | Trellis Plots | 25 | 420 | 374 |
 | Waterfall Plots | 15 | 176 | 165 |
+
+Columns cut by the rule of section 5.4, and the values left out (2026-11-13): Waterfall Plots 104 / 59726,
+Line and Symbol Graphs 36 / 12387, 3D Surface Plots 21 / 13592, Trellis Plots 18 / 8005, 3D Scatter Ribbon
+and Wall Graphs 9 / 3527, Histograms 5 / 3389, Multi-Panel Graphs 3 / 5067, Specialized Graphs 3 / 679,
+Column and Bar Charts 2 / 48, Financial Plots 2 / 13765, Multiple Axis Graphs 1 / 3498, Function Plots
+1 / 330, Contour Plots 1 / 82, 3D Bar Charts 1 / 6; none in Area, Box, Bridge, Polar and Statistical.
 
 ## 10. What a writer needs (for the next agent)
 

@@ -40,6 +40,7 @@ fn report(path: &Path, cells: bool) {
         s.columns_unmatched,
         s.columns_skipped
     );
+    println!("  cut columns {} (values dropped {})", s.columns_cut, s.values_dropped);
     if cells {
         for e in &s.examples {
             println!("    {e}");
@@ -54,6 +55,12 @@ fn report(path: &Path, cells: bool) {
                     for sh in &wb.sheets {
                         for c in &sh.columns {
                             println!("    {}.{} len {}", sh.name, c.short_name, c.len());
+                            if let Some(want) = std::env::var_os("OPJU_VALUES")
+                                && c.short_name == want.to_string_lossy()
+                                && let Some(v) = c.numeric()
+                            {
+                                println!("      {:?}", &v[..v.len().min(60)]);
+                            }
                         }
                     }
                 }

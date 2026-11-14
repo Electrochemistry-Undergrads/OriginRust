@@ -4,12 +4,13 @@
 //! tree; it looks for the records it understands by their fixed shapes (spec section 8) and
 //! reports what it leaves unread.
 
-use super::numbers::{decode_strings, decode_values, read_varint};
+use super::numbers::{cut_implausible_tail, decode_strings, decode_values, read_varint};
 
 /// What a column record holds.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ColumnValues {
-    Numeric(Vec<f64>),
+    /// The values, and how many values at the end were dropped because they cannot be data.
+    Numeric(Vec<f64>, usize),
     Text(Vec<String>),
     /// A data block this reader does not decode; the text says which kind.
     Unsupported(&'static str),
@@ -107,7 +108,10 @@ fn read_block(b: &[u8], d: usize, declared: u64) -> ColumnValues {
         // The sentinel is not used here: its two bytes can occur inside the numbers.
         let end = numeric_end.unwrap_or(sentinel).min(b.len());
         return match decode_values(b, q, end, count) {
-            Some((values, _)) => ColumnValues::Numeric(values),
+            Some((mut values, _)) => {
+                let dropped = cut_implausible_tail(&mut values);
+                ColumnValues::Numeric(values, dropped)
+            }
             None => ColumnValues::Unsupported("numbers that do not fit their block"),
         };
     }

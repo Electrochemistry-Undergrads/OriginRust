@@ -40,6 +40,9 @@ pub struct Summary {
     pub columns_skipped: BTreeMap<&'static str, usize>,
     /// Column records that belong to no workbook (data behind graphs and matrices).
     pub columns_unmatched: usize,
+    /// Columns cut short because the values after some row cannot be data, and the values dropped.
+    pub columns_cut: usize,
+    pub values_dropped: usize,
     /// The names of the first skipped records, with the reason and the first bytes of the block.
     pub examples: Vec<String>,
 }
@@ -141,7 +144,16 @@ fn build(bytes: &[u8], path: &Path) -> Result<(OpjImport, Summary), IoError> {
             }
         };
         let data = match rec.values {
-            ColumnValues::Numeric(v) => ColumnData::Numeric(Arc::new(v)),
+            ColumnValues::Numeric(v, dropped) => {
+                if dropped > 0 {
+                    summary.columns_cut += 1;
+                    summary.values_dropped += dropped;
+                    if summary.examples.len() < 400 {
+                        summary.examples.push(format!("cut: {} kept {} dropped {}", rec.name, v.len(), dropped));
+                    }
+                }
+                ColumnData::Numeric(Arc::new(v))
+            }
             ColumnValues::Text(v) => ColumnData::Text(Arc::new(v)),
             ColumnValues::Unsupported(why) => {
                 *summary.columns_skipped.entry(why).or_insert(0) += 1;
@@ -209,6 +221,12 @@ fn build(bytes: &[u8], path: &Path) -> Result<(OpjImport, Summary), IoError> {
         warnings.push(format!(
             "{} data block(s) belong to no workbook (data behind graphs and matrices) and were skipped.",
             summary.columns_unmatched
+        ));
+    }
+    if summary.columns_cut > 0 {
+        warnings.push(format!(
+            "{} column(s) were cut short: {} value(s) at their end could not be read as numbers and were left out.",
+            summary.columns_cut, summary.values_dropped
         ));
     }
     for (why, n) in &summary.columns_skipped {

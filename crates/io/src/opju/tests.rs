@@ -1,6 +1,6 @@
 //! Tests with byte strings built here. No sample file is read except by the ignored test at the end.
 
-use super::numbers::{MISSING, decode_strings, decode_values, read_varint};
+use super::numbers::{MISSING, cut_implausible_tail, decode_strings, decode_values, read_varint};
 use super::{read_opju_bytes, summarize};
 use sheaf_core::ColumnData;
 use std::path::Path;
@@ -46,6 +46,19 @@ fn encode_values(values: &[f64]) -> Vec<u8> {
         }
     }
     out
+}
+
+#[test]
+fn a_column_is_cut_at_the_first_value_that_cannot_be_data() {
+    let mut v = vec![1.0, -2.5e3, f64::NAN, 0.0, 4.2e-12, 3.1e255, 1.0, 2.0];
+    assert_eq!(cut_implausible_tail(&mut v), 3, "from the huge value on");
+    assert_eq!(v.len(), 5);
+    assert!(v[2].is_nan(), "a missing value is kept");
+    let mut w = vec![1.0, f64::INFINITY];
+    assert_eq!(cut_implausible_tail(&mut w), 1);
+    let mut ok = vec![1.0, 2.0];
+    assert_eq!(cut_implausible_tail(&mut ok), 0);
+    assert_eq!(ok, [1.0, 2.0]);
 }
 
 #[test]

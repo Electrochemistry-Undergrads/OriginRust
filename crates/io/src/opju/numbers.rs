@@ -10,6 +10,22 @@ pub const MISSING: f64 = -1.234_567_89e-300;
 /// Magnitudes below this are taken as missing values.
 const TINY: f64 = 1e-250;
 
+/// The values that come out of a numeric block are cut at the first one that cannot be data.
+pub const LARGEST: f64 = 1e250;
+
+/// Cuts `values` before the first value that is not finite or larger than [`LARGEST`] in magnitude.
+/// Returns how many values were dropped.
+pub fn cut_implausible_tail(values: &mut Vec<f64>) -> usize {
+    match values.iter().position(|v| !v.is_nan() && (!v.is_finite() || v.abs() > LARGEST)) {
+        Some(at) => {
+            let dropped = values.len() - at;
+            values.truncate(at);
+            dropped
+        }
+        None => 0,
+    }
+}
+
 /// Reads a base-128 number, low group first, with the high bit of a byte meaning "more follows".
 pub fn read_varint(bytes: &[u8], pos: &mut usize) -> Option<u64> {
     let mut value = 0u64;

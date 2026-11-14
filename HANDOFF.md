@@ -55,19 +55,40 @@ optimization", free for reuse with their build folders `target/wt-axis` and `tar
 `merge-05b`, an unfinished merge of branches that are all on `main` already (abort it, do not push it).
 The disk is about 96 % full; reuse a worktree and its build folder instead of making new ones.
 
-## Known issues reported by the owner
+## Known issues and table UI verification
 
-- [ ] **Single yellow-cell selection** (reported 2026-11-13): clicking a single yellow cell
-      automatically highlights the whole column, so the owner cannot select that cell alone.
-      Expected: selecting one cell highlights only that cell. Not yet reproduced or diagnosed;
-      investigate the worksheet selection behaviour and verify the fix before closing this issue.
+- [ ] **Single yellow-cell selection** (reported and reproduced 2026-11-13): a single click
+      in a yellow Long Name cell selects the whole column, including its data cells, instead
+      of that label cell alone. Double-clicking enters label editing and is a workaround.
+      Reproduced through the desktop UI in a new workbook; cause not yet diagnosed.
 
 - [ ] **Cell shortcuts and interaction logic across all tables** (reported 2026-11-13):
-      the owner reports that cell shortcuts and interaction logic work in imported tables but
-      behave incorrectly in newly created tables. Apply the same cell selection, navigation,
-      editing and shortcut behaviour to every table, regardless of how it was created.
-      Reproduce on both a new table and an imported table, and cover both paths when verifying
-      the fix. Not yet reproduced or diagnosed.
+      the owner reports inconsistent behaviour in newly created tables versus imported tables.
+      Apply the same selection, navigation, editing and shortcuts to every table. The Tab
+      focus failure below was reproduced in both kinds; it does not explain every reported
+      difference. Cover both creation paths when verifying fixes.
+
+### Table UI walkthrough (2026-11-13)
+
+Scope: table interactions only, using synthetic data in a separate Sheaf instance. Checked the
+running release build; its exact commit was not verified and it was not rebuilt for this pass.
+
+- [ ] **Confirmed: Tab after editing loses worksheet keyboard focus.** Reproduction: click A1
+      in a new table, type `8`, press Tab, then type `9`. A1 commits as 8 and the selection
+      outline moves to B1, but the next digit is ignored. Shift+Tab and arrow navigation also
+      stop controlling the table until a cell is clicked again. Reproduced twice in the new
+      table and also in an imported CSV table (click A1, type `6`, Tab, then `9`). Expected:
+      committing with Tab leaves keyboard focus in the next cell so entry and navigation continue.
+- [ ] **Needs confirmation: mouse drag selects only the final cell.** In an imported table,
+      dragging from A1 to B3, then from A1 to B5, left only B3 or B5 selected rather than the
+      rectangular range. Observed in two automated drag attempts; confirm with a manual drag
+      before treating it as an application defect, since input timing could be involved.
+- [x] With grid focus, Shift+arrow keys select a rectangular block in the imported table.
+      Ctrl+C/Ctrl+V copied and pasted a 2-by-2 block; Ctrl+Z removed the paste in one step
+      and Ctrl+Shift+Z restored it. Typing in a new-table data cell and committing with Tab
+      worked up to the subsequent focus failure described above.
+- [ ] Continue table UI coverage: row/column operations, sheet controls and switching, and
+      the remaining new-table/imported-table shortcut cases. These were not completed.
 
 ## Next step
 

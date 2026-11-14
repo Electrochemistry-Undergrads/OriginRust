@@ -299,6 +299,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         graph: None,
         active: Some(book),
         selected: &state.selected,
+        sorting_columns: if matches!(state.sel, Sel::Label { .. }) { Vec::new() } else { state.selected.clone() },
         cells: state.sel != Sel::None,
         undo: None,
         redo: None,

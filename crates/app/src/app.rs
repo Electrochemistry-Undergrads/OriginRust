@@ -936,7 +936,8 @@ impl SheafApp {
             Action::SortRange { columns, descending } => self.sort_selected(columns, descending, true),
             Action::SortColumns { columns, descending } => self.sort_selected(columns, descending, false),
             Action::SortCustom { book, columns } => {
-                self.sort = SortDialog::nested(self.doc.project(), book, columns);
+                let rows = if columns.is_empty() { None } else { self.selected_sort_rows(book) };
+                self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
             Action::Reshape { book, columns, kind } => {
                 self.reshape = ReshapeDialog::new(&self.doc, book, kind, columns);
@@ -1680,12 +1681,22 @@ impl SheafApp {
         }
     }
 
+    fn selected_sort_rows(&self, book: WindowId) -> Option<std::ops::Range<usize>> {
+        let state = self.books.get(&book)?;
+        if !matches!(state.sel, grid::Sel::Cells { .. } | grid::Sel::Rows { .. }) {
+            return None;
+        }
+        let sheet = self.doc.project().workbook(book)?.sheet();
+        state.target(sheet).map(|t| t.rows)
+    }
+
     /// Worksheet > Sort Range (`range`: the rows of the selected columns move together, ordered
     /// by the leftmost of them) and Sort Columns (each selected column is sorted on its own).
     fn sort_selected(&mut self, columns: Vec<ColumnId>, descending: bool, range: bool) {
         let project = self.doc.project();
         let Some(first) = columns.first().and_then(|c| project.locate(*c)) else { return };
         let (book_id, sheet) = (first.0.id, first.1);
+        let rows = self.selected_sort_rows(book_id).unwrap_or(0..usize::MAX);
         let Some(sheet_index) = first.0.sheets.iter().position(|s| std::ptr::eq(s, sheet)) else { return };
         let mut on_sheet: Vec<(usize, ColumnId)> =
             columns.iter().filter_map(|c| Some((sheet.column_index(*c)?, *c))).collect();
@@ -1695,9 +1706,9 @@ impl SheafApp {
         let order = if descending { "descending" } else { "ascending" };
         let result = self.doc.edit(if range { "Sort range" } else { "Sort columns" }, |p| {
             if range {
-                p.sort_range(book_id, sheet_index, key, &ids, descending)
+                p.sort_range_in_rows(book_id, sheet_index, key, &ids, descending, rows)
             } else {
-                p.sort_columns(book_id, sheet_index, &ids, descending)
+                p.sort_columns_in_rows(book_id, sheet_index, &ids, descending, rows)
             }
         });
         match result {
@@ -1780,6 +1791,13 @@ impl SheafApp {
             graph,
             active: self.active,
             selected,
+            sorting_columns: book
+                .and_then(|id| {
+                    let sheet = project.workbook(id)?.sheet();
+                    let target = self.books.get(&id)?.target(sheet)?;
+                    Some(target.columns.iter().map(|&i| sheet.columns[i].id).collect())
+                })
+                .unwrap_or_default(),
             cells: book.and_then(|b| self.books.get(&b)).is_some_and(|s| s.sel != Sel::None),
             undo: self.doc.undo_label(),
             redo: self.doc.redo_label(),
@@ -2373,11 +2391,13 @@ impl SheafApp {
             match d.show(ctx, self.doc.project()) {
                 SortOutcome::Open => {}
                 SortOutcome::Closed => self.sort = None,
-                SortOutcome::Nested { book, columns, keys } => {
+                SortOutcome::Nested { book, columns, keys, rows } => {
                     let sheet =
                         self.doc.project().workbook(book).map(|b| b.active_sheet.min(b.sheets.len().saturating_sub(1)));
                     if let Some(sheet) = sheet {
-                        match self.doc.edit("Sort (nested)", |p| p.sort_nested(book, sheet, &keys, &columns)) {
+                        match self.doc.edit("Sort (nested)", |p| {
+                            p.sort_nested_in_rows(book, sheet, &keys, &columns, rows.unwrap_or(0..usize::MAX))
+                        }) {
                             Ok(()) => self.say(format!("Sorted by {} column(s)", keys.len())),
                             Err(e) => self.message = Some(("Could not sort".to_string(), e.to_string())),
                         }

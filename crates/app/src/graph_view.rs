@@ -642,6 +642,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         graph: Some(graph_id),
         active: Some(graph_id),
         selected: &[],
+        sorting_columns: Vec::new(),
         cells: false,
         undo: None,
         redo: None,

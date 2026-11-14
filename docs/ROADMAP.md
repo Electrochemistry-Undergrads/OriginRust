@@ -205,7 +205,7 @@ the default project format.
         details remain unmeasured (`docs/spec/analysis-tools.md` section 12)
   - [x] Mixed Text & Numeric columns preserve text cells on import and project round trips;
         Month/Day of Week and Engineering/SI/Decimal:1000 displays, 19 date and 14 time patterns;
-        ASCII import supports delimiter sets with consecutive-run combining, multi-character and fixed-width delimiters, and Data Import Options
+        ASCII import supports delimiter sets with consecutive-run combining, multi-character and fixed-width delimiters, row/column range-pattern selection, and Data Import Options
         (T19; some format defaults still need measurement)
   - [x] Worksheet operations (T10): insert/delete rows, columns and cells; move/hide/resize columns;
         column/range/nested sort; masks excluded from analysis; non-destructive row filter;

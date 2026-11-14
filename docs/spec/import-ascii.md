@@ -221,6 +221,14 @@ Origin groups these under `Partials`; rows and columns each have: first, last, r
 
 Legacy ASCII.oif: `iPartialC1=0`, `iPartialC2=-1`, `iPartialR1=0`, `iPartialR2=-1` (zero-based, -1 = to the end). [F]
 
+### Implemented range and repeating-pattern selection
+
+`AsciiOptions::rows` and `columns` use `ImportSelection { first, last, read, skip }`, following the documented [Partial_rows / Partial_cols options](https://docs.originlab.com/x-function/ref/details-of-treenodes-in-import-ascii/). Positions are 1-based and inclusive; `last = 0` means through the end. Starting at `first`, take `read` entries, skip `skip`, and repeat until `last`. The default `{ first: 1, last: 0, read: 1, skip: 0 }` imports everything. For example, first 2 / last 5 / read 1 / skip 1 imports positions 2 and 4. First and read must be positive; a nonzero last must be at least first. An out-of-range selection that imports nothing is reported as no data.
+
+The Import window's Partial Import page and the wizard's shared Data Selection controls expose both axes. CLI flags are `--first-row`, `--last-row`, `--read-rows`, `--skip-rows`, `--first-column`, `--last-column`, `--read-columns`, and `--skip-columns`. Data-row positions exclude header records and blank records (the existing importer skips blank data records). Legacy API `skip_rows` and `max_rows` still define an initial window; the new row selection then applies within it. These legacy settings default to zero/no limit and are distinct from the CLI repeating `--skip-rows` flag.
+
+Selected columns keep their source Long Name, Units, Comments, short-name header values, and parameter values. Parameter names still come from the original first field even when that column is excluded. Automatic short names are assigned consecutively to the imported columns; the first imported column is X when that option is enabled. These naming/designation choices preserve existing output conventions and have not been newly measured in installed Origin. Preview, detection, and final import agree on the selected data. Selections apply to every file and reset per block when importing blocks as sheets. Custom range-list strings and the “all except first file” switch remain unimplemented.
+
 ## 10. Import mode and naming (P0)
 
 Modes (option `FirstMode` for the first file, `Mode` for later files in a multi-file import):

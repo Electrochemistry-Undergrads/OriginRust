@@ -110,6 +110,36 @@ pub enum Blocks {
     Sheets,
 }
 
+/// A 1-based input range, optionally taking `read` entries and skipping `skip`, repeatedly.
+/// A last position of zero means through the end. The pattern starts at `first`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportSelection {
+    pub first: usize,
+    pub last: usize,
+    pub read: usize,
+    pub skip: usize,
+}
+
+impl Default for ImportSelection {
+    fn default() -> Self {
+        Self { first: 1, last: 0, read: 1, skip: 0 }
+    }
+}
+
+impl ImportSelection {
+    fn contains(&self, index: usize) -> bool {
+        let Some(offset) = index.checked_sub(self.first.saturating_sub(1)) else { return false };
+        self.first > 0
+            && self.read > 0
+            && (self.last == 0 || index < self.last)
+            && offset % self.read.saturating_add(self.skip) < self.read
+    }
+
+    fn valid(&self) -> bool {
+        self.first > 0 && self.read > 0 && (self.last == 0 || self.last >= self.first)
+    }
+}
+
 /// Import settings. `None` means "detect"; for the line numbers, `Some(0)` means "there is none".
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AsciiOptions {
@@ -154,6 +184,10 @@ pub struct AsciiOptions {
     pub skip_rows: usize,
     /// Stop after this many data rows.
     pub max_rows: Option<usize>,
+    /// Data rows to import after the legacy skip/max window; positions are 1-based.
+    pub rows: ImportSelection,
+    /// Source columns to import. Their labels and parameter values follow the selected columns.
+    pub columns: ImportSelection,
     /// Whether date and time columns become numbers or stay text.
     pub dates: DateImport,
     /// Which order `11/12/2026` is read in when the file does not settle it
@@ -181,6 +215,8 @@ impl Default for AsciiOptions {
             first_column_x: true,
             skip_rows: 0,
             max_rows: None,
+            rows: ImportSelection::default(),
+            columns: ImportSelection::default(),
             dates: DateImport::Detect,
             date_order: DateOrder::Mdy,
         }
@@ -613,6 +649,8 @@ struct Analysis<'a> {
     detected: Detected,
     /// The data rows after `skip_rows` / `max_rows`, as raw fields.
     rows: Vec<Vec<String>>,
+    /// The original file-column positions of the imported columns (zero based).
+    source_columns: Vec<usize>,
     /// The digit-grouping character was found by looking at the numbers, not chosen.
     thousands_found: bool,
     ns: NumStyle,
@@ -797,10 +835,15 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
         .take(opts.max_rows.unwrap_or(usize::MAX))
         .collect();
     // Trailing empty columns (a delimiter at the end of every line) are not columns.
-    let columns =
+    let source_count =
         rows.iter().map(|r| r.iter().rposition(|c| !c.trim().is_empty()).map_or(0, |p| p + 1)).max().unwrap_or(0);
+    // Discover the source shape before selecting rows: a real column must not disappear
+    // merely because the selected rows happen to have missing values in it.
+    rows = rows.into_iter().enumerate().filter(|(i, _)| opts.rows.contains(*i)).map(|(_, row)| row).collect();
+    let source_columns: Vec<usize> = (0..source_count).filter(|&i| opts.columns.contains(i)).collect();
+    let columns = source_columns.len();
     for r in &mut rows {
-        r.truncate(columns.max(1));
+        *r = source_columns.iter().map(|&i| r.get(i).cloned().unwrap_or_default()).collect();
     }
     Analysis {
         lines,
@@ -815,6 +858,7 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
             thousands,
         },
         rows,
+        source_columns,
         thousands_found,
         ns,
     }
@@ -839,6 +883,13 @@ pub fn preview(text: &str, opts: &AsciiOptions, max_rows: usize) -> Vec<Vec<Stri
 /// Rows that consist only of empty fields are skipped. Quoted fields may span
 /// lines; line numbers in the options then count records, not physical lines.
 pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
+    for (name, selection) in [("row", &opts.rows), ("column", &opts.columns)] {
+        if !selection.valid() {
+            return Err(IoError::InvalidOption(format!(
+                "the {name} selection needs first and read counts above 0, and last must be 0 or at least first"
+            )));
+        }
+    }
     let comma_decimal = opts.decimal_comma || matches!(opts.thousands, Thousands::Dot | Thousands::Space);
     let comma_delimiter = matches!(opts.delimiter, Delimiter::Comma | Delimiter::Other(','))
         || matches!(&opts.delimiter, Delimiter::AnyOf { chars, .. } if chars.contains(','));
@@ -945,14 +996,21 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     }
     let d = a.detected.clone();
     let ncols = d.columns;
+    if ncols == 0 {
+        return Err(IoError::NoData {
+            source_name: file_stem.to_string(),
+            detail: "no source columns match the import selection".into(),
+        });
+    }
     let mut warnings = Vec::new();
 
     // Labels.
+    let raw_label_row = |n: usize| -> Vec<String> {
+        n.checked_sub(1).and_then(|i| a.lines.get(i)).map_or_else(Vec::new, |l| split_fields(l, &d.delimiter))
+    };
     let label_row = |n: usize| -> Vec<String> {
-        let mut f =
-            n.checked_sub(1).and_then(|i| a.lines.get(i)).map_or_else(Vec::new, |l| split_fields(l, &d.delimiter));
-        f.resize(ncols, String::new());
-        f
+        let cells = raw_label_row(n);
+        a.source_columns.iter().map(|&i| cells.get(i).cloned().unwrap_or_default()).collect()
     };
     let label_line = |n: usize| if opts.rename_columns { n } else { 0 };
     let mut long_names = label_row(label_line(d.long_name_line));
@@ -984,7 +1042,7 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
         .iter()
         .enumerate()
         .map(|(k, &line)| {
-            let cells = label_row(line);
+            let cells = raw_label_row(line);
             let generic = format!("Param{}", k + 1);
             if opts.param_name_from_first_cell {
                 let name = cells.first().map_or("", |c| c.trim().trim_end_matches(':').trim());
@@ -1071,8 +1129,9 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
     }
     for (j, col) in sheet.columns.iter_mut().enumerate() {
         for (name, cells, from) in &params {
-            if j >= *from
-                && let Some(v) = cells.get(j).filter(|v| !v.trim().is_empty())
+            let source = a.source_columns[j];
+            if source >= *from
+                && let Some(v) = cells.get(source).filter(|v| !v.trim().is_empty())
             {
                 col.params.insert(name.clone(), v.trim().to_string());
             }
@@ -1942,6 +2001,91 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert_eq!(imp.workbook.sheets.len(), 2);
         assert_eq!(imp.workbook.sheets[0].columns[1].data.text_cell(0), Some("a\n\nb"));
         assert_eq!(imp.workbook.sheets[1].columns[0].numeric().unwrap(), [3.0, 4.0]);
+    }
+
+    #[test]
+    fn partial_import_ranges_and_patterns_select_source_rows_and_columns() {
+        let text =
+            "t,a,b,c,d\n1,11,21,31,41\n2,12,22,32,42\n3,13,23,33,43\n4,14,24,34,44\n5,15,25,35,45\n6,16,26,36,46\n";
+        let opts = AsciiOptions {
+            rows: ImportSelection { first: 2, last: 5, read: 1, skip: 1 },
+            columns: ImportSelection { first: 2, last: 5, read: 1, skip: 1 },
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(imp.detected.columns, 2);
+        assert_eq!(detect(text, &opts), imp.detected);
+        assert_eq!(preview(text, &opts, 10), [vec!["12", "32"], vec!["14", "34"]]);
+        assert_eq!(col(&imp, 0).long_name, "a");
+        assert_eq!(col(&imp, 1).long_name, "c");
+        assert_eq!(col(&imp, 0).short_name, "A");
+        assert_eq!(col(&imp, 0).designation, Designation::X);
+        assert_eq!(col(&imp, 0).numeric().unwrap(), [12.0, 14.0]);
+        assert_eq!(col(&imp, 1).numeric().unwrap(), [32.0, 34.0]);
+    }
+
+    #[test]
+    fn partial_import_keeps_selected_labels_parameter_values_and_column_types() {
+        let text = "Time,Signal,Sample,Date\ns,mA,name,day\nclock,measured,label,stamp\nWavelength,250,300,350\n1,2.5,alpha,2026-11-01\n2,3.5,beta,2026-11-02\n3,4.5,gamma,2026-11-03\n";
+        let opts = AsciiOptions {
+            header_lines: Some(4),
+            long_name_line: Some(1),
+            units_line: Some(2),
+            comments_line: Some(3),
+            param_lines: vec![4],
+            columns: ImportSelection { first: 2, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(col(&imp, 0).long_name, "Signal");
+        assert_eq!(col(&imp, 0).units, "mA");
+        assert_eq!(col(&imp, 0).comments, "measured");
+        assert_eq!(col(&imp, 0).params.get("Wavelength").map(String::as_str), Some("250"));
+        assert_eq!(col(&imp, 1).params.get("Wavelength").map(String::as_str), Some("300"));
+        assert_eq!(col(&imp, 1).data.text_cell(0), Some("alpha"));
+        assert!(matches!(col(&imp, 2).format, NumberFormat::Date(_)));
+        assert_eq!(col(&imp, 2).params.get("Wavelength").map(String::as_str), Some("350"));
+    }
+
+    #[test]
+    fn partial_import_boundaries_and_legacy_window_are_well_defined() {
+        let mut opts =
+            AsciiOptions { rows: ImportSelection { first: 2, last: 4, read: 2, skip: 1 }, ..AsciiOptions::default() };
+        assert_eq!(preview("1\n2\n3\n4\n5\n", &opts, 20), [vec!["2"], vec!["3"]]);
+        opts.skip_rows = 1;
+        opts.max_rows = Some(3);
+        assert_eq!(preview("1\n2\n3\n4\n5\n", &opts, 20), [vec!["3"], vec!["4"]]);
+        let huge = ImportSelection { first: 1, last: 0, read: usize::MAX, skip: usize::MAX };
+        assert!(huge.contains(3), "an overflowing read/skip sum is safe");
+        for selection in [
+            ImportSelection { first: 0, ..ImportSelection::default() },
+            ImportSelection { read: 0, ..ImportSelection::default() },
+            ImportSelection { first: 4, last: 2, ..ImportSelection::default() },
+        ] {
+            let opts = AsciiOptions { rows: selection.clone(), ..AsciiOptions::default() };
+            assert!(parse_ascii("1,2\n3,4\n", "bad", &opts).is_err());
+            let opts = AsciiOptions { columns: selection, ..AsciiOptions::default() };
+            assert!(parse_ascii("1,2\n3,4\n", "bad", &opts).is_err());
+        }
+        let opts = AsciiOptions {
+            columns: ImportSelection { first: 5, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        assert!(parse_ascii("1,2\n3,4\n", "empty", &opts).unwrap_err().to_string().contains("no source columns"));
+    }
+
+    #[test]
+    fn selecting_rows_does_not_drop_a_real_column_that_is_missing_in_those_rows() {
+        let opts = AsciiOptions {
+            rows: ImportSelection { last: 1, ..ImportSelection::default() },
+            columns: ImportSelection { first: 2, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let text = "x,y\n1,\n2,3\n3,4\n4,5\n";
+        assert_eq!(preview(text, &opts, 10), [vec![""]]);
+        let imp = parse_with(text, &opts);
+        assert_eq!(imp.workbook.sheets[0].columns.len(), 1);
+        assert_eq!(col(&imp, 0).long_name, "y");
     }
 
     #[test]

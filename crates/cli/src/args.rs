@@ -224,6 +224,30 @@ pub struct ReadOptions {
     /// Delimited text: number of lines before the first data row (default: detect).
     #[arg(long, value_name = "N")]
     pub header_lines: Option<usize>,
+    /// Delimited text: first data row to import, counted after the header.
+    #[arg(long, default_value_t = 1)]
+    pub first_row: usize,
+    /// Delimited text: last data row to import, inclusive (0: through the end).
+    #[arg(long, default_value_t = 0)]
+    pub last_row: usize,
+    /// Delimited text: rows to read per repeating read/skip pattern.
+    #[arg(long, default_value_t = 1)]
+    pub read_rows: usize,
+    /// Delimited text: rows to skip per repeating read/skip pattern.
+    #[arg(long, default_value_t = 0)]
+    pub skip_rows: usize,
+    /// Delimited text: first source column to import.
+    #[arg(long, default_value_t = 1)]
+    pub first_column: usize,
+    /// Delimited text: last source column to import, inclusive (0: through the end).
+    #[arg(long, default_value_t = 0)]
+    pub last_column: usize,
+    /// Delimited text: columns to read per repeating read/skip pattern.
+    #[arg(long, default_value_t = 1)]
+    pub read_columns: usize,
+    /// Delimited text: columns to skip per repeating read/skip pattern.
+    #[arg(long, default_value_t = 0)]
+    pub skip_columns: usize,
     /// Delimited text: numbers use a comma as the decimal separator.
     #[arg(long)]
     pub decimal_comma: bool,

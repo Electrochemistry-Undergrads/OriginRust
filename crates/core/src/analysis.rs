@@ -36,7 +36,7 @@ pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
     PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
-pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, FreqOptions, MeansComparison, Tail};
+pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
@@ -246,6 +246,33 @@ pub enum TwoWayLayout {
     /// Origin's "Raw Data": every chosen column holds the data of one cell of the design; `levels` gives
     /// the level of factor A and of factor B of each column, in the order of the columns.
     Raw { levels: Vec<(String, String)> },
+}
+
+/// What [`Tool::DiscreteFrequency`] does (Origin's Discrete Frequency, `discfreqs`): the distinct values of each
+/// chosen column, text or numbers, with the quantities ticked.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DiscreteFreqSpec {
+    pub count: bool,
+    pub relative: bool,
+    pub cumulative: bool,
+    /// Relative and cumulative frequency in percent (else as a fraction).
+    pub percent: bool,
+    pub case_sensitive: bool,
+    pub sort: DiscSort,
+}
+
+impl Default for DiscreteFreqSpec {
+    /// Origin's defaults: Count only, case-insensitive, by descending counts.
+    fn default() -> Self {
+        DiscreteFreqSpec {
+            count: true,
+            relative: false,
+            cumulative: false,
+            percent: false,
+            case_sensitive: false,
+            sort: DiscSort::CountDesc,
+        }
+    }
 }
 
 /// What [`Tool::TwoWayAnova`] does.
@@ -526,6 +553,8 @@ pub enum Tool {
     /// points of a Y column against its X column, or of two chosen columns (X, then Y), counted in a grid
     /// of bins. A third chosen column is ignored, as in Origin.
     Binning2D(Bin2dOptions),
+    /// Statistics > Descriptive Statistics > Discrete Frequency.
+    DiscreteFrequency(DiscreteFreqSpec),
     Normality(NormalitySpec),
     TwoWayAnova(TwoWayAnovaSpec),
     MannWhitney(MannWhitneySpec),
@@ -578,6 +607,7 @@ impl Tool {
             Tool::Anova(_) => "One-way ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Binning2D(_) => "2D frequency counts",
+            Tool::DiscreteFrequency(_) => "Discrete frequency",
             Tool::Normality(_) => "Normality test",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
             Tool::MannWhitney(_) => "Mann-Whitney test",
@@ -615,6 +645,7 @@ impl Tool {
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Binning2D(_) => "Binning2D",
+            Tool::DiscreteFrequency(_) => "DiscretFreq",
             Tool::Normality(_) => "Normality",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
             Tool::MannWhitney(_) => "MannWhitney",
@@ -1201,7 +1232,7 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_));
+        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::DiscreteFrequency(_));
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1248,6 +1279,11 @@ impl Project {
             Tool::TwoWayAnova(spec) => {
                 let out = statistics::two_way_anova(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::DiscreteFrequency(spec) => {
+                let out = statistics::discrete_frequency(spec, sheet, &request.columns, request.rows)?;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }

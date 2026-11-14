@@ -4,7 +4,7 @@
 //! `docs/spec/statistics.md`.
 
 use super::*;
-use sheaf_calc::{TTest, anova_one_way, bin2d, freq_counts};
+use sheaf_calc::{Category, TTest, anova_one_way, bin2d, freq_counts};
 
 /// What a statistics tool produces; `analyze` turns it into a sheet (and a graph).
 pub(super) struct Output {
@@ -489,6 +489,118 @@ fn binning_2d(spec: &Bin2dOptions, inputs: &[Input<'_>]) -> Result<Output, Analy
         notes.push(format!(
             "Only the first two columns are used (X and Y); {} is ignored, as in Origin.",
             inputs[2..].iter().map(|i| i.short.as_str()).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
+}
+
+// ----- discrete frequency -------------------------------------------------------------------------------
+
+/// The cells of a column as categories, from the first row to the last filled one (or the chosen rows).
+fn categories(c: &Column, rows: RowRange) -> Result<Vec<Category>, AnalysisError> {
+    let cell = |row: usize| match &c.data {
+        ColumnData::Text(v) => Category::Text(v.get(row).cloned().unwrap_or_default()),
+        ColumnData::Numeric(v) => Category::Number(v.get(row).copied().unwrap_or(f64::NAN)),
+        ColumnData::Mixed { numbers, .. } => match c.data.text_cell(row) {
+            Some(t) => Category::Text(t.to_string()),
+            None => Category::Number(numbers.get(row).copied().unwrap_or(f64::NAN)),
+        },
+    };
+    let empty = |v: &Category| match v {
+        Category::Missing => true,
+        Category::Number(x) => x.is_nan(),
+        Category::Text(s) => s.is_empty(),
+    };
+    let mut all: Vec<Category> = (0..c.data.len()).map(cell).collect();
+    while all.last().is_some_and(empty) {
+        all.pop();
+    }
+    if all.is_empty() {
+        return Err(AnalysisError::Empty(c.short_name.clone()));
+    }
+    match rows {
+        RowRange::All => Ok(all),
+        RowRange::Rows(..) => {
+            let (first, last) = resolve_rows(rows, &c.short_name, &[], all.len())?;
+            Ok(all[first..=last].to_vec())
+        }
+        RowRange::XBetween(..) => Err(AnalysisError::BadOption(
+            "the discrete frequency has no X range to limit; choose rows with a row range".into(),
+        )),
+    }
+}
+
+pub(super) fn discrete_frequency(
+    spec: &DiscreteFreqSpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    if !(spec.count || spec.relative || spec.cumulative) {
+        return Err(AnalysisError::BadOption("tick at least one of Count, Relative and Cumulative Frequency".into()));
+    }
+    let mut on_sheet = Vec::new();
+    let mut notes = Vec::new();
+    let (scale, unit) = if spec.percent { (100.0, "%") } else { (1.0, "") };
+    for id in columns {
+        let c = sheet.column(*id).ok_or(AnalysisError::NoSuchColumn(*id))?;
+        let f = sheaf_calc::discrete_frequency(&categories(c, rows)?, spec.case_sensitive, spec.sort);
+        let with = |mut col: SheetColumn, d: Designation| {
+            col.designation = d;
+            col.comments = c.short_name.clone();
+            col
+        };
+        let numeric = f.rows.iter().all(|r| !matches!(r.value, Category::Text(_)));
+        let data = if numeric {
+            number_column(
+                "Data",
+                "",
+                f.rows
+                    .iter()
+                    .map(|r| match r.value {
+                        Category::Number(x) => x,
+                        _ => f64::NAN,
+                    })
+                    .collect(),
+            )
+        } else {
+            let texts = f
+                .rows
+                .iter()
+                .map(|r| match &r.value {
+                    Category::Text(s) => s.clone(),
+                    Category::Number(x) => format!("{x}"),
+                    Category::Missing => String::new(),
+                })
+                .collect();
+            label_column("Data", texts)
+        };
+        on_sheet.push(with(data, Designation::X));
+        if spec.count {
+            on_sheet.push(with(
+                number_column("Count", "", f.rows.iter().map(|r| r.count as f64).collect()),
+                Designation::Y,
+            ));
+        }
+        if spec.relative {
+            on_sheet.push(with(
+                number_column("Relative Frequency", unit, f.relative().iter().map(|v| v * scale).collect()),
+                Designation::Y,
+            ));
+        }
+        if spec.cumulative {
+            on_sheet.push(with(
+                number_column("Cumulative Frequency", unit, f.cumulative().iter().map(|v| v * scale).collect()),
+                Designation::Y,
+            ));
+        }
+        notes.push(format!(
+            "{}: {} cells, {} distinct values ({}{}).",
+            c.display_name(),
+            f.total,
+            f.rows.len(),
+            spec.sort.label().to_lowercase(),
+            if spec.case_sensitive { ", case-sensitive" } else { "" }
         ));
     }
     Ok(Output { table: None, on_sheet, notes, plots: Vec::new() })
@@ -1879,5 +1991,42 @@ mod tests {
             Tool::Correlation(CorrelationSpec { kendall: true, spearman: true, ..Default::default() }),
         );
         assert!(f.table.unwrap().rows[0].1[1].is_nan());
+    }
+}
+
+#[cfg(test)]
+mod disc_tests {
+    use super::*;
+
+    #[test]
+    fn discrete_frequency_writes_origin_s_columns() {
+        let mut p = Project::new();
+        let book = p.add_workbook("cats");
+        let texts = ["b", "a", "B", "c", "a", "", "d", ""].iter().map(|s| s.to_string()).collect();
+        let t = p.add_column(book, 0, Designation::Y, ColumnData::text(texts)).unwrap();
+        let n = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, f64::NAN, 3.0, 1.5])).unwrap();
+        let spec = DiscreteFreqSpec { relative: true, cumulative: true, percent: true, ..Default::default() };
+        let r = p
+            .analyze(&Request { columns: vec![t, n], rows: RowRange::All, tool: Tool::DiscreteFrequency(spec) })
+            .unwrap();
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(ws.name.starts_with("DiscretFreq"), "{}", ws.name);
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Data", "Count", "Relative Frequency", "Cumulative Frequency"].repeat(2));
+        assert_eq!(ws.columns[0].designation, Designation::X);
+        assert_eq!(ws.columns[0].comments, "A");
+        assert_eq!(ws.columns[4].comments, "B");
+        assert_eq!(ws.columns[2].units, "%");
+        // The trailing empty cell is not counted, the inner one is; "B" counts with "b".
+        assert_eq!(ws.columns[0].text().unwrap(), ["a", "b", "", "c", "d"]);
+        assert_eq!(ws.columns[1].numeric().unwrap(), [2.0, 2.0, 1.0, 1.0, 1.0]);
+        assert!((ws.columns[2].numeric().unwrap()[0] - 2.0 / 7.0 * 100.0).abs() < 1e-12);
+        assert_eq!(*ws.columns[3].numeric().unwrap().last().unwrap(), 100.0);
+        let d = ws.columns[4].numeric().unwrap();
+        assert_eq!(d[0], 3.0);
+        assert!(d[1].is_nan() && d[2] == 1.5, "missing sorts before the numbers among equal counts: {d:?}");
+        let none = DiscreteFreqSpec { count: false, ..Default::default() };
+        let req = Request { columns: vec![t], rows: RowRange::All, tool: Tool::DiscreteFrequency(none) };
+        assert!(p.analyze(&req).is_err());
     }
 }

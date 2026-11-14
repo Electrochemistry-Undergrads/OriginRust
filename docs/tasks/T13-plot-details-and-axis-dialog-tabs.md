@@ -1,6 +1,6 @@
 # T13: Missing Plot Details tabs and controls
 
-**Status:** item 1 mostly done (Drop Lines and Label tabs, line Transparency, Fill Area Under Curve in the Normal mode, measured, graphing spec 18) and the layer Background colour (item 3); left: Offset tab, the other fill modes and Pattern tab for fills, items 2, 3 (Size/Speed, Display, Link Axes Scales), 4-7. Origin's tab lists and defaults are measured (spec 18), on `main`. **Size:** M. **Model:** Sonnet.
+**Status:** item 1 mostly done (Drop Lines and Label tabs, line Transparency, Fill Area Under Curve in the Normal mode, measured, graphing spec 18) and the layer Background colour (item 3); item 5 done (the tree names plots `[Book1]Sheet1! A(X), B(Y) [1*:11*]`, `Project::plot_data_name`); left: Offset tab, the other fill modes and Pattern tab for fills, items 2, 3 (Size/Speed, Display, Link Axes Scales), 4, 6, 7. Origin's tab lists and defaults are measured (spec 18), on `main`. **Size:** M. **Model:** Sonnet.
 **Detail:** audit B "Plot Details", "Layer Contents (F12) and Plot Setup".
 **Spec:** `docs/spec/gui-look.md` (Plot Details), `docs/spec/ui-command-map.md` D1/D3.
 

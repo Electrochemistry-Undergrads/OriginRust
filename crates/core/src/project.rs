@@ -533,6 +533,29 @@ impl Project {
         }
     }
 
+    /// The plot as Origin's Plot Details tree names it (measured, graphing spec 18):
+    /// `[Book1]Sheet1! A(X), B(Y) [1*:11*]`: the short names of the book, sheet and columns and the
+    /// rows, where a star marks an end that follows the data; a set row range is shown without
+    /// stars. An error column is listed as `C(yEr±)` (not measured).
+    pub fn plot_data_name(&self, plot: &Plot) -> String {
+        let Some((book, sheet, y)) = self.locate(plot.y) else {
+            return self.plot_label(plot);
+        };
+        let mut cols = Vec::new();
+        if let Some(x) = plot.x.and_then(|x| self.column(x)) {
+            cols.push(format!("{}(X)", x.short_name));
+        }
+        cols.push(format!("{}(Y)", y.short_name));
+        if let Some(e) = plot.y_error.and_then(|e| self.column(e)) {
+            cols.push(format!("{}(yEr±)", e.short_name));
+        }
+        let rows = match plot.rows {
+            Some((a, b)) => format!("[{}:{}]", a + 1, b),
+            None => format!("[1*:{}*]", y.len()),
+        };
+        format!("[{}]{}! {} {rows}", book.name, sheet.name, cols.join(", "))
+    }
+
     /// The Y columns a new graph of `template` should show for a sheet.
     ///
     /// That is every numeric Y column when they all share one unit. When the
@@ -866,6 +889,19 @@ mod tests {
         let x = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
         let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 4.0, 9.0])).unwrap();
         (p, book, x, y)
+    }
+
+    #[test]
+    fn a_plot_is_named_as_in_origins_plot_details_tree() {
+        let (mut p, book, x, y) = sample();
+        let g = p.plot_columns(crate::template::Template::Line, &[y]).unwrap();
+        let sheet = p.workbook(book).unwrap().sheets[0].name.clone();
+        let plot = p.graph(g).unwrap().layers[0].plots[0].clone();
+        assert_eq!(plot.x, Some(x));
+        assert_eq!(p.plot_data_name(&plot), format!("[Book1]{sheet}! A(X), B(Y) [1*:3*]"));
+        let mut part = plot;
+        part.rows = Some((1, 3));
+        assert_eq!(p.plot_data_name(&part), format!("[Book1]{sheet}! A(X), B(Y) [2:3]"));
     }
 
     #[test]

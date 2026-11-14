@@ -213,6 +213,8 @@ impl GraphPropsDialog {
         let geometry = sheaf_plot::layout_geometry(doc.project(), self.graph).ok();
         let labels: Vec<Vec<String>> =
             graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_label(p)).collect()).collect();
+        let names: Vec<Vec<String>> =
+            graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_data_name(p)).collect()).collect();
         let sources = sources(doc.project());
         let columns = all_columns(doc.project());
 
@@ -265,6 +267,7 @@ impl GraphPropsDialog {
                             tab,
                             &mut graph,
                             &labels,
+                            &names,
                             &sources,
                             &columns,
                             &mut this.add_from,

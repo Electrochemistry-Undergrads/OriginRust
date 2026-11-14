@@ -506,7 +506,7 @@ fn the_plot_details_tree_chooses_a_plot_of_the_second_layer() {
         let moved = graph.layers[0].plots.remove(1);
         graph.layers[1].plots.push(moved);
     });
-    let name = project(&h).plot_label(&graph(&h).layers[1].plots[0]);
+    let name = project(&h).plot_data_name(&graph(&h).layers[1].plots[0]);
     open_props(&mut h, 0, PropsTab::Plots, None);
     assert_eq!(h.state().graph_props.as_ref().unwrap().layer, 0);
     for entry in ["Layer 1", "Layer 2"] {

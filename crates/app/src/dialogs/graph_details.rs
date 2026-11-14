@@ -119,6 +119,7 @@ pub fn dialog_body(
     tab: &mut DetailTab,
     graph: &mut Graph,
     labels: &[Vec<String>],
+    names: &[Vec<String>],
     sources: &[Source],
     columns: &[(ColumnId, String)],
     add_from: &mut usize,
@@ -139,7 +140,7 @@ pub fn dialog_body(
                 .id_salt("details_tree")
                 .max_height(tree_h)
                 .auto_shrink([false, false])
-                .show(ui, |ui| tree(ui, node, graph, labels));
+                .show(ui, |ui| tree(ui, node, graph, names));
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label("Plot Type");
@@ -211,7 +212,8 @@ pub fn dialog_body(
     });
 }
 
-fn tree(ui: &mut egui::Ui, node: &mut Node, graph: &mut Graph, labels: &[Vec<String>]) {
+/// `names` are Origin's tree names of the plots ([`sheaf_core::Project::plot_data_name`]).
+fn tree(ui: &mut egui::Ui, node: &mut Node, graph: &mut Graph, names: &[Vec<String>]) {
     if ui.selectable_label(*node == Node::Graph, &graph.name).clicked() {
         *node = Node::Graph;
     }
@@ -228,7 +230,7 @@ fn tree(ui: &mut egui::Ui, node: &mut Node, graph: &mut Graph, labels: &[Vec<Str
                         ui.checkbox(&mut plot.visible, "").on_hover_text("Show this plot");
                         crate::grid::color_swatch(ui, plot.line.color);
                         let text =
-                            labels.get(l).and_then(|v| v.get(p)).cloned().unwrap_or_else(|| format!("Plot {}", p + 1));
+                            names.get(l).and_then(|v| v.get(p)).cloned().unwrap_or_else(|| format!("Plot {}", p + 1));
                         if ui.selectable_label(*node == Node::Plot(l, p), text).clicked() {
                             *node = Node::Plot(l, p);
                         }

@@ -257,7 +257,7 @@ the default project format.
       on rows, Grubbs/Dixon outlier tests, Friedman, sign, median and two-sample KS tests measured
       against Origin (T14 items 1-4, `c44a1a6`)
 - [x] Holm comparisons and power analysis (`d724c40`); 2D frequency counts and binning measured against
-      Origin's `twoDBinning` (T14 item 6, statistics.md 13)
+      Origin's `twoDBinning`, discrete frequency against `discfreqs` (T14 item 6, statistics.md 13, 14)
 - [ ] Statistics breadth left: cross tabulation, distribution fitting, probability plots (T14 item 6;
       Dunnett not measurable); documented Kendall/normality
       p-value differences remain (T16)

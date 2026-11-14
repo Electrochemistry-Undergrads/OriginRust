@@ -68,6 +68,12 @@ with `wcol(c)[r]`; run with `run-labtalk-safe.ps1`), `parse3.py` reads their raw
 the three outputs into `crates/calc/tests/fixtures/bin2d_origin.rs` and `stats4/bin2d-origin.compact.json`. What they
 showed is in `docs/spec/statistics.md`, section 13.
 
+## Discrete frequency
+
+`stats5/g1.py` writes the line script of the `discfreqs` runs (output sheet read cell by cell as shown), `parse1.py`
+reads the raw output and `make-fixture1.py` writes `crates/calc/tests/fixtures/discfreq_origin.rs` and
+`stats5/discfreq-origin.compact.json`. Findings: `docs/spec/statistics.md`, section 14.
+
 ## Origin's own dialogs (lists of controls, defaults, combo box items)
 
 `origin-dialog.ps1` opens one of Origin's dialogs in a temporary visible Origin (same lock) and writes, per step, a picture

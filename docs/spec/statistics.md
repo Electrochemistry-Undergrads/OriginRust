@@ -473,6 +473,37 @@ matrix output was not used.
   count|freq|sum|mean|min|max|median`, `--x-inc`, `--x-bins`, `--x-min`, `--x-max`, `--x-centers`, `--x-below`,
   `--x-above` and the same for Y.
 
+## 14 Discrete frequency
+
+Origin's Statistics > Descriptive Statistics > Discrete Frequency (`discfreqs`), measured on 2026-11-14 with 17 runs
+on columns we wrote (`tools/origin-ref/stats5/g1.py`, parsed by `parse1.py`; `make-fixture1.py` writes
+`crates/calc/tests/fixtures/discfreq_origin.rs` and keeps Origin's sheets in `discfreq-origin.compact.json`; test
+`crates/calc/tests/origin_discfreq.rs`). The argument names come from Origin's documentation of the X-Function.
+
+- **Result sheet** `DiscretFreq1` in the input's workbook: per input column a block `Data` (designated X; a text
+  column for text input, numbers for numbers), `Count`, `Relative Frequency`, `Cumulative Frequency` (designated Y,
+  only the ticked ones), each with the input column's short name as its Comments; the unit `%` on the relative and
+  cumulative columns with Frequency in Percent, none with Fraction (the default). Origin's dialog: Recalculate, Input
+  Data Form (Raw, Indexed), Input, Quantities to Compute (Count ticked, Relative Frequency, Cumulative Frequency,
+  Frequency in Fraction or Percent), Case Sensitive (not ticked), Sort Data by (Ascending Counts, Descending Counts:
+  the default, Ascending Values, Descending Values, Categorical Order), Output Results.
+- **What counts**: every cell from the first row to the last filled one. An empty text cell and a missing number
+  inside the data are categories of their own (`""` and `--`), so 14 cells with one empty give relative
+  frequencies of n / 14. The cumulative frequency is the running sum of the relative ones in the sorted order.
+- **Texts** are compared without regard to case unless Case Sensitive is ticked, and a category is shown with the
+  spelling of its first cell (`b, B` gives `b` with 2). In value order texts sort without regard to case (`c` before
+  `Cc` before `d`); among numbers the missing value comes first in ascending and last in descending order.
+- **Order among equal counts**: Origin's follows no rule we found (with descending counts `b` came before `a` but `''`
+  before `Cc` before `d`; with ascending counts the numbers 10 before 7, as texts). Sheaf puts them in ascending value
+  order; the counts, the frequencies of each category and the cumulative frequency at the end of each run of equal
+  counts agree.
+- Categorical Order gave the order of Descending Counts on the (not categorical) columns measured and is not offered.
+  The Indexed form (a group column and a data column: one block per group) and Show Zero Count Categories (an option
+  of later Origin versions) are not built.
+- Sheaf: `sheaf_calc::{discrete_frequency, Category, DiscSort}`; `Tool::DiscreteFrequency` (`DiscreteFreqSpec`);
+  Statistics > Descriptive Statistics > Discrete Frequency...; `sheaf analyze discfreq FILE --y COLS [--relative]
+  [--cumulative] [--percent] [--no-count] [--case-sensitive] [--sort cdesc|casc|vasc|vdesc]`.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

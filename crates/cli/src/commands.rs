@@ -76,6 +76,12 @@ pub(crate) fn ascii_options(r: &ReadOptions) -> Result<AsciiOptions> {
         }
         o.delimiter = Delimiter::Fixed(r.fixed_width.clone());
     }
+    if let Some(chars) = &r.delimiter_chars {
+        if chars.is_empty() {
+            bail!("--delimiter-chars must not be empty");
+        }
+        o.delimiter = Delimiter::AnyOf { chars: chars.clone(), combine: r.combine_delimiters };
+    }
     o.short_name_line = r.short_name_line.unwrap_or(0);
     o.rename_columns = !r.no_rename_columns;
     o.rename_sheet = !r.no_rename_sheet;

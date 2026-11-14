@@ -29,7 +29,8 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1713 passed (one ignored) on macOS with filtered-plot regressions plus the latest FFT/IFFT and TIFF changes (2026-11-14); formatting and strict all-target Clippy passed. Previous Windows run: 1702 with FFT/IFFT, clipboard and TIFF palette changes. Parity: 45 done, 134 partial, 55 missing of 234 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1714 passed (one ignored) on macOS with filtered-plot regressions and the FFT/IFFT phase-boundary portability fix (2026-11-14); formatting and strict all-target Clippy passed. Previous Windows run: 1702 with FFT/IFFT, clipboard and TIFF palette changes. Parity: 45 done, 134 partial, 55 missing of 234 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- FFT/IFFT CI portability: phase unwrapping treats half-turn roundoff consistently across FFT backends; the original Origin fixtures remain unchanged (analysis-tools.md 15.1). The Linux-only failure is covered by an adjacent-representable-value regression.
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)

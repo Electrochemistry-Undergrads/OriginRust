@@ -29,7 +29,7 @@ open. History of what was merged when is in `git log` (not repeated here).
   differences.
 - The owner's daily workflow (CH Instruments import, CSV, overlay plots, integration, fitting,
   figures) works end to end.
-- Tests: 1646 passed (one ignored) on macOS after the formula, import and selected-range sorting updates (2026-11-14); formatting and strict all-target Clippy passed. Previous Windows run: 1582 at `2441c53` (2026-11-13 late). Parity: 43 done, 131 partial, 57 missing of 231 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
+- Tests: 1646 passed (one ignored) on macOS after the formula, import and selected-range sorting updates (2026-11-14); formatting and strict all-target Clippy passed. Previous Windows run: 1648 at `d0347ee` (2026-11-14). Parity: 43 done, 131 partial, 57 missing of 231 rows; P0 32 / 69 / 0 (`python tools/parity-count.py`).
 - CI repair (`4b048d1`): the repeated engineering-format failure (`1.0e-24` instead of `1e-24` with one significant digit) is fixed by parsing the decimal scaling power. Strict formatting expectations remain, with a regression across positive and negative decimal powers. The full macOS workspace at that commit passed 1576 tests (one ignored), formatting, and all-target Clippy. Pushes to `main` cancel older CI runs; use pull-request CI for verification while other sessions are pushing frequently.
 
 ## In flight (do not start these; check `git branch -a` and peer-notes for newer state)
@@ -179,7 +179,8 @@ about 88 % full, check `df -h /c` before parallel builds.
 7. **Origin checks for the macOS session's work**: done on 2026-11-13/14 on the Windows machine for polar, bars,
    radar, ASCII import, Column Properties (merged branches `origin-checks-*`), ternary (graphing 14.20), pies (14.21),
    curve mathematics (analysis-curve-math 4), Reduce to Evenly Spaced X (analysis-tools 12.2) and the drawn-object
-   tools (graphing 17). Left: avecurves spline ends and a turning X; the interactive Subtract Straight Line and Curve
+   tools (graphing 17), Peak Analyzer and Import Wizard pages, Layer Contents, Plot Setup, partial import and
+   quoted fields (import-ascii 16). Left: avecurves spline ends and a turning X; the interactive Subtract Straight Line and Curve
    Translate on the graph; Shift snapping and the ellipse tool; ternary title placement.
 
 ## Local-only resources

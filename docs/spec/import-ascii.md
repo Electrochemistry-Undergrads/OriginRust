@@ -479,3 +479,13 @@ Sheaf's wizard has these seven pages with these titles (`import_wizard.rs`): Hea
 line count and the Long Names, Units, Comments and Short Names lines; Variable Extraction and Save Filters
 are shown greyed; Data Selection holds Sheaf's partial import (rows to skip and to read); Data Columns the
 delimiter, designations and number and date settings. The other controls listed above are not offered.
+
+### 16.1 Quoted fields and the CSV import (measured 2026-11-14)
+
+On a file with quoted fields (`"Smith, J",1.5,"a ""quoted"" word"` and `'single, quote'`,
+`re-workspace/scratch/partimp`): `impASC` (File > Import > Single ASCII) has no text qualifier by default and
+splits inside the quotes; `impCSV` (File > Import > Comma Delimited (CSV)) treats `"` as the qualifier, removes
+it and reads `""` as one quote, but not `'`. Run from a script with no options, `impCSV` keeps every header line
+as data (Text & Numeric columns, no long names), while `impASC` makes the header into long names and units.
+Sheaf splits fields like `impCSV` (double quotes are a qualifier) and finds header lines like `impASC`; no change
+was made.

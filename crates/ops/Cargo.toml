@@ -1,0 +1,19 @@
+[package]
+name = "sheaf-ops"
+description = "The work behind the command line and the MCP server: import, plot, export, analyze and fit as functions that return data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+sheaf-core.workspace = true
+sheaf-io.workspace = true
+sheaf-plot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true

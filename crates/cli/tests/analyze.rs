@@ -1074,6 +1074,7 @@ fn dunnett_groups_file(dir: &Path) -> PathBuf {
         [33.0, 31.5, 34.2, 32.2, 30.9, 33.3],
     ];
     let mut text = String::from("ctrl,drugA,drugB,drugC\n");
+    #[allow(clippy::needless_range_loop)]
     for i in 0..6 {
         text.push_str(&format!("{},{},{},{}\n", g[0][i], g[1][i], g[2][i], g[3][i]));
     }

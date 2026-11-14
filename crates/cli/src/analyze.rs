@@ -1,19 +1,11 @@
 //! `sheaf analyze`: run an analysis tool on worksheet columns without a window.
 
 use crate::args::*;
-use crate::commands::{
-    is_project, load_project, named_columns, pick_book, pick_sheet, read_data_file, save_project, write_sheet,
-};
+use crate::commands::{is_project, load_project, read_data_file, save_project, write_sheet};
 use anyhow::{Result, anyhow, bail};
 use sheaf_core::Project;
 use sheaf_core::analysis::{self, BaselineSpec, IntegrateSpec, InterpSpec, Tool};
-use sheaf_core::template::Template;
-
-/// Reads "FROM:TO" as two numbers.
-pub(crate) fn parse_pair<T: std::str::FromStr>(text: &str, what: &str, example: &str) -> Result<(T, T)> {
-    let parsed = text.split_once(':').and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)));
-    parsed.ok_or_else(|| anyhow!("'{text}' is not a valid {what}; write it as FROM:TO, for example {example}"))
-}
+use sheaf_ops::analyze::{Job, OperandSpec, Outcome, Target, parse_pair};
 
 /// A number with six significant digits, without trailing zeros.
 pub(crate) fn short_number(v: f64) -> String {
@@ -74,46 +66,6 @@ fn print_table(t: &analysis::ResultTable) {
         }
         println!("{line}");
     }
-}
-
-/// What was asked for. Sorting and filtering change the sheet as a whole; every other tool
-/// works on Y columns.
-enum Job {
-    Tool(Tool),
-    /// Coherence; the second signal is looked up once the project is loaded.
-    Coherence {
-        other: String,
-        options: analysis::CoherenceOptions,
-    },
-    /// Curve math; the reference column is looked up once the project is loaded.
-    Math {
-        op: MathKind,
-        operand: OperandArgs,
-        /// Simple Column Math: row by row, no X.
-        column: bool,
-    },
-    /// Convolution or correlation; the second column is looked up once the project is loaded.
-    Signal {
-        conv: bool,
-        other: String,
-        circular: bool,
-        normalize: bool,
-        interval: Option<f64>,
-    },
-    /// Inverse FFT; the imaginary column is looked up once the project is loaded.
-    Ifft {
-        imaginary: Option<String>,
-        options: analysis::IfftOptions,
-        auto_interval: bool,
-    },
-    Sort {
-        by: String,
-        descending: bool,
-    },
-    Filter {
-        condition: String,
-        in_place: bool,
-    },
 }
 
 fn tail_of(tail: TailArg) -> analysis::Tail {
@@ -195,10 +147,14 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             if operand.reference.is_none() {
                 bail!("subtract-ref needs the reference curve: --ref COLUMN (use 'math --value' for a constant)");
             }
-            (target, Job::Math { op: MathKind::Subtract, operand, column: false })
+            (target, Job::Math { op: analysis::CurveOp::Subtract, operand: operand_spec(operand), column: false })
         }
-        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
-        AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
+        AnalyzeTool::Math { target, op, operand } => {
+            (target, Job::Math { op: curve_op(op), operand: operand_spec(operand), column: false })
+        }
+        AnalyzeTool::ColumnMath { target, op, operand } => {
+            (target, Job::Math { op: curve_op(op), operand: operand_spec(operand), column: true })
+        }
         AnalyzeTool::Envelope { target, kind, npts } => {
             let kind = match kind {
                 EnvelopeArg::Upper => analysis::EnvelopeType::Upper,
@@ -872,69 +828,6 @@ fn whole_sheet_only(target: &TargetArgs, tool: &str) -> Result<()> {
     }
 }
 
-/// Finds the reference column (loading its file if one was named) and builds the tool.
-fn math_tool(
-    project: &mut Project,
-    book: sheaf_core::WindowId,
-    sheet: usize,
-    op: MathKind,
-    operand: &OperandArgs,
-    column: bool,
-    read: &ReadOptions,
-) -> Result<Tool> {
-    let op = match op {
-        MathKind::Add => analysis::CurveOp::Add,
-        MathKind::Subtract => analysis::CurveOp::Subtract,
-        MathKind::Multiply => analysis::CurveOp::Multiply,
-        MathKind::Divide => analysis::CurveOp::Divide,
-        MathKind::Power => analysis::CurveOp::Power,
-    };
-    let operand_value = match (&operand.reference, operand.value) {
-        (None, Some(v)) => analysis::CurveOperand::Constant(v),
-        (None, None) => bail!("give the second operand: --value NUMBER or --ref COLUMN"),
-        (Some(name), _) => {
-            let (rb, rs) = match &operand.ref_file {
-                Some(file) => {
-                    let loaded = if is_project(file) {
-                        load_project(file)?
-                    } else {
-                        let mut p = Project::new();
-                        p.adopt_workbook(read_data_file(file, read)?.workbook);
-                        p
-                    };
-                    let from = pick_book(&loaded, operand.ref_book.as_deref())?;
-                    let book = loaded.workbook(from).expect("picked above").clone();
-                    let id = project.adopt_workbook(book);
-                    (id, pick_sheet(project, id, operand.ref_sheet.as_deref())?)
-                }
-                None => {
-                    let rb = match &operand.ref_book {
-                        Some(n) => pick_book(project, Some(n))?,
-                        None => book,
-                    };
-                    let rs = match (&operand.ref_sheet, rb == book) {
-                        (Some(n), _) => pick_sheet(project, rb, Some(n))?,
-                        (None, true) => sheet,
-                        (None, false) => pick_sheet(project, rb, None)?,
-                    };
-                    (rb, rs)
-                }
-            };
-            analysis::CurveOperand::Reference(named_columns(project, rb, rs, std::slice::from_ref(name))?[0])
-        }
-    };
-    if column {
-        if operand.common {
-            bail!("--common only applies to curve math; column math goes row by row");
-        }
-        return Ok(Tool::ColumnMath(analysis::ColumnMathSpec { op, operand: operand_value }));
-    }
-    if operand.common && matches!(operand_value, analysis::CurveOperand::Constant(_)) {
-        bail!("--common only applies to a reference curve");
-    }
-    Ok(Tool::CurveMath(analysis::CurveMathSpec { op, operand: operand_value, common_only: operand.common }))
-}
-
 /// `analyze power`: no data file, the table goes to the terminal (and `--export`).
 fn power(a: AnalyzeTool) -> Result<()> {
     let AnalyzeTool::Power { test, sizes, powers, mean1, mean2, sd, levels, css, alpha, one_sided, export } = a else {
@@ -963,8 +856,7 @@ fn power(a: AnalyzeTool) -> Result<()> {
         levels,
         css,
     };
-    let mut project = Project::new();
-    let report = project.power_analysis(&spec)?;
+    let (project, report) = sheaf_ops::analyze::run_power(&spec)?;
     let ws = &project.workbook(report.book).expect("just added").sheets[0];
     println!("{:>12}  {:>12}", "Sample Size", "Power");
     let (size, power) = (ws.columns[0].numeric().unwrap_or(&[]), ws.columns[1].numeric().unwrap_or(&[]));
@@ -989,61 +881,24 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         load_project(&target.input)?
     } else {
         let mut p = Project::new();
-        p.adopt_workbook(read_data_file(&target.input, &target.read)?.workbook);
+        p.adopt_workbook(read_data_file(&target.input, &crate::commands::read_settings(&target.read))?.workbook);
         p
     };
-    let book = pick_book(&project, target.book.as_deref())?;
-    let sheet = pick_sheet(&project, book, target.sheet.as_deref())?;
-    let job = match job {
-        Job::Math { op, operand, column } => {
-            Job::Tool(math_tool(&mut project, book, sheet, op, &operand, column, &target.read)?)
-        }
-        Job::Coherence { other, options } => {
-            let other = named_columns(&project, book, sheet, std::slice::from_ref(&other))?[0];
-            Job::Tool(Tool::Coherence(analysis::CoherenceSpec { other, options }))
-        }
-        Job::Ifft { imaginary, options, auto_interval } => {
-            let imaginary = match imaginary {
-                Some(name) => Some(named_columns(&project, book, sheet, std::slice::from_ref(&name))?[0]),
-                None => None,
-            };
-            Job::Tool(Tool::Ifft(analysis::IfftSpec { imaginary, options, auto_interval }))
-        }
-        Job::Signal { conv, other, circular, normalize, interval } => {
-            let other = named_columns(&project, book, sheet, std::slice::from_ref(&other))?[0];
-            Job::Tool(if conv {
-                Tool::Convolution(analysis::ConvolutionSpec { response: other, circular, normalize, interval })
-            } else {
-                let interval = interval.unwrap_or(1.0);
-                Tool::SignalCorrelation(analysis::SignalCorrelationSpec { other, circular, normalize, interval })
-            })
-        }
-        other => other,
+    let spec = Target {
+        y: target.y.clone(),
+        book: target.book.clone(),
+        sheet: target.sheet.clone(),
+        rows: target.rows.clone(),
+        x_range: target.x_range.clone(),
+        read: crate::commands::read_settings(&target.read),
     };
-
-    // The sheet that holds the results, for --export.
-    let result_sheet = match job {
-        Job::Tool(tool) => {
-            let columns = if target.y.is_empty() {
-                project.default_plot_columns(book, sheet, Template::Line)
-            } else {
-                named_columns(&project, book, sheet, &target.y)?
-            };
-            if columns.is_empty() {
-                bail!("there are no numeric Y columns to work on; name them with --y");
-            }
-            let rows = match (&target.rows, &target.x_range) {
-                (Some(r), _) => {
-                    let (from, to) = parse_pair::<usize>(r, "row range", "120:480")?;
-                    analysis::RowRange::Rows(from, to)
-                }
-                (None, Some(r)) => {
-                    let (from, to) = parse_pair::<f64>(r, "X range", "0.2:0.6")?;
-                    analysis::RowRange::XBetween(from, to)
-                }
-                (None, None) => analysis::RowRange::All,
-            };
-            let report = project.analyze(&analysis::Request { columns, rows, tool })?;
+    let run = sheaf_ops::analyze::run_job(&mut project, &spec, job)?;
+    for w in &run.load_warnings {
+        eprintln!("note: {w}");
+    }
+    crate::commands::remember_foreign(&run.foreign_inputs);
+    match &run.outcome {
+        Outcome::Report(report) => {
             if let Some(t) = &report.table {
                 print_table(t);
             }
@@ -1051,33 +906,41 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
                 println!("{note}");
             }
             println!("{}", report.message);
-            report.new_sheet.unwrap_or(sheet)
         }
-        Job::Math { .. } | Job::Signal { .. } | Job::Ifft { .. } | Job::Coherence { .. } => {
-            unreachable!("turned into a tool above")
+        Outcome::Sorted { by } => println!("sorted by column {by}"),
+        Outcome::Filtered { kept, before, sheet_name } => {
+            println!("kept {kept} of {before} rows in sheet {sheet_name}")
         }
-        Job::Sort { by, descending } => {
-            let key = named_columns(&project, book, sheet, std::slice::from_ref(&by))?[0];
-            project.sort_sheet(book, sheet, key, descending)?;
-            println!("sorted by column {by}");
-            sheet
-        }
-        Job::Filter { condition, in_place } => {
-            let before = project.workbook(book).expect("picked above").sheets[sheet].row_count();
-            let (kept, at) = project.filter_sheet(book, sheet, &condition, !in_place)?;
-            let name = &project.workbook(book).expect("picked above").sheets[at].name;
-            println!("kept {kept} of {before} rows in sheet {name}");
-            at
-        }
-    };
-
+    }
     if let Some(path) = &target.export {
-        write_sheet(&project.workbook(book).expect("picked above").sheets[result_sheet], path)?;
+        write_sheet(&project.workbook(run.book).expect("picked above").sheets[run.result_sheet], path)?;
     }
     if let Some(path) = &target.save {
         save_project(&project, path)?;
     }
     Ok(())
+}
+
+/// The operator of `math` and `subtract-ref`.
+fn curve_op(op: MathKind) -> analysis::CurveOp {
+    match op {
+        MathKind::Add => analysis::CurveOp::Add,
+        MathKind::Subtract => analysis::CurveOp::Subtract,
+        MathKind::Multiply => analysis::CurveOp::Multiply,
+        MathKind::Divide => analysis::CurveOp::Divide,
+        MathKind::Power => analysis::CurveOp::Power,
+    }
+}
+
+fn operand_spec(o: OperandArgs) -> OperandSpec {
+    OperandSpec {
+        value: o.value,
+        reference: o.reference,
+        ref_file: o.ref_file,
+        ref_book: o.ref_book,
+        ref_sheet: o.ref_sheet,
+        common: o.common,
+    }
 }
 
 fn local_span(span: f64) -> analysis::LocalSpan {
@@ -1098,13 +961,5 @@ mod tests {
         assert_eq!(short_number(0.0), "0");
         assert_eq!(short_number(f64::NAN), "--");
         assert_eq!(short_number(123456789.0), "123456789");
-    }
-
-    #[test]
-    fn ranges_are_read_as_from_colon_to() {
-        assert_eq!(parse_pair::<usize>("120:480", "row range", "120:480").unwrap(), (120, 480));
-        assert_eq!(parse_pair::<f64>("-0.5: 0.1", "X range", "0.2:0.6").unwrap(), (-0.5, 0.1));
-        assert!(parse_pair::<usize>("12-48", "row range", "120:480").is_err());
-        assert!(parse_pair::<usize>("a:3", "row range", "120:480").is_err());
     }
 }

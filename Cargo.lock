@@ -3134,6 +3134,7 @@ dependencies = [
  "clap",
  "sheaf-core",
  "sheaf-io",
+ "sheaf-ops",
  "sheaf-plot",
 ]
 
@@ -3181,6 +3182,18 @@ dependencies = [
  "sheaf-expr",
  "thiserror 2.0.21",
  "zip",
+]
+
+[[package]]
+name = "sheaf-ops"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sheaf-core",
+ "sheaf-io",
+ "sheaf-plot",
 ]
 
 [[package]]

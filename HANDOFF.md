@@ -58,6 +58,11 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
 
 ## Known issues and table UI verification
 
+- T05 PSD graph export: Export Graphs > Photoshop Document and CLI/API `.psd` output support
+  RGB, grayscale and 256 colors with DPI metadata. The image is flattened onto white, without
+  editable graph layers. PSD dimensions are limited before pixel allocation; graphing.md 9.4
+  records the published references and limits.
+
 - T19 import separators: **Other** reads a set of delimiter characters, with optional
   **Treat Consecutive Delimiters as One**; **Multiple Characters** reads a whole sequence.
   CLI equivalents: `--delimiter-chars` / `--combine-delimiters` and `--delimiter` respectively.

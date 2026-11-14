@@ -22,6 +22,7 @@ pub mod markup;
 mod pie;
 mod plots;
 mod polar;
+mod psd;
 mod raster;
 pub mod scene;
 mod shapes;
@@ -87,8 +88,10 @@ pub enum PlotError {
         #[source]
         source: std::io::Error,
     },
-    /// The file name has an extension that is not one of svg, png, tif, tiff, jpg, jpeg, bmp, gif, pdf, eps, emf.
-    #[error("cannot export to '.{0}' files; use .svg, .png, .tif, .pdf, .eps or .emf")]
+    /// The file name has an unsupported figure extension.
+    #[error(
+        "cannot export to '.{0}' files; use .svg, .png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .pdf, .eps or .emf"
+    )]
     UnknownFormat(String),
 }
 
@@ -542,7 +545,9 @@ pub fn export_bytes_opts(
     match ext {
         "svg" => Ok(svg.into_bytes()),
         e if raster::is_raster_ext(e) => {
-            raster::encode_raster(&raster::rasterise(&svg, dpi / 72.0, fonts)?, e, dpi, opts)
+            let max_side = (e == "psd").then_some(psd::MAX_DIMENSION);
+            let image = raster::rasterise_with_limit(&svg, dpi / 72.0, fonts, max_side)?;
+            raster::encode_raster(&image, e, dpi, opts)
         }
         "pdf" => raster::to_pdf(&svg, fonts),
         _ => Err(PlotError::UnknownFormat(ext.to_string())),

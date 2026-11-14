@@ -246,6 +246,33 @@ impl SheafApp {
     }
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
+    /// File > Append: the windows of the project in `path` join this project in a folder named
+    /// after the file, in one undo step.
+    fn append_project_file(&mut self, path: &Path) {
+        match sheaf_io::open_project(path) {
+            Ok(opened) => {
+                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Appended").to_string();
+                let mut added = (Vec::new(), 0);
+                self.doc.apply("Append project", |p| added = p.append(opened.project, &name));
+                let (ids, dropped) = added;
+                for id in ids.iter().take(MAX_TABS_AT_ONCE) {
+                    self.focus(*id);
+                }
+                self.say(format!("Appended {} window(s) from {}", ids.len(), path.display()));
+                let mut notes = opened.warnings;
+                if dropped > 0 {
+                    notes.push(format!(
+                        "{dropped} analysis result(s) of the appended project no longer recalculate; their values are kept."
+                    ));
+                }
+                if !notes.is_empty() {
+                    self.message = Some(("Notes about the appended project".to_string(), notes.join("\n\n")));
+                }
+            }
+            Err(e) => self.message = Some(("Could not append the project".to_string(), e.to_string())),
+        }
+    }
+
     fn load_project(&mut self, path: PathBuf) {
         match sheaf_io::open_project(&path) {
             Ok(opened) => {
@@ -1035,6 +1062,20 @@ impl SheafApp {
             Action::ExportData(book) => self.export_data(book),
             Action::Focus(id) => self.focus(id),
             Action::HideWindow(id) => self.workspace.hide(id),
+            Action::AppendProject(path) => {
+                let path = path.or_else(|| {
+                    let mut chooser = rfd::FileDialog::new()
+                        .set_title("Append project")
+                        .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj", "opju"]);
+                    if let Some(dir) = self.folder() {
+                        chooser = chooser.set_directory(dir);
+                    }
+                    chooser.pick_file()
+                });
+                if let Some(path) = path {
+                    self.append_project_file(&path);
+                }
+            }
             Action::DuplicateWindow(id) => {
                 let mut new = None;
                 self.doc.apply("Duplicate window", |p| new = p.duplicate_window(id));

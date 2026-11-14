@@ -397,6 +397,9 @@ pub enum Action {
     HideWindow(WindowId),
     /// Window > Duplicate: copy this workbook or graph into a new window.
     DuplicateWindow(WindowId),
+    /// File > Append: bring the windows of another project file into this one (the file, or `None`
+    /// to ask for it).
+    AppendProject(Option<std::path::PathBuf>),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).

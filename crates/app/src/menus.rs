@@ -213,6 +213,8 @@ pub enum Cmd {
     CloseWindow,
     /// Window > Duplicate: a copy of the active workbook or graph.
     DuplicateWindow,
+    /// File > Append...: bring the windows of another project into this one.
+    AppendProject,
     /// View > Project Explorer and the other panels.
     Panel(PanelId),
     Cascade,
@@ -426,7 +428,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
         keyed("&Open...", ctrl(Key::O), Cmd::OpenProject),
         grey_keyed("Open &Excel...", ctrl(Key::E)),
         grey("Open Sample Projects"),
-        grey("Appen&d..."),
+        item("Appen&d...", Cmd::AppendProject),
         item("&Close", Cmd::CloseWindow),
         sep(),
         keyed("&Save Project", ctrl(Key::S), Cmd::SaveProject),
@@ -2009,6 +2011,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::AppendProject => Action::AppendProject(None),
         Cmd::Panel(p) => Action::TogglePanel(*p),
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,

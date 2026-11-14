@@ -6099,3 +6099,22 @@ fn window_duplicate_copies_the_workbook_with_its_own_columns() {
     assert!(h.state().workspace.is_shown(books[books.len() - 1].id), "the copy is shown");
     assert_eq!(h.state().doc.undo_label(), Some("Duplicate window"));
 }
+
+#[test]
+fn file_append_brings_another_projects_windows_in_one_undo_step() {
+    let mut h = start(vec![data_file("appendproj")]);
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-append-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let other = dir.join("other.sheaf");
+    sheaf_io::save::save_project(project(&h), &other).unwrap();
+    let before = project(&h).windows.len();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::AppendProject(Some(other)), &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).windows.len(), before * 2, "every window comes over");
+    assert_eq!(project(&h).root.folders.last().unwrap().name, "other");
+    assert_eq!(h.state().doc.undo_label(), Some("Append project"));
+    // The File menu item is live (a greyed item would not be clickable).
+    menu_path(&mut h, &["File"]);
+    assert!(!h.get_by_label("Append...").accesskit_node().is_disabled());
+}

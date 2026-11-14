@@ -47,6 +47,29 @@ fn a_string_delimiter_and_fixed_widths_are_read() {
 }
 
 #[test]
+fn delimiter_character_sets_and_combined_runs_are_imported() {
+    let dir = scratch("delimiter-sets");
+    let text = "t|;i\n1|;2\n2|;3\n3|;4\n4|;5\n";
+    let (ok, err, p) = import(&dir, "sets.txt", text, &["--delimiter-chars", "|;", "--combine-delimiters"]);
+    assert!(ok, "{err}");
+    let sheet = &p.workbooks().next().unwrap().sheets[0];
+    assert_eq!(sheet.columns.len(), 2);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [2.0, 3.0, 4.0, 5.0]);
+    let (ok, err, p) = import(&dir, "sets.txt", text, &["--delimiter-chars", "|;"]);
+    assert!(ok, "{err}");
+    assert_eq!(p.workbooks().next().unwrap().sheets[0].columns.len(), 3, "empty middle cells remain by default");
+    for flags in [
+        vec!["--delimiter-chars", ""],
+        vec!["--delimiter-chars", "|;", "--delimiter", "comma"],
+        vec!["--delimiter-chars", "|;", "--fixed-width", "3"],
+        vec!["--combine-delimiters"],
+    ] {
+        let (ok, _, _) = import(&dir, "sets.txt", text, &flags);
+        assert!(!ok, "invalid flags: {flags:?}");
+    }
+}
+
+#[test]
 fn the_data_import_options_change_names_and_labels() {
     let dir = scratch("names");
     let text = "Time,Current\ns,A\n1,2\n2,3\n3,4\n4,5\n";

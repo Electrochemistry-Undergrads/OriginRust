@@ -6006,6 +6006,42 @@ fn the_import_window_reads_fixed_width_columns_and_has_ok_and_cancel_only() {
 }
 
 #[test]
+fn the_import_window_distinguishes_character_sets_and_whole_strings() {
+    use crate::actions::ImportPick;
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-delimiter-sets-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("delimiters.txt");
+    std::fs::write(&file, "t|;i\n1|;2\n2|;3\n3|;4\n4|;5\n").unwrap();
+    let mut h = start_auto_hide(vec![]);
+    h.state_mut().start_import(Some(vec![file]), ImportPick::Multiple);
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Detect")).click();
+    settle(&mut h);
+    click(&mut h, "Other");
+    h.get(By::new().role(egui::accesskit::Role::TextInput).value("|")).click();
+    settle(&mut h);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("|;".into()));
+    settle(&mut h);
+    click(&mut h, "Treat Consecutive Delimiters as One");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Other")).click();
+    settle(&mut h);
+    click(&mut h, "Multiple Characters");
+    assert!(h.query_by_label("Treat Consecutive Delimiters as One").is_none());
+    h.get(By::new().role(egui::accesskit::Role::TextInput).value("|;"));
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Multiple Characters")).click();
+    settle(&mut h);
+    click(&mut h, "Other");
+    // The characters and combine setting survive a round-trip through whole-string mode.
+    click(&mut h, "OK");
+    assert!(h.state().import.is_none());
+    let book = project(&h).workbooks().next().unwrap();
+    assert_eq!(book.sheet().columns.len(), 2);
+    assert_eq!(book.sheet().columns[1].long_name, "i");
+    assert_eq!(column(&h, "B"), [2.0, 3.0, 4.0, 5.0]);
+}
+
+#[test]
 fn the_naming_page_and_the_short_name_line_control_the_names() {
     use crate::actions::ImportPick;
     let mut h = start_auto_hide(vec![]);

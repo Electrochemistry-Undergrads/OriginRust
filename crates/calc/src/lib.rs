@@ -17,6 +17,7 @@ pub mod curvemath;
 pub mod curves;
 pub mod dierckx;
 pub mod differentiate;
+pub mod discfreq;
 pub mod freq;
 pub mod hypothesis;
 pub mod integrate;
@@ -47,6 +48,7 @@ pub use curves::{
     average_curves, intersections, polygon_area,
 };
 pub use differentiate::{DiffOptions, differentiate};
+pub use discfreq::{Category, DiscSort, DiscreteFreq, DiscreteRow, discrete_frequency};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};

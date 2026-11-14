@@ -260,8 +260,11 @@ the default project format.
       against Origin (T14 items 1-4, `c44a1a6`)
 - [x] Holm comparisons and power analysis (`d724c40`); 2D frequency counts and binning measured against
       Origin's `twoDBinning`, discrete frequency against `discfreqs` (T14 item 6, statistics.md 13, 14)
-- [ ] Statistics breadth left: cross tabulation, distribution fitting, probability plots (T14 item 6;
-      Dunnett not measurable); documented Kendall/normality
+- [x] Cross Tabulation (Statistics menu, `sheaf analyze crosstab`) and Dunnett comparisons (one-way ANOVA,
+      `--control`), checked against scipy, not Origin (T14, statistics.md 15)
+- [ ] Statistics breadth left: distribution fitting, probability plots (T14 item 6); Origin measurements of
+      cross tabulation and Dunnett on the Windows machine (statistics.md 15.3; Origin's library gives no Dunnett
+      statistic or p-value, so Dunnett may stay scipy-checked only); documented Kendall/normality
       p-value differences remain (T16)
 - [ ] Batch processing and analysis templates (batch file import already works)
 - [ ] Scripting through an embedded language

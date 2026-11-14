@@ -1350,9 +1350,9 @@ fn the_import_window_appends_columns_to_the_active_sheet_and_reads_thousands_sep
     assert!(h.query_by_label_contains("found: comma").is_some());
     // Put the data into the active sheet as new columns (the Import Mode node of the tree).
     click(&mut h, "Import Mode");
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New Books")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Start New Books")).click();
     settle(&mut h);
-    click(&mut h, "New Columns");
+    click(&mut h, "Start New Columns");
     click(&mut h, "OK");
     assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1, "no new book was made");
@@ -4685,9 +4685,9 @@ fn the_wizard_source_page_chooses_the_filter_and_the_import_mode() {
     std::fs::write(&more, "w\tz\n1\t1\n2\t2\n3\t3\n4\t4\n").unwrap();
     h.state_mut().import_wizard = Some(ImportWizard::new(vec![more]));
     settle(&mut h);
-    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("New Books")).click();
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Start New Books")).click();
     settle(&mut h);
-    click(&mut h, "New Columns");
+    click(&mut h, "Start New Columns");
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("<None>")).click();
     settle(&mut h);
     click(&mut h, "Delimited Text");
@@ -5682,7 +5682,7 @@ fn the_polar_button_of_the_2d_graphs_bar_makes_a_polar_graph() {
 }
 
 #[test]
-fn the_import_window_reads_fixed_width_columns_and_apply_keeps_the_window_open() {
+fn the_import_window_reads_fixed_width_columns_and_has_ok_and_cancel_only() {
     use crate::actions::ImportPick;
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fixed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -5701,37 +5701,34 @@ fn the_import_window_reads_fixed_width_columns_and_apply_keeps_the_window_open()
     settle(&mut h);
     click(&mut h, "Fixed Width");
     h.get_by_label("Widths");
-    // Apply imports and leaves the window; OK imports and closes it. Buttons run OK, Cancel, Apply.
-    assert!(button_x(&h, "OK") < button_x(&h, "Cancel") && button_x(&h, "Cancel") < button_x(&h, "Apply"));
-    click(&mut h, "Apply");
-    assert!(h.state().import.is_some(), "Apply keeps the window");
+    // Origin's impASC window has OK and Cancel, in that order, and no Apply.
+    assert!(button_x(&h, "OK") < button_x(&h, "Cancel"));
+    assert!(h.query_by_label("Apply").is_none(), "no Apply button");
+    click(&mut h, "OK");
+    assert!(h.state().import.is_none());
     assert_eq!(project(&h).workbooks().count(), 1);
     let book = project(&h).workbooks().next().unwrap();
     assert_eq!(book.sheet().columns.len(), 2, "the widths cut the lines into two columns");
     assert_eq!(column(&h, "B"), [3.0, 6.0, 9.0, 12.0, 15.0]);
-    click(&mut h, "OK");
-    assert!(h.state().import.is_none());
-    assert_eq!(project(&h).workbooks().count(), 2, "OK imported the file once more");
 }
 
 #[test]
-fn the_data_import_options_page_controls_the_names() {
+fn the_naming_page_and_the_short_name_line_control_the_names() {
     use crate::actions::ImportPick;
     let mut h = start_auto_hide(vec![]);
     h.state_mut().start_import(Some(vec![data_file("data-import-options")]), ImportPick::Multiple);
     settle(&mut h);
-    click(&mut h, "Data Import Options");
+    // The short-name line is part of the Header Lines page, as in Origin.
+    click(&mut h, "Header Lines");
     h.get_by_label("Line with the short names");
-    h.get_by_label("Rename the columns from the header lines");
-    h.get_by_label("Rename the book from the file name");
-    // Apply the new range to plots belongs to Replace Existing Data and is grey otherwise.
-    assert!(is_disabled(&h, "Apply the new range to plots"));
-    click(&mut h, "Rename the sheet from the file name");
-    click(&mut h, "Rename the columns from the header lines");
+    click(&mut h, "(Re)Naming Worksheet and Workbook");
+    h.get_by_label("Rename Book with (Partial) Filename");
+    assert!(h.query_by_label("Apply the new range to plots").is_none(), "Origin has no such option");
+    click(&mut h, "Rename Sheet with (Partial) Filename");
     click(&mut h, "OK");
     let book = project(&h).workbooks().next().expect("imported");
     assert_eq!(book.sheet().name, "Sheet1");
-    assert_eq!(book.sheet().columns[1].long_name, "", "the header line was skipped, not used as a label");
+    assert_eq!(book.sheet().columns[1].long_name, "up", "the header line still names the columns");
     assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
 }
 
@@ -5758,10 +5755,10 @@ fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() 
     assert_eq!(c.format, NumberFormat::Month(NameStyle::Short));
     let first = c.numeric().unwrap()[0];
     assert_eq!(c.cell_text(0), NumberFormat::Month(NameStyle::Short).format(first));
-    // The display of a month is its name style.
-    combo(&h, "Abbreviation").click();
+    // The display of a month is its name style, listed as samples like Origin's list.
+    combo(&h, "Jan").click();
     settle(&mut h);
-    click(&mut h, "Full name");
+    click(&mut h, "January");
     click(&mut h, "Apply");
     assert_eq!(project(&h).column(b).unwrap().format, NumberFormat::Month(NameStyle::Full));
     // Text keeps what the cells showed.
@@ -5776,16 +5773,13 @@ fn column_properties_offers_month_day_of_week_and_text_and_converts_the_cells() 
 }
 
 #[test]
-fn column_properties_refuses_a_short_name_longer_than_origins_limit() {
+fn column_properties_cuts_the_short_name_like_origin() {
     let mut h = start(vec![data_file("colprops-longname")]);
     let b = open_column_props(&mut h, "B");
-    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS");
+    // A longer name is cut to 18 characters and characters Origin drops are dropped, no message.
+    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQRS_T");
     click(&mut h, "OK");
-    assert!(h.state().column_props.is_some(), "the window stays open");
-    assert!(has_label(&h, "The short name may have at most 18 characters."));
-    assert_eq!(project(&h).column(b).unwrap().short_name, "B");
-    type_into_box(&mut h, 0, "ABCDEFGHIJKLMNOPQR");
-    click(&mut h, "OK");
+    assert!(h.state().column_props.is_none(), "the window closes");
     assert_eq!(project(&h).column(b).unwrap().short_name, "ABCDEFGHIJKLMNOPQR");
 }
 

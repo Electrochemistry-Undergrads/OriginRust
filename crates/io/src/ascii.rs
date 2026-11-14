@@ -6,7 +6,7 @@
 //! the user override any part through [`AsciiOptions`].
 
 use crate::error::IoError;
-use sheaf_core::column::default_short_name;
+use sheaf_core::column::{default_short_name, imported_short_name};
 use sheaf_core::datetime::{self, DateOrder};
 use sheaf_core::format::NumberFormat;
 use sheaf_core::{Column, ColumnData, ColumnId, Designation, WindowId, Workbook, Worksheet};
@@ -18,9 +18,6 @@ const DELIMITER_SAMPLE_LINES: usize = 200;
 const DATA_RUN: usize = 3;
 /// Longest worksheet name.
 const SHEET_NAME_MAX: usize = 31;
-/// Longest short name taken from a header cell.
-const SHORT_NAME_MAX: usize = 18;
-
 /// How the fields of a line are separated.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Delimiter {
@@ -1093,18 +1090,15 @@ fn detect_date_column(cells: &[&str], prefer: DateOrder) -> Option<DateColumn> {
     Some(DateColumn { values, format, ambiguous, order })
 }
 
-/// The short name of every column: the cell of the short-name line made safe, or the automatic
-/// name when there is no such cell, it has no usable character, or another column has it already.
+/// The short name of every column, as Origin's importer makes them (measured 2026-11-13): the cell
+/// of the short-name line with everything but letters, digits and dots dropped, a first digit or
+/// dot made `A`, cut to 18 characters; the automatic name when the cell is missing, has nothing
+/// left, or another column has the name already (compared without regard to case).
 fn short_names_from(cells: &[String], ncols: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for j in 0..ncols {
-        let wanted: String = cells
-            .get(j)
-            .map(|c| c.chars().filter(|ch| ch.is_alphanumeric() || *ch == '_').take(SHORT_NAME_MAX).collect())
-            .unwrap_or_default();
-        let usable = !wanted.is_empty()
-            && !wanted.starts_with(|c: char| c.is_ascii_digit())
-            && !out.iter().any(|o| o.eq_ignore_ascii_case(&wanted));
+        let wanted = cells.get(j).map(|c| imported_short_name(c)).unwrap_or_default();
+        let usable = !wanted.is_empty() && !out.iter().any(|o| o.eq_ignore_ascii_case(&wanted));
         out.push(if usable { wanted } else { default_short_name(j) });
     }
     // An automatic name can clash with a header cell that an earlier column took (`B` in the
@@ -1820,9 +1814,9 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         let opts = AsciiOptions { short_name_line: 1, long_name_line: Some(2), ..AsciiOptions::default() };
         let imp = parse_with(text, &opts);
         let names: Vec<_> = imp.workbook.sheets[0].columns.iter().map(|c| c.short_name.as_str()).collect();
-        // `Pot (V)` loses its spaces and brackets, a repeated name and a name that starts with a
-        // digit fall back to the automatic one.
-        assert_eq!(names, ["PotV", "Current", "C", "D"]);
+        // `Pot (V)` loses its spaces and brackets, a repeated name falls back to the automatic one
+        // and a first digit becomes A.
+        assert_eq!(names, ["PotV", "Current", "C", "Ard"]);
         assert_eq!(imp.workbook.sheets[0].columns[0].long_name, "volt");
         assert!(imp.warnings.iter().all(|w| !w.contains("header")), "{:?}", imp.warnings);
     }

@@ -1,0 +1,5 @@
+my_name_1	Second Col	3rd-col	abcdefghijklmnopqrstuvwxyz	9lives	my_name_1		abcdefghijklmnopqr	abcdefghijklmnopqrs	a.b	_lead	trail_	(paren)	Q1	q1	B	x y z	A
+Wave	Abs	Sig	Long	Num	Dup	E	L18	L19	Dot	U	T	P	C	D	F	G	H
+nm	au	mV	x	y	z	z	x	y	x	y	z	z	x	y	x	y	z
+1	2	3	4	5	6	7	8	9	10	11	12	13	14	15	16	17	18
+2	3	4	5	6	7	8	9	10	11	12	13	14	15	16	17	18	19

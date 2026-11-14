@@ -27,8 +27,6 @@ pub struct ImportDialog {
     pub(super) other_delimiter: String,
     /// The column widths typed for the Fixed Width delimiter.
     pub(super) fixed_widths: String,
-    /// When the data of a sheet is replaced, plots of its columns follow the new row range.
-    pub(super) apply_range: bool,
     /// Make a graph of every imported file.
     pub(super) plot: bool,
     /// The graph template; `None` uses what the importer suggests for each file.
@@ -80,7 +78,7 @@ impl ImportPage {
             ImportPage::ColumnDesignation => "Column Designation",
             ImportPage::PartialImport => "Partial Import",
             ImportPage::Miscellaneous => "Miscellaneous",
-            ImportPage::DataImportOptions => "Data Import Options",
+            ImportPage::DataImportOptions => "(Re)Naming Worksheet and Workbook",
             ImportPage::FileInfo => "File Info and Parameters",
         }
     }
@@ -130,8 +128,6 @@ pub enum ImportOutcome {
     Cancelled,
     /// The user pressed OK: import and close.
     Done(ImportRequest),
-    /// The user pressed Apply: import and keep the dialog open.
-    Apply(ImportRequest),
 }
 
 impl ImportDialog {
@@ -144,7 +140,6 @@ impl ImportDialog {
             ascii: AsciiOptions::default(),
             other_delimiter: "|".to_string(),
             fixed_widths: "10".to_string(),
-            apply_range: true,
             plot: true,
             mode: ImportMode::NewBook,
             target: None,
@@ -203,12 +198,7 @@ impl ImportDialog {
                 egui::TopBottomPanel::bottom("import_buttons").show_inside(ui, |ui| {
                     ui.add_space(6.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Origin's order is OK, Cancel, Apply; the layout runs right to left.
-                        if ui.button("Apply").on_hover_text("Import with these settings and keep this window open. Applying again repeats the import in the same mode (New Books makes another book).").clicked()
-                            && let ImportOutcome::Done(request) = self.run()
-                        {
-                            outcome = ImportOutcome::Apply(request);
-                        }
+                        // Origin's impASC window has OK and Cancel only (no Apply); the layout runs right to left.
                         if ui.button("Cancel").clicked() {
                             outcome = ImportOutcome::Cancelled;
                         }
@@ -279,7 +269,6 @@ impl ImportDialog {
             place: PlaceOptions {
                 // The sheet names of other formats (CH Instruments) are not the file name's business.
                 rename_sheet: self.ascii.rename_sheet || self.shown_format() != "ascii",
-                apply_range_to_plots: self.apply_range,
             },
         }
     }
@@ -429,41 +418,18 @@ impl ImportDialog {
         });
     }
 
-    /// Data Import Options: what the imported data is named, and what happens to graphs when the
-    /// data of a sheet is replaced.
+    /// (Re)Naming Worksheet and Workbook: whether the imported sheet and book are named from the
+    /// file name (both on in Origin).
     fn data_import_page(&mut self, ui: &mut egui::Ui) {
         let ascii = self.shown_format() == "ascii";
         ui.add_enabled_ui(ascii, |ui| {
             let o = &mut self.ascii;
-            ui.checkbox(&mut o.rename_columns, "Rename the columns from the header lines")
-                .on_hover_text("The long name, units and comments of each column come from the header lines");
-            ui.horizontal(|ui| {
-                ui.label("Line with the short names");
-                let mut line = o.short_name_line;
-                if ui
-                    .add(
-                        DragValue::new(&mut line)
-                            .range(0..=100_000)
-                            .custom_formatter(|v, _| if v == 0.0 { "none".to_string() } else { format!("{v}") }),
-                    )
-                    .changed()
-                {
-                    o.short_name_line = line;
-                }
-            });
-            ui.checkbox(&mut o.rename_sheet, "Rename the sheet from the file name");
-            ui.checkbox(&mut o.rename_book, "Rename the book from the file name");
+            ui.checkbox(&mut o.rename_sheet, "Rename Sheet with (Partial) Filename");
+            ui.checkbox(&mut o.rename_book, "Rename Book with (Partial) Filename");
         });
         if !ascii {
             ui.weak("The naming options apply to delimited text files.");
         }
-        ui.add_space(6.0);
-        ui.add_enabled_ui(self.mode == ImportMode::ReplaceSheet, |ui| {
-            ui.checkbox(&mut self.apply_range, "Apply the new range to plots").on_hover_text(
-                "When the data of a sheet is replaced, graphs of its columns plot all rows of the new data \
-                 instead of keeping the row range they had",
-            );
-        });
     }
 
     /// File Info and Parameters: the header entries the importer found in the current file.
@@ -599,6 +565,19 @@ impl ImportDialog {
                 ui.end_row();
                 ui.label("Line with comments");
                 optional_line(ui, &mut o.comments_line, detected.as_ref().map(|d| d.comments_line), "none");
+                ui.end_row();
+                ui.label("Line with the short names");
+                let mut line = o.short_name_line;
+                if ui
+                    .add(
+                        DragValue::new(&mut line)
+                            .range(0..=100_000)
+                            .custom_formatter(|v, _| if v == 0.0 { "none".to_string() } else { format!("{v}") }),
+                    )
+                    .changed()
+                {
+                    o.short_name_line = line;
+                }
                 ui.end_row();
             }
             if page == ImportPage::ColumnDesignation {

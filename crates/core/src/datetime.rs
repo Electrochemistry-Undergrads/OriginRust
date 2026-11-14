@@ -112,19 +112,19 @@ impl DatePattern {
     }
 }
 
-/// How the time of day is written. All use 24 hours.
+/// How a time is written, in the order and with the names of Origin's Time list. The patterns
+/// with `HH` count hours without wrapping at 24 (`25:30` for 1.0625 days) while the number is
+/// below 240 days; the `DDD` patterns count whole days. A negative number gets a minus sign.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TimePattern {
     /// `13:45`.
     Hm,
+    /// `13`.
+    H,
     /// `13:45:10`.
     #[default]
     Hms,
-    /// `13:45:10.250`.
-    HmsMs,
-    /// `13`.
-    H,
     /// `13:45:10.00`.
     HmsCs,
     /// `01 PM`.
@@ -139,20 +139,28 @@ pub enum TimePattern {
     Hhmm,
     /// `134510`.
     Hhmmss,
-    /// `000` (the milliseconds).
-    Millis,
+    /// `13:45:10.250`.
+    HmsMs,
+    /// `000` (elapsed days). Project files of an earlier build call this pattern `millis`.
+    #[serde(alias = "millis")]
+    ElapsedD,
     /// `000:13` (elapsed days and hours).
     ElapsedDh,
     /// `000:13:45` (elapsed days, hours and minutes).
     ElapsedDhm,
+    /// `000:13:45:10`.
+    ElapsedDhms,
+    /// `000:13:45:10.00`.
+    ElapsedDhmsCs,
+    /// `000:13:45:10.000000`.
+    ElapsedDhmsMicro,
 }
 
 impl TimePattern {
-    pub const ALL: [TimePattern; 14] = [
+    pub const ALL: [TimePattern; 17] = [
         TimePattern::Hm,
-        TimePattern::Hms,
-        TimePattern::HmsMs,
         TimePattern::H,
+        TimePattern::Hms,
         TimePattern::HmsCs,
         TimePattern::H12,
         TimePattern::Hm12,
@@ -160,32 +168,58 @@ impl TimePattern {
         TimePattern::MsCs,
         TimePattern::Hhmm,
         TimePattern::Hhmmss,
-        TimePattern::Millis,
+        TimePattern::HmsMs,
+        TimePattern::ElapsedD,
         TimePattern::ElapsedDh,
         TimePattern::ElapsedDhm,
+        TimePattern::ElapsedDhms,
+        TimePattern::ElapsedDhmsCs,
+        TimePattern::ElapsedDhmsMicro,
     ];
 
     /// True for the patterns that count whole days (they need the full number, not the fraction).
     pub fn is_elapsed(&self) -> bool {
-        matches!(self, TimePattern::ElapsedDh | TimePattern::ElapsedDhm)
+        matches!(
+            self,
+            TimePattern::ElapsedD
+                | TimePattern::ElapsedDh
+                | TimePattern::ElapsedDhm
+                | TimePattern::ElapsedDhms
+                | TimePattern::ElapsedDhmsCs
+                | TimePattern::ElapsedDhmsMicro
+        )
     }
 
     pub fn label(&self) -> &'static str {
         match self {
             TimePattern::Hm => "HH:mm",
-            TimePattern::Hms => "HH:mm:ss",
-            TimePattern::HmsMs => "HH:mm:ss.fff",
             TimePattern::H => "HH",
+            TimePattern::Hms => "HH:mm:ss",
             TimePattern::HmsCs => "HH:mm:ss.##",
-            TimePattern::H12 => "hh tt",
-            TimePattern::Hm12 => "hh:mm tt",
+            TimePattern::H12 => "hh pm",
+            TimePattern::Hm12 => "hh:mm pm",
             TimePattern::Ms => "mm:ss",
             TimePattern::MsCs => "mm:ss.##",
             TimePattern::Hhmm => "HHmm",
             TimePattern::Hhmmss => "HHmmss",
-            TimePattern::Millis => "fff",
+            TimePattern::HmsMs => "HH:mm:ss.###",
+            TimePattern::ElapsedD => "DDD",
             TimePattern::ElapsedDh => "DDD:HH",
             TimePattern::ElapsedDhm => "DDD:HH:mm",
+            TimePattern::ElapsedDhms => "DDD:HH:mm:ss",
+            TimePattern::ElapsedDhmsCs => "DDD:HH:mm:ss.##",
+            TimePattern::ElapsedDhmsMicro => "DDD:HH:mm:ss.######",
+        }
+    }
+
+    /// The smallest step the pattern shows, in microseconds: the number is rounded to it before
+    /// the fields are cut (Origin shows 0.0004 days, 34.56 s, as `00:00:35` and `00:00:34.56`).
+    fn step_micros(&self) -> i64 {
+        match self {
+            TimePattern::HmsCs | TimePattern::MsCs | TimePattern::ElapsedDhmsCs => 10_000,
+            TimePattern::HmsMs => 1_000,
+            TimePattern::ElapsedDhmsMicro => 1,
+            _ => 1_000_000,
         }
     }
 }
@@ -322,10 +356,16 @@ pub const MONTHS: [&str; 12] = [
 
 // ----- formatting ---------------------------------------------------------------------
 
+/// Year, month and day of a date number: the whole part counts, the time of day never moves the
+/// date (Origin shows 2461355.9999999 as 11/11/2026 24:00:00).
+fn day_of(v: f64) -> (i64, u32, u32) {
+    let v = if v.is_finite() { v.clamp(MIN_VALUE, MAX_VALUE) } else { 0.0 };
+    civil_from_days((v - UNIX_EPOCH_VALUE).floor() as i64)
+}
+
 /// Writes the date part of `v`.
 pub fn format_date(v: f64, pat: DatePattern) -> String {
-    let p = parts(v);
-    let (y, m, d) = (p.year, p.month, p.day);
+    let (y, m, d) = day_of(v);
     match pat {
         DatePattern::Mdy => format!("{m}/{d}/{y}"),
         DatePattern::MdyDash => format!("{m}-{d}-{y}"),
@@ -351,56 +391,82 @@ pub fn format_date(v: f64, pat: DatePattern) -> String {
     }
 }
 
-/// Writes the time of day of `v` (the fraction of the day).
+/// Up to this many days a time number counts its hours without wrapping (`25:30` for 1.0625); from
+/// 240 days on only the time of day is shown (measured in Origin: 239.9999 days is `5759:59:51`,
+/// 240.0001 days is `00:00:09`).
+const ELAPSED_HOURS_LIMIT_DAYS: f64 = 240.0;
+
+/// Writes a time number, as a Time column does. The number is rounded to the step of the pattern
+/// (whole seconds, hundredths, thousandths or microseconds) and then cut into fields, so 0.0004
+/// days is `00:00:35` and 0.99999999 days is `24:00:00` (the hours do not wrap). A negative number
+/// is written like its magnitude behind a minus sign, also when it shows as zero. Below 240 days the
+/// `HH` patterns count all the hours; from there on they show the time of day. The `DDD` patterns
+/// count the whole days of the number, at any size.
 pub fn format_time(v: f64, pat: TimePattern) -> String {
-    let p = parts(v);
-    match pat {
-        TimePattern::Hm => format!("{:02}:{:02}", p.hour, p.minute),
-        TimePattern::Hms => format!("{:02}:{:02}:{:02}", p.hour, p.minute, p.second),
-        TimePattern::HmsMs => format!("{:02}:{:02}:{:02}.{:03}", p.hour, p.minute, p.second, p.milli),
-        TimePattern::H => format!("{:02}", p.hour),
-        TimePattern::HmsCs => format!("{:02}:{:02}:{:02}.{:02}", p.hour, p.minute, p.second, p.milli / 10),
-        TimePattern::H12 => format!("{:02} {}", hour12(p.hour), am_pm(p.hour)),
-        TimePattern::Hm12 => format!("{:02}:{:02} {}", hour12(p.hour), p.minute, am_pm(p.hour)),
-        TimePattern::Ms => format!("{:02}:{:02}", p.minute, p.second),
-        TimePattern::MsCs => format!("{:02}:{:02}.{:02}", p.minute, p.second, p.milli / 10),
-        TimePattern::Hhmm => format!("{:02}{:02}", p.hour, p.minute),
-        TimePattern::Hhmmss => format!("{:02}{:02}{:02}", p.hour, p.minute, p.second),
-        TimePattern::Millis => format!("{:03}", p.milli),
-        TimePattern::ElapsedDh => format!("{:03}:{:02}", elapsed_days(v), p.hour),
-        TimePattern::ElapsedDhm => format!("{:03}:{:02}:{:02}", elapsed_days(v), p.hour, p.minute),
-    }
+    let sign = if v < 0.0 { "-" } else { "" };
+    let a = if v.is_finite() { v.abs() } else { 0.0 };
+    let step = pat.step_micros();
+    let per_day = 86_400_000_000 / step;
+    let rounded_units = |x: f64| (x * per_day as f64 + 0.5).floor() as i64;
+    let (days, units) = if pat.is_elapsed() || a >= ELAPSED_HOURS_LIMIT_DAYS {
+        let whole = a.floor();
+        (whole.min(9e18) as i64, rounded_units(a - whole))
+    } else {
+        (0, rounded_units(a))
+    };
+    let micros = units * step;
+    let hours = micros / 3_600_000_000;
+    let minute = micros / 60_000_000 % 60;
+    let second = micros / 1_000_000 % 60;
+    let micro = micros % 1_000_000;
+    let (cs, ms) = (micro / 10_000, micro / 1000);
+    let h12 = hours % 24;
+    let body = match pat {
+        TimePattern::Hm => format!("{hours:02}:{minute:02}"),
+        TimePattern::H => format!("{hours:02}"),
+        TimePattern::Hms => format!("{hours:02}:{minute:02}:{second:02}"),
+        TimePattern::HmsCs => format!("{hours:02}:{minute:02}:{second:02}.{cs:02}"),
+        TimePattern::H12 => format!("{:02} {}", hour12(h12), am_pm(h12)),
+        TimePattern::Hm12 => format!("{:02}:{minute:02} {}", hour12(h12), am_pm(h12)),
+        TimePattern::Ms => format!("{minute:02}:{second:02}"),
+        TimePattern::MsCs => format!("{minute:02}:{second:02}.{cs:02}"),
+        TimePattern::Hhmm => format!("{hours:02}{minute:02}"),
+        TimePattern::Hhmmss => format!("{hours:02}{minute:02}{second:02}"),
+        TimePattern::HmsMs => format!("{hours:02}:{minute:02}:{second:02}.{ms:03}"),
+        TimePattern::ElapsedD => format!("{days:03}"),
+        TimePattern::ElapsedDh => format!("{days:03}:{hours:02}"),
+        TimePattern::ElapsedDhm => format!("{days:03}:{hours:02}:{minute:02}"),
+        TimePattern::ElapsedDhms => format!("{days:03}:{hours:02}:{minute:02}:{second:02}"),
+        TimePattern::ElapsedDhmsCs => format!("{days:03}:{hours:02}:{minute:02}:{second:02}.{cs:02}"),
+        TimePattern::ElapsedDhmsMicro => format!("{days:03}:{hours:02}:{minute:02}:{second:02}.{micro:06}"),
+    };
+    format!("{sign}{body}")
 }
 
-fn hour12(h: u32) -> u32 {
-    if h.is_multiple_of(12) { 12 } else { h % 12 }
+fn hour12(h: i64) -> i64 {
+    if h % 12 == 0 { 12 } else { h % 12 }
 }
 
-fn am_pm(h: u32) -> &'static str {
+fn am_pm(h: i64) -> &'static str {
     if h < 12 { "AM" } else { "PM" }
-}
-
-/// Whole elapsed days of a time number (never negative).
-fn elapsed_days(v: f64) -> i64 {
-    if v.is_finite() { v.floor().max(0.0) as i64 } else { 0 }
 }
 
 /// Writes date and time of day separated by a space.
 ///
 /// Elapsed patterns (`DDD:HH`) mean nothing next to a calendar date (the day count would be the
-/// serial number), so they fall back to the time of day without the day count.
+/// serial number), so they fall back to the same fields without the day count. The time of day is
+/// rounded to the step of the pattern and may reach `24:00:00` on the same date, as in Origin.
 pub fn format_date_time(v: f64, date: DatePattern, time: TimePattern) -> String {
     let time = match time {
-        TimePattern::ElapsedDh => TimePattern::H,
+        TimePattern::ElapsedD | TimePattern::ElapsedDh => TimePattern::H,
         TimePattern::ElapsedDhm => TimePattern::Hm,
+        TimePattern::ElapsedDhms => TimePattern::Hms,
+        TimePattern::ElapsedDhmsCs => TimePattern::HmsCs,
+        TimePattern::ElapsedDhmsMicro => TimePattern::HmsMs,
         t => t,
     };
-    format!("{} {}", format_date(v, date), format_time(v, time))
-}
-
-/// A time-only column holds the fraction of a day; a stored whole-day offset is ignored.
-pub(crate) fn time_only_fraction(v: f64) -> f64 {
-    v - v.floor()
+    let fraction = if v.is_finite() { v - v.floor() } else { 0.0 };
+    format!("{} {}", format_date(v, date), format_time(fraction, time))
 }
 
 // ----- parsing -------------------------------------------------------------------------
@@ -618,10 +684,14 @@ mod tests {
         let v = date_value(2026, 2, 5).unwrap() + time_value(1, 5, 9.123).unwrap();
         let p = parts(v);
         assert_eq!((p.year, p.month, p.day, p.hour, p.minute, p.second, p.milli), (2026, 2, 5, 1, 5, 9, 123));
-        // A value a hair below midnight rolls into the next day.
+        // A value a hair below midnight rolls into the next day in `parts`, but the displayed date
+        // stays and the time reads 24:00:00, as in Origin.
         let v = date_value(2026, 11, 11).unwrap() + time_value(23, 59, 59.0).unwrap() + 0.9999 / 86_400.0;
         let p = parts(v);
         assert_eq!((p.day, p.hour, p.minute, p.second, p.milli), (12, 0, 0, 0, 0));
+        assert_eq!(format_date_time(v, DatePattern::Mdy, TimePattern::Hms), "11/11/2026 24:00:00");
+        assert_eq!(format_date_time(2_461_355.573_044, DatePattern::Mdy, TimePattern::Hms), "11/11/2026 13:45:11");
+        assert_eq!(format_date_time(2_461_355.500_005_8, DatePattern::Mdy, TimePattern::Hms), "11/11/2026 12:00:01");
         assert_eq!(weekday(date_value(2026, 11, 11).unwrap()), 2); // Wednesday
         assert_eq!(weekday(date_value(1970, 1, 1).unwrap()), 3); // Thursday
     }

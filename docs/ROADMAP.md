@@ -250,7 +250,8 @@ the default project format.
 - [x] Figure export breadth: SVG, PDF, EPS, EMF and PNG/TIFF/JPEG/BMP/GIF/TGA/PCX/PSD; size units,
       margins, colour depth and compression/quality controls; Copy Page bitmap and Windows EMF
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
-      Graph/dialog themes and some palette modes remain
+      TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
+      Graph/dialog themes, mono and 16-color modes remain
 - [ ] Matrices, contour plots and heatmaps (matrix branch is not merged)
 - [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,
       correlation and normality tests (`148e9b1`); expanded descriptive statistics and statistics

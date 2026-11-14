@@ -199,7 +199,7 @@ pub(crate) fn encode_png_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Result
     Ok(out)
 }
 
-/// Encodes the picture as a TIFF with the resolution recorded (24-bit RGB or 8-bit grey).
+/// Encodes a TIFF with resolution recorded: 24-bit RGB, indexed 256 colors or 8-bit grey.
 pub(crate) fn encode_tiff_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
     use tiff::encoder::{Compression, colortype};
     let err = |e: tiff::TiffError| PlotError::Tiff(e.to_string());
@@ -218,6 +218,23 @@ pub(crate) fn encode_tiff_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Resul
             let mut image = enc.new_image::<colortype::Gray8>(r.width, r.height).map_err(err)?;
             image.resolution(tiff::tags::ResolutionUnit::Inch, res);
             image.write_data(&luma(&rgb)).map_err(err)?;
+        } else if o.depth == ColorDepth::Colors256 {
+            let ix = quantise(&rgb);
+            // Palette images store one 8-bit index per pixel, like Gray8's sample layout.
+            // Override its interpretation and attach TIFF's planar 16-bit RGB color table.
+            let mut image = enc.new_image::<colortype::Gray8>(r.width, r.height).map_err(err)?;
+            image.resolution(tiff::tags::ResolutionUnit::Inch, res);
+            image
+                .encoder()
+                .write_tag(
+                    tiff::tags::Tag::PhotometricInterpretation,
+                    tiff::tags::PhotometricInterpretation::RGBPalette.to_u16(),
+                )
+                .map_err(err)?;
+            let map: Vec<u16> =
+                (0..3).flat_map(|channel| ix.palette.iter().map(move |rgb| u16::from(rgb[channel]) * 257)).collect();
+            image.encoder().write_tag(tiff::tags::Tag::ColorMap, map.as_slice()).map_err(err)?;
+            image.write_data(&ix.indices).map_err(err)?;
         } else {
             let mut image = enc.new_image::<colortype::RGB8>(r.width, r.height).map_err(err)?;
             image.resolution(tiff::tags::ResolutionUnit::Inch, res);

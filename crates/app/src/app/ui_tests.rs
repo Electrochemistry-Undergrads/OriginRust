@@ -1350,6 +1350,50 @@ fn export_graphs_psd_picker_writes_rgb_grey_and_indexed_images() {
 }
 
 #[test]
+fn export_graphs_tiff_palette_and_compression_choices_write_indexed_files() {
+    let mut h = start(vec![data_file("export-tiff-palette")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["File", "Export Graphs..."]);
+    h.get_by_value("Portable Network Graphics (*.png)").click();
+    settle(&mut h);
+    click(&mut h, "Tagged Image File Format (*.tif)");
+    h.get_by_value("24-bit Color").click();
+    settle(&mut h);
+    click(&mut h, "256 Colors");
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-tiff-palette-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    h.state_mut().export.as_mut().unwrap().set_path(&dir);
+    let mut current = "LZW";
+    for (name, compression, expected) in [("lzw", "LZW", 5), ("raw", "None", 1), ("packbits", "PackBits", 32773)] {
+        if compression != current {
+            h.get_by_value(current).click();
+            settle(&mut h);
+            h.get_all_by_label(compression).last().unwrap().click();
+            settle(&mut h);
+            current = compression;
+        }
+        h.state_mut().export.as_mut().unwrap().set_file_name(name);
+        settle(&mut h);
+        click(&mut h, "Apply");
+        let bytes = std::fs::read(dir.join(format!("{name}.tif"))).expect("Apply writes the indexed TIFF");
+        let ifd = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        let count = u16::from_le_bytes(bytes[ifd..ifd + 2].try_into().unwrap()) as usize;
+        let short_tag = |tag| {
+            let at = (0..count)
+                .map(|i| ifd + 2 + 12 * i)
+                .find(|&at| u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap()) == tag)
+                .unwrap();
+            u16::from_le_bytes(bytes[at + 8..at + 10].try_into().unwrap())
+        };
+        assert_eq!(short_tag(262), 3, "palette color");
+        assert_eq!(short_tag(258), 8, "one 8-bit index per pixel");
+        assert_eq!(short_tag(259), expected, "chosen compression");
+    }
+    click(&mut h, "Cancel");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn integrate_ranges_runs_from_the_analysis_menu_with_two_ranges() {
     let mut h = start(vec![data_file("ranges")]);
     show_window(&mut h, "Book1 - sample");

@@ -92,10 +92,13 @@ impl ExportFormat {
     /// The colour depths the format can store.
     fn depths(self) -> &'static [ColorDepth] {
         match self {
-            ExportFormat::Png | ExportFormat::Bmp | ExportFormat::Tga | ExportFormat::Pcx | ExportFormat::Psd => {
-                &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8]
-            }
-            ExportFormat::Tiff | ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Png
+            | ExportFormat::Bmp
+            | ExportFormat::Tga
+            | ExportFormat::Pcx
+            | ExportFormat::Psd
+            | ExportFormat::Tiff => &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
             ExportFormat::Gif => &[ColorDepth::Colors256],
             _ => &[],
         }

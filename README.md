@@ -78,6 +78,34 @@ cargo run --release -p sheaf-cli -- --help
 Projects save as `.sheaf` or Origin `.opj`; see the
 [project format documentation](docs/spec/project-file-format.md).
 
+## Use Sheaf from Claude or other AI tools
+
+`sheaf-mcp` is a Model Context Protocol server. An assistant can import data, read columns, plot,
+analyze, fit, export figures and save projects. It works on a project held by the server and sees
+only the folders you give with `--root`; with no `--root` every file path is refused.
+
+```sh
+cargo build --release -p sheaf-mcp
+
+# Claude Code
+claude mcp add sheaf -- /path/to/target/release/sheaf-mcp --root /path/to/my/data
+```
+
+For Claude Desktop, add this to `claude_desktop_config.json` and restart the app:
+
+```json
+{
+  "mcpServers": {
+    "sheaf": {
+      "command": "/path/to/target/release/sheaf-mcp",
+      "args": ["--root", "/path/to/my/data"]
+    }
+  }
+}
+```
+
+The tools and their limits are listed in [docs/spec/mcp.md](docs/spec/mcp.md).
+
 ## Under the hood
 
 - Eight Rust crates separate the workbook model, expression language, analysis, fitting,

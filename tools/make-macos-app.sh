@@ -26,12 +26,13 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 target="${CARGO_TARGET_DIR:-$root/target}"
 version="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$root/Cargo.toml" | head -1)"
 
-cargo build --release -p sheaf-app --manifest-path "$root/Cargo.toml"
+cargo build --release -p sheaf-app -p sheaf-mcp --manifest-path "$root/Cargo.toml"
 
 app="$target/release/Sheaf.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$target/release/sheaf-app" "$app/Contents/MacOS/sheaf-app"
+cp "$target/release/sheaf-mcp" "$app/Contents/MacOS/sheaf-mcp"
 cp "$root/crates/app/assets/icon/Sheaf.icns" "$app/Contents/Resources/Sheaf.icns"
 
 cat > "$app/Contents/Info.plist" <<PLIST

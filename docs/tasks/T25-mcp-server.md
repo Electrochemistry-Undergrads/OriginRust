@@ -1,6 +1,6 @@
 # T25: MCP server so Claude and other AI tools can use Sheaf
 
-**Status:** open (owner's request, 2026-11-14). **Size:** L. **Model:** Sonnet.
+**Status:** phase 1 done on branch `mcp-server` (not merged); phase 2 (`--attach` to the open desktop app) left. Owner's request, 2026-11-14. **Size:** L. **Model:** Sonnet.
 
 ## Goal
 

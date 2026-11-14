@@ -253,6 +253,10 @@ the default project format.
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
       TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
       Graph/dialog themes, mono and 16-color modes remain
+- [x] MCP server (T25 phase 1, branch `mcp-server`): `sheaf-mcp` speaks the Model Context Protocol over
+      stdio so Claude and other AI tools can import, plot, analyze, fit, export and save through the
+      shared `sheaf-ops` crate; file access is limited to `--root` folders. Phase 2 (act on the open
+      desktop app) and the analysis tools not yet exposed are left (`docs/spec/mcp.md`)
 - [ ] Matrices, contour plots and heatmaps (matrix branch is not merged)
 - [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,
       correlation and normality tests (`148e9b1`); expanded descriptive statistics and statistics

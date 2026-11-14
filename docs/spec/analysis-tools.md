@@ -725,8 +725,7 @@ Observed (Origin, `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`;
   `sum_j a[(j - k - 1) mod N] b[j]`, that is the plain circular correlation read from the far end.
   Checked on two data sets and both argument orders.
 - Normalize (correlation): divided by sqrt(sum a^2 * sum b^2).
-- Decimation (`decimate`) was probed as well, but Origin refused factors 3, 4 and 5 on 11 and 12
-  points and its moving-average filter gave values not explained yet; not built.
+- Decimation (`decimate`) is section 13.4.
 
 Sheaf: `sheaf_calc::convolve`, `correlate`; `Tool::Convolution(ConvolutionSpec)` and
 `Tool::SignalCorrelation(SignalCorrelationSpec)`. The results go to a new sheet `Convolution<n>`
@@ -836,6 +835,49 @@ bartlett|hanning|hamming|blackman|gaussian|kaiser] [--alpha A] [--beta B] [--int
 Not measured or not built: the Origin result graph, the output into existing columns, the
 interval taken from X (Sheaf follows what Origin does, 1), other detrending, and the phase or the
 cross spectrum.
+### 13.4 Decimation (`decimate`)
+
+Analysis > Signal Processing > Decimation. Options (from the X-Function file): `iy` (X and Y
+range), `d` (Resample Factor, default 2; the dialog slider runs 5 to 205 but smaller factors work),
+`filter` (`none` No Filter, `ave` Moving Average Filter, `fir` FIR Filter; default none), `order`
+(FIR order, default 30), `plot` (preview, no data), `oy` (new X and Y columns, "Decimated X1" and
+"Decimated Y1" by default) and `newsize` (an output value: assigning it from LabTalk is refused).
+Observed (`re-workspace/scratch/decimation/p1..p11.out.txt`; p1/p2/p3 which factors are refused on
+10 to 200 points, p4 the three filters, p5 and p6 impulse responses, p7 to p9 the FIR order, p11 the
+fixture; earlier `re-workspace/scratch/signal/sig1.out.txt` and `sig2.out.txt`; Rust tests in
+`crates/calc/src/decimate.rs`, 1e-12):
+
+- Result: `ceil(n / d)` points, point `k` is row `k * d` of the input, X and Y both (X values need
+  not be even). Factor 1 copies the data.
+- Refused (the X-Function returns false, no output): fewer than 2 points; a factor of 3 or more with
+  fewer than `10 * d` points (30 points allow 3, 29 do not; 59 points allow 5, not 6; 120 allow 12,
+  119 do not); a FIR order below 8 or above 60 (8 and 60 accepted, 7 and 61 refused, at 5 to 200
+  points; the points do not matter). Factors 1 and 2 are accepted from 2 points up. This is why the
+  earlier 11 and 12 point probes refused 3, 4 and 5, and why the values seen after the refused
+  calls were the leftovers of the call before.
+- `ave`: the triangle with weights `1, 2, .., d + 1, .., 2, 1` over `(d + 1)^2` centred on the kept
+  row (impulse responses, d = 2 and 3, 60 points: 1/9, 2/9, 3/9 and 1/16, 2/16, 3/16, 4/16), that
+  is the moving average of `d + 1` points applied twice; rows before the start count as 0 (the
+  first value of the ramp 1..20 at d = 2 is 1.111, the middle ones are exact). The filter is not
+  centred at the end: the kept row whose window reaches past the last row loses the weight of the
+  missing rows (60 points, d = 3: the last value has weights 1, 2, 3, 3, 2, 1 over 16 on the last
+  six rows, a total of 12/16, not 1, 2, 3, 4, 3, 2, 1). Equivalent: the second moving average reads
+  the first only up to the last row, `a[t] = 0` for `t >= n`. Checked on 61 to 100 points with
+  factors 3 to 7, where the last kept row is anywhere in a window.
+- `fir`: the same triangle with half width `order` instead of `d`, whatever the factor (impulse
+  response for d = 1, 2, 3, 5 at order 30: peak `31 / 961`; order 10: peak `11 / 121`), same start
+  and end rule. Checked against Origin for orders 8 to 12, 50, 58 to 60 and the default 30 on up to
+  100 points. The name FIR is Origin's; the filter it computes is this triangle, there is no
+  designed low pass in the numbers.
+- Not measured: missing values inside the input (the probes could not make a blank cell through
+  LabTalk; Sheaf refuses them, as in section 13), and `plot`.
+
+Sheaf: `sheaf_calc::decimate` (`DecimateOptions`, `DecimateFilter`, `DecimateError`),
+`Tool::Decimate(DecimateSpec)`. The result goes to a new sheet `Decimate<n>` with the kept X (the
+input's X name with "Decimated " in front, same unit) and Y per input; the Y comment says which point
+and filter. Origin's refusals are reported as errors with the same limits. Window: Analysis > Signal
+Processing > Decimation... (Resample Factor, Filter Type, Order). Command line: `sheaf analyze
+decimate FILE --y B [--factor D] [--filter none|ave|fir] [--order N]`.
 
 ## 14. Level crossing (`levelcrossing`)
 

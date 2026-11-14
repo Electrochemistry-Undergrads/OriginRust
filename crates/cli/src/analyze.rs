@@ -224,6 +224,15 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             let options = analysis::CoherenceOptions { fft_len, win_len, overlap, window, interval };
             (target, Job::Coherence { other, options })
         }
+        AnalyzeTool::Decimate { target, factor, filter, order } => {
+            let filter = match filter {
+                DecimateFilterArg::None => analysis::DecimateFilter::None,
+                DecimateFilterArg::Ave => analysis::DecimateFilter::MovingAverage,
+                DecimateFilterArg::Fir => analysis::DecimateFilter::Fir,
+            };
+            let options = analysis::DecimateOptions { factor, filter, order };
+            (target, Job::Tool(Tool::Decimate(analysis::DecimateSpec { options })))
+        }
         AnalyzeTool::FftFilter { target, kind, cutoff, freq1, freq2, threshold, pass, stop, no_offset, interval } => {
             let kind = match kind {
                 FftFilterArg::LowPass => analysis::FftFilterType::LowPass,

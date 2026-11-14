@@ -27,8 +27,9 @@ use sheaf_core::analysis::{
     PeakFitSpec, PeakShape,
 };
 use sheaf_core::analysis::{
-    CoherenceOptions, CoherenceSpec, CoherenceWindow, EnvelopeOptions, EnvelopeSpec, EnvelopeType, FftFilterOptions,
-    FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm, WindowCorrection,
+    CoherenceOptions, CoherenceSpec, CoherenceWindow, DecimateFilter, DecimateSpec, EnvelopeOptions, EnvelopeSpec,
+    EnvelopeType, FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm,
+    WindowCorrection,
 };
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
@@ -66,6 +67,8 @@ pub enum AnalysisKind {
     Envelope,
     /// Signal Processing > Coherence (Origin's `cohere`).
     Coherence,
+    /// Signal Processing > Decimation (Origin's `decimate`).
+    Decimate,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -120,7 +123,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 22] = [
+    pub const ALL: [AnalysisKind; 23] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -139,6 +142,7 @@ impl AnalysisKind {
         AnalysisKind::FftFilter,
         AnalysisKind::Envelope,
         AnalysisKind::Coherence,
+        AnalysisKind::Decimate,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -166,6 +170,7 @@ impl AnalysisKind {
             AnalysisKind::FftFilter => "FFT Filters...",
             AnalysisKind::Envelope => "Envelope...",
             AnalysisKind::Coherence => "Coherence...",
+            AnalysisKind::Decimate => "Decimation...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -230,6 +235,7 @@ impl AnalysisKind {
             "fft-filter" => AnalysisKind::FftFilter,
             "envelope" => AnalysisKind::Envelope,
             "coherence" => AnalysisKind::Coherence,
+            "decimate" => AnalysisKind::Decimate,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -599,6 +605,7 @@ pub struct AnalysisDialog {
     envelope: EnvelopeSpec,
     /// Coherence: window, lengths, overlap and interval of Origin's `cohere`.
     coherence: CoherenceOptions,
+    decimate: DecimateSpec,
     stats: StatsOptions,
     dist: super::dist_options::DistOptions,
     curves: super::math_curves::CurveOptions,
@@ -807,6 +814,36 @@ fn coherence_options(ui: &mut egui::Ui, o: &mut CoherenceOptions) {
     );
 }
 
+/// The options of Signal Processing > Decimation, with Origin's names.
+fn decimate_options(ui: &mut egui::Ui, spec: &mut DecimateSpec) {
+    let o = &mut spec.options;
+    ui.horizontal(|ui| {
+        ui.label("Resample Factor");
+        ui.add(DragValue::new(&mut o.factor).range(1..=100_000));
+    });
+    ui.horizontal(|ui| {
+        ui.label("Filter Type");
+        egui::ComboBox::from_id_salt("decimate_filter")
+            .selected_text(match o.filter {
+                DecimateFilter::None => "No Filter",
+                DecimateFilter::MovingAverage => "Moving Average Filter",
+                DecimateFilter::Fir => "FIR Filter",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut o.filter, DecimateFilter::None, "No Filter");
+                ui.selectable_value(&mut o.filter, DecimateFilter::MovingAverage, "Moving Average Filter");
+                ui.selectable_value(&mut o.filter, DecimateFilter::Fir, "FIR Filter");
+            });
+    });
+    ui.add_enabled_ui(o.filter == DecimateFilter::Fir, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Order");
+            ui.add(DragValue::new(&mut o.order).range(8..=60));
+        });
+    });
+    ui.weak("A factor of 3 or more needs ten times as many points as the factor.");
+}
+
 /// The options of Signal Processing > FFT > FFT, with Origin's names.
 fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
     let o = &mut spec.options;
@@ -1000,6 +1037,7 @@ impl AnalysisDialog {
             },
             envelope: EnvelopeSpec::default(),
             coherence: CoherenceOptions::default(),
+            decimate: DecimateSpec::default(),
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -1304,6 +1342,7 @@ impl AnalysisDialog {
                     .ok_or("there is no other column with numbers to use as the second signal")?;
                 Tool::Coherence(CoherenceSpec { other, options: self.coherence })
             }
+            AnalysisKind::Decimate => Tool::Decimate(self.decimate),
             AnalysisKind::Ifft => {
                 let imaginary = if self.use_reference {
                     Some(
@@ -1628,6 +1667,7 @@ impl AnalysisDialog {
                 self.reference_options(ui);
                 coherence_options(ui, &mut self.coherence);
             }
+            AnalysisKind::Decimate => decimate_options(ui, &mut self.decimate),
             AnalysisKind::Ifft => {
                 ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
                     ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
@@ -2375,6 +2415,7 @@ impl AnalysisDialog {
             AnalysisKind::FftFilter => "fft_filters",
             AnalysisKind::Envelope => "envelope",
             AnalysisKind::Coherence => "cohere",
+            AnalysisKind::Decimate => "decimate",
             AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
@@ -2445,6 +2486,7 @@ impl AnalysisDialog {
             AnalysisKind::FftFilter => "Remove frequencies from the input signals",
             AnalysisKind::Envelope => "The upper and lower envelope of the input curves",
             AnalysisKind::Coherence => "The magnitude-squared coherence of the input signals with a second signal",
+            AnalysisKind::Decimate => "Keep every n-th point of the input signals",
             AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
@@ -2505,6 +2547,7 @@ impl AnalysisDialog {
             | AnalysisKind::FftFilter => "New columns beside the input",
             AnalysisKind::Envelope => "The envelopes of each input, each with its X, in a new sheet",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
+            AnalysisKind::Decimate => "The kept points of each input, with their X, in a new sheet",
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
             AnalysisKind::Fft => "Eight spectrum columns per input in a new sheet",

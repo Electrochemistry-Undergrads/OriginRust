@@ -187,7 +187,8 @@ Cross-cutting findings:
 | FFT filters | low, high, band pass, block, notch | FFT Filters window, `analyze fft-filter`, `Tool::FftFilter`: the six types with Origin's automatic values (analysis-tools 15.2) | ✓ | checked against Origin | P1 |
 | Envelope | envelope | Envelope window, `analyze envelope`, `Tool::Envelope`: upper, lower or both, natural spline through the extremes found with `npts` points on each side, Origin's report columns (analysis-tools 13.2) | ✓ | checked against Origin | P2 |
 | Coherence | cohere | Coherence window, `analyze coherence`, `Tool::Coherence`: Welch-style segment averaging with nine windows, FFT and window length, overlap and interval; each input against a second signal (analysis-tools 13.3) | ✓ | checked against Origin; no result graph | P2 |
-| Correlation, wavelets, decimation, Hilbert, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
+| Decimation | Signal Processing > Decimation (decimate) | Decimation window, `analyze decimate`, `Tool::Decimate`: factor, none, moving average and FIR filter (analysis-tools 13.4) | ◐ | checked against Origin including its refusals; FIR is the triangle Origin computes; no missing values, no preview | P2 |
+| Wavelets, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
 
 ## 7 Peaks and baseline
 

@@ -556,6 +556,31 @@ fn coherence_writes_frequency_and_coherence() {
 }
 
 #[test]
+fn decimate_writes_every_nth_point_to_a_new_sheet() {
+    let dir = scratch("decimate");
+    let data = data_file(&dir);
+    let out = dir.join("decimated.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "decimate",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--factor",
+        "2",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Decimation"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows, ["0,0", "2,2", "4,4", "6,6", "8,8", "10,10"]);
+    // Origin refuses a factor of 3 on 11 points.
+    let (ok, _, stderr) = sheaf(&["analyze", "decimate", data.to_str().unwrap(), "--y", "ramp", "--factor", "3"]);
+    assert!(!ok && stderr.contains("at least 30 points"), "{stderr}");
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);

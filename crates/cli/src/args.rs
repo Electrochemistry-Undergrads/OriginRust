@@ -896,6 +896,16 @@ pub enum EnvelopeArg {
     Both,
 }
 
+/// Decimation filter (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum DecimateFilterArg {
+    None,
+    /// Moving average, a triangle of half width `factor`.
+    Ave,
+    /// Origin's FIR filter, a triangle of half width `order`.
+    Fir,
+}
+
 /// FFT window (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftWindowArg {
@@ -1247,6 +1257,20 @@ pub enum AnalyzeTool {
         /// Sampling interval (Origin: 1 unless given, not taken from the X column).
         #[arg(long, default_value_t = 1.0)]
         interval: f64,
+    },
+    /// Keep every n-th point of each column (Origin's Signal Processing > Decimation), with its X,
+    /// in a new sheet. A factor of 3 or more needs ten times as many points as the factor.
+    Decimate {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Keep every n-th point.
+        #[arg(long, short = 'd', default_value_t = 2)]
+        factor: usize,
+        #[arg(long, value_enum, default_value_t = DecimateFilterArg::None)]
+        filter: DecimateFilterArg,
+        /// FIR filter: half width of the smoothing, 8 to 60.
+        #[arg(long, default_value_t = 30)]
+        order: usize,
     },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.

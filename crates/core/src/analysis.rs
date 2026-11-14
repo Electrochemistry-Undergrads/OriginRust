@@ -39,8 +39,8 @@ pub use sheaf_calc::{
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
 pub use sheaf_calc::{
-    CoherenceOptions, CoherenceWindow, FftFilterOptions, FftFilterType, FftOptions, FftWindow, IfftOptions, PowerNorm,
-    WindowCorrection,
+    CoherenceOptions, CoherenceWindow, DecimateFilter, DecimateOptions, FftFilterOptions, FftFilterType, FftOptions,
+    FftWindow, IfftOptions, PowerNorm, WindowCorrection,
 };
 pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
@@ -260,6 +260,13 @@ pub struct IfftSpec {
     pub options: IfftOptions,
     /// Take the sampling interval (the frequency step) from the input's X column.
     pub auto_interval: bool,
+}
+
+/// What [`Tool::Decimate`] does (Origin's Signal Processing > Decimation, `decimate`, measured;
+/// analysis-tools.md 13.4): every `factor`-th point of each input, with its X, in a new sheet.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DecimateSpec {
+    pub options: DecimateOptions,
 }
 
 /// What [`Tool::FftFilter`] does (Origin's Signal Processing > FFT Filters, `fft_filters`,
@@ -677,6 +684,7 @@ pub enum Tool {
     FftFilter(FftFilterSpec),
     Envelope(EnvelopeSpec),
     Coherence(CoherenceSpec),
+    Decimate(DecimateSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -747,6 +755,7 @@ impl Tool {
             Tool::FftFilter(_) => "FFT filter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
+            Tool::Decimate(_) => "Decimation",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -813,6 +822,7 @@ impl Tool {
             Tool::FftFilter(_) => "FFTFilter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
+            Tool::Decimate(_) => "Decimate",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1006,6 +1016,18 @@ fn signal_values(v: &[f64], name: &str) -> Result<Vec<f64>, AnalysisError> {
         return Err(AnalysisError::BadOption(format!("column {name} has missing values")));
     }
     Ok(v.to_vec())
+}
+
+/// "2nd", "3rd", "12th" for the comment of a decimated column.
+fn ordinal(n: usize) -> String {
+    let suffix = match (n % 10, n % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{n}{suffix} point")
 }
 
 /// Origin's `<auto>` sampling interval: the mean X step of the input, 1 without a usable X.
@@ -1967,6 +1989,34 @@ impl Project {
                         units: String::new(),
                         comments: format!("Coherence of {} and {oshort}{}", inp.short, inp.range_note()),
                         data: ColumnData::numeric(r.coherence),
+                    });
+                }
+            }
+            Tool::Decimate(spec) => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let x = &inp.xs()[..y.len()];
+                    let (dx, dy) = calc::decimate(x, &y, &spec.options)
+                        .map_err(|e| AnalysisError::BadOption(format!("column {}: {e}", inp.short)))?;
+                    let o = &spec.options;
+                    let how = match o.filter {
+                        DecimateFilter::None => String::new(),
+                        DecimateFilter::MovingAverage => ", moving average filter".to_string(),
+                        DecimateFilter::Fir => format!(", FIR filter of order {}", o.order),
+                    };
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: format!("Decimated {}", inp.x_name),
+                        units: inp.x_units.clone(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(dx),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("Decimated {}", inp.name),
+                        units: inp.units.clone(),
+                        comments: format!("Every {} of {}{}{how}", ordinal(o.factor), inp.short, inp.range_note()),
+                        data: ColumnData::numeric(dy),
                     });
                 }
             }
@@ -3454,6 +3504,26 @@ mod tests {
             assert!((t - i as f64).abs() < 1e-9 && (v - i as f64).abs() < 1e-9, "row {i}: {t} {v}");
         }
         assert!(r.message.starts_with("IFFT"), "{}", r.message);
+    }
+
+    #[test]
+    fn decimation_writes_every_dth_point_with_its_x_to_a_new_sheet() {
+        let (mut p, book, _, ramp) = sample();
+        let options = DecimateOptions { factor: 2, ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Decimate(DecimateSpec { options }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("Decimate"), "{}", rs.name);
+        assert_eq!(rs.columns[0].numeric().unwrap(), [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+        assert_eq!((rs.columns[0].units.as_str(), rs.columns[0].long_name.as_str()), ("s", "Decimated Time"));
+        assert_eq!(rs.columns[1].numeric().unwrap(), [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+        assert_eq!(rs.columns[1].comments, "Every 2nd point of C");
+        assert!(r.message.starts_with("Decimation"), "{}", r.message);
+        // Origin refuses a factor of 3 on 11 points.
+        let big = DecimateOptions { factor: 3, ..Default::default() };
+        assert!(matches!(
+            p.analyze(&request(&[ramp], Tool::Decimate(DecimateSpec { options: big }))),
+            Err(AnalysisError::BadOption(_))
+        ));
     }
 
     #[test]

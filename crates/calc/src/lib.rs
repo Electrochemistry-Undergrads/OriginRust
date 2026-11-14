@@ -17,6 +17,7 @@ pub mod correlation;
 pub mod crosstab;
 pub mod curvemath;
 pub mod curves;
+pub mod decimate;
 pub mod dierckx;
 pub mod differentiate;
 pub mod discfreq;
@@ -58,6 +59,7 @@ pub use curves::{
     AverageMethod, AverageOptions, AverageResult, CommonX, CurveError, Intersection, MeetKind, PolygonArea, XRange,
     average_curves, intersections, polygon_area,
 };
+pub use decimate::{DecimateError, DecimateFilter, DecimateOptions, decimate};
 pub use differentiate::{DiffOptions, differentiate};
 pub use discfreq::{Category, DiscSort, DiscreteFreq, DiscreteRow, discrete_frequency};
 pub use distfit::{

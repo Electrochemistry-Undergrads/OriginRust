@@ -1519,6 +1519,21 @@ fn ifft_opens_from_signal_processing_and_takes_the_next_column_as_the_imaginary_
 }
 
 #[test]
+fn decimation_opens_from_signal_processing_and_writes_the_kept_points_to_a_new_sheet() {
+    let mut h = start(vec![data_file("decimate")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Decimation..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("Decimate")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 4, "X and Y for each of the two inputs");
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [1.0, 3.0], "every second row");
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [2.5, 6.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Decimation"));
+}
+
+#[test]
 fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
     let mut h = start(vec![data_file("fftfilter")]);
     show_window(&mut h, "Book1 - sample");

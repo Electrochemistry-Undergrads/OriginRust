@@ -5329,6 +5329,21 @@ fn row_header_selection_can_sort_a_range_and_labels_cannot_sort_data() {
 }
 
 #[test]
+fn column_header_custom_sort_uses_the_selected_column_and_undoes() {
+    let mut h = start(vec![data_file("column-context-custom-sort")]);
+    show_window(&mut h, "Book1 - sample");
+    right_click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Sort Column", "Custom..."]);
+    assert!(h.state().sort.is_some());
+    click(&mut h, "Descending");
+    click(&mut h, "OK");
+    assert_eq!(column(&h, "B"), [8.5, 6.5, 4.5, 2.5]);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(column(&h, "B"), [2.5, 4.5, 6.5, 8.5]);
+}
+
+#[test]
 fn set_values_substitute_picker_and_formula_fill_text_cells() {
     let mut h = start(vec![data_file("substitute")]);
     show_window(&mut h, "Book1 - sample");

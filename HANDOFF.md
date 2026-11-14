@@ -71,7 +71,8 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
 - T05 PSD graph export: Export Graphs > Photoshop Document and CLI/API `.psd` output support
   RGB, grayscale and 256 colors with DPI metadata. The image is flattened onto white, without
   editable graph layers. PSD dimensions are limited before pixel allocation; graphing.md 9.4
-  records the published references and limits.
+  records the published references and limits. TIFF now also offers 256 Colors, with the
+  selected None/PackBits/LZW compression and DPI retained; mono and 16-color modes remain open.
 
 - T19 import separators: **Other** reads a set of delimiter characters, with optional
   **Treat Consecutive Delimiters as One**; **Multiple Characters** reads a whole sequence.

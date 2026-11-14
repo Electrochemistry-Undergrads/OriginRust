@@ -1,6 +1,6 @@
 # T07: Worksheet export and clipboard as Origin
 
-**Status:** done, merged (`826f390`) (export measured and matched, export window added; clipboard left as is, see below). **Size:** S. **Branch:** `sheet-export`. **Model:** Sonnet.
+**Status:** done, merged (`826f390`) (export measured and matched, export window added); clipboard text separators/quotes/line breaks now round-trip (workbook-model 13.4). Origin clipboard defaults remain unmeasured. **Size:** S. **Branch:** `sheet-export`. **Model:** Sonnet.
 **Detail:** audit E "Different" (export paragraph) and "Partial" (clipboard).
 **Spec:** `docs/spec/import-ascii.md` (export, search "expASC"), `docs/spec/workbook-model.md`.
 
@@ -43,6 +43,12 @@ Origin's `expASC` defaults are in `docs/spec/import-ascii.md` section 13.1 (raw 
 `re-workspace/scratch/sheet-export/`). Export now writes `--` for missing values, 15-digit full precision
 (`format_full_precision` in `crates/core/src/format.rs`), CR LF lines, Origin's label-row order, quoting
 and separators; the File > Export Worksheet window (`dialogs/export_sheet.rs`) sets the options. Not done:
-Copy (clipboard) still writes the shortest round-trip text for "full precision" (kept so a paste reads back
-the same bits) and its label rows are unchanged, because Origin's own Copy was not measured; the `.csv`
+Copy (clipboard) writes the shortest round-trip text for "full precision" (kept so a paste reads back
+the same bits) and its label-row selection/order is unchanged, because Origin's own Copy was not measured; the `.csv`
 whole-book export and Origin's `select`/`addxcol` options are not implemented.
+
+Clipboard follow-up (2026-11-14): Copy/Cut now quote text fields so commas in one column do not
+paste into extra columns, and tabs, line breaks and quotes survive instead of being flattened.
+Paste detects separators outside quoted fields and handles quoted one-column/multiline text.
+Core regressions and new/imported-table UI coverage exercise the complete round trip and undo.
+See workbook-model.md 13.4 for limits; this is a Sheaf correctness fix, not measured Origin parity.

@@ -2681,6 +2681,47 @@ fn copy_gives_tab_separated_text_and_paste_puts_it_back_in_one_undo_step() {
 }
 
 #[test]
+fn owner_regression_clipboard_text_keeps_its_cells_through_copy_cut_paste_and_undo() {
+    let values = ["alpha,beta", "x\ty", "line one\nline two", "say \"hi\""];
+    for imported in [false, true] {
+        let mut h = cell_regression_table(imported, "clipboard-text");
+        let a = column_id(&h, "A");
+        h.state_mut().doc.apply("Text fixture", |p| {
+            p.column_mut(a).unwrap().data = ColumnData::text(values.iter().map(|s| (*s).into()).collect());
+        });
+        settle(&mut h);
+        let before: Vec<_> = (0..4).map(|r| sheet(&h).columns[1].cell_text(r)).collect();
+        let column_count = sheet(&h).columns.len();
+
+        click_text(&mut h, "A(X1)");
+        ctrl(&mut h, egui::Key::C);
+        let copied = h.state().copied.clone();
+        assert_eq!(h.state().doc.undo_label(), Some("Text fixture"), "Copy changes no data");
+        let at = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, at);
+        paste(&mut h, &copied);
+        let texts =
+            |h: &Harness<'static, SheafApp>| (0..4).map(|r| sheet(h).columns[1].cell_text(r)).collect::<Vec<_>>();
+        assert_eq!(texts(&h), values);
+        assert_eq!(sheet(&h).columns.len(), column_count, "commas must not grow the sheet");
+        assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (1, 3) });
+        assert_eq!(h.state().doc.undo_label(), Some("Paste"));
+
+        ctrl(&mut h, egui::Key::X);
+        assert_eq!(h.state().copied, copied, "Cut uses the same lossless table text");
+        assert!(sheet(&h).columns[1].is_empty());
+        assert_eq!(h.state().doc.undo_label(), Some("Cut cells"));
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(texts(&h), values);
+        ctrl(&mut h, egui::Key::Z);
+        assert_eq!(texts(&h), before, "Undo Paste restores the original destination");
+        h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z);
+        settle(&mut h);
+        assert_eq!(texts(&h), values);
+    }
+}
+
+#[test]
 fn plain_copy_and_copy_full_precision_both_write_every_digit() {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-fullprec-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

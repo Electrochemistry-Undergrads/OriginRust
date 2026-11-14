@@ -1945,7 +1945,8 @@ impl Project {
                         v[..end].to_vec()
                     };
                     let x = trim(inp.ys());
-                    let y = trim(ovalues.get(inp.first..).unwrap_or(&[]));
+                    let y_end = (inp.last + 1).min(ovalues.len());
+                    let y = trim(ovalues.get(inp.first.min(y_end)..y_end).unwrap_or(&[]));
                     if x.is_empty() {
                         return Err(AnalysisError::TooFewPoints(inp.short.clone()));
                     }
@@ -3393,6 +3394,26 @@ mod tests {
             p.analyze(&request(&[ramp], Tool::Coherence(CoherenceSpec { other: flat, options }))),
             Err(AnalysisError::BadOption(_))
         ));
+    }
+
+    #[test]
+    fn coherence_cuts_both_signals_to_the_row_range() {
+        let (mut p, book, _, ramp) = sample();
+        let sq: Vec<f64> = (0..11).map(|i| f64::from(i * i % 7)).collect();
+        let flat = p.add_column(book, 0, Designation::Y, ColumnData::numeric(sq)).unwrap();
+        let options = CoherenceOptions { fft_len: 8, win_len: 4, overlap: 0, ..Default::default() };
+        let mut req = request(&[ramp], Tool::Coherence(CoherenceSpec { other: flat, options }));
+        req.rows = RowRange::Rows(3, 6);
+        let r = p.analyze(&req).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let got = rs.columns[1].numeric().unwrap().to_vec();
+        let x = p.locate(ramp).unwrap().2.numeric().unwrap()[2..=5].to_vec();
+        let y = p.locate(flat).unwrap().2.numeric().unwrap()[2..=5].to_vec();
+        let want = calc::coherence(&x, &y, &options).unwrap().coherence;
+        assert_eq!(got.len(), want.len());
+        for (a, b) in got.iter().zip(&want) {
+            assert!((a.is_nan() && b.is_nan()) || (a - b).abs() < 1e-12);
+        }
     }
 
     #[test]

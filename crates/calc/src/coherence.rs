@@ -53,11 +53,14 @@ pub struct CoherenceResult {
     pub coherence: Vec<f64>,
 }
 
+/// The largest FFT length (the dialog's cap).
+pub const MAX_FFT_LEN: usize = 1 << 24;
+
 /// Modified Bessel function of the first kind, order 0 (power series).
 fn bessel_i0(x: f64) -> f64 {
     let q = x * x / 4.0;
     let (mut term, mut sum) = (1.0, 1.0);
-    for k in 1..500 {
+    for k in 1..5000 {
         term *= q / (k as f64 * k as f64);
         sum += term;
         if term < sum * 1e-17 {
@@ -108,6 +111,9 @@ pub fn coherence(x: &[f64], y: &[f64], o: &CoherenceOptions) -> Result<Coherence
     if o.win_len < 2 || o.win_len > o.fft_len {
         return Err(format!("the window length must be between 2 and the FFT length {}", o.fft_len));
     }
+    if o.fft_len > MAX_FFT_LEN {
+        return Err(format!("the FFT length must be at most {MAX_FFT_LEN}"));
+    }
     if o.overlap >= o.win_len {
         return Err("the overlap must be less than the window length".to_string());
     }
@@ -121,7 +127,15 @@ pub fn coherence(x: &[f64], y: &[f64], o: &CoherenceOptions) -> Result<Coherence
     let at = |v: &[f64], i: usize| v.get(i).copied().filter(|a| !a.is_nan()).unwrap_or(0.0);
     let step = o.win_len - o.overlap;
     let segments = if n < o.win_len { 1 } else { (n - o.win_len) / step + 1 };
+    if let CoherenceWindow::Gaussian { alpha: v } | CoherenceWindow::Kaiser { beta: v } = o.window
+        && !v.is_finite()
+    {
+        return Err(format!("{v} is not a usable window parameter"));
+    }
     let w = coherence_window(o.window, o.win_len);
+    if !w.iter().all(|v| v.is_finite()) {
+        return Err("the window parameter gives a window that is not finite".to_string());
+    }
     let half = o.fft_len / 2 + 1;
     let fft = FftPlanner::<f64>::new().plan_fft_forward(o.fft_len);
     let (mut sxx, mut syy) = (vec![0.0; half], vec![0.0; half]);
@@ -149,10 +163,7 @@ pub fn coherence(x: &[f64], y: &[f64], o: &CoherenceOptions) -> Result<Coherence
     Ok(CoherenceResult {
         frequency: (0..half).map(|j| j as f64 * df).collect(),
         coherence: (0..half)
-            .map(|j| {
-                let d = sxx[j] * syy[j];
-                if d > 0.0 { sxy[j].norm_sqr() / d } else { f64::NAN }
-            })
+            .map(|j| if sxx[j] > 0.0 && syy[j] > 0.0 { sxy[j].norm_sqr() / sxx[j] / syy[j] } else { f64::NAN })
             .collect(),
     })
 }
@@ -859,8 +870,22 @@ mod tests {
             CoherenceOptions { win_len: 1, overlap: 0, ..base },
             CoherenceOptions { overlap: 16, ..base },
             CoherenceOptions { interval: 0.0, ..base },
+            CoherenceOptions { fft_len: (1 << 24) + 2, win_len: 16, ..base },
+            CoherenceOptions { window: CoherenceWindow::Gaussian { alpha: f64::NAN }, ..base },
+            CoherenceOptions { window: CoherenceWindow::Gaussian { alpha: f64::INFINITY }, ..base },
+            CoherenceOptions { window: CoherenceWindow::Kaiser { beta: f64::NAN }, ..base },
+            CoherenceOptions { window: CoherenceWindow::Kaiser { beta: 1e4 }, ..base },
         ] {
             assert!(coherence(&X, &Y, &o).is_err(), "{o:?}");
         }
+    }
+
+    #[test]
+    fn extreme_amplitudes_do_not_overflow_the_ratio() {
+        let o = CoherenceOptions { fft_len: 8, win_len: 8, overlap: 4, ..Default::default() };
+        let x: Vec<f64> = X[..16].iter().map(|v| v * 1e60).collect();
+        let r = coherence(&x, &x, &o).unwrap();
+        assert!(r.coherence.iter().all(|v| v.is_nan() || (v - 1.0).abs() < 1e-9));
+        assert!(r.coherence[0].is_finite());
     }
 }

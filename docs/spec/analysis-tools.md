@@ -794,6 +794,49 @@ only the spline one in this version), repeated X values at two extremes (refused
 tried in Origin), the default workbook name of a call without `rd`, non-numeric input, several input columns (each
 pair is named Envelope X 1/Y 1 again) and row ranges.
 
+### 13.3 Coherence (`cohere`)
+
+Analysis > Signal Processing > Coherence. Options (from the X-Function file): `ix1` and `ix2` (the two
+signals), `interval`, `fftlen` (combo 256, 512, 1024; default 256), `win` (rect, welch, tri, bartlett,
+hanning, hamming, blackman, gauss, kaiser), `winlen` (default 256), `overlap` (default 128), `alpha`
+(Gaussian) and `beta` (Kaiser), and `oy` (an X and a Y column). Observed (probe files in
+`re-workspace/scratch/coherence/`: `c1` to `c5` with the `.lines.txt` scripts and `.out.txt`
+printouts; 64 points of two correlated random signals, a few 20 point signals for missing values;
+Rust tests in `calc/coherence.rs`, all to 1e-9, in practice 1e-15):
+
+- The result is the magnitude-squared coherence `|Sxy|^2 / (Sxx Syy)` with the spectra summed over
+  the segments (Welch's method, no averaging factor needed). Rows: `fftlen / 2 + 1` (odd lengths:
+  `fftlen / 2` rounded down plus 1; 15 gave 8, 31 gave 16) with the frequency `k / (fftlen * interval)`.
+- Segments of `winlen` points start every `winlen - overlap` points; only whole segments are used
+  (64 points, window 20, overlap 7: four segments, the partial fifth dropped). Each is multiplied by
+  the window, zero padded to `fftlen`, transformed; no detrending. Data shorter than one segment is one
+  zero padded segment, so the coherence is exactly 1 (the default 256/256/128 on 64 points gave 129 rows
+  of 1).
+- Windows are the symmetric ones of the FFT tool (Welch, triangular, Bartlett, Hanning, Hamming,
+  Blackman, 16 points checked), the Gaussian `exp(-(alpha (i - c) / c)^2 / 2)` with `c = (winlen - 1) / 2`
+  (alpha 1, 2.5 and 3; alpha 0 is flat), and the Kaiser `I0(beta sqrt(1 - (2i/(winlen-1) - 1)^2)) /
+  I0(beta)` (beta 4; beta 0 is flat).
+- Signals of unequal length: the shorter one is padded with zeros to the longer (41 against 64 points,
+  both ways round). A missing value counts as 0 (inside or at the start; dropping them or compacting
+  the column gave other numbers).
+- The interval defaults to 1 and is not taken from the X column, even as an XY range or with
+  `interval:=<auto>` (the frequency step stayed 1 / fftlen for an X step of 0.5). Only a given interval
+  scales the frequencies.
+- Where a spectrum is zero (a signal of zeros) the coherence is missing (NaN in the output). A signal
+  with itself gives 1.
+- Refused: `winlen` above `fftlen`, `winlen` of 1, `overlap` of `winlen` or more, a negative overlap.
+  `winlen` of 2, overlap 0 and overlap `winlen - 1` work.
+
+Sheaf: `sheaf_calc::coherence`, `Tool::Coherence(CoherenceSpec)`: each input column against a second
+column (chosen in the window; may be an input), the frequency and the coherence in a new sheet. The
+second column is cut to the same rows as the input range. Command line: `sheaf analyze coherence
+FILE --y B --with C [--fft-len N] [--win-len N] [--overlap N] [--window rectangle|welch|triangular|
+bartlett|hanning|hamming|blackman|gaussian|kaiser] [--alpha A] [--beta B] [--interval D]`.
+
+Not measured or not built: the Origin result graph, the output into existing columns, the
+interval taken from X (Sheaf follows what Origin does, 1), other detrending, and the phase or the
+cross spectrum.
+
 ## 14. Level crossing (`levelcrossing`)
 
 Origin has the `levelcrossing` X-Function (Data Manipulation) but no menu item for it; Sheaf puts it
@@ -939,49 +982,6 @@ Sheaf: `sheaf_calc::fft_filter`, `Tool::FftFilter(FftFilterSpec)`, a new column 
 (or a new sheet or existing columns, the Output node). Command line: `sheaf analyze fft-filter FILE
 --y B [--type low-pass|high-pass|band-pass|band-block|threshold|parabolic] [--cutoff F] [--freq1 F
 --freq2 F] [--threshold T] [--pass F --stop F] [--no-offset] [--interval D]`.
-
-### 13.3 Coherence (`cohere`)
-
-Analysis > Signal Processing > Coherence. Options (from the X-Function file): `ix1` and `ix2` (the two
-signals), `interval`, `fftlen` (combo 256, 512, 1024; default 256), `win` (rect, welch, tri, bartlett,
-hanning, hamming, blackman, gauss, kaiser), `winlen` (default 256), `overlap` (default 128), `alpha`
-(Gaussian) and `beta` (Kaiser), and `oy` (an X and a Y column). Observed (probe files in
-`re-workspace/scratch/coherence/`: `c1`, `c2`, `c3`, `c4` with the `.lines.txt` scripts and `.out.txt`
-printouts; 64 points of two correlated random signals, a few 20 point signals for missing values;
-Rust tests in `calc/coherence.rs`, all to 1e-9, in practice 1e-15):
-
-- The result is the magnitude-squared coherence `|Sxy|^2 / (Sxx Syy)` with the spectra summed over
-  the segments (Welch's method, no averaging factor needed). Rows: `fftlen / 2 + 1` (odd lengths:
-  `fftlen / 2` rounded down plus 1; 15 gave 8, 31 gave 16) with the frequency `k / (fftlen * interval)`.
-- Segments of `winlen` points start every `winlen - overlap` points; only whole segments are used
-  (64 points, window 20, overlap 7: four segments, the partial fifth dropped). Each is multiplied by
-  the window, zero padded to `fftlen`, transformed; no detrending. Data shorter than one segment is one
-  zero padded segment, so the coherence is exactly 1 (the default 256/256/128 on 64 points gave 129 rows
-  of 1).
-- Windows are the symmetric ones of the FFT tool (Welch, triangular, Bartlett, Hanning, Hamming,
-  Blackman, 16 points checked), the Gaussian `exp(-(alpha (i - c) / c)^2 / 2)` with `c = (winlen - 1) / 2`
-  (alpha 1, 2.5 and 3; alpha 0 is flat), and the Kaiser `I0(beta sqrt(1 - (2i/(winlen-1) - 1)^2)) /
-  I0(beta)` (beta 4; beta 0 is flat).
-- Signals of unequal length: the shorter one is padded with zeros to the longer (41 against 64 points,
-  both ways round). A missing value counts as 0 (inside or at the start; dropping them or compacting
-  the column gave other numbers).
-- The interval defaults to 1 and is not taken from the X column, even as an XY range or with
-  `interval:=<auto>` (the frequency step stayed 1 / fftlen for an X step of 0.5). Only a given interval
-  scales the frequencies.
-- Where a spectrum is zero (a signal of zeros) the coherence is missing (NaN in the output). A signal
-  with itself gives 1.
-- Refused: `winlen` above `fftlen`, `winlen` of 1, `overlap` of `winlen` or more, a negative overlap.
-  `winlen` of 2, overlap 0 and overlap `winlen - 1` work.
-
-Sheaf: `sheaf_calc::coherence`, `Tool::Coherence(CoherenceSpec)`: each input column against a second
-column (chosen in the window; may be an input), the frequency and the coherence in a new sheet. The
-second column is read from the first row of the input range on. Command line: `sheaf analyze coherence
-FILE --y B --with C [--fft-len N] [--win-len N] [--overlap N] [--window rectangle|welch|triangular|
-bartlett|hanning|hamming|blackman|gaussian|kaiser] [--alpha A] [--beta B] [--interval D]`.
-
-Not measured or not built: the Origin result graph, the output into existing columns, the
-interval taken from X (Sheaf follows what Origin does, 1), other detrending, and the phase or the
-cross spectrum.
 
 ## Files
 

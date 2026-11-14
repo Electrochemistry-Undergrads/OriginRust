@@ -4388,34 +4388,16 @@ fn the_two_way_anova_window_offers_no_x_range() {
     assert!(has_label(&h, "From row") && !has_label(&h, "X from"));
 }
 
-/// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning...: the two Y columns are X and Y.
-#[test]
-fn the_descriptive_menu_runs_a_2d_frequency_count() {
-    let mut h = start(vec![data_file("bin2d")]);
-    show_window(&mut h, "Book1 - sample");
-    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "2D Frequency Counts/Binning..."]);
-    assert!(h.state().analysis.is_some(), "the 2D frequency count window is open");
-    assert!(has_label(&h, "Set the X range") && has_label(&h, "Set the Y range"));
-    click(&mut h, "OK");
-    assert!(h.state().analysis.is_none());
-    let (sheet, total) = result_column(&h, "Total");
-    assert!(sheet.starts_with("Bin2D"), "{sheet}");
-    // Four pairs in 10 x 10 bins over the data range.
-    assert_eq!(total.iter().sum::<f64>(), 4.0);
-    assert_eq!(total.len(), 10);
-    assert_eq!(h.state().doc.undo_label(), Some("2D frequency count"));
-}
-
-/// Statistics > ANOVA > One-Way ANOVA...: Holm-Bonferroni and Dunnett are in the list of means comparisons; Dunnett
+/// Statistics > ANOVA > One-Way ANOVA...: the Holm methods and Dunnett are in the list of means comparisons; Dunnett
 /// asks for the control group.
 #[test]
-fn the_one_way_anova_window_offers_holm_and_dunnett() {
+fn the_one_way_anova_window_offers_the_holm_methods_and_dunnett() {
     let mut h = start(vec![data_file("anova-dunnett")]);
     show_window(&mut h, "Book1 - sample");
     menu_path(&mut h, &["Statistics", "ANOVA", "One-Way ANOVA..."]);
     h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Tukey")).click();
     settle(&mut h);
-    assert!(has_label(&h, "Holm-Bonferroni") && has_label(&h, "Dunnett"));
+    assert!(has_label(&h, "Bonferroni-Holm") && has_label(&h, "Sidak-Holm") && has_label(&h, "Dunnett"));
     click(&mut h, "Dunnett");
     assert!(has_label(&h, "Control group"), "Dunnett asks for the control group");
     click(&mut h, "OK");

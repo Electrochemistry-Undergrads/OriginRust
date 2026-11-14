@@ -50,8 +50,9 @@ pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_tw
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
 pub use manip::{
-    DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, ReduceMethod, ReduceOptions, Reduced, even_grid,
-    median_filter, reduce_duplicates, reduce_evenly, shift_to_land, subtract_line_through, translate, value_at,
+    DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, REDUCE_AUTO_FACTOR, REDUCE_EVEN_TOLERANCE_PCT, ReduceGroup,
+    ReduceMethod, ReduceOptions, Reduced, even_grid, median_filter, reduce_duplicates, reduce_evenly, shift_to_land,
+    subtract_line_through, translate, value_at,
 };
 pub use nonparam::{
     KruskalWallis, MannWhitney, RankGroup, RankTestError, SIGNED_RANK_EXACT_MAX_N, SignedRank, kruskal_wallis,

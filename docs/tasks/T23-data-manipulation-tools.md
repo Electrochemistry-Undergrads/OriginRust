@@ -5,7 +5,7 @@
 frame with Recalculate Manual/Auto, and have `sheaf analyze` subcommands. Every Origin behaviour that is
 not in an earlier spec table is from Origin's public documentation, paraphrased, and is not measured; each
 is listed under "Not measured" in spec section 12 to be measured on the Windows machine with
-`tools/origin-ref`.
+`tools/origin-ref`. On 2026-11-13 (Windows) Reduce to Evenly Spaced X was measured and rebuilt as Origin's `reduce_ex` (spec 12.2), and the X-Function names were read (12, item 1): Subtract Straight Line and Curve Translate are interactive tools on the graph in Origin, and Origin has no curve median filter in Mathematics (left: making those two interactive, deciding on Median Filter).
 **Size:** M. **Branch:** `math-manip`. **Model:** Sonnet.
 **Detail:** audit D "Partial"; backlog row "Mathematics" of T18.
 **Spec:** `docs/spec/analysis-tools.md` section 9 (Subtract Reference Data, the pattern to copy) and the

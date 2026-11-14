@@ -169,27 +169,28 @@ pub(super) fn run(
                 let (gx, gy) = calc::reduce_evenly(inp.xs(), inp.ys(), opts).ok_or_else(|| {
                     AnalysisError::BadOption(format!(
                         "column {} cannot be reduced: it needs two points with different X values, and the \
-                         spacing or number of points must be valid for the X range",
+                         number of points, interval, number of intervals or frequency must be valid for its X range",
                         inp.short
                     ))
                 })?;
+                // Origin's comment names the sampling method (measured).
                 let how = match opts.method {
-                    ReduceMethod::Interpolate => "interpolated",
-                    ReduceMethod::Average => "averaged in bins",
+                    ReduceMethod::First => "Y First(X First)",
+                    ReduceMethod::Mean => "Y Mean(X Average)",
                 };
-                let n = gx.len();
+                let n = on_sheet.len() / 2 + 1;
                 on_sheet.push(SheetColumn {
                     designation: Designation::X,
-                    long_name: inp.x_name.clone(),
+                    long_name: format!("ReduceEXX{n}"),
                     units: inp.x_units.clone(),
                     comments: String::new(),
                     data: ColumnData::numeric(gx),
                 });
                 on_sheet.push(SheetColumn {
                     designation: Designation::Y,
-                    long_name: inp.name.clone(),
+                    long_name: format!("ReduceEXY{n}"),
                     units: inp.units.clone(),
-                    comments: format!("{} reduced to {n} evenly spaced X values, {how}{}", inp.label, inp.range_note()),
+                    comments: format!("{how} Stats Reduction of {}{}", inp.short, inp.range_note()),
                     data: ColumnData::numeric(gy),
                 });
             }
@@ -341,11 +342,17 @@ mod tests {
     #[test]
     fn reduce_writes_a_new_sheet_with_even_x() {
         let (mut p, y, book) = setup();
-        let opts = ReduceOptions { grid: calc::EvenGrid::Count(3), ..ReduceOptions::default() };
+        // Every 2 points: (0, 1), (2, 3) and the short run (4) at the place of a full one.
+        let opts = ReduceOptions { group: calc::ReduceGroup::EveryN(2), ..ReduceOptions::default() };
         let r = p.analyze(&req(y, Tool::ReduceX(opts))).unwrap();
         let sheet = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(sheet.columns[0].numeric().unwrap(), [0.0, 2.0, 4.0]);
-        assert_eq!(sheet.columns[1].numeric().unwrap(), [1.0, 8.0, 9.0]);
+        assert_eq!(sheet.columns[0].numeric().unwrap(), [0.5, 2.5, 4.5]);
+        assert_eq!(sheet.columns[1].numeric().unwrap(), [2.0, 7.5, 9.0]);
+        assert_eq!(
+            (sheet.columns[0].long_name.as_str(), sheet.columns[1].long_name.as_str()),
+            ("ReduceEXX1", "ReduceEXY1")
+        );
+        assert_eq!(sheet.columns[1].comments, "Y Mean(X Average) Stats Reduction of B");
     }
 
     #[test]
@@ -428,12 +435,12 @@ mod tests {
         assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
 
         let (mut p, y, book) = setup();
-        let opts = ReduceOptions { grid: calc::EvenGrid::Count(3), ..ReduceOptions::default() };
+        let opts = ReduceOptions { group: calc::ReduceGroup::EveryN(2), ..ReduceOptions::default() };
         assert!(Project::can_link(&Tool::ReduceX(opts)));
         let r = p.analyze_linked(&req(y, Tool::ReduceX(opts)), &OutputTarget::NextToInput, RecalcMode::Auto);
         let out = r.unwrap().new_columns[1];
         edit_y(&mut p, y, new_y);
-        assert_eq!(p.numeric(out).unwrap(), [0.0, 4.0, 9.0]);
+        assert_eq!(p.numeric(out).unwrap(), [1.0, 5.0, 9.0]);
         assert_eq!(p.workbook(book).unwrap().sheets.len(), 2);
     }
 

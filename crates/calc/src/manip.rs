@@ -63,19 +63,182 @@ pub fn subtract_line_through(x: &[f64], y: &[f64], p1: LinePoint, p2: LinePoint)
     Some(subtract_line(x, y, resolve(p1)?, resolve(p2)?))
 }
 
-/// How [`reduce_evenly`] gets the Y value at each new X.
+/// How [`reduce_evenly`] makes one point of a group (Origin's `reduce_ex` "Sampling Method"; Random
+/// Y is not offered).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ReduceMethod {
-    /// Straight lines between the points of the curve (the default). Grid points outside the
-    /// X range of the data are missing.
+    /// The first point of the group; in the interval modes X is the bin's lower edge.
+    #[serde(alias = "Interpolate")]
+    First,
+    /// The mean Y of the group (the default); X is the bin centre, or the mean X of an Every N
+    /// Points group.
     #[default]
-    Interpolate,
-    /// The mean of the points that fall in the bin around each new X (one grid step wide, centred
-    /// on the new X, the lower edge belongs to the bin). Empty bins are missing.
-    Average,
+    #[serde(alias = "Average")]
+    Mean,
 }
 
-/// The new X values of [`reduce_evenly`].
+/// How [`reduce_evenly`] groups the points (Origin's `reduce_ex` "SubGroup").
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ReduceGroup {
+    /// Every N points (Origin's default, N = 5 under Auto).
+    EveryN(usize),
+    /// Bins of this width in X.
+    Interval(f64),
+    /// This many bins over the X range.
+    Intervals(usize),
+    /// Bins of width 1 / frequency.
+    Frequency(f64),
+}
+
+/// Origin's Auto resample factor of Every N Points (measured: 5 for 5 to 10000 points).
+pub const REDUCE_AUTO_FACTOR: usize = 5;
+
+/// Origin's default Even Sampling Interval Tolerance, in percent.
+pub const REDUCE_EVEN_TOLERANCE_PCT: f64 = 5.0;
+
+/// Options of [`reduce_evenly`], Origin's `reduce_ex` (analysis-tools.md section 12.2).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ReduceOptions {
+    #[serde(default = "default_group")]
+    pub group: ReduceGroup,
+    #[serde(default)]
+    pub method: ReduceMethod,
+    /// X Start and X End of the bins of the interval modes; `None` is the X range of the data.
+    #[serde(default)]
+    pub range: Option<(f64, f64)>,
+    /// Every N Points: X steps that differ from their mean by more than this (percent) make the
+    /// data uneven, and it is interpolated onto an even grid first.
+    #[serde(default = "default_tolerance")]
+    pub tolerance_pct: f64,
+}
+
+fn default_group() -> ReduceGroup {
+    ReduceGroup::EveryN(REDUCE_AUTO_FACTOR)
+}
+
+fn default_tolerance() -> f64 {
+    REDUCE_EVEN_TOLERANCE_PCT
+}
+
+impl Default for ReduceOptions {
+    fn default() -> Self {
+        ReduceOptions {
+            group: default_group(),
+            method: ReduceMethod::Mean,
+            range: None,
+            tolerance_pct: REDUCE_EVEN_TOLERANCE_PCT,
+        }
+    }
+}
+
+/// Reduce to Evenly Spaced X, as Origin's `reduce_ex` was measured (analysis-tools.md 12.2).
+/// Returns the new X and Y values.
+///
+/// Pairs with a missing X or Y are left out and the rest sorted by X.
+///
+/// * Every N points: when the X steps are not even within the tolerance (a missing value makes a
+///   gap, so it counts), the curve is first interpolated by straight lines onto as many evenly
+///   spaced X values from the first to the last X. Then each run of N points gives one point: Mean
+///   takes the mean X and mean Y, First the first point. A shorter last run keeps the place a full
+///   run would have: its X is its first X plus (N - 1) / 2 mean steps.
+/// * Bins (an interval, a number of intervals, or a frequency): the raw points are put in bins
+///   `[start + k dx, start + (k + 1) dx)`; there are round((end - start) / dx) bins for a given width,
+///   and a point at X End or beyond belongs to none. Mean gives the bin centre and the mean Y, First
+///   the lower edge and the Y of the bin's first point; an empty bin gives a missing Y.
+///
+/// `None` when fewer than two points are left, or the options are not usable (N below 1, a width,
+/// count or frequency that is not positive, an empty range, more than 100 million bins).
+pub fn reduce_evenly(x: &[f64], y: &[f64], opts: &ReduceOptions) -> Option<(Vec<f64>, Vec<f64>)> {
+    let mut pts: Vec<(f64, f64)> =
+        x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).map(|(&a, &b)| (a, b)).collect();
+    if pts.len() < 2 {
+        return None;
+    }
+    pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let (dlo, dhi) = (pts[0].0, pts[pts.len() - 1].0);
+    if dhi <= dlo {
+        return None;
+    }
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+    if let ReduceGroup::EveryN(n) = opts.group {
+        if n < 1 {
+            return None;
+        }
+        let step = (dhi - dlo) / (pts.len() - 1) as f64;
+        let tol = opts.tolerance_pct.max(0.0) / 100.0 * step;
+        if pts.windows(2).any(|w| ((w[1].0 - w[0].0) - step).abs() > tol) {
+            let k = pts.len();
+            let gx: Vec<f64> = (0..k).map(|i| if i + 1 == k { dhi } else { dlo + step * i as f64 }).collect();
+            let (px, py): (Vec<f64>, Vec<f64>) = pts.iter().copied().unzip();
+            let gy = interp1(&px, &py, &gx, &linear(Extrapolation::Missing));
+            pts = gx.into_iter().zip(gy).collect();
+        }
+        let (mut ox, mut oy) = (Vec::new(), Vec::new());
+        for run in pts.chunks(n) {
+            let xs: Vec<f64> = run.iter().map(|p| p.0).collect();
+            let ys: Vec<f64> = run.iter().map(|p| p.1).collect();
+            match opts.method {
+                ReduceMethod::First => {
+                    ox.push(xs[0]);
+                    oy.push(ys[0]);
+                }
+                ReduceMethod::Mean => {
+                    ox.push(if run.len() == n { mean(&xs) } else { xs[0] + (n - 1) as f64 / 2.0 * step });
+                    oy.push(mean(&ys));
+                }
+            }
+        }
+        return Some((ox, oy));
+    }
+    let (lo, hi) = match opts.range {
+        Some((a, b)) => (a.min(b), a.max(b)),
+        None => (dlo, dhi),
+    };
+    if !(lo.is_finite() && hi.is_finite()) || hi <= lo {
+        return None;
+    }
+    let (bins, dx) = match opts.group {
+        ReduceGroup::Interval(dx) | ReduceGroup::Frequency(dx) => {
+            let dx = if matches!(opts.group, ReduceGroup::Frequency(_)) { 1.0 / dx } else { dx };
+            if !(dx.is_finite() && dx > 0.0) {
+                return None;
+            }
+            (((hi - lo) / dx).round(), dx)
+        }
+        ReduceGroup::Intervals(k) => (k as f64, (hi - lo) / k as f64),
+        ReduceGroup::EveryN(_) => unreachable!("handled above"),
+    };
+    if !(1.0..=1.0e8).contains(&bins) {
+        return None;
+    }
+    let bins = bins as usize;
+    let end = hi.min(lo + bins as f64 * dx);
+    let mut members: Vec<Vec<f64>> = vec![Vec::new(); bins];
+    for &(px, py) in &pts {
+        if px < lo || px >= end {
+            continue;
+        }
+        let k = (((px - lo) / dx).floor() as usize).min(bins - 1);
+        members[k].push(py);
+    }
+    let ox = (0..bins)
+        .map(|k| match opts.method {
+            ReduceMethod::First => lo + k as f64 * dx,
+            ReduceMethod::Mean => lo + (k as f64 + 0.5) * dx,
+        })
+        .collect();
+    let oy = members
+        .iter()
+        .map(|m| match (m.is_empty(), opts.method) {
+            (true, _) => f64::NAN,
+            (false, ReduceMethod::First) => m[0],
+            (false, ReduceMethod::Mean) => mean(m),
+        })
+        .collect();
+    Some((ox, oy))
+}
+
+/// An evenly spaced grid of X values (see [`even_grid`]).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum EvenGrid {
     /// Spacing: X values `lo, lo + step, ...` up to and including `hi` (when `hi - lo` is a whole
@@ -83,21 +246,6 @@ pub enum EvenGrid {
     Step(f64),
     /// This many points, the first at `lo` and the last at `hi` (at least 2).
     Count(usize),
-}
-
-/// Options of [`reduce_evenly`].
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct ReduceOptions {
-    pub grid: EvenGrid,
-    pub method: ReduceMethod,
-    /// X range of the new points; `None` is the X range of the data.
-    pub range: Option<(f64, f64)>,
-}
-
-impl Default for ReduceOptions {
-    fn default() -> Self {
-        ReduceOptions { grid: EvenGrid::Count(100), method: ReduceMethod::Interpolate, range: None }
-    }
 }
 
 /// The evenly spaced X values of `grid` over `lo..=hi` and their spacing. `None` for a spacing that
@@ -135,42 +283,6 @@ pub fn even_grid(grid: EvenGrid, lo: f64, hi: f64) -> Option<(Vec<f64>, f64)> {
         *last = hi;
     }
     Some((g, step))
-}
-
-/// Reduces a curve to evenly spaced X values: returns the new X values and Y values.
-///
-/// Points with a missing X or Y are ignored. `None` when the curve has fewer than two valid
-/// points, its X values are all equal, or the grid is not valid (see [`even_grid`]).
-pub fn reduce_evenly(x: &[f64], y: &[f64], opts: &ReduceOptions) -> Option<(Vec<f64>, Vec<f64>)> {
-    let pts: Vec<(f64, f64)> =
-        x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).map(|(&a, &b)| (a, b)).collect();
-    if pts.len() < 2 {
-        return None;
-    }
-    let dlo = pts.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
-    let dhi = pts.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
-    let (lo, hi) = match opts.range {
-        Some((a, b)) => (a.min(b), a.max(b)),
-        None => (dlo, dhi),
-    };
-    let (gx, step) = even_grid(opts.grid, lo, hi)?;
-    let gy = match opts.method {
-        ReduceMethod::Interpolate => interp1(x, y, &gx, &linear(Extrapolation::Missing)),
-        ReduceMethod::Average => {
-            let mut sum = vec![0.0; gx.len()];
-            let mut count = vec![0usize; gx.len()];
-            for &(px, py) in &pts {
-                // The bin of grid point k is [lo + (k - 1/2) step, lo + (k + 1/2) step).
-                let k = ((px - lo) / step + 0.5).floor();
-                if k >= 0.0 && (k as usize) < gx.len() {
-                    sum[k as usize] += py;
-                    count[k as usize] += 1;
-                }
-            }
-            sum.iter().zip(&count).map(|(s, &c)| if c == 0 { f64::NAN } else { s / c as f64 }).collect()
-        }
-    };
-    Some((gx, gy))
 }
 
 /// Adds `by` to every value (missing values stay missing).
@@ -392,24 +504,8 @@ mod tests {
     }
 
     #[test]
-    fn the_last_grid_point_never_passes_the_data_maximum() {
-        // 0.1 * 3 and 10 / 147 * 147 are one ulp above the end in f64.
-        let x: Vec<f64> = vec![0.0, 0.1, 0.2, 0.3];
-        let y = vec![1.0, 2.0, 3.0, 4.0];
-        let opts = ReduceOptions { grid: EvenGrid::Step(0.1), ..ReduceOptions::default() };
-        let (gx, gy) = reduce_evenly(&x, &y, &opts).unwrap();
-        assert_eq!(gx.len(), 4);
-        assert_eq!(gx[3], 0.3);
-        assert!(gy.iter().all(|v| v.is_finite()), "{gy:?}");
-        close(&gy, &[1.0, 2.0, 3.0, 4.0]);
-        let x = [0.0, 10.0];
-        let y = [0.0, 20.0];
-        let opts = ReduceOptions { grid: EvenGrid::Count(148), ..ReduceOptions::default() };
-        let (gx, gy) = reduce_evenly(&x, &y, &opts).unwrap();
-        assert_eq!((gx.len(), gx[147]), (148, 10.0));
-        assert!(gy.iter().all(|v| v.is_finite()), "{gy:?}");
-        assert_eq!(gy[147], 20.0);
-        for n in [12, 23, 40, 45, 79, 84] {
+    fn an_even_grid_ends_on_its_last_value() {
+        for n in [12, 23, 40, 45, 79, 84, 148] {
             let (g, _) = even_grid(EvenGrid::Count(n), 0.0, 100.0).unwrap();
             assert_eq!(*g.last().unwrap(), 100.0);
             assert!(g.windows(2).all(|w| w[0] < w[1]));
@@ -435,35 +531,93 @@ mod tests {
         assert!(even_grid(EvenGrid::Step(1.0), 2.0, 2.0).is_none());
     }
 
+    /// Numbers measured with Origin's `reduce_ex` (`re-workspace/scratch/needs7/reduceex1..4.out.txt`).
     #[test]
-    fn reduce_by_interpolation() {
-        // Uneven X on the line y = 10 x; the new grid 0, 0.5, ... 2 reads it exactly.
-        let x = [0.0, 0.3, 1.1, 1.2, 2.0];
-        let y: Vec<f64> = x.iter().map(|v| 10.0 * v).collect();
-        let opts = ReduceOptions { grid: EvenGrid::Step(0.5), ..ReduceOptions::default() };
-        let (gx, gy) = reduce_evenly(&x, &y, &opts).unwrap();
-        close(&gx, &[0.0, 0.5, 1.0, 1.5, 2.0]);
-        close(&gy, &[0.0, 5.0, 10.0, 15.0, 20.0]);
-        // Descending X is sorted first; a range wider than the data gives missing values.
-        let xr: Vec<f64> = x.iter().rev().copied().collect();
-        let yr: Vec<f64> = y.iter().rev().copied().collect();
-        let opts = ReduceOptions { grid: EvenGrid::Step(1.0), range: Some((0.0, 3.0)), ..ReduceOptions::default() };
-        let (gx, gy) = reduce_evenly(&xr, &yr, &opts).unwrap();
-        close(&gx, &[0.0, 1.0, 2.0, 3.0]);
-        close(&gy, &[0.0, 10.0, 20.0, f64::NAN]);
-    }
-
-    #[test]
-    fn reduce_by_averaging() {
-        // Grid 0, 1, 2, 3 (bins [-0.5, 0.5), [0.5, 1.5), [1.5, 2.5), [2.5, 3.5)): bin 0 holds 0.0
-        // and 0.4 (mean of 2 and 4), bin 1 holds 0.5 and 1.4 (mean of 6 and 10), bin 2 holds
-        // nothing, bin 3 holds 3.0 (value 7).
-        let x = [0.0, 0.4, 0.5, 1.4, 3.0];
-        let y = [2.0, 4.0, 6.0, 10.0, 7.0];
-        let opts = ReduceOptions { grid: EvenGrid::Step(1.0), method: ReduceMethod::Average, range: Some((0.0, 3.0)) };
-        let (gx, gy) = reduce_evenly(&x, &y, &opts).unwrap();
-        close(&gx, &[0.0, 1.0, 2.0, 3.0]);
-        close(&gy, &[3.0, 8.0, f64::NAN, 7.0]);
+    #[allow(clippy::excessive_precision)] // the digits as Origin printed them
+    fn reduce_evenly_matches_origins_reduce_ex() {
+        let x: Vec<f64> = (0..12).map(f64::from).collect();
+        let y = [1.0, 3.0, 2.0, 5.0, 4.0, 6.0, 5.0, 8.0, 7.0, 9.0, 8.0, 10.0];
+        let run = |x: &[f64], y: &[f64], group, method| {
+            reduce_evenly(x, y, &ReduceOptions { group, method, ..ReduceOptions::default() }).unwrap()
+        };
+        use ReduceGroup::*;
+        use ReduceMethod::*;
+        let third = 6.666666666666667;
+        // Every 3 points: the mean, or the first point of each run.
+        let (gx, gy) = run(&x, &y, EveryN(3), Mean);
+        close(&gx, &[1.0, 4.0, 7.0, 10.0]);
+        close(&gy, &[2.0, 5.0, third, 9.0]);
+        let (gx, gy) = run(&x, &y, EveryN(3), First);
+        close(&gx, &[0.0, 3.0, 6.0, 9.0]);
+        close(&gy, &[1.0, 5.0, 5.0, 9.0]);
+        // Every 5 (Origin's Auto): the short last run keeps the place of a full one (X 12).
+        let (gx, gy) = reduce_evenly(&x, &y, &ReduceOptions::default()).unwrap();
+        close(&gx, &[2.0, 7.0, 12.0]);
+        close(&gy, &[3.0, 7.0, 9.0]);
+        let (gx, gy) = run(&x, &y, EveryN(5), First);
+        close(&gx, &[0.0, 5.0, 10.0]);
+        close(&gy, &[1.0, 6.0, 8.0]);
+        // Bins 2 wide: round(11 / 2) = 6 bins; the point at X End (11) is in none.
+        let (gx, gy) = run(&x, &y, Interval(2.0), Mean);
+        close(&gx, &[1.0, 3.0, 5.0, 7.0, 9.0, 11.0]);
+        close(&gy, &[2.0, 3.5, 5.0, 6.5, 8.0, 8.0]);
+        let (gx, gy) = run(&x, &y, Interval(2.0), First);
+        close(&gx, &[0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+        close(&gy, &[1.0, 2.0, 4.0, 5.0, 7.0, 8.0]);
+        assert_eq!(run(&x, &y, Frequency(0.5), Mean), run(&x, &y, Interval(2.0), Mean));
+        // round(11 / 2.5) = 4 bins: 10 and 11 are left out.
+        let (gx, gy) = run(&x, &y, Interval(2.5), Mean);
+        close(&gx, &[1.25, 3.75, 6.25, 8.75]);
+        close(&gy, &[2.0, 4.5, 6.333333333333333, 8.0]);
+        let (gx, gy) = run(&x, &y, Intervals(4), Mean);
+        close(&gx, &[1.375, 4.125, 6.875, 9.625]);
+        close(&gy, &[2.0, 5.0, third, 8.5]);
+        let (gx, gy) = run(&x, &y, Intervals(4), First);
+        close(&gx, &[0.0, 2.75, 5.5, 8.25]);
+        close(&gy, &[1.0, 5.0, 5.0, 9.0]);
+        // X Start 1 and X End 9.
+        let o = ReduceOptions { group: Interval(2.0), range: Some((1.0, 9.0)), ..ReduceOptions::default() };
+        let (gx, gy) = reduce_evenly(&x, &y, &o).unwrap();
+        close(&gx, &[2.0, 4.0, 6.0, 8.0]);
+        close(&gy, &[2.5, 4.5, 5.5, 7.5]);
+        // 0..10 with y = x^2, bins 2 wide: 5 bins, X = 10 left out.
+        let x10: Vec<f64> = (0..11).map(f64::from).collect();
+        let y10: Vec<f64> = x10.iter().map(|v| v * v).collect();
+        let (gx, gy) = run(&x10, &y10, Interval(2.0), Mean);
+        close(&gx, &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        close(&gy, &[0.5, 6.5, 20.5, 42.5, 72.5]);
+        // Uneven X: interpolated onto 12 even points first for Every N; the bins take raw points.
+        let xu = [0.0, 0.7, 1.1, 2.0, 3.4, 4.0, 5.5, 6.0, 7.2, 8.0, 9.0, 10.0];
+        let (gx, gy) = run(&xu, &y, EveryN(3), Mean);
+        close(&gx, &[0.90909090909090906, 3.6363636363636362, 6.3636363636363633, 9.0909090909090917]);
+        close(&gy, &[2.6237373737373741, 4.9682539682539684, 6.6363636363636358, 9.0]);
+        let (gx, gy) = run(&xu, &y, Interval(2.0), Mean);
+        close(&gx, &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        close(&gy, &[2.0, 4.5, 5.5, 7.5, 8.5]);
+        // Steps within 5 % of even are used as they are (mean X); 10 % makes them uneven.
+        let xj = [0.0, 1.03, 2.0, 2.97, 4.0, 5.02, 6.0, 7.0, 8.04, 9.0, 10.0, 11.0];
+        let (gx, gy) = run(&xj, &y, EveryN(3), Mean);
+        close(&gx, &[1.01, 3.9966666666666666, 7.0133333333333328, 10.0]);
+        close(&gy, &[2.0, 5.0, third, 9.0]);
+        let xm = [0.0, 1.1, 2.0, 2.9, 4.0, 5.1, 6.0, 7.0, 8.1, 9.0, 10.0, 11.0];
+        let (gx, gy) = run(&xm, &y, EveryN(3), Mean);
+        close(&gx, &[1.0, 4.0, 7.0, 10.0]);
+        close(&gy, &[1.9393939393939394, 4.9090909090909092, 6.6969696969696964, 9.0]);
+        // A missing value makes a gap: the rest is regridded (11 points over 0..11).
+        let mut ym = y.to_vec();
+        ym[3] = f64::NAN;
+        let (gx, gy) = run(&x, &ym, EveryN(3), Mean);
+        close(&gx, &[1.1, 4.4, 7.7, 11.0]);
+        close(&gy, &[2.0333333333333332, 4.5333333333333341, 7.5666666666666673, 9.05]);
+        // An empty bin keeps its X and has no Y.
+        let xe = [0.0, 0.5, 1.0, 5.0, 5.5, 6.0, 9.9, 10.0];
+        let ye = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let (gx, gy) = run(&xe, &ye, Interval(2.0), Mean);
+        close(&gx, &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        close(&gy, &[2.0, f64::NAN, 4.5, 6.0, 7.0]);
+        let (gx, gy) = run(&xe, &ye, Interval(2.0), First);
+        close(&gx, &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        close(&gy, &[1.0, f64::NAN, 4.0, 6.0, 7.0]);
     }
 
     #[test]

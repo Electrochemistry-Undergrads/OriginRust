@@ -766,8 +766,8 @@ pub enum DupKind {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ReduceKind {
-    Interpolate,
-    Average,
+    Mean,
+    First,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -1108,26 +1108,36 @@ pub enum AnalyzeTool {
         #[arg(long)]
         count: bool,
     },
-    /// Reduce each curve to evenly spaced X (--step or --points); the result goes to a new sheet.
+    /// Reduce to Evenly Spaced X as Origin's reduce_ex: every N points (--every, 5 by default),
+    /// or intervals of X (--step, --intervals or --frequency); the result goes to a new sheet.
     ReduceX {
         #[command(flatten)]
         target: TargetArgs,
-        /// Spacing of the new X values.
+        /// One point for every N points (Origin's Every N Points; 5 by default).
+        #[arg(long, group = "grid")]
+        every: Option<usize>,
+        /// Intervals of this width in X (By Sampling Interval).
         #[arg(long, group = "grid")]
         step: Option<f64>,
-        /// Number of new X values (default 100 when --step is not given).
+        /// This many intervals over the X range (By Number of Intervals).
         #[arg(long, group = "grid")]
-        points: Option<usize>,
-        /// interpolate (default) reads the curve between its points; average takes the mean of the
-        /// points in the bin around each new X.
-        #[arg(long, value_enum, default_value_t = ReduceKind::Interpolate)]
+        intervals: Option<usize>,
+        /// Intervals of width 1 / frequency (By Frequency).
+        #[arg(long, group = "grid")]
+        frequency: Option<f64>,
+        /// mean (default): the mean of each group; first: its first point.
+        #[arg(long, value_enum, default_value_t = ReduceKind::Mean)]
         method: ReduceKind,
-        /// First X of the result (default: the smallest X of the data).
+        /// X Start of the intervals (default: the smallest X of the data).
         #[arg(long, allow_hyphen_values = true)]
         x_min: Option<f64>,
-        /// Last X of the result (default: the largest X of the data).
+        /// X End of the intervals (default: the largest X of the data); a point there is left out.
         #[arg(long, allow_hyphen_values = true)]
         x_max: Option<f64>,
+        /// Every N points: X steps further than this (percent) from even make the data be
+        /// interpolated onto even X first.
+        #[arg(long, default_value_t = 5.0)]
+        tolerance: f64,
     },
     /// Translate each curve in X (a new sheet) or in Y (a new column): by --by, or so that the
     /// point at X = --at lands on --to.

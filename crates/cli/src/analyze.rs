@@ -287,21 +287,24 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::ReduceDup(analysis::ReduceDupSpec { method, tol, count })))
         }
-        AnalyzeTool::ReduceX { target, step, points, method, x_min, x_max } => {
+        AnalyzeTool::ReduceX { target, every, step, intervals, frequency, method, x_min, x_max, tolerance } => {
             let range = match (x_min, x_max) {
                 (None, None) => None,
                 (Some(lo), Some(hi)) => Some((lo, hi)),
                 _ => bail!("give both --x-min and --x-max, or neither"),
             };
-            let grid = match step {
-                Some(s) => analysis::EvenGrid::Step(s),
-                None => analysis::EvenGrid::Count(points.unwrap_or(100)),
+            let group = match (every, step, intervals, frequency) {
+                (_, Some(s), _, _) => analysis::ReduceGroup::Interval(s),
+                (_, _, Some(n), _) => analysis::ReduceGroup::Intervals(n),
+                (_, _, _, Some(f)) => analysis::ReduceGroup::Frequency(f),
+                (n, ..) => analysis::ReduceGroup::EveryN(n.unwrap_or(analysis::REDUCE_AUTO_FACTOR)),
             };
             let method = match method {
-                ReduceKind::Interpolate => analysis::ReduceMethod::Interpolate,
-                ReduceKind::Average => analysis::ReduceMethod::Average,
+                ReduceKind::Mean => analysis::ReduceMethod::Mean,
+                ReduceKind::First => analysis::ReduceMethod::First,
             };
-            (target, Job::Tool(Tool::ReduceX(analysis::ReduceOptions { grid, method, range })))
+            let opts = analysis::ReduceOptions { group, method, range, tolerance_pct: tolerance };
+            (target, Job::Tool(Tool::ReduceX(opts)))
         }
         AnalyzeTool::Translate { target, axis, by, at, to } => {
             let shift = match (by, at, to) {

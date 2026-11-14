@@ -114,3 +114,19 @@ Each item is what Origin has to be asked; Sheaf's current choice is stated above
 11. How Recalculate (Auto, Manual) treats these tools in Origin, and whether results go to a new sheet or next
     to the input by default.
 12. The dialog layout and wording (ours is the shared analysis window frame with the options of each tool).
+
+## Origin's X-Function interfaces (read 2026-11-13)
+
+Read from the interface lists of Origin's X-Function files with `tools/origin-ref/xf-args.py` (names,
+labels, defaults and choices only; the numbers of these tools are still to be measured):
+
+- `avecurves`: Method Average (default) or Concatenate; Averaged X Same as Source X, Common X Range,
+  Full X Range (the stored default), Custom or Follow Curve Trace; Tolerance for Common X Values 1e-8;
+  Number of Points, X Minimum and X Maximum auto; Interpolate Linear (default), Spline or B-Spline; Sort X
+  None, Ascending (default) or Descending; optional Std Dev, Std Err, N, Minimum, Maximum, SD times 2
+  and SD times 3 columns (all off).
+- `intersect`: two XY ranges; Method Linear (default), Cubic Spline or Cubic B-Spline; Sampling Points
+  1000; the intersection points go to new X and Y columns.
+- `levelcrossing` (Data Manipulation): Crossing Level 0; outputs the crossing X values, directions, X
+  indices and Y crossing values; Nearest Type Any (default), Left or Right; Duration Points 1.
+- `polyarea` has no argument list in its file that the script can read.

@@ -6173,16 +6173,16 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
     let x = names.iter().position(|n| n == "Curve Translate X...").unwrap_or_else(|| panic!("{names:?}"));
     assert_eq!(names[x + 1], "Curve Translate Y...");
 
-    // Reduce to 4 evenly spaced X values (the default is 100 points: the run keeps the X range).
+    // Reduce to Evenly Spaced X with Origin's defaults (every 5 points, Y Mean): the 4 points are one
+    // short run, placed where a full run of 5 would be (X = 1 + 2 steps).
     open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
     click(&mut h, "OK");
     assert_eq!(h.state().doc.undo_label(), Some("Reduce to evenly spaced X"));
     let sheets = &project(&h).workbooks().next().unwrap().sheets;
     let cols = &sheets.last().unwrap().columns;
     assert_eq!(cols.len(), 2);
-    assert_eq!(cols[0].numeric().unwrap().len(), 100);
-    assert_eq!(cols[0].numeric().unwrap()[0], 1.0);
-    assert_eq!(cols[0].numeric().unwrap()[99], 4.0);
+    assert_eq!(cols[0].numeric().unwrap(), [3.0]);
+    assert_eq!(cols[1].numeric().unwrap(), [5.5]);
 
     // The reduced sheet is now the active one. Translate Y with the shift set to 1.5 writes the Y column
     // plus 1.5 beside it, and Undo removes it.
@@ -6198,7 +6198,7 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
         .sheet()
         .columns
         .iter()
-        .find(|c| c.long_name == "up shifted")
+        .find(|c| c.long_name == "ReduceEXY1 shifted")
         .map(|c| c.numeric().unwrap().to_vec())
         .expect("the shifted column");
     let expected: Vec<f64> = reduced.iter().map(|v| v + 1.5).collect();
@@ -6206,7 +6206,9 @@ fn reduce_x_and_translate_y_run_from_the_menu_and_the_menu_lists_translate_y_aft
     let ctx = h.ctx.clone();
     h.state_mut().apply(Action::Undo, &ctx);
     settle(&mut h);
-    assert!(project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "up shifted"));
+    assert!(
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().all(|c| c.long_name != "ReduceEXY1 shifted")
+    );
 }
 
 #[test]
@@ -6239,12 +6241,12 @@ fn the_preview_of_a_tool_that_writes_a_new_sheet_shows_the_new_curve() {
     assert_eq!(rx, [11.0, 12.0, 13.0, 14.0]);
     assert_eq!(ry, [2.5, 4.5, 6.5, 8.5]);
     click(&mut h, "Cancel");
-    // Reduce to Evenly Spaced X: 100 points from X = 1 to 4, on the straight line y = 2 x + 0.5.
+    // Reduce to Evenly Spaced X (every 5 points, Y Mean): the 4 points of the line y = 2 x + 0.5 are
+    // one run, shown at X = 3 with their mean.
     open_analysis_on(&mut h, AnalysisKind::ReduceX, &["B"]);
     click(&mut h, "Preview");
     let (rx, ry) = h.state().analysis.as_ref().unwrap().preview_result().expect("a preview");
-    assert_eq!((rx.len(), rx[0], rx[99]), (100, 1.0, 4.0));
-    assert!(rx.iter().zip(&ry).all(|(x, y)| (y - (2.0 * x + 0.5)).abs() < 1e-9), "{ry:?}");
+    assert_eq!((rx, ry), (vec![3.0], vec![5.5]));
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1, "a preview writes nothing");
 }
 

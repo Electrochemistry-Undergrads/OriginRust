@@ -512,12 +512,7 @@ link mechanism):
   own value at that X (straight lines between data points) unless a Y is given. Equal X values, an X
   outside the data without a given Y, and a curve with fewer than two valid points are refused with
   nothing changed. The result is a new Y column behind each input named "<name> minus line".
-- Reduce to Evenly Spaced X: new X values from the lowest to the highest X of the data (or a chosen
-  range), either by number of points (first and last included, at least 2) or by step (the last value
-  is kept when the range is a whole number of steps within rounding). Y is interpolated by straight
-  lines (new X outside the data are missing) or averaged: each new X owns the bin one step wide
-  centred on it, the lower edge belongs to the bin, an empty bin is missing. The result is a new sheet
-  with an X column and a Y column per input. Points with a missing X or Y are ignored.
+- Reduce to Evenly Spaced X: Origin's `reduce_ex`, measured (12.2).
 - Curve Translate X: adds a constant to X, or moves the point at X = `at` to X = `to` (shift
   `to - at`); the result is a new sheet with the shifted X and the unchanged Y. Curve Translate Y
   (Sheaf's own item, next to X): adds a constant to Y, or shifts so that the curve's value at X = `at`
@@ -530,14 +525,17 @@ link mechanism):
 
 Not measured (to be measured in Origin; nothing here may be quoted as Origin's behaviour):
 
-1. Origin's X-Function names and options for the four items (the window title shows the tool alone).
+1. X-Function names, read from the interface lists of Origin's X-Function files with
+   `tools/origin-ref/xf-args.py` (names, labels, defaults and choices only): Subtract Straight Line is
+   `subtract_line` (no arguments: an interactive tool on the graph), Curve Translate is `curve translate`
+   (interactive: `ntype` Vertical Translate (default) or Horizontal Translate, a line to move the curve
+   to and a marker on the curve), Reduce to Evenly Spaced X is `reduce_ex` (12.2). Origin's
+   Mathematics menu has no median filter for curves: `medianflt2` filters matrices; a 1D median is a
+   method of Smooth.
 2. Subtract Straight Line: how Origin picks the two points (on a graph, by data cursor, or by
    typed values), whether a point's Y is the data value or the cursor's, and whether the result
    replaces the data or goes to a new column.
-3. Reduce to Evenly Spaced X: which interpolation and averaging choices Origin offers, its bin
-   definition and edge rule for averaging, how it chooses the number of points or the step by
-   default, what a new X outside the data gets (missing or extrapolated), whether the last grid
-   point is kept when the range is not a whole number of steps, and the output layout.
+3. Reduce to Evenly Spaced X: measured, see 12.2.
 4. Curve Translate: whether Origin moves data in place or writes a copy, how its "move a point to
    a value" mode reads a Y at an X between data points, and whether it works on the graph
    interactively. Curve Translate Y is not an Origin item as far as we know; its numbers are Sheaf's.
@@ -573,12 +571,42 @@ all of this, except that the columns go to a new sheet named "ReduceDup" (the an
 adds X and Y pairs only as a result sheet). The window offers the method, the tolerance and "Output
 the duplicate X values and their counts". Recalculate works as for the other tools of this section.
 
+### 12.2 Reduce to Evenly Spaced X (measured in Origin)
+
+Origin's `reduce_ex` (dialog and runs on 2026-11-13, `re-workspace/scratch/needs7/reduce_ex/` and
+`reduceex1..4.lines.txt`/`.out.txt`). The dialog has Recalculate (Manual), Input, SubGroup (Every N
+Points, By Sampling Interval, By Number of Intervals, By Frequency), Resample Factor (5 with Auto
+ticked; Auto gave 5 for 5 to 10000 points), Sampling Interval (0.25), Interval Number (10), Resample
+Frequency (8), X Start and X End (auto), Sampling Method (First Point, Y Mean (default), Random Y (X
+Average)), Even Sampling Interval Tolerance (5 %), Plot FFT for Preview, and Output `(<autoX>,<new>)`.
+
+- Every N Points: each run of N points gives one point. Y Mean gives the mean X and mean Y of the
+  run, First Point the run's first point. A shorter last run keeps the place of a full run: 12 points
+  0..11 every 5 gave X 2, 7, 12 (the last run is 10 and 11). When the X steps are not even (10 % off
+  was; 4 % off was not), the curve is first interpolated by straight lines onto as many evenly spaced
+  X values from the first to the last X; a missing value counts as a gap and does the same (the
+  row is left out and the 11 other points regridded).
+- The interval modes use the raw points. There are round((X End - X Start) / interval) intervals
+  `[start + k dx, start + (k + 1) dx)` (11 / 2 gave 6, 11 / 2.5 gave 4); a point at X End or beyond
+  is in none, even inside the last interval. By Number of Intervals uses (End - Start) / n, By
+  Frequency an interval of 1 / f. Y Mean gives the interval centre and the mean Y, First Point the
+  lower edge and the Y of the first point in it; an empty interval keeps its X with a missing Y.
+- The output columns are named `ReduceEXX1` and `ReduceEXY1`; the Y comment is "Y Mean(X Average)
+  Stats Reduction of B" or "Y First(X First) Stats Reduction of B".
+
+Sheaf (`calc::reduce_evenly`, `Tool::ReduceX`) copies these rules, names and comments, with three
+differences: Random Y is not offered; the columns go to a new sheet (as for every curve result of this
+section) and always include X, where Origin's default writes only a Y column with an implicit even X;
+in a run whose steps are uneven but within the tolerance, Origin's X of the short last run is not the
+rule above (0, 1.03, ... 10 every 3 gave 10.103 for the run 9, 10; Sheaf gives 10).
+Command line: `sheaf analyze reduce-x FILE --y B [--every N | --step DX | --intervals N | --frequency F]
+[--method mean|first] [--x-min X] [--x-max X] [--tolerance PCT]`.
+
 Command line: `sheaf analyze reduce-dup FILE --y B [--method mean|median|min|max|sum|sd|se|rms]
 [--tol T] [--count]`; window `--show analysis:reduce-dup`.
 
 Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--y2 V]`,
-`sheaf analyze reduce-x FILE --y B [--step S | --points N] [--method interpolate|average]
-[--x-min X] [--x-max X]`, `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
+`sheaf analyze reduce-x` (12.2), `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
 and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
 `--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
 

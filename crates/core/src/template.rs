@@ -426,6 +426,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             bars: BarSpacing::default(),
             coords: Coords::Cartesian,
             background: None,
+            background_style: BackgroundStyle::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
         }],
@@ -677,6 +678,9 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
         l.y_axis.show_tick_labels = true;
     }
     l.link = Some(LayerLink { parent: parent_index, x: ScaleLink::Straight, y: ScaleLink::None });
+    // The parent's background covers the frame already; a second one would hide its plots.
+    l.background = None;
+    l.background_style = BackgroundStyle::default();
     l.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
     l.x_axis.side = AxisSide::Hidden;
     l.x_axis.major_grid = None;
@@ -764,7 +768,7 @@ mod tests {
         assert_eq!((l.y_axis.major_tick, l.y_axis.minor_tick), (TickDirection::In, TickDirection::In));
         assert_eq!((l.x_axis.major_tick, l.x_axis.minor_tick), (TickDirection::None, TickDirection::None));
         assert_eq!((l.x_axis.minor_ticks, l.y_axis.minor_ticks), (0, 1));
-        assert_eq!(l.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0 });
+        assert_eq!(l.bars, BarSpacing { gap_pct: 20.0, overlap_pct: 0.0, width_pct: None });
         // Page, fonts and legend are those of the line template; the colours start at red (measured).
         let line = Template::Line.new_graph(WindowId(1), "Graph1");
         assert_eq!(g.page, line.page);
@@ -881,6 +885,12 @@ mod tests {
         let r = right_y_layer(&stacked, 0);
         assert_eq!(r.stack, Stack::None);
         assert!(r.y_axis.show_tick_labels);
+        // The parent's background covers the frame; the right layer draws none of its own.
+        let mut coloured = g.layers[0].clone();
+        coloured.background = Some(Color::rgb(240, 240, 255));
+        coloured.background_style.border = Some(BorderStyle::solid(Color::BLACK, 1.0));
+        let r = right_y_layer(&coloured, 0);
+        assert_eq!((r.background, r.background_style), (None, BackgroundStyle::default()));
     }
 
     #[test]

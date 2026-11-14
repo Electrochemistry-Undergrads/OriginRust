@@ -13,6 +13,7 @@
 mod data;
 mod emf;
 mod eps;
+mod fill;
 mod fonts;
 pub mod hit;
 mod layout;
@@ -34,6 +35,8 @@ pub mod ticks;
 mod ticks_scales;
 mod vector;
 
+#[cfg(test)]
+mod detail_tests;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]

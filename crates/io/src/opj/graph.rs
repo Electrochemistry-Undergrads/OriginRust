@@ -166,6 +166,7 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
             width_pt: pw / PAGE_UNITS_PER_INCH * 72.0,
             height_pt: ph / PAGE_UNITS_PER_INCH * 72.0,
             background: Color::WHITE,
+            style: Default::default(),
         };
     } else {
         notes.push("the page size could not be read; a default size was used".into());

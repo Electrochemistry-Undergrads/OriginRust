@@ -35,7 +35,7 @@ use sheaf_core::clipboard::CopyOptions;
 /// Copy Page's size factor: the picture is this fraction of the page size. Origin's option is
 /// 40 % up to 2021a and 100 % from 2021b, so 40 % is the 2016 default (graphing.md 9.6).
 const COPY_PAGE_SIZE_FACTOR: f64 = 0.4;
-use sheaf_core::graph::TickLabelSource;
+use sheaf_core::graph::{LabelForm, TickLabelSource};
 use sheaf_core::project::{Folder, Window};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
@@ -2883,6 +2883,18 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                         }
                         if p.y_error.is_some_and(|e| columns.contains(&e)) {
                             p.y_error = None;
+                        }
+                        if p.x_error.is_some_and(|e| columns.contains(&e)) {
+                            p.x_error = None;
+                        }
+                        if p.y_base.is_some_and(|b| columns.contains(&b)) {
+                            p.y_base = None;
+                        }
+                        // Data labels that read a deleted column go back to the Y value.
+                        if let LabelForm::Column { column } = p.decor.labels.form
+                            && columns.contains(&column)
+                        {
+                            p.decor.labels.form = LabelForm::Y;
                         }
                     }
                     // Stack settings and tick labels that name a deleted column are dropped too.

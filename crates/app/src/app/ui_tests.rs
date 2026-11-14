@@ -7506,3 +7506,289 @@ fn a_drag_over_cells_selects_the_block_whatever_the_event_timing() {
     settle(&mut h);
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 2) }, "C");
 }
+
+// ----- Plot Details: the look settings ported from the `plot-details` branch (brief T13) ----------
+
+fn edit_graph(h: &mut Harness<'static, SheafApp>, edit: impl FnOnce(&mut sheaf_core::Graph) + 'static) {
+    let (_, id) = window_ids(h);
+    h.state_mut().doc.apply("Test edit", move |p| edit(p.graph_mut(id).unwrap()));
+    settle(h);
+}
+
+/// Types `text` into the n-th number box of the dialog (a click enters its text edit).
+fn type_into_number(h: &mut Harness<'static, SheafApp>, nth: usize, text: &str) {
+    let node = h.query_all_by_role(egui::accesskit::Role::SpinButton).nth(nth).expect("a number box");
+    node.click();
+    settle(h);
+    key_with(h, egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text(text.to_string()));
+    settle(h);
+    key(h, egui::Key::Enter);
+}
+
+#[test]
+fn deleting_a_column_resets_the_data_labels_and_x_error_that_name_it() {
+    use sheaf_core::graph::LabelForm;
+    let mut p = Project::new();
+    let book = p.add_workbook("w");
+    let names = p.add_column(book, 0, Designation::X, ColumnData::text(vec!["a".into(), "b".into()])).unwrap();
+    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let ex = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.1, 0.1])).unwrap();
+    let g = p.plot_columns(Template::Line, &[y1]).unwrap();
+    {
+        let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
+        plot.decor.labels.enable = true;
+        plot.decor.labels.form = LabelForm::Column { column: names };
+        plot.x_error = Some(ex);
+        plot.y_base = Some(ex);
+    }
+    delete_columns(&mut p, &[names, ex]);
+    let graph = p.graph(g).unwrap();
+    let plot = &graph.layers[0].plots[0];
+    assert_eq!(plot.decor.labels.form, LabelForm::Y);
+    assert!(plot.decor.labels.enable, "the labels stay on");
+    assert_eq!((plot.x_error, plot.y_base), (None, None));
+    assert!(!graph.referenced_columns().contains(&names));
+}
+
+#[test]
+fn the_pattern_tab_of_columns_and_areas_sets_pattern_and_gradient_and_a_line_has_none() {
+    use sheaf_core::graph::FillPattern;
+    let mut h = start(vec![data_file("pd-pattern")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    assert!(!has_label(&h, "Pattern"), "a line plot has no Pattern tab");
+    click(&mut h, "Cancel");
+    edit_graph(&mut h, |g| g.layers[0].plots[0].kind = PlotKind::Column);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    h.query_all_by_label("Pattern").next().expect("the Pattern tab").click();
+    settle(&mut h);
+    h.get_by_value("None").click();
+    settle(&mut h);
+    click(&mut h, "Cross");
+    assert_eq!(graph(&h).layers[0].plots[0].decor.fill.pattern, FillPattern::Cross);
+    click(&mut h, "Fill with a gradient");
+    assert!(graph(&h).layers[0].plots[0].decor.fill.gradient.is_some());
+    click(&mut h, "OK");
+    // The figure draws the hatch and the bands.
+    let (_, id) = window_ids(&h);
+    let scene = sheaf_plot::graph_scene(project(&h), id).unwrap();
+    assert!(scene.layers[0].plots.len() > 8, "bands and hatch lines: {}", scene.layers[0].plots.len());
+    // An area plot has the tab too.
+    edit_graph(&mut h, |g| g.layers[0].plots[0].kind = PlotKind::Area);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    assert!(has_label(&h, "Pattern"));
+    assert!(!has_label(&h, "Spacing"), "areas have no bar spacing");
+}
+
+#[test]
+fn the_fill_under_the_curve_has_pattern_and_transparency_controls_on_the_line_tab() {
+    let mut h = start(vec![data_file("pd-fill")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Line");
+    assert!(!has_label(&h, "Pattern Color"), "no fill, no fill controls");
+    click(&mut h, "Fill Area Under Curve");
+    assert!(has_label(&h, "Pattern Color") && has_label(&h, "Gradient Fill"));
+    click(&mut h, "Fill with a gradient");
+    assert!(graph(&h).layers[0].plots[0].decor.fill.gradient.is_some());
+}
+
+#[test]
+fn the_spacing_tab_sets_the_bar_width_in_percent() {
+    let mut h = start(vec![data_file("pd-spacing")]);
+    edit_graph(&mut h, |g| {
+        for p in &mut g.layers[0].plots {
+            p.kind = PlotKind::Column;
+        }
+    });
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Spacing");
+    assert_eq!(graph(&h).layers[0].bars.width_pct, None);
+    click(&mut h, "Set");
+    assert_eq!(graph(&h).layers[0].bars.width_pct, Some(80.0), "starts at the width the gap gives");
+    click(&mut h, "OK");
+    let (_, id) = window_ids(&h);
+    // The bars are narrower than the default width of 80 % once the width is 40 %.
+    let widest = |h: &Harness<'static, SheafApp>| {
+        let scene = sheaf_plot::graph_scene(project(h), id).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|i| match i {
+                sheaf_plot::scene::Item::Rect { rect, .. } => Some(rect.w),
+                _ => None,
+            })
+            .fold(0.0, f64::max)
+    };
+    let at_80 = widest(&h);
+    edit_graph(&mut h, |g| g.layers[0].bars.width_pct = Some(40.0));
+    assert!(widest(&h) < at_80 * 0.6, "{} vs {at_80}", widest(&h));
+}
+
+#[test]
+fn the_label_tab_reads_a_column_and_sets_decimals_rows_and_offsets() {
+    use sheaf_core::graph::LabelForm;
+    let mut h = start(vec![data_file("pd-label")]);
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Label");
+    click(&mut h, "Enable");
+    for label in ["Horizontal Offset", "Vertical Offset", "Decimal Places", "Show at Specified Rows Only"] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    h.get_by_value("Y").click();
+    settle(&mut h);
+    h.query_all_by_label_contains("Column Book1").next().expect("the columns are in the form list").click();
+    settle(&mut h);
+    assert!(matches!(graph(&h).layers[0].plots[0].decor.labels.form, LabelForm::Column { .. }));
+    click(&mut h, "Set");
+    assert_eq!(graph(&h).layers[0].plots[0].decor.labels.decimals, Some(2));
+}
+
+#[test]
+fn the_group_tab_has_subgrouping_and_use_this_style_copies_the_look_settings() {
+    use sheaf_core::graph::{FillPattern, Subgrouping};
+    let mut h = start(vec![data_file("pd-subgroup")]);
+    edit_graph(&mut h, |g| {
+        let p = &mut g.layers[0].plots[0];
+        p.decor.fill.pattern = FillPattern::Cross;
+        p.decor.labels.enable = true;
+        p.decor.drop.vertical.on = true;
+        // The second plot has its own fill colour under the curve.
+        g.layers[0].plots[1].decor.fill_under = Some(sheaf_core::Color::rgb(1, 2, 3));
+        g.layers[0].plots[0].decor.fill_under = Some(sheaf_core::Color::rgb(9, 9, 9));
+    });
+    open_props(&mut h, 0, PropsTab::Plots, Some(0));
+    click(&mut h, "Group");
+    assert!(has_label(&h, "Subgrouping") && has_label(&h, "Subgroup on Increment"));
+    click(&mut h, "By Size");
+    assert_eq!(graph(&h).layers[0].group_style.subgrouping, Subgrouping::BySize { size: 2 });
+    click(&mut h, "Use this style for all plots");
+    let g = graph(&h);
+    let second = &g.layers[0].plots[1];
+    assert_eq!(second.decor.fill.pattern, FillPattern::Cross, "the pattern goes to the other plots");
+    assert!(second.decor.labels.enable && second.decor.drop.vertical.on);
+    assert_eq!(second.decor.fill_under, Some(second.line.color), "the fill under the curve keeps its own colour");
+}
+
+#[test]
+fn the_display_tab_switches_the_x_and_y_axes_and_the_background_has_gradient_and_border() {
+    let mut h = start(vec![data_file("pd-display")]);
+    let (_, id) = window_ids(&h);
+    let texts = |h: &Harness<'static, SheafApp>| {
+        let scene = sheaf_plot::graph_scene(project(h), id).unwrap();
+        scene.layers[0].overlay.iter().filter(|i| matches!(i, sheaf_plot::scene::Item::Text(_))).count()
+    };
+    let full = texts(&h);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Display");
+    assert!(!is_disabled(&h, "X Axes") && !is_disabled(&h, "Y Axes"));
+    click(&mut h, "X Axes");
+    assert!(!graph(&h).layers[0].display.show_x_axes && graph(&h).layers[0].display.show_y_axes);
+    click(&mut h, "OK");
+    assert!(texts(&h) < full, "the X tick labels and title are gone");
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Background");
+    assert!(is_disabled(&h, "Fill with a gradient"), "a gradient needs a colour");
+    edit_graph(&mut h, |g| g.layers[0].background = Some(sheaf_core::Color::rgb(200, 220, 255)));
+    click(&mut h, "Fill with a gradient");
+    assert!(graph(&h).layers[0].background_style.gradient.is_some());
+    click(&mut h, "Draw a border line");
+    assert!(graph(&h).layers[0].background_style.border.is_some());
+}
+
+#[test]
+fn the_page_tabs_have_miscellaneous_title_and_border_and_the_layer_icons_can_be_hidden() {
+    use sheaf_core::graph::TitleDisplay;
+    let mut h = start(vec![data_file("pd-page2")]);
+    edit_graph(&mut h, |g| g.long_name = "Scan".into());
+    open_props(&mut h, 0, PropsTab::Page, None);
+    for tab in ["Print/Dimensions", "Miscellaneous", "Display", "Legends/Titles"] {
+        assert!(has_label(&h, tab), "the page tab {tab}");
+    }
+    click(&mut h, "Legends/Titles");
+    h.get_by_value("Short and long name").click();
+    settle(&mut h);
+    click(&mut h, "Short name");
+    assert_eq!(graph(&h).page.style.title_display, TitleDisplay::Name);
+    click(&mut h, "Display");
+    click(&mut h, "Draw a border line");
+    assert!(graph(&h).page.style.border.is_some());
+    click(&mut h, "Miscellaneous");
+    h.query_all_by_role(egui::accesskit::Role::MultilineTextInput).next().expect("the comments box").click();
+    settle(&mut h);
+    h.event(egui::Event::Text("a note".to_string()));
+    settle(&mut h);
+    assert_eq!(graph(&h).page.style.comments, "a note");
+    // The icons are there until the tick is taken away; then the layer icon's menu is gone.
+    let icon = graph_ui(&h).page_point(0.0, 0.0).unwrap() + egui::vec2(9.0, 9.0);
+    click(&mut h, "Show the layer icons");
+    assert!(!graph(&h).page.style.layer_icons);
+    click(&mut h, "OK");
+    right_click_at(&mut h, icon);
+    assert!(h.query_by_label_contains("Hide Layer").is_none(), "no layer icon at the corner");
+    close_menus(&mut h);
+    edit_graph(&mut h, |g| g.page.style.layer_icons = true);
+    right_click_at(&mut h, icon);
+    assert!(h.query_by_label_contains("Hide Layer").is_some(), "the layer icon is back");
+}
+
+#[test]
+fn the_comments_of_a_graph_are_the_hover_text_of_its_name_in_the_object_manager() {
+    let mut h = start(vec![data_file("pd-comments")]);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    edit_graph(&mut h, |g| g.page.style.comments = "taken on the new cell".into());
+    let name = project(&h).graphs().next().unwrap().name.clone();
+    let at = in_right_panel(&h, &name);
+    move_pointer(&mut h, at);
+    h.run_steps(60);
+    assert!(h.query_by_label("taken on the new cell").is_some(), "the comments show as a tooltip");
+}
+
+#[test]
+fn print_dimensions_resizes_the_page_with_or_without_keeping_the_layers_the_same_size() {
+    let mut h = start(vec![data_file("pd-resize")]);
+    let (before_w, before_h) = (graph(&h).page.width_pt, graph(&h).page.height_pt);
+    let frame = graph(&h).layers[0].frame;
+    open_props(&mut h, 0, PropsTab::Page, None);
+    // The width is the first number box (in inches): double it. The layer grows with the page.
+    type_into_number(&mut h, 0, &format!("{}", before_w * 2.0 / 72.0));
+    assert!((graph(&h).page.width_pt - before_w * 2.0).abs() < 0.01, "{}", graph(&h).page.width_pt);
+    assert_eq!(graph(&h).layers[0].frame, frame, "the layers grow with the page");
+    assert_eq!(graph(&h).page.height_pt, before_h);
+    // With the tick the layer keeps its width in points.
+    click(&mut h, "Keep the size of the layers when the page is resized");
+    type_into_number(&mut h, 0, &format!("{}", before_w * 3.0 / 72.0));
+    let g = graph(&h);
+    assert!((g.page.width_pt - before_w * 3.0).abs() < 0.01, "{}", g.page.width_pt);
+    assert!((g.layers[0].frame.width * g.page.width_pt - frame.width * before_w * 2.0).abs() < 0.05);
+}
+
+#[test]
+fn the_size_tab_edits_the_layer_area_and_a_linked_layer_shows_fractions_of_its_parent() {
+    let mut h = start(vec![data_file("pd-size")]);
+    let (_, g) = window_ids(&h);
+    h.state_mut().doc.apply("Double Y", |p| {
+        p.add_right_y_layer(g, 0).unwrap();
+    });
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Size/Speed");
+    // The first number box is Left, in % of the page.
+    type_into_number(&mut h, 0, "25");
+    assert!((graph(&h).layers[0].frame.left - 0.25).abs() < 1e-9, "{:?}", graph(&h).layers[0].frame);
+    // The right Y layer follows layer 1: its values are fractions of that layer's area, in %.
+    click(&mut h, "Layer 2");
+    click(&mut h, "Size/Speed");
+    assert!(has_label_containing(&h, "This layer follows layer 1"));
+    let parent = graph(&h).layers[0].frame;
+    type_into_number(&mut h, 0, "10");
+    let child = graph(&h).layers[1].frame;
+    assert!((child.left - 0.10).abs() < 1e-9, "a fraction of the parent's area: {child:?}");
+    assert_eq!(graph(&h).layers[0].frame, parent, "the parent did not move");
+}
+
+fn has_label_containing(h: &Harness<'static, SheafApp>, text: &str) -> bool {
+    h.query_all_by_label_contains(text).next().is_some()
+}

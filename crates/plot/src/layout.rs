@@ -10,6 +10,7 @@
 //! on a smaller front frame and draws each later curve moved right and up.
 
 use crate::data::{self, Dim, LayerData, PlotData};
+use crate::fill;
 use crate::fonts::TextMeasurer;
 use crate::hit;
 use crate::legend;
@@ -61,6 +62,12 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
             );
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
+    }
+    // The page's border line, over everything, inside the page edge.
+    if let (Some(border), Some(last)) = (g.page.style.border.as_ref().filter(|b| b.width_pt > 0.0), layers.last_mut()) {
+        let inset = border.width_pt / 2.0;
+        let rect = Rect { x: inset, y: inset, w: g.page.width_pt - 2.0 * inset, h: g.page.height_pt - 2.0 * inset };
+        last.overlay.push(Item::Rect { rect, fill: None, stroke: Some(fill::border_stroke(border)) });
     }
     Ok(Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers })
 }
@@ -553,9 +560,8 @@ fn layer_scene(
     let mut scene =
         LayerScene { clip: geom.clip, grid: Vec::new(), plots: Vec::new(), overlay: Vec::new(), objects: Vec::new() };
     // The layer's Background colour fills the frame behind the grid and the data.
-    if let Some(fill) = layer.background {
-        scene.grid.push(Item::Rect { rect: geom.frame, fill: Some(fill), stroke: None });
-    }
+    fill::draw_background(&mut scene.grid, layer.background, &layer.background_style, geom.frame);
+    let background_items = scene.grid.len();
     let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
     let waterfall = stack::waterfall(g, index);
     // A waterfall draws no grid and no lines or ticks on the opposite edges: they would cut
@@ -602,7 +608,7 @@ fn layer_scene(
     }
     // Grid on Top of Data: the grid lines (not the background) are drawn after the plots.
     if layer.display.grid_on_top {
-        let keep = usize::from(layer.background.is_some()).min(scene.grid.len());
+        let keep = background_items.min(scene.grid.len());
         let lines = scene.grid.split_off(keep);
         scene.plots.extend(lines);
     }
@@ -613,6 +619,22 @@ fn layer_scene(
     let objects = &mut scene.objects;
     let out = &mut scene.overlay;
     let f = geom.frame;
+    fill::draw_border(out, &layer.background_style, f);
+    // Display tab: X Axes or Y Axes off draws nothing of that axis (line, ticks, labels, title).
+    let (hidden_x, hidden_y);
+    let hide = |a: &Axis| Axis { side: AxisSide::Hidden, show_opposite: false, opposite_ticks: false, ..a.clone() };
+    let xa = if layer.display.show_x_axes {
+        xa
+    } else {
+        hidden_x = hide(xa);
+        &hidden_x
+    };
+    let ya = if layer.display.show_y_axes {
+        ya
+    } else {
+        hidden_y = hide(ya);
+        &hidden_y
+    };
     let first_color = plot_color(pds);
     let (xp, yp) = (AxisPaint::new(xa, first_color), AxisPaint::new(ya, first_color));
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
@@ -1350,12 +1372,13 @@ fn draw_legend(
                     } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).
-                        out.push(Item::Rect {
-                            rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
-                            fill: Some(plot.symbol.color),
-                            stroke: (plot.line.width_pt > 0.0)
-                                .then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
-                        });
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            plot.symbol.color,
+                            &plot.decor.fill,
+                            (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
+                        );
                     }
                     x = sx1;
                     after_symbol = true;

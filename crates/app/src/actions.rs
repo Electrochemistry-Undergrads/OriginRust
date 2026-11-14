@@ -153,6 +153,8 @@ pub enum Action {
     GoToCell(WindowId),
     /// Edit > Find in Sheets... in this workbook.
     FindInSheets(WindowId),
+    /// Edit > Replace... in this workbook.
+    ReplaceInSheets(WindowId),
     Undo,
     Redo,
     NewWorkbook,

@@ -6040,3 +6040,35 @@ fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
     click(&mut h, "Close");
     assert!(h.state().find.is_none());
 }
+
+#[test]
+fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step() {
+    let mut h = start(vec![data_file("replacesheet")]);
+    show_window(&mut h, "Book1 - sample");
+    menu(&mut h, "Edit", "Replace...");
+    {
+        let d = h.state_mut().find.as_mut().expect("the Replace window opens");
+        d.set_text("4.5");
+        d.set_replacement("4.75");
+    }
+    settle(&mut h);
+    click(&mut h, "Find Next");
+    // "Replace" is also the window's title: click the button.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Replace").click();
+    settle(&mut h);
+    assert_eq!(column(&h, "B"), [2.5, 4.75, 6.5, 8.5]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace"));
+    {
+        let d = h.state_mut().find.as_mut().unwrap();
+        d.set_text(".5");
+        d.set_replacement(".25");
+    }
+    settle(&mut h);
+    click(&mut h, "Replace All");
+    assert_eq!(column(&h, "B"), [2.25, 4.75, 6.25, 8.25]);
+    assert_eq!(column(&h, "C"), [30.25, 20.25, 10.25, 0.25]);
+    assert_eq!(h.state().doc.undo_label(), Some("Replace all"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5], "one undo step");
+}

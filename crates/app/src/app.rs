@@ -692,6 +692,7 @@ impl SheafApp {
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
             Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
+            Action::ReplaceInSheets(book) => self.find = Some(FindDialog::replace(book)),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -2188,6 +2189,50 @@ impl SheafApp {
                         self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
                         self.books.get_mut(&book),
                     ) && let Some((column, row)) = d.search(sheet, state.active_cell())
+                    {
+                        state.go_to(sheet, column, row);
+                    }
+                }
+                outcome @ (FindOutcome::Replace | FindOutcome::ReplaceAll) => {
+                    let project = self.doc.project();
+                    if let Some(sheet) = project.workbook(book).and_then(|b| b.sheets.get(b.active_sheet)) {
+                        let cursor = self.books.get(&book).and_then(|s| s.active_cell());
+                        let edits: Vec<(usize, usize, String)> = match outcome {
+                            FindOutcome::ReplaceAll => d.replace_all(sheet),
+                            _ => cursor
+                                .and_then(|(c, r)| d.replaced(sheet, (c, r)).map(|t| (c, r, t)))
+                                .into_iter()
+                                .collect(),
+                        };
+                        // Columns kept up to date by a formula are left alone, as when typing.
+                        let (edits, locked): (Vec<_>, Vec<_>) =
+                            edits.into_iter().partition(|(c, _, _)| !sheet.columns[*c].is_locked());
+                        let edits: Vec<(sheaf_core::ColumnId, usize, String)> =
+                            edits.into_iter().map(|(c, r, t)| (sheet.columns[c].id, r, t)).collect();
+                        if !edits.is_empty() {
+                            let label = if edits.len() == 1 { "Replace" } else { "Replace all" };
+                            self.doc.apply(label, |p| {
+                                for (id, row, text) in &edits {
+                                    if let Some(c) = p.column_mut(*id) {
+                                        c.set_cell_text(*row, text);
+                                    }
+                                }
+                            });
+                        }
+                        if !locked.is_empty() {
+                            self.warn(format!(
+                                "{} cell(s) in columns calculated from a formula were left alone",
+                                locked.len()
+                            ));
+                        }
+                    }
+                    if matches!(outcome, FindOutcome::Replace)
+                        && let Some(d) = &mut self.find
+                        && let (Some(sheet), Some(state)) = (
+                            self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
+                            self.books.get_mut(&book),
+                        )
+                        && let Some((column, row)) = d.search(sheet, state.active_cell())
                     {
                         state.go_to(sheet, column, row);
                     }

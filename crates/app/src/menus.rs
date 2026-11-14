@@ -73,6 +73,8 @@ pub enum Cmd {
     GoToCell,
     /// Edit > Find in Sheets... (Ctrl+F) in a workbook.
     FindInSheets,
+    /// Edit > Replace... (Ctrl+H) in a workbook.
+    ReplaceInSheets,
     ExportGraph,
     ExportWorksheet,
     Exit,
@@ -525,7 +527,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.extend(greys(&["Remove Links", "-", "Set As Begin", "Set As End", "Reset to Full Range", "-"]));
         v.push(grey_keyed("Find in Project...", plain_key(Key::F3)));
         v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
-        v.push(grey_keyed("Replace...", ctrl(Key::H)));
+        v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
         v.extend(greys(&["-", "Button Edit Mode"]));
     } else {
@@ -1822,6 +1824,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportWizard => Action::ImportWizard,
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::FindInSheets => Action::FindInSheets(book?),
+        Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::Exit => Action::Quit,

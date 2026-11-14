@@ -1001,6 +1001,17 @@ pub enum AnalyzeTool {
         #[command(flatten)]
         operand: OperandArgs,
     },
+    /// Combine each column with a constant or another column row by row, without X values
+    /// (Origin's Simple Column Math): rows past the end of the operand column count as 0. The
+    /// results go into new columns beside the input.
+    ColumnMath {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = MathKind::Add)]
+        op: MathKind,
+        #[command(flatten)]
+        operand: OperandArgs,
+    },
     /// Derivative of each curve with respect to its X column.
     Differentiate {
         #[command(flatten)]

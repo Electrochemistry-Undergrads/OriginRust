@@ -937,7 +937,7 @@ fn analysis_menu() -> Vec<Entry> {
             "&Mathematics",
             vec![
                 item("Simple Curve Math...", Cmd::Analyze(AnalysisKind::CurveMath)),
-                grey("Simple Column Math..."),
+                item("Simple Column Math...", Cmd::Analyze(AnalysisKind::ColumnMath)),
                 sep(),
                 item("Differentiate...", Cmd::Analyze(AnalysisKind::Differentiate)),
                 item("Integrate...", Cmd::Analyze(AnalysisKind::Integrate)),

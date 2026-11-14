@@ -370,6 +370,31 @@ book or sheet is named; a file named with `--ref-file` is added to the project a
 so appears in `--save`). Window: Analysis > Subtract Reference Data... and Simple Math..., with a
 list of all other numeric Y columns of the project as references.
 
+### 9.1 Simple Column Math (`vmathtool`)
+
+Analysis > Mathematics > Simple Column Math combines a column with a constant or another column row
+by row, with no X values. Inputs (from its X-Function file): `ix1`, `operator` (add, sub, div, mul,
+pow; default add), `operand` (Constant or Reference Data; Constant first), `ix2`, `constant`
+(default 10) and the output `ox`, whose default is the input column itself.
+
+Observed (Origin, `re-workspace/scratch/vmath/vmath.out.txt`; the Rust test is
+`column_math_matches_origin_vmathtool` in `crates/calc/src/curvemath.rs`):
+
+- Without an output range the result replaces the values of the input column.
+- Row `i` of the data goes with row `i` of the operand column. Rows past the end of the operand
+  column count as 0: with a five-row operand, row 6 of `A - B` is `A`, of `A ^ B` is 1 and of
+  `A / B` missing.
+- A missing operand inside its length, or division by 0, gives a missing value; so does a
+  negative number to the power 0.5.
+- The result has one row per data row (a longer operand adds nothing).
+- Division by the constant 0 is refused (the X-Function fails and nothing changes).
+
+Sheaf: `sheaf_calc::column_math`, `Tool::ColumnMath(ColumnMathSpec)` (undo step "Column math").
+The window starts on Add with the constant 10 and its Output on the input columns themselves
+(Existing columns), as Origin; new columns beside the input or a new sheet can be chosen instead.
+Command line: `sheaf analyze column-math FILE --y B [--op ...] (--value N | --ref COLUMN)`, results
+beside the input. Not compared: a missing value in the data raised to the power 0.
+
 ## 10. Integrating several ranges at once (`integ1` per range)
 
 Origin's Integrate reports for one curve and one range: `area`, `x0`/`y0` (position and signed

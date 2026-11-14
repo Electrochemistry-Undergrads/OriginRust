@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 131 | 57 | 231 |
+| All rows | 44 | 131 | 57 | 232 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 62 | 57 | 130 |
+| P1 and P2 together | 12 | 62 | 57 | 131 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -117,6 +117,7 @@ Cross-cutting findings:
 | Built-in functions | Origin function list | about 50 (estimate) in `crates/expr` | ◐ | no string, date, random, cumsum, diff, rank, lookup; no user functions | P0 |
 | Recalculation (None, Auto, Manual) | Set Column Values | mode stored with the formula; Auto columns follow their inputs inside the same undo step, Manual ones show `pending` until Recalculate; cycles refused; spec in workbook-model.md 10a | ◐ | a coloured word in the header instead of the lock icon; same-sheet inputs only; analysis and fit results are not linked | P0 |
 | Simple math on curves | Analysis > Mathematics > Simple Math | Simple Math window, `analyze math`, `Tool::CurveMath` | ✓ | add, subtract, multiply, divide, power with a constant or a reference; checked against Origin (spec section 9); no graph rescale | P0 |
+| Simple math on columns | Analysis > Mathematics > Simple Column Math | Simple Column Math window, `analyze column-math`, `Tool::ColumnMath` | ✓ | row by row with a constant or a column, result into the input column by default; checked against Origin (analysis-tools 9.1) | P1 |
 | Row filter | Column > Filter | live sheet filter: a condition in the formula language with presets (above/below average, within 3 sigma, not missing); Enable/Disable, Reapply, Remove; the grid shows passing rows only and analysis and fits skip the others; sorts and row edits reapply it; Filter Rows (in place or new sheet) remains | ◐ | one filter per sheet, not per column; no date or text filters; plots still draw filtered rows | P1 |
 | Masking | Column > Mask | Apply, Remove, Swap on selected cells; masks follow rows through sorts, inserts and deletes; statistics, analysis tools and fits leave masked cells out; masked points draw red with their adjacent line segments (measured in Origin) | ◐ | no Change Color, Disable Masking, mask by condition or from the graph; two-way ANOVA ignores masks; the .opj reader skips masks and the writer leaves them to the companion | P1 |
 | Internal types | double, short, long, complex | f64 only | ✗ | | P1 |

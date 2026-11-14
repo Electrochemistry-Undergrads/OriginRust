@@ -48,6 +48,20 @@ pub fn curve_math_const(y: &[f64], op: CurveOp, operand: f64) -> Vec<f64> {
     y.iter().map(|&v| op.apply(v, operand)).collect()
 }
 
+/// Origin's Simple Column Math (`vmathtool`) with a column as the operand: row `i` of `y` combined
+/// with row `i` of `operand`, without X values or interpolation. Rows past the end of `operand`
+/// use 0 (as Origin: `6 - nothing` is 6, `6 ^ nothing` is 1, `6 / nothing` is missing); a missing
+/// value in either column inside its length gives a missing value. The result has `y.len()` rows.
+pub fn column_math(y: &[f64], op: CurveOp, operand: &[f64]) -> Vec<f64> {
+    y.iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            let r = operand.get(i).copied().unwrap_or(0.0);
+            if v.is_nan() || r.is_nan() { f64::NAN } else { op.apply(v, r) }
+        })
+        .collect()
+}
+
 fn linear() -> InterpOptions {
     InterpOptions {
         method: InterpMethod::Linear,
@@ -123,6 +137,27 @@ pub fn curve_math_ref(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn column_math_matches_origin_vmathtool() {
+        // Origin: A = 1..6, B = {2, 0, missing, -1, 5} (five rows); vmathtool A op B.
+        let nan = f64::NAN;
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let b = [2.0, 0.0, nan, -1.0, 5.0];
+        let same = |got: Vec<f64>, want: [f64; 6]| {
+            for (g, w) in got.iter().zip(want) {
+                assert!(g == &w || (g.is_nan() && w.is_nan()), "{got:?} != {want:?}");
+            }
+        };
+        same(column_math(&a, CurveOp::Divide, &b), [0.5, nan, nan, -4.0, 1.0, nan]);
+        same(column_math(&a, CurveOp::Power, &b), [1.0, 1.0, nan, 0.25, 3125.0, 1.0]);
+        same(column_math(&a, CurveOp::Subtract, &b), [-1.0, 2.0, nan, 5.0, 0.0, 6.0]);
+        // A shorter than the operand: one row per row of A.
+        assert_eq!(column_math(&[1.0, 2.0, 3.0], CurveOp::Multiply, &[5.0, 6.0, 7.0, 8.0, 9.0]), [5.0, 12.0, 21.0]);
+        // A negative base to the power 0.5 is missing.
+        let r = curve_math_const(&[-8.0, 4.0, 9.0], CurveOp::Power, 0.5);
+        assert!(r[0].is_nan() && r[1] == 2.0 && r[2] == 3.0);
+    }
 
     #[test]
     fn reference_is_interpolated_linearly_and_continued_outside() {

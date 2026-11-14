@@ -318,6 +318,35 @@ fn subtract_ref_and_math_use_a_reference_from_another_file() {
 }
 
 #[test]
+fn column_math_goes_row_by_row() {
+    let dir = scratch("column-math");
+    let data = data_file(&dir);
+    let out = dir.join("colmath.csv");
+    // ramp minus flat (2), row by row; Add is the default operator as in Origin.
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "column-math",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--op",
+        "subtract",
+        "--ref",
+        "flat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Column math"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows[0], "0,2,0,-2");
+    assert_eq!(rows[10], "10,2,10,8");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "column-math", data.to_str().unwrap(), "--y", "ramp", "--value", "1", "--common"]);
+    assert!(!ok && stderr.contains("row by row"), "{stderr}");
+}
+
+#[test]
 fn curve_math_and_range_mistakes_are_explained() {
     let dir = scratch("math-errors");
     let data = data_file(&dir);

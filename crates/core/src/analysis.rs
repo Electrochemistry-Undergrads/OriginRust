@@ -175,6 +175,15 @@ pub struct CurveMathSpec {
     pub common_only: bool,
 }
 
+/// What [`Tool::ColumnMath`] does (Origin's Simple Column Math, `vmathtool`): `y op operand` row by
+/// row. A [`CurveOperand::Reference`] is used as a plain column here: its row `i` goes with row `i`
+/// of the data, with no X values and no interpolation, and rows past its end count as 0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ColumnMathSpec {
+    pub op: CurveOp,
+    pub operand: CurveOperand,
+}
+
 /// Which t-test [`TTestSpec`] runs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TTestKind {
@@ -528,6 +537,7 @@ pub enum Tool {
     Integrate(IntegrateSpec),
     IntegrateRanges(IntegrateRangesSpec),
     CurveMath(CurveMathSpec),
+    ColumnMath(ColumnMathSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -583,6 +593,7 @@ impl Tool {
                 (CurveOperand::Reference(_), CurveOp::Subtract) => "Subtract reference",
                 _ => "Curve math",
             },
+            Tool::ColumnMath(_) => "Column math",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -633,7 +644,7 @@ impl Tool {
     fn sheet_prefix(&self) -> &'static str {
         match self {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
-            Tool::CurveMath(_) => "Math",
+            Tool::CurveMath(_) | Tool::ColumnMath(_) => "Math",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1522,6 +1533,57 @@ impl Project {
                         }
                         (None, CurveOperand::Reference(_)) => unreachable!("the reference was read above"),
                     }
+                }
+            }
+            Tool::ColumnMath(spec) => {
+                let operand: Option<(String, String, Vec<f64>)> = match spec.operand {
+                    CurveOperand::Constant(c) => {
+                        if !c.is_finite() {
+                            return Err(AnalysisError::BadOption(format!("{c} is not a usable operand")));
+                        }
+                        // Origin refuses to divide a column by the constant 0.
+                        if spec.op == CurveOp::Divide && c == 0.0 {
+                            return Err(AnalysisError::BadOption("cannot divide by 0".into()));
+                        }
+                        None
+                    }
+                    CurveOperand::Reference(id) => {
+                        let (_, _, rcol) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+                        let r = rcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
+                        Some((rcol.short_name.clone(), rcol.display_name().to_string(), r.to_vec()))
+                    }
+                };
+                let word = match spec.op {
+                    CurveOp::Add => "plus",
+                    CurveOp::Subtract => "minus",
+                    CurveOp::Multiply => "times",
+                    CurveOp::Divide => "divided by",
+                    CurveOp::Power => "to the power of",
+                };
+                for inp in &inputs {
+                    let units = match (spec.op, operand.is_some()) {
+                        (CurveOp::Add | CurveOp::Subtract, _) => inp.units.clone(),
+                        (CurveOp::Multiply | CurveOp::Divide, false) => inp.units.clone(),
+                        _ => String::new(),
+                    };
+                    let (long_name, comments, values) = match (&operand, spec.operand) {
+                        (Some((rshort, rname, r)), _) => {
+                            // Row i of the data goes with row i of the operand column.
+                            let rows = r.get(inp.first..).unwrap_or(&[]);
+                            (
+                                format!("{} {word} {rname}", inp.name),
+                                format!("{} {word} column {rshort}{}", inp.short, inp.range_note()),
+                                calc::column_math(inp.ys(), spec.op, rows),
+                            )
+                        }
+                        (None, CurveOperand::Constant(c)) => (
+                            format!("{} {word} {c}", inp.name),
+                            format!("{} {word} {c}{}", inp.short, inp.range_note()),
+                            calc::curve_math_const(inp.ys(), spec.op, c),
+                        ),
+                        (None, CurveOperand::Reference(_)) => unreachable!("the operand column was read above"),
+                    };
+                    beside.push(NewColumn { after: inp.id, long_name, units, comments, data: inp.aligned(&values) });
                 }
             }
             Tool::Differentiate(options) => {
@@ -2689,6 +2751,31 @@ mod tests {
         };
         let tool = curve_math(CurveOp::Add, CurveOperand::Reference(far), true);
         assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn column_math_goes_row_by_row_and_can_replace_its_input_as_origin() {
+        let (mut p, book, _, ramp) = sample();
+        let reference = add_reference(&mut p);
+        let tool =
+            Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Subtract, operand: CurveOperand::Reference(reference) });
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        // Rows 1-3 minus 1, 2, 3 (no X, no interpolation); the rows past the operand's end minus 0.
+        let mut want: Vec<f64> = (0..11).map(f64::from).collect();
+        for (w, d) in want.iter_mut().zip([1.0, 2.0, 3.0]) {
+            *w -= d;
+        }
+        assert_eq!(p.numeric(r.new_columns[0]).unwrap(), want);
+        assert_eq!(p.column(r.new_columns[0]).unwrap().comments, "C minus column B");
+        assert!(r.message.starts_with("Column math"), "{}", r.message);
+        // Origin's default output is the input column itself.
+        let tool = Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Add, operand: CurveOperand::Constant(10.0) });
+        let before = p.workbook(book).unwrap().sheets[0].columns.len();
+        p.analyze_to(&request(&[ramp], tool), &OutputTarget::Existing(vec![ramp])).unwrap();
+        assert_eq!(p.numeric(ramp).unwrap()[..3], [10.0, 11.0, 12.0]);
+        assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), before);
+        let zero = Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Divide, operand: CurveOperand::Constant(0.0) });
+        assert!(matches!(p.analyze(&request(&[ramp], zero)), Err(AnalysisError::BadOption(_))));
     }
 
     fn ranges(list: &[(f64, f64)], end_point_baseline: bool) -> Tool {

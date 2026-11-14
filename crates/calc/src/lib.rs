@@ -42,7 +42,7 @@ pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};
-pub use curvemath::{CurveMathResult, CurveOp, curve_math_const, curve_math_ref};
+pub use curvemath::{CurveMathResult, CurveOp, column_math, curve_math_const, curve_math_ref};
 pub use curves::{
     AverageMethod, AverageOptions, AverageResult, CommonX, CurveError, Intersection, MeetKind, PolygonArea, XRange,
     average_curves, intersections, polygon_area,

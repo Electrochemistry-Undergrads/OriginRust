@@ -1341,6 +1341,28 @@ fn simple_math_with_a_constant_adds_a_column_for_each_y_column() {
     assert_eq!(h.state().doc.undo_label(), Some("Curve math"));
 }
 
+#[test]
+fn simple_column_math_adds_ten_into_the_input_columns_as_origin() {
+    let mut h = start(vec![data_file("colmath")]);
+    show_window(&mut h, "Book1 - sample");
+    let before: Vec<Vec<f64>> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.numeric().unwrap().to_vec()).collect();
+    menu_path(&mut h, &["Analysis", "Mathematics", "Simple Column Math..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    // Origin's defaults: Add, the constant 10, the result written back into each input column.
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheet().columns.len(), before.len(), "no new columns");
+    let changed: Vec<usize> =
+        (0..before.len()).filter(|&i| b.sheet().columns[i].numeric().unwrap() != before[i]).collect();
+    assert_eq!(changed.len(), 2, "both Y columns");
+    for i in changed {
+        let want: Vec<f64> = before[i].iter().map(|v| v + 10.0).collect();
+        assert_eq!(b.sheet().columns[i].numeric().unwrap(), want);
+    }
+    assert_eq!(h.state().doc.undo_label(), Some("Column math"));
+}
+
 fn date_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

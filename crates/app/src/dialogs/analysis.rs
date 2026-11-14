@@ -17,9 +17,10 @@ use sheaf_core::analysis::{
     TwoWayAnovaSpec, TwoWayLayout,
 };
 use sheaf_core::analysis::{
-    AreaType, BaselineSpec, Boundary, CurveMathSpec, CurveOp, CurveOperand, DiffOptions, IntegrateRangesSpec,
-    IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter,
-    PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
+    AreaType, BaselineSpec, Boundary, ColumnMathSpec, CurveMathSpec, CurveOp, CurveOperand, DiffOptions,
+    IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LocalSpan, NormalizeMethod, OutputTarget,
+    PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange, SmoothMethod, SmoothOptions, SplineBoundary,
+    Tool,
 };
 use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
@@ -41,6 +42,8 @@ pub enum AnalysisKind {
     SubtractRef,
     /// Simple Math: add, subtract, multiply, divide or power with a constant or a reference.
     CurveMath,
+    /// Simple Column Math (Origin's `vmathtool`): a column with a constant or another column, row by row.
+    ColumnMath,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -88,7 +91,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 12] = [
+    pub const ALL: [AnalysisKind; 13] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -97,6 +100,7 @@ impl AnalysisKind {
         AnalysisKind::Baseline,
         AnalysisKind::SubtractRef,
         AnalysisKind::CurveMath,
+        AnalysisKind::ColumnMath,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -114,6 +118,7 @@ impl AnalysisKind {
             AnalysisKind::Baseline => "Subtract Baseline...",
             AnalysisKind::SubtractRef => "Subtract Reference Data...",
             AnalysisKind::CurveMath => "Simple Math...",
+            AnalysisKind::ColumnMath => "Simple Column Math...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -164,6 +169,7 @@ impl AnalysisKind {
             "baseline" => AnalysisKind::Baseline,
             "subtract-ref" => AnalysisKind::SubtractRef,
             "math" => AnalysisKind::CurveMath,
+            "column-math" => AnalysisKind::ColumnMath,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -647,8 +653,10 @@ impl AnalysisDialog {
             column_names: names.join(", "),
             ranges: vec![(x_lo, x_hi)],
             curve_op: CurveOp::Add,
-            use_reference: kind == AnalysisKind::SubtractRef || !reference_choices.is_empty(),
-            constant: 1.0,
+            // Origin's Simple Column Math starts on Constant 10.
+            use_reference: kind == AnalysisKind::SubtractRef
+                || (kind != AnalysisKind::ColumnMath && !reference_choices.is_empty()),
+            constant: if kind == AnalysisKind::ColumnMath { 10.0 } else { 1.0 },
             reference_choices,
             reference: 0,
             common_only: false,
@@ -704,7 +712,12 @@ impl AnalysisDialog {
             preview: None,
             preview_request: None,
             recalc: RecalcMode::Manual,
-            output_choice: OutputChoice::NextToInput,
+            // Origin writes Simple Column Math back into its input column.
+            output_choice: if kind == AnalysisKind::ColumnMath {
+                OutputChoice::Existing
+            } else {
+                OutputChoice::NextToInput
+            },
             output_existing: Vec::new(),
             auto_apply: false,
             applied: None,
@@ -937,6 +950,17 @@ impl AnalysisDialog {
                 let common_only = self.common_only && matches!(operand, CurveOperand::Reference(_));
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
+            AnalysisKind::ColumnMath => {
+                let operand = if self.use_reference {
+                    self.reference_choices
+                        .get(self.reference)
+                        .map(|(id, _)| CurveOperand::Reference(*id))
+                        .ok_or("there is no other column with numbers to use as the operand")?
+                } else {
+                    CurveOperand::Constant(self.constant)
+                };
+                Tool::ColumnMath(ColumnMathSpec { op: self.curve_op, operand })
+            }
             AnalysisKind::SubtractLine
             | AnalysisKind::ReduceDup
             | AnalysisKind::ReduceX
@@ -1125,12 +1149,13 @@ impl AnalysisDialog {
 
     /// The reference list and the options that belong to it.
     fn reference_options(&mut self, ui: &mut egui::Ui) {
+        let column_math = self.kind == AnalysisKind::ColumnMath;
         let text = match self.reference_choices.get(self.reference) {
             Some((_, label)) => label.as_str(),
             None => "(no other column with numbers)",
         };
         ui.horizontal(|ui| {
-            ui.label("Reference");
+            ui.label(if column_math { "Column" } else { "Reference" });
             let mut chosen = self.reference;
             egui::ComboBox::from_id_salt("reference_column").selected_text(text).width(300.0).show_ui(ui, |ui| {
                 for (i, (_, label)) in self.reference_choices.iter().enumerate() {
@@ -1139,6 +1164,10 @@ impl AnalysisDialog {
             });
             self.reference = chosen;
         });
+        if column_math {
+            ui.weak("Row by row, without X values; rows past the end of the column count as 0.");
+            return;
+        }
         ui.checkbox(&mut self.common_only, "Common X range only").on_hover_text(
             "Only where data and reference both have X values; the result goes to a new sheet. Otherwise the \
              reference is continued as a straight line outside its range.",
@@ -1182,7 +1211,7 @@ impl AnalysisDialog {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
             }
-            AnalysisKind::CurveMath => {
+            AnalysisKind::CurveMath | AnalysisKind::ColumnMath => {
                 ui.horizontal(|ui| {
                     ui.label("Operator");
                     egui::ComboBox::from_id_salt("curve_op")
@@ -1796,6 +1825,7 @@ impl AnalysisDialog {
             AnalysisKind::Normalize => "normalize",
             AnalysisKind::Baseline => "baseline",
             AnalysisKind::SubtractRef | AnalysisKind::CurveMath => "curvemath",
+            AnalysisKind::ColumnMath => "vmathtool",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -1850,6 +1880,9 @@ impl AnalysisDialog {
             AnalysisKind::Baseline => "Subtract a baseline from the input curves",
             AnalysisKind::SubtractRef => "Subtract a reference curve from the input curves",
             AnalysisKind::CurveMath => "Add, subtract, multiply, divide or raise to a power with a constant or a curve",
+            AnalysisKind::ColumnMath => {
+                "Add, subtract, multiply, divide or raise to a power with a constant or a column, row by row"
+            }
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -1897,7 +1930,8 @@ impl AnalysisDialog {
             | AnalysisKind::Baseline
             | AnalysisKind::Smooth
             | AnalysisKind::SubtractRef
-            | AnalysisKind::CurveMath => "New columns beside the input",
+            | AnalysisKind::CurveMath
+            | AnalysisKind::ColumnMath => "New columns beside the input",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
@@ -1958,6 +1992,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Interpolate
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::ColumnMath
         ) || super::manip_options::handles(self.kind)
     }
 
@@ -1974,7 +2009,7 @@ impl AnalysisDialog {
         self.column_names = names.join(", ");
         self.reference_choices = reference_choices(project, &columns);
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
-        if self.kind == AnalysisKind::CurveMath {
+        if matches!(self.kind, AnalysisKind::CurveMath | AnalysisKind::ColumnMath) {
             self.use_reference = self.use_reference && !self.reference_choices.is_empty();
         }
         if self.kind == AnalysisKind::Anova2 {
@@ -1998,6 +2033,7 @@ impl AnalysisDialog {
                 | AnalysisKind::Smooth
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
+                | AnalysisKind::ColumnMath
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter
@@ -2023,9 +2059,13 @@ impl AnalysisDialog {
         })
     }
 
-    /// The column after the input column, as the first suggestion for an existing target.
+    /// The column after the input column, as the first suggestion for an existing target (the input
+    /// column itself for Simple Column Math, as Origin).
     fn default_existing(&self, input: usize) -> usize {
         let at = self.columns.get(input).and_then(|c| self.sheet_columns.iter().position(|(id, _)| id == c));
+        if self.kind == AnalysisKind::ColumnMath {
+            return at.unwrap_or(0);
+        }
         at.map_or(0, |a| (a + 1).min(self.sheet_columns.len().saturating_sub(1)))
     }
 

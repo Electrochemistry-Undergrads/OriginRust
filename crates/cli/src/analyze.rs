@@ -84,6 +84,8 @@ enum Job {
     Math {
         op: MathKind,
         operand: OperandArgs,
+        /// Simple Column Math: row by row, no X.
+        column: bool,
     },
     Sort {
         by: String,
@@ -162,9 +164,10 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             if operand.reference.is_none() {
                 bail!("subtract-ref needs the reference curve: --ref COLUMN (use 'math --value' for a constant)");
             }
-            (target, Job::Math { op: MathKind::Subtract, operand })
+            (target, Job::Math { op: MathKind::Subtract, operand, column: false })
         }
-        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand }),
+        AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
+        AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
         AnalyzeTool::Differentiate { target, order, smooth, poly, points } => {
             (target, Job::Tool(Tool::Differentiate(analysis::DiffOptions { order, smooth, poly, npts: points })))
         }
@@ -661,6 +664,7 @@ fn math_tool(
     sheet: usize,
     op: MathKind,
     operand: &OperandArgs,
+    column: bool,
     read: &ReadOptions,
 ) -> Result<Tool> {
     let op = match op {
@@ -704,6 +708,12 @@ fn math_tool(
             analysis::CurveOperand::Reference(named_columns(project, rb, rs, std::slice::from_ref(name))?[0])
         }
     };
+    if column {
+        if operand.common {
+            bail!("--common only applies to curve math; column math goes row by row");
+        }
+        return Ok(Tool::ColumnMath(analysis::ColumnMathSpec { op, operand: operand_value }));
+    }
     if operand.common && matches!(operand_value, analysis::CurveOperand::Constant(_)) {
         bail!("--common only applies to a reference curve");
     }
@@ -770,7 +780,9 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     let book = pick_book(&project, target.book.as_deref())?;
     let sheet = pick_sheet(&project, book, target.sheet.as_deref())?;
     let job = match job {
-        Job::Math { op, operand } => Job::Tool(math_tool(&mut project, book, sheet, op, &operand, &target.read)?),
+        Job::Math { op, operand, column } => {
+            Job::Tool(math_tool(&mut project, book, sheet, op, &operand, column, &target.read)?)
+        }
         other => other,
     };
 

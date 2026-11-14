@@ -363,6 +363,47 @@ fn pcx_is_written_with_its_header_and_palette() {
 }
 
 #[test]
+fn psd_graph_exports_have_the_requested_colour_mode_and_complete_pixels() {
+    for (depth, mode, channels, palette_len) in
+        [(ColorDepth::Bit24, 3, 3, 0), (ColorDepth::Grey8, 1, 1, 0), (ColorDepth::Colors256, 2, 1, 768)]
+    {
+        let psd = raster_bytes("psd", &RasterOptions { depth, ..RasterOptions::default() });
+        let word = |at| u16::from_be_bytes(psd[at..at + 2].try_into().unwrap());
+        let long = |at| u32::from_be_bytes(psd[at..at + 4].try_into().unwrap());
+        assert_eq!(&psd[..4], b"8BPS");
+        assert_eq!((word(4), word(12), word(22), word(24)), (1, channels, 8, mode));
+        assert!(long(14) > 0 && long(18) > 0);
+        assert_eq!(long(26), palette_len);
+        assert_eq!(psd.len(), 68 + palette_len as usize + long(14) as usize * long(18) as usize * channels as usize);
+        assert!(psd[68 + palette_len as usize..].iter().any(|&b| b < 200), "graph pixels, not a blank image");
+    }
+}
+
+#[test]
+fn psd_composites_transparency_on_white_before_rgb_or_grey_encoding() {
+    let raster = Raster { width: 2, height: 1, rgba: vec![255, 0, 0, 128, 0, 0, 255, 0] };
+    let rgb = raster::encode_raster(&raster, "psd", 150.5, &RasterOptions::default()).unwrap();
+    assert_eq!(&rgb[68..], &[255, 255, 127, 255, 127, 255], "planar RGB, composited on white");
+    let grey = raster::encode_raster(
+        &raster,
+        "psd",
+        150.5,
+        &RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() },
+    )
+    .unwrap();
+    assert_eq!(&grey[68..], &[165, 255]);
+}
+
+#[test]
+fn oversized_psd_exports_are_refused_before_allocating_the_image() {
+    let (p, g) = project();
+    let size = ExportSize { width_in: Some(30_001.0 / 72.0), ..ExportSize::default() };
+    let error = export_bytes(&p, g, "psd", 72.0, size).unwrap_err();
+    assert!(matches!(error, PlotError::Image(_)), "{error}");
+    assert!(error.to_string().contains("30000 pixels per dimension"), "{error}");
+}
+
+#[test]
 fn colour_depth_changes_png_bmp_and_tiff() {
     let colours = RasterOptions { depth: ColorDepth::Colors256, ..RasterOptions::default() };
     let png = raster_bytes("png", &colours);

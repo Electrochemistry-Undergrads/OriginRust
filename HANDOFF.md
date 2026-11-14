@@ -58,6 +58,11 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
 
 ## Known issues and table UI verification
 
+- T05 PSD graph export: Export Graphs > Photoshop Document and CLI/API `.psd` output support
+  RGB, grayscale and 256 colors with DPI metadata. The image is flattened onto white, without
+  editable graph layers. PSD dimensions are limited before pixel allocation; graphing.md 9.4
+  records the published references and limits. T19 importer work remains in its separate session.
+
 - T08 text substitution: `substitute(s,new,find[,n])$` follows Origin's documented argument order;
   omitted/zero occurrence replaces all, a positive integer chooses one. Function > Text exposes it.
   Text-returning functions accept `$`; worksheet regressions cover Auto recalculation and undo.

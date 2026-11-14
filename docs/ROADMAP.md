@@ -247,9 +247,10 @@ the default project format.
       Geometry and UI tests exist; Origin behaviour has not been measured
 - [ ] Drawn-object `.opj` read/write, page/scale attachment, copy/paste, ordering and resize handles;
       pictures and inset graphs (T24/T18). The `.sheaf` companion preserves current objects
-- [x] Figure export breadth: SVG, PDF, EPS, EMF and PNG/TIFF/JPEG/BMP/GIF/TGA/PCX; size units,
+- [x] Figure export breadth: SVG, PDF, EPS, EMF and PNG/TIFF/JPEG/BMP/GIF/TGA/PCX/PSD; size units,
       margins, colour depth and compression/quality controls; Copy Page bitmap and Windows EMF
-      (T05). Graph/dialog themes, PSD and some palette modes remain
+      (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
+      Graph/dialog themes and some palette modes remain
 - [ ] Matrices, contour plots and heatmaps (matrix branch is not merged)
 - [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,
       correlation and normality tests (`148e9b1`); expanded descriptive statistics and statistics

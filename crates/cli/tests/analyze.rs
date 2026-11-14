@@ -442,6 +442,32 @@ fn ifft_of_two_columns() {
 }
 
 #[test]
+fn fft_filter_adds_a_column() {
+    let dir = scratch("fft-filter");
+    let data = data_file(&dir);
+    let out = dir.join("filtered.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "fft-filter",
+        data.to_str().unwrap(),
+        "--y",
+        "flat",
+        "--type",
+        "high-pass",
+        "--cutoff",
+        "0.1",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("FFT filter"), "{stdout}");
+    // The high pass keeps the offset of a constant: still 2 beside the input.
+    let text = std::fs::read_to_string(&out).unwrap();
+    let row = text.lines().find(|l| l.starts_with("0,")).unwrap();
+    assert!(row.starts_with("0,2,2,"), "{text}");
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);

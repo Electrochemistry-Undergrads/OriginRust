@@ -1003,7 +1003,7 @@ fn analysis_menu() -> Vec<Entry> {
             "Si&gnal Processing",
             vec![
                 item("Smooth...", Cmd::Analyze(AnalysisKind::Smooth)),
-                grey("FFT Filters..."),
+                item("FFT Filters...", Cmd::Analyze(AnalysisKind::FftFilter)),
                 sub(
                     "FFT",
                     vec![

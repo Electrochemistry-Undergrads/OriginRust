@@ -857,6 +857,38 @@ input, as in an FFT result sheet). Auto takes the X step of the input (the frequ
 result). Command line: `sheaf analyze ifft FILE --y Real [--imaginary Imag] [--interval D]
 [--no-shift] [--no-unwrap] [--science]`.
 
+### 15.2 FFT Filters (`fft_filters`)
+
+Analysis > Signal Processing > FFT Filters. Options (from the X-Function file): `filter` (0 Low
+Pass, 1 High Pass, 2 Band Pass, 3 Band Block, 4 Threshold, 5 Low Pass Parabolic), `cutoff`, `freq1`,
+`freq2`, `threshold`, `pass`, `stop` (all automatic by default) and `offset` (keep the DC offset, on;
+high pass, band pass and band block). Observed (`re-workspace/scratch/fftfilt/ff1..ff4.out.txt`, 10,
+16, 20, 32 and 40 points; the gain of every frequency was read off by dividing the FFTs; Rust test
+`fft_filters_match_origin` on nine of the cases):
+
+- Each frequency `f = k * step` (both signs, `step = 1 / (N * interval)`, the interval from the X
+  column: X step 0.5 doubled the frequencies) is kept or removed, and the real part of the inverse
+  transform is the result. Low pass keeps `f <= cutoff`; high pass `f >= cutoff`; band pass
+  `freq1 <= f <= freq2` (`6 * 0.05` lies just above 0.3 in floating point and was removed, so `f`
+  is the product, not `k / (N * interval)`).
+- Band block removes `freq1 <= f < freq2 + step`: one frequency more than band pass keeps whenever
+  freq2 is not itself a frequency (0.12 to 0.28 removed 0.15 to 0.30 of 20 points; 0.1 to 0.3 of 16
+  points removed up to 0.3125).
+- Keep DC offset: the zero frequency stays in high pass, band pass and band block; off, it is removed
+  too.
+- Threshold keeps the frequencies whose magnitude `|X|` (unscaled FFT) is at least the threshold.
+- Low Pass Parabolic weights `1` up to `pass`, `1 - ((f - pass) / (stop - pass))^2` up to `stop`, 0
+  above. In two cases the one frequency at a quarter of the sampling rate came out a little
+  different from this (0.31 and 0.434 instead of 0.4375, with a small imaginary part); not copied.
+- Automatic values: cutoff (low and high pass), freq1, pass = a quarter of the Nyquist frequency;
+  freq2, stop = three quarters; threshold = a tenth of the largest `|X|`, zero frequency included
+  (designed spectra: largest 100 removed up to 9 and kept 10; largest 50 removed up to 4).
+
+Sheaf: `sheaf_calc::fft_filter`, `Tool::FftFilter(FftFilterSpec)`, a new column beside each input
+(or a new sheet or existing columns, the Output node). Command line: `sheaf analyze fft-filter FILE
+--y B [--type low-pass|high-pass|band-pass|band-block|threshold|parabolic] [--cutoff F] [--freq1 F
+--freq2 F] [--threshold T] [--pass F --stop F] [--no-offset] [--interval D]`.
+
 ## Files
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with

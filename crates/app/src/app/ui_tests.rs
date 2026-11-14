@@ -1519,6 +1519,19 @@ fn ifft_opens_from_signal_processing_and_takes_the_next_column_as_the_imaginary_
 }
 
 #[test]
+fn fft_filters_open_from_signal_processing_and_add_a_column_per_input() {
+    let mut h = start(vec![data_file("fftfilter")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FFT Filters..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added = b.sheet().columns.iter().filter(|c| c.comments.starts_with("FFT low pass filter of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("FFT filter"));
+}
+
+#[test]
 fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("hilbert")]);
     show_window(&mut h, "Book1 - sample");

@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 43 | 119 | 68 | 230 |
+| All rows | 43 | 129 | 59 | 231 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 11 | 50 | 68 | 129 |
+| P1 and P2 together | 11 | 60 | 59 | 130 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -51,7 +51,7 @@ Cross-cutting findings:
 | Keyboard shortcuts | Ctrl+K import, Ctrl+Q set values, Ctrl+D, Ctrl+R, F-keys, Alt+n | Ctrl+N, O, S, Shift+S; Ctrl+K import; Ctrl+Q Set Column Values; Ctrl+D Add New Columns; Ctrl+Y Nonlinear Curve Fit; Ctrl+R Rescale; Ctrl+J Copy Page; Ctrl+T Toolbars; Ctrl+Z, Shift+Ctrl+Z; Ctrl+C, X, V; Delete; F2 Page Properties; F12 Layer Contents; Alt+1, 2, 6, 8 panels; Alt+Enter Properties. Worksheet keys taken from spreadsheet programs, none bound in Origin's worksheet: Ctrl+A select the sheet, Ctrl+Space the columns and Shift+Space the rows of the selection, Backspace empty the cell and edit it, Ctrl+Enter store the typed value in the whole block, Ctrl+Plus insert and Ctrl+Minus delete at the selection, Ctrl+Page Up/Down previous/next sheet (Excel's Ctrl+D, Ctrl+R and Ctrl+Y stay Origin's Add New Columns, Rescale and Nonlinear Curve Fit) | ◐ | many Origin keys are listed in the menus but grey and do nothing (F5, F7 to F11, Ctrl+U, Ctrl+3, Ctrl+4, Ctrl+I and Ctrl+M zoom, view keys, Alt+3, 4, 5, 7) | P0 |
 | New window kinds | File > New: Worksheet, Matrix, Graph, Image, Excel, Layout, Notes, Function Plot, from Template | File > New > Project and Worksheet; the Plot menu makes a graph from the selected columns | ◐ | no empty graph, matrix, image, layout, notes, function plot, new-from-template (grey in File > New) | P1 |
 | Append project | File > Append | CLI `import --append` (workbooks only) | ◐ | none in the app; graphs not merged | P1 |
-| Open Excel, sample project, Close | File menu | none | ✗ | Close of active window missing; Explorer Delete only | P1 |
+| Open Excel, sample project, Close | File menu | File > Close (closes the active window, its data stays, as the title bar's close button) | ◐ | no Excel or sample projects | P1 |
 | Save Window As, Save Template As, analysis template | File menu | none | ✗ | no .otp/.otw-style files; only 4 built-in figure templates | P1 |
 | Print, Print Preview, Page Setup | File > Print, Ctrl+P | none | ✗ | graphs can only be exported to files | P1 |
 | Recent projects, books, graphs, imports | File > Recent | none | ✗ | | P1 |
@@ -61,7 +61,7 @@ Cross-cutting findings:
 | Preferences | Tools > Options, Ctrl+U | none | ✗ | no settings stored | P1 |
 | Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | Object Manager (right edge: layers and plots of the active graph with tick boxes that show or hide plots), Messages Log and Results Log (left edge, with Clear), status bar with hints, Average, Sum and Count of the selected cells, AU : ON, active sheet, Radian | ◐ | no Command Window, Code Builder, Quick Help, Smart Hint Log or Data Display; Results Log holds only the analysis and fit summaries; Object Manager has no plot groups and no layer-level settings | P1 |
 | Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | page fitted to window; Axis Zoom In and Axis Zoom Out in an axis right-click menu; Rescale to Show All | ◐ | no Page, Print, Window or Draft view; no zoom tool, whole-page zoom or pan (the Zoom In and Zoom Out buttons are grey) | P1 |
-| Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | none | ✗ | | P1 |
+| Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | Edit > Find in Sheets (Ctrl+F: the shown text of the active sheet, down each column from the cursor, wrapping; match case, whole cell), Replace (Ctrl+H: the cell at the cursor or every cell, one undo step, formula columns left alone), Go to (Ctrl+G) | ◐ | only the active sheet, no search in other sheets or books, no Find in Project (F3); Origin's dialog options not measured | P1 |
 | Set As Begin, End, Reset | Edit menu | none | ✗ | analysis dialogs take row ranges individually | P1 |
 | Copy graph page to clipboard | Edit > Copy Page, Ctrl+J | Edit > Copy Page, Ctrl+J and the graph's right-click menu put the page on the clipboard as a 300 dpi picture at 40 % size (Origin's size factor) with the Auto margin, and on Windows an enhanced metafile next to the bitmap | ✓ | no WMF, no OLE object; the 40 % and the margin are read from the docs, not measured; pasting into another program was not tried | P1 |
 | Copy and paste format between graphs | Edit > Copy Format | "Use this style for all plots" button | ◐ | | P1 |
@@ -160,12 +160,13 @@ Cross-cutting findings:
 | Subtract reference curve | subtract_ref | Subtract Reference Data window, `analyze subtract-ref` | ✓ | linear interpolation, common range option, checked against Origin (spec section 9) | P0 |
 | Normalize | 12 methods | `calc/normalize.rs`, checked | ◐ | no reference column or cell methods; no row normalize | P0 |
 | Interpolate and resample | interp1xy | linear, spline, Akima, B-spline | ◐ | extrapolation option not exposed; B-spline default does not match; new sheet only | P0 |
-| Interpolate onto given X, trace | interp1, interp1trace | library function only | ✗ | no app or CLI route | P1 |
-| Translate X or Y | cxt, vshift | none | ✗ | | P1 |
-| Level crossing and curve intersect | levelcrossing, intersect | none | ✗ | | P1 |
-| Data reduction | reducerows, reducedup | none | ✗ | | P1 |
+| Interpolate onto given X, trace | interp1, interp1trace | Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a chosen column (linear, spline, Akima, B-spline; outside the data extrapolate, missing or repeat the end value, as Origin's option) | ◐ | no trace interpolation | P1 |
+| Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |
+| Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); level crossing none | ◐ | not measured in Origin, `analysis-curve-math.md`; no level crossing | P1 |
+| Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (T23), Reduce Duplicate X Data (all eight methods, tolerance, counts, column names checked against Origin's reducedup) | ◐ | Reduce Rows layout not compared with Origin; reducedup writes a new sheet where Origin adds columns to the input sheet; no Reduce XY Data | P1 |
 | Sampling interval check | vinc | internal use only | ✗ | | P1 |
-| Average multiple curves | avecurves | none | ✗ | | P1 |
+| Average multiple curves | avecurves | Average Multiple Curves window and `analyze average`: mean, SD, count; Recalculate Auto/Manual | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
+| Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Cumulative sum | Mathematics | running integral only | ✗ | | P1 |
 | Convolution, deconvolution | Signal Processing | none | ✗ | | P2 |
 | XYZ gridding, matrix conversion | Convert to Matrix | none | ✗ | no matrix window | P2 |
@@ -282,7 +283,7 @@ Cross-cutting findings:
 
 | Feature | Origin | Sheaf | Status | Gap | Priority |
 |---|---|---|---|---|---|
-| Graph object model | page, layers, axes, plots, objects | `core/graph.rs`: several layers per graph, linked layers (double-Y, panels), an active layer, plot offsets, bar spacing; the graph window selects layers and objects | ◐ | no drawn objects (lines, arrows, shapes); layers have no background of their own yet; a top or right axis with its own scale exists only as a linked layer | P0 |
+| Graph object model | page, layers, axes, plots, objects | `core/graph.rs`: several layers per graph, linked layers (double-Y, panels), an active layer, plot offsets, bar spacing; the graph window selects layers and objects | ◐ | drawn objects cannot be resized, reordered, copied or attached to the page or the scales (graphing.md 17.5); layers have no background of their own yet; a top or right axis with its own scale exists only as a linked layer | P0 |
 | Units and sizing | cm, mm, pixel, scale modes | inches and percent | ◐ | | P0 |
 | Axis scale and range | many scale types, rescale modes | axis dialog, Scale tab: linear, log10, ln, log2, reciprocal, offset reciprocal, probability, probit, logit and Weibull (limits and ticks measured in Origin, graphing.md 3.8), from and to, reverse, first tick, round out to ticks, exact data range, symmetric about zero, major step, minor tick count, rescale margin; tick label prefix and suffix | ◐ | no custom formula, discrete or symmetric-log scale; one axis break only (Breaks tab); the reciprocal default step fits 2 of 3 measured ranges; reverse, first tick, prefix and suffix are kept by the .opj companion only | P0 |
 | Axis line and ticks | Line and Ticks tab | direction, length, width, colour | ◐ | no separate tick colour, offset, arrows | P0 |
@@ -299,12 +300,12 @@ Cross-cutting findings:
 | Legend | Legend object | corners or manual, font, frame; the text in Origin's notation (`\l(n)` symbol, `%(n)` name, `l.p` for a double-Y legend, any literal text and markup, one entry per line; the automatic text is `\l(1) %(1)` per plot); columns; Reconstruct Legend (Graph > Legend, Ctrl+L, the legend's right-click menu, and a button in Plot Details); the legend can be dragged (it becomes manual); the text is written to and read from .opj files | ◐ | `%(n)` options (`@LL`, `@LU`, ...) are ignored and the name is always the plot's label; no `\l(n)` symbol options; Update Legend keeps custom lines, drops those of gone plots and adds missing ones (not measured against Origin), no other update modes, no entry order, line spacing or legend title; columns are not written to .opj (named, so the companion keeps them) | P0 |
 | Text objects and escapes | text tool, escapes | `markup.rs` renders many escapes | ◐ | free text labels can be added (Text tool, Graph > Add Text..., `--label`), edited (double click) and dragged; no colour, font or attachment choice; several escapes unsupported | P0 |
 | Fonts | Format > Font | per axis and legend | ◐ | no underline, no default-font setting | P0 |
-| Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label | ◐ | only text labels and the legend can be dragged; nothing can be resized; no drawing tools | P0 |
+| Direct editing on the graph | select, drag, double-click | a click selects an axis, title, legend, plot, label, drawn object or the page (handles drawn) and makes its layer active; double-click opens the axis dialog or Plot Details at that part; right-click menus per object; Delete hides the legend or a title and removes a label or a drawn object | ◐ | text labels, the legend and drawn objects can be dragged; nothing can be resized by handles | P0 |
 | Plot Details dialog | tree, Apply, OK, Cancel | Plot Details in Origin's layout: a tree at the left (graph, layers, plots), tabs for what is chosen, OK, Cancel, Apply; the axis dialog has the same buttons | ◐ | no Worksheet button; the Group tab has no increments; some tabs are grey (layer Background); the axis dialog lists Bottom, Top, Left and Right on the tabs other than Scale and Breaks, but Top and Right only hold the far-edge line and ticks; Apply To... copies the look to the other axis, all layers or both | P0 |
 | Grids | Grids tab | major and minor with style | ◐ | no opposite grid or zero line | P1 |
 | Axis breaks | Breaks tab | axis dialog, Breaks tab: one break with from, to, position and gap (percent of the axis) and its own tick step after the break; gap in the axis line with slashes | ◐ | one break, not 1 to 7; layout figures not measured in Origin; a line joining points on both sides of a break still crosses the gap; not written to .opj | P1 |
 | Reference lines, special ticks | add line | special ticks: extra ticks with own labels (Special Ticks tab) | ◐ | no reference lines | P1 |
-| Drawn lines, arrows, shapes | Tools toolbar | none | ✗ | | P1 |
+| Drawn lines, arrows, shapes | Tools toolbar | Tools bar: Line, Arrow, Rectangle and Circle (drag to draw, Shift to snap or square); move by dragging, Delete, double-click or right-click Properties (colour, width, dash, fill, arrow heads); undo for each step; drawn into the figure exports; kept in the project file (graphing.md 17) | ◐ | no resize handles, ordering, Cut, Copy and Paste, grouping, page or scale attachment, polylines, curves or pictures (graphing.md 17.5); not written to .opj (the save warns) | P1 |
 | Themes | Theme Organizer | none | ✗ | | P1 |
 | Graph templates | Save Template As | 9 built-in in the Plot menu: Line, Scatter, Line + Symbol, Column, Area, Cyclic voltammetry, Double-Y, Stacked Lines, Waterfall | ◐ | cannot save or load; .otp not read | P1 |
 | Layer arrangement, merge | Arrange Layers | layer frame editable in Plot Details (Size); panel layouts by CLI | ◐ | no Arrange Layers dialog, no Merge Graph Windows (grey) | P1 |
@@ -323,7 +324,7 @@ Cross-cutting findings:
 | One scene renderer for screen and exports | | `layout.rs` to `scene.rs` | ✓ | | P0 |
 | Other image types | EMF, WMF, TIF, JPG, EPS, BMP, GIF, AI and more | TIFF (none, PackBits or LZW), JPEG, BMP, GIF, TGA and PCX (24-bit, grey or 256 colours where the format allows), EPS (level 2, vector, standard PostScript fonts re-encoded to Latin-1, Greek from Symbol) and EMF (vector, text as text, written from the public format description) in the app (export window), the CLI (`-o fig.eps`, `-o fig.tga` and so on) and `export_file`; sizes scale as for SVG and PDF | ◐ | transparency is blended onto the page background in EPS and EMF; characters outside Latin-1, Greek and a few signs are replaced and reported (EPS); EMF was checked by loading it with GDI+, EPS only by structure (no PostScript interpreter was available); TGA and PCX were read back by an independent decoder (Pillow); WMF, PSD and AI are missing | P1 |
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
-| Export preview | Preview button | none | ✗ | | P1 |
+| Export preview | Preview button | Export Graphs preview pane with Auto Preview (T05) | ◐ | no Graph tab in the preview | P1 |
 | Send to PowerPoint or Word | Graph menu | none | ✗ | | P2 |
 
 ## 14 Dialog details
@@ -333,7 +334,7 @@ Cross-cutting findings:
 | Generic analysis dialog frame | input and output ranges, Preview, Auto Apply, theme, recalculate | one shared frame for every analysis and Statistics tool: Dialog Theme row (grey), Description, Recalculate (None, Manual, Auto for Smooth, Integrate and Find Peaks), Auto Apply, a tree with Input (range text and a "..." picker for the columns, rows), the tool's options and Output, Auto Preview and Preview with a preview pane for the tools that write curves (Smooth, Differentiate, Integrate, Normalize, Baseline, Interpolate, reference and simple math), OK, Cancel, Apply (runs and keeps the window) | ◐ | no saved themes, Recalculate links only Smooth, Integrate and Find Peaks, the output can be a new sheet or existing columns for the column-writing tools only, the preview is a small own drawing, not drawn on the source graph | P0 |
 | Column Properties dialog | Format dialog | Origin's layout: Prev and Next, Short Name (18 characters), Long Name, Units, Comments, Options (Plot Designation, Format with Text, Text & Numeric, Month and Day of Week, Display, Column Width greyed, Apply to all columns to the right), OK, Cancel, Apply | ◐ | Column Width is greyed (the grid has one width) | P0 |
 | Context menus | header, cell, row, corner, graph objects | worksheet menus for column header, cell, row, sheet tab and corner in the long form of Origin; graph menu | ◐ | Fill, Mask, Filter, Sparklines and more are greyed; no short form with chevron; graph objects only partly | P0 |
-| Set Column Values dialog extras | function list, descriptions | none | ✗ | | P1 |
+| Set Column Values dialog extras | function list, descriptions | Function menu with every sheaf-expr function, its description and example (T09) | ◐ | scripts box read-only, Set Multiple Columns Values missing | P1 |
 
 ## Order of work
 

@@ -7,6 +7,7 @@ use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, Fi
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_sheet::SheetExportDialog;
+use crate::dialogs::find::{FindDialog, FindOutcome};
 use crate::dialogs::fit::{FitDialog, FitDialogOutcome, FitKind};
 use crate::dialogs::fit_more::{FitMoreDialog, FitMoreKind, FitMoreOutcome};
 use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
@@ -16,6 +17,7 @@ use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
 use crate::dialogs::set_values::SetValuesDialog;
+use crate::dialogs::shape_object::ShapeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::text_object::TextDialog;
 use crate::graph_view::{self, GraphUi};
@@ -98,6 +100,7 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     column_props: Option<ColumnPropsDialog>,
     text_dialog: Option<TextDialog>,
+    shape_dialog: Option<ShapeDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -109,6 +112,7 @@ pub struct SheafApp {
     export_sheet: Option<SheetExportDialog>,
     rename: Option<RenameDialog>,
     go_to: Option<GoToDialog>,
+    find: Option<FindDialog>,
     sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
@@ -118,6 +122,8 @@ pub struct SheafApp {
     about: bool,
     /// Which toolbars are shown.
     toolbars: Toolbars,
+    /// View > Status Bar turned the status bar off.
+    status_bar_hidden: bool,
     /// The side panels: Project Explorer, Object Manager and the logs.
     panels: Panels,
     /// What the status bar and the message boxes said, and the reports of the tools.
@@ -157,6 +163,7 @@ impl SheafApp {
             graph_props: None,
             column_props: None,
             text_dialog: None,
+            shape_dialog: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -168,12 +175,14 @@ impl SheafApp {
             export_sheet: None,
             rename: None,
             go_to: None,
+            find: None,
             sort: None,
             sheet_name: None,
             copied: String::new(),
             copied_page: None,
             about: false,
             toolbars: Toolbars::default(),
+            status_bar_hidden: false,
             panels: Panels::default(),
             logs: Logs::default(),
             logged_message: None,
@@ -237,6 +246,33 @@ impl SheafApp {
     }
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
+    /// File > Append: the windows of the project in `path` join this project in a folder named
+    /// after the file, in one undo step.
+    fn append_project_file(&mut self, path: &Path) {
+        match sheaf_io::open_project(path) {
+            Ok(opened) => {
+                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Appended").to_string();
+                let mut added = (Vec::new(), 0);
+                self.doc.apply("Append project", |p| added = p.append(opened.project, &name));
+                let (ids, dropped) = added;
+                for id in ids.iter().take(MAX_TABS_AT_ONCE) {
+                    self.focus(*id);
+                }
+                self.say(format!("Appended {} window(s) from {}", ids.len(), path.display()));
+                let mut notes = opened.warnings;
+                if dropped > 0 {
+                    notes.push(format!(
+                        "{dropped} analysis result(s) of the appended project no longer recalculate; their values are kept."
+                    ));
+                }
+                if !notes.is_empty() {
+                    self.message = Some(("Notes about the appended project".to_string(), notes.join("\n\n")));
+                }
+            }
+            Err(e) => self.message = Some(("Could not append the project".to_string(), e.to_string())),
+        }
+    }
+
     fn load_project(&mut self, path: PathBuf) {
         match sheaf_io::open_project(&path) {
             Ok(opened) => {
@@ -286,6 +322,7 @@ impl SheafApp {
         self.export_sheet = None;
         self.rename = None;
         self.go_to = None;
+        self.find = None;
         self.row_filter = None;
         self.reshape = None;
         self.sort = None;
@@ -593,6 +630,7 @@ impl SheafApp {
             GraphOp::UpdateLegend { .. } => "Update legend",
             GraphOp::HideTitle { .. } => "Delete axis title",
             GraphOp::DeleteLabel { .. } => "Delete text",
+            GraphOp::DeleteShape { .. } => "Delete drawn object",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::MovePlotToAxis { right: true, .. } => "Move plot to right Y axis",
@@ -601,7 +639,24 @@ impl SheafApp {
         };
         // The present axis ranges, for the zoom (an automatic axis has no stored limits).
         let resolved = sheaf_plot::layout_geometry(self.doc.project(), graph).ok();
+        let shapes = self.shape_dialog_shapes();
         self.doc.apply(label, |p| graph_view::apply_op(p, graph, op, resolved.as_deref()));
+        self.close_shape_dialog_if_changed(shapes);
+    }
+
+    /// The drawn objects of the layer the drawn-object window edits, if it is open.
+    fn shape_dialog_shapes(&self) -> Option<Vec<sheaf_core::shape::Shape>> {
+        self.shape_dialog.as_ref().and_then(|d| d.layer_shapes(&self.doc)).map(<[_]>::to_vec)
+    }
+
+    /// Closes the drawn-object window when Delete, Undo or Redo changed the objects of its layer:
+    /// its index may now name another object, and Apply would edit that one.
+    fn close_shape_dialog_if_changed(&mut self, before: Option<Vec<sheaf_core::shape::Shape>>) {
+        if let Some(d) = &self.shape_dialog
+            && d.layer_shapes(&self.doc) != before.as_deref()
+        {
+            self.shape_dialog = None;
+        }
     }
 
     fn focus(&mut self, id: WindowId) {
@@ -663,6 +718,8 @@ impl SheafApp {
             }
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.go_to = Some(GoToDialog::new(book)),
+            Action::FindInSheets(book) => self.find = Some(FindDialog::new(book)),
+            Action::ReplaceInSheets(book) => self.find = Some(FindDialog::replace(book)),
             Action::ImportWizard => {
                 // An open wizard keeps its settings: the command only brings it to the front.
                 if self.import_wizard.is_some() {
@@ -672,14 +729,18 @@ impl SheafApp {
                 }
             }
             Action::Undo => {
+                let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.undo() {
                     self.say(format!("Undone: {label}"));
                 }
+                self.close_shape_dialog_if_changed(shapes);
             }
             Action::Redo => {
+                let shapes = self.shape_dialog_shapes();
                 if let Some(label) = self.doc.redo() {
                     self.say(format!("Redone: {label}"));
                 }
+                self.close_shape_dialog_if_changed(shapes);
             }
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
@@ -839,6 +900,18 @@ impl SheafApp {
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
+            Action::InterpolateFromColumn { book, columns } => {
+                self.open_analysis(book, columns, AnalysisKind::Interpolate);
+                if let Some(d) = &mut self.analysis {
+                    d.set_interp_from_column();
+                }
+            }
+            Action::InterpolateWith { book, columns, method } => {
+                self.open_analysis(book, columns, AnalysisKind::Interpolate);
+                if let Some(d) = &mut self.analysis {
+                    d.set_interp_method(method);
+                }
+            }
             Action::Fit { book, column, kind } => {
                 let column = column.filter(|c| self.doc.project().column(*c).is_some_and(|c| c.data.is_numeric()));
                 self.fit = FitDialog::new(self.doc.project(), book, column, kind);
@@ -925,12 +998,19 @@ impl SheafApp {
                 let state = self.graphs.entry(graph).or_default();
                 state.reader = tool == GraphTool::Reader;
                 state.text_tool = tool == GraphTool::Text;
+                state.shape_tool = match tool {
+                    GraphTool::Draw(kind) => Some(kind),
+                    _ => None,
+                };
                 state.reader_point = None;
                 match tool {
                     GraphTool::Reader => {
                         self.say("Data Reader: click a data point; Left and Right step through the rows; Esc ends")
                     }
                     GraphTool::Text => self.say("Text: click where the text goes; Esc ends"),
+                    GraphTool::Draw(kind) => {
+                        self.say(format!("{}: drag on the graph (Shift constrains); Esc ends", kind.name()))
+                    }
                     GraphTool::Pointer => {}
                 }
             }
@@ -942,6 +1022,25 @@ impl SheafApp {
             }
             Action::EditText { graph, layer, label } => {
                 self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label);
+            }
+            Action::AddShape { graph, layer, shape } => {
+                self.doc.apply("Add drawn object", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        l.shapes.push(shape);
+                    }
+                });
+            }
+            Action::MoveShape { graph, layer, shape, dx, dy } => {
+                self.doc.apply("Move drawn object", |p| {
+                    if let Some(s) =
+                        p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.shapes.get_mut(shape))
+                    {
+                        s.translate(dx, dy);
+                    }
+                });
+            }
+            Action::EditShape { graph, layer, shape } => {
+                self.shape_dialog = ShapeDialog::edit(&self.doc, graph, layer, shape);
             }
             Action::MoveLabel { graph, layer, label, x, y } => {
                 self.doc.apply("Move text", |p| {
@@ -969,6 +1068,27 @@ impl SheafApp {
             Action::ExportData(book) => self.export_data(book),
             Action::Focus(id) => self.focus(id),
             Action::HideWindow(id) => self.workspace.hide(id),
+            Action::AppendProject(path) => {
+                let path = path.or_else(|| {
+                    let mut chooser = rfd::FileDialog::new()
+                        .set_title("Append project")
+                        .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj", "opju"]);
+                    if let Some(dir) = self.folder() {
+                        chooser = chooser.set_directory(dir);
+                    }
+                    chooser.pick_file()
+                });
+                if let Some(path) = path {
+                    self.append_project_file(&path);
+                }
+            }
+            Action::DuplicateWindow(id) => {
+                let mut new = None;
+                self.doc.apply("Duplicate window", |p| new = p.duplicate_window(id));
+                if let Some(new) = new {
+                    self.focus(new);
+                }
+            }
             Action::MoveWindow { window, folder } => {
                 if explorer::home(&self.doc.project().root, window) != folder
                     && explorer::folder_at(&self.doc.project().root, &folder).is_some()
@@ -1075,6 +1195,7 @@ impl SheafApp {
             Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
             Action::Toolbars => self.toolbars.dialog = true,
+            Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
             Action::Quit => {
                 if self.doc.dirty {
                     self.pending = Some(Pending::Quit);
@@ -1096,9 +1217,10 @@ impl SheafApp {
             Pending::Open => {
                 let mut chooser = rfd::FileDialog::new()
                     .set_title("Open project")
-                    .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj"])
+                    .add_filter("Projects (Sheaf, Origin)", &[project_file::EXTENSION, "opj", "opju"])
                     .add_filter("Sheaf project", &[project_file::EXTENSION])
-                    .add_filter("Origin project", &["opj"]);
+                    .add_filter("Origin project", &["opj"])
+                    .add_filter("Origin Unicode project (workbooks only)", &["opju"]);
                 if let Some(dir) = self.folder() {
                     chooser = chooser.set_directory(dir);
                 }
@@ -1121,6 +1243,35 @@ impl SheafApp {
     /// Copy, cut, paste and clear on the selected cells of a workbook. Cut, paste and clear
     /// are one undo step each.
     fn cell_op(&mut self, book: WindowId, op: CellOp, ctx: &egui::Context) {
+        if let Some(Sel::Label { column, row }) = self.books.get(&book).map(|s| s.sel.clone()) {
+            let Some(c) = self.doc.project().column(column) else { return };
+            let original = grid::label_text_full(c, &row);
+            let replacement = match op {
+                CellOp::Copy(_) | CellOp::Cut => {
+                    ctx.copy_text(original.clone());
+                    self.copied = original;
+                    if op == CellOp::Cut { Some(String::new()) } else { None }
+                }
+                CellOp::Clear => Some(String::new()),
+                CellOp::Paste => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                    None
+                }
+                CellOp::PasteText(text) | CellOp::Fill(text) => Some(text),
+                _ => {
+                    self.warn("Select data cells to insert, delete, or mask worksheet data");
+                    None
+                }
+            };
+            if let Some(text) = replacement {
+                if row == LabelRow::Formula {
+                    self.warn("Change the formula in Set Column Values");
+                } else {
+                    self.apply(Action::SetLabel { column, row, text }, ctx);
+                }
+            }
+            return;
+        }
         let Some(b) = self.doc.project().workbook(book) else {
             return;
         };
@@ -1625,6 +1776,7 @@ impl SheafApp {
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
+            layer_curves: graph.map(|g| self.graph_layer_curves(g)).unwrap_or_default(),
         }
     }
 
@@ -1645,6 +1797,35 @@ impl SheafApp {
         })?;
         let (book, _, _) = project.locate(y)?;
         Some((book.id, y))
+    }
+
+    /// The Y columns of the visible plots of numbers in the active layer of graph `g` that sit in the
+    /// same worksheet as the plot the Analysis menu works on (see `MenuContext::layer_curves`); that
+    /// plot comes first.
+    fn graph_layer_curves(&self, g: WindowId) -> Vec<ColumnId> {
+        let project = self.doc.project();
+        let (Some(graph), Some((_, first))) = (project.graph(g), self.graph_curve(g)) else {
+            return Vec::new();
+        };
+        let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+        let sheet_of = |y: ColumnId| {
+            project.locate(y).and_then(|(b, s, _)| b.sheets.iter().position(|w| std::ptr::eq(w, s)).map(|i| (b.id, i)))
+        };
+        let here = sheet_of(first);
+        let mut out = vec![first];
+        if let Some(l) = graph.layers.get(layer) {
+            for p in &l.plots {
+                if p.visible
+                    && p.y != first
+                    && project.numeric(p.y).is_some()
+                    && sheet_of(p.y) == here
+                    && !out.contains(&p.y)
+                {
+                    out.push(p.y);
+                }
+            }
+        }
+        out
     }
 
     /// Keyboard shortcuts: the keys written in the menu table (Origin's keys for the commands
@@ -1726,6 +1907,7 @@ impl SheafApp {
             || self.graph_props.is_some()
             || self.column_props.is_some()
             || self.text_dialog.is_some()
+            || self.shape_dialog.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -1736,6 +1918,7 @@ impl SheafApp {
             || self.export_sheet.is_some()
             || self.rename.is_some()
             || self.go_to.is_some()
+            || self.find.is_some()
             || self.sort.is_some()
             || self.sheet_name.is_some()
             || self.about
@@ -1903,6 +2086,11 @@ impl SheafApp {
             && !d.show(ctx, &mut self.doc)
         {
             self.text_dialog = None;
+        }
+        if let Some(d) = &mut self.shape_dialog
+            && !d.show(ctx, &mut self.doc)
+        {
+            self.shape_dialog = None;
         }
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)
@@ -2072,6 +2260,66 @@ impl SheafApp {
                         state.go_to(sheet, column, row);
                     }
                     self.go_to = None;
+                }
+            }
+        }
+        if let Some(d) = &mut self.find {
+            let book = d.book;
+            match d.show(ctx) {
+                FindOutcome::Open => {}
+                FindOutcome::Closed => self.find = None,
+                FindOutcome::Next => {
+                    if let (Some(sheet), Some(state)) = (
+                        self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
+                        self.books.get_mut(&book),
+                    ) && let Some((column, row)) = d.search(sheet, state.active_cell())
+                    {
+                        state.go_to(sheet, column, row);
+                    }
+                }
+                outcome @ (FindOutcome::Replace | FindOutcome::ReplaceAll) => {
+                    let project = self.doc.project();
+                    if let Some(sheet) = project.workbook(book).and_then(|b| b.sheets.get(b.active_sheet)) {
+                        let cursor = self.books.get(&book).and_then(|s| s.active_cell());
+                        let edits: Vec<(usize, usize, String)> = match outcome {
+                            FindOutcome::ReplaceAll => d.replace_all(sheet),
+                            _ => cursor
+                                .and_then(|(c, r)| d.replaced(sheet, (c, r)).map(|t| (c, r, t)))
+                                .into_iter()
+                                .collect(),
+                        };
+                        // Columns kept up to date by a formula are left alone, as when typing.
+                        let (edits, locked): (Vec<_>, Vec<_>) =
+                            edits.into_iter().partition(|(c, _, _)| !sheet.columns[*c].is_locked());
+                        let edits: Vec<(sheaf_core::ColumnId, usize, String)> =
+                            edits.into_iter().map(|(c, r, t)| (sheet.columns[c].id, r, t)).collect();
+                        if !edits.is_empty() {
+                            let label = if edits.len() == 1 { "Replace" } else { "Replace all" };
+                            self.doc.apply(label, |p| {
+                                for (id, row, text) in &edits {
+                                    if let Some(c) = p.column_mut(*id) {
+                                        c.set_cell_text(*row, text);
+                                    }
+                                }
+                            });
+                        }
+                        if !locked.is_empty() {
+                            self.warn(format!(
+                                "{} cell(s) in columns calculated from a formula were left alone",
+                                locked.len()
+                            ));
+                        }
+                    }
+                    if matches!(outcome, FindOutcome::Replace)
+                        && let Some(d) = &mut self.find
+                        && let (Some(sheet), Some(state)) = (
+                            self.doc.project().workbook(book).and_then(|b| b.sheets.get(b.active_sheet)),
+                            self.books.get_mut(&book),
+                        )
+                        && let Some((column, row)) = d.search(sheet, state.active_cell())
+                    {
+                        state.go_to(sheet, column, row);
+                    }
                 }
             }
         }
@@ -2314,6 +2562,17 @@ impl SheafApp {
                         self.text_dialog = TextDialog::edit(&self.doc, id, 0, label);
                         self.graphs.entry(id).or_default().selected =
                             Some((0, sheaf_plot::scene::ObjectKind::Label(label)));
+                        self.focus(id);
+                    }
+                }
+                // shape:N opens the properties window of the N-th drawn object (from 1) of the
+                // first graph's first layer and selects it.
+                "shape" => {
+                    if let (Some(id), Ok(n)) = (first_graph, arg.parse::<usize>()) {
+                        let shape = n.saturating_sub(1);
+                        self.shape_dialog = ShapeDialog::edit(&self.doc, id, 0, shape);
+                        self.graphs.entry(id).or_default().selected =
+                            Some((0, sheaf_plot::scene::ObjectKind::Shape(shape)));
                         self.focus(id);
                     }
                 }
@@ -2563,7 +2822,9 @@ impl eframe::App for SheafApp {
                     .frame(bar_frame())
                     .show(ctx, |ui| toolbar::show_row(ui, &second, tb, &c, &mut actions));
             }
-            egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));
+            if !self.status_bar_hidden {
+                egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| self.status_bar(ui));
+            }
             if tb.shown(Bar::Graphs2D) {
                 egui::TopBottomPanel::bottom("toolbar_2d_graphs")
                     .frame(bar_frame())

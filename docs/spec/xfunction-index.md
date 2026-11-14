@@ -340,7 +340,7 @@ How to read the table: Origin groups the folders as Data Exploration, Data Manip
 | plotpClamp | Import and Export | Plot-type creation helper | P2 |
 | reimport2 | Import and Export | Re-import current file | P1 |
 | word2ogw | Import and Export | Worksheet or column manipulation helper | P2 |
-| avecurves | Mathematics | Average/concatenate several curves | P1 |
+| avecurves | Mathematics | Average/concatenate several curves (Sheaf: Average Multiple Curves, unmeasured, `analysis-curve-math.md`) | P1 |
 | averagexy | Mathematics | Average or concatenate multiple XY curves with common X options | P1 |
 | bspline | Mathematics | Cubic B-spline (smoothing) interpolation at supplied X values | P2 |
 | cnormalize | Mathematics | Normalize several curves one by one (adds reference-plot and picked-point options) | P1 |
@@ -356,14 +356,14 @@ How to read the table: Origin groups the folders as Data Exploration, Data Manip
 | interp2 | Mathematics | Fitting or interpolation helper | P2 |
 | interp3 | Mathematics | Fitting or interpolation helper | P2 |
 | interpxyz | Mathematics | Fitting or interpolation helper | P2 |
-| intersect | Mathematics | Intersections of two curves | P1 |
+| intersect | Mathematics | Intersections of two curves (Sheaf: Intersect, unmeasured, `analysis-curve-math.md`) | P1 |
 | marea | Mathematics | Matrix operation | P2 |
 | mathtool | Mathematics | Add/subtract/multiply/divide/power a curve with a constant or another curve | P0 |
 | medianflt2 | Mathematics | Matrix operation | P2 |
 | minterp2 | Mathematics | Matrix operation | P2 |
 | minverse | Mathematics | Matrix operation | P2 |
 | normalize | Mathematics | Rescale a curve by a statistic, to [0,1] or [0,100], or to Z scores | P0 |
-| polyarea | Mathematics | Area enclosed by a polygonal curve | P1 |
+| polyarea | Mathematics | Area enclosed by a polygonal curve (Sheaf: Polygon Area, unmeasured, `analysis-curve-math.md`) | P1 |
 | reflection | Mathematics | Reflect data across an interval | P2 |
 | rnormalize | Mathematics | Normalize worksheet columns in place | P1 |
 | specialflt2 | Mathematics | Matrix operation | P2 |

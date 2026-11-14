@@ -109,6 +109,8 @@ pub enum ObjectKind {
     Legend,
     /// A free text label: its index in `Layer::labels`.
     Label(usize),
+    /// A drawn line, arrow, rectangle or ellipse: its index in `Layer::shapes`.
+    Shape(usize),
     /// A plot: its index in `Layer::plots`.
     Plot(usize),
 }

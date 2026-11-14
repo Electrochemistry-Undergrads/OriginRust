@@ -699,6 +699,7 @@ fn draw_legend_and_labels(
         text::place(out, m, &label.text, &label.font, size, pos, Anchor::Start, label.rotation_deg);
         rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
+    crate::shapes::draw_shapes(out, objects, layer, index, f, m);
 }
 
 // ----- axis colors ---------------------------------------------------------------------------

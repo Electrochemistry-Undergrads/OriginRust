@@ -3449,3 +3449,123 @@ fn floating_bar_and_column_legends_list_the_last_plot_first() {
         assert!(at("E") < at("D") && at("D") < at("C"), "E, D, C from the top: {t:?}");
     }
 }
+
+// ----- drawn objects (graphing spec section 17) ----------------------------
+
+fn graph_with_one_of_each_shape() -> (sheaf_core::Project, sheaf_core::WindowId) {
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let mut line = Shape::new(ShapeKind::Line, (0.1, 0.1), (0.4, 0.1));
+    line.dash = sheaf_core::graph::Dash::Dash;
+    let mut arrow = Shape::new(ShapeKind::Arrow, (0.1, 0.3), (0.4, 0.5));
+    arrow.color = Color { r: 200, g: 0, b: 0, a: 255 };
+    arrow.head_at_start = true;
+    let mut rect = Shape::new(ShapeKind::Rectangle, (0.55, 0.1), (0.9, 0.3));
+    rect.fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    let ellipse = Shape::new(ShapeKind::Ellipse, (0.55, 0.5), (0.9, 0.9));
+    layer.shapes = vec![line, arrow, rect, ellipse];
+    (p, g)
+}
+
+#[test]
+fn golden_drawn_shapes() {
+    let (p, g) = graph_with_one_of_each_shape();
+    compare_golden("shapes", &svg_of(&p, g));
+}
+
+#[test]
+fn drawn_shapes_are_picked_by_outline_or_fill() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    let (p, g) = graph_with_one_of_each_shape();
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.25, 0.1), shape(0), "on the line");
+    assert_eq!(at(0.25, 0.4), shape(1), "on the arrow's middle");
+    assert_eq!(at(0.7, 0.2), shape(2), "inside the filled rectangle");
+    assert_eq!(at(0.55, 0.2), shape(2), "on its outline");
+    assert_eq!(at(0.725, 0.5), shape(3), "on the ellipse's top");
+    assert_eq!(at(0.56, 0.51), Hit::Layer(0), "in the ellipse's box corner");
+    // An unfilled shape is hit on its outline only: its inside is the layer behind it.
+    assert_eq!(at(0.725, 0.7), Hit::Layer(0), "inside the unfilled ellipse");
+    assert_eq!(at(0.9, 0.7), shape(3), "on the unfilled ellipse's right end");
+    // Outside the filled rectangle, 1 pt from its edge, is within the pick tolerance; 10 pt is not.
+    assert_eq!(hit_test(&scene, (f.x + 0.55 * f.w - 1.0, f.y + 0.2 * f.h), 2.0), shape(2), "1 pt outside the edge");
+    assert_eq!(hit_test(&scene, (f.x + 0.55 * f.w - 10.0, f.y + 0.2 * f.h), 2.0), Hit::Layer(0), "10 pt outside");
+}
+
+#[test]
+fn an_unfilled_rectangle_is_hit_on_its_edge_and_a_filled_ellipse_inside_only() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let mut rect = Shape::new(ShapeKind::Rectangle, (0.1, 0.1), (0.4, 0.4));
+    rect.fill = None;
+    let mut ellipse = Shape::new(ShapeKind::Ellipse, (0.55, 0.5), (0.9, 0.9));
+    ellipse.fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    p.graph_mut(g).unwrap().layers[0].shapes = vec![rect, ellipse];
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.1, 0.25), shape(0), "on the unfilled rectangle's edge");
+    assert_eq!(at(0.25, 0.25), Hit::Layer(0), "inside the unfilled rectangle");
+    assert_eq!(at(0.725, 0.7), shape(1), "inside the filled ellipse");
+    assert_eq!(at(0.56, 0.51), Hit::Layer(0), "the filled ellipse's box corner");
+}
+
+#[test]
+fn the_topmost_of_overlapping_drawn_objects_is_picked() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let fill = Some(Color { r: 200, g: 220, b: 255, a: 255 });
+    // Shape 0 is a big filled rectangle, shape 1 a smaller filled one drawn over it, shape 2 a
+    // filled rectangle that covers the label.
+    let mut big = Shape::new(ShapeKind::Rectangle, (0.1, 0.1), (0.6, 0.6));
+    big.fill = fill;
+    let mut small = Shape::new(ShapeKind::Rectangle, (0.3, 0.3), (0.5, 0.5));
+    small.fill = fill;
+    let mut cover = Shape::new(ShapeKind::Rectangle, (0.7, 0.7), (0.95, 0.95));
+    cover.fill = fill;
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.shapes = vec![big, small, cover];
+    layer.labels.push(sheaf_core::graph::TextLabel::new("peak", 0.8, 0.8, sheaf_core::graph::Font::new("Arial", 10.0)));
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |x: f64, y: f64| hit_test(&scene, (f.x + x * f.w, f.y + y * f.h), 2.0);
+    let shape = |k| Hit::Object { layer: 0, kind: ObjectKind::Shape(k) };
+    assert_eq!(at(0.4, 0.4), shape(1), "the overlap picks the rectangle painted last");
+    assert_eq!(at(0.2, 0.2), shape(0), "outside the small one the big one is picked");
+    assert_eq!(at(0.82, 0.8), shape(2), "a shape over a label is picked, not the label");
+}
+
+#[test]
+fn a_thick_line_is_picked_on_its_visible_width() {
+    use crate::hit::{Hit, hit_test};
+    use crate::scene::ObjectKind;
+    use sheaf_core::shape::{Shape, ShapeKind};
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0)]);
+    let mut line = Shape::new(ShapeKind::Line, (0.1, 0.5), (0.4, 0.5));
+    line.width_pt = 10.0;
+    p.graph_mut(g).unwrap().layers[0].shapes = vec![line];
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = scene.layers[0].clip;
+    let at = |dy: f64| hit_test(&scene, (f.x + 0.25 * f.w, f.y + 0.5 * f.h + dy), 1.0);
+    let shape = Hit::Object { layer: 0, kind: ObjectKind::Shape(0) };
+    assert_eq!(at(4.0), shape, "4 pt off the centre of a 10 pt line is on the stroke");
+    assert_eq!(at(-4.0), shape);
+    assert_eq!(at(20.0), Hit::Layer(0), "far from it is not");
+    // The selection box (the recorded bounds) holds the stroke.
+    let o = scene.layers[0].objects.iter().find(|o| o.kind == ObjectKind::Shape(0)).unwrap();
+    assert!(o.bounds.h >= 10.0 - 1e-9, "{:?}", o.bounds);
+}

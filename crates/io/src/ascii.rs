@@ -223,6 +223,20 @@ impl Default for AsciiOptions {
     }
 }
 
+impl AsciiOptions {
+    /// A copy that imports the full data range while retaining delimiters, labels, naming,
+    /// number/date settings and block handling. Used for the first file of a partial batch.
+    pub fn without_partial_import(&self) -> Self {
+        Self {
+            rows: ImportSelection::default(),
+            columns: ImportSelection::default(),
+            skip_rows: 0,
+            max_rows: None,
+            ..self.clone()
+        }
+    }
+}
+
 /// What [`detect`] decided. Line numbers are 1-based; 0 means "none".
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Detected {
@@ -2086,6 +2100,29 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         let imp = parse_with(text, &opts);
         assert_eq!(imp.workbook.sheets[0].columns.len(), 1);
         assert_eq!(col(&imp, 0).long_name, "y");
+    }
+
+    #[test]
+    fn full_range_override_keeps_delimiters_numbers_and_labels() {
+        let opts = AsciiOptions {
+            delimiter: Delimiter::Semicolon,
+            decimal_comma: true,
+            header_lines: Some(1),
+            long_name_line: Some(1),
+            units_line: Some(0),
+            comments_line: Some(0),
+            skip_rows: 1,
+            max_rows: Some(2),
+            rows: ImportSelection { read: 1, skip: 1, ..ImportSelection::default() },
+            columns: ImportSelection { first: 2, ..ImportSelection::default() },
+            ..AsciiOptions::default()
+        };
+        let text = "t;signal\n1,5;11,5\n2,5;12,5\n3,5;13,5\n4,5;14,5\n";
+        assert_eq!(parse_with(text, &opts).workbook.sheet().columns[0].numeric().unwrap(), [12.5]);
+        let full = parse_with(text, &opts.without_partial_import());
+        assert_eq!(full.workbook.sheet().columns.len(), 2);
+        assert_eq!(col(&full, 0).numeric().unwrap(), [1.5, 2.5, 3.5, 4.5]);
+        assert_eq!(col(&full, 1).long_name, "signal");
     }
 
     #[test]

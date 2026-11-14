@@ -24,6 +24,7 @@ pub struct ImportDialog {
     pub(super) kind: ImportKind,
     pub(super) chi: ChiOptions,
     pub(super) ascii: AsciiOptions,
+    pub(super) partial_except_first: bool,
     pub(super) other_delimiter: String,
     /// Remember this choice while switching between a delimiter set and a whole string.
     pub(super) combine_delimiters: bool,
@@ -140,6 +141,7 @@ impl ImportDialog {
             kind: ImportKind::Auto,
             chi: ChiOptions::default(),
             ascii: AsciiOptions::default(),
+            partial_except_first: false,
             other_delimiter: "|".to_string(),
             combine_delimiters: false,
             fixed_widths: "10".to_string(),
@@ -171,7 +173,12 @@ impl ImportDialog {
     }
 
     pub(super) fn read(&self, index: usize) -> Result<Imported, String> {
-        sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii).map_err(|e| e.to_string())
+        sheaf_io::import_file(&self.files[index], self.kind, &self.chi, &self.ascii_for_file(index))
+            .map_err(|e| e.to_string())
+    }
+
+    fn ascii_for_file(&self, index: usize) -> AsciiOptions {
+        if index == 0 && self.partial_except_first { self.ascii.without_partial_import() } else { self.ascii.clone() }
     }
 
     pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {
@@ -186,7 +193,7 @@ impl ImportDialog {
         if self.preview.is_none() {
             self.preview = Some(self.read(self.current));
         }
-        let before = (self.current, self.kind, self.chi.clone(), self.ascii.clone());
+        let before = (self.current, self.kind, self.chi.clone(), self.ascii.clone(), self.partial_except_first);
 
         let mut open = true;
         let mut outcome = ImportOutcome::Open;
@@ -240,7 +247,7 @@ impl ImportDialog {
                 });
             });
 
-        if before != (self.current, self.kind, self.chi.clone(), self.ascii.clone()) {
+        if before != (self.current, self.kind, self.chi.clone(), self.ascii.clone(), self.partial_except_first) {
             self.preview = None;
             ctx.request_repaint();
         }
@@ -308,15 +315,13 @@ impl ImportDialog {
     /// The detected settings of the current file, recomputed only when the file or the options
     /// have changed since the last call.
     pub(super) fn detected(&mut self) -> Option<sheaf_io::ascii::Detected> {
+        let options = self.ascii_for_file(self.current);
         let file = self.files.get(self.current)?;
-        let fresh = matches!(&self.detection, Some(c) if c.file == *file && c.options == self.ascii);
+        let fresh = matches!(&self.detection, Some(c) if c.file == *file && c.options == options);
         if !fresh {
             self.detect_runs += 1;
-            self.detection = Some(DetectionCache {
-                file: file.clone(),
-                options: self.ascii.clone(),
-                detected: detect_in_prefix(file, &self.ascii),
-            });
+            self.detection =
+                Some(DetectionCache { file: file.clone(), detected: detect_in_prefix(file, &options), options });
         }
         self.detection.as_ref().and_then(|c| c.detected.clone())
     }
@@ -609,6 +614,9 @@ impl ImportDialog {
                 ui.end_row();
             }
             if page == ImportPage::PartialImport {
+                ui.label("Apply selection");
+                ui.checkbox(&mut self.partial_except_first, "All files except first");
+                ui.end_row();
                 ui.label("Skip data rows");
                 ui.add(DragValue::new(&mut o.skip_rows).range(0..=usize::MAX));
                 ui.end_row();
@@ -762,6 +770,28 @@ pub(super) fn optional_line(ui: &mut egui::Ui, value: &mut Option<usize>, detect
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn except_first_preview_detection_and_import_use_the_same_options() {
+        use sheaf_io::ascii::ImportSelection;
+        let dir = std::env::temp_dir().join(format!("sheaf-import-except-first-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let files: Vec<_> = ["first.csv", "second.csv"].iter().map(|n| dir.join(n)).collect();
+        for file in &files {
+            std::fs::write(file, "t,i\n1,11\n2,12\n3,13\n4,14\n").unwrap();
+        }
+        let mut dlg = ImportDialog::new(files);
+        dlg.ascii.rows = ImportSelection { first: 2, last: 4, read: 1, skip: 1 };
+        dlg.ascii.columns.first = 2;
+        assert_eq!(dlg.detected().unwrap().columns, 1);
+        assert_eq!(dlg.read(0).unwrap().workbook.sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+        dlg.partial_except_first = true;
+        assert_eq!(dlg.detected().unwrap().columns, 2, "scope invalidates the detection cache");
+        assert_eq!(dlg.read(0).unwrap().workbook.sheet().row_count(), 4);
+        dlg.current = 1;
+        assert_eq!(dlg.detected().unwrap().columns, 1);
+        assert_eq!(dlg.read(1).unwrap().workbook.sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+    }
 
     #[test]
     fn detection_reads_a_bounded_prefix_once_per_file_and_options() {

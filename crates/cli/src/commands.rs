@@ -256,6 +256,7 @@ fn import(mut a: ImportArgs) -> Result<()> {
         ascii: ascii_options(&a.read)?,
         book_name: a.book_name.clone().unwrap_or_default(),
         file_name_in_comments: a.file_name_comments,
+        partial_except_first: a.partial_except_first,
     };
     let result = sheaf_io::batch::import_batch(&mut project, &data_files, &opts);
     let mut plotted = std::collections::HashSet::new();

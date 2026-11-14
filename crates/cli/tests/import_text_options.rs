@@ -104,6 +104,43 @@ fn partial_row_and_column_ranges_keep_the_selected_headers() {
 }
 
 #[test]
+fn partial_except_first_applies_to_later_files_in_a_batch() {
+    let dir = scratch("except-first");
+    let text = "t,a,b\n1,11,21\n2,12,22\n3,13,23\n4,14,24\n";
+    let first = dir.join("first.csv");
+    let second = dir.join("second.csv");
+    std::fs::write(&first, text).unwrap();
+    std::fs::write(&second, text).unwrap();
+    let output = dir.join("output.sheaf");
+    let result = Command::new(env!("CARGO_BIN_EXE_sheaf"))
+        .arg("import")
+        .arg(&first)
+        .arg(&second)
+        .arg("--into")
+        .arg(&output)
+        .args([
+            "--first-row",
+            "2",
+            "--skip-rows",
+            "1",
+            "--first-column",
+            "2",
+            "--last-column",
+            "2",
+            "--partial-except-first",
+        ])
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    let p = sheaf_io::project_file::load(&output).unwrap();
+    let books: Vec<_> = p.workbooks().collect();
+    assert_eq!(books[0].sheet().columns.len(), 3);
+    assert_eq!(books[0].sheet().row_count(), 4);
+    assert_eq!(books[1].sheet().columns.len(), 1);
+    assert_eq!(books[1].sheet().columns[0].numeric().unwrap(), [12.0, 14.0]);
+}
+
+#[test]
 fn the_data_import_options_change_names_and_labels() {
     let dir = scratch("names");
     let text = "Time,Current\ns,A\n1,2\n2,3\n3,4\n4,5\n";

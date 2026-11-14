@@ -329,6 +329,9 @@ pub struct ImportArgs {
     /// (always done with --mode columns).
     #[arg(long)]
     pub file_name_comments: bool,
+    /// Apply partial row/column selection to every data file except the first.
+    #[arg(long)]
+    pub partial_except_first: bool,
     #[command(flatten)]
     pub read: ReadOptions,
 }

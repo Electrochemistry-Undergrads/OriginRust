@@ -65,7 +65,9 @@ The disk is about 96 % full; reuse a worktree and its build folder instead of ma
   and the remaining Auto-detection bootstrap limitation are in import-ascii.md section 2.
   Partial Import now selects first/last rows and columns plus repeating read/skip patterns, with
   source labels and parameter values preserved (shared wizard controls and CLI; section 9).
-  Custom range lists and the all-except-first-file switch remain open.
+  Batch scope **All files except first** (CLI `--partial-except-first`) keeps the first data file
+  full while selecting later files; preview and final import share the same options. Custom
+  range lists remain open.
 
 - T08 text substitution: `substitute(s,new,find[,n])$` follows Origin's documented argument order;
   omitted/zero occurrence replaces all, a positive integer chooses one. Function > Text exposes it.

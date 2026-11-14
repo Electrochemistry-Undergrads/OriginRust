@@ -297,6 +297,9 @@ pub struct CoherenceSpec {
     pub options: CoherenceOptions,
 }
 
+/// The most points [`Tool::TraceInterp`] makes; more are refused.
+pub const MAX_TRACE_POINTS: usize = 10_000_000;
+
 /// What [`Tool::TraceInterp`] does (Origin's Mathematics > Trace Interpolation, `interp1trace`,
 /// measured; analysis-tools.md 16): the curve resampled at evenly spaced points along its path.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2049,6 +2052,12 @@ impl Project {
                         spec.points
                     )));
                 }
+                if spec.points > MAX_TRACE_POINTS {
+                    return Err(AnalysisError::BadOption(format!(
+                        "{} points are too many, the most is {MAX_TRACE_POINTS}",
+                        spec.points
+                    )));
+                }
                 let word = match spec.method {
                     TraceMethod::Linear => "linear",
                     TraceMethod::CubicSpline => "cubic spline",
@@ -3675,6 +3684,8 @@ mod tests {
         // A trace of fewer than two points, or with too few distinct points, is refused.
         let one = TraceInterpSpec { points: 1, ..spec };
         assert!(matches!(p.analyze(&request(&[yc], Tool::TraceInterp(one))), Err(AnalysisError::BadOption(_))));
+        let huge = TraceInterpSpec { points: MAX_TRACE_POINTS + 1, ..spec };
+        assert!(matches!(p.analyze(&request(&[yc], Tool::TraceInterp(huge))), Err(AnalysisError::BadOption(_))));
         let flat = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 6])).unwrap();
         assert!(matches!(p.analyze(&request(&[flat], Tool::TraceInterp(spec))), Err(AnalysisError::BadOption(_))));
     }

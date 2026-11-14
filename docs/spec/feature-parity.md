@@ -20,13 +20,13 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 135 | 54 | 238 |
+| All rows | 48 | 136 | 54 | 238 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 66 | 54 | 137 |
+| P1 and P2 together | 16 | 67 | 54 | 137 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
-Reading the counts: the P0 rows are mostly present but often only partly (70 of 101 are partial). No P0 row is missing altogether any more: the analysis dialogs now share one frame with Preview and Auto Preview, and the Analysis menu works on a graph's data plot. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
+Reading the counts: the P0 rows are mostly present but often only partly (69 of 101 are partial). No P0 row is missing altogether any more: the analysis dialogs now share one frame with Preview and Auto Preview, and the Analysis menu works on a graph's data plot. Since 2026-11-11 the former holes of .opj saving, the Origin look, Double-Y graphs, offset and waterfall plots and graph gadgets have become partial rows: they work for the owner's cases but lack Origin's breadth (three or more Y axes, colour-mapped waterfalls, more gadgets, saving the newer graph features into .opj without the companion file).
 
 Cross-cutting findings:
 - Column formulas recalculate (None, Auto, Manual; see workbook-model.md 10a). The CHI import writes `col*1000` formulas that stay one-time values (mode None).
@@ -161,7 +161,7 @@ Cross-cutting findings:
 | Subtract reference curve | subtract_ref | Subtract Reference Data window, `analyze subtract-ref` | ✓ | linear interpolation, common range option, checked against Origin (spec section 9) | P0 |
 | Normalize | 12 methods | `calc/normalize.rs`, checked | ◐ | no reference column or cell methods; no row normalize | P0 |
 | Interpolate and resample | interp1xy | linear, spline, Akima, B-spline | ◐ | extrapolation option not exposed; B-spline default does not match; new sheet only | P0 |
-| Interpolate onto given X, trace | interp1, interp1trace | Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a chosen column (linear, spline, Akima, B-spline; outside the data extrapolate, missing or repeat the end value, as Origin's option); Mathematics > Trace Interpolation window, `analyze trace-interp`, `Tool::TraceInterp`: linear, cubic spline, cubic B-spline along the path of a curve with non-monotonic X (analysis-tools 16) | ✓ | checked against Origin | P1 |
+| Interpolate onto given X, trace | interp1, interp1trace | Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a chosen column (linear, spline, Akima, B-spline; outside the data extrapolate, missing or repeat the end value, as Origin's option); Mathematics > Trace Interpolation window, `analyze trace-interp`, `Tool::TraceInterp`: linear, cubic spline, cubic B-spline along the path of a curve with non-monotonic X (analysis-tools 16) | ◐ | a constant-X (vertical) curve is refused; whether the tolerance compares with the previous point or the first of a run is not measured | P1 |
 | Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |
 | Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); Level Crossing window and `analyze level-crossing` (measured, analysis-tools 14) | ◐ | intersect not measured in Origin, `analysis-curve-math.md` | P1 |
 | Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (Origin's reduce_ex: every N points, intervals, number of intervals, frequency, first point or Y mean, measured), Reduce Duplicate X Data (all eight methods, tolerance, counts, column names checked against Origin's reducedup) | ◐ | Reduce Rows layout not compared with Origin; reducedup writes a new sheet where Origin adds columns to the input sheet; no Reduce XY Data | P1 |

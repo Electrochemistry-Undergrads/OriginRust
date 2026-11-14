@@ -1063,8 +1063,9 @@ Origin's printed numbers):
   cleaning (a constant Y column becomes one point), and for the B-spline with fewer than four
   points. Cubic Spline with two points is the line, with three it is the natural spline. A
   non-integer `npts` (5.7) is cut to 5.
-- Not measured: whether the tolerance compares with the previous point or the first of the run,
-  and an X range given with a row range.
+- Not measured: a constant-X (vertical) curve, which Sheaf merges to one point and refuses;
+  whether the tolerance compares with the previous point or the first of a run; and an X range
+  given with a row range.
 
 Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: the X and Y of each input
 in a new sheet (`TraceInterp`), the Y labelled "linear trace interpolation of B". Command line:

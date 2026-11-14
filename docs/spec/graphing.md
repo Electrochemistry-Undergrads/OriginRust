@@ -1702,3 +1702,9 @@ Offset tab (measured): rows X and Y with Multiplier and Offset boxes, and a note
 when the layer's Stack tab is set to Individual with X and/or Y enabled. Sheaf shows the tab on each
 plot of a layer with several plots: the X and Y offsets of that curve (`Layer::plot_offsets`), greyed
 unless the layer stacks Individually; Multiplier is not offered.
+
+Display tab (measured, section 18 list): Sheaf offers Labels (the tick labels of both axes), Data
+(`LayerDisplay::show_data`), Frame (the opposite-edge lines of both axes), Clip Data to Frame (off: the
+data may run over the whole page) and Grid on Top of Data (the grid lines are drawn after the plots);
+X Axes, Y Axes and Data on Top of Axes are shown greyed, and Scale Elements and Clipping Margins are
+not offered. The `.opj` writer names a changed Display tab in its save warnings.

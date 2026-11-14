@@ -427,6 +427,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             coords: Coords::Cartesian,
             background: None,
             group_style: GroupStyle::default(),
+            display: LayerDisplay::default(),
         }],
     }
 }

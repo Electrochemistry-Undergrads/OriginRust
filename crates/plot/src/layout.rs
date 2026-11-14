@@ -575,9 +575,11 @@ fn layer_scene(
         }
         (&layer.x_axis, &layer.y_axis)
     };
+    // Display tab: Show Elements Data off draws no plot.
+    let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
     match waterfall {
         None => {
-            for pd in pds {
+            for pd in drawn {
                 let start = scene.plots.len();
                 draw_plot(&mut scene.plots, pd, geom);
                 let kind = ObjectKind::Plot(plot_index(pd));
@@ -586,7 +588,7 @@ fn layer_scene(
         }
         Some((sx, sy)) => {
             // Back to front, so that the first curve is on top; member k moves by k shifts.
-            for pd in pds.iter().rev() {
+            for pd in drawn.iter().rev() {
                 let k = pd.member.unwrap_or(0) as f64;
                 let mut moved = geom.clone();
                 moved.frame.x += k * sx * geom.frame.w;
@@ -597,6 +599,16 @@ fn layer_scene(
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
         }
+    }
+    // Grid on Top of Data: the grid lines (not the background) are drawn after the plots.
+    if layer.display.grid_on_top {
+        let keep = usize::from(layer.background.is_some()).min(scene.grid.len());
+        let lines = scene.grid.split_off(keep);
+        scene.plots.extend(lines);
+    }
+    // Clip Data to Frame off: the data may run over the whole page.
+    if !layer.display.clip_data {
+        scene.clip = Rect { x: 0.0, y: 0.0, w: g.page.width_pt, h: g.page.height_pt };
     }
     let objects = &mut scene.objects;
     let out = &mut scene.overlay;

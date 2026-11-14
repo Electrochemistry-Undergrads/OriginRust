@@ -329,6 +329,9 @@ impl Writer {
         if layer.background.is_some() {
             notes.push("a layer background colour was not written (the companion file keeps it)".into());
         }
+        if !layer.display.is_default() {
+            notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
+        }
         let mut plots: Vec<Resolved> = Vec::new();
         for (plot_index, p) in layer.plots.iter().enumerate() {
             if !p.visible {

@@ -207,6 +207,34 @@ pub struct Layer {
     /// [`Layer::palette`]'s mode).
     #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
     pub group_style: GroupStyle,
+    /// The Display tab of Origin's layer Plot Details (graphing spec 18).
+    #[serde(default, skip_serializing_if = "LayerDisplay::is_default")]
+    pub display: LayerDisplay,
+}
+
+/// What a layer draws and how (Origin's Display tab; defaults measured: data shown, clipped to the
+/// frame, grid under the data).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayerDisplay {
+    /// Show Elements: Data.
+    pub show_data: bool,
+    /// Clip Data to Frame.
+    pub clip_data: bool,
+    /// Grid on Top of Data.
+    #[serde(default)]
+    pub grid_on_top: bool,
+}
+
+impl Default for LayerDisplay {
+    fn default() -> Self {
+        LayerDisplay { show_data: true, clip_data: true, grid_on_top: false }
+    }
+}
+
+impl LayerDisplay {
+    pub fn is_default(&self) -> bool {
+        *self == LayerDisplay::default()
+    }
 }
 
 /// The coordinate system of a layer.

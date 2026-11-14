@@ -36,6 +36,7 @@ pub enum DetailTab {
     DropLines,
     Label,
     Offset,
+    Display,
     LayerContents,
     Background,
     Size,
@@ -52,6 +53,7 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             (DetailTab::LayerContents, "Layer Contents", true),
             (DetailTab::Background, "Background", true),
             (DetailTab::Size, "Size", true),
+            (DetailTab::Display, "Display", true),
             (DetailTab::Stack, "Stack", true),
             (DetailTab::Legend, "Legend", true),
         ],
@@ -778,6 +780,29 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
             });
         }
         DetailTab::Stack => stack_tab(ui, layer),
+        DetailTab::Display => {
+            section(ui, "Show Elements");
+            ui.horizontal(|ui| {
+                ui.add_enabled(false, egui::Checkbox::new(&mut true, "X Axes"));
+                ui.add_enabled(false, egui::Checkbox::new(&mut true, "Y Axes"));
+                // Labels: the tick labels of both axes; Frame: the lines on the opposite edges.
+                let mut labels = layer.x_axis.show_tick_labels && layer.y_axis.show_tick_labels;
+                if ui.checkbox(&mut labels, "Labels").changed() {
+                    layer.x_axis.show_tick_labels = labels;
+                    layer.y_axis.show_tick_labels = labels;
+                }
+                ui.checkbox(&mut layer.display.show_data, "Data");
+                let mut frame = layer.x_axis.show_opposite && layer.y_axis.show_opposite;
+                if ui.checkbox(&mut frame, "Frame").changed() {
+                    layer.x_axis.show_opposite = frame;
+                    layer.y_axis.show_opposite = frame;
+                }
+            });
+            section(ui, "Data Drawing Options");
+            ui.checkbox(&mut layer.display.clip_data, "Clip Data to Frame");
+            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Data on Top of Axes"));
+            ui.checkbox(&mut layer.display.grid_on_top, "Grid on Top of Data");
+        }
         DetailTab::Background => {
             grid(ui, "layer_background", |ui| {
                 ui.label("Color");

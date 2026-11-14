@@ -3675,3 +3675,30 @@ fn a_layer_background_fills_the_frame_behind_the_grid() {
         matches!(first, scene::Item::Rect { fill: Some(c), stroke: None, rect } if *c == grey && *rect == scene.layers[0].clip)
     );
 }
+
+#[test]
+fn the_display_tab_hides_data_unclips_it_and_puts_the_grid_on_top() {
+    let (mut p, g) = decor_graph();
+    p.graph_mut(g).unwrap().layers[0].y_axis.major_grid =
+        Some(sheaf_core::graph::LineStyle::solid(Color::rgb(200, 200, 200), 0.5));
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let (grid, plots) = (scene.layers[0].grid.len(), scene.layers[0].plots.len());
+    assert!(grid > 0 && plots > 0);
+    let frame = scene.layers[0].clip;
+    // Grid on Top of Data: the grid lines come after the plots.
+    p.graph_mut(g).unwrap().layers[0].display.grid_on_top = true;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert_eq!((scene.layers[0].grid.len(), scene.layers[0].plots.len()), (0, plots + grid));
+    // Clip Data to Frame off: the clip is the page.
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.display.grid_on_top = false;
+    layer.display.clip_data = false;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert_ne!(scene.layers[0].clip, frame);
+    assert_eq!((scene.layers[0].clip.x, scene.layers[0].clip.y), (0.0, 0.0));
+    // Show Data off: no plot is drawn, the axes stay.
+    p.graph_mut(g).unwrap().layers[0].display.show_data = false;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert!(scene.layers[0].plots.is_empty());
+    assert!(!scene.layers[0].overlay.is_empty());
+}

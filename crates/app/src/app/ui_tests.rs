@@ -1447,6 +1447,20 @@ fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet
 }
 
 #[test]
+fn fft_opens_from_signal_processing_and_writes_a_spectrum_sheet() {
+    let mut h = start(vec![data_file("fft")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "FFT", "FFT..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("FFT")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 16, "eight columns for each of the two inputs");
+    assert_eq!(sheet.columns[0].long_name, "Frequency");
+    assert_eq!(h.state().doc.undo_label(), Some("FFT"));
+}
+
+#[test]
 fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("hilbert")]);
     show_window(&mut h, "Book1 - sample");

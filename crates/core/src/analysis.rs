@@ -38,6 +38,7 @@ pub use sheaf_calc::{
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
+pub use sheaf_calc::{FftOptions, FftWindow, PowerNorm, WindowCorrection};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -232,6 +233,16 @@ fn next_crossing_number(sheet: &Worksheet) -> usize {
         .filter_map(|c| c.long_name.strip_prefix("CrossingX")?.parse::<usize>().ok())
         .max()
         .map_or(1, |n| n + 1)
+}
+
+/// What [`Tool::Fft`] does (Origin's Signal Processing > FFT > FFT, `fft1`, measured;
+/// analysis-tools.md 15).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FftSpec {
+    pub options: FftOptions,
+    /// Take the sampling interval from the input's X column (its mean step; 1 without X) instead of
+    /// `options.interval`.
+    pub auto_interval: bool,
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -593,6 +604,7 @@ pub enum Tool {
     LevelCrossing(LevelCrossingSpec),
     /// Signal Processing > Hilbert Transform (Origin's `hilbert`, measured; analysis-tools.md 13).
     Hilbert,
+    Fft(FftSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -653,6 +665,7 @@ impl Tool {
             Tool::SignalCorrelation(_) => "Signal correlation",
             Tool::LevelCrossing(_) => "Level crossing",
             Tool::Hilbert => "Hilbert transform",
+            Tool::Fft(_) => "FFT",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -708,6 +721,7 @@ impl Tool {
             Tool::SignalCorrelation(_) => "Correlation",
             Tool::LevelCrossing(_) => "LevelCrossing",
             Tool::Hilbert => "Hilbert",
+            Tool::Fft(_) => "FFT",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1675,6 +1689,37 @@ impl Project {
                         ),
                         data: ColumnData::numeric(v),
                     });
+                }
+            }
+            Tool::Fft(spec) => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let mut o = spec.options;
+                    if spec.auto_interval {
+                        o.interval = auto_interval(inp.xs());
+                    }
+                    if !(o.interval.is_finite() && o.interval > 0.0) {
+                        return Err(AnalysisError::BadOption(format!("{} is not a usable interval", o.interval)));
+                    }
+                    let r = calc::fft_spectrum(&y, &o);
+                    let note = format!("FFT of {}{}", inp.short, inp.range_note());
+                    let mut col = |designation, name: &str, units: &str, data: Vec<f64>| {
+                        on_sheet.push(SheetColumn {
+                            designation,
+                            long_name: name.into(),
+                            units: units.into(),
+                            comments: note.clone(),
+                            data: ColumnData::numeric(data),
+                        })
+                    };
+                    col(Designation::X, "Frequency", "", r.frequency);
+                    col(Designation::Y, "Real", "", r.real);
+                    col(Designation::Y, "Imaginary", "", r.imaginary);
+                    col(Designation::Y, "Magnitude", "", r.magnitude);
+                    col(Designation::Y, "Amplitude", &inp.units, r.amplitude);
+                    col(Designation::Y, "Phase", "Degrees", r.phase);
+                    col(Designation::Y, "Power", "", r.power);
+                    col(Designation::Y, "dB", "dB", r.db);
                 }
             }
             Tool::Hilbert => {
@@ -3028,6 +3073,24 @@ mod tests {
             p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))),
             Err(AnalysisError::BadOption(_))
         ));
+    }
+
+    #[test]
+    fn the_fft_writes_origins_eight_columns_with_frequencies_from_the_x_step() {
+        let (mut p, book, _, ramp) = sample();
+        let r = p.analyze(&request(&[ramp], Tool::Fft(FftSpec { auto_interval: true, ..Default::default() }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("FFT"), "{}", rs.name);
+        let names: Vec<&str> = rs.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Frequency", "Real", "Imaginary", "Magnitude", "Amplitude", "Phase", "Power", "dB"]);
+        // 11 points one second apart: frequencies k / 11 up to 5 / 11.
+        let f = rs.columns[0].numeric().unwrap();
+        assert_eq!(f.len(), 6);
+        assert!((f[5] - 5.0 / 11.0).abs() < 1e-12);
+        // The mean of 0..10 is 5.
+        assert!((rs.columns[4].numeric().unwrap()[0] - 5.0).abs() < 1e-12);
+        let bad = FftSpec { options: FftOptions { interval: 0.0, ..Default::default() }, auto_interval: false };
+        assert!(matches!(p.analyze(&request(&[ramp], Tool::Fft(bad))), Err(AnalysisError::BadOption(_))));
     }
 
     #[test]

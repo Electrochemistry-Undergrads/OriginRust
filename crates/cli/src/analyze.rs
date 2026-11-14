@@ -177,6 +177,47 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
         AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
         AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
+        AnalyzeTool::Fft {
+            target,
+            interval,
+            window,
+            correction,
+            normalize,
+            two_sided,
+            no_shift,
+            no_unwrap,
+            science,
+            power,
+        } => {
+            let options = analysis::FftOptions {
+                interval: interval.unwrap_or(1.0),
+                window: match window {
+                    FftWindowArg::Rectangle => analysis::FftWindow::Rectangle,
+                    FftWindowArg::Welch => analysis::FftWindow::Welch,
+                    FftWindowArg::Triangular => analysis::FftWindow::Triangular,
+                    FftWindowArg::Bartlett => analysis::FftWindow::Bartlett,
+                    FftWindowArg::Hanning => analysis::FftWindow::Hanning,
+                    FftWindowArg::Hamming => analysis::FftWindow::Hamming,
+                    FftWindowArg::Blackman => analysis::FftWindow::Blackman,
+                },
+                correction: match correction {
+                    FftCorrectionArg::None => analysis::WindowCorrection::None,
+                    FftCorrectionArg::Amplitude => analysis::WindowCorrection::Amplitude,
+                    FftCorrectionArg::Power => analysis::WindowCorrection::Power,
+                },
+                normalize,
+                two_sided,
+                shift: !no_shift,
+                unwrap: !no_unwrap,
+                science,
+                power: match power {
+                    FftPowerArg::Msa => analysis::PowerNorm::Msa,
+                    FftPowerArg::Ssa => analysis::PowerNorm::Ssa,
+                    FftPowerArg::Tisa => analysis::PowerNorm::Tisa,
+                },
+            };
+            (target, Job::Tool(Tool::Fft(analysis::FftSpec { options, auto_interval: interval.is_none() })))
+        }
         AnalyzeTool::LevelCrossing { target, level, row, min_gap, details } => {
             let index = match row {
                 CrossingRow::Any => analysis::CrossingIndex::Nearest,

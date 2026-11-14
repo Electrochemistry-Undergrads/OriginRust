@@ -390,6 +390,31 @@ fn convolution_and_signal_correlation_write_a_new_sheet() {
 }
 
 #[test]
+fn fft_writes_a_spectrum() {
+    let dir = scratch("fft");
+    let data = data_file(&dir);
+    let out = dir.join("fft.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "fft",
+        data.to_str().unwrap(),
+        "--y",
+        "flat",
+        "--window",
+        "hanning",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("FFT"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.starts_with("Frequency,Real,Imaginary,Magnitude,Amplitude,Phase,Power,dB"), "{text}");
+    // A constant 2 with the amplitude-corrected window: amplitude 2 at frequency 0.
+    let first = text.lines().find(|l| l.starts_with("0,")).unwrap();
+    assert_eq!(first.split(',').nth(4), Some("2"), "{text}");
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);

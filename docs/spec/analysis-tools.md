@@ -792,6 +792,46 @@ the labels of Origin's outputs. Origin's index for a row range that does not sta
 measured. Command line: `sheaf analyze level-crossing FILE --y B [--level L] [--row any|left|right]
 [--min-gap N] [--details]`.
 
+## 15. FFT (`fft1`)
+
+Analysis > Signal Processing > FFT > FFT. Options (from the X-Function file): `interval` (`<Auto>`),
+`win` (Rectangle, Welch, Triangular, Bartlett, Hanning, Hamming, Blackman), `correct` (None,
+Amplitude, Power; Amplitude by default), `norma` (normalize, off), `shift` (on), `unwrap` (on),
+`factor` (-1 Electrical Engineering, +1 Science), `st` (auto, one-sided, two-sided), `norm` (MSA,
+SSA, TISA) and the report sheet. Origin's result sheet has Frequency, Complex, Real, Imaginary,
+Magnitude, Amplitude, Phase, Power and dB; Sheaf writes the same without the complex column.
+
+Observed (Origin, `re-workspace/scratch/fft/f1..f4.out.txt`, 5, 7, 8 and 9 points; Rust tests in
+`crates/calc/src/fft.rs`, relative 1e-9):
+
+- Real and imaginary parts are the plain DFT `X_k = sum x_n e^(-2 pi i k n / N)` (Science: the
+  imaginary part and the phase change sign). Magnitude `|X|`; Normalize divides real, imaginary and
+  magnitude (only) by N.
+- One-sided (the default for real data): rows k = 0 to N/2 (integer division), frequency
+  `k / (N * interval)`. Amplitude `2|X|/N`, except `|X|/N` in the first and the last row (also for an
+  odd N, where the last row is not the Nyquist frequency). Power (MSA) `2|X|^2/N^2`, except
+  `|X|^2/N^2` in the first row and `4|X|^2/N^2` in the last row for an odd N (5, 7 and 9 points).
+- Two-sided: all N rows, amplitude `|X|/N` and power `|X|^2/N^2` everywhere; with Shift the rows
+  run from `-(N/2 - 1)` (even N) to the Nyquist frequency, else from 0 to `(N-1)/(N*interval)`.
+- SSA is MSA times N, TISA is SSA times the interval. dB is `20 log10(amplitude)`.
+- Phase in degrees from atan2, unwrapped in row order (after the shift): a step of more than 180
+  degrees is corrected by multiples of 360, so 0 can become 360 in a shifted two-sided result.
+- Windows, symmetric over N points (c = (N-1)/2): Welch `1 - ((n-c)/((N+1)/2))^2`, Triangular
+  `1 - |n-c|/(N/2)`, Bartlett `1 - |n-c|/c`, Hanning `0.5 - 0.5 cos(2 pi n/(N-1))`, Hamming
+  `0.54 - 0.46 cos(...)`, Blackman `0.42 - 0.5 cos(...) + 0.08 cos(4 pi n/(N-1))`. Correction
+  Amplitude multiplies by `N / sum w`, Power by `sqrt(N / sum w^2)`.
+- `<Auto>` interval: called from LabTalk with a column (`col(B)`, a range `[Book]Sheet!B`) Origin
+  used 1 although the sheet has an X column with step 0.5; an XY range `(1,2)` is read as real and
+  imaginary parts, not as X and Y. Sheaf's Auto takes the mean X step of the input's X column (1
+  without one), as Convolution's measured `<auto>` does; the dialog's own behaviour is not measured.
+
+Sheaf: `sheaf_calc::fft_spectrum`, `Tool::Fft(FftSpec)`; a new sheet `FFT<n>` with the eight columns
+per input (Amplitude in the input's unit, Phase in degrees). Trailing missing values are dropped, a
+missing value inside is refused. Command line: `sheaf analyze fft FILE --y B [--interval D]
+[--window ...] [--correction none|amplitude|power] [--normalize] [--two-sided] [--no-shift]
+[--no-unwrap] [--science] [--power msa|ssa|tisa]`. Not built: complex input, IFFT, 2D FFT, the
+graphs Origin makes with the result.
+
 ## Files
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with

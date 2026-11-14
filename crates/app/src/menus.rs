@@ -1004,7 +1004,15 @@ fn analysis_menu() -> Vec<Entry> {
             vec![
                 item("Smooth...", Cmd::Analyze(AnalysisKind::Smooth)),
                 grey("FFT Filters..."),
-                grey_sub("FFT", &["FFT...", "IFFT...", "2D FFT...", "2D IFFT..."]),
+                sub(
+                    "FFT",
+                    vec![
+                        item("FFT...", Cmd::Analyze(AnalysisKind::Fft)),
+                        grey("IFFT..."),
+                        grey("2D FFT..."),
+                        grey("2D IFFT..."),
+                    ],
+                ),
                 item("Convolution...", Cmd::Analyze(AnalysisKind::Convolution)),
                 grey("Deconvolution..."),
                 item("Correlation...", Cmd::Analyze(AnalysisKind::SignalCorrelation)),

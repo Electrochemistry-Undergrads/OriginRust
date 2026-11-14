@@ -1286,34 +1286,38 @@ Origin's Plot > Specialized > "Polar theta(X) r(Y)" and "Polar r(X) theta(Y)", a
 
 ### 14.19 Radar charts (T12)
 
-Menu Plot > Specialized > Radar, the 2D Graphs button PlotRadar, `sheaf plot -t radar`. Everything
-here is from Origin's public documentation, not measured; measure on the Windows machine with
-tools/origin-ref.
+Menu Plot > Specialized > Radar, the 2D Graphs button PlotRadar, `sheaf plot -t radar`. Measured with Origin
+through COM (`plotxy iy:=... plot:=202 ogl:=[<new template:=Radar>]`, `re-workspace/scratch/oc-graphs/rad*.lines.txt`,
+pictures `rad1.png`, `rad2_*.png`, `rad4.png`):
+
+- **First spoke and direction.** The first row is the spoke straight up and the others follow clockwise, evenly spaced.
+- **Spoke names.** The X column's cells (text or numbers, e.g. 10, 20, 30) name the spokes, outside the outer polygon; with no X column the row numbers 1, 2, 3, ... do.
+- **Scale.** One radial scale with its tick labels on the first spoke, upwards from the centre. The centre is the axis' lower limit, not 0: values 2.1 to 5.2 gave 1.5 to 5.5 with the label 1.5 at the centre and 5.5 at the top vertex, values 0 to 4 gave -1 to 5, values -4 to -1 gave -4.5 to -0.5. The limits are the values plus the 8 % margin rounded outwards to whole steps, and the step is half of the one the usual table gives for that span (0.5 for spans of 3 and 3.1 where a Y axis has 1; 1 for a span of 4 where a Y axis has 2).
+- **Grid.** One grey polygon at every radius tick up to the outer polygon, and a spoke to every vertex; the outline is a polygon without ticks.
+- **Page and legend.** The page is 8.0 by 6.125 in; the layer is 61.2 % wide and 75.4 % high with its left edge at 11.7 % and top at 10.9 % of the page. The legend (line + symbol swatches, black square then red circle) stands at the layer's top right corner: its box spans 69 % to 79 % of the page width and 4 % to 14 % of its height.
+- Each Y column is one plot, a closed polygon (line + symbol by default) joining its values on the spokes.
 
 - The worksheet rows are the spokes, evenly spaced: spoke `i` of `n` is at `360 i / n` degrees. The
-  first spoke points up (12 o'clock), the others follow clockwise (from Origin's public
-  documentation, not measured; measure on the Windows machine with tools/origin-ref).
-- Each Y column is one plot, a closed polygon (line + symbol by default, colours from the line +
-  symbol list) joining its values on the spokes. Sheaf closes it by repeating the first point at 360
-  degrees.
+  first spoke points up (12 o'clock), the others follow clockwise.
+- Sheaf closes each polygon by repeating the first point at 360 degrees (line + symbol colours from the line +
+  symbol list).
 - The X column's cells, text or numbers, name the spokes, drawn outside the outer polygon; with no X
-  column (or an empty cell) the row number is the name (from Origin's public documentation, not
-  measured; measure on the Windows machine with tools/origin-ref).
-- One radial scale for all spokes, its tick labels on the first spoke from the centre up. Choice:
-  Sheaf starts the scale at 0 in the centre when the values are all positive and the layer's
-  radius minimum is automatic (the end follows the automatic axis rule); Origin's default start is
-  not measured. A radius outside the range is not drawn.
+  column (or an empty cell) the row number is the name.
+- One radial scale for all spokes, its tick labels on the first spoke from the centre up. The centre
+  is the lower limit; with automatic limits they are the values plus the margin rounded outwards to
+  whole steps of half the usual step (`resolve_dim` in `layout.rs`; before the measurement Sheaf started at 0).
+  A radius outside the range is not drawn. Template: page 8.0 by 6.125 in, the layer and legend as measured above.
 - The grid is concentric polygons at the radius major ticks plus straight spokes (the polar grid
   style); the outline is a polygon, with no ticks.
 - Implementation: a polar layer with `PolarCoords::radar = true`. `PolarMap` forces zero at 90
   degrees and clockwise, so `data_to_page`, `page_to_data`, symbols and hit testing are those of the
   polar layer. `data::radar_columns` turns the rows into `(angle, value)`; `polar::radar_axis` gives
-  the spoke ticks and names. The radar page is 8 by 6 inches with the legend right of the circle.
+  the spoke ticks and names. The radar page is 8 by 6.125 inches with the legend at the layer's top right corner.
 - The closing point is a repeated row marked `PlotData::closing`: the line runs to it, but it gets
   no symbol and no mask, and a masked first row also reddens the closing segment. Rows keep their
   place, so the column's mask still counts the right rows. The plot clip of a radar layer is
-  widened by one symbol size, so a symbol on the outer polygon is not cut. When every value is 0
-  the radius runs 0 to 1. Spoke names go through the label markup like every other label column
+  widened by one symbol size, so a symbol on the outer polygon is not cut. When all values are equal
+  their span is taken as 20 % of the value (1 for 0) to find the range (Origin's range for that case was not measured). Spoke names go through the label markup like every other label column
   (see 14.11).
 - The .opj writer stores plain line + symbol plots and warns; the companion keeps the layer.
 

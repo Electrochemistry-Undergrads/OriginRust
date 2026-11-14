@@ -3181,6 +3181,25 @@ fn radar_probe() -> (Project, WindowId) {
     (p, g)
 }
 
+/// The radius range of a radar chart of one column of values, rows spread over the spokes.
+fn radar_range(values: Vec<f64>) -> (f64, f64, f64) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let g = p.add_graph(Template::Radar);
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(values)).unwrap();
+    p.add_plot(g, 0, yc).unwrap();
+    let y = crate::layout_geometry(&p, g).unwrap()[0].y.clone();
+    (y.min, y.max, y.step)
+}
+
+#[test]
+fn the_radar_scale_follows_the_values_in_steps_of_half_the_usual_table() {
+    // Measured in Origin (spec 14.19): the limits are the values plus the 8 % margin rounded outwards to whole steps.
+    assert_eq!(radar_range(vec![3.2, 4.1, 2.5, 5.2, 4.4, 3.0, 2.1]), (1.5, 5.5, 0.5));
+    assert_eq!(radar_range(vec![0.0, 4.0, 1.0, 3.0, 2.0]), (-1.0, 5.0, 1.0));
+    assert_eq!(radar_range(vec![-3.0, -1.0, -2.0, -4.0]), (-4.5, -0.5, 0.5));
+}
+
 #[test]
 fn golden_radar_template() {
     let (p, g) = radar_probe();
@@ -3201,9 +3220,9 @@ fn radar_spokes_are_evenly_spaced_from_twelve_oclock_clockwise_and_named_by_the_
     assert!(x1 > map.cx && y1 < map.cy, "the second spoke is up and to the right (clockwise)");
     let (x3, y3) = geom.data_to_page(180.0, top);
     assert!((x3 - map.cx).abs() < 1e-6 && y3 > map.cy, "the fourth of six points down");
-    // The radial scale starts at 0 in the centre although the values start at 2.
-    assert_eq!(geom.y.min, 0.0);
-    let (cx, cy) = geom.data_to_page(0.0, 0.0);
+    // The radial scale starts at its lower limit in the centre (not at 0): values 2 to 5 gave 1.5 to 5.5.
+    assert_eq!((geom.y.min, geom.y.max, geom.y.step), (1.5, 5.5, 0.5));
+    let (cx, cy) = geom.data_to_page(0.0, geom.y.min);
     assert!((cx - map.cx).abs() < 1e-6 && (cy - map.cy).abs() < 1e-6);
     let t = texts(&doc(&svg_of(&p, g)));
     for name in ["Speed", "Power", "Range", "Comfort", "Safety", "Price"] {

@@ -173,13 +173,26 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
         if dim == Dim::Y
             && linear
             && let Some((lo, hi)) = range
-            && lo >= 0.0
             && axis.min.is_none()
+            && axis.max.is_none()
+            && axis.major_step.is_none()
             && sources.iter().any(|pd| pd.spokes.is_some())
         {
-            // A radar chart starts at the centre with 0 (graphing spec 14.19); all zeros give 0..1.
-            range = Some((0.0, if hi > 0.0 { hi } else { 1.0 }));
-            free.0 = false;
+            // A radar chart's centre is the axis' lower limit, which can be anything (graphing spec 14.19). The
+            // step is half of the usual table's, and both limits are rounded outwards to whole steps after
+            // the margin (measured: 2.1..5.2 gave 1.5..5.5 in steps of 0.5, 0..4 gave -1..5 in steps of 1).
+            let span = if hi > lo {
+                hi - lo
+            } else if hi != 0.0 {
+                hi.abs() * 0.2
+            } else {
+                1.0
+            };
+            let step = sheaf_core::autorange::linear_step(span) / 2.0;
+            let margin = axis.rescale_margin_pct / 100.0 * span;
+            let from = ((lo - margin) / step + 1e-9).floor() * step;
+            let to = ((hi.max(lo + span) + margin) / step - 1e-9).ceil() * step;
+            drawn = Some(Axis { min: Some(from), max: Some(to), major_step: Some(step), ..axis.clone() });
         }
         if dim == Dim::Y && linear && sources.iter().any(|pd| pd.plot.kind == PlotKind::Stacked100Area) {
             // Piles of 100: the axis ends exactly at 0 and 100.

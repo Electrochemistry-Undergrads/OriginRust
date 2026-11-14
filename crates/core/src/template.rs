@@ -487,14 +487,14 @@ fn radar(id: WindowId, name: &str) -> Graph {
     let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
     let l = &mut g.layers[0];
     l.coords = Coords::Polar(PolarCoords { zero_deg: 90.0, clockwise: true, radar: true, ..PolarCoords::default() });
-    // Wider than the polar page: the legend stands to the right of the circle and the spoke names.
-    g.page = Page::inches(8.0, 6.0);
+    // Origin's radar page (measured, spec 14.19): 8 by 6.125 in, the layer 61 % wide and 75 % high from
+    // 11.7 % and 10.9 %, the legend at the top right corner of the layer.
+    g.page = Page::inches(8.0, 6.125);
     let l = &mut g.layers[0];
-    l.frame = Frame { left: 0.1, top: 0.2, width: 0.45, height: 0.6 };
-    l.legend.position = LegendPosition::Manual { x: 1.65, y: 0.12 };
+    l.frame = Frame { left: 0.1173, top: 0.1092, width: 0.612, height: 0.7535 };
+    l.legend.position = LegendPosition::Manual { x: 1.0116, y: -0.0208 };
     l.x_axis.major_tick = TickDirection::None;
     l.y_axis.major_tick_len_pt = 5.0;
-    l.y_axis.rescale_margin_pct = 0.0;
     g
 }
 

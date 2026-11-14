@@ -946,7 +946,7 @@ fn analysis_menu() -> Vec<Entry> {
                 sep(),
                 item("Interpolate/Extrapolate...", Cmd::Analyze(AnalysisKind::Interpolate)),
                 item("Interpolate/Extrapolate Y from X...", Cmd::InterpolateFromColumn),
-                grey("Trace Interpolation..."),
+                item("Trace Interpolation...", Cmd::Analyze(AnalysisKind::TraceInterp)),
                 item("Linear Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::Linear)),
                 item("Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::CubicSpline)),
                 item("B-Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::BSpline)),

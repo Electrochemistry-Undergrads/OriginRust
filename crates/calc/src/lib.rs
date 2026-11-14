@@ -42,6 +42,7 @@ pub mod power;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
+pub mod trace;
 mod util;
 
 pub use anova::{
@@ -108,3 +109,4 @@ pub use power::{
 pub use signal::{convolve, correlate, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};
+pub use trace::{TraceMethod, trace_interp, trace_points};

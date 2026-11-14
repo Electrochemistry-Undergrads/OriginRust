@@ -40,7 +40,7 @@ pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqO
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
 pub use sheaf_calc::{
     CoherenceOptions, CoherenceWindow, DecimateFilter, DecimateOptions, FftFilterOptions, FftFilterType, FftOptions,
-    FftWindow, IfftOptions, PowerNorm, WindowCorrection,
+    FftWindow, IfftOptions, PowerNorm, TraceMethod, WindowCorrection,
 };
 pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
@@ -295,6 +295,21 @@ pub struct CoherenceSpec {
     /// Window, segment and FFT lengths, overlap and the sampling interval (Origin: 1 unless given,
     /// not taken from the X column).
     pub options: CoherenceOptions,
+}
+
+/// What [`Tool::TraceInterp`] does (Origin's Mathematics > Trace Interpolation, `interp1trace`,
+/// measured; analysis-tools.md 16): the curve resampled at evenly spaced points along its path.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TraceInterpSpec {
+    pub method: TraceMethod,
+    /// Number of points of the result (Origin's `npts`, default 100).
+    pub points: usize,
+}
+
+impl Default for TraceInterpSpec {
+    fn default() -> Self {
+        Self { method: TraceMethod::Linear, points: 100 }
+    }
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -685,6 +700,8 @@ pub enum Tool {
     Envelope(EnvelopeSpec),
     Coherence(CoherenceSpec),
     Decimate(DecimateSpec),
+    /// Mathematics > Trace Interpolation (Origin's `interp1trace`, measured; analysis-tools.md 16).
+    TraceInterp(TraceInterpSpec),
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -756,6 +773,7 @@ impl Tool {
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimation",
+            Tool::TraceInterp(_) => "Trace interpolation",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -823,6 +841,7 @@ impl Tool {
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimate",
+            Tool::TraceInterp(_) => "TraceInterp",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -2020,6 +2039,42 @@ impl Project {
                         units: inp.units.clone(),
                         comments: format!("Every {} of {}{}{how}", ordinal(o.factor), inp.short, inp.range_note()),
                         data: ColumnData::numeric(dy),
+                    });
+                }
+            }
+            Tool::TraceInterp(spec) => {
+                if spec.points < 2 {
+                    return Err(AnalysisError::BadOption(format!(
+                        "{} points are too few, a trace needs at least 2",
+                        spec.points
+                    )));
+                }
+                let word = match spec.method {
+                    TraceMethod::Linear => "linear",
+                    TraceMethod::CubicSpline => "cubic spline",
+                    TraceMethod::CubicBSpline => "cubic B-spline",
+                };
+                for inp in &inputs {
+                    let (x, y) = calc::trace_interp(inp.xs(), inp.ys(), spec.method, spec.points).ok_or_else(|| {
+                        let need = if spec.method == TraceMethod::CubicBSpline { 4 } else { 2 };
+                        AnalysisError::BadOption(format!(
+                            "{} needs at least {need} points that differ in X and in Y next to each other",
+                            inp.short
+                        ))
+                    })?;
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: inp.x_name.clone(),
+                        units: inp.x_units.clone(),
+                        comments: String::new(),
+                        data: ColumnData::numeric(x),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("{} trace", inp.name),
+                        units: inp.units.clone(),
+                        comments: format!("{word} trace interpolation of {}{}", inp.short, inp.range_note()),
+                        data: ColumnData::numeric(y),
                     });
                 }
             }
@@ -3591,6 +3646,37 @@ mod tests {
         // Too few extremes are refused with a message.
         let tiny = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
         assert!(p.analyze(&request(&[tiny], Tool::Envelope(EnvelopeSpec { options }))).is_err());
+    }
+
+    #[test]
+    fn a_trace_interpolation_goes_to_a_new_sheet_with_its_own_x() {
+        let mut p = Project::new();
+        let book = p.add_workbook("loop");
+        let x = [0.0, 2.0, 3.0, 2.0, 0.0, -1.0];
+        let y = [0.0, 0.0, 1.0, 2.0, 2.0, 1.0];
+        let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x.to_vec())).unwrap();
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y.to_vec())).unwrap();
+        p.column_mut(xc).unwrap().units = "V".into();
+        p.column_mut(yc).unwrap().units = "A".into();
+        let spec = TraceInterpSpec { method: TraceMethod::Linear, points: 10 };
+        let r = p.analyze(&request(&[yc], Tool::TraceInterp(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("TraceInterp"), "{}", rs.name);
+        // Origin's numbers for this loop (analysis-tools.md 16): the diamond (1,0) (3,1) (1,2) (-1,1)
+        let (ox, oy) = (rs.columns[0].numeric().unwrap(), rs.columns[1].numeric().unwrap());
+        assert_eq!((ox.len(), oy.len()), (10, 10));
+        assert_eq!((ox[0], oy[0], ox[3], oy[3], ox[9], oy[9]), (1.0, 0.0, 3.0, 1.0, -1.0, 1.0));
+        assert_eq!((rs.columns[0].units.as_str(), rs.columns[1].units.as_str()), ("V", "A"));
+        assert_eq!(rs.columns[1].comments, "linear trace interpolation of B");
+        assert!(r.message.starts_with("Trace interpolation"), "{}", r.message);
+        // The B-spline needs four points after merging; the diamond has four.
+        let spline = TraceInterpSpec { method: TraceMethod::CubicBSpline, points: 10 };
+        assert!(p.analyze(&request(&[yc], Tool::TraceInterp(spline))).is_ok());
+        // A trace of fewer than two points, or with too few distinct points, is refused.
+        let one = TraceInterpSpec { points: 1, ..spec };
+        assert!(matches!(p.analyze(&request(&[yc], Tool::TraceInterp(one))), Err(AnalysisError::BadOption(_))));
+        let flat = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 6])).unwrap();
+        assert!(matches!(p.analyze(&request(&[flat], Tool::TraceInterp(spec))), Err(AnalysisError::BadOption(_))));
     }
 
     #[test]

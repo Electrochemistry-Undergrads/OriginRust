@@ -581,6 +581,46 @@ fn decimate_writes_every_nth_point_to_a_new_sheet() {
 }
 
 #[test]
+fn trace_interp_resamples_a_loop_into_a_new_sheet() {
+    let dir = scratch("trace-interp");
+    // Origin's loop: equal Y neighbours merge, leaving the diamond (1,0) (3,1) (1,2) (-1,1)
+    let data = dir.join("loop.csv");
+    std::fs::write(
+        &data,
+        "v,i
+V,A
+0,0
+2,0
+3,1
+2,2
+0,2
+-1,1
+",
+    )
+    .unwrap();
+    let out = dir.join("trace.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "trace-interp",
+        data.to_str().unwrap(),
+        "--y",
+        "i",
+        "--points",
+        "10",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Trace interpolation"), "{stdout}");
+    let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
+    assert_eq!(rows.len(), 10);
+    assert_eq!((rows[0].as_str(), rows[3].as_str(), rows[9].as_str()), ("1,0", "3,1", "-1,1"));
+    // One point is no trace.
+    let (ok, _, stderr) = sheaf(&["analyze", "trace-interp", data.to_str().unwrap(), "--y", "i", "--points", "1"]);
+    assert!(!ok && !stderr.is_empty());
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);

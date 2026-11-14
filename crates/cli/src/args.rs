@@ -906,6 +906,14 @@ pub enum DecimateFilterArg {
     Fir,
 }
 
+/// Trace interpolation method (Origin's names).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum TraceMethodArg {
+    Linear,
+    Spline,
+    Bspline,
+}
+
 /// FFT window (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftWindowArg {
@@ -1271,6 +1279,18 @@ pub enum AnalyzeTool {
         /// FIR filter: half width of the smoothing, 8 to 60.
         #[arg(long, default_value_t = 30)]
         order: usize,
+    },
+    /// Resample each curve at evenly spaced points along its path (Origin's Mathematics > Trace
+    /// Interpolation), for curves whose X is not monotonic such as a CV loop. The results, with
+    /// their own X, go to a new sheet.
+    TraceInterp {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, value_enum, default_value_t = TraceMethodArg::Linear)]
+        method: TraceMethodArg,
+        /// Number of points of the result.
+        #[arg(long, default_value_t = 100)]
+        points: usize,
     },
     /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
     /// new column beside it.

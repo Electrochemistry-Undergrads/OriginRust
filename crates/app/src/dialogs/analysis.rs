@@ -29,7 +29,7 @@ use sheaf_core::analysis::{
 use sheaf_core::analysis::{
     CoherenceOptions, CoherenceSpec, CoherenceWindow, DecimateFilter, DecimateSpec, EnvelopeOptions, EnvelopeSpec,
     EnvelopeType, FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm,
-    WindowCorrection,
+    TraceInterpSpec, TraceMethod, WindowCorrection,
 };
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
@@ -69,6 +69,8 @@ pub enum AnalysisKind {
     Coherence,
     /// Signal Processing > Decimation (Origin's `decimate`).
     Decimate,
+    /// Mathematics > Trace Interpolation (Origin's `interp1trace`).
+    TraceInterp,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -123,7 +125,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 23] = [
+    pub const ALL: [AnalysisKind; 24] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -143,6 +145,7 @@ impl AnalysisKind {
         AnalysisKind::Envelope,
         AnalysisKind::Coherence,
         AnalysisKind::Decimate,
+        AnalysisKind::TraceInterp,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -171,6 +174,7 @@ impl AnalysisKind {
             AnalysisKind::Envelope => "Envelope...",
             AnalysisKind::Coherence => "Coherence...",
             AnalysisKind::Decimate => "Decimation...",
+            AnalysisKind::TraceInterp => "Trace Interpolation...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -236,6 +240,7 @@ impl AnalysisKind {
             "envelope" => AnalysisKind::Envelope,
             "coherence" => AnalysisKind::Coherence,
             "decimate" => AnalysisKind::Decimate,
+            "trace-interp" => AnalysisKind::TraceInterp,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -606,6 +611,7 @@ pub struct AnalysisDialog {
     /// Coherence: window, lengths, overlap and interval of Origin's `cohere`.
     coherence: CoherenceOptions,
     decimate: DecimateSpec,
+    trace_interp: TraceInterpSpec,
     stats: StatsOptions,
     dist: super::dist_options::DistOptions,
     curves: super::math_curves::CurveOptions,
@@ -844,6 +850,30 @@ fn decimate_options(ui: &mut egui::Ui, spec: &mut DecimateSpec) {
     ui.weak("A factor of 3 or more needs ten times as many points as the factor.");
 }
 
+/// The options of Mathematics > Trace Interpolation, with Origin's names.
+fn trace_interp_options(ui: &mut egui::Ui, spec: &mut TraceInterpSpec) {
+    const METHODS: [(&str, TraceMethod); 3] = [
+        ("Linear", TraceMethod::Linear),
+        ("Cubic Spline", TraceMethod::CubicSpline),
+        ("Cubic B-Spline", TraceMethod::CubicBSpline),
+    ];
+    ui.horizontal(|ui| {
+        ui.label("Method");
+        egui::ComboBox::from_id_salt("trace_interp_method")
+            .selected_text(METHODS.iter().find(|m| m.1 == spec.method).map_or("", |m| m.0))
+            .show_ui(ui, |ui| {
+                for (label, m) in METHODS {
+                    ui.selectable_value(&mut spec.method, m, label);
+                }
+            });
+    });
+    ui.horizontal(|ui| {
+        ui.label("Number of Points");
+        ui.add(DragValue::new(&mut spec.points).range(2..=1_000_000));
+    });
+    ui.weak("The points are evenly spaced along the path of the curve. Neighbouring points with the same X, then with the same Y, are first replaced by their mean.");
+}
+
 /// The options of Signal Processing > FFT > FFT, with Origin's names.
 fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
     let o = &mut spec.options;
@@ -1038,6 +1068,7 @@ impl AnalysisDialog {
             envelope: EnvelopeSpec::default(),
             coherence: CoherenceOptions::default(),
             decimate: DecimateSpec::default(),
+            trace_interp: TraceInterpSpec::default(),
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -1343,6 +1374,7 @@ impl AnalysisDialog {
                 Tool::Coherence(CoherenceSpec { other, options: self.coherence })
             }
             AnalysisKind::Decimate => Tool::Decimate(self.decimate),
+            AnalysisKind::TraceInterp => Tool::TraceInterp(self.trace_interp),
             AnalysisKind::Ifft => {
                 let imaginary = if self.use_reference {
                     Some(
@@ -1668,6 +1700,7 @@ impl AnalysisDialog {
                 coherence_options(ui, &mut self.coherence);
             }
             AnalysisKind::Decimate => decimate_options(ui, &mut self.decimate),
+            AnalysisKind::TraceInterp => trace_interp_options(ui, &mut self.trace_interp),
             AnalysisKind::Ifft => {
                 ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
                     ui.checkbox(&mut self.use_reference, "The input is the real part; imaginary part from");
@@ -2416,6 +2449,7 @@ impl AnalysisDialog {
             AnalysisKind::Envelope => "envelope",
             AnalysisKind::Coherence => "cohere",
             AnalysisKind::Decimate => "decimate",
+            AnalysisKind::TraceInterp => "interp1trace",
             AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
@@ -2487,6 +2521,9 @@ impl AnalysisDialog {
             AnalysisKind::Envelope => "The upper and lower envelope of the input curves",
             AnalysisKind::Coherence => "The magnitude-squared coherence of the input signals with a second signal",
             AnalysisKind::Decimate => "Keep every n-th point of the input signals",
+            AnalysisKind::TraceInterp => {
+                "Resample curves whose X is not monotonic at evenly spaced points along the path"
+            }
             AnalysisKind::Ifft => "The signal of a spectrum given as real and imaginary parts",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
@@ -2552,6 +2589,7 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
             AnalysisKind::Fft => "Eight spectrum columns per input in a new sheet",
             AnalysisKind::Coherence => "The coherence of each input against the frequency in a new sheet",
+            AnalysisKind::TraceInterp => "The interpolated X and Y of each input in a new sheet",
             AnalysisKind::Ifft => "Time, real, imaginary, amplitude and phase in a new sheet",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",

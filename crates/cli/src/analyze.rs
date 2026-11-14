@@ -254,6 +254,14 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::FftFilter(analysis::FftFilterSpec { options, interval })))
         }
+        AnalyzeTool::TraceInterp { target, method, points } => {
+            let method = match method {
+                TraceMethodArg::Linear => analysis::TraceMethod::Linear,
+                TraceMethodArg::Spline => analysis::TraceMethod::CubicSpline,
+                TraceMethodArg::Bspline => analysis::TraceMethod::CubicBSpline,
+            };
+            (target, Job::Tool(Tool::TraceInterp(analysis::TraceInterpSpec { method, points })))
+        }
         AnalyzeTool::Ifft { target, imaginary, interval, no_shift, no_unwrap, science } => {
             let options = analysis::IfftOptions {
                 interval: interval.unwrap_or(1.0),

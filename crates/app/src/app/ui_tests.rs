@@ -1595,6 +1595,21 @@ fn coherence_opens_from_signal_processing_and_writes_a_new_sheet() {
 }
 
 #[test]
+fn trace_interpolation_opens_from_mathematics_and_writes_a_sheet_with_its_own_x() {
+    let mut h = start(vec![data_file("traceinterp")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Trace Interpolation..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("TraceInterp")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 4, "an X and a Y column for each of the two inputs");
+    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 100, "Origin's default number of points");
+    assert!(sheet.columns[1].comments.starts_with("linear trace interpolation of"));
+    assert_eq!(h.state().doc.undo_label(), Some("Trace interpolation"));
+}
+
+#[test]
 fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
     let mut h = start(vec![data_file("hilbert")]);
     show_window(&mut h, "Book1 - sample");

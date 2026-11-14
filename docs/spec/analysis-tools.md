@@ -1036,6 +1036,40 @@ Sheaf: `sheaf_calc::fft_filter`, `Tool::FftFilter(FftFilterSpec)`, a new column 
 --y B [--type low-pass|high-pass|band-pass|band-block|threshold|parabolic] [--cutoff F] [--freq1 F
 --freq2 F] [--threshold T] [--pass F --stop F] [--no-offset] [--interval D]`.
 
+## 16. Trace Interpolation (`interp1trace`)
+
+Analysis > Mathematics > Trace Interpolation. The X-Function has `iy` (the XY range), `method`
+(`linear`, `spline` Cubic Spline, `bspline` Cubic B-Spline; default linear), `npts` (number of
+points, default 100) and `oy` (new X and Y columns). Observed (probe files in
+`re-workspace/scratch/trace-interp/`: `p1`, `p2`, `p3`, `p4`, `p5`, `q1..q3`, `r1`, `s1..s3`, `t1..t3`
+and `p_nan3`, each a `.lines.txt` script and its `.out.txt`; Rust tests in `calc/src/trace.rs` hold
+Origin's printed numbers):
+
+- The result has `npts` points evenly spaced along the path of the curve, the first and last being
+  the first and last points of the (cleaned) data. The path parameter is the cumulative chord
+  length. Linear joins the points with straight lines; Cubic Spline is a natural cubic spline of X
+  and of Y against the path length; Cubic B-Spline is the interpolating cubic spline with
+  not-a-knot ends (equal to scipy's `make_interp_spline`; the two spline kinds agree to 1e-15 with
+  the computation, all three methods on a loop of eight points).
+- Origin cleans the data first, and this is what makes a loop with straight X or Y runs look odd:
+  rows with a missing X or Y are dropped; then neighbouring points with the same X are replaced by
+  one point at the mean of X and Y; then neighbouring points with the same Y likewise (X first;
+  (3,0),(3,2) became (3,1) and only then (0,0),(1,0) became (0.5,0); a merge by Y that makes a new
+  equal X is not merged again). Only neighbours merge: the same X far apart in the path stays.
+  "The same" has a tolerance of 1e-8 times the range of that column (5e-8 apart in a range of 9
+  merged, 1e-7 did not; 5e-6 in a range of 504 merged, 1e-5 did not; the range is not the data's
+  magnitude: shifting the data by 1000 changed nothing).
+- No result (the sheet is not made) for `npts` of 0 or 1, for fewer than two points after the
+  cleaning (a constant Y column becomes one point), and for the B-spline with fewer than four
+  points. Cubic Spline with two points is the line, with three it is the natural spline. A
+  non-integer `npts` (5.7) is cut to 5.
+- Not measured: whether the tolerance compares with the previous point or the first of the run,
+  and an X range given with a row range.
+
+Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: the X and Y of each input
+in a new sheet (`TraceInterp`), the Y labelled "linear trace interpolation of B". Command line:
+`sheaf analyze trace-interp FILE --y B [--method linear|spline|bspline] [--points N]`.
+
 ## Files
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with

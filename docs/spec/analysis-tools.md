@@ -757,25 +757,40 @@ crossings of a pair closer than this many rows are dropped) and the outputs: X o
 (`oy`, an X column), `direction` (1 up, -1 down, 0 "derivative zero"), `xindex` (a Label column)
 and `yval` (the level).
 
-Observed (Origin, `re-workspace/scratch/levelx/lx.out.txt`; Rust test `level_crossings_match_origin`
-in `crates/calc/src/levelcross.rs`):
+Observed (Origin, `re-workspace/scratch/levelx/lx.out.txt` and `re-workspace/scratch/lcross/lc2.out.txt`,
+`lc3.out.txt`, `lc4.out.txt`; Rust tests `level_crossings_match_origin` and `more_cases_match_origin` in
+`crates/calc/src/levelcross.rs`):
 
 - A data point exactly on the level is a crossing at its own X and row. Its direction is the sign
   of the steps before and after it when they agree, else 0: a touch (1, 0, 1 at level 0) and each
-  point of a run on the level (-1, 0, 0, 3) have direction 0. At the first point the one step
-  there decides (0, 1, ... gives 1).
-- Between two points on opposite sides the crossing is interpolated linearly, direction of the step.
+  point of a run on the level (-1, 0, 0, 3) have direction 0. At the first and the last point the one
+  step there decides (0, 1, ... gives 1; ..., 0, 1 at level 1 gives 1).
+- Between two points on opposite sides the crossing is interpolated linearly, direction of the step
+  in row order (also with falling X: X 10, 8, 7, 3, 0 and Y 0, 2, 0, 2, 0 at level 1 give 9, 7.5, 5, 1.5
+  with 1, -1, 1, -1).
+- A missing Y is skipped and its neighbours are joined: 0, 2, missing, 0, 2 at level 1 gives 0.5, 2 and
+  3.5 (the crossing at 2 is not lost).
 - The row (1-based) for an interpolated crossing: Left the row before, Right the row after, Any the
-  nearer one, the left one on a tie.
+  row whose X is nearest, counting rows whose Y is missing (the crossing at 2 above is row 3, the
+  missing row), and on a tie the one with the smaller X (0.5 between X 0 and 1 is row 1; 9 between
+  X 10 and 8 is row 2).
 - `pts`: with indices 2, 4, 8, 9 and `pts` 3 all four were dropped; with 1, 2, 3, 4, 7 and `pts` 2
   only 7 was left. Sheaf takes the crossings in pairs in order (first with second, third with
   fourth); a sliding comparison would fit these two cases as well.
 - No crossing: empty outputs (Origin still wrote the level once into `yval`; Sheaf writes nothing).
+- Default output (no output columns named): only the X values, in a new column at the end of the input
+  sheet with long name `CrossingX1` (then `CrossingX2`, ... for later runs on that sheet), the comment
+  `X values of Y= 1.5 Level Crossing of B` (the level as typed: 1, 0.25, -3) and no units. The column
+  is added even when the curve never reaches the level. Origin writes the direction, index and Y values
+  only into columns that the script names.
 
-Sheaf: `sheaf_calc::level_crossings`, `Tool::LevelCrossing(LevelCrossingSpec)`; a new sheet
-`LevelCrossing<n>` with X, Level, Direction and Row (a Label column, rows of the sheet) per input.
-Command line: `sheaf analyze level-crossing FILE --y B [--level L] [--row any|left|right]
-[--min-gap N]`.
+Sheaf: `sheaf_calc::level_crossings`, `Tool::LevelCrossing(LevelCrossingSpec)`; the `CrossingX<n>`
+column as Origin, beside its input (ADR 0005) instead of at the end of the sheet. The switch "Also output
+directions, X indices and Y crossing values" (`details`) adds `Directions<n>`, `X Indices<n>` (rows of
+the sheet) and `Y Crossing Values<n>` (with the input's units) beside it; these names are Sheaf's, from
+the labels of Origin's outputs. Origin's index for a row range that does not start at row 1 was not
+measured. Command line: `sheaf analyze level-crossing FILE --y B [--level L] [--row any|left|right]
+[--min-gap N] [--details]`.
 
 ## Files
 

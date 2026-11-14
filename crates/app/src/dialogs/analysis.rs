@@ -691,7 +691,7 @@ impl AnalysisDialog {
             signal_circular: false,
             signal_normalize: false,
             signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
-            level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1 },
+            level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1, details: false },
             columns,
             rows_in_sheet,
             row_mode: RowMode::All,
@@ -1285,6 +1285,7 @@ impl AnalysisDialog {
                     ui.label("Level");
                     ui.add(DragValue::new(&mut spec.level).speed(0.01));
                 });
+                ui.checkbox(&mut spec.details, "Also output directions, X indices and Y crossing values");
                 ui.horizontal(|ui| {
                     ui.label("Row of a crossing between rows");
                     ui.radio_value(&mut spec.index, CrossingIndex::Nearest, "Any");
@@ -1913,6 +1914,12 @@ impl AnalysisDialog {
         self.preview.as_ref()?.as_ref().ok().map(|d| (d.rx.clone(), d.ry.clone()))
     }
 
+    /// Sets the Level Crossing level as the dialog's field would (for tests).
+    #[cfg(test)]
+    pub fn set_crossing_level(&mut self, level: f64) {
+        self.level_crossing.level = level;
+    }
+
     /// Sets the Curve Translate shift as the dialog's field would (for tests).
     #[cfg(test)]
     pub fn set_translate_by(&mut self, by: f64) {
@@ -2053,7 +2060,7 @@ impl AnalysisDialog {
             | AnalysisKind::Hilbert => "New columns beside the input",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
-            AnalysisKind::LevelCrossing => "X, level, direction and row of each crossing in a new sheet",
+            AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
             AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",

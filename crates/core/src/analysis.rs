@@ -218,6 +218,20 @@ pub struct LevelCrossingSpec {
     pub index: CrossingIndex,
     /// Drop both crossings of a pair whose rows are closer than this (Origin's `pts`, 1: keep all).
     pub min_gap: usize,
+    /// Also write the direction, the row and the Y of each crossing (Origin's optional outputs);
+    /// Origin's default writes only the X values.
+    pub details: bool,
+}
+
+/// The number of the next `CrossingX<n>` column of a sheet, as Origin numbers them: one more than
+/// the largest in use.
+fn next_crossing_number(sheet: &Worksheet) -> usize {
+    sheet
+        .columns
+        .iter()
+        .filter_map(|c| c.long_name.strip_prefix("CrossingX")?.parse::<usize>().ok())
+        .max()
+        .map_or(1, |n| n + 1)
 }
 
 /// Which t-test [`TTestSpec`] runs.
@@ -1679,38 +1693,52 @@ impl Project {
                 if !spec.level.is_finite() {
                     return Err(AnalysisError::BadOption(format!("{} is not a usable level", spec.level)));
                 }
-                for inp in &inputs {
-                    let found = calc::level_crossings(inp.xs(), inp.ys(), spec.level, spec.index, spec.min_gap);
-                    // Rows of the sheet, not of the chosen range.
-                    let row = |c: &calc::Crossing| (c.row + inp.first) as f64;
-                    let note = format!("{} at {}{}", inp.short, spec.level, inp.range_note());
-                    on_sheet.push(SheetColumn {
-                        designation: Designation::X,
-                        long_name: inp.x_name.clone(),
-                        units: inp.x_units.clone(),
-                        comments: format!("Crossings of {note}"),
-                        data: ColumnData::numeric(found.iter().map(|c| c.x).collect()),
-                    });
-                    on_sheet.push(SheetColumn {
-                        designation: Designation::Y,
-                        long_name: "Level".into(),
-                        units: inp.units.clone(),
-                        comments: note.clone(),
-                        data: ColumnData::numeric(vec![spec.level; found.len()]),
-                    });
-                    on_sheet.push(SheetColumn {
-                        designation: Designation::Y,
-                        long_name: "Direction".into(),
-                        units: String::new(),
-                        comments: "1 up, -1 down, 0 touching".into(),
-                        data: ColumnData::numeric(found.iter().map(|c| f64::from(c.direction)).collect()),
-                    });
-                    on_sheet.push(SheetColumn {
-                        designation: Designation::Label,
-                        long_name: "Row".into(),
-                        units: String::new(),
-                        comments: String::new(),
-                        data: ColumnData::numeric(found.iter().map(row).collect()),
+                // Origin's default output (measured, analysis-tools.md 14): a column CrossingX<n> of
+                // the crossing X values, without units, written even when there is no crossing.
+                let level = spec.level;
+                let first_number = next_crossing_number(sheet);
+                for (k, inp) in inputs.iter().enumerate() {
+                    let n = first_number + k;
+                    let found = calc::level_crossings(inp.xs(), inp.ys(), level, spec.index, spec.min_gap);
+                    let column = |long_name: String, units: &str, comments: String, data: Vec<f64>| NewColumn {
+                        after: inp.id,
+                        long_name,
+                        units: units.to_string(),
+                        comments,
+                        data,
+                    };
+                    beside.push(column(
+                        format!("CrossingX{n}"),
+                        "",
+                        format!("X values of Y= {level} Level Crossing of {}{}", inp.short, inp.range_note()),
+                        found.iter().map(|c| c.x).collect(),
+                    ));
+                    if spec.details {
+                        let about = format!("Level Crossing of {} at Y= {level}", inp.short);
+                        beside.push(column(
+                            format!("Directions{n}"),
+                            "",
+                            format!("{about}: 1 up, -1 down, 0 on the level without passing through"),
+                            found.iter().map(|c| f64::from(c.direction)).collect(),
+                        ));
+                        beside.push(column(
+                            format!("X Indices{n}"),
+                            "",
+                            format!("{about}: the row of each crossing"),
+                            // Rows of the sheet, not of the chosen range.
+                            found.iter().map(|c| (c.row + inp.first) as f64).collect(),
+                        ));
+                        beside.push(column(
+                            format!("Y Crossing Values{n}"),
+                            &inp.units,
+                            about,
+                            vec![level; found.len()],
+                        ));
+                    }
+                    notes.push(match found.len() {
+                        0 => format!("{} does not reach Y = {level}", inp.short),
+                        1 => format!("{} reaches Y = {level} once", inp.short),
+                        c => format!("{} reaches Y = {level} {c} times", inp.short),
                     });
                 }
             }
@@ -2034,6 +2062,18 @@ impl Project {
 
         match output {
             OutputTarget::NextToInput => {}
+            // The crossings are not one value per input row: on a new sheet they go as they are.
+            OutputTarget::NewSheet if matches!(request.tool, Tool::LevelCrossing(_)) => {
+                for nc in std::mem::take(&mut beside) {
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: nc.long_name,
+                        units: nc.units,
+                        comments: nc.comments,
+                        data: ColumnData::numeric(nc.data),
+                    });
+                }
+            }
             OutputTarget::NewSheet => {
                 for nc in std::mem::take(&mut beside) {
                     let inp = inputs.iter().find(|i| i.id == nc.after).expect("every result column has a source");
@@ -3004,23 +3044,35 @@ mod tests {
     }
 
     #[test]
-    fn level_crossing_lists_x_level_direction_and_row_in_a_new_sheet() {
+    fn level_crossing_writes_origins_crossing_column_beside_the_input() {
         let (mut p, book, _, ramp) = sample();
-        let spec = LevelCrossingSpec { level: 4.5, index: CrossingIndex::Nearest, min_gap: 1 };
+        let spec = LevelCrossingSpec { level: 4.5, index: CrossingIndex::Nearest, min_gap: 1, details: false };
         let r = p.analyze(&request(&[ramp], Tool::LevelCrossing(spec))).unwrap();
-        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert!(rs.name.starts_with("LevelCrossing"), "{}", rs.name);
-        let values: Vec<Vec<f64>> = rs.columns.iter().map(|c| c.numeric().unwrap().to_vec()).collect();
-        // 0..10 crosses 4.5 upward at X 4.5, between rows 5 and 6 (a tie: the left row).
-        assert_eq!(values, [vec![4.5], vec![4.5], vec![1.0], vec![5.0]]);
-        assert_eq!(rs.columns[3].designation, Designation::Label);
-        assert_eq!(rs.columns[0].units, "s");
-        // Within rows 7 to 11 the rows are still those of the sheet.
-        let mut req = request(&[ramp], Tool::LevelCrossing(LevelCrossingSpec { level: 8.0, ..spec }));
+        assert!(r.new_sheet.is_none());
+        let col = p.column(r.new_columns[0]).unwrap();
+        assert_eq!(col.long_name, "CrossingX1");
+        assert_eq!(col.comments, "X values of Y= 4.5 Level Crossing of C");
+        assert_eq!(col.units, "", "Origin gives the crossings no units");
+        assert_eq!(p.numeric(r.new_columns[0]).unwrap(), [4.5]);
+        assert_eq!(r.notes, ["C reaches Y = 4.5 once"]);
+        // The optional outputs, numbered on: direction, row (of the sheet within rows 7 to 11) and Y.
+        let mut req = request(&[ramp], Tool::LevelCrossing(LevelCrossingSpec { level: 8.0, details: true, ..spec }));
         req.rows = RowRange::Rows(7, 11);
         let r = p.analyze(&req).unwrap();
-        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(rs.columns[3].numeric().unwrap(), [9.0]);
+        let names: Vec<&str> = r.new_columns.iter().map(|&id| p.column(id).unwrap().long_name.as_str()).collect();
+        assert_eq!(names, ["CrossingX2", "Directions2", "X Indices2", "Y Crossing Values2"]);
+        let values: Vec<&[f64]> = r.new_columns.iter().map(|&id| p.numeric(id).unwrap()).collect();
+        // 8 is the X of row 9, a point on the level: its own row, direction up.
+        assert_eq!(values, [&[8.0][..], &[1.0], &[9.0], &[8.0]]);
+        // No crossing: Origin still adds the empty column.
+        let r = p.analyze(&request(&[ramp], Tool::LevelCrossing(LevelCrossingSpec { level: -3.0, ..spec }))).unwrap();
+        assert_eq!(p.column(r.new_columns[0]).unwrap().long_name, "CrossingX3");
+        assert!(p.numeric(r.new_columns[0]).unwrap().is_empty());
+        // On a new sheet the crossings go as they are, without the X of the input.
+        let r = p.analyze_to(&request(&[ramp], Tool::LevelCrossing(spec)), &OutputTarget::NewSheet).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns.len(), 1);
+        assert_eq!(ws.columns[0].numeric().unwrap(), [4.5]);
     }
 
     fn ranges(list: &[(f64, f64)], end_point_baseline: bool) -> Tool {

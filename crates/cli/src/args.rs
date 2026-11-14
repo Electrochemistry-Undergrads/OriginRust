@@ -854,7 +854,7 @@ pub enum MathKind {
 /// The row given for a level crossing between two rows (Origin's `type`).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CrossingRow {
-    /// The nearer row, the left one on a tie.
+    /// The row whose X is nearest, the smaller X on a tie.
     Any,
     Left,
     Right,
@@ -1062,8 +1062,8 @@ pub enum AnalyzeTool {
         #[command(flatten)]
         target: TargetArgs,
     },
-    /// Where each curve crosses a level (Origin's levelcrossing): X, level, direction (1 up,
-    /// -1 down, 0 touching) and row of each crossing, in a new sheet.
+    /// Where each curve crosses a level (Origin's levelcrossing): the crossing X values in a column
+    /// CrossingX<n> beside the curve, as Origin; --details adds the direction, row and Y.
     LevelCrossing {
         #[command(flatten)]
         target: TargetArgs,
@@ -1075,6 +1075,10 @@ pub enum AnalyzeTool {
         /// Drop both crossings of a pair whose rows are closer than this.
         #[arg(long, default_value_t = 1)]
         min_gap: usize,
+        /// Also write the direction of each crossing (1 up, -1 down, 0 on the level without
+        /// passing through), its row and its Y.
+        #[arg(long)]
+        details: bool,
     },
     /// Derivative of each curve with respect to its X column.
     Differentiate {

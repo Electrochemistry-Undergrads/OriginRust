@@ -141,7 +141,7 @@ running release build; its exact commit was not verified and it was not rebuilt 
 Pick the first open brief in `docs/tasks/README.md`. Suggested order by effect on the owner's figures and
 analysis: T13 leftovers (plot tree text, Size/Speed and Display tabs, other fill modes), T14 item 6 (2D binning scripts are started, untracked, in worktree `stats-more2`), T16 item 6, T18 backlog items that need no Origin
 (briefs first), merging the matrix branch (asks the owner first: it is another session's unpushed work), T19 item 2 and T04 (wizards, need Origin pages), then
-the leftovers named in each brief's Status (T22-T24 leftovers: level crossing and cumulative sum; drawn
+the leftovers named in each brief's Status (T22-T24 leftovers: level crossing done 2026-11-14, analysis-tools 14, and cumulative sum dropped, Origin has none; drawn
 objects read from `.opj`, page/scale attachment, copy/paste, ordering, resize handles). All earlier "open
 questions" are assigned to briefs; none waits on the owner.
 

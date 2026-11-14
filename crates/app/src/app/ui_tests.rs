@@ -1400,9 +1400,32 @@ fn level_crossing_opens_from_mathematics_and_lists_the_crossings() {
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
     let b = project(&h).workbooks().next().unwrap();
-    let sheet = b.sheets.iter().find(|s| s.name.starts_with("LevelCrossing")).expect("a result sheet");
-    assert_eq!(sheet.columns.len(), 8, "X, level, direction and row for each of the two inputs");
+    assert_eq!(b.sheets.len(), 1, "Origin writes into the input sheet");
+    let names: Vec<&str> = b.sheet().columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert!(names.contains(&"CrossingX1") && names.contains(&"CrossingX2"), "one per input: {names:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Level crossing"));
+}
+
+/// Origin's `levelcrossing` numbers for this curve at Y = 1.5, with the optional direction and row
+/// columns beside the crossing X values.
+#[test]
+fn level_crossing_matches_origins_numbers_and_optional_outputs() {
+    let data = csv_file("levelcross", "wave", "x,y\n0,0\n1,2\n2,4\n3,1\n4,-1\n5,-2\n6,1\n7,1\n8,3\n9,0.5\n10,2\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - wave");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Level Crossing..."]);
+    h.state_mut().analysis.as_mut().unwrap().set_crossing_level(1.5);
+    click(&mut h, "Also output directions, X indices and Y crossing values");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let ws = b.sheet();
+    let col = |name: &str| ws.columns.iter().find(|c| c.long_name == name).unwrap_or_else(|| panic!("no {name}"));
+    assert_eq!(col("CrossingX1").comments, "X values of Y= 1.5 Level Crossing of B");
+    let x = col("CrossingX1").numeric().unwrap();
+    let want = [0.75, 2.833_333_333_333_333_5, 7.25, 8.6, 9.666_666_666_666_666];
+    assert!(x.len() == 5 && x.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-12), "{x:?}");
+    assert_eq!(col("Directions1").numeric().unwrap(), [1.0, -1.0, 1.0, -1.0, 1.0]);
+    assert_eq!(col("X Indices1").numeric().unwrap(), [2.0, 4.0, 8.0, 10.0, 11.0]);
 }
 
 fn date_file(tag: &str) -> PathBuf {

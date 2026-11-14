@@ -413,14 +413,16 @@ fn level_crossing_lists_the_crossings() {
         "2.5",
         "--row",
         "right",
+        "--details",
         "--export",
         out.to_str().unwrap(),
     ]);
     assert!(ok, "stderr: {stderr}");
-    assert!(stdout.contains("Level crossing"), "{stdout}");
+    assert!(stdout.contains("Level crossing") && stdout.contains("C reaches Y = 2.5 once"), "{stdout}");
     let text = std::fs::read_to_string(&out).unwrap();
-    // X, level, direction and the right-hand row (X 2.5 lies between rows 3 and 4).
-    assert!(text.lines().any(|l| l == "2.5,2.5,1,4"), "{text}");
+    assert!(text.lines().next().unwrap().contains("CrossingX1"), "{text}");
+    // t, flat, ramp, then X, direction, the right-hand row (X 2.5 lies between rows 3 and 4) and Y.
+    assert!(text.lines().any(|l| l == "0,2,0,2.5,1,4,2.5"), "{text}");
 }
 
 #[test]

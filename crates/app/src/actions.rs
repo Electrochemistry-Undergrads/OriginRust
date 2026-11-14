@@ -209,6 +209,11 @@ pub enum Action {
     /// for the columns a plot of the active sheet would show.
     /// The Interpolate window with this method chosen (Mathematics > Linear, Spline or B-Spline
     /// Interpolation).
+    /// The Interpolate window taking its X values from a column (Interpolate/Extrapolate Y from X).
+    InterpolateFromColumn {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     InterpolateWith {
         book: WindowId,
         columns: Vec<ColumnId>,

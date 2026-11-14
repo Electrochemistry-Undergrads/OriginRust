@@ -119,6 +119,10 @@ pub struct InterpSpec {
     /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
     /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
     pub smoothing: f64,
+    /// Interpolate onto the values of this column instead of an even grid (Mathematics >
+    /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are
+    /// then not used.
+    pub at: Option<ColumnId>,
 }
 
 impl Default for InterpSpec {
@@ -129,6 +133,7 @@ impl Default for InterpSpec {
             npts: 100,
             range: None,
             smoothing: 0.0,
+            at: None,
         }
     }
 }
@@ -1588,7 +1593,11 @@ impl Project {
                 }
             }
             Tool::Interpolate(spec) => {
-                if spec.npts < 2 {
+                let at_values: Option<Vec<f64>> = match spec.at {
+                    Some(c) => Some(self.numeric(c).ok_or(AnalysisError::NoSuchColumn(c))?.to_vec()),
+                    None => None,
+                };
+                if at_values.is_none() && spec.npts < 2 {
                     return Err(AnalysisError::BadOption("interpolation needs at least two result points".into()));
                 }
                 if spec.method == InterpMethod::BSpline && !(spec.smoothing >= 0.0 && spec.smoothing.is_finite()) {
@@ -1619,7 +1628,10 @@ impl Project {
                         Some((a, b)) => (Some(a.min(b)), Some(a.max(b))),
                         None => (None, None),
                     };
-                    let (gx, gy) = calc::interp1xy(inp.xs(), inp.ys(), spec.npts, lo, hi, &options);
+                    let (gx, gy) = match &at_values {
+                        Some(at) => (at.clone(), calc::interp1(inp.xs(), inp.ys(), at, &options)),
+                        None => calc::interp1xy(inp.xs(), inp.ys(), spec.npts, lo, hi, &options),
+                    };
                     on_sheet.push(SheetColumn {
                         designation: Designation::X,
                         long_name: inp.x_name.clone(),
@@ -1631,7 +1643,10 @@ impl Project {
                         designation: Designation::Y,
                         long_name: inp.name.clone(),
                         units: inp.units.clone(),
-                        comments: format!("{} interpolated to {} points{}", inp.label, spec.npts, inp.range_note()),
+                        comments: match &at_values {
+                            Some(at) => format!("{} at {} given X values{}", inp.label, at.len(), inp.range_note()),
+                            None => format!("{} interpolated to {} points{}", inp.label, spec.npts, inp.range_note()),
+                        },
                         data: ColumnData::numeric(gy),
                     });
                 }
@@ -2232,6 +2247,20 @@ mod tests {
         let source = ws.column_index(ramp).unwrap();
         assert_eq!(ws.columns.len(), source + 6);
         assert!(d.new_sheet.is_none());
+    }
+
+    #[test]
+    fn interpolation_onto_the_values_of_a_column() {
+        let (mut p, book, _, ramp) = sample();
+        let at = p.add_column(book, 0, Designation::Disregard, ColumnData::numeric(vec![0.5, 2.25, 12.0])).unwrap();
+        let spec = InterpSpec { at: Some(at), ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns[0].numeric().unwrap(), [0.5, 2.25, 12.0], "X is the given column");
+        assert_eq!(ws.columns[1].numeric().unwrap(), [0.5, 2.25, 12.0], "y = x, extrapolated past 10");
+        assert!(ws.columns[1].comments.contains("3 given X values"), "{}", ws.columns[1].comments);
+        let missing = InterpSpec { at: Some(ColumnId(9999)), ..Default::default() };
+        assert!(p.analyze(&request(&[ramp], Tool::Interpolate(missing))).is_err());
     }
 
     #[test]

@@ -6118,3 +6118,22 @@ fn file_append_brings_another_projects_windows_in_one_undo_step() {
     menu_path(&mut h, &["File"]);
     assert!(!h.get_by_label("Append...").accesskit_node().is_disabled());
 }
+
+#[test]
+fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
+    let mut h = start(vec![data_file("interpfromx")]);
+    show_window(&mut h, "Book1 - sample");
+    // B is the curve; C's values (30.5 ... 0.5) are the X values to interpolate at.
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("B").unwrap().id;
+    let ctx = h.ctx.clone();
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().apply(Action::InterpolateFromColumn { book, columns: vec![b] }, &ctx);
+    settle(&mut h);
+    assert!(h.state().analysis.is_some(), "the Interpolate window opens");
+    click(&mut h, "OK");
+    let book = project(&h).workbooks().next().unwrap();
+    let sheet = book.sheets.last().unwrap();
+    // B against A: 2.5 4.5 6.5 8.5 at 1 2 3 4, so y = 2x + 0.5, extrapolated outside 1..4.
+    assert_eq!(sheet.columns[0].numeric().unwrap(), [30.5, 20.5, 10.5, 0.5]);
+    assert_eq!(sheet.columns[1].numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
+}

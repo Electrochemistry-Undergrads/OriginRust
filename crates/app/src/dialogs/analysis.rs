@@ -396,6 +396,10 @@ pub struct AnalysisDialog {
     line: [f64; 4],
     interp: InterpSpec,
     interp_own_range: bool,
+    /// Interpolate onto the values of this column (index into `sheet_columns`) instead of a grid.
+    interp_at: Option<usize>,
+    /// The column that `interp_at` starts at when the X values are taken from a column.
+    interp_at_default: usize,
     peaks: PeakOptions,
     peak_keep: PeakKeep,
     peak_height: f64,
@@ -487,6 +491,12 @@ impl AnalysisDialog {
         self.interp.method = method;
     }
 
+    /// Mathematics > Interpolate/Extrapolate Y from X: the X values come from a column, at first the
+    /// first column of the sheet that is neither an input nor an input's X column.
+    pub fn set_interp_from_column(&mut self) {
+        self.interp_at = Some(self.interp_at_default);
+    }
+
     #[cfg(test)]
     pub fn interp_method(&self) -> InterpMethod {
         self.interp.method
@@ -519,6 +529,18 @@ impl AnalysisDialog {
                 (c.id, format!("{}{detail}", c.short_name))
             })
             .collect();
+        // Interpolate/Extrapolate Y from X: the X values come at first from the first column that is
+        // neither an input nor the X column of an input (that would give the data back).
+        let input_xs: Vec<ColumnId> = columns
+            .iter()
+            .filter_map(|id| sheet.column_index(*id).and_then(|i| sheet.x_for(i)).map(|c| c.id))
+            .collect();
+        let interp_at_default = sheet
+            .columns
+            .iter()
+            .position(|c| !columns.contains(&c.id) && !input_xs.contains(&c.id))
+            .or_else(|| sheet.columns.iter().position(|c| !columns.contains(&c.id)))
+            .unwrap_or(0);
         // The two-way ANOVA starts with the chosen columns as factor A, factor B and data, in this order.
         let mut stats = StatsOptions { paired: kind == AnalysisKind::SignedRankPaired, ..StatsOptions::default() };
         if kind == AnalysisKind::Anova2 {
@@ -565,6 +587,8 @@ impl AnalysisDialog {
             line: [x_lo, 0.0, x_hi, 0.0],
             interp: InterpSpec { range: Some((x_lo, x_hi)), ..InterpSpec::default() },
             interp_own_range: false,
+            interp_at: None,
+            interp_at_default,
             peaks: PeakOptions::default(),
             peak_keep: PeakKeep::Default,
             peak_height: 0.0,
@@ -656,6 +680,7 @@ impl AnalysisDialog {
             }),
             AnalysisKind::Interpolate => Tool::Interpolate(InterpSpec {
                 range: if self.interp_own_range { self.interp.range } else { None },
+                at: self.interp_at.and_then(|i| self.sheet_columns.get(i)).map(|(id, _)| *id),
                 ..self.interp
             }),
             AnalysisKind::Peaks => Tool::FindPeaks(PeakOptions {
@@ -1055,12 +1080,33 @@ impl AnalysisDialog {
                         ui.radio_value(&mut self.interp.boundary, SplineBoundary::Natural, "Natural");
                     });
                 }
-                ui.horizontal(|ui| {
-                    ui.label("Number of points");
-                    ui.add(DragValue::new(&mut self.interp.npts).range(2..=10_000_000));
+                let mut from_column = self.interp_at.is_some();
+                if ui.checkbox(&mut from_column, "Interpolate at the X values of a column").changed() {
+                    if from_column {
+                        self.set_interp_from_column();
+                    } else {
+                        self.interp_at = None;
+                    }
+                }
+                if let Some(at) = &mut self.interp_at {
+                    let names = &self.sheet_columns;
+                    egui::ComboBox::from_id_salt("interp_at_column")
+                        .selected_text(names.get(*at).map_or("", |(_, n)| n.as_str()))
+                        .show_ui(ui, |ui| {
+                            for (k, (_, name)) in names.iter().enumerate() {
+                                ui.selectable_value(at, k, name);
+                            }
+                        });
+                }
+                let grid = self.interp_at.is_none();
+                ui.add_enabled_ui(grid, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Number of points");
+                        ui.add(DragValue::new(&mut self.interp.npts).range(2..=10_000_000));
+                    });
+                    ui.checkbox(&mut self.interp_own_range, "Choose the X range of the result");
                 });
-                ui.checkbox(&mut self.interp_own_range, "Choose the X range of the result");
-                ui.add_enabled_ui(self.interp_own_range, |ui| {
+                ui.add_enabled_ui(grid && self.interp_own_range, |ui| {
                     let (mut lo, mut hi) = self.interp.range.unwrap_or((0.0, 1.0));
                     ui.horizontal(|ui| {
                         ui.label("X from");

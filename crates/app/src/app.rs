@@ -900,6 +900,12 @@ impl SheafApp {
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
+            Action::InterpolateFromColumn { book, columns } => {
+                self.open_analysis(book, columns, AnalysisKind::Interpolate);
+                if let Some(d) = &mut self.analysis {
+                    d.set_interp_from_column();
+                }
+            }
             Action::InterpolateWith { book, columns, method } => {
                 self.open_analysis(book, columns, AnalysisKind::Interpolate);
                 if let Some(d) = &mut self.analysis {

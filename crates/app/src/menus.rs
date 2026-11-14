@@ -152,6 +152,8 @@ pub enum Cmd {
     /// Mathematics > Linear, Spline or B-Spline Interpolation: the Interpolate window with that
     /// method chosen.
     InterpolateWith(sheaf_core::analysis::InterpMethod),
+    /// Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a column.
+    InterpolateFromColumn,
     Fit(FitKind),
     FitMore(FitMoreKind),
     /// The graph settings of the active layer on a tab.
@@ -932,7 +934,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Integrate Ranges...", Cmd::Analyze(AnalysisKind::IntegrateRanges)),
                 sep(),
                 item("Interpolate/Extrapolate...", Cmd::Analyze(AnalysisKind::Interpolate)),
-                grey("Interpolate/Extrapolate Y from X..."),
+                item("Interpolate/Extrapolate Y from X...", Cmd::InterpolateFromColumn),
                 grey("Trace Interpolation..."),
                 item("Linear Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::Linear)),
                 item("Spline Interpolation...", Cmd::InterpolateWith(sheaf_core::analysis::InterpMethod::CubicSpline)),
@@ -1945,6 +1947,14 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                     _ => vec![y],
                 };
                 Action::Analyze { book, columns, kind: *kind }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
+        Cmd::InterpolateFromColumn => match (c.book, c.curve) {
+            (Some(book), _) => Action::InterpolateFromColumn { book, columns: c.selected.to_vec() },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                Action::InterpolateFromColumn { book, columns: vec![y] }
             }
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),

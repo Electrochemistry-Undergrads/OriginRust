@@ -1080,6 +1080,13 @@ impl AnalysisDialog {
                         ui.radio_value(&mut self.interp.boundary, SplineBoundary::Natural, "Natural");
                     });
                 }
+                ui.horizontal(|ui| {
+                    ui.label("Outside the data");
+                    use sheaf_core::analysis::Extrapolation as E;
+                    ui.radio_value(&mut self.interp.extrapolation, E::Extrapolate, "Extrapolate");
+                    ui.radio_value(&mut self.interp.extrapolation, E::Missing, "Missing value");
+                    ui.radio_value(&mut self.interp.extrapolation, E::Repeat, "Repeat the end value");
+                });
                 let mut from_column = self.interp_at.is_some();
                 if ui.checkbox(&mut from_column, "Interpolate at the X values of a column").changed() {
                     if from_column {

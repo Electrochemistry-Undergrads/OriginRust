@@ -33,8 +33,8 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 
 pub use sheaf_calc::{
-    AreaType, Boundary, CurveOp, DiffOptions, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection, PeakFilter,
-    PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
+    AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
+    PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
 };
 pub use sheaf_calc::{BinSize, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{ChainBaseline, ChainOptions, FindMethod, FindOptions, LimitMode};
@@ -123,6 +123,9 @@ pub struct InterpSpec {
     /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are
     /// then not used.
     pub at: Option<ColumnId>,
+    /// Values outside the X range of the data: continue the end segment (Origin's default),
+    /// missing, or repeat the end value (Origin's `option` extrap, miss, repeat).
+    pub extrapolation: calc::Extrapolation,
 }
 
 impl Default for InterpSpec {
@@ -134,6 +137,7 @@ impl Default for InterpSpec {
             range: None,
             smoothing: 0.0,
             at: None,
+            extrapolation: calc::Extrapolation::Extrapolate,
         }
     }
 }
@@ -1608,7 +1612,7 @@ impl Project {
                 let options = calc::InterpOptions {
                     method: spec.method,
                     boundary: spec.boundary,
-                    extrapolation: calc::Extrapolation::Extrapolate,
+                    extrapolation: spec.extrapolation,
                     smoothing: spec.smoothing,
                 };
                 let needed = if spec.method == InterpMethod::BSpline { 4 } else { 2 };
@@ -2261,6 +2265,15 @@ mod tests {
         assert!(ws.columns[1].comments.contains("3 given X values"), "{}", ws.columns[1].comments);
         let missing = InterpSpec { at: Some(ColumnId(9999)), ..Default::default() };
         assert!(p.analyze(&request(&[ramp], Tool::Interpolate(missing))).is_err());
+        // Outside the data (X 0..10): missing, or the end value repeated.
+        for (extrapolation, want) in [(Extrapolation::Missing, f64::NAN), (Extrapolation::Repeat, 10.0)] {
+            let spec = InterpSpec { at: Some(at), extrapolation, ..Default::default() };
+            let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
+            let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+            let y = ws.columns[1].numeric().unwrap();
+            assert_eq!(&y[..2], [0.5, 2.25], "{extrapolation:?}: inside the data as before");
+            assert!(y[2] == want || (want.is_nan() && y[2].is_nan()), "{extrapolation:?}: {}", y[2]);
+        }
     }
 
     #[test]

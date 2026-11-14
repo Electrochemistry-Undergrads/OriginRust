@@ -160,7 +160,7 @@ Cross-cutting findings:
 | Subtract reference curve | subtract_ref | Subtract Reference Data window, `analyze subtract-ref` | ✓ | linear interpolation, common range option, checked against Origin (spec section 9) | P0 |
 | Normalize | 12 methods | `calc/normalize.rs`, checked | ◐ | no reference column or cell methods; no row normalize | P0 |
 | Interpolate and resample | interp1xy | linear, spline, Akima, B-spline | ◐ | extrapolation option not exposed; B-spline default does not match; new sheet only | P0 |
-| Interpolate onto given X, trace | interp1, interp1trace | Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a chosen column (linear, spline, Akima, B-spline; extrapolates past the data) | ◐ | no trace interpolation; Origin's miss/repeat extrapolation options not offered | P1 |
+| Interpolate onto given X, trace | interp1, interp1trace | Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a chosen column (linear, spline, Akima, B-spline; outside the data extrapolate, missing or repeat the end value, as Origin's option) | ◐ | no trace interpolation | P1 |
 | Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |
 | Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); level crossing none | ◐ | not measured in Origin, `analysis-curve-math.md`; no level crossing | P1 |
 | Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (T23) | ◐ | reducedup (duplicate X) missing | P1 |

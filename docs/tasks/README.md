@@ -73,6 +73,10 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 | [T23](T23-data-manipulation-tools.md) | Subtract Straight Line, Reduce to Evenly Spaced X, Curve Translate X/Y, Median Filter | M | done, merged (`f66dbea`); Origin details unmeasured (spec section 12) |
 | [T24](T24-drawn-graph-objects.md) | Drawn objects on graphs: line, arrow, rectangle, ellipse | M | done, merged (`542fef7`) |
 | [T25](T25-mcp-server.md) | MCP server (`sheaf-mcp`) so Claude and other AI tools can drive Sheaf | L | phase 1 done, merged 2026-11-14 (stdio server, shared `sheaf-ops`, ADR 0011, `docs/spec/mcp.md`); left: phase 2 (`--attach` to the open app), a shared analysis-option registry (MCP has its own mapping kept equal by a parity test), the analysis tools not yet exposed (tests, ANOVA, peak chains, FFT filter, coherence and others), `output: new_sheet`, CHI import test through MCP |
+| [T27](T27-print.md) | Print, Print Preview, Page Setup (vector EMF/PDF path) | M | open; Windows and macOS halves |
+| [T28](T28-autosave-recovery.md) | Autosave to a recovery folder and crash recovery at start-up | M | open |
+| [T29](T29-multivariate-roc-survival.md) | PCA, k-means, ROC curve, Kaplan-Meier | L | open; Origin measurements on Windows |
+| [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | open; an ADR for the reader/writer crates first |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

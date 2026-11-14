@@ -270,6 +270,90 @@ pub fn ifft_spectrum(re: &[f64], im: Option<&[f64]>, o: &IfftOptions) -> IfftRes
     r
 }
 
+/// The filters of Origin's Signal Processing > FFT Filters (`fft_filters`, measured;
+/// analysis-tools.md 15.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FftFilterType {
+    #[default]
+    LowPass,
+    HighPass,
+    BandPass,
+    BandBlock,
+    /// Keeps the frequencies whose magnitude `|X|` reaches the threshold.
+    Threshold,
+    /// Low pass with a parabolic edge between the pass and the stop frequency.
+    LowPassParabolic,
+}
+
+/// Options of [`fft_filter`]; a `None` frequency or threshold is Origin's automatic value.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct FftFilterOptions {
+    pub kind: FftFilterType,
+    /// Low and high pass (automatic: a quarter of the Nyquist frequency).
+    pub cutoff: Option<f64>,
+    /// Band pass and band block (automatic: a quarter and three quarters of the Nyquist frequency).
+    pub freq1: Option<f64>,
+    pub freq2: Option<f64>,
+    /// Threshold (automatic: a tenth of the largest `|X|`, the zero frequency included).
+    pub threshold: Option<f64>,
+    /// Parabolic low pass (automatic: as `freq1` and `freq2`).
+    pub pass: Option<f64>,
+    pub stop: Option<f64>,
+    /// High pass, band pass, band block: keep the zero frequency (the mean; Origin's "Keep DC
+    /// offset", on by default).
+    pub keep_offset: bool,
+}
+
+/// Filters `y`, sampled every `interval`, in the frequency domain as Origin's FFT Filters: each
+/// frequency `f = k / (N interval)` (as `k` times the step, both signs) is kept, removed or, for the
+/// parabolic low pass, weighted by `1 - ((f - pass) / (stop - pass))^2`, and the real part of the
+/// inverse transform returned. Low pass keeps `f <= cutoff`, high pass `f >= cutoff`, band pass
+/// `freq1 <= f <= freq2`; band block removes `freq1 <= f < freq2 + step` (measured: one step more
+/// than band pass keeps).
+pub fn fft_filter(y: &[f64], interval: f64, o: &FftFilterOptions) -> Vec<f64> {
+    let n = y.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut buf: Vec<Complex<f64>> = y.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    let mut planner = FftPlanner::<f64>::new();
+    planner.plan_fft_forward(n).process(&mut buf);
+    let step = 1.0 / (n as f64 * interval);
+    let nyquist = 1.0 / (2.0 * interval);
+    let (low, high) = (nyquist / 4.0, nyquist * 3.0 / 4.0);
+    let max = buf.iter().map(|c| c.norm()).fold(0.0, f64::max);
+    let weights: Vec<f64> = (0..n)
+        .map(|k| {
+            let f = k.min(n - k) as f64 * step;
+            let keep = |b: bool| if b { 1.0 } else { 0.0 };
+            match o.kind {
+                FftFilterType::LowPass => keep(f <= o.cutoff.unwrap_or(low)),
+                FftFilterType::HighPass if k == 0 => keep(o.keep_offset),
+                FftFilterType::HighPass => keep(f >= o.cutoff.unwrap_or(low)),
+                FftFilterType::BandPass | FftFilterType::BandBlock if k == 0 => keep(o.keep_offset),
+                FftFilterType::BandPass => keep(f >= o.freq1.unwrap_or(low) && f <= o.freq2.unwrap_or(high)),
+                FftFilterType::BandBlock => keep(!(f >= o.freq1.unwrap_or(low) && f < o.freq2.unwrap_or(high) + step)),
+                FftFilterType::Threshold => keep(buf[k].norm() >= o.threshold.unwrap_or(max / 10.0)),
+                FftFilterType::LowPassParabolic => {
+                    let (p, s) = (o.pass.unwrap_or(low), o.stop.unwrap_or(high));
+                    if f <= p {
+                        1.0
+                    } else if f >= s {
+                        0.0
+                    } else {
+                        1.0 - ((f - p) / (s - p)).powi(2)
+                    }
+                }
+            }
+        })
+        .collect();
+    for (c, w) in buf.iter_mut().zip(&weights) {
+        *c *= *w;
+    }
+    planner.plan_fft_inverse(n).process(&mut buf);
+    buf.iter().map(|c| c.re / n as f64).collect()
+}
+
 #[cfg(test)]
 #[allow(clippy::excessive_precision)] // the digits as Origin printed them
 mod tests {
@@ -379,6 +463,214 @@ mod tests {
         close(&ifft_spectrum(&shifted.real, Some(&shifted.imaginary), &IfftOptions::default()).real, &X);
         let odd = fft_spectrum(&X[..7], &FftOptions { two_sided: true, ..Default::default() });
         close(&ifft_spectrum(&odd.real, Some(&odd.imaginary), &IfftOptions::default()).real, &X[..7]);
+    }
+
+    const LOW_02: [f64; 16] = [
+        2.4815835878369148,
+        1.5999835694299871,
+        2.0371060052525296,
+        3.3957971502100106,
+        4.9264088062138107,
+        5.8429331919632554,
+        5.7155095874189294,
+        4.7827932939138149,
+        3.8970960686034424,
+        3.9858028681969171,
+        5.3415736511878276,
+        7.3113096309765373,
+        8.6949115373458312,
+        8.5712803704098413,
+        6.9058107561407125,
+        4.5100999248996372,
+    ];
+    const HIGH_02_NO_OFFSET: [f64; 16] = [
+        0.51841641216308543,
+        -0.59998356942998765,
+        1.9628939947474706,
+        -2.3957971502100097,
+        0.073591193786188613,
+        3.1570668080367454,
+        -3.71550958741893,
+        1.2172067060861855,
+        1.1029039313965574,
+        -0.98580286819691787,
+        -0.34157365118782779,
+        0.68869036902346248,
+        0.30508846265416856,
+        -1.5712803704098397,
+        2.0941892438592871,
+        -1.5100999248996381,
+    ];
+    const BAND_NO_OFFSET: [f64; 16] = [
+        -1.5408029288227159,
+        -1.8131844165320048,
+        -1.4703640057367258,
+        0.028740719440290441,
+        1.9131048661742769,
+        2.4189855107139122,
+        1.1790387201241934,
+        -0.47482910172299597,
+        -1.580517414736927,
+        -2.1010291458410912,
+        -1.6509563378229171,
+        0.17836606174625713,
+        2.2082154773853659,
+        2.4952280516591836,
+        0.9422816234354493,
+        -0.73227767946355149,
+    ];
+    const BLOCK: [f64; 16] = [
+        6.1213203435596419,
+        1.6893398282201781,
+        4.75,
+        2.6464466094067265,
+        2.5251262658470841,
+        5.335786437626906,
+        2.3357864376269051,
+        6.5606601717798219,
+        5.0,
+        6.2248737341529159,
+        7.3713203435596419,
+        6.1464466094067252,
+        7.353553390593274,
+        5.75,
+        6.542893218813453,
+        3.646446609406726,
+    ];
+    const THRESHOLD_15: [f64; 16] = [
+        2.9801427570428944,
+        0.85607763534545622,
+        3.9097038339569048,
+        1.074812671152984,
+        5.147555305605545,
+        9.0381212704726366,
+        1.8816214516556276,
+        5.8712757111297229,
+        5.0198572429571051,
+        3.1439223646545429,
+        5.0902961660430952,
+        7.9251873288470165,
+        8.852444694394455,
+        6.9618787295273643,
+        9.1183785483443724,
+        3.1287242888702771,
+    ];
+    const LOW_AUTO: [f64; 16] = [
+        2.4617263448798088,
+        1.4560612047754438,
+        1.9468098392094344,
+        3.4706098213629941,
+        5.0739641118193557,
+        5.8810544624358911,
+        5.597131039074557,
+        4.6540690050435369,
+        3.9169533115605484,
+        4.12972523285146,
+        5.4318698172309228,
+        7.2364969598235538,
+        8.5473562317402862,
+        8.5331590999372047,
+        7.0241893044850849,
+        4.6388242137699152,
+    ];
+    const Y20: [f64; 20] = [
+        -1.43, 3.16, 0.55, 4.06, 4.39, -4.02, -4.8, 7.56, -1.11, -1.49, 9.93, 2.05, 7.55, 2.15, 4.59, -2.74, 4.52,
+        8.02, 2.85, 6.12,
+    ];
+    const PARABOLIC_005_04: [f64; 20] = [
+        1.5465863735257743,
+        1.1522023969398165,
+        1.8306380882712177,
+        3.9673429652217829,
+        2.4926135044769464,
+        -2.960441837378776,
+        -1.8585904134936619,
+        2.7489631324789405,
+        0.96632778321659107,
+        0.84227699267154432,
+        5.5403619233094954,
+        5.8872133012846,
+        4.5609019179482448,
+        4.6170135786637347,
+        1.7677827721951744,
+        0.33874824866822129,
+        3.6804581759344872,
+        6.2183876446138839,
+        5.4279198746157338,
+        3.143293576836252,
+    ];
+    const BLOCK_012_032: [f64; 20] = [
+        1.4042205398774246,
+        4.4835324359398872,
+        1.56637694101251,
+        1.1595457646276555,
+        -0.30102376568214118,
+        0.46644345223742756,
+        -1.6430433056099392,
+        2.1425744483452269,
+        0.75476393202250025,
+        2.8137003533473255,
+        5.8046912095575518,
+        1.0601532955150703,
+        8.7698039589421519,
+        -0.43322968366719722,
+        6.9538953151271929,
+        1.3126577808748214,
+        2.8922353348400636,
+        5.1045534421425574,
+        0.83807983991268675,
+        6.760068710637225,
+    ];
+    const THRESHOLD_AUTO_20: [f64; 20] = [
+        -1.5384999999999998,
+        3.2684999999999995,
+        0.441500000000001,
+        4.1685,
+        4.2815000000000012,
+        -3.9114999999999993,
+        -4.9085,
+        7.6685,
+        -1.2184999999999995,
+        -1.3814999999999997,
+        9.8215,
+        2.158500000000001,
+        7.4415,
+        2.2585000000000006,
+        4.4814999999999987,
+        -2.6315,
+        4.4115000000000011,
+        8.1284999999999989,
+        2.7415000000000003,
+        6.2285000000000013,
+    ];
+
+    #[test]
+    fn fft_filters_match_origin() {
+        let y = [3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0, 3.0, 5.0, 8.0, 9.0, 7.0, 9.0, 3.0];
+        let run = |o: FftFilterOptions| fft_filter(&y, 1.0, &o);
+        let base = FftFilterOptions { keep_offset: true, ..Default::default() };
+        close(&run(FftFilterOptions { cutoff: Some(0.2), ..base }), &LOW_02);
+        close(&run(base), &LOW_AUTO);
+        let high = FftFilterOptions { kind: FftFilterType::HighPass, cutoff: Some(0.2), keep_offset: false, ..base };
+        close(&run(high), &HIGH_02_NO_OFFSET);
+        let band = FftFilterOptions {
+            kind: FftFilterType::BandPass,
+            freq1: Some(0.1),
+            freq2: Some(0.3),
+            keep_offset: false,
+            ..base
+        };
+        close(&run(band), &BAND_NO_OFFSET);
+        close(&run(FftFilterOptions { kind: FftFilterType::BandBlock, keep_offset: true, ..band }), &BLOCK);
+        close(&run(FftFilterOptions { kind: FftFilterType::Threshold, threshold: Some(1.5), ..base }), &THRESHOLD_15);
+        // Twenty points: the parabolic edge, band block one step past freq2, the automatic threshold.
+        let run20 = |o: FftFilterOptions| fft_filter(&Y20, 1.0, &o);
+        let parabolic =
+            FftFilterOptions { kind: FftFilterType::LowPassParabolic, pass: Some(0.05), stop: Some(0.4), ..base };
+        close(&run20(parabolic), &PARABOLIC_005_04);
+        let block = FftFilterOptions { kind: FftFilterType::BandBlock, freq1: Some(0.12), freq2: Some(0.32), ..base };
+        close(&run20(block), &BLOCK_012_032);
+        close(&run20(FftFilterOptions { kind: FftFilterType::Threshold, ..base }), &THRESHOLD_AUTO_20);
     }
 
     #[test]

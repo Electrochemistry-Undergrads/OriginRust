@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 45 | 134 | 55 | 234 |
+| All rows | 46 | 134 | 54 | 234 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 13 | 65 | 55 | 133 |
+| P1 and P2 together | 14 | 65 | 54 | 133 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -184,7 +184,7 @@ Cross-cutting findings:
 | Smooth: Savitzky-Golay, adjacent average, weighted, percentile, FFT filter | Signal Processing > Smooth | `calc/smooth.rs`, checked against Origin; boundary options; Preview pane with Auto Preview in the shared analysis frame | ✓ | no auto-apply or recalculate | P0 |
 | Smooth: LOWESS, LOESS, binomial | Smooth dialog | Lowess, Loess (span or points) and binomial (order) as measured in Origin, dialog and CLI | ✓ | | P1 |
 | FFT and inverse FFT | fft1, ifft1 | FFT window, `analyze fft`, `Tool::Fft`: Origin's columns, windows, corrections, one- and two-sided, shift, unwrap, MSA/SSA/TISA (analysis-tools 15); IFFT window, `analyze ifft` (15.1) | ◐ | no complex input column, no windows in IFFT, no result graphs | P1 |
-| FFT filters | low, high, band pass, block, notch | low-pass inside Smooth only | ✗ | | P1 |
+| FFT filters | low, high, band pass, block, notch | FFT Filters window, `analyze fft-filter`, `Tool::FftFilter`: the six types with Origin's automatic values (analysis-tools 15.2) | ✓ | checked against Origin | P1 |
 | Correlation, wavelets, decimation, Hilbert, STFT, digital filters | Signal Processing | none | ✗ | | P2 |
 
 ## 7 Peaks and baseline

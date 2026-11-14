@@ -577,6 +577,8 @@ pub enum Tool {
     Convolution(ConvolutionSpec),
     SignalCorrelation(SignalCorrelationSpec),
     LevelCrossing(LevelCrossingSpec),
+    /// Signal Processing > Hilbert Transform (Origin's `hilbert`, measured; analysis-tools.md 13).
+    Hilbert,
     /// Data Manipulation: subtract the straight line through two points.
     SubtractLine(SubtractLineSpec),
     /// Data Manipulation: reduce duplicate X data.
@@ -636,6 +638,7 @@ impl Tool {
             Tool::Convolution(_) => "Convolution",
             Tool::SignalCorrelation(_) => "Signal correlation",
             Tool::LevelCrossing(_) => "Level crossing",
+            Tool::Hilbert => "Hilbert transform",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
             Tool::ReduceX(_) => "Reduce to evenly spaced X",
@@ -690,6 +693,7 @@ impl Tool {
             Tool::Convolution(_) => "Convolution",
             Tool::SignalCorrelation(_) => "Correlation",
             Tool::LevelCrossing(_) => "LevelCrossing",
+            Tool::Hilbert => "Hilbert",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
             Tool::Translate(_) => "Translate",
@@ -1656,6 +1660,18 @@ impl Project {
                             if *normalize { ", normalized" } else { "" }
                         ),
                         data: ColumnData::numeric(v),
+                    });
+                }
+            }
+            Tool::Hilbert => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("Hilbert transform of {}", inp.name),
+                        units: inp.units.clone(),
+                        comments: format!("Hilbert transform of {}{}", inp.short, inp.range_note()),
+                        data: inp.aligned(&calc::hilbert(&y)),
                     });
                 }
             }
@@ -2972,6 +2988,19 @@ mod tests {
             p.analyze(&request(&[ramp], Tool::SignalCorrelation(spec))),
             Err(AnalysisError::BadOption(_))
         ));
+    }
+
+    #[test]
+    fn the_hilbert_transform_goes_beside_its_column() {
+        let (mut p, book, _, ramp) = sample();
+        let r = p.analyze(&request(&[ramp], Tool::Hilbert)).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[3].id, r.new_columns[0], "right behind its source column");
+        assert_eq!(ws.columns[3].comments, "Hilbert transform of C");
+        let h = p.numeric(r.new_columns[0]).unwrap();
+        let want = sheaf_calc::hilbert(&(0..=10).map(f64::from).collect::<Vec<_>>());
+        assert_eq!(h, want);
+        assert!(r.message.starts_with("Hilbert transform"), "{}", r.message);
     }
 
     #[test]

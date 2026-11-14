@@ -1380,6 +1380,19 @@ fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet
 }
 
 #[test]
+fn hilbert_transform_opens_from_signal_processing_and_adds_a_column_per_input() {
+    let mut h = start(vec![data_file("hilbert")]);
+    show_window(&mut h, "Book1 - sample");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Hilbert Transform..."]);
+    assert!(h.state().analysis.is_some(), "the window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let added = b.sheet().columns.iter().filter(|c| c.comments.starts_with("Hilbert transform of")).count();
+    assert_eq!(added, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("Hilbert transform"));
+}
+
+#[test]
 fn level_crossing_opens_from_mathematics_and_lists_the_crossings() {
     let mut h = start(vec![data_file("levelx")]);
     show_window(&mut h, "Book1 - sample");

@@ -737,6 +737,17 @@ Command line: `sheaf analyze convolution FILE --y B --response C [--circular] [-
 [--interval D]` and `sheaf analyze signal-correlation FILE --y B --with C [--circular] [--normalize]
 [--interval D]`.
 
+### 13.1 Hilbert Transform (`hilbert`)
+
+Analysis > Signal Processing > Hilbert Transform. Inputs: `ix`, `hil` (output the transform, on),
+`ansig` (output the analytic signal; on in the X-Function file although its help says off) and the
+report sheet `rd` (a new sheet of the input book). Observed (`re-workspace/scratch/hilbert/hb.out.txt`,
+eight and seven points; Rust test `hilbert_matches_origin`, 1e-12): the transform is the standard
+discrete one, the imaginary part of the analytic signal made by FFT (positive frequencies doubled,
+negative removed, zero and, for an even length, the middle frequency kept); the analytic signal is a
+complex column whose real part is the input. Sheaf writes the transform only, in a new column beside
+each input (no complex columns); `Tool::Hilbert`, `sheaf analyze hilbert FILE --y B`.
+
 ## 14. Level crossing (`levelcrossing`)
 
 Origin has the `levelcrossing` X-Function (Data Manipulation) but no menu item for it; Sheaf puts it

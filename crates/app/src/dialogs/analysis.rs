@@ -50,6 +50,8 @@ pub enum AnalysisKind {
     SignalCorrelation,
     /// Level Crossing (Origin's `levelcrossing` X-Function, which has no menu item there).
     LevelCrossing,
+    /// Signal Processing > Hilbert Transform (Origin's `hilbert`).
+    Hilbert,
     Interpolate,
     Peaks,
     /// Baseline, peak search, per-peak integration and an optional multi-peak fit.
@@ -97,7 +99,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 16] = [
+    pub const ALL: [AnalysisKind; 17] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -110,6 +112,7 @@ impl AnalysisKind {
         AnalysisKind::Convolution,
         AnalysisKind::SignalCorrelation,
         AnalysisKind::LevelCrossing,
+        AnalysisKind::Hilbert,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
         AnalysisKind::PeakChain,
@@ -131,6 +134,7 @@ impl AnalysisKind {
             AnalysisKind::Convolution => "Convolution...",
             AnalysisKind::SignalCorrelation => "Correlation...",
             AnalysisKind::LevelCrossing => "Level Crossing...",
+            AnalysisKind::Hilbert => "Hilbert Transform...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
@@ -185,6 +189,7 @@ impl AnalysisKind {
             "convolution" => AnalysisKind::Convolution,
             "signal-correlation" => AnalysisKind::SignalCorrelation,
             "level-crossing" => AnalysisKind::LevelCrossing,
+            "hilbert" => AnalysisKind::Hilbert,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
@@ -978,6 +983,7 @@ impl AnalysisDialog {
                 Tool::CurveMath(CurveMathSpec { op, operand, common_only })
             }
             AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
+            AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
                 let other = self
                     .reference_choices
@@ -1266,6 +1272,12 @@ impl AnalysisDialog {
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
+            }
+            AnalysisKind::Hilbert => {
+                ui.weak(
+                    "Writes the Hilbert transform of each input column. Origin also writes the analytic signal as a \
+                     complex column, whose real part is the input and whose imaginary part is this transform.",
+                );
             }
             AnalysisKind::LevelCrossing => {
                 let spec = &mut self.level_crossing;
@@ -1927,6 +1939,7 @@ impl AnalysisDialog {
             AnalysisKind::Convolution => "conv",
             AnalysisKind::SignalCorrelation => "corr1",
             AnalysisKind::LevelCrossing => "levelcrossing",
+            AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Interpolate => "interp1",
             AnalysisKind::Peaks => "pkFind",
             AnalysisKind::PeakChain => "",
@@ -1987,6 +2000,7 @@ impl AnalysisDialog {
             AnalysisKind::Convolution => "Convolve the input signals with a response",
             AnalysisKind::SignalCorrelation => "Correlate the input signals with a second signal",
             AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
+            AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Interpolate => "Interpolate the input curves at evenly spaced X values",
             AnalysisKind::Peaks => "Find the peaks of the input curves",
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
@@ -2035,7 +2049,8 @@ impl AnalysisDialog {
             | AnalysisKind::Smooth
             | AnalysisKind::SubtractRef
             | AnalysisKind::CurveMath
-            | AnalysisKind::ColumnMath => "New columns beside the input",
+            | AnalysisKind::ColumnMath
+            | AnalysisKind::Hilbert => "New columns beside the input",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "X, level, direction and row of each crossing in a new sheet",
@@ -2142,6 +2157,7 @@ impl AnalysisDialog {
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
                 | AnalysisKind::ColumnMath
+                | AnalysisKind::Hilbert
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter

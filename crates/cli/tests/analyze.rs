@@ -390,6 +390,15 @@ fn convolution_and_signal_correlation_write_a_new_sheet() {
 }
 
 #[test]
+fn hilbert_adds_a_column() {
+    let dir = scratch("hilbert");
+    let data = data_file(&dir);
+    let (ok, stdout, stderr) = sheaf(&["analyze", "hilbert", data.to_str().unwrap(), "--y", "ramp"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Hilbert transform"), "{stdout}");
+}
+
+#[test]
 fn level_crossing_lists_the_crossings() {
     let dir = scratch("level-crossing");
     let data = data_file(&dir);

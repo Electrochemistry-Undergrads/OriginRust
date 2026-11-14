@@ -1,6 +1,7 @@
-//! Convolution and correlation of two signals, as Origin's Analysis > Signal Processing >
-//! Convolution (`conv`) and Correlation (`corr1`). The sums are taken directly (Origin uses FFTs,
-//! so its numbers carry rounding noise of about 1e-15). See `docs/spec/analysis-tools.md` 13.
+//! Convolution and correlation of two signals and the Hilbert transform, as Origin's Analysis >
+//! Signal Processing > Convolution (`conv`), Correlation (`corr1`) and Hilbert Transform
+//! (`hilbert`). Convolution and correlation sums are taken directly (Origin uses FFTs, so its
+//! numbers carry rounding noise of about 1e-15). See `docs/spec/analysis-tools.md` 13.
 
 /// Convolution of `signal` with `response`.
 ///
@@ -57,6 +58,33 @@ pub fn correlate(a: &[f64], b: &[f64], circular: bool, normalize: bool) -> (Vec<
     }
 }
 
+/// The discrete Hilbert transform of `y`, as Origin's Signal Processing > Hilbert Transform
+/// (`hilbert`, measured): the imaginary part of the analytic signal made by the FFT (the positive
+/// frequencies doubled, the negative ones removed, the zero and, for an even length, the middle
+/// frequency kept).
+pub fn hilbert(y: &[f64]) -> Vec<f64> {
+    use rustfft::{FftPlanner, num_complex::Complex};
+    let n = y.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut buf: Vec<Complex<f64>> = y.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    let mut planner = FftPlanner::<f64>::new();
+    planner.plan_fft_forward(n).process(&mut buf);
+    for (k, c) in buf.iter_mut().enumerate() {
+        let w = if k == 0 || (n.is_multiple_of(2) && k == n / 2) {
+            1.0
+        } else if k < n.div_ceil(2) {
+            2.0
+        } else {
+            0.0
+        };
+        *c *= w;
+    }
+    planner.plan_fft_inverse(n).process(&mut buf);
+    buf.iter().map(|c| c.im / n as f64).collect()
+}
+
 fn norm(v: &[f64]) -> f64 {
     v.iter().map(|x| x * x).sum::<f64>().sqrt()
 }
@@ -95,6 +123,35 @@ mod tests {
         let r = [1.0, 2.0, 3.0, 4.0, 5.0];
         close(&convolve(&s, &r, false, false), &[2.0, 3.0, 4.5, 6.0, 7.5, -3.0, 2.5]);
         close(&convolve(&s, &r, true, false), &[-1.0, 5.5, 4.5, 6.0, 7.5]);
+    }
+
+    #[test]
+    fn hilbert_matches_origin() {
+        close(
+            &hilbert(&[1.0, 3.0, -2.0, 4.0, 0.0, 5.0, 2.0, -1.0]),
+            &[
+                -2.3106601717798214,
+                2.0177669529663689,
+                -1.2248737341529163,
+                -1.3106601717798214,
+                -0.18933982822017859,
+                -1.5177669529663689,
+                3.7248737341529163,
+                0.81066017177982141,
+            ],
+        );
+        close(
+            &hilbert(&[1.0, 3.0, -2.0, 4.0, 0.0, 5.0, 2.0]),
+            &[
+                -1.8240214214054773,
+                2.9109728183618637,
+                -1.2321059856186376,
+                -1.2933405193024705,
+                0.0075618404315286169,
+                -2.3538711542579649,
+                3.7848044217911578,
+            ],
+        );
     }
 
     #[test]

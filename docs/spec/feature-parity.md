@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 45 | 132 | 56 | 233 |
+| All rows | 45 | 133 | 56 | 234 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 13 | 63 | 56 | 132 |
+| P1 and P2 together | 13 | 64 | 56 | 133 |
 
 By priority alone: 101 rows are P0, 85 are P1 and 44 are P2.
 
@@ -170,6 +170,7 @@ Cross-cutting findings:
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Cumulative sum | Mathematics | running integral only | ✗ | | P1 |
 | Convolution, deconvolution | Signal Processing | Convolution window, `analyze convolution`, `Tool::Convolution`: linear and circular, normalized, Origin's automatic interval | ◐ | checked against Origin (analysis-tools 13); deconvolution and wrap response missing | P2 |
+| Hilbert transform | Signal Processing > Hilbert Transform (hilbert) | Hilbert Transform window, `analyze hilbert`, `Tool::Hilbert` | ◐ | transform checked against Origin (analysis-tools 13.1); no analytic signal (no complex columns) | P2 |
 | Correlation of two signals | Signal Processing > Correlation (corr1) | Correlation window, `analyze signal-correlation`, `Tool::SignalCorrelation`: linear and circular in Origin's lag order, normalized, autocorrelation | ✓ | checked against Origin (analysis-tools 13) | P2 |
 | XYZ gridding, matrix conversion | Convert to Matrix | none | ✗ | no matrix window | P2 |
 | Rank, remove duplicates | wdeldup | none | ✗ | | P2 |

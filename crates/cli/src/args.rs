@@ -1056,6 +1056,12 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 1.0)]
         interval: f64,
     },
+    /// The Hilbert transform of each column (Origin's Signal Processing > Hilbert Transform), in a
+    /// new column beside it.
+    Hilbert {
+        #[command(flatten)]
+        target: TargetArgs,
+    },
     /// Where each curve crosses a level (Origin's levelcrossing): X, level, direction (1 up,
     /// -1 down, 0 touching) and row of each crossing, in a new sheet.
     LevelCrossing {

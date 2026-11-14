@@ -84,6 +84,6 @@ pub use power::{
     PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
     t_sample_sizes,
 };
-pub use signal::{convolve, correlate};
+pub use signal::{convolve, correlate, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};

@@ -176,6 +176,7 @@ fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         }
         AnalyzeTool::Math { target, op, operand } => (target, Job::Math { op, operand, column: false }),
         AnalyzeTool::ColumnMath { target, op, operand } => (target, Job::Math { op, operand, column: true }),
+        AnalyzeTool::Hilbert { target } => (target, Job::Tool(Tool::Hilbert)),
         AnalyzeTool::LevelCrossing { target, level, row, min_gap } => {
             let index = match row {
                 CrossingRow::Any => analysis::CrossingIndex::Nearest,

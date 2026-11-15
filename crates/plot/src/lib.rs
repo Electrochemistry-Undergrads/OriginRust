@@ -437,8 +437,7 @@ pub fn render_multipage_pdf(
     size: ExportSize,
     layout: ExportLayout,
 ) -> Result<Vec<u8>, PlotError> {
-    let svgs = graphs.iter().map(|&g| export_svg(project, g, size, layout)).collect::<Result<Vec<_>, _>>()?;
-    multipage::svgs_to_pdf(&svgs, SystemFonts::shared())
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| export_svg(project, g, size, layout)), SystemFonts::shared())
 }
 
 /// [`render_multipage_pdf`] written to `path`.
@@ -456,8 +455,7 @@ pub fn export_multipage_pdf_file(
 /// Several graphs on the project's paper, one sheet per graph, each placed by the saved Page
 /// Setup as [`render_print_pdf`] places one graph.
 pub fn render_print_multipage_pdf(project: &Project, graphs: &[WindowId]) -> Result<Vec<u8>, PlotError> {
-    let svgs = graphs.iter().map(|&g| print_svg(project, g)).collect::<Result<Vec<_>, _>>()?;
-    multipage::svgs_to_pdf(&svgs, SystemFonts::shared())
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| print_svg(project, g)), SystemFonts::shared())
 }
 
 fn print_svg(project: &Project, graph: WindowId) -> Result<String, PlotError> {

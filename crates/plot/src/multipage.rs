@@ -9,20 +9,26 @@ use crate::raster::parse_tree;
 use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref, TextStr};
 use std::collections::HashMap;
 
-/// Writes one PDF page per SVG, in order. Each page is the size of its SVG (in points).
-pub(crate) fn svgs_to_pdf(svgs: &[String], fonts: &SystemFonts) -> Result<Vec<u8>, PlotError> {
-    if svgs.is_empty() {
-        return Err(PlotError::Pdf("no graphs to put in the PDF".into()));
-    }
+/// The sRGB v4 ICC profile svg2pdf uses (the ICC's compact profile, CC0; see ATTRIBUTION.md).
+static SRGB_ICC: &[u8] = include_bytes!("../assets/sRGB-v4.icc");
+
+/// Writes one PDF page per SVG, in order. Each page is the size of its SVG (in points). The SVGs
+/// are produced one at a time and each is converted and dropped before the next is asked for,
+/// so only one page's SVG is in memory. An error from the iterator stops the export.
+pub(crate) fn svgs_to_pdf(
+    svgs: impl IntoIterator<Item = Result<String, PlotError>>,
+    fonts: &SystemFonts,
+) -> Result<Vec<u8>, PlotError> {
     let mut alloc = Ref::new(1);
     let catalog = alloc.bump();
     let page_tree = alloc.bump();
     let info = alloc.bump();
+    let srgb = alloc.bump();
     let mut pdf = Pdf::new();
-    let mut kids = Vec::with_capacity(svgs.len());
+    let mut kids = Vec::new();
     let name = Name(b"G1");
     for svg in svgs {
-        let tree = parse_tree(svg, fonts).map_err(PlotError::Pdf)?;
+        let tree = parse_tree(&svg?, fonts).map_err(PlotError::Pdf)?;
         let (w, h) = (tree.size().width(), tree.size().height());
         if !(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0) {
             return Err(PlotError::Pdf("a page has no size".into()));
@@ -50,10 +56,19 @@ pub(crate) fn svgs_to_pdf(svgs: &[String], fonts: &SystemFonts) -> Result<Vec<u8
         p.parent(page_tree);
         p.contents(contents);
         p.resources().x_objects().pair(name, x_object);
-        p.group().transparency().isolated(true).knockout(false);
+        // The same blending group as svg2pdf's one-page PDF: isolated, in sRGB.
+        p.group().transparency().isolated(true).knockout(false).color_space().icc_based(srgb);
         p.finish();
         pdf.extend(&chunk);
     }
+    if kids.is_empty() {
+        return Err(PlotError::Pdf("no graphs to put in the PDF".into()));
+    }
+    // One sRGB profile shared by every page's group.
+    pdf.icc_profile(srgb, &miniz_deflate(SRGB_ICC))
+        .n(3)
+        .range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
+        .filter(Filter::FlateDecode);
     pdf.catalog(catalog).pages(page_tree);
     pdf.pages(page_tree).count(kids.len() as i32).kids(kids);
     pdf.document_info(info).producer(TextStr("Sheaf"));

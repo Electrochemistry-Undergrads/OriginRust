@@ -136,3 +136,26 @@ fn the_file_is_written() {
     assert_eq!(page_count(&bytes), 2);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn every_page_group_is_isolated_and_in_one_shared_icc_based_srgb() {
+    let (p, g) = project(3);
+    let pdf = render_multipage_pdf(&p, &g, ExportSize::default(), ExportLayout::default()).unwrap();
+    let t = text(&pdf);
+    let mut profiles = Vec::new();
+    // The page objects are the ones with a media box (the converted graphs' XObjects have groups too).
+    for (i, _) in t.match_indices("/MediaBox [") {
+        let page = &t[i..i + t[i..].find("endobj").unwrap()];
+        let dict = &page[page.find("/Group").expect("a page group")..];
+        let dict = &dict[..dict.find(">>").unwrap()];
+        assert!(dict.contains("/S /Transparency") && dict.contains("/I true"), "{dict}");
+        let cs = &dict[dict.find("/CS [/ICCBased ").expect("a colour space") + 15..];
+        let id: u32 = cs.split_whitespace().next().unwrap().parse().unwrap();
+        profiles.push(id);
+    }
+    assert_eq!(profiles.len(), 3);
+    assert!(profiles.iter().all(|&id| id == profiles[0]), "one shared profile: {profiles:?}");
+    let obj = &t[t.find(&format!("\n{} 0 obj", profiles[0])).expect("the profile object")..];
+    let dict = &obj[..obj.find("stream").unwrap()];
+    assert!(dict.contains("/N 3") && dict.contains("/FlateDecode"), "{dict}");
+}

@@ -29,6 +29,9 @@ fn find(sheet: &Worksheet, r: &ColumnRef) -> Option<usize> {
             .or_else(|| cols.iter().position(|c| c.long_name == *name)),
         ColumnRef::Long(name) => cols.iter().position(|c| c.long_name == *name),
         ColumnRef::Index(n) => n.checked_sub(1).filter(|&i| i < cols.len()),
+        // Cross-sheet recalculation records are not written; the existing warning/companion
+        // path keeps these formulas losslessly without attaching them to local columns.
+        ColumnRef::Scoped { .. } => None,
     }
 }
 

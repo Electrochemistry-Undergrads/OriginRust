@@ -1292,9 +1292,97 @@ then `layer -g`; Y = x, x+1, x+2, x+3 for X = 0..10, so each curve is 10 high); 
   "3" gives 0, 3, 6; "2 5" on four curves gives 0, 2, 7, 9 (the steps between neighbours, repeated).
 
 Sheaf (`graph_details.rs` `stack_tab`): the same Offset group of choices. Constant takes one step, not a
-list; Auto chosen on this tab starts at 8 %; Cumulative, Incremental, Keep Proportion, the X/Y ticks and the
-column/bar options are greyed (no stacked columns yet, GP-COL-01); Waterfall is Sheaf's own extra choice
+list; Auto chosen on this tab starts at 8 %; Cumulative is live for line, scatter and line + symbol plots
+(13.15); Incremental, Keep Proportion, the X/Y ticks and the column/bar options are greyed (no stacked columns
+yet, GP-COL-01); Waterfall is Sheaf's own extra choice
 with its two shifts. The per-plot offsets of Individual stay listed under the group.
+
+### 13.15 Graph > Offset Grouped Data in Layer and Cumulative lines (T62 slice 1)
+
+Origin facts (13.1, 13.14, measured as far as listed there): the submenu has None, Cumulative, Constant, Auto
+and Individual, one of them ticked; Cumulative adds each plot's Y values point by point to those of the plots
+before it. **Not measured** (Sheaf's choices, labelled so): whether the menu items prompt, what Cumulative does
+with missing rows or different X, and the menu's undo text.
+
+Sheaf:
+
+- **Menu.** Graph > Offset Grouped Data in Layer has the five items, live, with a tick on the active layer's
+  present mode. A choice changes the active layer's `stack` as one history step (undo text "Offset grouped data
+  in layer"); the mode the layer already has is a no-op (no history step, the stored values stay). Plot Details'
+  Stack tab edits the same field, so the tick and the radio buttons always agree (Waterfall, Sheaf's own
+  mode, has no menu item and ticks none).
+- **No prompts.** Constant and Auto use stored values as the Stack tab does: a layer not yet in that mode starts
+  at Constant step 1 or Auto gap 8 % (the tab's own start values); individual offsets stay in `plot_offsets`.
+  Origin's own prompting (if any) is unmeasured.
+- **Cumulative rule** (`core/stack.rs` `cumulative_add`): the members (13.3) are summed in plot order,
+  pointwise by **row index**, whatever their X values; plot k is drawn at `Y_k[row] + sum over j<k of Y_j[row]`.
+  A previous plot adds 0 at a row where it is missing (not a finite number), outside its row range, or removed
+  by a worksheet row filter, or hidden by a mask while Hide Masked Points is on (drawing treats those points as
+  gaps, so they add nothing either), so one hole does not break the curves above it; the plot's own missing value stays a
+  gap. Hidden plots still add their share (13.3). A fitted curve following a member is moved by that member's
+  added amount at the fit's own X (linear interpolation along the leader's X, clamped at its ends).
+  Applies to line, scatter and line + symbol plots; other plot types in the layer are drawn as they are and add
+  nothing. Places (`places`) carry no offset in this mode (it is not a pair of offsets), so the `.opj` writer and
+  Individual are unaffected: the writer warns that Cumulative was written as plain curves and the `.sheaf`
+  companion keeps the mode.
+- **Everything follows the drawing.** The plot data (`PlotData.y`), hence automatic axis ranges, filters,
+  symbols, drop lines, labels and error bars, the Data Reader and the Data menu tools (which take the added share
+  back when a point is moved) use the summed Y. The Integrate gadget's shading still follows the source values.
+- **Menu and Plot Details only offer Cumulative where it acts:** the Cumulative item (and the Plot Details
+  Cumulative radio button) is greyed, with the hover reason "Cumulative needs a line, scatter or line + symbol
+  plot in the layer", when the active layer has no such plot (a column, bar or area layer would otherwise tick and
+  add an undo step with no visible change). The other modes are unaffected.
+- **CLI/MCP:** `--stack cumulative` (and the MCP `stack` string).
+
+
+### 13.16 Plot > Statistics > Stacked Histograms (T62 slice 2)
+
+Origin: the command makes one graph with one histogram panel per selected Y column, the panels stacked
+vertically. **Not measured** (all Sheaf's choices): shared versus per-panel bins, panel order, gaps, labels.
+
+Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histograms; CLI
+`sheaf plot -t stacked-histograms`):
+
+- One panel per Y column that holds numbers (text columns are left out; no numbers at all is an error),
+  **top to bottom in selection order**. The panels reuse `PanelLayout::stack` (one column, no gap, X linked to
+  the first panel so all share one X scale and the inner panels show no X tick labels) with the order turned
+  top-down, and the shared panel helpers `plot_panels`/`panel_layers` of 15.
+- **Shared bins** (provisional): the bin width, first edge and last edge are the ones the histogram rule
+  (frequency-counts automatic bins, measured for single histograms) gives for the **union of the finite values
+  each panel's histogram uses**: the rows its sheet's row filter lets show, and not masked while Hide Masked Points
+  is on (`Project::shown_values`), so a hidden outlier does not widen the shared bins; they are stored explicitly on every plot (`hist`), so the panels have identical bin edges
+  and later editing one panel's bins does not touch the others. Each panel has its own count axis.
+- Each panel gets the next colour of the layer palette (starting at the Histogram template's red).
+- `--panels` and `--y2` (a right Y axis, also refused by `plot_columns_double_y`) are refused with this template; the legend of each panel names its column.
+
+
+### 13.17 Waterfall Y:Color Mapping and Z:Color Mapping (T62 slice 3)
+
+Origin: Plot > Y-offset/Waterfall has Waterfall Y:Color Mapping and Waterfall Z:Color Mapping (3D waterfall is B15).
+**Not measured** (all Sheaf's choices): palettes, levels, scale layout, where Z comes from.
+
+Sheaf (`Layer::waterfall_color` None/Y/Z, `Template::WaterfallY` = `waterfall-y`, `WaterfallZ` = `waterfall-z`;
+GUI Plot > Y-offset/Waterfall; CLI `sheaf plot -t waterfall-y|waterfall-z`): the 2D waterfall of 13.6 (placement
+unchanged), the legend hidden, and:
+
+- **Colours** come from the shared ramp (`plots::map_color`: blue, cyan, green, yellow, red) also used by colour
+  mapped symbols, parallel plots and sunburst plots.
+- **Y mapping:** the line is built exactly as the plain line (the plot's connect mode, axis breaks, missing data
+  with the page's "Connect line across Missing Data", symbol-line gaps: one code path, `draw_line`); only the
+  colouring differs. The final polyline is split into its straight pieces and each is coloured by the mean Y of its
+  two ends (read back off the page in data units, less the curve's stack offset, so it is on the source Y scale; a
+  segment colour, not a gradient inside a segment; runs of one colour are drawn as one path). One scale for the
+  whole layer: the smallest and largest shown Y of all curves. Fill under the curve is not applied to the mapped
+  line; symbols of line + symbol plots keep the plot colour.
+- **Z mapping:** each curve is one colour, from its Z value on a scale from the smallest to the largest Z of the
+  layer. Z is the number in the long name of the curve's Y column; else the number in its comments; else the curve's
+  place in the stack counted from 1 (`core::stack::waterfall_z`).
+- **Colour scale:** `hexbin::draw_color_bar` beside the layer's whole frame (the right end of the back curve),
+  titled Y or Z, ticks at nice values; an equal-valued scale puts one tick in the middle.
+- The mapping is stored in the layer (`waterfall_color`), so it round-trips in `.sheaf`. The `.opj` writer writes
+  the curves in their plot colours, without a scale, and warns (the companion keeps the mapping).
+- A mapping on a layer that is not drawn as a waterfall (linked layers, other stack modes) is ignored.
+
 
 ---
 

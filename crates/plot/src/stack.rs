@@ -31,3 +31,27 @@ pub(crate) fn front_frame(f: Rect, n: usize, sx: f64, sy: f64) -> Rect {
     let y = if sy >= 0.0 { f.y + f.h - h } else { f.y };
     Rect { x, y, w, h }
 }
+
+/// The colour scale of a colour mapped waterfall (graphing spec 13.17): the bar of the shared ramp beside the
+/// layer's whole frame (the back curve's end), titled Y or Z, ticks at nice values of the scale.
+pub(crate) fn draw_scale(
+    out: &mut Vec<crate::scene::Item>,
+    layer: &sheaf_core::graph::Layer,
+    pds: &[crate::data::PlotData],
+    geom: &crate::LayerGeometry,
+    m: &dyn crate::fonts::TextMeasurer,
+) {
+    let Some(wf) = pds.iter().find_map(|pd| pd.wf) else { return };
+    let title = if wf.mode == sheaf_core::graph::WaterfallColor::Z { "Z" } else { "Y" };
+    let mut whole = geom.clone();
+    whole.frame = geom.clip;
+    crate::hexbin::draw_color_bar(
+        out,
+        layer,
+        &whole,
+        m,
+        title,
+        &crate::sunburst::scale_ticks(wf.lo, wf.hi),
+        (0.0, 0.0),
+    );
+}

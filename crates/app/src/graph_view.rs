@@ -807,6 +807,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         tool,
         curve: None,
         layer_curves: Vec::new(),
+        stack: None,
+        can_cumulate: false,
     }
 }
 
@@ -962,6 +964,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::ToggleGrids { layer, .. }
         | GraphOp::Rescale { layer }
         | GraphOp::ExchangeAxes { layer }
+        | GraphOp::SetStack { layer, .. }
         | GraphOp::AxisZoom { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::ReconstructLegend { layer }
@@ -1024,6 +1027,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             for a in [&mut l.x_axis, &mut l.y_axis] {
                 a.min = None;
                 a.max = None;
+            }
+        }
+        GraphOp::SetStack { stack, .. } => {
+            if std::mem::discriminant(&l.stack) != std::mem::discriminant(&stack) {
+                l.stack = stack;
             }
         }
         GraphOp::ExchangeAxes { .. } => {

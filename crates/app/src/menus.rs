@@ -29,7 +29,7 @@ use eframe::egui::{
     self, Color32, Key, KeyboardShortcut, Modifiers, Stroke, TextStyle,
     text::{LayoutJob, TextFormat},
 };
-use sheaf_core::graph::PlotKind;
+use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
@@ -39,6 +39,7 @@ use std::sync::OnceLock;
 /// Tooltip of an item that Sheaf does not have.
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
+pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
@@ -229,6 +230,10 @@ pub enum Cmd {
     Rescale,
     /// Graph > Exchange X-Y Axes on the active layer.
     ExchangeAxes,
+    /// Graph > Offset Grouped Data in Layer: the active layer's stack mode. A Constant step or an
+    /// Auto gap already stored on the layer is kept; a layer that is not in that mode starts from
+    /// the value Plot Details' Stack tab offers.
+    SetStack(sheaf_core::graph::Stack),
     /// Graph > Legend > Reconstruct Legend on the active layer (Ctrl+L).
     ReconstructLegend,
     /// Graph > Legend > Update Legend on the active layer.
@@ -387,6 +392,11 @@ pub struct MenuContext<'a> {
     /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
     /// compare curves (Average Multiple Curves, Intersect) start from these.
     pub layer_curves: Vec<ColumnId>,
+    /// The stack mode of the active layer of the active graph (the tick of Graph > Offset Grouped
+    /// Data in Layer); `None` without a graph.
+    pub stack: Option<sheaf_core::graph::Stack>,
+    /// True when the active layer has a plot that Cumulative stacking applies to (line, scatter, line + symbol).
+    pub can_cumulate: bool,
 }
 
 impl<'a> MenuContext<'a> {
@@ -826,8 +836,10 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("&Stacked Lines by Y Offsets", Cmd::Plot(Template::StackedLines)),
                     item("&Waterfall", Cmd::Plot(Template::Waterfall)),
+                    item("Waterfall Y:Color Mapping", Cmd::Plot(Template::WaterfallY)),
+                    item("Waterfall Z:Color Mapping", Cmd::Plot(Template::WaterfallZ)),
                 ],
-                &["Waterfall Y:Color Mapping", "Waterfall Z:Color Mapping", "3D Waterfall"],
+                &["3D Waterfall"],
             ),
         ),
         sub(
@@ -885,9 +897,11 @@ fn plot_menu() -> Vec<Entry> {
                 ],
                 vec![item("Ridgeline Chart", Cmd::Plot(Template::Ridgeline))],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
+                vec![
+                    grey("Histogram + Probabilities"),
+                    item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
+                ],
                 greys(&[
-                    "Histogram + Probabilities",
-                    "Stacked Histograms",
                     "Marginal Histograms",
                     "Marginal Box Charts",
                     "2D Kernel Density",
@@ -1346,7 +1360,16 @@ fn graph_menu() -> Vec<Entry> {
         grey("Fit Layer to Graph"),
         grey("Fit Page to Layers..."),
         item("Exchange X-Y Axes", Cmd::ExchangeAxes),
-        grey_sub("Offset Grouped Data in Layer", &["None", "Cumulative", "Constant", "Auto", "Individual"]),
+        sub(
+            "Offset Grouped Data in Layer",
+            vec![
+                item("None", Cmd::SetStack(Stack::None)),
+                item("Cumulative", Cmd::SetStack(Stack::Cumulative)),
+                item("Constant", Cmd::SetStack(Stack::Constant { step: 1.0 })),
+                item("Auto", Cmd::SetStack(Stack::Auto { gap_percent: 8.0 })),
+                item("Individual", Cmd::SetStack(Stack::Individual)),
+            ],
+        ),
         grey("Convert to Standard Font Size"),
     ]
 }
@@ -2334,6 +2357,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ExchangeAxes => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ExchangeAxes { layer: c.layer } }
         }
+        Cmd::SetStack(Stack::Cumulative) if !c.can_cumulate => return Err(NO_CUMULATIVE),
+        Cmd::SetStack(stack) => Action::GraphEdit {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            op: GraphOp::SetStack { layer: c.layer, stack: *stack },
+        },
         Cmd::ReconstructLegend => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::ReconstructLegend { layer: c.layer } }
         }
@@ -2546,6 +2574,11 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleAiLink)) && c.ai_link {
+                    tick(ui, &response);
+                }
+                if let (Some(Cmd::SetStack(mode)), Some(current)) = (&it.cmd, c.stack)
+                    && std::mem::discriminant(mode) == std::mem::discriminant(&current)
+                {
                     tick(ui, &response);
                 }
                 if response.contains_pointer() {
@@ -2812,6 +2845,8 @@ mod tests {
             tool: Default::default(),
             curve: None,
             layer_curves: Vec::new(),
+            stack: None,
+            can_cumulate: false,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

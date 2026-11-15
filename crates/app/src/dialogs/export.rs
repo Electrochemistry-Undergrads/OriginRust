@@ -92,14 +92,15 @@ impl ExportFormat {
     /// The colour depths the format can store.
     fn depths(self) -> &'static [ColorDepth] {
         match self {
-            ExportFormat::Png
-            | ExportFormat::Bmp
-            | ExportFormat::Tga
-            | ExportFormat::Pcx
-            | ExportFormat::Psd
-            | ExportFormat::Tiff => &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            // Origin 2016's Color Depth lists, in its order (graphing.md 9.4); its 16-bit Color for
+            // BMP and TGA is not offered.
+            ExportFormat::Png | ExportFormat::Bmp | ExportFormat::Pcx | ExportFormat::Tiff => {
+                &[ColorDepth::Mono, ColorDepth::Colors16, ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8]
+            }
+            ExportFormat::Psd => &[ColorDepth::Mono, ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Tga => &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
             ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
-            ExportFormat::Gif => &[ColorDepth::Colors256],
+            ExportFormat::Gif => &[ColorDepth::Mono, ColorDepth::Colors16, ColorDepth::Colors256, ColorDepth::Grey8],
             _ => &[],
         }
     }
@@ -107,9 +108,11 @@ impl ExportFormat {
 
 fn depth_label(d: ColorDepth) -> &'static str {
     match d {
+        ColorDepth::Mono => "Monochrome",
+        ColorDepth::Colors16 => "16 Colors",
         ColorDepth::Colors256 => "256 Colors",
         ColorDepth::Bit24 => "24-bit Color",
-        ColorDepth::Grey8 => "8-bit Grayscale",
+        ColorDepth::Grey8 => "8-bit Gray Scale",
     }
 }
 
@@ -396,7 +399,8 @@ impl ExportDialog {
         // The depth must be one the format can store.
         if self.format.is_raster() && !self.format.depths().contains(&self.depth) {
             let d = self.format.depths();
-            self.depth = if d.contains(&ColorDepth::Bit24) { ColorDepth::Bit24 } else { d[0] };
+            // Not offered by this format: 24-bit, else 256 colours (GIF), else the first depth.
+            self.depth = [ColorDepth::Bit24, ColorDepth::Colors256].into_iter().find(|c| d.contains(c)).unwrap_or(d[0]);
         }
         if !self.format.is_raster() && self.width_unit == SizeUnit::Pixel {
             self.width_unit = SizeUnit::Inch;

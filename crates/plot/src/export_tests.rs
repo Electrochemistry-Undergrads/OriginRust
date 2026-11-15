@@ -554,3 +554,117 @@ fn tiff_compression_choice_is_written_in_the_file() {
     let lzw = raster_bytes("tif", &RasterOptions::default());
     assert!(lzw.len() < none.len(), "LZW is smaller than no compression");
 }
+
+#[test]
+fn rows_are_packed_high_bits_first_and_padded_to_a_byte() {
+    assert_eq!(raster::pack_row(&[1, 0, 1, 1, 0, 0, 0, 1, 1], 1), vec![0b1011_0001, 0b1000_0000]);
+    assert_eq!(raster::pack_row(&[0xA, 0x3, 0xF], 4), vec![0xA3, 0xF0]);
+    assert_eq!(raster::pack_row(&[7, 8], 8), vec![7, 8]);
+}
+
+/// Decodes a PNG into (bit depth, palette, one index per pixel, width, height).
+fn png_indices(bytes: &[u8]) -> (png::BitDepth, Vec<u8>, Vec<u8>, usize, usize) {
+    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info().unwrap();
+    let info = reader.info().clone();
+    let mut buf = vec![0; reader.output_buffer_size().unwrap()];
+    let frame = reader.next_frame(&mut buf).unwrap();
+    let (w, h) = (info.width as usize, info.height as usize);
+    let bits = match info.bit_depth {
+        png::BitDepth::One => 1,
+        png::BitDepth::Four => 4,
+        _ => 8,
+    };
+    let mut idx = Vec::with_capacity(w * h);
+    for y in 0..h {
+        let row = &buf[y * frame.line_size..(y + 1) * frame.line_size];
+        for x in 0..w {
+            let bit = x * bits;
+            idx.push((row[bit / 8] >> (8 - bits - bit % 8)) & ((1 << bits) - 1) as u8);
+        }
+    }
+    (info.bit_depth, info.palette.map(|p| p.to_vec()).unwrap_or_default(), idx, w, h)
+}
+
+#[test]
+fn mono_and_16_colour_png_are_packed_palette_images() {
+    let mono = raster_bytes("png", &RasterOptions { depth: ColorDepth::Mono, ..RasterOptions::default() });
+    let (depth, palette, idx, w, h) = png_indices(&mono);
+    assert_eq!(depth, png::BitDepth::One);
+    assert_eq!(palette, vec![0, 0, 0, 255, 255, 255]);
+    assert_eq!(idx.len(), w * h);
+    assert!(idx.contains(&0) && idx.contains(&1), "black lines on white");
+    // Each pixel is the ordered dither (8 x 8 Bayer, Origin's) of the 8-bit grey export of the graph.
+    let grey = raster_bytes("png", &RasterOptions { depth: ColorDepth::Grey8, ..RasterOptions::default() });
+    let mut reader = png::Decoder::new(std::io::Cursor::new(&grey[..])).read_info().unwrap();
+    let mut g = vec![0; reader.output_buffer_size().unwrap()];
+    reader.next_frame(&mut g).unwrap();
+    let bayer = |x: usize, y: usize| -> u16 { u16::from(raster::BAYER8[y % 8][x % 8]) };
+    assert!(
+        idx.iter().zip(&g).enumerate().all(|(k, (&i, &v))| i == u8::from(4 * bayer(k % w, k / w) + 2 < u16::from(v)))
+    );
+    // A mid grey of 128 is half white: 32 of each 8 x 8 cell.
+    let half = raster::mono_dither_for_test(&[128; 64 * 3], 8);
+    assert_eq!(half.iter().filter(|&&i| i == 1).count(), 32);
+
+    let c16 = raster_bytes("png", &RasterOptions { depth: ColorDepth::Colors16, ..RasterOptions::default() });
+    let (depth, palette, idx, _, _) = png_indices(&c16);
+    assert_eq!(depth, png::BitDepth::Four);
+    assert_eq!(palette.len(), 48, "16 palette entries");
+    assert!(idx.iter().all(|&i| i < 16));
+    // the white background and the black axes keep palette entries close to white and black
+    let near = |c: [u8; 3]| palette.chunks(3).any(|p| p.iter().zip(c).all(|(&a, b)| a.abs_diff(b) <= 12));
+    assert!(near([255, 255, 255]) && near([0, 0, 0]), "{palette:?}");
+}
+
+#[test]
+fn mono_and_16_colour_bmp_have_1_and_4_bits_per_pixel() {
+    for (depth, bpp, colours) in [(ColorDepth::Mono, 1usize, 2usize), (ColorDepth::Colors16, 4, 16)] {
+        let bmp = raster_bytes("bmp", &RasterOptions { depth, ..RasterOptions::default() });
+        let u32_at = |at: usize| u32::from_le_bytes(bmp[at..at + 4].try_into().unwrap()) as usize;
+        let (w, h) = (u32_at(18), u32_at(22));
+        assert_eq!(u16::from_le_bytes([bmp[28], bmp[29]]) as usize, bpp, "{depth:?}");
+        assert_eq!(u32_at(46), colours, "{depth:?}: colours used");
+        assert_eq!(u32_at(10), 14 + 40 + 4 * colours, "{depth:?}: pixel offset after the palette");
+        let stride = (w * bpp).div_ceil(32) * 4;
+        assert_eq!(bmp.len(), 14 + 40 + 4 * colours + stride * h, "{depth:?}: file length");
+        assert_eq!(u32_at(2), bmp.len());
+    }
+    let mono = raster_bytes("bmp", &RasterOptions { depth: ColorDepth::Mono, ..RasterOptions::default() });
+    assert_eq!(&mono[54..62], &[0, 0, 0, 0, 255, 255, 255, 0], "black, then white (BGR0)");
+}
+
+#[test]
+fn formats_without_small_depths_store_mono_and_16_colours_as_8_bit_indices() {
+    for depth in [ColorDepth::Mono, ColorDepth::Colors16] {
+        let top = if depth == ColorDepth::Mono { 2 } else { 16 };
+        let tga = raster_bytes("tga", &RasterOptions { depth, ..RasterOptions::default() });
+        assert_eq!((tga[1], tga[2], tga[16]), (1, 1, 8), "{depth:?}: colour-mapped TGA");
+        assert!(tga[18 + 768..].iter().all(|&i| i < top), "{depth:?}: indices within the small palette");
+        let psd = raster_bytes("psd", &RasterOptions { depth, ..RasterOptions::default() });
+        assert_eq!(u16::from_be_bytes([psd[24], psd[25]]), 2, "{depth:?}: indexed PSD");
+        assert!(psd[68 + 768..].iter().all(|&i| i < top), "{depth:?}");
+        let pcx = raster_bytes("pcx", &RasterOptions { depth, ..RasterOptions::default() });
+        assert_eq!(pcx[pcx.len() - 769], 0x0C, "{depth:?}: PCX palette marker");
+        let tif = raster_bytes("tif", &RasterOptions { depth, ..RasterOptions::default() });
+        assert!(tif.starts_with(b"II*\0") || tif.starts_with(b"MM\0*"), "{depth:?}: TIFF header");
+    }
+}
+
+#[test]
+fn gif_mono_16_colour_and_grey_keep_their_exact_palettes() {
+    for (depth, size) in [(ColorDepth::Mono, 2usize), (ColorDepth::Colors16, 16), (ColorDepth::Grey8, 256)] {
+        let gif = raster_bytes("gif", &RasterOptions { depth, ..RasterOptions::default() });
+        let mut opts = gif::DecodeOptions::new();
+        opts.set_color_output(gif::ColorOutput::Indexed);
+        let mut dec = opts.read_info(std::io::Cursor::new(&gif[..])).unwrap();
+        let palette = dec.global_palette().unwrap().to_vec();
+        let frame = dec.read_next_frame().unwrap().unwrap();
+        assert!(palette.len() >= 3 * size, "{depth:?}: {} palette bytes", palette.len());
+        assert!(frame.buffer.iter().all(|&i| usize::from(i) < size), "{depth:?}");
+        match depth {
+            ColorDepth::Mono => assert_eq!(&palette[..6], &[0, 0, 0, 255, 255, 255]),
+            ColorDepth::Colors16 => assert!(palette.len() >= 48),
+            _ => assert_eq!(&palette[3 * 200..3 * 201], &[200, 200, 200]),
+        }
+    }
+}

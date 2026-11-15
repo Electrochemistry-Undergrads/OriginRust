@@ -92,6 +92,7 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     if matches!(a.tool, AnalyzeTool::Power { .. }) {
         return power(a.tool);
     }
+    let plot = sheaf_ops::cli_analyze::comparison_plot_request(&a.tool)?;
     let (target, job) = job_from(a.tool)?;
     let mut project = if is_project(&target.input) {
         load_project(&target.input)?
@@ -127,6 +128,11 @@ pub fn analyze(a: AnalyzeArgs) -> Result<()> {
         Outcome::Filtered { kept, before, sheet_name } => {
             println!("kept {kept} of {before} rows in sheet {sheet_name}")
         }
+    }
+    if let Some(request) = &plot {
+        let graph = sheaf_ops::analyze::write_comparison_plot(&mut project, &run, request)?;
+        let name = project.graph(graph).map_or_else(String::new, |g| g.name.clone());
+        println!("multiple comparisons plot {name} written to {}", request.path.display());
     }
     if let Some(path) = &target.export {
         write_sheet(&project.workbook(run.book).expect("picked above").sheets[run.result_sheet], path)?;

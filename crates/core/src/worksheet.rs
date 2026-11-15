@@ -38,6 +38,10 @@ pub struct Worksheet {
     /// Cell notes (see [`crate::notes`]), sorted by column and row.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<crate::notes::CellNote>,
+    /// Set on the report sheet of a one-way ANOVA with a means comparison and of a two-sample t-test: the groups
+    /// the report was made from, so that "Multiple Comparisons Plot" (T64) can draw them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison_source: Option<crate::compplot::ComparisonSource>,
 }
 
 impl Worksheet {
@@ -49,6 +53,7 @@ impl Worksheet {
             frozen: Frozen::default(),
             cond_formats: Vec::new(),
             notes: Vec::new(),
+            comparison_source: None,
         }
     }
 

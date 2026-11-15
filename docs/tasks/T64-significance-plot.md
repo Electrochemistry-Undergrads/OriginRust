@@ -1,6 +1,6 @@
-# T58: Multiple comparisons plot (significance brackets)
+# T64: Multiple comparisons plot (significance brackets)
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `significance-plot`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `significance-plot`. Spec: statistics.md 23. Left: Two-Way ANOVA, paired t-test and the one-sample Significance Plot, Origin measurements (everything is from documents), picking/editing brackets, a mini toolbar.
 **Size:** M. **Source:** `origin-2026-2027-gaps.md` (Analysis: Multiple Comparisons and Significance
 Plots, Origin 2027).
 

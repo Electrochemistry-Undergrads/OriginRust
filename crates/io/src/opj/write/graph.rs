@@ -1101,6 +1101,16 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             if layer.slopes.len() == 1 { "it" } else { "them" },
         ));
     }
+    if !layer.brackets.is_empty() {
+        let n = layer.brackets.len();
+        notes.push(format!(
+            "layer {} has {n} significance bracket{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
     if matches!(roles[index], Role::RightY { x_straight: false, .. }) {
         notes.push(
             "the X scale of a right Y layer that is not linked to its parent's was written with the link only".into(),

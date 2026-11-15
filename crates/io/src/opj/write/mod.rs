@@ -145,13 +145,16 @@ struct Notes {
     hidden_dropped: usize,
     widths_dropped: usize,
     /// Columns with masked cells: the file written here holds no mask.
-    masks_dropped: usize,
     /// Group and Subject columns, written as unused.
     group_roles_dropped: usize,
     /// Sheets with a worksheet filter: the file written here holds no filter.
     filters_dropped: usize,
     /// Sheets with frozen panes: the file written here holds none.
     frozen_dropped: usize,
+    /// Sheets with conditional formatting rules: the file written here holds none.
+    cond_formats_dropped: usize,
+    /// Cell notes: the file written here holds none (counted per note).
+    cell_notes_dropped: usize,
     /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
     analysis_links_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
@@ -309,6 +312,8 @@ impl Writer {
             .collect();
         self.notes.filters_dropped += usize::from(sheet.filter.is_some());
         self.notes.frozen_dropped += usize::from(!sheet.frozen.is_none());
+        self.notes.cond_formats_dropped += usize::from(!sheet.cond_formats.is_empty());
+        self.notes.cell_notes_dropped += sheet.notes.len();
         for (i, column) in sheet.columns.iter().enumerate() {
             let dataset_name = format!("{}_{}{}", book.name, column.short_name, suffix);
             self.check_name("column name", &column.short_name, MAX_DATASET_NAME)?;
@@ -347,7 +352,6 @@ impl Writer {
             self.notes.formats_dropped += usize::from(column.format != sheaf_core::format::NumberFormat::General);
             self.notes.hidden_dropped += usize::from(column.hidden);
             self.notes.widths_dropped += usize::from(column.width.is_some());
-            self.notes.masks_dropped += usize::from(!column.mask.is_empty());
             let long = self.label_text(&column.long_name, "long name")?;
             let units = self.label_text(&column.units, "units")?;
             let comments = self.comment_text(&column.comments)?;
@@ -439,7 +443,7 @@ impl Writer {
         };
         let mut block = framed(&layout::dataset_header(&spec));
         block.extend(framed(&data));
-        block.extend(framed(&[]));
+        block.extend(framed(&mask_block(column, rows)));
         Ok((block, (first, last)))
     }
 
@@ -717,16 +721,22 @@ impl Writer {
                 n.frozen_dropped
             ));
         }
+        if n.cond_formats_dropped > 0 {
+            warnings.push(format!(
+                "{} sheet(s) have conditional formatting; the project file written here does not hold it, so Origin shows none.",
+                n.cond_formats_dropped
+            ));
+        }
+        if n.cell_notes_dropped > 0 {
+            warnings.push(format!(
+                "{} cell note(s) are not written: the project file written here does not hold them, so Origin shows none.",
+                n.cell_notes_dropped
+            ));
+        }
         if n.group_roles_dropped > 0 {
             warnings.push(format!(
                 "{} Group or Subject column(s) were written as unused: the project file written here has no such role.",
                 n.group_roles_dropped
-            ));
-        }
-        if n.masks_dropped > 0 {
-            warnings.push(format!(
-                "{} column(s) have masked cells; the project file written here does not hold the mask, so Origin uses those cells.",
-                n.masks_dropped
             ));
         }
         if n.widths_dropped > 0 {
@@ -780,4 +790,20 @@ fn parent_of(roles: &[Designation], i: usize, first: usize) -> u16 {
         Designation::YError | Designation::XError | Designation::Z | Designation::Label => &[Designation::Y],
     };
     roles[..i].iter().rposition(|c| wanted.contains(c)).map_or(0, |p| (first + p + 1) as u16)
+}
+
+/// The mask block of a data set in Origin's layout (opj-format.md 3.2): empty without masked
+/// cells; otherwise 4 bytes Origin leaves to chance (written as zeros), the block length, 32 zero
+/// bytes, one byte per written row (1 = masked) and 4 zero bytes.
+fn mask_block(column: &Column, rows: usize) -> Vec<u8> {
+    if column.mask.range(..rows).next().is_none() {
+        return Vec::new();
+    }
+    let len = 40 + rows + 4;
+    let mut b = vec![0u8; len];
+    b[4..8].copy_from_slice(&(len as u32).to_le_bytes());
+    for &r in column.mask.range(..rows) {
+        b[40 + r] = 1;
+    }
+    b
 }

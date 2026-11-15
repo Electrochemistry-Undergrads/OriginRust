@@ -36,8 +36,10 @@ pub(crate) struct PlotData<'a> {
     /// How the X column shows its values (a date format makes a date axis).
     pub x_format: Option<NumberFormat>,
     pub y: Cow<'a, [f64]>,
-    /// Rows of the Y column that are masked: drawn red, as Origin does.
+    /// Rows of the Y column that are masked (none while masking is disabled): drawn in
+    /// `mask_color`, red unless Column > Mask > Change Color chose another, as Origin does.
     pub mask: Option<&'a std::collections::BTreeSet<usize>>,
+    pub mask_color: sheaf_core::Color,
     /// Active filters on the source worksheets. Indices remain original worksheet rows.
     pub filters: Vec<&'a sheaf_core::rowfilter::RowFilter>,
     pub err: Option<&'a [f64]>,
@@ -62,6 +64,9 @@ pub(crate) struct PlotData<'a> {
     pub bar: Option<BarSlot>,
     /// The statistics a box chart plot draws; `None` for other kinds.
     pub boxed: Option<BoxStats>,
+    /// The density silhouette a violin plot draws (its box statistics are in `boxed`); `None`
+    /// for other kinds.
+    pub violin: Option<crate::violin::ViolinData>,
     /// What a pie chart plot draws; `None` for other kinds.
     pub pie: Option<PieData>,
     /// The values that set the size of each symbol of a bubble plot.
@@ -112,7 +117,7 @@ pub(crate) struct PieData {
 pub(crate) const BOX_WIDTH: f64 = 0.8;
 
 /// The statistics of one box from the finite values of a column, `None` without any.
-fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxStats> {
+pub(crate) fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxStats> {
     let mut v: Vec<f64> = values.iter().copied().filter(|x| x.is_finite()).collect();
     if v.is_empty() {
         return None;
@@ -154,6 +159,21 @@ impl PlotData<'_> {
     /// A real missing value still breaks a line; a filtered row simply joins its neighbours.
     pub fn rows(&self) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {
         (self.start..self.end).filter(|&r| self.row_shown(r))
+    }
+
+    /// Rows in the order the line connects them: worksheet order, or with the plot's `sort_x`
+    /// flag (line and line-symbol plots only) increasing drawn X. The sort is stable, so ties keep
+    /// worksheet order; rows whose X is not a finite number are left out of the path altogether
+    /// (they neither connect nor break it). A row with a missing Y stays in its sorted place and
+    /// breaks the line there, as in worksheet order.
+    pub fn line_rows(&self) -> Box<dyn DoubleEndedIterator<Item = usize> + '_> {
+        if !(self.plot.line.sort_x && matches!(self.plot.kind, PlotKind::Line | PlotKind::LineSymbol)) {
+            return Box::new(self.rows());
+        }
+        let mut rows: Vec<(f64, usize)> =
+            self.rows().map(|r| (self.x_at(r), r)).filter(|(x, _)| x.is_finite()).collect();
+        rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+        Box::new(rows.into_iter().map(|(_, r)| r))
     }
 
     /// Display frequency for point decorations. Lines, ranges and analysis still read every row.
@@ -284,12 +304,25 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));
         let (start, end) = row_range(plot, y.len());
+        let active_mask = project.column(plot.y).and_then(|c| c.active_mask());
+        // Hide Masked Points: masked rows become gaps, like missing values, and nothing is drawn red.
+        let (y_plot, mask): (Cow<'_, [f64]>, _) = match active_mask {
+            Some(m) if project.hide_masked => {
+                let mut owned = y.to_vec();
+                for &r in m.range(..owned.len()) {
+                    owned[r] = f64::NAN;
+                }
+                (Cow::Owned(owned), None)
+            }
+            _ => (Cow::Borrowed(y), active_mask),
+        };
         let mut pd = PlotData {
             plot,
             x: x.map(Cow::Borrowed),
             x_format,
-            y: Cow::Borrowed(y),
-            mask: project.column(plot.y).map(|c| &c.mask).filter(|m| !m.is_empty()),
+            y: y_plot,
+            mask,
+            mask_color: project.mask_color_rgb(),
             filters: project.plot_row_filters(plot),
             err,
             xerr,
@@ -304,6 +337,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             member: place.member,
             bar: None,
             boxed: None,
+            violin: None,
             pie: None,
             size_z: plot.size_from.and_then(|id| project.numeric(id)),
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
@@ -350,13 +384,28 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.xerr = None;
                 pd.base = None;
             }
-            PlotKind::Box => {
+            PlotKind::Box
+            | PlotKind::Violin
+            | PlotKind::ViolinBox
+            | PlotKind::ViolinPoint
+            | PlotKind::ViolinQuartile
+            | PlotKind::ViolinStick
+            | PlotKind::HalfViolin => {
                 boxes += 1;
                 let label = project.plot_label(plot);
-                let values = pd.visible_values();
+                // A violin leaves out masked rows (Origin's masked data are excluded from the plot);
+                // the box chart takes every visible row as it always did.
+                let values: Cow<[f64]> = if plot.kind.is_violin() && pd.mask.is_some() {
+                    Cow::Owned(pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).map(|r| pd.y[r]).collect())
+                } else {
+                    pd.visible_values()
+                };
                 let Some(stats) = box_stats(&values, boxes as f64, label) else {
                     continue;
                 };
+                if plot.kind.is_violin() {
+                    pd.violin = Some(crate::violin::ViolinData::new(&values));
+                }
                 // The plot is the one point at the middle of its box.
                 pd.x = Some(Cow::Owned(vec![stats.pos]));
                 pd.y = Cow::Owned(vec![stats.median]);
@@ -620,6 +669,25 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let (Some(b), Some(v)) = (&pd.boxed, &pd.violin) {
+            if dim == Dim::X {
+                add(pd.display_x(b.pos - crate::violin::VIOLIN_WIDTH / 2.0));
+                add(pd.display_x(b.pos + crate::violin::VIOLIN_WIDTH / 2.0));
+            } else if let Some((lo, hi)) = v.y_extent() {
+                add(pd.display_y(lo));
+                add(pd.display_y(hi));
+                // The curve ends reach below the smallest value and can be <= 0 where the data are not,
+                // which a log axis cannot show: the data and the box marks keep the range valid.
+                if let (Some(&first), Some(&last)) = (v.values.first(), v.values.last()) {
+                    add(pd.display_y(first));
+                    add(pd.display_y(last));
+                }
+                for y in [b.whisker_low, b.q1, b.median, b.q3, b.whisker_high] {
+                    add(pd.display_y(y));
+                }
+            }
+            continue;
+        }
         if let Some(b) = &pd.boxed {
             if dim == Dim::X {
                 add(pd.display_x(b.pos - BOX_WIDTH / 2.0));

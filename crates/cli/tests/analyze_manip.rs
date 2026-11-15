@@ -92,8 +92,11 @@ fn median_filter_removes_the_spike() {
     let dir = scratch("median");
     let text = run_export(&dir, "median", &["median-filter", "spiky", "--points", "3"]);
     assert!(text.lines().any(|l| l == "2,8,100,5"), "{text}");
+    // An even window acts like the next odd one, as Origin's smoothing does.
+    let even = run_export(&dir, "median4", &["median-filter", "spiky", "--points", "4"]);
+    let odd = run_export(&dir, "median5", &["median-filter", "spiky", "--points", "5"]);
+    assert_eq!(even, odd);
     let data = data_file(&dir);
-    let (ok, _, stderr) = sheaf(&["analyze", "median-filter", data.to_str().unwrap(), "--y", "spiky", "--points", "4"]);
-    assert!(!ok);
-    assert!(stderr.contains("odd"), "{stderr}");
+    let (ok, _, stderr) = sheaf(&["analyze", "median-filter", data.to_str().unwrap(), "--y", "spiky", "--points", "0"]);
+    assert!(!ok, "{stderr}");
 }

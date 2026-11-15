@@ -70,8 +70,30 @@ pub struct Project {
     /// project; changing it is an undo step like any other setting.
     #[serde(default, skip_serializing_if = "is_default_page_setup")]
     pub page_setup: crate::page_setup::PageSetup,
+    /// Colour of masked points: an index into Origin's colour list ([`crate::template::ORIGIN_COLOR_LIST`]),
+    /// 1 (red) at first. Column > Mask > Change Color steps it on (Origin's `@MC`, a global setting
+    /// there; saved with the project here).
+    #[serde(default = "default_mask_color", skip_serializing_if = "is_default_mask_color")]
+    pub mask_color: u8,
+    /// Column > Mask > Disable Masking, one switch for the whole project as in Origin (`@MM`). The
+    /// columns carry a copy ([`crate::column::Column::mask_disabled`], what the readers use), which
+    /// [`Project::apply_mask_switch`] brings back in line after every edit, so new columns follow it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    masking_off: bool,
+    /// Hide masked points (Origin's Mask toolbar switch `@MP`): graphs leave masked points out, as
+    /// gaps like missing values, instead of drawing them in the mask colour. Analysis is unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hide_masked: bool,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
+}
+
+fn default_mask_color() -> u8 {
+    1
+}
+
+fn is_default_mask_color(c: &u8) -> bool {
+    *c == 1
 }
 
 fn is_default_page_setup(s: &crate::page_setup::PageSetup) -> bool {
@@ -134,9 +156,49 @@ pub enum ProjectError {
     LollipopNeedsTwoColumns(usize),
     #[error("a lollipop plot cannot have a right Y axis; use one Y axis or another template")]
     LollipopNoRightAxis,
+    #[error("a violin plot cannot have a right Y axis; use one Y axis or another template")]
+    ViolinNoRightAxis,
 }
 
 impl Project {
+    /// The colour masked points are drawn in.
+    pub fn mask_color_rgb(&self) -> crate::Color {
+        let list = &crate::template::ORIGIN_COLOR_LIST;
+        let (r, g, b) = list[usize::from(self.mask_color) % list.len()];
+        crate::Color::rgb(r, g, b)
+    }
+
+    /// Column > Mask > Change Color: the next colour of Origin's list, back to red (1) after the
+    /// 24th (index 23), so black is never chosen (Origin's rule for `@MC`, measured 2026-11-15).
+    pub fn cycle_mask_color(&mut self) {
+        self.mask_color = if self.mask_color > 22 { 1 } else { self.mask_color + 1 };
+    }
+
+    /// Whether masking is disabled (Column > Mask > Disable Masking); the menu then offers Enable
+    /// Masking.
+    pub fn masking_disabled(&self) -> bool {
+        self.masking_off
+    }
+
+    /// Switches masking off or on for the whole project.
+    pub fn set_masking_disabled(&mut self, disabled: bool) {
+        self.masking_off = disabled;
+        self.apply_mask_switch();
+    }
+
+    /// Gives every column the project's masking switch (columns made after the switch, by an import,
+    /// Unstack or a new sheet, start with masking on). Called after each edit and on loading.
+    pub fn apply_mask_switch(&mut self) {
+        let disabled = self.masking_off;
+        for w in &mut self.windows {
+            if let Window::Workbook(b) = w {
+                for c in b.sheets.iter_mut().flat_map(|s| &mut s.columns) {
+                    c.mask_disabled = disabled;
+                }
+            }
+        }
+    }
+
     pub fn new() -> Self {
         Project {
             windows: Vec::new(),
@@ -144,6 +206,9 @@ impl Project {
             window_places: Vec::new(),
             analysis_links: Vec::new(),
             page_setup: crate::page_setup::PageSetup::default(),
+            mask_color: default_mask_color(),
+            masking_off: false,
+            hide_masked: false,
             next_id: 1,
         }
     }
@@ -258,9 +323,14 @@ impl Project {
         book.id = id;
         book.name = self.unique_name("Book");
         for sheet in &mut book.sheets {
+            let mut renamed = std::collections::HashMap::new();
             for col in &mut sheet.columns {
-                col.id = ColumnId(self.fresh_id());
+                let new = ColumnId(self.fresh_id());
+                renamed.insert(col.id, new);
+                col.id = new;
             }
+            sheet.remap_cond_format_columns(&|c| renamed.get(&c).copied());
+            sheet.remap_note_columns(&|c| renamed.get(&c).copied());
         }
         self.windows.push(Window::Workbook(book));
         id
@@ -309,9 +379,13 @@ impl Project {
             match window {
                 Window::Workbook(book) => {
                     book.id = w(book.id);
-                    for col in book.sheets.iter_mut().flat_map(|s| s.columns.iter_mut()) {
-                        col.id = c(col.id);
-                        col.analysis = None;
+                    for sheet in &mut book.sheets {
+                        for col in &mut sheet.columns {
+                            col.id = c(col.id);
+                            col.analysis = None;
+                        }
+                        sheet.remap_cond_format_columns(&|id| Some(c(id)));
+                        sheet.remap_note_columns(&|id| Some(c(id)));
                     }
                 }
                 Window::Graph(graph) => {
@@ -741,6 +815,9 @@ impl Project {
         if template == Template::Lollipop {
             return Err(ProjectError::LollipopNoRightAxis);
         }
+        if template.is_violin() {
+            return Err(ProjectError::ViolinNoRightAxis);
+        }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
@@ -961,6 +1038,15 @@ mod tests {
         let graphs = p.graphs().count();
         let r = p.plot_columns_double_y(crate::template::Template::Lollipop, &[y], &[y]);
         assert!(matches!(r, Err(ProjectError::LollipopNoRightAxis)));
+        assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
+    }
+
+    #[test]
+    fn a_violin_is_refused_a_right_y_axis() {
+        let (mut p, _, _, y) = sample();
+        let graphs = p.graphs().count();
+        let r = p.plot_columns_double_y(crate::template::Template::Violin, &[y], &[y]);
+        assert!(matches!(r, Err(ProjectError::ViolinNoRightAxis)));
         assert_eq!(p.graphs().count(), graphs, "no graph is left behind");
     }
 
@@ -1384,5 +1470,59 @@ mod tests {
         assert_eq!(here.root.folders.last().unwrap().name, "XRD project");
         let fresh = here.new_column_id();
         assert!(fresh.0 > y.0, "new ids come after the appended ones");
+    }
+
+    fn book_with_rule(p: &mut Project) -> (WindowId, ColumnId) {
+        let b = p.add_workbook("");
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let sheet = &mut p.workbook_mut(b).unwrap().sheets[0];
+        let rule = crate::condformat::CondFormat::new(
+            sheet,
+            crate::condformat::CondRange::whole_columns(vec![c]),
+            crate::condformat::Rule::min_max(),
+        );
+        sheet.cond_formats.push(rule);
+        (b, c)
+    }
+
+    fn rule_columns(p: &Project, b: WindowId) -> Vec<ColumnId> {
+        p.workbook(b).unwrap().sheets[0].cond_formats[0].range.columns.clone()
+    }
+
+    #[test]
+    fn duplicate_window_and_append_remap_the_rules() {
+        let mut p = Project::new();
+        let (b, _) = book_with_rule(&mut p);
+        let copy = p.duplicate_window(b).unwrap();
+        let col = p.workbook(copy).unwrap().sheets[0].columns[0].id;
+        assert_eq!(rule_columns(&p, copy), vec![col]);
+
+        let mut other = Project::new();
+        let (ob, oc) = book_with_rule(&mut other);
+        let (new, _) = p.append(other, "f");
+        let _ = (ob, oc);
+        let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
+        assert_eq!(rule_columns(&p, new[0]), vec![col]);
+    }
+
+    #[test]
+    fn duplicate_window_and_append_remap_the_notes() {
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        p.workbook_mut(b).unwrap().sheets[0].set_note(c, 1, "n");
+        let copy = p.duplicate_window(b).unwrap();
+        let col = p.workbook(copy).unwrap().sheets[0].columns[0].id;
+        assert_ne!(col, c);
+        assert_eq!(p.workbook(copy).unwrap().sheets[0].note(col, 1), Some("n"));
+        assert_eq!(p.workbook(b).unwrap().sheets[0].note(c, 1), Some("n"));
+
+        let mut other = Project::new();
+        let ob = other.add_workbook("");
+        let oc = other.add_column(ob, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        other.workbook_mut(ob).unwrap().sheets[0].set_note(oc, 0, "o");
+        let (new, _) = p.append(other, "f");
+        let col = p.workbook(new[0]).unwrap().sheets[0].columns[0].id;
+        assert_eq!(p.workbook(new[0]).unwrap().sheets[0].note(col, 0), Some("o"));
     }
 }

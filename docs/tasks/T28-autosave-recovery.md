@@ -7,7 +7,7 @@ Discard / Later dialog, Tools > Autosave..., `--recovery-dir`/`--no-recovery`; 3
 reviewed by three agents with each finding checked, five fixed. Left: measure Origin's defaults and
 start-up prompt on Windows (`tools/origin-ref`, screenshot to `re-workspace/scratch/t28/`); Origin's
 "backup project before saving" switch; move the setting into Tools > Options when T18's Options exists;
-undo back to the saved state does not clear the recovery (`Document` keeps no saved revision).
+undo/redo saved-state checkpoints and recovery cleanup added in `saved-state-recovery` (macOS, no Origin); view changes do not dirty the document, recovered projects stay modified until explicitly saved.
 **Size:** M. **Branch:** `autosave`. **Model:** Sonnet. No Origin needed for the mechanism; the defaults
 are measured once on Windows.
 **Detail:** audit E (autosave and recovery missing).

@@ -679,8 +679,9 @@ fn layer_scene(
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
-    let gaps = (geom.x.gap.map(|g| g.span(geom.x.reversed)), geom.y.gap.map(|g| g.span(geom.y.reversed)));
-    draw_axis_lines(out, xa, ya, f, xp.line, yp.line, gaps);
+    let spans = |r: &ResolvedAxis| r.gaps.iter().map(|g| g.span(r.reversed)).collect::<Vec<_>>();
+    let gaps = (spans(&geom.x), spans(&geom.y));
+    draw_axis_lines(out, xa, ya, f, xp.line, yp.line, &gaps);
     draw_additional_lines(out, xa, ya, geom, xp.line, yp.line);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
@@ -838,6 +839,11 @@ fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
     lines(&layer.y_axis.major_grid, &geom.y.major, &geom.y, false);
 }
 
+/// How far the strokes of an axis break reach to either side of the axis line, in points. Origin 2016's
+/// exports showed strokes 35 px across at 2.07 px per point on both axes, about 8 pt from the line
+/// counting the stroke width (graphing spec 3.6); whether it follows the tick length is unmeasured.
+const BREAK_MARK_PT: f64 = 8.0;
+
 /// Draws the axis lines of a layer: each shown axis on its own edge and, with `show_opposite`,
 /// on the edge across. `xc` and `yc` are the axes' line colors.
 fn draw_axis_lines(
@@ -847,12 +853,13 @@ fn draw_axis_lines(
     f: Rect,
     xc: Color,
     yc: Color,
-    gaps: (Option<(f64, f64)>, Option<(f64, f64)>),
+    gaps: &(Vec<(f64, f64)>, Vec<(f64, f64)>),
 ) {
     let (l, r, t, b) = (f.x, f.x + f.w, f.y, f.y + f.h);
     let shown = |a: &Axis| a.side != AxisSide::Hidden;
     let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
-    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same && gaps == (None, None) {
+    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same && gaps.0.is_empty() && gaps.1.is_empty()
+    {
         // All four edges in one stroke, so that the corners join cleanly.
         let mut d = String::new();
         move_to(&mut d, l, t);
@@ -868,53 +875,59 @@ fn draw_axis_lines(
                 (x1, y1): (f64, f64),
                 a: &Axis,
                 color: Color,
-                gap: Option<(f64, f64)>| {
+                gaps: &[(f64, f64)]| {
         let mut d = String::new();
         let stroke = Stroke { color, width: a.line_width_pt, dash: Vec::new(), cap: Cap::Square, join: Join::Miter };
-        match gap {
-            None => {
-                move_to(&mut d, x0, y0);
-                line_to(&mut d, x1, y1);
-            }
-            Some((lo, hi)) => {
-                // Two pieces, and a short slash across the axis at each end of the gap.
-                let at = |u: f64| (x0 + u * (x1 - x0), y0 + u * (y1 - y0));
-                let (a0, a1, b0, b1) = (at(0.0), at(lo), at(hi), at(1.0));
-                move_to(&mut d, a0.0, a0.1);
-                line_to(&mut d, a1.0, a1.1);
-                move_to(&mut d, b0.0, b0.1);
-                line_to(&mut d, b1.0, b1.1);
-                let horizontal = (y1 - y0).abs() < 1e-9;
-                let k = 3.0;
-                for p in [a1, b0] {
-                    if horizontal {
-                        move_to(&mut d, p.0 - k * 0.5, p.1 + k);
-                        line_to(&mut d, p.0 + k * 0.5, p.1 - k);
-                    } else {
-                        move_to(&mut d, p.0 - k, p.1 - k * 0.5);
-                        line_to(&mut d, p.0 + k, p.1 + k * 0.5);
-                    }
+        // The pieces between the gaps, and at each end of a gap a slanted stroke across the axis, as
+        // Origin 2016 draws a break (graphing spec 3.6): centred on the end of the piece, as long along
+        // the axis as half the gap on either side (the two strokes meet at the middle of the gap) and
+        // reaching BREAK_MARK_PT to either side of the line, rising to the right on both axes.
+        let at = |u: f64| (x0 + u * (x1 - x0), y0 + u * (y1 - y0));
+        let mut cuts: Vec<(f64, f64)> = gaps.to_vec();
+        cuts.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut start = 0.0;
+        for &(lo, hi) in &cuts {
+            let (p, q) = (at(start), at(lo));
+            move_to(&mut d, p.0, p.1);
+            line_to(&mut d, q.0, q.1);
+            start = hi;
+        }
+        let (p, q) = (at(start), at(1.0));
+        move_to(&mut d, p.0, p.1);
+        line_to(&mut d, q.0, q.1);
+        let horizontal = (y1 - y0).abs() < 1e-9;
+        let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
+        for &(lo, hi) in &cuts {
+            let half = (hi - lo) * length / 2.0;
+            for p in [at(lo), at(hi)] {
+                if horizontal {
+                    move_to(&mut d, p.0 - half, p.1 + BREAK_MARK_PT);
+                    line_to(&mut d, p.0 + half, p.1 - BREAK_MARK_PT);
+                } else {
+                    move_to(&mut d, p.0 - BREAK_MARK_PT, p.1 + half);
+                    line_to(&mut d, p.0 + BREAK_MARK_PT, p.1 - half);
                 }
             }
         }
         out.push(Item::Path { d, fill: None, stroke: Some(stroke) });
     };
-    // The line of a Y axis runs from the top down, so its gap is measured from the top.
-    let gap_y = gaps.1.map(|(lo, hi)| (1.0 - hi, 1.0 - lo));
+    // The line of a Y axis runs from the top down, so its gaps are measured from the top.
+    let gap_y: Vec<(f64, f64)> = gaps.1.iter().map(|&(lo, hi)| (1.0 - hi, 1.0 - lo)).collect();
+    let gap_x = &gaps.0;
     // The edge each axis is drawn on, and the edge across from it.
     let (x_main, x_other) = if xa.side == AxisSide::Opposite { (t, b) } else { (b, t) };
     let (y_main, y_other) = if ya.side == AxisSide::Opposite { (r, l) } else { (l, r) };
     if shown(xa) {
-        line(out, (l, x_main), (r, x_main), xa, xc, gaps.0);
+        line(out, (l, x_main), (r, x_main), xa, xc, gap_x);
     }
     if shown(ya) {
-        line(out, (y_main, t), (y_main, b), ya, yc, gap_y);
+        line(out, (y_main, t), (y_main, b), ya, yc, &gap_y);
     }
     if shown(xa) && xa.show_opposite {
-        line(out, (l, x_other), (r, x_other), xa, xc, gaps.0);
+        line(out, (l, x_other), (r, x_other), xa, xc, gap_x);
     }
     if shown(ya) && ya.show_opposite {
-        line(out, (y_other, t), (y_other, b), ya, yc, gap_y);
+        line(out, (y_other, t), (y_other, b), ya, yc, &gap_y);
     }
 }
 
@@ -1400,7 +1413,9 @@ fn draw_legend(
                     let (sx0, sx1) = (x, x + sample);
                     let plot = entries[*k].plot;
                     // A line plot filled under its curve shows a filled box, as Origin's legend does.
-                    let filled = plot.decor.fill_under.filter(|_| plot.kind.has_line() && !plot.kind.is_area());
+                    let filled = plot.decor.fill_under.filter(|_| {
+                        plot.kind.has_line() && !plot.kind.is_area() && !plot.decor.fill_under_mode.is_sidelines()
+                    });
                     let mut front_line = None;
                     if let Some(fill) = filled {
                         out.push(Item::Rect {
@@ -1436,6 +1451,15 @@ fn draw_legend(
                             fill: None,
                             stroke: Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
                         });
+                    } else if plot.kind.is_violin() {
+                        // A small filled box like the silhouette: the tinted fill, outlined in the plot colour.
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            crate::violin::violin_fill_color(plot),
+                            &plot.decor.fill,
+                            Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        );
                     } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).

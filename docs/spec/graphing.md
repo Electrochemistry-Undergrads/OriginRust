@@ -199,9 +199,42 @@ Per direction: major and minor grid each with show, color, style, thickness; plu
 ### 3.6 Breaks [W:axesref-breaks] (P1)
 Enable; half-length (auto = one major tick distance); 1 to 7 breaks; per break from, to, position % of axis length (automatic position even or proportional); per-break "scale after break" and "tick labels after break" (both default to follow main axis).
 
-Sheaf (not measured in Origin, built from the dialog fields above): one break per axis (`Axis::axis_break`): values from..to are
-cut out, the gap opens at `position_pct` of the axis with width `gap_pct` (both percent of the axis length; Origin states a
-half-length in points), ticks inside the break go, the ticks after it can use their own step; values inside cannot be placed.
+**Measured 2026-11-15 in Origin 2016** (axis dialog through `tools/origin-ref/origin-dialog.ps1`, PNG exports 1600 px
+wide of a line plot of 1..100 against itself, axes -25 to 125; raw files in `re-workspace/scratch/axis-breaks`):
+- The Breaks tab (Horizontal, Vertical): tick **Enable** (ticked), **Break Half Length** (an editable list: `<auto>`, 3, 5,
+  8, 10, 15), **Number of Breaks** (None, 1 to 7, starts at None), a table with the columns Break From, Break To, Auto
+  Position (a tick) and Position (greyed while Auto Position is ticked), buttons Delete and Details....
+- Rows the dialog fills in on the axis -25..125: going to 1 gives 12.5..87.5 (the middle half); going on to 2 adds
+  96.875..115.625 and to 3 adds 117.96875..122.65625 (each new row the middle half of what lies after the last break).
+  Jumping from None straight to 2 gave 5..35 and 65..95 instead (the axis in five equal parts); after None again, 3 gave
+  -10..20, 35..65, 80..110 and 4 gave -10..20, 35..50, 65..80, 95..110; 7 gave rows 15 % apart from -17.5..-2.5; going
+  down from 7 to 5 kept the first five rows. The jump rules depend on what the table held before and are not copied.
+- Auto Position puts break k of n at k/(n+1) of the axis: 50; 33, 67; 25, 50, 75; 20, 40, 60, 80; 17 ... 83; 13 ... 88
+  (the table shows them rounded).
+- Each part between breaks is drawn linearly in its share of the axis (the parts of the three-break axis had 2.8, 10.8,
+  44 and 45 px per unit). The gap of the automatic Break Half Length, from the tick positions: 15.4 px of the 879 px
+  Y axis with one break (1.75 %), 15.5 to 16 px with two (1.77 to 1.82 %), 18.6 px of the 1090 px X axis with one
+  (1.71 %) and 18.2 to 18.4 px with two (1.67 to 1.69 %); 7.4 to 9 pt at the export's 2.07 px per point, so it follows
+  the axis length rather than a fixed size. Typing 5 or 10 into Break Half Length in the scripted dialog did not take,
+  so its unit is unmeasured.
+- The mark: the axis line is cut between the two ends, and at each end a straight stroke as thick as the axis line
+  crosses it, centred on the end, reaching about half the gap along the axis to either side (the two strokes meet
+  above and below the middle of the gap) and about 8 pt to either side of the line (35 px across, stroke width
+  included), rising to the right on both the X and the Y axis.
+- Tick steps: with one break on -25..125 (step 50 before) every part was labelled every 5 (`layer.y.inc` became 5), the
+  same on -2500..12500 (5000 to 500); on 1..9 (step 2) and -5..40 (step 10) the step stayed. With three breaks the two
+  short parts at the top had their own step 0.5. No rule fitting all four cases was found; Sheaf keeps the axis step
+  and offers a step after each break.
+
+Sheaf: `Axis::axis_breaks`, up to seven (`MAX_AXIS_BREAKS`); files with the former single `axis_break` read as one
+break. Each break cuts its values from..to out; with Auto Position (`auto_position`, on for new breaks, off for breaks
+read from older files so that they keep their `position_pct`) break k of n sits at k/(n+1), otherwise its middle is at
+`position_pct`; the gap is `gap_pct` of the axis length, 1.75 by default (`BREAK_GAP_PCT`, the measured automatic
+gap). Breaks outside the limits, empty, overlapping the one before or whose gap would not fit after the gap before
+are left out. Ticks inside a break go; `step_after` gives the part after a break its own step up to the next break.
+Values inside a break cannot be placed. The dialog's Enable starts with one break (the middle half), Number of
+Breaks adds rows by the one-at-a-time rule above and removes rows from the end, Delete removes a row, and one "Gap
+(% of axis)" value stands for Origin's Break Half Length. The mark is drawn as measured, 8 pt to either side.
 
 ### 3.7 Special ticks and reference lines (P1/P2)
 Custom tick positions and labels per tick. Reference lines are not documented for 2016; emulate with `addline` objects.
@@ -1518,6 +1551,90 @@ X gives a one-entry legend named after it instead.
 - Goldens: `pie-3d.svg`, `pie-bw.svg` (values 3, 5, 2, 7, 4).
 - Not done: changing the 3D view (tilt, thickness, rotation), exploded slices, label positions inside, the toolbar button "Pie" (still greyed), hatch pattern choice per slice, Plot Details shows the kinds by name.
 
+### 14.22 Violin plot (T37)
+
+Origin's documented facts (from its help, not measured; no Origin was at hand; [W:origin-help/violin-plot],
+[W:origin-help/create-violin-plot], [W:origin-help/pd-dialog-distribution-tab], [W:origin-help/pd-dialog-box-tab],
+[W:origin-help/pd-dialog-data-tab], [W:origin-help/pd-dialog-spacing-tab], [W:labtalk/ref/ksdensity-func],
+[W:labtalk/ref/kernelwidth-func], [W:origin-help/groupedviolin-indexeddata]):
+
+- Origin 2019. A violin plot is "a fancy variation of box chart" that adds a kernel density curve of the observations.
+  Menu: "Plot > Statistical: [variant]" in the newer help, "Plot: 2D > Violin Plot" in the older; the two pages disagree.
+  Seven variants, with templates: Violin Plot (`Violin.otpu`), Violin with Box (`ViolinBox`), Violin with Point
+  (`ViolinData`), Violin with Quartile (`ViolinQuartile`), Violin with Stick (`ViolinStick`), Split Violin
+  (`ViolinSplit`), Half Violin (`HalfViolin`). The help never describes the variants one by one; the 2019 announcement
+  speaks of a median and summary box, two subgroups split into the halves of one violin, one half with each observation
+  in bins, and observation lines inside the violin.
+- Data: one or more Y columns, each its own violin; column names or labels are the X tick labels. Split Violin needs two
+  or more columns whose last column holds only two categories. Grouped violins (indexed data) and "Inner Split by" a
+  two-level column exist on grouped data.
+- There is no tab of its own: the curve is on the Plot Details Distribution tab (Curve Type Kernel Smooth by default
+  for violins), the box and the data points on the Box and Data tabs, then Percentile, Pattern, Spacing and Lines.
+- Kernel: normal, `K(x) = exp(-x^2/2)/sqrt(2 pi)`; `f(x) = 1/(n w) sum K((x - x_i)/w)` (LabTalk `ksdensity`).
+  Bandwidth options: Scott `0.9 A n^-1/5`, Silverman `1.059 A n^-1/5` with `A = min(SD, IQR/1.349)` (Scott is
+  Origin's `kernelwidth` function), `k x SD`, or a number. The default rule is not stated (Scott is assumed).
+- "Extend (% bandwidth)": the curve runs from `min - Extend/100 w` to `max + Extend/100 w`, so it is not cut at the data
+  (the help's examples use 300). "Scale": Count (widths by sample size), Width (all violins the same width) or Area
+  (the same area); "Scale to Maximum (%)" sets the amplitude. Defaults of these are not stated.
+- Curve colour Auto is a darker shade of the fill; the fill transparency Auto follows the Pattern tab. Spacing tab: gap
+  between boxes 20 %. Box tab Type options include Box, Data, Box + Data Overlap, Box(Right) + Data(Left), Half Box + Data;
+  Half Violin uses Half Box [Left] + Data [Right] with "Distribution Curve Next to Box". Box Range and Whisker Range
+  have Origin's usual options.
+- Not documented at all: number of grid points, default scale mode, default extend, maximum violin width against the
+  spacing, default colours, fill and outline, inner box width, the look of median, quartile and stick marks.
+
+**What Sheaf does** (every item not marked "documented" is Sheaf's choice, unmeasured):
+
+- Kinds `PlotKind::{Violin, ViolinBox, ViolinPoint, ViolinQuartile, ViolinStick, HalfViolin}` (one kind per variant,
+  so no new field of `Plot` and old files load unchanged; `PlotKind::violin_inner()` says what is drawn inside) and the
+  templates of the same names, in Plot > Statistics after the grey Grouped Box Charts / Interval Plot: "Violin Plot"
+  (`violin`), "Violin with Box" (`violin-box`), "Violin with Point" (`violin-point`), "Violin with Quartile"
+  (`violin-quartile`), "Violin with Stick" (`violin-stick`), "Half Violin" (`half-violin`). They are box chart
+  templates: page, axes and the colours starting at red are the box chart's (the box chart is measured, 14.15).
+  Each Y column is one violin standing at 1, 2, 3, ... in plot order with its name as the tick label, as boxes do.
+  The box chart's own drawing and goldens are untouched. `plot_columns_double_y`, `--y2` and MCP refuse a violin
+  (no right Y axis, like the lollipop). Origin's help has a "Violin with Box" button on the 2D Graphs toolbar ([W:origin-help/violin-plot]); Sheaf has not added it yet (see not done below).
+- Density (`crates/calc/src/kde.rs`, documented formulas): Gaussian kernel and the Scott bandwidth `0.9 A n^-1/5`,
+  `A = min(SD, IQR/1.349)`; Silverman, `k x SD` and a fixed width are in the library but not reachable from the
+  interface yet. Sheaf's choices: the IQR uses the quartiles of the box chart; with IQR 0 (many equal values) `A`
+  is the SD; missing and non-finite values are left out; the curve is evaluated on 128 even grid points, plus more points wherever those are more than a quarter of a bandwidth apart (far outliers stretch the range while the Scott bandwidth follows the bulk): within 3 bandwidths of every value the step is at most a quarter of a bandwidth, with at most 8192 added points, so the bulk of the data is always sampled and the widest point is at the mode (the density peak is within 1 % of the sampled maximum); the curve
+  extends 200 % of a bandwidth past the smallest and largest value (documented as a setting, default unknown). Fewer than
+  two values or no spread give no bandwidth: no silhouette is drawn, the marks inside still are.
+  Tested against scipy (`tools/kde-ref.py`, `crates/calc/tests/scipy_kde.rs`: `scipy.stats.gaussian_kde` with the factor
+  `w/SD`, 1e-12 relative; scipy's own Scott and Silverman factors as `k x SD`). None of the numbers is from Origin.
+- Scale: every violin is scaled to the same maximum width of 0.8 of the spacing (Origin's "Width" mode and the box
+  width; Area and Count scaling and Scale to Maximum are not done).
+- Drawing (`crates/plot/src/violin.rs`, constants `VIOLIN_*`): the silhouette is a closed polygon mirrored about the
+  position, filled and outlined in the plot's colour (outline width = the line width, at least 0.5 pt). While the Fill
+  settings are plain the fill is the plot colour 60 % toward white; once the plot has a transparency, pattern or
+  gradient it is the plot colour with those settings (`fill::fill_polygon`). The legend sample is a small box in the
+  same fill and outline. Marks inside, in the plot colour:
+  - Violin Plot: a white dot with a coloured ring at the median (Origin's text mentions a median).
+  - Violin with Box: a box 0.12 wide from the first to the third quartile, filled, a white median line, a whisker line
+    to the box chart's whisker ends (Origin's 1.5 IQR rule, as 14.15; no outliers).
+  - Violin with Quartile: dashed lines at the quartiles and a solid line twice as thick at the median, each across the
+    local width of the silhouette.
+  - Violin with Point: every value a 3 pt filled dot at its height, spread across 0.8 of the local width by a golden
+    ratio sequence (the same picture every time), and the median dot.
+  - Violin with Stick: every value a 0.5 pt line across the local width.
+  - Half Violin: only the right half of the silhouette; a half box 0.12 wide to the left of the middle line (gap 0.04)
+    with whisker and median. (Origin's half violin shows binned data beside the curve; not done.)
+  The automatic ranges cover the curve: Y from the first to the last grid point, X from 0.6 to 1.4 for one violin. The Y range also covers the data and the box marks, so that a log axis, which cannot show the curve ends at or below zero, still gets a range around the data. On a log axis the silhouette stops at the lowest grid point above zero and is closed by a flat edge there (no taper; the kernel density is not computed in log space).
+  The box chart's X title rule applies (none).
+- Rows: filtered rows are left out like the box chart's; unlike the box chart, masked rows are left out too (Origin
+  excludes masked points from a plot; the box chart ignoring masks is old behaviour that was not changed).
+- `.opj`: written as plain columns like box and pie plots; the save warns ("violin plots were written as plain columns of
+  their data"); the `.sheaf` companion keeps the kind.
+- Tests: `violin_tests.rs` (silhouette symmetric and widest at the mode, extent, positions and labels, inner box equals
+  the box chart's statistics, marks per variant, half violin side, missing/filtered/masked data, degenerate columns,
+  legend, fill transparency, centring on the tick, outliers far from the bulk, log axis), `kde.rs` tests for the grid with far outliers, golden `violin.svg`, core template and serde tests, UI menu test, CLI test, `.opj` warning
+  test.
+- Not done: the "Violin with Box" button of the 2D Graphs toolbar (and the buttons of the other variants, if Origin has them), Split Violin (needs the last-column-with-two-categories data layout and Inner Split by), grouped violins
+  from indexed data, Plot Details settings for the violin (bandwidth rule, extend, scale mode, scale to maximum, fill,
+  distribution curve types other than kernel smooth, curve next to box), binned data (Data tab bins), a violin tab, and
+  everything about Origin's real defaults. Measuring Origin's defaults (grid, extend, scale, width, colours, inner box)
+  is left for a session with Origin.
+
 ### 14.11 Unknowns
 
 - The overlap geometry: whether Origin keeps the group width (1 - g) s while the overlap changes (assumed here) or each bar's width. Needs one click test (Plot Details > Spacing) or an `.opj` saved with an overlap.
@@ -1928,10 +2045,70 @@ a double-click on the graph; pictures and control lists in `re-workspace/scratch
   clipping margins), Stack.
 
 Sheaf (`Plot::decor`, `Layer::background`, drawn in `crates/plot/src/plots.rs` and `layout.rs`):
-Fill Area Under Curve in the Normal mode only, with its own colour (Origin puts the colour on the
-Pattern tab; Sheaf shows it under the check box) and the alpha of that colour as transparency; the
-line's Transparency slider sets the alpha of the line colour; both drop lines with style, width and
-an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame.
+Fill Area Under Curve uses its own colour in Normal mode (Origin puts the colour on the Pattern
+tab; Sheaf shows it under the check box), with the colour's alpha as transparency. The line's
+Transparency slider sets the alpha of the line colour. Both drop lines offer style, width and an
+Auto or chosen colour, drawing from each point to the left and bottom edges of the frame.
+
+Fill Area Under Curve offers **Normal**, **Inclusive broken by missing values**, **Sidelines only**
+and **Sidelines and Base**.
+Normal remains the old default and keeps its previous filled rendering. Sidelines only leaves
+an unfilled curve and adds vertical boundaries from its first and last finite displayed points
+to the bottom of the frame. Sidelines and Base also connects those bottom endpoints. These
+outlines use the connecting line's colour, width, dash and transparency; the stored fill colour,
+hatch and gradient are inactive and their controls are hidden in these modes. The mode selector
+is disabled while Fill Area Under Curve is off; its selection is retained. Dependent group edits
+copy it. Other fill modes and user-selected baselines remain open.
+
+Measured in Origin 2016 on 2026-11-15, `re-workspace/scratch/t13-fill-sidelines/`: blue fill colour,
+red 6 pt line, points (2,1), (6,1.5), (10,1), Y range -1..2, 900-pixel exports.
+`verified_sides.png` and `verified_base.png` have no blue area: the red boundaries reach the
+frame bottom at -1 rather than the zero line inside the frame. The legend uses a red line sample
+rather than Normal's blue filled box. Controls confirm the two selected modes. In
+`verified_missing.png`, rows 3/5 are explicitly missing (`0/0`, both `ISNA` results 1), leaving
+first/last runs and an isolated middle point. Only the OUTER endpoints get sidelines; missing-run
+ends and the isolated interior point get none, and the connecting-line gap remains open.
+The original `normal.png` is a valid bottom-baseline/blue-fill control with its line inadvertently
+changed to 0.2 pt; initial `sides`/`sides_base` captures selected line width instead of fill mode
+and are excluded. Initial `sides_missing` has seven finite points and is excluded from missing-data
+evidence. The corrected controls and raw worksheet reads are retained locally. See also the
+[published Line-tab description](https://docs.originlab.com/origin-help/pd-dialog-line-tab/) and
+[LabTalk missing-value syntax](https://docs.originlab.com/labtalk/ref/missing-val-constant/).
+
+The shared scene keeps one stroke across the curve and its added boundaries, preserving opacity
+at the joins, and changes the legend sample to a line. Screen, raster and vector exports share
+that scene; existing connection styles, clipping, skipped symbols and row selection still apply.
+Source values and axes are unchanged. Hidden masked rows follow the existing missing-data
+view policy, so a hidden endpoint leaves no dangling sideline. Native and companion files preserve
+the mode, including while disabled; the existing `.opj` save warning covers the unsupported fill settings. Only
+Cartesian straight-line examples were Origin-measured; other connections use Sheaf's existing
+curve geometry, and specialised coordinates, alternate baselines and unusual stroke preferences
+remain unmeasured. Normal's older hatch/gradient/border fidelity remains covered by section 18.6.
+
+**Inclusive broken by missing values** fills each finite run by directly joining its last point
+back to its first. The connecting stroke also closes that chord, with no added boundary down to
+the frame bottom. Missing rows separate the polygons. A one-point run has no filled area but
+keeps its round connecting-stroke cap. Fill colour, hatch, gradient and transparency remain active;
+the legend keeps a filled box. The same finite-run closure uses the existing connection geometry,
+clipping, row selection and symbol-gap handling. Each closed outline is one stroke, so its joins
+do not receive a second coat of translucent line colour. Normal remains the old default and its
+filled geometry is unchanged. Group editing, Apply/Cancel/history and native/companion saves
+preserve the new mode; `.opj` retains the unsupported-fill warning.
+
+Measured in Origin 2016 on 2026-11-15, `re-workspace/scratch/t13-fill-inclusive/`: the corrected
+`verified_sloping` control selects Inclusive (combo 4, item 1) and applies OK, with blue fill and
+a red 6 pt line through (1,1), (5,3), (10,2), on Y=-1..4. Only the endpoint-chord triangle is blue,
+with a red closing chord and blue filled legend. In `verified_missing`, rows 4/8/10 of a 13-row
+series are explicitly missing (`0/0`, each `ISNA` result 1): three finite runs become three closed
+filled triangles, without bridging the gaps; the isolated ninth row remains a red round cap.
+The `verified_closed` control repeats X=(2,2,6,6,2), Y=(1,3,3,1,1): the closed rectangle is
+blue with a red outline and no fill down to the frame bottom.
+The initial `sloping`/`missing`/`closed` attempts failed to open Plot Details (setup/command false)
+and are excluded as mode evidence. The verified controls, actions, raw worksheet reads and
+exports remain local. The [published Line-tab reference](https://docs.originlab.com/origin-help/pd-dialog-line-tab/)
+describes the endpoint closure and missing-run behavior. Only Cartesian straight connections
+were Origin-measured; other connections reuse Sheaf's existing geometry. Specialised-coordinate,
+self-intersection and remaining fill-mode parity are still unmeasured.
 
 Data Points Display Control on Drop Lines now offers Skip Points and a frequency. This uses the
 existing `SymbolStyle::every` (the former Symbol tab's Show every field), so old projects keep their
@@ -2287,6 +2464,39 @@ Sheaf's own choices, all unmeasured (no Origin at hand):
   warning names them and the `.opj.sheaf` companion keeps them. Files without the new fields load as Axis / Auto and
   are written back without them.
 
+### 18.9 Plot-only X sorting (T39)
+
+Origin's documented facts (from its help, not measured; [W:originlab.com/2023]): Origin 2023's
+"Line-Symbol Plot with automatic X value sorting" sorts the data of line and line-symbol plots
+by X "without having to sort the worksheet columns". It is a per-data-plot LabTalk property,
+`layer.plot1.line.sortx=1;`, and the graph can then be saved as a template. The Plot Details Line
+tab page lists no such option [W:origin-help/pd-dialog-line-tab], and no default is documented
+(taken as off).
+
+Sheaf's choices (all unmeasured; Origin's help does not say):
+
+- Field: `LineStyle::sort_x` (serde default false, omitted from `.sheaf` when false, so old files and
+  flag-off output are unchanged). "Apply to all" copies it with the rest of the line style and
+  Dependent group edits copy it from the leader.
+- UI: a check box "Sort X for line connection" at the top of the Line tab, offered only for Line and
+  Line + Symbol plots (Sheaf's own place and label). CLI `--sort-x` and the MCP `style.sort_x` set it on
+  the plots a command makes or restyles.
+- Order: the line joins the plotted rows by increasing drawn X (after multiplier and offset), computed
+  once per plot per draw (`PlotData::line_rows`). The sort is stable, so equal X keep worksheet order.
+  A row whose X is missing or not finite is left out of the path altogether (it neither connects
+  nor breaks it). A row with a missing Y keeps its sorted place and breaks the line between its
+  sorted neighbours, as a missing Y does in worksheet order.
+- Everything that follows the line path uses that order: straight, step, spline, B-spline and Bezier
+  connections (a spline needs strictly increasing X, which sorted data without ties meets), fill under
+  the curve in every mode, Gap to Symbol clearances, No Line Break for skipped points, the outer
+  endpoints of the Sidelines modes.
+- Per-point items (symbols, data labels, error bars, drop lines, masking) stay on their points and keep
+  worksheet painting order; the Data Reader and hit testing read worksheet rows. The worksheet is never
+  sorted.
+- Area, column, bar and other kinds ignore the flag. Sheaf has no exchanged X-Y layer for line
+  plots; horizontal bars are their own kinds.
+- `.opj`: the writer has no field for it; a save warning says so and the companion `.opj.sheaf` keeps it.
+
 ## 19. Printing (File > Print, Print Preview, Page Setup; T27)
 
 Measured in OriginPro 2016 (64-bit) through `tools/origin-ref/origin-screenshot.ps1 -FullScreen`
@@ -2303,6 +2513,11 @@ line graph active. Everything not listed here is unmeasured.
   it opened Slide Show of Graphs, not a preview; no Print Preview toolbar button was measured
   (unmeasured). Clicking the Print button by script only showed the tooltip, so the system dialog
   behind it was not captured.
+
+Sheaf's Standard toolbar Print button uses the same command resolver and print action as
+File > Print. It is available for the same active-window contexts as the menu and uses the
+measured tooltip "Print the active window". Tests switch between workbook and graph focus and
+check menu/toolbar availability and click dispatch; the print backend is skipped by the UI harness.
 
 ### 19.2 Page Setup (measured, window captured)
 
@@ -2395,7 +2610,98 @@ printable; a real printer may clip marks outside its hardware limits.
 
 This is Sheaf's own command; no Origin CLI or dialog behaviour is claimed.
 
-### 19.7 Not done
+### 19.7 Native macOS graph print panel (T27)
 
-Print and Print Preview of a workbook (a sheet as a table), View > Print View and the Standard
-toolbar's Print button, Origin's Source (tray), native CLI printer submission on Windows, the macOS print panel.
+File > Print... on an active graph uses PDFKit's native print operation on the main thread.
+The input is `sheaf_plot::render_print_pdf`: a vector PDF already laid out on the saved paper by
+`PageSetup::place`. The native operation receives the saved paper and orientation, zero additional
+margins, scale-none and no auto-rotation, so the operation starts with that placement instead of
+applying Sheaf's margins a second time. Changes in the system panel apply to that print job and do
+not change the saved project settings.
+
+The prepared operation retains its PDF document for the operation's full lifetime. A successful
+native run is reported as printed; a false return has no success message because AppKit uses that
+return for both cancellation and failure. Failures to load the PDF or construct an operation are
+reported as errors. This is the system's panel, not an imitation of Origin's Windows Print window.
+
+References: [PDFKit print-operation factory](https://developer.apple.com/documentation/pdfkit/pdfdocument/printoperation(for:scalingmode:autorotate:)),
+[AppKit run](https://developer.apple.com/documentation/appkit/nsprintoperation/run()), and the
+[Rust PDFDocument bindings](https://docs.rs/objc2-pdf-kit/0.3.2/objc2_pdf_kit/struct.PDFDocument.html).
+Automated checks prepare the real native operation on the process main thread without running it;
+standard UI tests never send a print job. Run the no-spool native check on macOS with
+`cargo run -p sheaf-app --example macos_print_check`; it verifies Letter/A4 portrait/landscape,
+PDF media boxes, native paper/orientation, margins, scaling and title, and rejects invalid PDF or
+mismatched paper. Opening and cancelling the actual panel was not manually verified in this
+session. Physical-printer output remains unverified. Changing paper in the system panel does not regenerate the graph layout; use Sheaf's
+Page Setup to change that layout.
+
+### 19.8 Printing a workbook (T27, measured dialog, Sheaf's own layout)
+
+**Measured in OriginPro 2016** (File > Print with a worksheet active, picture in the local scratch
+folder `re-workspace/scratch/t27/wb/dlg1.png`, not committed): the Print window is the system's
+common print dialog with Origin's extra controls for a worksheet. Group **Printer**: Name (a
+drop-down of the installed printers), a **Properties...** button, the status lines (Status, Type,
+Where, Comment), a **Print to file** check box. Group **Print**: **Columns From / To** and **Rows
+From / To** (two boxes each, empty by default), a **Selection** check box and an **Options...**
+button. Group **Copies**: **Number of copies** (1) and **Collate** (greyed at 1 copy). Buttons OK and
+Cancel. So Origin prints a worksheet by column and row range or by selection, and has a worksheet
+printing options window behind Options... that was not opened (the click on it by script did not
+show a window; **unmeasured**).
+
+**Unmeasured**: the printed layout of an Origin worksheet. Printing through the Origin automation
+interface (`doc -p;`) printed nothing while the machine had no default printer; with one, only the
+dialog above could be reached, and the run that was to answer the driver's Save dialog produced no
+file. Therefore the following are not Origin facts: whether the label rows, row numbers, grid lines
+and column heads print, the font, the row height, the page numbers, the page order, and what
+Options... offers. Do not read Sheaf's layout below as Origin's.
+
+**Sheaf's rule** (`sheaf_core::sheet_print`, drawn by `sheaf_plot::sheet`):
+
+- File > Print... and File > Print Preview act on the active window: a graph as in 19.4, a workbook
+  prints its **active sheet** as a table. The Page Setup of the project applies (paper, orientation,
+  margins); Automatic orientation is portrait for a sheet. Tables are not scaled: the printed area is
+  the paper inside the margins and every page is exactly that area, so a table page is placed 1:1
+  (the printer path plays the page's metafile into the margin rectangle, as for a graph; the
+  printer's unprintable edge can only shrink it when the margin is smaller than the edge).
+- Content: a grey row of column names as the sheet's head shows them (`A(X1)`, `B(Y1)`), then the
+  label rows that have text in a printed column (Long Name, Units, Comments, F(x)=, user parameters;
+  a row without any text in the printed columns is left out), then the data rows. Columns hidden in
+  the sheet and rows hidden by the sheet's filter are not printed; the row numbers are the sheet's
+  own, so a filtered sheet shows its gaps in the numbering. Cell texts are the column's display
+  format as the grid shows it (`Column::shown_text`: General shows up to 5 decimals, date/time and
+  other formats as set); numbers are right-aligned, text left-aligned. Text longer than its cell is
+  cut (not wrapped). Grid lines, a grey head and row-number column, the label rows pale yellow as on
+  screen.
+- Measures (points): font 8, row 12, column width = characters x 50/8 (the sheet's own column width
+  in characters, 8 by default), row-number column 30, footer line 16. On screen rows are 16 px and 8
+  characters 67 px; the print values are Sheaf's choice, not measured.
+- Page breaking (`paginate`, pure and tested): rows go down first, each page takes
+  `floor((area height - footer - head) / row height)` rows (at least one); then the next band of
+  columns starts at the first row again, the row-number column repeated on every page. A band takes
+  columns while they fit the area width (at least one, so a column wider than the page gets a page
+  of its own and its text is cut). Page order is down, then across. An empty sheet is one page.
+- Page numbers: "Page n of m" at the bottom left under each page's table (Sheaf's choice; Origin's
+  behaviour is unmeasured).
+- Output: Windows plays one enhanced metafile per page (`render_sheet_emf_pages`) with
+  `StartPage`/`EndPage` per page inside one document; the Print dialog offers a page range (from/to)
+  when there are several pages. Origin's column/row ranges and selection are not offered. Elsewhere
+  `render_sheet_pdf` writes one paper-sized vector page per table page (the multi-page writer of
+  9.7), text kept as text, and `lp` prints it.
+- Print Preview of a workbook is the same window as for a graph with **< Prev**, "Page n of m" and
+  **Next >** between the Page Setup and Close buttons; the page picture is the table page drawn
+  inside the margin rectangle of the paper.
+
+**Check** (Sheaf's side, headless, no dialog, no physical printer): the ignored test
+`winprint::tests::prints_a_three_page_sheet_to_a_named_printer_without_a_dialog` builds a synthetic
+130-row, 3-column sheet, prints it to "Microsoft Print to PDF" with `DOCINFOW.lpszOutput` set (no
+dialog, about 7 s including the build) and writes Sheaf's own PDF of the same sheet beside it
+(`re-workspace/scratch/t27/wb/sheaf-print3.pdf` and `sheaf-print3.sheaf.pdf`, local). Both files
+have 3 pages with a 612 x 792 pt media box (Letter portrait). Not checked: a physical printer,
+copies, collation, page ranges through the driver, other paper sizes.
+
+### 19.9 Not done
+
+View > Print View, Origin's Source (tray), native CLI printer submission on Windows, Origin's workbook
+Options... window, the printed layout of an Origin worksheet (19.8), printing a selection or a row/column
+range of a sheet, CLI workbook printing, the PDFKit panel for a sheet on macOS (a sheet goes to `lp`).
+

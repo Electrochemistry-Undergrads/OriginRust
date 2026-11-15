@@ -32,11 +32,24 @@ pub struct Worksheet {
     /// View > Freeze Panes (see [`Frozen`]).
     #[serde(default, skip_serializing_if = "Frozen::is_none")]
     pub frozen: Frozen,
+    /// Worksheet > Conditional Formatting (see [`crate::condformat`]); the earlier rule wins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cond_formats: Vec<crate::condformat::CondFormat>,
+    /// Cell notes (see [`crate::notes`]), sorted by column and row.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<crate::notes::CellNote>,
 }
 
 impl Worksheet {
     pub fn new(name: impl Into<String>) -> Self {
-        Worksheet { name: name.into(), columns: Vec::new(), filter: None, frozen: Frozen::default() }
+        Worksheet {
+            name: name.into(),
+            columns: Vec::new(),
+            filter: None,
+            frozen: Frozen::default(),
+            cond_formats: Vec::new(),
+            notes: Vec::new(),
+        }
     }
 
     /// Number of rows: the length of the longest column.

@@ -509,11 +509,48 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     b.sheets[0].filter =
         Some(sheaf_core::rowfilter::RowFilter { condition: "col(A) > 0".into(), enabled: true, keep: vec![true] });
     b.sheets[0].frozen = sheaf_core::Frozen { rows: 1, columns: 0 };
+    b.sheets[0].cond_formats = vec![sheaf_core::condformat::CondFormat {
+        name: "C1R1-C1R0".into(),
+        range: sheaf_core::condformat::CondRange::whole_columns(vec![b.sheets[0].columns[0].id]),
+        rule: sheaf_core::condformat::Rule::min_max(),
+    }];
+    let first = b.sheets[0].columns[0].id;
+    b.sheets[0].set_note(first, 0, "a note");
     let all = written(&p).warnings.join(" | ");
+    assert!(all.contains("1 cell note(s) are not written"), "{all}");
     assert!(all.contains("1 sheet(s) have frozen panes"), "{all}");
+    assert!(all.contains("1 sheet(s) have conditional formatting"), "{all}");
     assert!(all.contains("1 hidden column(s)"), "{all}");
     assert!(all.contains("1 column(s) have their own width"), "{all}");
-    assert!(all.contains("1 column(s) have masked cells"), "{all}");
+    assert!(!all.contains("masked cells"), "masks are written now: {all}");
     assert!(all.contains("1 Group or Subject column(s)"), "{all}");
     assert!(all.contains("1 sheet(s) have a worksheet filter"), "{all}");
+}
+
+#[test]
+fn masked_cells_are_written_in_origins_layout_and_read_back() {
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[1].mask.extend([0, 2]);
+    let w = written(&p);
+    assert!(w.warnings.iter().all(|x| !x.contains("mask")), "{:?}", w.warnings);
+    let imp = read_back(&w.bytes);
+    let cols = &imp.workbooks[0].sheets[0].columns;
+    assert_eq!(cols[1].mask.iter().copied().collect::<Vec<_>>(), vec![0, 2]);
+    assert!(cols[0].mask.is_empty());
+}
+
+/// Writes `sheaf-masked.opj` (column B rows 1 and 3 masked, 1-based) into `SHEAF_OPJ_MASK_DIR`, so
+/// Origin can be asked which cells it sees masked (opj-format.md 3.2):
+/// `SHEAF_OPJ_MASK_DIR=<folder> cargo test -p sheaf-io -- --ignored write_masked_project_for_origin`.
+#[test]
+#[ignore]
+fn write_masked_project_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_MASK_DIR") else { return };
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[1].mask.extend([0, 2]);
+    std::fs::write(Path::new(&dir).join("sheaf-masked.opj"), written(&p).bytes).unwrap();
 }

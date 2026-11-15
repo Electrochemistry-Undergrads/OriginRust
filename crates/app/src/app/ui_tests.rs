@@ -10,15 +10,23 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod cell_notes;
+mod cond_format;
 mod excel;
+mod fill_inclusive;
+mod fill_sidelines;
 mod frozen_panes;
 mod label_frames;
 mod label_whiteout;
+mod live;
 mod lollipop;
 mod offset_multipliers;
 mod skip_points;
+mod sort_x;
 mod symbol_line_gaps;
 mod symbol_line_order;
+mod toolbar_print;
+mod violin;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {
@@ -1317,6 +1325,48 @@ fn file_page_setup_changes_the_project_setup_as_an_undo_step() {
 }
 
 #[test]
+fn print_preview_of_a_workbook_pages_through_the_sheet() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-print-sheet-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("long.csv");
+    let mut text = String::from(
+        "t,up
+",
+    );
+    for i in 1..=120 {
+        text.push_str(&format!(
+            "{i},{}
+",
+            f64::from(i) * 0.5
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - long");
+    menu_path(&mut h, &["File", "Print Preview"]);
+    assert!(h.state().print_preview.is_some(), "Print Preview is open for the workbook");
+    // Letter portrait, 1 inch margins: 49 body rows per page, so 120 rows are 3 pages.
+    assert!(h.query_by_value("Page 1 of 3").is_some());
+    assert!(h.query_by_label("Print...").is_some());
+    click(&mut h, "Next >");
+    assert!(h.query_by_value("Page 2 of 3").is_some());
+    assert_eq!(h.state().print_preview.as_ref().unwrap().page(), 1);
+    click(&mut h, "Next >");
+    click(&mut h, "Next >");
+    assert!(h.query_by_value("Page 3 of 3").is_some(), "the last page stays the last");
+    click(&mut h, "< Prev");
+    assert!(h.query_by_value("Page 2 of 3").is_some());
+    // The page picture is drawn: the preview has a texture for the table page.
+    click(&mut h, "Close");
+    assert!(h.state().print_preview.is_none());
+    // Ctrl+P on the workbook stops before the system dialog under test.
+    ctrl(&mut h, egui::Key::P);
+    assert!(h.state().message.is_none(), "no error box");
+    assert!(h.state().status.contains("Printing is skipped"), "{}", h.state().status);
+}
+
+#[test]
 fn file_print_preview_opens_for_the_active_graph_and_ctrl_p_does_not_reach_a_printer() {
     let mut h = start(vec![data_file("print-preview")]);
     show_window(&mut h, "Graph1 - sample");
@@ -2493,8 +2543,12 @@ fn menu_items_sheaf_lacks_are_greyed_with_origins_name_and_a_tooltip() {
     assert!(h.query_by_label_contains("Not available in Sheaf yet").is_some(), "the tooltip says why");
     close_menus(&mut h);
     // A greyed item with a shortcut still shows the key.
+    click(&mut h, "View");
+    assert!(!entry_enabled(&h, "Command Window Alt+3"));
+    close_menus(&mut h);
+    // Print is live with a workbook active (it prints the sheet).
     click(&mut h, "File");
-    assert!(!entry_enabled(&h, "Print... Ctrl+P"));
+    assert!(entry_enabled(&h, "Print... Ctrl+P"));
 }
 
 #[test]
@@ -4832,7 +4886,7 @@ fn the_descriptive_menu_fits_distributions() {
 }
 
 /// Statistics > Multivariate Analysis > Principal Component Analysis...: eigenvalues and loadings in a result
-/// sheet, a scree plot as a graph; one undo removes both.
+/// sheet; like Origin's pca it draws a scree plot, a loading plot and a biplot as graphs; one undo removes all.
 #[test]
 fn the_multivariate_menu_runs_a_principal_component_analysis() {
     let mut h = start(vec![data_file("pca")]);
@@ -4847,10 +4901,39 @@ fn the_multivariate_menu_runs_a_principal_component_analysis() {
     // Two columns that are perfectly anti-correlated: eigenvalues 2 and 0, loadings of equal size.
     assert_eq!(eigen.len(), 2);
     assert!((eigen[0] - 2.0).abs() < 1e-9 && eigen[1].abs() < 1e-9, "{eigen:?}");
-    let (_, l1) = result_column(&h, "Loading PC1");
+    let (_, l1) = result_column(&h, "Coefficients of PC1");
     assert!((l1[0].abs() - 0.5f64.sqrt()).abs() < 1e-9 && (l1[0].abs() - l1[1].abs()).abs() < 1e-9, "{l1:?}");
-    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    let names: Vec<String> = project(&h).graphs().skip(graphs_before).map(|g| g.long_name.clone()).collect();
+    assert_eq!(names, ["Scree Plot", "Loading Plot", "Biplot"]);
     assert_eq!(h.state().doc.undo_label(), Some("Principal component analysis"));
+    // One undo removes the sheet and the three graphs.
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).graphs().count(), graphs_before);
+}
+
+/// The window of the principal component analysis has the switches of Origin's dialog for the plots: loading plot,
+/// score plot and biplot, and the two components on the axes.
+#[test]
+fn the_principal_component_window_switches_the_plots() {
+    let mut h = start(vec![data_file("pca-plots")]);
+    show_window(&mut h, "Book1 - sample");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Multivariate Analysis", "Principal Component Analysis..."]);
+    for label in [
+        "Scree plot (new graph)",
+        "Loading plot (the loadings as vectors from the origin)",
+        "Score plot",
+        "Biplot (scores as points, loadings as vectors on the top and right axes)",
+    ] {
+        assert!(has_label(&h, label), "{label}");
+    }
+    // Scree and loading plot off, score plot on: the biplot (on by default) and the score plot remain.
+    click(&mut h, "Scree plot (new graph)");
+    click(&mut h, "Loading plot (the loadings as vectors from the origin)");
+    click(&mut h, "Score plot");
+    click(&mut h, "OK");
+    let names: Vec<String> = project(&h).graphs().skip(graphs_before).map(|g| g.long_name.clone()).collect();
+    assert_eq!(names, ["Scores Plot", "Biplot"]);
 }
 
 /// Statistics > ROC Curve...: the test variable and the state column (last) give the area, the curve and a graph;
@@ -6100,6 +6183,7 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod find_replace;
 mod go_to;
 mod go_to_picker;
 mod label_panels;
@@ -6636,9 +6720,28 @@ fn the_axis_dialog_lists_the_edges_and_has_working_breaks_and_special_ticks_tabs
     }
     click(&mut h, "Breaks");
     assert!(h.query_by_label("Horizontal").is_some() && h.query_by_label("Bottom").is_none());
-    h.get_by_label("Show Break").click();
+    h.get_by_label("Enable").click();
     settle(&mut h);
-    assert!(graph(&h).layers[0].x_axis.axis_break.is_some());
+    let axis = &graph(&h).layers[0].x_axis;
+    assert_eq!(axis.axis_breaks.len(), 1);
+    // The first break is the middle half of the axis and is placed automatically, as in Origin.
+    let b = axis.axis_breaks[0];
+    assert!(b.auto_position && b.from < b.to);
+    // A second break takes the middle half of what the first left, a third likewise.
+    for k in [2, 3] {
+        h.get(By::new().role(egui::accesskit::Role::ComboBox).value((k - 1).to_string().as_str())).click();
+        settle(&mut h);
+        h.get(By::new().role(egui::accesskit::Role::Button).label(k.to_string().as_str())).click();
+        settle(&mut h);
+        let breaks = &graph(&h).layers[0].x_axis.axis_breaks;
+        assert_eq!(breaks.len(), k);
+        let (prev, new) = (breaks[k - 2], breaks[k - 1]);
+        assert!(new.from > prev.to && new.to > new.from, "{breaks:?}");
+    }
+    // Deleting a row removes that break.
+    h.get_all_by_label("Delete").next().expect("a Delete button per row").click();
+    settle(&mut h);
+    assert_eq!(graph(&h).layers[0].x_axis.axis_breaks.len(), 2);
     click(&mut h, "Special Ticks");
     click(&mut h, "Add Tick");
     assert_eq!(graph(&h).layers[0].x_axis.special_ticks.len(), 1);
@@ -6774,6 +6877,126 @@ fn masking_cells_marks_them_for_analysis_and_undoes() {
     assert!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.is_empty());
     h.state_mut().apply(Action::Undo, &ctx);
     assert_eq!(project(&h).workbooks().next().unwrap().sheet().column_by_name("C").unwrap().mask.len(), 2);
+}
+
+fn mask_data_file(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("values.csv");
+    std::fs::write(
+        &path,
+        "v
+2
+4
+9
+3
+5
+-7
+1
+6
+8
+0
+",
+    )
+    .unwrap();
+    path
+}
+
+/// Selects the only column of the first workbook and returns the book.
+fn select_only_column(h: &mut Harness<'static, SheafApp>) -> WindowId {
+    let book = project(h).workbooks().next().unwrap().id;
+    let id = project(h).workbooks().next().unwrap().sheet().columns[0].id;
+    h.state_mut().books.entry(book).or_default().selected = vec![id];
+    book
+}
+
+fn mask_rows(h: &Harness<'static, SheafApp>) -> Vec<usize> {
+    project(h).workbooks().next().unwrap().sheet().columns[0].mask.iter().copied().collect()
+}
+
+#[test]
+fn hide_masked_points_is_a_project_switch_with_a_show_label() {
+    let mut h = start(vec![mask_data_file("maskhide")]);
+    select_only_column(&mut h);
+    let ctx = h.ctx.clone();
+    show_window(&mut h, "Book1 - values");
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Hide Masked Points"));
+    close_menus(&mut h);
+    h.state_mut().apply(Action::ToggleHideMasked, &ctx);
+    settle(&mut h);
+    assert!(project(&h).hide_masked);
+    assert_eq!(h.state().doc.undo_label(), Some("Hide or show masked points"));
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Show Masked Points"));
+    close_menus(&mut h);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(!project(&h).hide_masked);
+}
+
+#[test]
+fn mask_change_color_and_disable_masking_are_project_wide_undoable_steps() {
+    let mut h = start(vec![mask_data_file("maskmenu")]);
+    let book = select_only_column(&mut h);
+    let ctx = h.ctx.clone();
+    show_window(&mut h, "Book1 - values");
+    assert_eq!(project(&h).mask_color, 1);
+    h.state_mut().apply(Action::MaskColor, &ctx);
+    assert_eq!(project(&h).mask_color, 2);
+    assert_eq!(h.state().doc.undo_label(), Some("Change mask color"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(project(&h).mask_color, 1);
+
+    let sheet = project(&h).workbooks().next().unwrap().sheet().clone();
+    h.state_mut().books.entry(book).or_default().select_cells(&sheet, (0, 0), (0, 1));
+    h.state_mut()
+        .apply(Action::Cells { book, op: crate::actions::CellOp::Mask(sheaf_core::sheetops::MaskOp::Apply) }, &ctx);
+    let col = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheet().columns[0].clone();
+    assert_eq!(col(&h).numeric_unmasked().unwrap().iter().filter(|v| v.is_nan()).count(), 2);
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Disable Masking"));
+    close_menus(&mut h);
+    h.state_mut().apply(Action::ToggleMasking, &ctx);
+    settle(&mut h);
+    assert!(project(&h).masking_disabled());
+    assert_eq!(col(&h).numeric_unmasked().unwrap().iter().filter(|v| v.is_nan()).count(), 0);
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Enable Masking"));
+    assert!(not_toolbar(&h, "Disable Masking").is_empty());
+    close_menus(&mut h);
+    h.state_mut().apply(Action::ToggleMasking, &ctx);
+    assert!(!project(&h).masking_disabled());
+    assert_eq!(col(&h).numeric_unmasked().unwrap().iter().filter(|v| v.is_nan()).count(), 2);
+}
+
+#[test]
+fn mask_cells_by_condition_dialog_masks_in_one_undo_step() {
+    let mut h = start(vec![mask_data_file("maskcond")]);
+    let book = select_only_column(&mut h);
+    let ctx = h.ctx.clone();
+    let columns = h.state().books[&book].selected.clone();
+    // An existing mask on row 0 is replaced while Keep Existing Mask is off.
+    h.state_mut().doc.apply("Seed", |p| {
+        p.workbook_mut(book).unwrap().sheet_mut().columns[0].mask.insert(0);
+    });
+    h.state_mut().apply(Action::MaskByConditionDialog { book, columns: columns.clone() }, &ctx);
+    settle(&mut h);
+    choose_recalc(&mut h, "Outliers by Std. Deviation", ">");
+    h.state_mut().mask_condition.as_mut().unwrap().value = 5.0;
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().mask_condition.is_none());
+    assert_eq!(mask_rows(&h), vec![2, 7, 8]);
+    assert_eq!(h.state().doc.undo_label(), Some("Mask cells by condition"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert_eq!(mask_rows(&h), vec![0]);
+
+    // Outliers by Std. Deviation, multiple 1 (the defaults), keeping nothing.
+    h.state_mut().apply(Action::MaskByConditionDialog { book, columns }, &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(mask_rows(&h), vec![2, 5, 8]);
 }
 
 #[test]
@@ -7794,6 +8017,7 @@ fn find_in_sheets_moves_the_cursor_to_the_cell_with_the_text() {
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Find in Sheets...");
     assert!(h.state().find.is_some(), "the window opens");
+    click(&mut h, "String");
     h.state_mut().find.as_mut().unwrap().set_text("4.5");
     settle(&mut h);
     click(&mut h, "Find Next");
@@ -7813,6 +8037,7 @@ fn replace_changes_the_cell_at_the_cursor_and_replace_all_every_cell_in_one_step
     let mut h = start(vec![data_file("replacesheet")]);
     show_window(&mut h, "Book1 - sample");
     menu(&mut h, "Edit", "Replace...");
+    click(&mut h, "String");
     {
         let d = h.state_mut().find.as_mut().expect("the Replace window opens");
         d.set_text("4.5");
@@ -8275,6 +8500,47 @@ fn the_survival_menu_runs_the_kaplan_meier_estimator() {
     assert_eq!(h.state().doc.undo_label(), Some("Kaplan-Meier estimator"));
 }
 
+/// Statistics > Descriptive Statistics > Graphical Summary...: the options window offers Groups, the confidence level
+/// and the graph arrangement; OK writes the three tables and one three-layer graph; one undo removes both.
+#[test]
+fn the_descriptive_menu_runs_a_graphical_summary() {
+    let mut text = String::from("n,value\n");
+    for i in 0..20 {
+        text.push_str(&format!("{i},{}\n", 5.0 + (f64::from(i) * 1.9).sin() * 2.0 + f64::from(i) * 0.2));
+    }
+    let data = csv_file("gsum", "summary", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - summary");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Graphical Summary..."]);
+    assert!(h.state().analysis.is_some(), "the Graphical Summary window is open");
+    for label in ["Groups", "Confidence Level (%)", "Graph Arrangement"] {
+        assert!(has_label(&h, label), "{label} is missing");
+    }
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "OK closes the window");
+    let (sheet, _) = result_column(&h, "Value");
+    assert!(sheet.starts_with("GraphSummary"), "{sheet}");
+    let (_, tables) = {
+        let p = project(&h);
+        let ws = p.workbooks().next().unwrap().sheets.last().unwrap();
+        let col = ws.columns.iter().find(|c| c.long_name == "Table").unwrap();
+        (sheet.clone(), col.text().unwrap().to_vec())
+    };
+    for t in ["Description Statistics", "95% Confidence Intervals", "Normality Test"] {
+        assert!(tables.iter().any(|x| x == t), "{t} missing");
+    }
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers.len(), 3);
+    assert_eq!(h.state().doc.undo_label(), Some("Graphical summary"));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), graphs_before);
+    assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);
+}
+
 /// Statistics > Multivariate Analysis > K-Means Cluster Analysis...: the cluster table and the cluster of every row
 /// in a result sheet and a scatter graph; one undo removes both.
 #[test]
@@ -8300,7 +8566,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
     assert!(has_label(&h, "Number of clusters"), "the cluster count box is missing");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "the window closed after OK");
-    let (sheet, n) = result_column(&h, "Cluster N");
+    let (sheet, n) = result_column(&h, "Number of Observations");
     assert!(sheet.starts_with("KMeans"), "{sheet}");
     assert_eq!(n.iter().sum::<f64>() as usize, 6, "{n:?}");
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);

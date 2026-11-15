@@ -19,13 +19,13 @@ outputs or UI behavior.
 |---|---|---|---|
 | Cell formulas and Formula Bar | 2019 / 2021 | Calculate individual cells and edit their expressions in a formula bar, alongside column-wide calculations. | [2019][o19] · [2021][o21] |
 | Named cells and ranges | 2022 | Assign a reusable name to a cell or selected range and reference it in calculations. | [2022][o22] |
-| Cell notes | 2022 | Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
+| Cell notes | 2022 | Done (T36). Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
 | Worksheet frozen panes | 2023 | Done (T34). Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |
 | Time Series Pivot | 2025 | Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
 | Project Browser | 2025b | Search a project-wide list of sheets, columns, graphs and folders, preview matches and apply metadata edits to multiple selections. | [2025b][o25b] |
 | Window Switcher | 2025b | Cycle through open child windows with keyboard shortcuts and previews. | [2025b][o25b] |
 | Interactive formula references | 2025b | Insert a cell, column or range into the formula being edited by clicking or dragging in the sheet. | [2025b][o25b] |
-| Conditional highlight of extrema | 2025b | Mark the minimum or maximum within each row or each column as its values change. | [2025b][o25b] |
+| Conditional highlight of extrema | 2025b | Done (T35). Mark the minimum or maximum within each row or each column as its values change. | [2025b][o25b] |
 | Flash Fill and Smart Formula | 2026 | Infer a text extraction or combination rule from an example. Preview it and either fill static values or keep a calculation that updates. | [2026][o26] |
 | Find in Project Files | 2026 / 2026b | Search a collection of saved projects for text in metadata, graph labels, notes and data cells, then open the matching project. | [2026][o26] · [2026b][o26b] |
 | Repeat Last Action and Duplicate Operation | 2026 | Repeat the last plotting action on another selection, reopen the last tool dialog and apply a configured analysis to other sheets. | [2026][o26] |
@@ -57,7 +57,7 @@ outputs or UI behavior.
 | Chord and lollipop plots | 2021 | Lollipop done (T33). Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
 | Network and grouped marginal plots | 2021b | Draw connections among nodes. Pair grouped scatter data with distributions along the margins. | [2021b][o21b] |
 | Sunburst and ridgeline plots | 2022 | Draw a hierarchy as concentric rings or compare distributions as vertically offset density curves. | [2022][o22] |
-| Plot-only X sorting | 2023 | Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
+| Plot-only X sorting | 2023 | Done (T39). Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
 | Built-in equation rendering | 2023b | Render LaTeX equations in graph labels and worksheet metadata, carry metadata equations into legends and axis titles, and retain vector output on export. | [2023b][o23b] |
 | Time Series Explorer | 2024b | View the full series and a detail panel for a chosen interval. Step or play through successive intervals. | [2024b][o24b] |
 | Extract data from regions on a graph | 2024b | Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |
@@ -77,7 +77,7 @@ outputs or UI behavior.
 | Time series modeling and forecasting | 2024b Pro App | Check stationarity, inspect autocorrelation, separate trend and seasonality, and use ARIMA to forecast future observations. | [2024b][o24b] · [Time Series Analysis][tsa] |
 | Best Subset Selection | 2025b Pro App | Compare regression models over candidate predictor subsets and rank the models by fit criteria. | [2025b][o25b] |
 | Piecewise Peak Fitting | 2025b Pro App | Divide a single curve into fitting regions, set a separate baseline for each region and resolve peaks within each region. | [2025b][o25b] · [Piecewise Peak Fitting][piecewise] |
-| Graphical Summary | 2026 | Produce a descriptive report with statistics, diagnostic charts and Anderson–Darling normality testing for individual or grouped data. | [2026][o26] |
+| Graphical Summary | 2026 | Done (T40, Separate Graphs). Produce a descriptive report with statistics, diagnostic charts and Anderson–Darling normality testing for individual or grouped data. | [2026][o26] |
 | Life Science structured tables | 2026b Pro | Give experimental data explicit group, replicate, time or survival roles and surface table-specific graphing and analysis actions. | [2026b][o26b] |
 | Random Forest and Acceptance Sampling | 2026b Pro Apps | Train ensembles of decision trees for predictive modeling. Design or evaluate lot-acceptance sampling plans. | [2026b][o26b] |
 | Multiple Comparisons and Significance Plots | 2027 | Generate a chart directly from ANOVA or t-test reports, including comparisons, error bars and p-value annotations. | [2027][o27] |

@@ -1,13 +1,15 @@
 # T27: Print, Print Preview, Page Setup
 
-**Status:** Windows graph printing merged (2026-11-14): Page Setup model and window, Print, Print Preview, headless print check, graphing 19. Left: workbook printing, macOS panel, Origin's Print/Print Preview windows (unmeasured). (Brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
+**Status:** Windows graph printing merged (2026-11-14): Page Setup model and window, Print, Print Preview, headless print check, graphing 19. Native macOS graph print panel merged (graphing 19.7). Workbook printing merged 2026-11-15 (graphing 19.8): the active sheet prints as a table through the same EMF/PDF path, pure tested page breaking, Print Preview with page navigation, headless 3-page check; Origin's workbook Print dialog was measured (ranges, Selection, Options...), its printed layout was not (unmeasured, Sheaf's own layout). Left: Origin's Print Preview window and worksheet Options..., column/row range and selection printing, CLI workbook printing. (Brief written 2026-11-14 from T18's "Print" row and parity row "Print, Print Preview,
 Page Setup", P1).
 CLI graph printing added on macOS without Origin (`cli-print`, 2026-11-14):
 `sheaf print PROJECT [--graph NAME] --output FILE.pdf` writes a vector PDF on the saved paper size,
 with the graph scaled and centred by `PageSetup::place`; without `--output`, macOS/Linux submit
 that PDF through `lp` to the default or `--printer NAME` destination. Windows supports PDF output
-only. No physical printer was used in the automated checks; the native macOS panel and workbook
-printing remain open. Formatting, strict all-target Clippy and 2,119 workspace tests passed (one ignored).
+only. The native macOS graph print panel is added in `mac-print-panel` (2026-11-15), using
+PDFKit and the same print PDF. The Standard toolbar Print button now shares the menu command
+and availability rules; workbook printing remains separate. No physical printer was used
+in the automated checks. Formatting, strict all-target Clippy and 2,119 workspace tests passed (one ignored).
 
 **Size:** M. **Branch:** `print`. **Model:** Sonnet. Needs a Windows session for the Windows path and a
 macOS session for the macOS path; each half can merge on its own.

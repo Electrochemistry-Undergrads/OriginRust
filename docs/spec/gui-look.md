@@ -371,6 +371,106 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
   frozen block never goes over the half-width cap above: the column stops growing there instead of
   dropping out of the block.
 
+### Conditional formatting (T35)
+
+Origin facts (from the help pages and X-Function reference, not measured; no Origin was available)
+[W:originlab.com/2025b, W:origin-help/conditional-format, W:x-function/ref/wcolorbycr]:
+
+- Origin 2025b: "conditional formatting to highlight min/max column-wise or row-wise".
+- Worksheet > Conditional Formatting (also on the right-click menu of selected cells) holds Highlight
+  Min Max, Highlight Top Bottom, Conditional Highlight, Conditional Heatmap, Conditional Pareto,
+  Conditional Outliers, Remove Conditional Format and Conditional Format Manager.
+- A rule's Name defaults to the first and last cell of its range, `C<c1>R<r1>-C<c2>R<r2>`, R0 meaning
+  "to the end" (example `C1R1-C4R0`). Where rules overlap, the upper rule in the Manager wins.
+- Highlight Min Max is `wcolorbycr rng name dir max.fill max.font min.fill min.font`; `dir` 0 is
+  row-wise (the default), 1 column-wise, each row or column on its own. Defaults (0x01BBGGRR ints):
+  max fill 30067455 = RGB(255,202,202), max font 20132812 = RGB(204,51,51), min fill 33085116 =
+  RGB(188,214,248), min font 26692113 = RGB(17,74,151).
+- Highlight Top Bottom is `wcolortb`: Top N Items, Top N%, Bottom N Items, Bottom N%, on the selected
+  columns. Its default N and colours are not documented.
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Rules.** Per sheet (`cond_formats`, saved in `.sheaf`, absent when empty), a list: name, range
+  (columns by id plus first row and an optional last row, none meaning to the end of the data), rule
+  and colours. A selection of whole columns, rows or the sheet, or a block of cells, gives the range;
+  a block that reaches the last data row follows the data from then on. A label cell or nothing
+  selected gives a status message and no window (the menu items are greyed without a selection).
+- **Evaluation.** Live: the grid shows the rules on the current values, with no stored colours. Only
+  numbers count; text, empty and NaN cells are ignored, and so are masked cells (they take no part in
+  the ranking and keep the red mask look). Ties: every cell equal to the maximum (minimum, or to the
+  N-th value for Top Bottom) is highlighted. A row or column with one number counts as its maximum.
+  Max takes precedence over min where they coincide (all values equal).
+- **Min Max.** Window with Name, Row-wise / Column-wise radio buttons and a Fill and a Font colour (each
+  switchable off) for the maximum and the minimum, Origin's defaults above, row-wise.
+- **Top Bottom.** Window with Name, Mode (Top N Items, Top N%, Bottom N Items, Bottom N%), N (default
+  10, so "Top 10 Items") and one Fill/Font pair, defaulting to the Min Max maximum colours for Top and
+  the minimum colours for Bottom (Sheaf's own). Each column of the selection is ranked on its own. N %
+  is taken of the numbers in the column and rounds up (at least one item).
+- **Order.** A new rule goes to the top of the list; the earlier rule wins the whole cell, so a cell
+  coloured by a rule is not touched by a later one. Filtered (hidden) rows are ranked like the others.
+- **Remove.** Remove Conditional Format removes every rule whose range touches the selection, whole
+  rules and not just the selected part; with none it says so in the status bar. Each command is one
+  undo step ("Highlight min max", "Highlight top bottom", "Remove conditional format").
+- **Copies and edits.** Window > Duplicate, Worksheet > Duplicate sheet and File > Append keep the rules,
+  pointing at the copy's own columns. Deleting columns takes them out of every rule and drops a rule
+  left with no column (in the same undo step as the delete). Inserting rows at or above a rule's first
+  row moves it down, inside it makes it longer; deleting rows moves or shortens it, and a rule whose
+  whole row span is deleted is dropped; a rule that runs to the end stays open. Only operations on a
+  column of the rule count.
+- **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
+  read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
+  release build.
+- **Left out.** Conditional Highlight, Heatmap, Pareto, Outliers and the Manager (greyed); renaming a
+  rule after creation. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
+  companion keeps them.
+
+### Cell notes (T36)
+
+Origin facts (help pages, not measured; no Origin was available) [W:originlab.com/2022,
+W:origin-help/insnote-to-wkscell, W:x-function/ref/insertcmt]:
+
+- Origin 2022: "Add Notes to individual Worksheet Cells", similar to Excel and Google Sheets. Select the
+  cell and click the Mini Toolbar Add Note button; the note displays as a popup when hovering on the
+  tab in the upper-right corner of the cell; the system variable `@NCP = 0` stops the popups. Notes
+  are edited in a Notes window ("Open in Notes Window"); contents are Text or Origin Rich Text. The
+  X-Function `insertCmt` adds a note to a selected cell (search snippet, unconfirmed).
+- Not documented: how to delete a note, the tab's colour and size, behaviour under sort/insert/delete,
+  export.
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Storage.** Per sheet (`Worksheet.notes`, core `notes.rs`, saved in `.sheaf`, absent when empty): a
+  list sorted by column id and data row, so the saved form is deterministic and a lookup is a binary
+  search (no per-cell scan). Plain text only; empty text is never stored. A note may sit on an empty
+  cell (beyond the data rows) and then follows its row position like any other.
+- **Indicator.** A small filled dark-red triangle (7 px) in the upper-right corner of the cell, also in
+  frozen (overlay) cells and over conditional-format fills. Origin's colour and size are unmeasured.
+- **Popup.** Hovering anywhere on the noted cell (not only the tab) shows the text in a tooltip, wrapped
+  at 300 px. There is no `@NCP` switch. A tooltip cannot scroll, so a long note is cut at 20 lines or
+  1,500 characters and ends with "…" (the full text stays in the editor).
+- **Editing.** The cell right-click menu replaces the greyed "Insert Notes" item: "Add Note..." on a cell
+  without a note, "Edit Note..." and "Delete Note" on one with a note, for a single selected cell
+  (otherwise a status message). Inside a multi-cell selection the note entries act on the right-clicked
+  cell (choosing one reselects that cell; the other cell-menu entries still act on the selection). The
+  editor is a small window with a multi-line text box (scrolls above 300 px, so OK/Cancel stay on screen) and OK/Cancel
+  (no Notes window, no Mini Toolbar button, no rich text). Each change is one undo step ("Add note",
+  "Edit note", "Delete note"; emptying the text of an existing note deletes it). Clear (Delete key)
+  clears values and leaves the note.
+- **Sort.** Notes move with their row: Sort Worksheet, Sort Range, nested/custom sort (also of selected
+  rows) and Filter Rows (in place, dropping the notes of removed rows) permute the notes of the sorted
+  columns exactly as the values; Sort Columns (each column on its own) and Reverse Order move only that
+  column's notes.
+- **Rows and columns.** Insert rows shifts the notes of the columns inserted into at or below the row;
+  delete rows drops the notes on the deleted cells and shifts those below. Columns have stable ids, so
+  Move Columns and column insert need nothing; deleting a column drops its notes (same undo step).
+  Duplicate (window or sheet) and File > Append keep the notes, on the copy's own columns.
+- **Not carried.** Operations that build a new sheet (Transpose, Stack/Unstack, Split Columns, Reduce
+  Rows, Filter Rows to a new sheet) do not copy notes; neither do the `.opj` writer (save to `.opj`
+  warns "N cell note(s) are not written"; the `.opj.sheaf` companion keeps them), CSV and Excel export.
+- **Left out.** Notes window, rich text, `@NCP`, Mini Toolbar button, hovering only on the tab, notes
+  on labels/headers.
+
 ## 4. Graph window
 
 Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second study
@@ -683,6 +783,63 @@ disabled controls are grey; blue bold text marks a hint or a state message.
     buttons Delete and Details....
   The tab and the list are independent: choosing a different tab changes which targets the list
   offers (two for Scale and Breaks, four for the others).
+
+### Find and Replace (2026-11-15)
+
+Origin 2016's public `findreplace option:=0;` and `option:=1;` commands open the Find and Replace
+tabs of one window. The [command reference](https://docs.originlab.com/x-function/ref/findreplace/)
+documents this entry point. Clear pictures, control dumps and post-operation values are in
+`re-workspace/scratch/t02-find-replace/`. The initial Ctrl+F/Ctrl+H attempts found no dialog and
+are excluded as layout evidence; the direct-command captures succeeded.
+
+The initial captures show Numeric selected, condition `=`, Active Worksheet, and expanded Options.
+Find what is seeded from the selected cell's display: B2 containing 5 gives `5`, and a stored
+100.000001 displayed as 100 gives `100`. Selecting text Alpha seeds `Alpha` but leaves Numeric
+selected, with Find Next disabled until the query is valid or the user chooses String.
+Skip linked cells is checked. Absolute value, Search up, Keep sign and Set as missing are unchecked;
+tolerance is `1e-8`. Numeric conditions are `=`, `<`, `<=`, `>`, `>=`, `!=`.
+The Replace tab adds its replacement field and two numeric replacement flags. Its bottom buttons
+are Find Next, Replace, Replace All, Close; Find has Find Next and Close at the right.
+
+String mode hides the numeric condition/tolerance and shows Match case, Match whole cell contents,
+Use wildcards and Include label rows, initially unchecked, alongside Skip linked cells and Search
+up. Look in also offers workbook, folder, recursive folder, open books in folder and project scopes.
+Options can persist in Origin across temporary instances: the last probe explicitly
+restored the original numeric/string flags, condition, scope and tolerance; the restored image and
+action log are retained in `final/restore/` and `conditions/restore/`.
+
+The synthetic GUI probes establish these rules:
+
+| Probe | Observed result |
+|---|---|
+| Numeric 100, tolerance 1e-8, data 100.000001 and 100 | both found/replaced: relative tolerance, not an absolute 1e-8 difference |
+| Numeric 2, data 1.99999999, 2, 2.00000001, missing | `=`, `<=`, `>=` match the three finite cells; `<` matches the first; `>` the third; `!=` matches first, third and missing |
+| Absolute 2, replace 7, Keep sign, data -2, 2, -3, 0 | -7, 7, -3, 0 |
+| Greater than 2, replace 7, Set as missing, data -2, 2, 3, missing | missing, missing, 7, missing |
+| Find numeric `--` with one explicit missing value at A4 | A4; unused allocation beyond the data did not become the result |
+| Find 2 upward from B2, B = 2, 5, 2, 8 | B1 rather than B3 |
+| String `a*c`, wildcard on, replace Z; abXXc, xabc, abc | Z, xabc, Z: the pattern must match the entire cell |
+| Numeric 2, empty replacement | the matching cell becomes missing |
+
+Equality uses the relative difference `abs(a-b)/(abs(a)+abs(b))` with exact equality handling zero.
+The inclusive comparisons include that equality test; strict comparisons and `!=` do not use its
+tolerance. Thus `!=` is deliberately not the complement of tolerant `=`. Numeric searches use stored
+numbers, whereas String searches use displayed text and preserve ordinary substring replacement
+when wildcards are off. Wildcard replacement substitutes the entire matching cell with literal text.
+
+Sheaf follows these measured controls and rules in the existing dialog, with a shared Find/Replace
+window, preserved inputs across its tabs, selected-cell seeding and one undo step per replacement
+action. Formula columns retain their existing replacement protection. Search, invalid input, Close
+and Escape create no document edit. Case and whole-cell String behavior remains available; old
+substring UI regressions explicitly select String now that Numeric is the initial mode.
+Four new UI regressions and four parser/matching fixtures cover these behaviors. `--show find` and
+`--show replace` support native screenshots.
+
+Remaining: searches still cover active-sheet data only. The wider Look in scopes, label rows,
+individual cell links, selected-range restriction, saved dialog history/settings and the query's
+triangle menu are not implemented. Look in and Include label rows are disabled; Skip linked cells
+is fixed checked because individual links are not modeled. The worksheet's normal formula-column
+protection remains in force independently. These gaps keep the parity row partial.
 
 ### Go To (2026-11-14)
 

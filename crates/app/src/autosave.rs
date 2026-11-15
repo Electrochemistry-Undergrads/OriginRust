@@ -40,6 +40,8 @@ pub struct Autosave {
     /// Recovery files of this session may exist.
     has_files: bool,
     inflight: Option<JoinHandle<Result<(), String>>>,
+    #[cfg(test)]
+    write_gate: Option<std::sync::mpsc::Receiver<()>>,
     /// How many background writes were started (the tests count them).
     #[cfg_attr(not(test), allow(dead_code))]
     started: usize,
@@ -60,6 +62,8 @@ impl Autosave {
             written: None,
             has_files: false,
             inflight: None,
+            #[cfg(test)]
+            write_gate: None,
             started: 0,
             error_reported: false,
         }
@@ -68,6 +72,11 @@ impl Autosave {
     /// True when this instance has a recovery session (a recovery folder that could be used).
     pub fn has_session(&self) -> bool {
         self.session.is_some()
+    }
+
+    /// Whether a background write still needs to finish before recovery can be cleared.
+    pub fn write_pending(&self) -> bool {
+        self.inflight.is_some()
     }
 
     /// The clock the timer reads.
@@ -85,6 +94,14 @@ impl Autosave {
     #[cfg(test)]
     pub fn idle(&self) -> bool {
         self.inflight.is_none()
+    }
+
+    /// Hold the next worker until the test releases it, without timing assumptions.
+    #[cfg(test)]
+    pub fn pause_next_write(&mut self) -> std::sync::mpsc::Sender<()> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        self.write_gate = Some(receiver);
+        sender
     }
 
     /// How many background writes were started.
@@ -134,7 +151,13 @@ impl Autosave {
         self.written = Some(revision);
         self.has_files = true;
         self.started += 1;
+        #[cfg(test)]
+        let gate = self.write_gate.take();
         self.inflight = Some(std::thread::spawn(move || {
+            #[cfg(test)]
+            if let Some(gate) = gate {
+                let _ = gate.recv();
+            }
             session.save(&project, original.as_deref()).map(|_| ()).map_err(|e| e.to_string())
         }));
     }

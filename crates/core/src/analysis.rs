@@ -51,6 +51,7 @@ pub use multivariate::{KmeansSpec, PcaSpec};
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
 
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
@@ -878,6 +879,8 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
+    /// Statistics > Descriptive Statistics > Graphical Summary (T40; `docs/spec/statistics.md` section 22).
+    GraphSummary(GraphSummarySpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
@@ -964,6 +967,7 @@ impl Tool {
             Tool::Kmeans(_) => "K-means cluster analysis",
             Tool::Roc(_) => "ROC curve",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
+            Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
@@ -1021,6 +1025,7 @@ impl Tool {
             Tool::Kmeans(_) => "KMeans",
             Tool::Roc(_) => "ROC",
             Tool::KaplanMeier(_) => "KaplanMeier",
+            Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
@@ -1100,6 +1105,71 @@ impl ResultTable {
     }
 }
 
+/// Applies the looks of a planned graph (fixed limits, lines through zero, colours, labels) to its first layer.
+fn apply_look(l: &mut crate::graph::Layer, look: &dist::Look, ids: &[ColumnId]) {
+    if let Some((a, b)) = look.x_range {
+        l.x_axis.min = Some(a);
+        l.x_axis.max = Some(b);
+    }
+    if let Some((a, b)) = look.y_range {
+        l.y_axis.min = Some(a);
+        l.y_axis.max = Some(b);
+    }
+    if let Some(a) = look.y_min {
+        l.y_axis.min = Some(a);
+    }
+    l.x_axis.major_step = look.x_step.or(l.x_axis.major_step);
+    l.y_axis.major_step = look.y_step.or(l.y_axis.major_step);
+    if look.no_legend {
+        l.legend.visible = false;
+    }
+    if look.cross_lines {
+        l.x_axis.additional_line = Some(0.0);
+        l.y_axis.additional_line = Some(0.0);
+    }
+    if look.box_frame {
+        for axis in [&mut l.x_axis, &mut l.y_axis] {
+            axis.show_opposite = true;
+            axis.opposite_ticks = false;
+        }
+    }
+    for &(i, color) in &look.colors {
+        if let Some(p) = l.plots.get_mut(i) {
+            p.line.color = color;
+            p.symbol.color = color;
+            p.auto_color = false;
+        }
+    }
+    for &(i, shape, size, color) in &look.symbols {
+        if let Some(p) = l.plots.get_mut(i) {
+            p.symbol.shape = shape;
+            p.symbol.size_pt = size;
+            if let Some(c) = color {
+                p.symbol.color = c;
+                p.auto_color = false;
+            }
+        }
+    }
+    for &i in &look.dotted {
+        if let Some(p) = l.plots.get_mut(i) {
+            p.line.dash = crate::graph::Dash::Dot;
+        }
+    }
+    for &(i, col, color) in &look.labels {
+        if let Some(p) = l.plots.get_mut(i) {
+            let mut font = crate::graph::Font::new("Arial", 18.0);
+            font.color = color;
+            p.decor.labels = crate::graph::DataLabels {
+                enable: true,
+                form: crate::graph::LabelForm::Column { column: ids[col] },
+                position: crate::graph::LabelPosition::Right,
+                font,
+                ..Default::default()
+            };
+        }
+    }
+}
+
 /// What a tool did.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Report {
@@ -1112,6 +1182,8 @@ pub struct Report {
     pub new_sheet: Option<usize>,
     /// The graph that was added (a histogram's column plot), if any.
     pub new_graph: Option<WindowId>,
+    /// Further graphs that the tool added (principal component analysis draws up to three), in drawing order.
+    pub more_graphs: Vec<WindowId>,
     /// The numbers per input column (integration, statistics, peak counts).
     pub table: Option<ResultTable>,
     /// One sentence for a status line, for example "Integrate: 3 columns, results in sheet Integrate1".
@@ -1591,6 +1663,7 @@ mod multivariate;
 mod power;
 mod roc;
 mod statistics;
+mod summary;
 mod survival;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
@@ -1654,12 +1727,75 @@ impl Project {
                 l.y_axis.scale = plan.y_scale;
                 l.x_axis.title = Some(plan.x_title.clone());
                 l.y_axis.title = Some(plan.y_title.clone());
+                apply_look(l, &plan.look, ids);
             }
             if let Some(name) = long_name {
                 g.long_name = name;
             }
+            if let Some(title) = &plan.look.title {
+                g.long_name = title.clone();
+            }
+        }
+        if let Some(ov) = &plan.look.overlay {
+            self.overlay_layer(graph, ids, ov);
         }
         graph
+    }
+
+    /// The second layer of a graph that has plots of its own against axes on the top and right edges (the
+    /// loading vectors of a biplot).
+    fn overlay_layer(&mut self, graph: WindowId, ids: &[ColumnId], ov: &dist::Overlay) {
+        use crate::graph::{AxisSide, LayerLink, ScaleLink};
+        let Some(parent) = self.graph(graph).and_then(|g| g.layers.first()).cloned() else { return };
+        let mut layer = crate::template::right_y_layer(&parent, 0);
+        layer.link = Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None });
+        layer.x_axis.side = AxisSide::Opposite;
+        layer.x_axis.min = Some(ov.x_range.0);
+        layer.x_axis.max = Some(ov.x_range.1);
+        layer.y_axis.min = Some(ov.y_range.0);
+        layer.y_axis.max = Some(ov.y_range.1);
+        layer.x_axis.major_step = None;
+        layer.y_axis.major_step = None;
+        layer.x_axis.title = Some(String::new());
+        layer.y_axis.title = Some(String::new());
+        layer.x_axis.show_title = false;
+        layer.y_axis.show_title = false;
+        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+            axis.color = ov.color;
+            axis.tick_font.color = ov.color;
+            axis.additional_line = None;
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            g.layers.push(layer);
+        }
+        for p in &ov.plots {
+            self.add_plot_xy(graph, 1, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");
+        }
+        if let Some(l) = self.graph_mut(graph).and_then(|g| g.layers.get_mut(1)) {
+            for (plot, spec) in l.plots.iter_mut().zip(&ov.plots) {
+                plot.kind = spec.kind;
+                plot.label = Some(spec.label.clone());
+                plot.line.color = ov.color;
+                plot.line.width_pt = 0.5;
+                plot.symbol.color = ov.color;
+                plot.auto_color = false;
+            }
+            for &(i, col) in &ov.labels {
+                if let Some(plot) = l.plots.get_mut(i) {
+                    plot.decor.labels = crate::graph::DataLabels {
+                        enable: true,
+                        form: crate::graph::LabelForm::Column { column: ids[col] },
+                        position: crate::graph::LabelPosition::Right,
+                        font: {
+                            let mut f = crate::graph::Font::new("Arial", 18.0);
+                            f.color = ov.color;
+                            f
+                        },
+                        ..Default::default()
+                    };
+                }
+            }
+        }
     }
 
     /// Runs an analysis tool on worksheet columns. See the module text for
@@ -1690,6 +1826,7 @@ impl Project {
                 | Tool::PropTest(_)
                 | Tool::Roc(_)
                 | Tool::KaplanMeier(_)
+                | Tool::GraphSummary(_)
         );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
@@ -1734,6 +1871,10 @@ impl Project {
         let mut graph_plots: Vec<(usize, usize)> = Vec::new();
         // A graph of scatter and line plots (probability plots).
         let mut xy_graph: Option<dist::XyGraph> = None;
+        // Further graphs of the same tool (loading plot, biplot).
+        let mut more_xy_graphs: Vec<dist::XyGraph> = Vec::new();
+        // The graphs of a graphical summary (three layers each).
+        let mut summary_graphs: Vec<summary::SummaryGraph> = Vec::new();
 
         match &request.tool {
             Tool::TwoWayAnova(spec) => {
@@ -1802,12 +1943,20 @@ impl Project {
                 notes = out.notes;
                 xy_graph = out.graph;
             }
+            Tool::GraphSummary(spec) => {
+                let out = summary::run(spec, sheet, &request.columns, request.rows)?;
+                table = Some(out.table);
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                summary_graphs = out.graphs;
+            }
             Tool::Pca(_) | Tool::Kmeans(_) => {
                 let out = multivariate::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
             }
             Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
                 let out = curves::run(&request.tool, &inputs)?;
@@ -2841,6 +2990,18 @@ impl Project {
         if let Some(plan) = &xy_graph {
             new_graph = Some(self.xy_graph(&sheet_column_ids, plan));
         }
+        let mut more_graphs = Vec::new();
+        for plan in &more_xy_graphs {
+            more_graphs.push(self.xy_graph(&sheet_column_ids, plan));
+        }
+        for plan in &summary_graphs {
+            let id = self.summary_graph(&sheet_column_ids, plan);
+            if new_graph.is_none() {
+                new_graph = Some(id);
+            } else {
+                more_graphs.push(id);
+            }
+        }
         let columns = if count == 1 { "1 column".to_string() } else { format!("{count} columns") };
         // Name the added columns, so that the result can be found without opening the sheet.
         const SHOWN: usize = 6;
@@ -2859,10 +3020,25 @@ impl Project {
             (None, _) => format!("{}: {columns}, results in new columns {added}", request.tool.name()),
         };
         let message = match new_graph.and_then(|g| self.graph(g)) {
-            Some(g) => format!("{message}; graph {}", g.name),
+            Some(g) => {
+                let names: Vec<String> = std::iter::once(g.name.clone())
+                    .chain(more_graphs.iter().filter_map(|id| self.graph(*id).map(|g| g.name.clone())))
+                    .collect();
+                format!("{message}; graph{} {}", if names.len() == 1 { "" } else { "s" }, names.join(", "))
+            }
             None => message,
         };
-        Ok(Report { book: book_id, sheet: sheet_index, new_columns, new_sheet, new_graph, table, message, notes })
+        Ok(Report {
+            book: book_id,
+            sheet: sheet_index,
+            new_columns,
+            new_sheet,
+            new_graph,
+            more_graphs,
+            table,
+            message,
+            notes,
+        })
     }
 
     /// Sorts all rows of a sheet by the values of one column. Rows keep
@@ -2917,6 +3093,7 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -2949,11 +3126,16 @@ impl Project {
         }
         let n = ws.row_count();
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
+        let mut orders = Vec::new();
         for c in &mut ws.columns {
             if columns.contains(&c.id) {
                 let order = sort_order_in_rows(&c.data, n, descending, rows.clone());
                 c.reorder_rows(&order, n);
+                orders.push((c.id, order));
             }
+        }
+        for (id, order) in orders {
+            ws.notes_reorder_rows(&|c| c == id, &order, n);
         }
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
@@ -3010,6 +3192,7 @@ impl Project {
             for c in &mut ws.columns {
                 c.reorder_rows(&keep, n);
             }
+            ws.notes_reorder_rows(&|_| true, &keep, n);
             Ok((kept, sheet))
         }
     }

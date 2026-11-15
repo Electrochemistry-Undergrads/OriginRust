@@ -26,9 +26,11 @@ pub mod dunnett;
 pub mod envelope;
 pub mod fft;
 pub mod freq;
+pub mod graph_summary;
 pub mod hypothesis;
 pub mod integrate;
 pub mod interp;
+pub mod kde;
 pub mod kmeans;
 pub mod levelcross;
 pub mod manip;
@@ -79,9 +81,11 @@ pub use fft::{
     WindowCorrection, fft_filter, fft_spectrum, fft_window, ifft_spectrum,
 };
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
+pub use graph_summary::{SampleSummary, graph_summary, median_confidence_limits, sd_confidence_limits};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, automatic_smoothing, interp1, interp1xy};
+pub use kde::{Bandwidth, Density, GRID_POINTS, bandwidth, density_at, kernel_density};
 pub use kmeans::{Cluster, Kmeans, KmeansError, KmeansOptions, VariableAnova, kmeans};
 pub use levelcross::{Crossing, CrossingIndex, level_crossings};
 pub use manip::{

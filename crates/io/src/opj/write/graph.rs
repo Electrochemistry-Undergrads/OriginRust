@@ -376,6 +376,11 @@ impl Writer {
             if p.symbol.every > 1 && p.kind.supports_skip_points() {
                 notes.push("Skip Points (symbols, drop lines, error bars and labels on every n-th point only) was not written; the companion file keeps it".into());
             }
+            if p.line.sort_x
+                && matches!(p.kind, sheaf_core::graph::PlotKind::Line | sheaf_core::graph::PlotKind::LineSymbol)
+            {
+                notes.push("Sort X for line connection (the line joins the points in increasing X order) was not written; the companion file keeps it".into());
+            }
             if !p.decor.is_default() {
                 notes.push(
                     "drop lines, symbol/line gaps and draw order, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
@@ -695,6 +700,9 @@ impl Writer {
         if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || is_pie(k)) {
             notes.push("histogram, box and pie plots were written as plain columns of their data".into());
         }
+        if has(&|k| k.is_violin()) {
+            notes.push("violin plots were written as plain columns of their data".into());
+        }
         if plots
             .iter()
             .any(|r| (r.plot.size_from.is_some() && layer.coords.ternary().is_none()) || r.plot.color_from.is_some())
@@ -735,6 +743,12 @@ impl Writer {
                 | PlotKind::FloatingBar
                 | PlotKind::Histogram
                 | PlotKind::Box
+                | PlotKind::Violin
+                | PlotKind::ViolinBox
+                | PlotKind::ViolinPoint
+                | PlotKind::ViolinQuartile
+                | PlotKind::ViolinStick
+                | PlotKind::HalfViolin
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,
@@ -1085,7 +1099,7 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.reverse {
             notes.push("a reversed axis was written in the normal direction".into());
         }
-        if axis.axis_break.is_some() {
+        if !axis.axis_breaks.is_empty() {
             notes.push("an axis break was not written".into());
         }
         if axis.additional_line.is_some() {

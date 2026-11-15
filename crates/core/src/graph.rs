@@ -748,6 +748,7 @@ impl Layer {
             }
             q.line.width_pt = src.line.width_pt;
             q.line.connect = src.line.connect;
+            q.line.sort_x = src.line.sort_x;
             if g.line_style == Increment::None {
                 q.line.dash = src.line.dash;
             }
@@ -762,6 +763,7 @@ impl Layer {
             q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
             q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
+            q.decor.fill_under_mode = src.decor.fill_under_mode;
             if same_color {
                 q.line.color = src.line.color;
                 q.symbol.color = src.symbol.color;
@@ -956,9 +958,16 @@ pub struct Axis {
     /// the ticks are at multiples of the step. Linear axes only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_tick: Option<f64>,
-    /// One break in the axis: a region of values that is left out, with a gap in the axis line.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub axis_break: Option<AxisBreak>,
+    /// The breaks of the axis (Origin allows 1 to 7, [`MAX_AXIS_BREAKS`]): regions of values that are left
+    /// out, each with a gap in the axis line. Files written before several breaks existed hold one break
+    /// under the name `axis_break`; it is read as a list of one.
+    #[serde(
+        default,
+        alias = "axis_break",
+        deserialize_with = "breaks_one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub axis_breaks: Vec<AxisBreak>,
     /// Origin's Grids tab "Additional Lines": a line across the layer at this value of the OTHER axis,
     /// in this axis' line style (for the X axis a horizontal line at Y = value, labelled "Y =" in
     /// Origin's dialog; for the Y axis a vertical line at X = value). `None` means off; Origin's
@@ -997,25 +1006,70 @@ pub struct SpecialTick {
     pub label: String,
 }
 
+/// The most breaks an axis has (Origin's Number of Breaks lists None and 1 to 7).
+pub const MAX_AXIS_BREAKS: usize = 7;
+
+/// The width of the gap of a break in percent of the axis length when the user has not set one. Origin
+/// 2016's automatic Break Half Length left gaps of 1.67 % to 1.79 % of the axis length on 879 and 1090 px
+/// axes with one to three breaks (graphing spec 3.6).
+pub const BREAK_GAP_PCT: f64 = 1.75;
+
 /// A break in an axis (graphing spec 3.6): the values from `from` to `to` are cut out; the axis
 /// shows a gap there, and the part after it can have its own tick step.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AxisBreak {
     pub from: f64,
     pub to: f64,
-    /// Where the gap starts to open, in percent of the axis length from its low end.
+    /// The middle of the gap, in percent of the axis length from its low end. Used when
+    /// `auto_position` is off.
     pub position_pct: f64,
     /// Width of the gap in percent of the axis length.
     pub gap_pct: f64,
     /// Major tick step after the break; `None` keeps the step of the axis.
     pub step_after: Option<f64>,
+    /// Origin's "Auto Position" (on for a new break): the breaks of the axis share it evenly, break k of
+    /// n sitting at k / (n + 1) of its length, whatever `position_pct` says. Off in files written before
+    /// the setting existed, so that their breaks stay where they were.
+    #[serde(default)]
+    pub auto_position: bool,
 }
 
 impl AxisBreak {
-    /// A break of the values `from..to` in the middle of the axis.
+    /// A break of the values `from..to` placed automatically (in the middle when it is the only one).
     pub fn new(from: f64, to: f64) -> AxisBreak {
-        AxisBreak { from, to, position_pct: 50.0, gap_pct: 2.0, step_after: None }
+        AxisBreak { from, to, position_pct: 50.0, gap_pct: BREAK_GAP_PCT, step_after: None, auto_position: true }
     }
+
+    /// The break Origin's dialog adds after `existing` on an axis from `min` to `max`: the middle half of
+    /// what lies after the last break (or of the whole axis for the first one), as Origin 2016 filled the
+    /// rows when the Number of Breaks went up one at a time (graphing spec 3.6). It takes the gap width of
+    /// the breaks before it.
+    pub fn next_after(existing: &[AxisBreak], min: f64, max: f64) -> AxisBreak {
+        let (lo, hi) = (min.min(max), min.max(max));
+        let start = existing.iter().map(|b| b.to).filter(|t| t.is_finite() && *t > lo && *t < hi).fold(lo, f64::max);
+        let span = hi - start;
+        let mut b = AxisBreak::new(start + span * 0.25, start + span * 0.75);
+        if let Some(last) = existing.last() {
+            b.gap_pct = last.gap_pct;
+        }
+        b
+    }
+}
+
+/// Reads the breaks of an axis written either as a list or, by files from before several breaks, as a
+/// single break (or `null`).
+fn breaks_one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<AxisBreak>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        Many(Vec<AxisBreak>),
+        One(AxisBreak),
+    }
+    Ok(match Option::<OneOrMany>::deserialize(d)? {
+        None => Vec::new(),
+        Some(OneOrMany::One(b)) => vec![b],
+        Some(OneOrMany::Many(v)) => v,
+    })
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1088,11 +1142,15 @@ pub struct LineStyle {
     pub dash: Dash,
     #[serde(default)]
     pub connect: Connect,
+    /// Connect the plotted points in increasing X order instead of worksheet order (Origin 2023's
+    /// `layer.plotN.line.sortx`). Only the line path follows it; the worksheet is untouched.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sort_x: bool,
 }
 
 impl LineStyle {
     pub fn solid(color: Color, width_pt: f64) -> Self {
-        LineStyle { color, width_pt, dash: Dash::Solid, connect: Connect::Straight }
+        LineStyle { color, width_pt, dash: Dash::Solid, connect: Connect::Straight, sort_x: false }
     }
 }
 
@@ -1188,6 +1246,25 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// Origin's violin plot (2019, template Violin.otpu): each plot's Y column as a mirrored
+    /// kernel density silhouette standing at 1, 2, 3, ... in plot order like [`PlotKind::Box`],
+    /// with the median marked inside.
+    Violin,
+    /// Origin's "Violin with Box" (ViolinBox.otpu): the silhouette with a narrow box, whiskers
+    /// and median inside.
+    ViolinBox,
+    /// Origin's "Violin with Point" (ViolinData.otpu): the silhouette with every observation
+    /// drawn as a point inside it.
+    ViolinPoint,
+    /// Origin's "Violin with Quartile" (ViolinQuartile.otpu): the silhouette with lines at the
+    /// quartiles and the median inside.
+    ViolinQuartile,
+    /// Origin's "Violin with Stick" (ViolinStick.otpu): the silhouette with every observation
+    /// drawn as a line across it.
+    ViolinStick,
+    /// Origin's "Half Violin" (HalfViolin.otpu): one half of the silhouette, with a half box on
+    /// the other side.
+    HalfViolin,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1198,7 +1275,49 @@ pub enum PlotKind {
     PieBw,
 }
 
+/// What a violin plot draws inside (or beside) its silhouette.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ViolinInner {
+    /// A marker at the median.
+    Median,
+    /// A narrow box from the first to the third quartile with whiskers and the median.
+    Box,
+    /// Lines at the quartiles and the median.
+    Quartile,
+    /// Every observation as a point.
+    Point,
+    /// Every observation as a line across the silhouette.
+    Stick,
+}
+
 impl PlotKind {
+    /// True for the six violin kinds.
+    pub fn is_violin(&self) -> bool {
+        self.violin_inner().is_some()
+    }
+
+    /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
+    pub fn is_distribution(&self) -> bool {
+        *self == PlotKind::Box || self.is_violin()
+    }
+
+    /// What a violin kind draws inside its silhouette; `None` for other kinds.
+    pub fn violin_inner(&self) -> Option<ViolinInner> {
+        match self {
+            PlotKind::Violin => Some(ViolinInner::Median),
+            PlotKind::ViolinBox | PlotKind::HalfViolin => Some(ViolinInner::Box),
+            PlotKind::ViolinPoint => Some(ViolinInner::Point),
+            PlotKind::ViolinQuartile => Some(ViolinInner::Quartile),
+            PlotKind::ViolinStick => Some(ViolinInner::Stick),
+            _ => None,
+        }
+    }
+
+    /// True for [`PlotKind::HalfViolin`]: only the right half of the silhouette is drawn.
+    pub fn is_half_violin(&self) -> bool {
+        *self == PlotKind::HalfViolin
+    }
+
     /// Kinds whose Drop Lines tab offers Skip Points. Area and bar plots keep every point.
     pub fn supports_skip_points(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
@@ -1352,10 +1471,13 @@ pub struct PlotDecor {
     /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
     #[serde(default, skip_serializing_if = "DropLines::is_default")]
     pub drop: DropLines,
-    /// Origin's "Fill Area Under Curve" in its "Normal" mode: the area between the curve and the
-    /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
+    /// Enables Fill Area Under Curve with this colour for filled modes; sidelines use the line
+    /// style instead. `None` disables both fills and sidelines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_under: Option<Color>,
+    /// The selected fill/outline mode is retained while Fill Area Under Curve is disabled.
+    #[serde(default, skip_serializing_if = "FillUnderMode::is_normal")]
+    pub fill_under_mode: FillUnderMode,
     /// Transparency, hatch and gradient of the fill under a curve, of a bar or of an area (the
     /// Pattern tab). Plain by default: the flat colour only.
     #[serde(default, skip_serializing_if = "FillStyle::is_default")]
@@ -1363,6 +1485,39 @@ pub struct PlotDecor {
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FillUnderMode {
+    #[default]
+    Normal,
+    /// Close each finite run directly from its last point to its first, without an axis baseline.
+    InclusiveBrokenByMissingValues,
+    SidelinesOnly,
+    SidelinesAndBase,
+}
+
+impl FillUnderMode {
+    pub const ALL: [Self; 4] =
+        [Self::Normal, Self::InclusiveBrokenByMissingValues, Self::SidelinesOnly, Self::SidelinesAndBase];
+
+    pub fn is_normal(&self) -> bool {
+        *self == Self::Normal
+    }
+
+    pub fn is_sidelines(&self) -> bool {
+        matches!(self, Self::SidelinesOnly | Self::SidelinesAndBase)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::InclusiveBrokenByMissingValues => "Inclusive broken by missing values",
+            Self::SidelinesOnly => "Sidelines only",
+            Self::SidelinesAndBase => "Sidelines and Base",
+        }
+    }
 }
 
 /// How a Line + Symbol connecting line meets its point symbols. Other plot kinds ignore these
@@ -2311,6 +2466,51 @@ mod polar_tests {
 }
 
 #[cfg(test)]
+mod break_tests {
+    use super::*;
+    use crate::template::Template;
+
+    #[test]
+    fn an_old_single_break_reads_as_a_list_and_keeps_its_place() {
+        let axis = Template::Line.new_graph(WindowId(1), "G").layers[0].y_axis.clone();
+        let mut json = serde_json::to_value(&axis).unwrap();
+        json["axis_break"] =
+            serde_json::json!({"from": 30.0, "to": 70.0, "position_pct": 60.0, "gap_pct": 2.0, "step_after": null});
+        let old: Axis = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(old.axis_breaks.len(), 1);
+        let b = old.axis_breaks[0];
+        assert_eq!((b.from, b.to, b.position_pct, b.gap_pct), (30.0, 70.0, 60.0, 2.0));
+        assert!(!b.auto_position, "an old break stays where it was");
+        json["axis_break"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<Axis>(json).unwrap().axis_breaks.is_empty());
+        // Several breaks are written as a list and read back unchanged; none are not written at all.
+        let mut many = axis.clone();
+        many.axis_breaks =
+            vec![AxisBreak::new(1.0, 2.0), AxisBreak::next_after(&[AxisBreak::new(1.0, 2.0)], 0.0, 10.0)];
+        let text = serde_json::to_string(&many).unwrap();
+        assert!(text.contains("\"axis_breaks\":["));
+        assert_eq!(serde_json::from_str::<Axis>(&text).unwrap(), many);
+        assert!(!serde_json::to_string(&axis).unwrap().contains("axis_break"));
+    }
+
+    #[test]
+    fn a_new_break_takes_the_middle_half_of_what_is_left() {
+        // Origin 2016's rows on the axis -25..125, adding one break at a time (graphing spec 3.6).
+        let mut breaks = Vec::new();
+        for (from, to) in [(12.5, 87.5), (96.875, 115.625), (117.96875, 122.65625)] {
+            let b = AxisBreak::next_after(&breaks, -25.0, 125.0);
+            assert_eq!((b.from, b.to), (from, to));
+            assert!(b.auto_position && b.gap_pct == BREAK_GAP_PCT);
+            breaks.push(b);
+        }
+        // A reversed range gives the same rows; the gap of the last break is kept.
+        breaks[2].gap_pct = 3.0;
+        let b = AxisBreak::next_after(&breaks, 125.0, -25.0);
+        assert_eq!((b.from, b.gap_pct), (122.65625 + (125.0 - 122.65625) * 0.25, 3.0));
+    }
+}
+
+#[cfg(test)]
 mod ternary_tests {
     use super::*;
     use crate::template::Template;
@@ -2502,5 +2702,23 @@ mod style_tests {
         d.vertical.color_mode = DropColorMode::PlusMinus;
         let back: DropLines = serde_json::from_str(&serde_json::to_string(&d).unwrap()).unwrap();
         assert_eq!(back, d);
+    }
+}
+
+#[cfg(test)]
+mod sort_x_tests {
+    use super::*;
+
+    #[test]
+    fn sort_x_defaults_off_is_not_written_when_off_and_round_trips() {
+        let mut line = LineStyle::solid(Color::BLACK, 1.0);
+        // A file written before the flag existed has no such key.
+        let old: LineStyle = serde_json::from_str(&serde_json::to_string(&line).unwrap()).unwrap();
+        assert!(!old.sort_x);
+        assert!(!serde_json::to_string(&line).unwrap().contains("sort_x"));
+        line.sort_x = true;
+        let text = serde_json::to_string(&line).unwrap();
+        assert!(text.contains("\"sort_x\":true"));
+        assert!(serde_json::from_str::<LineStyle>(&text).unwrap().sort_x);
     }
 }

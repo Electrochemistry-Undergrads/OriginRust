@@ -13,6 +13,13 @@ use sheaf_core::{Column, ColumnId, Document, FormulaState, RecalcMode, WindowId,
 use std::collections::HashMap;
 use std::ops::Range;
 
+/// Conditional-format styles with what they were evaluated for.
+struct CondCache {
+    revision: u64,
+    sheet: usize,
+    styles: std::sync::Arc<sheaf_core::condformat::CellStyles>,
+}
+
 /// What is selected in a worksheet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Sel {
@@ -128,6 +135,9 @@ pub struct BookUi {
     /// The short name of a column whose header menu opens by itself in the next frame (for
     /// pictures made with `--show column-menu:NAME`).
     pub open_header_menu: Option<String>,
+    /// The styles the conditional formats give the cells of the sheet shown, evaluated once per
+    /// change of the document (its revision) and sheet, not per frame or per cell.
+    cond_cache: Option<CondCache>,
     /// Horizontal scroll position and the sizes it ranges over, from the last frame; the bar
     /// next to the sheet tabs draws and changes them.
     h_offset: f32,
@@ -395,6 +405,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         windows: Vec::new(),
         open: None,
         panels: [true; 4],
+        ai_link: false,
         layer: 0,
         tool: Default::default(),
         curve: None,
@@ -512,6 +523,51 @@ pub fn freeze_counts(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::Fr
     Ok(sheaf_core::Frozen { rows: rows as u8, columns: columns as u8 })
 }
 
+/// The range a conditional format takes from the selection: the columns and rows of a block of
+/// cells, whole columns, whole rows or the whole sheet; or why there is none.
+/// The cell a note belongs to: the single selected data cell.
+pub fn note_cell(state: &BookUi, sheet: &Worksheet) -> Result<(ColumnId, usize), &'static str> {
+    match &state.sel {
+        Sel::Cells { anchor, end } if anchor == end => {
+            sheet.columns.get(anchor.0).map(|c| (c.id, anchor.1)).ok_or("Select a cell of the sheet first")
+        }
+        _ => Err("Select a single cell for a note"),
+    }
+}
+
+pub fn cond_range(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::condformat::CondRange, &'static str> {
+    use sheaf_core::condformat::CondRange;
+    let all_columns = || sheet.columns.iter().map(|c| c.id).collect::<Vec<_>>();
+    match &state.sel {
+        Sel::Cells { anchor, end } => {
+            let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
+            let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
+            let columns: Vec<ColumnId> = sheet.columns.iter().skip(c0).take(c1 + 1 - c0).map(|c| c.id).collect();
+            if columns.is_empty() {
+                return Err("Select cells of the sheet first");
+            }
+            // A block that runs to the last row of the data keeps following the data (Origin: R0).
+            let last_data = sheet.row_count().saturating_sub(1);
+            Ok(CondRange { columns, first_row: r0, last_row: (r1 < last_data).then_some(r1) })
+        }
+        Sel::Columns => {
+            let columns: Vec<ColumnId> =
+                sheet.columns.iter().map(|c| c.id).filter(|id| state.selected.contains(id)).collect();
+            if columns.is_empty() {
+                return Err("Select cells or columns first");
+            }
+            Ok(CondRange::whole_columns(columns))
+        }
+        Sel::Rows { anchor, end } => {
+            let last_data = sheet.row_count().saturating_sub(1);
+            let (r0, r1) = (*anchor.min(end), *anchor.max(end));
+            Ok(CondRange { columns: all_columns(), first_row: r0, last_row: (r1 < last_data).then_some(r1) })
+        }
+        Sel::All => Ok(CondRange::whole_columns(all_columns())),
+        Sel::Label { .. } | Sel::None => Err("Select cells, rows or columns of the data first"),
+    }
+}
+
 /// The part of `rect` where the pointer really reaches it: inside the clip of the ui that draws
 /// it and, for a cell that scrolls (not `overlay`), right of the frozen columns that cover it.
 fn visible_part(ui: &egui::Ui, rect: Rect, overlay: bool, state: &BookUi) -> Rect {
@@ -563,21 +619,7 @@ fn label_text(column: &Column, row: &LabelRow) -> String {
 /// The name in the grey row of the head: the letter and, in brackets, the kind of data and the
 /// number of the data set it belongs to ("A(X1)", "B(Y1)", "C(Y1)", "D(X2)").
 pub fn head_name(sheet: &Worksheet, position: usize) -> String {
-    use sheaf_core::Designation;
-    let column = &sheet.columns[position];
-    let tag = column.designation.tag();
-    if tag.is_empty() {
-        return column.short_name.clone();
-    }
-    match column.designation {
-        Designation::Label => format!("{}({tag})", column.short_name),
-        _ => {
-            // The data set number counts the X columns up to this one; columns before the first
-            // X belong to set 1.
-            let group = sheet.columns[..=position].iter().filter(|c| c.designation == Designation::X).count().max(1);
-            format!("{}({tag}{group})", column.short_name)
-        }
-    }
+    sheaf_core::sheet_print::head_name(sheet, position)
 }
 
 // ----- the window --------------------------------------------------------------------------
@@ -593,6 +635,16 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         return;
     };
     state.repair(sheet);
+    // Conditional formats: evaluated again only when the document changed (or another sheet shows).
+    if sheet.cond_formats.is_empty() {
+        state.cond_cache = None;
+    } else if !state.cond_cache.as_ref().is_some_and(|c| c.revision == doc.revision() && c.sheet == sheet_index) {
+        state.cond_cache = Some(CondCache {
+            revision: doc.revision(),
+            sheet: sheet_index,
+            styles: std::sync::Arc::new(sheaf_core::condformat::evaluate(sheet, &sheet.cond_formats)),
+        });
+    }
 
     // The strip of sheet tabs along the bottom edge, the grid above it.
     let full = ui.max_rect();
@@ -1749,6 +1801,8 @@ fn body_cell(
     let rect = ui.max_rect();
     let look = cell_look(state, sheet, position, column, r);
     let single = matches!(&state.sel, Sel::Cells { anchor, end } if anchor == end);
+    let cond = state.cond_cache.as_ref().and_then(|c| c.styles.get(column.id, r));
+    let noted = sheet.note(column.id, r);
     match look {
         Look::Dark => {
             ui.painter().rect_filled(rect, 0.0, BLOCK_BLACK);
@@ -1759,7 +1813,11 @@ fn body_cell(
         _ if column.mask.contains(&r) => {
             ui.painter().rect_filled(rect, 0.0, MASK_FILL);
         }
-        _ => {}
+        _ => {
+            if let Some(fill) = cond.and_then(|c| c.fill) {
+                ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(fill.r, fill.g, fill.b));
+            }
+        }
     }
     let (right, bottom) = (rect.right() - 0.5, rect.bottom() - 0.5);
     let grid = Stroke::new(1.0_f32, LINE_BODY);
@@ -1814,7 +1872,10 @@ fn body_cell(
     let color = match look {
         Look::Dark => Color32::WHITE,
         _ if column.mask.contains(&r) => MASK_TEXT,
-        _ => TEXT,
+        _ => match cond.and_then(|c| c.font) {
+            Some(font) => Color32::from_rgb(font.r, font.g, font.b),
+            None => TEXT,
+        },
     };
     let layout = if numeric && !is_text_cell {
         Layout::right_to_left(Align::Center)
@@ -1829,7 +1890,64 @@ fn body_cell(
     if response.double_clicked() && !column.is_locked() {
         start_editing(state, column, r);
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::cell_menu(), &book_ctx(book_id, state), actions));
+    if let Some(note) = noted {
+        paint_note_tab(ui, rect);
+        response.clone().on_hover_ui(|ui| {
+            ui.set_max_width(NOTE_POPUP_WIDTH);
+            ui.label(popup_text(note));
+        });
+    }
+    response.context_menu(|ui| {
+        let before = actions.len();
+        menus::show_context(ui, &menus::cell_menu_for(noted.is_some()), &book_ctx(book_id, state), actions);
+        // A note belongs to the right-clicked cell even inside a larger selection.
+        if actions[before..].iter().any(|a| matches!(a, Action::NoteDialog(_) | Action::DeleteNote(_))) {
+            state.select_cells(sheet, (position, r), (position, r));
+        }
+    });
+}
+
+/// Longest note shown in the hover popup (tooltips cannot scroll): lines and characters.
+const NOTE_POPUP_LINES: usize = 20;
+const NOTE_POPUP_CHARS: usize = 1500;
+
+/// The note as the hover popup shows it: cut to about 20 lines / 1,500 characters, ending with "…".
+fn popup_text(note: &str) -> String {
+    let mut out = String::new();
+    for (i, line) in note.lines().enumerate() {
+        let used = out.chars().count();
+        if i >= NOTE_POPUP_LINES || used >= NOTE_POPUP_CHARS {
+            out.push('…');
+            return out;
+        }
+        if i > 0 {
+            out.push('\n');
+        }
+        let room = NOTE_POPUP_CHARS - out.chars().count();
+        if line.chars().count() > room {
+            out.extend(line.chars().take(room));
+            out.push('…');
+            return out;
+        }
+        out.push_str(line);
+    }
+    out
+}
+
+/// Width limit of the note popup; longer lines wrap.
+const NOTE_POPUP_WIDTH: f32 = 300.0;
+/// The note tab: a small filled triangle in the upper-right corner of a noted cell. Sheaf's own
+/// look (a dark red, as the comment marker of common spreadsheets); Origin's is unmeasured.
+const NOTE_TAB: Color32 = Color32::from_rgb(192, 0, 0);
+const NOTE_TAB_SIZE: f32 = 7.0;
+
+fn paint_note_tab(ui: &egui::Ui, rect: Rect) {
+    let (x, y) = (rect.right() - 1.0, rect.top() + 1.0);
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![Pos2::new(x - NOTE_TAB_SIZE, y), Pos2::new(x, y), Pos2::new(x, y + NOTE_TAB_SIZE)],
+        NOTE_TAB,
+        Stroke::NONE,
+    ));
 }
 
 /// The text a cell is edited with: for numbers the shortest text that reads back as exactly the
@@ -2440,6 +2558,20 @@ pub fn color_swatch(ui: &mut egui::Ui, color: sheaf_core::Color) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn popup_text_is_cut_by_lines_and_by_characters() {
+        assert_eq!(popup_text("short"), "short");
+        let lines: String = (0..30).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
+        let cut = popup_text(&lines);
+        assert_eq!(cut.lines().count(), 20);
+        assert!(cut.ends_with('…'));
+        let wide = "x".repeat(5000);
+        let cut = popup_text(&wide);
+        assert_eq!(cut.chars().count(), 1501);
+        assert!(cut.ends_with('…'));
+        assert_eq!(popup_text(&"y".repeat(1500)).chars().count(), 1500);
+    }
     use sheaf_core::{ColumnData, Designation, Project};
 
     fn sheet() -> Worksheet {

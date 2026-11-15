@@ -1,16 +1,21 @@
 # Sheaf MCP server (`sheaf-mcp`)
 
-Sheaf's own interface for AI assistants. Design: ADR 0011. Clean-room: the tool names and shapes are
-Sheaf's. Status: specification for T25 phase 1; the tools that exist at any time are the ones
-`tools/list` returns.
+Sheaf's own interface for AI assistants. Design: ADR 0011 (headless server) and ADR 0013 (attach to the
+open desktop app). Clean-room: the tool names and shapes are Sheaf's. Status: sections 1 to 10 are
+T25 phase 1 (done); section 11 specifies phase 2, `sheaf-mcp --attach` (built). The tools
+that exist at any time are the ones `tools/list` returns.
 
 ## 1. Process and framing
 
-- Binary `sheaf-mcp`, stdio transport. Options: `--root DIR` (repeatable), `--version`, `--help`.
+- Binary `sheaf-mcp`, stdio transport. Options: `--root DIR` (repeatable), `--attach` (phase 2, section
+  11), `--version`, `--help`.
 - Messages are JSON-RPC 2.0, UTF-8, one per line, no embedded newlines, on stdin and stdout.
 - Stdout carries protocol messages only. Logs go to stderr. End of stdin ends the process, exit code 0.
-- Requests are handled one at a time, in order. A batch array is answered as an array.
-- One `Project` per process (ADR 0011). It starts empty.
+- Requests are handled one at a time, in order. A batch array is answered as an array. (With `--attach`
+  the process also reads stdin while a call waits, so `ping` and `notifications/cancelled` are handled
+  at once: section 11.6.)
+- Without `--attach` there is one `Project` per process (ADR 0011). It starts empty. With `--attach`
+  there is none: the project is the one open in the desktop app, which must be listening.
 
 ## 2. Protocol revisions
 
@@ -150,7 +155,7 @@ it to continue.
 "FROM:TO", counted from 1, an end may be empty).
 Sets a column from a formula of Sheaf's expression language (`docs/spec/expression-language.md`, for
 example `col(B)*1000`). A column that does not exist is created when `create` is given. Result
-`{column, created, rows, recalculate: "none|auto|manual"}`. A column made by `create` is removed again when
+`{book, sheet, column, created, rows, recalculate: "none|auto|manual"}` (`book` and `sheet` name what was used). A column made by `create` is removed again when
 the formula fails. Limit: 10 000 000 rows. Nothing changes on error.
 
 ### 5.2 Graphs and export
@@ -186,7 +191,8 @@ sheet's Y columns. `graph` restyles that graph instead of creating one; omit `te
 those of `sheaf plot --panels` and its panel flags. `overlay_files` imports each file and overlays
 each file's Y columns. `text_labels` and `draw` positions are fractions of the layer frame, (0,0) the
 top left; `size` sets the page size (the same as `style.width` and `style.height`, not both). The
-`style` fields are those of `sheaf plot`'s style flags. Result `{graph, created, plots, warnings}`. Rules kept from the CLI: panels do not
+`style` fields are those of `sheaf plot`'s style flags. Result `{graph, created, plots, book, sheet, warnings}` (`book` and `sheet` name the data plotted, and are
+`null` when an existing graph was restyled). Rules kept from the CLI: panels do not
 combine with double-Y or waterfall templates; a waterfall takes no `y2`; `graph` and `panels` are
 exclusive; `y2` and `graph` are exclusive; `overlay_files` excludes `book` and `sheet`. Style values
 are checked as the CLI checks them: width and height 0.1 to 100 inches, finite axis limits that
@@ -211,8 +217,9 @@ being the first page's graph. A list that resolves to one graph is the one-graph
 
 **`export_data`** `{book?, sheet?, path, format?: "csv|tsv|xlsx", all_sheets?}` writes the sheet as
 delimited text (tabs for `.tsv` and `.txt`), or as an Excel workbook for a path ending in `.xlsx` or
-`format: "xlsx"` (`all_sheets` writes every sheet of the book). Result `{path, rows, columns}`; for
-xlsx also `{sheets, warnings}`.
+`format: "xlsx"` (`all_sheets` writes every sheet of the book). Result `{book, sheet, path, rows, columns}`;
+for xlsx also `{sheets, warnings}`. `path` is the file that was written: an xlsx export to a name with no
+extension is written as `NAME.xlsx` (the reply says so), headless and attached.
 
 ### 5.3 Analysis
 
@@ -287,7 +294,9 @@ short names to use instead of being resolved to the first.
 
 **`sort_sheet`** `{book?, sheet?, key, descending?}` and **`filter_sheet`**
 `{book?, sheet?, condition, in_place?}` are separate tools because they are not analysis tools.
-`condition` is a column formula.
+`condition` is a column formula. Results: `sort_sheet` `{book, sheet, rows}`; `filter_sheet`
+`{book, source_sheet, sheet, rows, before}`, where `source_sheet` is the sheet that was filtered and `sheet`
+is where the kept rows are now (the new sheet when `in_place` is false, as in phase 1).
 
 ### 5.4 Fitting
 
@@ -365,6 +374,7 @@ The text names only tools and options of this server.
 | URI | Content |
 | --- | --- |
 | `sheaf://project` | `application/json`: the `list_contents` result. |
+| `sheaf://app` | `application/json`: current desktop window, selection, Data Reader pin and dialog/edit state; listed only by an attached desktop host (section 11.18). |
 | `sheaf://column/{book}/{sheet}/{column}` | `text/csv` (template): the column with its X column, at most 10 000 rows; a header line carries the long name and unit. |
 | `sheaf://graph/{name}.png` | `image/png` blob (template), 150 dpi. |
 
@@ -389,7 +399,7 @@ the limits of section 7. No resource reads a file by path.
   imported file is at most 256 MB; a request line at most 8 MB.
 - **Overwriting.** `save_project` over an Origin file the server opened first copies it to
   `<name>.opj.bak` (an older `.bak` is never replaced). Other saves and exports replace the file
-  named, as the CLI does.
+  named, as the CLI does. Attached (section 11.11) exports never replace a file.
 - **Stdout** carries protocol only.
 
 ## 8. Errors
@@ -436,9 +446,552 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
 `tools/call` chain import, plot, analyze, fit, export, save on synthetic files (`gen_chi.js` or the
 fixtures). It compares the numbers with `sheaf-ops` called directly, which the CLI also calls. Unit
 tests cover the root check (`..`, links, companion and backup paths), paging of `read_columns`, and
-that every tool's schema accepts its documented example. `tests/analyze_bridge.rs` enumerates the subcommands of `sheaf analyze` from clap and checks that each is reachable by name through `analyze` and survives empty options, and compares the numbers of ten bridged tools with the CLI code run in-process. `tests/hardening.rs` covers links inside a root that point outside, shared long names and notifications.
+that every tool's schema accepts its documented example. `tests/analyze_bridge.rs` enumerates the subcommands of `sheaf analyze` from clap and checks that each is reachable by name through `analyze` and survives empty options, and compares the numbers of ten bridged tools with the CLI code run in-process. `tests/hardening.rs` covers links inside a root that point outside, shared long names and notifications. The tests of phase 2 are listed in section 11.15.
 
-## 11. Phase 2 (not specified here)
+Phase 2 also changes the headless server (section 11.10): it runs its project in a `Document`, so a
+formula column follows `set_column_values`, `fit` is atomic (a failed plot write undoes the fit), and
+opening a project does not recalculate it. Five results gain `book` and `sheet`.
 
-`sheaf-mcp --attach` forwards tool calls to the open desktop app, each as one undo step. It needs its
-own ADR and a section here.
+## 11. Phase 2: attach to the open desktop app
+
+Design: ADR 0013. Status: built (T25 phase 2). Everything in sections 1 to 10 holds unless this section
+says otherwise. The tool names, arguments and result shapes do not change, except the additive `book` and
+`sheet` fields of section 11.10.
+
+### 11.1 Overview
+
+The desktop app (`sheaf-app`) can listen on a local endpoint. `sheaf-mcp --attach` does not open a
+project of its own: it forwards the tool calls of the assistant to the running app. Each change is one
+undo step of the app's project, windows the assistant creates open as usual, and the owner sees every
+change and can undo it within the undo limit (100 steps; files written to disk are not undone). Results
+equal those of the headless server and the CLI, because the app runs the same `sheaf-mcp` and `sheaf-ops`
+code (section 11.10).
+
+Options of `sheaf-mcp` added: `--attach`. With `--attach`, `--root DIR` (repeatable) lists the folders the
+assistant may touch. The proxy makes each root absolute and canonical (the code of section 7) and sends
+absolute paths only. The process still speaks MCP on stdio.
+
+The app side is off by default. The owner turns it on with Tools > `AI Assistants (MCP)` or with
+`sheaf-app --mcp`. The menu tick is the owner's consent to the link; the roots are chosen by the client
+(section 11.13).
+
+### 11.2 Run folder and discovery
+
+- **Candidates**, in this order. The first is the variable `SHEAF_MCP_RUN_DIR`, when set (tests and
+  unusual systems). On Linux `$XDG_RUNTIME_DIR/sheaf`, when that variable is set and absolute. Then the
+  data-directory fallback: `~/Library/Application Support/Sheaf/run` on macOS, `$XDG_DATA_HOME/sheaf/run`
+  or `~/.local/share/sheaf/run` on Linux, `%LOCALAPPDATA%\Sheaf\run` on Windows. The list is
+  `sheaf_io::recovery::run_dir_candidates()`. There is no `/tmp` fallback.
+- **The app** listens in the first candidate that passes the checks below. **The client** probes every
+  candidate, in order, because an assistant started by another program can have another environment
+  than the app.
+- **Files.** `mcp.lock`, `mcp.json`, and on Unix `mcp.sock`.
+  - `mcp.lock` is held with an exclusive `File::try_lock` for as long as the app listens, as
+    `sheaf_io::recovery::Session` does. The system drops the lock when the process ends, even after a crash.
+  - `mcp.json` is written atomically (mode 0600) after the endpoint is bound:
+    `{"v":1,"pid":N,"app":"<version>","endpoint":{"kind":"unix","path":"/.../mcp.sock"}}` or
+    `{"kind":"tcp","addr":"127.0.0.1:49152","token":"<64 hex>"}`.
+  - The process that gets the lock removes an old `mcp.sock` and `mcp.json`, then binds.
+- **Folder checks** (Unix; the app and the client both run them). Every missing level is created with
+  `DirBuilder` at mode 0700 (the umask can only remove bits). An existing folder must be a real directory
+  (`symlink_metadata`, not a link) and owned by the current user, which is tested as: the owner of the
+  folder equals the owner of a probe file that the process just created in it and removed. If its mode has
+  any group or other bit and it is owned by the user, it is set to 0700 and checked again; if it still has
+  them, or has another owner, it is refused. The client does not create a missing folder (it skips it).
+  On Windows the folder is under the user's profile and keeps the rights it inherits; they are not
+  checked. A link is refused there too.
+- **Unix socket.** A `UnixListener` on `mcp.sock`, set to mode 0600. A path longer than 100 bytes is
+  refused with a message that names `SHEAF_MCP_RUN_DIR`. The peer's user is not asked (`peer_cred` is
+  unstable): the 0700 folder is the access control.
+- **Windows.** A `TcpListener` on `127.0.0.1`, port 0 (the system picks one), and a 256-bit token from
+  `getrandom` (64 hex digits). The same TCP code is built on every platform and tested on all; Unix
+  uses it only in tests. No other address is ever bound.
+- **One endpoint per user.** A second app instance that cannot get the lock reports "busy". The app shows a
+  warning in the status bar and its menu item stays unticked.
+- **Client discovery.** For each candidate folder: run the folder checks; open `mcp.lock` read-only and
+  call `try_lock_shared`. If it gets the lock, no app listens there: unlock and go on. If the lock would
+  block, read `mcp.json` (if it is missing, retry for 2 seconds, since the app writes it after the lock)
+  and connect. A connection that fails goes on to the next folder. When nothing answers, the error names
+  the folders and the reason for each: `no Sheaf is listening (looked in: /run/user/1000/sheaf: no lock;
+  /home/me/.local/share/sheaf/run: does not exist); turn on Tools > AI Assistants (MCP) in Sheaf, or start
+  it with --mcp`. The proxy answers `initialize` and `tools/list` without the app, connects when the first
+  call needs it, and connects again for a later call.
+
+### 11.3 Framing and handshake
+
+JSON, one message per line, UTF-8, on the socket. A request line is at most 8 MiB. A reply line is at
+most 64 MiB (a PNG in base64 plus text). The reader is the one `sheaf-mcp` uses for stdin
+(`link/frame.rs`). An oversize request line is answered with an error and the connection is closed.
+
+The first line of a connection must be a hello, within 10 seconds. The clock runs whatever the peer sends:
+a peer that sends a byte now and then is cut off at 10 seconds too, and the first line is at most 64 KiB
+(the 8 MiB limit applies after the hello). A line over the cap is answered with an error and the
+connection is closed.
+
+```json
+{"hello":{"v":1,"client":"claude-code 1.2","roots":["/Users/me/Data"],"token":"<64 hex, TCP only>"}}
+```
+
+The app answers `{"hello":{"v":1,"app":"<version>"}}`. Anything else as the first line, including HTTP
+text, closes the connection without a reply. A TCP hello with a missing or wrong token gets the error
+`not allowed` and is closed; the token is compared in constant time (a fixed-length byte comparison with
+no early exit). The `client` text is untrusted: it is sanitised (section 11.8) and cut to 40 characters
+before it is shown.
+
+Each root must be an absolute path; a hello with a relative root is refused with an error and the
+connection is closed. A hello names at most 16 different roots (a repeated root counts once); more is
+refused with `too many roots (at most 16)`. The app builds a `Roots` for the connection with `Roots::new`: a root that does not
+exist or is not a folder gives an error reply and the connection is closed. An empty list keeps the phase-1
+behaviour: no folder is allowed.
+
+Up to 8 connections may be open (a connection that has not finished its hello counts). A ninth gets the
+error `Sheaf is busy with other assistants; try again` and is closed.
+
+### 11.4 Requests and replies
+
+Each request has a number `id` chosen by the client. One call may be in flight per connection; a second
+`call` before the first is answered is an error.
+
+| Request | Meaning |
+| --- | --- |
+| `{"id":1,"op":"call","name":"plot","args":{...},"structured":true}` | A `tools/call`. `structured` is true when the negotiated protocol is `2025-06-18`. |
+| `{"id":2,"op":"cancel","target":1}` | Cancel the call `1` if it has not started. The reply is `{"id":2,"result":{"cancelled":true}}` or `false`. When it is `true`, call `1` is answered with the error `-32800` `cancelled`. |
+| `{"id":3,"op":"resources_list"}` | The `resources/list` result of section 6 for the live project. |
+| `{"id":4,"op":"resource_read","uri":"sheaf://project"}` | The `resources/read` result. |
+
+Replies: `{"id":1,"result":{...}}` where `result` is exactly what `tools/call` (or the resource method)
+returns in section 3, or `{"id":1,"error":{"code":-32602,"message":"..."}}` for a protocol failure
+(`-32602` bad parameters or unknown tool, `-32800` cancelled, `-32000` anything else: busy, the link
+turned off, the change limit). A failing tool is still a `result` with `isError: true`. The proxy copies
+`result` into its JSON-RPC reply unchanged and only adds its own envelope. The app checks the tool name
+again and refuses an unknown one.
+
+The app can also write a line that answers no request, then closes the connection:
+`{"notice":{"kind":"replaced","message":"the project in Sheaf was replaced"}}` or
+`{"notice":{"kind":"closed","message":"the owner turned the link off"}}`.
+
+### 11.5 What the proxy answers by itself
+
+`initialize`, `ping`, `tools/list`, `prompts/list`, `prompts/get`, `resources/templates/list` and
+notifications are answered in `sheaf-mcp` with no app. `tools/list` shows 13 tools: the 16 of section 5
+minus the three with `headless_only` (`new_project`, `open_project`, `save_project`). A call to one of
+the three is answered by the proxy with the tool error `not available while attached: the person using
+Sheaf opens and saves projects` (the app refuses it too, whatever the client). The `instructions` text of
+`initialize` is replaced: the assistant is attached to a project that a person has open in Sheaf; every
+change appears in the person's undo list as "AI: ..."; the person saves the file; name the sheet in calls,
+because an omitted sheet means the sheet the person has selected; a call may wait while the person has a
+dialog open or is typing in a cell; files written are never replaced, so pick a new name; and the folders
+allowed.
+
+### 11.6 The proxy while a call waits
+
+The proxy has a reader thread on stdin and one on the link, feeding one event queue.
+
+- `ping`, other notifications and `initialize` are answered at once, also while a call waits. A further
+  request that needs the app waits its turn (requests are handled in order).
+- `notifications/cancelled` for a request that waits behind the call in flight, or that has not arrived
+  yet: the proxy remembers the id (the last 1024) and drops that request instead of sending it, with no
+  reply (the client has abandoned it). A cancelled call never reaches the app.
+- `notifications/cancelled` for the waiting call: the proxy sends the `cancel` operation. If the app
+  answers `cancelled: true` the proxy sends nothing for that MCP request (the client has abandoned it).
+  If the call has started, the proxy goes on waiting.
+- The proxy waits at most **50 seconds** for a reply. Then it sends `cancel` and waits 2 seconds for the
+  answer. If the app confirms that the job never started, the tool error is `the owner is busy or has a
+  dialog open in Sheaf; the call did not run; try again`. Otherwise it is `still running in Sheaf; check
+  list_contents before retrying`. It then closes that connection and opens a new one for the next call,
+  and ignores any reply that arrives late for an old id.
+- **No automatic retry of a mutating call.** A request is written once. If writing fails before any byte
+  was sent, the proxy connects again and writes it once more. If the write succeeded and the reply was
+  lost (the app closed), the proxy returns the tool error `connection to Sheaf lost; check the project
+  before retrying`, because the change may have been made.
+- A `notice` of kind `replaced` is kept by the proxy and returned once, as a tool error to the call in
+  flight or to the next call (which is not sent): `the project in Sheaf was replaced; look at it again
+  with list_contents before changing anything`. The proxy then connects again for the call after.
+- End of stdin: every line read before it is still answered, on every path: the call that waits and the
+  calls behind it finish and get their replies, then the proxy closes the link and exits with code 0. So
+  `printf '<request>' | sheaf-mcp --attach` is answered. (An assistant that stops without closing a
+  call cancels it with `notifications/cancelled`; a call that already went to the app is not undone by
+  the end of input.)
+
+### 11.7 Which tools forward, and how
+
+| Tool | In the app |
+| --- | --- |
+| `list_contents`, `read_columns`, `export_graph`, `export_data` | Run on a copy of the live project. No undo step. `export_*` write only under the roots, never replace a file, and never touch the protected set (section 11.11). |
+| `list_analysis_tools`, `list_fit_models` | Run at once, even while a dialog is open. They do not read the project. |
+| `import_files`, `set_column_values`, `plot`, `analyze`, `sort_sheet`, `filter_sheet`, `fit` | `mutates`: run inside `Document::edit`. One undo step, named as in section 11.8. |
+| `new_project`, `open_project`, `save_project` | `headless_only`: refused (section 11.5). |
+
+Resource operations run on a copy of the live project, like the reads.
+
+A mutating call that fails or panics is rolled back and leaves no step, in the project and in the
+connection's `Session`. A call that changes nothing leaves no step. `fit` is atomic: its plot window and
+plot file are part of the same call, and a failure of the plot write undoes the fit. After a mutating
+call the formula columns are recalculated and analysis links updated (it is a `Document::edit`).
+
+Windows the call creates (graphs, workbooks) are found by `sync_windows` in the same frame and open as
+usual. The app does not add a second way to open windows.
+
+### 11.8 Undo step names and the sanitizer
+
+The name is built before the call, from the tool name, the arguments and the live project:
+`AI: ` + tool, then the book name, then the columns as `B(Y)` (short name and designation as the project
+says; at most 3, then `+N`), then a model or analysis tool name, the formula for `set_column_values`, and
+the first file name with `+N` for `import_files`. If nothing useful is found the name is `AI: <tool>`.
+Examples: `AI: plot Book1 B(Y)`, `AI: fit Gauss Book1 B(Y)`, `AI: set_column_values Book1 C = A*2`,
+`AI: import_files run1.csv +2`.
+
+**One sanitizer** (`sheaf_mcp::link::sanitize(text, max_chars)`) cleans every string that came over the
+wire before the interface shows it: the undo name (60 characters), the client name (40), the roots in the
+tooltip, file names, and the error text of a failed call in the status bar and the Messages Log. It
+removes control characters (Unicode Cc), bidi controls and the other format characters (Cf, for example
+U+202A to U+202E, U+2066 to U+2069, U+200B to U+200F, U+FEFF, tag characters), and U+2028 and U+2029;
+turns runs of white space into one space; trims; and cuts at a character boundary with `...` added when
+it cut. These are the strings the link layer shows. Text that a tool stores in the project is not cleaned:
+a column long name or units from `set_column_values` `create`, a formula, and the names of imported
+sheets and files reach the grid headers and the explorers as they came, like text the owner typed or
+a file the owner imported. They are data of the project, not messages of the link.
+
+The Edit menu shows `Undo AI: plot Book1 B(Y)` through the usual undo label. Undo restores the whole call.
+Redo works as for any step. A new call clears the redo list, as any edit does. The history limit of the
+app (100 steps) applies, so an old AI step can leave the list; project changes are undoable within that
+limit, and files an assistant wrote on disk are not undone. Each connection may make at most 1000
+mutating calls (a call that starts counts, whatever its result); after that the call is refused with
+`this connection has made 1000 changes; ask the owner to turn the link off and on, or restart the
+assistant`.
+
+### 11.9 The app's queue and the owner's work
+
+The app runs the endpoint on its own threads: an accept thread, and a reader thread and a writer thread
+per connection. They do socket work and queueing only; they never touch the project.
+
+1. A reader thread reads a line and makes a job: the client, the roots, the operation, an atomic state
+   (QUEUED, RUNNING, CANCELLED) and a reply sender for the writer thread. It puts the job on a queue (at
+   most one per connection, so at most 8 jobs) and asks the window for a repaint. A `cancel` operation is
+   handled by the reader thread at once: it tries to change the state from QUEUED to CANCELLED.
+2. Each frame the UI thread, in `SheafApp::live_step` (`crates/app/src/live.rs`, `Live::step`), pops the
+   whole queue into a local pending list. It runs after the actions of the frame and before `sync_windows`. While a connection is open or a job is
+   pending, the app asks for a repaint every 250 ms, so a lost wake-up cannot stall.
+   `list_analysis_tools` and `list_fit_models` never reach the UI thread: the connection's reader thread
+   answers them itself.
+3. **Non-mutating jobs run at once**, in arrival order, whatever else is deferred. A job that is not
+   mutating sees the project as drawn, including the live preview of an open dialog.
+4. **A mutating job is deferred** while any dialog is open (`dialog_open()`) or a cell is being edited in
+   any workbook (`editing` or `editing_label`). **At most one mutating job runs per frame.** The pure
+   tools of section 11.7 are never deferred.
+5. To run, the UI thread calls `Job::execute(doc, protected)`: it changes QUEUED to RUNNING (if that fails
+   the job was cancelled and is skipped), runs the call through `run_on_document` and sends the reply. A
+   panic becomes a tool error. `protected` is computed for that job from the live document (the open
+   path, the Origin source, the recovered path, the recovery folder and the run folder). Each frame
+   `host::sweep` drops jobs that are no longer queued and cancels the old ones (item 6).
+6. A job that is still QUEUED 55 seconds after it was made is cancelled by the app with the reply `the
+   owner is busy or has a dialog open in Sheaf; the call did not run; try again`. This is the backstop for
+   clients other than the proxy, whose 50 seconds come first.
+7. A closed connection cancels its queued job; a running job finishes and its reply is dropped.
+8. After a mutating call the status bar and the Messages Log show the undo name. A failed call shows a
+   status-bar warning `AI: <tool> failed: <message>` and a Messages Log line (the message is
+   sanitised). No message box opens.
+
+A heavy tool (fit, a large import, a large render) blocks the UI for its run. This is accepted. A
+snapshot worker for reads is later work.
+
+### 11.10 One implementation, and what differs
+
+`crates/mcp/src/exec.rs` holds `Session { path, foreign, suggested }`, the `Policy` (attached or not, the
+roots of the caller, the protected set) and `run_on_document`. The headless `Server` and the app both
+call it. The `Server` owns a `Document` with its history limit set to 0 (`Document::set_limit`), so it keeps no
+steps.
+
+- A `mutates` tool runs in `Document::edit`, with panics caught inside the closure. `Document::edit` also
+  puts the project back when the recalculation of formula columns and analysis links after the tool
+  panics, and the executor catches that panic too: no half-made change, no undo step, no dirty flag, and
+  the session as it was. A tool that is not
+  `mutates` runs on a copy that is discarded: no step, no recalculation, no dirty flag. `new_project` and
+  `open_project` (headless only) go through `Document::replace`, never `edit`: opening a project with a
+  formula column leaves its data as the file has it.
+- The same code gives the same `result` in both modes. This changes phase 1 in three places: a formula
+  column follows `set_column_values` and the other edits (headless recalculates now), `fit` is atomic, and
+  five results gain `book` and `sheet`.
+- **`book` and `sheet` in results.** `set_column_values`, `export_data`, `plot`, `sort_sheet` and
+  `filter_sheet` add `book` (the short name) and `sheet` (the sheet used) to their result. `filter_sheet`
+  keeps `sheet` as it was in phase 1, the sheet that holds the rows now (the new sheet when `in_place` is
+  false), and adds `source_sheet`, the sheet that was filtered. `plot` gives `null` for both when it
+  restyled an existing graph. The other tools already name them.
+- **Known differences between headless and attached**, all documented and not hidden:
+  - An omitted `sheet` means the workbook's active sheet. Attached, that is the sheet tab the person has
+    selected (view state in the project), and it can change between two calls. Headless, it is the
+    sheet the last import or call left active. The assistant is told to name the sheet; the result says
+    which one was used.
+  - An omitted `book` means the first workbook in project order, not the active window, in both modes.
+  - `resources/list` lists the columns of the active sheet of the first workbook that has one; the same
+    view-state dependency.
+  - `Session.suggested` (the template an imported book suggests) is kept per connection and starts empty
+    for a new connection.
+  - Reads see a dialog's live preview (item 3 of section 11.9).
+- `Session.path` and `Session.foreign` are not used while attached: nothing there saves or opens.
+- `Document` gains `set_limit(n)` and `generation()` (bumped by `replace`; the app drops the connections
+  when it changes, section 11.12). `sheaf-mcp` gains `getrandom` 0.3 as a direct dependency (already in
+  `Cargo.lock`) and no `unsafe` code. The app depends on the `sheaf-mcp` library; `sheaf-mcp` never
+  depends on the app.
+
+Modules of the library: `exec` (executor, labels, policy), `link` (`frame`, hello and operations,
+`sanitize`, `discovery`, `transport`, `host` that accepts connections and queues jobs, `client`), `proxy`
+(the stdio loop of section 11.6). `main.rs` only parses options. The app side is
+`crates/app/src/live.rs`: `Live` owns the host and runs the frame's work (`Live::step`), `SheafApp::live_step`
+calls it, and the status bar draws the chip.
+
+### 11.11 Files the assistant writes
+
+Attached, `export_data`, `export_graph` (also the multi-page PDF) and the `plot` path of `fit`:
+
+- **Never replace.** If the destination exists the call fails with `will not overwrite: '<path>' exists;
+  choose a new file name`. The check is `symlink_metadata`, so a link (even one that points nowhere) and any
+  file that is not a regular file count as existing, and a destination that is a link is never followed.
+- **Atomic.** The file is written to a new temporary file in the target folder (`create_new`, so no link
+  is followed; the name keeps the extension, because the writers choose the format from it), then
+  published without replacing: `hard_link` to the final name (it fails when the name exists) and the
+  temporary file is removed. Where the file system has no hard links the write checks again and uses
+  `rename`, which leaves a small race. A failed write leaves no temporary file. Headless writes are
+  unchanged (section 7).
+- **The protected set** is computed for each call from the live document and refuses a new file with any of
+  these names: the open project's path, its `.sheaf` companion and its `.bak`; the Origin file it was read
+  from with its companion and `.bak`; the original path of a recovered project; the temporary names
+  (`.<name>.<pid>.tmp`) of those files; any name that ends in `.opj`, `.opju`, `.sheaf`, `.bak` or `.lock`;
+  and anything inside the recovery folder or the run folder. Names are compared by canonical parent plus
+  file name, case-insensitively on macOS and Windows. Refused with `that name belongs to the project open
+  in Sheaf: <path>`. The rule matters although nothing is replaced: a planted `.bak` would stop the backup
+  of an Origin project (an older `.bak` is never replaced), and a file planted in the recovery folder
+  would be offered back as a recovery.
+- **Names Windows would read as another name** are refused on every platform: a final component that ends
+  in a dot or a space, or that contains `:` (Windows drops the trailing dot or space, and reads `name::$DATA`
+  as a stream of `name`, so `X.opj.bak.` would otherwise create the protected `X.opj.bak`). The message is
+  `a file name may not end in a dot or a space or contain ':'`.
+- **The xlsx name.** `export_data` to xlsx with a name that has no extension is written as `NAME.xlsx`;
+  that name is checked against the roots and these rules, not the one the caller gave.
+
+### 11.12 Owner interface and lifecycle
+
+- **Menu.** Tools > `AI Assistants (MCP)`, a tick item. Ticked means the endpoint is listening. The state
+  is never saved: the app starts with it off.
+- **Flag.** `sheaf-app --mcp` starts the app with the endpoint on. If it cannot start (another instance
+  holds it, the folder fails the checks), the app starts anyway and shows the reason in the status bar and
+  the Messages Log.
+- **Status bar.** A boxed `AI: connected (n)` while at least one assistant is connected. The tooltip lists
+  each client's name and its roots (sanitised), and says that its changes are undo steps named `AI: ...`
+  and that files it writes are not undone. A connect and a disconnect each write a line to the status bar
+  and the Messages Log with the client name and roots.
+- **Turning it off** (untick, or exit). The app sets a closing flag; wakes the accept thread by connecting
+  to itself; answers every queued job with `the owner turned the link off` (QUEUED to CANCELLED) and sends
+  the notice `closed`; shuts down every connection; waits for the threads for at most 2 seconds (the UI
+  thread never hangs; a thread that does not end is left to end when its socket fails); removes `mcp.sock`
+  and `mcp.json`; drops the lock. The toggle runs on the UI thread, so no job is running at that moment.
+  Turning it on again works and makes a new endpoint (and token).
+- **The owner replaces the project** (New, Open, Recover, a dropped file: whatever calls
+  `Document::replace`, seen as a change of `Document::generation()`). Every connection gets the notice
+  `replaced` and is closed, and queued jobs are answered with the same text. The proxy turns this into one
+  tool error (section 11.6), so the assistant looks at the project again before it acts on names from the
+  old one.
+
+**As built** (`crates/app/src/live.rs`, `app.rs`, `menus.rs`):
+
+- The tick item sits under Tools, after Autosave, and is ticked while the endpoint listens. `SheafApp::
+  set_link` starts it with the folders of `Startup::mcp_dirs` (`run_dir_candidates()` in the app, none in
+  tests) and turns it off with `Live::stop`, which `on_exit` calls too. A start that fails (another Sheaf
+  holds the lock, no usable folder) is a status-bar warning and a Messages Log line; the tick stays off.
+- A connect and a disconnect write `AI assistant connected: <name> (may use: <roots>)` and
+  `AI assistant disconnected: <name>` to the status bar and the Messages Log. The chip is `AI: connected (n)`;
+  its tooltip lists each client and its folders and says that the changes are undo steps named `AI: ...`
+  and that files it writes are not undone.
+- After a mutating call that changed the project the status bar and the log show the undo name; a failed
+  call shows `AI: <tool> failed: <message>` (sanitised, at most 200 characters) in both.
+- The generation check runs in `Live::step`, after the owner's actions: New, Open and Recover all end in
+  `Document::replace`, so all three drop the connections (the log says `The project was replaced: n AI
+  connection(s) closed`). Undo and Redo do not replace the project and do not drop them.
+- Untick and exit call `LinkServer::stop` (bounded by 2 seconds). Calls the UI thread had already taken
+  into its pending list are answered by the same stop, because they share their state with the queue.
+
+### 11.13 Safety rules
+
+- Local and user-only: Unix 0700 folder and 0600 socket; Windows loopback with a 256-bit token. No other
+  address is bound.
+- A first line that is not a hello closes the connection (a web page cannot drive the endpoint, and cannot
+  know the token).
+- No tool runs a command or a script, and none is added. The app executes only the tools of section 5.
+- **File access is confined to the roots of the connection** (section 7), in the process that touches the
+  files. A client that sends no roots can touch no files. **The roots are chosen by the client, and the
+  app does not ask the owner about them**; it shows them (tooltip, Messages Log). The confinement is
+  therefore voluntary against any process of the same user that can reach the endpoint: such a process
+  can connect, name any roots and drive the app. It is not defence against an attacker already running as
+  the user, who can read the user's files anyway; what it gains is the open project. The same is true of
+  the Windows token, which any process of the user that can read `mcp.json` has. This is the
+  confused-deputy limit of ADR 0013.
+- Writes never replace and never touch the protected set (section 11.11).
+- A request over 8 MiB, a ninth connection, and a second call in flight are refused with an error.
+- Wire text is sanitised before it is shown (section 11.8).
+- The owner sees every change (status bar, Messages Log, undo list) and can undo each one within the undo
+  limit. The tick in the menu is the owner's consent; there is no per-call prompt.
+
+### 11.14 Failure modes
+
+| Situation | What the assistant sees |
+| --- | --- |
+| No app is listening | Tool error `no Sheaf is listening (looked in: ...)`. `tools/list` still works. |
+| Dialog open or cell edit for more than 50 s | Tool error `the owner is busy or has a dialog open in Sheaf; the call did not run; try again`. |
+| A call still running after 50 s | Tool error `still running in Sheaf; check list_contents before retrying`. Not retried. |
+| 8 connections open | Tool error `Sheaf is busy with other assistants; try again`. |
+| App quits during a call | Tool error `connection to Sheaf lost; check the project before retrying`. Not retried. |
+| The owner turned the link off | Tool error `the owner turned the link off`. |
+| The owner replaced the project | One tool error `the project in Sheaf was replaced; ...`, then calls work on the new project. |
+| 1000 changes made on this connection | Tool error with the limit text of section 11.8. |
+| First line is not a hello, wrong token, or a bad or relative root | The connection is closed; for a bad root or token an error reply comes first. |
+| Second app instance | The app reports busy in the status bar; the first keeps the endpoint. |
+| Run folder fails the checks, or the socket path is too long | The app shows why and does not listen. |
+| `new_project`, `open_project`, `save_project` | Refused (section 11.5). |
+| Export to a name that exists, or a protected name | Tool error (section 11.11); nothing is written. |
+| A tool fails or panics | `isError: true`; the project is as before; no undo step. |
+
+### 11.15 Tests that guard it
+
+In `crates/mcp` (no GUI):
+
+- The undo-name table (section 11.8), and unit tests of the sanitizer: control, bidi, format and
+  line-separator characters, collapsed spaces, the cap on a character boundary.
+- A parity script run twice, headless and through `run_on_document` on a document with history, with
+  identical results: `import_files`, `plot`, `analyze`, `fit` with a plot, `set_column_values`,
+  `sort_sheet`, `filter_sheet`, export, `read_columns` paging.
+- Headless on a `Document` (limit 0): a formula column follows `set_column_values`; **opening a project
+  with a formula column leaves its data unchanged**; `fit` with a failing plot write leaves no fit; a panic
+  injected in a tool leaves the project and the `Session` as before; the five `book` and `sheet` fields.
+- With history: one step per mutating call; a failing call, a panic and a no-op leave no step; undo
+  restores the project; the 1000-call cap.
+- The `headless_only` refusals (also when called by hand with `attached`).
+- Writes (attached): never replace an existing file, a dangling link, a link to a file, a folder, a FIFO
+  (Unix); no temporary file left after a failure; the hard-link publish and its `rename` fallback; every
+  name of the protected set, in the case spelled differently on macOS and Windows, through a link to the
+  folder (canonical parent), and the planted-`.bak` case; headless still replaces.
+- Roots from the hello: a relative root refused by the app; the proxy turns a relative `--root` into an
+  absolute one; confinement of plain paths, of paths inside bridged `options`, and of the `fit` `fdf` file;
+  empty roots give the phase-1 message.
+- Folder checks with injected owner ids: a 0755 folder is set to 0700, a folder of another owner and a
+  linked folder are refused, missing levels are made 0700, a long socket path is refused.
+- Transport tests with a fake host, on Unix socket and on TCP (the TCP tests run on every platform): stale
+  socket and stale `mcp.json`, lock busy, the client names the folders when nothing listens and probes the
+  second candidate, an HTTP first line closed, a wrong and a missing token closed, the constant-time
+  comparison, a ninth connection refused, two clients, an oversize line, a second call in flight.
+- The cancel race: a job answered `busy` or `cancelled` never runs afterwards; the 55 s backstop (clock
+  injected).
+- Lifecycle: turning off answers queued jobs and removes the files; off then on works; a client that
+  never reads does not hold the join past its bound; the `replaced` notice closes the connection.
+- The proxy: `ping` answered while a call waits; `notifications/cancelled` sends `cancel`; the 50 s
+  timeout (clock injected) gives each of the two messages; a late reply is ignored; a lost reply is not
+  retried; the `replaced` notice becomes one error; the hidden tools; end of stdin while waiting.
+- A process test of `sheaf-mcp --attach --root` against the fake host, and the no-app error.
+
+In `crates/app` (`app/ui_tests/live.rs`: the real proxy code in the test process, a real socket and a
+temporary run folder; `Startup::default()` has no folder, so no test can touch the user's real ones):
+
+- The undo name, and Edit > Undo reverts the whole call.
+- A window created by the assistant is shown.
+- The status-bar chip appears on connect and goes away when the assistant ends; the tooltip text and the
+  Messages Log show a client name with bidi and control characters cleaned, and the tooltip names the
+  folders.
+- A mutating call waits under every dialog, the Fit more dialog included.
+- A mutating call waits while a dialog is open or a cell is being edited, a read does not, and one
+  mutating call runs per frame.
+- A failed call is a status-bar warning and a Messages Log line, not a message box.
+- Replacing the project (New, Open) drops the connections.
+- The menu toggle creates and removes the files, and works twice.
+
+On Windows in CI: the TCP and token tests above, the lock behaviour, and the case-insensitive protected
+names. Still to be checked by hand on Windows before the ADR is accepted: a second user account cannot read
+`mcp.json`, and a loopback bind raises no firewall prompt.
+
+### 11.16 Setup
+
+Start the app with the link on (`sheaf-app --mcp`) or tick Tools > AI Assistants (MCP). Then add the proxy
+to the assistant with the folders it may use:
+
+```
+claude mcp add sheaf -- /path/to/sheaf-mcp --attach --root ~/Data
+```
+
+In `claude_desktop_config.json` use `"args":["--attach","--root","C:\\Users\\me\\Data"]`. When the app
+is not listening, `tools/list` still works and a call says where it looked.
+
+### 11.17 Implementation plan
+
+Four commits, each with the workspace green (`cargo fmt --all`, strict Clippy, `cargo test --workspace`).
+
+1. **Headless executor on `Document`.** `Ctx`, `Session` and `Policy` replace `&mut Server` in the tool
+   functions; `resources` take a project; `mutates` and `headless_only` on the tool definitions;
+   `Document::set_limit` and `generation` in core; `exec::run_on_document`; the headless `Server` runs on a
+   `Document` (limit 0), `new_project` and `open_project` through `replace`; atomic `fit`; the undo
+   labels and `link::sanitize`; the attached write rules and the protected set (the no-replace write is in
+   `sheaf-mcp`'s `files`, modelled on `sheaf_io::save::write_atomically`, which stays private); roots only absolute when attached; `book` and `sheet` in five results; the
+   per-connection change cap; the parity, rollback, write and headless tests. Any phase-1 test that relied
+   on the non-atomic `fit` changes here.
+2. **Link protocol, discovery, transport and proxy (library).** `sheaf_io::recovery::run_dir_candidates()`;
+   `link` (`frame`, hello and operations, `discovery` with the folder checks, `transport` with the Unix
+   socket and the TCP and token code, `host`, `client`); `getrandom`; `proxy`; the `--attach` option and
+   thin `main.rs`; transport, lifecycle, proxy and process tests with a fake host.
+3. **App integration.** The `sheaf-mcp` dependency and workspace entry; `crates/app/src/live.rs`; the
+   menu tick; `--mcp` in `Startup`; the status-bar chip; `live_step` after the actions and before
+   `sync_windows`; the generation check; the UI tests.
+4. **Docs.** README, ROADMAP, the T25 status and its step 8 (which still says named pipe), `ui-command-map.md`,
+   the `main.rs` comment of the app, and the status of ADR 0013 and of this section.
+
+### 11.18 Current desktop context (`sheaf://app`, 2026-11-15)
+
+The attached desktop host lists `sheaf://app` as `application/json`. Read it with the existing
+`resources/read` request, for example `{"uri":"sheaf://app"}`. The MCP reply uses the usual
+`contents` envelope; its `text` is a JSON object. The headless server and hosts without a UI-context
+provider omit it from `resources/list` and return resource-not-found (`-32002`) when it is read.
+The existing version-1 link `resource_read` operation carries the request; the wire format is unchanged.
+
+```json
+{
+  "document_revision": 4,
+  "project_generation": 0,
+  "modified": true,
+  "active_window": {"id": 1, "name": "Book1", "kind": "workbook"},
+  "worksheet": {"name": "Sheet1", "index": 1, "column_count": 3, "row_count": 10},
+  "active_layer": null,
+  "selection": {
+    "kind": "cells", "columns": ["B", "C"], "column_count": 2,
+    "columns_truncated": false, "rows": {"from": 2, "to": 5},
+    "active_cell": {"column": "B", "row": 2}
+  },
+  "data_reader": null,
+  "editing": false,
+  "dialog_open": false
+}
+```
+
+`active_window` gives the short name usable in tool arguments and an informational model ID. It
+is `null` when no project window is active. `worksheet` is present for a workbook, and `active_layer`
+is present for a graph. Indices and rows count from **1**, with inclusive range endpoints. Continue
+to address tools by workbook, sheet and column **names**; this resource does not change tool defaults
+or make the selection an implicit input. Re-read it before acting when the owner may have changed focus.
+
+Worksheet selections use `kind` = `cells`, `columns`, `rows`, `all` or `label`; no selection is `null`.
+`columns` lists short names in worksheet order, including nonadjacent selected columns. At most
+1,024 names are returned, with the full `column_count` and `columns_truncated` flag. A truncated
+list is incomplete. `rows: null` for a column or whole-sheet selection denotes its full extent.
+Cell blocks and row selections carry `rows: {from,to}`; a block also gives its current `active_cell`.
+A `label` selection has no data rows: `label_row.kind` is `long_name`, `units`, `comments`, `formula`
+or `parameter`; a parameter adds its `name`. Editor text and cell/label values are absent.
+
+Graph selections give `kind` = `plot`, `label`, `shape`, `x_axis`, `y_axis`, `x_title`, `y_title` or
+`legend`, plus `layer`. Plots, labels and shapes add a one-based `index`. A stored object index that
+no longer exists yields `null`. `data_reader` gives `enabled` and the stored pin as `{layer,plot,row}`
+or `null`; the row is the source worksheet row. The point is omitted when its plot/column/row no
+longer exists. This reports UI state without changing graph selection or the reader.
+
+The resource is read on the UI thread when its queued request runs. Its reader is created for that
+frame but serializes only when this URI is requested, using the document after earlier queued jobs.
+If a preceding job switched sheets before the grid redrew, that snapshot has `selection: null` rather
+than applying the previous sheet's grid selection to the new sheet. `editing` and `dialog_open`
+explain why mutating calls may be waiting; reads remain available under either condition. A read
+leaves project data, revision, modified state, selection and undo history untouched. UI-only focus
+changes can change this resource without changing `document_revision`. There is no subscription
+or cached context; clients request it again for a fresh view.

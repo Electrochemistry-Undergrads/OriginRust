@@ -796,7 +796,20 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Pca { target, covariance, pairwise, components, standardize_scores, no_scores, no_graph } => (
+        AnalyzeTool::Pca {
+            target,
+            covariance,
+            pairwise,
+            components,
+            standardize_scores,
+            no_scores,
+            no_graph,
+            no_loading_plot,
+            no_biplot,
+            score_plot,
+            x_component,
+            y_component,
+        } => (
             target,
             Job::Tool(Tool::Pca(analysis::PcaSpec {
                 correlation: !covariance,
@@ -805,6 +818,11 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 standardize_scores,
                 scores: !no_scores,
                 scree: !no_graph,
+                loading_plot: !no_graph && !no_loading_plot,
+                score_plot: score_plot && !no_graph,
+                biplot: !no_graph && !no_biplot,
+                x_component,
+                y_component,
             })),
         ),
         AnalyzeTool::Roc { target, positive, lower_is_positive, confidence, no_graph } => (
@@ -852,6 +870,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 band,
             })),
         ),
+        AnalyzeTool::GraphSummary { target, groups, level, arrangement } => {
+            no_x_range(&target, "the graphical summary")?;
+            let Some(arrangement) = analysis::GraphArrangement::from_word(&arrangement) else {
+                bail!("--arrangement is separate, per-variable, per-group or all-in-one; got \"{arrangement}\"");
+            };
+            (target, Job::GraphSummary { groups, level, arrangement })
+        }
         AnalyzeTool::Sort { target, by, descending } => {
             whole_sheet_only(&target, "sort")?;
             (target, Job::Sort { by, descending })

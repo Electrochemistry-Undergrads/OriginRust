@@ -7,6 +7,7 @@ use crate::ids::{ColumnId, WindowId};
 use crate::project::{Project, ProjectError};
 use crate::worksheet::Worksheet;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -76,7 +77,84 @@ pub enum MaskOp {
     Swap,
 }
 
+/// Column > Mask Cells by Condition (Origin's `colmask`): which cells of a column to mask.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum MaskCondition {
+    /// Cells further than this many sample standard deviations from the mean (Origin's default
+    /// condition "Outliers by Std. Deviation", multiple 1 to 6).
+    OutliersBySd(u8),
+    Greater(f64),
+    GreaterOrEqual(f64),
+    Less(f64),
+    LessOrEqual(f64),
+    Equal(f64),
+}
+
+impl MaskCondition {
+    /// The rows of `values` (missing values never match) that meet the condition; `absolute` compares
+    /// `|y|` with the absolute value (ignored by the outlier test). Measured against Origin 2016's `colmask`
+    /// (workbook-model 13.1a): the outlier test is `|y - mean| > k s` with the sample standard
+    /// deviation `s` (divisor n - 1) of all the numbers of the column.
+    pub fn rows(&self, values: &[f64], absolute: bool) -> Vec<usize> {
+        let ok: Vec<(usize, f64)> = values.iter().copied().enumerate().filter(|(_, v)| v.is_finite()).collect();
+        match *self {
+            MaskCondition::OutliersBySd(k) => {
+                let n = ok.len();
+                if n < 2 {
+                    return Vec::new();
+                }
+                let mean = ok.iter().map(|p| p.1).sum::<f64>() / n as f64;
+                let var = ok.iter().map(|p| (p.1 - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+                let limit = f64::from(k) * var.sqrt();
+                ok.iter().filter(|p| (p.1 - mean).abs() > limit).map(|p| p.0).collect()
+            }
+            _ => ok
+                .iter()
+                .filter(|&&(_, v)| {
+                    // Origin compares |y| with |value| (masking "|y| > -1" leaves 0 and 1 unmasked).
+                    let (y, f) = if absolute {
+                        (v.abs(), f64::abs as fn(f64) -> f64)
+                    } else {
+                        (v, std::convert::identity as fn(f64) -> f64)
+                    };
+                    match *self {
+                        MaskCondition::Greater(t) => y > f(t),
+                        MaskCondition::GreaterOrEqual(t) => y >= f(t),
+                        MaskCondition::Less(t) => y < f(t),
+                        MaskCondition::LessOrEqual(t) => y <= f(t),
+                        MaskCondition::Equal(t) => y == f(t),
+                        MaskCondition::OutliersBySd(_) => false,
+                    }
+                })
+                .map(|p| p.0)
+                .collect(),
+        }
+    }
+}
+
 impl Worksheet {
+    /// Masks the cells of these columns (positions) that meet `condition`. Without `keep` the
+    /// columns' existing masks are replaced, with it the new cells are added (Origin's Keep Existing
+    /// Mask, off by default). Returns the number of cells whose mask changed.
+    pub fn mask_by_condition(
+        &mut self,
+        columns: &[usize],
+        condition: MaskCondition,
+        absolute: bool,
+        keep: bool,
+    ) -> usize {
+        let mut changed = 0;
+        for &i in columns {
+            let Some(c) = self.columns.get_mut(i) else { continue };
+            let Some(values) = c.numeric() else { continue };
+            let hit: BTreeSet<usize> = condition.rows(values, absolute).into_iter().collect();
+            let new: BTreeSet<usize> = if keep { c.mask.union(&hit).copied().collect() } else { hit };
+            changed += c.mask.symmetric_difference(&new).count();
+            c.mask = new;
+        }
+        changed
+    }
+
     /// Masks, unmasks or swaps the mask of the cells of these columns (positions) and rows.
     /// Cells below the data of a column cannot be masked. Returns the number of cells changed.
     pub fn mask_cells(&mut self, columns: &[usize], rows: Range<usize>, op: MaskOp) -> usize {
@@ -119,17 +197,21 @@ impl Worksheet {
     /// such columns were skipped.
     pub fn insert_rows(&mut self, columns: &[usize], at: usize, count: usize) -> usize {
         let mut locked = 0;
+        let mut done = Vec::new();
         for &i in columns {
             let Some(c) = self.columns.get_mut(i) else { continue };
             if c.is_locked() {
                 locked += 1;
                 continue;
             }
+            done.push(c.id);
             if at < c.len() {
                 c.mask = c.mask.iter().map(|r| if *r >= at { r + count } else { *r }).collect();
             }
             c.data.insert_blank_rows(at, count);
         }
+        self.cond_formats_insert_rows(columns, at, count);
+        self.notes_insert_rows(&done, at, count);
         locked
     }
 
@@ -137,12 +219,14 @@ impl Worksheet {
     /// Returns how many formula columns were skipped.
     pub fn delete_rows(&mut self, columns: &[usize], rows: Range<usize>) -> usize {
         let mut locked = 0;
+        let mut done = Vec::new();
         for &i in columns {
             let Some(c) = self.columns.get_mut(i) else { continue };
             if c.is_locked() {
                 locked += 1;
                 continue;
             }
+            done.push(c.id);
             c.mask = c
                 .mask
                 .iter()
@@ -152,6 +236,8 @@ impl Worksheet {
             c.data.remove_rows(rows.clone());
             c.trim_missing_tail();
         }
+        self.cond_formats_delete_rows(columns, rows.clone());
+        self.notes_delete_rows(&done, rows);
         locked
     }
 
@@ -277,6 +363,7 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -300,6 +387,7 @@ impl Project {
     /// Order). Columns kept up to date by a formula are left alone; returns how many.
     pub fn reverse_columns(&mut self, ids: &[ColumnId]) -> usize {
         let mut locked = 0;
+        let mut reversed = Vec::new();
         for id in ids {
             let Some(c) = self.column_mut(*id) else { continue };
             if c.is_locked() {
@@ -309,6 +397,16 @@ impl Project {
             let n = c.len();
             let order: Vec<usize> = (0..n).rev().collect();
             c.reorder_rows(&order, n);
+            reversed.push((*id, order, n));
+        }
+        for (id, order, n) in reversed {
+            for w in &mut self.windows {
+                if let crate::project::Window::Workbook(b) = w {
+                    for sheet in &mut b.sheets {
+                        sheet.notes_reorder_rows(&|c| c == id, &order, n);
+                    }
+                }
+            }
         }
         locked
     }
@@ -445,6 +543,89 @@ mod tests {
         let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
         assert_eq!(ws.mask_cells(&[0], 0..3, MaskOp::Remove), 2);
         assert!(ws.columns[0].mask.is_empty());
+    }
+
+    #[test]
+    fn notes_follow_their_rows_through_sorts_and_reverse() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let k = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![3.0, 1.0, 2.0])).unwrap();
+        let o = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![30.0, 10.0, 20.0])).unwrap();
+        {
+            let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+            ws.set_note(k, 0, "three");
+            ws.set_note(o, 1, "ten");
+        }
+        p.sort_sheet(book, 0, k, false).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 2), ws.note(o, 0)), (Some("three"), Some("ten")));
+        // Sorting one column alone moves only that column's notes.
+        p.sort_columns(book, 0, &[k], true).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 0), ws.note(o, 0)), (Some("three"), Some("ten")));
+        assert_eq!(ws.notes.len(), 2);
+        // Sort Range on one column and the key keeps the other columns' notes in place.
+        p.sort_range(book, 0, k, &[k], false).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 2), ws.note(o, 0)), (Some("three"), Some("ten")));
+        p.reverse_columns(&[o]);
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!((ws.note(k, 2), ws.note(o, 2)), (Some("three"), Some("ten")));
+    }
+
+    #[test]
+    fn disable_masking_is_one_switch_that_new_columns_follow() {
+        let mut doc = crate::history::Document::new(Project::new());
+        let (book, a) = doc.apply("data", |p| {
+            let book = p.add_workbook("");
+            let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+            p.column_mut(a).unwrap().mask.insert(0);
+            (book, a)
+        });
+        doc.apply("off", |p| p.set_masking_disabled(true));
+        assert!(doc.project().masking_disabled());
+        assert!(doc.project().column(a).unwrap().active_mask().is_none());
+        // a column made later (as by Unstack or an import) follows the switch too
+        let b = doc.apply("new column", |p| {
+            let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 4.0])).unwrap();
+            p.column_mut(b).unwrap().mask.insert(1);
+            b
+        });
+        assert!(doc.project().column(b).unwrap().active_mask().is_none(), "new columns follow the switch");
+        doc.apply("on", |p| p.set_masking_disabled(false));
+        assert!(doc.project().column(b).unwrap().numeric_unmasked().unwrap()[1].is_nan());
+    }
+
+    #[test]
+    fn mask_by_condition_follows_origins_colmask() {
+        // Origin 2016 `colmask` on 2 4 9 3 5 -7 1 6 8 0 (rows as Origin reported, 0-based here).
+        let y = [2.0, 4.0, 9.0, 3.0, 5.0, -7.0, 1.0, 6.0, 8.0, 0.0];
+        let r = |c: MaskCondition, abs: bool| c.rows(&y, abs);
+        assert_eq!(r(MaskCondition::OutliersBySd(1), false), vec![2, 5, 8]);
+        assert_eq!(r(MaskCondition::OutliersBySd(2), false), vec![5]);
+        assert!(r(MaskCondition::OutliersBySd(3), false).is_empty());
+        assert_eq!(r(MaskCondition::Greater(5.0), false), vec![2, 7, 8]);
+        assert_eq!(r(MaskCondition::Greater(5.0), true), vec![2, 5, 7, 8]);
+        assert_eq!(r(MaskCondition::GreaterOrEqual(5.0), false), vec![2, 4, 7, 8]);
+        assert_eq!(r(MaskCondition::Less(3.0), false), vec![0, 5, 6, 9]);
+        assert_eq!(r(MaskCondition::Less(3.0), true), vec![0, 6, 9]);
+        assert_eq!(r(MaskCondition::LessOrEqual(3.0), false), vec![0, 3, 5, 6, 9]);
+        assert_eq!(r(MaskCondition::Equal(5.0), false), vec![4]);
+        assert_eq!(r(MaskCondition::Greater(-1.0), true), vec![0, 1, 2, 3, 4, 5, 7, 8]);
+        // nine zeros and a 10: |10 - 1| = 9 > 2 s (s = sqrt(10)) but not > 3 s, as in Origin
+        let z = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0];
+        assert_eq!(MaskCondition::OutliersBySd(2).rows(&z, false), vec![9]);
+        assert!(MaskCondition::OutliersBySd(3).rows(&z, false).is_empty());
+        // Keep Existing Mask: off replaces the old mask, on adds to it
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let k = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y.to_vec())).unwrap();
+        p.column_mut(k).unwrap().mask.insert(0);
+        let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
+        assert_eq!(ws.mask_by_condition(&[0], MaskCondition::Greater(8.0), false, true), 1);
+        assert_eq!(ws.columns[0].mask.iter().copied().collect::<Vec<_>>(), vec![0, 2]);
+        assert_eq!(ws.mask_by_condition(&[0], MaskCondition::Greater(8.0), false, false), 1);
+        assert_eq!(ws.columns[0].mask.iter().copied().collect::<Vec<_>>(), vec![2]);
     }
 
     #[test]

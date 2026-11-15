@@ -60,6 +60,9 @@ pub struct Style {
     pub height: Option<f64>,
     /// Line width in points.
     pub line_width: Option<f64>,
+    /// Connect the points of line and line+symbol plots in increasing X order (the worksheet is
+    /// not sorted).
+    pub sort_x: bool,
     pub colors: Vec<String>,
     pub labels: Vec<String>,
     pub no_legend: bool,
@@ -130,6 +133,10 @@ impl PlotSpec {
         }
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Lollipop) {
             bail!("a lollipop plot cannot have a right Y axis; leave out --y2 or choose another template");
+        }
+        if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name).is_some_and(|t| t.is_violin())
+        {
+            bail!("a violin plot cannot have a right Y axis; leave out --y2 or choose another template");
         }
         if !self.y2.is_empty() && self.template.as_deref().and_then(Template::from_name) == Some(Template::Waterfall) {
             bail!("a waterfall cannot have a right Y axis; leave out --y2 or choose another template");
@@ -487,6 +494,9 @@ fn style_plots(g: &mut Graph, group: &[usize], s: &Style, colors: &[Color]) {
         for plot in &mut layer.plots {
             if let Some(w) = s.line_width {
                 plot.line = LineStyle { width_pt: w, ..plot.line.clone() };
+            }
+            if s.sort_x {
+                plot.line.sort_x = true;
             }
             if let Some(c) = colors.get(i) {
                 // A column plot's color is its fill; its outline keeps its own color.

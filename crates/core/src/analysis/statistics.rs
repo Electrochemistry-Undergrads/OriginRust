@@ -737,7 +737,7 @@ fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError
 
 // ----- histogram -------------------------------------------------------------------------------------
 
-fn histogram(spec: &HistogramSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+pub(super) fn histogram(spec: &HistogramSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
     let mut table = ResultTable::new(&["N", "Bins", "First edge", "Bin size", "Largest count"]);
     let mut on_sheet: Vec<SheetColumn> = Vec::new();
     let mut plots = Vec::new();

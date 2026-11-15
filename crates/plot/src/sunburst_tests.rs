@@ -279,6 +279,28 @@ fn a_radial_label_must_fit_the_wedge_at_its_inner_end() {
 }
 
 #[test]
+fn a_value_is_never_drawn_without_its_name() {
+    // The names are far wider than the ring but the values would fit: no text at all for the wedges.
+    let build = |names: bool, values: bool| {
+        let mut p = Project::new();
+        let b = p.add_workbook("data");
+        let cats: Vec<String> = (0..4).map(|i| format!("{}{i}", "W".repeat(60))).collect();
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::text(cats)).unwrap();
+        let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0])).unwrap();
+        let g = p.plot_sunburst(&[c], v).unwrap();
+        set(&mut p, g, |s| {
+            s.show_names = names;
+            s.show_values = values;
+        });
+        texts(&doc(&svg_of(&p, g)))
+    };
+    let both = build(true, true);
+    assert!(!both.iter().any(|s| s.starts_with('W')), "{both:?}");
+    assert_eq!(both, build(false, false), "no wedge text, only the scale and title");
+    assert!(build(false, true).len() > both.len(), "values alone are still drawn when names are off");
+}
+
+#[test]
 fn the_colour_scale_is_titled_with_the_value_column() {
     let (mut p, g, v) = world();
     p.column_mut(v).unwrap().long_name = "Population".to_string();

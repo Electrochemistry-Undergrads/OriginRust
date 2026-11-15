@@ -231,7 +231,11 @@ fn label(out: &mut Vec<Item>, sb: &SunburstData, rings: &Rings, w: &Wedge, m: &d
     };
     let fits = |s: &str| text::width(m, s, &font, size) + 2.0 * pad <= ring;
     let mut lines: Vec<String> = Vec::new();
-    if style.show_names && fits(&w.name) {
+    if style.show_names {
+        // A value alone would not say what it belongs to: when the name does not fit, the whole label goes.
+        if !fits(&w.name) {
+            return;
+        }
         lines.push(w.name.clone());
     }
     let value = value_text(w.value);

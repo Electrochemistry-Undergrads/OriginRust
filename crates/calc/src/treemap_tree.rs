@@ -94,7 +94,8 @@ pub fn build(rows: &[Row], levels: usize) -> Tree {
         }
         let mut nodes = &mut tree.roots;
         for (raw, name) in row.path.iter().take(levels).map(|s| (s.is_empty(), blank(s))) {
-            let at = match nodes.iter().position(|n| n.name == name) {
+            // An empty cell is its own node: it never merges with a literal "(blank)" text.
+            let at = match nodes.iter().position(|n| n.blank == raw && n.name == name) {
                 Some(i) => i,
                 None => {
                     nodes.push(Node { name, value: 0.0, key: Key::Missing, blank: raw, children: Vec::new() });
@@ -247,6 +248,20 @@ mod tests {
             ],
             2,
         )
+    }
+
+    #[test]
+    fn an_empty_cell_never_merges_with_a_literal_blank_text() {
+        let a = [row(&["x", ""], 2.0), row(&["x", "(blank)"], 3.0)];
+        let b = [row(&["x", "(blank)"], 3.0), row(&["x", ""], 2.0)];
+        for rows in [&a, &b] {
+            let kids = &build(rows, 2).roots[0].children;
+            assert_eq!(kids.len(), 2);
+            let empty = kids.iter().find(|n| n.blank).unwrap();
+            let text = kids.iter().find(|n| !n.blank).unwrap();
+            assert_eq!((empty.value, text.value), (2.0, 3.0));
+            assert_eq!((empty.name.as_str(), text.name.as_str()), ("(blank)", "(blank)"));
+        }
     }
 
     #[test]

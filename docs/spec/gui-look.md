@@ -640,6 +640,60 @@ disabled controls are grey; blue bold text marks a hint or a state message.
   The tab and the list are independent: choosing a different tab changes which targets the list
   offers (two for Scale and Breaks, four for the others).
 
+### Go To (2026-11-14)
+
+Origin 2016's `dlgRowColGoto -d;` opens **Go To: dlgRowColGoto**. The clear screenshot and control
+dump in `re-workspace/scratch/t02-go-to/explicit-dialog/` show size/current-selection information,
+a zero/end hint, **Go to Column**, **Go to Row**, **Extend Selection** (unchecked), then OK/Cancel.
+Both input fields start blank, with the caret in Column. The worksheet chooser is hidden. The
+column input has a picker button; its flyout was not measured. Direct `dlgRowColGoto;` does not
+open a window, and the separate shortcut-capture attempt found no dialog; neither is UI evidence.
+The [published shortcut reference](https://docs.originlab.com/origin-help/hotkey-in-origin/)
+identifies this function as the workbook Ctrl+G command.
+
+Headless synthetic probes (`selection*.lines.txt` / `.out.txt` in the same scratch directory)
+read `wks.c1/c2/r1/r2/sel` after calling the function:
+
+| Initial selection | Input (1-based) | Result |
+|---|---|---|
+| C7 | row 10, column 2 | B10 |
+| C7 | row 10 only | C10 |
+| C7 | column 2 only | B7 |
+| B2:C4 | row 10 only | B10:C10 |
+| B2:C4 | column 4 only | D2:D4 |
+| B2:C4 | row 10, column 4, extend | B2:D10 |
+| B2:C4 | row 1, column 1, extend | A1:C4 |
+| B2:D10 | row 4, column 3, extend | B2:C4 |
+| B2:C4 | row 10 only, extend | B2:C10 |
+| B2:C4 | column 4 only, extend | B2:D4 |
+
+An omitted coordinate keeps that whole axis of the selection. For an entered coordinate with
+Extend enabled, the fixed edge is the previous far edge when the target is before the region;
+otherwise it is the first edge. Thus moving inside the region can shrink it. Row-header selections
+become cell ranges over all columns; column-only movement of whole columns retains whole-column
+selection. On a sheet allocated 100 rows with four populated rows, row 1000 clamps to 100 without
+growing the allocation. Row 0 and column 0 select the last **data** row and last column (D4 here),
+not row 100. An unequal-length control (B has two values, C six, D three) shows row 0 goes to B2
+when column 2 is entered or the current column is B, and to D3 when column 0 is entered. Omitting
+the column for a B:C cell range or whole-column selection also uses B's data end, keeping both
+columns selected. Thus the explicit destination column, or the first selected column, determines
+the end; the worksheet-wide maximum does not. Column 999 is refused, leaving C7 untouched. The headless column-name string goes
+through integer conversion, so no GUI name-resolution rule is inferred from that diagnostic.
+
+Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
+extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;
+there is no new stored worksheet row count. Short column names remain supported, ignoring ASCII
+case; Origin's long/duplicate-name resolution is still unmeasured. Rows use nonnegative 32-bit
+integer input; the exact native upper bound was not stress-tested. The size/current hint reports
+Sheaf's actual view and first selected coordinate. No project data or undo state is
+changed by navigation, empty OK, Cancel or Escape. A fresh reveal target clears stale cell
+geometry so the selected blank row can actually scroll into view. Explicit far-column jumps use
+the full horizontal distance rather than stopping after four viewport-sized steps; the column
+picker is present but disabled. Six new UI tests cover the
+measured axis/range cases, forward/backward/inside extension, capacity/end navigation, visibility,
+keyboard continuation, far-column jumps in both directions, invalid entries and cancel/history; parser fixtures include the 100-row,
+four-populated-row distinction and a new unequal-column end fixture. `--show go-to` supports native screenshots.
+
 ## 6. Mouse and keyboard summary
 
 - Pointer tool is the default; every other tool (zoom, data reader, text...) stays active until

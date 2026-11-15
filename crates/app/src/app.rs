@@ -2245,12 +2245,22 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        // A Parallel Index is grouped by the selected column of text (else the first text column of the sheet).
+        let group = if template == Template::ParallelIndex {
+            columns.iter().copied().find(|id| self.doc.project().column(*id).is_some_and(|c| !c.data.is_numeric()))
+        } else {
+            None
+        };
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
             self.warn("Nothing to plot: select one or more numeric Y columns".to_string());
             return;
         }
-        match self.doc.edit("Plot columns", |p| p.plot_columns(template, &ys)) {
+        let made = self.doc.edit("Plot columns", |p| match group {
+            Some(g) => p.plot_parallel(template, &ys, Some(g)),
+            None => p.plot_columns(template, &ys),
+        });
+        match made {
             Ok(_) => self.say(format!("Plotted {} column(s)", ys.len())),
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }

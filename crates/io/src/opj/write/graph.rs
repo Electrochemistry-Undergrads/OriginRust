@@ -723,6 +723,12 @@ impl Writer {
         if has(&|k| k.is_hexbin()) {
             notes.push("hexbin plots were written as scatter plots of their data".into());
         }
+        if has(&|k| k.is_parallel()) {
+            notes.push(
+                "parallel plots and parallel indexes were written as line plots of their columns; their axes, colours and groups were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k.is_ridgeline()) {
             notes.push("ridgeline charts were written as plain columns of their data".into());
         }
@@ -753,7 +759,7 @@ impl Writer {
         for (r, place) in plots.iter().zip(places.iter().copied()) {
             let p = r.plot;
             let kind = match p.kind {
-                PlotKind::Line => CurveKind::Line,
+                PlotKind::Line | PlotKind::Parallel | PlotKind::ParallelIndex => CurveKind::Line,
                 PlotKind::Scatter | PlotKind::Hexbin => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column

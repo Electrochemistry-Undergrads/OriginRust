@@ -343,6 +343,7 @@ fn new_plot(layer: &Layer, x: Option<ColumnId>, y: ColumnId, y_error: Option<Col
         hist: Default::default(),
         ridge: layer.inherited_ridge(),
         hexbin: layer.inherited_hexbin(),
+        parallel: layer.inherited_parallel(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

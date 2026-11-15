@@ -1,11 +1,14 @@
 # T18: Backlog (not yet briefed)
 
+Current order and backlog packages are in [PLAN](PLAN.md); the greyed-entry assignments are in
+[greyed-items](greyed-items.md). T58–T63 take precedence over this older backlog.
+
 Large or later items. Before starting one, write a proper brief (see README "Brief format") from
 the audit section named and the parity table row.
 
 | Item | Audit | Notes |
 |---|---|---|
-| Matrices, contour, heatmaps | E, C | owned by `originrust-3a`; do not start |
+| Matrices, contour, heatmaps | E, C | B14; preserve `originrust-3a` work and follow current HANDOFF claims/inactivity rule |
 | Notes, Layout, Excel, Image, Function windows | A, E | `Window` is only Workbook/Graph (`crates/core/src/project.rs`) |
 | Command Window, Script Window, scripting runtime | A, D | milestone 6 "embedded language"; ADR first |
 | Analysis templates and recalculation of analysis results | D | relates to T03 Recalculate |
@@ -18,7 +21,7 @@ the audit section named and the parity table row.
 | Mathematics: cumulative sum tool, level crossing, curve intersect, average curves, polygon area | D | done: T22, T23, level crossing (analysis-tools 14), trace interpolation (16); cumulative sum dropped (Origin has no tool, only `cumsum()`) |
 | Multivariate: PCA, k-means, ROC, Kaplan-Meier | D | brief T29 |
 | Toolbars as separate bars, View > Toolbars customisation | A | |
-| Drawing tools: lines, arrows, rectangles, pictures, inset | C | lines, arrows, rectangles, ellipses: brief T24 (`draw-objects`); pictures and inset still open |
+| Drawing tools: lines, arrows, rectangles, pictures, inset | C | lines, arrows, rectangles, ellipses: brief T24 (`draw-objects`); inset T61; pictures remain open |
 | Autosave and recovery | E | brief T28 done (autosave.md); Append Project done (`21c2aea`: File > Append, the appended project in its own folder, its recalculation links dropped with a note) |
 | Print, Print Preview, Page Setup | A | brief T27 |
 | 3D graphs | C | last (owner's request) |

@@ -865,6 +865,9 @@ fn layer_scene(
         crate::hexbin::draw_scale(out, layer, pds, geom, m);
         crate::sunburst::draw_scale(out, layer, pds, geom, m);
     }
+    if waterfall.is_none() && layer.display.show_data {
+        crate::slope::draw(out, objects, project, layer, index, pds, geom, m);
+    }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene
 }

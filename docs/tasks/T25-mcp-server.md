@@ -154,3 +154,19 @@ Validation on combined Go To/hexbin main `8c4fa2a`: formatting, strict workspace
 all-target Clippy and 3,006 tests pass (eight existing ignored). All eleven focused
 discovery tests pass, including the five new Windows regressions; final native app/proxy
 and effective-access checks passed with atomic private file creation.
+
+## Proxy reader cleanup follow-up (2026-11-15)
+
+Windows stress reproduced the proxy returning while the app still listed its connection.
+The active link now signals its reader on disposal. A 250 ms read poll releases the reader's
+socket clone independently of shutdown wake-up; live partial frames are retained, and
+cancelled partial replies are discarded. Wire format, request/cancellation timeouts, retries,
+history, discovery and UI behavior are unchanged.
+
+The new real-TCP regression omits writer shutdown: the previous reader loop fails to deliver
+peer EOF; cancellation passes for both idle and partial replies. The original ten-second
+integration disconnect assertion is unchanged. Fifty full link-suite runs and 200 additional
+exact disconnect runs pass, totaling 1,750 integration checks.
+
+Formatting, strict workspace all-target Clippy and 3,306 workspace tests pass (eight
+existing ignored), with the current formula-formatting, digital-filter and ROC work integrated.

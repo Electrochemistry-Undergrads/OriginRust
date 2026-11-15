@@ -1291,6 +1291,12 @@ impl Graph {
             let settings = g.layers[from].plot_offsets.remove(i);
             *g.layers[to].plot_offset_mut(column) = settings;
         }
+        // Its slope annotations go with it, unless another plot left behind is also theirs.
+        let (stay, go): (Vec<_>, Vec<_>) = std::mem::take(&mut g.layers[from].slopes)
+            .into_iter()
+            .partition(|s| !s.matches(&plot) || g.layers[from].plots.iter().any(|p| s.matches(p)));
+        g.layers[from].slopes = stay;
+        g.layers[to].slopes.extend(go);
         g.layers[to].plots.push(plot);
         g.layers[from].recolor_automatic();
         g.layers[to].recolor_automatic();
@@ -1566,6 +1572,25 @@ mod tests {
         let d = p.add_graph(Template::DoubleY);
         assert_eq!(p.add_right_y_layer(d, 0), Ok(1));
         assert_eq!(p.graph(d).unwrap().layers.len(), 2);
+    }
+
+    #[test]
+    fn moving_a_plot_takes_its_slope_annotations_along() {
+        let (mut p, ys) = four_ys();
+        let g = p.plot_columns(Template::Line, &ys[..2]).unwrap();
+        let right = p.add_right_y_layer(g, 0).unwrap();
+        {
+            let l = &mut p.graph_mut(g).unwrap().layers[0];
+            let (a, b) = (l.plots[0].clone(), l.plots[1].clone());
+            l.slopes.push(crate::graph::SlopeAnnotation::for_plot(&a, 0, 2));
+            l.slopes.push(crate::graph::SlopeAnnotation::for_plot(&b, 1, 2));
+        }
+        p.move_plot_to_layer(g, 0, 0, right).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers[right].slopes.len(), 1);
+        assert_eq!(graph.layers[right].slopes[0].plot, ys[0]);
+        assert_eq!(graph.layers[0].slopes.len(), 1);
+        assert_eq!(graph.layers[0].slopes[0].plot, ys[1]);
     }
 
     #[test]
@@ -1952,6 +1977,9 @@ mod tests {
             let l = &mut other.graph_mut(g).unwrap().layers[0];
             l.x_axis.rug.plot = Some(cols[0]);
             l.y_axis.rug_opposite.plot = Some(cols[0]);
+            let mut sl = crate::graph::SlopeAnnotation::new(cols[0], 0, 2);
+            sl.x = Some(cols[1]);
+            l.slopes.push(sl);
         }
         let (new, _) = here.append(other, "f");
         let graph = here.graph(new[1]).unwrap();
@@ -1967,5 +1995,7 @@ mod tests {
         assert_eq!(data(l.x_axis.rug.plot.unwrap()), want(0));
         assert_eq!(data(l.y_axis.rug_opposite.plot.unwrap()), want(0));
         assert_eq!(l.x_axis.rug_opposite.plot, None, "an unset rug choice stays unset");
+        assert_eq!(data(l.slopes[0].plot), want(0), "a slope annotation follows its plot's column");
+        assert_eq!(data(l.slopes[0].x.unwrap()), want(1), "and its plot's X column");
     }
 }

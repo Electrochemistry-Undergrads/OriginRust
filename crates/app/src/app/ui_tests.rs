@@ -33,6 +33,7 @@ mod set_multiple;
 mod shape_ordering;
 mod simulate;
 mod skip_points;
+mod slope;
 mod sort_x;
 mod sunburst;
 mod surface_fit;

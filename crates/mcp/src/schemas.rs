@@ -129,6 +129,11 @@ fn style_schema() -> Value {
                            ("x2", n("Second corner X.")), ("y2", n("Second corner Y.")),
                        ], &["kind", "x1", "y1", "x2", "y2"])}),
             ),
+            (
+                "slope",
+                json!({"type": "array", "description": "Slope annotations on the first plot of the first layer: two worksheet row numbers counted from 1 (a string \"A,B\" or an object). The label reads slope = <value> in the axes' own units (per decade on a log10 axis).",
+                       "items": {"anyOf": [{"type": "string"}, obj(vec![("row_a", n("First row, from 1.")), ("row_b", n("Second row, from 1."))], &["row_a", "row_b"])]}}),
+            ),
         ],
         &[],
     )

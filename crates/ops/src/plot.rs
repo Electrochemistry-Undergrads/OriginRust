@@ -676,7 +676,7 @@ fn panel_layout(shape: PanelShape, panels: usize, template: Template, p: &Panels
 /// One graph with several panels (`--panels`), graphing spec section 15.6.
 fn panel_graph(project: &mut Project, template: Template, p: &PanelsSpec, a: &PlotSpec) -> Result<WindowId> {
     let shape = parse_panels(&p.shape)?;
-    if matches!(template, Template::DoubleY | Template::Waterfall) {
+    if matches!(template, Template::DoubleY | Template::Waterfall | Template::Lollipop) {
         bail!("the {} template cannot be used with --panels; choose another template", template.name());
     }
     let (groups, labels) = panel_groups(project, template, p, a)?;

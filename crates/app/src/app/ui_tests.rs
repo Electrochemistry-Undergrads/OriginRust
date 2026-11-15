@@ -14,6 +14,7 @@ mod cell_format;
 mod cell_notes;
 mod comparison_plot;
 mod cond_format;
+mod duplicate_entries;
 mod excel;
 mod export_themes;
 mod fill_inclusive;
@@ -3864,7 +3865,7 @@ fn the_window_menu_of_the_explorer_has_origins_commands_and_the_live_ones_work()
     for name in ["Show", "Hide", "Rename...", "Delete", "Duplicate", "Properties..."] {
         assert!(h.query_by_label(name).is_some(), "{name}");
     }
-    assert!(h.get_by_label("Duplicate").accesskit_node().is_disabled(), "Sheaf cannot duplicate a window yet");
+    assert!(!h.get_by_label("Duplicate").accesskit_node().is_disabled(), "the window can be duplicated");
     click(&mut h, "Hide");
     assert!(!h.state().workspace.is_shown(book));
     assert_eq!(project(&h).workbooks().count(), 1, "hiding keeps the data");

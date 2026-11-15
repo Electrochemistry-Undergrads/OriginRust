@@ -341,6 +341,11 @@ impl Writer {
         if !layer.display.is_default() {
             notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
         }
+        if layer.xy_ratio.is_some() {
+            notes.push(
+                "a layer's axis lengths linked to the scale with an X:Y ratio (Size/Speed) were not written".into(),
+            );
+        }
         let mut plots: Vec<Resolved> = Vec::new();
         for (plot_index, p) in layer.plots.iter().enumerate() {
             if !p.visible {

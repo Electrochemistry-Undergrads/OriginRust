@@ -488,6 +488,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             background_style: BackgroundStyle::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
+            xy_ratio: None,
         }],
     }
 }

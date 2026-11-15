@@ -288,7 +288,18 @@ fn group_geometry(
     let frame_of = |root_frame: Rect, i: usize| {
         if i == root { root_frame } else { data::linked_frame(&g.layers[i].frame, root_frame) }
     };
-    let nominal = data::page_frame(&rl.frame, &g.page);
+    let mut nominal = data::page_frame(&rl.frame, &g.page);
+    // Origin's "Link Axis Length to Scale with X:Y Ratio": the frame keeps its left, top and width and its
+    // height follows the axis ranges, even past the page (graphing 18.7a). Not with axis breaks (Origin
+    // hides the setting then) nor in polar and ternary layers.
+    let cartesian = rl.coords.polar().is_none() && rl.coords.ternary().is_none();
+    let linked_height = rl
+        .xy_ratio
+        .filter(|_| cartesian && root_x.gaps.is_empty() && root_y.gaps.is_empty())
+        .and_then(|r| sheaf_core::graph::xy_ratio_height(nominal.w, root_x.scale_span(), root_y.scale_span(), r));
+    if let Some(h) = linked_height {
+        nominal.h = h;
+    }
     let mut edges = LabelEdges::NONE;
     // The rectangle that holds the frames of every member: the root's frame, or the whole stack
     // when the members are panels of their own.
@@ -316,7 +327,8 @@ fn group_geometry(
         }
         label_edges(&mut edges, &g.layers[i], f, x, y, m);
     }
-    let fitted = fit_on_page(bounds, &edges, &g.page);
+    // A linked X:Y ratio is not given up to keep the labels on the page.
+    let fitted = if linked_height.is_some() { bounds } else { fit_on_page(bounds, &edges, &g.page) };
     let f = if bounds == nominal { fitted } else { scale_into(nominal, bounds, fitted) };
     members
         .iter()

@@ -306,6 +306,39 @@ pub struct Layer {
     /// The Display tab of Origin's layer Plot Details (graphing spec 18).
     #[serde(default, skip_serializing_if = "LayerDisplay::is_default")]
     pub display: LayerDisplay,
+    /// Origin's Size/Speed "Link Axis Length to Scale with X:Y Ratio" (graphing spec 18.7a): `Some(r)` keeps
+    /// one unit of X `r` times as long on the page as one unit of Y. The layout keeps the left, top and
+    /// width of the frame and makes the height follow the axis ranges ([`xy_ratio_height`]); turning it on
+    /// or changing `r` first shrinks the frame to fit ([`Layer::fit_xy_ratio`]). Ignored while an axis has
+    /// a break and in polar and ternary layers. `None` (off) by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xy_ratio: Option<f64>,
+}
+
+/// The height (in the units of `width`) a frame of that width needs so that one unit of an X axis spanning
+/// `span_x` is `ratio` times as long as one unit of a Y axis spanning `span_y` (spans in the axes' own
+/// scale: decades on a log axis). `None` when an input is not a positive finite number.
+pub fn xy_ratio_height(width: f64, span_x: f64, span_y: f64, ratio: f64) -> Option<f64> {
+    let ok = |v: f64| v.is_finite() && v > 0.0;
+    (ok(width) && ok(span_x) && ok(span_y) && ok(ratio)).then(|| width * span_y / (span_x * ratio)).filter(|h| ok(*h))
+}
+
+impl Layer {
+    /// Origin's response to ticking "Link Axis Length to Scale" or changing its ratio (measured in Origin
+    /// 2016, graphing spec 18.7a): the frame keeps its left and top and shrinks either its width or its height
+    /// (never grows) until one unit of X is `ratio` times one unit of Y. `page` is the page size in points,
+    /// `span_x` and `span_y` the current axis spans in their own scale. Sets [`Layer::xy_ratio`]; the frame
+    /// is unchanged when the spans are not usable.
+    pub fn fit_xy_ratio(&mut self, ratio: f64, page: (f64, f64), span_x: f64, span_y: f64) {
+        self.xy_ratio = Some(ratio);
+        let (w, h) = (self.frame.width * page.0, self.frame.height * page.1);
+        let Some(need_h) = xy_ratio_height(w, span_x, span_y, ratio) else { return };
+        if need_h <= h {
+            self.frame.height = need_h / page.1;
+        } else if let Some(need_w) = xy_ratio_height(h, span_y, span_x, 1.0 / ratio) {
+            self.frame.width = need_w / page.0;
+        }
+    }
 }
 
 /// What a layer draws and how (Origin's Display tab; defaults measured: data shown, clipped to the
@@ -2462,6 +2495,46 @@ mod polar_tests {
         let l = &Template::Polar.new_graph(WindowId(1), "P").layers[0];
         assert_eq!(l.coords.polar().map(|c| c.radius), Some(RadiusColumn::Y));
         assert!(l.x_axis.major_grid.is_some() && l.y_axis.major_grid.is_some(), "rings and spokes");
+    }
+}
+
+#[cfg(test)]
+mod xy_ratio_tests {
+    use super::*;
+    use crate::template::Template;
+
+    /// Origin 2016 (graphing 18.7a): page 10.72 x 8.205 in, layer 17.91/11.58/68.16/71.83 % of the page,
+    /// X -2.5..12.5 and Y -2..22. Ticking the link (ratio 1) left the width at 34.36 %; then ratio 2 left the
+    /// height at 35.91 %, or instead ratio 0.5 left the width at 17.18 %. Left and top did not move.
+    #[test]
+    fn ticking_the_link_shrinks_the_frame_as_origin_did() {
+        let page = (10.72 * 72.0, 8.205 * 72.0);
+        let mut layer = Template::Line.new_graph(WindowId(1), "G").layers[0].clone();
+        assert_eq!(layer.xy_ratio, None, "off by default");
+        layer.frame = Frame { left: 0.1791, top: 0.1158, width: 0.6816, height: 0.7183 };
+        let pct = |v: f64| (v * 10000.0).round() / 100.0;
+        layer.fit_xy_ratio(1.0, page, 15.0, 24.0);
+        assert_eq!((pct(layer.frame.width), pct(layer.frame.height)), (34.36, 71.83));
+        assert_eq!(layer.xy_ratio, Some(1.0));
+        let linked = layer.clone();
+        layer.fit_xy_ratio(2.0, page, 15.0, 24.0);
+        // Origin showed 35.91 (it works from its own rounded width); Sheaf gets 35.915.
+        assert_eq!(pct(layer.frame.width), 34.36);
+        assert!((pct(layer.frame.height) - 35.91).abs() <= 0.011, "{:?}", layer.frame);
+        let mut layer = linked;
+        layer.fit_xy_ratio(0.5, page, 15.0, 24.0);
+        assert_eq!((pct(layer.frame.width), pct(layer.frame.height)), (17.18, 71.83));
+        assert_eq!((layer.frame.left, layer.frame.top), (0.1791, 0.1158));
+        // Unusable spans leave the frame alone.
+        let before = layer.frame;
+        layer.fit_xy_ratio(1.0, page, 0.0, 24.0);
+        assert_eq!(layer.frame, before);
+        assert_eq!(xy_ratio_height(100.0, 10.0, 20.0, 2.0), Some(100.0));
+        assert_eq!(xy_ratio_height(100.0, f64::NAN, 20.0, 2.0), None);
+        // The setting is saved only when on.
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains("\"xy_ratio\":1.0"));
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap().xy_ratio, Some(1.0));
     }
 }
 

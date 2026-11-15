@@ -102,10 +102,13 @@ pub enum Template {
     ViolinStick,
     /// Origin's "Half Violin".
     HalfViolin,
+    /// Ridgeline chart (Origin's "Ridgeline Chart", 2022): every Y column a density curve on a
+    /// baseline at its column index, with the colours of the box chart template.
+    Ridgeline,
 }
 
 impl Template {
-    pub const ALL: [Template; 39] = [
+    pub const ALL: [Template; 40] = [
         Template::Line,
         Template::Scatter,
         Template::LineSymbol,
@@ -129,6 +132,7 @@ impl Template {
         Template::ViolinQuartile,
         Template::ViolinStick,
         Template::HalfViolin,
+        Template::Ridgeline,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -189,6 +193,7 @@ impl Template {
             Template::ViolinQuartile => "violin-quartile",
             Template::ViolinStick => "violin-stick",
             Template::HalfViolin => "half-violin",
+            Template::Ridgeline => "ridgeline",
         }
     }
 
@@ -233,6 +238,7 @@ impl Template {
             Template::ViolinQuartile => "Violin with Quartile",
             Template::ViolinStick => "Violin with Stick",
             Template::HalfViolin => "Half Violin",
+            Template::Ridgeline => "Ridgeline Chart",
         }
     }
 
@@ -296,6 +302,7 @@ impl Template {
             Template::ViolinQuartile => from_red(general(id, name, PlotKind::ViolinQuartile)),
             Template::ViolinStick => from_red(general(id, name, PlotKind::ViolinStick)),
             Template::HalfViolin => from_red(general(id, name, PlotKind::HalfViolin)),
+            Template::Ridgeline => from_red(general(id, name, PlotKind::Ridgeline)),
         }
     }
 }
@@ -827,7 +834,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 39);
+        assert_eq!(Template::ALL.len(), 40);
         assert_eq!(Template::from_name("lollipop"), Some(Template::Lollipop));
         assert_eq!(Template::from_name("violin"), Some(Template::Violin));
         assert_eq!(Template::from_name("violin-box"), Some(Template::ViolinBox));
@@ -1101,6 +1108,34 @@ mod tests {
         assert!(json.contains("\"default_kind\":\"box\""));
         let back: crate::graph::Graph = serde_json::from_str(&json).unwrap();
         assert_eq!(back, g);
+    }
+
+    #[test]
+    fn the_ridgeline_template_is_a_box_chart_template_with_its_own_kind() {
+        use crate::graph::{RidgeBandwidth, RidgeDisplay, RidgelineStyle};
+        assert_eq!(Template::from_name("ridgeline"), Some(Template::Ridgeline));
+        assert_eq!(Template::Ridgeline.label(), "Ridgeline Chart");
+        let g = Template::Ridgeline.new_graph(WindowId(1), "G");
+        assert_eq!(g.layers[0].default_kind, PlotKind::Ridgeline);
+        assert!(PlotKind::Ridgeline.is_ridgeline() && PlotKind::Ridgeline.is_distribution());
+        assert!(!PlotKind::Ridgeline.is_violin() && !Template::Ridgeline.is_violin());
+        assert_eq!(serde_json::to_string(&PlotKind::Ridgeline).unwrap(), "\"ridgeline\"");
+        let back: crate::graph::Graph = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back, g);
+        // Defaults: Scott, curve, no quantile lines; a plot saved without settings loads with them.
+        let d = RidgelineStyle::default();
+        assert_eq!(
+            (d.display, d.bandwidth, d.quantile_lines),
+            (RidgeDisplay::DistributionCurve, RidgeBandwidth::Scott, false)
+        );
+        assert_eq!((d.height, d.fill_transparency_pct, d.quantiles.clone()), (1.5, 30.0, vec![25.0, 50.0, 75.0]));
+        let partial: RidgelineStyle =
+            serde_json::from_str(r#"{"display":"with_rug","bandwidth":{"k_sd":0.5}}"#).unwrap();
+        assert_eq!(partial.display, RidgeDisplay::WithRug);
+        assert_eq!(partial.bandwidth, RidgeBandwidth::KSd(0.5));
+        assert_eq!(partial.height, 1.5);
+        let all: RidgelineStyle = serde_json::from_str("{}").unwrap();
+        assert!(all.is_default());
     }
 
     #[test]

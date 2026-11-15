@@ -713,6 +713,9 @@ impl Writer {
         if has(&|k| k.is_violin()) {
             notes.push("violin plots were written as plain columns of their data".into());
         }
+        if has(&|k| k.is_ridgeline()) {
+            notes.push("ridgeline charts were written as plain columns of their data".into());
+        }
         if plots
             .iter()
             .any(|r| (r.plot.size_from.is_some() && layer.coords.ternary().is_none()) || r.plot.color_from.is_some())
@@ -759,6 +762,7 @@ impl Writer {
                 | PlotKind::ViolinQuartile
                 | PlotKind::ViolinStick
                 | PlotKind::HalfViolin
+                | PlotKind::Ridgeline
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

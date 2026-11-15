@@ -67,6 +67,8 @@ pub(crate) struct PlotData<'a> {
     /// The density silhouette a violin plot draws (its box statistics are in `boxed`); `None`
     /// for other kinds.
     pub violin: Option<crate::violin::ViolinData>,
+    /// The density curve (or bars) a ridgeline plot draws; `None` for other kinds.
+    pub ridge: Option<crate::ridgeline::RidgeData>,
     /// What a pie chart plot draws; `None` for other kinds.
     pub pie: Option<PieData>,
     /// The values that set the size of each symbol of a bubble plot.
@@ -140,6 +142,15 @@ pub(crate) fn box_stats(values: &[f64], pos: f64, label: String) -> Option<BoxSt
 /// The bins of a histogram plot as the points of a column plot: bin centres and counts. `None`
 /// without numbers or with a bin size that cannot be used.
 fn histogram_points(values: &[f64], style: &sheaf_core::graph::HistogramStyle) -> Option<(Vec<f64>, Vec<f64>)> {
+    let f = histogram_freq(values, style)?;
+    Some((f.rows.iter().map(|r| r.center).collect(), f.rows.iter().map(|r| r.count as f64).collect()))
+}
+
+/// The bins of a histogram plot (also those of a ridgeline's block bars).
+pub(crate) fn histogram_freq(
+    values: &[f64],
+    style: &sheaf_core::graph::HistogramStyle,
+) -> Option<sheaf_calc::freq::Freq> {
     use sheaf_calc::freq::{BinSize, FreqOptions, freq_counts};
     let opts = FreqOptions {
         min: style.begin,
@@ -148,8 +159,7 @@ fn histogram_points(values: &[f64], style: &sheaf_core::graph::HistogramStyle) -
         below: false,
         above: false,
     };
-    let f = freq_counts(values, &opts)?;
-    Some((f.rows.iter().map(|r| r.center).collect(), f.rows.iter().map(|r| r.count as f64).collect()))
+    freq_counts(values, &opts)
 }
 
 impl PlotData<'_> {
@@ -299,6 +309,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     let (places, members) = stack::places(project, layer);
     let mut plots = Vec::new();
     let mut boxes = 0usize;
+    let mut ridges = 0usize;
     for (plot, place) in layer.plots.iter().zip(places).filter(|(p, _)| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
@@ -341,6 +352,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             bar: None,
             boxed: None,
             violin: None,
+            ridge: None,
             pie: None,
             size_z: plot.size_from.and_then(|id| project.numeric(id)),
             color_z: plot.color_from.and_then(|id| project.numeric(id)),
@@ -424,6 +436,30 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 pd.base = None;
                 pd.boxed = Some(stats);
             }
+            PlotKind::Ridgeline => {
+                // Masked rows are left out, as in a violin; filtered rows too.
+                let values: Vec<f64> =
+                    pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).map(|r| pd.y[r]).collect();
+                ridges += 1;
+                let ridge = crate::ridgeline::RidgeData::new(
+                    &values,
+                    ridges as f64,
+                    project.plot_label(plot),
+                    &plot.ridge,
+                    &plot.hist,
+                );
+                // The plot is the one point at the left end of its curve, on its baseline.
+                pd.x = Some(Cow::Owned(vec![ridge.x_extent().map_or(0.0, |e| e.0)]));
+                pd.y = Cow::Owned(vec![ridge.pos]);
+                pd.start = 0;
+                pd.end = 1;
+                pd.mask = None;
+                pd.filters.clear();
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+                pd.ridge = Some(ridge);
+            }
             _ => {}
         }
         if let Some(polar) = layer.coords.polar() {
@@ -437,6 +473,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     if layer.coords.polar().is_some_and(|p| p.radar) {
         radar_columns(project, &mut plots);
     }
+    crate::ridgeline::set_scales(&mut plots);
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     LayerData { plots, members }
@@ -675,6 +712,18 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
         }
     };
     for pd in pds {
+        if let Some(rd) = &pd.ridge {
+            if dim == Dim::X {
+                if let Some((lo, hi)) = rd.x_extent() {
+                    add(pd.display_x(lo));
+                    add(pd.display_x(hi));
+                }
+            } else {
+                add(pd.display_y(rd.pos - rd.rug_reach(&pd.plot.ridge)));
+                add(pd.display_y(rd.pos + rd.peak() * rd.scale));
+            }
+            continue;
+        }
         if let (Some(b), Some(v)) = (&pd.boxed, &pd.violin) {
             if dim == Dim::X {
                 add(pd.display_x(b.pos - crate::violin::VIOLIN_WIDTH / 2.0));

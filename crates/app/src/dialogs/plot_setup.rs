@@ -349,6 +349,7 @@ fn new_plot(layer: &Layer, x: Option<ColumnId>, y: ColumnId, y_error: Option<Col
         y_base: None,
         error: ErrorStyle::default(),
         hist: Default::default(),
+        ridge: Default::default(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

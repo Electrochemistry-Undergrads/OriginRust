@@ -27,6 +27,7 @@ mod plots;
 mod polar;
 mod psd;
 mod raster;
+mod ridgeline;
 mod rug;
 pub mod scene;
 mod shapes;
@@ -64,6 +65,8 @@ mod margin_tests;
 mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
+#[cfg(test)]
+mod ridgeline_tests;
 #[cfg(test)]
 mod rug_tests;
 #[cfg(test)]

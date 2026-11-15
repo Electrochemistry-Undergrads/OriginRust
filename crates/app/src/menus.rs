@@ -825,6 +825,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Violin with Stick", Cmd::Plot(Template::ViolinStick)),
                     item("Half Violin", Cmd::Plot(Template::HalfViolin)),
                 ],
+                vec![item("Ridgeline Chart", Cmd::Plot(Template::Ridgeline))],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
                 greys(&[
                     "Histogram + Probabilities",

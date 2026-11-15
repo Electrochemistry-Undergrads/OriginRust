@@ -158,6 +158,8 @@ pub enum ProjectError {
     LollipopNoRightAxis,
     #[error("a violin plot cannot have a right Y axis; use one Y axis or another template")]
     ViolinNoRightAxis,
+    #[error("a ridgeline chart cannot have a right Y axis; use one Y axis or another template")]
+    RidgelineNoRightAxis,
 }
 
 impl Project {
@@ -599,6 +601,7 @@ impl Project {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -817,6 +820,9 @@ impl Project {
         }
         if template.is_violin() {
             return Err(ProjectError::ViolinNoRightAxis);
+        }
+        if template == Template::Ridgeline {
+            return Err(ProjectError::RidgelineNoRightAxis);
         }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;

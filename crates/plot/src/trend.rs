@@ -78,6 +78,7 @@ fn has_trendlines(pd: &PlotData) -> bool {
         || pd.pie.is_some()
         || pd.boxed.is_some()
         || pd.violin.is_some()
+        || pd.ridge.is_some()
         || pd.hist_raw.is_some())
 }
 

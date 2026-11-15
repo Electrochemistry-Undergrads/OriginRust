@@ -89,6 +89,8 @@ pub(crate) fn draw_plot(
         draw_box(out, pd, geom);
     } else if plot.kind.is_violin() {
         crate::violin::draw_violin(out, pd, geom);
+    } else if plot.kind.is_ridgeline() {
+        crate::ridgeline::draw_ridge(out, pd, geom);
     } else if plot.kind.is_bar() {
         draw_columns(out, pd, geom);
     }

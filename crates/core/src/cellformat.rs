@@ -82,6 +82,16 @@ impl CellFormat {
     }
 }
 
+/// The smallest and largest cell font size drawn, in points. The grid, the print and the image
+/// export all clamp to it, so a size outside it looks the same everywhere.
+pub const MIN_CELL_PT: f32 = 4.0;
+pub const MAX_CELL_PT: f32 = 96.0;
+
+/// A cell font size as drawn: within [`MIN_CELL_PT`], [`MAX_CELL_PT`].
+pub fn clamp_cell_pt(pt: f32) -> f32 {
+    pt.clamp(MIN_CELL_PT, MAX_CELL_PT)
+}
+
 /// The data rows of a range: first row and last row (0-based, inclusive); `None` for the last row
 /// runs to the end of the data and beyond.
 pub type RowSpan = (usize, Option<usize>);
@@ -180,7 +190,9 @@ fn span_minus(rows: Option<RowSpan>, cut: Option<RowSpan>) -> Vec<Option<RowSpan
 }
 
 /// Spans of the new rows of the rows in `rows` after `order` put row `order[i]` at row `i` (rows
-/// beyond the sheet length `n` stay where they are, rows the order leaves out are dropped).
+/// beyond the sheet length `n` stay where they are, rows the order leaves out are dropped). The
+/// open-ended tail starts at the NEW length `order.len()`, which is where appended rows go when
+/// the order dropped rows (a filter in place), so they are covered as before.
 fn span_reorder(rows: Option<RowSpan>, order: &[usize], n: usize) -> Vec<Option<RowSpan>> {
     // Whole columns look the same after any order.
     if rows.is_none() {
@@ -197,7 +209,7 @@ fn span_reorder(rows: Option<RowSpan>, order: &[usize], n: usize) -> Vec<Option<
         }
     }
     if b >= n {
-        runs.push((a.max(n), b));
+        runs.push((a.max(order.len()), b));
     }
     runs.sort();
     let mut merged: Vec<(usize, usize)> = Vec::new();
@@ -208,13 +220,6 @@ fn span_reorder(rows: Option<RowSpan>, order: &[usize], n: usize) -> Vec<Option<
         }
     }
     merged.into_iter().map(|(s, e)| span(s, e)).collect()
-}
-
-fn span_contains(rows: Option<RowSpan>, row: usize) -> bool {
-    match rows {
-        None => true,
-        Some((a, b)) => row >= a && b.is_none_or(|b| row <= b),
-    }
 }
 
 // ----- resolved styles ---------------------------------------------------------------------
@@ -254,25 +259,98 @@ fn visible(c: Option<Color>) -> Option<Color> {
     c.filter(|c| c.a != 0)
 }
 
+/// One stretch of rows of a column with one resolved format.
+#[derive(Clone, Debug)]
+struct Seg {
+    first: usize,
+    /// Inclusive; `usize::MAX` is open.
+    last: usize,
+    style: CellFormat,
+    /// The range whose font name wins here.
+    font: Option<u32>,
+}
+
 /// Which ranges of a sheet reach each column, for fast per-cell lookups. Built once per document
-/// revision; resolving a cell walks the few ranges of its column.
+/// revision. Data cells: per column a sorted list of non-overlapping row stretches with the
+/// resolved format of each (later ranges win), found by binary search, so a lookup costs
+/// O(log n) however many ranges there are. Label cells walk the few ranges of their column.
 #[derive(Clone, Debug, Default)]
 pub struct FormatIndex {
-    cells: HashMap<ColumnId, Vec<u32>>,
+    cells: HashMap<ColumnId, Vec<Seg>>,
     labels: HashMap<ColumnId, Vec<u32>>,
+}
+
+/// The stretches of one column from its ranges (`(span, range index)` in range order).
+fn segments(sheet: &Worksheet, ranges: &[(usize, usize, u32)]) -> Vec<Seg> {
+    // Sweep the boundaries; `active` holds the ranges over the current stretch, in range order.
+    let mut events: Vec<(usize, bool, u32)> = Vec::with_capacity(ranges.len() * 2);
+    for &(a, b, i) in ranges {
+        events.push((a, true, i));
+        if b != usize::MAX {
+            events.push((b + 1, false, i));
+        }
+    }
+    events.sort_by_key(|e| e.0);
+    let mut active: std::collections::BTreeSet<u32> = Default::default();
+    let mut out: Vec<Seg> = Vec::new();
+    let mut k = 0;
+    while k < events.len() {
+        let at = events[k].0;
+        while k < events.len() && events[k].0 == at {
+            let (_, add, i) = events[k];
+            if add {
+                active.insert(i);
+            } else {
+                active.remove(&i);
+            }
+            k += 1;
+        }
+        if active.is_empty() {
+            continue;
+        }
+        let last = events.get(k).map_or(usize::MAX, |e| e.0 - 1);
+        let mut f = CellFormat::default();
+        let mut font = None;
+        for &i in &active {
+            let st = &sheet.cell_formats[i as usize].style;
+            f.merge_except_font(st);
+            if st.font.is_some() {
+                font = Some(i);
+            }
+        }
+        let name = |s: &Seg| s.font.map(|i| sheet.cell_formats[i as usize].style.font.as_deref());
+        let seg = Seg { first: at, last, style: f, font };
+        match out.last_mut() {
+            Some(prev) if prev.last != usize::MAX && prev.last + 1 == at && prev.style == seg.style && name(prev) == name(&seg) => {
+                prev.last = seg.last;
+            }
+            _ => out.push(seg),
+        }
+    }
+    out
 }
 
 impl FormatIndex {
     pub fn new(sheet: &Worksheet) -> Self {
         let mut ix = FormatIndex::default();
+        let mut spans: HashMap<ColumnId, Vec<(usize, usize, u32)>> = HashMap::new();
         for (i, r) in sheet.cell_formats.iter().enumerate() {
-            let map = match &r.target {
-                FormatTarget::Cells { .. } => &mut ix.cells,
-                FormatTarget::LabelRows { .. } => &mut ix.labels,
-            };
-            for c in r.target.columns() {
-                map.entry(*c).or_default().push(i as u32);
+            match &r.target {
+                FormatTarget::Cells { columns, rows } => {
+                    let (a, b) = bounds(*rows);
+                    for c in columns {
+                        spans.entry(*c).or_default().push((a, b, i as u32));
+                    }
+                }
+                FormatTarget::LabelRows { columns, .. } => {
+                    for c in columns {
+                        ix.labels.entry(*c).or_default().push(i as u32);
+                    }
+                }
             }
+        }
+        for (c, list) in spans {
+            ix.cells.insert(c, segments(sheet, &list));
         }
         ix
     }
@@ -284,19 +362,12 @@ impl FormatIndex {
     /// The format of a data cell of `sheet` (the sheet the index was built from).
     pub fn resolve<'a>(&self, sheet: &'a Worksheet, column: ColumnId, row: usize) -> ResolvedStyle<'a> {
         let Some(list) = self.cells.get(&column) else { return ResolvedStyle::default() };
-        let mut f = CellFormat::default();
-        let mut font: Option<&'a str> = None;
-        for &i in list {
-            let r = &sheet.cell_formats[i as usize];
-            let FormatTarget::Cells { rows, .. } = &r.target else { continue };
-            if span_contains(*rows, row) {
-                f.merge_except_font(&r.style);
-                if let Some(name) = &r.style.font {
-                    font = Some(name.as_str());
-                }
-            }
-        }
-        finish(f, font)
+        let at = list.partition_point(|s| s.first <= row);
+        let Some(seg) = at.checked_sub(1).map(|i| &list[i]).filter(|s| row <= s.last) else {
+            return ResolvedStyle::default();
+        };
+        let font = seg.font.and_then(|i| sheet.cell_formats[i as usize].style.font.as_deref());
+        finish(&seg.style, font)
     }
 
     /// The format of a label cell.
@@ -314,11 +385,11 @@ impl FormatIndex {
                 }
             }
         }
-        finish(f, font)
+        finish(&f, font)
     }
 }
 
-fn finish(f: CellFormat, font: Option<&str>) -> ResolvedStyle<'_> {
+fn finish<'a>(f: &CellFormat, font: Option<&'a str>) -> ResolvedStyle<'a> {
     ResolvedStyle {
         bold: f.bold.unwrap_or(false),
         italic: f.italic.unwrap_or(false),
@@ -485,6 +556,95 @@ impl Worksheet {
                 });
             }
         }
+        self.coalesce_formats();
+    }
+
+    /// Merges records with the same columns and style whose row spans touch or overlap, so a
+    /// reorder leaves one record per run of rows rather than one per piece. Merging only matters
+    /// when ranges of different styles overlap (the later wins), so when some do, only records
+    /// next to each other in the list are merged and the order is untouched.
+    fn coalesce_formats(&mut self) {
+        if self.cell_formats.len() < 2 {
+            return;
+        }
+        // Different styles overlapping on a shared column? Sweep each column's spans by start.
+        let mut per_col: HashMap<ColumnId, Vec<(usize, usize, usize)>> = HashMap::new();
+        for (i, r) in self.cell_formats.iter().enumerate() {
+            if let FormatTarget::Cells { columns, rows } = &r.target {
+                let (a, b) = bounds(*rows);
+                for c in columns {
+                    per_col.entry(*c).or_default().push((a, b, i));
+                }
+            }
+        }
+        let mut conflict = false;
+        'cols: for list in per_col.values_mut() {
+            list.sort();
+            let mut max: Option<(usize, usize)> = None; // (end, record)
+            for &(a, b, i) in list.iter() {
+                if let Some((end, m)) = max
+                    && a <= end
+                    && self.cell_formats[m].style != self.cell_formats[i].style
+                {
+                    conflict = true;
+                    break 'cols;
+                }
+                if max.is_none_or(|(end, _)| b > end) {
+                    max = Some((b, i));
+                }
+            }
+        }
+        let old = std::mem::take(&mut self.cell_formats);
+        if conflict {
+            for r in old {
+                if let Some(last) = self.cell_formats.last_mut()
+                    && last.style == r.style
+                    && join_spans(&mut last.target, &r.target)
+                {
+                    continue;
+                }
+                self.cell_formats.push(r);
+            }
+            return;
+        }
+        // Order does not matter: merge every group of the same columns and style by span.
+        let mut groups: HashMap<String, usize> = HashMap::new();
+        let mut order: Vec<(FormatRange, Vec<(usize, usize)>)> = Vec::new();
+        for r in old {
+            match &r.target {
+                FormatTarget::Cells { columns, rows } => {
+                    let key = format!("{columns:?}{:?}", r.style);
+                    let g = *groups.entry(key).or_insert_with(|| {
+                        order.push((r.clone(), Vec::new()));
+                        order.len() - 1
+                    });
+                    order[g].1.push(bounds(*rows));
+                }
+                FormatTarget::LabelRows { .. } => order.push((r, Vec::new())),
+            }
+        }
+        for (r, mut spans) in order {
+            if spans.is_empty() {
+                self.cell_formats.push(r);
+                continue;
+            }
+            spans.sort();
+            let FormatTarget::Cells { columns, .. } = &r.target else { unreachable!() };
+            let mut merged: Vec<(usize, usize)> = Vec::new();
+            for (a, b) in spans {
+                match merged.last_mut() {
+                    Some(l) if l.1 == usize::MAX || a <= l.1 + 1 => l.1 = l.1.max(b),
+                    _ => merged.push((a, b)),
+                }
+            }
+            for (a, b) in merged {
+                let rows = if a == 0 && b == usize::MAX { None } else { span(a, b) };
+                self.cell_formats.push(FormatRange {
+                    target: FormatTarget::Cells { columns: columns.clone(), rows },
+                    style: r.style.clone(),
+                });
+            }
+        }
     }
 
     /// Moves the formats of these columns for `count` rows inserted before row `at`: spans that
@@ -558,6 +718,25 @@ fn covers(outer: &FormatTarget, inner: &FormatTarget) -> bool {
         }
         _ => false,
     }
+}
+
+/// Extends `into` by `add` when both are data cells of the same columns with touching or
+/// overlapping row spans (the styles are known to be equal).
+fn join_spans(into: &mut FormatTarget, add: &FormatTarget) -> bool {
+    let (FormatTarget::Cells { columns: ic, rows: ir }, FormatTarget::Cells { columns: ac, rows: ar }) = (into, add)
+    else {
+        return false;
+    };
+    if ic != ac {
+        return false;
+    }
+    let (a, b) = bounds(*ir);
+    let (c, d) = bounds(*ar);
+    if c <= b.saturating_add(1) && a <= d.saturating_add(1) {
+        *ir = if a.min(c) == 0 && b.max(d) == usize::MAX { None } else { span(a.min(c), b.max(d)) };
+        return true;
+    }
+    false
 }
 
 /// Extends `into` by `add` when the two reach the same rows of different columns, or the same
@@ -881,6 +1060,101 @@ mod tests {
         u.apply_cell_format(FormatTarget::cells(vec![A], 0, Some(4)), bold());
         u.formats_reorder_rows(&|_| true, &[0, 2, 4], 5);
         assert_eq!(rows_of(&u), vec![(vec![1], Some((0, Some(2))))]);
+    }
+
+    #[test]
+    fn sorting_a_fully_formatted_column_keeps_one_record() {
+        let n = 50_000usize;
+        let mut s = sheet();
+        s.apply_cell_format(FormatTarget::cells(vec![A], 0, Some(n - 1)), bold());
+        // A deterministic shuffle.
+        let mut order: Vec<usize> = (0..n).collect();
+        let mut x = 12345u64;
+        for i in (1..n).rev() {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            order.swap(i, (x >> 33) as usize % (i + 1));
+        }
+        s.formats_reorder_rows(&|_| true, &order, n);
+        assert_eq!(s.cell_formats.len(), 1);
+        assert_eq!(rows_of(&s), vec![(vec![1], Some((0, Some(n - 1))))]);
+    }
+
+    #[test]
+    fn sorting_a_half_formatted_column_makes_only_the_inherent_runs() {
+        let n = 20_000usize;
+        let mut s = sheet();
+        for r in (0..n).step_by(2) {
+            s.apply_cell_format(FormatTarget::cells(vec![A], r, Some(r)), bold());
+        }
+        assert_eq!(s.cell_formats.len(), n / 2, "single rows that do not touch stay apart");
+        let mut order: Vec<usize> = (0..n).collect();
+        let mut x = 99u64;
+        for i in (1..n).rev() {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            order.swap(i, (x >> 33) as usize % (i + 1));
+        }
+        s.formats_reorder_rows(&|_| true, &order, n);
+        let mut runs = 0;
+        let mut prev = false;
+        for &src in &order {
+            let f = src % 2 == 0;
+            if f && !prev {
+                runs += 1;
+            }
+            prev = f;
+        }
+        assert_eq!(s.cell_formats.len(), runs, "one record per run of formatted rows");
+        let ix = s.format_index();
+        for (i, &src) in order.iter().enumerate().take(1000) {
+            assert_eq!(ix.resolve(&s, A, i).bold, src % 2 == 0);
+        }
+    }
+
+    #[test]
+    fn many_records_resolve_by_binary_search_with_later_wins() {
+        let mut s = sheet();
+        let recs = 20_000usize;
+        for r in 0..recs {
+            // Disjoint single rows with distinct sizes, so nothing joins.
+            s.cell_formats.push(FormatRange {
+                target: FormatTarget::Cells { columns: vec![A], rows: Some((r * 2, Some(r * 2))) },
+                style: CellFormat { size_pt: Some(r as f32 + 1.0), ..Default::default() },
+            });
+        }
+        // A later whole-column range overrides bold only, size stays from the earlier ones.
+        s.cell_formats.push(FormatRange { target: FormatTarget::whole_columns(vec![A]), style: bold() });
+        s.cell_formats.push(FormatRange {
+            target: FormatTarget::Cells { columns: vec![A], rows: Some((10, Some(11))) },
+            style: CellFormat { bold: Some(false), ..Default::default() },
+        });
+        let ix = s.format_index();
+        let t = std::time::Instant::now();
+        let mut hits = 0;
+        for row in 0..1000 {
+            for _ in 0..50 {
+                if ix.resolve(&s, A, row).size_pt.is_some() {
+                    hits += 1;
+                }
+            }
+        }
+        assert!(t.elapsed().as_secs() < 2, "lookups must not scan every record");
+        assert_eq!(hits, 500 * 50);
+        assert_eq!(ix.resolve(&s, A, 4).size_pt, Some(3.0));
+        assert!(ix.resolve(&s, A, 4).bold && ix.resolve(&s, A, 5).bold);
+        assert!(!ix.resolve(&s, A, 10).bold && !ix.resolve(&s, A, 11).bold && ix.resolve(&s, A, 12).bold);
+        assert_eq!(ix.resolve(&s, A, 50_000).size_pt, None);
+    }
+
+    #[test]
+    fn a_filter_in_place_keeps_the_open_tail_at_the_new_end() {
+        let mut s = sheet();
+        s.apply_cell_format(FormatTarget::cells(vec![A], 3, None), bold());
+        // Keep rows 0,1,2,3,4,5,6,7 of ten: two rows removed.
+        let keep: Vec<usize> = (0..8).collect();
+        s.formats_reorder_rows(&|_| true, &keep, 10);
+        assert!(!is_bold(&s, A, 2) && is_bold(&s, A, 3) && is_bold(&s, A, 7));
+        assert!(is_bold(&s, A, 8) && is_bold(&s, A, 9) && is_bold(&s, A, 100), "appended rows are covered");
+        assert_eq!(rows_of(&s), vec![(vec![1], Some((3, None)))]);
     }
 
     #[test]

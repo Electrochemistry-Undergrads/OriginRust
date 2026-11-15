@@ -161,7 +161,7 @@ impl<'a> SheetTable<'a> {
             text,
             align,
             bold: st.bold,
-            size: st.size_pt.map_or(s.font_pt, |p| f64::from(p) * s.font_pt / GRID_BODY_PT),
+            size: st.size_pt.map_or(s.font_pt, |p| f64::from(crate::cellformat::clamp_cell_pt(p)) * s.font_pt / GRID_BODY_PT),
             fmt: TextFmt {
                 italic: st.italic,
                 underline: st.underline,
@@ -610,6 +610,22 @@ mod tests {
 
     fn text_op<'a>(ops: &'a [PrintOp], t: &str) -> &'a PrintOp {
         ops.iter().find(|o| matches!(o, PrintOp::Text { text, .. } if text == t)).expect(t)
+    }
+
+    #[test]
+    fn sizes_are_clamped_like_the_grid() {
+        use crate::cellformat::{CellFormat, FormatTarget, MAX_CELL_PT, MIN_CELL_PT};
+        let mut ws = sheet();
+        let size = |pt: f32| CellFormat { size_pt: Some(pt), ..Default::default() };
+        ws.apply_cell_format(FormatTarget::cells(vec![ColumnId(3)], 0, Some(0)), size(0.25));
+        ws.apply_cell_format(FormatTarget::cells(vec![ColumnId(3)], 1, Some(1)), size(500.0));
+        let t = SheetTable::new(&ws, PrintStyle::default());
+        let (pages, _) = t.pages_for(&setup());
+        let ops = t.draw_page(&pages[0], 1);
+        let PrintOp::Text { size: small, .. } = text_op(&ops, "t1") else { unreachable!() };
+        let PrintOp::Text { size: big, .. } = text_op(&ops, "t2") else { unreachable!() };
+        assert_eq!(*small, f64::from(MIN_CELL_PT) * 8.0 / 12.0);
+        assert_eq!(*big, f64::from(MAX_CELL_PT) * 8.0 / 12.0);
     }
 
     #[test]

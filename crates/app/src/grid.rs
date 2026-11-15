@@ -2010,7 +2010,7 @@ fn grid_family(name: &str) -> egui::FontFamily {
 fn formatted_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedStyle<'_>) {
     let mut rich = RichText::new(text).color(color);
     if let Some(pt) = f.size_pt {
-        rich = rich.size(pt.clamp(4.0, 96.0));
+        rich = rich.size(sheaf_core::cellformat::clamp_cell_pt(pt));
     }
     if let Some(name) = f.font {
         rich = rich.family(grid_family(name));

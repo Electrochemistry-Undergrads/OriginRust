@@ -539,7 +539,16 @@ rule below is Sheaf's choice.
   formats with their rows, like cell notes (whole-column formats are unchanged; rows an order
   drops lose theirs, rows beyond the data stay). Column delete and analysis result retirement
   drop ids; duplicate sheet/window and append rename ids. Undo and redo are ordinary document
-  steps.
+  steps. After a reorder, records with the same columns and style whose spans touch or overlap
+  are merged (a permutation of a fully formatted span is one record again; a partly formatted
+  column keeps one record per run of formatted rows). When ranges of different styles overlap,
+  only neighbouring records are merged so later-wins order holds. A row removal in place (filter)
+  puts an open-ended tail at the new row count, so rows appended later are covered as before.
+- **Lookup.** Drawing resolves cells through a per-revision index: per column a sorted list of
+  non-overlapping row stretches with their resolved style, found by binary search, so a lookup
+  costs O(log n) whatever the number of records.
+- **Size.** Font sizes are clamped to 4..96 pt (`clamp_cell_pt`) in the grid, print, PDF and
+  image export alike; print scales the clamped size by the printed font over the grid's 12 pt.
 - **Files.** `.sheaf` and the `.opj` companion keep everything. The `.opj` writer holds none and
   warns ("N sheet(s) have cell formatting ..."). Excel export does not write them and says so in
   its warnings (per-cell fonts combined with column number formats are left).

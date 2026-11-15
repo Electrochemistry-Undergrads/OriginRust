@@ -650,6 +650,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         redo: None,
         windows: Vec::new(),
         open: None,
+        recent_projects: &[],
+        recent_imports: &[],
         panels: [true; 4],
         ai_link: false,
         layer,

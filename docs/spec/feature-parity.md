@@ -20,9 +20,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 49 | 144 | 46 | 239 |
+| All rows | 49 | 145 | 45 | 239 |
 | P0 | 32 | 69 | 0 | 101 |
-| P1 and P2 together | 17 | 75 | 46 | 138 |
+| P1 and P2 together | 17 | 76 | 45 | 138 |
 
 By priority alone: 101 rows are P0, 87 are P1 and 50 are P2.
 
@@ -54,7 +54,7 @@ Cross-cutting findings:
 | Open Excel, sample project, Close | File menu | File > Close (closes the active window, its data stays, as the title bar's close button) | ◐ | no Excel or sample projects | P1 |
 | Save Window As, Save Template As, analysis template | File menu | none | ✗ | no .otp/.otw-style files; only 4 built-in figure templates | P1 |
 | Print, Print Preview, Page Setup | File > Print, Ctrl+P | File > Print... (Ctrl+P) prints the active graph page through the Windows print dialog as a vector metafile scaled and centred inside the margins, or, with a workbook active, its active sheet as a table (head, label rows, visible rows and columns as displayed, grid, page numbers) over as many pages as needed, rows down then columns across, with a page range in the dialog (graphing 19.8); Print Preview shows paper, margins and the page where it prints; Page Setup (Letter, Legal, Tabloid, A3, A4, A5, orientation with Automatic, margins) is saved with the project and in the `.opj.sheaf` companion (graphing 19) | ◐ | checked on Microsoft Print to PDF only, not on a physical printer; Origin's own Print Preview window and the printed layout of a worksheet were not captured (unmeasured; the workbook Print dialog was: column/row ranges, Selection, Options...; Sheaf offers only a page range and its own layout); no Print View, no tray (Source); toolbar Print shares the menu action; macOS graph printing opens the native PDFKit panel with saved Page Setup, a sheet on macOS and Linux goes to `lp` without a dialog (untested); `sheaf print` writes a vector PDF using saved Page Setup and submits via `lp` on macOS/Linux (fake-spooler tested); Windows CLI submission remains open | P1 |
-| Recent projects, books, graphs, imports | File > Recent | none | ✗ | | P1 |
+| Recent projects, books, graphs, imports | File > Recent | File > Recent Projects and Import > Recent Imports (10 each, newest first, shared by every running instance, Clear; a missing file is reported and dropped; recent-files.md) | ◐ | Recent Books, Recent Graphs and Recent Exports grey (no single-window files); Origin's list length and layout unmeasured | P1 |
 | Exit | File > Exit | File > Quit with save prompt | ✓ | | P1 |
 | Window properties and rename | Alt+Enter | Alt+Enter, Window > Properties and the Explorer's Properties open a small window for the long name | ◐ | short name automatic; no comments field or full Properties dialog | P1 |
 | Window menu | cascade, tile, duplicate, split, refresh | Cascade, Tile Horizontally, Tile Vertically, Properties (Alt+Enter), Refresh (F5: recalculates waiting columns) and the list of windows that focuses one | ◐ | no Arrange Icons, Duplicate, Duplicate (Batch Plotting), Split or Folders | P1 |

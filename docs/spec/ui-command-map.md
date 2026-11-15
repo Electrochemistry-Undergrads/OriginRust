@@ -73,7 +73,9 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
   Re-Import Directly [Ctrl+4]; Re-Import... (repeat the last import on the same sheet).
   Database Import: New / saved queries.
 - **Export** (dyn): see section B4. Recent Exports submenu.
-- Recent Books, Recent Graphs, Recent Projects; Exit.
+- Recent Books, Recent Graphs, Recent Projects; Exit. Recent Projects and Recent Imports work (T38,
+  `docs/spec/recent-files.md`; 10 entries per list, the numbering and the path display are Sheaf's
+  choices, not measured in Origin). Recent Books, Recent Graphs and Recent Exports stay greyed.
 - Graph windows additionally have Export Page... in the Layout version and the graph File menu
   carries Batch Processing but no "Re-Import".
 

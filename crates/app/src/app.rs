@@ -38,6 +38,7 @@ use crate::live::{self, Live, Note};
 use crate::menus::{self, MenuContext, WindowKind};
 use crate::panels::logs::Logs;
 use crate::panels::{self, PanelData, PanelId, Panels, explorer, objects};
+use crate::recent::{self, Recent, RecentKind};
 use crate::theme;
 use crate::toolbar::{self, Bar, Toolbars};
 use crate::workspace::{WindowInfo, Workspace};
@@ -74,6 +75,9 @@ pub struct Startup {
     pub recovery_dir: Option<PathBuf>,
     /// Where the autosave switch and interval are kept; `None` keeps the defaults and writes nothing.
     pub settings_path: Option<PathBuf>,
+    /// The file of the recent projects and imports (`recent.json`); `None` keeps no lists and writes
+    /// nothing (the tests pass a temporary file).
+    pub recent_path: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
     /// The run folders the AI link may listen in, best first. `None` has no folder, so the link
@@ -192,12 +196,15 @@ pub struct SheafApp {
     recovered_from: Option<PathBuf>,
     /// The endpoint of `sheaf-mcp --attach`, when Tools > AI Assistants (MCP) is ticked.
     live: Live,
+    /// The recent projects and imports (File > Recent Projects, File > Import > Recent Imports).
+    recent: Recent,
 }
 
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
         theme::apply(&cc.egui_ctx);
         let startup_dirs = startup.mcp_dirs.clone().unwrap_or_default();
+        let recent_path = startup.recent_path.clone();
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
@@ -264,6 +271,7 @@ impl SheafApp {
             recovery_offer: None,
             recovered_from: None,
             live: Live::new(cc.egui_ctx.clone(), startup_dirs),
+            recent: Recent::new(recent_path),
         };
         app.start_recovery();
         let paths = std::mem::take(&mut app.startup.paths);
@@ -516,6 +524,7 @@ impl SheafApp {
     fn load_project(&mut self, path: PathBuf) {
         match sheaf_io::open_project(&path) {
             Ok(opened) => {
+                self.note_project(&path);
                 self.doc.replace(opened.project);
                 self.reset_views();
                 self.recovered_from = None;
@@ -654,6 +663,12 @@ impl SheafApp {
                     said.push_str(&format!("; the original Origin file is kept as {}", b.display()));
                 }
                 self.say(said);
+                // Only a file that exists is listed: the .opj, or the companion when it was refused.
+                if outcome.main_written {
+                    self.note_project(&path);
+                } else if let Some(companion) = &outcome.companion {
+                    self.note_project(companion);
+                }
                 self.path = Some(path);
                 self.recovered_from = None;
                 if let Some(text) = outcome.details() {
@@ -669,6 +684,37 @@ impl SheafApp {
             Err(e) => {
                 self.message = Some(("Could not save the project".to_string(), e.to_string()));
                 false
+            }
+        }
+    }
+
+    /// A project was opened or saved: it goes to the top of the recent projects.
+    fn note_project(&mut self, path: &Path) {
+        if let Some(why) = self.recent.push_project(path) {
+            self.logs.warn(why);
+        }
+    }
+
+    /// A click on an entry of the recent lists. The file is checked now (the menu never touches it):
+    /// a missing file, a folder or a link to one, or a file of the wrong kind is reported and
+    /// dropped from the lists. Otherwise it goes the way a dropped file does, so the question about
+    /// unsaved changes comes first for a project.
+    fn follow_recent(&mut self, path: PathBuf, kind: RecentKind) {
+        match recent::check_target(&path, kind) {
+            Ok(()) => self.open_paths(vec![path], false),
+            Err(why) => {
+                let title = match kind {
+                    RecentKind::Projects => "Could not open the project",
+                    RecentKind::Imports => "Could not import the file",
+                };
+                self.warn(format!("{title}: {}", path.display()));
+                if let Some(failed) = self.recent.forget(&path) {
+                    self.logs.warn(failed);
+                }
+                self.message = Some((
+                    title.to_string(),
+                    format!("{}\n\n{why}\n\nIt was removed from the recent files.", path.display()),
+                ));
             }
         }
     }
@@ -695,6 +741,7 @@ impl SheafApp {
     fn finish_import(&mut self, request: ImportRequest) {
         let ImportRequest { items, errors, plot, template, mode, place } = request;
         let count = items.len();
+        let sources: Vec<PathBuf> = items.iter().map(|i| i.path.clone()).collect();
         let excel_sheets: usize = items.iter().filter(|i| i.format == "excel").map(|i| i.workbook.sheets.len()).sum();
         let mut notes: Vec<String> = errors;
         for i in &items {
@@ -729,6 +776,9 @@ impl SheafApp {
             notes.extend(placement_notes);
             let sheets = if excel_sheets > 0 { format!(", {excel_sheets} Excel sheet(s)") } else { String::new() };
             self.say(format!("Imported {count} file(s){sheets}"));
+            if let Some(why) = self.recent.push_imports(&sources) {
+                self.logs.warn(why);
+            }
         }
         for note in &notes {
             self.logs.warn(note.clone());
@@ -1558,6 +1608,21 @@ impl SheafApp {
                     self.append_project_file(&path);
                 }
             }
+            Action::ReloadRecent => {
+                self.recent.reload();
+                ctx.request_repaint();
+            }
+            Action::OpenRecent(path) => self.follow_recent(path, RecentKind::Projects),
+            Action::ImportRecent(path) => self.follow_recent(path, RecentKind::Imports),
+            Action::ClearRecent(kind) => {
+                let failed = match kind {
+                    RecentKind::Projects => self.recent.clear_projects(),
+                    RecentKind::Imports => self.recent.clear_imports(),
+                };
+                if let Some(why) = failed {
+                    self.logs.warn(why);
+                }
+            }
             Action::DuplicateWindow(id) => {
                 let mut new = None;
                 self.doc.apply("Duplicate window", |p| new = p.duplicate_window(id));
@@ -2299,6 +2364,8 @@ impl SheafApp {
             redo: self.doc.redo_label(),
             windows: project.windows.iter().map(|w| (w.id(), w.title())).collect(),
             open: self.open_menu.as_deref(),
+            recent_projects: self.recent.projects(),
+            recent_imports: self.recent.imports(),
             panels: self.panels.shown_flags(),
             ai_link: self.live.active(),
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),

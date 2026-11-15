@@ -18,6 +18,7 @@ mod label_whiteout;
 mod live;
 mod lollipop;
 mod offset_multipliers;
+mod recent;
 mod skip_points;
 mod symbol_line_gaps;
 mod symbol_line_order;

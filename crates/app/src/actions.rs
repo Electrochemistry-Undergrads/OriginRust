@@ -456,6 +456,14 @@ pub enum Action {
     /// File > Append: bring the windows of another project file into this one (the file, or `None`
     /// to ask for it).
     AppendProject(Option<std::path::PathBuf>),
+    /// The File menu was opened: read the recent files again.
+    ReloadRecent,
+    /// File > Recent Projects: open this entry the way Open does.
+    OpenRecent(std::path::PathBuf),
+    /// File > Import > Recent Imports: import this entry again with the default settings.
+    ImportRecent(std::path::PathBuf),
+    /// Clear Recent Projects / Clear Recent Imports.
+    ClearRecent(crate::recent::RecentKind),
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).

@@ -102,6 +102,7 @@ pub fn comparison_plot_request(tool: &AnalyzeTool) -> Result<Option<crate::analy
         },
         significant_only: !plot.all_pairs,
         threshold: plot.threshold,
+        alpha: 0.05,
         pairs: Vec::new(),
     };
     Ok(Some(crate::analyze::ComparisonPlotRequest { path: path.clone(), options }))

@@ -24,8 +24,8 @@ T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edi
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.
 - [Task index](docs/tasks/README.md): status and leftovers for every brief, including T58–T63.
-- [Greyed inventory](docs/tasks/greyed-items.md): **463 listed item locations** at the planning
-  baseline (319 menu bar, 47 toolbar, 97 context menu). Run `python3 tools/greyed-count.py --check`
+- [Greyed inventory](docs/tasks/greyed-items.md): **459 listed item locations** at the planning
+  baseline (318 menu bar, 47 toolbar, 94 context menu). Run `python3 tools/greyed-count.py --check`
   after changes. This is a hand-maintained inventory, not a generated audit of the Rust source.
 - [Known issues and UI walkthrough](docs/tasks/known-issues.md): preserved findings and acceptance
   cases. Specs remain the source of measured behaviour and numeric fixtures.
@@ -96,7 +96,6 @@ its implementation and unmeasured Origin defaults are recorded in graphing 17.6 
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `t48-origin` | Claude Windows, "continue all tasks" | T48 leftover: Origin 2016 measurements of the graph Data menu (Mask/Remove Bad/Move Data Points, graphing.md 20.4) and Sheaf following them; core graph_data.rs, app data_tools/reader/graph_view Data modes only | claimed 2026-11-15; no shape-resize, slope annotation, browser, stats, MCP or other sessions' scope |
 | `deconv-stft` | Claude macOS, "violin" | T57 Deconvolution and STFT: calc signal/new stft module, core analysis tools, Signal Processing menu and dialogs, CLI/MCP analyze, analysis-tools.md 18 | claimed 2026-11-15; no Convolution/FFT/IIR/FIR result changes, no matrices, plot or other sessions' scopes |
-| `cell-format` | Claude macOS, "mac-multipdf" | T59 worksheet cell formatting, steps 1, 2 and 4 (model with range maintenance, grid/print/image drawing, Format Cells window, .sheaf/.opj); step 3 (toolbar adapter behind T58's dispatch) left for after T58 slice 3 | claimed 2026-11-15; new core cellformat.rs + Worksheet.cell_formats, sheetops upkeep, app grid.rs body_cell + new dialogs/cell_format.rs + menu items, plot sheet.rs/sheet_print.rs; no toolbar.rs Format bar (T58) or other sessions' scopes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 ## Verification and completion

@@ -510,6 +510,40 @@ matching Origin's unquoted commas; parameter rows follow the current alphabetica
 number display details remain those of the column formatter. Formatted/OLE tables, links and
 automatic label detection on paste are separate features.
 
+## 13b. Cell formats (T59, Sheaf's choices, none measured with Origin)
+
+Manual formatting of data cells and label cells: bold, italic, underline, font, size, text colour,
+fill colour, horizontal alignment (`crates/core/src/cellformat.rs`, `Worksheet.cell_formats`).
+Origin's own controls, defaults, precedence and `.opj` storage are not measured (T59 step 5); every
+rule below is Sheaf's choice.
+
+- **Storage.** An ordered list of ranges. A range is column ids plus either a data-row span
+  (first row, optional last row; no last row runs to the end of the data and beyond) or label rows
+  (long name, units, comments, F(x)=, a parameter), and a style whose unset properties change
+  nothing. Whole-column formatting has no row span: one record however many rows. Empty lists are
+  not saved; old files load without formats.
+- **Overlap.** Later ranges win property by property. A transparent colour means "no fill" or
+  "default text colour", an empty font name "default font", size 0 "default size" and alignment
+  Auto "left for text, right for numbers"; each lets a later range undo an earlier one.
+- **Applying.** Appends a range, merging into the last one when it has the same target, or the
+  same style on the same rows of other columns or on touching row spans of the same columns.
+  Earlier ranges wholly inside the new one lose the properties it sets.
+- **Clear Formats** cuts ranges over the selected cells (data cells and label cells are separate
+  targets). Selections: a block that runs to the last data row is open-ended; columns, rows and
+  the whole sheet are cells of those columns/rows; a row filter does not matter (hidden rows in
+  the span are formatted too).
+- **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
+  underline, font, size and alignment stay manual.
+- **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns
+  (a range that covers other columns is split first). Sorts and other row permutations move
+  formats with their rows, like cell notes (whole-column formats are unchanged; rows an order
+  drops lose theirs, rows beyond the data stay). Column delete and analysis result retirement
+  drop ids; duplicate sheet/window and append rename ids. Undo and redo are ordinary document
+  steps.
+- **Files.** `.sheaf` and the `.opj` companion keep everything. The `.opj` writer holds none and
+  warns ("N sheet(s) have cell formatting ..."). Excel export does not write them and says so in
+  its warnings (per-cell fonts combined with column number formats are left).
+
 ## 14. Suggested Rust data model (P0)
 
 ```

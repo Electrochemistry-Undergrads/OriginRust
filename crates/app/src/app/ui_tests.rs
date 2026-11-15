@@ -10,6 +10,7 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod autosave;
+mod cell_format;
 mod cell_notes;
 mod comparison_plot;
 mod cond_format;

@@ -6,6 +6,14 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 
 ## Integration after the archived snapshot
 
+- T64 multiple comparisons plot (2026-11-15, macOS, no Origin): the report sheet of a one-way ANOVA with a means
+  comparison or a two-sample t-test (button in the sheet tab strip, Statistics > Multiple Comparisons Plot...) makes a graph
+  of the groups (bar, box, violin, scatter; SD, SEM or 95 % CI error bars) with significance brackets (asterisks or
+  p-values read from the report, significant only with a threshold; Holm methods show the step-down adjusted p and every
+  method follows the report's Significant column), stacked by span in axis space (log axes too) with the Y axis growing,
+  or in a reserved band above the frame when the Y maximum is fixed, the level step never below the label height;
+  pairs stored by group index; `analyze anova|ttest --comparison-plot OUT`, MCP, not written to .opj (warning). Documents
+  only, unmeasured; two-way, paired and one-sample left (statistics.md 23).
 - T52 slope annotation (2026-11-15, macOS, no Origin): Tools toolbar "Slope" picks two points of one plot
   (Data Reader snapping); a segment, dashed rise/run legs and "slope = ..." linked to those rows and the plot's
   X/Y columns; per decade on log axes (Tafel), units from the drawn axes' columns; follows moved plots;

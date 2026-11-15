@@ -6,6 +6,7 @@ pub mod autosave;
 pub mod bin2d_options;
 pub mod cell_note;
 pub mod column_props;
+pub mod comparison_plot;
 pub mod cond_format;
 pub mod details_look;
 pub mod dist_options;

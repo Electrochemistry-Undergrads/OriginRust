@@ -8,6 +8,7 @@ use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, Fi
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
 use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
+use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
@@ -152,6 +153,7 @@ pub struct SheafApp {
     text_dialog: Option<TextDialog>,
     shape_dialog: Option<ShapeDialog>,
     slope_dialog: Option<SlopeDialog>,
+    comparison_plot: Option<ComparisonPlotDialog>,
     set_values: Option<SetValuesDialog>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
@@ -251,6 +253,7 @@ impl SheafApp {
             text_dialog: None,
             shape_dialog: None,
             slope_dialog: None,
+            comparison_plot: None,
             set_values: None,
             analysis: None,
             fit: None,
@@ -1690,6 +1693,17 @@ impl SheafApp {
                     self.warn("Select at least one numeric Y column to plot by label.");
                 }
             }
+            Action::ComparisonPlot { book, sheet } => {
+                let sheet = sheet.or_else(|| self.doc.project().workbook(book).map(|b| b.active_sheet));
+                match sheet {
+                    Some(sheet) if self.doc.project().can_comparison_plot(book, sheet) => {
+                        self.comparison_plot = Some(ComparisonPlotDialog::new(book, sheet));
+                    }
+                    _ => self.warn(
+                        "Open the report sheet of a one-way ANOVA with a means comparison or of a two-sample t-test first.",
+                    ),
+                }
+            }
             Action::Analyze { book, columns, kind } => self.open_analysis(book, columns, kind),
             Action::InterpolateFromColumn { book, columns } => {
                 self.open_analysis(book, columns, AnalysisKind::Interpolate);
@@ -2980,6 +2994,7 @@ impl SheafApp {
             || self.text_dialog.is_some()
             || self.shape_dialog.is_some()
             || self.slope_dialog.is_some()
+            || self.comparison_plot.is_some()
             || self.set_values.is_some()
             || self.analysis.is_some()
             || self.fit.is_some()
@@ -3272,6 +3287,17 @@ impl SheafApp {
                     self.label_panels = None;
                     self.focus(graph);
                     self.say("Created panels by label");
+                }
+            }
+        }
+        if let Some(d) = &mut self.comparison_plot {
+            match d.show(ctx, &mut self.doc) {
+                ComparisonPlotOutcome::Open => {}
+                ComparisonPlotOutcome::Closed => self.comparison_plot = None,
+                ComparisonPlotOutcome::Created(graph) => {
+                    self.comparison_plot = None;
+                    self.focus(graph);
+                    self.say("Created multiple comparisons plot");
                 }
             }
         }

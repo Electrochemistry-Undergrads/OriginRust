@@ -126,6 +126,23 @@ pub enum Outcome {
     },
 }
 
+/// A multiple comparisons plot to draw after a one-way ANOVA or two-sample t-test (`--comparison-plot`).
+#[derive(Clone, Debug)]
+pub struct ComparisonPlotRequest {
+    pub path: PathBuf,
+    pub options: sheaf_core::compplot::ComparisonPlotOptions,
+}
+
+/// Makes the multiple comparisons plot of the report `run` wrote and writes it to the request's file (the
+/// format follows the extension). The graph stays in the project; its window id is returned.
+pub fn write_comparison_plot(project: &mut Project, run: &Run, request: &ComparisonPlotRequest) -> Result<WindowId> {
+    let Outcome::Report(report) = &run.outcome else { bail!("the tool gave no report to draw") };
+    let sheet = report.new_sheet.ok_or_else(|| anyhow!("the report has no sheet to draw"))?;
+    let graph = project.comparison_plot(run.book, sheet, &request.options).map_err(|e| anyhow!("{e}"))?;
+    crate::render::write_graph(project, graph, &request.path, &crate::render::ExportSettings::default())?;
+    Ok(graph)
+}
+
 /// The result of [`run_job`].
 pub struct Run {
     pub book: WindowId,

@@ -1350,6 +1350,100 @@ Per Variable, Per Group and All in One arrangements; Origin's exact table layout
 panel layout and styling, and its median/SD interval formulas (none was measured: the documentation does not give
 them); the box chart of the other arrangements; Origin's default level.
 
+## 23 Multiple comparisons plot (T64)
+
+Origin 2027 makes a "Multiple Comparisons Plot" directly from the report of a one-way ANOVA, a two-way ANOVA and the
+two-sample and paired t-tests (an icon in the report sheet), and a "Significance Plot" from a one-sample t-test. Plot
+types are bar, box, violin and scatter; error bars are SD, SEM or 95 % CI; the brackets and annotations can be
+customized and can sit outside the plot area; an option shows only the p-values that meet a threshold. [W:Origin 2027
+product page] The older free "Paired Comparison Plot" app offers "Letters on Top", "Asterisk with Bracket" and "P-Value
+with Bracket" and "Exclude n.s. in Group". [W:app/paired-comparison-plot] None of this was measured; everything below
+that the documents do not say is Sheaf's choice, **unmeasured**.
+
+**Made from.** The report sheet of a one-way ANOVA with a means comparison (any method, Dunnett included) and of a
+two-sample t-test (equal or unequal variances). Two-way ANOVA, the paired t-test and the one-sample "Significance
+Plot" are left. The report sheet keeps a copy of the groups as the test used them (`Worksheet::comparison_source`,
+saved with the project). The report sheet also stores the groups `(i, j)` of each row of the means comparison **by
+group index**, the analysis' alpha and, for the Holm methods, the step-down kind (only stored data; the report and the
+ANOVA are unchanged). The p-value of a pair is read from the report sheet: the "Prob" column of the means comparison or
+the t-test's "Prob"; the pair's groups come from the stored indices, so two groups with the same name, or a name with
+" - " in it, map correctly. A report without stored pairs (an older project) is read by the names in its row labels
+`"{name_j} - {name_i}"` and is **refused** with an error when a label fits more than one pair of groups (duplicate
+names, or names that make the text ambiguous).
+
+**Agreement with the report (Holm).** Holm-Bonferroni and Holm-Sidak list the plain pairwise p in "Prob" but judge each
+pair by the step-down (`alpha / (m - rank)`), so the raw p is not the decision. Holm: adjusted p derived from the
+report's raw p, matching its step-down decisions: with the raw p sorted ascending, `adj_(r) = max over k <= r of
+min(1, (m - k + 1) p_(k))` (Bonferroni) or `max over k <= r of 1 - (1 - p_(k))^(m - k + 1)` (Sidak), `holm_adjust`;
+a pair is significant at alpha exactly when its adjusted p is below alpha. Stars and p-value labels use the adjusted p.
+For every method the decision follows the report's "Significant" column at the analysis' alpha: with Asterisks a pair
+the report marks not significant reads `ns` (a significant one has at least one `*`), and when the threshold equals the
+analysis' alpha (a threshold of another value filters by p < threshold of the shown p) "Significant only" shows exactly
+the pairs the report marks. Example: three groups with raw p 0.04, 0.2, 0.3 give adjusted 0.12, 0.4, 0.4: no bracket,
+`ns`.
+
+**The graph** (`Project::comparison_plot`, one undo step): a new sheet `MultCompN` in the workbook holds the data; the
+graph has one X category per group, in report order, named by the group, at X = 1, 2, 3, ...
+- Bar: columns of the means with error bars (the error column of the sheet).
+- Box and Violin: one box or violin per group (the plots' own statistics; no error bars).
+- Scatter: the raw points, each shifted sideways by a fixed amount up to 0.18 either way (golden-ratio sequence, the same
+  every time), over a black diamond at the mean with its error bar.
+- Error bar (bar and scatter): SD; SEM; 95 % CI as the half-width `t(0.975, n - 1) * SEM` (Student's t).
+- Y axis title "Mean +- SD" (or SEM, 95% CI) with the unit, or "Value" for box and violin; no X title, no legend.
+
+**Brackets.** `Layer::brackets` is a list of `SignificanceBracket { group_a, group_b, p, label }` (groups from 0); the
+layer's `comparison` keeps the settings (plot type, error bar, label style, significant only, threshold, alpha) and every
+compared pair (with the shown p and the report's decision), so labels can be restyled (`ComparisonPlotOptions::brackets`) without the report. Old projects load
+without them (serde defaults).
+- Labels, Asterisks: `*` p < 0.05, `**` p < 0.01, `***` p < 0.001, `****` p < 0.0001, `ns` otherwise (strict, so p = 0.05
+  is `ns`). P-values: `p = 0.0123` (four decimals, trailing zeros dropped down to two decimals, `p = 0.50`) and
+  `p < 0.0001`.
+- Significant only (default on) with a threshold (default 0.05): a pair is shown when p < threshold (p adjusted for
+  Holm), or, when the threshold is the analysis' alpha, when the report marks it significant (see above).
+- Drawing (`crates/plot/src/brackets.rs`): a horizontal line over the two group centres with a 5 pt vertical end down
+  at each, black, 1 pt, the label centred above it in the legend font. Pairs are sorted by span (shortest first, then
+  report order). The levels are found in the **axis-transformed space** (data units on a linear axis, logarithms on a
+  log axis, so brackets stack multiplicatively there). One level step is 6 % of the data range (of the data with error
+  bars, whiskers, outliers and violin tips, including 0 for bars) at least, and never less than the label step: the
+  label's baseline gap (2.5 pt, or more for a big font whose descenders would reach the line), its height above the
+  baseline (ascent) and the 5 pt end of the bracket above it, plus 1 pt, converted to axis units **at the final axis
+  scale**. The layout resolves the axes, converts the label step with the frame it got, and resolves again until the step
+  stops growing (up to 30 times, 0.01 % tolerance; like hexbin's re-resolve). A stack taller than 60 % of the axis keeps
+  the step at that limit (the labels then crowd each other) instead of growing without end. Each bracket is placed one
+  step above the highest of the elements of the groups it spans and of the earlier brackets whose span touches its own
+  (closed intervals, so brackets that share a group stack). Brackets whose spans do not touch share the lowest level.
+- **On the axis** (linear or log Y axis with an automatic upper limit): the Y axis **grows** to hold the highest bracket
+  plus one step for its label (in log space on a log axis). Other plot kinds are drawn exactly as before (test).
+- **In a band** (the Y axis' upper limit is fixed, or a scale that is neither linear nor logarithmic): the axis is not
+  changed and the brackets stand in a band above the frame. The stack is made of the spans alone (no data to clear:
+  everything is inside the frame), the level step is the label step in points, and the lowest line stands 6 pt over the
+  frame. The layout **reserves the band's height** in its top label edge (`label_edges`), so the frame moves down just as
+  for a tall tick label; with the X axis on the top the band starts above that axis' tick labels and title, so
+  nothing overlaps them. A bracket whose label would still leave the page (the frame cannot give more than half its
+  height) is not drawn (clipped to the page). A free text label or a legend that the user placed over the band is not
+  moved.
+- Brackets are not pickable or draggable and have no properties window yet. They are not written to `.opj`: the save
+  warning names them ("layer N has K significance brackets that an Origin project file written here cannot hold") and
+  the `.opj.sheaf` companion keeps them.
+
+**Where.** The report sheet of such a test shows a "Multiple Comparisons Plot..." button at the right of the sheet tab
+strip, and Statistics > Multiple Comparisons Plot... works on the active sheet (a message when it is not such a report).
+The dialog has Plot Type, Error Bar (greyed for box and violin), Label (Asterisks or P-values), Significant only and
+its Threshold. `sheaf analyze anova ... --comparison-plot OUT.(png|svg|pdf)` and the same on `analyze ttest` (two-sample
+only) with `--plot-type bar|box|violin|scatter`, `--error-bar sd|sem|ci95`, `--labels asterisks|p-values`,
+`--all-pairs`, `--threshold`; the graph also stays in a project saved with `--save`. MCP: the same option names in
+`analyze` for `anova` and `ttest` (`comparison_plot` is a path inside the allowed folders); the reply has
+`comparison_plot: {graph, file}`.
+
+Tests: `crates/core/tests/comparison_plot.rs` (labels at the boundaries, p-values equal to the report rows for Tukey
+and Bonferroni, significant-only and threshold, SD/SEM/CI95 against hand values, the t-test's single bracket, settings
+round trip, Holm adjusted p against hand values, the three-group Holm example, decisions equal to the "Significant"
+column for Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe, Holm-Bonferroni, Holm-Sidak and Dunnett at two alphas,
+groups named alike or with " - " by index, the refused ambiguous fallback), `crates/plot/src/brackets.rs` (stacking, axis,
+log axis inside the extended range, fixed maximum band and title, 15 pairs with p-value labels clear of every line,
+unchanged drawing), `crates/cli/tests/analyze.rs` (SVG,
+refusals), `crates/mcp` (bridge), the `.opj` warning, and the app test `comparison_plot`.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

@@ -139,7 +139,10 @@ impl Themes {
                         if !name.trim().is_empty() {
                             ui.label(error.to_string());
                         }
-                    } else if self.names.iter().any(|n| n.to_lowercase() == name.trim().to_lowercase()) {
+                    } else if checked
+                        .as_ref()
+                        .is_ok_and(|name| self.names.iter().any(|n| n.to_lowercase() == name.to_lowercase()))
+                    {
                         ui.label("A theme of this name will be replaced.");
                     }
                     ui.horizontal(|ui| {
@@ -379,6 +382,7 @@ impl ExportDialog {
                         Command::SaveAs(name) => name,
                         _ => self.themes.selected.clone(),
                     };
+                    let name = clean_name(&name).map_err(|e| e.to_string())?;
                     if name.eq_ignore_ascii_case(SYSTEM) {
                         return Err("This name is reserved for the system settings.".into());
                     }

@@ -63,17 +63,26 @@ fn named_graph_export_theme_survives_reopening_and_apply_records_last_used() {
     svg(&mut h);
     h.state_mut().export.as_mut().unwrap().set_file_name("paper");
     h.state_mut().export.as_mut().unwrap().set_path(&dir.join("output"));
-    save_as(&mut h, "Publication");
+    save_as(&mut h, "Publication figures");
+    theme_menu(&mut h, "Save As...");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("Publication   figures".into()));
+    settle(&mut h);
+    assert!(
+        h.query(By::new().role(egui::accesskit::Role::Label).value("A theme of this name will be replaced.")).is_some()
+    );
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
     assert!(!dir.join("output/paper.svg").exists(), "saving a theme exported a graph");
     theme_menu(&mut h, "System Default");
     assert!(h.query_by_value("Portable Network Graphics (*.png)").is_some());
-    theme_menu(&mut h, "Publication");
+    theme_menu(&mut h, "Publication figures");
     assert!(h.query_by_value("Scalable Vector Graphics (*.svg)").is_some());
     h.state_mut().export.as_mut().unwrap().set_file_name("paper-revised");
     settle(&mut h);
-    assert!(h.query(By::new().role(egui::accesskit::Role::TextInput).value("Publication *")).is_some());
+    assert!(h.query(By::new().role(egui::accesskit::Role::TextInput).value("Publication figures *")).is_some());
     theme_menu(&mut h, "Save");
-    assert!(h.query(By::new().role(egui::accesskit::Role::TextInput).value("Publication")).is_some());
+    assert!(h.query(By::new().role(egui::accesskit::Role::TextInput).value("Publication figures")).is_some());
     assert_eq!(project(&h), &before);
     click(&mut h, "Apply");
     assert!(dir.join("output/paper-revised.svg").is_file());

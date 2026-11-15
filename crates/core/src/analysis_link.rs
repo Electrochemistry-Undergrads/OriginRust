@@ -253,6 +253,10 @@ impl Project {
         for (i, sheet) in b.sheets.iter_mut().enumerate() {
             let had = sheet.columns.len();
             sheet.columns.retain(|c| !stale.contains(&c.id));
+            if sheet.columns.len() != had {
+                sheet.remap_cond_format_columns(&|c| (!stale.contains(&c)).then_some(c));
+                sheet.remap_note_columns(&|c| (!stale.contains(&c)).then_some(c));
+            }
             // A sheet that held only old results is gone; the indices in the report move with it.
             keep.push(sheet.columns.len() == had || !sheet.columns.is_empty() || i == report.sheet);
         }
@@ -480,6 +484,37 @@ mod tests {
         assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3);
         assert!(p.analysis_links.is_empty(), "mode None drops the link");
         assert!(p.column(first[0]).unwrap().analysis.is_none());
+    }
+
+    #[test]
+    fn retiring_result_columns_drops_their_notes_and_conditional_formats() {
+        use crate::condformat::{CondFormat, CondRange, Rule};
+        let (mut p, _x, y, book) = setup();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 20])).unwrap();
+        let two = Request { columns: vec![y, y2], ..smooth_request(y) };
+        let (_, first) =
+            p.analyze_linked_into(None, &two, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+        assert_eq!(first.len(), 2);
+        let (keep, gone) = (first[0], first[1]);
+        let s = p.workbook_mut(book).unwrap().sheet_mut();
+        s.set_note(y, 0, "input stays");
+        s.set_note(keep, 0, "goes");
+        s.set_note(gone, 0, "goes too");
+        for c in [y, keep, gone] {
+            let rule = CondFormat::new(s, CondRange::whole_columns(vec![c]), Rule::min_max());
+            s.cond_formats.push(rule);
+        }
+        // One input column now: fewer result columns, so the old second result is retired.
+        let (_, second) = p
+            .analyze_linked_into(Some(&first), &smooth_request(y), &OutputTarget::NextToInput, RecalcMode::Manual)
+            .unwrap();
+        assert!(p.column(gone).is_none(), "the old result column was removed");
+        let s = p.workbook(book).unwrap().sheet();
+        assert!(s.notes.iter().all(|n| n.column != gone && n.column != keep), "orphan note: {:?}", s.notes);
+        assert!(s.cond_formats.iter().all(|r| !r.range.columns.contains(&gone) && !r.range.columns.contains(&keep)));
+        assert_eq!(s.notes.len(), 1);
+        assert_eq!(s.cond_formats.len(), 1);
+        let _ = (keep, second);
     }
 
     #[test]

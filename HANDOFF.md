@@ -46,6 +46,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t13-symbol-line-gaps` | Codex Windows, t13-symbol-line-gaps | T13 Line/Drop Lines symbol gaps and No Line Break for Skipped Points; plot style/decor, plots.rs geometry, graph_details and focused tests | claimed 2026-11-14; no Axis fields/drawing/autorange, labels, app state, printing or other sessions' work |
 | `mac-print-panel` | Codex macOS, no Origin | T27 native macOS graph print panel via PDFKit; app print_graph/macprint, macOS dependencies and no-spool validation example | claimed 2026-11-14; no workbook printing, Windows CLI, Excel/imports or other sessions’ scope |
 | `saved-state-recovery` | Codex macOS, no Origin | T28 undo/redo saved-state checkpoints and recovery cleanup; core/history.rs, app save/recovery hooks, autosave and focused UI tests | claimed 2026-11-14; no Excel dialogs/imports, axis/labels, backup settings or other sessions’ scope |
 | `codex/reciprocal-autorange` | Codex Windows, reciprocal-autorange | T11 reciprocal-axis automatic major step/range only; core scales.rs, isolated fixtures and graphing 3.8 | claimed 2026-11-14; no graph model, app/UI, label/plot styles, export, statistics, MCP or other sessions' scope |

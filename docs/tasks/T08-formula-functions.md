@@ -29,8 +29,13 @@ and the narrower conversion-only data boundary are documented Sheaf choices.
 Validation on integrated `0666218` plus this change and the Windows XDG test-fixture repair:
 formatting, strict workspace/all-target Clippy and the full workspace suite pass
 (2,128 passed, three existing ignored; 12 new expression/core/I/O regressions).
+Default formatting follow-up (`codex/formula-format-defaults`): explicit empty Text/Format
+formats use the measured fresh `@SD=14` precision, distinct from omitted/`"*"` formats;
+source column formatting still governs omitted direct-column Text. Precision, dynamic format
+arguments, recalculation and Undo are covered; expression-language.md section 3 records the
+Origin probes and limits.
 **Left:** legacy multi-argument worksheet/graph `%()` substitution, session/range-variable
-substitution and generated expression text; Origin global/`@SD` formatting defaults.
+substitution and generated expression text; user-configurable global/`@SD` formatting settings.
 **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
 **Detail:** audit E "Missing" (formula functions). **Spec:** `docs/spec/expression-language.md`.
 

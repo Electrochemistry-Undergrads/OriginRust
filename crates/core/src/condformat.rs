@@ -304,6 +304,80 @@ pub fn evaluate(sheet: &Worksheet, rules: &[CondFormat]) -> CellStyles {
     styles
 }
 
+impl Worksheet {
+    /// Renames the columns of every rule (`map` gives the new id of a column, or `None` when the
+    /// column is gone) and drops the rules left with no column. Used wherever a sheet's columns get
+    /// new ids (duplicate, append) or are deleted.
+    pub fn remap_cond_format_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
+        for r in &mut self.cond_formats {
+            r.range.columns = r.range.columns.iter().filter_map(|c| map(*c)).collect();
+        }
+        self.cond_formats.retain(|r| !r.range.columns.is_empty());
+    }
+
+    /// Moves the rows of the rules for `count` rows inserted before row `at` in the columns at
+    /// these positions: both bounds shift when the rows come at or above the first row, the last
+    /// row moves when they come inside the range; a rule that runs to the end stays open.
+    pub fn cond_formats_insert_rows(&mut self, columns: &[usize], at: usize, count: usize) {
+        for r in self.touched_rules(columns) {
+            let range = &mut self.cond_formats[r].range;
+            if at <= range.first_row {
+                range.first_row += count;
+                range.last_row = range.last_row.map(|l| l + count);
+            } else if let Some(l) = range.last_row
+                && at <= l
+            {
+                range.last_row = Some(l + count);
+            }
+        }
+    }
+
+    /// Adjusts the rows of the rules for the deleted `rows` of the columns at these positions:
+    /// bounds below the rows move up, bounds inside them move to the edge, and a rule whose whole
+    /// row span was deleted is dropped.
+    pub fn cond_formats_delete_rows(&mut self, columns: &[usize], rows: std::ops::Range<usize>) {
+        if rows.is_empty() {
+            return;
+        }
+        let len = rows.len();
+        let mut gone = Vec::new();
+        for r in self.touched_rules(columns) {
+            let range = &mut self.cond_formats[r].range;
+            if let Some(l) = range.last_row
+                && range.first_row >= rows.start
+                && l < rows.end
+            {
+                gone.push(r);
+                continue;
+            }
+            let first = range.first_row;
+            range.first_row = if first >= rows.end { first - len } else { first.min(rows.start) };
+            range.last_row = range.last_row.map(|l| {
+                if l >= rows.end {
+                    l - len
+                } else if l >= rows.start {
+                    rows.start - 1
+                } else {
+                    l
+                }
+            });
+        }
+        let mut i = 0;
+        self.cond_formats.retain(|_| {
+            i += 1;
+            !gone.contains(&(i - 1))
+        });
+    }
+
+    /// Indexes of the rules that have a column among these positions.
+    fn touched_rules(&self, columns: &[usize]) -> Vec<usize> {
+        let ids: Vec<ColumnId> = columns.iter().filter_map(|i| self.columns.get(*i).map(|c| c.id)).collect();
+        (0..self.cond_formats.len())
+            .filter(|r| self.cond_formats[*r].range.columns.iter().any(|c| ids.contains(c)))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -554,5 +628,69 @@ mod tests {
             let st = evaluate(&s, &[rule(&s, r)]);
             eprintln!("evaluated in {:?} (empty: {})", t.elapsed(), st.is_empty());
         }
+    }
+
+    fn ranged(s: &mut Worksheet, first: usize, last: Option<usize>) {
+        s.cond_formats.push(CondFormat::new(
+            s,
+            CondRange { columns: vec![ColumnId(1)], first_row: first, last_row: last },
+            Rule::min_max(),
+        ));
+    }
+
+    fn rows_of(s: &Worksheet) -> Vec<(usize, Option<usize>)> {
+        s.cond_formats.iter().map(|r| (r.range.first_row, r.range.last_row)).collect()
+    }
+
+    #[test]
+    fn remap_renames_and_drops_columns() {
+        let mut s = sheet(&[&[1.0], &[2.0]]);
+        s.cond_formats.push(rule(&s, Rule::min_max()));
+        s.cond_formats.push(CondFormat::new(&s, CondRange::whole_columns(vec![ColumnId(2)]), Rule::min_max()));
+        s.remap_cond_format_columns(&|c| (c == ColumnId(1)).then_some(ColumnId(10)));
+        assert_eq!(s.cond_formats.len(), 1);
+        assert_eq!(s.cond_formats[0].range.columns, vec![ColumnId(10)]);
+    }
+
+    #[test]
+    fn insert_rows_moves_bounds() {
+        let mut s = sheet(&[&[0.0; 10]]);
+        ranged(&mut s, 3, Some(6));
+        ranged(&mut s, 3, None);
+        s.cond_formats_insert_rows(&[0], 3, 2);
+        assert_eq!(rows_of(&s), [(5, Some(8)), (5, None)]);
+        s.cond_formats_insert_rows(&[0], 6, 1);
+        assert_eq!(rows_of(&s), [(5, Some(9)), (5, None)]);
+        s.cond_formats_insert_rows(&[0], 10, 1);
+        assert_eq!(rows_of(&s), [(5, Some(9)), (5, None)], "below the range changes nothing");
+    }
+
+    #[test]
+    fn delete_rows_shrinks_shifts_and_drops() {
+        let mut s = sheet(&[&[0.0; 10]]);
+        ranged(&mut s, 3, Some(6));
+        ranged(&mut s, 3, None);
+        s.cond_formats_delete_rows(&[0], 0..2);
+        assert_eq!(rows_of(&s), [(1, Some(4)), (1, None)]);
+        s.cond_formats_delete_rows(&[0], 3..5);
+        assert_eq!(rows_of(&s), [(1, Some(2)), (1, None)]);
+        s.cond_formats_delete_rows(&[0], 1..3);
+        assert_eq!(rows_of(&s), [(1, None)], "the closed rule is gone, the open one stays");
+    }
+
+    #[test]
+    fn delete_rows_across_first_row() {
+        let mut s = sheet(&[&[0.0; 10]]);
+        ranged(&mut s, 3, Some(6));
+        s.cond_formats_delete_rows(&[0], 1..5);
+        assert_eq!(rows_of(&s), [(1, Some(2))]);
+    }
+
+    #[test]
+    fn untouched_columns_keep_their_rules() {
+        let mut s = sheet(&[&[0.0; 10], &[0.0; 10]]);
+        ranged(&mut s, 3, Some(6));
+        s.cond_formats_delete_rows(&[1], 0..2);
+        assert_eq!(rows_of(&s), [(3, Some(6))]);
     }
 }

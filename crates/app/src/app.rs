@@ -1867,9 +1867,13 @@ impl SheafApp {
                 let mut copy = b.sheets[active].clone();
                 copy.name = free_name(&b.sheets, &format!("{}_", copy.name));
                 self.doc.apply("Duplicate sheet", |p| {
+                    let mut renamed = std::collections::HashMap::new();
                     for c in &mut copy.columns {
-                        c.id = p.new_column_id();
+                        let new = p.new_column_id();
+                        renamed.insert(c.id, new);
+                        c.id = new;
                     }
+                    copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
                     if let Some(b) = p.workbook_mut(book) {
                         b.sheets.insert(active + 1, copy);
                         b.active_sheet = active + 1;
@@ -3439,6 +3443,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
             Window::Workbook(b) => {
                 for s in &mut b.sheets {
                     s.columns.retain(|c| !columns.contains(&c.id));
+                    s.remap_cond_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
             Window::Graph(g) => {

@@ -412,6 +412,12 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Remove.** Remove Conditional Format removes every rule whose range touches the selection, whole
   rules and not just the selected part; with none it says so in the status bar. Each command is one
   undo step ("Highlight min max", "Highlight top bottom", "Remove conditional format").
+- **Copies and edits.** Window > Duplicate, Worksheet > Duplicate sheet and File > Append keep the rules,
+  pointing at the copy's own columns. Deleting columns takes them out of every rule and drops a rule
+  left with no column (in the same undo step as the delete). Inserting rows at or above a rule's first
+  row moves it down, inside it makes it longer; deleting rows moves or shortens it, and a rule whose
+  whole row span is deleted is dropped; a rule that runs to the end stays open. Only operations on a
+  column of the rule count.
 - **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
   read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
   release build.

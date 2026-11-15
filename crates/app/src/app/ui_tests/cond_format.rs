@@ -163,3 +163,33 @@ fn conditional_formats_survive_save_and_reload_through_the_companion() {
     let reloaded = project(&h2).workbooks().next().unwrap().sheet().cond_formats.clone();
     assert_eq!(reloaded, rules(&h));
 }
+
+#[test]
+fn duplicate_sheet_keeps_the_rules_on_the_copys_own_columns() {
+    let mut h = start_book("cf-dup-sheet");
+    apply_column_wise(&mut h);
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().sheet_op(book, SheetOp::Duplicate);
+    h.run();
+    let b = project(&h).workbook(book).unwrap();
+    let (orig, copy) = (&b.sheets[0], &b.sheets[1]);
+    assert_eq!(copy.cond_formats.len(), orig.cond_formats.len());
+    assert!(!copy.cond_formats.is_empty());
+    for r in &copy.cond_formats {
+        for id in &r.range.columns {
+            assert!(copy.column_index(*id).is_some(), "rule column belongs to the copy");
+            assert!(orig.column_index(*id).is_none());
+        }
+    }
+}
+
+#[test]
+fn deleting_all_columns_of_a_rule_drops_it_with_the_delete() {
+    let mut h = start_book("cf-del-cols");
+    apply_column_wise(&mut h);
+    let ids: Vec<_> = sheet(&h).cond_formats[0].range.columns.clone();
+    h.state_mut().doc.apply("Delete columns", |p| delete_columns(p, &ids));
+    assert!(rules(&h).is_empty());
+    h.state_mut().doc.undo();
+    assert_eq!(rules(&h).len(), 1, "undo brings the rule back with the columns");
+}

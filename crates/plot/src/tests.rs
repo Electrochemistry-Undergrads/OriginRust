@@ -4205,3 +4205,98 @@ fn connect_line_across_missing_data_joins_the_points_around_missing_rows() {
     }
     assert_eq!(pieces(&p), 2);
 }
+
+// ----- cumulative stacking (graphing spec 13.15) -----------------------------
+
+/// The drawn Y values of the visible plots of the first layer, one vector per plot.
+fn drawn_ys(p: &Project, g: WindowId) -> Vec<Vec<f64>> {
+    let layer = &p.graph(g).unwrap().layers[0];
+    data::collect(p, layer).plots.iter().map(|pd| (0..pd.y.len()).map(|i| pd.y_at(i)).collect()).collect()
+}
+
+const THREE: [Of; 3] = [&|x| x, &|x| 2.0 * x, &|x| 3.0 * x];
+
+#[test]
+fn cumulative_lines_add_the_plots_before_them_row_by_row() {
+    let (p, g) = stacked(Stack::Cumulative, &THREE);
+    let ys = drawn_ys(&p, g);
+    for (i, x) in x0_20().iter().enumerate() {
+        assert!(near(ys[0][i], *x) && near(ys[1][i], 3.0 * x) && near(ys[2][i], 6.0 * x), "row {i}: {ys:?}");
+    }
+    // Only the drawing changes: no place has an offset and the data are as they were.
+    assert_offsets(&p, g, &[0.0, 0.0, 0.0]);
+    let c = plot_column(&p, g, 2);
+    assert_eq!(p.numeric(c).unwrap()[20], 60.0);
+    // The automatic range covers the top curve: 0 to 120.
+    assert_eq!(y_range(&p, g), Some((0.0, 120.0)));
+}
+
+#[test]
+fn cumulative_hidden_plots_still_count_and_none_removes_the_sum() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    p.graph_mut(g).unwrap().layers[0].plots[1].visible = false;
+    let ys = drawn_ys(&p, g);
+    assert_eq!(ys.len(), 2);
+    assert!(near(ys[1][20], 120.0), "the hidden curve keeps its share: {ys:?}");
+    p.graph_mut(g).unwrap().layers[0].stack = Stack::None;
+    assert!(near(drawn_ys(&p, g)[1][20], 60.0));
+}
+
+#[test]
+fn cumulative_rows_missing_in_a_previous_plot_add_nothing() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let (b, c) = (plot_column(&p, g, 1), plot_column(&p, g, 2));
+    let mut values = p.numeric(b).unwrap().to_vec();
+    values[5] = f64::NAN;
+    values.truncate(10);
+    set_values(&mut p, b, values);
+    let ys = drawn_ys(&p, g);
+    assert!(ys[1][5].is_nan(), "the missing value stays a gap");
+    assert!(near(ys[2][5], 3.0 * 5.0 + 5.0), "row 5 of the top curve: 15 + 5 (the missing 10 counts 0)");
+    assert!(near(ys[2][4], 12.0 + 8.0 + 4.0), "{:?}", ys[2]);
+    // Beyond the short plot's rows it adds nothing either: row 15 is 45 + 15.
+    assert!(near(ys[2][15], 45.0 + 15.0), "{:?}", ys[2]);
+    assert_eq!(p.numeric(c).unwrap().len(), 21);
+}
+
+#[test]
+fn cumulative_sums_by_row_index_even_when_the_x_values_differ() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let book = p.workbooks().next().unwrap().id;
+    let x2 =
+        p.add_column(book, 0, Designation::X, ColumnData::numeric((0..=20).map(|v| 100.0 + f64::from(v)).collect()));
+    let x2 = x2.unwrap();
+    p.graph_mut(g).unwrap().layers[0].plots[1].x = Some(x2);
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    // Row 3 of the second plot is drawn at its own X (103) and at Y 6 + 3.
+    assert!(near(d.plots[1].x_at(3), 103.0) && near(d.plots[1].y_at(3), 9.0));
+}
+
+#[test]
+fn cumulative_skips_filtered_rows_and_the_range_follows_what_is_shown() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let book = p.workbooks().next().unwrap().id;
+    let keep: Vec<bool> = (0..21).map(|r| r >= 10).collect();
+    p.workbook_mut(book).unwrap().sheets[0].filter =
+        Some(sheaf_core::rowfilter::RowFilter { condition: "x>=10".into(), enabled: true, keep });
+    let layer = &p.graph(g).unwrap().layers[0];
+    let add = sheaf_core::stack::cumulative_add(&p, layer);
+    assert_eq!(add[2].as_ref().unwrap()[3], 0.0, "filtered rows add nothing");
+    assert_eq!(add[2].as_ref().unwrap()[12], 12.0 + 24.0);
+    // Shown rows 10..=20: the lowest drawn Y is the bottom curve at X = 10 and the highest 120.
+    assert_eq!(y_range(&p, g), Some((10.0, 120.0)));
+}
+
+#[test]
+fn a_fitted_curve_of_a_cumulative_member_rides_on_the_sum_below_it() {
+    // Curves: A, B, the fit of B (a line through B), C.
+    let fs: [Of; 4] = [&|x| x, &|x| 2.0 * x, &|x| 2.0 * x, &|x| 3.0 * x];
+    let (mut p, g) = stacked(Stack::Cumulative, &fs);
+    let (b, fit) = (plot_column(&p, g, 1), plot_column(&p, g, 2));
+    p.graph_mut(g).unwrap().layers[0].plot_offset_mut(fit).follows = Some(b);
+    let ys = drawn_ys(&p, g);
+    // A is below B by A, so the fit is moved by A(x) = x too, and C stacks on A and B only.
+    assert!(near(ys[2][7], 14.0 + 7.0) && near(ys[1][7], 14.0 + 7.0), "{:?}", ys[2]);
+    assert!(near(ys[3][7], 21.0 + 7.0 + 14.0), "{:?}", ys[3]);
+}

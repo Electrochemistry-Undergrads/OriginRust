@@ -1353,7 +1353,9 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
             r
         };
         radio(ui, &mut mode, Stack::None, "None");
-        ui.add_enabled(false, egui::RadioButton::new(false, "Cumulative")).on_disabled_hover_text(later);
+        radio(ui, &mut mode, Stack::Cumulative, "Cumulative").on_hover_text(
+            "Sheaf: lines, scatter and line + symbol plots are drawn at their Y plus the Y of the plots before them, row by row",
+        );
         ui.add_enabled(false, egui::RadioButton::new(false, "Incremental")).on_disabled_hover_text(later);
         ui.horizontal(|ui| {
             radio(ui, &mut mode, Stack::Constant { step: 1.0 }, "Constant");

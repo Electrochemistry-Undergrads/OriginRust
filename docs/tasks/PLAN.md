@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 459 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 454 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -76,7 +76,7 @@ T58 goes first (it builds the toolbar's dispatch); T59 can start on its model an
 |---|---|---|---|---|---|---|
 | [ ] | [T60](T60-merge-graphs-layer-management.md) | Merge Graph Windows, Layer Management (arrange, size, link), Fit Layer to Graph, Fit Page to Layers | L | for both windows | 7 | `core/panels.rs`, new `core/merge.rs`, new dialogs |
 | [ ] | [T61](T61-layers-and-multi-y.md) | Add Layer buttons, inset, layer icon menu, Layer Properties, 3Ys/4Ys templates, Multiple Y Axes | L | for templates' placement | 20 | `core/graph.rs` (layers), `core/template.rs`, `app/graph_view.rs` |
-| [ ] | [T62](T62-stack-offset-leftovers.md) | Offset Grouped Data in Layer menu (with Cumulative), Stacked Histograms, waterfall colour mapping | M | for Stacked Histograms and waterfall colours | 8 | `core/stack.rs`, `plot/stack.rs`, `core/template.rs` |
+| [ ] | [T62](T62-stack-offset-leftovers.md) | Offset Grouped Data in Layer menu (with Cumulative), Stacked Histograms, waterfall colour mapping | M | for Stacked Histograms and waterfall colours | 3 | `core/stack.rs`, `plot/stack.rs`, `core/template.rs` |
 
 What already works and must not be rebuilt: Stacked Lines by Y Offsets and Waterfall (graphing 13,
 ADR 0010), Plot > Multi-Panel > 2/4/9 Panel, Stack... and Multiple Panels by Label (graphing 15),

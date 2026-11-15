@@ -1238,9 +1238,43 @@ then `layer -g`; Y = x, x+1, x+2, x+3 for X = 0..10, so each curve is 10 high); 
   "3" gives 0, 3, 6; "2 5" on four curves gives 0, 2, 7, 9 (the steps between neighbours, repeated).
 
 Sheaf (`graph_details.rs` `stack_tab`): the same Offset group of choices. Constant takes one step, not a
-list; Auto chosen on this tab starts at 8 %; Cumulative, Incremental, Keep Proportion, the X/Y ticks and the
-column/bar options are greyed (no stacked columns yet, GP-COL-01); Waterfall is Sheaf's own extra choice
+list; Auto chosen on this tab starts at 8 %; Cumulative is live for line, scatter and line + symbol plots
+(13.15); Incremental, Keep Proportion, the X/Y ticks and the column/bar options are greyed (no stacked columns
+yet, GP-COL-01); Waterfall is Sheaf's own extra choice
 with its two shifts. The per-plot offsets of Individual stay listed under the group.
+
+### 13.15 Graph > Offset Grouped Data in Layer and Cumulative lines (T62 slice 1)
+
+Origin facts (13.1, 13.14, measured as far as listed there): the submenu has None, Cumulative, Constant, Auto
+and Individual, one of them ticked; Cumulative adds each plot's Y values point by point to those of the plots
+before it. **Not measured** (Sheaf's choices, labelled so): whether the menu items prompt, what Cumulative does
+with missing rows or different X, and the menu's undo text.
+
+Sheaf:
+
+- **Menu.** Graph > Offset Grouped Data in Layer has the five items, live, with a tick on the active layer's
+  present mode. A choice changes the active layer's `stack` as one history step (undo text "Offset grouped data
+  in layer"); the mode the layer already has is a no-op (no history step, the stored values stay). Plot Details'
+  Stack tab edits the same field, so the tick and the radio buttons always agree (Waterfall, Sheaf's own
+  mode, has no menu item and ticks none).
+- **No prompts.** Constant and Auto use stored values as the Stack tab does: a layer not yet in that mode starts
+  at Constant step 1 or Auto gap 8 % (the tab's own start values); individual offsets stay in `plot_offsets`.
+  Origin's own prompting (if any) is unmeasured.
+- **Cumulative rule** (`core/stack.rs` `cumulative_add`): the members (13.3) are summed in plot order,
+  pointwise by **row index**, whatever their X values; plot k is drawn at `Y_k[row] + sum over j<k of Y_j[row]`.
+  A previous plot adds 0 at a row where it is missing (not a finite number), outside its row range, or removed
+  by a worksheet row filter, so one hole does not break the curves above it; the plot's own missing value stays a
+  gap. Hidden plots still add their share (13.3). A fitted curve following a member is moved by that member's
+  added amount at the fit's own X (linear interpolation along the leader's X, clamped at its ends).
+  Applies to line, scatter and line + symbol plots; other plot types in the layer are drawn as they are and add
+  nothing. Places (`places`) carry no offset in this mode (it is not a pair of offsets), so the `.opj` writer and
+  Individual are unaffected: the writer warns that Cumulative was written as plain curves and the `.sheaf`
+  companion keeps the mode.
+- **Everything follows the drawing.** The plot data (`PlotData.y`), hence automatic axis ranges, filters,
+  symbols, drop lines, labels and error bars, the Data Reader and the Data menu tools (which take the added share
+  back when a point is moved) use the summed Y. The Integrate gadget's shading still follows the source values.
+- **CLI/MCP:** `--stack cumulative` (and the MCP `stack` string).
+
 
 ---
 

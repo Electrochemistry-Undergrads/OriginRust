@@ -333,10 +333,11 @@ pub(crate) fn collect_graph<'a>(project: &'a Project, g: &'a sheaf_core::graph::
 /// the stack).
 pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'a> {
     let (places, members) = stack::places(project, layer);
+    let mut cumulative = sheaf_core::stack::cumulative_add(project, layer);
     let mut plots = Vec::new();
     let mut boxes = 0usize;
     let mut ridges = 0usize;
-    for (plot, place) in layer.plots.iter().zip(places).filter(|(p, _)| p.visible) {
+    for (index, (plot, place)) in layer.plots.iter().zip(places).enumerate().filter(|(_, (p, _))| p.visible) {
         let Some(y) = project.numeric(plot.y) else { continue };
         let x = plot.x.and_then(|id| project.numeric(id));
         let x_format = plot.x.and_then(|id| project.column(id)).map(|c| c.format);
@@ -355,6 +356,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 (Cow::Owned(owned), None)
             }
             _ => (Cow::Borrowed(y), active_mask),
+        };
+        // Cumulative stacking: each row is drawn at its Y plus the Y of the plots before it.
+        let y_plot = match cumulative[index].take() {
+            Some(add) => Cow::Owned(y_plot.iter().zip(&add).map(|(v, a)| v + a).collect()),
+            None => y_plot,
         };
         let mut pd = PlotData {
             plot,

@@ -62,7 +62,8 @@ pub fn place(
     let geom = geometry.get(p.layer)?;
     let placement = placement(project, graph, p.layer, p.plot);
     let shift = sheaf_plot::waterfall_shift(project, graph, p.layer, &placement, geom);
-    let at = to_screen(page_of(geom, &placement, shift, xv, yv));
+    let lift = cumulative_add(project, graph, p.layer, p.plot).and_then(|a| a.get(p.row).copied()).unwrap_or(0.0);
+    let at = to_screen(page_of(geom, &placement, shift, xv, yv + lift));
     (at.x.is_finite() && at.y.is_finite()).then_some((at, xv, yv))
 }
 
@@ -78,6 +79,13 @@ fn page_of(geom: &LayerGeometry, place: &Place, shift: (f64, f64), xv: f64, yv: 
 pub fn shift(project: &Project, graph: WindowId, geometry: &[LayerGeometry], p: Point) -> (f64, f64) {
     let Some(geom) = geometry.get(p.layer) else { return (0.0, 0.0) };
     sheaf_plot::waterfall_shift(project, graph, p.layer, &placement(project, graph, p.layer, p.plot), geom)
+}
+
+/// What Cumulative stacking adds to each row of a plot's Y values when it is drawn (`None` in the
+/// other modes), so a picked point is where the curve is drawn.
+pub fn cumulative_add(project: &Project, graph: WindowId, layer: usize, plot: usize) -> Option<Vec<f64>> {
+    let l = project.graph(graph)?.layers.get(layer)?;
+    sheaf_core::stack::cumulative_add(project, l).get_mut(plot)?.take()
 }
 
 pub fn placement(project: &Project, graph: WindowId, layer: usize, plot: usize) -> Place {
@@ -132,6 +140,7 @@ fn each_point(
             let filters = project.plot_row_filters(plot);
             let (start, end) = sheaf_core::stack::row_range(plot, x.len().min(y.len()));
             let placement = placement(project, graph, li, pi);
+            let lift = cumulative_add(project, graph, li, pi);
             let shift = sheaf_plot::waterfall_shift(project, graph, li, &placement, geom);
             let hidden = if pick == Pick::Edit && project.hide_masked {
                 project.column(plot.y).and_then(|c| c.active_mask())
@@ -156,7 +165,8 @@ fn each_point(
                 {
                     continue;
                 }
-                let page = page_of(geom, &placement, shift, *xv, *yv);
+                let add = lift.as_ref().and_then(|a| a.get(row)).copied().unwrap_or(0.0);
+                let page = page_of(geom, &placement, shift, *xv, *yv + add);
                 let at = to_screen(page);
                 if at.x.is_finite() && at.y.is_finite() && !clipped(page) {
                     f(at, Point { layer: li, plot: pi, row });

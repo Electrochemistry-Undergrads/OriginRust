@@ -1122,6 +1122,12 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    if layer.stack == Stack::Cumulative {
+        notes.push(
+            "a cumulative stack was written as plain curves (the cumulative offset mode is not written; the .opj.sheaf companion keeps it)"
+                .into(),
+        );
+    }
     if layer.plot_offsets.iter().any(|o| o.x_multiplier != 1.0 || o.y_multiplier != 1.0) {
         notes.push("plot X/Y multipliers were not written; Origin shows the source values with offsets only (the .opj.sheaf companion keeps the multipliers)".into());
     }

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **459 greyed items: 318 in the menu bar, 47 on the toolbars, 94 in context menus.**
+original inventory baseline. This is not a new runtime audit. **454 greyed items: 313 in the menu bar, 47 on the toolbars, 94 in context menus.**
 
 ## How to read and keep this file
 
@@ -39,7 +39,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T59` | 2 |
 | `T60` | 7 |
 | `T61` | 20 |
-| `T62` | 8 |
+| `T62` | 3 |
 | `T63` | 31 |
 | `B1` | 27 |
 | `B2` | 51 |
@@ -60,7 +60,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 19 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 86 items, backlog packages (`B`) 354, not planned (`N`) 19.
+Briefs (`T`) hold 81 items, backlog packages (`B`) 354, not planned (`N`) 19.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -172,7 +172,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Add Function Graph... · Add Straight Line... · New Table · New Color Scale · Convert to Standard Font Size
 - `T61` New Layer(Axes): Horizontal Axis Layer... · Vertical Axis Layer...
 - `B3` Legend: Add Legend Title
-- `T62` Offset Grouped Data in Layer: None · Cumulative · Constant · Auto · Individual
 
 ### Data
 - `B3` Set Display Range · Reset to Full Range · Mark Data Range · Clear Data Markers

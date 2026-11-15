@@ -649,6 +649,10 @@ pub enum Stack {
     Constant { step: f64 },
     /// Each member is moved by its own offset from [`Layer::plot_offsets`].
     Individual,
+    /// Each member's drawn Y is its Y plus the sum of the Y values of all members before it at the
+    /// same row (graphing spec 13.15). Pointwise by row index, so it is not a pair of offsets: see
+    /// [`crate::stack::cumulative_add`]. Lines, scatter and line + symbol plots only.
+    Cumulative,
     /// A simple two-dimensional waterfall: member k is drawn moved right by `k * dx_percent` and
     /// up by `k * dy_percent` percent of the front frame, which shrinks to make room. Drawn only
     /// for a layer that is not linked to another and has no linked layers.
@@ -2496,6 +2500,7 @@ mod tests {
             (Stack::Auto { gap_percent: 10.0 }, r#"{"kind":"auto","gap_percent":10.0}"#),
             (Stack::Constant { step: -500.0 }, r#"{"kind":"constant","step":-500.0}"#),
             (Stack::Individual, r#"{"kind":"individual"}"#),
+            (Stack::Cumulative, r#"{"kind":"cumulative"}"#),
             (
                 Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 },
                 r#"{"kind":"waterfall","dx_percent":5.0,"dy_percent":10.0}"#,

@@ -130,6 +130,13 @@ fn a_waterfall_is_written_as_offsets_that_put_the_curves_where_sheaf_draws_them(
     assert_eq!(imp.graphs[0].layers[0].stack, Stack::None);
 }
 
+#[test]
+fn a_cumulative_stack_is_written_as_plain_curves_with_a_warning() {
+    let (imp, out) = round_trip(&stacked(Stack::Cumulative));
+    assert!(out.warnings.iter().any(|w| w.contains("cumulative")), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].stack, Stack::None);
+}
+
 fn double_y() -> Project {
     let mut p = source();
     let c = ids(&p);

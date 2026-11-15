@@ -74,7 +74,7 @@ pub enum SheetOp {
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GraphOp {
     /// Change Plot to: line, scatter, line + symbol, column.
     SetPlotKind { layer: usize, plot: usize, kind: PlotKind },
@@ -94,6 +94,9 @@ pub enum GraphOp {
     /// Exchange X-Y Axes: the settings of the two axes and the X and Y columns of every plot trade places.
     /// A layer with a plot against the row number (no X column) is left as it is.
     ExchangeAxes { layer: usize },
+    /// Graph > Offset Grouped Data in Layer: the layer's stack mode. Choosing the mode the layer
+    /// already has changes nothing and makes no undo step.
+    SetStack { layer: usize, stack: sheaf_core::graph::Stack },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
     /// Delete on the legend: it is hidden.

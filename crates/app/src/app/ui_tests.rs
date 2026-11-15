@@ -649,7 +649,7 @@ fn the_stack_tab_has_origins_offset_choices_and_auto_gap() {
     {
         assert!(has_label(&h, label), "{label}");
     }
-    assert!(is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
+    assert!(!is_disabled(&h, "Cumulative") && is_disabled(&h, "Show Connect Line on Stacked Column/Bar"));
     h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Auto")).click();
     settle(&mut h);
     click(&mut h, "OK");
@@ -6813,6 +6813,75 @@ fn exchange_axes_swaps_the_columns_and_the_axis_settings_in_one_undo_step() {
     assert_eq!(h.state().doc.undo_label(), Some("Exchange X-Y axes"));
     menu(&mut h, "Edit", "Undo Exchange X-Y axes");
     assert_eq!(graph(&h).layers[0], before);
+}
+
+const OFFSET_MENU: &str = "Offset Grouped Data in Layer";
+
+#[test]
+fn offset_grouped_data_menu_sets_the_stack_mode_through_history_and_ticks_the_current_one() {
+    let mut h = start(vec![data_file("offset-menu")]);
+    assert_eq!(h.state().menu_context().stack, Some(Stack::None), "None is ticked at the start");
+    let undo_before = h.state().doc.undo_label().map(str::to_string);
+    for (entry, want) in [
+        ("Cumulative", Stack::Cumulative),
+        ("Constant", Stack::Constant { step: 1.0 }),
+        ("Auto", Stack::Auto { gap_percent: 8.0 }),
+        ("Individual", Stack::Individual),
+        ("None", Stack::None),
+    ] {
+        menu_path(&mut h, &["Graph", OFFSET_MENU, entry]);
+        assert_eq!(graph(&h).layers[0].stack, want, "{entry}");
+        assert_eq!(h.state().menu_context().stack, Some(want), "the tick follows {entry}");
+    }
+    assert_ne!(h.state().doc.undo_label().map(str::to_string), undo_before);
+    // One undo step per change.
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Cumulative"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Offset grouped data in layer"));
+    menu(&mut h, "Edit", "Undo Offset grouped data in layer");
+    assert_eq!(graph(&h).layers[0].stack, Stack::None);
+    menu(&mut h, "Edit", "Redo Offset grouped data in layer");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Cumulative);
+}
+
+#[test]
+fn choosing_the_current_offset_mode_is_a_no_op_that_keeps_its_settings() {
+    let mut h = start(vec![data_file("offset-noop")]);
+    h.state_mut().doc.apply("Test", |p| {
+        p.graph_mut(window_ids_of(p)).unwrap().layers[0].stack = Stack::Auto { gap_percent: 25.0 };
+    });
+    let label = h.state().doc.undo_label().map(str::to_string);
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Auto"]);
+    assert_eq!(graph(&h).layers[0].stack, Stack::Auto { gap_percent: 25.0 }, "the stored gap is kept");
+    assert_eq!(h.state().doc.undo_label().map(str::to_string), label, "no undo step");
+}
+
+fn window_ids_of(p: &Project) -> WindowId {
+    p.graphs().next().unwrap().id
+}
+
+#[test]
+fn the_offset_menu_and_plot_details_stay_in_sync() {
+    let mut h = start(vec![data_file("offset-sync")]);
+    menu_path(&mut h, &["Graph", OFFSET_MENU, "Cumulative"]);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    let radio = |h: &Harness<'static, SheafApp>, label: &str| {
+        h.get(By::new().role(egui::accesskit::Role::RadioButton).label(label)).accesskit_node().toggled()
+    };
+    assert_eq!(radio(&h, "Cumulative"), Some(egui::accesskit::Toggled::True));
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Constant")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().menu_context().stack, Some(Stack::Constant { step: 1.0 }));
+    // And the other way: Plot Details can switch to Cumulative.
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Stack");
+    h.get(By::new().role(egui::accesskit::Role::RadioButton).label("Cumulative")).click();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(graph(&h).layers[0].stack, Stack::Cumulative);
 }
 
 #[test]

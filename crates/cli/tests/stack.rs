@@ -85,6 +85,8 @@ fn stack_sets_the_mode_of_the_first_layer() {
     assert_eq!(layer(&p).stack, Stack::Constant { step: -500.0 });
     let p = plot_and_load(&dir, &data, &["-t", "stacked", "--stack", "none"]);
     assert_eq!(layer(&p).stack, Stack::None);
+    let p = plot_and_load(&dir, &data, &["--stack", "Cumulative"]);
+    assert_eq!(layer(&p).stack, Stack::Cumulative);
     let text = std::fs::read_to_string(dir.join("o.svg")).unwrap();
     assert!(text.starts_with("<svg"));
 

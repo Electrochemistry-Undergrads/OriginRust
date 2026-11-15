@@ -42,6 +42,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t01-stack-panels` | Codex Windows, t01-stack-panels | T01 Multi-Panel > Stack dialog over existing panels API; app dialog/menu/state and focused UI tests only | claimed 2026-11-14; no core/plot/offset scaling, clipboard or other sessions' symbols |
 | `codex/t13-offset-multipliers` | Codex Windows, t13-offset-multipliers | T13 Offset tab X/Y Multiplier; core/plot/graph_details, reader, gadget/graph_view display mapping and app.rs `start_integrate` only, focused tests | claimed 2026-11-14; no worksheet copy/paste symbols or numerical analysis/fitting changes |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 

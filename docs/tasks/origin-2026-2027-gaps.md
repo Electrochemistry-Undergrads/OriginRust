@@ -19,7 +19,7 @@ outputs or UI behavior.
 |---|---|---|---|
 | Cell formulas and Formula Bar | 2019 / 2021 | Calculate individual cells and edit their expressions in a formula bar, alongside column-wide calculations. | [2019][o19] · [2021][o21] |
 | Named cells and ranges | 2022 | Assign a reusable name to a cell or selected range and reference it in calculations. | [2022][o22] |
-| Cell notes | 2022 | Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
+| Cell notes | 2022 | Done (T36). Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
 | Worksheet frozen panes | 2023 | Done (T34). Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |
 | Time Series Pivot | 2025 | Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
 | Project Browser | 2025b | Search a project-wide list of sheets, columns, graphs and folders, preview matches and apply metadata edits to multiple selections. | [2025b][o25b] |

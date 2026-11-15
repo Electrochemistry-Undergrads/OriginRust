@@ -1263,7 +1263,8 @@ Sheaf:
 - **Cumulative rule** (`core/stack.rs` `cumulative_add`): the members (13.3) are summed in plot order,
   pointwise by **row index**, whatever their X values; plot k is drawn at `Y_k[row] + sum over j<k of Y_j[row]`.
   A previous plot adds 0 at a row where it is missing (not a finite number), outside its row range, or removed
-  by a worksheet row filter, so one hole does not break the curves above it; the plot's own missing value stays a
+  by a worksheet row filter, or hidden by a mask while Hide Masked Points is on (drawing treats those points as
+  gaps, so they add nothing either), so one hole does not break the curves above it; the plot's own missing value stays a
   gap. Hidden plots still add their share (13.3). A fitted curve following a member is moved by that member's
   added amount at the fit's own X (linear interpolation along the leader's X, clamped at its ends).
   Applies to line, scatter and line + symbol plots; other plot types in the layer are drawn as they are and add
@@ -1273,6 +1274,10 @@ Sheaf:
 - **Everything follows the drawing.** The plot data (`PlotData.y`), hence automatic axis ranges, filters,
   symbols, drop lines, labels and error bars, the Data Reader and the Data menu tools (which take the added share
   back when a point is moved) use the summed Y. The Integrate gadget's shading still follows the source values.
+- **Menu and Plot Details only offer Cumulative where it acts:** the Cumulative item (and the Plot Details
+  Cumulative radio button) is greyed, with the hover reason "Cumulative needs a line, scatter or line + symbol
+  plot in the layer", when the active layer has no such plot (a column, bar or area layer would otherwise tick and
+  add an undo step with no visible change). The other modes are unaffected.
 - **CLI/MCP:** `--stack cumulative` (and the MCP `stack` string).
 
 
@@ -1289,11 +1294,12 @@ Sheaf (`Project::plot_stacked_histograms`; GUI Plot > Statistics > Stacked Histo
   the first panel so all share one X scale and the inner panels show no X tick labels) with the order turned
   top-down, and the shared panel helpers `plot_panels`/`panel_layers` of 15.
 - **Shared bins** (provisional): the bin width, first edge and last edge are the ones the histogram rule
-  (frequency-counts automatic bins, measured for single histograms) gives for the **union of all the columns'
-  finite values**; they are stored explicitly on every plot (`hist`), so the panels have identical bin edges
+  (frequency-counts automatic bins, measured for single histograms) gives for the **union of the finite values
+  each panel's histogram uses**: the rows its sheet's row filter lets show, and not masked while Hide Masked Points
+  is on (`Project::shown_values`), so a hidden outlier does not widen the shared bins; they are stored explicitly on every plot (`hist`), so the panels have identical bin edges
   and later editing one panel's bins does not touch the others. Each panel has its own count axis.
 - Each panel gets the next colour of the layer palette (starting at the Histogram template's red).
-- `--panels` is refused with this template; the legend of each panel names its column.
+- `--panels` and `--y2` (a right Y axis, also refused by `plot_columns_double_y`) are refused with this template; the legend of each panel names its column.
 
 
 ### 13.17 Waterfall Y:Color Mapping and Z:Color Mapping (T62 slice 3)
@@ -1307,10 +1313,13 @@ unchanged), the legend hidden, and:
 
 - **Colours** come from the shared ramp (`plots::map_color`: blue, cyan, green, yellow, red) also used by colour
   mapped symbols, parallel plots and sunburst plots.
-- **Y mapping:** each straight segment between two shown, finite points is coloured by the mean Y of its two ends
-  (a segment colour, not a gradient inside a segment; runs of one colour are drawn as one path). One scale for the
-  whole layer: the smallest and largest shown Y of all curves. Connection styles other than straight, symbol gaps
-  and fill under the curve are not applied to the mapped line; symbols of line + symbol plots keep the plot colour.
+- **Y mapping:** the line is built exactly as the plain line (the plot's connect mode, axis breaks, missing data
+  with the page's "Connect line across Missing Data", symbol-line gaps: one code path, `draw_line`); only the
+  colouring differs. The final polyline is split into its straight pieces and each is coloured by the mean Y of its
+  two ends (read back off the page in data units, less the curve's stack offset, so it is on the source Y scale; a
+  segment colour, not a gradient inside a segment; runs of one colour are drawn as one path). One scale for the
+  whole layer: the smallest and largest shown Y of all curves. Fill under the curve is not applied to the mapped
+  line; symbols of line + symbol plots keep the plot colour.
 - **Z mapping:** each curve is one colour, from its Z value on a scale from the smallest to the largest Z of the
   layer. Z is the number in the long name of the curve's Y column; else the number in its comments; else the curve's
   place in the stack counted from 1 (`core::stack::waterfall_z`).

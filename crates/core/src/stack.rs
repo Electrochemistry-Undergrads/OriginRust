@@ -114,6 +114,11 @@ fn cumulates(plot: &Plot) -> bool {
     matches!(plot.kind, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
 }
 
+/// True when `layer` has a plot that [`Stack::Cumulative`] would add up (a line, scatter or line + symbol plot).
+pub fn layer_cumulates(layer: &Layer) -> bool {
+    layer.plots.iter().any(cumulates)
+}
+
 /// What [`Stack::Cumulative`] adds to the Y values of each plot of `layer` (graphing spec 13.15),
 /// one entry per plot in plot order, each a vector with one number per row of the plot's Y column;
 /// drawn Y of a row is its Y plus this number. `None` for a plot that is not stacked this way: the
@@ -122,7 +127,7 @@ fn cumulates(plot: &Plot) -> bool {
 ///
 /// Sheaf's rules (not measured in Origin): the members are summed in plot order, pointwise by row
 /// index, whatever their X values. A member contributes its Y at a row when the row is shown (in
-/// the plot's row range, passing its row filters) and finite; otherwise it contributes 0, so one
+/// the plot's row range, passing its row filters, and not masked while Hide Masked Points is on) and finite; otherwise it contributes 0, so one
 /// missing value does not break the curves above it. A hidden member still contributes (spec
 /// 13.3). A curve that follows a member (a fitted curve) is moved by the leader's added amount
 /// at its own X, interpolated linearly along the leader's X (clamped at the ends).
@@ -150,8 +155,10 @@ pub fn cumulative_add(project: &Project, layer: &Layer) -> Vec<Option<Vec<f64>>>
         out[i] = Some(add);
         let filters = project.plot_row_filters(plot);
         let (start, end) = row_range(plot, y.len());
+        // With Hide Masked Points a masked row is not drawn, so it adds nothing either.
+        let hidden = project.column(plot.y).and_then(|c| c.active_mask()).filter(|_| project.hide_masked);
         for (r, &v) in y.iter().enumerate().take(end).skip(start) {
-            if v.is_finite() && filters.iter().all(|f| f.passes(r)) {
+            if v.is_finite() && filters.iter().all(|f| f.passes(r)) && !hidden.is_some_and(|m| m.contains(&r)) {
                 running[r] += v;
             }
         }

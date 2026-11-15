@@ -4453,3 +4453,136 @@ fn y_mapping_colours_segments_by_the_mean_y_of_their_ends_over_one_scale() {
     assert!(distinct.len() > 10, "a gradient of many colours, got {}", distinct.len());
     assert!(texts(&doc(&svg_of(&p, g))).iter().any(|t| t == "Y"));
 }
+
+// ----- waterfall Y mapping follows the plain line's geometry (graphing spec 13.17) -----------
+
+/// The stroked line pieces of the first layer, with pieces that continue each other (as the colour runs of a
+/// mapped line do) merged into one.
+fn merged_line_pieces(p: &Project, g: WindowId) -> Vec<Vec<(f64, f64)>> {
+    let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+    let mut out: Vec<Vec<(f64, f64)>> = Vec::new();
+    for item in &scene.layers[0].plots {
+        let scene::Item::Path { d, fill: None, stroke: Some(_) } = item else { continue };
+        for sub in hit::subpaths(d) {
+            match out.last_mut() {
+                Some(last) if last.last() == sub.first() => last.extend(sub.into_iter().skip(1)),
+                _ => out.push(sub),
+            }
+        }
+    }
+    out
+}
+
+fn same_pieces(a: &[Vec<(f64, f64)>], b: &[Vec<(f64, f64)>]) {
+    assert_eq!(a.len(), b.len(), "piece count");
+    for (x, y) in a.iter().zip(b) {
+        assert_eq!(x.len(), y.len());
+        assert!(x.iter().zip(y).all(|(p, q)| (p.0 - q.0).abs() < 1e-6 && (p.1 - q.1).abs() < 1e-6), "{x:?} vs {y:?}");
+    }
+}
+
+/// The geometry of the Y mapped waterfall equals that of the uncoloured one after `setup`.
+fn y_mapped_geometry_matches_plain(setup: impl Fn(&mut Project, WindowId)) -> Vec<Vec<(f64, f64)>> {
+    use sheaf_core::graph::WaterfallColor;
+    let (mut p, g) = mapped_waterfall(WaterfallColor::None);
+    setup(&mut p, g);
+    let plain = merged_line_pieces(&p, g);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = WaterfallColor::Y;
+    let mapped = merged_line_pieces(&p, g);
+    same_pieces(&plain, &mapped);
+    let colors = plot_stroke_colors(&p, g);
+    assert!(colors.iter().map(|c| (c.r, c.g, c.b)).collect::<std::collections::BTreeSet<_>>().len() > 3, "still coloured");
+    mapped
+}
+
+#[test]
+fn y_mapping_keeps_the_step_connect_geometry() {
+    let pieces = y_mapped_geometry_matches_plain(|p, g| {
+        p.graph_mut(g).unwrap().layers[0].plots.iter_mut().for_each(|pl| pl.line.connect = Connect::StepHorizontal);
+    });
+    // Steps have twice the corners of a straight line.
+    assert!(pieces[0].len() > 30, "{}", pieces[0].len());
+}
+
+#[test]
+fn y_mapping_keeps_the_spline_connect_geometry() {
+    let straight = y_mapped_geometry_matches_plain(|_, _| {});
+    let spline = y_mapped_geometry_matches_plain(|p, g| {
+        p.graph_mut(g).unwrap().layers[0].plots.iter_mut().for_each(|pl| pl.line.connect = Connect::Spline);
+    });
+    assert!(spline[0].len() > straight[0].len(), "the spline is sampled finer");
+}
+
+#[test]
+fn y_mapping_honours_missing_data_and_connect_across_missing() {
+    use sheaf_core::graph::WaterfallColor;
+    let setup = |p: &mut Project, g: WindowId| {
+        let c = plot_column(p, g, 0);
+        let mut v = p.numeric(c).unwrap().to_vec();
+        v[5] = f64::NAN;
+        v[6] = f64::NAN;
+        set_values(p, c, v);
+    };
+    let broken = y_mapped_geometry_matches_plain(setup);
+    let pieces_of_first = |p: &Project, g| merged_line_pieces(p, g).len();
+    let (mut p, g) = mapped_waterfall(WaterfallColor::Y);
+    setup(&mut p, g);
+    let before = pieces_of_first(&p, g);
+    p.graph_mut(g).unwrap().page.style.connect_across_missing = true;
+    assert_eq!(before, broken.len());
+    assert_eq!(pieces_of_first(&p, g), before - 1, "the first curve is joined across the gap");
+    // And equal to the uncoloured line with the option on.
+    let mapped = merged_line_pieces(&p, g);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = WaterfallColor::None;
+    same_pieces(&merged_line_pieces(&p, g), &mapped);
+}
+
+#[test]
+fn y_mapping_cuts_lines_at_axis_breaks() {
+    use sheaf_core::graph::AxisBreak;
+    let without = y_mapped_geometry_matches_plain(|_, _| {}).len();
+    let cut = y_mapped_geometry_matches_plain(|p, g| {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.y_axis.axis_breaks = vec![AxisBreak::new(30.0, 60.0)];
+    });
+    assert!(cut.len() > without, "{} pieces after the break, {without} before", cut.len());
+}
+
+#[test]
+fn cumulative_skips_masked_rows_while_hide_masked_points_is_on() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let c = plot_column(&p, g, 0);
+    p.column_mut(c).unwrap().mask.insert(4);
+    // Masked points are drawn (red) by default and still add up.
+    assert!(near(drawn_ys(&p, g)[1][4], 12.0), "{:?}", drawn_ys(&p, g)[1]);
+    p.hide_masked = true;
+    let ys = drawn_ys(&p, g);
+    assert!(ys[0][4].is_nan(), "the masked point is not drawn");
+    assert!(near(ys[1][4], 8.0), "the plot above gets nothing from it: {}", ys[1][4]);
+    assert!(near(ys[2][4], 20.0) && near(ys[1][5], 15.0), "other rows are unchanged");
+}
+
+#[test]
+fn stacked_histogram_bins_ignore_masked_and_filtered_outliers() {
+    let (mut p, ys) = stacked_hist_project();
+    let book = p.workbooks().next().unwrap().id;
+    let set_last = |p: &mut Project, c, v: f64| {
+        let mut values = p.numeric(c).unwrap().to_vec();
+        *values.last_mut().unwrap() = v;
+        set_values(p, c, values);
+    };
+    let end_of = |p: &mut Project| {
+        let g = p.plot_columns(Template::StackedHistograms, &ys).unwrap();
+        p.graph(g).unwrap().layers[0].plots[0].hist.end.unwrap()
+    };
+    let normal = end_of(&mut p);
+    set_last(&mut p, ys[0], 1000.0);
+    set_last(&mut p, ys[1], 900.0);
+    assert!(end_of(&mut p) > 500.0, "shown outliers widen the bins");
+    // A filtered row (the sheet's rows pass `col(A) < 500`) and a masked one (with Hide Masked Points).
+    p.set_row_filter(book, 0, "col(A) < 500").unwrap();
+    p.column_mut(ys[1]).unwrap().mask.insert(23);
+    assert!(end_of(&mut p) > 500.0, "a masked point is shown by default");
+    p.hide_masked = true;
+    assert_eq!(end_of(&mut p), normal);
+}

@@ -244,6 +244,8 @@ pub enum ProjectError {
     SunburstNeedsValue,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
+    #[error("a stacked histograms graph cannot have a right Y axis; use one Y axis or another template")]
+    StackedHistogramsNoRightAxis,
 }
 
 impl Project {
@@ -1135,6 +1137,9 @@ impl Project {
         if template == Template::Sunburst {
             return Err(ProjectError::SunburstNoRightAxis);
         }
+        if template == Template::StackedHistograms {
+            return Err(ProjectError::StackedHistogramsNoRightAxis);
+        }
         for y in left.iter().chain(right) {
             self.column(*y).ok_or(ProjectError::NoSuchColumn(*y))?;
         }
@@ -1243,12 +1248,9 @@ impl Project {
         use crate::graph::HistogramStyle;
         use crate::panels::{PanelLayout, PanelOrder};
         let columns: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_some()).collect();
-        let all: Vec<f64> = columns
-            .iter()
-            .filter_map(|y| self.numeric(*y))
-            .flat_map(|v| v.iter().copied())
-            .filter(|v| v.is_finite())
-            .collect();
+        // The bins cover the values each panel's histogram uses: the rows that show (passing the sheet's filter,
+        // and not masked while Hide Masked Points is on).
+        let all: Vec<f64> = columns.iter().flat_map(|y| self.shown_values(*y)).filter(|v| v.is_finite()).collect();
         let opts = sheaf_calc::freq::FreqOptions {
             min: None,
             max: None,
@@ -1711,6 +1713,10 @@ mod tests {
         }
         let missing = ColumnId(999);
         assert_eq!(p.plot_columns_double_y(Template::Line, &[missing], &[]), Err(ProjectError::NoSuchColumn(missing)));
+        assert_eq!(
+            p.plot_columns_double_y(Template::StackedHistograms, &[missing], &[missing]),
+            Err(ProjectError::StackedHistogramsNoRightAxis)
+        );
     }
 
     /// A sheet with X and the Y columns B to G.

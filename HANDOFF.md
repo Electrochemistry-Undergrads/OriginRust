@@ -36,6 +36,12 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- Lines across axis breaks (2026-11-15, Windows, branch `break-lines`): as Origin 2016 draws them
+  (measured, graphing 3.6), a segment joining points on both sides of an X or Y break is left out over
+  the band of the break's gap; the page Display tab's "Connect line across Axis Break" (off by default,
+  `PageStyle::connect_across_breaks`) draws it through (that case is unmeasured). Also measured: the
+  same tab's "Connect line across Missing Data" is off by default, which Sheaf already matches.
+  Formatting, strict all-target Clippy and 2736 workspace tests pass (8 ignored) on 1113ff9.
 - T02 Find/Replace selected range (2026-11-15, Windows, feature `a8ea895`): the checked
   range option snapshots opening blocks, columns and rows for Numeric/String searches and
   both replacement paths, including conditional missing values. Restricted hits retain the

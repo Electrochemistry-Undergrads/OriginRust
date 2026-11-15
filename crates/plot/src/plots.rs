@@ -639,6 +639,7 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
                     d.clear();
                     gaps.write_polyline(&points, &mut d);
                 }
+                let d = crate::break_cut::cut_at_breaks(d, geom);
                 if !d.is_empty() {
                     if side_mode.is_some() {
                         outline.push_str(&d);

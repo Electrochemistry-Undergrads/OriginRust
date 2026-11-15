@@ -19,6 +19,7 @@ pub mod recovery;
 pub mod save;
 mod text;
 pub mod themes;
+pub mod user_templates;
 pub mod window_file;
 
 pub use error::IoError;
@@ -48,12 +49,12 @@ pub struct OpenedProject {
 }
 
 /// True for files that [`open_project`] reads: `.sheaf`, `.opj` and `.opju`.
-/// A `.sheaf` file that is a window file (File > Save Window As) is not a project: see
-/// [`window_file::is_window_file`].
+/// A `.sheaf` file that is a window file (File > Save Window As) or a user template is not a project: see
+/// [`window_file::is_window_file`] and [`user_templates::is_template_file`].
 pub fn is_project_file(path: &Path) -> bool {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     if ext.eq_ignore_ascii_case(project_file::EXTENSION) {
-        return !window_file::is_window_file(path);
+        return !window_file::is_window_file(path) && !user_templates::is_template_file(path);
     }
     ext.eq_ignore_ascii_case("opj") || ext.eq_ignore_ascii_case("opju")
 }

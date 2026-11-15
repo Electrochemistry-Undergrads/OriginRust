@@ -37,6 +37,7 @@ pub mod sheet_print;
 pub mod sheetops;
 pub mod stack;
 pub mod template;
+pub mod user_template;
 pub mod worksheet;
 
 pub use clipboard::{CopyOptions, PasteReport};
@@ -48,4 +49,5 @@ pub use graph_data::{DataCell, DataEditError, DataEditReport};
 pub use history::Document;
 pub use ids::{ColumnId, WindowId};
 pub use project::{Project, Window};
+pub use user_template::{UserTemplate, UserTemplateError};
 pub use worksheet::{Frozen, MAX_FROZEN, Workbook, Worksheet};

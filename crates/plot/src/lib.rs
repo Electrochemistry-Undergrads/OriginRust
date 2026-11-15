@@ -98,6 +98,8 @@ mod treemap_tests;
 mod trend_tests;
 #[cfg(test)]
 mod violin_tests;
+#[cfg(test)]
+mod user_template_tests;
 
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};

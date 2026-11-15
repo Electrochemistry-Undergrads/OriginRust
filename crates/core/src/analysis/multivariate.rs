@@ -1,6 +1,6 @@
-//! The multivariate tools of `Project::analyze`. Principal component analysis today; k-means joins it here.
+//! The multivariate tools of `Project::analyze`. Principal component analysis (section 17) and k-means cluster analysis (section 18).
 //! The numerics are in `sheaf_calc` (`pca`); what the tools compute and report is written down in
-//! `docs/spec/statistics.md`, section 17.
+//! `docs/spec/statistics.md`, sections 17 and 18.
 
 use super::dist::{GraphPlot, Output, XyGraph};
 use super::statistics::num;
@@ -10,6 +10,7 @@ use crate::graph::{PlotKind, ScaleKind};
 pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
     match tool {
         Tool::Pca(spec) => pca(spec, inputs),
+        Tool::Kmeans(spec) => kmeans(spec, inputs),
         _ => unreachable!("only the multivariate tools come here"),
     }
 }
@@ -178,6 +179,179 @@ fn pca(spec: &PcaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
     Ok(Output { table: Some(table), on_sheet, notes, graph })
 }
 
+// ----- k-means cluster analysis -----------------------------------------------------------------------------
+
+/// What [`Tool::Kmeans`] does (Statistics > Multivariate Analysis > K-Means Cluster Analysis): the chosen columns
+/// are the variables, their rows the cases.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KmeansSpec {
+    /// Number of clusters.
+    pub clusters: usize,
+    /// Upper limit of the passes of single-case moves.
+    pub max_passes: usize,
+    /// Analysis of variance of every variable by cluster.
+    pub anova: bool,
+    /// Write the cluster of every row (and, with `member_distance`, its distance to the cluster centre).
+    pub membership: bool,
+    pub member_distance: bool,
+    /// Make a scatter graph of the first two variables with one plot per cluster.
+    pub graph: bool,
+}
+
+impl Default for KmeansSpec {
+    fn default() -> Self {
+        KmeansSpec { clusters: 3, max_passes: 100, anova: true, membership: true, member_distance: true, graph: true }
+    }
+}
+
+fn kmeans(spec: &KmeansSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    let columns: Vec<Vec<f64>> = inputs.iter().map(|i| i.ys().to_vec()).collect();
+    let options = calc::KmeansOptions { clusters: spec.clusters, max_passes: spec.max_passes };
+    let r = calc::kmeans(&columns, &options).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let p = inputs.len();
+    let k = r.clusters.len();
+    let names: Vec<String> = inputs.iter().map(|i| i.label.clone()).collect();
+    let cl = |q: usize| format!("Cluster {}", q + 1);
+
+    // The table that is printed: one row per cluster.
+    let mut table = ResultTable::new(&["N", "Sum of squares", "Mean distance", "Max distance"]);
+    for (q, c) in r.clusters.iter().enumerate() {
+        table.push_row(
+            cl(q),
+            vec![c.count as f64, c.sum_squares, c.mean_distance, c.max_distance],
+            vec![String::new(); 4],
+        );
+    }
+
+    // The result sheet: statistics of the variables, the clusters (initial and final centres, sizes, distances),
+    // the analysis of variance, then the cluster of every row.
+    let mut on_sheet = vec![
+        label_column("Variable", names.clone()),
+        number_column("N", Designation::Y, r.count.iter().map(|&n| n as f64).collect()),
+        number_column("Missing", Designation::Y, r.missing.iter().map(|&n| n as f64).collect()),
+        number_column("Mean", Designation::Y, r.mean.clone()),
+        number_column("SD", Designation::Y, r.sd.clone()),
+        label_column("Cluster", (0..k).map(cl).collect()),
+    ];
+    for j in 0..p {
+        on_sheet.push(number_column(
+            &format!("Initial centre {}", inputs[j].short),
+            Designation::Y,
+            r.clusters.iter().map(|c| c.initial[j]).collect(),
+        ));
+    }
+    for j in 0..p {
+        on_sheet.push(number_column(
+            &format!("Centre {}", inputs[j].short),
+            Designation::Y,
+            r.clusters.iter().map(|c| c.centre[j]).collect(),
+        ));
+    }
+    on_sheet.push(number_column("Cluster N", Designation::Y, r.clusters.iter().map(|c| c.count as f64).collect()));
+    on_sheet.push(number_column("Sum of squares", Designation::Y, r.clusters.iter().map(|c| c.sum_squares).collect()));
+    on_sheet.push(number_column("Mean distance", Designation::Y, r.clusters.iter().map(|c| c.mean_distance).collect()));
+    on_sheet.push(number_column("Max distance", Designation::Y, r.clusters.iter().map(|c| c.max_distance).collect()));
+    for q in 0..k {
+        on_sheet.push(number_column(
+            &format!("Distance to {}", cl(q)),
+            Designation::Y,
+            r.centre_distances.iter().map(|row| row[q]).collect(),
+        ));
+    }
+    if spec.anova {
+        on_sheet.push(label_column("ANOVA variable", names.clone()));
+        let pick = |f: &dyn Fn(&calc::VariableAnova) -> f64| r.anova.iter().map(f).collect::<Vec<f64>>();
+        on_sheet.push(number_column("DF between", Designation::Y, pick(&|a| a.df_between)));
+        on_sheet.push(number_column("MS between", Designation::Y, pick(&|a| a.ms_between)));
+        on_sheet.push(number_column("DF error", Designation::Y, pick(&|a| a.df_error)));
+        on_sheet.push(number_column("MS error", Designation::Y, pick(&|a| a.ms_error)));
+        on_sheet.push(number_column("F", Designation::Y, pick(&|a| a.f)));
+        on_sheet.push(number_column("Prob>F", Designation::Y, pick(&|a| a.p)));
+    }
+    if spec.membership {
+        let nan = f64::NAN;
+        on_sheet.push(number_column(
+            "Cluster number",
+            Designation::Y,
+            r.membership.iter().map(|m| m.map_or(nan, |(q, _)| (q + 1) as f64)).collect(),
+        ));
+        if spec.member_distance {
+            on_sheet.push(number_column(
+                "Distance to centre",
+                Designation::Y,
+                r.membership.iter().map(|m| m.map_or(nan, |(_, d)| d)).collect(),
+            ));
+        }
+    }
+
+    let mut notes = Vec::new();
+    let rows_used = r.membership.iter().filter(|m| m.is_some()).count();
+    notes.push(format!(
+        "K-means cluster analysis of {p} columns into {k} clusters, {rows_used} of {} rows used.",
+        r.membership.len()
+    ));
+    for (q, c) in r.clusters.iter().enumerate() {
+        let centre: Vec<String> =
+            inputs.iter().zip(&c.centre).map(|(i, v)| format!("{} {}", i.short, num(*v))).collect();
+        notes.push(format!(
+            "{}: {} cases, centre ({}), sum of squares {}, mean distance {}, largest distance {}.",
+            cl(q),
+            c.count,
+            centre.join(", "),
+            num(c.sum_squares),
+            num(c.mean_distance),
+            num(c.max_distance)
+        ));
+    }
+    if spec.anova {
+        for (a, i) in r.anova.iter().zip(inputs) {
+            notes.push(format!(
+                "{}: F({}, {}) = {}, Prob>F {}.",
+                i.short,
+                num(a.df_between),
+                num(a.df_error),
+                num(a.f),
+                num(a.p)
+            ));
+        }
+    }
+    notes.push(
+        "Distances are Euclidean on the values as they are (not standardized). The initial centres are chosen from \
+         the rows by replacement in sheet order, so the cluster numbers depend on the order of the rows."
+            .into(),
+    );
+    if r.missing.iter().any(|&m| m > 0) {
+        notes.push("Rows with a missing value in any column were left out (not measured against Origin).".into());
+    }
+
+    // The graph: the first two variables, one scatter plot per cluster.
+    let mut graph = None;
+    if spec.graph && p >= 2 {
+        let mut plots = Vec::new();
+        for q in 0..k {
+            let (mut x, mut y) = (Vec::new(), Vec::new());
+            for (row, m) in r.membership.iter().enumerate() {
+                if matches!(m, Some((c, _)) if *c == q) {
+                    x.push(columns[0].get(row).copied().unwrap_or(f64::NAN));
+                    y.push(columns[1].get(row).copied().unwrap_or(f64::NAN));
+                }
+            }
+            let at = on_sheet.len();
+            on_sheet.push(number_column(&format!("{} X", cl(q)), Designation::X, x));
+            on_sheet.push(number_column(&format!("{} Y", cl(q)), Designation::Y, y));
+            plots.push(GraphPlot { x: at, y: at + 1, kind: PlotKind::Scatter, label: cl(q), line_of: None });
+        }
+        graph = Some(XyGraph {
+            plots,
+            x_scale: ScaleKind::Linear,
+            y_scale: ScaleKind::Linear,
+            x_title: names[0].clone(),
+            y_title: names[1].clone(),
+        });
+    }
+    Ok(Output { table: Some(table), on_sheet, notes, graph })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +411,33 @@ mod tests {
         let zero = PcaSpec { components: 0, ..Default::default() };
         let r = Request { columns: ids, rows: RowRange::All, tool: Tool::Pca(zero) };
         assert!(p.analyze(&r).is_err());
+    }
+
+    #[test]
+    fn kmeans_report_sheet_and_cluster_graph() {
+        // Two groups of three in two variables.
+        let a = vec![1.0, 1.5, 2.0, 9.0, 9.5, 10.0];
+        let b = vec![1.0, 2.0, 1.5, 9.0, 8.5, 9.5];
+        let mut p = Project::new();
+        let book = p.add_workbook("km");
+        let ids: Vec<ColumnId> = [a, b]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let spec = KmeansSpec { clusters: 2, ..Default::default() };
+        let r = p.analyze(&Request { columns: ids.clone(), rows: RowRange::All, tool: Tool::Kmeans(spec) }).unwrap();
+        assert!(r.message.contains("K-means") && r.message.contains("KMeans1"), "{}", r.message);
+        let t = r.table.unwrap();
+        assert_eq!(t.rows.len(), 2);
+        assert_eq!((t.rows[0].1[0], t.rows[1].1[0]), (3.0, 3.0));
+        let sheet = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        let long: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert!(long.contains(&"Cluster number") && long.contains(&"Prob>F") && long.contains(&"Centre B"), "{long:?}");
+        assert_eq!(p.graph(r.new_graph.unwrap()).unwrap().layers[0].plots.len(), 2);
+        let bare = KmeansSpec { clusters: 2, anova: false, membership: false, graph: false, ..Default::default() };
+        let r = p.analyze(&Request { columns: ids.clone(), rows: RowRange::All, tool: Tool::Kmeans(bare) }).unwrap();
+        assert!(r.new_graph.is_none());
+        let too_many = KmeansSpec { clusters: 7, ..Default::default() };
+        assert!(p.analyze(&Request { columns: ids, rows: RowRange::All, tool: Tool::Kmeans(too_many) }).is_err());
     }
 }

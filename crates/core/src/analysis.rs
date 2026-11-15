@@ -47,7 +47,7 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
-pub use multivariate::PcaSpec;
+pub use multivariate::{KmeansSpec, PcaSpec};
 pub use roc::RocSpec;
 pub use survival::KaplanMeierSpec;
 pub use sheaf_calc::Family as DistFamily;
@@ -755,6 +755,8 @@ pub enum Tool {
     ProbPlot(ProbPlotSpec),
     /// Statistics > Multivariate Analysis > Principal Component Analysis (T29, `docs/spec/statistics.md` section 17).
     Pca(PcaSpec),
+    /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (T29, `docs/spec/statistics.md` section 18).
+    Kmeans(KmeansSpec),
     /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
     Roc(RocSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
@@ -835,6 +837,7 @@ impl Tool {
                 ProbPlotKind::QQ => "Q-Q plot",
             },
             Tool::Pca(_) => "Principal component analysis",
+            Tool::Kmeans(_) => "K-means cluster analysis",
             Tool::Roc(_) => "ROC curve",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -889,6 +892,7 @@ impl Tool {
                 ProbPlotKind::QQ => "QQPlot",
             },
             Tool::Pca(_) => "PCA",
+            Tool::Kmeans(_) => "KMeans",
             Tool::Roc(_) => "ROC",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::AverageCurves(_) => "AverageResult",
@@ -1653,7 +1657,7 @@ impl Project {
                 notes = out.notes;
                 xy_graph = out.graph;
             }
-            Tool::Pca(_) => {
+            Tool::Pca(_) | Tool::Kmeans(_) => {
                 let out = multivariate::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;

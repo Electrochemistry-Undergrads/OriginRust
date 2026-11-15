@@ -102,6 +102,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T49](T49-parallel-plot.md) | Parallel Plot and Parallel Index (parallel coordinates) | M | done 2026-11-15 (graphing 14.25, `parallel-plot`, macOS); left: Parallel Sets, curvature, colour map, axis reordering, Origin defaults unmeasured |
 | [T50](T50-treemap.md) | Treemap: nested rectangles sized by value (six Origin layouts) | M | done 2026-11-15 (graphing 14.26, `treemap`, macOS); left: Origin defaults/colours/labels unmeasured, hover and drill-down, colour by value |
 | [T51](T51-sunburst.md) | Sunburst plot: hierarchy as concentric rings coloured by value | M | done 2026-11-15 (graphing 14.27, `sunburst`, macOS); left: Origin defaults unmeasured, hover and Collapse/Expand drilling |
+| [T52](T52-slope-annotation.md) | Slope annotation between two data points (per decade on log axes) | M | claimed 2026-11-15 (`slope-annotation`, macOS) |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

@@ -6814,6 +6814,26 @@ fn mask_rows(h: &Harness<'static, SheafApp>) -> Vec<usize> {
 }
 
 #[test]
+fn hide_masked_points_is_a_project_switch_with_a_show_label() {
+    let mut h = start(vec![mask_data_file("maskhide")]);
+    select_only_column(&mut h);
+    let ctx = h.ctx.clone();
+    show_window(&mut h, "Book1 - values");
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Hide Masked Points"));
+    close_menus(&mut h);
+    h.state_mut().apply(Action::ToggleHideMasked, &ctx);
+    settle(&mut h);
+    assert!(project(&h).hide_masked);
+    assert_eq!(h.state().doc.undo_label(), Some("Hide or show masked points"));
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Show Masked Points"));
+    close_menus(&mut h);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(!project(&h).hide_masked);
+}
+
+#[test]
 fn mask_change_color_and_disable_masking_are_project_wide_undoable_steps() {
     let mut h = start(vec![mask_data_file("maskmenu")]);
     let book = select_only_column(&mut h);

@@ -312,7 +312,7 @@ Sort Columns > Custom and the column-header context menu now open the existing n
 
 ### 13.1a Mask, measured with Origin (task T10)
 
-`wcellmask irng:=<range>` masks the cells of a range. `stats` on a column with one of five cells masked reports n = 4 (the masked value is left out). In a graph (line + symbol, five points, the third masked, exported to PNG) the masked point stays plotted: its symbol is drawn **red**, and so are the two line segments that meet at it. Sheaf: `Column::mask` (a set of rows), Column > Mask > Apply / Remove / Swap on the selected cells; analysis, statistics and fits read `Column::numeric_unmasked`; the mask moves with its rows in sorts, inserts and deletes; the plot draws masked points red (`draw_masked`). Not done: masking from the graph, Hide Masked Data (Origin's toolbar switch `@MP`, which leaves masked points out of graphs), the `.opj` reader (it skips masks) and the writer (it names masked columns in the save warnings).
+`wcellmask irng:=<range>` masks the cells of a range. `stats` on a column with one of five cells masked reports n = 4 (the masked value is left out). In a graph (line + symbol, five points, the third masked, exported to PNG) the masked point stays plotted: its symbol is drawn **red**, and so are the two line segments that meet at it. Sheaf: `Column::mask` (a set of rows), Column > Mask > Apply / Remove / Swap on the selected cells; analysis, statistics and fits read `Column::numeric_unmasked`; the mask moves with its rows in sorts, inserts and deletes; the plot draws masked points red (`draw_masked`). Not done: masking from the graph, the `.opj` reader (it skips masks) and the writer (it names masked columns in the save warnings).
 
 **Change Color, Disable Masking, Mask Cells by Condition (measured 2026-11-15, Origin 2016, `re-workspace/scratch/t10m`):**
 - Column > Mask holds Apply, Remove, Swap, Change Color and Disable Masking; Mask Cells by Condition... is its own item
@@ -333,7 +333,12 @@ Sheaf: `Project::mask_color` (saved with the project, Origin keeps it as a setti
 Masking is one project switch (`Project::set_masking_disabled`) copied into every column after each edit, so columns
 made later follow it (`Column::active_mask` is what analysis, plots, the categorical tools and conditional formatting
 read); `sheetops::MaskCondition` and `Worksheet::mask_by_condition`. The worksheet still shows
-masked cells in its mask colours while masking is disabled (Origin's sheet colours were not measured). The worksheet shows a masked cell with red text on a light red fill; Origin's own cell colour was not measured.
+masked cells in its mask colours while masking is disabled (Origin's sheet colours were not measured).
+- Hide masked points (Origin's Mask toolbar switch `@MP`, measured 2026-11-15 with the same graph): the masked point
+  and the two segments that meet at it disappear, leaving a gap as for a missing value; the axis range stayed as it
+  was (the axes were not rescaled in that run). Sheaf: `Project::hide_masked`, Column > Mask > Hide Masked Points
+  (Show Masked Points while on; Sheaf has no Mask toolbar, so the switch sits in this submenu); graphs treat hidden
+  masked rows as missing values, analysis is unchanged. The worksheet shows a masked cell with red text on a light red fill; Origin's own cell colour was not measured.
 
 ### 13.2 Worksheet operations in Sheaf (T10)
 

@@ -4036,3 +4036,37 @@ fn additional_lines_cross_the_layer_at_a_value_of_the_other_axis() {
     p.graph_mut(g).unwrap().layers[0].x_axis.additional_line = Some(99.0);
     assert_eq!(lines(&p).len(), before.len() + 1);
 }
+
+#[test]
+fn hidden_masked_points_leave_a_gap_and_nothing_red() {
+    let x: Vec<f64> = (1..=5).map(f64::from).collect();
+    let (mut p, g) = project(Template::LineSymbol, x, vec![vec![2.0, 4.0, 9.0, 3.0, 5.0]]);
+    let y = p.graph(g).unwrap().layers[0].plots[0].y;
+    p.column_mut(y).unwrap().mask.insert(2);
+    let red = |p: &Project| -> usize {
+        let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter(|it| matches!(it, scene::Item::Path { stroke: Some(s), .. } if s.color == Color::RED))
+            .count()
+    };
+    assert!(red(&p) > 0, "the masked point is drawn red");
+    p.hide_masked = true;
+    assert_eq!(red(&p), 0, "hidden: nothing red");
+    // the curve breaks at the hidden point: 2 line segments instead of 4
+    let segments = |p: &Project| -> usize {
+        let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                scene::Item::Path { d, stroke: Some(_), fill: None } => Some(d.matches('L').count()),
+                _ => None,
+            })
+            .sum()
+    };
+    assert_eq!(segments(&p), 2);
+    p.column_mut(y).unwrap().mask.clear();
+    assert_eq!(segments(&p), 4);
+}

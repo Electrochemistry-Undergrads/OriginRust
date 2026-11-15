@@ -367,7 +367,9 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Navigation.** Keys, Go To and typing never scroll to a frozen target (it is always in view); a
   target in the scrolling part is revealed below and right of the frozen block.
 - **Width.** A frozen column keeps the width it had; dragging the right edge of its head (a 6 px strip)
-  changes it, and the width survives unfreezing and freezing again.
+  changes it, and the width survives unfreezing and freezing again. The drag is clamped so that the
+  frozen block never goes over the half-width cap above: the column stops growing there instead of
+  dropping out of the block.
 
 ## 4. Graph window
 

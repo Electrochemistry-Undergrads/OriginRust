@@ -142,6 +142,8 @@ pub struct BookUi {
     frozen_clip_x: f32,
     /// Total width of the frozen block (row header and frozen columns), 0 without frozen columns.
     frozen_w: f32,
+    /// The most the frozen block may take in this frame ([`frozen_cap`] of the body width).
+    frozen_max_w: f32,
     /// The frozen columns and the frozen data rows as laid out in this frame.
     frozen_cols: Vec<ColumnId>,
     frozen_rows: Vec<usize>,
@@ -447,6 +449,14 @@ fn column_px(state: &BookUi, column: &Column) -> f32 {
     }
 }
 
+/// The share of the body width that the frozen block (row header and frozen columns) may take.
+const FROZEN_MAX_SHARE: f32 = 0.5;
+
+/// The widest the frozen block may be in a body `body_width` pixels wide.
+fn frozen_cap(body_width: f32) -> f32 {
+    body_width * FROZEN_MAX_SHARE
+}
+
 /// The frozen panes as drawn: how many displayed rows and which column positions are frozen.
 /// The setting of the sheet is clamped here and never changed: the frozen rows leave at least
 /// three rows of the body to scroll, and the frozen block takes at most half the width.
@@ -466,7 +476,7 @@ pub fn frozen_split(
         sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden).take(usize::from(sheet.frozen.columns))
     {
         let w = width_of(column);
-        if used + w > body_size.x * 0.5 {
+        if used + w > frozen_cap(body_size.x) {
             break;
         }
         used += w;
@@ -612,6 +622,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     state.frozen_cols = frozen_positions.iter().map(|p| sheet.columns[*p].id).collect();
     state.frozen_rows = frozen_rows.clone();
     state.frozen_w = frozen_w;
+    state.frozen_max_w = frozen_cap(body.width());
     state.frozen_clip_x = body.left() + frozen_w;
     // The primary button was released: a drag over cells is over.
     if !ui.input(|i| i.pointer.primary_down()) {
@@ -1566,7 +1577,9 @@ fn frozen_resize(ui: &mut egui::Ui, state: &mut BookUi, column: &Column, head: R
         .interact(strip, ui.id().with(("resize", column.id.0)), Sense::drag())
         .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
     if response.dragged() {
-        let width = (head.width() + response.drag_delta().x).max(30.0);
+        // Never wider than leaves the block within the cap, or the column would leave the block.
+        let room = state.frozen_max_w - (state.frozen_w - head.width());
+        let width = (head.width() + response.drag_delta().x).max(30.0).min(room.max(30.0) - 0.01);
         state.frozen_widths.insert(column.id, width);
         ui.ctx().request_repaint();
     }

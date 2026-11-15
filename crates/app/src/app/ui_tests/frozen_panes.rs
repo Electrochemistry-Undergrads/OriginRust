@@ -418,18 +418,59 @@ fn dragging_the_edge_of_a_frozen_head_resizes_the_column_and_the_width_survives_
     let d_before = rect_of(&h, &cell_text(5, 3)).min.x;
     let head = rect_of(&h, "A(X1)");
     let edge = egui::pos2(head.center().x + 33.0, head.center().y);
-    drag(&mut h, edge, edge + egui::vec2(40.0, 0.0));
+    drag(&mut h, edge, edge + egui::vec2(15.0, 0.0));
     settle(&mut h);
-    assert!((width_of_a(&h) - 107.0).abs() < 1.5, "{}", width_of_a(&h));
-    assert!((rect_of(&h, &cell_text(5, 3)).min.x - d_before - 40.0).abs() < 1.5, "the first scrolling column moved");
+    assert!((width_of_a(&h) - 82.0).abs() < 1.5, "{}", width_of_a(&h));
+    assert!((rect_of(&h, &cell_text(5, 3)).min.x - d_before - 15.0).abs() < 1.5, "the first scrolling column moved");
     freeze_shortcut(&mut h);
     assert_eq!(frozen(&h), Frozen::default());
     settle(&mut h);
-    assert!((width_of_a(&h) - 107.0).abs() < 1.5, "unfrozen it keeps the width: {}", width_of_a(&h));
+    assert!((width_of_a(&h) - 82.0).abs() < 1.5, "unfrozen it keeps the width: {}", width_of_a(&h));
     freeze_shortcut(&mut h);
     assert_eq!(frozen(&h), Frozen { rows: 3, columns: 2 });
     settle(&mut h);
-    assert!((width_of_a(&h) - 107.0).abs() < 1.5, "and so does a new freeze: {}", width_of_a(&h));
+    assert!((width_of_a(&h) - 82.0).abs() < 1.5, "and so does a new freeze: {}", width_of_a(&h));
+}
+
+#[test]
+fn dragging_a_frozen_head_edge_far_right_stops_at_the_cap_and_keeps_both_columns_frozen() {
+    let mut h = start_wide("fp-resize-cap");
+    freeze_at(&mut h, 3, 2);
+    settle(&mut h);
+    let width_of_a = |h: &Harness<'static, SheafApp>| {
+        let (a, b) = (rect_of(h, "A(X1)").center().x, rect_of(h, "B(Y1)").center().x);
+        2.0 * (b - a) - 67.0
+    };
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let head = rect_of(&h, "A(X1)");
+    let mut at = egui::pos2(head.center().x + 33.0, head.center().y);
+    h.event(egui::Event::PointerMoved(at));
+    h.step();
+    h.event(button(at, true));
+    h.step();
+    for _ in 0..15 {
+        at.x += 25.0;
+        h.event(egui::Event::PointerMoved(at));
+        h.step();
+        assert!(rect_opt(&h, "B(Y1)").is_some(), "the second column stays in the frozen block");
+        assert!(rect_opt(&h, "A(X1)").is_some());
+    }
+    h.event(button(at, false));
+    h.step();
+    settle(&mut h);
+    // The window is 472 points wide: the block (84 + A + 67) is at most 236, so A is at most 85.
+    let wa = width_of_a(&h);
+    assert!((wa - 85.0).abs() < 1.5, "the width stops at the cap: {wa}");
+    // Both columns are still frozen: the first scrolling cell is column C, right of the block.
+    assert!(rect_of(&h, &cell_text(5, 2)).min.x > rect_of(&h, "B(Y1)").center().x);
+    assert_eq!(frozen(&h), Frozen { rows: 3, columns: 2 });
+    settle(&mut h);
+    assert!((width_of_a(&h) - wa).abs() < 1.0, "the width is kept after the release");
 }
 
 #[test]

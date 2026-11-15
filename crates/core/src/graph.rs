@@ -311,7 +311,7 @@ pub struct Layer {
     /// Slope annotations (graphing spec 17.6, T52): a slope marked between two rows of a plot.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub slopes: Vec<SlopeAnnotation>,
-    /// Significance brackets between groups of a multiple comparisons plot (T58, graphing spec 17.7): the pairs
+    /// Significance brackets between groups of a multiple comparisons plot (T64, graphing spec 17.7): the pairs
     /// that are shown, drawn above the groups at positions 1, 2, 3, ...
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub brackets: Vec<crate::compplot::SignificanceBracket>,

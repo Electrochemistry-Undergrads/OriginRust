@@ -1,4 +1,4 @@
-//! Multiple Comparisons Plot... (T58): the options of the plot made from the report sheet of a one-way ANOVA with a
+//! Multiple Comparisons Plot... (T64): the options of the plot made from the report sheet of a one-way ANOVA with a
 //! means comparison or of a two-sample t-test. OK makes the graph as one undo step.
 
 use eframe::egui;

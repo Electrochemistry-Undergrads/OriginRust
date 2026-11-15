@@ -178,7 +178,7 @@ fn resolve_dim(
 ) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
-    // Significance brackets (T58) are above the data: the Y axis grows to hold them (a log axis in log space),
+    // Significance brackets (T64) are above the data: the Y axis grows to hold them (a log axis in log space),
     // unless its top is fixed, when they stand in a band above the frame.
     if dim == Dim::Y
         && let Some(top) = crate::brackets::needed_top(layer, sources, bracket_step)

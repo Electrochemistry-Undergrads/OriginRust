@@ -1418,7 +1418,7 @@ pub(crate) fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> 
 }
 
 /// The groups behind the report of a one-way ANOVA with a means comparison and of a two-sample t-test, kept on the
-/// report sheet for the Multiple Comparisons Plot (T58).
+/// report sheet for the Multiple Comparisons Plot (T64).
 fn comparison_source(
     tool: &Tool,
     inputs: &[Input<'_>],

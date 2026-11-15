@@ -387,7 +387,7 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
     },
-    /// Multiple Comparisons Plot... (T58) of a report sheet (`None`: the workbook's active sheet).
+    /// Multiple Comparisons Plot... (T64) of a report sheet (`None`: the workbook's active sheet).
     ComparisonPlot {
         book: WindowId,
         sheet: Option<usize>,

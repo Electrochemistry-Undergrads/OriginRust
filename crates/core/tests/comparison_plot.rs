@@ -1,4 +1,4 @@
-//! Multiple Comparisons Plot (T58): labels, p-values read from the report, filtering, error bars.
+//! Multiple Comparisons Plot (T64): labels, p-values read from the report, filtering, error bars.
 
 use sheaf_core::analysis::{AnovaSpec, MeansComparison, OutputTarget, Request, RowRange, TTestKind, TTestSpec, Tool};
 use sheaf_core::compplot::*;

@@ -14,7 +14,7 @@ pub(super) struct Output {
     /// Pairs of indices into `on_sheet` (X column, Y column) for the plots of a histogram graph.
     pub plots: Vec<(usize, usize)>,
     /// The groups (indices into the inputs, `(i, j)` of each row) of the rows of a means comparison, in the order of the
-    /// report; empty for every other tool. Kept on the report sheet for the Multiple Comparisons Plot (T58).
+    /// report; empty for every other tool. Kept on the report sheet for the Multiple Comparisons Plot (T64).
     pub comparison_pairs: Vec<(usize, usize)>,
 }
 

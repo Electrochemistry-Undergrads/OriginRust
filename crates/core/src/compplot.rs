@@ -1,6 +1,6 @@
-//! Multiple Comparisons Plot (T58, Origin 2027): a graph of the groups of a one-way ANOVA with a means comparison, or
+//! Multiple Comparisons Plot (T64, Origin 2027): a graph of the groups of a one-way ANOVA with a means comparison, or
 //! of a two-sample t-test, with significance brackets between the compared groups. What it draws is written down in
-//! `docs/spec/statistics.md`, section "Multiple comparisons plot (T58)".
+//! `docs/spec/statistics.md`, section "Multiple comparisons plot (T64)".
 //!
 //! The report sheet of the two tests carries a [`ComparisonSource`], a copy of the groups' numbers as the test used
 //! them. The p-value of each pair is read from the report sheet itself (the "Prob" column of the means comparison,

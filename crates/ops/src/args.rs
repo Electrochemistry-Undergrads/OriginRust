@@ -970,7 +970,7 @@ pub enum BracketLabelsArg {
     PValues,
 }
 
-/// The multiple comparisons plot (T58) that a one-way ANOVA with a means comparison or a two-sample t-test can draw.
+/// The multiple comparisons plot (T64) that a one-way ANOVA with a means comparison or a two-sample t-test can draw.
 #[derive(Args, Debug, Clone)]
 pub struct ComparisonPlotArgs {
     /// Also draw the multiple comparisons plot of the report to this figure file (.png, .svg or .pdf): the groups

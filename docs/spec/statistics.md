@@ -1350,7 +1350,7 @@ Per Variable, Per Group and All in One arrangements; Origin's exact table layout
 panel layout and styling, and its median/SD interval formulas (none was measured: the documentation does not give
 them); the box chart of the other arrangements; Origin's default level.
 
-## 23 Multiple comparisons plot (T58)
+## 23 Multiple comparisons plot (T64)
 
 Origin 2027 makes a "Multiple Comparisons Plot" directly from the report of a one-way ANOVA, a two-way ANOVA and the
 two-sample and paired t-tests (an icon in the report sheet), and a "Significance Plot" from a one-sample t-test. Plot

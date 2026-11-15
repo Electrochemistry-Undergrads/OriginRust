@@ -660,7 +660,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         sheet_tabs(ui, book, sheet_index, book_id, state, actions);
     });
 
-    // The report of a one-way ANOVA or a two-sample t-test offers its multiple comparisons plot (T58).
+    // The report of a one-way ANOVA or a two-sample t-test offers its multiple comparisons plot (T64).
     if doc.project().can_comparison_plot(book_id, sheet_index) {
         ui.scope_builder(UiBuilder::new().max_rect(tab_strip), |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

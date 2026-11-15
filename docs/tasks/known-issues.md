@@ -6,7 +6,7 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 
 ## Integration after the archived snapshot
 
-- T58 multiple comparisons plot (2026-11-15, macOS, no Origin): the report sheet of a one-way ANOVA with a means
+- T64 multiple comparisons plot (2026-11-15, macOS, no Origin): the report sheet of a one-way ANOVA with a means
   comparison or a two-sample t-test (button in the sheet tab strip, Statistics > Multiple Comparisons Plot...) makes a graph
   of the groups (bar, box, violin, scatter; SD, SEM or 95 % CI error bars) with significance brackets (asterisks or
   p-values read from the report, significant only with a threshold; Holm methods show the step-down adjusted p and every

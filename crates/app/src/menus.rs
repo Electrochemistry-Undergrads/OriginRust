@@ -159,7 +159,7 @@ pub enum Cmd {
     },
     StackPanels,
     LabelPanels,
-    /// Statistics > Multiple Comparisons Plot... (T58).
+    /// Statistics > Multiple Comparisons Plot... (T64).
     ComparisonPlot,
     /// Add / Edit Trendline... on a plot of the active layer.
     Trendline {

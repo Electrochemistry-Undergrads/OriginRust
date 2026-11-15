@@ -39,7 +39,7 @@ pub struct Worksheet {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<crate::notes::CellNote>,
     /// Set on the report sheet of a one-way ANOVA with a means comparison and of a two-sample t-test: the groups
-    /// the report was made from, so that "Multiple Comparisons Plot" (T58) can draw them.
+    /// the report was made from, so that "Multiple Comparisons Plot" (T64) can draw them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comparison_source: Option<crate::compplot::ComparisonSource>,
 }

@@ -1,4 +1,4 @@
-//! Significance brackets of a multiple comparisons plot (T58, graphing spec 17.7): a horizontal line over two groups
+//! Significance brackets of a multiple comparisons plot (T64, graphing spec 17.7): a horizontal line over two groups
 //! with a short vertical end down to each group, and the label centred above it.
 //!
 //! The groups stand at X = 1, 2, 3, ... The brackets are stacked: the pairs are sorted by span (the shortest first,

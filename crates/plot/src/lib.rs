@@ -40,6 +40,8 @@ mod detail_tests;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]
+mod label_whiteout_tests;
+#[cfg(test)]
 mod legend_tests;
 #[cfg(test)]
 mod margin_tests;

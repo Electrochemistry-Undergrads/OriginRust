@@ -593,7 +593,7 @@ fn layer_scene(
         None => {
             for pd in drawn {
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, geom);
+                draw_plot(&mut scene.plots, pd, geom, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
@@ -606,7 +606,7 @@ fn layer_scene(
                 moved.frame.x += k * sx * geom.frame.w;
                 moved.frame.y -= k * sy * geom.frame.h;
                 let start = scene.plots.len();
-                draw_plot(&mut scene.plots, pd, &moved);
+                draw_plot(&mut scene.plots, pd, &moved, m);
                 let kind = ObjectKind::Plot(plot_index(pd));
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }

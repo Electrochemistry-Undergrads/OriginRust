@@ -400,6 +400,7 @@ fn the_settings_reach_every_export_format() {
         plot.decor.fill.transparency_pct = 30;
         plot.decor.fill.gradient = Some(Gradient::new(Color::WHITE));
         plot.decor.labels.enable = true;
+        plot.decor.labels.white_out = true;
     }
     p.graph_mut(g).unwrap().page.style.border = Some(BorderStyle::solid(Color::BLACK, 1.0));
     assert!(render_svg_with(&p, g, &FixedMetrics).unwrap().contains("<path"));

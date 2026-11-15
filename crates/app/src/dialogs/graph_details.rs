@@ -489,6 +489,9 @@ fn plot_tab_body(
                     ui.label("Size, style, color");
                     font_ui(ui, &mut labels.font);
                     ui.end_row();
+                    ui.label("Background");
+                    ui.checkbox(&mut labels.white_out, "White Out");
+                    ui.end_row();
                     ui.label("Rotate (deg)");
                     ui.add(DragValue::new(&mut labels.rotate_deg).range(-360.0..=360.0).speed(1.0));
                     ui.end_row();

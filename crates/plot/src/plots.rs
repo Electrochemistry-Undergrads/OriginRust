@@ -4,6 +4,7 @@ use crate::LayerGeometry;
 use crate::Rect;
 use crate::data::PlotData;
 use crate::fill::{fill_polygon, fill_rect};
+use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
     Connect, DropLine, ErrorDirection, LabelForm, LabelPosition, LineStyle, PlotKind, ScaleKind, SymbolShape,
@@ -38,7 +39,7 @@ pub(crate) fn line_stroke(line: &LineStyle) -> Stroke {
 }
 
 /// Appends the items of one plot to `out`.
-pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m: &dyn TextMeasurer) {
     let plot = pd.plot;
     if plot.kind == PlotKind::Pie {
         draw_pie(out, pd, geom);
@@ -87,7 +88,7 @@ pub(crate) fn draw_plot(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry
         draw_masked(out, pd, geom);
     }
     if decor.labels.enable && plot.kind != PlotKind::Box {
-        draw_data_labels(out, pd, geom);
+        draw_data_labels(out, pd, geom, m);
     }
 }
 
@@ -172,7 +173,7 @@ fn label_number(v: f64) -> String {
 
 /// Data labels (Origin's Label tab): the label form's text next to each point, a quarter of the
 /// font size away on the chosen side.
-fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m: &dyn TextMeasurer) {
     let labels = &pd.plot.decor.labels;
     let size = labels.font.size_pt;
     let gap = size * 0.25;
@@ -205,7 +206,7 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             LabelPosition::Below => (px, py + gap + 2.0 * mid, Anchor::Middle),
             LabelPosition::Center => (px, py + mid, Anchor::Middle),
         };
-        out.push(Item::Text(TextItem {
+        let item = TextItem {
             x: x + labels.dx_pt,
             y: y + labels.dy_pt,
             text,
@@ -216,8 +217,39 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
             color: labels.font.color,
             anchor,
             rotate_ccw: labels.rotate_deg,
-        }));
+        };
+        if labels.white_out {
+            draw_label_background(out, &item, m.width(&item.text, &labels.font, size));
+        }
+        out.push(Item::Text(item));
     }
+}
+
+/// White Out follows the text's anchor and rotation. The font box approximates Origin 2016's
+/// Arial background (30 pt "12345": 100 x 40 pixels in a 900-pixel-wide page export).
+fn draw_label_background(out: &mut Vec<Item>, text: &TextItem, width: f64) {
+    if !(width.is_finite() && width > 0.0 && text.size.is_finite() && text.size > 0.0 && text.rotate_ccw.is_finite()) {
+        return;
+    }
+    let left = match text.anchor {
+        Anchor::Start => 0.0,
+        Anchor::Middle => -width / 2.0,
+        Anchor::End => -width,
+    };
+    let pad = 0.05 * text.size;
+    let (x0, x1, y0, y1) = (left - pad, left + width + pad, -0.92 * text.size, 0.23 * text.size);
+    let (sin, cos) = text.rotate_ccw.to_radians().sin_cos();
+    let mut d = String::new();
+    for (i, (dx, dy)) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)].into_iter().enumerate() {
+        let (x, y) = (text.x + dx * cos + dy * sin, text.y - dx * sin + dy * cos);
+        if i == 0 {
+            move_to(&mut d, x, y);
+        } else {
+            line_to(&mut d, x, y);
+        }
+    }
+    d.push('Z');
+    out.push(Item::Path { d, fill: Some(sheaf_core::Color::WHITE), stroke: None });
 }
 
 /// Origin draws a masked point red: its symbol, and the two line segments that meet at it

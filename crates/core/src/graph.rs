@@ -1408,6 +1408,9 @@ pub enum LabelPosition {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataLabels {
     pub enable: bool,
+    /// Origin's White Out: an opaque white background behind each displayed label.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub white_out: bool,
     #[serde(default)]
     pub form: LabelForm,
     #[serde(default)]
@@ -1436,6 +1439,7 @@ impl Default for DataLabels {
     fn default() -> Self {
         DataLabels {
             enable: false,
+            white_out: false,
             form: LabelForm::Y,
             position: LabelPosition::Right,
             font: Font::new("Arial", 22.0),

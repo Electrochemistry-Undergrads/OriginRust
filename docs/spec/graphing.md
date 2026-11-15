@@ -1797,10 +1797,28 @@ Sheaf keeps its existing continuous full-data line. Smart Skip is not offered.
 
 Data labels have font, size, colour, rotation, position and the forms X, Y, Row Indices and (X,Y).
 They are written a quarter of the font size from the point, numbers as the worksheet shows them (up to 15
-significant digits); the layer Background colour fills the frame behind the grid. Sheaf's own additions
+significant digits). White Out on the Label tab draws an opaque white rectangle immediately behind
+each displayed nonempty label, independent of page/layer colour. It follows the label's anchor,
+offsets and rotation and uses the same clipping and row/Skip Points selection as the text. Older
+projects omit `DataLabels::white_out` and load with it off. Native/companion saves preserve it;
+the `.opj` writer names the unsupported data labels in its save warning.
+
+White Out reference (2026-11-14): Origin 2016, `set %C -q 1; set %C -qw 1;`, Arial 30,
+label "12345", Center, gray layer behind a red line. The 900-pixel PNG has
+three 100 x 40 pixel opaque white label boxes; off has none. Rotation 45 degrees rotates the boxes
+with the text. Raw commands, outputs, pictures and region bounds are in
+`re-workspace/scratch/t13-label-whiteout/`. The existing Label control capture also has White Out
+unchecked (`t13/open3/label.controls.txt`). Published controls:
+[Label tab](https://docs.originlab.com/origin-help/pd-dialog-label-tab/),
+[LabTalk label switches](https://docs.originlab.com/labtalk/ref/options_for_data_plot_labels/).
+Sheaf approximates the font box using the measured text advance plus 0.05 em on each side and a
+baseline band from -0.92 to +0.23 em. Exact padding for other fonts is unmeasured; label frames,
+editable margins and leader lines remain open.
+
+The layer Background colour fills the frame behind the grid. Sheaf's own additions
 beyond what was measured (hatch and gradient fills, bar width, label column, rows, decimals and offsets,
 background gradient and border, X/Y axes switches, page border, layer icons, comments, subgroups) are in
-section 18.6. Not done: the other fill modes, label frames, white out, custom forms and display formats
+section 18.6. Not done: the other fill modes, label frames, custom forms and display formats
 beyond decimals, leader lines, the No Line Break / Gap to Symbol interaction. The `.opj` writer
 does not store these settings; the save names them and the companion file keeps them.
 
@@ -1973,7 +1991,7 @@ project file only when they differ from the default (a file written before loads
 
 ### 18.7 Not done
 
-Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, "White Out", frame, margin, attach-to,
+Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, frame, margin, attach-to,
 automatic overlap avoidance and leader lines of Label, X and Y multiplier of Offset, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 print margins, writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).

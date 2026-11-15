@@ -23,6 +23,7 @@ pub mod graph_details;
 pub mod graph_props;
 pub mod import;
 pub mod import_excel;
+pub mod import_theme;
 pub mod import_wizard;
 pub mod label_panels;
 pub mod layer_contents;

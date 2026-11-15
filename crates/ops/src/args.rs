@@ -326,6 +326,19 @@ pub struct ReadOptions {
     /// Excel: leave hidden sheets out when --sheets is not given.
     #[arg(long)]
     pub skip_hidden_sheets: bool,
+    /// Start from a saved import theme (the Dialog Theme row of the import windows): a saved name,
+    /// `<default>` or `<last used>`. Options given on the command line win over the theme; a flag
+    /// can only turn an option on, so to switch one off save a theme without it. A name that is in
+    /// no store lists the saved themes.
+    #[arg(long, value_name = "NAME", conflicts_with = "last_used")]
+    pub theme: Option<String>,
+    /// Start from the settings of the last OK in the import windows (same as `--theme "<last used>"`).
+    #[arg(long)]
+    pub last_used: bool,
+    /// The folder of the saved import themes (default: `$SHEAF_THEMES_DIR`, else `import-themes` in the
+    /// settings folder). Only read with --theme or --last-used.
+    #[arg(long, value_name = "DIR")]
+    pub themes_dir: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]

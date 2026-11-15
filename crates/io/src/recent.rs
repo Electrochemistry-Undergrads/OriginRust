@@ -219,7 +219,7 @@ fn push(list: &mut Vec<PathBuf>, path: PathBuf) {
 }
 
 /// Holds the lock file next to the lists; dropping it lets the next instance in.
-fn lock(path: &Path) -> Option<std::fs::File> {
+pub(crate) fn lock(path: &Path) -> Option<std::fs::File> {
     let name = path.file_name()?.to_string_lossy().into_owned();
     let lock_path = path.with_file_name(format!("{name}.lock"));
     let file = OpenOptions::new().create(true).truncate(false).write(true).open(lock_path).ok()?;

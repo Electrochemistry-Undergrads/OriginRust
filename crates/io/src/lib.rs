@@ -18,6 +18,7 @@ pub mod recent;
 pub mod recovery;
 pub mod save;
 mod text;
+pub mod themes;
 
 pub use error::IoError;
 pub use excel::{is_excel_file, is_excel_workbook};
@@ -147,9 +148,10 @@ pub fn open_project(path: &Path) -> Result<OpenedProject, IoError> {
 }
 
 /// Which importer to use.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ImportKind {
     /// CHI when the file looks like a CH Instruments export, delimited text otherwise.
+    #[default]
     Auto,
     Chi,
     Ascii,

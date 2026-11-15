@@ -20,6 +20,7 @@ use crate::dialogs::go_to::{GoToDialog, GoToOutcome};
 use crate::dialogs::graph_props::{GraphPropsDialog, PropsTab};
 use crate::dialogs::import::{ImportDialog, ImportOutcome, ImportRequest};
 use crate::dialogs::import_excel::{ExcelImportDialog, split_excel};
+use crate::dialogs::import_theme::Themed;
 use crate::dialogs::import_wizard::{ImportWizard, WizardPage};
 use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutcome};
 use crate::dialogs::mask_condition::MaskConditionDialog;
@@ -80,6 +81,9 @@ pub struct Startup {
     /// The file of the recent projects and imports (`recent.json`); `None` keeps no lists and writes
     /// nothing (the tests pass a temporary file).
     pub recent_path: Option<PathBuf>,
+    /// The folder of the saved import settings (`import-themes`: the Dialog Theme row of the import
+    /// windows); `None` hides the row and writes nothing (the tests pass a temporary folder).
+    pub themes_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
     /// The run folders the AI link may listen in, best first. `None` has no folder, so the link
@@ -471,10 +475,10 @@ impl SheafApp {
         let (workbooks, paths) = split_excel(paths);
         if ask {
             if !workbooks.is_empty() {
-                self.import_excel = Some(ExcelImportDialog::new(workbooks));
+                self.import_excel = Some(self.excel_dialog(workbooks));
             }
             if !paths.is_empty() {
-                self.import = Some(ImportDialog::new(paths));
+                self.import = Some(self.import_dialog(paths));
             }
             return;
         }
@@ -1239,7 +1243,7 @@ impl SheafApp {
                 if self.import_wizard.is_some() {
                     ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, egui::Id::new("import_wizard")));
                 } else {
-                    self.import_wizard = Some(ImportWizard::new(Vec::new()));
+                    self.import_wizard = Some(self.wizard(Vec::new()));
                 }
             }
             Action::Undo => {
@@ -2767,6 +2771,25 @@ impl SheafApp {
         });
     }
 
+    /// An import window on `files`, started from `<last used>` (or `<default>`) of the saved settings.
+    fn import_dialog(&self, files: Vec<PathBuf>) -> ImportDialog {
+        let mut d = ImportDialog::new(files);
+        d.attach_themes(self.startup.themes_dir.clone());
+        d
+    }
+
+    fn excel_dialog(&self, files: Vec<PathBuf>) -> ExcelImportDialog {
+        let mut d = ExcelImportDialog::new(files);
+        d.attach_themes(self.startup.themes_dir.clone());
+        d
+    }
+
+    fn wizard(&self, files: Vec<PathBuf>) -> ImportWizard {
+        let mut w = ImportWizard::new(files);
+        w.attach_themes(self.startup.themes_dir.clone());
+        w
+    }
+
     /// Opens the import dialog on `files`, or on what the user picks when there are none.
     fn start_import(&mut self, files: Option<Vec<PathBuf>>, pick: ImportPick) {
         let files = files.or_else(|| {
@@ -2789,10 +2812,10 @@ impl SheafApp {
             // An Excel workbook chosen with an ASCII item still goes to the Excel window.
             let (workbooks, files) = split_excel(files);
             if !workbooks.is_empty() {
-                self.import_excel = Some(ExcelImportDialog::new(workbooks));
+                self.import_excel = Some(self.excel_dialog(workbooks));
             }
             if !files.is_empty() {
-                let mut dialog = ImportDialog::new(files);
+                let mut dialog = self.import_dialog(files);
                 if pick == ImportPick::Csv {
                     dialog.preset_comma();
                 }
@@ -2837,6 +2860,9 @@ impl SheafApp {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import = None,
                 ImportOutcome::Done(request) => {
+                    if let Some(warning) = d.take_theme_warning() {
+                        self.logs.warn(warning);
+                    }
                     self.import = None;
                     self.finish_import(request);
                 }
@@ -2847,6 +2873,9 @@ impl SheafApp {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import_excel = None,
                 ImportOutcome::Done(request) => {
+                    if let Some(warning) = d.take_theme_warning() {
+                        self.logs.warn(warning);
+                    }
                     self.import_excel = None;
                     self.finish_import(request);
                 }
@@ -2857,6 +2886,9 @@ impl SheafApp {
                 ImportOutcome::Open => {}
                 ImportOutcome::Cancelled => self.import_wizard = None,
                 ImportOutcome::Done(request) => {
+                    if let Some(warning) = d.take_theme_warning() {
+                        self.logs.warn(warning);
+                    }
                     self.import_wizard = None;
                     self.finish_import(request);
                 }
@@ -3683,7 +3715,7 @@ impl SheafApp {
                 }
                 "import-wizard" => {
                     let files = if arg.is_empty() { Vec::new() } else { vec![PathBuf::from(arg)] };
-                    self.import_wizard = Some(ImportWizard::new(files));
+                    self.import_wizard = Some(self.wizard(files));
                 }
                 // import-wizard-page:header, variables, file, data, selection or save (after import-wizard).
                 "import-wizard-page" => {
@@ -3702,7 +3734,7 @@ impl SheafApp {
                 }
                 "import-excel" => {
                     if !arg.is_empty() {
-                        self.import_excel = Some(ExcelImportDialog::new(vec![PathBuf::from(arg)]));
+                        self.import_excel = Some(self.excel_dialog(vec![PathBuf::from(arg)]));
                     }
                 }
                 // import-excel-page:mode, header, columns, partial or misc (after import-excel).
@@ -3718,7 +3750,7 @@ impl SheafApp {
                 }
                 "import" | "import-data-options" => {
                     if !arg.is_empty() {
-                        let mut d = ImportDialog::new(vec![PathBuf::from(arg)]);
+                        let mut d = self.import_dialog(vec![PathBuf::from(arg)]);
                         if name == "import-data-options" {
                             d.show_data_import_options();
                         }

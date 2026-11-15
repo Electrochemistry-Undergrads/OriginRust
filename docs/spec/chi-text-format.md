@@ -266,6 +266,14 @@ The command-line program turns the defaults off with `--no-split-scans`, `--no-s
 `--no-milliamp`, `--no-charge` and `--keep-file-times`, and turns current inversion on with
 `--invert-current`.
 
+### 3.1 Saved settings (T46)
+
+The options can be saved as dialog themes (`import-ascii.md` section 17): `<default>` is the table above,
+`<last used>` is the options of the last OK, and named themes are kept by the owner ("CHI CV 3 header lines").
+They are kept in their own store (`import-themes/chi.json`, Sheaf's choice, not measured) so that the same
+CHI options apply whether the file comes through the import window or `sheaf import --theme NAME`. A file
+from an older Sheaf lacking a newer option gets that option's default from the table.
+
 ## 4. Unknowns
 
 - The exact header text of each technique in the owner's CHI software version. Confirmed for

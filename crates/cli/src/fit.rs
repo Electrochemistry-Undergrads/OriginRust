@@ -144,7 +144,7 @@ pub fn fit(a: FitArgs) -> Result<()> {
         load_project(input)?
     } else {
         let mut p = Project::new();
-        p.adopt_workbook(read_data_file(input, &read_settings(&a.read))?.workbook);
+        p.adopt_workbook(read_data_file(input, &read_settings(&a.read)?)?.workbook);
         p
     };
     let result = sheaf_ops::fit::run(&mut project, &spec, &prepared)?;

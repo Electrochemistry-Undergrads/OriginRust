@@ -27,7 +27,7 @@ fn sheet_of(name: &str, columns: Vec<Column>) -> Worksheet {
 
 /// A workbook of three sheets written by the exporter: two with data and header rows, one holding
 /// text only.
-fn excel_file(tag: &str) -> PathBuf {
+pub(super) fn excel_file(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-excel-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();

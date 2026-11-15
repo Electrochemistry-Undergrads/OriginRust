@@ -19,7 +19,7 @@ const DATA_RUN: usize = 3;
 /// Longest worksheet name.
 const SHEET_NAME_MAX: usize = 31;
 /// How the fields of a line are separated.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Delimiter {
     /// Guess from the file.
     Auto,
@@ -33,7 +33,9 @@ pub enum Delimiter {
     /// Each character is a delimiter (Origin's Other Delimiters). Optionally collapse a run
     /// of these characters to one separator. Quoted empty fields are still real fields.
     AnyOf {
+        #[serde(default)]
         chars: String,
+        #[serde(default)]
         combine: bool,
     },
     /// A string of two or more characters that separates the fields as a whole (`||`, `::`,
@@ -70,7 +72,7 @@ pub fn parse_widths(text: &str) -> Option<Vec<usize>> {
 }
 
 /// What to do with columns of dates and times of day.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum DateImport {
     /// Import them as numbers (Origin's date numbers) with a date or time display format.
     #[default]
@@ -81,7 +83,7 @@ pub enum DateImport {
 
 /// Which character groups the digits of a number (`1,234.5`, `1.234,5`, `1 234,5`, `1'234.5`).
 /// These are Origin's four number-separator choices plus "none" and "detect".
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Thousands {
     /// Use a separator when the file shows one unambiguously (a number such as `1,234,567`,
     /// `1,234.5`, `1.234,5` or `1 234`), none otherwise.
@@ -101,7 +103,7 @@ pub enum Thousands {
 
 /// What to do with a file that holds several blocks of data separated by blank lines
 /// (each block may repeat its header lines).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Blocks {
     /// One block: blank lines are skipped and everything is read as one table.
     #[default]
@@ -112,7 +114,8 @@ pub enum Blocks {
 
 /// A 1-based input range, optionally taking `read` entries and skipping `skip`, repeatedly.
 /// A last position of zero means through the end. The pattern starts at `first`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ImportSelection {
     pub first: usize,
     pub last: usize,
@@ -141,7 +144,8 @@ impl ImportSelection {
 }
 
 /// Import settings. `None` means "detect"; for the line numbers, `Some(0)` means "there is none".
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct AsciiOptions {
     pub delimiter: Delimiter,
     /// Number of lines before the first data row.

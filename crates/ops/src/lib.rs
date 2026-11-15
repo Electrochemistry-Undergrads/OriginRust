@@ -16,6 +16,7 @@ pub mod read;
 pub mod render;
 pub mod session;
 pub mod tabular;
+pub mod themes;
 
-pub use read::{DataFormat, ReadSettings, ThousandsSetting};
+pub use read::{DataFormat, NoFlagOptions, ReadSettings, SharedOptions, ThousandsSetting};
 pub use session::{Loaded, SaveReport};

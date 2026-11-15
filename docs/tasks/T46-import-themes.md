@@ -1,6 +1,6 @@
 # T46: Saved import settings (Dialog Theme: last used and named themes)
 
-**Status:** claimed 2026-11-15 (branch `import-themes`, Claude macOS "mac-themes"). Brief written from
+**Status:** done, merged 2026-11-15 (Claude macOS "mac-themes"; spec import-ascii.md 17): `sheaf_io::themes` (serde on every import option struct, locked merged writes, unreadable themes kept), Dialog Theme row in the ASCII/CHI window, the Import Wizard and the Excel window, `--theme`/`--last-used`/`--themes-dir` on every command that reads data files. Reviewed by three agents with each finding checked; six fixed. Left: the seven Origin measurements in import-ascii.md 17.3; `.oif` filters stay out of scope. Brief written from
 parity row "Import filters and saved settings" (P1, ✗) and the Dialog Theme row measured in Origin's
 impASC window (import-ascii.md, "The impASC window, measured in Origin").
 **Size:** M. **Branch:** `import-themes`. **Model:** Sonnet. No Origin needed for the mechanism; the

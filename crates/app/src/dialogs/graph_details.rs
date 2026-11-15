@@ -418,12 +418,27 @@ fn plot_tab_body(
                     // Origin starts the fill in the line's colour.
                     plot.decor.fill_under = fill.then_some(plot.line.color);
                 }
-                if let Some(color) = plot.decor.fill_under.as_mut() {
+                ui.add_enabled_ui(fill, |ui| {
+                    ui.horizontal(|ui| {
+                        let label = ui.label("Fill mode");
+                        egui::ComboBox::from_id_salt(("fill_under_mode", plot.y))
+                            .selected_text(plot.decor.fill_under_mode.name())
+                            .show_ui(ui, |ui| {
+                                for mode in FillUnderMode::ALL {
+                                    ui.selectable_value(&mut plot.decor.fill_under_mode, mode, mode.name());
+                                }
+                            })
+                            .response
+                            .labelled_by(label.id);
+                    });
+                });
+                if plot.decor.fill_under_mode.is_normal()
+                    && let Some(color) = plot.decor.fill_under.as_mut()
+                {
                     ui.horizontal(|ui| {
                         ui.label("Fill color");
                         color_button(ui, color);
                     });
-                    ui.weak("Normal: the area between the curve and the bottom of the layer.");
                     look::fill_controls(ui, "line_fill", &mut plot.decor.fill);
                 }
             }

@@ -762,6 +762,7 @@ impl Layer {
             q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
             q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
+            q.decor.fill_under_mode = src.decor.fill_under_mode;
             if same_color {
                 q.line.color = src.line.color;
                 q.symbol.color = src.symbol.color;
@@ -1413,10 +1414,13 @@ pub struct PlotDecor {
     /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
     #[serde(default, skip_serializing_if = "DropLines::is_default")]
     pub drop: DropLines,
-    /// Origin's "Fill Area Under Curve" in its "Normal" mode: the area between the curve and the
-    /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
+    /// Enables Fill Area Under Curve. Normal fills to the layer bottom with this colour;
+    /// sidelines use the line style instead. `None` disables both fills and sidelines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_under: Option<Color>,
+    /// The selected fill/outline mode is retained while Fill Area Under Curve is disabled.
+    #[serde(default, skip_serializing_if = "FillUnderMode::is_normal")]
+    pub fill_under_mode: FillUnderMode,
     /// Transparency, hatch and gradient of the fill under a curve, of a bar or of an area (the
     /// Pattern tab). Plain by default: the flat colour only.
     #[serde(default, skip_serializing_if = "FillStyle::is_default")]
@@ -1424,6 +1428,31 @@ pub struct PlotDecor {
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FillUnderMode {
+    #[default]
+    Normal,
+    SidelinesOnly,
+    SidelinesAndBase,
+}
+
+impl FillUnderMode {
+    pub const ALL: [Self; 3] = [Self::Normal, Self::SidelinesOnly, Self::SidelinesAndBase];
+
+    pub fn is_normal(&self) -> bool {
+        *self == Self::Normal
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::SidelinesOnly => "Sidelines only",
+            Self::SidelinesAndBase => "Sidelines and Base",
+        }
+    }
 }
 
 /// How a Line + Symbol connecting line meets its point symbols. Other plot kinds ignore these

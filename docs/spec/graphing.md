@@ -2012,10 +2012,44 @@ a double-click on the graph; pictures and control lists in `re-workspace/scratch
   clipping margins), Stack.
 
 Sheaf (`Plot::decor`, `Layer::background`, drawn in `crates/plot/src/plots.rs` and `layout.rs`):
-Fill Area Under Curve in the Normal mode only, with its own colour (Origin puts the colour on the
-Pattern tab; Sheaf shows it under the check box) and the alpha of that colour as transparency; the
-line's Transparency slider sets the alpha of the line colour; both drop lines with style, width and
-an Auto or chosen colour, drawn from each point to the left edge and to the bottom edge of the frame.
+Fill Area Under Curve uses its own colour in Normal mode (Origin puts the colour on the Pattern
+tab; Sheaf shows it under the check box), with the colour's alpha as transparency. The line's
+Transparency slider sets the alpha of the line colour. Both drop lines offer style, width and an
+Auto or chosen colour, drawing from each point to the left and bottom edges of the frame.
+
+Fill Area Under Curve now offers **Normal**, **Sidelines only** and **Sidelines and Base**.
+Normal remains the old default and keeps its previous filled rendering. Sidelines only leaves
+an unfilled curve and adds vertical boundaries from its first and last finite displayed points
+to the bottom of the frame. Sidelines and Base also connects those bottom endpoints. These
+outlines use the connecting line's colour, width, dash and transparency; the stored fill colour,
+hatch and gradient are inactive and their controls are hidden in these modes. The mode selector
+is disabled while Fill Area Under Curve is off; its selection is retained. Dependent group edits
+copy it. Other fill modes and user-selected baselines remain open.
+
+Measured in Origin 2016 on 2026-11-15, `re-workspace/scratch/t13-fill-sidelines/`: blue fill colour,
+red 6 pt line, points (2,1), (6,1.5), (10,1), Y range -1..2, 900-pixel exports.
+`verified_sides.png` and `verified_base.png` have no blue area: the red boundaries reach the
+frame bottom at -1 rather than the zero line inside the frame. The legend uses a red line sample
+rather than Normal's blue filled box. Controls confirm the two selected modes. In
+`verified_missing.png`, rows 3/5 are explicitly missing (`0/0`, both `ISNA` results 1), leaving
+first/last runs and an isolated middle point. Only the OUTER endpoints get sidelines; missing-run
+ends and the isolated interior point get none, and the connecting-line gap remains open.
+The original `normal.png` is a valid bottom-baseline/blue-fill control with its line inadvertently
+changed to 0.2 pt; initial `sides`/`sides_base` captures selected line width instead of fill mode
+and are excluded. Initial `sides_missing` has seven finite points and is excluded from missing-data
+evidence. The corrected controls and raw worksheet reads are retained locally. See also the
+[published Line-tab description](https://docs.originlab.com/origin-help/pd-dialog-line-tab/) and
+[LabTalk missing-value syntax](https://docs.originlab.com/labtalk/ref/missing-val-constant/).
+
+The shared scene keeps one stroke across the curve and its added boundaries, preserving opacity
+at the joins, and changes the legend sample to a line. Screen, raster and vector exports share
+that scene; existing connection styles, clipping, skipped symbols and row selection still apply.
+Source values and axes are unchanged. Hidden masked rows follow the existing missing-data
+view policy, so a hidden endpoint leaves no dangling sideline. Native and companion files preserve
+the mode, including while disabled; the existing `.opj` save warning covers the unsupported fill settings. Only
+Cartesian straight-line examples were Origin-measured; other connections use Sheaf's existing
+curve geometry, and specialised coordinates, alternate baselines and unusual stroke preferences
+remain unmeasured. Normal's older hatch/gradient/border fidelity remains covered by section 18.6.
 
 Data Points Display Control on Drop Lines now offers Skip Points and a frequency. This uses the
 existing `SymbolStyle::every` (the former Symbol tab's Show every field), so old projects keep their

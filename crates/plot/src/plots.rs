@@ -7,8 +7,8 @@ use crate::fill::{fill_polygon, fill_rect};
 use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
-    Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, LabelForm, LabelFrame, LabelPosition, LineStyle,
-    PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolShape, SymbolStyle,
+    Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, FillUnderMode, LabelForm, LabelFrame,
+    LabelPosition, LineStyle, PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolShape, SymbolStyle,
 };
 
 /// Points closer than this (in pt) to the last kept point are dropped.
@@ -113,6 +113,10 @@ pub(crate) fn draw_plot(
 /// of the layer frame (measured: the fill reaches the bottom axis, not Y = 0). A missing point
 /// breaks the area, as it breaks the line.
 fn draw_fill_under(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, color: sheaf_core::Color) {
+    if !pd.plot.decor.fill_under_mode.is_normal() {
+        // The outline modes are part of the connecting stroke, avoiding double opacity at joins.
+        return;
+    }
     let bottom = geom.frame.y + geom.frame.h;
     let style = pd.plot.decor.fill;
     let mut d = String::new();
@@ -546,30 +550,65 @@ fn symbol_line_gaps(pd: &PlotData, geom: &LayerGeometry, stroke: &Stroke) -> Opt
 fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let stroke = line_stroke(&pd.plot.line);
     let gaps = symbol_line_gaps(pd, geom, &stroke);
+    let side_mode =
+        (pd.plot.decor.fill_under.is_some() && !pd.plot.kind.is_area() && !pd.plot.decor.fill_under_mode.is_normal())
+            .then_some(pd.plot.decor.fill_under_mode);
+    let ends = side_mode.and_then(|_| {
+        let mut points = pd.rows().filter_map(|i| geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)).map(|p| (i, p)));
+        let first = points.next()?;
+        Some((first, points.next_back().unwrap_or(first)))
+    });
+    let bottom = geom.frame.y + geom.frame.h;
     let connect = match pd.plot.line.connect {
         Connect::Spline if !spline_applies(pd) => Connect::Straight,
         c => c,
     };
     let mut piece: Vec<(f64, f64)> = Vec::new();
     let mut pending: Option<(f64, f64)> = None;
-    let flush = |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, out: &mut Vec<Item>| {
-        if let Some(p) = pending.take() {
-            piece.push(p);
-        }
-        if piece.len() >= 2 {
-            let mut d = String::with_capacity(piece.len() * 12);
-            polyline_path(&mut d, piece, connect);
-            if let Some(gaps) = &gaps {
-                let points = crate::hit::path_points(&d);
-                d.clear();
-                gaps.write_polyline(&points, &mut d);
+    let (mut first_row, mut last_row) = (None, None);
+    let mut outline = String::new();
+    let mut flush =
+        |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, out: &mut Vec<Item>, first_row, last_row| {
+            if let Some(p) = pending.take() {
+                piece.push(p);
             }
-            if !d.is_empty() {
-                out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+            let at_end = ends.is_some_and(|((a, _), (b, _))| first_row == Some(a) || last_row == Some(b));
+            if piece.len() >= 2 || (at_end && !piece.is_empty()) {
+                let mut d = String::with_capacity(piece.len() * 12);
+                polyline_path(&mut d, piece, connect);
+                if let Some(((first, first_point), (last, _))) = ends {
+                    // Origin adds boundaries only at the plot's outer endpoints, including across
+                    // missing-data breaks. It adds none at internal breaks or isolated middle points.
+                    if first_row == Some(first) {
+                        let mut prefix = String::new();
+                        move_to(&mut prefix, piece[0].0, bottom);
+                        d.replace_range(..1, "L");
+                        prefix.push_str(&d);
+                        d = prefix;
+                    }
+                    if last_row == Some(last) {
+                        let last_x = crate::hit::path_points(&d).last().map_or(piece[piece.len() - 1].0, |p| p.0);
+                        line_to(&mut d, last_x, bottom);
+                        if side_mode == Some(FillUnderMode::SidelinesAndBase) {
+                            line_to(&mut d, first_point.0, bottom);
+                        }
+                    }
+                }
+                if let Some(gaps) = &gaps {
+                    let points = crate::hit::path_points(&d);
+                    d.clear();
+                    gaps.write_polyline(&points, &mut d);
+                }
+                if !d.is_empty() {
+                    if side_mode.is_some() {
+                        outline.push_str(&d);
+                    } else {
+                        out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+                    }
+                }
             }
-        }
-        piece.clear();
-    };
+            piece.clear();
+        };
     // Adds a point to the piece unless it is closer than DECIMATE_PT to the last kept one.
     let keep = |piece: &mut Vec<(f64, f64)>, pending: &mut Option<(f64, f64)>, p: (f64, f64)| match piece.last() {
         None => piece.push(p),
@@ -587,6 +626,8 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     for i in pd.rows() {
         match geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) {
             Some(p) => {
+                first_row.get_or_insert(i);
+                last_row = Some(i);
                 let strip = (p.0 / STRIP_PT).floor() as i64;
                 match &mut run {
                     Some(r) if r.strip == strip => r.add(p),
@@ -602,14 +643,17 @@ fn draw_line(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
                 if let Some(r) = run.take() {
                     r.emit(|q| keep(&mut piece, &mut pending, q));
                 }
-                flush(&mut piece, &mut pending, out);
+                flush(&mut piece, &mut pending, out, first_row.take(), last_row.take());
             }
         }
     }
     if let Some(r) = run.take() {
         r.emit(|q| keep(&mut piece, &mut pending, q));
     }
-    flush(&mut piece, &mut pending, out);
+    flush(&mut piece, &mut pending, out, first_row.take(), last_row.take());
+    if !outline.is_empty() {
+        out.push(Item::Path { d: outline, fill: None, stroke: Some(stroke) });
+    }
 }
 
 /// Writes one piece as path data.

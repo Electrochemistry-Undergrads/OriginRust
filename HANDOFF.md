@@ -36,6 +36,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T13 sidelines fill modes (2026-11-15, Windows): Sidelines only and Sidelines and Base
+  use the connecting stroke to the frame bottom, with no fill or internal missing-run sidelines.
+  Origin 2016 controls/exports confirm geometry and line legends; group/history and native/companion
+  saves retain the mode. Formatting, strict workspace all-target Clippy and 2,609 tests pass
+  (five existing ignored), including eight new regressions. Windows MCP portability fixes also
+  keep strict Clippy and three displayed-path fixtures compatible with canonical drive paths.
+
 - T27 Standard toolbar Print (2026-11-15): the button uses the existing File > Print command
   and its active-window availability, with Origin's measured tooltip "Print the active window".
   A UI regression checks menu/toolbar parity and dispatch without sending a job. Formatting,
@@ -129,11 +136,10 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `codex/t13-fill-inclusive` | Codex Windows, t13-fill-inclusive | T13 Inclusive broken by missing values only: FillUnderMode variant/classification, draw_fill_under finite-run closure, draw_line and legend mode predicates, graph_details fill controls, focused tests/docs | claimed 2026-11-15; private t13-skip-points tree/target; no Axis/breaks/geometry/PDF, mask policy/reader, navigation/formulas, stats or other sessions scope |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
-| `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under/draw_line boundaries, draw_legend sample, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout geometry/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
-| `codex/mcp-windows-lint` | Codex Windows, t13-fill-sidelines | T25 Windows strict-Clippy portability: Listener::bind Unix-only directory argument in crates/mcp/src/link/transport.rs | claimed 2026-11-15; one-function cfg use only, no transport/protocol or endpoint behavior changes; same private t13 tree/target |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
 | `vartest2` | Claude Windows, "continue all tasks" | T26 leftovers: Origin measurements of the two-sample proportion test (unpooled, tails, differences, Fisher, small samples), two-sample variance dialog with intervals, power analysis outputs; calc vartest.rs, core var/prop runners, their dialogs, statistics.md 21 | claimed 2026-11-15 |

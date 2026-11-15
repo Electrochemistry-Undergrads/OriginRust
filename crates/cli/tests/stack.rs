@@ -138,6 +138,14 @@ fn waterfall_needs_two_percentages_and_a_graph_without_a_right_axis() {
 }
 
 #[test]
+fn stacked_histograms_refuse_a_right_axis() {
+    let dir = scratch("stacked-hist-y2");
+    let data = data_file(&dir);
+    let stderr = plot_error(&dir, &data, &["-t", "stacked-histograms", "--y2", "C"]);
+    assert!(stderr.contains("stacked histograms cannot have a right Y axis"), "{stderr}");
+}
+
+#[test]
 fn the_stacked_template_and_the_y_axis_options() {
     let dir = scratch("template");
     let data = data_file(&dir);

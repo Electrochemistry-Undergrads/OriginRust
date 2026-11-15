@@ -80,6 +80,10 @@ pub struct Project {
     /// [`Project::apply_mask_switch`] brings back in line after every edit, so new columns follow it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     masking_off: bool,
+    /// Hide masked points (Origin's Mask toolbar switch `@MP`): graphs leave masked points out, as
+    /// gaps like missing values, instead of drawing them in the mask colour. Analysis is unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hide_masked: bool,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
 }
@@ -204,6 +208,7 @@ impl Project {
             page_setup: crate::page_setup::PageSetup::default(),
             mask_color: default_mask_color(),
             masking_off: false,
+            hide_masked: false,
             next_id: 1,
         }
     }

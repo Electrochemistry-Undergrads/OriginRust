@@ -20,6 +20,7 @@ mod offset_multipliers;
 mod skip_points;
 mod symbol_line_gaps;
 mod symbol_line_order;
+mod toolbar_print;
 mod violin;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
@@ -6812,6 +6813,26 @@ fn select_only_column(h: &mut Harness<'static, SheafApp>) -> WindowId {
 
 fn mask_rows(h: &Harness<'static, SheafApp>) -> Vec<usize> {
     project(h).workbooks().next().unwrap().sheet().columns[0].mask.iter().copied().collect()
+}
+
+#[test]
+fn hide_masked_points_is_a_project_switch_with_a_show_label() {
+    let mut h = start(vec![mask_data_file("maskhide")]);
+    select_only_column(&mut h);
+    let ctx = h.ctx.clone();
+    show_window(&mut h, "Book1 - values");
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Hide Masked Points"));
+    close_menus(&mut h);
+    h.state_mut().apply(Action::ToggleHideMasked, &ctx);
+    settle(&mut h);
+    assert!(project(&h).hide_masked);
+    assert_eq!(h.state().doc.undo_label(), Some("Hide or show masked points"));
+    menu_path(&mut h, &["Column", "Mask"]);
+    assert!(entry_enabled(&h, "Show Masked Points"));
+    close_menus(&mut h);
+    h.state_mut().apply(Action::Undo, &ctx);
+    assert!(!project(&h).hide_masked);
 }
 
 #[test]

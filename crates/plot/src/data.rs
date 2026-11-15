@@ -289,12 +289,24 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));
         let (start, end) = row_range(plot, y.len());
+        let active_mask = project.column(plot.y).and_then(|c| c.active_mask());
+        // Hide Masked Points: masked rows become gaps, like missing values, and nothing is drawn red.
+        let (y_plot, mask): (Cow<'_, [f64]>, _) = match active_mask {
+            Some(m) if project.hide_masked => {
+                let mut owned = y.to_vec();
+                for &r in m.range(..owned.len()) {
+                    owned[r] = f64::NAN;
+                }
+                (Cow::Owned(owned), None)
+            }
+            _ => (Cow::Borrowed(y), active_mask),
+        };
         let mut pd = PlotData {
             plot,
             x: x.map(Cow::Borrowed),
             x_format,
-            y: Cow::Borrowed(y),
-            mask: project.column(plot.y).and_then(|c| c.active_mask()),
+            y: y_plot,
+            mask,
             mask_color: project.mask_color_rgb(),
             filters: project.plot_row_filters(plot),
             err,

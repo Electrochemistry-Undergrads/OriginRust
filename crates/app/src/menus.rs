@@ -105,6 +105,8 @@ pub enum Cmd {
     MaskColor,
     /// Column > Mask > Disable Masking (Enable Masking while it is disabled).
     ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points.
+    ToggleHideMasked,
     /// Column > Mask Cells by Condition...
     MaskByCondition,
     /// Column > Set as Categorical.
@@ -912,6 +914,8 @@ fn mask_menu() -> Entry {
         item("Swap", Cmd::Mask(MaskOp::Swap)),
         item("Change Color", Cmd::MaskColor),
         item("Disable Masking", Cmd::ToggleMasking),
+        // Origin has this switch on its Mask toolbar (`@MP`); Sheaf puts it here.
+        item("Hide Masked Points", Cmd::ToggleHideMasked),
     ];
     sub("Mask", entries)
 }
@@ -1899,6 +1903,15 @@ pub fn set_masking_disabled(ctx: &egui::Context, disabled: bool) {
     ctx.data_mut(|d| d.insert_temp(egui::Id::new("masking_disabled"), disabled));
 }
 
+/// Tells the menus whether masked points are hidden (for the Hide/Show Masked Points label).
+pub fn set_masked_hidden(ctx: &egui::Context, hidden: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("masked_hidden"), hidden));
+}
+
+fn masked_hidden(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new("masked_hidden"))).unwrap_or(false)
+}
+
 fn masking_disabled(ctx: &egui::Context) -> bool {
     ctx.data(|d| d.get_temp(egui::Id::new("masking_disabled"))).unwrap_or(false)
 }
@@ -2015,6 +2028,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::MaskColor => Action::MaskColor,
         Cmd::ToggleMasking => Action::ToggleMasking,
+        Cmd::ToggleHideMasked => Action::ToggleHideMasked,
         Cmd::MaskByCondition => {
             let book = book?;
             Action::MaskByConditionDialog { book, columns: some()? }
@@ -2318,6 +2332,9 @@ fn show_entries(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actions: 
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleMasking)) && masking_disabled(ui.ctx()) {
                     label = "Enable Masking".to_string();
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleHideMasked)) && masked_hidden(ui.ctx()) {
+                    label = "Show Masked Points".to_string();
                 }
                 let resolved = it.cmd.as_ref().map(|cmd| resolve(cmd, c));
                 let enabled = matches!(resolved, Some(Ok(_)));

@@ -38,6 +38,10 @@ command does not cancel queued calls. ADR 0013 and mcp.md 11.19 record the scope
 Four real-proxy/UI regressions cover a complete batch, exported-file preservation, saved state,
 individual redo, a manual boundary, stale dispatch, editor/dialog guards and a truncated history.
 
+Validation: formatting, strict workspace all-target Clippy and all 2,740 workspace tests pass
+(eight existing ignored), including the latest Find, window-switcher, X:Y ratio and axis-break
+line drawing integrations. All owned builders exited before merge.
+
 ## Goal
 
 An AI assistant (Claude Code, Claude Desktop, or any client that speaks the Model Context Protocol)

@@ -468,6 +468,13 @@ double-Y study of graphing.md 12.7 showed what it is.)
   5 give the major tick direction, bits 6 and 7 the minor one: 0 none, 1 in, 2 out, 3 both (a default
   Origin graph has `0xA0`, both out; the owner's Y axis has `0x50`, both in, which matches his figure).
   The meaning of 1 and 3 was inferred from these two cases, not from a rendering of each.
+- Block 3, u16 at `0x4A`: the major tick length in tenths of a point (measured 2026-11-15 by setting
+  Line and Ticks > Major Ticks > Length in Origin 2016's axis dialog and saving: 80 for the default 8 pt,
+  150 for 15 pt, 30 for 3 pt; the same u16 stands at `0x4A` of the other five blocks but did not change).
+  Where a minor tick length other than Auto (half the major) is kept was not found: a chosen minor
+  length changed no byte in the scripted runs (the choice may not have been committed). Sheaf writes the
+  major length and names a minor length that is not half the major in the save warnings. Origin 2016 opened a
+  Sheaf file with 15 pt (X) and 3 pt (Y) and saved them back unchanged (150, 30).
 - Block 3, byte `0x26`: bit `0x40` set means the axis line and ticks are drawn on the primary side
   (bottom for X, left for Y). u16 at `0x0F`: the axis colour; `F7 FF` means "automatic" (the colour
   of the layer's plot), 0 black.

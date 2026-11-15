@@ -374,7 +374,7 @@ fn what_the_file_cannot_hold_is_named() {
         "not a worksheet column",
         "no counterpart in Origin",
         "divisor",
-        "tick lengths",
+        "minor tick length",
         "grid lines",
         "font family",
         "legend background",
@@ -510,4 +510,39 @@ fn other_scale_types_survive_a_round_trip() {
     assert_eq!(l.y_axis.scale, ScaleKind::Ln);
     assert_eq!(l.x_axis.scale, ScaleKind::OffsetReciprocal);
     assert!(l.y_axis.min.is_some_and(|m| m > 0.0));
+}
+
+#[test]
+fn the_major_tick_length_is_written_and_read_back() {
+    let mut p = source();
+    graph_with(&mut p, Template::LineSymbol, &[(0, 1)], |g| {
+        let l = &mut g.layers[0];
+        l.x_axis.major_tick_len_pt = 15.0;
+        l.x_axis.minor_tick_len_pt = 7.5;
+        l.y_axis.major_tick_len_pt = 3.0;
+        l.y_axis.minor_tick_len_pt = 1.5;
+    });
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.iter().all(|w| !w.contains("tick length")), "{warnings:?}");
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!((l.x_axis.major_tick_len_pt, l.x_axis.minor_tick_len_pt), (15.0, 7.5));
+    assert_eq!((l.y_axis.major_tick_len_pt, l.y_axis.minor_tick_len_pt), (3.0, 1.5));
+}
+
+/// Writes `sheaf-ticks.opj` (X major 15 pt, Y 3 pt) into `SHEAF_OPJ_TICK_DIR`, for Origin to open and
+/// save again (opj-format.md 10.3): `SHEAF_OPJ_TICK_DIR=<folder> cargo test -p sheaf-io -- --ignored
+/// write_tick_lengths_for_origin`.
+#[test]
+#[ignore]
+fn write_tick_lengths_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_TICK_DIR") else { return };
+    let mut p = source();
+    graph_with(&mut p, Template::LineSymbol, &[(0, 1)], |g| {
+        let l = &mut g.layers[0];
+        l.x_axis.major_tick_len_pt = 15.0;
+        l.x_axis.minor_tick_len_pt = 7.5;
+        l.y_axis.major_tick_len_pt = 3.0;
+        l.y_axis.minor_tick_len_pt = 1.5;
+    });
+    std::fs::write(Path::new(&dir).join("sheaf-ticks.opj"), write_named(&p, "g", TIME).unwrap().bytes).unwrap();
 }

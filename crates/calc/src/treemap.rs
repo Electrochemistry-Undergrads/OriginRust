@@ -562,7 +562,7 @@ mod tests {
 
     /// The original quadratic step, kept as the oracle for the prefix-sum version.
     #[cfg(test)]
-fn pivot_step_reference(kind: Layout, items: &[(usize, f64)], r: Rect) -> Step {
+    fn pivot_step_reference(kind: Layout, items: &[(usize, f64)], r: Rect) -> Step {
         let p = pick_pivot(kind, items);
         let sum1: f64 = items[..p].iter().map(|it| it.1).sum();
         let sp = items[p].1;

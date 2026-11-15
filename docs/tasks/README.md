@@ -46,6 +46,9 @@ facts** (what is already measured, with the source), **Where** (files and symbol
 
 ## Index
 
+[Origin 2016 to 2026–2027 functionality gaps](origin-2026-2027-gaps.md) lists newer capabilities
+that are missing from Sheaf and have no existing brief or handoff entry.
+
 | Brief | Area | Size | Status |
 |---|---|---|---|
 | [T01](T01-greyed-menus-with-code.md) | Enable greyed menu items whose feature already exists | M | done (`a2fb77b`); custom sort wired with selected-row bounds; Stack and label-group panel dialogs left |

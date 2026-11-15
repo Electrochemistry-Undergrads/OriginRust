@@ -22,6 +22,11 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- CI build size (2026-11-15): dev/test debug information is disabled and the cache prefix
+  is reset to `debug0-v1-rust` after the hosted runner exhausted its disk during test linking.
+  The format/lint/test commands remain unchanged. Local formatting, strict all-target workspace
+  Clippy and all 2,226 tests pass with debug information disabled (three existing ignored).
+
 - T13 Symbol/Line interface (2026-11-14, Windows): Gap to Symbol and No Line Break for
   Skipped Point(s) follow Origin 2016 horizontal, zigzag and three-point diagonal exports.
   Circular clearance is independent of square/circle marker shape; the current fixed 30%

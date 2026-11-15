@@ -138,6 +138,38 @@ Attached elements (font sizes, line and arrow widths, arrowheads, drawn objects)
 
 ---
 
+### 2.4 Stock legend anchor (T21, measured 2026-11-15)
+
+Nine verified OriginPro 2016 exports use synthetic five-row data: Line with one/four curves,
+a long Y name, a resized layer, a resized page, and two-curve Scatter, Line + Symbol, Column
+and Double-Y. `plotxy iy:=(1,2:3) plot:=200|201|202|203` creates the ordinary plots; Double-Y
+uses `plot:=202 ogl:=[<new template:=doubleY>]`. `doc -uw` refreshes before `expGraph` writes
+a 1600-pixel PNG. Scripts, numeric results and inspected PNGs are local in
+`re-workspace/scratch/t21-legend-position/`; the first five failed exports are excluded.
+
+For Line, Scatter, Line + Symbol and Column, `legend.attach=0` (layer frame). The upper-left
+anchor, in fractions of the frame from its upper-left, is approximately **(0.8223, -0.1044)**.
+It is calculated from `legend.x1/y1` and the axis ranges: `x=(x1-xfrom)/(xto-xfrom)` and
+`y=1-(y1-yfrom)/(yto-yfrom)`. In the ordinary 0..6 by 1..11 Line case, x1=4.933850365,
+y1=12.043552036. Scatter/Line+Symbol and Column give the same fractions with different ranges.
+The anchor remains fixed when rows or text widen the legend: it grows right/down, can extend
+past the page with a long label, and four entries cross the upper frame edge. A single entry
+is above the frame in Origin. The resized-layer/page PNGs follow the same relative anchor;
+raw `legend.left/top` retain cached page coordinates, so they are not used to infer resizing.
+
+Implementation decision: new graphs from those four templates will use an **Automatic**
+legend position with that upper-left anchor. Existing corner/manual positions and the CV,
+Double-Y and other template placements stay as saved. The existing position chooser will
+show/reset Automatic. Native/companion files retain it, and the `.opj` writer places its
+legend rectangle at the same anchor. Text measurement, padding, row spacing, sample size,
+fonts, frame styles and manual dragging remain the current renderer's behavior; this copies
+placement, and does not claim identical legend dimensions. Double-Y's smaller page-attached
+legend is a separate measured difference, outside this change.
+
+The probe uses the documented [graphical object coordinates](https://docs.originlab.com/labtalk/guide/creating-and-accessing-graphical-objs/)
+and [expGraph](https://docs.originlab.com/x-function/ref/expgraph/); measurements above come
+from the installed 2016 application rather than current documentation defaults.
+
 ## 3. Axis options (P0)
 
 ### 3.1 Scale tab [W:axesref-scale]

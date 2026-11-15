@@ -124,7 +124,7 @@ pub struct InterpSpec {
     /// X range of the result; `None` is the X range of the data.
     pub range: Option<(f64, f64)>,
     /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
-    /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
+    /// `sf`). 0 chooses the factor from the data as Origin does (`sheaf_calc::automatic_smoothing`).
     pub smoothing: f64,
     /// Interpolate onto the values of this column instead of an even grid (Mathematics >
     /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are

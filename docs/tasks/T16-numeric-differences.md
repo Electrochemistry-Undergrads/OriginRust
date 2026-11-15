@@ -1,6 +1,6 @@
 # T16: Small numeric and behaviour differences
 
-**Status:** item 2 done, merged (`94063b4`) (natural spline, 900 limit, increasing X, B-spline and Bezier added; spec 5.2); items 1 and 5 done, item 4 investigated, merged (`b967898`) (not fixed, findings in statistics.md); 3 done; 6 open (a different thing: the analysis smoothing factor, not the line connection). **Size:** S each; independent, one commit each. **Branch:** `small-diffs`.
+**Status:** item 2 done, merged (`94063b4`) (natural spline, 900 limit, increasing X, B-spline and Bezier added; spec 5.2); items 1 and 5 done, item 4 investigated, merged (`b967898`) (not fixed, findings in statistics.md); 3 done; 6 done 2026-11-14 on branch `small-diffs` (Origin's automatic B-spline factor found: the semivariogram nugget, analysis-tools.md 5; 236 Origin data sets to 6e-15). **Size:** S each; independent, one commit each. **Branch:** `small-diffs`.
 **Model:** Sonnet (Haiku to run the suites). **Detail:** audit C "Missing objects", D "Numerically
 or behaviourally different".
 
@@ -23,6 +23,8 @@ or behaviourally different".
    (`crates/calc/src/freq.rs`); measured cases in `tools/origin-ref/stats-bins*.lines.txt`. Find the
    rule from them. (DONE: `m = round(1.75 ln n)`, size `range/(m-0.19)` to 1 digit (n<14) or 1-2-5 (n>=14); 593/600.)
 6. **B-spline smoothing factor 0** differs (Origin's automatic factor unknown,
-   `crates/calc/src/interp.rs`). Low priority; documented already.
+   `crates/calc/src/interp.rs`). (DONE: the factor is `|a|` of a straight-line fit of the first five
+   semivariogram lags against squared distance, from the rows in worksheet order;
+   `automatic_smoothing`, analysis-tools.md 5, fixture `origin_bspline_auto.rs`.)
 
 Done when: each fixed with an Origin fixture, or the brief says why not; checks pass.

@@ -15,9 +15,8 @@ regenerates the same data.
 Status by tool: integrate, differentiate, normalize, interpolate (linear, cubic spline, Akima),
 baseline, peak finding (local maximum) and statistics are done and checked. Smooth: adjacent
 averaging, Savitzky-Golay, percentile filter and the FFT filter are done and checked. Cubic
-B-spline interpolation: the smoothing spline for a smoothing factor above 0 is done and matches
-Origin; the default factor 0 is implemented as the interpolating spline and does NOT match Origin
-inside the data (Origin's automatic factor was not found, see section 5).
+B-spline interpolation: done and checked, both for a smoothing factor above 0 and for Origin's default
+factor 0 (an automatic factor from the data, found 2026-11-14, see section 5).
 
 ## 1. Integrate (`integ1`)
 
@@ -204,30 +203,46 @@ x = 0..10, impulses, polynomials, random numbers; scripts `interp-bspline.labtal
   it also agrees with SciPy's `splrep` on 300 random cases (checked once, not kept as a test). A very
   small `sf` ends with one knot per data point (the interpolating spline); a large one with a single
   cubic polynomial.
-* (observed) `sf = 0` (the default) is not an interpolating spline: Origin then uses an automatic
-  factor that depends on the data in a way we did not find. Measured values of this factor for
-  unit impulses on x = 0..10: 1/12, 0.1245, 19/120, 0.1799, 0.1843, 1/6, 1/12, 0.0422, 1/120, 9/680,
-  3/170 for the impulse at x = 0, 1, ..., 10; it is proportional to the square of the data scale and
-  for other data (sin x, random numbers) it is 4 % to 14 % of the sum of squares of y. It is not a
-  quadratic form in y, not the residual of a polynomial fit, and it does not come from limiting the
-  number of knots. Consequently Origin's default B-spline moves up to 0.27 away from the data points
-  of a unit impulse and about 0.2 from sin x on 11 points. Data that already lie on a cubic
-  polynomial (for example y = x^2) are reproduced exactly.
+* (observed) `sf = 0` (the default) is not an interpolating spline: Origin chooses the factor from
+  the data and then runs the same Dierckx fit. The rule (found 2026-11-14 by matching the Dierckx fit
+  to Origin's curve, which pins the factor to about 1e-9, then decoding it from unit impulses and all
+  pairs `e_i + e_j`, `e_i - e_j` on 5, 8 and 11 points; scripts `re-workspace/scratch/t16/gen1.py` to
+  `gen4.py`, raw outputs `probe1-4.out.txt` there):
+  1. Drop rows with a missing X or Y. Keep the rows in worksheet order (do not sort, do not merge
+     repeated X yet).
+  2. With `m` rows, take `L = min(5, m - 1)` lags and the starts `i = 0 .. m - L - 1` (the SAME
+     `m - L` starts for every lag, so the last rows enter fewer pairs: this is why the factor is not
+     symmetric when the data are reversed).
+  3. For each lag `d = 1 .. L`: `h_d` = mean over the starts of `(x[i+d] - x[i])^2`, `g_d` = mean over
+     the starts of `(y[i+d] - y[i])^2 / 2` (a semivariogram against squared distance).
+  4. Fit `g = a + b h` to the `L` points by ordinary least squares; the factor is `|a|`, the nugget,
+     an estimate of the noise variance. The absolute value matters: the intercept is negative for
+     some data (an impulse near the end), and Origin then uses its magnitude.
+  On equally spaced X this is `|sum_i sum_d (89 - 5 d^2) (y[i+d] - y[i])^2| / (340 (m - 5))` for
+  `m >= 6`: a unit impulse inside long data gets `1/(m - 5)`, one at the first row half of that.
+  The factor scales with the square of Y, ignores a constant added to Y and the scale of X, and
+  changes when the rows are reordered (checked: reversed data, unsorted X). With the factor, the
+  Dierckx fit on the sorted points (repeated X merged to their mean, as for `sf > 0`) reproduced
+  Origin's curve on all 236 data sets measured (impulses, pairs, random numbers, noisy sine, uneven
+  and unsorted X, repeated X, missing values, 5 to 200 points) to 6e-15. A factor of 0 (constant
+  Y) gives the interpolating spline. With 4 points any factor gives the interpolating cubic, so
+  nothing there is measurable. Not measured: equal `h_d` at every lag (impossible for distinct X
+  seen so far; Sheaf then uses `a` = mean of `g`), an Origin fit whose knot search stops early.
 * (observed) Outside the data range with the default option Origin continues with the straight
   line through the two nearest data points (not the end slope of the curve), whatever `sf` is.
   `miss` and `repeat` work as for the other methods.
 * (observed) Repeated X values: Origin replaces them by one point with the mean Y (checked for
   `sf` = 0.2 on x = 0 1 2 2 3 4 4; the output equals the fit of the merged points to 1e-9). We do the
-  same for the B-spline method. For the default factor the curve at a repeated X then differs from
-  the mean, which is the same automatic smoothing that is not understood. Fewer than four different
+  same for the B-spline method. With the default factor the merge happens after the factor is
+  computed on the unmerged rows (measured, data set `dupx` of probe 3). Fewer than four different
   X values give no result.
 * Our implementation (`InterpMethod::BSpline`): `smoothing` above 0 is the Dierckx smoothing spline
-  inside the data; 0 is the interpolating (not-a-knot) cubic spline, which agrees with Origin's
-  default only for data that lie on a cubic polynomial; both continue outside the data with Origin's
-  straight line. At least four different X values. A negative or missing factor is refused. The
-  dialog and the command line say that factor 0 is not Origin's automatic smoothing.
+  inside the data; 0 computes Origin's factor (`sheaf_calc::automatic_smoothing`, the rule above) and
+  fits with it; both continue outside the data with Origin's straight line. At least four different
+  X values. A negative or missing factor is refused. Tests: `crates/calc/tests/origin_bspline.rs`
+  and `origin_bspline_auto.rs` (16 Origin data sets at 15 positions each, 1e-10).
 
-Unsorted X: we sort and drop pairs with a missing value (not compared with Origin).
+Unsorted X and missing values: pairs with a missing value are dropped and the points sorted, as in Origin (measured for the B-spline, where the automatic factor is computed before sorting; section 5).
 
 ## 6. Baseline subtraction
 

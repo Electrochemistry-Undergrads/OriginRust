@@ -1397,7 +1397,7 @@ pub enum AnalyzeTool {
         #[arg(long, allow_hyphen_values = true)]
         x_max: Option<f64>,
         /// B-spline smoothing factor: the allowed sum of squared residuals (matches Origin's `sf`).
-        /// 0 interpolates the points; Origin's automatic factor for 0 is not reproduced.
+        /// 0 chooses the factor from the data as Origin does.
         #[arg(long, default_value_t = 0.0)]
         smoothing: f64,
     },

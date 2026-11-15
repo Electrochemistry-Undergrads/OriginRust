@@ -81,6 +81,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T29](T29-multivariate-roc-survival.md) | PCA, k-means, ROC curve, Kaplan-Meier | L | open; Origin measurements on Windows |
 | [T30](T30-excel-import-export.md) | Excel import (xls, xlsx, xlsm) and xlsx export | L | done, merged 2026-11-14 (ADR 0012, `docs/spec/import-excel.md`); left: Origin measurements on Windows, the owner's workbooks check, `.xlsb`/`.ods` tests |
 | [T31](T31-windows-executable-icon.md) | Embed the existing app icon in Windows executable resources | S | done; all seven built-PE icon frames match the source and Windows extracts both sizes |
+| [T32](T32-multipage-pdf-export.md) | Several graphs in one multi-page PDF (Export Graphs, CLI, MCP) | M | claimed 2026-11-15 (`multipage-pdf`, macOS) |
 
 In flight (do not start these): matrices/contour/heatmaps (`originrust-3a`). All other branches of
 2026-11-12 are merged or turned into briefs (T20, T21).

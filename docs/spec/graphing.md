@@ -2416,9 +2416,8 @@ Automated checks prepare the real native operation on the process main thread wi
 standard UI tests never send a print job. Run the no-spool native check on macOS with
 `cargo run -p sheaf-app --example macos_print_check`; it verifies Letter/A4 portrait/landscape,
 PDF media boxes, native paper/orientation, margins, scaling and title, and rejects invalid PDF or
-mismatched paper. Computer Use did not approve access to the isolated QA app, so opening and
-cancelling the actual panel was not verified in this session. Physical-printer output remains
-unverified. Changing paper in the system panel does not regenerate the graph layout; use Sheaf's
+mismatched paper. Opening and cancelling the actual panel was not manually verified in this
+session. Physical-printer output remains unverified. Changing paper in the system panel does not regenerate the graph layout; use Sheaf's
 Page Setup to change that layout.
 
 ### 19.8 Not done

@@ -65,6 +65,24 @@ impl<'a> SheetHost<'a> {
 }
 
 impl Host for SheetHost<'_> {
+    fn column_parameter(&self, col: &ColumnRef, name: &str) -> Option<String> {
+        let column = self.find(col)?;
+        let names = self.sheet.parameter_names();
+        let key = names
+            .iter()
+            .find(|k| k.as_str() == name)
+            .or_else(|| names.iter().find(|k| k.eq_ignore_ascii_case(name)))
+            .or_else(|| {
+                let ordinal = name.strip_prefix(['D', 'd'])?;
+                if ordinal.is_empty() || !ordinal.bytes().all(|c| c.is_ascii_digit()) {
+                    return None;
+                }
+                let index: usize = ordinal.parse().ok()?;
+                index.checked_sub(1).and_then(|i| names.get(i))
+            })?;
+        Some(column.params.get(key).cloned().unwrap_or_default())
+    }
+
     fn formatted_numeric_cell(&self, col: &ColumnRef, row: usize) -> Option<String> {
         let c = self.find(col)?;
         let value = c.numeric().and_then(|v| v.get(row)).copied().unwrap_or(f64::NAN);
@@ -142,12 +160,14 @@ pub(crate) fn eval_on_sheet(expr: &Expr, sheet: &Worksheet, rows: usize) -> Resu
 struct FormulaDeps {
     data: Vec<ColumnId>,
     labels: Vec<ColumnId>,
+    parameters: bool,
 }
 
 /// Resolves cell and header sources, or returns the first reference that matches no column.
 /// A computed `cell(r,c)` may read any other column of the sheet.
 fn resolve_deps(expr: &Expr, sheet: &Worksheet, me: ColumnId) -> Result<FormulaDeps, ColumnRef> {
     let host = SheetHost { sheet };
+    let expr = expr.resolve_parameters(&host);
     let mut out = Vec::new();
     for r in expr.data_columns() {
         let id = host.find(&r).ok_or(r)?.id;
@@ -181,7 +201,7 @@ fn resolve_deps(expr: &Expr, sheet: &Worksheet, me: ColumnId) -> Result<FormulaD
             labels.push(id);
         }
     }
-    Ok(FormulaDeps { data: out, labels })
+    Ok(FormulaDeps { data: out, labels, parameters: expr.reads_parameters() })
 }
 
 /// The new data of `target` after its formula filled `range`. Rows outside the range keep their
@@ -337,6 +357,7 @@ pub(crate) fn recalc_sheet(
     ws: &mut Worksheet,
     changed: &HashSet<ColumnId>,
     force: &HashSet<ColumnId>,
+    parameter_rows_changed: bool,
 ) -> Vec<RecalcProblem> {
     let mut problems = Vec::new();
     let nodes: Vec<FormulaNode> = ws
@@ -408,8 +429,10 @@ pub(crate) fn recalc_sheet(
             }
         };
         let forced = force.contains(&node.id);
-        let needs =
-            forced || state == FormulaState::Broken || deps.data.iter().chain(&deps.labels).any(|d| dirty.contains(d));
+        let needs = forced
+            || state == FormulaState::Broken
+            || (parameter_rows_changed && deps.parameters)
+            || deps.data.iter().chain(&deps.labels).any(|d| dirty.contains(d));
         if !needs {
             continue;
         }
@@ -554,7 +577,7 @@ impl Project {
             if let crate::Window::Workbook(b) = w {
                 for s in &mut b.sheets {
                     if s.columns.iter().any(|c| changed.contains(&c.id)) {
-                        problems.extend(recalc_sheet(s, &changed, &none));
+                        problems.extend(recalc_sheet(s, &changed, &none, false));
                     }
                 }
             }
@@ -576,7 +599,7 @@ impl Project {
             if let crate::Window::Workbook(b) = w {
                 for s in &mut b.sheets {
                     if s.column(column).is_some() {
-                        problems = recalc_sheet(s, &HashSet::new(), &force);
+                        problems = recalc_sheet(s, &HashSet::new(), &force, false);
                     }
                 }
             }
@@ -597,7 +620,7 @@ impl Project {
         if force.is_empty() {
             return Vec::new();
         }
-        recalc_sheet(ws, &HashSet::new(), &force)
+        recalc_sheet(ws, &HashSet::new(), &force, false)
     }
 
     /// Brings recalculating columns up to date after an edit that turned `before` into `self`:
@@ -618,10 +641,19 @@ impl Project {
         let none = HashSet::new();
         for w in &mut self.windows {
             if let crate::Window::Workbook(b) = w {
-                for s in &mut b.sheets {
+                for (sheet_index, s) in b.sheets.iter_mut().enumerate() {
                     if !s.columns.iter().any(Column::is_locked) {
                         continue;
                     }
+                    // Dn aliases follow the displayed row order. Adding/removing a parameter
+                    // on any column can change the row named by an alias on another column.
+                    let old_names = before
+                        .workbook(b.id)
+                        .and_then(|book| book.sheets.get(sheet_index))
+                        .map(Worksheet::parameter_names)
+                        .unwrap_or_default();
+                    let new_names = s.parameter_names();
+                    let parameter_rows_changed = old_names != new_names;
                     let changed: HashSet<ColumnId> = s
                         .columns
                         .iter()
@@ -634,11 +666,12 @@ impl Project {
                                     || o.comments != c.comments
                                     || o.formula != c.formula
                                     || o.format != c.format
+                                    || o.params != c.params
                             })
                         })
                         .map(|c| c.id)
                         .collect();
-                    problems.extend(recalc_sheet(s, &changed, &none));
+                    problems.extend(recalc_sheet(s, &changed, &none, parameter_rows_changed));
                 }
             }
         }

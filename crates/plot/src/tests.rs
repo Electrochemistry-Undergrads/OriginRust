@@ -322,7 +322,7 @@ fn symbols_every_nth_and_error_bars() {
     // Error bars first, then symbols (no line for a scatter plot).
     assert_eq!(plots.len(), 2);
     let bars = plots[0].attribute("d").unwrap();
-    assert_eq!(bars.matches('M').count(), 3 * 10);
+    assert_eq!(bars.matches('M').count(), 3 * 4, "errors follow the same selected points as symbols");
     assert_eq!(plots[0].attribute("stroke-width"), Some("0.5")); // half the line width, at least 0.5 pt
     let symbols = plots[1].attribute("d").unwrap();
     assert_eq!(symbols.matches('Z').count(), 4, "points 0, 3, 6, 9");
@@ -518,6 +518,40 @@ fn raster_has_a_red_line_on_white() {
     // Inside the frame but far from the line.
     let (qx, qy) = geom.data_to_page(9.0, 1.0);
     assert_eq!(pixel(&r, (qx * 2.0) as u32, (qy * 2.0) as u32), [255, 255, 255, 255]);
+}
+
+#[test]
+fn data_on_top_changes_overlap_pixels_and_picking_without_changing_clipping() {
+    let (mut p, g) = red_line_project();
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.x_axis.min = Some(0.0);
+    layer.x_axis.max = Some(10.0);
+    layer.y_axis.min = Some(0.0);
+    layer.y_axis.max = Some(10.0);
+    layer.x_axis.line_width_pt = 4.0;
+    layer.y_axis.line_width_pt = 4.0;
+    // A wide red line along the bottom axis, intersecting a black axis well away from ticks.
+    let y = layer.plots[0].y;
+    p.column_mut(y).unwrap().data = ColumnData::numeric(vec![0.0; 11]);
+    let geom = layout_geometry(&p, g).unwrap().remove(0);
+    let point = geom.data_to_page(5.5, 0.0);
+    let sample = |p: &Project, point: (f64, f64)| {
+        let raster = render_raster(p, g, 2.0).unwrap();
+        pixel(&raster, (point.0 * 2.0) as u32, (point.1 * 2.0 - 1.0) as u32)
+    };
+    assert_eq!(sample(&p, point), [0, 0, 0, 255], "axes initially cover the data");
+    let before = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert_eq!(hit::hit_test(&before, point, 0.1), hit::Hit::Object { layer: 0, kind: scene::ObjectKind::XAxis });
+
+    p.graph_mut(g).unwrap().layers[0].display.data_on_top = true;
+    assert_eq!(sample(&p, point), [255, 0, 0, 255], "data now covers the axis");
+    let after = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert_eq!(before.layers[0].clip, after.layers[0].clip);
+    assert_eq!(hit::hit_test(&after, point, 0.1), hit::Hit::Object { layer: 0, kind: scene::ObjectKind::Plot(0) });
+    let below = (point.0, point.1 + 4.0);
+    assert_eq!(sample(&p, below), [255, 255, 255, 255], "data is still clipped at the frame");
+    p.graph_mut(g).unwrap().layers[0].display.clip_data = false;
+    assert_eq!(sample(&p, below), [255, 0, 0, 255], "the independent clipping switch still works");
 }
 
 #[test]

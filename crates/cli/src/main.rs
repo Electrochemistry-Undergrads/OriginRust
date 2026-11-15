@@ -14,11 +14,11 @@
 //! ```
 
 mod analyze;
-mod args;
 mod commands;
 mod fit;
 
 use clap::Parser;
+use sheaf_ops::args;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {

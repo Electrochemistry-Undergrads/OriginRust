@@ -251,6 +251,46 @@ fn the_original_file_is_copied_once_before_it_is_replaced() {
     assert!(backup_original(&dir.join("missing.opj")).unwrap().is_none());
 }
 
+#[cfg(unix)]
+#[test]
+fn the_backup_is_never_written_through_a_symlink() {
+    let dir = scratch("backup_link");
+    let f = dir.join("x.opj");
+    std::fs::write(&f, b"original").unwrap();
+    let outside = dir.join("outside");
+    std::os::unix::fs::symlink(&outside, dir.join("x.opj.bak")).unwrap();
+    assert!(backup_original(&f).is_err());
+    assert!(!outside.exists(), "nothing was created behind the link");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_to_an_existing_file_counts_as_a_backup_already_there_and_its_target_is_not_touched() {
+    let dir = scratch("backup_link_file");
+    let f = dir.join("x.opj");
+    std::fs::write(&f, b"original").unwrap();
+    let elsewhere = dir.join("elsewhere");
+    std::fs::write(&elsewhere, b"precious").unwrap();
+    std::os::unix::fs::symlink(&elsewhere, dir.join("x.opj.bak")).unwrap();
+    assert!(backup_original(&f).unwrap().is_none());
+    assert_eq!(std::fs::read(&elsewhere).unwrap(), b"precious");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_backup_has_the_permissions_of_the_original_and_an_existing_backup_is_never_overwritten() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = scratch("backup_mode");
+    let f = dir.join("x.opj");
+    std::fs::write(&f, b"original").unwrap();
+    std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o640)).unwrap();
+    let b = backup_original(&f).unwrap().expect("a copy is made");
+    assert_eq!(std::fs::metadata(&b).unwrap().permissions().mode() & 0o777, 0o640);
+    std::fs::write(&b, b"edited by hand").unwrap();
+    assert!(backup_original(&f).unwrap().is_none());
+    assert_eq!(std::fs::read(&b).unwrap(), b"edited by hand");
+}
+
 #[test]
 fn a_polar_layer_is_kept_by_the_companion_and_the_opj_warns() {
     let dir = scratch("polar");

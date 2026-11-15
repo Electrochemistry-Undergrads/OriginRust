@@ -319,6 +319,9 @@ pub struct LayerDisplay {
     /// Grid on Top of Data.
     #[serde(default)]
     pub grid_on_top: bool,
+    /// Data on Top of Axes. Axes remain unclipped when drawn behind the data.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub data_on_top: bool,
     /// Show Elements: X Axes. Off hides the X axes of the layer (lines, ticks, tick labels, titles).
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub show_x_axes: bool,
@@ -333,7 +336,14 @@ fn is_true(v: &bool) -> bool {
 
 impl Default for LayerDisplay {
     fn default() -> Self {
-        LayerDisplay { show_data: true, clip_data: true, grid_on_top: false, show_x_axes: true, show_y_axes: true }
+        LayerDisplay {
+            show_data: true,
+            clip_data: true,
+            grid_on_top: false,
+            data_on_top: false,
+            show_x_axes: true,
+            show_y_axes: true,
+        }
     }
 }
 
@@ -576,11 +586,32 @@ pub struct PlotOffset {
     /// Offset in Y, in axis units; used in [`Stack::Individual`] mode.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub y: f64,
+    /// Scale of the original X values before adding `x`, in [`Stack::Individual`] mode.
+    #[serde(default = "unit_multiplier", skip_serializing_if = "is_unit_multiplier")]
+    pub x_multiplier: f64,
+    /// Scale of the original Y values before adding `y`, in [`Stack::Individual`] mode.
+    #[serde(default = "unit_multiplier", skip_serializing_if = "is_unit_multiplier")]
+    pub y_multiplier: f64,
     /// When set, the curve has no place of its own in the stack: it takes the offset (and the
     /// waterfall shift) of the first member whose Y column is this one. A fitted curve drawn over
     /// its data uses it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follows: Option<ColumnId>,
+}
+
+impl PlotOffset {
+    /// Identity placement for a curve, without adding an entry to its layer.
+    pub fn new(column: ColumnId) -> Self {
+        Self { column, x: 0.0, y: 0.0, x_multiplier: 1.0, y_multiplier: 1.0, follows: None }
+    }
+}
+
+fn unit_multiplier() -> f64 {
+    1.0
+}
+
+fn is_unit_multiplier(value: &f64) -> bool {
+    *value == 1.0
 }
 
 fn default_rescale_margin() -> f64 {
@@ -758,7 +789,7 @@ impl Layer {
         let i = match self.plot_offsets.iter().position(|o| o.column == column) {
             Some(i) => i,
             None => {
-                self.plot_offsets.push(PlotOffset { column, x: 0.0, y: 0.0, follows: None });
+                self.plot_offsets.push(PlotOffset::new(column));
                 self.plot_offsets.len() - 1
             }
         };
@@ -1094,7 +1125,8 @@ pub struct SymbolStyle {
     /// Filled with the color, or drawn as an outline.
     pub filled: bool,
     pub edge_width_pt: f64,
-    /// Draw a symbol only on every n-th point (1 = every point).
+    /// Drop Lines > Skip Points: draw point decorations (symbols, drop lines, errors and labels)
+    /// on the first of every n source points in the plot range (0 or 1 = every point).
     #[serde(default = "one")]
     pub every: u32,
 }
@@ -1160,6 +1192,11 @@ pub enum PlotKind {
 }
 
 impl PlotKind {
+    /// Kinds whose Drop Lines tab offers Skip Points. Area and bar plots keep every point.
+    pub fn supports_skip_points(&self) -> bool {
+        matches!(self, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
+    }
+
     pub fn has_line(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::LineSymbol) || self.is_area()
     }
@@ -1392,6 +1429,9 @@ pub enum LabelPosition {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataLabels {
     pub enable: bool,
+    /// Origin's White Out: an opaque white background behind each displayed label.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub white_out: bool,
     #[serde(default)]
     pub form: LabelForm,
     #[serde(default)]
@@ -1420,6 +1460,7 @@ impl Default for DataLabels {
     fn default() -> Self {
         DataLabels {
             enable: false,
+            white_out: false,
             form: LabelForm::Y,
             position: LabelPosition::Right,
             font: Font::new("Arial", 22.0),
@@ -1818,7 +1859,7 @@ mod tests {
     fn plot_offsets_are_found_by_column_and_added_once() {
         let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
         let entry: PlotOffset = serde_json::from_str(r#"{"column":3}"#).unwrap();
-        assert_eq!(entry, PlotOffset { column: ColumnId(3), x: 0.0, y: 0.0, follows: None });
+        assert_eq!(entry, PlotOffset::new(ColumnId(3)));
         assert_eq!(layer.plot_offset(ColumnId(3)), None);
         layer.plot_offset_mut(ColumnId(3)).x = 1.5;
         layer.plot_offset_mut(ColumnId(3)).follows = Some(ColumnId(2));

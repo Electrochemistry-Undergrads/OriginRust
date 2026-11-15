@@ -1,6 +1,7 @@
 //! The analysis tools `analyze` accepts: their names, options and how the options become a
 //! `sheaf_ops::analyze::Job`. The numbers come from the same code as `sheaf analyze`.
 
+use crate::bridge::{self, Filter};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Map, Value, json};
 use sheaf_core::analysis::{self, BaselineSpec, InterpSpec, Tool};
@@ -302,9 +303,115 @@ pub fn registry() -> Vec<ToolDesc> {
     v
 }
 
-/// The registry as `list_analysis_tools` returns it.
+/// The command-line names of tools whose hand-mapped version has another name.
+const ALIASES: [(&str, &str); 2] = [("peaks", "find_peaks"), ("stats", "statistics")];
+
+/// The options of a bridged tool the server does not take from the tool's `options`: the input,
+/// the selection (`columns`, `book`, `sheet`, `rows`, `x_range` of the call), the files the command
+/// line writes (`export`, `save`: use `export_data` and `save_project`) and the read options.
+pub fn bridge_filter() -> Filter {
+    Filter::excluding(["input", "y", "book", "sheet", "rows", "x_range", "export", "save"])
+        .and_excluding(bridge::ids_of::<sheaf_ops::args::ReadOptions>())
+}
+
+/// A tool of `sheaf analyze` that has no hand-mapped version: its options come from clap.
+pub struct Bridged {
+    /// The name `analyze` takes: the command-line name with `_` for `-`.
+    pub name: String,
+    /// The subcommand of `sheaf analyze`.
+    pub command: String,
+    pub summary: String,
+    pub schema: Value,
+    pub second_column: Option<&'static str>,
+}
+
+fn hand_name_of(registry: &[ToolDesc], snake: &str) -> Option<&'static str> {
+    let snake = ALIASES.iter().find(|(c, _)| *c == snake).map_or(snake, |(_, h)| h);
+    registry.iter().find(|t| t.name == snake).map(|t| t.name)
+}
+
+/// Every subcommand of `sheaf analyze` that is not hand-mapped, in the command line's order.
+pub fn bridged() -> Vec<Bridged> {
+    let reg = registry();
+    let analyze = bridge::subcommand(&["analyze"]).expect("the analyze command exists");
+    let filter = bridge_filter();
+    analyze
+        .get_subcommands()
+        .filter(|c| c.get_name() != "help")
+        .filter(|c| hand_name_of(&reg, &c.get_name().replace('-', "_")).is_none())
+        .map(|c| {
+            let cmd = bridge::subcommand(&["analyze", c.get_name()]).expect("listed above");
+            let schema = bridge::schema(&cmd, &filter);
+            let about = c.get_about().map(|a| bridge::tool_text(&a.to_string())).unwrap_or_default();
+            let summary = about.split_once(". ").map_or(about.as_str(), |(a, _)| a).trim_end_matches('.').to_string();
+            let second_column =
+                ["other", "response", "imaginary", "ref"].into_iter().find(|k| schema["properties"].get(*k).is_some());
+            Bridged {
+                name: c.get_name().replace('-', "_"),
+                command: c.get_name().to_string(),
+                summary,
+                schema,
+                second_column,
+            }
+        })
+        .collect()
+}
+
+/// How `analyze` runs a tool name.
+pub enum Which {
+    /// A hand-mapped tool (the name as the registry has it).
+    Hand(&'static str),
+    /// A tool built from the command line's options.
+    Bridged(Bridged),
+}
+
+/// Finds a tool by name: `_` or `-`, any case, the command-line names `peaks` and `stats` included.
+pub fn resolve(name: &str) -> Result<Which> {
+    let snake = name.trim().to_ascii_lowercase().replace('-', "_");
+    let reg = registry();
+    if let Some(h) = hand_name_of(&reg, &snake) {
+        return Ok(Which::Hand(h));
+    }
+    let mut all = bridged();
+    if let Some(i) = all.iter().position(|b| b.name == snake) {
+        return Ok(Which::Bridged(all.swap_remove(i)));
+    }
+    let mut names: Vec<String> = reg.iter().map(|t| t.name.to_string()).collect();
+    names.extend(all.iter().map(|b| b.name.clone()));
+    bail!("unknown analysis tool \"{name}\" (tools: {})", names.join(", "))
+}
+
+/// The options of a bridged tool as `list_analysis_tools` shows them.
+fn bridged_options(schema: &Value) -> Vec<Value> {
+    let required: Vec<&str> =
+        schema["required"].as_array().map(|r| r.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    let Some(props) = schema["properties"].as_object() else { return Vec::new() };
+    props
+        .iter()
+        .map(|(name, p)| {
+            let ty = match p["type"].as_str() {
+                Some("array") => format!("[{}]", p["items"]["type"].as_str().unwrap_or("string")),
+                Some(t) => t.to_string(),
+                None => "string".to_string(),
+            };
+            let mut d = json!({
+                "name": name, "type": ty, "default": p.get("default").cloned().unwrap_or(Value::Null),
+                "description": p["description"], "required": required.contains(&name.as_str()),
+            });
+            let choices = if p["type"] == "array" { &p["items"]["enum"] } else { &p["enum"] };
+            if choices.is_array() {
+                d["choices"] = choices.clone();
+            }
+            d
+        })
+        .collect()
+}
+
+/// The registry as `list_analysis_tools` returns it: the hand-mapped tools, then every other tool
+/// of `sheaf analyze` with the options of its command-line definition. A bridged tool also carries
+/// `bridged: true` and its JSON Schema.
 pub fn describe() -> Value {
-    let tools: Vec<Value> = registry()
+    let mut tools: Vec<Value> = registry()
         .into_iter()
         .map(|t| {
             let options: Vec<Value> = t
@@ -324,6 +431,12 @@ pub fn describe() -> Value {
             json!({"name": t.name, "summary": t.summary, "options": options, "second_column": t.second_column})
         })
         .collect();
+    tools.extend(bridged().into_iter().map(|b| {
+        json!({
+            "name": b.name, "summary": b.summary, "options": bridged_options(&b.schema),
+            "second_column": b.second_column, "bridged": true, "input_schema": b.schema,
+        })
+    }));
     json!({ "tools": tools })
 }
 

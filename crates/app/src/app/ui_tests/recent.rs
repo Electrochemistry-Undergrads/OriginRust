@@ -10,8 +10,8 @@ fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-app-recent-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    // The canonical form is what the lists store (the temporary folder is a link on macOS).
-    std::fs::canonicalize(&dir).unwrap()
+    // Resolve the macOS temporary-folder link and use the list's plain Windows path spelling.
+    sheaf_io::recent::normalize(&std::fs::canonicalize(&dir).unwrap())
 }
 
 /// Starts the application with this recent file and these start-up paths.

@@ -5,7 +5,7 @@ fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("sheaf-io-recent-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::canonicalize(&dir).unwrap()
+    strip_verbatim(std::fs::canonicalize(&dir).unwrap())
 }
 
 fn touch(dir: &Path, name: &str) -> PathBuf {

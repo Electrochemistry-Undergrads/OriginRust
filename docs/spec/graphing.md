@@ -2249,6 +2249,44 @@ automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).
 
+### 18.8 Lollipop plot (T33)
+
+Origin's documented facts (from its help, not measured; [W:origin-help/lollipop-plot],
+[W:origin-help/pd-dialog-dropline-tab]):
+
+- Plot > Basic 2D : Lollipop Plot (template `Lollipop.OTPU`, Origin 2021). It needs two or more Y
+  columns (or a range spanning two); X comes from the associated X column, else the row number or
+  sampling interval.
+- It is a variation of the vertical drop-line scatter with X and Y exchanged, with drop lines set to
+  "Next Data Plot": each plot's drop line goes to the next plot at the same X, one by one, and the
+  last Y connects back to the first.
+- Plot Details > Drop Lines tab: "Drop To" offers "Next Data Plot" (selected by default for Lollipop
+  in the Vertical group). The colour list has "Auto" (the symbol colour) and "Y Value: Plus-Minus"
+  (only for Lollipop), which colours drop lines by the sign of the Y value.
+
+Sheaf's own choices, all unmeasured (no Origin at hand):
+
+- `Template::Lollipop` ("lollipop" on the command line and in MCP, menu Plot > Symbol > Lollipop
+  Plot): scatter with the standard scatter symbol and size, vertical drop lines on, Drop To = Next
+  Data Plot. Fewer than two Y columns are refused in `Project::plot_columns` (menu message, CLI and
+  MCP error "a lollipop plot needs two or more Y columns"). `--panels` refuses it.
+- Exchange X-Y: each plot's X and Y columns and the layer's two axes trade places (as Graph > Exchange
+  X-Y Axes does), so the drop lines run sideways along the value axis. Plots without an X column
+  (row number) cannot be exchanged in the model; they stay upright. Each plot keeps its Y column's
+  name in the legend; the axis titles follow the traded columns (the first plot's name on the value axis).
+- Drop To has two settings, Axis (default, the older behaviour) and Next Data Plot, one per group
+  (Horizontal, Vertical); both groups use the same segment rule when set to Next Data Plot.
+- Next Data Plot: plot k draws from each of its points to the point of plot k+1 of the layer at the same
+  row; the last plot draws back to the first. With exactly two plots only the first draws (no segment twice);
+  one plot draws none. A row where either end is missing, NaN, masked or outside the axis range gives no segment.
+- "Y Value: Plus-Minus": two fixed colours, blue (0, 114, 178) for zero and above and vermilion (213, 94, 0)
+  for negative, per segment, only when the colour is Auto. For a drop to the axis the sign is that of the plotted Y;
+  for a drop to the next plot it is the sign of the start point's value along the direction the segment runs
+  (the horizontal value in an exchanged lollipop). The list offers it when Drop To is Next Data Plot or it is set.
+- Stroke width and style are the Drop Lines defaults (0.5 pt, solid). `.opj` cannot hold either new setting; a save
+  warning names them and the `.opj.sheaf` companion keeps them. Files without the new fields load as Axis / Auto and
+  are written back without them.
+
 ## 19. Printing (File > Print, Print Preview, Page Setup; T27)
 
 Measured in OriginPro 2016 (64-bit) through `tools/origin-ref/origin-screenshot.ps1 -FullScreen`

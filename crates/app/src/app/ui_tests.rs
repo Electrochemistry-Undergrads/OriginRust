@@ -20,6 +20,7 @@ mod offset_multipliers;
 mod skip_points;
 mod symbol_line_gaps;
 mod symbol_line_order;
+mod toolbar_print;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {

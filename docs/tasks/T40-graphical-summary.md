@@ -1,6 +1,9 @@
 # T40: Graphical Summary (descriptive report with normality test and charts)
 
-**Status:** claimed 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `graph-summary`.
+**Status:** done 2026-11-15 (session "mac-multipdf", macOS, no Origin), branch `graph-summary`: Statistics >
+Descriptive Statistics > Graphical Summary (Separate Graphs), `sheaf analyze graphsummary`, MCP via the
+bridge; statistics checked against scipy 1.18. Left: Per Variable, Per Group and All in One arrangements;
+Origin's table layout, names, panel styling and interval formulas unmeasured (statistics.md 22).
 **Size:** L. **Source:** `origin-2026-2027-gaps.md` (Analysis: Graphical Summary, Origin 2026).
 
 ## Goal

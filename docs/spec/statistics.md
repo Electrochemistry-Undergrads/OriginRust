@@ -1166,6 +1166,89 @@ failed to open the dialog (the Origin window was in use by another session) and 
 sheet is named `VarTest1` or `PropTest1`. Tolerances of the fixtures: 1e-6 relative except the F quantiles (1e-5)
 and tiny exact p (5e-10 absolute).
 
+## 22 Graphical Summary (T40)
+
+Statistics > Descriptive Statistics > Graphical Summary. Numerics in `crates/calc/src/graph_summary.rs`, tool in
+`crates/core/src/analysis/summary.rs`, window in `crates/app/src/dialogs/analysis.rs`
+(`AnalysisKind::GraphSummary`), CLI `sheaf analyze graphsummary` (MCP: the bridged tool `graphsummary`).
+Documentation facts only, nothing measured: Origin 2026 is not available to the sessions that built this.
+
+### 22.1 What Origin does (documentation, not measured)
+
+- Inputs: one or more columns (or a data table), optional Group column(s), Confidence Interval (%) level, Graph
+  Arrangement: Separate Graphs, Per Variable, Per Group, All in One. [W:origin-help/graphical-summary]
+- Separate Graphs: for each variable-group pair a graph with three plots (histogram with a distribution curve,
+  confidence interval plot, probability plot) and three tables "Description Statistics", "##% Confidence Intervals"
+  and "Normality Test", titled by variable and group. [W:origin-help/graphical-summary; blog.originlab.com/graphical-summary]
+- Per Variable and Per Group draw a histogram with curve, a box chart with outliers and a CI plot with a panel per
+  group or variable and one summary table; All in One puts all subsets in one graph. [same]
+- The table shows mean and median with their confidence intervals; the summary includes the Anderson-Darling normality
+  test (2026 release). [W:blog; press release]
+- Not stated by Origin: the full statistic list, the default level, the destination of the outputs, the curve, the
+  p-value method of the test, the interval formulas.
+
+### 22.2 What Sheaf does (Sheaf's choices)
+
+- **Arrangement**: only Separate Graphs. The other three are in the enum (`GraphArrangement`) and the dialog (greyed,
+  with a hover note) and are refused by the tool and by `--arrangement` with "not available yet".
+- **Groups**: any number of group columns (numbers or text); a group is one combination of their values. Rows with an
+  empty group cell are left out. The group key is exact, not the 4-digit text of other tools: a numeric cell is kept
+  as its f64 value (so 2023.5 and 2024 are two groups, -0 equals 0) and labelled with its full round-trip number
+  (`2023.5`); a text cell is its trimmed text. Keys are ordered per column, in the order of the group columns, by a
+  total order: numeric cells first, by `f64::total_cmp`, then text cells by bytes; numeric-ness comes from the cell
+  type, never from parsing text, so "nan", "inf" or "1a" are plain text. Variable-group pairs with fewer than two numbers are left out with a note; at least one must remain.
+  A variable-group whose mean, SD or variance is not finite (values such as 1e300 and -1e300) keeps its table rows
+  but gets no graph, with a note, like the constant sample.
+- **Statistics** (the Descriptive Statistics tool's own `calc::stats`, not redefined): N, missing, mean, standard
+  deviation (n - 1), SE of the mean, variance, bias-corrected skewness and kurtosis, minimum, Q1, median, Q3, maximum
+  (Origin's quartile rule of `calc::quantile_origin`).
+- **Confidence level**: percent, default 95, between 0 and 100 (exclusive).
+- **CI of the mean**: Student t, `mean +/- t(1 - a/2, n-1) * SE` (`calc::mean_confidence_limits`).
+- **CI of the standard deviation**: chi-square, `s sqrt((n-1)/chi2(1 - a/2, n-1))` to `s sqrt((n-1)/chi2(a/2, n-1))`.
+- **CI of the median**: distribution-free, from order statistics, exact binomial and not interpolated. With the sample
+  sorted ascending, `k` is the largest rank with `P(Binomial(n, 1/2) <= k-1) <= a/2` and the interval is
+  `[x(k), x(n+1-k)]`; both ends are sample values. Its real coverage `1 - 2 P(Binomial(n,1/2) <= k-1)` is at least the
+  level (conservative, so it is often wider than asked). When even `k = 1` cannot reach the level (n too small: n = 4
+  at 95 %) the interval is `[min, max]` and a note gives its real confidence. Minitab-style interpolation between
+  neighbouring order statistics is not used.
+- **Normality Test**: Anderson-Darling A-squared and its p-value exactly as `calc::anderson_darling` gives them (the
+  Normality Test tool; needs 8 numbers with spread, otherwise the cells are empty and a note says so).
+- **Report sheet** `GraphSummary1` (Sheaf's layout): the first seven columns are long-form tables, text columns
+  Variable, Group, Table, Statistic and number columns Value, Lower, Upper. The Table column holds "Description
+  Statistics" (13 rows: N ... Maximum), "<level>% Confidence Intervals" (Mean, Median, Standard Deviation with estimate
+  in Value and the limits in Lower and Upper) and "Normality Test" (A-Squared, P-Value). `Report.table` has one row per
+  variable-group with the same numbers as columns (also the limits and A-Squared, P-Value).
+- **Graph data** is written to the same sheet behind those seven columns, per variable-group: the histogram's columns
+  (the Frequency Counts tool, automatic bins), the normal curve (101 points over the bin range,
+  `N * bin width * pdf` of the sample mean and SD, so it is on the count axis), the two interval segments and the two
+  estimates with their labels, and the Probability Plot tool's columns (normal, T14).
+- **Graph** per variable-group, long name `<variable> <group>` (the variable alone without groups), page 11 x 7 in
+  with three layers (Sheaf's layout, not Origin's): top left the histogram (bars) with the red normal curve, bottom
+  left the interval plot (the mean and the median each a horizontal bar from lower to upper limit with a square at the
+  estimate and its name; bars are line plots because the median interval is asymmetric and X error bars are
+  symmetric), right the normal probability plot with the fitted line on a probability axis. The graph title is a text
+  label above the histogram. Graphs are numbered in the order variable, then group: `new_graph` is the first, the rest
+  are `more_graphs`.
+- **Dialog**: input columns from the selection; Groups (a drop-down of check boxes over the other columns of the
+  sheet), Confidence Level (%), Graph Arrangement. No X range (the tool takes row ranges only). Auto Apply is off for
+  it (each run makes sheets and graphs); no Recalculate (the tool is not linkable).
+
+### 22.3 Checked against scipy, tolerances
+
+Sample `[2.1, 3.4, 3.9, 4.4, 4.8, 5.0, 5.3, 6.1, 6.6, 7.2, 8.0, 11.5]` (n = 12), numpy/scipy 1.18:
+mean 5.691666666666667, SD 2.4640905876697032, skewness 1.058210251752913 (`scipy.stats.skew(bias=False)`), kurtosis
+1.866917485643393 (`kurtosis(bias=False)`), mean interval 4.1260582004245965 to 7.257275132908738 (`t.ppf`), SD
+interval 1.7455498235905689 to 4.183725242485017 (`chi2.ppf`), median interval 3.9 to 7.2 with coverage 0.96142578125
+(`binom.cdf`), A-squared 0.30557037512815555 (`scipy.stats.anderson`). Tests in `calc::graph_summary` use 1e-9 relative
+(1e-12 for the plain statistics). The p-value is not compared with scipy (scipy 1.18 gives none for `anderson` without
+a method; Sheaf's comes from the existing implementation, section 4).
+
+### 22.4 Not done or not known
+
+Per Variable, Per Group and All in One arrangements; Origin's exact table layout, table row names and order, the
+panel layout and styling, and its median/SD interval formulas (none was measured: the documentation does not give
+them); the box chart of the other arrangements; Origin's default level.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

@@ -118,8 +118,22 @@ Function data sets and matrix sheets have other names (matrices have no undersco
 The data block holds `rows x cell size` bytes with no framing inside. The number of rows is the
 block size divided by the cell size; trailing bytes that do not make a whole cell were never
 seen and are ignored. A data set with an empty data block exists (it belongs to an unfilled
-column). The mask block was empty in every file seen; public documentation says it is read but
-its meaning is not documented (so nothing is decoded from it) [pub][obs].
+column). The mask block is empty when no cell of the column is masked [obs]. With masked cells
+(measured 2026-11-15 on projects Origin 2016 saved after `wcellmask`: one cell, three scattered
+cells in two columns, a run of eight, and the first and last of 50 rows; `re-workspace/scratch/opjmask`)
+it holds `40 + rows + 4` bytes for a column of `rows` cells [obs]:
+
+| Offset | Bytes | Meaning |
+|---|---|---|
+| 0 | 4 | differs between saves of the same data (a stale address) [obs] |
+| 4 | 4 | u32, the block's own length [obs] |
+| 8 | 32 | zero [obs] |
+| 40 | `rows` | one byte per row, 1 = masked, 0 = not [obs] |
+| 40 + rows | 4 | zero [obs] |
+
+Sheaf reads the masked rows (`dataset::decode_mask`; a block whose length field disagrees is ignored)
+and writes the same layout with zeros in the first four bytes; Origin 2016 opened such a file with the
+written cells masked (`ismasked`, and `stats` counted the others only) [obs].
 
 Columns are stored padded: in the small private files a worksheet with six numbers still stored 32
 cells per column, the rest being "no value" cells [obs]. The reader keeps the padding (it cannot tell
@@ -605,7 +619,7 @@ colour, heights, error bars, axis range and tick marks inside.
 
 ## 11. Unknowns
 
-- The mask block (always empty in these files).
+- The mask block (empty, or the masked rows in the layout of section 3.2).
 - Byte 1 of a text-or-number cell when not 0; flags in the data-set header at `0x3F`.
 - Whether text longer than `cell size - 2` is ever truncated or stored elsewhere.
 - The meaning of designation value 1 (read as "disregard"), and of values 8 to 17, 64, 80, 82, 128, 129 seen in

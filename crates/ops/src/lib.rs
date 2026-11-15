@@ -5,6 +5,8 @@
 pub mod analyze;
 pub mod args;
 pub mod cli_analyze;
+pub mod cli_fit;
+pub mod cli_plot;
 pub mod fit;
 pub mod import;
 pub mod info;

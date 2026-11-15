@@ -40,6 +40,13 @@ open. History of what was merged when is in `git log` (not repeated here).
   native/companion saves retain the behavior; `.opj` warns. Formatting, strict all-target
   workspace Clippy and 2,226 tests pass (three existing ignored), including eight new regressions.
 
+- T32 multi-page PDF (2026-11-15, macOS, no Origin): several graphs into one PDF, one page per
+  graph (Origin 2018b `expGraph` `multipage`). `sheaf_plot::render_multipage_pdf` (each page = that
+  graph's one-page PDF export with the same size/margin; sRGB page groups) and
+  `render_print_multipage_pdf` (Page Setup sheets); Export Graphs check box "Export as multi-page PDF
+  file"; `sheaf export`/`sheaf print` repeated `--graph` and `--all-graphs` (print to `lp`: one job per
+  graph); MCP `export_graph` `graphs`/`all_graphs`. Origin's label, file name and page sizing are
+  unmeasured (graphing.md 9.7, T32 brief).
 - Milestones 1-5 done (M2 waits on the owner's click-through; M5 lacks plot groups/legend frames).
   Owner requests of 2026-11-11 done: parity audit, Origin-style workspace (ADR 0007, most steps),
   `.opj` writer for workbooks and graphs, `.opj` as default save with a `.opj.sheaf` companion for
@@ -64,6 +71,7 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 | Branch | Owner session | What | State |
 |---|---|---|---|
+| `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |
 | `codex/t13-fill-sidelines` | Codex Windows, t13-fill-sidelines | T13 Fill Area Sidelines only / Sidelines and Base; plot fill-mode/group copy, draw_fill_under, graph_details selector and focused tests | claimed 2026-11-15; no Axis/layout/PDF, mask policy/color, navigation, labels, stats or other sessions scopes |
 | `codex/t02-go-to-picker` | Codex Windows, t02-go-to-picker | T02 Go To column picker and typed/duplicate column-name behavior only; go_to dialog/resolver and focused tests | claimed 2026-11-15; no grid/filtered handlers, app lifecycle/history, core/model/formula, plot or other sessions' scopes |
 | `codex/formula-format-defaults` | Codex Windows, formula-format-defaults | T08 omitted/empty numeric-format defaults for text/format expressions; expr formatter/evaluation and isolated formula fixtures | claimed 2026-11-14; fresh-session Origin defaults only, no global Options UI/settings, core model/history, IO, plot, statistics, MCP or other sessions' scope |
@@ -73,7 +81,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | `stats-multi` | Claude Windows, "continue all tasks" | T29 PCA, ROC, Kaplan-Meier, k-means: calc pca/roc/survival/kmeans.rs, core statistics tools, Statistics menu items, ops analyze | claimed 2026-11-14 |
 | `mcp-attach` | Claude macOS, "mac-attach" | T25 phase 2: ADR 0013, app live link (local socket, off by default, menu + `--mcp`), `sheaf-mcp --attach` forwarding, one undo step per forwarded change, status-bar note; new crates/app module + mcp attach client, docs | claimed 2026-11-14 night; no print, recovery/history internals, Excel, Go To, symbol gaps, stats or other sessions' scope |
 | `stats-origin` | Claude Windows, "t14-origin-checks" | T14 item 6: Origin measurements of cross tabulation and Dunnett (statistics.md 15.3), distribution fit, probability and Q-Q plots (16.4); calc crosstab/dunnett/distfit, core analysis/dist.rs and the crosstab/ANOVA runners, their option dialogs, Origin fixtures | claimed 2026-11-14 night; continues 318653a1's scratch/stats-origin probes; no vartest, stats-multi, print, recovery, MCP attach, Go To, symbol gaps or other sessions' scope |
-| `multipage-pdf` | Claude macOS, "mac-multipdf" | T32 multi-page PDF export (Origin 2018b `expGraph` multipage): sheaf-plot multi-page writer, Export Graphs check box, `sheaf export/print` several graphs, MCP `export_graph` graphs list | claimed 2026-11-15; files crates/plot lib.rs/raster.rs (+ new module), app dialogs/export.rs, ops args/render, cli, mcp export, graphing.md 9.6; no print panel, MCP attach or other sessions' scope |
 | `worktree-agent-a79f85b1afb5f0034` | `originrust-3a` | Matrices, heat maps, contour plots, `sheaf matrix` CLI (`7994c3b`..`8c21175`, 48 files, 10k lines) | 4 commits, local only, based on `148e9b1`, not merged; session offline since 2026-11-12 19:00 |
 
 `merge-05b` (worktree `.claude/worktrees/merge-05b`) is session 05b367c2's unfinished merge of the same

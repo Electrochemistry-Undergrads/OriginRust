@@ -37,9 +37,14 @@ pub enum Command {
 pub struct PrintArgs {
     /// A .sheaf, .opj or .opju project containing a graph.
     pub project: PathBuf,
-    /// The graph to print (default: the only graph).
+    /// The graph to print (default: the only graph). Repeat it to print several graphs in the
+    /// order given: with --output one PDF with a sheet per graph, otherwise one print job per
+    /// graph (Sheaf's choices). A name given twice prints that graph twice.
+    #[arg(long, value_name = "NAME", conflicts_with = "all_graphs")]
+    pub graph: Vec<String>,
+    /// Print every graph of the project in project order, as with a repeated --graph.
     #[arg(long)]
-    pub graph: Option<String>,
+    pub all_graphs: bool,
     /// Submit to this printer (default: the system default printer).
     #[arg(long, conflicts_with = "output")]
     pub printer: Option<String>,
@@ -652,9 +657,17 @@ pub struct ExportArgs {
     /// A .sheaf project or an Origin .opj project (its graphs are read) or .opju project (only its workbooks are read). For an output ending in
     /// .opj a data file (CH Instruments text, CSV or other delimited text) is also accepted.
     pub project: PathBuf,
-    /// Name of the graph (default: the only graph of the project). Not used for .opj or .xlsx output.
+    /// Name of the graph (default: the only graph of the project). Repeat it to export several
+    /// graphs into one multi-page .pdf, one page per graph in the order given (Origin's Export
+    /// Graphs "multipage" option); a name given twice gets a page each time. Not used for .opj or
+    /// .xlsx output.
+    #[arg(long, value_name = "NAME", conflicts_with = "all_graphs")]
+    pub graph: Vec<String>,
+    /// Export every graph of the project, in project order (Sheaf's choice of page order).
+    /// More than one graph needs a .pdf output: one multi-page PDF, one page per graph, with
+    /// --image-width, --image-height and --margin applied to every page.
     #[arg(long)]
-    pub graph: Option<String>,
+    pub all_graphs: bool,
     /// Excel output: name of the workbook to write (default: the first one).
     #[arg(long)]
     pub book: Option<String>,

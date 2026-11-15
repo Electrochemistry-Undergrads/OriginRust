@@ -36,6 +36,13 @@ open. History of what was merged when is in `git log` (not repeated here).
 
 ## State of `main`
 
+- T25 current app context (2026-11-15, Windows): attached `sheaf://app` reports the active
+  window/sheet, worksheet or graph selection, Data Reader pin and dialog/edit state, with one-based
+  indices and bounded metadata. It reads current UI state without values/editor text, document or
+  history changes; headless mode omits it. The existing resource-read wire operation is retained.
+  Formatting, strict workspace all-target Clippy and 2,653 tests pass (7 existing ignored),
+  including six new context/proxy/UI regressions. ADR 0013 amendment and mcp.md 11.18 document it.
+
 - T13 Inclusive fill mode (2026-11-15, Windows): finite runs fill and outline to their own
   endpoint chords; missing rows separate polygons, and isolated points keep round stroke caps.
   Three corrected Origin 2016 captures verify the sloping/missing/closed-polygon cases. Filled
@@ -149,7 +156,6 @@ open. History of what was merged when is in `git log` (not repeated here).
 | Branch | Owner session | What | State |
 |---|---|---|---|
 | `codex/mcp-busy-greeting-claim` | Codex Windows, t02-find-replace | T25 connection-admission repair ONLY: host.rs::refuse graceful busy greeting, transport Stream send-half-close helper and focused TCP regression; code will be on codex/t02-find-replace | claimed 2026-11-15; separate commit; no app-resource/proxy/Op/request dispatch, roots/files/exports, history, UI selection or other sessions' scope |
-| `codex/t25-app-resource` | Codex Windows, t25-app-resource | T25 read-only sheaf://app current-window/selection resource: MCP resources/proxy, narrow link request path, app live-link context extraction and focused tests/docs | claimed 2026-11-15; same private t13 tree/target; reads selections only; no history/Undo AI, filesystem/export policy, grid/selection interactions, recent-files/open/save/import/startup hooks, plot/axes or other sessions scope |
 | `shape-ordering` | Codex macOS | T24 drawn-shape Bring to front/Push to back within a layer, selection safety and undo/redo; app graph actions/view/shape menu and focused tests | claimed 2026-11-15; no clipboard, resizing, model geometry, plot types, cell notes or other sessions’ scope |
 | `codex/t02-find-replace` | Codex Windows, t02-find-replace | T02 existing Find in Sheets/Replace layout, defaults and options measured against Origin; find dialog and focused UI tests | claimed 2026-11-15; no Find in Project, grid/Go To, core/expr/history, plot, statistics, printing or other sessions' scopes |
 | `axis-breaks` | Claude Windows, "axis-breaks" | T11 more than one axis break (Origin's 1-7 breaks, per-break position), measured Origin break layout; core Axis break list, plot axis/tick drawing, graph_axis.rs Breaks tab, persistence and focused tests | claimed 2026-11-15; Axis fields only, no PLOT/plots.rs draw_plot, graph_details, navigation, stats or other sessions' scopes |

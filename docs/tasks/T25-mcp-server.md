@@ -22,9 +22,9 @@ selection behavior intact. ADR 0013's amendment and mcp.md 11.18 define the cont
 regressions cover the real attach proxy/UI, busy states, unchanged data/history, wide sheets,
 parameter labels, graph indices, stale sheet selections and headless availability.
 
-Validation on integrated `6003ddb` (cell notes plus the docs-only greeting claim): formatting,
-strict workspace all-target Clippy and all 2,641 workspace tests pass (seven existing ignored).
-All six new context regressions pass; the validation builder exited.
+Validation on integrated T39 `31f97d4`: formatting, strict workspace all-target Clippy and all
+2,653 workspace tests pass (7 existing ignored). All six new context regressions pass;
+all owned workers exited before merge.
 
 ## Goal
 

@@ -3472,8 +3472,12 @@ it, the worksheet read afterwards by LabTalk (`stats` per cell with masking off 
 missing cell; the cell text with masking on gives `--` only for a missing cell; `wks.nRows`). Screenshots and raw
 runs are local (`re-workspace/scratch/t48`). Everything below is what Origin did; where Sheaf differs it is in 20.5.
 
-**Status of the nine items** (details in the numbered paragraphs): 1 measured; 2 measured; 3 measured; 4 see the
-paragraph (Move); 5 partly; 6 to 9 see the paragraphs.
+**Status of the nine items.** 1 cursor, check mark, ending: measured (Move's cursor not obtainable). 2 Mask: measured.
+3 Remove Bad: measured (what a formula column does: one run, see M3). 4 Move: **unmeasured** (M4). 5 undo: measured
+for Mask and Remove Bad, not for Move. 6 other plot kinds, Hide Masked Points, filter: **unmeasured**. 7 hit radius:
+measured roughly (M7), highlight before the click: none seen. 8 clipped, Skip Points, Show Elements Data, waterfall:
+**unmeasured**. 9 follow vs jump: **unmeasured** (Move). Origin runs are slow (about a minute per ten-row dump)
+and the last session was stopped by its time limit, so these were not reached.
 
 **M1. Menu, cursors, ending a mode.**
 - The graph's Data menu lists, under the three tools, one line per plot of the active layer ("1 g1 [Book1]Sheet1!
@@ -3488,8 +3492,11 @@ paragraph (Move); 5 partly; 6 to 9 see the paragraphs.
   `[Book1]Sheet1[row]`, X and Y, a green readout `[Book1]Sheet1![5]: X = 5, Y = 11`, status text "Data Reader: Click
   to read data value. Left/right keys go from point to point ..."); the Data Reader button of the Tools toolbar is
   pressed. The point is then removed by pressing **Enter** (M3).
-- Move Data Points: the points of every plot are drawn as hollow squares (the Y plot black with a white centre, the
-  other with a cyan centre) while the mode is on; the Pointer button looks pressed. (See M4 for what a drag did.)
+- Move Data Points: the mode shows no change that was visible (no status text, no cursor change, Pointer button
+  stays pressed). The hollow squares seen after a click on a plot are the ordinary **plot selection** (a click on a
+  point selects the plots of the layer, a second click one point with a bold square), not the Move mode.
+  While the mode was on a click on the menu bar did not open the menu (the first click was swallowed) and clicks on
+  points selected nothing.
 - Ending: Esc ends the Mask mode; **right-click** ends it too and opens the graph's context menu (which has Mask,
   Analysis Markers and Plot Details); a double-click does **not** end it (a drag after it still masks); a click on the
   Pointer or the Data Reader button ends it (a drag after that changes nothing).
@@ -3512,6 +3519,9 @@ paragraph (Move); 5 partly; 6 to 9 see the paragraphs.
   masks only. The flyout choice reached by the menu path was not kept: choosing Data > Mask Data Points after the
   flyout's Active Plot mode still masked both plots.
 - Esc, right click and the Pointer or Data Reader button end the mode before a drag, then the drag does nothing.
+- One Undo step per drag or click; Edit shows **"Undo Set Mask Data"** after a mask drag (a second Undo step below
+  it is the graph's creation). The Tools toolbar mask button's tip reads "Mask Points on Active Plot"; the Data
+  Reader tip is "Get data point".
 
 **M3. Remove Bad Data Points** (Data Reader plus Enter).
 - A click on a point (the reader picks it, shows its Data Info) changes nothing by itself. **Enter** then removes
@@ -3532,3 +3542,37 @@ paragraph (Move); 5 partly; 6 to 9 see the paragraphs.
 masked it at 2, 4, 6 and 8 pixels and not at 9 and more pixels for the default symbol size; for symbol size 24
 masked at 6, 10 and 14 and not at 15 or more, for symbol size 3 masked up to at least 9. So the radius is about
 the half symbol size plus a margin and not below 8 to 9 pixels. [Re-measured below if better pinned.]
+
+**M4. Move Data Points: not measured.** In about thirty Origin runs (menu by mouse and by Alt+D with the key
+count, with and without a plot or a single point selected first, with the Data Reader point set first, `@MDS=20`
+to enlarge the points, scatter and line + symbol, one and two plots, drags with `SetCursorPos` moves, with relative
+and with absolute `mouse_event` moves, slow and fast, from points and from offsets of 2 to 6 pixels around them, with
+Ctrl, Shift and Alt held, double-click first, click-move-click, arrow keys and Enter) no cell ever changed and the
+screen showed no drag feedback. Whether Move needs input that synthetic mouse events do not give, or a state not
+found, is unknown: what Move writes (X and Y or Y only), snapping, log axes, formula columns, Esc during a drag,
+modifiers and the undo text are all **unmeasured**. Origin's system variable `@MDS` is the size of the points of the
+Move tool (default -1, size 6), which is the only fact found about it.
+
+**M5. Undo.** One step each for a mask drag/click ("Undo Set Mask Data") and for a removal ("Undo Remove Data Point",
+`@YPR` 0 or 1); the worksheet shows the change at once (read right after the action).
+
+### 20.5 Where Sheaf's current behaviour differs from Origin (to change in part 2)
+
+1. **Active plot.** Origin has one; Sheaf has none. Origin's Mask default acts on all plots of the layer by region;
+   Tab switches to the active plot, and the toolbar flyout offers active-plot and all-plots modes. Sheaf: the pointer
+   decides, a rectangle masks every plot (same as Origin's default).
+2. **Click in Mask mode.** Origin: a click on an unmasked point masks it, a click on a masked point does nothing,
+   unmasking is only through the Unmask modes (rectangle). Sheaf: a click on a masked point unmasks it, a click on an
+   unmasked point does nothing. Sheaf has no Unmask modes, no Tab (active plot) toggle, no Space (freehand shape).
+3. **Remove Bad.** Origin: pick with the Data Reader (click or Left/Right) and confirm with Enter; Y cell missing
+   (rows kept) with `@YPR` 1, whole row deleted with 0; undo text "Undo Remove Data Point". Sheaf: a click removes at
+   once, always only the Y cell; no row-delete variant; no formula-column refusal difference was measured (Origin
+   cleared a cell of a formula column in one run; Sheaf refuses).
+4. **Ending.** Origin: right-click ends and opens the context menu, double-click does not end. Sheaf: Esc or Pointer
+   ends (Esc matches; right-click and double-click not defined).
+5. **Menu.** Origin lists the plots under the tools with the active plot checked; Sheaf has no such list. No check
+   on the tool items in either.
+6. **Undo labels.** Origin "Undo Set Mask Data" and "Undo Remove Data Point"; Sheaf "Mask 4 points of B(Y)" and
+   "Remove bad point B(Y) row 12" (Sheaf's own wording may stay).
+7. **Hit radius.** Origin about 8 to 9 pixels for the default symbol (more for larger symbols); Sheaf 30 points.
+8. **Move.** Unmeasured; Sheaf's design stays [Sheaf choice].

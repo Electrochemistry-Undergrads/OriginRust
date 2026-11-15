@@ -49,6 +49,8 @@ public static class AfterInput {
   [DllImport("user32.dll")] public static extern IntPtr LoadCursor(IntPtr inst, IntPtr name);
   [DllImport("user32.dll")] public static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr hIcon, int w, int h, int step, IntPtr bg, int flags);
   public static void Move(int x, int y) { SetCursorPos(x, y); }
+  public static void AbsMove(int x, int y) { mouse_event(0x8001u, (uint)(x * 65536 / 1024), (uint)(y * 65536 / 768), 0, UIntPtr.Zero); }
+  public static void RelMove(int dx, int dy) { mouse_event(1u, (uint)dx, (uint)dy, 0, UIntPtr.Zero); }
   public static void Down(int button) { mouse_event(button == 1 ? 8u : 2u, 0, 0, 0, UIntPtr.Zero); }
   public static void Up(int button) { mouse_event(button == 1 ? 0x10u : 4u, 0, 0, 0, UIntPtr.Zero); }
   public static void Key(byte vk, bool down) { keybd_event(vk, 0, down ? 0u : 2u, UIntPtr.Zero); }
@@ -157,6 +159,23 @@ public static class DlgOpen {
       Start-Sleep -Milliseconds 300
       if (-not ($a.Count -gt 5 -and $a[5] -eq 1)) { [Sheaf.AfterInput]::Up(0); Start-Sleep -Milliseconds 800 }
       continue
+    }
+    if ($l.StartsWith('@RDRAG:')) {
+      # "@RDRAG:x1,y1,x2,y2[,steps]" is "@DRAG" with relative mouse moves (mouse_event MOVE deltas) instead of SetCursorPos, as a real mouse sends them.
+      $a = @($l.Substring(7) -split ',' | ForEach-Object { [int]$_ }); $steps = 12; if ($a.Count -gt 4) { $steps = $a[4] }
+      [Sheaf.AfterInput]::Move([int]$a[0], [int]$a[1]); Start-Sleep -Milliseconds 400
+      [Sheaf.AfterInput]::RelMove(1, 0); [Sheaf.AfterInput]::RelMove(-1, 0); Start-Sleep -Milliseconds 300
+      [Sheaf.AfterInput]::Down(0); Start-Sleep -Milliseconds 300
+      for ($k = 1; $k -le $steps; $k++) { [Sheaf.AfterInput]::RelMove([int][Math]::Round(($a[2] - $a[0]) / $steps), [int][Math]::Round(($a[3] - $a[1]) / $steps)); Start-Sleep -Milliseconds 80 }
+      Start-Sleep -Milliseconds 400; [Sheaf.AfterInput]::Up(0); Start-Sleep -Milliseconds 800; continue
+    }
+    if ($l.StartsWith('@ADRAG:')) {
+      # "@ADRAG:x1,y1,x2,y2[,steps]" is "@DRAG" with absolute mouse_event moves (normalized to a 1024x768 screen), the way a pen or a remote desktop sends them.
+      $a = @($l.Substring(7) -split ',' | ForEach-Object { [int]$_ }); $steps = 12; if ($a.Count -gt 4) { $steps = $a[4] }
+      [Sheaf.AfterInput]::AbsMove($a[0], $a[1]); Start-Sleep -Milliseconds 500
+      [Sheaf.AfterInput]::Down(0); Start-Sleep -Milliseconds 300
+      for ($k = 1; $k -le $steps; $k++) { [Sheaf.AfterInput]::AbsMove([int]($a[0] + ($a[2] - $a[0]) * $k / $steps), [int]($a[1] + ($a[3] - $a[1]) * $k / $steps)); Start-Sleep -Milliseconds 80 }
+      Start-Sleep -Milliseconds 400; [Sheaf.AfterInput]::Up(0); Start-Sleep -Milliseconds 800; continue
     }
     if ($l.StartsWith('@DOWN:')) { $xy = $l.Substring(6) -split ','; [Sheaf.AfterInput]::Move([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 400; [Sheaf.AfterInput]::Down(0); Start-Sleep -Milliseconds 300; continue }
     if ($l.StartsWith('@UP:')) { $xy = $l.Substring(4) -split ','; [Sheaf.AfterInput]::Move([int]$xy[0], [int]$xy[1]); Start-Sleep -Milliseconds 300; [Sheaf.AfterInput]::Up(0); Start-Sleep -Milliseconds 800; continue }

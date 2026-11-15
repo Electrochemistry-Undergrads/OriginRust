@@ -98,11 +98,8 @@ impl Server {
             return Some(error_reply(id.unwrap_or(Value::Null), INVALID_REQUEST, "invalid request: no method"));
         };
         if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
-            return Some(error_reply(
-                id.unwrap_or(Value::Null),
-                INVALID_REQUEST,
-                "invalid request: jsonrpc must be \"2.0\"",
-            ));
+            // A notification (no id) never gets a reply, valid or not.
+            return id.map(|id| error_reply(id, INVALID_REQUEST, "invalid request: jsonrpc must be \"2.0\""));
         }
         let params = match obj.get("params") {
             None | Some(Value::Null) => Value::Object(Map::new()),
@@ -273,6 +270,10 @@ mod tests {
         // Even a request-shaped call without an id is a notification.
         assert!(s.handle_line(r#"{"jsonrpc":"2.0","method":"ping"}"#).is_none());
         assert!(s.handle_line(r#"{"jsonrpc":"2.0","method":"no/such"}"#).is_none());
+        // A notification with a bad envelope gets no reply either.
+        assert!(s.handle_line(r#"{"jsonrpc":"1.0","method":"ping"}"#).is_none());
+        assert!(s.handle_line(r#"{"method":"notifications/initialized"}"#).is_none());
+        assert!(s.handle_line(r#"{"jsonrpc":2,"method":"ping","params":"x"}"#).is_none());
         // A reply from the client is not answered.
         assert!(s.handle_line(r#"{"jsonrpc":"2.0","id":3,"result":{}}"#).is_none());
     }

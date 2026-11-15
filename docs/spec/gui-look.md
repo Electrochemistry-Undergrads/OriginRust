@@ -447,10 +447,13 @@ Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
 - **Indicator.** A small filled dark-red triangle (7 px) in the upper-right corner of the cell, also in
   frozen (overlay) cells and over conditional-format fills. Origin's colour and size are unmeasured.
 - **Popup.** Hovering anywhere on the noted cell (not only the tab) shows the text in a tooltip, wrapped
-  at 300 px. There is no `@NCP` switch.
+  at 300 px. There is no `@NCP` switch. A tooltip cannot scroll, so a long note is cut at 20 lines or
+  1,500 characters and ends with "…" (the full text stays in the editor).
 - **Editing.** The cell right-click menu replaces the greyed "Insert Notes" item: "Add Note..." on a cell
   without a note, "Edit Note..." and "Delete Note" on one with a note, for a single selected cell
-  (otherwise a status message). The editor is a small window with a multi-line text box and OK/Cancel
+  (otherwise a status message). Inside a multi-cell selection the note entries act on the right-clicked
+  cell (choosing one reselects that cell; the other cell-menu entries still act on the selection). The
+  editor is a small window with a multi-line text box (scrolls above 300 px, so OK/Cancel stay on screen) and OK/Cancel
   (no Notes window, no Mini Toolbar button, no rich text). Each change is one undo step ("Add note",
   "Edit note", "Delete note"; emptying the text of an existing note deletes it). Clear (Delete key)
   clears values and leaves the note.

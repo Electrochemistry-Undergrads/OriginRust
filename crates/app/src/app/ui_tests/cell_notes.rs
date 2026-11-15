@@ -180,3 +180,74 @@ fn a_note_needs_a_single_selected_cell_and_works_in_frozen_overlay_cells() {
     settle(&mut h);
     assert_eq!(tabs(&h).len(), 1);
 }
+
+fn select_cells_in_state(h: &mut Harness<'static, SheafApp>, anchor: (usize, usize), end: (usize, usize)) {
+    let book = project(h).workbooks().next().unwrap().id;
+    let s = sheet(h).clone();
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&s, anchor, end);
+    settle(h);
+}
+
+fn set_note_directly(h: &mut Harness<'static, SheafApp>, short: &str, row: usize, text: &str) {
+    let book = project(h).workbooks().next().unwrap().id;
+    let c = col_id(h, short);
+    let text = text.to_string();
+    h.state_mut().doc.apply("Add note", |p| {
+        p.workbook_mut(book).unwrap().sheet_mut().set_note(c, row, &text);
+    });
+    settle(h);
+}
+
+#[test]
+fn the_note_entries_act_on_the_right_clicked_cell_inside_a_multi_cell_selection() {
+    let mut h = start_book("note-multi");
+    set_note_directly(&mut h, "B", 1, "on b2");
+    let b = col_id(&h, "B");
+    select_cells_in_state(&mut h, (1, 0), (1, 2));
+    right_click_text(&mut h, "4.5");
+    menu_path(&mut h, &["Edit Note..."]);
+    assert!(h.state().status.is_empty() || !h.state().status.contains("single cell"), "{}", h.state().status);
+    assert_eq!(h.state().cell_note.as_ref().expect("the editor opened").text, "on b2");
+    click(&mut h, "Cancel");
+
+    select_cells_in_state(&mut h, (1, 0), (1, 2));
+    right_click_text(&mut h, "4.5");
+    menu_path(&mut h, &["Delete Note"]);
+    assert_eq!(sheet(&h).note(b, 1), None);
+    assert_eq!(h.state().doc.undo_label(), Some("Delete note"));
+}
+
+#[test]
+fn a_very_long_note_scrolls_in_the_editor_and_ok_stays_reachable() {
+    let mut h = start_book("note-long");
+    let long: String = (0..2000).map(|i| format!("line {i}\n")).collect();
+    set_note_directly(&mut h, "B", 1, long.trim_end());
+    click_text(&mut h, "4.5");
+    right_click_text(&mut h, "4.5");
+    menu_path(&mut h, &["Edit Note..."]);
+    settle(&mut h);
+    let screen = h.ctx.content_rect();
+    let ok = h.get_by_label("OK");
+    let r = ok.rect();
+    assert!(screen.contains_rect(r), "OK {r:?} is on screen {screen:?}");
+    ok.click();
+    settle(&mut h);
+    assert!(h.state().cell_note.is_none());
+    assert_eq!(sheet(&h).note(col_id(&h, "B"), 1), Some(long.trim_end()));
+}
+
+#[test]
+fn a_long_note_is_cut_in_the_hover_popup_with_an_ellipsis() {
+    let mut h = start_book("note-cut");
+    let long: String = (0..50).map(|i| format!("row {i}")).collect::<Vec<_>>().join("\n");
+    set_note_directly(&mut h, "B", 1, &long);
+    pause(&mut h);
+    let at = grid_text(&h, "4.5").rect().center();
+    h.event(egui::Event::PointerMoved(at));
+    for _ in 0..30 {
+        h.step();
+    }
+    let expected: String = (0..20).map(|i| format!("row {i}")).collect::<Vec<_>>().join("\n") + "…";
+    assert!(h.query(By::new().role(egui::accesskit::Role::Label).value(expected.as_str())).is_some());
+    assert!(h.query_by_label_contains("row 40").is_none());
+}

@@ -1907,12 +1907,44 @@ fn body_cell(
         paint_note_tab(ui, rect);
         response.clone().on_hover_ui(|ui| {
             ui.set_max_width(NOTE_POPUP_WIDTH);
-            ui.label(note);
+            ui.label(popup_text(note));
         });
     }
     response.context_menu(|ui| {
-        menus::show_context(ui, &menus::cell_menu_for(noted.is_some()), &book_ctx(book_id, state), actions)
+        let before = actions.len();
+        menus::show_context(ui, &menus::cell_menu_for(noted.is_some()), &book_ctx(book_id, state), actions);
+        // A note belongs to the right-clicked cell even inside a larger selection.
+        if actions[before..].iter().any(|a| matches!(a, Action::NoteDialog(_) | Action::DeleteNote(_))) {
+            state.select_cells(sheet, (position, r), (position, r));
+        }
     });
+}
+
+/// Longest note shown in the hover popup (tooltips cannot scroll): lines and characters.
+const NOTE_POPUP_LINES: usize = 20;
+const NOTE_POPUP_CHARS: usize = 1500;
+
+/// The note as the hover popup shows it: cut to about 20 lines / 1,500 characters, ending with "…".
+fn popup_text(note: &str) -> String {
+    let mut out = String::new();
+    for (i, line) in note.lines().enumerate() {
+        let used = out.chars().count();
+        if i >= NOTE_POPUP_LINES || used >= NOTE_POPUP_CHARS {
+            out.push('…');
+            return out;
+        }
+        if i > 0 {
+            out.push('\n');
+        }
+        let room = NOTE_POPUP_CHARS - out.chars().count();
+        if line.chars().count() > room {
+            out.extend(line.chars().take(room));
+            out.push('…');
+            return out;
+        }
+        out.push_str(line);
+    }
+    out
 }
 
 /// Width limit of the note popup; longer lines wrap.
@@ -2539,6 +2571,20 @@ pub fn color_swatch(ui: &mut egui::Ui, color: sheaf_core::Color) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn popup_text_is_cut_by_lines_and_by_characters() {
+        assert_eq!(popup_text("short"), "short");
+        let lines: String = (0..30).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
+        let cut = popup_text(&lines);
+        assert_eq!(cut.lines().count(), 20);
+        assert!(cut.ends_with('…'));
+        let wide = "x".repeat(5000);
+        let cut = popup_text(&wide);
+        assert_eq!(cut.chars().count(), 1501);
+        assert!(cut.ends_with('…'));
+        assert_eq!(popup_text(&"y".repeat(1500)).chars().count(), 1500);
+    }
     use sheaf_core::{ColumnData, Designation, Project};
 
     fn sheet() -> Worksheet {

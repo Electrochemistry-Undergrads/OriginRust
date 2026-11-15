@@ -48,12 +48,19 @@ impl CellNoteDialog {
             .resizable(true)
             .default_width(320.0)
             .show(ctx, |ui| {
-                let edit = ui.add(
-                    egui::TextEdit::multiline(&mut self.text)
-                        .id(egui::Id::new("cell_note_text"))
-                        .desired_rows(6)
-                        .desired_width(f32::INFINITY),
-                );
+                // A very long note scrolls inside the box so OK and Cancel stay on screen.
+                let edit = egui::ScrollArea::vertical()
+                    .id_salt("cell_note_scroll")
+                    .max_height(300.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.text)
+                                .id(egui::Id::new("cell_note_text"))
+                                .desired_rows(6)
+                                .desired_width(f32::INFINITY),
+                        )
+                    })
+                    .inner;
                 if self.first_frame {
                     edit.request_focus();
                     self.first_frame = false;

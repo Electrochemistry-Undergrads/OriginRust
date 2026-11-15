@@ -367,10 +367,10 @@ fn label_box_path(text: &TextItem, width: f64, pad_x: f64, pad_y: f64) -> Option
     Some(d)
 }
 
-/// Origin draws a masked point red: its symbol, and the two line segments that meet at it
-/// (measured with a line + symbol plot of five points, one masked). Drawn on top of the plot.
+/// Origin draws a masked point in the mask colour (red at first): its symbol, and the two line
+/// segments that meet at it (measured with a line + symbol plot of five points, one masked; the
+/// colour follows Column > Mask > Change Color, measured for indices 1 to 5). Drawn on top of the plot.
 fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
-    use sheaf_core::Color;
     let Some(mask) = pd.mask else { return };
     let sampled_masks = (pd.plot.kind.has_symbols() && pd.point_interval() > 1)
         .then(|| pd.point_rows().filter(|i| mask.contains(i)).collect::<std::collections::BTreeSet<_>>());
@@ -407,10 +407,10 @@ fn draw_masked(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         }
     }
     if !lines.is_empty() {
-        out.push(Item::Path { d: lines, fill: None, stroke: Some(Stroke { color: Color::RED, ..line }) });
+        out.push(Item::Path { d: lines, fill: None, stroke: Some(Stroke { color: pd.mask_color, ..line }) });
     }
     if !symbols.is_empty() {
-        let red = SymbolStyle { color: Color::RED, ..pd.plot.symbol.clone() };
+        let red = SymbolStyle { color: pd.mask_color, ..pd.plot.symbol.clone() };
         out.push(symbol_item(symbols, &red));
     }
 }

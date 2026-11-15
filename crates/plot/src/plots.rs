@@ -181,7 +181,7 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
     let mid = size * 0.35;
     for i in pd.point_rows() {
         let Some((px, py)) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
-        let (xv, yv) = (pd.cat_at(i) - pd.ox, pd.y.get(i).copied().unwrap_or(f64::NAN));
+        let (xv, yv) = (pd.source_x_at(i), pd.y.get(i).copied().unwrap_or(f64::NAN));
         if !labels.labels_row(i) {
             continue;
         }
@@ -805,7 +805,7 @@ fn draw_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let Some(b) = &pd.boxed else { return };
     let color = pd.plot.symbol.color;
     let width = pd.plot.line.width_pt.max(0.5);
-    let at = |x: f64, y: f64| geom.checked_data_to_page(x, y);
+    let at = |x: f64, y: f64| geom.checked_data_to_page(pd.display_x(x), pd.display_y(y));
     let (l, r) = (b.pos - crate::data::BOX_WIDTH / 2.0, b.pos + crate::data::BOX_WIDTH / 2.0);
     if let (Some(a), Some(c)) = (at(l, b.q1), at(r, b.q3)) {
         out.push(Item::Rect {

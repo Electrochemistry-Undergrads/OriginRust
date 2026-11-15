@@ -412,24 +412,28 @@ fn plot_tab_body(
             let individual = layer.stack == Stack::Individual;
             let column = layer.plots[p].y;
             // Read without adding an entry, so that looking at the tab changes nothing.
-            let (mut x, mut y) = layer.plot_offset(column).map_or((0.0, 0.0), |o| (o.x, o.y));
-            let before = (x, y);
+            let o = layer.plot_offset(column).copied().unwrap_or_else(|| PlotOffset::new(column));
+            let (mut x, mut y, mut mx, mut my) = (o.x, o.y, o.x_multiplier, o.y_multiplier);
+            let before = (x, y, mx, my);
             ui.add_enabled_ui(individual, |ui| {
                 grid(ui, "plot_offset", |ui| {
                     ui.label("");
+                    ui.strong("Multiplier");
                     ui.strong("Offset");
                     ui.end_row();
-                    ui.label("X");
+                    let label = ui.label("X");
+                    ui.add(DragValue::new(&mut mx).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut x).speed(0.01));
                     ui.end_row();
-                    ui.label("Y");
+                    let label = ui.label("Y");
+                    ui.add(DragValue::new(&mut my).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut y).speed(0.01));
                     ui.end_row();
                 });
             });
-            if (x, y) != before {
+            if (x, y, mx, my) != before {
                 let o = layer.plot_offset_mut(column);
-                (o.x, o.y) = (x, y);
+                (o.x, o.y, o.x_multiplier, o.y_multiplier) = (x, y, mx, my);
             }
             if !individual {
                 ui.weak("Offsets of single plots are used when the layer's Stack tab is set to Individual.");
@@ -1167,7 +1171,7 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
                             layer.plot_offsets[k].x = x;
                             layer.plot_offsets[k].y = y;
                         }
-                        None => layer.plot_offsets.push(PlotOffset { column, x, y, follows: None }),
+                        None => layer.plot_offsets.push(PlotOffset { x, y, ..PlotOffset::new(column) }),
                     }
                 }
             }

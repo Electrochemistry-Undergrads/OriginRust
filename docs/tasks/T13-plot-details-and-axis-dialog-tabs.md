@@ -1,6 +1,6 @@
 # T13: Missing Plot Details tabs and controls
 
-**Status:** base tabs merged from `plot-details` (2026-11-14); Data on Top of Axes, Skip Points and Label White Out completed in the follow-ups below. The measured parts were already on `main`. Measured against Origin (graphing spec 18, 18.1 to 18.5): Drop Lines and Label tabs, line Transparency, Fill Area Under Curve (Normal), the layer Background colour, the Group tab (Edit Mode, increments, members), Offset (X and Y offsets), Display, Size/Speed (units), Link Axes Scales, Stack, the page tabs Print/Dimensions, Display and Legends/Titles, the tree names, Layer Contents and Plot Setup as Origin's own windows, the Workbook and ">>" buttons. Ported from the branch onto those dialogs, **Sheaf's own and not measured** (spec 18.6): a hatch, gradient and transparency for the fill of columns, bars, areas and the fill under a curve (Pattern tab; for areas too); bar Width (in %) on Spacing; Label by a column of the project, a list of rows, decimals and offsets; subgroups by size on the Group tab; the layer Background gradient and border; the X Axes and Y Axes switches of Display; the page's border, layer icons switch, comments (hover text in the Object Manager), window title choice, Miscellaneous tab, and Print/Dimensions keeping the layers' size; the right Y layer no longer copies its parent's background; drop lines are drawn only for the kinds whose tab offers them; deleting a column resets the X error, base and data labels that name it; "Use this style for all plots" copies the look settings. Not taken from the branch because main's measured version replaced it: the second Layer Contents and Plot Setup dialogs, the second Group, Drop Lines, Label and Link tabs, its tree text, its Workbook button and side panel, line transparency as a percentage field. **Left:** the other fill modes and Origin's pattern list, the Offset tab's Multiplier, several groups per layer, subgrouping by column label, Binned, Size/Speed X:Y ratio, caching and speed mode, label frame/margin/leader lines, No Line Break / Gap to Symbol, print margins, writing the new settings to `.opj` (the writer names them in its save warnings). **Unmeasured:** everything in spec 18.6 (compare with Origin on the Windows machine). **Size:** M. **Model:** Sonnet.
+**Status:** base tabs merged from `plot-details` (2026-11-14); Data on Top of Axes, Skip Points and Label White Out completed in the follow-ups below. The measured parts were already on `main`. Measured against Origin (graphing spec 18, 18.1 to 18.5): Drop Lines and Label tabs, line Transparency, Fill Area Under Curve (Normal), the layer Background colour, the Group tab (Edit Mode, increments, members), Offset (X and Y offsets), Display, Size/Speed (units), Link Axes Scales, Stack, the page tabs Print/Dimensions, Display and Legends/Titles, the tree names, Layer Contents and Plot Setup as Origin's own windows, the Workbook and ">>" buttons. Ported from the branch onto those dialogs, **Sheaf's own and not measured** (spec 18.6): a hatch, gradient and transparency for the fill of columns, bars, areas and the fill under a curve (Pattern tab; for areas too); bar Width (in %) on Spacing; Label by a column of the project, a list of rows, decimals and offsets; subgroups by size on the Group tab; the layer Background gradient and border; the X Axes and Y Axes switches of Display; the page's border, layer icons switch, comments (hover text in the Object Manager), window title choice, Miscellaneous tab, and Print/Dimensions keeping the layers' size; the right Y layer no longer copies its parent's background; drop lines are drawn only for the kinds whose tab offers them; deleting a column resets the X error, base and data labels that name it; "Use this style for all plots" copies the look settings. Not taken from the branch because main's measured version replaced it: the second Layer Contents and Plot Setup dialogs, the second Group, Drop Lines, Label and Link tabs, its tree text, its Workbook button and side panel, line transparency as a percentage field. **Left:** the other fill modes and Origin's pattern list, several groups per layer, subgrouping by column label, Binned, Size/Speed X:Y ratio, caching and speed mode, label frame/margin/leader lines, No Line Break / Gap to Symbol, print margins, writing the new settings to `.opj` (the writer names them in its save warnings). **Unmeasured:** everything in spec 18.6 (compare with Origin on the Windows machine). **Size:** M. **Model:** Sonnet.
 **Detail:** audit B "Plot Details", "Layer Contents (F12) and Plot Setup".
 **Spec:** `docs/spec/gui-look.md` (Plot Details), `docs/spec/ui-command-map.md` D1/D3.
 
@@ -44,6 +44,24 @@ cover the behavior. Label frames, editable margins and leader lines remain open.
 
 Validation on integrated `756d12d`: formatting, strict workspace all-target Clippy and 1,968
 workspace tests pass (two ignored), including all six new regressions.
+
+## Offset multipliers follow-up (2026-11-14)
+
+The Offset tab now offers X and Y multipliers (default 1) beside its existing offsets, enabled
+in Individual mode. Positive factors scale source values before the offsets. Origin 2016
+measurements confirm fractional factors, unchanged error magnitudes and source label values;
+stored zero/negative factors render as 1. Nonfinite factors also render as 1. Source data,
+analysis and fit results remain unchanged. Followers inherit the leader's complete placement.
+The Data Reader follows displayed points while reporting source values; the Integrate gadget's
+range, shading and dragging follow placement while its area stays in source units.
+Native and companion saves preserve the factors. The `.opj` writer explicitly warns that
+multipliers are omitted, retaining the original data and its existing offset writing.
+Separate Individual X/Y switches and specialized-coordinate parity remain open (graphing 18.1).
+
+Validation on integrated `f14e20f` plus the docs-only T01 claim `89473a2`: formatting, strict
+workspace all-target Clippy and 1,993 workspace tests pass (two ignored). Ten new regressions
+cover model compatibility, Origin placements/error lengths/labels, raster and picking, log/range
+handling, native/companion saves, dialog history, Data Reader and gadget source-unit behavior.
 
 ## Today
 

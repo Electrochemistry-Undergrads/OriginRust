@@ -1037,6 +1037,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    if layer.plot_offsets.iter().any(|o| o.x_multiplier != 1.0 || o.y_multiplier != 1.0) {
+        notes.push("plot X/Y multipliers were not written; Origin shows the source values with offsets only (the .opj.sheaf companion keeps the multipliers)".into());
+    }
     if layer.coords.polar().is_some_and(|p| p.radar) {
         notes.push(
             "the radar layer was not written; its plots went out as plain line + symbol plots on rectangular axes"

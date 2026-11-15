@@ -46,6 +46,8 @@ mod legend_tests;
 #[cfg(test)]
 mod margin_tests;
 #[cfg(test)]
+mod offset_multiplier_tests;
+#[cfg(test)]
 mod skip_tests;
 #[cfg(test)]
 mod tests;
@@ -331,9 +333,19 @@ pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGe
 /// in automatic mode they are computed from the current data. The desktop app copies them into
 /// the layer when the user switches to individual offsets, so that the picture does not jump.
 pub fn stack_offsets(project: &Project, graph: WindowId, layer: usize) -> Result<Vec<(f64, f64)>, PlotError> {
+    Ok(stack_places(project, graph, layer)?.into_iter().map(|p| (p.ox, p.oy)).collect())
+}
+
+/// Display multipliers, offsets and stack membership, in plot order. Reader tools and overlays
+/// use these placements to follow the drawing while retaining the original worksheet values.
+pub fn stack_places(
+    project: &Project,
+    graph: WindowId,
+    layer: usize,
+) -> Result<Vec<sheaf_core::stack::Place>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let layer = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
-    Ok(stack::places(project, layer).0.into_iter().map(|p| (p.ox, p.oy)).collect())
+    Ok(stack::places(project, layer).0)
 }
 
 /// Renders a graph as SVG text, measuring text with the installed fonts.

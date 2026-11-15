@@ -586,11 +586,32 @@ pub struct PlotOffset {
     /// Offset in Y, in axis units; used in [`Stack::Individual`] mode.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub y: f64,
+    /// Scale of the original X values before adding `x`, in [`Stack::Individual`] mode.
+    #[serde(default = "unit_multiplier", skip_serializing_if = "is_unit_multiplier")]
+    pub x_multiplier: f64,
+    /// Scale of the original Y values before adding `y`, in [`Stack::Individual`] mode.
+    #[serde(default = "unit_multiplier", skip_serializing_if = "is_unit_multiplier")]
+    pub y_multiplier: f64,
     /// When set, the curve has no place of its own in the stack: it takes the offset (and the
     /// waterfall shift) of the first member whose Y column is this one. A fitted curve drawn over
     /// its data uses it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follows: Option<ColumnId>,
+}
+
+impl PlotOffset {
+    /// Identity placement for a curve, without adding an entry to its layer.
+    pub fn new(column: ColumnId) -> Self {
+        Self { column, x: 0.0, y: 0.0, x_multiplier: 1.0, y_multiplier: 1.0, follows: None }
+    }
+}
+
+fn unit_multiplier() -> f64 {
+    1.0
+}
+
+fn is_unit_multiplier(value: &f64) -> bool {
+    *value == 1.0
 }
 
 fn default_rescale_margin() -> f64 {
@@ -768,7 +789,7 @@ impl Layer {
         let i = match self.plot_offsets.iter().position(|o| o.column == column) {
             Some(i) => i,
             None => {
-                self.plot_offsets.push(PlotOffset { column, x: 0.0, y: 0.0, follows: None });
+                self.plot_offsets.push(PlotOffset::new(column));
                 self.plot_offsets.len() - 1
             }
         };
@@ -1838,7 +1859,7 @@ mod tests {
     fn plot_offsets_are_found_by_column_and_added_once() {
         let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
         let entry: PlotOffset = serde_json::from_str(r#"{"column":3}"#).unwrap();
-        assert_eq!(entry, PlotOffset { column: ColumnId(3), x: 0.0, y: 0.0, follows: None });
+        assert_eq!(entry, PlotOffset::new(ColumnId(3)));
         assert_eq!(layer.plot_offset(ColumnId(3)), None);
         layer.plot_offset_mut(ColumnId(3)).x = 1.5;
         layer.plot_offset_mut(ColumnId(3)).follows = Some(ColumnId(2));

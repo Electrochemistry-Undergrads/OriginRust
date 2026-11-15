@@ -827,6 +827,8 @@ pub struct PlotOffset {
     pub column: ColumnId,          // the Y column of the curve
     pub x: f64,                    // default 0; not written when 0
     pub y: f64,                    // default 0; not written when 0
+    pub x_multiplier: f64,         // default 1; not written when 1
+    pub y_multiplier: f64,         // default 1; not written when 1
     pub follows: Option<ColumnId>, // default None; not written when None
 }
 ```
@@ -867,6 +869,10 @@ The offsets are computed again at every drawing, so they follow the data.
 13.4.2 **Constant.** Member k gets (0, k × step).
 
 13.4.3 **Individual.** Each member gets the `x` and `y` of the layer's entry for its Y column, or (0, 0) when there is none.
+It also gets `x_multiplier` and `y_multiplier` (default 1). Positive finite factors scale the
+original values before adding the offsets; zero, negative and nonfinite factors draw as 1
+(Origin 2016 measurements in 18.1). Other stack modes ignore these stored factors. Followers
+inherit the leader's complete placement, including multipliers.
 
 13.4.4 **None and Waterfall.** Every member gets (0, 0).
 
@@ -876,14 +882,17 @@ The offsets are computed again at every drawing, so they follow the data.
 
 ### 13.5 Drawing
 
-- Every use of a data point (x, y) uses (x + ox, y + oy) instead:
+- Every use of a data point (x, y) uses (mx * x + ox, my * y + oy) instead (multipliers are 1 outside Individual):
   - lines and symbols;
-  - error bars, from y + oy - e to y + oy + e;
-  - column bars, from oy to y + oy;
+  - error bars, from my * y + oy - e to my * y + oy + e (error magnitudes stay unscaled);
+  - column bars, from oy to my * y + oy;
   - the data range for automatic axis limits (figure-rendering.md section 2, step 1).
 - When an offset is 0 the value is used exactly as stored, so a layer with `stack` None is drawn exactly as before, with byte-identical SVG.
 - Worksheets, analysis tools and fits always use the stored values.
-- Limits, ticks and tick labels follow figure-rendering.md section 2, applied to the moved values. Tick labels show axis coordinates; no curve is labelled with its own values. Read-outs in the app show axis coordinates.
+- Limits, ticks and tick labels follow figure-rendering.md section 2, applied to the moved values.
+  Tick labels show axis coordinates. Data labels and the Data Reader show source values; the
+  reader snaps to the transformed point. The Integrate gadget maps its range and shading through
+  the placement and converts pointer X back to source units; its area uses source data.
 - The legend is unchanged (plot order).
 
 Check: the SVG of an Auto-stacked graph is byte-identical to the SVG of an unstacked graph whose Y columns were shifted beforehand by the offsets of 13.4.
@@ -1840,10 +1849,29 @@ Type and Symbol Interior with None and By One, running on from the first plot (`
 Symbol Interior alternates filled and open); Group Members lists the plots. Not done: Binned, several
 groups in one layer, subgrouping by column label. Subgrouping by size is Sheaf's own (section 18.6).
 
-Offset tab (measured): rows X and Y with Multiplier and Offset boxes, and a note that offsets take effect
-when the layer's Stack tab is set to Individual with X and/or Y enabled. Sheaf shows the tab on each
-plot of a layer with several plots: the X and Y offsets of that curve (`Layer::plot_offsets`), greyed
-unless the layer stacks Individually; Multiplier is not offered.
+Offset tab: rows X and Y with Multiplier and Offset boxes. Origin requires Individual on the
+layer's Stack tab with the corresponding axes enabled. Sheaf shows these fields on each plot
+of a layer with several plots, enabled in Individual mode; both axes apply, as with the existing
+offsets (the Stack tab's separate X/Y switches remain unavailable).
+
+**Multiplier reference (Origin 2016, 2026-11-14):** synthetic X = [1, 2, 3], Y = [2, 4, 6],
+`layer -b s 4 1 1`, X/Y offsets 5/7 and factors 2/3 (`set ... -sxs`, `-sys`) export symbols at
+(7, 13), (9, 19), (11, 25). This matches the
+[documented affine transform](https://docs.originlab.com/origin-help/pd-offset-tab/), applied
+in data units before axis scaling. Factors 0.5 give (5.5, 8), (6, 9), (6.5, 10).
+Factors -2/-3 and 0/0 are retained by `get ... -sxs/-sys`, but both render with factor 1 at
+(6, 9), (7, 11), (8, 13); those exported PNGs are byte-identical. None mode returns to
+(1, 2), (2, 4), (3, 6). Y labels still read 2, 4, 6. With error columns 0.5 (X) and 1 (Y),
+the first scaled point has endpoints X = 6.5/7.5 and Y = 12/14: error magnitudes are not
+multiplied. Worksheet values remain unchanged. Raw scripts and PNGs are local in
+`scratch/t13-offset-multipliers/probe4*` and `probe5*`; earlier probes used an incorrect layer
+command or error-plot assignment and are not evidence for these rules.
+
+Sheaf stores factors on `PlotOffset` with a backward-compatible default of 1, omitted when 1.
+Nonfinite factors also use 1 for drawing. Native and `.opj.sheaf` saves preserve the settings;
+the `.opj` writer leaves the data unchanged, writes its existing offsets and explicitly warns
+that multipliers are omitted. Screen and all exports share the transformed scene. Specialized
+plot/coordinate combinations beyond Cartesian line/scatter are not Origin-measured here.
 
 Display tab (measured, section 18 list): Sheaf offers Labels (the tick labels of both axes), Data
 (`LayerDisplay::show_data`), Frame (the opposite-edge lines of both axes), Clip Data to Frame (off: the
@@ -1992,6 +2020,6 @@ project file only when they differ from the default (a file written before loads
 ### 18.7 Not done
 
 Speed mode and X:Y ratio of Size/Speed, No Line Break for Skipped Point(s) / Gap to Symbol, frame, margin, attach-to,
-automatic overlap avoidance and leader lines of Label, X and Y multiplier of Offset, the other fill modes and
+automatic overlap avoidance and leader lines of Label, the other fill modes and
 Origin's list of fill patterns, subgrouping By Column Label, Binned increments, several groups in one layer,
 print margins, writing these settings to `.opj` (the writer names what it cannot hold in its save warnings).

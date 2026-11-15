@@ -582,7 +582,9 @@ impl SheafApp {
         let Some(geom) = sheaf_plot::layout_geometry(project, graph).ok().and_then(|v| v.into_iter().nth(layer)) else {
             return;
         };
-        let (x0, x1) = (geom.x.from_unit(0.25), geom.x.from_unit(0.75));
+        let placement =
+            sheaf_plot::stack_places(project, graph, layer).ok().and_then(|p| p.get(plot).copied()).unwrap_or_default();
+        let (x0, x1) = (placement.source_x(geom.x.from_unit(0.25)), placement.source_x(geom.x.from_unit(0.75)));
         state.gadget = Some(crate::gadget::Integrator { layer, plot, x0, x1, end_point_baseline: false });
         self.focus(graph);
     }

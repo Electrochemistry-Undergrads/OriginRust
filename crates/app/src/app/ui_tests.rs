@@ -10,6 +10,7 @@ use sheaf_core::graph::{LegendPosition, PlotKind, ScaleKind, ScaleLink, Stack};
 use sheaf_plot::scene::ObjectKind;
 
 mod label_whiteout;
+mod offset_multipliers;
 mod skip_points;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.

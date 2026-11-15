@@ -29,6 +29,7 @@ pub mod scene;
 mod shapes;
 mod stack;
 mod svg;
+mod symbol_gaps;
 mod ternary;
 mod text;
 pub mod ticks;
@@ -51,6 +52,8 @@ mod margin_tests;
 mod offset_multiplier_tests;
 #[cfg(test)]
 mod skip_tests;
+#[cfg(test)]
+mod symbol_gap_tests;
 #[cfg(test)]
 mod tests;
 

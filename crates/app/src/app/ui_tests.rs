@@ -15,6 +15,7 @@ mod label_frames;
 mod label_whiteout;
 mod offset_multipliers;
 mod skip_points;
+mod symbol_line_gaps;
 
 /// Writes a small data file into a fresh temporary folder and returns its path.
 fn data_file(tag: &str) -> PathBuf {

@@ -1,6 +1,6 @@
 # T13: Missing Plot Details tabs and controls
 
-**Status:** base tabs merged from `plot-details` (2026-11-14); Data on Top of Axes, Skip Points, Label White Out, Offset multipliers and Label Frame/Margin completed in the follow-ups below. The measured parts were already on `main`. Measured against Origin (graphing spec 18, 18.1 to 18.5): Drop Lines and Label tabs, line Transparency, Fill Area Under Curve (Normal), the layer Background colour, the Group tab (Edit Mode, increments, members), Offset (X and Y offsets), Display, Size/Speed (units), Link Axes Scales, Stack, the page tabs Print/Dimensions, Display and Legends/Titles, the tree names, Layer Contents and Plot Setup as Origin's own windows, the Workbook and ">>" buttons. Ported from the branch onto those dialogs, **Sheaf's own and not measured** (spec 18.6): a hatch, gradient and transparency for the fill of columns, bars, areas and the fill under a curve (Pattern tab; for areas too); bar Width (in %) on Spacing; Label by a column of the project, a list of rows, decimals and offsets; subgroups by size on the Group tab; the layer Background gradient and border; the X Axes and Y Axes switches of Display; the page's border, layer icons switch, comments (hover text in the Object Manager), window title choice, Miscellaneous tab, and Print/Dimensions keeping the layers' size; the right Y layer no longer copies its parent's background; drop lines are drawn only for the kinds whose tab offers them; deleting a column resets the X error, base and data labels that name it; "Use this style for all plots" copies the look settings. Not taken from the branch because main's measured version replaced it: the second Layer Contents and Plot Setup dialogs, the second Group, Drop Lines, Label and Link tabs, its tree text, its Workbook button and side panel, line transparency as a percentage field. **Left:** the other fill modes and Origin's pattern list, several groups per layer, subgrouping by column label, Binned, Size/Speed X:Y ratio, caching and speed mode, label leader lines, No Line Break / Gap to Symbol, print margins, writing the new settings to `.opj` (the writer names them in its save warnings). **Unmeasured:** everything in spec 18.6 (compare with Origin on the Windows machine). **Size:** M. **Model:** Sonnet.
+**Status:** base tabs merged from `plot-details` (2026-11-14); Data on Top of Axes, Skip Points, Label White Out, Offset multipliers and Label Frame/Margin completed in the follow-ups below. The measured parts were already on `main`. Measured against Origin (graphing spec 18, 18.1 to 18.5): Drop Lines and Label tabs, line Transparency, Fill Area Under Curve (Normal), the layer Background colour, the Group tab (Edit Mode, increments, members), Offset (X and Y offsets), Display, Size/Speed (units), Link Axes Scales, Stack, the page tabs Print/Dimensions, Display and Legends/Titles, the tree names, Layer Contents and Plot Setup as Origin's own windows, the Workbook and ">>" buttons. Ported from the branch onto those dialogs, **Sheaf's own and not measured** (spec 18.6): a hatch, gradient and transparency for the fill of columns, bars, areas and the fill under a curve (Pattern tab; for areas too); bar Width (in %) on Spacing; Label by a column of the project, a list of rows, decimals and offsets; subgroups by size on the Group tab; the layer Background gradient and border; the X Axes and Y Axes switches of Display; the page's border, layer icons switch, comments (hover text in the Object Manager), window title choice, Miscellaneous tab, and Print/Dimensions keeping the layers' size; the right Y layer no longer copies its parent's background; drop lines are drawn only for the kinds whose tab offers them; deleting a column resets the X error, base and data labels that name it; "Use this style for all plots" copies the look settings. Not taken from the branch because main's measured version replaced it: the second Layer Contents and Plot Setup dialogs, the second Group, Drop Lines, Label and Link tabs, its tree text, its Workbook button and side panel, line transparency as a percentage field. **Left:** the other fill modes and Origin's pattern list, several groups per layer, subgrouping by column label, Binned, Size/Speed X:Y ratio, caching and speed mode, label leader lines, print margins, writing the new settings to `.opj` (the writer names them in its save warnings). **Unmeasured:** everything in spec 18.6 (compare with Origin on the Windows machine). **Size:** M. **Model:** Sonnet.
 **Detail:** audit B "Plot Details", "Layer Contents (F12) and Plot Setup".
 **Spec:** `docs/spec/gui-look.md` (Plot Details), `docs/spec/ui-command-map.md` D1/D3.
 
@@ -24,8 +24,8 @@ Implemented the Drop Lines Data Points Display Control using the existing saved 
 Skip Points now selects the same rows for drop lines, symbols, error bars and data labels.
 Origin 2016 PNG measurements establish the frequency, plot-range phase and absence of a forced
 last point. Native/companion saves preserve the setting, and the `.opj` warning includes line plots
-with skipped errors. The full-data connecting line and axes remain unchanged. No Line Break /
-Gap to Symbol and modern Smart Skip modes remain open; filtered-row frequency is Sheaf's existing
+with skipped errors. The full-data connecting line and axes remain unchanged by Skip Points alone. Symbol gaps and
+No Line Break are covered by the later follow-up below; modern Smart Skip remains open; filtered-row frequency is Sheaf's existing
 compacted display order, not yet Origin-measured. See graphing section 18.
 
 Validation after incorporating origin/main `2b16f6b`: formatting, strict all-target workspace
@@ -80,6 +80,27 @@ core/plot/UI/IO regressions pass, including raster paint order, rotation/shadow 
 vector backends. The full suite exposed a separate upstream autosave UI fixture collision;
 `planted` now gives each recovery case its own input fixture, and all 25 autosave tests pass with
 16 test threads. No autosave implementation changed.
+
+## Symbol/line gaps follow-up (2026-11-14)
+
+Line + Symbol offers Gap to Symbol on Line, and No Line Break for Skipped Point(s) under
+Drop Lines when gaps and Skip Points are enabled. Origin 2016 horizontal exports confirm that
+gaps otherwise apply at every source position, including skipped symbols; No Line Break keeps
+only displayed-marker gaps while the connecting line still follows every raw source value.
+Both switches default off. The shared scene removes line geometry, preserving backgrounds,
+grids and fills; masks keep the same holes, and screen/raster/vector exports share the result.
+Native and companion saves preserve the switches, with an explicit omission warning for `.opj`.
+Current fixed 30% clearance, Draw Line in Front/Behind and other limits are recorded in graphing 18.
+
+Eight new regressions cover old model defaults/group edits, raster/picking, skipped peaks and
+range phase, missing values, dense/overlapping/coincident markers, all connection/export paths,
+UI dependencies/Apply/Cancel/history and native/companion saves.
+The clean three-point diagonal Origin control confirms identical line pixels for square/circle
+markers at the same nominal size; the earlier invalid circular capture is excluded.
+
+Validation on integrated `eaa6a5c`: formatting, strict workspace all-target Clippy and
+2,226 workspace tests pass (three existing ignored). All reference workflows and the final
+builder exited before merge; all eight new regressions pass.
 
 ## Today
 

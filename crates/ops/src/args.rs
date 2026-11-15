@@ -22,7 +22,7 @@ pub enum Command {
     Print(PrintArgs),
     /// Write a graph of a project as PNG, TIFF, JPEG, BMP, GIF, TGA, PCX, SVG, PDF, EPS or EMF, or
     /// the project (or a data file) as an Origin .opj project or an Excel .xlsx workbook.
-    Export(ExportArgs),
+    Export(Box<ExportArgs>),
     /// Write a worksheet of a project as delimited text, or as an Excel .xlsx workbook.
     ExportData(ExportDataArgs),
     /// Run an analysis tool on worksheet columns: integrate, differentiate, smooth, normalize,
@@ -30,7 +30,10 @@ pub enum Command {
     Analyze(AnalyzeArgs),
     /// Fit a model to a column: straight line, polynomial, a built-in function, a formula or an
     /// Origin .FDF function. Prints the parameters, statistics and ANOVA table.
-    Fit(FitArgs),
+    Fit(Box<FitArgs>),
+    /// Simulate Curve: the values of a built-in fit function for typed parameters, at X values from a range
+    /// or from a column. Writes X and Y as delimited text or an Excel workbook, or adds them to a project.
+    Simulate(SimulateArgs),
 }
 
 #[derive(Args, Debug)]
@@ -174,6 +177,15 @@ pub struct FitArgs {
     /// negative limits as --x-range=-0.5:0.1).
     #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
     pub x_range: Option<String>,
+    /// Fit a surface z = f(x, y) to this Z column (short or long name); --model is then a surface
+    /// function such as Gauss2D or Plane (see --list), or --formula in x and y. The Y column is
+    /// the one given with --y and the X column the one given with --x; left out, they are the X
+    /// column to the left of the Z column and the nearest Y column before it.
+    #[arg(long, value_name = "COLUMN", conflicts_with_all = ["global", "regress", "compare", "rank", "xerr", "plot"])]
+    pub z: Option<String>,
+    /// The X column of a surface fit (--z).
+    #[arg(long, value_name = "COLUMN", requires = "z")]
+    pub x: Option<String>,
     /// Draw the data with the fitted curve and write the figure (.png, .tif, .jpg, .bmp, .gif, .tga,
     /// .pcx, .psd, .svg, .pdf, .eps or .emf). With
     /// several columns, only the first one is drawn.
@@ -191,6 +203,65 @@ pub struct FitArgs {
     /// --save and can be written with export-data.
     #[arg(long, value_name = "FILE")]
     pub export: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
+}
+
+/// `sheaf simulate`: Analysis > Fitting > Simulate Curve without a window.
+#[derive(Args, Debug)]
+pub struct SimulateArgs {
+    /// A data file, a .sheaf project or an Origin .opj or .opju project: the workbook that gets the new
+    /// sheet, and the place --x-of looks in. Without it the curve is a project of its own.
+    pub input: Option<PathBuf>,
+    /// List the functions with their parameters and starting values, and exit.
+    #[arg(long)]
+    pub list: bool,
+    /// The built-in fit function, such as Gauss, ExpDec1 or Boltzmann (see --list). Case does not matter.
+    #[arg(short, long, default_value = "Gauss")]
+    pub function: String,
+    /// A parameter value, for example --param xc=5 (repeat the option or separate with commas). The
+    /// parameters left out keep the starting values of --list.
+    #[arg(short, long, value_delimiter = ',', value_name = "NAME=VALUE", allow_hyphen_values = true)]
+    pub param: Vec<String>,
+    /// The first X value (default: the X range of Origin's Simulate Curve window for the function, Gauss -1). A first value above --to gives falling X.
+    #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
+    pub from: Option<f64>,
+    /// The last X value (default: the function's, Gauss 5).
+    #[arg(long, allow_hyphen_values = true, conflicts_with = "x_of")]
+    pub to: Option<f64>,
+    /// How many X values, from 2 to 1000000 (default 200).
+    #[arg(long, conflicts_with = "x_of")]
+    pub points: Option<usize>,
+    /// Space the X values evenly on a logarithmic scale (both ends must be positive).
+    #[arg(long, conflicts_with = "x_of")]
+    pub log: bool,
+    /// Use the X values of this column (short or long name, in --sheet) instead of a range.
+    #[arg(long, value_name = "COLUMN")]
+    pub x_of: Option<String>,
+    /// For a project input: the workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// The sheet --x-of looks in, by name (default: the workbook's active sheet).
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// Draw the curve and write the figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps
+    /// or .emf). The graph is also kept with --save.
+    #[arg(long, value_name = "FIGURE")]
+    pub plot: Option<PathBuf>,
+    /// Resolution of a raster figure in dots per inch.
+    #[arg(long, default_value_t = 300.0)]
+    pub dpi: f64,
+    /// Draw the curve in a graph of the project that --save writes (--plot does this too).
+    #[arg(long)]
+    pub graph: bool,
+    /// Write the X and Y columns as delimited text (.tsv or .txt gives tabs, anything else commas) or, for a
+    /// .xlsx path, as an Excel workbook. Without --output and --save the curve is printed.
+    #[arg(short, long, visible_alias = "export", value_name = "FILE")]
+    pub output: Option<PathBuf>,
+    /// Save the project with the new sheet to this file: .opj (also when no extension is given, with a
+    /// companion .opj.sheaf if the .opj cannot hold everything) or .sheaf.
+    #[arg(long, visible_alias = "project", value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
     #[command(flatten)]
     pub read: ReadOptions,
 }
@@ -326,6 +397,19 @@ pub struct ReadOptions {
     /// Excel: leave hidden sheets out when --sheets is not given.
     #[arg(long)]
     pub skip_hidden_sheets: bool,
+    /// Start from a saved import theme (the Dialog Theme row of the import windows): a saved name,
+    /// `<default>` or `<last used>`. Options given on the command line win over the theme; a flag
+    /// can only turn an option on, so to switch one off save a theme without it. A name that is in
+    /// no store lists the saved themes.
+    #[arg(long, value_name = "NAME", conflicts_with = "last_used")]
+    pub theme: Option<String>,
+    /// Start from the settings of the last OK in the import windows (same as `--theme "<last used>"`).
+    #[arg(long)]
+    pub last_used: bool,
+    /// The folder of the saved import themes (default: `$SHEAF_THEMES_DIR`, else `import-themes` in the
+    /// settings folder). Only read with --theme or --last-used.
+    #[arg(long, value_name = "DIR")]
+    pub themes_dir: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -463,6 +547,19 @@ pub struct StyleArgs {
     /// Line width of the data curves in points.
     #[arg(long, value_name = "PT")]
     pub line_width: Option<f64>,
+    /// Connect the points of line and line+symbol curves in increasing X order, leaving the
+    /// worksheet unsorted (Origin 2023's LabTalk layer.plotN.line.sortx). Symbols, labels and
+    /// error bars stay on their points.
+    #[arg(long)]
+    pub sort_x: bool,
+    /// Add a trendline to each curve: linear, poly:N (order 2 to 10), power, log, exp or ma:N
+    /// (moving average, window 2 to 10). Repeatable. Replaces the trendlines the curve has. A
+    /// fitted trendline writes its equation and R-squared at the top left of the layer.
+    #[arg(long, value_name = "KIND")]
+    pub trendline: Vec<String>,
+    /// Draw the trendlines without the equation and R-squared label.
+    #[arg(long)]
+    pub no_trendline_label: bool,
     /// Curve colors in legend order (left axis first, then right axis), comma-separated, as
     /// #RRGGBB or basic names.
     #[arg(long, value_delimiter = ',', value_name = "COLORS")]
@@ -517,6 +614,40 @@ pub struct StyleArgs {
     /// --bar-overlap=-20).
     #[arg(long, value_name = "PCT", allow_hyphen_values = true)]
     pub bar_overlap: Option<f64>,
+    /// Hexbin plots (-t hexbin): the number of bins along X (the page's regular hexagons set Y
+    /// from it), from 2 to 1000 (default 20).
+    #[arg(long, value_name = "N")]
+    pub hex_bins: Option<usize>,
+    /// Treemaps (-t treemap): the layout of every level: squarified (default), squarified-plus, split, pivot-size,
+    /// pivot-middle or pivot-split-size.
+    #[arg(long, value_name = "LAYOUT")]
+    pub treemap_layout: Option<String>,
+    /// Treemaps: the order of the rectangles: categorical (default, the order of first appearance), alphabetical,
+    /// size or column:NAME (by a column, smallest first). The squarified layouts sort by size and ignore it.
+    #[arg(long, value_name = "ORDER")]
+    pub treemap_order: Option<String>,
+    /// Treemaps: the number of levels shown, 1 or more (default: every level).
+    #[arg(long, value_name = "N")]
+    pub treemap_depth: Option<usize>,
+    /// Treemaps: the gap between rectangles in pt, from 0 to 20 (default 1.5).
+    #[arg(long, value_name = "PT")]
+    pub treemap_gap: Option<f64>,
+    /// Sunburst plots (-t sunburst): where the first wedge starts, in degrees counter-clockwise from 3 o'clock
+    /// (default 90: 12 o'clock; the wedges go clockwise).
+    #[arg(long, value_name = "DEGREES", allow_hyphen_values = true)]
+    pub sunburst_start: Option<f64>,
+    /// Sunburst plots: the hole in the middle as a percentage of the radius, 0 to 90 (default 30).
+    #[arg(long, value_name = "PCT")]
+    pub sunburst_hole: Option<f64>,
+    /// Sunburst plots: the gap between rings in pt, from 0 to 20 (default 0).
+    #[arg(long, value_name = "PT")]
+    pub sunburst_gap: Option<f64>,
+    /// Sunburst plots: what the wedges are labelled with: names (default), values, both or none.
+    #[arg(long, value_name = "WHAT")]
+    pub sunburst_labels: Option<String>,
+    /// Sunburst plots: the order of the wedges of a ring: worksheet (default, first appearance) or size (largest first).
+    #[arg(long, value_name = "ORDER")]
+    pub sunburst_order: Option<String>,
     /// Add a free text label to the first layer: "TEXT@X,Y", where X and Y are fractions of the
     /// layer frame (0,0 is its top left corner, 1,1 its bottom right; the label's text starts
     /// there). The text may use Origin's escapes, for example --label "\b(Zn-LMO)@0.85,0.1".
@@ -571,7 +702,18 @@ pub struct PlotArgs {
     /// side by side, with sample names from a text X column under the bars; double-y puts the 1st,
     /// 3rd, ... Y column on the left axis and the 2nd, 4th, ... on a right axis; stacked moves each
     /// curve above the one before it; lollipop (two or more Y columns) joins each Y column's points
-    /// to the next column's at the same row with drop lines, X and Y exchanged.
+    /// to the next column's at the same row with drop lines, X and Y exchanged; scatter-rug is a scatter
+    /// with a rug (one short line per point) beside the bottom and left axes; violin draws each
+    /// Y column as a mirrored kernel density silhouette, like box (also violin-box, violin-point,
+    /// violin-quartile, violin-stick and half-violin, which differ in the marks inside); ridgeline draws
+    /// each Y column as a density curve on its own baseline, the columns stacked up the page; hexbin bins
+    /// the X column against the first Y column into hexagons coloured by their count (see --hex-bins);
+    /// parallel (two or more Y columns) draws one vertical axis per column and one line per row, coloured by a
+    /// column with a colour scale; parallel-index (three or more Y columns and a text group column, see --group)
+    /// colours the lines by group, with a legend; treemap nests rectangles by the category columns (--group; default:
+    /// the text columns) with areas proportional to the last numeric Y column (see the --treemap-* options); sunburst
+    /// draws the same hierarchy as concentric rings, the first category innermost, angles proportional to the last
+    /// numeric Y column, coloured by value (see the --sunburst-* options).
     #[arg(short, long)]
     pub template: Option<String>,
     /// Y columns to plot, comma-separated short or long names (default: all Y columns).
@@ -594,6 +736,13 @@ pub struct PlotArgs {
     /// with a companion .opj.sheaf if needed) or .sheaf.
     #[arg(long, value_name = "PROJECT")]
     pub save: Option<PathBuf>,
+    /// Parallel plots (-t parallel, -t parallel-index): the column that colours the lines. For a parallel index the
+    /// group column (text; default: the first text column of the sheet), one colour and legend entry per distinct
+    /// text. For a parallel plot a numeric column (default: the last Y column) shown with a colour scale; `none`
+    /// draws every line in the plot colour. For a treemap or sunburst the category columns, comma-separated, the first the top level or innermost ring
+    /// (default: the text columns among --y, else every text column of the sheet).
+    #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
+    pub group: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the
     /// first at the bottom, as Origin's Stack command), or ROWSxCOLUMNS such as 2x1 (Origin's
     /// Vertical 2 Panel), 1x2 (Horizontal 2 Panel) or 2x2 (4 Panel). Each Y column gets its own
@@ -1774,6 +1923,16 @@ pub enum AnalyzeTool {
         /// Confidence levels in percent, for example 90,95,99; none means no intervals.
         #[arg(long, value_delimiter = ',')]
         levels: Vec<f64>,
+        /// Power analysis: the power at the observed sample sizes (Origin's "Actual Power").
+        #[arg(long)]
+        power: bool,
+        /// Power analysis: also the power at these sample sizes, for example 50,100,200 (Origin's "Hypothetical
+        /// Power"; per sample for the two-sample test).
+        #[arg(long, value_delimiter = ',')]
+        power_sizes: Vec<u64>,
+        /// Significance level of the power analysis (separate from --alpha, as in Origin).
+        #[arg(long, default_value_t = 0.05)]
+        power_alpha: f64,
     },
     /// One-way ANOVA: every chosen column is a group. The result (group statistics, ANOVA table,
     /// means comparison of all pairs) goes to a new sheet.
@@ -2146,7 +2305,7 @@ pub enum AnalyzeTool {
         no_graph: bool,
     },
     /// Principal component analysis of the --y columns (the variables): eigenvalues, percent of variance,
-    /// loadings and scores; makes a scree plot as a graph.
+    /// loadings and scores; makes a scree plot, a loading plot and a biplot as graphs.
     Pca {
         #[command(flatten)]
         target: TargetArgs,
@@ -2165,9 +2324,24 @@ pub enum AnalyzeTool {
         /// Do not write the scores.
         #[arg(long)]
         no_scores: bool,
-        /// Do not make the scree plot.
+        /// Do not make the scree plot, loading plot and biplot.
         #[arg(long)]
         no_graph: bool,
+        /// Do not make the loading plot (the loadings of two components as vectors).
+        #[arg(long)]
+        no_loading_plot: bool,
+        /// Do not make the biplot (scores as points with the loading vectors on the top and right axes).
+        #[arg(long)]
+        no_biplot: bool,
+        /// Also make a score plot (the scores of two components as points).
+        #[arg(long)]
+        score_plot: bool,
+        /// The component on the horizontal axis of the loading plot, score plot and biplot.
+        #[arg(long, default_value_t = 1)]
+        x_component: usize,
+        /// The component on the vertical axis of those plots.
+        #[arg(long, default_value_t = 2)]
+        y_component: usize,
     },
     /// ROC curve: the --y columns are the test variables followed, last, by the state column. Area under the
     /// curve with standard error (DeLong) and confidence interval, the curve and the best cut-off; makes a graph.
@@ -2240,6 +2414,26 @@ pub enum AnalyzeTool {
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
+    },
+    /// Graphical summary (Statistics > Descriptive Statistics > Graphical Summary): for each --y column (and each
+    /// group of the --groups columns) a report of descriptive statistics, confidence intervals of the mean, median
+    /// and standard deviation and the Anderson-Darling normality test, and a graph with a histogram and normal
+    /// curve, an interval plot and a normal probability plot.
+    #[command(name = "graphsummary", alias = "graph-summary")]
+    GraphSummary {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Group columns, comma-separated short or long names; each group (combination of values) is summarized
+        /// on its own.
+        #[arg(long, value_delimiter = ',')]
+        groups: Vec<String>,
+        /// Confidence level of the intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        level: f64,
+        /// Graph arrangement: separate (one graph per variable and group). The other three Origin arrangements
+        /// (per-variable, per-group, all-in-one) are not available yet.
+        #[arg(long, default_value = "separate")]
+        arrangement: String,
     },
     /// Sort the rows of the sheet by one column.
     Sort {

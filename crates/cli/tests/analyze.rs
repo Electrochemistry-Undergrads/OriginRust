@@ -1287,7 +1287,34 @@ fn principal_component_analysis_runs_from_the_command_line() {
     assert!(!out.contains("Chi-square"), "{out}");
     let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
     assert!(ok, "{err}");
-    assert!(info.contains("Score PC1") && info.contains("Loading PC2"), "{info}");
+    assert!(info.contains("Principal Component 1") && info.contains("Coefficients of PC2"), "{info}");
+    // Origin's pca draws a scree plot, a loading plot and a biplot; a score plot is a switch.
+    for graph in ["Scree Plot", "Loading Plot", "Biplot"] {
+        assert!(info.contains(graph), "{graph}: {info}");
+    }
+    assert!(!info.contains("Scores Plot"), "{info}");
+    let more = dir.join("pca-more.sheaf");
+    let (ok, _, err) = sheaf(&[
+        "analyze",
+        "pca",
+        file,
+        "--y",
+        "a,b,c",
+        "--components",
+        "3",
+        "--score-plot",
+        "--x-component",
+        "2",
+        "--y-component",
+        "3",
+        "--no-biplot",
+        "--save",
+        more.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    let (ok, info, err) = sheaf(&["info", more.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Scores Plot") && info.contains("Loading Plot") && !info.contains("Biplot"), "{info}");
     let (ok, out, err) =
         sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--covariance", "--components", "3", "--no-graph"]);
     assert!(ok, "{err}");
@@ -1346,6 +1373,46 @@ fn kaplan_meier_runs_from_the_command_line() {
     assert!(out.contains("Log-rank test: chi-square 0.2542") && out.contains("Breslow test"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time"]);
     assert!(!ok && err.contains("two or three columns"), "{err}");
+}
+
+/// Graphical summary (spec `statistics.md` section 22): grouped input gives a table block and a graph per group.
+#[test]
+fn graphsummary_runs_from_the_command_line() {
+    let dir = scratch("gsum");
+    let path = dir.join("gs.csv");
+    let mut text = String::from("value,other,grp\n");
+    for i in 0..30 {
+        let v = 10.0 + (f64::from(i) * 1.3).sin() * 3.0 + f64::from(i) * 0.1;
+        text.push_str(&format!("{v:.4},{},{}\n", v * 2.0, if i % 3 == 0 { "ctl" } else { "trt" }));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let tsv = dir.join("out.tsv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "graphsummary",
+        file,
+        "--y",
+        "value",
+        "--groups",
+        "grp",
+        "--level",
+        "90",
+        "--export",
+        tsv.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("GraphSummary1") && out.contains("graphs"), "{out}");
+    let exported = std::fs::read_to_string(&tsv).unwrap();
+    for needle in ["Description Statistics", "90% Confidence Intervals", "Normality Test", "ctl", "trt", "A-Squared"] {
+        assert!(exported.contains(needle), "{needle} missing in {exported}");
+    }
+    let (ok, _, err) = sheaf(&["analyze", "graphsummary", file, "--y", "value", "--arrangement", "per-group"]);
+    assert!(!ok && err.contains("not available yet"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "graphsummary", file, "--y", "value", "--arrangement", "nonsense"]);
+    assert!(!ok && err.contains("--arrangement"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "graphsummary", file, "--y", "value", "--level", "120"]);
+    assert!(!ok && err.contains("between 0 and 100"), "{err}");
 }
 
 /// K-means cluster analysis (spec `statistics.md` section 18): Origin's measured 12-case example in two variables.

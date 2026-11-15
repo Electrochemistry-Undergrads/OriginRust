@@ -1,6 +1,6 @@
 # T02: Menu labels, shortcuts and context menus that differ from Origin
 
-**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To layout/selection (2026-11-14) and column-picker/name lookup (2026-11-15) measured and updated, gui-look section 5. The project-wide Column Browser remains. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
+**Status:** done, merged (`bbdb60a`) (items 1-7, 9, 10 done; 8 kept; see Result); Go To and Find/Replace follow-ups measured and updated (2026-11-14/15), gui-look section 5. Wider search scopes and advanced Column Browser controls remain. **Size:** M. **Branch:** `menu-diffs`. **Model:** Sonnet.
 **Detail:** audit section A, bullet "Different" (`docs/audit/origin-differences-2026-11-12.md`).
 **Spec:** `docs/spec/gui-look.md` sections 1 and 3, `docs/spec/ui-command-map.md`.
 
@@ -56,7 +56,8 @@ Each item fixed or listed as "kept, because ..." here; a UI test per new key bin
 3. Done: Recent Graphs only in the graph File menu, Re-Import items only outside graphs, "Open Sample
    Projects".
 4. Done: Ctrl+Shift+C = Copy including label rows.
-5. Done: Find in Project (F3), Find in Sheets (Ctrl+F), Replace (Ctrl+H) greyed with key text; Go to live.
+5. Done: shortcut text added; Find in Project (F3) remains greyed, Find in Sheets (Ctrl+F), Replace
+   (Ctrl+H) and Go to (Ctrl+G) are live.
 6. Done: F2 / Delete / Ctrl+A in the Explorer while it has the keyboard (last click inside it); Ctrl+A
    highlights every window of the folder, Delete deletes the highlighted ones (one undo step each).
    Folder menu Rename and Delete Folder live (not for the root); Delete Folder removes its windows as
@@ -90,8 +91,38 @@ case, and duplicate long names choose the first column. The picker displays shor
 designations and long names, allowing a later duplicate to be chosen; navigation still waits for
 OK. Reset clears only the column, and Escape closes the flyout before the dialog. A parser fixture
 and four UI regressions cover name lookup, duplicate picking, Reset, Escape and unchanged history.
-Origin's separate project-wide Column Browser was captured but remains unimplemented; Select
-Columns stays disabled.
+Origin's separate project-wide Column Browser was captured; the later follow-up below enables
+Select Columns for Go To.
 Sheet row capacity is still Sheaf's data length plus 30 spare rows, rather than a persisted Origin
 allocation. Six new UI regressions, a new unequal-column parser fixture and the expanded existing
 parser regression cover this follow-up.
+
+Find/Replace follow-up (2026-11-15): direct Origin 2016 captures show one tabbed window, Numeric
+initial mode, selected display text in Find what, active-sheet scope and expanded Options. The
+dialog now implements Numeric conditions, relative tolerance, missing values, absolute-value and
+sign-preserving replacement, clearing nonmatches, backward search and String wildcards. The
+measured strict `!=` rule is distinct from tolerant equality. Empty Numeric replacement clears
+the cell. String mode keeps the existing case/whole-cell and substring rules. Four new UI tests,
+four matching fixtures and the updated existing substring regressions cover the change.
+All probes and the remaining wider-scope, labels, cell-link, history and query-menu
+limitations are recorded in gui-look section 5. `--show find` / `--show replace` open native previews.
+
+Selected-range follow-up (2026-11-15): eleven successful Origin GUI cases establish the checked
+range option for blocks, whole columns and rows, its retention across restricted hits and its
+removal after an unchecked search collapses the range. Sheaf snapshots the opening scope for
+both data modes, forward/backward/wildcard searches and both replacement paths, including
+clearing numeric nonmatches. Four UI regressions and one matching fixture cover this addition.
+The visual difference (Sheaf selects each hit while retaining the saved scope; Origin retains
+the rectangle) and the remaining gaps are recorded in gui-look section 5.
+
+Column Browser follow-up (2026-11-15): eight isolated Origin GUI probes establish scope labels,
+Add/Remove, qualified references, transfer to the parent before navigation, and Cancel. Go To
+uses the chosen position in the original worksheet even for another book's column; several
+added columns go to the last column. The browser now implements these measured behaviors,
+project/book/sheet/folder scopes and metadata without data/history/activation changes. Five UI
+regressions and a folder-scope fixture cover it. A second follow-up adds top-table Ctrl/Command,
+Shift and keyboard selection plus Add as One Block, enabled only for consecutive columns in one
+sheet. Nine valid native cases establish individual versus grouped Add, disabled noncontiguous/
+mixed-book blocks, whole-block Remove and the original-sheet last-column navigation rule.
+Five more UI regressions cover those workflows and grouped reference transfer. Exclude,
+lower row-range editing and saved preferences remain (gui-look section 5).

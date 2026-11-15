@@ -41,6 +41,49 @@ pub enum ThousandsSetting {
     Apostrophe,
 }
 
+/// Import options that have no command-line flag. They stay at their defaults unless a saved import
+/// theme (`--theme`) carries other values, so a theme brings back the whole window.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct NoFlagOptions {
+    /// The first column is the X column.
+    pub first_column_x: bool,
+    /// A parameter row is named after the first cell of its header line.
+    pub param_name_from_first_cell: bool,
+    /// Legacy: rows to skip before the row selection.
+    pub skip_rows: usize,
+    /// Legacy: most rows to read.
+    pub max_rows: Option<usize>,
+}
+
+impl Default for NoFlagOptions {
+    fn default() -> Self {
+        Self { first_column_x: true, param_name_from_first_cell: true, skip_rows: 0, max_rows: None }
+    }
+}
+
+/// The options the text reader and the Excel reader share: header lines, names, row and column
+/// selection, dates. A saved Excel theme can carry its own copy (see [`ReadSettings::excel_shared`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SharedOptions {
+    pub header_lines: Option<usize>,
+    pub long_name_line: Option<usize>,
+    pub units_line: Option<usize>,
+    pub comments_line: Option<usize>,
+    pub param_lines: Vec<usize>,
+    pub short_name_line: Option<usize>,
+    pub no_rename_columns: bool,
+    pub no_rename_book: bool,
+    pub first_row: usize,
+    pub last_row: usize,
+    pub read_rows: usize,
+    pub skip_rows: usize,
+    pub first_column: usize,
+    pub last_column: usize,
+    pub read_columns: usize,
+    pub skip_columns: usize,
+    pub dates_as_text: bool,
+}
+
 /// The import options of both readers. The defaults are those of the command line.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -85,6 +128,22 @@ pub struct ReadSettings {
     pub hidden_sheets: bool,
     /// Excel: leave hidden sheets out when `sheets` is empty and `hidden_sheets` is off.
     pub skip_hidden_sheets: bool,
+    /// The text options without a flag (only a saved theme sets them).
+    #[serde(skip)]
+    pub text_no_flag: NoFlagOptions,
+    /// The Excel options without a flag (only a saved theme sets them).
+    #[serde(skip)]
+    pub excel_no_flag: NoFlagOptions,
+    /// The delimiter exactly as a saved theme holds it. `delimiter` is read as a keyword (`tab`,
+    /// `comma`, ...), so a whole-string delimiter that spells a keyword, or a single character
+    /// the keywords take, is carried here instead. Only a saved theme sets it.
+    #[serde(skip)]
+    pub delimiter_exact: Option<Delimiter>,
+    /// The shared options of a saved Excel theme. When set, Excel files are read with these and
+    /// text files with the fields above, so a name that both windows saved gives each kind of
+    /// file the settings of its own window. Only a saved theme sets it.
+    #[serde(skip)]
+    pub excel_shared: Option<SharedOptions>,
 }
 
 impl Default for ReadSettings {
@@ -126,11 +185,59 @@ impl Default for ReadSettings {
             sheets: Vec::new(),
             hidden_sheets: false,
             skip_hidden_sheets: false,
+            text_no_flag: NoFlagOptions::default(),
+            excel_no_flag: NoFlagOptions::default(),
+            delimiter_exact: None,
+            excel_shared: None,
         }
     }
 }
 
 impl ReadSettings {
+    /// The shared options as the fields above hold them.
+    pub fn shared(&self) -> SharedOptions {
+        SharedOptions {
+            header_lines: self.header_lines,
+            long_name_line: self.long_name_line,
+            units_line: self.units_line,
+            comments_line: self.comments_line,
+            param_lines: self.param_lines.clone(),
+            short_name_line: self.short_name_line,
+            no_rename_columns: self.no_rename_columns,
+            no_rename_book: self.no_rename_book,
+            first_row: self.first_row,
+            last_row: self.last_row,
+            read_rows: self.read_rows,
+            skip_rows: self.skip_rows,
+            first_column: self.first_column,
+            last_column: self.last_column,
+            read_columns: self.read_columns,
+            skip_columns: self.skip_columns,
+            dates_as_text: self.dates_as_text,
+        }
+    }
+
+    /// Sets the fields that hold the shared options.
+    pub fn set_shared(&mut self, s: SharedOptions) {
+        self.header_lines = s.header_lines;
+        self.long_name_line = s.long_name_line;
+        self.units_line = s.units_line;
+        self.comments_line = s.comments_line;
+        self.param_lines = s.param_lines;
+        self.short_name_line = s.short_name_line;
+        self.no_rename_columns = s.no_rename_columns;
+        self.no_rename_book = s.no_rename_book;
+        self.first_row = s.first_row;
+        self.last_row = s.last_row;
+        self.read_rows = s.read_rows;
+        self.skip_rows = s.skip_rows;
+        self.first_column = s.first_column;
+        self.last_column = s.last_column;
+        self.read_columns = s.read_columns;
+        self.skip_columns = s.skip_columns;
+        self.dates_as_text = s.dates_as_text;
+    }
+
     pub fn chi_options(&self) -> ChiOptions {
         ChiOptions {
             split_scans: !self.no_split_scans,
@@ -157,6 +264,9 @@ impl ReadSettings {
                 },
             };
         }
+        if let Some(d) = &r.delimiter_exact {
+            o.delimiter = d.clone();
+        }
         if !r.fixed_width.is_empty() {
             if r.fixed_width.contains(&0) {
                 bail!("--fixed-width: every width must be above 0");
@@ -169,6 +279,11 @@ impl ReadSettings {
             }
             o.delimiter = Delimiter::AnyOf { chars: chars.clone(), combine: r.combine_delimiters };
         }
+        let extra = r.text_no_flag;
+        o.first_column_x = extra.first_column_x;
+        o.param_name_from_first_cell = extra.param_name_from_first_cell;
+        o.skip_rows = extra.skip_rows;
+        o.max_rows = extra.max_rows;
         o.short_name_line = r.short_name_line.unwrap_or(0);
         o.rename_columns = !r.no_rename_columns;
         o.rename_sheet = !r.no_rename_sheet;
@@ -211,36 +326,43 @@ impl ReadSettings {
         Ok(o)
     }
 
-    /// The options for Excel files. The header, row and column settings are those of text files;
-    /// the separator, number and block settings do not apply to a cell grid and are left out.
+    /// The options for Excel files. The header, row and column settings are those of the Excel
+    /// theme when one was loaded (`excel_shared`), else those of text files; the separator, number
+    /// and block settings do not apply to a cell grid and are left out.
     pub fn excel_options(&self) -> ExcelOptions {
         let r = self;
+        let s = r.excel_shared.clone().unwrap_or_else(|| r.shared());
         let mut o = ExcelOptions {
             sheets: r.sheets.iter().map(|s| SheetRef::parse(s)).collect(),
             include_hidden: r.hidden_sheets || !r.skip_hidden_sheets,
             ..ExcelOptions::default()
         };
-        o.header_lines = r.header_lines;
-        o.long_name_line = r.long_name_line;
-        o.units_line = r.units_line;
-        o.comments_line = r.comments_line;
-        o.rename_columns = !r.no_rename_columns;
-        o.short_name_line = r.short_name_line.unwrap_or(0);
-        o.rename_book = !r.no_rename_book;
-        o.param_lines = r.param_lines.clone();
+        let extra = r.excel_no_flag;
+        o.first_column_x = extra.first_column_x;
+        o.param_name_from_first_cell = extra.param_name_from_first_cell;
+        o.skip_rows = extra.skip_rows;
+        o.max_rows = extra.max_rows;
+        o.header_lines = s.header_lines;
+        o.long_name_line = s.long_name_line;
+        o.units_line = s.units_line;
+        o.comments_line = s.comments_line;
+        o.rename_columns = !s.no_rename_columns;
+        o.short_name_line = s.short_name_line.unwrap_or(0);
+        o.rename_book = !s.no_rename_book;
+        o.param_lines = s.param_lines;
         o.rows = sheaf_io::ascii::ImportSelection {
-            first: r.first_row,
-            last: r.last_row,
-            read: r.read_rows,
-            skip: r.skip_rows,
+            first: s.first_row,
+            last: s.last_row,
+            read: s.read_rows,
+            skip: s.skip_rows,
         };
         o.columns = sheaf_io::ascii::ImportSelection {
-            first: r.first_column,
-            last: r.last_column,
-            read: r.read_columns,
-            skip: r.skip_columns,
+            first: s.first_column,
+            last: s.last_column,
+            read: s.read_columns,
+            skip: s.skip_columns,
         };
-        if r.dates_as_text {
+        if s.dates_as_text {
             o.dates = sheaf_io::ascii::DateImport::AsText;
         }
         o

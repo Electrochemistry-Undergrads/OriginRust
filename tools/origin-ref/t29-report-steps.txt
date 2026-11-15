@@ -1,0 +1,17 @@
+pca_a=@X:win -a Book1;page.active$ = RepPCA;win -z;|@W:1500
+pca_b=@L:117,207|@W:500|@L:117,189|@W:500|@L:117,171|@W:500|@L:117,153|@W:500
+pca_c=@L:800,330|{PGDN}|@W:700
+pca_d={PGDN}|@W:700
+pca_e={PGDN}|@W:700
+pca_f={PGDN}|@W:700
+km_a=@X:win -a Book2;page.active$ = RepKM;win -z;|@W:1500
+km_b=@L:117,189|@W:500|@L:117,171|@W:500|@L:117,153|@W:500
+km_c=@L:800,330|{PGDN}|@W:700
+km_d={PGDN}|@W:700
+km_e={PGDN}|@W:700
+km_f={PGDN}|@W:700
+ks_a=@X:win -a Book3;page.active$ = RepKMe;win -z;|@W:1500
+ks_c=@L:800,330|{PGDN}|@W:700
+ks_d={PGDN}|@W:700
+ks_e={PGDN}|@W:700
+ks_f={PGDN}|@W:700

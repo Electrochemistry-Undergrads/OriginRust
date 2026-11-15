@@ -55,6 +55,46 @@ impl Graph {
         out
     }
 
+    /// Renumbers every column id stored anywhere in this graph through `f`: the plots' X, Y, error,
+    /// base, size and colour columns, label columns, treemap and sunburst categories, the treemap order column, the
+    /// parallel colour/group column, the plot offsets and their follows, the tick-label columns of
+    /// the axes and the plot choice of the rugs. Every path that renumbers columns (File > Append,
+    /// ...) goes through this; a new field that holds a [`ColumnId`] is added here.
+    pub fn remap_columns(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
+        for layer in &mut self.layers {
+            for p in &mut layer.plots {
+                p.y = f(p.y);
+                for id in [&mut p.x, &mut p.y_error, &mut p.x_error, &mut p.y_base, &mut p.size_from, &mut p.color_from]
+                {
+                    *id = id.map(f);
+                }
+                if let LabelForm::Column { column } = &mut p.decor.labels.form {
+                    *column = f(*column);
+                }
+                p.parallel.color = p.parallel.color.map(f);
+                for c in &mut p.treemap.categories {
+                    *c = f(*c);
+                }
+                p.treemap.order_column = p.treemap.order_column.map(f);
+                for c in &mut p.sunburst.categories {
+                    *c = f(*c);
+                }
+            }
+            for o in &mut layer.plot_offsets {
+                o.column = f(o.column);
+                o.follows = o.follows.map(f);
+            }
+            for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+                if let TickLabelSource::Column { column } = &mut axis.tick_label_source {
+                    *column = f(*column);
+                }
+                for rug in [&mut axis.rug, &mut axis.rug_opposite] {
+                    rug.plot = rug.plot.map(f);
+                }
+            }
+        }
+    }
+
     /// The parent of layer `index` when the layer has a valid link: the parent comes earlier in
     /// the list and is not linked itself. A layer with an invalid link (to itself, to a later or
     /// missing layer, or to a linked layer) is drawn as an independent layer.
@@ -306,6 +346,39 @@ pub struct Layer {
     /// The Display tab of Origin's layer Plot Details (graphing spec 18).
     #[serde(default, skip_serializing_if = "LayerDisplay::is_default")]
     pub display: LayerDisplay,
+    /// Origin's Size/Speed "Link Axis Length to Scale with X:Y Ratio" (graphing spec 18.7a): `Some(r)` keeps
+    /// one unit of X `r` times as long on the page as one unit of Y. The layout keeps the left, top and
+    /// width of the frame and makes the height follow the axis ranges ([`xy_ratio_height`]); turning it on
+    /// or changing `r` first shrinks the frame to fit ([`Layer::fit_xy_ratio`]). Ignored while an axis has
+    /// a break and in polar and ternary layers. `None` (off) by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xy_ratio: Option<f64>,
+}
+
+/// The height (in the units of `width`) a frame of that width needs so that one unit of an X axis spanning
+/// `span_x` is `ratio` times as long as one unit of a Y axis spanning `span_y` (spans in the axes' own
+/// scale: decades on a log axis). `None` when an input is not a positive finite number.
+pub fn xy_ratio_height(width: f64, span_x: f64, span_y: f64, ratio: f64) -> Option<f64> {
+    let ok = |v: f64| v.is_finite() && v > 0.0;
+    (ok(width) && ok(span_x) && ok(span_y) && ok(ratio)).then(|| width * span_y / (span_x * ratio)).filter(|h| ok(*h))
+}
+
+impl Layer {
+    /// Origin's response to ticking "Link Axis Length to Scale" or changing its ratio (measured in Origin
+    /// 2016, graphing spec 18.7a): the frame keeps its left and top and shrinks either its width or its height
+    /// (never grows) until one unit of X is `ratio` times one unit of Y. `page` is the page size in points,
+    /// `span_x` and `span_y` the current axis spans in their own scale. Sets [`Layer::xy_ratio`]; the frame
+    /// is unchanged when the spans are not usable.
+    pub fn fit_xy_ratio(&mut self, ratio: f64, page: (f64, f64), span_x: f64, span_y: f64) {
+        self.xy_ratio = Some(ratio);
+        let (w, h) = (self.frame.width * page.0, self.frame.height * page.1);
+        let Some(need_h) = xy_ratio_height(w, span_x, span_y, ratio) else { return };
+        if need_h <= h {
+            self.frame.height = need_h / page.1;
+        } else if let Some(need_w) = xy_ratio_height(h, span_y, span_x, 1.0 / ratio) {
+            self.frame.width = need_w / page.0;
+        }
+    }
 }
 
 /// What a layer draws and how (Origin's Display tab; defaults measured: data shown, clipped to the
@@ -691,6 +764,34 @@ fn is_false(b: &bool) -> bool {
 }
 
 impl Layer {
+    /// The ridgeline settings a plot added to this layer starts with: those of its first ridgeline
+    /// plot (so all ridges share bandwidth, display and look), else the defaults.
+    pub fn inherited_ridge(&self) -> RidgelineStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Ridgeline).map(|p| p.ridge.clone()).unwrap_or_default()
+    }
+
+    /// The hexbin settings a plot added to this layer starts with: those of its first hexbin plot, else the
+    /// defaults.
+    pub fn inherited_hexbin(&self) -> HexbinStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Hexbin).map(|p| p.hexbin).unwrap_or_default()
+    }
+
+    /// The parallel settings a plot added to this layer starts with: those of its first parallel plot, else the
+    /// defaults.
+    pub fn inherited_parallel(&self) -> ParallelStyle {
+        self.plots.iter().find(|p| p.kind.is_parallel()).map(|p| p.parallel).unwrap_or_default()
+    }
+
+    /// The sunburst settings a plot added to this layer starts with: those of its first sunburst plot, else the defaults.
+    pub fn inherited_sunburst(&self) -> SunburstStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Sunburst).map(|p| p.sunburst.clone()).unwrap_or_default()
+    }
+
+    /// The treemap settings a plot added to this layer starts with: those of its first treemap plot, else the defaults.
+    pub fn inherited_treemap(&self) -> TreemapStyle {
+        self.plots.iter().find(|p| p.kind == PlotKind::Treemap).map(|p| p.treemap.clone()).unwrap_or_default()
+    }
+
     /// Recolors the plots whose color still comes from the palette, in plot order, and leaves
     /// colors chosen by hand alone. Used when plots are added or removed: with a palette that
     /// spreads its colors over the number of plots, every automatic color moves along.
@@ -748,6 +849,7 @@ impl Layer {
             }
             q.line.width_pt = src.line.width_pt;
             q.line.connect = src.line.connect;
+            q.line.sort_x = src.line.sort_x;
             if g.line_style == Increment::None {
                 q.line.dash = src.line.dash;
             }
@@ -762,6 +864,7 @@ impl Layer {
             q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
             q.decor.fill_under = src.decor.fill_under.map(|_| q.line.color);
+            q.decor.fill_under_mode = src.decor.fill_under_mode;
             if same_color {
                 q.line.color = src.line.color;
                 q.symbol.color = src.symbol.color;
@@ -956,9 +1059,16 @@ pub struct Axis {
     /// the ticks are at multiples of the step. Linear axes only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_tick: Option<f64>,
-    /// One break in the axis: a region of values that is left out, with a gap in the axis line.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub axis_break: Option<AxisBreak>,
+    /// The breaks of the axis (Origin allows 1 to 7, [`MAX_AXIS_BREAKS`]): regions of values that are left
+    /// out, each with a gap in the axis line. Files written before several breaks existed hold one break
+    /// under the name `axis_break`; it is read as a list of one.
+    #[serde(
+        default,
+        alias = "axis_break",
+        deserialize_with = "breaks_one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub axis_breaks: Vec<AxisBreak>,
     /// Origin's Grids tab "Additional Lines": a line across the layer at this value of the OTHER axis,
     /// in this axis' line style (for the X axis a horizontal line at Y = value, labelled "Y =" in
     /// Origin's dialog; for the Y axis a vertical line at X = value). `None` means off; Origin's
@@ -986,6 +1096,78 @@ pub struct Axis {
     pub tick_prefix: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tick_suffix: String,
+    /// The rug beside the axis' own edge (bottom or left; the edge the axis line is on, see [`Axis::side`]).
+    #[serde(default, skip_serializing_if = "Rug::is_default")]
+    pub rug: Rug,
+    /// The rug beside the opposite edge (top for X, right for Y).
+    #[serde(default, skip_serializing_if = "Rug::is_default")]
+    pub rug_opposite: Rug,
+}
+
+/// Origin's Rug tab of the Axis dialog (2019b, graphing spec 18.10): a strip beside an axis edge with one
+/// short line per plotted point, projected onto that axis. [`Rug::default`] is "no rug"; the numbers
+/// are Sheaf's own choices (Origin's are unmeasured).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Rug {
+    /// Show the rug panel.
+    pub show: bool,
+    /// Which plot's points: the Y column of the plot (the first plot of the layer with that Y column);
+    /// `None` is Origin's `<All>`. A column no plot of the layer uses any more also means `<All>`.
+    /// A column id, not a position, so removing, reordering or moving plots keeps the choice.
+    pub plot: Option<ColumnId>,
+    /// Line colour; `None` is Auto, the colour of each plot.
+    pub color: Option<Color>,
+    /// Line thickness in points.
+    pub thickness_pt: f64,
+    /// Transparency of the lines, 0 to 100 percent.
+    pub transparency_pct: f64,
+    /// Panel size across the axis, in percent of the average of the layer's width and height.
+    pub size_pct: f64,
+    /// All plots share one strip (Origin's Overlap); off gives each plot a sub-strip of its own.
+    pub overlap: bool,
+    /// Space between sub-strips when `overlap` is off, in percent of the panel size.
+    pub gap_pct: f64,
+    /// Space left empty at both ends of the lines across the panel, in percent of the panel size (below 50).
+    pub margin_pct: f64,
+    /// Border lines at the two ends of the panel along the axis (perpendicular to the axis).
+    pub perpendicular_border: bool,
+    /// Border lines along the panel's inner and outer edges (parallel to the axis).
+    pub parallel_border: bool,
+}
+
+impl Default for Rug {
+    fn default() -> Rug {
+        Rug {
+            show: false,
+            plot: None,
+            color: None,
+            thickness_pt: 0.5,
+            transparency_pct: 0.0,
+            size_pct: 5.0,
+            overlap: true,
+            gap_pct: 10.0,
+            margin_pct: 0.0,
+            perpendicular_border: false,
+            parallel_border: false,
+        }
+    }
+}
+
+impl Rug {
+    pub fn is_default(&self) -> bool {
+        *self == Rug::default()
+    }
+
+    /// A shown rug with the defaults (what the Scatter + Rug template puts on the bottom and left axes).
+    pub fn shown() -> Rug {
+        Rug { show: true, ..Rug::default() }
+    }
+
+    /// The values the drawing uses: percentages and the thickness limited to their ranges.
+    pub fn size_frac(&self) -> f64 {
+        self.size_pct.clamp(0.0, 100.0) / 100.0
+    }
 }
 
 /// An extra tick of an axis.
@@ -997,25 +1179,70 @@ pub struct SpecialTick {
     pub label: String,
 }
 
+/// The most breaks an axis has (Origin's Number of Breaks lists None and 1 to 7).
+pub const MAX_AXIS_BREAKS: usize = 7;
+
+/// The width of the gap of a break in percent of the axis length when the user has not set one. Origin
+/// 2016's automatic Break Half Length left gaps of 1.67 % to 1.79 % of the axis length on 879 and 1090 px
+/// axes with one to three breaks (graphing spec 3.6).
+pub const BREAK_GAP_PCT: f64 = 1.75;
+
 /// A break in an axis (graphing spec 3.6): the values from `from` to `to` are cut out; the axis
 /// shows a gap there, and the part after it can have its own tick step.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AxisBreak {
     pub from: f64,
     pub to: f64,
-    /// Where the gap starts to open, in percent of the axis length from its low end.
+    /// The middle of the gap, in percent of the axis length from its low end. Used when
+    /// `auto_position` is off.
     pub position_pct: f64,
     /// Width of the gap in percent of the axis length.
     pub gap_pct: f64,
     /// Major tick step after the break; `None` keeps the step of the axis.
     pub step_after: Option<f64>,
+    /// Origin's "Auto Position" (on for a new break): the breaks of the axis share it evenly, break k of
+    /// n sitting at k / (n + 1) of its length, whatever `position_pct` says. Off in files written before
+    /// the setting existed, so that their breaks stay where they were.
+    #[serde(default)]
+    pub auto_position: bool,
 }
 
 impl AxisBreak {
-    /// A break of the values `from..to` in the middle of the axis.
+    /// A break of the values `from..to` placed automatically (in the middle when it is the only one).
     pub fn new(from: f64, to: f64) -> AxisBreak {
-        AxisBreak { from, to, position_pct: 50.0, gap_pct: 2.0, step_after: None }
+        AxisBreak { from, to, position_pct: 50.0, gap_pct: BREAK_GAP_PCT, step_after: None, auto_position: true }
     }
+
+    /// The break Origin's dialog adds after `existing` on an axis from `min` to `max`: the middle half of
+    /// what lies after the last break (or of the whole axis for the first one), as Origin 2016 filled the
+    /// rows when the Number of Breaks went up one at a time (graphing spec 3.6). It takes the gap width of
+    /// the breaks before it.
+    pub fn next_after(existing: &[AxisBreak], min: f64, max: f64) -> AxisBreak {
+        let (lo, hi) = (min.min(max), min.max(max));
+        let start = existing.iter().map(|b| b.to).filter(|t| t.is_finite() && *t > lo && *t < hi).fold(lo, f64::max);
+        let span = hi - start;
+        let mut b = AxisBreak::new(start + span * 0.25, start + span * 0.75);
+        if let Some(last) = existing.last() {
+            b.gap_pct = last.gap_pct;
+        }
+        b
+    }
+}
+
+/// Reads the breaks of an axis written either as a list or, by files from before several breaks, as a
+/// single break (or `null`).
+fn breaks_one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<AxisBreak>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        Many(Vec<AxisBreak>),
+        One(AxisBreak),
+    }
+    Ok(match Option::<OneOrMany>::deserialize(d)? {
+        None => Vec::new(),
+        Some(OneOrMany::One(b)) => vec![b],
+        Some(OneOrMany::Many(v)) => v,
+    })
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1088,11 +1315,15 @@ pub struct LineStyle {
     pub dash: Dash,
     #[serde(default)]
     pub connect: Connect,
+    /// Connect the plotted points in increasing X order instead of worksheet order (Origin 2023's
+    /// `layer.plotN.line.sortx`). Only the line path follows it; the worksheet is untouched.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sort_x: bool,
 }
 
 impl LineStyle {
     pub fn solid(color: Color, width_pt: f64) -> Self {
-        LineStyle { color, width_pt, dash: Dash::Solid, connect: Connect::Straight }
+        LineStyle { color, width_pt, dash: Dash::Solid, connect: Connect::Straight, sort_x: false }
     }
 }
 
@@ -1188,6 +1419,43 @@ pub enum PlotKind {
     /// A box chart of the plot's Y column (Origin's plot type 206): one box per plot, standing at
     /// 1, 2, 3, ... in plot order, with the median, the mean, whiskers and outliers.
     Box,
+    /// Origin's violin plot (2019, template Violin.otpu): each plot's Y column as a mirrored
+    /// kernel density silhouette standing at 1, 2, 3, ... in plot order like [`PlotKind::Box`],
+    /// with the median marked inside.
+    Violin,
+    /// Origin's "Violin with Box" (ViolinBox.otpu): the silhouette with a narrow box, whiskers
+    /// and median inside.
+    ViolinBox,
+    /// Origin's "Violin with Point" (ViolinData.otpu): the silhouette with every observation
+    /// drawn as a point inside it.
+    ViolinPoint,
+    /// Origin's "Violin with Quartile" (ViolinQuartile.otpu): the silhouette with lines at the
+    /// quartiles and the median inside.
+    ViolinQuartile,
+    /// Origin's "Violin with Stick" (ViolinStick.otpu): the silhouette with every observation
+    /// drawn as a line across it.
+    ViolinStick,
+    /// Origin's "Half Violin" (HalfViolin.otpu): one half of the silhouette, with a half box on
+    /// the other side.
+    HalfViolin,
+    /// Origin's ridgeline chart (2022, ridgeline.OTPU): the plot's Y column as a density curve on
+    /// a baseline at its column index (graphing spec 14.23).
+    Ridgeline,
+    /// Origin's hexbin plot (2027, Hexbin.OTPU): the plot's X and Y columns binned into hexagons coloured by
+    /// the number of points in each (graphing spec 14.24).
+    Hexbin,
+    /// Origin's Parallel Plot (2019, Parallel.otpu): the plot's Y column is one vertical axis; every row is a
+    /// line through the axes of all the layer's parallel plots, coloured by a numeric column (graphing spec 14.25).
+    Parallel,
+    /// Origin's Parallel Index: like [`PlotKind::Parallel`], with the lines coloured by the group (the text of a
+    /// column) of their row, and a legend of the groups.
+    ParallelIndex,
+    /// Origin's Treemap plot (2025b, treemap.otpu): the plot's Y column is the value, the category columns of its
+    /// [`TreemapStyle`] the nested levels (graphing spec 14.26).
+    Treemap,
+    /// Origin's Sunburst plot (2022, Sunburst.OTP): the plot's Y column is the value, the category columns of its
+    /// [`SunburstStyle`] the rings, the first innermost (graphing spec 14.27).
+    Sunburst,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -1198,7 +1466,64 @@ pub enum PlotKind {
     PieBw,
 }
 
+/// What a violin plot draws inside (or beside) its silhouette.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ViolinInner {
+    /// A marker at the median.
+    Median,
+    /// A narrow box from the first to the third quartile with whiskers and the median.
+    Box,
+    /// Lines at the quartiles and the median.
+    Quartile,
+    /// Every observation as a point.
+    Point,
+    /// Every observation as a line across the silhouette.
+    Stick,
+}
+
 impl PlotKind {
+    /// True for the six violin kinds.
+    pub fn is_violin(&self) -> bool {
+        self.violin_inner().is_some()
+    }
+
+    /// True for the kinds drawn as a distribution per plot at 1, 2, 3, ...: box chart and violins.
+    pub fn is_distribution(&self) -> bool {
+        *self == PlotKind::Box || self.is_violin() || self.is_ridgeline()
+    }
+
+    /// True for [`PlotKind::Parallel`] and [`PlotKind::ParallelIndex`].
+    pub fn is_parallel(&self) -> bool {
+        matches!(self, PlotKind::Parallel | PlotKind::ParallelIndex)
+    }
+
+    /// True for [`PlotKind::Hexbin`].
+    pub fn is_hexbin(&self) -> bool {
+        *self == PlotKind::Hexbin
+    }
+
+    /// True for [`PlotKind::Ridgeline`].
+    pub fn is_ridgeline(&self) -> bool {
+        *self == PlotKind::Ridgeline
+    }
+
+    /// What a violin kind draws inside its silhouette; `None` for other kinds.
+    pub fn violin_inner(&self) -> Option<ViolinInner> {
+        match self {
+            PlotKind::Violin => Some(ViolinInner::Median),
+            PlotKind::ViolinBox | PlotKind::HalfViolin => Some(ViolinInner::Box),
+            PlotKind::ViolinPoint => Some(ViolinInner::Point),
+            PlotKind::ViolinQuartile => Some(ViolinInner::Quartile),
+            PlotKind::ViolinStick => Some(ViolinInner::Stick),
+            _ => None,
+        }
+    }
+
+    /// True for [`PlotKind::HalfViolin`]: only the right half of the silhouette is drawn.
+    pub fn is_half_violin(&self) -> bool {
+        *self == PlotKind::HalfViolin
+    }
+
     /// Kinds whose Drop Lines tab offers Skip Points. Area and bar plots keep every point.
     pub fn supports_skip_points(&self) -> bool {
         matches!(self, PlotKind::Line | PlotKind::Scatter | PlotKind::LineSymbol)
@@ -1330,6 +1655,21 @@ pub struct Plot {
     /// The bins of a histogram plot.
     #[serde(default, skip_serializing_if = "HistogramStyle::is_default")]
     pub hist: HistogramStyle,
+    /// The settings of a ridgeline plot (graphing spec 14.23).
+    #[serde(default, skip_serializing_if = "RidgelineStyle::is_default")]
+    pub ridge: RidgelineStyle,
+    /// The bin settings of a hexbin plot (graphing spec 14.24).
+    #[serde(default, skip_serializing_if = "HexbinStyle::is_default")]
+    pub hexbin: HexbinStyle,
+    /// The settings of a Parallel Plot or Parallel Index (graphing spec 14.25).
+    #[serde(default, skip_serializing_if = "ParallelStyle::is_default")]
+    pub parallel: ParallelStyle,
+    /// The settings of a treemap plot (graphing spec 14.26).
+    #[serde(default, skip_serializing_if = "TreemapStyle::is_default")]
+    pub treemap: TreemapStyle,
+    /// The settings of a sunburst plot (graphing spec 14.27).
+    #[serde(default, skip_serializing_if = "SunburstStyle::is_default")]
+    pub sunburst: SunburstStyle,
     /// A bubble plot: the symbol of each point is as wide as this column's value says (Origin's
     /// Z column of a Bubble plot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1352,10 +1692,13 @@ pub struct PlotDecor {
     /// Lines from each point to the Y axis (Origin's "Horizontal") and to the X axis ("Vertical").
     #[serde(default, skip_serializing_if = "DropLines::is_default")]
     pub drop: DropLines,
-    /// Origin's "Fill Area Under Curve" in its "Normal" mode: the area between the curve and the
-    /// bottom of the layer (measured: not Y = 0) is filled with this colour. `None` is off.
+    /// Enables Fill Area Under Curve with this colour for filled modes; sidelines use the line
+    /// style instead. `None` disables both fills and sidelines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_under: Option<Color>,
+    /// The selected fill/outline mode is retained while Fill Area Under Curve is disabled.
+    #[serde(default, skip_serializing_if = "FillUnderMode::is_normal")]
+    pub fill_under_mode: FillUnderMode,
     /// Transparency, hatch and gradient of the fill under a curve, of a bar or of an area (the
     /// Pattern tab). Plain by default: the flat colour only.
     #[serde(default, skip_serializing_if = "FillStyle::is_default")]
@@ -1363,6 +1706,89 @@ pub struct PlotDecor {
     /// The text written next to each point.
     #[serde(default, skip_serializing_if = "DataLabels::is_default")]
     pub labels: DataLabels,
+    /// Fitted curves and moving averages drawn over the plot (graphing spec 18.11), in the order
+    /// added; each is recomputed from the plotted data when drawn.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trendlines: Vec<Trendline>,
+}
+
+pub use sheaf_calc::trend::TrendKind;
+
+/// One on-graph trendline of a plot (Origin 2025b's Add Trend Line, graphing spec 18.11).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Trendline {
+    pub kind: TrendKind,
+    /// Write the fitted equation (not for a moving average).
+    #[serde(default = "yes")]
+    pub show_equation: bool,
+    /// Write R-squared (not for a moving average).
+    #[serde(default = "yes")]
+    pub show_r2: bool,
+    /// `None` is Auto: the plot's colour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+    #[serde(default = "Trendline::default_width")]
+    pub width_pt: f64,
+    #[serde(default)]
+    pub dash: Dash,
+    /// Moves the label from its default place (points; +x right, +y down).
+    #[serde(default, skip_serializing_if = "is_zero_pair")]
+    pub label_offset_pt: (f64, f64),
+}
+
+fn is_zero_pair(v: &(f64, f64)) -> bool {
+    *v == (0.0, 0.0)
+}
+
+impl Trendline {
+    fn default_width() -> f64 {
+        1.5
+    }
+
+    pub fn new(kind: TrendKind) -> Self {
+        Trendline {
+            kind,
+            show_equation: true,
+            show_r2: true,
+            color: None,
+            width_pt: Self::default_width(),
+            dash: Dash::Solid,
+            label_offset_pt: (0.0, 0.0),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FillUnderMode {
+    #[default]
+    Normal,
+    /// Close each finite run directly from its last point to its first, without an axis baseline.
+    InclusiveBrokenByMissingValues,
+    SidelinesOnly,
+    SidelinesAndBase,
+}
+
+impl FillUnderMode {
+    pub const ALL: [Self; 4] =
+        [Self::Normal, Self::InclusiveBrokenByMissingValues, Self::SidelinesOnly, Self::SidelinesAndBase];
+
+    pub fn is_normal(&self) -> bool {
+        *self == Self::Normal
+    }
+
+    pub fn is_sidelines(&self) -> bool {
+        matches!(self, Self::SidelinesOnly | Self::SidelinesAndBase)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::InclusiveBrokenByMissingValues => "Inclusive broken by missing values",
+            Self::SidelinesOnly => "Sidelines only",
+            Self::SidelinesAndBase => "Sidelines and Base",
+        }
+    }
 }
 
 /// How a Line + Symbol connecting line meets its point symbols. Other plot kinds ignore these
@@ -1677,6 +2103,8 @@ fn yes() -> bool {
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum LegendPosition {
+    /// Stock Line/Scatter/Line+Symbol/Column upper-left anchor (graphing spec 2.4).
+    Automatic,
     TopRight,
     TopLeft,
     BottomRight,
@@ -1720,6 +2148,10 @@ fn is_one_column(c: &u32) -> bool {
 }
 
 impl Legend {
+    /// Upper-left fractions of the layer frame, measured in Origin 2016. The rectangle grows
+    /// right/down as its text, rows or columns change; it is not a centre or right-edge anchor.
+    pub const AUTOMATIC_ANCHOR: (f64, f64) = (0.8223, -0.1044);
+
     /// The automatic legend text for plots with these ids (see [`Legend::text`]): a symbol and a
     /// name per line.
     pub fn automatic_text<S: AsRef<str>>(ids: &[S]) -> String {
@@ -2094,6 +2526,11 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2134,6 +2571,11 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2251,6 +2693,11 @@ mod tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2311,6 +2758,91 @@ mod polar_tests {
 }
 
 #[cfg(test)]
+mod xy_ratio_tests {
+    use super::*;
+    use crate::template::Template;
+
+    /// Origin 2016 (graphing 18.7a): page 10.72 x 8.205 in, layer 17.91/11.58/68.16/71.83 % of the page,
+    /// X -2.5..12.5 and Y -2..22. Ticking the link (ratio 1) left the width at 34.36 %; then ratio 2 left the
+    /// height at 35.91 %, or instead ratio 0.5 left the width at 17.18 %. Left and top did not move.
+    #[test]
+    fn ticking_the_link_shrinks_the_frame_as_origin_did() {
+        let page = (10.72 * 72.0, 8.205 * 72.0);
+        let mut layer = Template::Line.new_graph(WindowId(1), "G").layers[0].clone();
+        assert_eq!(layer.xy_ratio, None, "off by default");
+        layer.frame = Frame { left: 0.1791, top: 0.1158, width: 0.6816, height: 0.7183 };
+        let pct = |v: f64| (v * 10000.0).round() / 100.0;
+        layer.fit_xy_ratio(1.0, page, 15.0, 24.0);
+        assert_eq!((pct(layer.frame.width), pct(layer.frame.height)), (34.36, 71.83));
+        assert_eq!(layer.xy_ratio, Some(1.0));
+        let linked = layer.clone();
+        layer.fit_xy_ratio(2.0, page, 15.0, 24.0);
+        // Origin showed 35.91 (it works from its own rounded width); Sheaf gets 35.915.
+        assert_eq!(pct(layer.frame.width), 34.36);
+        assert!((pct(layer.frame.height) - 35.91).abs() <= 0.011, "{:?}", layer.frame);
+        let mut layer = linked;
+        layer.fit_xy_ratio(0.5, page, 15.0, 24.0);
+        assert_eq!((pct(layer.frame.width), pct(layer.frame.height)), (17.18, 71.83));
+        assert_eq!((layer.frame.left, layer.frame.top), (0.1791, 0.1158));
+        // Unusable spans leave the frame alone.
+        let before = layer.frame;
+        layer.fit_xy_ratio(1.0, page, 0.0, 24.0);
+        assert_eq!(layer.frame, before);
+        assert_eq!(xy_ratio_height(100.0, 10.0, 20.0, 2.0), Some(100.0));
+        assert_eq!(xy_ratio_height(100.0, f64::NAN, 20.0, 2.0), None);
+        // The setting is saved only when on.
+        let json = serde_json::to_string(&layer).unwrap();
+        assert!(json.contains("\"xy_ratio\":1.0"));
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap().xy_ratio, Some(1.0));
+    }
+}
+
+#[cfg(test)]
+mod break_tests {
+    use super::*;
+    use crate::template::Template;
+
+    #[test]
+    fn an_old_single_break_reads_as_a_list_and_keeps_its_place() {
+        let axis = Template::Line.new_graph(WindowId(1), "G").layers[0].y_axis.clone();
+        let mut json = serde_json::to_value(&axis).unwrap();
+        json["axis_break"] =
+            serde_json::json!({"from": 30.0, "to": 70.0, "position_pct": 60.0, "gap_pct": 2.0, "step_after": null});
+        let old: Axis = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(old.axis_breaks.len(), 1);
+        let b = old.axis_breaks[0];
+        assert_eq!((b.from, b.to, b.position_pct, b.gap_pct), (30.0, 70.0, 60.0, 2.0));
+        assert!(!b.auto_position, "an old break stays where it was");
+        json["axis_break"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<Axis>(json).unwrap().axis_breaks.is_empty());
+        // Several breaks are written as a list and read back unchanged; none are not written at all.
+        let mut many = axis.clone();
+        many.axis_breaks =
+            vec![AxisBreak::new(1.0, 2.0), AxisBreak::next_after(&[AxisBreak::new(1.0, 2.0)], 0.0, 10.0)];
+        let text = serde_json::to_string(&many).unwrap();
+        assert!(text.contains("\"axis_breaks\":["));
+        assert_eq!(serde_json::from_str::<Axis>(&text).unwrap(), many);
+        assert!(!serde_json::to_string(&axis).unwrap().contains("axis_break"));
+    }
+
+    #[test]
+    fn a_new_break_takes_the_middle_half_of_what_is_left() {
+        // Origin 2016's rows on the axis -25..125, adding one break at a time (graphing spec 3.6).
+        let mut breaks = Vec::new();
+        for (from, to) in [(12.5, 87.5), (96.875, 115.625), (117.96875, 122.65625)] {
+            let b = AxisBreak::next_after(&breaks, -25.0, 125.0);
+            assert_eq!((b.from, b.to), (from, to));
+            assert!(b.auto_position && b.gap_pct == BREAK_GAP_PCT);
+            breaks.push(b);
+        }
+        // A reversed range gives the same rows; the gap of the last break is kept.
+        breaks[2].gap_pct = 3.0;
+        let b = AxisBreak::next_after(&breaks, 125.0, -25.0);
+        assert_eq!((b.from, b.gap_pct), (122.65625 + (125.0 - 122.65625) * 0.25, 3.0));
+    }
+}
+
+#[cfg(test)]
 mod ternary_tests {
     use super::*;
     use crate::template::Template;
@@ -2356,6 +2888,11 @@ mod style_tests {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -2502,5 +3039,47 @@ mod style_tests {
         d.vertical.color_mode = DropColorMode::PlusMinus;
         let back: DropLines = serde_json::from_str(&serde_json::to_string(&d).unwrap()).unwrap();
         assert_eq!(back, d);
+    }
+}
+
+#[cfg(test)]
+mod sort_x_tests {
+    use super::*;
+
+    #[test]
+    fn sort_x_defaults_off_is_not_written_when_off_and_round_trips() {
+        let mut line = LineStyle::solid(Color::BLACK, 1.0);
+        // A file written before the flag existed has no such key.
+        let old: LineStyle = serde_json::from_str(&serde_json::to_string(&line).unwrap()).unwrap();
+        assert!(!old.sort_x);
+        assert!(!serde_json::to_string(&line).unwrap().contains("sort_x"));
+        line.sort_x = true;
+        let text = serde_json::to_string(&line).unwrap();
+        assert!(text.contains("\"sort_x\":true"));
+        assert!(serde_json::from_str::<LineStyle>(&text).unwrap().sort_x);
+    }
+}
+
+#[cfg(test)]
+mod trendline_tests {
+    use super::*;
+
+    #[test]
+    fn trendlines_are_skipped_when_empty_and_round_trip() {
+        let mut decor = PlotDecor::default();
+        assert!(!serde_json::to_string(&decor).unwrap().contains("trendlines"));
+        assert!(decor.is_default());
+        let mut t = Trendline::new(TrendKind::Polynomial { order: 3 });
+        t.color = Some(Color::BLACK);
+        t.label_offset_pt = (4.0, -2.0);
+        decor.trendlines.push(t.clone());
+        decor.trendlines.push(Trendline::new(TrendKind::MovingAverage { window: 5 }));
+        assert!(!decor.is_default());
+        let text = serde_json::to_string(&decor).unwrap();
+        let back: PlotDecor = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.trendlines, decor.trendlines);
+        // A minimal record reads with the defaults.
+        let old: Trendline = serde_json::from_str(r#"{"kind":"linear"}"#).unwrap();
+        assert_eq!(old, Trendline::new(TrendKind::Linear));
     }
 }

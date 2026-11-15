@@ -292,6 +292,8 @@ Single-peak shapes. Most have a centre, width and area/height parameter and carr
 
 ## Surface Fitting (22)
 
+Supported in Sheaf: all 22 fit `z = f(x, y)` to three worksheet columns (`crates/fit/src/surface.rs`; the Fit window's category "Surface Fitting", `sheaf fit --z`, `sheaf fit --list`; `docs/spec/fitting.md` sections 14 and 15). Sheaf's names for GaussCum, LogisticCum, ExtremeCum, Cosine and DoseResp are `GaussCum2D`, `LogisticCum2D`, `ExtremeCum2D`, `Cosine2D` and `DoseResp2D`, because Origin gives them the name of a one-variable function. Checked against Origin's `nlbeginz` runs: Plane, Parabola2D, Poly2D, Gauss2D, Lorentz2D, Voigt2D, Gaussian2D, Exponential2D, Rational2D; the others are copied from the FDF formulas and not run in Origin. Not supported: the three-variable functions of the next category, and matrix input.
+
 | Function | Pri | Formula | Parameters | Peak | Notes |
 |---|---|---|---|---|---|
 | Chebyshev2D | P2 | `[x,y -> z] z0 + A1 * cos(acos(x)) + B1 * cos(acos(y)) + A2 * cos(2 * acos(x)) + C1 * cos(acos(x)) * cos(acos(y)) + B2 * cos(2 * acos(y))` | `z0` (?), `A1` (?), `A2` (?), `B1` (?), `B2` (?), `C1` (?) |  |  |

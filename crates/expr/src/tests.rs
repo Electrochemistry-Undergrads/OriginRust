@@ -1180,3 +1180,44 @@ fn text_formulas_in_a_numeric_context() {
     // compile() has no text values.
     assert!(Expr::parse("col(A)$").unwrap().compile(&plain).is_err());
 }
+
+#[test]
+fn j_is_a_variable_the_host_provides() {
+    let host = SimpleHost::new().var("j", 3.0);
+    assert_eq!(Expr::parse("j*10 + 1").unwrap().eval(&host).unwrap(), 31.0);
+    assert_eq!(Expr::parse("j*10").unwrap().variables(), ["j"]);
+    let e = err("j + 1");
+    assert!(e.to_string().contains("unknown variable 'j'"), "{e}");
+}
+
+#[test]
+fn a_column_given_relative_to_j_parses_and_prints() {
+    let e = Expr::parse("wcol(j-1)*2 + col(j+3) - COL(j) + wcol(J)").unwrap();
+    assert_eq!(
+        e.columns(),
+        [ColumnRef::Relative(-1), ColumnRef::Relative(3), ColumnRef::Short("j".into()), ColumnRef::Short("J".into()),]
+    );
+    assert_eq!(ColumnRef::Relative(-1).to_string(), "col(j-1)");
+    assert_eq!(ColumnRef::Relative(2).to_string(), "col(j+2)");
+    assert_eq!(ColumnRef::Relative(0).to_string(), "col(j)");
+    assert_eq!(Expr::parse("col(j-0)").unwrap().columns(), [ColumnRef::Relative(0)]);
+}
+
+#[test]
+fn a_relative_column_needs_a_whole_offset() {
+    for src in ["col(j-)", "col(j+x)", "col(j-1.5)", "col(j*2)", "col(j-1"] {
+        assert!(Expr::parse(src).is_err(), "{src}");
+    }
+    // Other names are not relative: `col(k-1)` is still a syntax error as before.
+    assert!(Expr::parse("col(k-1)").is_err());
+}
+
+#[test]
+fn a_relative_column_is_found_by_a_host_that_registers_it() {
+    let data = [1.0, 2.0, 3.0];
+    let host = SimpleHost::new().var("j", 2.0).column(ColumnRef::Relative(-1), &data);
+    let e = Expr::parse("col(j-1)*j").unwrap();
+    assert_eq!(e.eval_rows(&host, 3).unwrap(), [2.0, 4.0, 6.0]);
+    let e = Expr::parse("col(j+5)").unwrap().eval_rows(&host, 3).unwrap_err();
+    assert!(e.to_string().contains("unknown column col(j+5)"), "{e}");
+}

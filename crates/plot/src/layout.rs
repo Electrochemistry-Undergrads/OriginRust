@@ -34,12 +34,21 @@ use sheaf_core::{Project, WindowId};
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds: Vec<LayerData> = data::collect_graph(project, g);
     let geoms = graph_geometry(project, g, &pds, m);
     let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);
     let y_titles = title_places(project, g, &geoms, &pds, Dim::Y, m);
     let mut layers: Vec<LayerScene> = (0..g.layers.len())
-        .map(|i| layer_scene(project, g, i, &geoms[i], &pds[i].plots, (x_titles[i], y_titles[i]), m))
+        .map(|i| {
+            // Trendline labels of the layers in one frame (a layer and its right Y layer) stack.
+            let first_line: usize = g
+                .same_frame(i)
+                .into_iter()
+                .filter(|&j| j < i && g.layers[j].display.show_data)
+                .map(|j| crate::trend::label_lines(&pds[j].plots, &geoms[j]))
+                .sum();
+            layer_scene(project, g, i, &geoms[i], &pds[i].plots, (x_titles[i], y_titles[i]), first_line, m)
+        })
         .collect();
     // A legend that lists the plots of every layer drawn in its frame (a layer and its right Y
     // layer) is drawn after all layers, so that no layer's curves cover it.
@@ -93,6 +102,27 @@ pub(crate) fn graph_geometry(
     pds: &[LayerData],
     m: &dyn TextMeasurer,
 ) -> Vec<LayerGeometry> {
+    let mut geoms = graph_geometry_once(project, g, pds, m);
+    // Hexbin: the axis range comes from the binning for the nominal frame, the drawing bins for the real
+    // one (narrowed by the colour scale). Widen the range to the hexagons as drawn until they fit.
+    for _ in 0..6 {
+        let mut grew = false;
+        for (d, geom) in pds.iter().zip(&geoms) {
+            for pd in &d.plots {
+                if let Some(h) = &pd.hex {
+                    grew |= h.grow_to_drawn(&pd.plot.hexbin, geom);
+                }
+            }
+        }
+        if !grew {
+            break;
+        }
+        geoms = graph_geometry_once(project, g, pds, m);
+    }
+    geoms
+}
+
+fn graph_geometry_once(project: &Project, g: &Graph, pds: &[LayerData], m: &dyn TextMeasurer) -> Vec<LayerGeometry> {
     let mut out: Vec<Option<LayerGeometry>> = vec![None; g.layers.len()];
     for root in 0..g.layers.len() {
         if g.root_of(root) == root {
@@ -116,7 +146,20 @@ fn resolve_dim(project: &Project, axis: &Axis, dim: Dim, sources: &[&data::PlotD
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
     let boxes: Vec<&data::BoxStats> = sources.iter().filter_map(|pd| pd.boxed.as_ref()).collect();
-    let mut resolved = if dim == Dim::X && !boxes.is_empty() {
+    let ridges: Vec<&crate::ridgeline::RidgeData> = sources.iter().filter_map(|pd| pd.ridge.as_ref()).collect();
+    let mut resolved = if dim == Dim::Y && !ridges.is_empty() && axis.scale == sheaf_core::graph::ScaleKind::Linear {
+        // Ridgelines: one baseline per column at 1, 2, 3, ... named by its column; the axis reaches
+        // below the first baseline (and its rug) and above the highest peak (graphing spec 14.23).
+        let n = ridges.len() as f64;
+        let rug =
+            sources.iter().filter_map(|pd| pd.ridge.as_ref().map(|r| r.rug_reach(&pd.plot.ridge))).fold(0.0, f64::max);
+        let top = ridges.iter().map(|r| r.pos + r.peak() * r.scale).fold(n, f64::max);
+        let (lo, hi) = ((1.0 - rug - 0.1).min(0.5), top + 0.1);
+        let mut r = crate::ticks::resolve_category(axis, Some((lo + 0.5, hi - 0.5)));
+        let names: Vec<String> = ridges.iter().map(|r| r.label.clone()).collect();
+        crate::ticks::label_from_cells(&mut r, &names);
+        r
+    } else if dim == Dim::X && !boxes.is_empty() {
         // Box charts: one category per box, named by its column.
         let mut r = crate::ticks::resolve_category(axis, Some((1.0, boxes.len() as f64)));
         let names: Vec<String> = boxes.iter().map(|b| b.label.clone()).collect();
@@ -288,7 +331,18 @@ fn group_geometry(
     let frame_of = |root_frame: Rect, i: usize| {
         if i == root { root_frame } else { data::linked_frame(&g.layers[i].frame, root_frame) }
     };
-    let nominal = data::page_frame(&rl.frame, &g.page);
+    let mut nominal = data::page_frame(&rl.frame, &g.page);
+    // Origin's "Link Axis Length to Scale with X:Y Ratio": the frame keeps its left, top and width and its
+    // height follows the axis ranges, even past the page (graphing 18.7a). Not with axis breaks (Origin
+    // hides the setting then) nor in polar and ternary layers.
+    let cartesian = rl.coords.polar().is_none() && rl.coords.ternary().is_none();
+    let linked_height = rl
+        .xy_ratio
+        .filter(|_| cartesian && root_x.gaps.is_empty() && root_y.gaps.is_empty())
+        .and_then(|r| sheaf_core::graph::xy_ratio_height(nominal.w, root_x.scale_span(), root_y.scale_span(), r));
+    if let Some(h) = linked_height {
+        nominal.h = h;
+    }
     let mut edges = LabelEdges::NONE;
     // The rectangle that holds the frames of every member: the root's frame, or the whole stack
     // when the members are panels of their own.
@@ -306,6 +360,8 @@ fn group_geometry(
                 y: y.clone(),
                 polar: None,
                 ternary: Some(ternary::TernaryMap::new(f, percent)),
+                connect_across_breaks: false,
+                connect_across_missing: false,
             };
             let (l, t, r, b) = ternary::draw_axes(&mut Vec::new(), project, &g.layers[i], &pds[i].plots, &geom, m);
             edges.left = edges.left.min(l);
@@ -314,9 +370,15 @@ fn group_geometry(
             edges.bottom = edges.bottom.max(b);
             continue;
         }
-        label_edges(&mut edges, &g.layers[i], f, x, y, m);
+        if pds[i].plots.iter().any(|pd| pd.plot.kind.is_parallel()) {
+            // The axes of a parallel plot are its own: its labels, titles and colour scale or legend.
+            crate::parallel::label_edges(&mut edges, &g.layers[i], &pds[i].plots, f, m);
+            continue;
+        }
+        label_edges(&mut edges, &g.layers[i], f, x, y, m, stack::waterfall(g, i).is_some());
     }
-    let fitted = fit_on_page(bounds, &edges, &g.page);
+    // A linked X:Y ratio is not given up to keep the labels on the page.
+    let fitted = if linked_height.is_some() { bounds } else { fit_on_page(bounds, &edges, &g.page) };
     let f = if bounds == nominal { fitted } else { scale_into(nominal, bounds, fitted) };
     members
         .iter()
@@ -349,18 +411,20 @@ fn group_geometry(
                 }
                 _ => clip,
             };
-            (i, LayerGeometry { frame, clip, x, y, polar, ternary })
+            let connect_across_breaks = g.page.style.connect_across_breaks;
+            let connect_across_missing = g.page.style.connect_across_missing;
+            (i, LayerGeometry { frame, clip, x, y, polar, ternary, connect_across_breaks, connect_across_missing })
         })
         .collect()
 }
 
 /// The outermost extent of the tick labels and titles of a group, in page points.
 #[derive(Copy, Clone, Debug)]
-struct LabelEdges {
-    left: f64,
-    right: f64,
-    top: f64,
-    bottom: f64,
+pub(crate) struct LabelEdges {
+    pub left: f64,
+    pub right: f64,
+    pub top: f64,
+    pub bottom: f64,
 }
 
 impl LabelEdges {
@@ -369,7 +433,18 @@ impl LabelEdges {
 }
 
 /// Widens `e` by the tick labels and titles of one layer laid out at frame `f`.
-fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: &ResolvedAxis, m: &dyn TextMeasurer) {
+///
+/// `waterfall` is true for a layer drawn as a waterfall, which draws no ticks on the opposite edges, so
+/// an opposite rug starts at the frame there (the same view of the axes as `layer_scene` draws with).
+fn label_edges(
+    e: &mut LabelEdges,
+    layer: &Layer,
+    f: Rect,
+    x: &ResolvedAxis,
+    y: &ResolvedAxis,
+    m: &dyn TextMeasurer,
+    waterfall: bool,
+) {
     let mut scratch = Vec::new();
     let (xa, ya) = (&layer.x_axis, &layer.y_axis);
     if let Some(p) = layer.coords.polar() {
@@ -381,6 +456,8 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
             y: y.clone(),
             polar: Some(polar::PolarMap::new(f, p)),
             ternary: None,
+            connect_across_breaks: false,
+            connect_across_missing: false,
         };
         let paint = AxisPaint::new(xa, None);
         let (l, t, r, b) = polar::draw_angle_axis(&mut scratch, xa, &paint, &geom, m);
@@ -404,6 +481,21 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
         }
         AxisSide::Hidden => {}
     }
+    let across = crate::rug::opposite_reach(xa, f, !waterfall);
+    if across > 0.0 {
+        match xa.side {
+            AxisSide::Normal => e.top = e.top.min(f.y - across),
+            _ => e.bottom = e.bottom.max(f.y + f.h + across),
+        }
+    }
+    // The colour scale of a hexbin plot beside the frame.
+    if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind.is_hexbin()) {
+        e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
+    }
+    // The colour scale of a sunburst plot beside the frame.
+    if layer.display.show_data && layer.plots.iter().any(|p| p.visible && p.kind == PlotKind::Sunburst) {
+        e.right = e.right.max(f.x + f.w + crate::hexbin::scale_reserve(ya.tick_font.size_pt));
+    }
     let y_size = ya.title_font.size_pt;
     match ya.side {
         AxisSide::Normal => {
@@ -417,6 +509,13 @@ fn label_edges(e: &mut LabelEdges, layer: &Layer, f: Rect, x: &ResolvedAxis, y: 
             e.right = e.right.max(edge);
         }
         AxisSide::Hidden => {}
+    }
+    let across = crate::rug::opposite_reach(ya, f, !waterfall);
+    if across > 0.0 {
+        match ya.side {
+            AxisSide::Normal => e.right = e.right.max(f.x + f.w + across),
+            _ => e.left = e.left.min(f.x - across),
+        }
     }
 }
 
@@ -554,6 +653,7 @@ fn layer_scene(
     geom: &LayerGeometry,
     pds: &[PlotData],
     (x_title, y_title): (TitlePlace, TitlePlace),
+    first_label_line: usize,
     m: &dyn TextMeasurer,
 ) -> LayerScene {
     let layer = &g.layers[index];
@@ -578,7 +678,9 @@ fn layer_scene(
         y_axis = Axis { show_opposite: false, opposite_ticks: false, ..layer.y_axis.clone() };
         (&x_axis, &y_axis)
     } else {
-        if geom.polar.is_some() {
+        if pds.iter().any(|pd| pd.plot.kind.is_parallel()) {
+            // The vertical axes are drawn with the plots; the layer's own grid has no axes to follow.
+        } else if geom.polar.is_some() {
             polar::draw_grid(&mut scene.grid, layer, geom);
         } else if geom.ternary.is_some() {
             ternary::draw_grid(&mut scene.grid, layer, geom);
@@ -589,9 +691,20 @@ fn layer_scene(
     };
     // Display tab: Show Elements Data off draws no plot.
     let drawn: &[PlotData] = if layer.display.show_data { pds } else { &[] };
+    crate::hexbin::share_max(drawn, geom);
     match waterfall {
         None => {
-            for (k, pd) in drawn.iter().enumerate() {
+            // Ridgelines are drawn back to front: the highest baseline first, so that nearer ridges
+            // overlap the farther ones.
+            let mut order: Vec<usize> = (0..drawn.len()).collect();
+            if drawn.iter().any(|pd| pd.ridge.is_some()) {
+                order.sort_by(|&a, &b| {
+                    let pos = |i: usize| drawn[i].ridge.as_ref().map_or(0.0, |r| r.pos);
+                    pos(b).total_cmp(&pos(a))
+                });
+            }
+            for k in order {
+                let pd = &drawn[k];
                 // Drop To = Next Data Plot: the next plot, the first after the last; with two
                 // plots only the first draws the segments (the last would repeat them).
                 let next = match drawn.len() {
@@ -618,6 +731,9 @@ fn layer_scene(
                 hit::record(&mut scene.objects, &scene.plots, start, kind, index, ItemList::Plots, &[], m);
             }
         }
+    }
+    if waterfall.is_none() {
+        crate::trend::draw(&mut scene.plots, layer, drawn, geom, first_label_line, m);
     }
     // Grid on Top of Data: the grid lines (not the background) are drawn after the plots.
     if layer.display.grid_on_top {
@@ -653,6 +769,26 @@ fn layer_scene(
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
+    if pds.iter().any(|pd| pd.plot.kind.is_parallel()) {
+        // Parallel Plot and Parallel Index: the layer's X and Y axes are not drawn; one vertical axis per column.
+        let start = out.len();
+        if layer.display.show_data && layer.display.show_y_axes {
+            crate::parallel::draw_axes(out, layer, pds, geom, m);
+        }
+        rec(objects, out, start, ObjectKind::YAxis, &[]);
+        if layer.display.show_data {
+            // The colour scale and the legend of the groups are the layer's legend: pickable and movable as one.
+            let start = out.len();
+            crate::parallel::draw_scale(out, layer, pds, geom, m);
+            crate::parallel::draw_legend(out, layer, pds, f, m);
+            rec(objects, out, start, ObjectKind::Legend, &[]);
+        }
+        if layer.display.data_on_top {
+            scene.underlay_len = out.len();
+        }
+        draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
+        return scene;
+    }
     if geom.ternary.is_some() {
         let start = out.len();
         ternary::draw_axes(out, project, layer, pds, geom, m);
@@ -679,8 +815,9 @@ fn layer_scene(
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: if xa.side == AxisSide::Opposite { f.y } else { f.y + f.h }, h: 0.0, ..f };
     let y_line = Rect { x: if ya.side == AxisSide::Opposite { f.x + f.w } else { f.x }, w: 0.0, ..f };
-    let gaps = (geom.x.gap.map(|g| g.span(geom.x.reversed)), geom.y.gap.map(|g| g.span(geom.y.reversed)));
-    draw_axis_lines(out, xa, ya, f, xp.line, yp.line, gaps);
+    let spans = |r: &ResolvedAxis| r.gaps.iter().map(|g| g.span(r.reversed)).collect::<Vec<_>>();
+    let gaps = (spans(&geom.x), spans(&geom.y));
+    draw_axis_lines(out, xa, ya, f, xp.line, yp.line, &gaps);
     draw_additional_lines(out, xa, ya, geom, xp.line, yp.line);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
@@ -692,6 +829,7 @@ fn layer_scene(
     if ya.side != AxisSide::Hidden {
         rec(objects, out, start, ObjectKind::YAxis, &[y_line]);
     }
+    crate::rug::draw(out, layer, xa, ya, geom, pds, xp.line, yp.line);
     let start = out.len();
     let x_edge = (xa.side != AxisSide::Hidden).then(|| draw_x_labels(out, xa, &geom.x, f, &xp.labels, m));
     rec(objects, out, start, ObjectKind::XAxis, &[]);
@@ -722,6 +860,10 @@ fn layer_scene(
     rec(objects, out, start, ObjectKind::YTitle, &[]);
     if layer.display.data_on_top {
         scene.underlay_len = out.len();
+    }
+    if layer.display.show_data {
+        crate::hexbin::draw_scale(out, layer, pds, geom, m);
+        crate::sunburst::draw_scale(out, layer, pds, geom, m);
     }
     draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
     scene
@@ -768,12 +910,7 @@ fn draw_legend_and_labels(
 /// The color of the first drawable plot of a layer: its line color, or the symbol (fill) color
 /// for scatter and column plots, which have no line of their own to show.
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
-    pds.first().map(|pd| match pd.plot.kind {
-        PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => {
-            pd.plot.line.color
-        }
-        _ => pd.plot.symbol.color,
-    })
+    pds.first().map(crate::rug::plot_color)
 }
 
 /// The colors an axis is drawn in: its own, or that of the layer's first plot when the axis
@@ -838,6 +975,11 @@ fn draw_grid(out: &mut Vec<Item>, layer: &Layer, geom: &LayerGeometry) {
     lines(&layer.y_axis.major_grid, &geom.y.major, &geom.y, false);
 }
 
+/// How far the strokes of an axis break reach to either side of the axis line, in points. Origin 2016's
+/// exports showed strokes 35 px across at 2.07 px per point on both axes, about 8 pt from the line
+/// counting the stroke width (graphing spec 3.6); whether it follows the tick length is unmeasured.
+const BREAK_MARK_PT: f64 = 8.0;
+
 /// Draws the axis lines of a layer: each shown axis on its own edge and, with `show_opposite`,
 /// on the edge across. `xc` and `yc` are the axes' line colors.
 fn draw_axis_lines(
@@ -847,12 +989,13 @@ fn draw_axis_lines(
     f: Rect,
     xc: Color,
     yc: Color,
-    gaps: (Option<(f64, f64)>, Option<(f64, f64)>),
+    gaps: &(Vec<(f64, f64)>, Vec<(f64, f64)>),
 ) {
     let (l, r, t, b) = (f.x, f.x + f.w, f.y, f.y + f.h);
     let shown = |a: &Axis| a.side != AxisSide::Hidden;
     let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
-    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same && gaps == (None, None) {
+    if shown(xa) && shown(ya) && xa.show_opposite && ya.show_opposite && same && gaps.0.is_empty() && gaps.1.is_empty()
+    {
         // All four edges in one stroke, so that the corners join cleanly.
         let mut d = String::new();
         move_to(&mut d, l, t);
@@ -868,53 +1011,59 @@ fn draw_axis_lines(
                 (x1, y1): (f64, f64),
                 a: &Axis,
                 color: Color,
-                gap: Option<(f64, f64)>| {
+                gaps: &[(f64, f64)]| {
         let mut d = String::new();
         let stroke = Stroke { color, width: a.line_width_pt, dash: Vec::new(), cap: Cap::Square, join: Join::Miter };
-        match gap {
-            None => {
-                move_to(&mut d, x0, y0);
-                line_to(&mut d, x1, y1);
-            }
-            Some((lo, hi)) => {
-                // Two pieces, and a short slash across the axis at each end of the gap.
-                let at = |u: f64| (x0 + u * (x1 - x0), y0 + u * (y1 - y0));
-                let (a0, a1, b0, b1) = (at(0.0), at(lo), at(hi), at(1.0));
-                move_to(&mut d, a0.0, a0.1);
-                line_to(&mut d, a1.0, a1.1);
-                move_to(&mut d, b0.0, b0.1);
-                line_to(&mut d, b1.0, b1.1);
-                let horizontal = (y1 - y0).abs() < 1e-9;
-                let k = 3.0;
-                for p in [a1, b0] {
-                    if horizontal {
-                        move_to(&mut d, p.0 - k * 0.5, p.1 + k);
-                        line_to(&mut d, p.0 + k * 0.5, p.1 - k);
-                    } else {
-                        move_to(&mut d, p.0 - k, p.1 - k * 0.5);
-                        line_to(&mut d, p.0 + k, p.1 + k * 0.5);
-                    }
+        // The pieces between the gaps, and at each end of a gap a slanted stroke across the axis, as
+        // Origin 2016 draws a break (graphing spec 3.6): centred on the end of the piece, as long along
+        // the axis as half the gap on either side (the two strokes meet at the middle of the gap) and
+        // reaching BREAK_MARK_PT to either side of the line, rising to the right on both axes.
+        let at = |u: f64| (x0 + u * (x1 - x0), y0 + u * (y1 - y0));
+        let mut cuts: Vec<(f64, f64)> = gaps.to_vec();
+        cuts.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut start = 0.0;
+        for &(lo, hi) in &cuts {
+            let (p, q) = (at(start), at(lo));
+            move_to(&mut d, p.0, p.1);
+            line_to(&mut d, q.0, q.1);
+            start = hi;
+        }
+        let (p, q) = (at(start), at(1.0));
+        move_to(&mut d, p.0, p.1);
+        line_to(&mut d, q.0, q.1);
+        let horizontal = (y1 - y0).abs() < 1e-9;
+        let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
+        for &(lo, hi) in &cuts {
+            let half = (hi - lo) * length / 2.0;
+            for p in [at(lo), at(hi)] {
+                if horizontal {
+                    move_to(&mut d, p.0 - half, p.1 + BREAK_MARK_PT);
+                    line_to(&mut d, p.0 + half, p.1 - BREAK_MARK_PT);
+                } else {
+                    move_to(&mut d, p.0 - BREAK_MARK_PT, p.1 + half);
+                    line_to(&mut d, p.0 + BREAK_MARK_PT, p.1 - half);
                 }
             }
         }
         out.push(Item::Path { d, fill: None, stroke: Some(stroke) });
     };
-    // The line of a Y axis runs from the top down, so its gap is measured from the top.
-    let gap_y = gaps.1.map(|(lo, hi)| (1.0 - hi, 1.0 - lo));
+    // The line of a Y axis runs from the top down, so its gaps are measured from the top.
+    let gap_y: Vec<(f64, f64)> = gaps.1.iter().map(|&(lo, hi)| (1.0 - hi, 1.0 - lo)).collect();
+    let gap_x = &gaps.0;
     // The edge each axis is drawn on, and the edge across from it.
     let (x_main, x_other) = if xa.side == AxisSide::Opposite { (t, b) } else { (b, t) };
     let (y_main, y_other) = if ya.side == AxisSide::Opposite { (r, l) } else { (l, r) };
     if shown(xa) {
-        line(out, (l, x_main), (r, x_main), xa, xc, gaps.0);
+        line(out, (l, x_main), (r, x_main), xa, xc, gap_x);
     }
     if shown(ya) {
-        line(out, (y_main, t), (y_main, b), ya, yc, gap_y);
+        line(out, (y_main, t), (y_main, b), ya, yc, &gap_y);
     }
     if shown(xa) && xa.show_opposite {
-        line(out, (l, x_other), (r, x_other), xa, xc, gaps.0);
+        line(out, (l, x_other), (r, x_other), xa, xc, gap_x);
     }
     if shown(ya) && ya.show_opposite {
-        line(out, (y_other, t), (y_other, b), ya, yc, gap_y);
+        line(out, (y_other, t), (y_other, b), ya, yc, &gap_y);
     }
 }
 
@@ -954,7 +1103,7 @@ fn draw_additional_lines(out: &mut Vec<Item>, xa: &Axis, ya: &Axis, geom: &Layer
 
 /// The part of a tick on one side of the axis line: `(from, to)` offsets in
 /// the direction pointing into the frame (negative is outwards).
-fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
+pub(crate) fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
     match dir {
         TickDirection::In => Some((0.0, len)),
         TickDirection::Out => Some((0.0, -len)),
@@ -964,7 +1113,7 @@ fn tick_span(dir: TickDirection, len: f64) -> Option<(f64, f64)> {
 }
 
 /// How far ticks reach out of the frame on the axis' outer side.
-fn outward_extent(axis: &Axis) -> f64 {
+pub(crate) fn outward_extent(axis: &Axis) -> f64 {
     let ext = |dir: TickDirection, len: f64| match dir {
         TickDirection::Out | TickDirection::Both => len.max(0.0),
         _ => 0.0,
@@ -1025,7 +1174,7 @@ fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect
 
 // ----- tick labels and titles ----------------------------------------------------------------
 
-fn label_gap(axis: &Axis) -> f64 {
+pub(crate) fn label_gap(axis: &Axis) -> f64 {
     0.35 * axis.tick_font.size_pt
 }
 
@@ -1063,7 +1212,8 @@ fn draw_x_labels(
 ) -> f64 {
     let size = axis.tick_font.size_pt;
     let top_side = axis.side == AxisSide::Opposite;
-    let tick_end = if top_side { f.y - outward_extent(axis) } else { f.y + f.h + outward_extent(axis) };
+    let rug = crate::rug::main_extent(axis, f);
+    let tick_end = if top_side { f.y - outward_extent(axis) - rug } else { f.y + f.h + outward_extent(axis) + rug };
     if !axis.show_tick_labels {
         return tick_end;
     }
@@ -1118,7 +1268,8 @@ fn draw_y_labels(
     m: &dyn TextMeasurer,
 ) -> f64 {
     let right_side = axis.side == AxisSide::Opposite;
-    let tick_end = if right_side { f.x + f.w + outward_extent(axis) } else { f.x - outward_extent(axis) };
+    let rug = crate::rug::main_extent(axis, f);
+    let tick_end = if right_side { f.x + f.w + outward_extent(axis) + rug } else { f.x - outward_extent(axis) - rug };
     if !axis.show_tick_labels {
         return tick_end;
     }
@@ -1157,6 +1308,10 @@ fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -
     }
     if pd.boxed.is_some() && !y_axis {
         return String::new();
+    }
+    if pd.ridge.is_some() {
+        // The columns name the baselines; the values along X have no column of their own.
+        return if y_axis { String::new() } else { "Value".to_string() };
     }
     // Horizontal bars show their values on the X axis and their positions on the Y axis.
     if y_axis != pd.transposed() {
@@ -1289,7 +1444,8 @@ fn draw_legend(
     ticks: &EdgeTicks,
     m: &dyn TextMeasurer,
 ) {
-    if !lg.visible || entries.is_empty() {
+    // A parallel plot's legend lists its groups, not its axes (`parallel::draw_legend`).
+    if !lg.visible || entries.is_empty() || entries.iter().any(|pd| pd.plot.kind.is_parallel()) {
         return;
     }
     let fs = lg.font.size_pt;
@@ -1377,6 +1533,10 @@ fn draw_legend(
     let m_right = 0.8 * fs + ticks.right.unwrap_or(0.0);
     let m_top = 0.8 * fs + ticks.top.unwrap_or(0.0);
     let (x0, y0) = match lg.position {
+        LegendPosition::Automatic => {
+            let (x, y) = Legend::AUTOMATIC_ANCHOR;
+            (f.x + x * f.w, f.y + y * f.h)
+        }
         LegendPosition::TopLeft => (f.x + m_left, f.y + m_top),
         LegendPosition::TopRight => (f.x + f.w - m_right - w, f.y + m_top),
         LegendPosition::BottomLeft => (f.x + m_left, f.y + f.h - m_bottom - h),
@@ -1400,7 +1560,9 @@ fn draw_legend(
                     let (sx0, sx1) = (x, x + sample);
                     let plot = entries[*k].plot;
                     // A line plot filled under its curve shows a filled box, as Origin's legend does.
-                    let filled = plot.decor.fill_under.filter(|_| plot.kind.has_line() && !plot.kind.is_area());
+                    let filled = plot.decor.fill_under.filter(|_| {
+                        plot.kind.has_line() && !plot.kind.is_area() && !plot.decor.fill_under_mode.is_sidelines()
+                    });
                     let mut front_line = None;
                     if let Some(fill) = filled {
                         out.push(Item::Rect {
@@ -1436,6 +1598,27 @@ fn draw_legend(
                             fill: None,
                             stroke: Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
                         });
+                    } else if plot.kind.is_violin() {
+                        // A small filled box like the silhouette: the tinted fill, outlined in the plot colour.
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            crate::violin::violin_fill_color(plot),
+                            &plot.decor.fill,
+                            Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        );
+                    } else if plot.kind.is_ridgeline() {
+                        // A small box in the ridge's fill and outline.
+                        fill::fill_rect(
+                            out,
+                            Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
+                            plot.symbol.color,
+                            &sheaf_core::graph::FillStyle {
+                                transparency_pct: plot.ridge.fill_transparency_pct.round().clamp(0.0, 100.0) as u8,
+                                ..plot.decor.fill
+                            },
+                            Some(Stroke::solid(plot.symbol.color, plot.line.width_pt.max(0.5))),
+                        );
                     } else if plot.kind.is_bar() || plot.kind.is_area() {
                         // A small bar: as long as a line sample, one font size high, filled and
                         // outlined like the bars (an area plot is shown the same way).

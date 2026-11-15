@@ -331,6 +331,28 @@ fn emf_text_records_carry_the_string_font_and_spacing() {
 }
 
 #[test]
+fn thin_dash_lengths_reach_svg_eps_and_emf_in_points() {
+    let line = sheaf_core::graph::LineStyle {
+        dash: sheaf_core::graph::Dash::Dash,
+        width_pt: 0.5,
+        ..sheaf_core::graph::LineStyle::solid(Color::BLACK, 0.5)
+    };
+    let stroke = crate::plots::line_stroke(&line);
+    let scene = scene_with(vec![Item::Path { d: "M10 20L60 20".into(), fill: None, stroke: Some(stroke) }]);
+    let svg = svg::write_svg(&scene);
+    assert!(svg.contains("stroke-dasharray=\"3.24 2.4\""), "{svg}");
+    let eps = eps_text(&scene);
+    assert!(eps.contains("[3.24 2.4 ] 0 setdash"), "{eps}");
+    let bytes = emf::write_emf(&scene, 1.0, &FixedMetrics);
+    let records = emf_records(&bytes);
+    let pen = records.iter().find(|r| r.0 == 95).expect("geometric pen").1;
+    let u = |k: usize| u32::from_le_bytes(pen[8 + 4 * k..12 + 4 * k].try_into().unwrap());
+    assert_eq!(u(6), 18, "0.5 pt in 0.01 mm units");
+    assert_eq!(u(10), 2);
+    assert_eq!((u(11), u(12)), (114, 85), "absolute point lengths survive unit conversion");
+}
+
+#[test]
 fn emf_pens_carry_width_dashes_and_colour() {
     let stroke = Stroke { dash: vec![4.0, 2.0], ..Stroke::solid(Color::rgb(1, 2, 3), 2.0) };
     let items = vec![Item::Path { d: "M10 10L50 10L50 30".into(), fill: None, stroke: Some(stroke) }];

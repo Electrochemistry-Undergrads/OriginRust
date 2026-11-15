@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 /// How an imported workbook is put into the project. These are Origin's modes "new books",
 /// "new sheets", "replace existing data", "new columns" and "new rows".
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ImportMode {
     /// A new workbook.
     #[default]
@@ -53,7 +53,8 @@ impl ImportMode {
 }
 
 /// Options of [`place_workbook_with`] (Origin's "(Re)Naming Worksheet and Workbook" group).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct PlaceOptions {
     /// The sheet takes the name that the importer gave it (the file name). When false, a replaced
     /// sheet keeps its name and a new sheet gets the next free `Sheet<n>`.
@@ -146,8 +147,14 @@ pub fn place_workbook_with(
                 for (old, col) in dest.sheets[t.sheet].columns.iter().zip(columns.iter_mut()) {
                     col.id = old.id;
                 }
-                dest.sheets[t.sheet] =
-                    Worksheet { name, columns, filter: None, frozen: Default::default(), cond_formats: Vec::new() };
+                dest.sheets[t.sheet] = Worksheet {
+                    name,
+                    columns,
+                    filter: None,
+                    frozen: Default::default(),
+                    cond_formats: Vec::new(),
+                    notes: Vec::new(),
+                };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.
             for mut sheet in it {
@@ -325,7 +332,7 @@ fn pad_front(col: &mut Column, rows: usize) {
 // ----- many files ----------------------------------------------------------------------
 
 /// How the files of a batch are laid out.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum BatchLayout {
     /// One book per file.
     #[default]
@@ -354,7 +361,8 @@ impl BatchLayout {
 }
 
 /// Settings of [`import_batch`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct BatchOptions {
     pub layout: BatchLayout,
     pub kind: ImportKind,
@@ -633,6 +641,7 @@ mod tests {
             filter: None,
             frozen: Default::default(),
             cond_formats: Vec::new(),
+            notes: Vec::new(),
         }];
         b
     }

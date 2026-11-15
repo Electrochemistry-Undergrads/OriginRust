@@ -247,16 +247,19 @@ the default project format.
 - [x] Drawn graph objects (T24, `542fef7`): line, arrow, rectangle and ellipse tools; Shift
       constraints, selection/move/delete, properties and undo; SVG/PNG/PDF rendering and CLI.
       Geometry and UI tests exist; Origin behaviour has not been measured
-- [ ] Drawn-object `.opj` read/write, page/scale attachment, copy/paste, ordering and resize handles;
+- [x] Drawn shapes can move to front/back within one layer, with selection-safe undo/redo (T24).
+- [ ] Drawn-object `.opj` read/write, page/scale attachment, copy/paste, ordering across object kinds/layers and resize handles;
       pictures and inset graphs (T24/T18). The `.sheaf` companion preserves current objects
 - [x] Figure export breadth: SVG, PDF, EPS, EMF and PNG/TIFF/JPEG/BMP/GIF/TGA/PCX/PSD; size units,
       margins, colour depth and compression/quality controls; Copy Page bitmap and Windows EMF
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
       TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
       Graph/dialog themes, mono and 16-color modes remain
+- [x] Autosave recovery follows saved content checkpoints: undo/redo back to a normal save clears
+      the modified flag and recovery copy; recovered projects remain modified until saved (T28).
 - [ ] Printing (T27): Windows graph print dialog, Print Preview and saved Page Setup exist;
       `sheaf print` writes paper-sized vector PDF and submits through `lp` on macOS/Linux.
-      Workbook printing, native macOS panel and Windows CLI submission remain
+      Native macOS graph print panel uses PDFKit; workbook printing and Windows CLI submission remain
 - [x] MCP server (T25 phase 1, branch `mcp-server`): `sheaf-mcp` speaks the Model Context Protocol over
       stdio so Claude and other AI tools can import, plot, analyze, fit, export and save through the
       shared `sheaf-ops` crate; file access is limited to `--root` folders. Phase 2 (act on the open

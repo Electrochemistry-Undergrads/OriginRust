@@ -6,14 +6,17 @@
 
 use super::import::{
     HeaderLines, ImportOutcome, ImportRequest, ModeControls, header_line_rows, mode_and_graph_controls, selection_rows,
+    usable_mode,
 };
+use super::import_theme::{ThemeRow, Themed};
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::template::Template;
 use sheaf_io::batch::{ImportMode, PlaceOptions};
 use sheaf_io::chi::ChiOptions;
 use sheaf_io::excel::{ExcelOptions, SheetInfo, SheetKind, SheetPreview, SheetRef};
-use sheaf_io::{ImportKind, Imported};
+use sheaf_io::themes::{self, ExcelSettings};
+use sheaf_io::{ImportKind, Imported, IoError};
 use std::path::{Path, PathBuf};
 
 /// Rows of the cell preview.
@@ -123,6 +126,10 @@ pub struct ExcelImportDialog {
     target: Option<String>,
     page: ExcelPage,
     preview: Option<PreviewCache>,
+    /// The Dialog Theme row (T46).
+    themes: ThemeRow,
+    /// A failure to record `<last used>` at OK, for the application to log.
+    theme_warning: Option<String>,
     #[cfg(test)]
     preview_runs: usize,
 }
@@ -141,9 +148,63 @@ impl ExcelImportDialog {
             target: None,
             page: ExcelPage::Sheets,
             preview: None,
+            themes: ThemeRow::new("import_excel"),
+            theme_warning: None,
             #[cfg(test)]
             preview_runs: 0,
         }
+    }
+
+    /// The controls as a theme stores them (the ticked sheets, the file list and the target are not
+    /// part of it).
+    fn settings(&self) -> ExcelSettings {
+        ExcelSettings {
+            options: self.opts.clone(),
+            partial_except_first: self.partial_except_first,
+            mode: self.mode,
+            plot: self.plot,
+        }
+    }
+
+    /// The failure of the last OK to record `<last used>`, once.
+    pub fn take_theme_warning(&mut self) -> Option<String> {
+        self.theme_warning.take()
+    }
+
+    /// The entry shown in the Dialog Theme list (for tests).
+    #[cfg(test)]
+    pub fn theme_entry(&self) -> &str {
+        self.themes.selected()
+    }
+
+    /// The id of the Save As window (for tests).
+    #[cfg(test)]
+    pub fn theme_prompt_id(&self) -> egui::Id {
+        self.themes.prompt_id()
+    }
+
+    /// The saved names in the Dialog Theme list (for tests).
+    #[cfg(test)]
+    pub fn theme_names(&self) -> &[String] {
+        self.themes.names()
+    }
+
+    /// Changes the options as the controls would (for tests).
+    #[cfg(test)]
+    pub fn edit_options(&mut self, change: impl FnOnce(&mut ExcelOptions)) {
+        change(&mut self.opts);
+    }
+
+    /// The options and choices that a theme holds (for tests).
+    #[cfg(test)]
+    pub fn theme_settings(&self) -> ExcelSettings {
+        self.settings()
+    }
+
+    /// OK: imports the files and remembers the settings as `<last used>`.
+    fn confirm(&mut self) -> ImportOutcome {
+        self.theme_warning = self.record_last_used();
+        self.run()
     }
 
     /// Starts on a node of the tree (`--show import-excel-page:header`).
@@ -216,9 +277,6 @@ impl ExcelImportDialog {
 
     pub fn show(&mut self, ctx: &egui::Context, target: Option<&str>) -> ImportOutcome {
         self.target = target.map(str::to_string);
-        if self.target.is_none() {
-            self.mode = ImportMode::NewBook;
-        }
         if self.files.is_empty() {
             return ImportOutcome::Cancelled;
         }
@@ -241,7 +299,7 @@ impl ExcelImportDialog {
                             outcome = ImportOutcome::Cancelled;
                         }
                         if ui.button("OK").clicked() {
-                            outcome = self.run();
+                            outcome = self.confirm();
                         }
                         if self.files.len() > 1 {
                             ui.weak(format!("{} files are imported with these options", self.files.len()));
@@ -249,6 +307,9 @@ impl ExcelImportDialog {
                     });
                 });
                 egui::CentralPanel::default().show_inside(ui, |ui| {
+                    if let Some(command) = self.themes.ui(ui) {
+                        self.run_theme_command(command);
+                    }
                     self.files_ui(ui);
                     ui.separator();
                     ui.allocate_ui_with_layout(
@@ -296,7 +357,7 @@ impl ExcelImportDialog {
             errors,
             plot: self.plot,
             template: self.template,
-            mode: self.mode,
+            mode: usable_mode(self.mode, self.target.is_some()),
             // The sheets keep the names they have in Excel.
             place: PlaceOptions { rename_sheet: true },
         }
@@ -612,6 +673,43 @@ pub(super) fn column_letters(mut n: usize) -> String {
 /// the other files.
 pub fn split_excel(paths: Vec<PathBuf>) -> (Vec<PathBuf>, Vec<PathBuf>) {
     paths.into_iter().partition(|p| sheaf_io::is_excel_workbook(Path::new(p)))
+}
+
+impl Themed for ExcelImportDialog {
+    fn theme_row(&mut self) -> &mut ThemeRow {
+        &mut self.themes
+    }
+
+    fn theme_row_ref(&self) -> &ThemeRow {
+        &self.themes
+    }
+
+    fn list_names(&self, dir: &Path) -> Vec<String> {
+        themes::names::<ExcelSettings>(dir)
+    }
+
+    fn apply_entry(&mut self, dir: &Path, entry: &str) -> Result<(), themes::ThemeError> {
+        let s = themes::resolve::<ExcelSettings>(dir, entry)?;
+        // The ticked sheets belong to the files, not to the theme.
+        let sheets = std::mem::take(&mut self.opts.sheets);
+        self.opts = ExcelOptions { sheets, ..s.options };
+        self.partial_except_first = s.partial_except_first;
+        self.mode = s.mode;
+        self.plot = s.plot;
+        Ok(())
+    }
+
+    fn store_as(&self, dir: &Path, name: &str) -> Result<String, themes::ThemeError> {
+        themes::save_theme(dir, name, &self.settings())
+    }
+
+    fn remove_theme(&self, dir: &Path, name: &str) -> Result<(), IoError> {
+        themes::delete_theme::<ExcelSettings>(dir, name).map(|_| ())
+    }
+
+    fn record_theme(&self, dir: &Path) -> Result<(), IoError> {
+        themes::record_last_used(dir, &self.settings())
+    }
 }
 
 #[cfg(test)]

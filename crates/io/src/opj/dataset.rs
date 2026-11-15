@@ -38,7 +38,33 @@ pub(crate) struct DataSetInfo {
     /// Rows the header claims (the data block decides the real count).
     pub declared_rows: u32,
     pub data: Extent,
-    pub mask_len: u32,
+    /// Where the mask block is (empty when nothing of the column is masked).
+    pub mask: Extent,
+}
+
+/// Offset of the first row's byte in a mask block, and the bytes after the last row.
+const MASK_ROWS_AT: usize = 40;
+const MASK_TAIL: usize = 4;
+
+/// The masked rows (0-based) of a mask block, measured on projects saved by Origin 2016 with
+/// `wcellmask` (opj-format.md 3.2): 4 bytes that vary between saves, the block's own length as a
+/// little-endian u32, 32 zero bytes, one byte per row (1 = masked) and 4 zero bytes. A block whose
+/// length field disagrees with its size, or that is too short, gives no mask.
+pub(crate) fn decode_mask(b: &[u8]) -> std::collections::BTreeSet<usize> {
+    let mut rows = std::collections::BTreeSet::new();
+    if b.len() < MASK_ROWS_AT + MASK_TAIL {
+        return rows;
+    }
+    let stated = u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize;
+    if stated != b.len() {
+        return rows;
+    }
+    for (r, &flag) in b[MASK_ROWS_AT..b.len() - MASK_TAIL].iter().enumerate() {
+        if flag != 0 {
+            rows.insert(r);
+        }
+    }
+    rows
 }
 
 /// Reads the headers of all data sets; the data blocks are stepped over, not read.
@@ -64,10 +90,10 @@ fn scan_one<R: Read + Seek>(f: &mut Frames<R>) -> Result<Option<DataSetInfo>, Fr
     }
     let data = f.skip_block()?;
     let mask = f.skip_block()?;
-    Ok(Some(parse_header(&header, data, mask.len)))
+    Ok(Some(parse_header(&header, data, mask)))
 }
 
-pub(crate) fn parse_header(h: &[u8], data: Extent, mask_len: u32) -> DataSetInfo {
+pub(crate) fn parse_header(h: &[u8], data: Extent, mask: Extent) -> DataSetInfo {
     let u16_at = |o: usize| h.get(o..o + 2).map_or(0, |b| u16::from_le_bytes([b[0], b[1]]));
     let u32_at = |o: usize| h.get(o..o + 4).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
     let mut cell_size = usize::from(h.get(OFF_CELL_SIZE).copied().unwrap_or(0));
@@ -81,7 +107,7 @@ pub(crate) fn parse_header(h: &[u8], data: Extent, mask_len: u32) -> DataSetInfo
         unsigned: h.get(OFF_FLAGS).is_some_and(|f| f & FLAG_UNSIGNED != 0),
         declared_rows: u32_at(OFF_ROWS),
         data,
-        mask_len,
+        mask,
     }
 }
 
@@ -196,7 +222,7 @@ mod tests {
             unsigned,
             declared_rows: 0,
             data: Extent { pos: 0, len: 0 },
-            mask_len: 0,
+            mask: Extent { pos: 0, len: 0 },
         }
     }
 
@@ -356,15 +382,33 @@ mod tests {
         h[0x3D] = 10;
         h[0x3F] = 8;
         h[0x58..0x58 + 7].copy_from_slice(b"Book1_A");
-        let i = parse_header(&h, Extent { pos: 9, len: 70 }, 0);
+        let i = parse_header(&h, Extent { pos: 9, len: 70 }, Extent { pos: 0, len: 0 });
         assert_eq!(
             (i.name.as_str(), i.type_code, i.cell_size, i.declared_rows, i.unsigned),
             ("Book1_A", 0x6121, 10, 7, true)
         );
         assert_eq!(i.data, Extent { pos: 9, len: 70 });
-        let short = parse_header(&h[..0x30], Extent { pos: 0, len: 0 }, 0);
+        let short = parse_header(&h[..0x30], Extent { pos: 0, len: 0 }, Extent { pos: 0, len: 0 });
         assert_eq!((short.name.as_str(), short.cell_size), ("", 8));
-        let none = parse_header(&[], Extent { pos: 0, len: 0 }, 0);
+        let none = parse_header(&[], Extent { pos: 0, len: 0 }, Extent { pos: 0, len: 0 });
         assert_eq!(none.type_code, 0);
+    }
+
+    #[test]
+    fn mask_blocks_hold_one_byte_per_row_after_a_40_byte_head() {
+        // As Origin 2016 wrote it for 21 rows with rows 1, 2 and 5 masked (0-based 0, 1, 4).
+        let mut b = vec![0u8; 65];
+        b[..4].copy_from_slice(&[0xc0, 0x09, 0x41, 0x0f]);
+        b[4] = 65;
+        for r in [0, 1, 4] {
+            b[40 + r] = 1;
+        }
+        assert_eq!(decode_mask(&b).into_iter().collect::<Vec<_>>(), vec![0, 1, 4]);
+        // a length field that disagrees, or a short block, gives nothing
+        let mut wrong = b.clone();
+        wrong[4] = 64;
+        assert!(decode_mask(&wrong).is_empty());
+        assert!(decode_mask(&b[..30]).is_empty());
+        assert!(decode_mask(&[]).is_empty());
     }
 }

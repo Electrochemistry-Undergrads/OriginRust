@@ -14,11 +14,11 @@
 //! Each layer has a numbered icon: a click activates the layer, a double click opens its plot
 //! list, a right click the layer menu.
 
-use crate::actions::{Action, GraphOp, GraphTool};
+use crate::actions::{Action, DataTool, GraphOp, GraphTool};
 use crate::dialogs::graph_props::PropsTab;
 use crate::gadget::Integrator;
 use crate::menus::{self, MenuContext, WindowKind};
-use crate::reader;
+use crate::{data_tools, reader};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2};
 use sheaf_core::shape::{self, Shape, ShapeKind};
 use sheaf_core::{Document, Project, WindowId};
@@ -101,6 +101,10 @@ pub struct GraphUi {
     pub text_tool: bool,
     /// The drawing tool in use (Line, Arrow, Rectangle, Circle): a drag on the page draws one.
     pub shape_tool: Option<ShapeKind>,
+    /// The Data menu tool in use (Mask, Move, Remove Bad Data Points).
+    pub data_tool: Option<DataTool>,
+    /// What the Data menu tool is dragging.
+    data_drag: Option<data_tools::Drag>,
     /// An object being drawn.
     drawing: Option<Drawing>,
     /// A drawn object being moved.
@@ -148,6 +152,12 @@ struct LabelDrag {
 }
 
 impl GraphUi {
+    /// Whether a Data menu tool has a drag in progress.
+    #[cfg(test)]
+    pub fn data_dragging(&self) -> bool {
+        self.data_drag.is_some()
+    }
+
     /// The tool in use.
     pub fn tool(&self) -> GraphTool {
         if self.reader {
@@ -156,8 +166,43 @@ impl GraphUi {
             GraphTool::Text
         } else if let Some(kind) = self.shape_tool {
             GraphTool::Draw(kind)
+        } else if let Some(tool) = self.data_tool {
+            GraphTool::Data(tool)
         } else {
             GraphTool::Pointer
+        }
+    }
+
+    /// Layers with an index-based shape selection, context menu or drag.
+    pub fn shape_interaction_layers(&self) -> Vec<usize> {
+        let mut layers = Vec::new();
+        if let Some((layer, ObjectKind::Shape(_))) = self.selected {
+            layers.push(layer);
+        }
+        if let Some(MenuTarget::Hit(Hit::Object { layer, kind: ObjectKind::Shape(_) })) = self.menu_on
+            && !layers.contains(&layer)
+        {
+            layers.push(layer);
+        }
+        if let Some(drag) = self.shape_drag
+            && !layers.contains(&drag.layer)
+        {
+            layers.push(drag.layer);
+        }
+        layers
+    }
+
+    /// Discard index-based shape interactions after a layer's shape list changes.
+    pub fn invalidate_shape_interaction(&mut self, layer: usize, keep_selection: bool) {
+        if !keep_selection && matches!(self.selected, Some((l, ObjectKind::Shape(_))) if l == layer) {
+            self.selected = None;
+        }
+        if matches!(self.menu_on, Some(MenuTarget::Hit(Hit::Object { layer: l, kind: ObjectKind::Shape(_) })) if l == layer)
+        {
+            self.menu_on = None;
+        }
+        if self.shape_drag.is_some_and(|drag| drag.layer == layer) {
+            self.shape_drag = None;
         }
     }
 
@@ -346,6 +391,22 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // The Data menu tools: Mask, Move and Remove Bad Data Points.
+    if let Some(tool) = state.data_tool {
+        let view = data_tools::View {
+            project: doc.project(),
+            graph: graph_id,
+            geometry: &t.geometry,
+            to_screen: &to_screen,
+            to_page: &to_page,
+        };
+        data_tools::show(ui, &painter, &response, &view, tool, &mut state.data_drag, actions);
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.data_tool = None;
+            state.data_drag = None;
+        }
+    }
+
     // The Text tool: a click places a label there, in the layer under the click.
     if state.text_tool {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
@@ -359,6 +420,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && state.data_tool.is_none()
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Label(label) } = pick(pos)
         && let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label))
@@ -434,6 +496,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && state.data_tool.is_none()
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Shape(shape) } = pick(pos)
     {
@@ -466,6 +529,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
+        && state.data_tool.is_none()
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Legend } = pick(pos)
         && let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
@@ -520,6 +584,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     } else if response.clicked()
         && !state.reader
+        && state.data_tool.is_none()
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
@@ -533,6 +598,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
     if response.double_clicked()
         && !state.reader
+        && state.data_tool.is_none()
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
@@ -648,9 +714,15 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         cells: false,
         undo: None,
         redo: None,
+        undo_ai: false,
         windows: Vec::new(),
         open: None,
+        recent_projects: &[],
+        recent_books: &[],
+        recent_graphs: &[],
+        recent_imports: &[],
         panels: [true; 4],
+        ai_link: false,
         layer,
         tool,
         curve: None,
@@ -704,7 +776,7 @@ fn menu_for(
                 };
                 let book = project.locate(plot.y).map(|(b, _, _)| (b.id, b.name.clone()));
                 let on_right = graph.right_y_member(layer) == Some(layer);
-                menus::graph_plot_menu(layer, p, plot.kind, on_right, book)
+                menus::graph_plot_menu(layer, p, plot.kind, on_right, book, plot.decor.trendlines.len())
             }
             ObjectKind::XAxis | ObjectKind::YAxis => {
                 let y = kind == ObjectKind::YAxis;
@@ -803,6 +875,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     let layer_index = match op {
         GraphOp::SetPlotKind { layer, .. }
         | GraphOp::HidePlot { layer, .. }
+        | GraphOp::RemoveTrendline { layer, .. }
         | GraphOp::MovePlotToAxis { layer, .. }
         | GraphOp::HideAxis { layer, .. }
         | GraphOp::ToggleGrids { layer, .. }
@@ -815,6 +888,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::HideTitle { layer, .. }
         | GraphOp::DeleteLabel { layer, .. }
         | GraphOp::DeleteShape { layer, .. }
+        | GraphOp::OrderShape { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer } => layer,
     };
@@ -839,6 +913,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::SetPlotKind { plot, kind, .. } => {
             if let Some(p) = l.plots.get_mut(plot) {
                 p.kind = kind;
+            }
+        }
+        GraphOp::RemoveTrendline { plot, .. } => {
+            if let Some(p) = l.plots.get_mut(plot) {
+                p.decor.trendlines.pop();
             }
         }
         GraphOp::HidePlot { plot, .. } => {
@@ -903,6 +982,17 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         GraphOp::DeleteShape { shape, .. } => {
             if shape < l.shapes.len() {
                 l.shapes.remove(shape);
+            }
+        }
+        GraphOp::OrderShape { shape, front, .. } => {
+            let len = l.shapes.len();
+            if shape < len && ((front && shape + 1 < len) || (!front && shape > 0)) {
+                let value = l.shapes.remove(shape);
+                if front {
+                    l.shapes.push(value);
+                } else {
+                    l.shapes.insert(0, value);
+                }
             }
         }
         GraphOp::HideLayer { .. } => l.plots.iter_mut().for_each(|p| p.visible = false),

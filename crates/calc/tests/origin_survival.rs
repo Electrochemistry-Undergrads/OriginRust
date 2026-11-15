@@ -156,3 +156,42 @@ fn censored_largest_time_and_three_groups() {
         close(r.p, p, 1e-6, test.name()); // Origin's own chi-square tail differs from the exact one by about 4e-8
     }
 }
+
+/// Origin's survival-function sheet with `sfci:=1` (`kaplan-plots2.lines.txt`, raw output `plots/k2.out`, local): the
+/// limits of the curve are `S -/+ z se` without a cut-off at 1 (the first rows exceed 1) and 0.
+#[test]
+fn curve_limits_are_linear_and_not_cut_off() {
+    // (time, S, upper, lower) per group at 95 percent.
+    let g1 = [
+        (3.0, 0.8571428571428571, 1.1163677216739256, 0.59791799261178857),
+        (8.0, 0.68571428571428572, 1.050844262977237, 0.32058430845133451),
+        (12.0, 0.51428571428571423, 0.91386215529465864, 0.11470927327676989),
+        (20.0, 0.25714285714285712, 0.66569966530008107, -0.15141395101436683),
+        (25.0, 0.0, 0.0, 0.0),
+    ];
+    let g2 = [
+        (6.0, 0.7142857142857143, 1.048943575369615, 0.37962785320181353),
+        (8.0, 0.5714285714285714, 0.93802789055273683, 0.20482925230440596),
+        (12.0, 0.38095238095238093, 0.77165206341474812, -0.0097473015099862059),
+        (17.0, 0.19047619047619047, 0.51887821282394331, -0.13792583187156238),
+    ];
+    for (group, rows) in [(Some(1), &g1[..]), (Some(2), &g2[..])] {
+        let (t, c) = sample(group);
+        let km = kaplan_meier(&t, &c, 95.0).unwrap();
+        // Group 2's steps start at 5 (censored, no step), so match by time.
+        for &(time, s, hi, lo) in rows {
+            let step = km.steps.iter().find(|st| st.time == time).unwrap_or_else(|| panic!("no step at {time}"));
+            close(step.survival, s, 1e-12, "S");
+            close(step.upper, hi, 1e-12, "upper");
+            close(step.lower, lo, 1e-12, "lower");
+        }
+    }
+    // One sample at 95 percent.
+    let (t, c) = sample(None);
+    let km = kaplan_meier(&t, &c, 95.0).unwrap();
+    let s3 = &km.steps[0];
+    close(s3.upper, 1.0634763252490635, 1e-12, "upper at 3");
+    close(s3.lower, 0.79366653189379366, 1e-12, "lower at 3");
+    let last = km.steps.last().unwrap();
+    close(last.lower, -0.0, 1e-12, "lower at 25");
+}

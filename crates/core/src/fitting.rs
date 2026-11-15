@@ -32,9 +32,11 @@ pub use sheaf_fit::FitStatus;
 pub use sheaf_fit::compare::{Comparison, Ranked, Verdict};
 
 mod more;
+mod surface;
 pub use more::{CompareOutcome, MultiRegOutcome, MultiRegRequest, RankOutcome};
 pub use sheaf_fit::nlsf::Algorithm;
 use sheaf_fit::{Bands, FitError, FitReport};
+pub use surface::{SURFACE_CATEGORY, surface_columns, surface_functions};
 
 /// Which kind of model is fitted. It decides the name of the report sheet
 /// and which engine of `sheaf-fit` runs.
@@ -162,6 +164,9 @@ pub struct FitRequest {
     pub scale_errors: bool,
     /// Iteration algorithm of a nonlinear fit (Origin's "Iteration Algorithm").
     pub algorithm: Algorithm,
+    /// A surface fit `z = f(x, y)`: `y` is then the Z column and this names the X and Y columns
+    /// (`docs/spec/fitting.md` section 15). `None` is a curve fit.
+    pub surface: Option<SurfaceColumns>,
 }
 
 impl FitRequest {
@@ -188,8 +193,17 @@ impl FitRequest {
             tolerance: 1e-9,
             scale_errors: true,
             algorithm: Algorithm::LevenbergMarquardt,
+            surface: None,
         }
     }
+}
+
+/// The X and Y columns of a surface fit; `None` takes the sheet's own: the X column to the left
+/// of the Z column, and the nearest Y column to its left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SurfaceColumns {
+    pub x: Option<ColumnId>,
+    pub y: Option<ColumnId>,
 }
 
 /// The values a fit engine receives, already restricted to the chosen rows. Missing values are
@@ -265,6 +279,9 @@ pub struct FitOutcome {
     pub derived: Vec<(String, f64)>,
     /// One sentence for a status line.
     pub message: String,
+    /// A surface fit: `curve_x` and `curve_y` are then the X and Z columns of the grid sheet
+    /// `curve_sheet` (its Y column is between them), and there is no graph of the fit.
+    pub surface: bool,
 }
 
 /// What [`Project::fit_multi`] did.
@@ -332,6 +349,11 @@ fn band_plot(layer: &crate::graph::Layer, x: ColumnId, band: &BandColumn, color:
         y_base: None,
         error: ErrorStyle::default(),
         hist: Default::default(),
+        ridge: Default::default(),
+        hexbin: Default::default(),
+        parallel: Default::default(),
+        treemap: Default::default(),
+        sunburst: Default::default(),
         size_from: None,
         color_from: None,
         decor: Default::default(),
@@ -737,6 +759,11 @@ impl Project {
                         y_base: None,
                         error: ErrorStyle::default(),
                         hist: Default::default(),
+                        ridge: Default::default(),
+                        hexbin: Default::default(),
+                        parallel: Default::default(),
+                        treemap: Default::default(),
+                        sunburst: Default::default(),
                         size_from: None,
                         color_from: None,
                         decor: Default::default(),
@@ -793,12 +820,16 @@ impl Project {
             graphs,
             derived: fitted.derived,
             message,
+            surface: false,
         })
     }
 
     /// Fits one column with the engine of `sheaf-fit` that the request's model calls for, and
     /// places the results (see the module text and [`Project::fit_with`]).
     pub fn fit(&mut self, request: &FitRequest) -> Result<FitOutcome, FitRequestError> {
+        if request.surface.is_some() {
+            return self.fit_surface(request);
+        }
         let model = request.model.clone();
         let settings = request.params.clone();
         self.fit_with(request, move |data| run_engine(&model, &settings, data))
@@ -1050,6 +1081,11 @@ impl Project {
             y_base: None,
             error: ErrorStyle::default(),
             hist: Default::default(),
+            ridge: Default::default(),
+            hexbin: Default::default(),
+            parallel: Default::default(),
+            treemap: Default::default(),
+            sunburst: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -1190,6 +1226,12 @@ fn nl_function(
         FitModel::Fdf(text) => (sheaf_fit::fdf::parse_fdf(text)?.to_fit_function()?, None),
         _ => unreachable!("matched above"),
     };
+    apply_settings(&mut func, settings)?;
+    Ok((func, library_name))
+}
+
+/// Applies the start values, fixed values and bounds of `settings` to the parameters of `func`.
+fn apply_settings(func: &mut sheaf_fit::nlsf::FitFunction, settings: &[ParamSetting]) -> Result<(), FitError> {
     for s in settings {
         let Some(at) = func.params.iter().position(|p| p.name == s.name) else {
             let known: Vec<&str> = func.params.iter().map(|p| p.name.as_str()).collect();
@@ -1236,7 +1278,7 @@ fn nl_function(
             }
         }
     }
-    Ok((func, library_name))
+    Ok(())
 }
 
 fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Result<FittedModel, FitError> {

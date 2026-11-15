@@ -59,6 +59,18 @@ pub enum IoError {
     #[error("'{}' is not a Sheaf project file (its manifest does not say 'sheaf-project')", path.display())]
     NotAProject { path: PathBuf },
 
+    /// A window file (File > Save Window As) was given where a project is needed.
+    #[error("'{}' is a window file (one workbook or graph), not a project; open it to add its window to the open project", path.display())]
+    IsAWindowFile { path: PathBuf },
+
+    /// A file that is not a window file was given where one is needed.
+    #[error("'{}' is not a Sheaf window file (it is a project, or has no window marker in its manifest)", path.display())]
+    NotAWindowFile { path: PathBuf },
+
+    /// The window to save is not in the project.
+    #[error("cannot save the window: the project has no window with id {id}")]
+    NoSuchWindow { id: u64 },
+
     /// The project was saved by a newer program than this one.
     #[error(
         "'{}' uses project file format version {found}, but this program only reads versions up to \

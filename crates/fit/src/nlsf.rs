@@ -29,6 +29,12 @@ pub type ModelFn = Arc<dyn Fn(&[f64], f64) -> f64 + Send + Sync>;
 /// guess; use 1".
 pub type InitFn = Arc<dyn Fn(&[f64], &[f64]) -> Vec<f64> + Send + Sync>;
 
+/// Like [`ModelFn`] for a surface `z = f(x, y)`: `(parameter values, x, y) -> z`.
+pub type ModelFn2 = Arc<dyn Fn(&[f64], f64, f64) -> f64 + Send + Sync>;
+
+/// Guesses starting values of a surface fit: `(x, y, z) -> one value per parameter`.
+pub type InitFn2 = Arc<dyn Fn(&[f64], &[f64], &[f64]) -> Vec<f64> + Send + Sync>;
+
 /// How the model is computed.
 #[derive(Clone)]
 pub enum Model {
@@ -37,6 +43,8 @@ pub enum Model {
     Formula(Expr),
     /// Rust code.
     Closure(ModelFn),
+    /// Rust code of a function of two independent variables.
+    Closure2(ModelFn2),
 }
 
 /// One parameter of a [`FitFunction`] with its constraints.
@@ -94,6 +102,11 @@ pub struct FitFunction {
     pub params: Vec<ParamSpec>,
     pub model: Model,
     pub init: Option<InitFn>,
+    /// Name of the second independent variable of a surface function `z = f(x, y)` (`y`);
+    /// `None` for the usual one-variable functions. Such a function is fitted with [`fit_xyz`].
+    pub x2_name: Option<String>,
+    /// Starting values from the data of a surface fit; used instead of `init`.
+    pub init2: Option<InitFn2>,
 }
 
 impl std::fmt::Debug for FitFunction {
@@ -132,6 +145,51 @@ impl FitFunction {
             params: params.iter().map(|p| ParamSpec::new(p)).collect(),
             model: Model::Formula(expr),
             init: None,
+            x2_name: None,
+            init2: None,
+        })
+    }
+
+    /// A surface function from a formula in `x` and `y` such as `z0 + a*x + b*y` (the right-hand
+    /// side; a leading `z =` is accepted) and its parameter names. Fit it with [`fit_xyz`].
+    pub fn from_formula_xy(name: &str, formula: &str, params: &[&str]) -> Result<Self, FitError> {
+        Self::xy_formula(name, formula, params, false)
+    }
+
+    /// [`FitFunction::from_formula_xy`] for the built-in table: a parameter named `E` (which the
+    /// formula language reads as Euler's number) is written `E__` in the formula and keeps its
+    /// name `E` in the report.
+    pub(crate) fn from_formula_xy_builtin(name: &str, formula: &str, params: &[&str]) -> Result<Self, FitError> {
+        Self::xy_formula(name, formula, params, true)
+    }
+
+    fn xy_formula(name: &str, formula: &str, params: &[&str], builtin: bool) -> Result<Self, FitError> {
+        let rhs = strip_lhs(formula);
+        let expr = Expr::parse(&rhs).map_err(|e| FitError::BadFunction(e.to_string()))?;
+        let checked = params.iter().copied().filter(|p| !(builtin && p.eq_ignore_ascii_case("e")));
+        check_param_names("x", checked.clone()).map_err(FitError::BadFunction)?;
+        check_param_names("y", checked).map_err(FitError::BadFunction)?;
+        let alias = |p: &str| if builtin && p.eq_ignore_ascii_case("e") { format!("{p}__") } else { p.to_string() };
+        for v in expr.variables() {
+            if v != "x" && v != "y" && !params.iter().any(|p| alias(p) == v) {
+                return Err(FitError::BadFunction(format!(
+                    "the formula uses '{v}', which is neither x, y nor a parameter"
+                )));
+            }
+        }
+        let used = expr.variables();
+        if let Some(p) = params.iter().find(|p| !used.iter().any(|v| *v == alias(p))) {
+            return Err(FitError::BadFunction(format!("the parameter '{p}' does not appear in the formula")));
+        }
+        Ok(FitFunction {
+            name: name.to_string(),
+            equation: format!("z = {}", rhs.replace("E__", "E")),
+            x_name: "x".to_string(),
+            params: params.iter().map(|p| ParamSpec::new(p)).collect(),
+            model: Model::Formula(expr),
+            init: None,
+            x2_name: Some("y".to_string()),
+            init2: None,
         })
     }
 
@@ -144,6 +202,8 @@ impl FitFunction {
             params: params.iter().map(|p| ParamSpec::new(p)).collect(),
             model: Model::Closure(f),
             init: None,
+            x2_name: None,
+            init2: None,
         }
     }
 
@@ -176,10 +236,23 @@ impl FitFunction {
     /// The model value at `x` for the given parameter values (in `params` order). NaN if the
     /// formula cannot be evaluated.
     pub fn eval(&self, params: &[f64], x: f64) -> f64 {
+        self.eval2(params, x, f64::NAN)
+    }
+
+    /// The model value at `(x, y)` of a surface function (`y` is ignored by a one-variable one).
+    pub fn eval2(&self, params: &[f64], x: f64, y: f64) -> f64 {
         match &self.model {
             Model::Closure(f) => f(params, x),
+            Model::Closure2(f) => f(params, x, y),
             Model::Formula(e) => {
-                let host = PointHost { names: &self.params, vals: params, x_name: &self.x_name, x };
+                let host = PointHost {
+                    names: &self.params,
+                    vals: params,
+                    x_name: &self.x_name,
+                    x,
+                    x2_name: self.x2_name.as_deref(),
+                    x2: y,
+                };
                 e.eval(&host).unwrap_or(f64::NAN)
             }
         }
@@ -206,6 +279,8 @@ struct PointHost<'a> {
     vals: &'a [f64],
     x_name: &'a str,
     x: f64,
+    x2_name: Option<&'a str>,
+    x2: f64,
 }
 
 impl Host for PointHost<'_> {
@@ -213,6 +288,10 @@ impl Host for PointHost<'_> {
         if name == self.x_name {
             return Some(self.x);
         }
+        if self.x2_name == Some(name) {
+            return Some(self.x2);
+        }
+        let name = name.strip_suffix("__").unwrap_or(name);
         self.names.iter().position(|p| p.name == name).map(|i| self.vals[i])
     }
     fn cell(&self, _col: &sheaf_expr::ColumnRef, _row: usize) -> Option<f64> {
@@ -288,6 +367,19 @@ pub fn fit(func: &FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Resul
     Ok(f.finish())
 }
 
+/// Fits a surface function `z = f(x, y)` to the points `(x, y, z)` (three worksheet columns).
+/// Points with a missing x, y, z or weight are dropped. The report lists the fitted values and
+/// residuals per input row.
+pub fn fit_xyz(func: &FitFunction, x: &[f64], y: &[f64], z: &[f64], opts: &FitOptions) -> Result<FitReport, FitError> {
+    let mut f = Fitter::new_xyz(func, x, y, z, opts)?;
+    for _ in 0..opts.max_iterations {
+        if f.step().converged {
+            break;
+        }
+    }
+    Ok(f.finish())
+}
+
 /// The state after one iteration of a [`Fitter`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct StepOutcome {
@@ -315,6 +407,8 @@ pub struct Fitter<'a> {
     /// Indices of the input points that take part.
     used: Vec<usize>,
     xs: Vec<f64>,
+    /// The second independent variable of a surface fit; empty for a one-variable fit.
+    x2s: Vec<f64>,
     ys: Vec<f64>,
     ws: Vec<f64>,
     sw: Vec<f64>,
@@ -332,6 +426,39 @@ pub struct Fitter<'a> {
 impl<'a> Fitter<'a> {
     /// Prepares a fit: checks the function, drops invalid points and sets the starting values.
     pub fn new(func: &'a FitFunction, x: &[f64], y: &[f64], opts: &FitOptions) -> Result<Self, FitError> {
+        if func.x2_name.is_some() {
+            return Err(FitError::BadFunction(format!(
+                "{} is a function of two variables; fit it to x, y and z columns",
+                func.name
+            )));
+        }
+        Self::build(func, x, None, y, opts)
+    }
+
+    /// Prepares a surface fit `z = f(x, y)`, like [`Fitter::new`].
+    pub fn new_xyz(
+        func: &'a FitFunction,
+        x: &[f64],
+        y: &[f64],
+        z: &[f64],
+        opts: &FitOptions,
+    ) -> Result<Self, FitError> {
+        if func.x2_name.is_none() {
+            return Err(FitError::BadFunction(format!("{} is a function of one variable", func.name)));
+        }
+        if y.len() != x.len() {
+            return Err(FitError::LengthMismatch { x: x.len(), y: y.len() });
+        }
+        Self::build(func, x, Some(y), z, opts)
+    }
+
+    fn build(
+        func: &'a FitFunction,
+        x: &[f64],
+        x2: Option<&[f64]>,
+        y: &[f64],
+        opts: &FitOptions,
+    ) -> Result<Self, FitError> {
         if x.len() != y.len() {
             return Err(FitError::LengthMismatch { x: x.len(), y: y.len() });
         }
@@ -384,8 +511,11 @@ impl<'a> Fitter<'a> {
                 w.iter().map(|w| if *w > 0.0 { *w } else { f64::NAN }).collect()
             }
         };
-        let used: Vec<usize> =
-            (0..n_all).filter(|&i| x[i].is_finite() && y[i].is_finite() && raw_w[i].is_finite()).collect();
+        let used: Vec<usize> = (0..n_all)
+            .filter(|&i| {
+                x[i].is_finite() && y[i].is_finite() && raw_w[i].is_finite() && x2.is_none_or(|v| v[i].is_finite())
+            })
+            .collect();
         if used.len() < n_all {
             warnings.push(format!(
                 "{} point(s) with a missing or invalid x, y or weight were left out",
@@ -393,6 +523,7 @@ impl<'a> Fitter<'a> {
             ));
         }
         let xs: Vec<f64> = used.iter().map(|&i| x[i]).collect();
+        let x2s: Vec<f64> = x2.map(|v| used.iter().map(|&i| v[i]).collect()).unwrap_or_default();
         let ys: Vec<f64> = used.iter().map(|&i| y[i]).collect();
         let ws: Vec<f64> = used.iter().map(|&i| raw_w[i]).collect();
         let sw: Vec<f64> = ws.iter().map(|w| w.sqrt()).collect();
@@ -406,7 +537,11 @@ impl<'a> Fitter<'a> {
         }
 
         // Starting values: explicit, else from the guess routine, else 1.
-        let guess = func.init.as_ref().map(|f| f(&xs, &ys)).unwrap_or_default();
+        let guess = match (&func.init2, &func.init) {
+            (Some(f), _) if x2.is_some() => f(&xs, &x2s, &ys),
+            (_, Some(f)) if x2.is_none() => f(&xs, &ys),
+            _ => Vec::new(),
+        };
         let mut p: Vec<f64> = (0..np)
             .map(|j| {
                 let s = &func.params[j];
@@ -433,14 +568,14 @@ impl<'a> Fitter<'a> {
         let cost_of = |p: &[f64]| -> f64 {
             let mut c = 0.0;
             for i in 0..n {
-                let r = sw[i] * (ys[i] - func.eval(p, xs[i]));
+                let r = sw[i] * (ys[i] - func.eval2(p, xs[i], x2s.get(i).copied().unwrap_or(f64::NAN)));
                 c += r * r;
             }
             c
         };
         let cost = cost_of(&p);
         if !cost.is_finite() {
-            if xs.iter().all(|&xv| func.eval(&p, xv).is_finite()) {
+            if (0..n).all(|i| func.eval2(&p, xs[i], x2s.get(i).copied().unwrap_or(f64::NAN)).is_finite()) {
                 return Err(FitError::Failed(
                     "the sum of squared residuals is too large to be computed (it overflows); scale the data".into(),
                 ));
@@ -456,6 +591,7 @@ impl<'a> Fitter<'a> {
             n_all,
             used,
             xs,
+            x2s,
             ys,
             ws,
             sw,
@@ -476,7 +612,8 @@ impl<'a> Fitter<'a> {
     fn cost_of(&self, p: &[f64]) -> f64 {
         let mut c = 0.0;
         for i in 0..self.xs.len() {
-            let r = self.sw[i] * (self.ys[i] - self.func.eval(p, self.xs[i]));
+            let r = self.sw[i]
+                * (self.ys[i] - self.func.eval2(p, self.xs[i], self.x2s.get(i).copied().unwrap_or(f64::NAN)));
             c += r * r;
         }
         c
@@ -510,7 +647,7 @@ impl<'a> Fitter<'a> {
         let func = self.func;
         let nfree = self.free.len();
         self.iterations += 1;
-        let (jac, res) = jacobian(func, &self.p, &self.free, &self.xs, &self.ys, &self.sw);
+        let (jac, res) = jacobian(func, &self.p, &self.free, &self.xs, &self.x2s, &self.ys, &self.sw);
         let g = jac.transpose() * &res;
         let a = jac.transpose() * &jac;
         let mut accepted = false;
@@ -706,7 +843,22 @@ impl<'a> Fitter<'a> {
     /// reported as stopped at the maximum number of iterations.
     pub fn finish(self) -> FitReport {
         let Fitter {
-            func, opts, n_all, used, xs, ys, ws, sw, free, p, cost, iterations, converged, mut warnings, ..
+            func,
+            opts,
+            n_all,
+            used,
+            xs,
+            x2s,
+            ys,
+            ws,
+            sw,
+            free,
+            p,
+            cost,
+            iterations,
+            converged,
+            mut warnings,
+            ..
         } = self;
         let status = if converged { FitStatus::Converged } else { FitStatus::MaxIterations };
         let n = xs.len();
@@ -718,7 +870,7 @@ impl<'a> Fitter<'a> {
         let rss = cost;
         let reduced = if dof > 0 { rss / dof as f64 } else { f64::NAN };
 
-        let (jac, _) = jacobian(func, &p, &free, &xs, &ys, &sw);
+        let (jac, _) = jacobian(func, &p, &free, &xs, &x2s, &ys, &sw);
         let jtj = jac.transpose() * &jac;
         let scale = opts.scale_errors.unwrap_or(true);
         let mut cov_free: Option<DMatrix<f64>> = None;
@@ -827,7 +979,7 @@ impl<'a> Fitter<'a> {
         let mut fitted = vec![f64::NAN; n_all];
         let mut residuals = vec![f64::NAN; n_all];
         for (k, &i) in used.iter().enumerate() {
-            let f = func.eval(&p, xs[k]);
+            let f = func.eval2(&p, xs[k], x2s.get(k).copied().unwrap_or(f64::NAN));
             fitted[i] = f;
             residuals[i] = ys[k] - f;
         }
@@ -902,14 +1054,16 @@ fn jacobian(
     p: &[f64],
     free: &[usize],
     xs: &[f64],
+    x2s: &[f64],
     ys: &[f64],
     sw: &[f64],
 ) -> (DMatrix<f64>, DVector<f64>) {
     let n = xs.len();
+    let x2 = |i: usize| x2s.get(i).copied().unwrap_or(f64::NAN);
     let mut jac = DMatrix::<f64>::zeros(n, free.len());
     let mut res = DVector::<f64>::zeros(n);
     for i in 0..n {
-        res[i] = sw[i] * (ys[i] - func.eval(p, xs[i]));
+        res[i] = sw[i] * (ys[i] - func.eval2(p, xs[i], x2(i)));
     }
     let mut q = p.to_vec();
     for (k, &j) in free.iter().enumerate() {
@@ -918,15 +1072,15 @@ fn jacobian(
         // parameter resting on its bound must not get a one-sided (less accurate) derivative.
         for i in 0..n {
             q[j] = p[j] + h;
-            let fu = func.eval(&q, xs[i]);
+            let fu = func.eval2(&q, xs[i], x2(i));
             q[j] = p[j] - h;
-            let fd = func.eval(&q, xs[i]);
+            let fd = func.eval2(&q, xs[i], x2(i));
             let d = if fu.is_finite() && fd.is_finite() {
                 (fu - fd) / (2.0 * h)
             } else {
                 // The model is not defined on one side (for example a bound at the edge of its
                 // domain): use the other side.
-                let f0 = func.eval(p, xs[i]);
+                let f0 = func.eval2(p, xs[i], x2(i));
                 if fu.is_finite() { (fu - f0) / h } else { (f0 - fd) / h }
             };
             jac[(i, k)] = sw[i] * d;

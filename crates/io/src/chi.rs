@@ -29,7 +29,8 @@ const SEGMENT_TURN_FRACTION: f64 = 0.05;
 const SEGMENT_LIMIT_FRACTION: f64 = 0.02;
 
 /// What the CHI importer should do. The defaults follow the spec.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ChiOptions {
     /// Split a multi-cycle CV file into scans (default on).
     pub split_scans: bool,

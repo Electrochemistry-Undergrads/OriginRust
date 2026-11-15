@@ -10,37 +10,56 @@
 //! [`render_pdf`], [`export_file`] and, for an interactive view,
 //! [`render_raster`] together with [`layout_geometry`].
 
+mod break_cut;
+mod dash;
 mod data;
 mod emf;
 mod eps;
 mod fill;
 mod fonts;
+mod hexbin;
 pub mod hit;
 mod layout;
 mod legend;
 mod margin;
 pub mod markup;
 mod multipage;
+mod parallel;
 mod pie;
 mod plots;
 mod polar;
 mod psd;
 mod raster;
+mod ridgeline;
+mod rug;
 pub mod scene;
 mod shapes;
+mod sheet;
 mod stack;
+mod sunburst;
 mod svg;
 mod symbol_gaps;
 mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
+mod treemap;
+pub(crate) mod trend;
 mod vector;
+mod violin;
 
+#[cfg(test)]
+mod dash_tests;
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
 mod export_tests;
+#[cfg(test)]
+mod fill_inclusive_tests;
+#[cfg(test)]
+mod fill_sideline_tests;
+#[cfg(test)]
+mod hexbin_tests;
 #[cfg(test)]
 mod label_frame_tests;
 #[cfg(test)]
@@ -56,18 +75,35 @@ mod multipage_tests;
 #[cfg(test)]
 mod offset_multiplier_tests;
 #[cfg(test)]
+mod parallel_tests;
+#[cfg(test)]
+mod ridgeline_tests;
+#[cfg(test)]
+mod rug_tests;
+#[cfg(test)]
 mod skip_tests;
+#[cfg(test)]
+mod sort_x_tests;
+#[cfg(test)]
+mod sunburst_tests;
 #[cfg(test)]
 mod symbol_gap_tests;
 #[cfg(test)]
 mod symbol_line_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod treemap_tests;
+#[cfg(test)]
+mod trend_tests;
+#[cfg(test)]
+mod violin_tests;
 
 pub use eps::EpsOutput;
 pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
+pub use sheet::{SheetPages, render_sheet_emf_pages, render_sheet_pdf, render_sheet_raster, sheet_pages};
 
 use sheaf_core::graph::ScaleKind;
 use sheaf_core::{Project, WindowId};
@@ -251,6 +287,12 @@ pub struct LayerGeometry {
     /// The triangle of a ternary layer. Then the data are the normalised X and Y fractions of the
     /// rows (graphing spec section 14.20).
     pub ternary: Option<ternary::TernaryMap>,
+    /// The page's "Connect line across Axis Break": lines are drawn through the bands of axis breaks
+    /// instead of being cut there (graphing spec 3.6).
+    pub connect_across_breaks: bool,
+    /// The page's "Connect line across Missing Data": rows with a missing X or Y value do not break a
+    /// connecting line (graphing spec 18.7b).
+    pub connect_across_missing: bool,
 }
 
 impl LayerGeometry {
@@ -336,7 +378,7 @@ pub struct Raster {
 /// linked, its parent's X axis.
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds = data::collect_graph(project, g);
     Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
 }
 
@@ -358,6 +400,22 @@ pub fn stack_places(
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let layer = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
     Ok(stack::places(project, layer).0)
+}
+
+/// How far a plot of a waterfall layer is moved on the page from the front frame, `(dx, dy)` in
+/// page points, for the plot placed by `place` in layer `layer` with geometry `geometry`. Member `k`
+/// is drawn `k` shifts right of and above the front frame (spec 13.6); `(0, 0)` for every plot of a
+/// layer that is not drawn as a waterfall. Add it to `LayerGeometry::data_to_page`.
+pub fn waterfall_shift(
+    project: &Project,
+    graph: WindowId,
+    layer: usize,
+    place: &sheaf_core::stack::Place,
+    geometry: &LayerGeometry,
+) -> (f64, f64) {
+    let Some((sx, sy)) = project.graph(graph).and_then(|g| stack::waterfall(g, layer)) else { return (0.0, 0.0) };
+    let k = place.member.unwrap_or(0) as f64;
+    (k * sx * geometry.frame.w, -k * sy * geometry.frame.h)
 }
 
 /// Renders a graph as SVG text, measuring text with the installed fonts.

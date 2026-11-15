@@ -46,16 +46,22 @@ pub enum FormulaError {
 /// `col(A)` finds a column by short name (ignoring case) and, if there is
 /// none, by long name; `col("Long Name")` by long name; `col(3)` by position.
 /// Text columns read as missing values.
+///
+/// `j` is the 1-based position in the sheet of the column the formula belongs to (the variable
+/// `j`, `col(j-1)` and a bare `col(j)` when no column is called j or J); a host made without a
+/// column has no `j`.
 struct SheetHost<'a> {
     sheet: &'a Worksheet,
     book: Option<&'a Workbook>,
     project: Option<&'a Project>,
+    j: Option<usize>,
 }
 
 impl<'a> SheetHost<'a> {
     fn at(project: &'a Project, column: ColumnId) -> Option<Self> {
         let (book, sheet, _) = project.locate(column)?;
-        Some(Self { sheet, book: Some(book), project: Some(project) })
+        let j = sheet.columns.iter().position(|c| c.id == column).map(|p| p + 1);
+        Some(Self { sheet, book: Some(book), project: Some(project), j })
     }
 
     fn source<'r>(&self, r: &'r ColumnRef) -> Option<(&'a Worksheet, &'r ColumnRef)> {
@@ -85,7 +91,36 @@ impl<'a> SheetHost<'a> {
         Some((sheet, column))
     }
 
+    /// The column a reference means. A bare `col(j)` is a column called j (short name ignoring
+    /// case, then long name) and only when the sheet has none the position of the formula column.
     fn find(&self, r: &ColumnRef) -> Option<&'a Column> {
+        if let Some(found) = self.find_by_name(r) {
+            return Some(found);
+        }
+        let (sheet, r) = self.source(r)?;
+        match r {
+            ColumnRef::Short(name) if name == "j" => self.j.and_then(|j| sheet.columns.get(j - 1)),
+            _ => None,
+        }
+    }
+
+    /// Whether `r` is a bare `col(j)` that no column name answers, so it means the position.
+    fn means_position(&self, r: &ColumnRef) -> bool {
+        let inner = match r {
+            ColumnRef::Scoped { column, .. } => &**column,
+            r => r,
+        };
+        matches!(inner, ColumnRef::Short(name) if name == "j") && self.find_by_name(r).is_none()
+    }
+
+    /// Whether the formula reads the position of its column: the variable `j` or a bare
+    /// `col(j)` that no column is called.
+    fn reads_position(&self, expr: &Expr) -> bool {
+        expr.variables().iter().any(|v| v == "j") || expr.columns().iter().any(|r| self.means_position(r))
+    }
+
+    /// The column a reference names or counts to, without the bare `col(j)` position fallback.
+    fn find_by_name(&self, r: &ColumnRef) -> Option<&'a Column> {
         let (sheet, r) = self.source(r)?;
         let cols = &sheet.columns;
         match r {
@@ -93,6 +128,10 @@ impl<'a> SheetHost<'a> {
                 .iter()
                 .find(|c| c.short_name.eq_ignore_ascii_case(name))
                 .or_else(|| cols.iter().find(|c| c.long_name == *name)),
+            ColumnRef::Relative(offset) => {
+                let position = i64::try_from(self.j?).ok()?.checked_add(*offset)?;
+                usize::try_from(position).ok()?.checked_sub(1).and_then(|i| cols.get(i))
+            }
             ColumnRef::Long(name) => cols.iter().find(|c| c.long_name == *name),
             ColumnRef::Index(n) => n.checked_sub(1).and_then(|i| cols.get(i)),
             ColumnRef::Scoped { .. } => None,
@@ -140,8 +179,8 @@ impl Host for SheetHost<'_> {
         })
     }
 
-    fn variable(&self, _name: &str) -> Option<f64> {
-        None
+    fn variable(&self, name: &str) -> Option<f64> {
+        (name == "j").then_some(self.j? as f64)
     }
 
     fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
@@ -189,7 +228,7 @@ impl Host for SheetHost<'_> {
 
 /// Evaluates an expression for the first `rows` rows of a sheet.
 pub(crate) fn eval_on_sheet(expr: &Expr, sheet: &Worksheet, rows: usize) -> Result<Vec<f64>, ExprError> {
-    expr.eval_rows(&SheetHost { sheet, book: None, project: None }, rows)
+    expr.eval_rows(&SheetHost { sheet, book: None, project: None, j: None }, rows)
 }
 
 /// Cell reads determine calculation order; header reads only invalidate a result.
@@ -634,6 +673,57 @@ impl Project {
         Ok(())
     }
 
+    /// Sets one formula on several columns of one sheet (Set Multiple Columns Values). Each
+    /// column keeps the formula text as typed and runs it with its own `j`, the 1-based position
+    /// of the column in the sheet, so `col(j-1)*2` doubles the column to the left of every column
+    /// set. `mode` and `rows` apply to every column.
+    ///
+    /// The columns are set from left to right whatever the order of `columns`, each as by
+    /// [`Project::set_column_values_with`], so a chain such as `col(j-1)+1` over B to E in mode
+    /// `None` reads the values just written. Columns of a chain in `Auto` or `Manual` recalculate
+    /// by their own `j`. `columns` must name at least one column and all on the same sheet. If any
+    /// column fails (an unknown column, a cycle, text outside the rows) nothing is changed and
+    /// the error names the column. Call it through [`crate::Document::edit`] for one undo step, or use
+    /// [`crate::Document::set_columns_values`].
+    pub fn set_columns_values_with(
+        &mut self,
+        columns: &[ColumnId],
+        formula: &str,
+        rows: Option<Range<usize>>,
+        mode: RecalcMode,
+    ) -> Result<(), FormulaError> {
+        let mut ordered: Vec<(usize, ColumnId)> = Vec::new();
+        let mut sheet_at = None;
+        for &id in columns {
+            let (book, sheet, _) = self.locate(id).ok_or(FormulaError::NoSuchColumn(id))?;
+            let place = (book.id, book.sheets.iter().position(|s| std::ptr::eq(s, sheet)));
+            if *sheet_at.get_or_insert(place) != place {
+                return Err(FormulaError::Broken("the columns must all be on the same sheet".into()));
+            }
+            if !ordered.iter().any(|(_, c)| *c == id) {
+                ordered.push((sheet.columns.iter().position(|c| c.id == id).unwrap_or(0), id));
+            }
+        }
+        if ordered.is_empty() {
+            return Err(FormulaError::Broken("no columns to set".into()));
+        }
+        ordered.sort_unstable();
+        let before = self.clone();
+        for (_, id) in &ordered {
+            if let Err(e) = self.set_column_values_with(*id, formula, rows.clone(), mode) {
+                *self = before;
+                return Err(match e {
+                    FormulaError::Expr(e) if ordered.len() > 1 => {
+                        let name = self.column(*id).map_or_else(String::new, |c| c.short_name.clone());
+                        FormulaError::Broken(format!("column {name}: {e}"))
+                    }
+                    e => e,
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Updates the recalculating columns that read any of the `changed` columns (directly or
     /// through other recalculating columns): Auto columns are recalculated, Manual ones are
     /// marked pending. Call this after changing column data outside a [`crate::Document`] edit,
@@ -695,11 +785,14 @@ impl Project {
                 if layout_changed {
                     for c in s.columns.iter().filter(|c| c.is_locked()) {
                         if let Ok(expr) = Expr::parse(c.formula.as_deref().unwrap_or_default()) {
-                            let previous =
-                                SheetHost::at(before, c.id).and_then(|host| resolve_deps(&expr, &host, c.id).ok());
-                            let current =
-                                SheetHost::at(self, c.id).and_then(|host| resolve_deps(&expr, &host, c.id).ok());
-                            if previous != current {
+                            let (old_host, host) = (SheetHost::at(before, c.id), SheetHost::at(self, c.id));
+                            let previous = old_host.as_ref().and_then(|h| resolve_deps(&expr, h, c.id).ok());
+                            let current = host.as_ref().and_then(|h| resolve_deps(&expr, h, c.id).ok());
+                            // `j` is not a read, so a moved column is told apart by its position.
+                            let moved = host.as_ref().is_some_and(|h| {
+                                h.reads_position(&expr) && old_host.as_ref().map(|o| o.j) != Some(h.j)
+                            });
+                            if previous != current || moved {
                                 bindings_changed.insert(c.id);
                             }
                         }
@@ -758,6 +851,20 @@ fn reference_layout_changed(before: &Project, after: &Project) -> bool {
                         .ne(b.columns.iter().map(|c| (c.id, &c.short_name, &c.long_name)))
             })
     })
+}
+
+impl crate::Document {
+    /// [`Project::set_columns_values_with`] as one undo step labelled "Set multiple columns
+    /// values". On error nothing is changed and no step is added.
+    pub fn set_columns_values(
+        &mut self,
+        columns: &[ColumnId],
+        formula: &str,
+        rows: Option<Range<usize>>,
+        mode: RecalcMode,
+    ) -> Result<(), FormulaError> {
+        self.edit("Set multiple columns values", |p| p.set_columns_values_with(columns, formula, rows, mode))
+    }
 }
 
 #[cfg(test)]

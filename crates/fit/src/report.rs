@@ -140,4 +140,6 @@ pub enum FitError {
     BadFunction(String),
     #[error("the fit failed: {0}")]
     Failed(String),
+    #[error("{0}")]
+    BadSimulation(String),
 }

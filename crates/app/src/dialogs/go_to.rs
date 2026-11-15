@@ -2,7 +2,10 @@
 //! navigates to rows, columns or a cell without changing worksheet data.
 
 use eframe::egui;
-use sheaf_core::{Column, WindowId, Worksheet};
+use sheaf_core::{Column, Project, WindowId, Worksheet};
+
+mod browser;
+use browser::{BrowserOutcome, ColumnBrowser};
 
 /// The window that asks for the cell to go to.
 pub struct GoToDialog {
@@ -17,6 +20,9 @@ pub struct GoToDialog {
     error: Option<String>,
     /// True until the first frame, to put the keyboard in the column field.
     first_frame: bool,
+    browser: Option<ColumnBrowser>,
+    /// The browser returns a qualified reference, but Go To applies its ordinal locally.
+    browser_ordinal: Option<usize>,
 }
 
 /// What the window did in a frame.
@@ -43,11 +49,32 @@ impl GoToDialog {
             current,
             error: None,
             first_frame: true,
+            browser: None,
+            browser_ordinal: None,
         }
     }
 
-    /// Shows the window; `sheet` is the sheet the cell is looked up in.
-    pub fn show(&mut self, ctx: &egui::Context, sheet: &Worksheet) -> GoToOutcome {
+    /// Shows Go To or its browser. Navigation always uses the original workbook's active sheet.
+    pub fn show(&mut self, ctx: &egui::Context, project: &Project) -> GoToOutcome {
+        let Some(workbook) = project.workbook(self.book) else { return GoToOutcome::Closed };
+        let Some(sheet) = workbook.sheets.get(workbook.active_sheet) else { return GoToOutcome::Closed };
+        if let Some(browser) = &mut self.browser {
+            match browser.show(ctx, project) {
+                BrowserOutcome::Open => {}
+                BrowserOutcome::Closed => {
+                    self.browser = None;
+                    self.first_frame = true;
+                }
+                BrowserOutcome::Selected { reference, ordinal } => {
+                    self.column = reference;
+                    self.browser_ordinal = Some(ordinal);
+                    self.browser = None;
+                    self.error = None;
+                    self.first_frame = true;
+                }
+            }
+            return GoToOutcome::Open;
+        }
         let mut open = true;
         let mut outcome = GoToOutcome::Open;
         let picker_was_open = egui::Popup::is_any_open(ctx);
@@ -63,6 +90,9 @@ impl GoToDialog {
                 ui.horizontal(|ui| {
                     let column =
                         ui.add(egui::TextEdit::singleline(&mut self.column).desired_width(190.0)).labelled_by(label.id);
+                    if column.changed() {
+                        self.browser_ordinal = None;
+                    }
                     if self.first_frame {
                         column.request_focus();
                         self.first_frame = false;
@@ -78,6 +108,7 @@ impl GoToDialog {
                                 );
                                 if ui.button(label).clicked() {
                                     self.column = column_reference(column);
+                                    self.browser_ordinal = None;
                                     self.error = None;
                                     ui.close();
                                 }
@@ -86,11 +117,16 @@ impl GoToDialog {
                         ui.separator();
                         if ui.button("Reset").clicked() {
                             self.column.clear();
+                            self.browser_ordinal = None;
                             self.error = None;
                             ui.close();
                         }
                         ui.separator();
-                        ui.add_enabled(false, egui::Button::new("Select Columns..."));
+                        if ui.button("Select Columns...").clicked() {
+                            self.browser = Some(ColumnBrowser::new(self.book, workbook.active_sheet));
+                            egui::Popup::close_all(ctx);
+                            ui.close();
+                        }
                     })
                     .response
                     .on_hover_text("Choose a column");
@@ -111,10 +147,11 @@ impl GoToDialog {
                         outcome = GoToOutcome::Closed;
                     }
                     if ui.button("OK").clicked() || enter {
+                        let browser_column = self.browser_ordinal.map(|ordinal| ordinal.to_string());
                         match parse_target(
                             sheet,
                             &self.row,
-                            &self.column,
+                            browser_column.as_deref().unwrap_or(&self.column),
                             self.row_capacity,
                             self.current.map_or(0, |p| p.0),
                         ) {

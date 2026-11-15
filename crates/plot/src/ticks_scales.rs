@@ -59,7 +59,7 @@ pub(crate) fn resolve_other(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAx
         minor,
         labels,
         reversed: false,
-        gap: None,
+        gaps: Vec::new(),
         minor_labels: Vec::new(),
     }
 }

@@ -5,8 +5,9 @@
 //! column the run read changes, an Auto link is run again at once (inside the same undo step as the
 //! edit) and a Manual link is marked pending until [`Project::recalculate_analysis`] is called. The
 //! results are replaced in place, so graphs and formulas that refer to the result columns keep working.
-//! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area and the data
-//! manipulation tools (T23) can be linked; the other tools run once.
+//! Smooth, Integrate, Find Peaks, Average Multiple Curves, Intersect, Polygon Area, the data
+//! manipulation tools (T23) and Simulate Curve (T47, which follows the column its X values come from)
+//! can be linked; the other tools run once.
 
 use std::collections::HashSet;
 
@@ -15,7 +16,7 @@ use sheaf_calc::{PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
     AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, ReduceDupSpec, Report,
-    Request, RowRange, SubtractLineSpec, Tool, TranslateSpec,
+    Request, RowRange, SimulateCurveSpec, SubtractLineSpec, Tool, TranslateSpec,
 };
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
@@ -34,6 +35,7 @@ pub enum LinkTool {
     ReduceDup(ReduceDupSpec),
     Translate(TranslateSpec),
     MedianFilter(MedianFilterSpec),
+    SimulateCurve(SimulateCurveSpec),
 }
 
 impl LinkTool {
@@ -50,6 +52,8 @@ impl LinkTool {
             Tool::ReduceDup(s) => Some(LinkTool::ReduceDup(*s)),
             Tool::Translate(s) => Some(LinkTool::Translate(*s)),
             Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
+            // The graph of the first run stays; a repeated run does not draw another.
+            Tool::SimulateCurve(s) => Some(LinkTool::SimulateCurve(SimulateCurveSpec { plot: false, ..s.clone() })),
             _ => None,
         }
     }
@@ -67,6 +71,7 @@ impl LinkTool {
             LinkTool::ReduceDup(s) => Tool::ReduceDup(*s),
             LinkTool::Translate(s) => Tool::Translate(*s),
             LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
+            LinkTool::SimulateCurve(s) => Tool::SimulateCurve(s.clone()),
         }
     }
 }
@@ -253,6 +258,10 @@ impl Project {
         for (i, sheet) in b.sheets.iter_mut().enumerate() {
             let had = sheet.columns.len();
             sheet.columns.retain(|c| !stale.contains(&c.id));
+            if sheet.columns.len() != had {
+                sheet.remap_cond_format_columns(&|c| (!stale.contains(&c)).then_some(c));
+                sheet.remap_note_columns(&|c| (!stale.contains(&c)).then_some(c));
+            }
             // A sheet that held only old results is gone; the indices in the report move with it.
             keep.push(sheet.columns.len() == had || !sheet.columns.is_empty() || i == report.sheet);
         }
@@ -314,7 +323,7 @@ impl Project {
     }
 
     /// Brings the links up to date after an edit that turned `before` into `self`: Auto links whose
-    /// input columns changed run again, Manual links are marked pending. Used by
+    /// input columns changed (their values or their mask) run again, Manual links are marked pending. Used by
     /// [`crate::Document`] inside the undo step of the edit. Returns what could not run.
     pub fn update_analysis_links(&mut self, before: &Project) -> Vec<String> {
         if self.analysis_links.is_empty() {
@@ -324,7 +333,10 @@ impl Project {
         for b in self.workbooks() {
             for s in &b.sheets {
                 for c in &s.columns {
-                    if before.column(c.id).is_some_and(|o| o.data != c.data) {
+                    if before
+                        .column(c.id)
+                        .is_some_and(|o| o.data != c.data || o.mask != c.mask || o.mask_disabled != c.mask_disabled)
+                    {
                         changed.insert(c.id);
                     }
                 }
@@ -414,6 +426,30 @@ mod tests {
     }
 
     #[test]
+    fn a_linked_simulated_curve_follows_its_x_column() {
+        use crate::analysis::{SimulateCurveSpec, SimulateX};
+        let (mut p, x, _y, book) = setup();
+        let spec = SimulateCurveSpec {
+            function: "Line".into(),
+            params: vec![("A".into(), 1.0), ("B".into(), 2.0)],
+            x: SimulateX::OfColumn(x),
+            plot: true,
+        };
+        let req = Request { columns: vec![x], rows: RowRange::All, tool: Tool::SimulateCurve(spec) };
+        let report = p.analyze_linked(&req, &OutputTarget::NextToInput, RecalcMode::Auto).unwrap();
+        let (sx, sy) = (report.new_columns[0], report.new_columns[1]);
+        assert_eq!(p.numeric(sy).unwrap()[3], 1.0 + 2.0 * 3.0);
+        let before = p.clone();
+        p.column_mut(x).unwrap().data = ColumnData::numeric((0..20).map(|i| 10.0 * i as f64).collect());
+        let problems = p.update_analysis_links(&before);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(p.numeric(sx).unwrap()[1], 10.0, "same columns, new values");
+        assert_eq!(p.numeric(sy).unwrap()[1], 21.0);
+        assert_eq!(p.workbook(book).unwrap().sheets.len(), 2, "no sheet was added");
+        assert_eq!(p.graphs().count(), 1, "the repeated run draws no second graph");
+    }
+
+    #[test]
     fn a_manual_link_waits_until_it_is_recalculated() {
         let (mut p, _x, y, _) = setup();
         let report = p.analyze_linked(&smooth_request(y), &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
@@ -480,6 +516,36 @@ mod tests {
         assert_eq!(p.workbook(book).unwrap().sheets[0].columns.len(), 3);
         assert!(p.analysis_links.is_empty(), "mode None drops the link");
         assert!(p.column(first[0]).unwrap().analysis.is_none());
+    }
+
+    #[test]
+    fn retiring_result_columns_drops_their_notes_and_conditional_formats() {
+        use crate::condformat::{CondFormat, CondRange, Rule};
+        let (mut p, _x, y, book) = setup();
+        let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 20])).unwrap();
+        let two = Request { columns: vec![y, y2], ..smooth_request(y) };
+        let (_, first) = p.analyze_linked_into(None, &two, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+        assert_eq!(first.len(), 2);
+        let (keep, gone) = (first[0], first[1]);
+        let s = p.workbook_mut(book).unwrap().sheet_mut();
+        s.set_note(y, 0, "input stays");
+        s.set_note(keep, 0, "goes");
+        s.set_note(gone, 0, "goes too");
+        for c in [y, keep, gone] {
+            let rule = CondFormat::new(s, CondRange::whole_columns(vec![c]), Rule::min_max());
+            s.cond_formats.push(rule);
+        }
+        // One input column now: fewer result columns, so the old second result is retired.
+        let (_, second) = p
+            .analyze_linked_into(Some(&first), &smooth_request(y), &OutputTarget::NextToInput, RecalcMode::Manual)
+            .unwrap();
+        assert!(p.column(gone).is_none(), "the old result column was removed");
+        let s = p.workbook(book).unwrap().sheet();
+        assert!(s.notes.iter().all(|n| n.column != gone && n.column != keep), "orphan note: {:?}", s.notes);
+        assert!(s.cond_formats.iter().all(|r| !r.range.columns.contains(&gone) && !r.range.columns.contains(&keep)));
+        assert_eq!(s.notes.len(), 1);
+        assert_eq!(s.cond_formats.len(), 1);
+        let _ = (keep, second);
     }
 
     #[test]
